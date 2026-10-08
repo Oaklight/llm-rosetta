@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any, ClassVar
 from unittest.mock import AsyncMock, MagicMock
 
@@ -47,11 +48,12 @@ class _CustomRecordOp(OpsBase):
 
     event_type: ClassVar[str] = "custom_event"
 
-    __slots__ = ("recorded",)
+    __slots__ = ("recorded", "recorded_error")
 
     def __init__(self, ctx: OpsContext) -> None:
         super().__init__(ctx)
         self.recorded = False
+        self.recorded_error = None
 
     async def _run(self) -> Any:
         return "custom_result"
@@ -62,8 +64,9 @@ class _CustomRecordOp(OpsBase):
     def _details(self, result: Any) -> dict[str, Any]:
         return {}
 
-    async def _record(self, result: Any) -> None:
+    async def _record(self, result: Any, *, error: BaseException | None = None) -> None:
         self.recorded = True
+        self.recorded_error = error
 
 
 class _WarnOp(OpsBase):
@@ -81,6 +84,21 @@ class _WarnOp(OpsBase):
 
     def _details(self, result: Any) -> dict[str, Any]:
         return {"level": "warn"}
+
+
+class _FailOp(OpsBase):
+    """Always-failing subclass for testing failure recording."""
+
+    event_type: ClassVar[str] = "fail_event"
+
+    async def _run(self) -> Any:
+        raise ValueError("boom")
+
+    def _message(self, result: Any) -> str:
+        return "failed op"
+
+    def _details(self, result: Any) -> dict[str, Any]:
+        return {"attempted": True}
 
 
 # -- OpsContext tests ------------------------------------------------------
@@ -151,6 +169,7 @@ class TestOpsBase:
         result = await op.execute()
         assert result == "custom_result"
         assert op.recorded is True
+        assert op.recorded_error is None
 
     @pytest.mark.asyncio
     async def test_severity_and_source_classvar(self):
@@ -167,23 +186,75 @@ class TestOpsBase:
         assert entry.details == {"level": "warn"}
 
     @pytest.mark.asyncio
-    async def test_run_exception_propagates(self):
-        class _FailOp(OpsBase):
-            event_type: ClassVar[str] = "fail"
+    async def test_run_failure_records_and_reraises(self):
+        """Failed _run() should still record (with error details) then re-raise."""
+        ops_log = MagicMock()
+        ops_log.add = AsyncMock()
+        ctx = OpsContext(ops_log=ops_log)
 
-            async def _run(self) -> Any:
-                raise ValueError("boom")
+        op = _FailOp(ctx)
+        with pytest.raises(ValueError, match="boom"):
+            await op.execute()
 
-            def _message(self, result: Any) -> str:
-                return ""
+        # Audit entry was still written
+        ops_log.add.assert_called_once()
+        entry = ops_log.add.call_args[0][0]
+        assert entry.event_type == "fail_event"
+        assert entry.severity == SEVERITY_WARNING  # escalated on failure
+        assert "boom" in entry.details.get("error", "")
+        assert entry.details["attempted"] is True
 
-            def _details(self, result: Any) -> dict[str, Any]:
-                return {}
-
+    @pytest.mark.asyncio
+    async def test_run_failure_no_ops_log_still_raises(self):
+        """Failed _run() re-raises even when ops_log is None."""
         ctx = OpsContext()
         op = _FailOp(ctx)
         with pytest.raises(ValueError, match="boom"):
             await op.execute()
+
+    @pytest.mark.asyncio
+    async def test_record_failure_is_swallowed(self, caplog):
+        """If _record() itself raises, the operation result is still returned."""
+        ops_log = MagicMock()
+        ops_log.add = AsyncMock(side_effect=RuntimeError("db full"))
+        ctx = OpsContext(ops_log=ops_log)
+
+        op = _StubOp(ctx, return_value="success")
+        with caplog.at_level(logging.WARNING):
+            result = await op.execute()
+
+        assert result == "success"
+        assert "ops audit record failed" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_record_failure_does_not_mask_run_failure(self, caplog):
+        """If both _run() and _record() fail, the _run() exception wins."""
+        ops_log = MagicMock()
+        ops_log.add = AsyncMock(side_effect=RuntimeError("db full"))
+        ctx = OpsContext(ops_log=ops_log)
+
+        op = _FailOp(ctx)
+        with caplog.at_level(logging.WARNING):
+            with pytest.raises(ValueError, match="boom"):
+                await op.execute()
+
+        assert "ops audit record failed" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_record_override_receives_error(self):
+        """Custom _record override receives the error kwarg on failure."""
+
+        class _FailCustom(_CustomRecordOp):
+            async def _run(self) -> Any:
+                raise TypeError("type fail")
+
+        ctx = OpsContext()
+        op = _FailCustom(ctx)
+        with pytest.raises(TypeError, match="type fail"):
+            await op.execute()
+
+        assert op.recorded is True
+        assert isinstance(op.recorded_error, TypeError)
 
     def test_ops_base_is_abstract(self):
         with pytest.raises(TypeError):
