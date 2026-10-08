@@ -3,10 +3,6 @@
 Keys are stored as SHA-256 hashes — plaintext is never persisted.
 An in-memory cache (hash → KeyContext) keeps auth lookups at O(1)
 without hitting SQLite on every request.
-
-TODO: Convert to async via aiosqlite, similar to PersistenceManager.
-      Left synchronous for now because the keystore is low-traffic
-      (mainly startup, occasional admin CRUD, and throttled touch()).
 """
 
 from __future__ import annotations
@@ -15,13 +11,14 @@ import hashlib
 import json
 import logging
 import secrets
-import sqlite3
 import time
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+from llm_rosetta._vendor import aiosqlite
 
 logger = logging.getLogger("llm-rosetta.keystore")
 
@@ -50,19 +47,32 @@ def _generate_id() -> str:
 
 
 class KeyStore:
-    """SQLite-backed API key store with in-memory validation cache.
+    """Async SQLite-backed API key store with in-memory validation cache.
 
-    Args:
-        db_path: Path to the SQLite database file.  Created if missing.
+    Use the async :meth:`create` classmethod to construct instances::
+
+        ks = await KeyStore.create("/var/data/keys.db")
+
+    ``validate()`` and ``has_keys()`` remain synchronous (pure cache
+    lookups) so they can be called from the hot auth path without await.
     """
 
-    def __init__(self, db_path: str | Path) -> None:
-        self._db_path = Path(db_path)
-        self._db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(str(self._db_path), check_same_thread=False)
-        self._conn.execute("PRAGMA journal_mode=WAL")
-        self._conn.execute("PRAGMA synchronous=NORMAL")
-        self._conn.execute(
+    def __init__(self) -> None:
+        self._conn: aiosqlite.Connection = None  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
+        self._db_path: Path = Path()
+        self._cache: dict[str, tuple[str, KeyContext]] = {}
+        self._last_touch: dict[str, float] = {}
+
+    @classmethod
+    async def create(cls, db_path: str | Path) -> KeyStore:
+        """Async factory: create a KeyStore with an open connection."""
+        instance = cls()
+        instance._db_path = Path(db_path)
+        instance._db_path.parent.mkdir(parents=True, exist_ok=True)
+        instance._conn = await aiosqlite.connect(str(instance._db_path))
+        await instance._conn.execute("PRAGMA journal_mode=WAL")
+        await instance._conn.execute("PRAGMA synchronous=NORMAL")
+        await instance._conn.execute(
             """CREATE TABLE IF NOT EXISTS api_keys (
                 id          TEXT PRIMARY KEY,
                 key_hash    TEXT NOT NULL UNIQUE,
@@ -72,51 +82,73 @@ class KeyStore:
                 rotated     TEXT
             )"""
         )
-        self._conn.commit()
-        self._migrate_last_used()
-        self._cache: dict[str, tuple[str, KeyContext]] = {}
-        self._last_touch: dict[str, float] = {}
-        self._refresh_cache()
+        await instance._conn.commit()
+        await instance._migrate_last_used()
+        await instance._refresh_cache()
+        return instance
 
-    def _migrate_last_used(self) -> None:
-        cols = {
-            r[1] for r in self._conn.execute("PRAGMA table_info(api_keys)").fetchall()
-        }
+    async def _migrate_last_used(self) -> None:
+        cursor = await self._conn.execute("PRAGMA table_info(api_keys)")
+        cols = {r[1] for r in await cursor.fetchall()}
         if "last_used" not in cols:
-            self._conn.execute("ALTER TABLE api_keys ADD COLUMN last_used TEXT")
-            self._conn.commit()
+            await self._conn.execute("ALTER TABLE api_keys ADD COLUMN last_used TEXT")
+            await self._conn.commit()
 
-    def _refresh_cache(self) -> None:
+    async def _refresh_cache(self) -> None:
         """Rebuild the in-memory hash → (id, KeyContext) lookup."""
-        rows = self._conn.execute(
+        cursor = await self._conn.execute(
             "SELECT id, key_hash, label, allowed_shims FROM api_keys"
-        ).fetchall()
+        )
+        rows = await cursor.fetchall()
         cache: dict[str, tuple[str, KeyContext]] = {}
         for row_id, key_hash, label, shims_json in rows:
             try:
                 shims = frozenset(json.loads(shims_json))
             except (json.JSONDecodeError, TypeError):
                 shims = frozenset({"*"})
-            cache[key_hash] = (row_id, KeyContext(label=label, allowed_shims=shims))
+            cache[key_hash] = (
+                row_id,
+                KeyContext(label=label, allowed_shims=shims),
+            )
         self._cache = cache
 
     def validate(self, raw_key: str) -> tuple[str, KeyContext] | None:
-        """Validate a raw API key and return ``(key_id, context)``, or None."""
+        """Validate a raw API key and return ``(key_id, context)``, or None.
+
+        Synchronous — uses the in-memory cache only.
+        """
         return self._cache.get(_hash_key(raw_key))
 
     def touch(self, key_id: str, interval: float = 300.0) -> None:
-        """Record a last-used timestamp, throttled to one write per *interval* seconds."""
+        """Record a last-used timestamp, throttled to one write per *interval* seconds.
+
+        Remains synchronous — schedules the async write as a fire-and-forget
+        task so it can be called from the sync auth-hook hot path without await.
+        """
         now = time.monotonic()
         if now - self._last_touch.get(key_id, 0) < interval:
             return
         self._last_touch[key_id] = now
-        ts = datetime.now(timezone.utc).isoformat()
-        self._conn.execute(
-            "UPDATE api_keys SET last_used = ? WHERE id = ?", (ts, key_id)
-        )
-        self._conn.commit()
 
-    def backfill_last_used(self, request_log_db_path: str | Path) -> int:
+        import asyncio
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        loop.create_task(self._touch_write(key_id))
+
+    async def _touch_write(self, key_id: str) -> None:
+        ts = datetime.now(timezone.utc).isoformat()
+        try:
+            await self._conn.execute(
+                "UPDATE api_keys SET last_used = ? WHERE id = ?", (ts, key_id)
+            )
+            await self._conn.commit()
+        except Exception as exc:
+            logger.debug("touch write failed for key %s: %s", key_id, exc)
+
+    async def backfill_last_used(self, request_log_db_path: str | Path) -> int:
         """Backfill last_used from request log for keys that have no value yet."""
         import sqlite3 as _sqlite3
 
@@ -126,9 +158,11 @@ class KeyStore:
             return 0
         updated = 0
         try:
-            for row_id, label, last_used in self._conn.execute(
+            cursor = await self._conn.execute(
                 "SELECT id, label, last_used FROM api_keys"
-            ).fetchall():
+            )
+            rows = await cursor.fetchall()
+            for row_id, label, last_used in rows:
                 if last_used or not label:
                     continue
                 r = log_conn.execute(
@@ -136,21 +170,22 @@ class KeyStore:
                     (label,),
                 ).fetchone()
                 if r and r[0]:
-                    self._conn.execute(
+                    await self._conn.execute(
                         "UPDATE api_keys SET last_used = ? WHERE id = ?",
                         (r[0], row_id),
                     )
                     updated += 1
             if updated:
-                self._conn.commit()
+                await self._conn.commit()
         finally:
             log_conn.close()
         return updated
 
     def has_keys(self) -> bool:
+        """Check if any keys exist (synchronous cache check)."""
         return bool(self._cache)
 
-    def create(
+    async def create_key(
         self,
         label: str = "",
         allowed_shims: list[str] | None = None,
@@ -165,23 +200,22 @@ class KeyStore:
         raw_key = manual_key or _generate_key()
         key_hash = _hash_key(raw_key)
         shims = json.dumps(allowed_shims or ["*"])
-        from datetime import datetime, timezone
-
         created = datetime.now(timezone.utc).isoformat()
-        self._conn.execute(
+        await self._conn.execute(
             "INSERT INTO api_keys (id, key_hash, label, allowed_shims, created) "
             "VALUES (?, ?, ?, ?, ?)",
             (key_id, key_hash, label, shims, created),
         )
-        self._conn.commit()
-        self._refresh_cache()
+        await self._conn.commit()
+        await self._refresh_cache()
         return key_id, raw_key
 
-    def list_keys(self) -> list[dict[str, Any]]:
+    async def list_keys(self) -> list[dict[str, Any]]:
         """List all keys without secrets."""
-        rows = self._conn.execute(
+        cursor = await self._conn.execute(
             "SELECT id, label, allowed_shims, created, rotated, last_used FROM api_keys"
-        ).fetchall()
+        )
+        rows = await cursor.fetchall()
         result = []
         for row_id, label, shims_json, created, rotated, last_used in rows:
             try:
@@ -201,7 +235,7 @@ class KeyStore:
             result.append(entry)
         return result
 
-    def update(
+    async def update(
         self,
         key_id: str,
         label: str | None = None,
@@ -217,86 +251,83 @@ class KeyStore:
             parts.append("allowed_shims = ?")
             params.append(json.dumps(allowed_shims))
         if not parts:
-            return self._key_exists(key_id)
+            return await self._key_exists(key_id)
         params.append(key_id)
-        cur = self._conn.execute(
+        cur = await self._conn.execute(
             f"UPDATE api_keys SET {', '.join(parts)} WHERE id = ?", params
         )
-        self._conn.commit()
+        await self._conn.commit()
         if cur.rowcount == 0:
             return False
-        self._refresh_cache()
+        await self._refresh_cache()
         return True
 
-    def delete(self, key_id: str) -> bool:
+    async def delete(self, key_id: str) -> bool:
         """Delete a key by id.  Returns True if found."""
-        cur = self._conn.execute("DELETE FROM api_keys WHERE id = ?", (key_id,))
-        self._conn.commit()
+        cur = await self._conn.execute("DELETE FROM api_keys WHERE id = ?", (key_id,))
+        await self._conn.commit()
         if cur.rowcount == 0:
             return False
-        self._refresh_cache()
+        await self._refresh_cache()
         return True
 
-    def rotate(self, key_id: str) -> str | None:
-        """Rotate a key: generate new raw key, update hash.  Returns new raw key or None."""
-        row = self._conn.execute(
+    async def rotate(self, key_id: str) -> str | None:
+        """Rotate a key: generate new raw key, update hash.  Returns new raw key."""
+        row = await self._conn.execute_fetchone(
             "SELECT id FROM api_keys WHERE id = ?", (key_id,)
-        ).fetchone()
+        )
         if not row:
             return None
         new_key = _generate_key()
         new_hash = _hash_key(new_key)
-        from datetime import datetime, timezone
-
         rotated = datetime.now(timezone.utc).isoformat()
-        self._conn.execute(
+        await self._conn.execute(
             "UPDATE api_keys SET key_hash = ?, rotated = ? WHERE id = ?",
             (new_hash, rotated, key_id),
         )
-        self._conn.commit()
-        self._refresh_cache()
+        await self._conn.commit()
+        await self._refresh_cache()
         return new_key
 
-    def import_from_config(self, config_keys: list[dict[str, str]]) -> int:
-        """Import plaintext keys from config into SQLite (idempotent).
-
-        Returns the number of keys newly imported.
-        """
+    async def import_from_config(self, config_keys: list[dict[str, str]]) -> int:
+        """Import plaintext keys from config into SQLite (idempotent)."""
         imported = 0
         for entry in config_keys:
             raw_key = entry.get("key", "")
             if not raw_key:
                 continue
             key_hash = _hash_key(raw_key)
-            try:
-                self._conn.execute(
-                    "INSERT OR IGNORE INTO api_keys "
-                    "(id, key_hash, label, allowed_shims, created) "
-                    "VALUES (?, ?, ?, ?, ?)",
-                    (
-                        entry.get("id", _generate_id()),
-                        key_hash,
-                        entry.get("label", ""),
-                        '["*"]',
-                        entry.get("created", ""),
-                    ),
-                )
-                if self._conn.execute("SELECT changes()").fetchone()[0]:
-                    imported += 1
-            except sqlite3.IntegrityError:
-                pass
+            await self._conn.execute(
+                "INSERT OR IGNORE INTO api_keys "
+                "(id, key_hash, label, allowed_shims, created) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (
+                    entry.get("id", _generate_id()),
+                    key_hash,
+                    entry.get("label", ""),
+                    '["*"]',
+                    entry.get("created", ""),
+                ),
+            )
+            cursor = await self._conn.execute("SELECT changes()")
+            row = await cursor.fetchone()
+            if row and row[0]:
+                imported += 1
         if imported:
-            self._conn.commit()
-            self._refresh_cache()
+            await self._conn.commit()
+            await self._refresh_cache()
         return imported
 
-    def close(self) -> None:
-        self._conn.close()
+    async def close(self) -> None:
+        """Close the database connection."""
+        if self._conn is not None:
+            try:
+                await self._conn.close()
+            except Exception:
+                pass
 
-    def _key_exists(self, key_id: str) -> bool:
-        return (
-            self._conn.execute(
-                "SELECT 1 FROM api_keys WHERE id = ?", (key_id,)
-            ).fetchone()
-            is not None
+    async def _key_exists(self, key_id: str) -> bool:
+        row = await self._conn.execute_fetchone(
+            "SELECT 1 FROM api_keys WHERE id = ?", (key_id,)
         )
+        return row is not None

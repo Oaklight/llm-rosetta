@@ -61,20 +61,20 @@ def _run(coro: Any) -> Any:
     return asyncio.run(coro)
 
 
-def _make_keystore_with_key(
+async def _make_keystore_with_key(
     tmp_path, raw_key: str, label: str = ""
 ) -> tuple[KeyStore, str]:
     """Create a KeyStore with a single key and return (keystore, key_id)."""
-    ks = KeyStore(tmp_path / "keys.db")
-    key_id, _ = ks.create(label=label, manual_key=raw_key)
+    ks = await KeyStore.create(tmp_path / "keys.db")
+    key_id, _ = await ks.create_key(label=label, manual_key=raw_key)
     return ks, key_id
 
 
-def _make_keystore_with_keys(tmp_path, keys: dict[str, str]) -> KeyStore:
+async def _make_keystore_with_keys(tmp_path, keys: dict[str, str]) -> KeyStore:
     """Create a KeyStore with multiple keys {raw_key: label}."""
-    ks = KeyStore(tmp_path / "keys.db")
+    ks = await KeyStore.create(tmp_path / "keys.db")
     for raw_key, label in keys.items():
-        ks.create(label=label, manual_key=raw_key)
+        await ks.create_key(label=label, manual_key=raw_key)
     return ks
 
 
@@ -86,7 +86,7 @@ def _make_keystore_with_keys(tmp_path, keys: dict[str, str]) -> KeyStore:
 class TestNoApiKey:
     """When no api_key is configured, behavior depends on open_on_no_keys."""
 
-    def test_open_on_no_keys_allows_all(self):
+    async def test_open_on_no_keys_allows_all(self):
         state = AuthState(keystore=None, internal_token=None, open_on_no_keys=True)
         hook = create_auth_hook(state)
 
@@ -96,10 +96,10 @@ class TestNoApiKey:
             "/v1/messages",
             "/admin/api/config",
         ]:
-            resp = _run(hook(_make_request(path)))
+            resp = await hook(_make_request(path))
             assert resp is None, f"Expected pass-through for {path}"
 
-    def test_closed_on_no_keys_blocks_api(self):
+    async def test_closed_on_no_keys_blocks_api(self):
         state = AuthState(
             keystore=None,
             internal_token=None,
@@ -107,11 +107,11 @@ class TestNoApiKey:
         )
         hook = create_auth_hook(state)
 
-        resp = _run(hook(_make_request("/v1/chat/completions")))
+        resp = await hook(_make_request("/v1/chat/completions"))
         assert resp is not None
         assert resp.status_code == 403
 
-    def test_closed_on_no_keys_allows_health(self):
+    async def test_closed_on_no_keys_allows_health(self):
         state = AuthState(
             keystore=None,
             internal_token=None,
@@ -119,7 +119,7 @@ class TestNoApiKey:
         )
         hook = create_auth_hook(state)
 
-        resp = _run(hook(_make_request("/health")))
+        resp = await hook(_make_request("/health"))
         assert resp is None
 
 
@@ -134,117 +134,117 @@ class TestWithApiKey:
     KEY = "test-gateway-key-123"
 
     @pytest.fixture()
-    def hook(self, tmp_path):
-        ks, _ = _make_keystore_with_key(tmp_path, self.KEY)
+    async def hook(self, tmp_path):
+        ks, _ = await _make_keystore_with_key(tmp_path, self.KEY)
         state = AuthState(keystore=ks, internal_token=None)
         yield create_auth_hook(state)
-        ks.close()
+        await ks.close()
 
     # --- Health is always public ---
-    def test_health_no_auth(self, hook: Any):
-        resp = _run(hook(_make_request("/health", method="GET")))
+    async def test_health_no_auth(self, hook: Any):
+        resp = await hook(_make_request("/health", method="GET"))
         assert resp is None
 
     # --- OpenAI Chat ---
-    def test_openai_chat_valid(self, hook: Any):
+    async def test_openai_chat_valid(self, hook: Any):
         req = _make_request(
             "/v1/chat/completions",
             headers={"authorization": f"Bearer {self.KEY}"},
         )
-        assert _run(hook(req)) is None
+        assert await hook(req) is None
 
-    def test_openai_chat_missing(self, hook: Any):
+    async def test_openai_chat_missing(self, hook: Any):
         req = _make_request("/v1/chat/completions")
-        resp = _run(hook(req))
+        resp = await hook(req)
         assert resp is not None
         assert resp.status_code == 401
 
-    def test_openai_chat_wrong(self, hook: Any):
+    async def test_openai_chat_wrong(self, hook: Any):
         req = _make_request(
             "/v1/chat/completions",
             headers={"authorization": "Bearer wrong-key"},
         )
-        resp = _run(hook(req))
+        resp = await hook(req)
         assert resp is not None
         assert resp.status_code == 401
 
     # --- OpenAI Responses ---
-    def test_openai_responses_valid(self, hook: Any):
+    async def test_openai_responses_valid(self, hook: Any):
         req = _make_request(
             "/v1/responses",
             headers={"authorization": f"Bearer {self.KEY}"},
         )
-        assert _run(hook(req)) is None
+        assert await hook(req) is None
 
     # --- Anthropic ---
-    def test_anthropic_valid(self, hook: Any):
+    async def test_anthropic_valid(self, hook: Any):
         req = _make_request(
             "/v1/messages",
             headers={"x-api-key": self.KEY},
         )
-        assert _run(hook(req)) is None
+        assert await hook(req) is None
 
-    def test_anthropic_missing(self, hook: Any):
+    async def test_anthropic_missing(self, hook: Any):
         req = _make_request("/v1/messages")
-        resp = _run(hook(req))
+        resp = await hook(req)
         assert resp is not None
         assert resp.status_code == 401
 
-    def test_anthropic_wrong(self, hook: Any):
+    async def test_anthropic_wrong(self, hook: Any):
         req = _make_request(
             "/v1/messages",
             headers={"x-api-key": "wrong"},
         )
-        resp = _run(hook(req))
+        resp = await hook(req)
         assert resp is not None
         assert resp.status_code == 401
 
     # --- Google GenAI (header) ---
-    def test_google_header_valid(self, hook: Any):
+    async def test_google_header_valid(self, hook: Any):
         req = _make_request(
             "/v1beta/models/gemini:generateContent",
             headers={"x-goog-api-key": self.KEY},
         )
-        assert _run(hook(req)) is None
+        assert await hook(req) is None
 
-    def test_google_query_valid(self, hook: Any):
+    async def test_google_query_valid(self, hook: Any):
         req = _make_request(
             "/v1beta/models/gemini:generateContent",
             query_params={"key": [self.KEY]},
         )
-        assert _run(hook(req)) is None
+        assert await hook(req) is None
 
-    def test_google_missing(self, hook: Any):
+    async def test_google_missing(self, hook: Any):
         req = _make_request("/v1beta/models/gemini:generateContent")
-        resp = _run(hook(req))
+        resp = await hook(req)
         assert resp is not None
         assert resp.status_code == 401
 
     # --- Models list ---
-    def test_models_list_valid(self, hook: Any):
+    async def test_models_list_valid(self, hook: Any):
         req = _make_request(
             "/v1/models",
             method="GET",
             headers={"authorization": f"Bearer {self.KEY}"},
         )
-        assert _run(hook(req)) is None
+        assert await hook(req) is None
 
-    def test_google_models_list_valid(self, hook: Any):
+    async def test_google_models_list_valid(self, hook: Any):
         req = _make_request(
             "/v1beta/models",
             method="GET",
             headers={"x-goog-api-key": self.KEY},
         )
-        assert _run(hook(req)) is None
+        assert await hook(req) is None
 
     # --- Admin (no gateway-level auth) ---
-    def test_admin_html_no_auth(self, hook: Any):
+    async def test_admin_html_no_auth(self, hook: Any):
         req = _make_request("/admin", method="GET")
-        assert _run(hook(req)) is None
+        assert await hook(req) is None
 
-    def test_admin_api_no_auth(self, hook: Any):
+    async def test_admin_api_no_auth(self, hook: Any):
         req = _make_request("/admin/api/config", method="GET")
-        assert _run(hook(req)) is None
+        assert await hook(req) is None
 
 
 # ---------------------------------------------------------------------------
@@ -258,61 +258,61 @@ class TestMultiKey:
     KEYS = {"key-alpha": "alpha", "key-beta": "beta", "key-gamma": "gamma"}
 
     @pytest.fixture()
-    def hook(self, tmp_path):
-        ks = _make_keystore_with_keys(tmp_path, self.KEYS)
+    async def hook(self, tmp_path):
+        ks = await _make_keystore_with_keys(tmp_path, self.KEYS)
         state = AuthState(keystore=ks, internal_token=None)
         yield create_auth_hook(state)
-        ks.close()
+        await ks.close()
 
-    def test_first_key_valid(self, hook: Any):
+    async def test_first_key_valid(self, hook: Any):
         req = _make_request(
             "/v1/chat/completions",
             headers={"authorization": "Bearer key-alpha"},
         )
-        assert _run(hook(req)) is None
+        assert await hook(req) is None
 
-    def test_second_key_valid(self, hook: Any):
+    async def test_second_key_valid(self, hook: Any):
         req = _make_request(
             "/v1/chat/completions",
             headers={"authorization": "Bearer key-beta"},
         )
-        assert _run(hook(req)) is None
+        assert await hook(req) is None
 
-    def test_third_key_valid(self, hook: Any):
+    async def test_third_key_valid(self, hook: Any):
         req = _make_request(
             "/v1/chat/completions",
             headers={"authorization": "Bearer key-gamma"},
         )
-        assert _run(hook(req)) is None
+        assert await hook(req) is None
 
-    def test_invalid_key_rejected(self, hook: Any):
+    async def test_invalid_key_rejected(self, hook: Any):
         req = _make_request(
             "/v1/chat/completions",
             headers={"authorization": "Bearer wrong-key"},
         )
-        resp = _run(hook(req))
+        resp = await hook(req)
         assert resp is not None
         assert resp.status_code == 401
 
-    def test_missing_key_rejected(self, hook: Any):
+    async def test_missing_key_rejected(self, hook: Any):
         req = _make_request("/v1/chat/completions")
-        resp = _run(hook(req))
+        resp = await hook(req)
         assert resp is not None
         assert resp.status_code == 401
 
-    def test_anthropic_multi_key(self, hook: Any):
+    async def test_anthropic_multi_key(self, hook: Any):
         req = _make_request(
             "/v1/messages",
             headers={"x-api-key": "key-beta"},
         )
-        assert _run(hook(req)) is None
+        assert await hook(req) is None
 
-    def test_google_multi_key(self, hook: Any):
+    async def test_google_multi_key(self, hook: Any):
         req = _make_request(
             "/v1beta/models/gemini:generateContent",
             headers={"x-goog-api-key": "key-gamma"},
         )
-        assert _run(hook(req)) is None
+        assert await hook(req) is None
 
 
 # ---------------------------------------------------------------------------
@@ -327,32 +327,32 @@ class TestInternalToken:
     INTERNAL = "rsk-internal-abc123"
 
     @pytest.fixture()
-    def hook(self, tmp_path):
-        ks, _ = _make_keystore_with_key(tmp_path, self.KEY)
+    async def hook(self, tmp_path):
+        ks, _ = await _make_keystore_with_key(tmp_path, self.KEY)
         state = AuthState(keystore=ks, internal_token=self.INTERNAL)
         yield create_auth_hook(state)
-        ks.close()
+        await ks.close()
 
-    def test_internal_token_accepted(self, hook: Any):
+    async def test_internal_token_accepted(self, hook: Any):
         req = _make_request(
             "/v1/chat/completions",
             headers={"authorization": f"Bearer {self.INTERNAL}"},
         )
-        assert _run(hook(req)) is None
+        assert await hook(req) is None
 
-    def test_real_key_still_works(self, hook: Any):
+    async def test_real_key_still_works(self, hook: Any):
         req = _make_request(
             "/v1/chat/completions",
             headers={"authorization": f"Bearer {self.KEY}"},
         )
-        assert _run(hook(req)) is None
+        assert await hook(req) is None
 
-    def test_wrong_key_still_rejected(self, hook: Any):
+    async def test_wrong_key_still_rejected(self, hook: Any):
         req = _make_request(
             "/v1/chat/completions",
             headers={"authorization": "Bearer wrong"},
         )
-        resp = _run(hook(req))
+        resp = await hook(req)
         assert resp is not None
         assert resp.status_code == 401
 
@@ -375,46 +375,46 @@ class TestKeyContextTracking:
     INTERNAL = "rsk-internal-test"
 
     @pytest.fixture()
-    def hook(self, tmp_path):
-        ks = _make_keystore_with_keys(tmp_path, self.KEYS)
+    async def hook(self, tmp_path):
+        ks = await _make_keystore_with_keys(tmp_path, self.KEYS)
         state = AuthState(keystore=ks, internal_token=self.INTERNAL)
         yield create_auth_hook(state)
-        ks.close()
+        await ks.close()
 
-    def test_context_attached_for_prod_key(self, hook: Any):
+    async def test_context_attached_for_prod_key(self, hook: Any):
         req = _make_request(
             "/v1/chat/completions",
             headers={"authorization": "Bearer key-prod"},
         )
-        _, ctx = _run(_run_and_get_context(hook, req))
+        _, ctx = await _run_and_get_context(hook, req)
         assert ctx is not None
         assert ctx.label == "Production"
 
-    def test_context_attached_for_dev_key(self, hook: Any):
+    async def test_context_attached_for_dev_key(self, hook: Any):
         req = _make_request(
             "/v1/chat/completions",
             headers={"authorization": "Bearer key-dev"},
         )
-        _, ctx = _run(_run_and_get_context(hook, req))
+        _, ctx = await _run_and_get_context(hook, req)
         assert ctx is not None
         assert ctx.label == "Development"
 
-    def test_internal_token_context(self, hook: Any):
+    async def test_internal_token_context(self, hook: Any):
         req = _make_request(
             "/v1/chat/completions",
             headers={"authorization": f"Bearer {self.INTERNAL}"},
         )
-        _, ctx = _run(_run_and_get_context(hook, req))
+        _, ctx = await _run_and_get_context(hook, req)
         assert ctx is not None
         assert ctx.label == "internal"
         assert ctx.allowed_shims == frozenset({"*"})
 
-    def test_anthropic_context(self, hook: Any):
+    async def test_anthropic_context(self, hook: Any):
         req = _make_request(
             "/v1/messages",
             headers={"x-api-key": "key-prod"},
         )
-        _, ctx = _run(_run_and_get_context(hook, req))
+        _, ctx = await _run_and_get_context(hook, req)
         assert ctx is not None
         assert ctx.label == "Production"
 
@@ -446,24 +446,24 @@ class TestAdminSessionAuth:
 
     # -- Session store --
 
-    def test_create_and_validate_session(self):
+    async def test_create_and_validate_session(self):
         state = self._make_auth_state()
         sid = state.create_session(ip="1.2.3.4")
         assert state.validate_session(sid) is True
         assert state.session_count == 1
 
-    def test_validate_unknown_session(self):
+    async def test_validate_unknown_session(self):
         state = self._make_auth_state()
         assert state.validate_session("nonexistent") is False
 
-    def test_invalidate_session(self):
+    async def test_invalidate_session(self):
         state = self._make_auth_state()
         sid = state.create_session()
         assert state.invalidate_session(sid) is True
         assert state.validate_session(sid) is False
         assert state.invalidate_session(sid) is False
 
-    def test_invalidate_all_sessions(self):
+    async def test_invalidate_all_sessions(self):
         state = self._make_auth_state()
         state.create_session()
         state.create_session()
@@ -474,7 +474,7 @@ class TestAdminSessionAuth:
 
     # -- change_password clears sessions --
 
-    def test_change_password_clears_sessions(self):
+    async def test_change_password_clears_sessions(self):
         state = self._make_auth_state()
         sid = state.create_session()
         state.change_password("new_secret")
@@ -484,7 +484,7 @@ class TestAdminSessionAuth:
 
     # -- rotate does NOT clear sessions --
 
-    def test_rotate_preserves_sessions(self):
+    async def test_rotate_preserves_sessions(self):
         state = self._make_auth_state()
         sid = state.create_session()
         old_token = state.internal_token
@@ -495,7 +495,7 @@ class TestAdminSessionAuth:
 
     # -- check_admin_auth with internal_token header --
 
-    def test_admin_auth_accepts_internal_token_header(self):
+    async def test_admin_auth_accepts_internal_token_header(self):
         from llm_rosetta.gateway.middleware.auth import check_admin_auth
 
         state = self._make_auth_state()
@@ -503,7 +503,7 @@ class TestAdminSessionAuth:
         result = check_admin_auth(req, state)
         assert result is None  # allowed
 
-    def test_admin_auth_rejects_wrong_token_header(self):
+    async def test_admin_auth_rejects_wrong_token_header(self):
         from llm_rosetta.gateway.middleware.auth import check_admin_auth
 
         state = self._make_auth_state()
@@ -514,7 +514,7 @@ class TestAdminSessionAuth:
 
     # -- check_admin_auth with session cookie --
 
-    def test_admin_auth_accepts_valid_session_cookie(self):
+    async def test_admin_auth_accepts_valid_session_cookie(self):
         from llm_rosetta.gateway.middleware.auth import (
             ADMIN_COOKIE_NAME,
             check_admin_auth,
@@ -526,7 +526,7 @@ class TestAdminSessionAuth:
         result = check_admin_auth(req, state)
         assert result is None  # allowed
 
-    def test_admin_auth_rejects_invalid_cookie(self):
+    async def test_admin_auth_rejects_invalid_cookie(self):
         from llm_rosetta.gateway.middleware.auth import (
             ADMIN_COOKIE_NAME,
             check_admin_auth,
@@ -540,7 +540,7 @@ class TestAdminSessionAuth:
 
     # -- No password configured → pass through --
 
-    def test_admin_auth_no_password_allows_all(self):
+    async def test_admin_auth_no_password_allows_all(self):
         from llm_rosetta.gateway.middleware.auth import check_admin_auth
 
         state = AuthState(
@@ -552,7 +552,7 @@ class TestAdminSessionAuth:
 
     # -- Login/logout/auth-check always allowed --
 
-    def test_admin_auth_always_allows_login(self):
+    async def test_admin_auth_always_allows_login(self):
         from llm_rosetta.gateway.middleware.auth import check_admin_auth
 
         state = self._make_auth_state()

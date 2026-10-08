@@ -1,7 +1,6 @@
-"""Tests for gateway.keystore — SQLite-backed API key storage."""
+"""Tests for gateway.keystore — async SQLite-backed API key storage."""
 
 from __future__ import annotations
-
 
 import pytest
 
@@ -9,24 +8,26 @@ from llm_rosetta.gateway.keystore import KeyContext, KeyStore
 
 
 @pytest.fixture()
-def keystore(tmp_path):
-    ks = KeyStore(tmp_path / "keys.db")
+async def keystore(tmp_path):
+    ks = await KeyStore.create(tmp_path / "keys.db")
     yield ks
-    ks.close()
+    await ks.close()
 
 
 class TestKeyStoreCreate:
-    def test_create_returns_id_and_raw_key(self, keystore):
-        key_id, raw_key = keystore.create(label="test")
+    async def test_create_returns_id_and_raw_key(self, keystore):
+        key_id, raw_key = await keystore.create_key(label="test")
         assert len(key_id) == 8
         assert raw_key.startswith("rsk-")
 
-    def test_create_with_manual_key(self, keystore):
-        key_id, raw_key = keystore.create(label="manual", manual_key="my-secret-key")
+    async def test_create_with_manual_key(self, keystore):
+        key_id, raw_key = await keystore.create_key(
+            label="manual", manual_key="my-secret-key"
+        )
         assert raw_key == "my-secret-key"
 
-    def test_create_with_allowed_shims(self, keystore):
-        key_id, raw_key = keystore.create(
+    async def test_create_with_allowed_shims(self, keystore):
+        key_id, raw_key = await keystore.create_key(
             label="limited", allowed_shims=["openai", "anthropic"]
         )
         result = keystore.validate(raw_key)
@@ -34,8 +35,8 @@ class TestKeyStoreCreate:
         _, ctx = result
         assert ctx.allowed_shims == frozenset({"openai", "anthropic"})
 
-    def test_default_allowed_shims_is_star(self, keystore):
-        _, raw_key = keystore.create(label="default")
+    async def test_default_allowed_shims_is_star(self, keystore):
+        _, raw_key = await keystore.create_key(label="default")
         result = keystore.validate(raw_key)
         assert result is not None
         _, ctx = result
@@ -43,26 +44,26 @@ class TestKeyStoreCreate:
 
 
 class TestKeyStoreValidate:
-    def test_validate_valid_key(self, keystore):
-        _, raw_key = keystore.create(label="valid")
+    async def test_validate_valid_key(self, keystore):
+        _, raw_key = await keystore.create_key(label="valid")
         result = keystore.validate(raw_key)
         assert result is not None
         _, ctx = result
         assert ctx.label == "valid"
 
-    def test_validate_invalid_key(self, keystore):
-        keystore.create(label="exists")
+    async def test_validate_invalid_key(self, keystore):
+        await keystore.create_key(label="exists")
         assert keystore.validate("wrong-key") is None
 
-    def test_validate_empty_store(self, keystore):
+    async def test_validate_empty_store(self, keystore):
         assert keystore.validate("any-key") is None
 
 
 class TestKeyStoreList:
-    def test_list_returns_no_secrets(self, keystore):
-        keystore.create(label="a")
-        keystore.create(label="b")
-        keys = keystore.list_keys()
+    async def test_list_returns_no_secrets(self, keystore):
+        await keystore.create_key(label="a")
+        await keystore.create_key(label="b")
+        keys = await keystore.list_keys()
         assert len(keys) == 2
         for k in keys:
             assert "key" not in k
@@ -72,89 +73,89 @@ class TestKeyStoreList:
             assert "allowed_shims" in k
             assert "created" in k
 
-    def test_list_empty(self, keystore):
-        assert keystore.list_keys() == []
+    async def test_list_empty(self, keystore):
+        assert await keystore.list_keys() == []
 
 
 class TestKeyStoreUpdate:
-    def test_update_label(self, keystore):
-        key_id, raw_key = keystore.create(label="old")
-        assert keystore.update(key_id, label="new")
+    async def test_update_label(self, keystore):
+        key_id, raw_key = await keystore.create_key(label="old")
+        assert await keystore.update(key_id, label="new")
         result = keystore.validate(raw_key)
         assert result is not None
         _, ctx = result
         assert ctx.label == "new"
 
-    def test_update_allowed_shims(self, keystore):
-        key_id, raw_key = keystore.create(label="x")
-        assert keystore.update(key_id, allowed_shims=["google"])
+    async def test_update_allowed_shims(self, keystore):
+        key_id, raw_key = await keystore.create_key(label="x")
+        assert await keystore.update(key_id, allowed_shims=["google"])
         result = keystore.validate(raw_key)
         assert result is not None
         _, ctx = result
         assert ctx.allowed_shims == frozenset({"google"})
 
-    def test_update_nonexistent(self, keystore):
-        assert not keystore.update("nonexistent", label="x")
+    async def test_update_nonexistent(self, keystore):
+        assert not await keystore.update("nonexistent", label="x")
 
-    def test_update_nothing(self, keystore):
-        key_id, _ = keystore.create(label="y")
-        assert keystore.update(key_id)
+    async def test_update_nothing(self, keystore):
+        key_id, _ = await keystore.create_key(label="y")
+        assert await keystore.update(key_id)
 
 
 class TestKeyStoreDelete:
-    def test_delete_existing(self, keystore):
-        key_id, raw_key = keystore.create(label="del")
-        assert keystore.delete(key_id)
+    async def test_delete_existing(self, keystore):
+        key_id, raw_key = await keystore.create_key(label="del")
+        assert await keystore.delete(key_id)
         assert keystore.validate(raw_key) is None
 
-    def test_delete_nonexistent(self, keystore):
-        assert not keystore.delete("nonexistent")
+    async def test_delete_nonexistent(self, keystore):
+        assert not await keystore.delete("nonexistent")
 
-    def test_has_keys_after_delete(self, keystore):
-        key_id, _ = keystore.create(label="only")
+    async def test_has_keys_after_delete(self, keystore):
+        key_id, _ = await keystore.create_key(label="only")
         assert keystore.has_keys()
-        keystore.delete(key_id)
+        await keystore.delete(key_id)
         assert not keystore.has_keys()
 
 
 class TestKeyStoreRotate:
-    def test_rotate_returns_new_key(self, keystore):
-        key_id, old_key = keystore.create(label="rotate")
-        new_key = keystore.rotate(key_id)
+    async def test_rotate_returns_new_key(self, keystore):
+        key_id, old_key = await keystore.create_key(label="rotate")
+        new_key = await keystore.rotate(key_id)
         assert new_key is not None
         assert new_key != old_key
         assert new_key.startswith("rsk-")
 
-    def test_rotate_invalidates_old_key(self, keystore):
-        key_id, old_key = keystore.create(label="rotate")
-        keystore.rotate(key_id)
+    async def test_rotate_invalidates_old_key(self, keystore):
+        key_id, old_key = await keystore.create_key(label="rotate")
+        await keystore.rotate(key_id)
         assert keystore.validate(old_key) is None
 
-    def test_rotate_new_key_validates(self, keystore):
-        key_id, _ = keystore.create(label="rotate")
-        new_key = keystore.rotate(key_id)
+    async def test_rotate_new_key_validates(self, keystore):
+        key_id, _ = await keystore.create_key(label="rotate")
+        new_key = await keystore.rotate(key_id)
         result = keystore.validate(new_key)
         assert result is not None
         _, ctx = result
         assert ctx.label == "rotate"
 
-    def test_rotate_sets_rotated_timestamp(self, keystore):
-        key_id, _ = keystore.create(label="ts")
-        keystore.rotate(key_id)
-        keys = keystore.list_keys()
+    async def test_rotate_sets_rotated_timestamp(self, keystore):
+        key_id, _ = await keystore.create_key(label="ts")
+        await keystore.rotate(key_id)
+        keys = await keystore.list_keys()
         entry = next(k for k in keys if k["id"] == key_id)
         assert entry.get("rotated") is not None
 
-    def test_rotate_nonexistent(self, keystore):
-        assert keystore.rotate("nonexistent") is None
+    async def test_rotate_nonexistent(self, keystore):
+        assert await keystore.rotate("nonexistent") is None
 
 
 class TestKeyStoreHasKeys:
-    def test_has_keys_empty(self, keystore):
+    async def test_has_keys_empty(self, keystore):
         assert not keystore.has_keys()
 
-    def test_has_keys_with_key(self, keystore):
-        keystore.create(label="x")
+    async def test_has_keys_with_key(self, keystore):
+        await keystore.create_key(label="x")
         assert keystore.has_keys()
 
 
@@ -171,12 +172,12 @@ class TestKeyContext:
 
 
 class TestKeyStoreWAL:
-    def test_wal_mode(self, tmp_path):
-        ks = KeyStore(tmp_path / "test.db")
+    async def test_wal_mode(self, tmp_path):
+        ks = await KeyStore.create(tmp_path / "test.db")
         import sqlite3
 
         conn = sqlite3.connect(str(tmp_path / "test.db"))
         mode = conn.execute("PRAGMA journal_mode").fetchone()[0]
         conn.close()
-        ks.close()
+        await ks.close()
         assert mode == "wal"
