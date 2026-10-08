@@ -128,8 +128,9 @@ async def _init_persistence(
 
     # Detect counter drift (ungraceful shutdown) but defer the rebuild to
     # a background task so the server starts accepting connections immediately.
-    # Only flag when counters < log — the reverse (counters > log) is
-    # expected when log retention caps purge old entries.
+    # Compare lifetime counter (monotonic) against current log size.
+    # lifetime < log means counters were never persisted for some requests.
+    # The reverse (lifetime > log) is normal after pruning.
     log_entries = await persistence.count_log_entries()
     _counter_rebuild_needed = False
     if await persistence.check_and_clear_rebuild_flag():
@@ -138,11 +139,11 @@ async def _init_persistence(
             "rebuild will run in the background after startup"
         )
         _counter_rebuild_needed = True
-    elif metrics.total_requests < log_entries:
+    elif metrics.lifetime_total_requests < log_entries:
         logger.warning(
-            "Counter drift detected (counters=%d, log=%d) — "
+            "Counter drift detected (lifetime=%d, log=%d) — "
             "rebuild will run in the background after startup",
-            metrics.total_requests,
+            metrics.lifetime_total_requests,
             log_entries,
         )
         _counter_rebuild_needed = True

@@ -128,3 +128,87 @@ class TestMetricsCollector:
         m.record_disconnect()
         m.rebuild_counters([])
         assert m.total_client_disconnects == 0
+
+
+class TestLifetimeCounters:
+    def _record(self, m, status=200):
+        m.record_request(
+            model="m",
+            source="s",
+            target="t",
+            status_code=status,
+            duration_ms=1.0,
+            is_stream=False,
+            provider_name="p",
+        )
+
+    def test_lifetime_increments_with_total(self):
+        m = MetricsCollector()
+        self._record(m)
+        self._record(m, status=500)
+        assert m.total_requests == 2
+        assert m.lifetime_total_requests == 2
+        assert m.total_errors == 1
+        assert m.lifetime_total_errors == 1
+
+    def test_rebuild_does_not_reset_lifetime(self):
+        m = MetricsCollector()
+        for _ in range(10):
+            self._record(m)
+        self._record(m, status=500)
+        assert m.lifetime_total_requests == 11
+        assert m.lifetime_total_errors == 1
+
+        # Rebuild with only 5 rows (simulating prune)
+        rows = [
+            {
+                "model": "m",
+                "source_provider": "s",
+                "target_provider": "t",
+                "is_stream": False,
+                "status_code": 200,
+            }
+            for _ in range(5)
+        ]
+        m.rebuild_counters(iter(rows))
+        assert m.total_requests == 5  # reset to log count
+        assert m.lifetime_total_requests == 11  # preserved
+
+    def test_export_load_roundtrip(self):
+        m = MetricsCollector()
+        for _ in range(5):
+            self._record(m)
+        self._record(m, status=500)
+        exported = m.export_counters()
+        assert exported["lifetime_total_requests"] == 6
+        assert exported["lifetime_total_errors"] == 1
+
+        m2 = MetricsCollector()
+        m2.load_counters(exported)
+        assert m2.lifetime_total_requests == 6
+        assert m2.lifetime_total_errors == 1
+
+    def test_load_old_data_without_lifetime(self):
+        """Loading data from before lifetime counters bootstraps from totals."""
+        m = MetricsCollector()
+        m.load_counters({"total_requests": 100, "total_errors": 10})
+        assert m.lifetime_total_requests == 100
+        assert m.lifetime_total_errors == 10
+
+    def test_merge_rebuild_preserves_lifetime(self):
+        m = MetricsCollector()
+        for _ in range(20):
+            self._record(m)
+        pre = m.export_counters()
+        # Simulate background rebuild with fewer rows
+        baseline = {"total_requests": 10, "lifetime_total_requests": 20}
+        m.merge_rebuild(baseline, pre)
+        assert m.lifetime_total_requests == 20
+
+    def test_snapshot_includes_lifetime(self):
+        m = MetricsCollector()
+        self._record(m)
+        snap = m.snapshot()
+        assert "lifetime_total_requests" in snap
+        assert "lifetime_total_errors" in snap
+        assert snap["lifetime_total_requests"] == 1
