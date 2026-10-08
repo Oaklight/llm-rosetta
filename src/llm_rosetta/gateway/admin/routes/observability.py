@@ -110,15 +110,7 @@ async def get_rate_limit_status(request: Any) -> Response:
     return JSONResponse(rate_limit_state.snapshot(key=key))
 
 
-async def _rebuild_counters_after_mutation(request: Any) -> None:
-    """Rebuild in-memory counters from request_log after admin-initiated deletion."""
-    metrics = getattr(request.app, "metrics", None)
-    persistence = getattr(request.app, "persistence", None)
-    if metrics is None or persistence is None:
-        return
-    rows = [row async for row in persistence.iter_log_rows_for_rebuild()]
-    metrics.rebuild_counters(iter(rows))
-    await persistence.save_metrics(metrics.export_counters())
+# _rebuild_counters_after_mutation removed — now handled by Ops._record()
 
 
 async def rebuild_metrics(request: Any) -> Response:
@@ -130,30 +122,16 @@ async def rebuild_metrics(request: Any) -> Response:
     Returns both the pre-rebuild and post-rebuild counter snapshots
     so the admin UI can display what changed (sanity check).
     """
-    persistence = getattr(request.app, "persistence", None)
-    if persistence is None:
+    from llm_rosetta.gateway.ops.data import OpsRebuildMetrics
+
+    ctx = getattr(request.app, "ops_ctx", None)
+    if ctx is None or ctx.persistence is None:
         return JSONResponse(
             {"error": "No persistence configured (in-memory mode)"},
             status_code=400,
         )
-
-    metrics = request.app.metrics
-    before = metrics.export_counters()
-    rows = [row async for row in persistence.iter_log_rows_for_rebuild()]
-    count = metrics.rebuild_counters(iter(rows))
-    after = metrics.export_counters()
-
-    # Persist the rebuilt counters immediately
-    await persistence.save_metrics(after)
-
-    return JSONResponse(
-        {
-            "ok": True,
-            "rebuilt_from": count,
-            "before": before,
-            "counters": after,
-        }
-    )
+    result = await OpsRebuildMetrics(ctx).execute()
+    return JSONResponse({"ok": True, **(result or {})})
 
 
 async def get_token_usage(request: Any) -> Response:
@@ -248,10 +226,13 @@ async def get_request_by_id(request: Any, **kwargs: Any) -> Response:
 
 async def clear_requests(request: Any) -> Response:
     """Clear the request log."""
-    log = request.app.request_log
-    await log.clear()
-    await _rebuild_counters_after_mutation(request)
-    return JSONResponse({"ok": True})
+    from llm_rosetta.gateway.ops.data import OpsClearData
+
+    ctx = getattr(request.app, "ops_ctx", None)
+    if ctx is None or ctx.persistence is None:
+        return JSONResponse({"error": "No persistence configured"}, status_code=400)
+    result = await OpsClearData(ctx, table="request_log").execute()
+    return JSONResponse({"ok": True, **(result or {})})
 
 
 async def get_provider_key(request: Any, **kwargs: Any) -> Response:
@@ -442,30 +423,35 @@ async def get_error_dump_body(request: Any, **kwargs: Any) -> Response:
 
 async def clear_error_dumps(request: Any) -> Response:
     """Delete all error dumps."""
-    persistence = getattr(request.app, "persistence", None)
-    if persistence is None:
-        return JSONResponse({"error": "No persistence configured"}, status_code=400)
+    from llm_rosetta.gateway.ops.data import OpsClearData
 
-    await persistence.clear_error_dumps()
+    ctx = getattr(request.app, "ops_ctx", None)
+    if ctx is None or ctx.persistence is None:
+        return JSONResponse({"error": "No persistence configured"}, status_code=400)
+    await OpsClearData(ctx, table="error_dumps").execute()
     return JSONResponse({"ok": True})
 
 
 async def delete_error_dump(request: Any, **kwargs: Any) -> Response:
     """Delete a single error dump by ID."""
-    persistence = getattr(request.app, "persistence", None)
-    if persistence is None:
-        return JSONResponse({"error": "No persistence configured"}, status_code=400)
+    from llm_rosetta.gateway.ops.data import OpsDeleteErrorDump
 
+    ctx = getattr(request.app, "ops_ctx", None)
+    if ctx is None or ctx.persistence is None:
+        return JSONResponse({"error": "No persistence configured"}, status_code=400)
     dump_id = request.path_params["dump_id"]
-    if await persistence.delete_error_dump(dump_id):
+    found = await OpsDeleteErrorDump(ctx, dump_id=dump_id).execute()
+    if found:
         return JSONResponse({"ok": True})
     return JSONResponse({"error": "Not found"}, status_code=404)
 
 
 async def db_cleanup(request: Any) -> Response:
     """Delete records older than max_age_days and vacuum the database."""
-    persistence = getattr(request.app, "persistence", None)
-    if persistence is None:
+    from llm_rosetta.gateway.ops.data import OpsCleanupData
+
+    ctx = getattr(request.app, "ops_ctx", None)
+    if ctx is None or ctx.persistence is None:
         return JSONResponse({"error": "No persistence configured"}, status_code=400)
 
     body, err = parse_json_body(request)
@@ -478,25 +464,27 @@ async def db_cleanup(request: Any) -> Response:
             {"error": "max_age_days must be a positive integer"}, status_code=400
         )
 
-    result = await persistence.cleanup_by_age(max_age_days)
-    await _rebuild_counters_after_mutation(request)
+    result = await OpsCleanupData(ctx, mode="age", max_age_days=max_age_days).execute()
     return JSONResponse({"ok": True, **result})
 
 
 async def db_vacuum(request: Any) -> Response:
     """Run VACUUM on the database to reclaim disk space."""
-    persistence = getattr(request.app, "persistence", None)
-    if persistence is None:
-        return JSONResponse({"error": "No persistence configured"}, status_code=400)
+    from llm_rosetta.gateway.ops.data import OpsVacuum
 
-    result = await persistence.vacuum()
+    ctx = getattr(request.app, "ops_ctx", None)
+    if ctx is None or ctx.persistence is None:
+        return JSONResponse({"error": "No persistence configured"}, status_code=400)
+    result = await OpsVacuum(ctx).execute()
     return JSONResponse({"ok": True, **result})
 
 
 async def cleanup_requests_by_age(request: Any) -> Response:
     """Delete request log entries older than max_age_days."""
-    persistence = getattr(request.app, "persistence", None)
-    if persistence is None:
+    from llm_rosetta.gateway.ops.data import OpsCleanupData
+
+    ctx = getattr(request.app, "ops_ctx", None)
+    if ctx is None or ctx.persistence is None:
         return JSONResponse({"error": "No persistence configured"}, status_code=400)
 
     body, err = parse_json_body(request)
@@ -509,15 +497,18 @@ async def cleanup_requests_by_age(request: Any) -> Response:
             {"error": "max_age_days must be a positive integer"}, status_code=400
         )
 
-    result = await persistence.cleanup_logs_by_age(max_age_days)
-    await _rebuild_counters_after_mutation(request)
+    result = await OpsCleanupData(
+        ctx, mode="age", tables=("request_log",), max_age_days=max_age_days
+    ).execute()
     return JSONResponse({"ok": True, **result})
 
 
 async def cleanup_error_dumps_by_age(request: Any) -> Response:
     """Delete error dumps older than max_age_days."""
-    persistence = getattr(request.app, "persistence", None)
-    if persistence is None:
+    from llm_rosetta.gateway.ops.data import OpsCleanupData
+
+    ctx = getattr(request.app, "ops_ctx", None)
+    if ctx is None or ctx.persistence is None:
         return JSONResponse({"error": "No persistence configured"}, status_code=400)
 
     body, err = parse_json_body(request)
@@ -530,7 +521,9 @@ async def cleanup_error_dumps_by_age(request: Any) -> Response:
             {"error": "max_age_days must be a positive integer"}, status_code=400
         )
 
-    result = await persistence.cleanup_error_dumps_by_age(max_age_days)
+    result = await OpsCleanupData(
+        ctx, mode="age", tables=("error_dumps",), max_age_days=max_age_days
+    ).execute()
     return JSONResponse({"ok": True, **result})
 
 
@@ -580,28 +573,13 @@ async def get_ops_log(request: Any) -> Response:
 
 async def clear_ops_log(request: Any) -> Response:
     """Clear the ops log, recording the clear action itself."""
-    ops_log = getattr(request.app, "ops_log", None)
-    if ops_log is None:
+    from llm_rosetta.gateway.ops.data import OpsClearOpsLog
+
+    ctx = getattr(request.app, "ops_ctx", None)
+    if ctx is None:
         return JSONResponse({"ok": True})
-
-    from llm_rosetta.observability.ops_log import (
-        EVENT_OPS_LOG_CLEARED,
-        OpsLogEntry,
-        SEVERITY_INFO,
-        SOURCE_ADMIN,
-    )
-
-    count = await ops_log.clear()
-    await ops_log.add(
-        OpsLogEntry.create(
-            event_type=EVENT_OPS_LOG_CLEARED,
-            severity=SEVERITY_INFO,
-            message=f"Ops log cleared ({count} entries removed)",
-            details={"cleared_count": count},
-            source=SOURCE_ADMIN,
-        )
-    )
-    return JSONResponse({"ok": True, "cleared": count})
+    result = await OpsClearOpsLog(ctx).execute()
+    return JSONResponse({"ok": True, **(result or {})})
 
 
 async def get_ops_log_event_types(request: Any) -> Response:
@@ -620,8 +598,10 @@ async def get_ops_log_sources(request: Any) -> Response:
 
 async def cleanup_ops_log_by_age(request: Any) -> Response:
     """Delete ops log entries older than max_age_days."""
-    persistence = getattr(request.app, "persistence", None)
-    if persistence is None:
+    from llm_rosetta.gateway.ops.data import OpsCleanupData
+
+    ctx = getattr(request.app, "ops_ctx", None)
+    if ctx is None or ctx.persistence is None:
         return JSONResponse({"error": "No persistence configured"}, status_code=400)
 
     body, err = parse_json_body(request)
@@ -634,7 +614,9 @@ async def cleanup_ops_log_by_age(request: Any) -> Response:
             {"error": "max_age_days must be a positive integer"}, status_code=400
         )
 
-    result = await persistence.cleanup_ops_log_by_age(max_age_days)
+    result = await OpsCleanupData(
+        ctx, mode="age", tables=("ops_log",), max_age_days=max_age_days
+    ).execute()
     return JSONResponse({"ok": True, **result})
 
 
@@ -648,8 +630,10 @@ _TARGET_TABLES: dict[str, tuple[str, ...]] = {
 
 async def db_cleanup_before(request: Any) -> Response:
     """Delete rows with timestamp < *before* from selected tables."""
-    persistence = getattr(request.app, "persistence", None)
-    if persistence is None:
+    from llm_rosetta.gateway.ops.data import OpsCleanupData
+
+    ctx = getattr(request.app, "ops_ctx", None)
+    if ctx is None or ctx.persistence is None:
         return JSONResponse({"error": "No persistence configured"}, status_code=400)
 
     body, err = parse_json_body(request)
@@ -663,16 +647,18 @@ async def db_cleanup_before(request: Any) -> Response:
         )
 
     tables = _TARGET_TABLES.get(body.get("target", "all"), _TARGET_TABLES["all"])
-    result = await persistence.cleanup_before(before, tables=tables)
-    if "request_log" in tables:
-        await _rebuild_counters_after_mutation(request)
+    result = await OpsCleanupData(
+        ctx, mode="before", tables=tables, before=before
+    ).execute()
     return JSONResponse({"ok": True, **result})
 
 
 async def db_cleanup_range(request: Any) -> Response:
     """Delete rows with *start* <= timestamp < *end* from selected tables."""
-    persistence = getattr(request.app, "persistence", None)
-    if persistence is None:
+    from llm_rosetta.gateway.ops.data import OpsCleanupData
+
+    ctx = getattr(request.app, "ops_ctx", None)
+    if ctx is None or ctx.persistence is None:
         return JSONResponse({"error": "No persistence configured"}, status_code=400)
 
     body, err = parse_json_body(request)
@@ -691,18 +677,18 @@ async def db_cleanup_range(request: Any) -> Response:
         )
 
     tables = _TARGET_TABLES.get(body.get("target", "all"), _TARGET_TABLES["all"])
-    result = await persistence.cleanup_range(start, end, tables=tables)
-    if "request_log" in tables:
-        await _rebuild_counters_after_mutation(request)
+    result = await OpsCleanupData(
+        ctx, mode="range", tables=tables, start=start, end=end
+    ).execute()
     return JSONResponse({"ok": True, **result})
 
 
 async def db_trim(request: Any) -> Response:
     """Trim all tables to their configured retention caps."""
-    persistence = getattr(request.app, "persistence", None)
-    if persistence is None:
-        return JSONResponse({"error": "No persistence configured"}, status_code=400)
+    from llm_rosetta.gateway.ops.data import OpsTrimData
 
-    result = await persistence.trim_to_cap()
-    await _rebuild_counters_after_mutation(request)
+    ctx = getattr(request.app, "ops_ctx", None)
+    if ctx is None or ctx.persistence is None:
+        return JSONResponse({"error": "No persistence configured"}, status_code=400)
+    result = await OpsTrimData(ctx).execute()
     return JSONResponse({"ok": True, **result})
