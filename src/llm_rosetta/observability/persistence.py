@@ -18,7 +18,7 @@ import gzip
 import json
 import logging
 import warnings
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -112,6 +112,7 @@ class PersistenceManager:
             else (ops_log_max if ops_log_max is not None else DEFAULT_OPS_WARN_MAX)
         )
         self._ops_insert_count = 0
+        self.on_prune: Callable[[str, int], Awaitable[None]] | None = None
         self._data_dir.mkdir(parents=True, exist_ok=True)
 
         # Connection is opened by create() or _open(); asserted non-None
@@ -823,6 +824,9 @@ class PersistenceManager:
 
         if committed:
             await self._conn.commit()
+            total_pruned = max(0, info_excess) + max(0, warn_excess)
+            if total_pruned > 0 and self.on_prune is not None:
+                await self.on_prune("ops_log", total_pruned)
 
     @classmethod
     def _ops_row_to_dict(cls, row: tuple[Any, ...]) -> dict[str, Any]:
@@ -1468,6 +1472,9 @@ class PersistenceManager:
         )
         await self._conn.commit()
 
+        if excess > 0 and self.on_prune is not None:
+            await self.on_prune("error_dumps", excess)
+
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
@@ -1525,6 +1532,10 @@ class PersistenceManager:
                 await self._conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
             except Exception:
                 pass
+
+        pruned = count - self._success_max  # original excess
+        if pruned > 0 and self.on_prune is not None:
+            await self.on_prune("request_log", pruned)
 
     async def update_entry_profile(
         self, entry_id: str, profile_update: dict[str, Any]

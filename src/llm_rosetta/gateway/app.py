@@ -902,37 +902,27 @@ async def _periodic_cleanup(app: App) -> None:
     await asyncio.sleep(_CLEANUP_INITIAL_DELAY)
     while True:
         try:
-            persistence = getattr(app, "persistence", None)
+            ops_ctx = getattr(app, "ops_ctx", None)
             config = getattr(app, "gateway_config", None)
-            if persistence is not None and config is not None:
+            if (
+                ops_ctx is not None
+                and ops_ctx.persistence is not None
+                and config is not None
+            ):
+                from .ops.data import OpsPeriodicCleanup
+
                 raw_cfg = getattr(config, "_raw", {})
                 server = raw_cfg.get("server", {}) if isinstance(raw_cfg, dict) else {}
                 rl_age = int((server.get("request_log") or {}).get("max_age_days", 90))
                 ol_age = int((server.get("ops_log") or {}).get("max_age_days", 90))
 
-                rl = await persistence.cleanup_logs_by_age(rl_age)
-                ed = await persistence.cleanup_error_dumps_by_age(rl_age)
-                ol = await persistence.cleanup_ops_log_by_age(ol_age)
+                result = await OpsPeriodicCleanup(
+                    ops_ctx, rl_age=rl_age, ol_age=ol_age
+                ).execute()
 
-                total = (
-                    rl.get("deleted", 0)
-                    + ed.get("error_dumps_deleted", 0)
-                    + ol.get("deleted", 0)
-                )
+                total = (result or {}).get("total", 0)
                 if total > 0:
-                    logger.info(
-                        "Periodic cleanup: %d log, %d dump, %d ops removed",
-                        rl.get("deleted", 0),
-                        ed.get("error_dumps_deleted", 0),
-                        ol.get("deleted", 0),
-                    )
-                    metrics = getattr(app, "metrics", None)
-                    if metrics is not None:
-                        rows = [
-                            row async for row in persistence.iter_log_rows_for_rebuild()
-                        ]
-                        metrics.rebuild_counters(iter(rows))
-                        await persistence.save_metrics(metrics.export_counters())
+                    logger.info("Periodic cleanup: %d entries removed", total)
         except Exception as exc:
             logger.warning("Periodic cleanup failed: %s", exc)
         await asyncio.sleep(_CLEANUP_INTERVAL)

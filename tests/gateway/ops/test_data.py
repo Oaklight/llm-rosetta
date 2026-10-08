@@ -285,3 +285,74 @@ class TestOpsClearOpsLog:
         entry = ops_log.add.call_args[0][0]
         assert entry.event_type == EVENT_OPS_LOG_CLEARED
         assert entry.details["cleared_count"] == 42
+
+
+class TestOpsPrune:
+    @pytest.mark.asyncio
+    async def test_prune_records_event(self):
+        ops_log = MagicMock()
+        ops_log.add = AsyncMock()
+        ctx = OpsContext(ops_log=ops_log)
+
+        from llm_rosetta.gateway.ops.data import OpsPrune
+
+        await OpsPrune(ctx, table="request_log", count=50).execute()
+
+        entry = ops_log.add.call_args[0][0]
+        assert entry.event_type == EVENT_DATA_TRIMMED
+        assert entry.source == "persistence"
+        assert entry.details["table"] == "request_log"
+        assert entry.details["pruned"] == 50
+        assert "50" in entry.message
+
+    @pytest.mark.asyncio
+    async def test_prune_no_ops_log(self):
+        from llm_rosetta.gateway.ops.data import OpsPrune
+
+        ctx = OpsContext()
+        await OpsPrune(ctx, table="error_dumps", count=10).execute()
+
+
+class TestOpsPeriodicCleanup:
+    @pytest.mark.asyncio
+    async def test_periodic_cleanup_with_deletions(self):
+        from llm_rosetta.gateway.ops.data import OpsPeriodicCleanup
+
+        p = _mock_persistence()
+        m = MagicMock()
+        m.rebuild_counters = MagicMock(return_value=2)
+        m.export_counters = MagicMock(return_value={})
+        ops_log = MagicMock()
+        ops_log.add = AsyncMock()
+        ctx = OpsContext(ops_log=ops_log, persistence=p, metrics=m)
+
+        result = await OpsPeriodicCleanup(ctx, rl_age=30, ol_age=60).execute()
+
+        assert result["total"] > 0
+        p.cleanup_logs_by_age.assert_awaited_once_with(30)
+        p.cleanup_error_dumps_by_age.assert_awaited_once_with(30)
+        p.cleanup_ops_log_by_age.assert_awaited_once_with(60)
+        # ops_log entry written because total > 0
+        ops_log.add.assert_called_once()
+        entry = ops_log.add.call_args[0][0]
+        assert entry.event_type == EVENT_DATA_CLEANUP
+        assert entry.source == "persistence"
+
+    @pytest.mark.asyncio
+    async def test_periodic_cleanup_zero_deletions_no_record(self):
+        from llm_rosetta.gateway.ops.data import OpsPeriodicCleanup
+
+        p = MagicMock()
+        p.cleanup_logs_by_age = AsyncMock(return_value={"deleted": 0})
+        p.cleanup_error_dumps_by_age = AsyncMock(
+            return_value={"error_dumps_deleted": 0}
+        )
+        p.cleanup_ops_log_by_age = AsyncMock(return_value={"deleted": 0})
+        ops_log = MagicMock()
+        ops_log.add = AsyncMock()
+        ctx = OpsContext(ops_log=ops_log, persistence=p)
+
+        result = await OpsPeriodicCleanup(ctx, rl_age=90, ol_age=90).execute()
+
+        assert result["total"] == 0
+        ops_log.add.assert_not_called()
