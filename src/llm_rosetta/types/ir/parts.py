@@ -199,7 +199,7 @@ class ReasoningPart(TypedDict):
     ]  # 推理内容，某些provider可能不提供 Reasoning content, may not be provided by some providers
     signature: NotRequired[
         str
-    ]  # 推理签名，某些provider只提供这个 Reasoning signature, some providers only provide this
+    ]  # Verification signature coexisting with visible reasoning text (Anthropic, Google)
     status: NotRequired[
         Literal["in_progress", "completed", "incomplete"]
     ]  # 推理状态 Reasoning status
@@ -207,7 +207,7 @@ class ReasoningPart(TypedDict):
     cache_hint: NotRequired[dict[str, Any]]
     redacted_data: NotRequired[
         str
-    ]  # Anthropic-only: opaque redacted reasoning blob, round-tripped verbatim. Other converters ignore this field. See #857.
+    ]  # Opaque reasoning blob, round-tripped verbatim (Anthropic redacted_thinking, OpenAI encrypted_content)
 
 
 class UrlCitation(TypedDict, total=False):

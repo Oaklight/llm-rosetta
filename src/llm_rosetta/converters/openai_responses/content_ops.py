@@ -311,10 +311,10 @@ class OpenAIResponsesContentOps(BaseContentOps):
         if raw_content:
             result["content"] = raw_content
 
-        # Preserve encryption signature for encrypted reasoning.
-        signature = ir_reasoning.get("signature")
-        if signature:
-            result["encrypted_content"] = signature
+        # Preserve opaque encrypted reasoning blob.
+        redacted = ir_reasoning.get("redacted_data")
+        if redacted:
+            result["encrypted_content"] = redacted
 
         return result
 
@@ -370,10 +370,10 @@ class OpenAIResponsesContentOps(BaseContentOps):
         if reasoning_content:
             part["reasoning"] = str(reasoning_content)
 
-        # Preserve encrypted_content as signature.
+        # Preserve encrypted_content as opaque reasoning blob.
         encrypted = provider_reasoning.get("encrypted_content")
         if encrypted:
-            part["signature"] = str(encrypted)
+            part["redacted_data"] = str(encrypted)
 
         if metadata:
             part["provider_metadata"] = metadata

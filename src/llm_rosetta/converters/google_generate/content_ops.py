@@ -295,12 +295,9 @@ class GoogleGenerateContentOps(BaseContentOps):
             "thought": True,
             "text": ir_reasoning.get("reasoning", ""),
         }
-        # Preserve thought_signature
-        provider_metadata = cast(dict, ir_reasoning).get("provider_metadata")
-        if provider_metadata:
-            google_meta = provider_metadata.get("google", {})
-            if "thought_signature" in google_meta:
-                part["thoughtSignature"] = google_meta["thought_signature"]
+        signature = ir_reasoning.get("signature")
+        if signature:
+            part["thoughtSignature"] = signature
         return part
 
     @staticmethod
@@ -316,12 +313,11 @@ class GoogleGenerateContentOps(BaseContentOps):
         result = ReasoningPart(
             type="reasoning", reasoning=provider_reasoning.get("text", "")
         )
-        # Preserve thoughtSignature in provider_metadata (same as text/tool parts)
         thought_sig = provider_reasoning.get(
             "thoughtSignature"
         ) or provider_reasoning.get("thought_signature")
         if thought_sig:
-            result["provider_metadata"] = {"google": {"thought_signature": thought_sig}}
+            result["signature"] = thought_sig
         return result
 
     # ==================== Refusal (not natively supported) ====================
