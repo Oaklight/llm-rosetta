@@ -76,6 +76,7 @@ from .persistence import (
 )
 from .profiling import ProfilerState
 from .request_log import RequestLog, RequestLogEntry
+from .retention import RetentionPolicy, RetentionTracker
 
 __all__ = [
     "ALL_EVENT_TYPES",
@@ -121,6 +122,8 @@ __all__ = [
     "ProfilerState",
     "RequestLog",
     "RequestLogEntry",
+    "RetentionPolicy",
+    "RetentionTracker",
     "compress_body",
     "compute_body_hash",
     "decompress_body",
