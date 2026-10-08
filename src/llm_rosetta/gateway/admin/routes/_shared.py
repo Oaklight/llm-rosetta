@@ -10,7 +10,7 @@ from collections.abc import AsyncGenerator
 
 from llm_rosetta._vendor.httpserver import JSONResponse, Response
 
-from ...config import ConfigIO, GatewayConfig, config_lock
+from ...config import ConfigIO, GatewayConfig, async_config_lock
 
 logger = logging.getLogger("llm-rosetta-gateway")
 
@@ -97,7 +97,7 @@ async def config_mutate(
     ctx = ConfigMutationContext()
     config_path = _get_config_path(request)
 
-    with config_lock(config_path):
+    async with async_config_lock(config_path):
         try:
             ctx.data = _get_config_io(request).load_raw(config_path)
         except Exception as exc:
