@@ -76,6 +76,9 @@ supported format and forwards them to any configured upstream provider.
 | `gateway/config.py` | JSONC config loading, env-var substitution |
 | `gateway/providers.py` | Provider info, auth headers, key rotation |
 | `gateway/admin/` | Admin UI, metrics, request logging, persistence |
+| `gateway/ops/` | Unified operations audit layer (OpsBase + typed operation subclasses) |
+| `gateway/routing_strategy.py` | Pluggable routing strategies (weighted round-robin, affinity) |
+| `gateway/middleware/` | Auth, rate limiting, error format, hop limit, headers |
 
 ### IR type system
 
@@ -112,6 +115,12 @@ src/llm_rosetta/
 │   ├── middleware/           # Auth, rate limiting, error format, headers, etc.
 │   ├── pipelines/            # Embeddings, rerank, decision handlers
 │   ├── transport/            # Upstream HTTP transport
+│   ├── ops/                  # Unified operations audit layer
+│   │   ├── base.py           # OpsContext, OpsBase ABC
+│   │   ├── proxy.py          # OpsProxyRequest (hot path)
+│   │   ├── data.py           # Data mutation ops
+│   │   ├── security.py       # Auth/session ops
+│   │   └── keys.py           # API key management ops
 │   └── admin/               # Admin panel (metrics, request log, persistence)
 ├── types/                   # Typed IR and provider-specific types
 │   └── ir/                  # IR dataclasses (messages, parts, tools, stream)
@@ -129,6 +138,7 @@ tests/
 
 scripts/
 ├── alcf-token.py                 # ALCF token management
+├── bench_pipeline.py             # Conversion pipeline benchmarks
 ├── rosetta-test-*.sh             # Agent integration test runners
 ├── run_gateway_integration.sh    # Gateway integration test runner
 ├── dev/                          # Developer tools (not user-facing)
@@ -163,6 +173,7 @@ make test          # pytest tests/ --ignore=tests/integration -v
 make build         # python -m build
 make push          # twine upload
 make build-docker  # Build gateway Docker image
+make bench         # Run conversion pipeline benchmarks
 ```
 
 Tooling config (ruff, ty, complexipy) lives in `pyproject.toml`.
@@ -374,6 +385,8 @@ gate — missing any item means the converter is not fully integrated.
 - Shim/transform issue → check `shims/builtins.py` and `shims/transforms.py`
 - Gateway config issue → check `gateway/config.py` resolution order
   (shim → type → name fallback)
+- Ops audit issue → check `gateway/ops/base.py` execute flow, verify
+  OpsContext wiring in `gateway/admin/__init__.py` (`setup_admin`)
 - `_vendor/` issues → never fix in-place; update upstream, re-vendor
 - Integration test failure → likely missing API keys or network; these are
   excluded from `make test` by default
@@ -441,3 +454,25 @@ Thanks to the model type registry and data-driven admin UI:
   data-driven
 - `admin/js/state.js` — icons populated from `icon_svg` metadata
 - `admin/js/fetch-models.js` — type radios generated from metadata
+
+## Adding a new Ops subclass (checklist)
+
+When adding a new operation to the gateway ops layer, **every** item
+below must be completed.
+
+1. **Subclass `OpsBase`** in the appropriate module under
+   `gateway/ops/` (`data.py`, `security.py`, `keys.py`, or a new
+   file).
+2. **Set class variables**: `event_type`, `severity`, `source`.
+3. **Implement abstract methods**: `_run()`, `_message(result)`,
+   `_details(result)`.  Override `_record()` only if the op should
+   not write to `ops_log` (e.g. `OpsProxyRequest` writes to
+   `request_log` + `metrics` instead).
+4. **Add event constant** — add an `EVENT_*` constant to
+   `observability/ops_log.py` and include it in `ALL_EVENT_TYPES`.
+5. **Wire into route handler** — construct the Ops subclass with
+   `OpsContext` and `await op.execute()`.
+6. **Export** — add the class to `gateway/ops/__init__.py` `__all__`.
+7. **Unit tests** in `tests/gateway/ops/`.
+8. **Update CLAUDE.md** ops module description if a new file was
+   added.
