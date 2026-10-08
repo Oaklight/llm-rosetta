@@ -19,6 +19,27 @@ from llm_rosetta.types.ir import SystemMessage, UserMessage, AssistantMessage, T
 | `AssistantMessage` | `"assistant"` | TextPart、ToolCallPart、ReasoningPart |
 | `ToolMessage` | `"tool"` | ToolResultPart |
 
+### ToolMessage.batch_id
+
+`ToolMessage` 支持一个可选的 `batch_id` 字段（`NotRequired[str]`）。
+当一次 assistant 轮次产生多个工具调用时，所有对应的工具结果消息
+可以共享同一个 `batch_id`，表示它们属于同一批次。这在消息级转换
+中用于正确分组工具结果。
+
+```python
+from llm_rosetta.types.ir.messages import create_tool_message
+
+msg = create_tool_message(
+    tool_call_id="call_abc123",
+    result='{"temperature": "72°F"}',
+    batch_id="batch_xyz",
+)
+```
+
+!!! note
+    公开 API 导出的便捷函数 `create_tool_result_message()` 不会
+    转发 `batch_id`。需要批次分组时，请直接使用 `create_tool_message()`。
+
 ## 内容部分
 
 | 部分 | 描述 |

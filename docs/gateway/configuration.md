@@ -237,6 +237,29 @@ llm-rosetta-gateway --socket /run/user/$(id -u)/rosetta.sock
 
 能力信息显示在[管理面板](admin-panel.md)中，也可在面板中编辑。
 
+### 路由策略
+
+多提供方模型条目支持 `strategy` 字段来控制网关如何在提供方之间选择：
+
+```jsonc
+"models": {
+  "gpt-4o": {
+    "providers": [
+      {"name": "openai-prod", "weight": 5},
+      {"name": "openai-backup", "weight": 1}
+    ],
+    "strategy": "weighted_round_robin"
+  }
+}
+```
+
+| 策略 | 描述 |
+|------|------|
+| `weighted_round_robin` | **（默认）** 平滑的 nginx 风格加权轮询。权重 [5, 1] 产生序列 A A A A A B，而非突发切换。 |
+| `affinity_round_robin` | 对客户端标识（API key 或 IP）做 SHA-256 哈希，确定性地选择首选提供方，实现缓存亲和。无标识或仅单提供方时回退到加权轮询。 |
+
+策略按模型设置。单提供方模型忽略此字段。
+
 ## 网关 API Key
 
 网关 API Key 通过**管理面板**管理——配置文件中不再设置 API Key。
@@ -279,6 +302,12 @@ keystore（`keys.db`）中。
 
 !!! warning "未解析的占位符"
     如果 `admin_password` 包含未解析的 `${ENV_VAR}` 占位符（即环境变量未在启动时设置），网关会**拒绝启动**并输出清晰的错误信息，防止将字面量字符串 `${ADMIN_PASSWORD}` 作为密码使用。
+
+!!! info "会话认证与内部令牌"
+    浏览器认证使用**基于会话的 cookie**（HttpOnly + SameSite=Lax，
+    30 分钟无活动超时）。`X-Admin-Token` 请求头是一个独立的机制，
+    用于编程式 API 访问——它通过 HMAC 比较内部代理令牌进行验证，
+    而非管理密码。
 
 ### `credential_visible`
 
@@ -375,21 +404,16 @@ soft_error_patterns:
 
 ## 保真度验证
 
-网关可通过与存储的基线比较往返结果来验证转换保真度：
+网关对**同格式路由**（如 OpenAI → OpenAI 经不同提供方）验证转换保真度，
+通过比较原始请求/响应体与往返转换后的结果。
 
-```jsonc
-{
-  "server": {
-    "fidelity_check": true     // 默认值：false
-  }
-}
-```
+- **同格式影子对比始终运行** — 无需配置。当源和目标使用相同的 API
+  格式时，网关自动对比原始和转换后的请求与响应。
+- **严重级别为 critical 的差异**会自动触发错误转储，可在管理面板的
+  错误转储区域查看。
+- 保真度差异结果存储在请求的 profile 数据中，位于 `"fidelity"` 键下。
 
-启用后：
-
-- **持久化基线**：按模型的往返转换基线存储在 SQLite 中。当请求经过 A→IR→B→IR→A 转换后，与存储的基线进行比较。
-- **同格式影子对比**：对同格式路由（如 OpenAI→OpenAI 经不同 Provider），自动比较转换前和往返后的请求体。
-- 保真度差异记录为错误转储，可在 admin 面板中调查。
+跨格式路由不运行保真度对比，因为源和目标格式本质不同。
 
 ## 延迟启动
 

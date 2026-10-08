@@ -105,3 +105,65 @@ Passthrough 数据带有 converter dialect 标签，例如 `openai_responses` �
 - **流式测试** — 验证流事件顺序和生命周期
 
 运行 `make test` 执行完整测试套件（不包括需要 API key 的集成测试）。
+
+## Gateway Ops 层
+
+!!! note "转换器 ops 与 gateway ops 的区别"
+    转换器层按关注点拆分转换逻辑（`content_ops`、`message_ops`、
+    `tool_ops`、`config_ops`）。**Gateway ops 层**是一个独立的概念——
+    每个网关侧的变更操作都是一个 `OpsBase` 子类，自动进行审计记录。
+
+### OpsBase 协议
+
+```
+路由处理器 → 构造 Ops 子类 → 调用 execute()
+                                ├── _run()        （业务逻辑）
+                                └── _record()     （审计记录）
+                                     ├── _message()  （人类可读摘要）
+                                     └── _details()  （结构化元数据）
+```
+
+`execute()` 通过 `_run()` 执行操作，然后通过 `_record()` 记录结果。
+失败时，`_record(result=None, error=exc)` 被调用，严重性自动提升为
+WARNING，原始异常被重新抛出。记录过程的错误会被日志记录但不会掩盖
+操作结果（尽力审计）。
+
+### OpsContext
+
+`OpsContext` 是一个轻量级的服务包，在应用初始化时由 `setup_admin()` 创建一次。
+它持有四个子系统的引用——均为可选（未配置时为 `None`）：
+
+| 槽位 | 类型 | 用途 |
+|------|------|------|
+| `ops_log` | `OpsLog` | 审计事件日志 |
+| `request_log` | `RequestLog` | 代理请求流量日志 |
+| `metrics` | `MetricsCollector` | 进程内指标 |
+| `persistence` | `PersistenceManager` | SQLite 持久化 |
+
+### 模块组织
+
+| 模块 | 内容 |
+|------|------|
+| `ops/base.py` | `OpsContext`、`OpsBase` ABC |
+| `ops/proxy.py` | `OpsProxyRequest` — 热路径遥测，覆写 `_record` 以写入 `request_log` + `metrics` |
+| `ops/data.py` | 数据变更 ops（`OpsClearData`、`OpsCleanupData`、`OpsTrimData`、`OpsVacuum`、`OpsRebuildMetrics`、`OpsClearOpsLog`、`OpsPrune`、`OpsPeriodicCleanup`） |
+| `ops/security.py` | 认证/会话 ops（`OpsPasswordChange`、`OpsTokenRotate`、`OpsSessionLogoutAll`） |
+| `ops/keys.py` | API 密钥管理 ops（`OpsKeyCreate`、`OpsKeyUpdate`、`OpsKeyDelete`、`OpsKeyRotate`） |
+
+### 使用模式
+
+路由处理器用 `OpsContext` 构造 Ops 子类并调用 `execute()`——
+记录自动完成：
+
+```python
+from llm_rosetta.gateway.ops import OpsClearData
+
+result = await OpsClearData(request.app.ops_ctx, table="request_log").execute()
+```
+
+### OpsProxyRequest（特殊情况）
+
+`OpsProxyRequest` 覆写 `_record()` 以写入 `request_log` + `metrics`
+而非 `ops_log`。代理请求的频率过高，不适合写入审计日志。它的
+`_run()` 是空操作——实际的代理处理发生在 ops 类之外。这个类将遥测
+记录接口统一到同一个 `execute()` 契约下。

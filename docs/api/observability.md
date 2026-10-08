@@ -20,6 +20,8 @@ from llm_rosetta.observability import (
     compute_body_hash,
     compress_body,
     decompress_body,
+    OpsLog,
+    OpsLogEntry,
 )
 ```
 
@@ -195,6 +197,106 @@ if state.should_profile():
 | `store_result(profiler, ...)` | 存储分析结果 |
 | `status()` | 当前分析状态字典 |
 | `clear_results()` | 移除所有已存储的结果 |
+
+---
+
+## 操作日志 (OpsLog)
+
+操作日志记录服务器级别的操作事件——数据变更、安全事件、密钥管理、
+启动/关闭——并附带结构化元数据。有 SQLite 持久化时委托给持久化层，
+否则回退到内存环形缓冲区。
+
+```python
+from llm_rosetta.observability import OpsLog, OpsLogEntry
+```
+
+### OpsLogEntry 字段
+
+| 字段 | 类型 | 描述 |
+|------|------|------|
+| `id` | `str` | 自动生成的 UUID hex |
+| `timestamp` | `str` | ISO 8601 时间戳 |
+| `event_type` | `str` | 事件类别（见下表） |
+| `severity` | `str` | `"info"`、`"warning"` 或 `"error"` |
+| `message` | `str` | 人类可读摘要 |
+| `details` | `dict \| None` | 结构化元数据（因事件类型而异） |
+| `source` | `str \| None` | 来源子系统 |
+
+### 事件类型
+
+| 常量 | 字符串 | 描述 |
+|------|--------|------|
+| `EVENT_STARTUP` | `startup` | 服务器启动 |
+| `EVENT_SHUTDOWN` | `shutdown` | 优雅停止 |
+| `EVENT_CONFIG_RELOAD` | `config_reload` | 配置重载 |
+| `EVENT_ADMIN_SETUP` | `admin_setup` | 管理面板初始化 |
+| `EVENT_KEY_CREATE` | `key_create` | API 密钥创建 |
+| `EVENT_KEY_UPDATE` | `key_update` | API 密钥更新 |
+| `EVENT_KEY_DELETE` | `key_delete` | API 密钥删除 |
+| `EVENT_KEY_ROTATE` | `key_rotate` | API 密钥轮换 |
+| `EVENT_HEALTH_CHANGE` | `health_status_change` | 提供方健康状态变化 |
+| `EVENT_DATA_CLEARED` | `data_cleared` | 表数据清除 |
+| `EVENT_DATA_CLEANUP` | `data_cleanup` | 基于时间的清理 |
+| `EVENT_DATA_TRIMMED` | `data_trimmed` | 裁剪至保留上限 |
+| `EVENT_DATA_VACUUMED` | `data_vacuumed` | 数据库 vacuum |
+| `EVENT_DATA_REBUILT` | `data_rebuilt` | 从日志重建指标 |
+| `EVENT_OPS_LOG_CLEARED` | `ops_log_cleared` | 操作日志已清除 |
+| `EVENT_PASSWORD_CHANGED` | `password_changed` | 管理密码已更改 |
+| `EVENT_TOKEN_ROTATED` | `token_rotated` | 内部代理令牌已轮换 |
+| `EVENT_SESSION_LOGOUT_ALL` | `session_logout_all` | 所有管理会话已失效 |
+
+### 来源
+
+| 常量 | 字符串 | 使用者 |
+|------|--------|--------|
+| `SOURCE_GATEWAY` | `gateway` | 启动、关闭 |
+| `SOURCE_ADMIN` | `admin` | 管理面板操作、会话注销 |
+| `SOURCE_KEYS` | `keys` | API 密钥管理 |
+| `SOURCE_CONFIG` | `config` | 配置重载 |
+| `SOURCE_PERSISTENCE` | `persistence` | 后台修剪、定期清理 |
+| `SOURCE_AUTH` | `auth` | 密码更改、令牌轮换 |
+
+### 严重性级别
+
+| 常量 | 字符串 | 用途 |
+|------|--------|------|
+| `SEVERITY_INFO` | `info` | 非破坏性操作（默认） |
+| `SEVERITY_WARNING` | `warning` | 破坏性数据变更、安全事件 |
+| `SEVERITY_ERROR` | `error` | 失败（`_run()` 抛出异常时自动设置） |
+
+### OpsLog 方法
+
+| 方法 | 描述 |
+|------|------|
+| `add(entry)` | 记录一个操作事件 |
+| `get_entries(...)` | 分页、过滤查询（最新在前） |
+| `clear()` | 删除所有条目，返回数量 |
+
+### ops_log 与 request_log 对比
+
+| 方面 | ops_log | request_log |
+|------|---------|-------------|
+| 记录内容 | 变更、安全事件、生命周期 | 代理请求流量 |
+| 体量 | 低（管理操作、后台任务） | 高（每个代理请求） |
+| 写入者 | `OpsBase._record()`（默认） | `OpsProxyRequest._record()`（覆写） |
+| 典型事件 | `data_cleared`、`key_create`、`password_changed` | 每个 `/v1/*` 代理请求 |
+
+### OpsContext
+
+`OpsContext` 是连接 ops 与可观测性子系统的轻量级服务包。
+在应用初始化时由 `setup_admin()` 创建一次：
+
+```python
+from llm_rosetta.gateway.ops import OpsContext
+
+ctx = OpsContext(
+    ops_log=ops_log,
+    request_log=request_log,
+    metrics=metrics,
+    persistence=persistence,  # 均为可选——None 表示禁用该子系统
+)
+app.ops_ctx = ctx
+```
 
 ---
 

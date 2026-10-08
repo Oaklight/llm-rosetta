@@ -217,6 +217,75 @@ app._bind_port = port
 
 在调用 `setup_admin()` 之后、服务器开始接受连接之前设置这些属性。
 
+## Ops 层集成
+
+网关的统一 ops 层将每个变更操作记录为受审计的操作。嵌入网关时，
+`OpsContext` 由 `setup_admin()` 自动创建并附加到 `app.ops_ctx`。
+
+### OpsContext 的创建方式
+
+`setup_admin()` 创建 `OpsContext`，引用所有四个可观测性子系统：
+
+```python
+from llm_rosetta.gateway.ops import OpsContext
+
+# 由 setup_admin() 自动创建：
+ctx = OpsContext(
+    ops_log=ops_log,          # OpsLog 实例
+    request_log=request_log,  # RequestLog 实例
+    metrics=metrics,          # MetricsCollector 实例
+    persistence=persistence,  # PersistenceManager 或 None
+)
+app.ops_ctx = ctx
+```
+
+所有属性均为可选——`None` 表示该子系统未配置（如纯内存模式下无持久化）。
+
+### 路由处理器用法
+
+路由处理器构造 Ops 子类并调用 `execute()`：
+
+```python
+from llm_rosetta.gateway.ops import OpsClearData
+
+async def handle_clear_log(request):
+    result = await OpsClearData(request.app.ops_ctx, table="request_log").execute()
+    return json_response({"status": "ok", **result})
+```
+
+`execute()` 方法运行操作并自动记录。失败时，错误被记录到审计日志，
+原始异常被重新抛出。
+
+### 下游项目中的自定义 Ops
+
+下游项目可以定义自定义的 `OpsBase` 子类：
+
+```python
+from llm_rosetta.gateway.ops import OpsBase, OpsContext
+
+class OpsCustomAction(OpsBase):
+    event_type = "custom_action"
+    severity = "info"
+    source = "my_project"
+
+    def __init__(self, ctx: OpsContext, *, detail: str) -> None:
+        super().__init__(ctx)
+        self._detail = detail
+
+    async def _run(self):
+        # ... 你的逻辑 ...
+        return {"status": "done"}
+
+    def _message(self, result):
+        return f"Custom action: {self._detail}"
+
+    def _details(self, result):
+        return {"detail": self._detail, **(result or {})}
+```
+
+将对应的事件类型常量添加到你自己项目的常量模块中（不要直接修改
+`llm_rosetta.observability.ops_log`）。
+
 ## 品牌定制
 
 ### branding 字典

@@ -94,3 +94,44 @@ stream_response_from_provider(...)   # Provider → IR（流式）
 | 流式 handler（私有） | `_handle_ir_X_to_p` / `_handle_p_X_to_ir` | `_handle_ir_text_delta_to_p()` |
 | 构建/转换辅助函数（私有） | `_{verb}_{source}_X_to_{target}` | `_build_p_usage_to_ir()` |
 | 公开转换器 API | `X_to_provider` / `X_from_provider` | `request_to_provider()` |
+
+## Gateway Ops 命名
+
+Gateway ops 层（`gateway/ops/`）有自己的命名约定，与转换器层的
+`ir_X_to_p` / `p_X_to_ir` 模式不同。
+
+### 类名
+
+Ops 类使用 `Ops` 前缀加 PascalCase 动作名：
+
+| 模式 | 示例 |
+|------|------|
+| `Ops{Action}` | `OpsClearData`、`OpsKeyRotate`、`OpsPasswordChange` |
+| `_Ops{Group}Base` | `_OpsKeyBase`（某一族 ops 的内部共享基类） |
+
+### 常量
+
+事件类型、来源和严重性常量遵循以下模式：
+
+| 类别 | 模式 | 示例 |
+|------|------|------|
+| 事件类型 | `EVENT_{PAST_TENSE}` | `EVENT_DATA_CLEARED`、`EVENT_PASSWORD_CHANGED`、`EVENT_KEY_CREATE` |
+| 来源 | `SOURCE_{SUBSYSTEM}` | `SOURCE_ADMIN`、`SOURCE_AUTH`、`SOURCE_KEYS`、`SOURCE_PERSISTENCE` |
+| 严重性 | `SEVERITY_{LEVEL}` | `SEVERITY_INFO`、`SEVERITY_WARNING` |
+
+### 方法
+
+| 方法 | 用途 |
+|------|------|
+| `_run()` | 业务逻辑（抽象，必须实现） |
+| `_message(result)` | 用于审计日志的人类可读摘要（抽象，必须实现） |
+| `_details(result)` | 用于审计日志的结构化元数据字典（抽象，必须实现） |
+| `_record(result, *, error=None)` | 写入审计记录（仅在不写 ops_log 时覆写） |
+
+### Mixin
+
+共享行为的 mixin 使用 `_{Description}Mixin`：
+
+| Mixin | 用途 |
+|-------|------|
+| `_DataMutationMixin` | 影响 `request_log` 的 ops 的计数器重建逻辑 |
