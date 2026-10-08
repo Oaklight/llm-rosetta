@@ -4,75 +4,72 @@ This subpackage contains utility functions that support the conversion
 pipeline but are not part of the abstract Ops interface hierarchy.
 All helpers operate on IR-level data structures and are provider-agnostic.
 
-Modules:
-    cache           — LRU cache for tool definition conversion results.
-    image_limit     — Truncate images to provider-declared limits.
-    tool_orphan_fix — Fix mismatched tool_call / tool_result pairing.
-    reasoning       — Shim-driven reasoning configuration helpers.
-    schema          — JSON Schema sanitization for provider compatibility.
-    tool_call_unwind — Unwind parallel tool calls into sequential pairs.
-    tool_call_id    — Tool call ID sanitization for provider compatibility.
-    tool_content    — Multimodal content block conversion inside tool results.
-    truncate        — Fit an identifier into a length budget uniquely.
+Tool-related helpers have moved to :mod:`converters.base.tools`.
+The ``__getattr__`` fallback below keeps the old import paths working
+(e.g. ``from ..base.helpers import sanitize_schema``).
+
+Modules (remaining in helpers):
+    cache              — LRU cache for tool definition conversion results.
+    cache_breakpoints  — Cache breakpoint detection.
+    image_limit        — Truncate images to provider-declared limits.
+    reasoning          — Shim-driven reasoning configuration helpers.
+    system_message_hoist — Hoist late system messages to the front.
+    truncate           — Fit an identifier into a length budget uniquely.
 """
 
-# Re-export public functions so call sites can use:
-#   from ..base.helpers import fix_orphaned_tool_calls_ir
-# without knowing internal file layout.
+from __future__ import annotations
 
-from .tool_orphan_fix import (
-    extract_part_ids,
-    fix_orphaned_tool_calls_ir,
-    log_orphan_warnings,
-    strip_orphaned_tool_config,
-)
-from .schema import convert_nullable_to_type_array, sanitize_schema
-from .tool_batch import assign_tool_batch_ids, merge_tool_messages
-from .tool_call_id import sanitize_tool_call_id
+# ── Non-tool helpers (canonical home) ──
+
 from .reasoning import DEFAULT_REASONING_CAPS, apply_reasoning_config
-from .tool_call_unwind import unwind_parallel_tool_calls_ir
-from .tool_content import convert_content_blocks_to_ir, convert_ir_content_blocks_to_p
-from .tool_intrinsic import (
-    get_intrinsic_kind,
-    is_intrinsic_part,
-    make_intrinsic_tool_call,
-    make_intrinsic_tool_result,
-    set_intrinsic_kind,
-)
 from .truncate import truncate_with_digest
-
-__all__ = [
-    # orphan_fix
-    "extract_part_ids",
-    "fix_orphaned_tool_calls_ir",
-    "log_orphan_warnings",
-    "strip_orphaned_tool_config",
-    # schema
-    "convert_nullable_to_type_array",
-    "sanitize_schema",
-    "sanitize_tool_call_id",
-    # reasoning
-    "DEFAULT_REASONING_CAPS",
-    "apply_reasoning_config",
-    # tool_batch
-    "assign_tool_batch_ids",
-    "merge_tool_messages",
-    # tool_call_unwind
-    "unwind_parallel_tool_calls_ir",
-    # tool_content
-    "convert_content_blocks_to_ir",
-    "convert_ir_content_blocks_to_p",
-    # truncate
-    "truncate_with_digest",
-    # tool_intrinsic
-    "is_intrinsic_part",
-    "get_intrinsic_kind",
-    "set_intrinsic_kind",
-    "make_intrinsic_tool_call",
-    "make_intrinsic_tool_result",
-]
-
-# system_message_hoist
 from .system_message_hoist import hoist_late_system_messages_ir
 
-__all__ += ["hoist_late_system_messages_ir"]
+# ── Lazy backward-compat re-exports from tools/ ──
+# Using __getattr__ avoids circular imports: tools/call_id.py imports
+# helpers/truncate.py, which would trigger helpers/__init__.py, which
+# would try to import tools/call_id.py again.
+
+_TOOLS_REEXPORTS: dict[str, tuple[str, str]] = {
+    # name → (submodule of ..tools, attribute name)
+    "extract_part_ids": ("orphan_fix", "extract_part_ids"),
+    "fix_orphaned_tool_calls_ir": ("orphan_fix", "fix_orphaned_tool_calls_ir"),
+    "log_orphan_warnings": ("orphan_fix", "log_orphan_warnings"),
+    "strip_orphaned_tool_config": ("orphan_fix", "strip_orphaned_tool_config"),
+    "convert_nullable_to_type_array": ("schema", "convert_nullable_to_type_array"),
+    "sanitize_schema": ("schema", "sanitize_schema"),
+    "sanitize_tool_call_id": ("call_id", "sanitize_tool_call_id"),
+    "assign_tool_batch_ids": ("batch", "assign_tool_batch_ids"),
+    "merge_tool_messages": ("batch", "merge_tool_messages"),
+    "unwind_parallel_tool_calls_ir": ("call_unwind", "unwind_parallel_tool_calls_ir"),
+    "convert_content_blocks_to_ir": ("content", "convert_content_blocks_to_ir"),
+    "convert_ir_content_blocks_to_p": ("content", "convert_ir_content_blocks_to_p"),
+    "is_intrinsic_part": ("intrinsic", "is_intrinsic_part"),
+    "get_intrinsic_kind": ("intrinsic", "get_intrinsic_kind"),
+    "set_intrinsic_kind": ("intrinsic", "set_intrinsic_kind"),
+    "make_intrinsic_tool_call": ("intrinsic", "make_intrinsic_tool_call"),
+    "make_intrinsic_tool_result": ("intrinsic", "make_intrinsic_tool_result"),
+}
+
+
+def __getattr__(name: str) -> object:
+    if name in _TOOLS_REEXPORTS:
+        submod, attr = _TOOLS_REEXPORTS[name]
+        import importlib
+
+        mod = importlib.import_module(f"..tools.{submod}", __name__)
+        return getattr(mod, attr)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+__all__ = [
+    # reasoning (canonical)
+    "DEFAULT_REASONING_CAPS",
+    "apply_reasoning_config",
+    # truncate (canonical)
+    "truncate_with_digest",
+    # system_message_hoist (canonical)
+    "hoist_late_system_messages_ir",
+    # ── re-exports from tools/ (backward compat) ──
+    *_TOOLS_REEXPORTS,
+]

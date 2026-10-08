@@ -24,7 +24,7 @@ from ...types.ir import (
 )
 from ...types.ir.tools import ToolCallConfig
 from ..base import BaseToolOps
-from ..base.helpers import log_orphan_warnings, sanitize_schema, sanitize_tool_call_id
+from ..base.tools import log_orphan_warnings, sanitize_schema, sanitize_tool_call_id
 
 logger = logging.getLogger(__name__)
 
@@ -472,7 +472,7 @@ class OpenAIChatToolOps(BaseToolOps):
         if isinstance(result, list):
             # Deferred imports to avoid circular dependency
             # (tool_ops ↔ content_ops via base helpers)
-            from ..base.helpers.tool_content import convert_ir_content_blocks_to_p
+            from ..base.tools.content import convert_ir_content_blocks_to_p
 
             from .content_ops import OpenAIChatContentOps
 

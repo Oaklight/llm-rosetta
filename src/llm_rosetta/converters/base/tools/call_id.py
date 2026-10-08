@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import re
 
-from .truncate import truncate_with_digest
+from ..helpers.truncate import truncate_with_digest
 
 _INVALID_CHARS = re.compile(r"[^a-zA-Z0-9_-]")
 

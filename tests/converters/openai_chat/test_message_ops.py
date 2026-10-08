@@ -5,7 +5,7 @@ OpenAI Chat MessageOps unit tests.
 from typing import Any, Union, cast
 
 from llm_rosetta._vendor.validate import validate
-from llm_rosetta.converters.base.helpers.multimodal_tool_patch import (
+from llm_rosetta.converters.base.tools.multimodal_patch import (
     has_multimodal_content,
     is_synthetic_tool_content_msg,
 )

@@ -11,7 +11,7 @@ from typing import Any, cast
 from ...types.ir import ToolCallPart, ToolResultPart
 from ...types.ir.tools import ToolChoice, ToolDefinition
 from ..base import BaseToolOps
-from ..base.helpers.tool_intrinsic import (
+from ..base.tools.intrinsic import (
     get_intrinsic_kind,
     make_intrinsic_tool_call,
     make_intrinsic_tool_result,

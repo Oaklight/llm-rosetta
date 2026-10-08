@@ -1,39 +1,20 @@
-"""
-LLM-Rosetta - Base Tool Operations
+"""Base Tool Operations — abstract interface for the tool lifecycle.
 
-Abstract base class for tool conversion operations.
-
-Handles the full tool lifecycle: definition → choice → call → result → config.
-All methods are ``@staticmethod @abstractmethod``.
-
-Utility functions (orphan fixing, schema sanitization) live in the
-``helpers`` subpackage.
+Defines :class:`BaseToolOps`, the abstract base class that every
+provider-specific ``ToolOps`` must implement.  Covers:
+definition → choice → call → result → config.
 """
 
 from abc import ABC, abstractmethod
 from typing import Any
 
-from ...types.ir import (
+from ....types.ir import (
     ToolCallPart,
     ToolChoice,
     ToolDefinition,
     ToolResultPart,
 )
-from ...types.ir.tools import ToolCallConfig
-
-# Backward-compatibility re-exports.  These utilities moved to the ``helpers``
-# subpackage in v0.6.11, but external callers (e.g. argo-proxy) historically
-# imported them from this module via
-# ``from llm_rosetta.converters.base.tools import sanitize_schema``.
-# Re-export them here so the old import paths keep working.  The canonical
-# location is ``llm_rosetta.converters.base.helpers``.
-from .helpers.schema import sanitize_schema  # noqa: F401
-from .helpers.tool_orphan_fix import (  # noqa: F401
-    extract_part_ids,
-    fix_orphaned_tool_calls_ir,
-    log_orphan_warnings,
-    strip_orphaned_tool_config,
-)
+from ....types.ir.tools import ToolCallConfig
 
 
 class BaseToolOps(ABC):

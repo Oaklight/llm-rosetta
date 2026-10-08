@@ -3,7 +3,7 @@
 import re
 
 
-from llm_rosetta.converters.base.helpers.tool_call_id import (
+from llm_rosetta.converters.base.tools.call_id import (
     MAX_TOOL_CALL_ID_LENGTH,
     sanitize_tool_call_id,
 )

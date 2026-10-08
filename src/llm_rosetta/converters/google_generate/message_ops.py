@@ -34,8 +34,8 @@ from ...types.ir import (
     is_tool_result_part,
 )
 from ..base import BaseMessageOps
-from ..base.helpers.tool_batch import assign_tool_batch_ids, merge_tool_messages
-from ..base.helpers.tool_intrinsic import (
+from ..base.tools.batch import assign_tool_batch_ids, merge_tool_messages
+from ..base.tools.intrinsic import (
     get_intrinsic_kind,
     make_intrinsic_tool_call,
     make_intrinsic_tool_result,

@@ -1,6 +1,6 @@
 """OpenAI Chat converter constants — reason mappings and tool content packing."""
 
-from ..base.helpers.multimodal_tool_patch import (  # noqa: F401  # re-export
+from ..base.tools.multimodal_patch import (  # noqa: F401  # re-export
     TOOL_CONTENT_CLOSE_TAG,
     TOOL_CONTENT_OPEN_TAG_RE,
 )
