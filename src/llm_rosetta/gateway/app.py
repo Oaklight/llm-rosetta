@@ -57,12 +57,12 @@ from .deferred_startup import ProviderNotReady
 logger = get_logger()
 
 
-async def _record_telemetry(
-    request: Any,
+async def _record_proxy_op(
+    app: Any,
     *,
     model: str,
-    source_provider: ProviderType,
-    target_provider: ProviderType,
+    source_provider: str,
+    target_provider: str,
     provider_name: str,
     is_stream: bool,
     status_code: int,
@@ -70,84 +70,31 @@ async def _record_telemetry(
     error_detail: str | None,
     profile: dict[str, Any] | None = None,
     entry_id_override: str | None = None,
-) -> str | None:
-    """Record metrics and request log entry after a proxy call completes.
+) -> None:
+    """Record a proxy request via OpsProxyRequest.
 
-    Args:
-        entry_id_override: Pre-generated entry ID for streaming requests.
-            When provided, the entry is created with this ID so the
-            stream generator can write back profile data by ID.
-
-    Returns:
-        The request log entry ID, or ``None`` if no request log is
-        configured.
+    Thin wrapper that fetches ``ops_ctx`` from ``app`` and delegates to
+    :class:`~llm_rosetta.gateway.ops.proxy.OpsProxyRequest`.
     """
-    metrics = getattr(request.app, "metrics", None)
-    if is_stream and metrics:
-        metrics.active_streams -= 1
-    # Extract usage from profile (non-streaming only; streaming writes
-    # back usage separately after the stream completes)
-    _usage = (profile or {}).get("usage") if not is_stream else None
-    _input_tokens = _usage.get("prompt_tokens") if _usage else None
-    _output_tokens = _usage.get("completion_tokens") if _usage else None
-    _total_tokens = _usage.get("total_tokens") if _usage else None
-    _cache_read_tokens = _usage.get("cache_read_tokens") if _usage else None
-    _cache_creation_tokens = _usage.get("cache_creation_tokens") if _usage else None
-    _reasoning_tokens = _usage.get("reasoning_tokens") if _usage else None
+    from .ops.proxy import OpsProxyRequest
 
-    if metrics:
-        metrics.record_request(
-            model=model,
-            source=source_provider,
-            target=target_provider,
-            status_code=status_code,
-            duration_ms=duration_ms,
-            is_stream=is_stream,
-            provider_name=provider_name,
-            error_detail=error_detail,
-            input_tokens=_input_tokens,
-            output_tokens=_output_tokens,
-            cache_read_tokens=_cache_read_tokens,
-            cache_creation_tokens=_cache_creation_tokens,
-            reasoning_tokens=_reasoning_tokens,
-        )
-
-    request_log = getattr(request.app, "request_log", None)
-    if request_log is not None:
-        from dataclasses import replace as _dc_replace
-
-        from llm_rosetta.observability import RequestLogEntry
-
-        entry = RequestLogEntry.create(
-            model=model,
-            source_provider=source_provider,
-            target_provider=target_provider,
-            target_provider_name=provider_name,
-            is_stream=is_stream,
-            status_code=status_code,
-            duration_ms=duration_ms,
-            error_detail=error_detail,
-            api_key_label=(
-                _kctx.label if (_kctx := api_key_context_var.get()) else None
-            ),
-            client_ip=(
-                _rctx.client_ip if (_rctx := request_context_var.get()) else None
-            ),
-            profile=profile,
-            input_tokens=_input_tokens,
-            output_tokens=_output_tokens,
-            total_tokens=_total_tokens,
-            cache_read_tokens=_cache_read_tokens,
-            cache_creation_tokens=_cache_creation_tokens,
-            reasoning_tokens=_reasoning_tokens,
-        )
-        # For streaming, use the pre-generated ID so the stream
-        # generator can write back profile data by this ID.
-        if entry_id_override:
-            entry = _dc_replace(entry, id=entry_id_override)
-        await request_log.add(entry)
-        return entry.id
-    return None
+    ctx = getattr(app, "ops_ctx", None)
+    if ctx is None:
+        return
+    op = OpsProxyRequest(
+        ctx,
+        model=model,
+        source_provider=source_provider,
+        target_provider=target_provider,
+        provider_name=provider_name,
+        is_stream=is_stream,
+        status_code=status_code,
+        duration_ms=duration_ms,
+        error_detail=error_detail,
+        profile=profile,
+        entry_id_override=entry_id_override,
+    )
+    await op.execute()
 
 
 # ---------------------------------------------------------------------------
@@ -505,8 +452,8 @@ async def _proxy_handler(
             duration_ms=duration_ms,
         )
 
-        await _record_telemetry(
-            request,
+        await _record_proxy_op(
+            request.app,
             model=model,
             source_provider=source_provider,
             target_provider=route.target_provider,
@@ -898,8 +845,8 @@ def _register_non_llm_routes(app: App, config: GatewayConfig) -> None:
                         duration_ms=duration_ms,
                     )
 
-                    await _record_telemetry(
-                        request,
+                    await _record_proxy_op(
+                        request.app,
                         model=model,
                         source_provider=cast(ProviderType, type_name),
                         target_provider=cast(ProviderType, type_name),
