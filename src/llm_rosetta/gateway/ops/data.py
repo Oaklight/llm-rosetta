@@ -271,3 +271,88 @@ class OpsClearOpsLog(OpsBase):
 
     def _details(self, result: Any) -> dict[str, Any]:
         return {"cleared_count": (result or {}).get("cleared", 0)}
+
+
+class OpsPrune(OpsBase):
+    """Record an amortized prune event (prune already happened in persistence)."""
+
+    event_type: ClassVar[str] = EVENT_DATA_TRIMMED
+    source: ClassVar[str] = "persistence"
+
+    __slots__ = ("_table", "_count")
+
+    def __init__(self, ctx: OpsContext, *, table: str, count: int) -> None:
+        super().__init__(ctx)
+        self._table = table
+        self._count = count
+
+    async def _run(self) -> None:
+        return None
+
+    def _message(self, result: Any) -> str:
+        return f"Auto-prune: {self._count} rows removed from {self._table}"
+
+    def _details(self, result: Any) -> dict[str, Any]:
+        return {"table": self._table, "pruned": self._count}
+
+
+class OpsPeriodicCleanup(_DataMutationMixin, OpsBase):
+    """Record a periodic background cleanup."""
+
+    event_type: ClassVar[str] = EVENT_DATA_CLEANUP
+    source: ClassVar[str] = "persistence"
+
+    __slots__ = (
+        "_rl_age",
+        "_ol_age",
+        "_rl_result",
+        "_ed_result",
+        "_ol_result",
+    )
+
+    def __init__(
+        self,
+        ctx: OpsContext,
+        *,
+        rl_age: int = 90,
+        ol_age: int = 90,
+    ) -> None:
+        super().__init__(ctx)
+        self._rl_age = rl_age
+        self._ol_age = ol_age
+        self._rl_result: dict[str, Any] = {}
+        self._ed_result: dict[str, Any] = {}
+        self._ol_result: dict[str, Any] = {}
+
+    async def _run(self) -> dict[str, Any]:
+        p = self._ctx.persistence
+        if p is None:
+            return {}
+        self._rl_result = await p.cleanup_logs_by_age(self._rl_age)
+        self._ed_result = await p.cleanup_error_dumps_by_age(self._rl_age)
+        self._ol_result = await p.cleanup_ops_log_by_age(self._ol_age)
+        total = (
+            self._rl_result.get("deleted", 0)
+            + self._ed_result.get("error_dumps_deleted", 0)
+            + self._ol_result.get("deleted", 0)
+        )
+        return {"total": total, **self._rl_result, **self._ed_result, **self._ol_result}
+
+    async def _record(self, result: Any, *, error: BaseException | None = None) -> None:
+        total = (result or {}).get("total", 0)
+        if total > 0 or error is not None:
+            await super()._record(result, error=error)
+            await self._rebuild_counters()
+
+    def _message(self, result: Any) -> str:
+        total = (result or {}).get("total", 0)
+        return f"Periodic cleanup: {total} entries removed"
+
+    def _details(self, result: Any) -> dict[str, Any]:
+        return {
+            "rl_age": self._rl_age,
+            "ol_age": self._ol_age,
+            "request_log_deleted": self._rl_result.get("deleted", 0),
+            "error_dumps_deleted": self._ed_result.get("error_dumps_deleted", 0),
+            "ops_log_deleted": self._ol_result.get("deleted", 0),
+        }
