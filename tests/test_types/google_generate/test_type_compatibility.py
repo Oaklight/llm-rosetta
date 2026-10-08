@@ -694,7 +694,7 @@ class TestSDKCompatibility:
             content_dict = sdk_content.model_dump(exclude_none=True)
 
             # Verify it matches our Content TypedDict structure
-            content: Content = content_dict
+            content: Content = cast(Content, content_dict)
             assert content["role"] == "user"
             parts = content["parts"]
             assert parts is not None
@@ -712,7 +712,7 @@ class TestSDKCompatibility:
             sdk_part = sdk_types.Part(text="Hello")
             part_dict = sdk_part.model_dump(exclude_none=True)
 
-            part: Part = part_dict
+            part: Part = cast(Part, part_dict)
             assert part["text"] == "Hello"
 
         except ImportError:
@@ -731,7 +731,7 @@ class TestSDKCompatibility:
             )
             part_dict = sdk_part.model_dump(exclude_none=True)
 
-            part: Part = part_dict
+            part: Part = cast(Part, part_dict)
             func_call = part["function_call"]
             assert func_call is not None
             assert func_call["name"] == "get_weather"
@@ -760,7 +760,7 @@ class TestSDKCompatibility:
             )
             func_dict = sdk_func.model_dump(exclude_none=True)
 
-            func_decl: FunctionDeclaration = func_dict
+            func_decl: FunctionDeclaration = cast(FunctionDeclaration, func_dict)
             assert func_decl["name"] == "get_weather"
             assert func_decl["description"] == "Get the current weather"
 
@@ -782,7 +782,7 @@ class TestSDKCompatibility:
             )
             tool_dict = sdk_tool.model_dump(exclude_none=True)
 
-            tool: Tool = tool_dict
+            tool: Tool = cast(Tool, tool_dict)
             func_decls = tool["function_declarations"]
             assert func_decls is not None
             assert len(func_decls) == 1
@@ -802,7 +802,7 @@ class TestSDKCompatibility:
             )
             safety_dict = sdk_safety.model_dump(exclude_none=True)
 
-            safety: SafetySetting = safety_dict
+            safety: SafetySetting = cast(SafetySetting, safety_dict)
             assert safety["category"] == "HARM_CATEGORY_HARASSMENT"
             assert safety["threshold"] == "BLOCK_MEDIUM_AND_ABOVE"
 
@@ -820,7 +820,7 @@ class TestSDKCompatibility:
             )
             thinking_dict = sdk_thinking.model_dump(exclude_none=True)
 
-            thinking: ThinkingConfig = thinking_dict
+            thinking: ThinkingConfig = cast(ThinkingConfig, thinking_dict)
             assert thinking["include_thoughts"] is True
             assert thinking["thinking_budget"] == 2048
 
@@ -853,7 +853,9 @@ class TestSDKCompatibility:
             )
             response_dict = sdk_response.model_dump(exclude_none=True)
 
-            response: GenerateContentResponse = response_dict
+            response: GenerateContentResponse = cast(
+                GenerateContentResponse, response_dict
+            )
             candidates = response["candidates"]
             assert candidates is not None
             assert len(candidates) == 1
@@ -893,7 +895,7 @@ class TestSDKCompatibility:
             )
             candidate_dict = sdk_candidate.model_dump(exclude_none=True)
 
-            candidate: Candidate = candidate_dict
+            candidate: Candidate = cast(Candidate, candidate_dict)
             safety_ratings = candidate["safety_ratings"]
             assert safety_ratings is not None
             assert len(safety_ratings) == 1
@@ -916,7 +918,9 @@ class TestSDKCompatibility:
             )
             usage_dict = sdk_usage.model_dump(exclude_none=True)
 
-            usage: GenerateContentResponseUsageMetadata = usage_dict
+            usage: GenerateContentResponseUsageMetadata = cast(
+                GenerateContentResponseUsageMetadata, usage_dict
+            )
             assert usage["prompt_token_count"] == 100
             assert usage["total_token_count"] == 300
             assert usage["thoughts_token_count"] == 25
