@@ -554,6 +554,7 @@ BENCH_PATHS = [
     ("openai_responses", "anthropic"),
     ("google", "google"),
     ("google", "openai_chat"),
+    ("google", "anthropic"),
     ("google_interactions", "google_interactions"),
 ]
 
