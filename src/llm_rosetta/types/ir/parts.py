@@ -205,6 +205,9 @@ class ReasoningPart(TypedDict):
     ]  # 推理状态 Reasoning status
     provider_metadata: NotRequired[dict[str, Any]]
     cache_hint: NotRequired[dict[str, Any]]
+    redacted_data: NotRequired[
+        str
+    ]  # Opaque redacted reasoning data (Anthropic redacted_thinking)
 
 
 class UrlCitation(TypedDict, total=False):

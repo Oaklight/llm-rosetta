@@ -408,5 +408,7 @@ class AnthropicMessageOps(BaseMessageOps):
             return [self.tool_ops.p_tool_result_to_ir(provider_part)]
         elif part_type == "thinking":
             return [self.content_ops.p_reasoning_to_ir(provider_part)]
+        elif part_type == "redacted_thinking":
+            return [self.content_ops.p_redacted_thinking_to_ir(provider_part)]
 
         return []

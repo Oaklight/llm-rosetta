@@ -31,6 +31,7 @@ from ...types.ir.stream import (
     UsageEvent,
 )
 from ..base import BaseConverter
+from ..base.helpers.system_message_hoist import hoist_system_in_converter
 from ..base.context import ConversionContext, StreamContext
 from .config_ops import GoogleInteractionsConfigOps
 from .content_ops import GoogleInteractionsContentOps
@@ -161,6 +162,19 @@ class GoogleInteractionsConverter(BaseConverter):
         self, ir_request: IRRequest, result: dict[str, Any]
     ) -> None:
         messages = list(ir_request.get("messages", []))
+
+        # Hoist mid-conversation system messages to <system> user envelopes
+        # so they are not silently dropped. Idempotent if shim already ran.
+        messages, hoisted_si = hoist_system_in_converter(messages, ir_request)
+        if hoisted_si and "system_instruction" not in result:
+            texts = [
+                p["text"]
+                for p in hoisted_si
+                if isinstance(p, dict) and p.get("type") == "text"
+            ]
+            if texts:
+                result["system_instruction"] = " ".join(texts)
+
         non_system: list = []
         for msg in messages:
             if hasattr(msg, "get") and msg.get("role") == "system":

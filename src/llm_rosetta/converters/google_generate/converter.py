@@ -50,6 +50,7 @@ from ..base.helpers import (
     sanitize_tool_call_id,
     strip_orphaned_tool_config,
 )
+from ..base.helpers.system_message_hoist import hoist_system_in_converter
 from ._constants import (
     GOOGLE_REASON_FROM_PROVIDER,
     GOOGLE_REASON_TO_PROVIDER,
@@ -96,6 +97,40 @@ def _dict_to_modality_list(details: dict[str, int]) -> list[dict[str, Any]]:
             continue
         result.append({"modality": modality, "tokenCount": count})
     return result
+
+
+def _hoist_and_extract_system(
+    ir_messages: list,
+    ir_request: Mapping[str, Any],
+    system_instruction: dict[str, Any] | None,
+) -> tuple[list, dict[str, Any] | None]:
+    """Hoist late system messages and extract leading ones for system_instruction."""
+    ir_messages, hoisted_si = hoist_system_in_converter(ir_messages, ir_request)
+    if hoisted_si and system_instruction is None:
+        texts = [
+            p["text"]
+            for p in hoisted_si
+            if isinstance(p, dict) and p.get("type") == "text"
+        ]
+        if texts:
+            system_instruction = {
+                "role": "user",
+                "parts": [{"text": t} for t in texts],
+            }
+
+    for item in ir_messages:
+        if is_message(item) and item.get("role") == "system":
+            msg_parts = [
+                {"text": part["text"]}
+                for part in item.get("content", [])
+                if is_text_part(part)
+            ]
+            if system_instruction is None:
+                system_instruction = {"role": "user", "parts": msg_parts}
+            else:
+                cast(list, system_instruction["parts"]).extend(msg_parts)
+
+    return ir_messages, system_instruction
 
 
 class GoogleGenerateConverter(BaseConverter):
@@ -258,17 +293,10 @@ class GoogleGenerateConverter(BaseConverter):
         ir_messages = assign_tool_batch_ids(ir_messages)
         ctx.warnings.extend(strip_orphaned_tool_config(ir_request))
 
-        # Extract system messages from message list
-        for item in ir_messages:
-            if is_message(item) and item.get("role") == "system":
-                msg_parts = []
-                for part in item.get("content", []):
-                    if is_text_part(part):
-                        msg_parts.append({"text": part["text"]})
-                if system_instruction is None:
-                    system_instruction = {"role": "user", "parts": msg_parts}
-                else:
-                    cast(list, system_instruction["parts"]).extend(msg_parts)
+        # Hoist mid-conversation system messages and extract leading ones.
+        ir_messages, system_instruction = _hoist_and_extract_system(
+            ir_messages, ir_request, system_instruction
+        )
 
         # Convert non-system messages
         contents, msg_warnings = self.message_ops.ir_messages_to_p(
