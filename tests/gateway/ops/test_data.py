@@ -33,6 +33,7 @@ def _make_ctx(
     persistence: Any = None,
     ops_log: Any = None,
     metrics: Any = None,
+    request_log: Any = None,
 ) -> OpsContext:
     if ops_log is None:
         ops_log = MagicMock()
@@ -41,6 +42,7 @@ def _make_ctx(
         ops_log=ops_log,
         persistence=persistence,
         metrics=metrics,
+        request_log=request_log,
     )
 
 
@@ -75,12 +77,14 @@ class TestOpsClearData:
         m = MagicMock()
         m.rebuild_counters = MagicMock(return_value=2)
         m.export_counters = MagicMock(return_value={"total": 2})
-        ctx = _make_ctx(persistence=p, metrics=m)
+        rl = MagicMock()
+        rl.clear = AsyncMock()
+        ctx = _make_ctx(persistence=p, metrics=m, request_log=rl)
 
         result = await OpsClearData(ctx, table="request_log").execute()
 
         assert result["deleted"] == 100
-        p.clear_log.assert_awaited_once()
+        rl.clear.assert_awaited_once()
         # Counter rebuild triggered
         m.rebuild_counters.assert_called_once()
         p.save_metrics.assert_awaited_once()
