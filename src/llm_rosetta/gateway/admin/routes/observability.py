@@ -229,8 +229,8 @@ async def clear_requests(request: Any) -> Response:
     from llm_rosetta.gateway.ops.data import OpsClearData
 
     ctx = getattr(request.app, "ops_ctx", None)
-    if ctx is None or ctx.persistence is None:
-        return JSONResponse({"error": "No persistence configured"}, status_code=400)
+    if ctx is None:
+        return JSONResponse({"error": "No ops context configured"}, status_code=400)
     result = await OpsClearData(ctx, table="request_log").execute()
     return JSONResponse({"ok": True, **(result or {})})
 
