@@ -17,28 +17,7 @@ def _get_keystore(request: Any) -> KeyStore:
     return ks
 
 
-async def _log_key_event(
-    request: Any, event_type: str, message: str, details: dict[str, Any]
-) -> None:
-    """Record an API key operation in the ops log."""
-    ops_log = getattr(request.app, "ops_log", None)
-    if ops_log is None:
-        return
-    from llm_rosetta.observability.ops_log import (
-        OpsLogEntry,
-        SEVERITY_INFO,
-        SOURCE_KEYS,
-    )
-
-    await ops_log.add(
-        OpsLogEntry.create(
-            event_type=event_type,
-            severity=SEVERITY_INFO,
-            message=message,
-            details=details,
-            source=SOURCE_KEYS,
-        )
-    )
+# _log_key_event removed — replaced by OpsKey* in gateway/ops/keys.py
 
 
 async def get_api_keys(request: Any) -> Response:
@@ -72,14 +51,11 @@ async def create_api_key(request: Any) -> Response:
     entry = keystore.list_keys()
     created_entry = next((k for k in entry if k["id"] == key_id), {"id": key_id})
     created_entry["key"] = raw_key
-    from llm_rosetta.observability.ops_log import EVENT_KEY_CREATE
+    from llm_rosetta.gateway.ops.keys import OpsKeyCreate
 
-    await _log_key_event(
-        request,
-        EVENT_KEY_CREATE,
-        f"API key created: {label or '(no label)'}",
-        {"key_id": key_id, "label": label},
-    )
+    _ops_ctx = getattr(request.app, "ops_ctx", None)
+    if _ops_ctx is not None:
+        await OpsKeyCreate(_ops_ctx, key_id=key_id, label=label or "").execute()
     return JSONResponse({"ok": True, "key": created_entry})
 
 
@@ -103,15 +79,12 @@ async def update_api_key(request: Any, **kwargs: Any) -> Response:
         result["label"] = label
     if allowed_shims is not None:
         result["allowed_shims"] = allowed_shims
-    from llm_rosetta.observability.ops_log import EVENT_KEY_UPDATE
+    from llm_rosetta.gateway.ops.keys import OpsKeyUpdate
 
     changed = [k for k in ("label", "allowed_shims") if body.get(k) is not None]
-    await _log_key_event(
-        request,
-        EVENT_KEY_UPDATE,
-        f"API key updated: {key_id}",
-        {"key_id": key_id, "changed_fields": changed},
-    )
+    _ops_ctx = getattr(request.app, "ops_ctx", None)
+    if _ops_ctx is not None:
+        await OpsKeyUpdate(_ops_ctx, key_id=key_id, changed_fields=changed).execute()
     return JSONResponse(result)
 
 
@@ -127,14 +100,11 @@ async def delete_api_key(request: Any, **kwargs: Any) -> Response:
     if not keystore.delete(key_id):
         return JSONResponse({"error": f"Key '{key_id}' not found"}, status_code=404)
 
-    from llm_rosetta.observability.ops_log import EVENT_KEY_DELETE
+    from llm_rosetta.gateway.ops.keys import OpsKeyDelete
 
-    await _log_key_event(
-        request,
-        EVENT_KEY_DELETE,
-        f"API key deleted: {label or key_id}",
-        {"key_id": key_id, "label": label},
-    )
+    _ops_ctx = getattr(request.app, "ops_ctx", None)
+    if _ops_ctx is not None:
+        await OpsKeyDelete(_ops_ctx, key_id=key_id, label=label).execute()
     return JSONResponse({"ok": True, "deleted": key_id})
 
 
@@ -151,14 +121,11 @@ async def rotate_api_key(request: Any, **kwargs: Any) -> Response:
     if new_key is None:
         return JSONResponse({"error": f"Key '{key_id}' not found"}, status_code=404)
 
-    from llm_rosetta.observability.ops_log import EVENT_KEY_ROTATE
+    from llm_rosetta.gateway.ops.keys import OpsKeyRotate
 
-    await _log_key_event(
-        request,
-        EVENT_KEY_ROTATE,
-        f"API key rotated: {label or key_id}",
-        {"key_id": key_id, "label": label},
-    )
+    _ops_ctx = getattr(request.app, "ops_ctx", None)
+    if _ops_ctx is not None:
+        await OpsKeyRotate(_ops_ctx, key_id=key_id, label=label).execute()
     return JSONResponse({"ok": True, "id": key_id, "key": new_key})
 
 

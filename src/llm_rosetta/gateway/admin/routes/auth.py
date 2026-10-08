@@ -302,6 +302,13 @@ async def change_password(request: Any) -> Response:
     # This calls change_password() on AuthState, which invalidates all sessions.
     await _reload_gateway_config(request, config_path)
 
+    # Audit log
+    from llm_rosetta.gateway.ops.security import OpsPasswordChange
+
+    _ops_ctx = getattr(request.app, "ops_ctx", None)
+    if _ops_ctx is not None:
+        await OpsPasswordChange(_ops_ctx).execute()
+
     # Create a new session for the current user so they stay logged in.
     session_id = auth_state.create_session(ip=ip)
     resp = JSONResponse({"ok": True})
@@ -319,6 +326,13 @@ async def rotate_token(request: Any) -> Response:
     auth_state = request.app.auth_state
     auth_state.rotate_internal_token()
     request.app.internal_token = auth_state.internal_token
+
+    from llm_rosetta.gateway.ops.security import OpsTokenRotate
+
+    _ops_ctx = getattr(request.app, "ops_ctx", None)
+    if _ops_ctx is not None:
+        await OpsTokenRotate(_ops_ctx).execute()
+
     return JSONResponse({"ok": True})
 
 
@@ -327,24 +341,11 @@ async def logout_all_sessions(request: Any) -> Response:
     auth_state = request.app.auth_state
     count = auth_state.invalidate_all_sessions()
 
-    ops_log = getattr(request.app, "ops_log", None)
-    if ops_log is not None:
-        from llm_rosetta.observability.ops_log import (
-            EVENT_SESSION_LOGOUT_ALL,
-            OpsLogEntry,
-            SEVERITY_INFO,
-            SOURCE_ADMIN,
-        )
+    from llm_rosetta.gateway.ops.security import OpsSessionLogoutAll
 
-        await ops_log.add(
-            OpsLogEntry.create(
-                event_type=EVENT_SESSION_LOGOUT_ALL,
-                severity=SEVERITY_INFO,
-                message=f"All admin sessions invalidated ({count} cleared)",
-                details={"sessions_cleared": count},
-                source=SOURCE_ADMIN,
-            )
-        )
+    _ops_ctx = getattr(request.app, "ops_ctx", None)
+    if _ops_ctx is not None:
+        await OpsSessionLogoutAll(_ops_ctx, count=count).execute()
 
     resp = JSONResponse({"ok": True, "sessions_cleared": count})
     resp.delete_cookie(ADMIN_COOKIE_NAME, path="/admin")
