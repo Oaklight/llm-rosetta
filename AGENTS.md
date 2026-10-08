@@ -78,7 +78,7 @@ supported format and forwards them to any configured upstream provider.
 | `gateway/admin/` | Admin UI, metrics, request logging, persistence |
 | `gateway/ops/` | Unified operations audit layer (OpsBase + typed operation subclasses) |
 | `gateway/routing_strategy.py` | Pluggable routing strategies (weighted round-robin, affinity) |
-| `gateway/middleware/` | Auth, rate limiting, error format, hop limit, headers |
+| `gateway/middleware/` | Auth, rate limiting, error format, hop limit, headers, etc. |
 
 ### IR type system
 
