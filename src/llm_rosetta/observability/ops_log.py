@@ -21,6 +21,13 @@ Never store raw API keys, tokens, or secrets.
 - ``health_status_change``: ``{"provider", "old_status", "new_status"}``
 - ``admin_setup``: (no details)
 - ``ops_log_cleared``: ``{"cleared_count"}``
+- ``data_cleared``: ``{"table"}``
+- ``data_cleanup``: ``{"table(s)", "max_age_days|before|start+end", ...}``
+- ``data_trimmed``: ``{"table", "pruned|trimmed", ...}``
+- ``data_vacuumed``: ``{"freed_bytes", ...}``
+- ``data_rebuilt``: ``{"rebuilt_from"}``
+- ``password_changed``: (no details)
+- ``token_rotated``: (no details)
 """
 
 from __future__ import annotations
@@ -48,6 +55,16 @@ EVENT_ADMIN_SETUP = "admin_setup"
 EVENT_OPS_LOG_CLEARED = "ops_log_cleared"
 EVENT_SESSION_LOGOUT_ALL = "session_logout_all"
 
+# -- Data mutation event types (added for ops audit layer, #846) -----------
+
+EVENT_DATA_CLEARED = "data_cleared"
+EVENT_DATA_CLEANUP = "data_cleanup"
+EVENT_DATA_TRIMMED = "data_trimmed"
+EVENT_DATA_VACUUMED = "data_vacuumed"
+EVENT_DATA_REBUILT = "data_rebuilt"
+EVENT_PASSWORD_CHANGED = "password_changed"
+EVENT_TOKEN_ROTATED = "token_rotated"
+
 ALL_EVENT_TYPES = [
     EVENT_STARTUP,
     EVENT_SHUTDOWN,
@@ -60,6 +77,13 @@ ALL_EVENT_TYPES = [
     EVENT_ADMIN_SETUP,
     EVENT_OPS_LOG_CLEARED,
     EVENT_SESSION_LOGOUT_ALL,
+    EVENT_DATA_CLEARED,
+    EVENT_DATA_CLEANUP,
+    EVENT_DATA_TRIMMED,
+    EVENT_DATA_VACUUMED,
+    EVENT_DATA_REBUILT,
+    EVENT_PASSWORD_CHANGED,
+    EVENT_TOKEN_ROTATED,
 ]
 
 # -- Severity constants ----------------------------------------------------
@@ -77,6 +101,7 @@ SOURCE_ADMIN = "admin"
 SOURCE_KEYS = "keys"
 SOURCE_CONFIG = "config"
 SOURCE_PERSISTENCE = "persistence"
+SOURCE_AUTH = "auth"
 
 ALL_SOURCES = [
     SOURCE_GATEWAY,
@@ -84,6 +109,7 @@ ALL_SOURCES = [
     SOURCE_KEYS,
     SOURCE_CONFIG,
     SOURCE_PERSISTENCE,
+    SOURCE_AUTH,
 ]
 
 
