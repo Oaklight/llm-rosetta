@@ -7,8 +7,9 @@ import logging
 import os
 import re
 import sys
-from collections.abc import Generator
-from contextlib import contextmanager, suppress
+import asyncio
+from collections.abc import AsyncGenerator, Generator
+from contextlib import asynccontextmanager, contextmanager, suppress
 from typing import Any, NamedTuple, Protocol, runtime_checkable
 
 from llm_rosetta._vendor import jsonx
@@ -156,6 +157,41 @@ def config_lock(path: str) -> Generator[None, None, None]:
     with open(lock_path, "a+") as lf:
         _lock_exclusive(lf)
         yield
+
+
+# Per-path asyncio locks for in-process serialization.
+# Keyed by (realpath, loop_id) to handle event loop replacement (e.g. tests).
+_async_locks: dict[tuple[str, int], asyncio.Lock] = {}
+
+
+def _get_async_lock(path: str) -> asyncio.Lock:
+    real = os.path.realpath(path)
+    loop_id = id(asyncio.get_running_loop())
+    key = (real, loop_id)
+    if key not in _async_locks:
+        _async_locks[key] = asyncio.Lock()
+    return _async_locks[key]
+
+
+@asynccontextmanager
+async def async_config_lock(path: str) -> AsyncGenerator[None, None]:
+    """Async version of :func:`config_lock` for use in event-loop contexts.
+
+    Acquires an in-process ``asyncio.Lock`` first (non-blocking to the
+    event loop), then delegates the cross-process file lock to a thread
+    executor so ``fcntl.flock`` never blocks the loop.
+    """
+    lock = _get_async_lock(path)
+    async with lock:
+        lock_path = os.path.realpath(path) + ".lock"
+        os.makedirs(os.path.dirname(lock_path) or ".", exist_ok=True)
+        lf = open(lock_path, "a+")  # noqa: SIM115
+        try:
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, _lock_exclusive, lf)
+            yield
+        finally:
+            lf.close()
 
 
 def load_config_raw(path: str) -> dict[str, Any]:
