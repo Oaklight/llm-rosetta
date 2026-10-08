@@ -1420,6 +1420,11 @@ async def run_gateway(
     flush_task = asyncio.create_task(_periodic_flush(app))
     cleanup_task = asyncio.create_task(_periodic_cleanup(app))
     rotation_task = asyncio.create_task(_periodic_token_rotation(app))
+
+    persistence = getattr(app, "persistence", None)
+    if persistence is not None:
+        persistence.start_wal_task()
+
     logger.info(
         "Periodic cleanup armed (interval=%ds, initial_delay=%ds)",
         _CLEANUP_INTERVAL,
