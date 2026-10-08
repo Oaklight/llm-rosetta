@@ -10,6 +10,7 @@ audit recording.  Route handlers construct an Ops object and call
 """
 
 from .base import OpsBase, OpsContext
+from .proxy import OpsProxyRequest
 from .data import (
     OpsClearData,
     OpsClearOpsLog,
@@ -22,6 +23,7 @@ from .data import (
 
 __all__ = [
     "OpsBase",
+    "OpsProxyRequest",
     "OpsCleanupData",
     "OpsClearData",
     "OpsClearOpsLog",
