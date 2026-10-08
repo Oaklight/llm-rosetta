@@ -28,6 +28,10 @@ from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any
 
+from llm_rosetta.converters.base.helpers.tool_intrinsic import (
+    is_intrinsic_part as _is_intrinsic_part,
+)
+
 from llm_rosetta.converters.base.context import ConversionContext
 from llm_rosetta.shims.provider_shim import (
     ProviderShim,
@@ -219,14 +223,6 @@ _CUSTOM_TOOL_SYNTH_PARAMS: dict[str, Any] = {
     },
     "required": ["input"],
 }
-
-
-def _is_intrinsic_part(part: Any) -> bool:
-    return (
-        isinstance(part, dict)
-        and part.get("type") in ("tool_call", "tool_result")
-        and part.get("tool_type") == "intrinsic"
-    )
 
 
 def _has_intrinsic_parts(messages: list[Any]) -> bool:

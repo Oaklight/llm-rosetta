@@ -305,8 +305,9 @@ def _ir_intrinsic_to_responses(
     tool_input: Any,
     arguments: str,
 ) -> dict[str, Any]:
-    pm = ir_tool_call.get("provider_metadata") or {}
-    intrinsic_kind = pm.get("intrinsic_kind", tool_name)
+    from ..base.helpers.tool_intrinsic import get_intrinsic_kind
+
+    intrinsic_kind = get_intrinsic_kind(ir_tool_call, tool_name)
     item_type = _INTRINSIC_KIND_TO_ITEM.get(intrinsic_kind, "function_call")
     result_item: dict[str, Any] = {
         "type": item_type,
@@ -834,19 +835,19 @@ class OpenAIResponsesToolOps(BaseToolOps):
             "web_search_call",
             "file_search_call",
         ):
+            from ..base.helpers.tool_intrinsic import make_intrinsic_tool_call
+
             intrinsic_kind = _ITEM_TO_INTRINSIC_KIND.get(item_type, item_type)
             return cast(
                 ToolCallPart,
-                {
-                    "type": "tool_call",
-                    "tool_call_id": provider_tool_call.get(
+                make_intrinsic_tool_call(
+                    tool_call_id=provider_tool_call.get(
                         "call_id", provider_tool_call.get("id", "")
                     ),
-                    "tool_name": provider_tool_call.get("name", item_type),
-                    "tool_input": tool_input,
-                    "tool_type": "intrinsic",
-                    "provider_metadata": {"intrinsic_kind": intrinsic_kind},
-                },
+                    tool_name=provider_tool_call.get("name", item_type),
+                    tool_input=tool_input,
+                    intrinsic_kind=intrinsic_kind,
+                ),
             )
         elif item_type == "custom_tool_call":
             return _custom_tool_call_to_ir(provider_tool_call)

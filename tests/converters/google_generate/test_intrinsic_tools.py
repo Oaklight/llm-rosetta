@@ -92,7 +92,7 @@ class TestGoogleCodeExecutionResultToIR:
         assert tr["tool_type"] == "intrinsic"
         assert tr["provider_metadata"]["intrinsic_kind"] == "code_execution"
         assert tr["result"] == "hello\n"
-        assert tr["is_error"] is False
+        assert not tr.get("is_error")
 
     def test_code_execution_result_failed(self):
         """Failed codeExecutionResult sets is_error=True."""

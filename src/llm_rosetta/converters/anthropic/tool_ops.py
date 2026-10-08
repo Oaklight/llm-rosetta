@@ -31,9 +31,11 @@ from ..base import BaseToolOps
 from ..base.helpers import (
     convert_nullable_to_type_array,
     extract_part_ids,
+    get_intrinsic_kind,
     log_orphan_warnings,
     sanitize_schema,
     sanitize_tool_call_id,
+    set_intrinsic_kind,
 )
 
 logger = logging.getLogger(__name__)
@@ -315,7 +317,7 @@ class AnthropicToolOps(BaseToolOps):
         pm = ir_tool_call.get("provider_metadata") or {}
 
         if tool_type == "intrinsic":
-            intrinsic_kind = pm.get("intrinsic_kind", ir_tool_call["tool_name"])
+            intrinsic_kind = get_intrinsic_kind(ir_tool_call, ir_tool_call["tool_name"])
             result = {
                 "type": "server_tool_use",
                 "id": sanitize_tool_call_id(ir_tool_call["tool_call_id"]),
@@ -381,7 +383,7 @@ class AnthropicToolOps(BaseToolOps):
             part["provider_metadata"] = pm
 
         if block_type == "server_tool_use":
-            part.setdefault("provider_metadata", {})["intrinsic_kind"] = tool_name
+            set_intrinsic_kind(part, tool_name)
 
         # Preserve non-default caller for Anthropic round-trip
         caller = provider_tool_call.get("caller")
@@ -473,6 +475,49 @@ class AnthropicToolOps(BaseToolOps):
 
         # Read cache_control → cache_hint
         cache_control = provider_tool_result.get("cache_control")
+        if cache_control is not None:
+            part["cache_hint"] = cache_control
+
+        return part
+
+    # ==================== Server Tool Result ====================
+
+    @staticmethod
+    def p_server_tool_result_to_ir(
+        provider_block: Any, **kwargs: Any
+    ) -> ToolResultPart:
+        """Anthropic server tool result block → IR ToolResultPart.
+
+        Handles ``web_search_tool_result``, ``code_execution_tool_result``,
+        and other ``*_tool_result`` block types from Anthropic's server tools.
+        The block type suffix (minus ``_tool_result``) becomes the
+        ``intrinsic_kind``.
+        """
+        block_type = provider_block.get("type", "")
+        kind = block_type.removesuffix("_tool_result")
+
+        content = provider_block.get("content", "")
+        if isinstance(content, list):
+            from .content_ops import AnthropicContentOps
+
+            content = convert_content_blocks_to_ir(content, AnthropicContentOps)
+        elif isinstance(content, dict):
+            content = json.dumps(content)
+
+        part = ToolResultPart(
+            type="tool_result",
+            tool_call_id=provider_block.get("tool_use_id", ""),
+            result=content,
+            tool_type="intrinsic",
+            is_error=provider_block.get("is_error", False),
+        )
+        set_intrinsic_kind(part, kind)
+
+        pm = provider_block.get("_provider_metadata")
+        if pm:
+            part["provider_metadata"].update(pm)
+
+        cache_control = provider_block.get("cache_control")
         if cache_control is not None:
             part["cache_hint"] = cache_control
 

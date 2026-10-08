@@ -22,8 +22,6 @@ from ...types.ir import (
     ContentPart,
     IRInputItem,
     Message,
-    ToolCallPart,
-    ToolResultPart,
     is_audio_part,
     is_extension_item,
     is_file_part,
@@ -68,8 +66,9 @@ def _match_tool_name(result_id: str, known_names: dict[str, list[str]]) -> str:
 
 
 def _ir_intrinsic_tool_call_to_google(content_part: Any) -> dict[str, Any] | None:
-    pm = content_part.get("provider_metadata") or {}
-    if pm.get("intrinsic_kind") != "code_execution":
+    from ..base.helpers.tool_intrinsic import get_intrinsic_kind
+
+    if get_intrinsic_kind(content_part) != "code_execution":
         return None
     return {
         "executableCode": {
@@ -80,8 +79,9 @@ def _ir_intrinsic_tool_call_to_google(content_part: Any) -> dict[str, Any] | Non
 
 
 def _ir_intrinsic_tool_result_to_google(content_part: Any) -> dict[str, Any] | None:
-    pm = content_part.get("provider_metadata") or {}
-    if pm.get("intrinsic_kind") != "code_execution":
+    from ..base.helpers.tool_intrinsic import get_intrinsic_kind
+
+    if get_intrinsic_kind(content_part) != "code_execution":
         return None
     outcome = "OUTCOME_FAILED" if content_part.get("is_error") else "OUTCOME_OK"
     result = content_part.get("result", "")
@@ -412,18 +412,21 @@ class GoogleGenerateMessageOps(BaseMessageOps):
             # Handle executableCode / codeExecutionResult as intrinsic tools
             exec_code = part.get("executableCode") or part.get("executable_code")
             if exec_code is not None:
+                from ..base.helpers.tool_intrinsic import make_intrinsic_tool_call
+
                 call_id = f"google_exec_{uuid.uuid4().hex[:12]}"
                 content_parts.append(
-                    ToolCallPart(
-                        type="tool_call",
-                        tool_call_id=call_id,
-                        tool_name="code_execution",
-                        tool_input={
-                            "code": exec_code.get("code", ""),
-                            "language": exec_code.get("language", "PYTHON"),
-                        },
-                        tool_type="intrinsic",
-                        provider_metadata={"intrinsic_kind": "code_execution"},
+                    cast(
+                        ContentPart,
+                        make_intrinsic_tool_call(
+                            tool_call_id=call_id,
+                            tool_name="code_execution",
+                            tool_input={
+                                "code": exec_code.get("code", ""),
+                                "language": exec_code.get("language", "PYTHON"),
+                            },
+                            intrinsic_kind="code_execution",
+                        ),
                     )
                 )
                 continue
@@ -432,17 +435,20 @@ class GoogleGenerateMessageOps(BaseMessageOps):
                 "code_execution_result"
             )
             if code_result is not None:
+                from ..base.helpers.tool_intrinsic import make_intrinsic_tool_result
+
                 # Google's codeExecutionResult has no ID field to pair with
                 # executableCode; _reconcile_tool_call_ids handles matching.
                 tool_result_parts.append(
-                    ToolResultPart(
-                        type="tool_result",
-                        tool_call_id="",
-                        result=code_result.get("output", ""),
-                        tool_type="intrinsic",
-                        provider_metadata={"intrinsic_kind": "code_execution"},
-                        is_error=code_result.get("outcome", "OUTCOME_OK")
-                        != "OUTCOME_OK",
+                    cast(
+                        ContentPart,
+                        make_intrinsic_tool_result(
+                            tool_call_id="",
+                            result=code_result.get("output", ""),
+                            intrinsic_kind="code_execution",
+                            is_error=code_result.get("outcome", "OUTCOME_OK")
+                            != "OUTCOME_OK",
+                        ),
                     )
                 )
                 continue
