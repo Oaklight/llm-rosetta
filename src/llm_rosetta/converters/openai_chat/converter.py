@@ -583,7 +583,7 @@ class OpenAIChatConverter(BaseConverter):
 
     def stream_response_from_provider(
         self,
-        chunk: dict[str, Any],
+        chunk: dict[str, Any] | None,
         context: StreamContext | None = None,
     ) -> list[IRStreamEvent]:
         """Convert an OpenAI SSE chunk to IR stream events.
@@ -595,13 +595,29 @@ class OpenAIChatConverter(BaseConverter):
         Without a context the behaviour is identical to the previous
         implementation (backward compatible).
 
+        Pass ``None`` as the chunk to signal EOF — this flushes any
+        deferred ``StreamEndEvent`` that was held back while waiting
+        for a usage chunk that never arrived.
+
         Args:
-            chunk: OpenAI SSE chunk dict (or SDK object).
+            chunk: OpenAI SSE chunk dict (or SDK object), or ``None``
+                to signal end-of-stream.
             context: Optional stream context for stateful conversions.
 
         Returns:
             List of IR stream events extracted from the chunk.
         """
+        if chunk is None:
+            if (
+                context is not None
+                and context._stream_end_deferred
+                and not context.is_ended
+            ):
+                context._stream_end_deferred = False
+                context.mark_ended()
+                return [StreamEndEvent(type="stream_end")]
+            return []
+
         chunk = self._normalize(chunk)
         events: list[IRStreamEvent] = []
 
@@ -819,6 +835,15 @@ class OpenAIChatConverter(BaseConverter):
         if context is None:
             return
 
+        # Flush a deferred stream_end from the previous chunk.  This fires
+        # when the finish_reason chunk had no usage and a follow-up chunk
+        # arrives (e.g. a usage-only chunk, or any other trailing data).
+        if context._stream_end_deferred and not context.is_ended:
+            context._stream_end_deferred = False
+            context.mark_ended()
+            events.append(StreamEndEvent(type="stream_end"))
+            return
+
         # Guard: only treat empty choices as stream-end AFTER the stream has
         # actually started.  Some upstreams (e.g. Azure / Argo) send a
         # preflight chunk with ``choices: []`` and empty ``id``/``model``
@@ -832,20 +857,20 @@ class OpenAIChatConverter(BaseConverter):
             context.mark_ended()
             events.append(StreamEndEvent(type="stream_end"))
 
-        # Also emit StreamEndEvent when we got a finish_reason but upstream
-        # may not send a subsequent empty-choices chunk (e.g. when the
-        # upstream ignores stream_options.include_usage).
-        if (
-            not context.is_ended
-            and usage
-            and any(
-                choice.get("finish_reason")
-                and context.is_choice_finished(choice.get("index", 0))
-                for choice in choices
-            )
+        # Also emit StreamEndEvent when we got a finish_reason and all
+        # choices are done.  If usage is present on the same chunk, emit
+        # immediately; otherwise defer to the next chunk / EOF sentinel
+        # so that a late-arriving usage chunk can still be processed.
+        if not context.is_ended and any(
+            choice.get("finish_reason")
+            and context.is_choice_finished(choice.get("index", 0))
+            for choice in choices
         ):
-            context.mark_ended()
-            events.append(StreamEndEvent(type="stream_end"))
+            if usage:
+                context.mark_ended()
+                events.append(StreamEndEvent(type="stream_end"))
+            else:
+                context._stream_end_deferred = True
 
     # --- to_provider ---
 

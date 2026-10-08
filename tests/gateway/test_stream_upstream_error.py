@@ -52,6 +52,8 @@ class _FakeProcessor:
     """Converts content chunks; an error chunk yields nothing, as in real life."""
 
     def process_chunk(self, chunk):
+        if chunk is None:
+            return []
         if "error" in chunk:
             return []
         return [{"type": "response.output_text.delta", "delta": chunk.get("text", "")}]

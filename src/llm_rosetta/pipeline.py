@@ -182,7 +182,7 @@ class StreamProcessorProtocol(Protocol):
     @property
     def source_context(self) -> Any: ...
 
-    def process_chunk(self, chunk: dict[str, Any]) -> list[dict[str, Any]]: ...
+    def process_chunk(self, chunk: dict[str, Any] | None) -> list[dict[str, Any]]: ...
 
 
 class ConversionPipeline:
@@ -948,7 +948,9 @@ class BaselineStreamProcessor:
             return result if result else None
         return None
 
-    def process_chunk(self, chunk: dict[str, Any]) -> list[dict[str, Any]]:
+    def process_chunk(self, chunk: dict[str, Any] | None) -> list[dict[str, Any]]:
+        if chunk is None:
+            return []
         if self._response_body_transforms:
             chunk = apply_transforms(self._response_body_transforms, chunk)
         if self._pre_ir_transforms:
@@ -1062,16 +1064,50 @@ class StreamProcessor:
                 if v is not None and v != 0:
                     self._usage[k] = v
 
-    def process_chunk(self, chunk: dict[str, Any]) -> list[dict[str, Any]]:
+    def _flush_deferred(self) -> list[dict[str, Any]]:
+        """Flush deferred terminal events from the target converter.
+
+        Called when the upstream stream ends (``process_chunk(None)``)
+        to emit any ``StreamEndEvent`` that was held back while
+        waiting for a usage chunk that never arrived.
+        """
+        ir_events = self._target_converter.stream_response_from_provider(
+            None, context=self._from_ctx
+        )
+        result: list[dict[str, Any]] = []
+        for ir_event in ir_events:
+            if self._on_ir_event is not None:
+                self._on_ir_event(ir_event)
+            source_chunks = self._source_converter.stream_response_to_provider(
+                ir_event, context=self._to_ctx
+            )
+            if isinstance(source_chunks, list):
+                result.extend(sc for sc in source_chunks if sc)
+            elif source_chunks:
+                result.append(source_chunks)
+        if self._post_ir_transforms and result:
+            result = [apply_transforms(self._post_ir_transforms, c) for c in result]
+        return result
+
+    def process_chunk(self, chunk: dict[str, Any] | None) -> list[dict[str, Any]]:
         """Convert one upstream chunk to source-format events.
 
+        Pass ``None`` to signal end-of-stream.  This flushes any
+        deferred terminal events from the target converter (e.g. a
+        ``StreamEndEvent`` held back while waiting for a usage chunk
+        that never arrived).
+
         Args:
-            chunk: A parsed upstream response chunk (e.g. from SSE).
+            chunk: A parsed upstream response chunk (e.g. from SSE),
+                or ``None`` to signal EOF.
 
         Returns:
             List of source-format event dicts.  May be empty (some
             upstream chunks produce no source events), one, or multiple.
         """
+        if chunk is None:
+            return self._flush_deferred()
+
         # Apply response body transforms (e.g. harmony tool-call rewrite)
         if self._response_body_transforms:
             chunk = apply_transforms(self._response_body_transforms, chunk)

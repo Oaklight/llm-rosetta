@@ -159,6 +159,8 @@ class _FakeStream:
 
 class _FakeProcessor:
     def process_chunk(self, chunk):
+        if chunk is None:
+            return []
         if "error" in chunk:
             return []
         return [{"type": "content", "data": chunk}]
