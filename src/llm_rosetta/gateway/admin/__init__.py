@@ -243,6 +243,15 @@ async def setup_admin(
     app.request_log = request_log
     app.ops_log = ops_log
     app.persistence = persistence
+    # Unified ops context — used by gateway/ops/ operation layer
+    from llm_rosetta.gateway.ops import OpsContext
+
+    app.ops_ctx = OpsContext(
+        ops_log=ops_log,
+        request_log=request_log,
+        metrics=metrics,
+        persistence=persistence,
+    )
     app.gateway_config = config
     app.config_path = config_path
     app.config_io = config_io

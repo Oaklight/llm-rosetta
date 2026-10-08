@@ -10,8 +10,24 @@ audit recording.  Route handlers construct an Ops object and call
 """
 
 from .base import OpsBase, OpsContext
+from .data import (
+    OpsClearData,
+    OpsClearOpsLog,
+    OpsCleanupData,
+    OpsDeleteErrorDump,
+    OpsRebuildMetrics,
+    OpsTrimData,
+    OpsVacuum,
+)
 
 __all__ = [
     "OpsBase",
+    "OpsCleanupData",
+    "OpsClearData",
+    "OpsClearOpsLog",
     "OpsContext",
+    "OpsDeleteErrorDump",
+    "OpsRebuildMetrics",
+    "OpsTrimData",
+    "OpsVacuum",
 ]
