@@ -172,10 +172,14 @@ class _ProviderStats:
 class MetricsCollector:
     """Lightweight in-process metrics for the gateway."""
 
-    # Counters
+    # Counters (reset on rebuild to match current log contents)
     total_requests: int = 0
     total_errors: int = 0
     total_streams: int = 0
+
+    # Lifetime counters (monotonically increasing, never reset by rebuild/prune)
+    lifetime_total_requests: int = 0
+    lifetime_total_errors: int = 0
 
     # Breakdowns
     by_model: dict[str, int] = field(default_factory=dict)
@@ -286,9 +290,11 @@ class MetricsCollector:
     ) -> None:
         """Record a completed proxy request."""
         self.total_requests += 1
+        self.lifetime_total_requests += 1
         is_error = status_code >= 400
         if is_error:
             self.total_errors += 1
+            self.lifetime_total_errors += 1
         if is_stream:
             self.total_streams += 1
 
@@ -370,6 +376,8 @@ class MetricsCollector:
             "total_errors": self.total_errors,
             "total_streams": self.total_streams,
             "total_client_disconnects": self.total_client_disconnects,
+            "lifetime_total_requests": self.lifetime_total_requests,
+            "lifetime_total_errors": self.lifetime_total_errors,
             "by_model": dict(self.by_model),
             "by_source_provider": dict(self.by_source_provider),
             "by_target_provider": dict(self.by_target_provider),
@@ -391,6 +399,12 @@ class MetricsCollector:
         self.total_errors = data.get("total_errors", 0)
         self.total_streams = data.get("total_streams", 0)
         self.total_client_disconnects = data.get("total_client_disconnects", 0)
+        self.lifetime_total_requests = data.get(
+            "lifetime_total_requests", self.total_requests
+        )
+        self.lifetime_total_errors = data.get(
+            "lifetime_total_errors", self.total_errors
+        )
         self.by_model = dict(data.get("by_model", {}))
         self.by_source_provider = dict(data.get("by_source_provider", {}))
         self.by_target_provider = dict(data.get("by_target_provider", {}))
@@ -584,6 +598,16 @@ class MetricsCollector:
         self.by_model_tokens = by_model_tokens
         self.by_provider_tokens = by_provider_tokens
 
+        # Lifetime counters: take the max — they must never decrease
+        self.lifetime_total_requests = max(
+            self.lifetime_total_requests,
+            baseline.get("lifetime_total_requests", 0),
+        )
+        self.lifetime_total_errors = max(
+            self.lifetime_total_errors,
+            baseline.get("lifetime_total_errors", 0),
+        )
+
     def snapshot(self, series_seconds: int = 60) -> dict:
         """Return a JSON-serializable metrics snapshot."""
         uptime = time.monotonic() - self._start_time
@@ -599,6 +623,8 @@ class MetricsCollector:
             "total_errors": self.total_errors,
             "total_streams": self.total_streams,
             "total_client_disconnects": self.total_client_disconnects,
+            "lifetime_total_requests": self.lifetime_total_requests,
+            "lifetime_total_errors": self.lifetime_total_errors,
             "error_rate": error_rate,
             "active_streams": self.active_streams,
             "by_model": dict(self.by_model),
