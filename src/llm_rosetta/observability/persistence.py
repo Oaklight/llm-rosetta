@@ -14,6 +14,7 @@ This module is framework-agnostic and can be used by any consumer
 
 from __future__ import annotations
 
+import asyncio
 import gzip
 import json
 import logging
@@ -42,6 +43,10 @@ DEFAULT_OPS_WARN_MAX = 5000
 
 _PRUNE_BATCH_SIZE = 5000
 _VACUUM_THRESHOLD = 1000
+
+# WAL checkpoint defaults
+DEFAULT_WAL_MAX_BYTES = 64 * 1024 * 1024  # 64 MB
+_WAL_CHECKPOINT_INTERVAL = 300  # 5 minutes
 
 
 class PersistenceManager:
@@ -112,6 +117,8 @@ class PersistenceManager:
             else (ops_log_max if ops_log_max is not None else DEFAULT_OPS_WARN_MAX)
         )
         self._ops_insert_count = 0
+        self._wal_max_bytes = DEFAULT_WAL_MAX_BYTES
+        self._wal_task: asyncio.Task[None] | None = None
         self.on_prune: Callable[[str, int], Awaitable[None]] | None = None
         self._data_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1115,8 +1122,8 @@ class PersistenceManager:
         if total_deleted > 0:
             try:
                 await self._conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("WAL checkpoint after deletion failed: %s", exc)
         return False
 
     async def _batched_delete(
@@ -1476,11 +1483,94 @@ class PersistenceManager:
             await self.on_prune("error_dumps", excess)
 
     # ------------------------------------------------------------------
+    # WAL checkpoint management
+    # ------------------------------------------------------------------
+
+    @property
+    def _wal_path(self) -> Path:
+        return self.db_path.with_suffix(".db-wal")
+
+    def wal_size(self) -> int:
+        """Return current WAL file size in bytes, 0 if absent."""
+        try:
+            return self._wal_path.stat().st_size
+        except FileNotFoundError:
+            return 0
+
+    async def wal_checkpoint(self) -> dict[str, Any]:
+        """Run a WAL checkpoint and return status."""
+        wal_before = self.wal_size()
+        try:
+            row = await self._conn.execute_fetchone("PRAGMA wal_checkpoint(TRUNCATE)")
+            busy, log_frames, checkpointed = row if row else (0, 0, 0)
+        except Exception as exc:
+            logger.warning("WAL checkpoint failed: %s", exc)
+            return {"ok": False, "error": str(exc), "wal_before": wal_before}
+
+        wal_after = self.wal_size()
+        if busy:
+            logger.warning(
+                "WAL checkpoint incomplete — database busy (log=%d, checkpointed=%d)",
+                log_frames,
+                checkpointed,
+            )
+        return {
+            "ok": not busy,
+            "wal_before": wal_before,
+            "wal_after": wal_after,
+            "log_frames": log_frames,
+            "checkpointed": checkpointed,
+        }
+
+    async def _periodic_wal_checkpoint(self) -> None:
+        """Background task: checkpoint WAL every interval or when oversized."""
+        while True:
+            await asyncio.sleep(_WAL_CHECKPOINT_INTERVAL)
+            try:
+                wal_bytes = self.wal_size()
+                if wal_bytes > self._wal_max_bytes:
+                    logger.info(
+                        "WAL size %d bytes exceeds cap %d, checkpointing",
+                        wal_bytes,
+                        self._wal_max_bytes,
+                    )
+                result = await self.wal_checkpoint()
+                if result.get("ok") and result.get("wal_before", 0) > 0:
+                    logger.debug(
+                        "WAL checkpoint: %d → %d bytes",
+                        result["wal_before"],
+                        result.get("wal_after", 0),
+                    )
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                logger.warning("Periodic WAL checkpoint error: %s", exc)
+
+    def start_wal_task(self) -> None:
+        """Start the periodic WAL checkpoint background task."""
+        if self._wal_task is None or self._wal_task.done():
+            self._wal_task = asyncio.create_task(
+                self._periodic_wal_checkpoint(),
+                name="persistence-wal-checkpoint",
+            )
+
+    async def stop_wal_task(self) -> None:
+        """Cancel the WAL checkpoint background task."""
+        if self._wal_task is not None and not self._wal_task.done():
+            self._wal_task.cancel()
+            try:
+                await self._wal_task
+            except asyncio.CancelledError:
+                pass
+            self._wal_task = None
+
+    # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
 
     async def close(self) -> None:
         """Commit and close the database connection."""
+        await self.stop_wal_task()
         if self._conn is None:
             return
         try:
@@ -1530,8 +1620,8 @@ class PersistenceManager:
         if was_large:
             try:
                 await self._conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("WAL checkpoint after prune failed: %s", exc)
 
         pruned = count - self._success_max  # original excess
         if pruned > 0 and self.on_prune is not None:
