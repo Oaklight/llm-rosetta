@@ -154,6 +154,8 @@ class OpenAIChatConverter(BaseConverter):
         # are lenient, so cross-format conversions may carry orphaned
         # tool_calls from interrupted sessions.
         ir_messages = fix_orphaned_tool_calls_ir(ir_request.get("messages", []))
+        # Assign batch_ids over the full list before message_ops runs, so
+        # per-format merge_tool_messages can group parallel tool results.
         ir_messages = assign_tool_batch_ids(ir_messages)
         ctx.warnings.extend(strip_orphaned_tool_config(ir_request))
         converted_msgs, msg_warnings = self.message_ops.ir_messages_to_p(
