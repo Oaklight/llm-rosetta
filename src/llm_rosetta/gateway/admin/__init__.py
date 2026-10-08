@@ -246,12 +246,24 @@ async def setup_admin(
     # Unified ops context — used by gateway/ops/ operation layer
     from llm_rosetta.gateway.ops import OpsContext
 
-    app.ops_ctx = OpsContext(
+    _ops_ctx = OpsContext(
         ops_log=ops_log,
         request_log=request_log,
         metrics=metrics,
         persistence=persistence,
     )
+    app.ops_ctx = _ops_ctx
+
+    # Wire amortized prune audit callback
+    if persistence is not None:
+
+        async def _on_prune(table: str, count: int) -> None:
+            from llm_rosetta.gateway.ops.data import OpsPrune
+
+            await OpsPrune(_ops_ctx, table=table, count=count).execute()
+
+        persistence.on_prune = _on_prune
+
     app.gateway_config = config
     app.config_path = config_path
     app.config_io = config_io
