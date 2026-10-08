@@ -32,6 +32,13 @@ from .tool_call_id import sanitize_tool_call_id
 from .reasoning import DEFAULT_REASONING_CAPS, apply_reasoning_config
 from .tool_call_unwind import unwind_parallel_tool_calls_ir
 from .tool_content import convert_content_blocks_to_ir, convert_ir_content_blocks_to_p
+from .tool_intrinsic import (
+    get_intrinsic_kind,
+    is_intrinsic_part,
+    make_intrinsic_tool_call,
+    make_intrinsic_tool_result,
+    set_intrinsic_kind,
+)
 from .truncate import truncate_with_digest
 
 __all__ = [
@@ -57,6 +64,12 @@ __all__ = [
     "convert_ir_content_blocks_to_p",
     # truncate
     "truncate_with_digest",
+    # tool_intrinsic
+    "is_intrinsic_part",
+    "get_intrinsic_kind",
+    "set_intrinsic_kind",
+    "make_intrinsic_tool_call",
+    "make_intrinsic_tool_result",
 ]
 
 # system_message_hoist
