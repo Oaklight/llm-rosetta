@@ -50,13 +50,16 @@ class OpsClearData(_DataMutationMixin, OpsBase):
 
     async def _run(self) -> dict[str, Any]:
         p = self._ctx.persistence
+        if self._table == "request_log":
+            rl = self._ctx.request_log
+            if rl is not None:
+                count = await p.count_log_entries() if p else 0
+                await rl.clear()
+                return {"deleted": count}
+            return {}
         if p is None:
             return {}
-        if self._table == "request_log":
-            count = await p.count_log_entries()
-            await p.clear_log()
-            return {"deleted": count}
-        elif self._table == "error_dumps":
+        if self._table == "error_dumps":
             await p.clear_error_dumps()
             return {}
         return {}
@@ -136,6 +139,7 @@ class OpsCleanupData(_DataMutationMixin, OpsBase):
         elif self._mode == "age" and self._tables == ("ops_log",):
             return await p.cleanup_ops_log_by_age(self._max_age_days or 90)
         elif self._mode == "age":
+            # Catch-all: cleanup_by_age cleans request_log + error_dumps
             return await p.cleanup_by_age(self._max_age_days or 90)
         elif self._mode == "before":
             return await p.cleanup_before(self._before or "", tables=self._tables)
