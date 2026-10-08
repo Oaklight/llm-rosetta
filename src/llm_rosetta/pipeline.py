@@ -24,7 +24,7 @@ from __future__ import annotations
 import logging
 import time
 import warnings
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Iterator
 from typing import Any, Literal, Protocol, runtime_checkable
 
 from llm_rosetta.capabilities import (
@@ -183,6 +183,10 @@ class StreamProcessorProtocol(Protocol):
     def source_context(self) -> Any: ...
 
     def process_chunk(self, chunk: dict[str, Any] | None) -> list[dict[str, Any]]: ...
+
+    def iter_events(
+        self, chunks: Iterable[dict[str, Any]]
+    ) -> Iterator[dict[str, Any]]: ...
 
 
 class ConversionPipeline:
@@ -969,6 +973,25 @@ class BaselineStreamProcessor:
             self._usage = u
         return [chunk]
 
+    def iter_events(self, chunks: Iterable[dict[str, Any]]) -> Iterator[dict[str, Any]]:
+        """Iterate over upstream chunks and yield source-format events.
+
+        Equivalent to calling :meth:`process_chunk` for each chunk
+        followed by a final ``process_chunk(None)`` to flush any
+        deferred terminal events.  Baseline passthrough has no
+        deferred state, but the final flush is included for
+        interface consistency.
+
+        Args:
+            chunks: Iterable of parsed upstream response chunks.
+
+        Yields:
+            Source-format event dicts.
+        """
+        for chunk in chunks:
+            yield from self.process_chunk(chunk)
+        yield from self.process_chunk(None)
+
 
 class StreamProcessor:
     """Stateful per-chunk converter for streaming responses.
@@ -1168,6 +1191,28 @@ class StreamProcessor:
             result = [apply_transforms(self._post_ir_transforms, c) for c in result]
 
         return result
+
+    def iter_events(self, chunks: Iterable[dict[str, Any]]) -> Iterator[dict[str, Any]]:
+        """Iterate over upstream chunks and yield source-format events.
+
+        Equivalent to calling :meth:`process_chunk` for each chunk
+        followed by a final ``process_chunk(None)`` to flush any
+        deferred terminal events (e.g. a ``StreamEndEvent`` held back
+        while waiting for a usage chunk that never arrived).
+
+        This is the recommended entry point for streaming conversion —
+        it guarantees that the stream is properly finalized regardless
+        of whether the upstream sent usage data.
+
+        Args:
+            chunks: Iterable of parsed upstream response chunks.
+
+        Yields:
+            Source-format event dicts.
+        """
+        for chunk in chunks:
+            yield from self.process_chunk(chunk)
+        yield from self.process_chunk(None)
 
     def _restore_custom_tool_events(
         self, ir_events: list[dict[str, Any]]

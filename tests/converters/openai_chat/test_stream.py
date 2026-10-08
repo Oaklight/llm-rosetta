@@ -1388,3 +1388,89 @@ class TestDeferredStreamEnd:
         assert "message_delta" in anth_types, "message_delta missing — #838 regression"
         assert "message_stop" in anth_types, "message_stop missing — #838 regression"
         assert stop_reason == "end_turn"
+
+
+class TestIterStreamFromProvider:
+    """Tests for BaseConverter.iter_stream_from_provider (#872)."""
+
+    def setup_method(self):
+        self.converter = OpenAIChatConverter()
+
+    def test_iter_stream_yields_all_events(self):
+        """iter_stream_from_provider yields events from all chunks."""
+        chunks = [
+            {
+                "id": "chatcmpl-abc",
+                "object": "chat.completion.chunk",
+                "model": "gpt-4",
+                "created": 1700000000,
+                "choices": [{"index": 0, "delta": {"content": "Hi"}}],
+            },
+            {"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]},
+        ]
+        ctx = self.converter.create_stream_context()
+        events = list(self.converter.iter_stream_from_provider(chunks, context=ctx))
+        types = [e["type"] for e in events]
+        assert "stream_start" in types
+        assert "text_delta" in types
+        assert "finish" in types
+        assert "stream_end" in types
+
+    def test_iter_stream_flushes_deferred_stream_end(self):
+        """iter_stream_from_provider auto-flushes deferred StreamEndEvent."""
+        chunks = [
+            {
+                "id": "chatcmpl-abc",
+                "object": "chat.completion.chunk",
+                "model": "gpt-4",
+                "created": 1700000000,
+                "choices": [{"index": 0, "delta": {"content": "ok"}}],
+            },
+            # Finish without usage — defers StreamEndEvent
+            {"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]},
+            # No usage-only chunk follows — iter_stream flushes via None
+        ]
+        ctx = self.converter.create_stream_context()
+        events = list(self.converter.iter_stream_from_provider(chunks, context=ctx))
+        types = [e["type"] for e in events]
+        assert "stream_end" in types
+        assert ctx.is_ended is True
+
+    def test_iter_stream_without_context(self):
+        """iter_stream_from_provider works without context (no lifecycle events)."""
+        chunks = [
+            {"choices": [{"index": 0, "delta": {"content": "Hi"}}]},
+        ]
+        events = list(self.converter.iter_stream_from_provider(chunks))
+        types = [e["type"] for e in events]
+        assert "text_delta" in types
+        assert "stream_start" not in types
+        assert "stream_end" not in types
+
+    def test_iter_stream_safe_for_converters_without_none_support(self):
+        """iter_stream_from_provider gracefully handles converters that reject None."""
+        from llm_rosetta.converters.google_generate import GoogleGenerateConverter
+
+        gc = GoogleGenerateConverter()
+        chunks = [
+            {
+                "candidates": [
+                    {
+                        "content": {"parts": [{"text": "ok"}], "role": "model"},
+                        "finishReason": "STOP",
+                    }
+                ],
+                "usageMetadata": {
+                    "promptTokenCount": 5,
+                    "candidatesTokenCount": 1,
+                    "totalTokenCount": 6,
+                },
+            },
+        ]
+        ctx = gc.create_stream_context()
+        # Should not raise even though GoogleGenerateConverter
+        # doesn't support None sentinel
+        events = list(gc.iter_stream_from_provider(chunks, context=ctx))
+        types = [e["type"] for e in events]
+        assert "finish" in types
+        assert len(events) > 0

@@ -1056,3 +1056,70 @@ class TestConversionPipeline:
         synthetic = user_msgs[-1]
         assert isinstance(synthetic["content"], list)
         assert any(p.get("type") == "image_url" for p in synthetic["content"])
+
+
+class TestStreamProcessorIterEvents:
+    """Tests for StreamProcessor.iter_events (#872)."""
+
+    def _make_processor(self, source="openai_chat", target="anthropic"):
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        pipeline = ConversionPipeline(source, target)
+        pipeline.convert_request(
+            {"model": "gpt-4", "messages": [{"role": "user", "content": "hi"}]}
+        )
+        return pipeline.create_stream_processor()
+
+    def test_iter_events_yields_all_events(self):
+        """iter_events yields source-format events for all chunks."""
+        processor = self._make_processor("openai_chat", "openai_chat")
+        chunks = [
+            {
+                "id": "chatcmpl-abc",
+                "object": "chat.completion.chunk",
+                "model": "gpt-4",
+                "created": 1700000000,
+                "choices": [
+                    {"index": 0, "delta": {"role": "assistant", "content": ""}}
+                ],
+            },
+            {"choices": [{"index": 0, "delta": {"content": "Hi"}}]},
+            {"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]},
+        ]
+        events = list(processor.iter_events(chunks))
+        assert len(events) > 0
+        # Should have content and finish events
+        has_content = any(
+            c.get("choices", [{}])[0].get("delta", {}).get("content") == "Hi"
+            for c in events
+            if c.get("choices")
+        )
+        assert has_content
+
+    def test_iter_events_flushes_deferred_stream_end(self):
+        """iter_events auto-flushes deferred StreamEndEvent for Anthropic output."""
+        processor = self._make_processor("anthropic", "openai_chat")
+        chunks = [
+            {
+                "id": "chatcmpl-abc",
+                "object": "chat.completion.chunk",
+                "model": "gpt-4",
+                "created": 1700000000,
+                "choices": [
+                    {"index": 0, "delta": {"role": "assistant", "content": ""}}
+                ],
+            },
+            {"choices": [{"index": 0, "delta": {"content": "ok"}}]},
+            # Finish without usage
+            {"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]},
+        ]
+        events = list(processor.iter_events(chunks))
+        types = [e.get("type") for e in events]
+        assert "message_delta" in types, "message_delta missing — #838 regression"
+        assert "message_stop" in types, "message_stop missing — #838 regression"
+
+    def test_iter_events_empty_input(self):
+        """iter_events with empty iterable returns no events."""
+        processor = self._make_processor("openai_chat", "openai_chat")
+        events = list(processor.iter_events([]))
+        assert events == []

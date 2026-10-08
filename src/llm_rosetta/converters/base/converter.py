@@ -6,7 +6,7 @@ Defines the basic interface for converters (abstract base class, functional doma
 """
 
 from abc import ABC, abstractmethod
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from typing import Any, cast
 
 from ...types.ir.passthrough import ProviderPassthroughEvent
@@ -370,6 +370,35 @@ class BaseConverter(ABC):
             List of IR stream events extracted from the chunk.
         """
         pass
+
+    def iter_stream_from_provider(
+        self,
+        chunks: Iterable[dict[str, Any]],
+        context: StreamContext | None = None,
+    ) -> Iterator[IRStreamEvent]:
+        """Iterate over upstream chunks and yield IR stream events.
+
+        Equivalent to calling :meth:`stream_response_from_provider` for
+        each chunk, then once more with ``None`` to flush any deferred
+        terminal events.  Converters that do not support the ``None``
+        sentinel (i.e. have no deferred state) safely ignore it.
+
+        Args:
+            chunks: Iterable of provider-native stream chunks.
+            context: Optional stream context for stateful conversions.
+
+        Yields:
+            IR stream events.
+        """
+        for chunk in chunks:
+            yield from self.stream_response_from_provider(chunk, context=context)
+        try:
+            yield from self.stream_response_from_provider(
+                None,  # ty: ignore[invalid-argument-type]
+                context=context,  # type: ignore[arg-type]
+            )
+        except (TypeError, AttributeError):
+            pass
 
     def stream_response_to_provider(
         self,
