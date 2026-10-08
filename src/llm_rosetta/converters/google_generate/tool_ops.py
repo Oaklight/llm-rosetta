@@ -424,9 +424,11 @@ class GoogleGenerateToolOps(BaseToolOps):
     ) -> dict:
         """IR ToolResultPart → Google GenAI function_response Part with context.
 
-        Looks up the corresponding tool_call in the message history to find
-        the actual function name (since Google requires function name, not
-        tool_call_id).
+        Scans the message history to resolve tool_call_id → tool_name,
+        then delegates to :meth:`ir_tool_result_to_p_named`.
+
+        Prefer passing a pre-built ``tool_call_index`` dict and calling
+        ``ir_tool_result_to_p_named`` directly for O(1) resolution.
 
         Args:
             ir_tool_result: IR tool result part.
@@ -458,21 +460,9 @@ class GoogleGenerateToolOps(BaseToolOps):
             )
             tool_name = tool_call_id
 
-        result_content = _get_result_content(ir_tool_result)
-
-        response_data: dict[str, Any] = {"output": result_content}
-        if ir_tool_result.get("is_error"):
-            response_data = {"error": result_content}
-
-        func_response: dict[str, Any] = {
-            "name": tool_name,
-            "response": response_data,
-        }
-        tool_call_id = ir_tool_result.get("tool_call_id")
-        if tool_call_id:
-            func_response["id"] = sanitize_tool_call_id(tool_call_id)
-
-        return {"functionResponse": func_response}
+        return GoogleGenerateToolOps.ir_tool_result_to_p_named(
+            ir_tool_result, tool_name
+        )
 
     @staticmethod
     def ir_tool_result_to_p_named(

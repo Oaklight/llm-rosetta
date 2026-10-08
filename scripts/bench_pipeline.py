@@ -455,12 +455,14 @@ def _generate_request(provider: str, profile: str) -> dict[str, Any]:
                 n_msgs, n_tools=n_tools, text_size=text_size
             ),
             "tools": [
-                {
-                    "type": "function",
-                    "name": f"tool_{i}",
-                    "description": _make_tool_anthropic(i)["description"],
-                    "parameters": _make_tool_anthropic(i)["input_schema"],
-                }
+                (
+                    lambda t: {
+                        "type": "function",
+                        "name": f"tool_{i}",
+                        "description": t["description"],
+                        "parameters": t["input_schema"],
+                    }
+                )(_make_tool_anthropic(i))
                 for i in range(n_tools)
             ],
         }
