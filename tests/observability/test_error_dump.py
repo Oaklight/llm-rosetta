@@ -377,14 +377,26 @@ class TestPersistenceErrorDumps:
 
     @pytest.mark.asyncio
     async def test_request_log_id_stored(self, persistence: PersistenceManager) -> None:
+        from llm_rosetta.observability import RequestLogEntry
+
+        log_entry = RequestLogEntry.create(
+            model="test-model",
+            source_provider="openai_chat",
+            target_provider="anthropic",
+            is_stream=False,
+            status_code=500,
+            duration_ms=10.0,
+        )
+        await persistence.insert_log_entries([log_entry.to_dict()])
+
         dump_id = await dump_error(
             persistence,
             request_body={"test": True},
             status_code=500,
             error_phase="upstream",
-            request_log_id="abc123",
+            request_log_id=log_entry.id,
         )
         assert dump_id is not None
         entry = await persistence.get_error_dump(dump_id)
         assert entry is not None
-        assert entry["request_log_id"] == "abc123"
+        assert entry["request_log_id"] == log_entry.id

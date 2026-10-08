@@ -112,6 +112,111 @@ class TestPersistenceRetention:
         assert await pm.count_error_entries() == 10
 
 
+class TestSchemaVersioning:
+    async def test_new_db_has_latest_version(self, tmp_path):
+        pm = await PersistenceManager.create(str(tmp_path))
+        version = await pm.schema_version()
+        assert version == 2  # latest migration version
+
+    async def test_schema_version_table_exists(self, pm):
+        row = await pm._conn.execute_fetchone(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='schema_version'"
+        )
+        assert row is not None
+
+    async def test_migration_history_recorded(self, pm):
+        cursor = await pm._conn.execute(
+            "SELECT version, applied_at FROM schema_version ORDER BY version"
+        )
+        rows = await cursor.fetchall()
+        assert len(rows) == 2
+        assert rows[0][0] == 1
+        assert rows[1][0] == 2
+        # applied_at should be ISO timestamps
+        assert "T" in rows[0][1]
+
+    async def test_error_dumps_indexes_exist(self, pm):
+        cursor = await pm._conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='index' "
+            "AND tbl_name='error_dumps'"
+        )
+        indexes = {r[0] for r in await cursor.fetchall()}
+        assert "idx_ed_model" in indexes
+        assert "idx_ed_error_phase" in indexes
+
+    async def test_foreign_keys_enabled(self, pm):
+        row = await pm._conn.execute_fetchone("PRAGMA foreign_keys")
+        assert row[0] == 1
+
+    async def test_error_dumps_fk_on_new_db(self, tmp_path):
+        """New databases should have FK constraint on error_dumps.request_log_id."""
+        pm = await PersistenceManager.create(str(tmp_path))
+        cursor = await pm._conn.execute("PRAGMA foreign_key_list(error_dumps)")
+        fks = await cursor.fetchall()
+        assert len(fks) >= 1
+        # FK should reference request_log(id)
+        fk = fks[0]
+        assert fk[2] == "request_log"  # table
+        assert fk[3] == "request_log_id"  # from
+        assert fk[4] == "id"  # to
+
+    async def test_idempotent_migrations(self, tmp_path):
+        """Running migrations twice should not fail."""
+        pm = await PersistenceManager.create(str(tmp_path))
+        v1 = await pm.schema_version()
+        await pm.close()
+        # Re-open — migrations should detect already-applied and skip
+        pm2 = await PersistenceManager.create(str(tmp_path))
+        v2 = await pm2.schema_version()
+        assert v1 == v2
+
+    async def test_bootstrap_detects_old_style_migration(self, tmp_path):
+        """Databases that had _migrate_add_columns should get v1 auto-detected."""
+        from llm_rosetta._vendor import aiosqlite
+
+        db_path = tmp_path / "gateway.db"
+        # Simulate old database: create tables manually without schema_version data
+        conn = await aiosqlite.connect(str(db_path))
+        await conn.executescript("""
+            CREATE TABLE request_log (
+                id TEXT PRIMARY KEY, timestamp TEXT NOT NULL,
+                model TEXT NOT NULL, source_provider TEXT NOT NULL,
+                target_provider TEXT NOT NULL, is_stream INTEGER NOT NULL,
+                status_code INTEGER NOT NULL, duration_ms REAL NOT NULL,
+                error_detail TEXT, api_key_label TEXT,
+                target_provider_name TEXT, client_ip TEXT,
+                profile TEXT, input_tokens INTEGER,
+                output_tokens INTEGER, total_tokens INTEGER,
+                cache_read_tokens INTEGER, cache_creation_tokens INTEGER,
+                reasoning_tokens INTEGER
+            );
+            CREATE TABLE metrics (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+            CREATE TABLE dump_bodies (
+                hash TEXT PRIMARY KEY, data BLOB NOT NULL,
+                orig_bytes INTEGER NOT NULL, created TEXT NOT NULL
+            );
+            CREATE TABLE error_dumps (
+                id TEXT PRIMARY KEY, request_log_id TEXT,
+                timestamp TEXT NOT NULL, model TEXT,
+                source_provider TEXT, target_provider TEXT,
+                provider_name TEXT, status_code INTEGER,
+                error_phase TEXT, body_hash TEXT,
+                response_text TEXT, upstream_url TEXT,
+                converted_body_hash TEXT
+            );
+            CREATE TABLE ops_log (
+                id TEXT PRIMARY KEY, timestamp TEXT NOT NULL,
+                event_type TEXT NOT NULL, severity TEXT NOT NULL,
+                message TEXT NOT NULL, details TEXT, source TEXT
+            );
+        """)
+        await conn.close()
+
+        # Now open with PersistenceManager — should bootstrap v1 and apply v2
+        pm = await PersistenceManager.create(str(tmp_path))
+        assert await pm.schema_version() == 2
+
+
 class TestWALCheckpoint:
     async def test_wal_size_initially_zero_or_small(self, pm):
         assert pm.wal_size() >= 0
