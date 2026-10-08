@@ -20,6 +20,7 @@ import json
 import logging
 import sqlite3
 import warnings
+from datetime import datetime, timezone
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from pathlib import Path
 from typing import Any
@@ -93,6 +94,7 @@ class PersistenceManager:
         ops_info_max: int | None = None,
         ops_warn_max: int | None = None,
         ops_log_max: int | None = None,
+        wal_max_bytes: int | None = None,
     ) -> None:
         if max_entries is not None:
             warnings.warn(
@@ -122,7 +124,9 @@ class PersistenceManager:
             ),
         )
         self._tracker = RetentionTracker()
-        self._wal_max_bytes = DEFAULT_WAL_MAX_BYTES
+        self._wal_max_bytes = (
+            wal_max_bytes if wal_max_bytes is not None else DEFAULT_WAL_MAX_BYTES
+        )
         self._wal_task: asyncio.Task[None] | None = None
         self.on_prune: Callable[[str, int], Awaitable[None]] | None = None
         self._data_dir.mkdir(parents=True, exist_ok=True)
@@ -155,6 +159,7 @@ class PersistenceManager:
         ops_info_max: int | None = None,
         ops_warn_max: int | None = None,
         ops_log_max: int | None = None,
+        wal_max_bytes: int | None = None,
     ) -> PersistenceManager:
         """Async factory: create a PersistenceManager with an open connection.
 
@@ -168,6 +173,7 @@ class PersistenceManager:
             ops_info_max=ops_info_max,
             ops_warn_max=ops_warn_max,
             ops_log_max=ops_log_max,
+            wal_max_bytes=wal_max_bytes,
         )
         await instance._open()
         return instance
@@ -286,8 +292,10 @@ class PersistenceManager:
     _MIGRATIONS: list[tuple[int, str, list[str]]] = [
         (
             1,
-            "add request_log token/profile columns",
+            "add request_log extra columns",
             [
+                "ALTER TABLE request_log ADD COLUMN target_provider_name TEXT",
+                "ALTER TABLE request_log ADD COLUMN client_ip TEXT",
                 "ALTER TABLE request_log ADD COLUMN profile TEXT",
                 "ALTER TABLE request_log ADD COLUMN input_tokens INTEGER",
                 "ALTER TABLE request_log ADD COLUMN output_tokens INTEGER",
@@ -321,8 +329,6 @@ class PersistenceManager:
             cursor = await self._conn.execute("PRAGMA table_info(request_log)")
             columns = {r[1] for r in await cursor.fetchall()}
             if "reasoning_tokens" in columns:
-                from datetime import datetime, timezone
-
                 await self._conn.execute(
                     "INSERT OR IGNORE INTO schema_version (version, applied_at) "
                     "VALUES (?, ?)",
@@ -342,7 +348,6 @@ class PersistenceManager:
                     if "duplicate column" in str(exc).lower():
                         continue
                     raise
-            from datetime import datetime, timezone
 
             await self._conn.execute(
                 "INSERT INTO schema_version (version, applied_at) VALUES (?, ?)",
@@ -984,7 +989,6 @@ class PersistenceManager:
 
         If the hash already exists the row is silently skipped.
         """
-        from datetime import datetime, timezone
 
         await self._conn.execute(
             "INSERT OR IGNORE INTO dump_bodies (hash, data, orig_bytes, created) "
@@ -1561,7 +1565,6 @@ class PersistenceManager:
 
     async def _create_backup(self) -> None:
         """Create a timestamped backup of the database, keeping last N copies."""
-        from datetime import datetime, timezone
 
         backup_dir = self._data_dir / _BACKUP_DIR
         backup_dir.mkdir(parents=True, exist_ok=True)
@@ -1650,6 +1653,16 @@ class PersistenceManager:
 
     async def _periodic_wal_checkpoint(self) -> None:
         """Background task: checkpoint WAL every interval or when oversized."""
+        # Check immediately on startup — don't wait a full interval if WAL
+        # is already huge (e.g. after ungraceful shutdown).
+        wal_bytes = self.wal_size()
+        if wal_bytes > self._wal_max_bytes:
+            logger.info(
+                "WAL size %d bytes exceeds cap %d on startup, checkpointing",
+                wal_bytes,
+                self._wal_max_bytes,
+            )
+            await self.wal_checkpoint()
         while True:
             await asyncio.sleep(_WAL_CHECKPOINT_INTERVAL)
             try:

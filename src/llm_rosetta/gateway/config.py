@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
 import re
 import sys
-import asyncio
 from collections.abc import AsyncGenerator, Generator
 from contextlib import asynccontextmanager, contextmanager, suppress
 from typing import Any, NamedTuple, Protocol, runtime_checkable
@@ -166,9 +166,14 @@ _async_locks: dict[tuple[str, int], asyncio.Lock] = {}
 
 def _get_async_lock(path: str) -> asyncio.Lock:
     real = os.path.realpath(path)
-    loop_id = id(asyncio.get_running_loop())
+    loop = asyncio.get_running_loop()
+    loop_id = id(loop)
     key = (real, loop_id)
     if key not in _async_locks:
+        # Evict stale entries from previous loops
+        stale = [k for k in _async_locks if k[1] != loop_id]
+        for k in stale:
+            del _async_locks[k]
         _async_locks[key] = asyncio.Lock()
     return _async_locks[key]
 

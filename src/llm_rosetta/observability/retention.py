@@ -23,6 +23,10 @@ class RetentionPolicy:
 
     Replaces scattered constants: ``DEFAULT_SUCCESS_MAX``, ``DEFAULT_DUMP_MAX``,
     ``DEFAULT_OPS_INFO_MAX``, ``DEFAULT_OPS_WARN_MAX``, ``DEFAULT_MAX_AGE_DAYS``.
+
+    All caps are floored at 1 on post-init to prevent accidental deletion
+    of all entries.  The config hot-reload path in ``_shared.py`` applies a
+    higher floor (``max(100, ...)``) for production safety.
     """
 
     success_max: int = 50_000
@@ -30,6 +34,13 @@ class RetentionPolicy:
     ops_info_max: int = 10_000
     ops_warn_max: int = 5_000
     max_age_days: int = 90
+
+    def __post_init__(self) -> None:
+        self.success_max = max(self.success_max, 1)
+        self.dump_max = max(self.dump_max, 1)
+        self.ops_info_max = max(self.ops_info_max, 1)
+        self.ops_warn_max = max(self.ops_warn_max, 1)
+        self.max_age_days = max(self.max_age_days, 1)
 
 
 @dataclass
