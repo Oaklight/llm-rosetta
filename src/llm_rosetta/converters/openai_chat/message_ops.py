@@ -346,14 +346,15 @@ class OpenAIChatMessageOps(BaseMessageOps):
         # Set reasoning content (DeepSeek / extended OpenAI Chat providers)
         if reasoning_text is not None:
             openai_message["reasoning_content"] = reasoning_text
-            # Restore reasoning_details / encrypted_content from provider_metadata
+            # Restore reasoning_details from provider_metadata, encrypted_content from redacted_data
             for part in content:
                 if is_reasoning_part(part):
                     pm = part.get("provider_metadata", {}).get("openai_chat", {})
                     if "reasoning_details" in pm:
                         openai_message["reasoning_details"] = pm["reasoning_details"]
-                    if "encrypted_content" in pm:
-                        openai_message["encrypted_content"] = pm["encrypted_content"]
+                    redacted = part.get("redacted_data")
+                    if redacted:
+                        openai_message["encrypted_content"] = redacted
                     break
 
         # Set text content
@@ -571,16 +572,16 @@ class OpenAIChatMessageOps(BaseMessageOps):
         reasoning_content = msg.get("reasoning_content")
         if reasoning_content is not None:
             reasoning_part = self.content_ops.p_reasoning_to_ir(reasoning_content)
-            # Preserve reasoning_details and encrypted_content in provider_metadata
-            meta: dict[str, Any] = {}
+            # Preserve reasoning_details in provider_metadata
             reasoning_details = msg.get("reasoning_details")
             if reasoning_details:
-                meta["reasoning_details"] = reasoning_details
+                reasoning_part["provider_metadata"] = {
+                    "openai_chat": {"reasoning_details": reasoning_details}
+                }
+            # Preserve encrypted_content as opaque reasoning blob
             encrypted_content = msg.get("encrypted_content")
             if encrypted_content:
-                meta["encrypted_content"] = encrypted_content
-            if meta:
-                reasoning_part["provider_metadata"] = {"openai_chat": meta}
+                reasoning_part["redacted_data"] = encrypted_content
             ir_content.append(reasoning_part)
 
         # Handle text content

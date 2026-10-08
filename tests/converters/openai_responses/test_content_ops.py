@@ -337,7 +337,7 @@ class TestOpenAIResponsesContentOps:
         assert result is None
 
     def test_p_reasoning_to_ir_with_encrypted_content(self):
-        """Test reasoning with encrypted_content → signature field."""
+        """Test reasoning with encrypted_content → redacted_data field."""
         provider = {
             "type": "reasoning",
             "id": "rs_abc123",
@@ -346,7 +346,8 @@ class TestOpenAIResponsesContentOps:
         }
         result = OpenAIResponsesContentOps.p_reasoning_to_ir(provider)
         assert result is not None
-        assert result["signature"] == "enc_sig_xyz"
+        assert result["redacted_data"] == "enc_sig_xyz"
+        assert "signature" not in result
         assert result["provider_metadata"]["responses_reasoning_id"] == "rs_abc123"
 
     def test_p_reasoning_to_ir_list_content_extracts_text(self):
@@ -381,7 +382,7 @@ class TestOpenAIResponsesContentOps:
         result = OpenAIResponsesContentOps.p_reasoning_to_ir(provider)
         assert result is not None
         assert result["reasoning"] == "We need to answer simple. 2+2=4."
-        assert result["signature"] == "c4707159-eb5a-421a-8e2d-2e55d8c7e98d-0"
+        assert result["redacted_data"] == "c4707159-eb5a-421a-8e2d-2e55d8c7e98d-0"
         assert (
             result["provider_metadata"]["responses_reasoning_content"]
             == provider["content"]
@@ -582,12 +583,12 @@ class TestReasoningDirection:
         ir_reasoning = ReasoningPart(
             type="reasoning",
             reasoning="thinking...",
-            signature="real-encrypted-content",
-            provider_metadata={
-                "responses_reasoning_id": "rs_original_123",
-                "responses_reasoning_summary": summary,
-            },
         )
+        ir_reasoning["redacted_data"] = "real-encrypted-content"
+        ir_reasoning["provider_metadata"] = {
+            "responses_reasoning_id": "rs_original_123",
+            "responses_reasoning_summary": summary,
+        }
         result = OpenAIResponsesContentOps.ir_reasoning_to_p(ir_reasoning)
         assert result is not None
         assert result["id"] == "rs_original_123"

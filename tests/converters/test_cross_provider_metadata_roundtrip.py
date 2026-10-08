@@ -119,66 +119,51 @@ class TestGoogleAnthropicReasoningRoundTrip:
         }
 
     def test_reasoning_google_to_anthropic_to_google(self):
-        """thought_signature on reasoning survives Google → IR → Anthropic → IR → Google."""
+        """thought_signature on reasoning survives Google → IR → Anthropic → IR → Google.
+
+        After #857, Google generate maps thoughtSignature to ReasoningPart.signature
+        (same as Google Interactions and Anthropic). The signature field is shared,
+        so it round-trips through Anthropic naturally.
+        """
         google_part = self._google_thought_part()
 
-        # Google → IR
+        # Google → IR: thoughtSignature → signature
         ir = GoogleGenerateContentOps.p_reasoning_to_ir(google_part)
         assert ir["reasoning"] == "Let me think about this..."
-        # Google p_reasoning_to_ir may not store thought_signature in provider_metadata
-        # — it stores it directly. Let's build the IR manually to test the Anthropic path.
+        assert ir["signature"] == self.THOUGHT_SIG
 
-        # Build IR with provider_metadata (as it would come from a full converter pipeline)
-        ir_with_meta = ReasoningPart(
-            type="reasoning",
-            reasoning="Let me think about this...",
-        )
-        ir_with_meta["provider_metadata"] = {
-            "google": {"thought_signature": self.THOUGHT_SIG}
-        }
-
-        # IR → Anthropic
-        anthropic_block = AnthropicContentOps.ir_reasoning_to_p(ir_with_meta)
+        # IR → Anthropic: signature → thinking.signature
+        anthropic_block = AnthropicContentOps.ir_reasoning_to_p(ir)
         assert anthropic_block["type"] == "thinking"
-        assert (
-            anthropic_block["_provider_metadata"]["google"]["thought_signature"]
-            == self.THOUGHT_SIG
-        )
+        assert anthropic_block["signature"] == self.THOUGHT_SIG
 
-        # Anthropic → IR
+        # Anthropic → IR: thinking.signature → signature
         ir2 = AnthropicContentOps.p_reasoning_to_ir(anthropic_block)
-        assert (
-            ir2["provider_metadata"]["google"]["thought_signature"] == self.THOUGHT_SIG
-        )
+        assert ir2["signature"] == self.THOUGHT_SIG
 
-        # IR → Google
+        # IR → Google: signature → thoughtSignature
         google_out = GoogleGenerateContentOps.ir_reasoning_to_p(ir2)
         assert google_out["thoughtSignature"] == self.THOUGHT_SIG
         assert google_out["thought"] is True
 
-    def test_reasoning_native_signature_preserved_separately(self):
-        """Anthropic native signature and provider_metadata coexist."""
+    def test_reasoning_signature_round_trip_single_provider(self):
+        """Signature round-trips within a single provider."""
         ir = ReasoningPart(
             type="reasoning",
             reasoning="thinking...",
         )
-        ir["signature"] = "anthropic-native-sig"
-        ir["provider_metadata"] = {"google": {"thought_signature": "google-sig"}}
+        ir["signature"] = "some-verification-sig"
 
         anthropic = AnthropicContentOps.ir_reasoning_to_p(ir)
-        assert anthropic["signature"] == "anthropic-native-sig"
-        assert (
-            anthropic["_provider_metadata"]["google"]["thought_signature"]
-            == "google-sig"
-        )
+        assert anthropic["signature"] == "some-verification-sig"
 
         ir2 = AnthropicContentOps.p_reasoning_to_ir(anthropic)
-        assert ir2["signature"] == "anthropic-native-sig"
-        assert ir2["provider_metadata"]["google"]["thought_signature"] == "google-sig"
+        assert ir2["signature"] == "some-verification-sig"
 
     def test_reasoning_no_metadata_unaffected(self):
-        """Reasoning blocks without provider_metadata still work normally."""
+        """Reasoning blocks without signature still work normally."""
         ir = ReasoningPart(type="reasoning", reasoning="hmm")
         anthropic = AnthropicContentOps.ir_reasoning_to_p(ir)
+        assert "signature" not in anthropic
         assert "_provider_metadata" not in anthropic
         assert anthropic["type"] == "thinking"
