@@ -16,7 +16,7 @@ import json
 import logging
 from typing import Any, Literal, cast
 
-from ..base.helpers.tool_content import (
+from ..base.tools.content import (
     convert_content_blocks_to_ir,
     convert_ir_content_blocks_to_p,
 )
@@ -28,7 +28,7 @@ from ...types.ir import (
 )
 from ...types.ir.tools import ToolCallConfig
 from ..base import BaseToolOps
-from ..base.helpers import (
+from ..base.tools import (
     extract_part_ids,
     get_intrinsic_kind,
     log_orphan_warnings,

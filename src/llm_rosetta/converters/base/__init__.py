@@ -27,9 +27,9 @@ from .embedding_converter import BaseEmbeddingConverter
 from .decision_converter import BaseDecisionConverter
 from .rerank_converter import BaseRerankConverter
 from .messages import BaseMessageOps  # noqa: F401
-from .helpers.tool_content import convert_content_blocks_to_ir  # noqa: F401
-from .helpers.tool_content import convert_ir_content_blocks_to_p  # noqa: F401
-from .helpers.schema import sanitize_schema  # noqa: F401
+from .tools import convert_content_blocks_to_ir  # noqa: F401
+from .tools import convert_ir_content_blocks_to_p  # noqa: F401
+from .tools import sanitize_schema  # noqa: F401
 from .tools import BaseToolOps  # noqa: F401
 
 __all__ = [

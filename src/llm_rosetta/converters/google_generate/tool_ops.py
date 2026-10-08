@@ -25,7 +25,7 @@ from ...types.ir import (
 )
 from ...types.ir.tools import ToolCallConfig
 from ..base import BaseToolOps
-from ..base.helpers import sanitize_schema, sanitize_tool_call_id
+from ..base.tools import sanitize_schema, sanitize_tool_call_id
 from ._constants import generate_tool_call_id
 
 
@@ -93,7 +93,7 @@ def _get_result_content(ir_tool_result: ToolResultPart) -> Any:
     provider format via ``convert_ir_content_blocks_to_p``.  Plain data
     lists and dicts are JSON-serialized.  Scalar values pass through.
     """
-    from ..base.helpers.tool_content import convert_ir_content_blocks_to_p
+    from ..base.tools.content import convert_ir_content_blocks_to_p
 
     from .content_ops import GoogleGenerateContentOps
 
@@ -521,7 +521,7 @@ class GoogleGenerateToolOps(BaseToolOps):
 
         # Normalize provider content block lists to IR format
         if isinstance(content, list) and _is_content_block_list(content):
-            from ..base.helpers.tool_content import convert_content_blocks_to_ir
+            from ..base.tools.content import convert_content_blocks_to_ir
 
             from .content_ops import GoogleGenerateContentOps
 

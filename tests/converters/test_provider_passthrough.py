@@ -7,7 +7,7 @@ from llm_rosetta.converters.anthropic.converter import AnthropicConverter
 from llm_rosetta.converters.base import BaseConverter
 from llm_rosetta.converters.base.context import ConversionContext, StreamContext
 from llm_rosetta.pipeline import StreamProcessor
-from llm_rosetta.converters.base.helpers.tool_orphan_fix import (
+from llm_rosetta.converters.base.tools.orphan_fix import (
     fix_orphaned_tool_calls_ir,
 )
 from llm_rosetta.converters.openai_responses.converter import OpenAIResponsesConverter

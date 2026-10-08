@@ -28,7 +28,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any
 
-from llm_rosetta.converters.base.helpers.tool_intrinsic import (
+from llm_rosetta.converters.base.tools.intrinsic import (
     is_intrinsic_part as _is_intrinsic_part,
 )
 

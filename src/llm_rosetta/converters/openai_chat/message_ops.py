@@ -33,14 +33,14 @@ from ...types.ir import (
     is_tool_result_part,
 )
 from ..base import BaseMessageOps
-from ..base.helpers.tool_batch import assign_tool_batch_ids
-from ..base.helpers.multimodal_tool_patch import (
+from ..base.tools.batch import assign_tool_batch_ids
+from ..base.tools.multimodal_patch import (
     has_multimodal_content,
     inject_packed_tool_content,
     pack_multimodal_tool_result,
     unpack_tool_content,
 )
-from ..base.helpers.tool_content import convert_content_blocks_to_ir
+from ..base.tools.content import convert_content_blocks_to_ir
 from .content_ops import OpenAIChatContentOps
 from .tool_ops import OpenAIChatToolOps
 

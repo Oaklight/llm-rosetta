@@ -40,12 +40,12 @@ from ...types.ir.stream import (
 )
 from ..base import BaseConverter
 from ..base.context import ConversionContext, StreamContext
-from ..base.helpers import (
+from ..base.helpers.truncate import truncate_with_digest
+from ..base.tools import (
     assign_tool_batch_ids,
     fix_orphaned_tool_calls_ir,
     sanitize_tool_call_id,
     strip_orphaned_tool_config,
-    truncate_with_digest,
 )
 from .stream_context import OpenAIResponsesStreamContext
 from ._constants import (

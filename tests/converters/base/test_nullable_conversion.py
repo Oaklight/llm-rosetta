@@ -1,6 +1,6 @@
 """Tests for convert_nullable_to_type_array in converters/base/schema.py."""
 
-from llm_rosetta.converters.base.helpers.schema import convert_nullable_to_type_array
+from llm_rosetta.converters.base.tools.schema import convert_nullable_to_type_array
 
 
 class TestConvertNullableToTypeArray:

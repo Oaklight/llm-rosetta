@@ -361,7 +361,7 @@ def unwind_parallel_tool_calls(pattern: str | None = None) -> IRTransform:
         if compiled is not None:
             if not context.model or not compiled.search(context.model):
                 return body
-        from llm_rosetta.converters.base.helpers.tool_call_unwind import (
+        from llm_rosetta.converters.base.tools.call_unwind import (
             unwind_parallel_tool_calls_ir,
         )
 

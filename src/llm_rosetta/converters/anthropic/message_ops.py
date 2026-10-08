@@ -35,7 +35,7 @@ from ...types.ir import (
     is_tool_result_part,
 )
 from ..base import BaseMessageOps
-from ..base.helpers.tool_batch import assign_tool_batch_ids, merge_tool_messages
+from ..base.tools.batch import assign_tool_batch_ids, merge_tool_messages
 from .content_ops import AnthropicContentOps
 from .tool_ops import AnthropicToolOps
 

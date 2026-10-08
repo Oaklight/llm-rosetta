@@ -1,6 +1,6 @@
 """Tests for sanitize_schema and _flatten_combination in converters/base/schema.py."""
 
-from llm_rosetta.converters.base.helpers.schema import (
+from llm_rosetta.converters.base.tools.schema import (
     sanitize_schema,
     _flatten_combination,
 )

@@ -247,7 +247,7 @@ def sanitize_schema(
     if defs is not None:
         return _sanitize_schema_impl(schema, defs, extra_strip_keys)
 
-    from .cache import _SENTINEL, sanitize_cache, schema_cache_key
+    from ..helpers.cache import _SENTINEL, sanitize_cache, schema_cache_key
 
     frozen_extra = frozenset(extra_strip_keys) if extra_strip_keys else None
     key = schema_cache_key(schema, frozen_extra)
