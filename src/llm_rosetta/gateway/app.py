@@ -989,7 +989,7 @@ async def _flush_now(app: App) -> None:
 
     keystore = getattr(app, "keystore", None)
     if keystore is not None:
-        keystore.close()
+        await keystore.close()
 
     logger.info("Persistence flushed and closed on shutdown")
 
@@ -1014,7 +1014,7 @@ def _resolve_data_dir_for_app(
     return None
 
 
-def _setup_auth(
+async def _setup_auth(
     config: GatewayConfig,
     config_path: str | None,
     data_dir: str | None = None,
@@ -1053,7 +1053,7 @@ def _setup_auth(
     else:
         keys_db_path = "keys.db"
 
-    keystore = KeyStore(keys_db_path)
+    keystore = await KeyStore.create(keys_db_path)
 
     auth_state = AuthState(
         keystore=keystore,
@@ -1304,7 +1304,7 @@ async def create_app(
     app.before_request(create_hop_limit_hook())
 
     # --- Auth (SQLite keystore + config fallback) ---
-    internal_token, keystore, auth_state = _setup_auth(
+    internal_token, keystore, auth_state = await _setup_auth(
         config, config_path, data_dir=resolved_data_dir
     )
     if not ext.skip_builtin_auth:

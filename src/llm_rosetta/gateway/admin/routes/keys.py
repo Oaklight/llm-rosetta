@@ -23,7 +23,7 @@ def _get_keystore(request: Any) -> KeyStore:
 async def get_api_keys(request: Any) -> Response:
     """List all gateway API keys (no secrets returned)."""
     keystore = _get_keystore(request)
-    return JSONResponse({"keys": keystore.list_keys()})
+    return JSONResponse({"keys": await keystore.list_keys()})
 
 
 async def create_api_key(request: Any) -> Response:
@@ -40,7 +40,7 @@ async def create_api_key(request: Any) -> Response:
     allowed_shims = body.get("allowed_shims")
 
     try:
-        key_id, raw_key = keystore.create(
+        key_id, raw_key = await keystore.create_key(
             label=label,
             allowed_shims=allowed_shims,
             manual_key=manual_key,
@@ -48,7 +48,7 @@ async def create_api_key(request: Any) -> Response:
     except Exception as exc:
         return JSONResponse({"error": f"Failed to create key: {exc}"}, status_code=500)
 
-    entry = keystore.list_keys()
+    entry = await keystore.list_keys()
     created_entry = next((k for k in entry if k["id"] == key_id), {"id": key_id})
     created_entry["key"] = raw_key
     from llm_rosetta.gateway.ops.keys import OpsKeyCreate
@@ -71,7 +71,7 @@ async def update_api_key(request: Any, **kwargs: Any) -> Response:
     label = body.get("label")
     allowed_shims = body.get("allowed_shims")
 
-    if not keystore.update(key_id, label=label, allowed_shims=allowed_shims):
+    if not await keystore.update(key_id, label=label, allowed_shims=allowed_shims):
         return JSONResponse({"error": f"Key '{key_id}' not found"}, status_code=404)
 
     result: dict[str, Any] = {"ok": True, "id": key_id}
@@ -94,10 +94,11 @@ async def delete_api_key(request: Any, **kwargs: Any) -> Response:
     key_id = request.path_params["key_id"]
 
     # Capture label before deletion (gone afterward)
-    entry = next((k for k in keystore.list_keys() if k["id"] == key_id), None)
+    entries = await keystore.list_keys()
+    entry = next((k for k in entries if k["id"] == key_id), None)
     label = entry.get("label") if entry else None
 
-    if not keystore.delete(key_id):
+    if not await keystore.delete(key_id):
         return JSONResponse({"error": f"Key '{key_id}' not found"}, status_code=404)
 
     from llm_rosetta.gateway.ops.keys import OpsKeyDelete
@@ -113,11 +114,11 @@ async def rotate_api_key(request: Any, **kwargs: Any) -> Response:
     keystore = _get_keystore(request)
     key_id = request.path_params["key_id"]
 
-    # Capture label before rotation for audit trail
-    entry = next((k for k in keystore.list_keys() if k["id"] == key_id), None)
+    entries = await keystore.list_keys()
+    entry = next((k for k in entries if k["id"] == key_id), None)
     label = entry.get("label") if entry else None
 
-    new_key = keystore.rotate(key_id)
+    new_key = await keystore.rotate(key_id)
     if new_key is None:
         return JSONResponse({"error": f"Key '{key_id}' not found"}, status_code=404)
 
@@ -135,7 +136,7 @@ async def backfill_keys_last_used(request: Any, **kwargs: Any) -> Response:
     persistence = getattr(request.app, "persistence", None)
     if persistence is None:
         return JSONResponse({"error": "No persistence configured"}, status_code=400)
-    updated = keystore.backfill_last_used(persistence.db_path)
+    updated = await keystore.backfill_last_used(persistence.db_path)
     return JSONResponse({"updated": updated})
 
 

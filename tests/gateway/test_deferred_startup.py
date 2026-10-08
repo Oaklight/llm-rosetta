@@ -554,7 +554,7 @@ class TestDeferredBackfills:
         persistence.db_path = "/tmp/test.db"
 
         keystore = MagicMock()
-        keystore.backfill_last_used.return_value = 2
+        keystore.backfill_last_used = AsyncMock(return_value=2)
 
         config = _FakeConfig({})
         config.models = {
