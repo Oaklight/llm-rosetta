@@ -18,6 +18,7 @@ import asyncio
 import gzip
 import json
 import logging
+import sqlite3
 import warnings
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from pathlib import Path
@@ -44,6 +45,9 @@ DEFAULT_OPS_WARN_MAX = _RP_DEFAULTS.ops_warn_max
 
 _PRUNE_BATCH_SIZE = 5000
 _VACUUM_THRESHOLD = 1000
+
+_BACKUP_DIR = "backups"
+_BACKUP_MAX_KEEP = 3
 
 # WAL checkpoint defaults
 DEFAULT_WAL_MAX_BYTES = 64 * 1024 * 1024  # 64 MB
@@ -129,6 +133,9 @@ class PersistenceManager:
 
     async def _open(self) -> None:
         """Open the database connection, create tables, and run migrations."""
+        if self.db_path.exists():
+            await self._create_backup()
+            self._integrity_check()
         self._conn = await aiosqlite.connect(str(self.db_path))
         await self._conn.execute("PRAGMA journal_mode=WAL")
         await self._conn.execute("PRAGMA synchronous=NORMAL")
@@ -1549,6 +1556,59 @@ class PersistenceManager:
             await self.on_prune("error_dumps", excess)
 
     # ------------------------------------------------------------------
+    # Backup and integrity
+    # ------------------------------------------------------------------
+
+    async def _create_backup(self) -> None:
+        """Create a timestamped backup of the database, keeping last N copies."""
+        from datetime import datetime, timezone
+
+        backup_dir = self._data_dir / _BACKUP_DIR
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        backup_path = backup_dir / f"gateway-{ts}.db"
+
+        loop = asyncio.get_running_loop()
+        try:
+            await loop.run_in_executor(None, self._sync_backup, backup_path)
+            size_mb = backup_path.stat().st_size / (1024 * 1024)
+            logger.info("Database backup created: %s (%.1f MB)", backup_path, size_mb)
+        except Exception as exc:
+            logger.warning("Database backup failed: %s", exc)
+            return
+
+        existing = sorted(backup_dir.glob("gateway-*.db"))
+        if len(existing) > _BACKUP_MAX_KEEP:
+            for old in existing[: len(existing) - _BACKUP_MAX_KEEP]:
+                try:
+                    old.unlink()
+                except OSError:
+                    pass
+
+    def _sync_backup(self, dest: Path) -> None:
+        """Run sqlite3.backup() synchronously (called from executor)."""
+        src_conn = sqlite3.connect(str(self.db_path))
+        dst_conn = sqlite3.connect(str(dest))
+        try:
+            src_conn.backup(dst_conn)
+        finally:
+            dst_conn.close()
+            src_conn.close()
+
+    def _integrity_check(self) -> None:
+        """Run a quick integrity check on startup."""
+        try:
+            conn = sqlite3.connect(str(self.db_path))
+            result = conn.execute("PRAGMA quick_check").fetchone()
+            conn.close()
+            if result and result[0] != "ok":
+                logger.warning("Database integrity issue: %s", result[0])
+            else:
+                logger.debug("Database integrity check: ok")
+        except Exception as exc:
+            logger.warning("Database integrity check failed: %s", exc)
+
+    # ------------------------------------------------------------------
     # WAL checkpoint management
     # ------------------------------------------------------------------
 
@@ -1710,6 +1770,7 @@ class PersistenceManager:
             "SELECT profile FROM request_log WHERE id = ?", (entry_id,)
         )
         if row is None:
+            logger.debug("update_entry_profile: entry %s not found", entry_id)
             return
         existing: dict[str, Any] = {}
         if row[0]:

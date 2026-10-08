@@ -181,7 +181,7 @@ async def dump_error(
             request_log_id=request_log_id,
         )
     except Exception:
-        logger.debug("Failed to dump error", exc_info=True)
+        logger.info("Failed to dump error", exc_info=True)
         return None
 
 

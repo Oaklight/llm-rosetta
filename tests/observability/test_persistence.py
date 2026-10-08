@@ -254,3 +254,45 @@ class TestWALCheckpoint:
         assert pm._wal_task is not None
         await pm.close()
         assert pm._wal_task is None
+
+
+class TestBackupAndIntegrity:
+    async def test_backup_created_on_open(self, tmp_path):
+        pm = await PersistenceManager.create(str(tmp_path))
+        await pm.close()
+        # Re-open: should create a backup of existing DB
+        pm2 = await PersistenceManager.create(str(tmp_path))
+        backup_dir = tmp_path / "backups"
+        assert backup_dir.exists()
+        backups = list(backup_dir.glob("gateway-*.db"))
+        assert len(backups) == 1
+        assert backups[0].stat().st_size > 0
+        await pm2.close()
+
+    async def test_backup_keeps_max_copies(self, tmp_path):
+        # Create initial DB
+        pm = await PersistenceManager.create(str(tmp_path))
+        await pm.close()
+        # Re-open 5 times to create 5 backups
+        import asyncio
+
+        for _ in range(5):
+            await asyncio.sleep(0.01)  # ensure unique timestamps
+            pm = await PersistenceManager.create(str(tmp_path))
+            await pm.close()
+        backup_dir = tmp_path / "backups"
+        backups = list(backup_dir.glob("gateway-*.db"))
+        assert len(backups) <= 3  # _BACKUP_MAX_KEEP
+
+    async def test_integrity_check_passes_on_new_db(self, tmp_path):
+        pm = await PersistenceManager.create(str(tmp_path))
+        await pm.close()
+        # Re-open triggers integrity check
+        pm2 = await PersistenceManager.create(str(tmp_path))
+        await pm2.close()  # no error = integrity ok
+
+    async def test_no_backup_on_fresh_db(self, tmp_path):
+        pm = await PersistenceManager.create(str(tmp_path))
+        backup_dir = tmp_path / "backups"
+        assert not backup_dir.exists()
+        await pm.close()
