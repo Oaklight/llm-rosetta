@@ -25,6 +25,8 @@ from typing import Any
 
 from llm_rosetta._vendor import aiosqlite
 
+from .retention import RetentionPolicy, RetentionTracker
+
 logger = logging.getLogger("llm-rosetta.observability")
 
 _DB_FILENAME = "gateway.db"
@@ -33,13 +35,12 @@ _DB_FILENAME = "gateway.db"
 _LEGACY_LOG = "request_log.jsonl"
 _LEGACY_METRICS = "metrics.json"
 
-# Retention defaults.
-DEFAULT_SUCCESS_MAX = 50000
-
-DEFAULT_MAX_AGE_DAYS = 90
-
-DEFAULT_OPS_INFO_MAX = 10000
-DEFAULT_OPS_WARN_MAX = 5000
+# Backward-compatible aliases — values from RetentionPolicy defaults
+_RP_DEFAULTS = RetentionPolicy()
+DEFAULT_SUCCESS_MAX = _RP_DEFAULTS.success_max
+DEFAULT_MAX_AGE_DAYS = _RP_DEFAULTS.max_age_days
+DEFAULT_OPS_INFO_MAX = _RP_DEFAULTS.ops_info_max
+DEFAULT_OPS_WARN_MAX = _RP_DEFAULTS.ops_warn_max
 
 _PRUNE_BATCH_SIZE = 5000
 _VACUUM_THRESHOLD = 1000
@@ -100,23 +101,23 @@ class PersistenceManager:
                 success_max = max_entries
 
         self._data_dir = Path(data_dir)
-        self._success_max = (
-            success_max if success_max is not None else DEFAULT_SUCCESS_MAX
+        self._retention = RetentionPolicy(
+            success_max=(
+                success_max if success_max is not None else DEFAULT_SUCCESS_MAX
+            ),
+            dump_max=dump_max if dump_max is not None else self.DEFAULT_DUMP_MAX,
+            ops_info_max=(
+                ops_info_max
+                if ops_info_max is not None
+                else (ops_log_max if ops_log_max is not None else DEFAULT_OPS_INFO_MAX)
+            ),
+            ops_warn_max=(
+                ops_warn_max
+                if ops_warn_max is not None
+                else (ops_log_max if ops_log_max is not None else DEFAULT_OPS_WARN_MAX)
+            ),
         )
-        self._dump_max = dump_max if dump_max is not None else self.DEFAULT_DUMP_MAX
-        self._insert_count = 0
-        # Legacy single-cap fallback: ops_log_max sets both if specific caps absent
-        self._ops_info_max = (
-            ops_info_max
-            if ops_info_max is not None
-            else (ops_log_max if ops_log_max is not None else DEFAULT_OPS_INFO_MAX)
-        )
-        self._ops_warn_max = (
-            ops_warn_max
-            if ops_warn_max is not None
-            else (ops_log_max if ops_log_max is not None else DEFAULT_OPS_WARN_MAX)
-        )
-        self._ops_insert_count = 0
+        self._tracker = RetentionTracker()
         self._wal_max_bytes = DEFAULT_WAL_MAX_BYTES
         self._wal_task: asyncio.Task[None] | None = None
         self.on_prune: Callable[[str, int], Awaitable[None]] | None = None
@@ -165,22 +166,27 @@ class PersistenceManager:
         return instance
 
     @property
+    def retention(self) -> RetentionPolicy:
+        """The current retention policy."""
+        return self._retention
+
+    @property
     def success_max(self) -> int:
         """Cap on retained successful request log entries."""
-        return self._success_max
+        return self._retention.success_max
 
     @success_max.setter
     def success_max(self, value: int) -> None:
-        self._success_max = value
+        self._retention.success_max = value
 
     @property
     def dump_max(self) -> int:
         """Cap on retained error dump entries."""
-        return self._dump_max
+        return self._retention.dump_max
 
     @dump_max.setter
     def dump_max(self, value: int) -> None:
-        self._dump_max = value
+        self._retention.dump_max = value
 
     @property
     def db_path(self) -> Path:
@@ -469,13 +475,9 @@ class PersistenceManager:
             ],
         )
         await self._conn.commit()
-        self._insert_count += len(entries)
-        # Periodic prune amortizes the DELETE cost; opportunistic prune
-        # bounds memory when the success cap is small.
-        if self._insert_count >= 100:
+        if self._tracker.note_insert("request_log", len(entries)):
             await self._prune()
-            self._insert_count = 0
-        elif await self.count_success_entries() > self._success_max:
+        elif await self.count_success_entries() > self._retention.success_max:
             await self._prune()
 
     async def query_log_entries(
@@ -778,10 +780,8 @@ class PersistenceManager:
         await self._conn.commit()
         if _skip_prune:
             return
-        self._ops_insert_count += len(entries)
-        if self._ops_insert_count >= 100:
+        if self._tracker.note_insert("ops_log", len(entries)):
             await self._prune_ops_log()
-            self._ops_insert_count = 0
 
     async def query_ops_log_entries(
         self,
@@ -867,7 +867,7 @@ class PersistenceManager:
         """Remove oldest ops log entries beyond per-severity retention limits."""
         committed = False
 
-        info_excess = await self.count_ops_info_entries() - self._ops_info_max
+        info_excess = await self.count_ops_info_entries() - self._retention.ops_info_max
         if info_excess > 0:
             await self._conn.execute(
                 "DELETE FROM ops_log "
@@ -881,7 +881,7 @@ class PersistenceManager:
             )
             committed = True
 
-        warn_excess = await self.count_ops_warn_entries() - self._ops_warn_max
+        warn_excess = await self.count_ops_warn_entries() - self._retention.ops_warn_max
         if warn_excess > 0:
             await self._conn.execute(
                 "DELETE FROM ops_log "
@@ -968,7 +968,7 @@ class PersistenceManager:
     # ------------------------------------------------------------------
 
     # Default retention cap for error_dumps rows.
-    DEFAULT_DUMP_MAX = 10000
+    DEFAULT_DUMP_MAX = _RP_DEFAULTS.dump_max
 
     async def insert_dump_body(
         self, body_hash: str, data: bytes, orig_bytes: int
@@ -1357,7 +1357,7 @@ class PersistenceManager:
         size_before = self.db_path.stat().st_size
 
         success_count = await self.count_success_entries()
-        rl_excess = max(0, success_count - self._success_max)
+        rl_excess = max(0, success_count - self._retention.success_max)
         rl_trimmed = 0
         if rl_excess > 0:
             while rl_excess > 0:
@@ -1377,7 +1377,7 @@ class PersistenceManager:
                 rl_excess -= batch
 
         dump_count = await self.count_error_dumps()
-        dump_excess = max(0, dump_count - self._dump_max)
+        dump_excess = max(0, dump_count - self._retention.dump_max)
         dumps_trimmed = 0
         if dump_excess > 0:
             await self._conn.execute(
@@ -1395,8 +1395,8 @@ class PersistenceManager:
 
         ops_trimmed = 0
         for severity, cap in (
-            ("info", self._ops_info_max),
-            ("warn", self._ops_warn_max),
+            ("info", self._retention.ops_info_max),
+            ("warn", self._retention.ops_warn_max),
         ):
             where = "severity = 'info'" if severity == "info" else "severity != 'info'"
             row = await self._conn.execute_fetchone(
@@ -1520,7 +1520,7 @@ class PersistenceManager:
         Also cleans up orphaned dump_bodies entries.
         """
         count = await self.count_error_dumps()
-        excess = count - self._dump_max
+        excess = count - self._retention.dump_max
         if excess <= 0:
             return
 
@@ -1663,7 +1663,7 @@ class PersistenceManager:
         batched to avoid holding a long write-lock.
         """
         count = await self.count_success_entries()
-        excess = count - self._success_max
+        excess = count - self._retention.success_max
         if excess <= 0:
             return
 
@@ -1689,7 +1689,7 @@ class PersistenceManager:
             except Exception as exc:
                 logger.warning("WAL checkpoint after prune failed: %s", exc)
 
-        pruned = count - self._success_max  # original excess
+        pruned = count - self._retention.success_max  # original excess
         if pruned > 0 and self.on_prune is not None:
             await self.on_prune("request_log", pruned)
 

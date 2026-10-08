@@ -240,9 +240,9 @@ async def _reload_gateway_config(request: Any, config_path: str) -> GatewayConfi
             persistence.dump_max = int(rl_cfg["error_dump_max"])
         ol_cfg = new_config.ops_log or {}
         if "info_max" in ol_cfg:
-            persistence._ops_info_max = max(100, int(ol_cfg["info_max"]))
+            persistence.retention.ops_info_max = max(100, int(ol_cfg["info_max"]))
         if "warn_max" in ol_cfg:
-            persistence._ops_warn_max = max(100, int(ol_cfg["warn_max"]))
+            persistence.retention.ops_warn_max = max(100, int(ol_cfg["warn_max"]))
 
     # Record config reload event
     ops_log = getattr(request.app, "ops_log", None)
