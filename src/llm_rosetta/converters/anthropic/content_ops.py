@@ -250,16 +250,21 @@ class AnthropicContentOps(BaseContentOps):
 
     @staticmethod
     def ir_reasoning_to_p(ir_reasoning: ReasoningPart, **kwargs: Any) -> dict:
-        """IR ReasoningPart → Anthropic thinking content block.
+        """IR ReasoningPart → Anthropic thinking or redacted_thinking block.
 
-        Anthropic uses ``thinking`` type with ``thinking`` field for reasoning.
+        Emits ``redacted_thinking`` when ``redacted_data`` is present,
+        otherwise ``thinking``.
 
         Args:
             ir_reasoning: IR reasoning part.
 
         Returns:
-            Anthropic thinking content dict.
+            Anthropic thinking or redacted_thinking content dict.
         """
+        redacted_data = ir_reasoning.get("redacted_data")
+        if redacted_data is not None:
+            return {"type": "redacted_thinking", "data": redacted_data}
+
         result: dict = {
             "type": "thinking",
             "thinking": ir_reasoning.get("reasoning", ""),
@@ -312,6 +317,21 @@ class AnthropicContentOps(BaseContentOps):
             result["cache_hint"] = cache_control
 
         return result
+
+    @staticmethod
+    def p_redacted_thinking_to_ir(provider_part: Any, **kwargs: Any) -> ReasoningPart:
+        """Anthropic redacted_thinking → IR ReasoningPart with redacted_data.
+
+        Args:
+            provider_part: Anthropic redacted_thinking content dict.
+
+        Returns:
+            IR ReasoningPart carrying opaque redacted data.
+        """
+        return ReasoningPart(
+            type="reasoning",
+            redacted_data=provider_part.get("data", ""),
+        )
 
     # ==================== Refusal ====================
 

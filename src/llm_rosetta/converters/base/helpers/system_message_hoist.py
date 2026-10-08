@@ -185,3 +185,33 @@ def hoist_late_system_messages_ir(
     if existing_si:
         result["system_instruction"] = existing_si
     return result
+
+
+def hoist_system_in_converter(
+    ir_messages: list,
+    ir_request: dict[str, Any] | Any,
+) -> tuple[list, list[dict[str, Any]] | None]:
+    """Hoist system messages for converters that don't support inline system.
+
+    Applies ``hoist_late_system_messages_ir`` and returns the updated message
+    list plus any system_instruction parts extracted from leading messages.
+
+    Returns:
+        Tuple of (updated messages, hoisted system_instruction parts or None).
+    """
+    has_system = any(
+        isinstance(m, dict) and m.get("role") == "system" for m in ir_messages
+    )
+    if not has_system:
+        return ir_messages, None
+
+    hoist_ir: dict[str, Any] = {
+        "messages": ir_messages,
+        "system_instruction": (
+            list(ir_request.get("system_instruction") or [])
+            if hasattr(ir_request, "get")
+            else []
+        ),
+    }
+    hoisted = hoist_late_system_messages_ir(hoist_ir)
+    return hoisted["messages"], hoisted.get("system_instruction") or None

@@ -1373,8 +1373,8 @@ class TestAnthropicContentBlockCompliance:
 
     # --- ToolUseBlock.caller ---
 
-    def test_tool_use_has_caller_default(self):
-        """IR→A: tool_use block includes caller: {"type": "direct"} by default."""
+    def test_tool_use_no_caller_default(self):
+        """IR→A: tool_use block does not get a default caller field."""
         ir_response = cast(
             IRResponse,
             {
@@ -1408,7 +1408,7 @@ class TestAnthropicContentBlockCompliance:
         )
         result = self.converter.response_to_provider(ir_response)
         tool_block = result["content"][0]
-        assert tool_block["caller"] == {"type": "direct"}
+        assert "caller" not in tool_block
 
     def test_caller_round_trip_direct(self):
         """A→IR→A: direct caller round-trips."""
@@ -1431,7 +1431,8 @@ class TestAnthropicContentBlockCompliance:
         }
         ir = self.converter.response_from_provider(provider_response)
         restored = self.converter.response_to_provider(ir)
-        assert restored["content"][0]["caller"] == {"type": "direct"}
+        # direct is the default — not preserved to avoid round-trip inflation
+        assert "caller" not in restored["content"][0]
 
     def test_caller_round_trip_code_execution(self):
         """A→IR→A: non-direct caller preserved via provider_metadata."""
@@ -1496,7 +1497,7 @@ class TestAnthropicContentBlockCompliance:
         ir = openai.response_from_provider(openai_response)
         anthropic_out = self.converter.response_to_provider(ir)
         tool_block = [b for b in anthropic_out["content"] if b["type"] == "tool_use"][0]
-        assert tool_block["caller"] == {"type": "direct"}
+        assert "caller" not in tool_block
 
     # --- TextBlock.citations ---
 

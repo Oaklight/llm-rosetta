@@ -897,8 +897,10 @@ class OpenAIResponsesToolOps(BaseToolOps):
             type="tool_result",
             tool_call_id=provider_tool_result.get("call_id", ""),
             result=output,
-            is_error=provider_tool_result.get("is_error", False),
         )
+        is_error = provider_tool_result.get("is_error")
+        if is_error is not None:
+            part["is_error"] = is_error
         # Record the non-default types so the outbound leg can emit the
         # same item kind.  The context it would otherwise consult is only
         # populated while streaming a response, never by parsing history.

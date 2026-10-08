@@ -49,6 +49,7 @@ from ..base.helpers import (
     sanitize_tool_call_id,
     strip_orphaned_tool_config,
 )
+from ..base.helpers.system_message_hoist import hoist_system_in_converter
 from ._constants import (
     ANTHROPIC_REASON_FROM_PROVIDER,
     ANTHROPIC_REASON_TO_PROVIDER,
@@ -154,17 +155,10 @@ class AnthropicConverter(BaseConverter):
         ir_messages = assign_tool_batch_ids(ir_messages)
         ctx.warnings.extend(strip_orphaned_tool_config(ir_request))
 
-        # Extract system messages from ir_messages (cross-format path:
-        # other converters may put system in ir_messages instead of
-        # system_instruction).  ir_messages_to_p skips system role, so
-        # we handle them here.
-        if "system" not in result:
-            for item in ir_messages:
-                if isinstance(item, dict) and item.get("role") == "system":
-                    content = item.get("content", [])
-                    if content:
-                        result["system"] = self.message_ops._ir_system_to_p(content)
-                    break
+        # Hoist system messages: leading → system_instruction, late → user envelope.
+        ir_messages, hoisted_si = hoist_system_in_converter(ir_messages, ir_request)
+        if hoisted_si and "system" not in result:
+            result["system"] = self.message_ops._ir_system_to_p(hoisted_si)
 
         message_kwargs: dict[str, Any] = {}
         if ctx and "reasoning_cap" in ctx.options:
