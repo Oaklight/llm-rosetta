@@ -253,6 +253,8 @@ class GoogleGenerateConverter(BaseConverter):
         # 2. Handle messages — fix orphaned tool_calls/results and strip
         #    orphaned tool_choice/tool_config at IR level before conversion.
         ir_messages = fix_orphaned_tool_calls_ir(ir_request.get("messages", []))
+        # Assign batch_ids over the full list before message_ops runs, so
+        # per-format merge_tool_messages can group parallel tool results.
         ir_messages = assign_tool_batch_ids(ir_messages)
         ctx.warnings.extend(strip_orphaned_tool_config(ir_request))
 
