@@ -30,7 +30,9 @@ from ...types.ir.tools import ToolCallConfig
 from ..base import BaseToolOps
 from ..base.helpers import (
     extract_part_ids,
+    get_intrinsic_kind,
     log_orphan_warnings,
+    make_intrinsic_tool_call,
     sanitize_schema,
     sanitize_tool_call_id,
 )
@@ -305,8 +307,6 @@ def _ir_intrinsic_to_responses(
     tool_input: Any,
     arguments: str,
 ) -> dict[str, Any]:
-    from ..base.helpers.tool_intrinsic import get_intrinsic_kind
-
     intrinsic_kind = get_intrinsic_kind(ir_tool_call, tool_name)
     item_type = _INTRINSIC_KIND_TO_ITEM.get(intrinsic_kind, "function_call")
     result_item: dict[str, Any] = {
@@ -835,8 +835,6 @@ class OpenAIResponsesToolOps(BaseToolOps):
             "web_search_call",
             "file_search_call",
         ):
-            from ..base.helpers.tool_intrinsic import make_intrinsic_tool_call
-
             intrinsic_kind = _ITEM_TO_INTRINSIC_KIND.get(item_type, item_type)
             return cast(
                 ToolCallPart,
