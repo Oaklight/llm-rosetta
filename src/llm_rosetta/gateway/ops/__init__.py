@@ -23,12 +23,12 @@ from .data import (
 
 __all__ = [
     "OpsBase",
-    "OpsProxyRequest",
     "OpsCleanupData",
     "OpsClearData",
     "OpsClearOpsLog",
     "OpsContext",
     "OpsDeleteErrorDump",
+    "OpsProxyRequest",
     "OpsRebuildMetrics",
     "OpsTrimData",
     "OpsVacuum",
