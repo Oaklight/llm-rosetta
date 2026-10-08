@@ -118,6 +118,9 @@ def _hoist_and_extract_system(
                 "parts": [{"text": t} for t in texts],
             }
 
+    # Defensive: hoist_system_in_converter already rewrites all system
+    # messages (leading → extracted, late → user envelope), so this loop
+    # should not match. Kept as a safety net for edge cases.
     for item in ir_messages:
         if is_message(item) and item.get("role") == "system":
             msg_parts = [

@@ -207,7 +207,7 @@ class ReasoningPart(TypedDict):
     cache_hint: NotRequired[dict[str, Any]]
     redacted_data: NotRequired[
         str
-    ]  # Opaque redacted reasoning data (Anthropic redacted_thinking)
+    ]  # Anthropic-only: opaque redacted reasoning blob, round-tripped verbatim. Other converters ignore this field. See #857.
 
 
 class UrlCitation(TypedDict, total=False):
