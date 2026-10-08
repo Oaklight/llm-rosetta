@@ -131,7 +131,9 @@ class PersistenceManager:
         self._conn = await aiosqlite.connect(str(self.db_path))
         await self._conn.execute("PRAGMA journal_mode=WAL")
         await self._conn.execute("PRAGMA synchronous=NORMAL")
+        await self._conn.execute("PRAGMA foreign_keys=ON")
         await self._init_tables()
+        await self._run_migrations()
         await self._migrate_legacy()
 
     @classmethod
@@ -222,7 +224,7 @@ class PersistenceManager:
             );
             CREATE TABLE IF NOT EXISTS error_dumps (
                 id                  TEXT PRIMARY KEY,
-                request_log_id      TEXT,
+                request_log_id      TEXT REFERENCES request_log(id) ON DELETE SET NULL,
                 timestamp           TEXT NOT NULL,
                 model               TEXT,
                 source_provider     TEXT,
@@ -255,32 +257,96 @@ class PersistenceManager:
                 ON ops_log(event_type);
             CREATE INDEX IF NOT EXISTS idx_ol_severity_ts
                 ON ops_log(severity, timestamp DESC);
-        """)
-        await self._migrate_add_columns()
 
-    async def _migrate_add_columns(self) -> None:
-        """Add nullable columns missing from older schema versions."""
-        cursor = await self._conn.execute("PRAGMA table_info(request_log)")
-        columns = {row[1] for row in await cursor.fetchall()}
-        added = False
-        for col, col_type in (
-            ("target_provider_name", "TEXT"),
-            ("client_ip", "TEXT"),
-            ("profile", "TEXT"),
-            ("input_tokens", "INTEGER"),
-            ("output_tokens", "INTEGER"),
-            ("total_tokens", "INTEGER"),
-            ("cache_read_tokens", "INTEGER"),
-            ("cache_creation_tokens", "INTEGER"),
-            ("reasoning_tokens", "INTEGER"),
-        ):
-            if col not in columns:
+            CREATE TABLE IF NOT EXISTS schema_version (
+                version     INTEGER PRIMARY KEY,
+                applied_at  TEXT NOT NULL
+            );
+        """)
+
+    # ------------------------------------------------------------------
+    # Versioned migrations
+    # ------------------------------------------------------------------
+
+    # Each entry: (version, description, sql_statements)
+    # Migrations are applied in order; each bumps the schema version.
+    _MIGRATIONS: list[tuple[int, str, list[str]]] = [
+        (
+            1,
+            "add request_log token/profile columns",
+            [
+                "ALTER TABLE request_log ADD COLUMN profile TEXT",
+                "ALTER TABLE request_log ADD COLUMN input_tokens INTEGER",
+                "ALTER TABLE request_log ADD COLUMN output_tokens INTEGER",
+                "ALTER TABLE request_log ADD COLUMN total_tokens INTEGER",
+                "ALTER TABLE request_log ADD COLUMN cache_read_tokens INTEGER",
+                "ALTER TABLE request_log ADD COLUMN cache_creation_tokens INTEGER",
+                "ALTER TABLE request_log ADD COLUMN reasoning_tokens INTEGER",
+            ],
+        ),
+        (
+            2,
+            "add error_dumps indexes on model and error_phase",
+            [
+                "CREATE INDEX IF NOT EXISTS idx_ed_model ON error_dumps(model)",
+                "CREATE INDEX IF NOT EXISTS idx_ed_error_phase ON error_dumps(error_phase)",
+            ],
+        ),
+    ]
+
+    async def _run_migrations(self) -> None:
+        """Apply pending versioned migrations."""
+        row = await self._conn.execute_fetchone(
+            "SELECT MAX(version) FROM schema_version"
+        )
+        current = row[0] if row and row[0] is not None else 0
+
+        # Bootstrap: detect columns already added by old _migrate_add_columns.
+        # Check for the last column added by v1 (reasoning_tokens) to confirm
+        # the old migration fully completed.
+        if current == 0:
+            cursor = await self._conn.execute("PRAGMA table_info(request_log)")
+            columns = {r[1] for r in await cursor.fetchall()}
+            if "reasoning_tokens" in columns:
+                from datetime import datetime, timezone
+
                 await self._conn.execute(
-                    f"ALTER TABLE request_log ADD COLUMN {col} {col_type}"
+                    "INSERT OR IGNORE INTO schema_version (version, applied_at) "
+                    "VALUES (?, ?)",
+                    (1, datetime.now(timezone.utc).isoformat()),
                 )
-                added = True
-        if added:
+                await self._conn.commit()
+                current = 1
+
+        for version, description, statements in self._MIGRATIONS:
+            if version <= current:
+                continue
+            logger.info("Applying migration v%d: %s", version, description)
+            for sql in statements:
+                try:
+                    await self._conn.execute(sql)
+                except Exception as exc:
+                    if "duplicate column" in str(exc).lower():
+                        continue
+                    raise
+            from datetime import datetime, timezone
+
+            await self._conn.execute(
+                "INSERT INTO schema_version (version, applied_at) VALUES (?, ?)",
+                (version, datetime.now(timezone.utc).isoformat()),
+            )
             await self._conn.commit()
+            logger.info("Migration v%d applied", version)
+
+    async def schema_version(self) -> int:
+        """Return the current schema version number."""
+        try:
+            row = await self._conn.execute_fetchone(
+                "SELECT MAX(version) FROM schema_version"
+            )
+            return row[0] if row and row[0] is not None else 0
+        except Exception:
+            return 0
 
     async def backfill_provider_names(
         self, model_to_provider: Mapping[str, str]
