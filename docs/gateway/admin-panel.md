@@ -179,15 +179,42 @@ Click **Clear Log** to remove all entries from the current view.
 
 ### Server Ops Log
 
-The Logs tab includes a segmented toggle to switch between **Request Log** and **Server Ops Log**. The ops log tracks server-level operational events:
+The Logs tab includes a segmented toggle to switch between **Request Log** and **Server Ops Log**. The ops log tracks server-level operational events with structured metadata.
 
-| Event type | Examples |
-|-----------|---------|
-| Startup / Shutdown | Server start, graceful stop |
-| Config | Config reload, hot-reload via admin API |
-| API Keys | Key creation, deletion, rotation |
+#### Event Categories
 
-Filters for event type, severity, and source narrow the view. Auto-refresh is gated on the active log view (request log refreshes don't fire while viewing ops log, and vice versa).
+| Category | Event Types | Description |
+|----------|-------------|-------------|
+| Lifecycle | `startup`, `shutdown` | Server start and graceful stop |
+| Configuration | `config_reload`, `admin_setup` | Config hot-reload, admin panel init |
+| API Keys | `key_create`, `key_update`, `key_delete`, `key_rotate` | Key management operations |
+| Data Mutations | `data_cleared`, `data_cleanup`, `data_trimmed`, `data_vacuumed`, `data_rebuilt` | Database maintenance operations |
+| Security | `password_changed`, `token_rotated`, `session_logout_all` | Authentication and session events |
+| Health | `health_status_change` | Provider health state changes |
+
+#### Severity Levels
+
+- **info** — non-destructive operations (key creation, config reload, vacuum)
+- **warning** — destructive data mutations (clear, trim, cleanup) and security events (password change, token rotation)
+
+Operations that fail are automatically recorded with elevated severity.
+
+#### Source Filtering
+
+Filter by the originating subsystem:
+
+| Source | Operations |
+|--------|-----------|
+| `admin` | Admin panel actions (clear data, session logout) |
+| `auth` | Password change, token rotation |
+| `keys` | API key create/update/delete/rotate |
+| `persistence` | Background prune, periodic cleanup |
+| `gateway` | Startup, shutdown |
+| `config` | Configuration reload |
+
+#### ops_log vs request_log
+
+The **request log** records every proxy request (high volume, traffic-focused). The **ops log** records mutations and security events (low volume, audit-focused). They are queried independently — auto-refresh is gated on the active log view.
 
 ### Log Retention
 

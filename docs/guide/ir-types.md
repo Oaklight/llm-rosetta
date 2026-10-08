@@ -19,6 +19,29 @@ from llm_rosetta.types.ir import SystemMessage, UserMessage, AssistantMessage, T
 | `AssistantMessage` | `"assistant"` | TextPart, ToolCallPart, ReasoningPart |
 | `ToolMessage` | `"tool"` | ToolResultPart |
 
+### ToolMessage.batch_id
+
+`ToolMessage` supports an optional `batch_id` field (`NotRequired[str]`).
+When an assistant turn produces multiple tool calls, all corresponding
+tool result messages can share the same `batch_id` to indicate they
+belong to the same batch.  This is used during message-level conversion
+to correctly group tool results.
+
+```python
+from llm_rosetta.types.ir.messages import create_tool_message
+
+msg = create_tool_message(
+    tool_call_id="call_abc123",
+    result='{"temperature": "72°F"}',
+    batch_id="batch_xyz",
+)
+```
+
+!!! note
+    The convenience function `create_tool_result_message()` (exported in
+    the public API) does not forward `batch_id`.  Use
+    `create_tool_message()` directly when batch grouping is needed.
+
 ## Content Parts
 
 | Part | Description |

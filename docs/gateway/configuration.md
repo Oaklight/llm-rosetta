@@ -237,6 +237,30 @@ Available capabilities: `text`, `vision`, `tools`, `embedding`, `reasoning`. If 
 
 Capabilities are displayed in the [admin panel](admin-panel.md) and can be edited there.
 
+### Routing Strategy
+
+Multi-provider model entries support a `strategy` field to control how
+the gateway selects among providers:
+
+```jsonc
+"models": {
+  "gpt-4o": {
+    "providers": [
+      {"name": "openai-prod", "weight": 5},
+      {"name": "openai-backup", "weight": 1}
+    ],
+    "strategy": "weighted_round_robin"
+  }
+}
+```
+
+| Strategy | Description |
+|----------|-------------|
+| `weighted_round_robin` | **(default)** Smooth nginx-style interleaving based on weights. Weights [5, 1] yield the sequence A A A A A B, not burst-then-switch. |
+| `affinity_round_robin` | SHA-256 hash of client identity (API key or IP) selects a deterministic preferred provider for cache locality. Falls back to weighted round-robin when no identity is available or only one provider is configured. |
+
+The strategy is set per model.  Single-provider models ignore it.
+
 ## Gateway API Keys
 
 Gateway API keys are managed through the **admin panel** — there is no
@@ -281,6 +305,13 @@ Supports `${ENV_VAR}` substitution:
 
 !!! warning "Unresolved placeholders"
     If `admin_password` contains an unresolved `${ENV_VAR}` placeholder (because the environment variable was not set at startup), the gateway **refuses to start** and logs a clear error. This prevents accidentally using the literal string `${ADMIN_PASSWORD}` as the password.
+
+!!! info "Session-based auth vs. internal token"
+    Browser authentication uses **session-based cookies** (HttpOnly +
+    SameSite=Lax, 30-minute inactivity timeout).  The `X-Admin-Token`
+    header is a separate mechanism for programmatic API access — it
+    validates against the internal proxy token via HMAC comparison, not
+    the admin password.
 
 ### `credential_visible`
 
@@ -377,21 +408,21 @@ When a 200 response body matches a pattern, it is re-wrapped with the configured
 
 ## Fidelity Verification
 
-The gateway can verify conversion fidelity by comparing round-trip results against stored baselines:
+The gateway verifies conversion fidelity for **same-format routes**
+(e.g. OpenAI → OpenAI via different providers) by comparing the
+original request/response body against the post-round-trip converted
+body.
 
-```jsonc
-{
-  "server": {
-    "fidelity_check": true     // Default: false
-  }
-}
-```
+- **Same-format shadow diffs run always** — no configuration needed.
+  When source and target use the same API format, the gateway
+  automatically diffs the original vs. converted request and response.
+- **Critical-severity diffs** trigger automatic error dumps, visible
+  in the admin panel's Error Dumps section.
+- Fidelity diff results are stored in the request's profile data
+  under the `"fidelity"` key.
 
-When enabled:
-
-- **Persistent baselines**: per-model round-trip conversion baselines are stored in SQLite. When a request is converted A→IR→B→IR→A, the result is compared against the stored baseline.
-- **Same-format shadow diff**: for same-format routes (e.g. OpenAI→OpenAI via different providers), a shadow diff automatically compares pre-conversion and post-round-trip request bodies.
-- Fidelity diffs are logged as error dumps for investigation in the admin panel.
+Cross-format routes do not run fidelity diffs because the source and
+target formats are inherently different.
 
 ## Deferred Startup
 

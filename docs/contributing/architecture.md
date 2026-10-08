@@ -105,3 +105,69 @@ Tests live under `tests/converters/<name>/` mirroring the converter structure. K
 - **Streaming tests** — verify stream event ordering and lifecycle
 
 Run `make test` to execute the full suite (excluding integration tests that require API keys).
+
+## Gateway Ops Layer
+
+!!! note "Converter ops vs. gateway ops"
+    The converter layer splits conversion logic by concern (`content_ops`,
+    `message_ops`, `tool_ops`, `config_ops`).  The **gateway ops layer** is
+    a separate concept — every gateway-side mutation is an `OpsBase` subclass
+    with automatic audit recording.
+
+### OpsBase Protocol
+
+```
+Route handler → constructs Ops subclass → calls execute()
+                                            ├── _run()        (business logic)
+                                            └── _record()     (audit recording)
+                                                 ├── _message()  (human summary)
+                                                 └── _details()  (structured metadata)
+```
+
+`execute()` runs the operation via `_run()`, then records the result via
+`_record()`.  On failure, `_record(result=None, error=exc)` is called
+with severity auto-escalated to WARNING, and the original exception is
+re-raised.  Recording errors are logged but never mask the operation
+result (best-effort audit).
+
+### OpsContext
+
+`OpsContext` is a lightweight service bag created once at app init in
+`setup_admin()`.  It holds references to four subsystems — all optional
+(`None` when not configured):
+
+| Slot | Type | Purpose |
+|------|------|---------|
+| `ops_log` | `OpsLog` | Audit event log |
+| `request_log` | `RequestLog` | Proxy request traffic log |
+| `metrics` | `MetricsCollector` | In-process metrics |
+| `persistence` | `PersistenceManager` | SQLite persistence |
+
+### Module Organization
+
+| Module | Contents |
+|--------|----------|
+| `ops/base.py` | `OpsContext`, `OpsBase` ABC |
+| `ops/proxy.py` | `OpsProxyRequest` — hot-path telemetry, overrides `_record` to write `request_log` + `metrics` |
+| `ops/data.py` | Data mutation ops (`OpsClearData`, `OpsCleanupData`, `OpsTrimData`, `OpsVacuum`, `OpsRebuildMetrics`, `OpsClearOpsLog`, `OpsPrune`, `OpsPeriodicCleanup`) |
+| `ops/security.py` | Auth/session ops (`OpsPasswordChange`, `OpsTokenRotate`, `OpsSessionLogoutAll`) |
+| `ops/keys.py` | API key management ops (`OpsKeyCreate`, `OpsKeyUpdate`, `OpsKeyDelete`, `OpsKeyRotate`) |
+
+### Usage Pattern
+
+Route handlers construct an Ops subclass with `OpsContext` and call
+`execute()` — recording happens automatically:
+
+```python
+from llm_rosetta.gateway.ops import OpsClearData
+
+result = await OpsClearData(request.app.ops_ctx, table="request_log").execute()
+```
+
+### OpsProxyRequest (Special Case)
+
+`OpsProxyRequest` overrides `_record()` to write to `request_log` +
+`metrics` instead of `ops_log`.  Proxy requests are far too frequent
+for the audit log.  Its `_run()` is a no-op — the actual proxy handling
+happens outside the ops class.  This class unifies the telemetry
+recording interface under the same `execute()` contract.

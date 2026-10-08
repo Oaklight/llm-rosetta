@@ -98,3 +98,44 @@ full word `provider` (never abbreviated `_from_p`).
 | Streaming handlers (private) | `_handle_ir_X_to_p` / `_handle_p_X_to_ir` | `_handle_ir_text_delta_to_p()` |
 | Build/convert helpers (private) | `_{verb}_{source}_X_to_{target}` | `_build_p_usage_to_ir()` |
 | Public converter API | `X_to_provider` / `X_from_provider` | `request_to_provider()` |
+
+## Gateway Ops Naming
+
+The gateway ops layer (`gateway/ops/`) has its own naming conventions,
+separate from the converter layer's `ir_X_to_p` / `p_X_to_ir` pattern.
+
+### Class Names
+
+Ops classes use the prefix `Ops` followed by the action in PascalCase:
+
+| Pattern | Examples |
+|---------|----------|
+| `Ops{Action}` | `OpsClearData`, `OpsKeyRotate`, `OpsPasswordChange` |
+| `_Ops{Group}Base` | `_OpsKeyBase` (shared internal base for a family) |
+
+### Constants
+
+Event type, source, and severity constants follow these patterns:
+
+| Category | Pattern | Examples |
+|----------|---------|----------|
+| Event types | `EVENT_{PAST_TENSE}` | `EVENT_DATA_CLEARED`, `EVENT_PASSWORD_CHANGED`, `EVENT_KEY_CREATE` |
+| Sources | `SOURCE_{SUBSYSTEM}` | `SOURCE_ADMIN`, `SOURCE_AUTH`, `SOURCE_KEYS`, `SOURCE_PERSISTENCE` |
+| Severity | `SEVERITY_{LEVEL}` | `SEVERITY_INFO`, `SEVERITY_WARNING` |
+
+### Methods
+
+| Method | Purpose |
+|--------|---------|
+| `_run()` | Business logic (abstract, required) |
+| `_message(result)` | Human-readable summary for audit log (abstract, required) |
+| `_details(result)` | Structured metadata dict for audit log (abstract, required) |
+| `_record(result, *, error=None)` | Write audit record (override only for non-ops_log targets) |
+
+### Mixins
+
+Shared behavior mixins use `_{Description}Mixin`:
+
+| Mixin | Purpose |
+|-------|---------|
+| `_DataMutationMixin` | Counter-rebuild logic for ops affecting `request_log` |

@@ -22,6 +22,8 @@ from llm_rosetta.observability import (
     compute_body_hash,
     compress_body,
     decompress_body,
+    OpsLog,
+    OpsLogEntry,
 )
 ```
 
@@ -200,6 +202,107 @@ if state.should_profile():
 | `store_result(profiler, ...)` | Store profiling result |
 | `status()` | Current profiling status dict |
 | `clear_results()` | Remove all stored results |
+
+---
+
+## Operations Log (OpsLog)
+
+The operations log captures server-level operational events — data mutations,
+security events, key management, startup/shutdown — with structured metadata.
+It delegates to SQLite persistence when available and falls back to an
+in-memory ring buffer otherwise.
+
+```python
+from llm_rosetta.observability import OpsLog, OpsLogEntry
+```
+
+### OpsLogEntry Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `str` | Auto-generated UUID hex |
+| `timestamp` | `str` | ISO 8601 timestamp |
+| `event_type` | `str` | Event category (see table below) |
+| `severity` | `str` | `"info"`, `"warning"`, or `"error"` |
+| `message` | `str` | Human-readable summary |
+| `details` | `dict \| None` | Structured metadata (event-type specific) |
+| `source` | `str \| None` | Originating subsystem |
+
+### Event Types
+
+| Constant | String | Description |
+|----------|--------|-------------|
+| `EVENT_STARTUP` | `startup` | Server started |
+| `EVENT_SHUTDOWN` | `shutdown` | Graceful stop |
+| `EVENT_CONFIG_RELOAD` | `config_reload` | Configuration reloaded |
+| `EVENT_ADMIN_SETUP` | `admin_setup` | Admin panel initialized |
+| `EVENT_KEY_CREATE` | `key_create` | API key created |
+| `EVENT_KEY_UPDATE` | `key_update` | API key updated |
+| `EVENT_KEY_DELETE` | `key_delete` | API key deleted |
+| `EVENT_KEY_ROTATE` | `key_rotate` | API key rotated |
+| `EVENT_HEALTH_CHANGE` | `health_status_change` | Provider health changed |
+| `EVENT_DATA_CLEARED` | `data_cleared` | Table data cleared |
+| `EVENT_DATA_CLEANUP` | `data_cleanup` | Age/date-based cleanup |
+| `EVENT_DATA_TRIMMED` | `data_trimmed` | Trimmed to retention cap |
+| `EVENT_DATA_VACUUMED` | `data_vacuumed` | Database vacuumed |
+| `EVENT_DATA_REBUILT` | `data_rebuilt` | Metrics rebuilt from log |
+| `EVENT_OPS_LOG_CLEARED` | `ops_log_cleared` | Ops log cleared |
+| `EVENT_PASSWORD_CHANGED` | `password_changed` | Admin password changed |
+| `EVENT_TOKEN_ROTATED` | `token_rotated` | Internal proxy token rotated |
+| `EVENT_SESSION_LOGOUT_ALL` | `session_logout_all` | All admin sessions invalidated |
+
+### Sources
+
+| Constant | String | Used By |
+|----------|--------|---------|
+| `SOURCE_GATEWAY` | `gateway` | Startup, shutdown |
+| `SOURCE_ADMIN` | `admin` | Admin panel actions, session logout |
+| `SOURCE_KEYS` | `keys` | API key management |
+| `SOURCE_CONFIG` | `config` | Config reload |
+| `SOURCE_PERSISTENCE` | `persistence` | Background prune, periodic cleanup |
+| `SOURCE_AUTH` | `auth` | Password change, token rotation |
+
+### Severity Levels
+
+| Constant | String | Usage |
+|----------|--------|-------|
+| `SEVERITY_INFO` | `info` | Non-destructive operations (default) |
+| `SEVERITY_WARNING` | `warning` | Destructive data mutations, security events |
+| `SEVERITY_ERROR` | `error` | Failures (auto-set when `_run()` raises) |
+
+### OpsLog Methods
+
+| Method | Description |
+|--------|-------------|
+| `add(entry)` | Record an operational event |
+| `get_entries(...)` | Paginated, filtered query (newest-first) |
+| `clear()` | Remove all entries, return count |
+
+### ops_log vs request_log
+
+| Aspect | ops_log | request_log |
+|--------|---------|-------------|
+| Records | Mutations, security events, lifecycle | Proxy request traffic |
+| Volume | Low (admin actions, background tasks) | High (every proxy request) |
+| Written by | `OpsBase._record()` (default) | `OpsProxyRequest._record()` (override) |
+| Typical events | `data_cleared`, `key_create`, `password_changed` | Every `/v1/*` proxy request |
+
+### OpsContext
+
+`OpsContext` is a lightweight service bag connecting ops to observability
+subsystems.  Created once at app init in `setup_admin()`:
+
+```python
+from llm_rosetta.gateway.ops import OpsContext
+
+ctx = OpsContext(
+    ops_log=ops_log,
+    request_log=request_log,
+    metrics=metrics,
+    persistence=persistence,  # all optional — None disables that subsystem
+)
+app.ops_ctx = ctx
+```
 
 ---
 

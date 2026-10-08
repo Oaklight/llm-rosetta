@@ -218,6 +218,80 @@ app._bind_port = port
 
 Set these after calling `setup_admin()` and before the server starts accepting connections.
 
+## Ops Layer Integration
+
+The gateway's unified ops layer records every mutation as an audited
+operation.  When embedding the gateway, `OpsContext` is automatically
+created by `setup_admin()` and attached to `app.ops_ctx`.
+
+### How OpsContext Is Created
+
+`setup_admin()` creates `OpsContext` with references to all four
+observability subsystems:
+
+```python
+from llm_rosetta.gateway.ops import OpsContext
+
+# Created automatically by setup_admin():
+ctx = OpsContext(
+    ops_log=ops_log,          # OpsLog instance
+    request_log=request_log,  # RequestLog instance
+    metrics=metrics,          # MetricsCollector instance
+    persistence=persistence,  # PersistenceManager or None
+)
+app.ops_ctx = ctx
+```
+
+All attributes are optional — `None` means the subsystem is not
+configured (e.g. no persistence in in-memory mode).
+
+### Route Handler Usage
+
+Route handlers construct an Ops subclass with the context and call
+`execute()`:
+
+```python
+from llm_rosetta.gateway.ops import OpsClearData
+
+async def handle_clear_log(request):
+    result = await OpsClearData(request.app.ops_ctx, table="request_log").execute()
+    return json_response({"status": "ok", **result})
+```
+
+The `execute()` method runs the operation and records it automatically.
+On failure, the error is recorded in the audit log and the original
+exception is re-raised.
+
+### Custom Ops in Downstream Projects
+
+Downstream projects can define custom `OpsBase` subclasses:
+
+```python
+from llm_rosetta.gateway.ops import OpsBase, OpsContext
+
+class OpsCustomAction(OpsBase):
+    event_type = "custom_action"
+    severity = "info"
+    source = "my_project"
+
+    def __init__(self, ctx: OpsContext, *, detail: str) -> None:
+        super().__init__(ctx)
+        self._detail = detail
+
+    async def _run(self):
+        # ... your logic ...
+        return {"status": "done"}
+
+    def _message(self, result):
+        return f"Custom action: {self._detail}"
+
+    def _details(self, result):
+        return {"detail": self._detail, **(result or {})}
+```
+
+Add the corresponding event type constant to your project's constants
+module (not to `llm_rosetta.observability.ops_log` directly).
+
 ## Branding Customization
 
 ### Branding Dict
