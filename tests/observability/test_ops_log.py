@@ -399,7 +399,7 @@ class TestConstants:
     def test_all_event_types(self):
         assert EVENT_STARTUP in ALL_EVENT_TYPES
         assert EVENT_OPS_LOG_CLEARED in ALL_EVENT_TYPES
-        assert len(ALL_EVENT_TYPES) == 11
+        assert len(ALL_EVENT_TYPES) == 18
 
     def test_all_severities(self):
         assert SEVERITY_INFO in ALL_SEVERITIES
@@ -410,4 +410,4 @@ class TestConstants:
     def test_all_sources(self):
         assert SOURCE_GATEWAY in ALL_SOURCES
         assert SOURCE_ADMIN in ALL_SOURCES
-        assert len(ALL_SOURCES) == 5
+        assert len(ALL_SOURCES) == 6
