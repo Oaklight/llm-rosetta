@@ -11,6 +11,8 @@ audit recording.  Route handlers construct an Ops object and call
 
 from .base import OpsBase, OpsContext
 from .proxy import OpsProxyRequest
+from .keys import OpsKeyCreate, OpsKeyDelete, OpsKeyRotate, OpsKeyUpdate
+from .security import OpsPasswordChange, OpsSessionLogoutAll, OpsTokenRotate
 from .data import (
     OpsClearData,
     OpsClearOpsLog,
@@ -28,8 +30,15 @@ __all__ = [
     "OpsClearOpsLog",
     "OpsContext",
     "OpsDeleteErrorDump",
+    "OpsKeyCreate",
+    "OpsKeyDelete",
+    "OpsKeyRotate",
+    "OpsKeyUpdate",
+    "OpsPasswordChange",
     "OpsProxyRequest",
     "OpsRebuildMetrics",
     "OpsTrimData",
+    "OpsSessionLogoutAll",
+    "OpsTokenRotate",
     "OpsVacuum",
 ]
