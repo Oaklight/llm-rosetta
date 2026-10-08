@@ -110,3 +110,42 @@ class TestPersistenceRetention:
             )
             await pm.insert_log_entries([entry.to_dict()])
         assert await pm.count_error_entries() == 10
+
+
+class TestWALCheckpoint:
+    async def test_wal_size_initially_zero_or_small(self, pm):
+        assert pm.wal_size() >= 0
+
+    async def test_wal_checkpoint_returns_status(self, pm):
+        result = await pm.wal_checkpoint()
+        assert result["ok"] is True
+        assert "wal_before" in result
+        assert "wal_after" in result
+
+    async def test_wal_checkpoint_after_inserts(self, pm):
+        for i in range(10):
+            entry = RequestLogEntry.create(
+                model=f"m-{i}",
+                source_provider="openai_chat",
+                target_provider="anthropic",
+                is_stream=False,
+                status_code=200,
+                duration_ms=10.0,
+            )
+            await pm.insert_log_entries([entry.to_dict()])
+        result = await pm.wal_checkpoint()
+        assert result["ok"] is True
+
+    async def test_start_stop_wal_task(self, pm):
+        pm.start_wal_task()
+        assert pm._wal_task is not None
+        assert not pm._wal_task.done()
+        await pm.stop_wal_task()
+        assert pm._wal_task is None
+
+    async def test_close_stops_wal_task(self, tmp_path):
+        pm = await PersistenceManager.create(str(tmp_path))
+        pm.start_wal_task()
+        assert pm._wal_task is not None
+        await pm.close()
+        assert pm._wal_task is None
