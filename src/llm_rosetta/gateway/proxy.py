@@ -981,6 +981,19 @@ async def _write_back_stream_usage(
         )
 
 
+def _flush_and_finalize(
+    processor: Any,
+    format_sse: Any,
+    source_provider: str,
+    format_sse_done: Any,
+) -> list[str]:
+    """Flush deferred terminal events and append the SSE done sentinel."""
+    tail = [format_sse(e) for e in processor.process_chunk(None)]
+    if source_provider in ("openai_chat", "openai_responses", "open_responses"):
+        tail.append(format_sse_done())
+    return tail
+
+
 async def _stream_event_generator(
     *,
     source_provider: ProviderType,
@@ -1042,8 +1055,12 @@ async def _stream_event_generator(
                 for source_event in processor.process_chunk(chunk):
                     yield format_sse(source_event)
 
-        if source_provider in ("openai_chat", "openai_responses", "open_responses"):
-            yield format_sse_done()
+        # Flush any deferred terminal events and append the SSE [DONE]
+        # sentinel for OpenAI-family formats.
+        for sse_text in _flush_and_finalize(
+            processor, format_sse, source_provider, format_sse_done
+        ):
+            yield sse_text
 
         log_stream_summary(
             model=model,

@@ -138,6 +138,7 @@ class StreamContext(ConversionContext):
     # Lifecycle flags
     _started: bool = field(default=False, repr=False)
     _ended: bool = field(default=False, repr=False)
+    _stream_end_deferred: bool = field(default=False, repr=False)
     _finished_choice_indexes: set[int] = field(default_factory=set, repr=False)
 
     # Tool call accumulation for streaming

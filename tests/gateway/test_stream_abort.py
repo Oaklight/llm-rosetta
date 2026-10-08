@@ -199,7 +199,9 @@ def test_original_exception_survives_builder_failure() -> None:
         def source_context(self) -> Any:
             return _ExplodingContext()
 
-        def process_chunk(self, chunk: dict[str, Any]) -> list[dict[str, Any]]:
+        def process_chunk(self, chunk: dict[str, Any] | None) -> list[dict[str, Any]]:
+            if chunk is None:
+                return []
             return [chunk]
 
     events, raised = asyncio.run(

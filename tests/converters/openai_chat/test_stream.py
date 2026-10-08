@@ -1173,3 +1173,218 @@ class TestStreamingRefusal:
             finish_events[0].get("provider_metadata", {}).get("refusal_text")
             == "I cannot help."
         )
+
+
+class TestDeferredStreamEnd:
+    """Tests for #838: deferred StreamEndEvent when upstream has no usage."""
+
+    def setup_method(self):
+        self.converter = OpenAIChatConverter()
+
+    def _make_started_ctx(self) -> StreamContext:
+        ctx = StreamContext()
+        ctx.mark_started()
+        ctx.response_id = "chatcmpl-test"
+        ctx.model = "gpt-4"
+        return ctx
+
+    def _feed_chunks(
+        self, chunks: list[dict | None], ctx: StreamContext | None = None
+    ) -> list[dict]:
+        if ctx is None:
+            ctx = self._make_started_ctx()
+        all_events: list[dict] = []
+        for chunk in chunks:
+            events = cast(
+                list[Any],
+                self.converter.stream_response_from_provider(chunk, context=ctx),
+            )
+            all_events.extend(events)
+        return all_events
+
+    def test_deferred_when_no_usage(self):
+        """finish_reason without usage defers StreamEndEvent."""
+        ctx = self._make_started_ctx()
+        chunk = {"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]}
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(chunk, context=ctx),
+        )
+        types = [e["type"] for e in events]
+        assert "finish" in types
+        assert "stream_end" not in types
+        assert ctx._stream_end_deferred is True
+        assert ctx.is_ended is False
+
+    def test_flushed_on_none_sentinel(self):
+        """None sentinel flushes deferred StreamEndEvent."""
+        ctx = self._make_started_ctx()
+        # finish chunk without usage
+        self.converter.stream_response_from_provider(
+            {"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]},
+            context=ctx,
+        )
+        assert ctx._stream_end_deferred is True
+
+        # EOF sentinel
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(None, context=ctx),
+        )
+        assert len(events) == 1
+        assert events[0]["type"] == "stream_end"
+        assert ctx.is_ended is True
+        assert ctx._stream_end_deferred is False
+
+    def test_flushed_on_next_chunk(self):
+        """Deferred StreamEndEvent flushes on the next normal chunk."""
+        ctx = self._make_started_ctx()
+        # finish chunk without usage
+        self.converter.stream_response_from_provider(
+            {"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]},
+            context=ctx,
+        )
+        # next chunk (e.g. trailing data)
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider({"choices": []}, context=ctx),
+        )
+        types = [e["type"] for e in events]
+        assert "stream_end" in types
+        assert ctx.is_ended is True
+
+    def test_not_deferred_when_usage_present(self):
+        """finish_reason WITH usage emits StreamEndEvent immediately."""
+        ctx = self._make_started_ctx()
+        chunk = {
+            "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+            "usage": {
+                "prompt_tokens": 5,
+                "completion_tokens": 3,
+                "total_tokens": 8,
+            },
+        }
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(chunk, context=ctx),
+        )
+        types = [e["type"] for e in events]
+        assert "stream_end" in types
+        assert ctx.is_ended is True
+        assert ctx._stream_end_deferred is False
+
+    def test_deferred_then_usage_only_chunk(self):
+        """finish without usage, then usage-only chunk (empty choices).
+
+        The usage-only chunk should produce UsageEvent + StreamEndEvent,
+        preserving the ordering: finish → usage → stream_end.
+        """
+        ctx = StreamContext()  # fresh context — not pre-started
+        chunks: list[dict | None] = [
+            # Start + content
+            {
+                "id": "chatcmpl-test",
+                "object": "chat.completion.chunk",
+                "model": "gpt-4",
+                "created": 1700000000,
+                "choices": [{"index": 0, "delta": {"content": "ok"}}],
+            },
+            # Finish (no usage)
+            {"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]},
+            # Usage-only chunk (empty choices — OpenAI include_usage pattern)
+            {
+                "choices": [],
+                "usage": {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 2,
+                    "total_tokens": 12,
+                },
+            },
+        ]
+        events = self._feed_chunks(chunks, ctx)
+        types = [e["type"] for e in events]
+
+        assert "stream_start" in types
+        assert "text_delta" in types
+        assert "finish" in types
+        assert "usage" in types
+        assert "stream_end" in types
+
+        # Ordering: finish before usage before stream_end
+        finish_idx = types.index("finish")
+        usage_idx = types.index("usage")
+        end_idx = types.index("stream_end")
+        assert finish_idx < usage_idx < end_idx
+
+    def test_none_sentinel_no_deferred_is_noop(self):
+        """None sentinel with no deferred state returns empty list."""
+        ctx = self._make_started_ctx()
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(None, context=ctx),
+        )
+        assert events == []
+
+    def test_none_sentinel_already_ended_is_noop(self):
+        """None sentinel after stream already ended returns empty list."""
+        ctx = self._make_started_ctx()
+        ctx.mark_ended()
+        ctx._stream_end_deferred = True  # shouldn't matter if already ended
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(None, context=ctx),
+        )
+        assert events == []
+
+    def test_full_pipeline_no_usage(self):
+        """Full OpenAI Chat → IR → Anthropic pipeline without usage.
+
+        Verifies that message_delta (with stop_reason) and message_stop
+        are present — the exact bug reported in #838.
+        """
+        from llm_rosetta.converters.anthropic import AnthropicConverter
+
+        oc = OpenAIChatConverter()
+        ac = AnthropicConverter()
+        from_ctx = oc.create_stream_context()
+        to_ctx = ac.create_stream_context()
+
+        chunks: list[dict | None] = [
+            {
+                "id": "chatcmpl-abc",
+                "object": "chat.completion.chunk",
+                "model": "gpt-4",
+                "created": 1700000000,
+                "choices": [
+                    {"index": 0, "delta": {"role": "assistant", "content": ""}}
+                ],
+            },
+            {"choices": [{"index": 0, "delta": {"content": "Hello"}}]},
+            {"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]},
+            None,  # EOF sentinel
+        ]
+
+        anth_types: list[str] = []
+        stop_reason = None
+        for chunk in chunks:
+            ir_events = oc.stream_response_from_provider(chunk, context=from_ctx)
+            for ir_ev in ir_events:
+                results = ac.stream_response_to_provider(ir_ev, context=to_ctx)
+                if isinstance(results, dict):
+                    results = [results] if results else []
+                for r in results:
+                    if not r:
+                        continue
+                    anth_types.append(r.get("type", "?"))
+                    if r.get("type") == "message_delta":
+                        d = r.get("delta", {})
+                        if d.get("stop_reason"):
+                            stop_reason = d["stop_reason"]
+
+        assert "message_start" in anth_types
+        assert "content_block_start" in anth_types
+        assert "content_block_delta" in anth_types
+        assert "content_block_stop" in anth_types
+        assert "message_delta" in anth_types, "message_delta missing — #838 regression"
+        assert "message_stop" in anth_types, "message_stop missing — #838 regression"
+        assert stop_reason == "end_turn"
