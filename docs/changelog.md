@@ -28,6 +28,7 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### 变更
 
+- **Intrinsic 工具类型** (PR [#840](https://github.com/Oaklight/llm-rosetta/pull/840), issue [#181](https://github.com/Oaklight/llm-rosetta/issues/181))：将独立的服务端工具类型字面量（`web_search`、`code_interpreter`、`file_search`）替换为统一的 `intrinsic` IR tool_type。具体种类存储在 `provider_metadata["intrinsic_kind"]` 中。Intrinsic 工具在同格式转换中透传，跨格式转换中剥离。五个 converter 全部更新：Anthropic `server_tool_use` + `*_tool_result` block、OpenAI Responses `web_search_call`/`code_interpreter_call`/`file_search_call`/`shell_call`/`computer_call`、Google Generate `executableCode`/`codeExecutionResult`、Google Interactions 全部 6 种 server step type。共享 helper 位于 `converters/base/helpers/tool_intrinsic.py`。
 - **Shim 变换** (PRs [#684](https://github.com/Oaklight/llm-rosetta/pull/684), [#685](https://github.com/Oaklight/llm-rosetta/pull/685), [#716](https://github.com/Oaklight/llm-rosetta/pull/716), [#799](https://github.com/Oaklight/llm-rosetta/pull/799), [#812](https://github.com/Oaklight/llm-rosetta/pull/812))：新增 `default_tool_description` 和 `response_body_transforms` 原语；Argo 和 DeepSeek Responses API shim；`ProviderShim` 字段重组为 `ConnectionConfig`/`ToolsConfig`。
 - **构建系统** (PR [#824](https://github.com/Oaklight/llm-rosetta/pull/824))：从 `deploy-dev` 提取独立的 `build-wheel` Makefile 目标。Makefile 和 CI 的版本解析统一为 `sed -n`，兼容 POSIX/macOS。
 
