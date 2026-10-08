@@ -141,7 +141,7 @@ class OpsProxyRequest(OpsBase):
             self._entry_id = entry.id
 
     def _message(self, result: Any) -> str:
-        return ""
+        return ""  # not used — _record is overridden
 
     def _details(self, result: Any) -> dict[str, Any]:
-        return {}
+        return {}  # not used — _record is overridden
