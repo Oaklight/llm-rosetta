@@ -340,13 +340,11 @@ def _translate_intrinsic_in_messages(
             if not _is_intrinsic_part(part):
                 new_content.append(part)
                 continue
+            # _is_intrinsic_part guarantees type is tool_call or tool_result.
             if part.get("type") == "tool_call":
                 new_content.append(_intrinsic_call_to_function(part))
-            elif part.get("type") == "tool_result":
-                new_content.append(_intrinsic_result_to_function(part))
             else:
-                new_content.append(part)
-                continue
+                new_content.append(_intrinsic_result_to_function(part))
             translated += 1
             changed = True
         if changed:
