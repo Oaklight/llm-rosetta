@@ -29,7 +29,7 @@ from typing import Any, Literal, Protocol, runtime_checkable
 
 from llm_rosetta.capabilities import (
     enforce_custom_tools,
-    strip_intrinsic_tools,
+    translate_intrinsic_tools,
     relocate_oversized_tool_descriptions,
     enforce_reasoning,
     enforce_vision,
@@ -572,8 +572,8 @@ class ConversionPipeline:
             request_id=request_id,
         )
 
-        # Capability enforcement: intrinsic tools (post-IR)
-        ir_request = strip_intrinsic_tools(
+        # Capability enforcement: intrinsic tools — translate for cross-format (post-IR)
+        ir_request = translate_intrinsic_tools(
             ir_request,
             same_format=self._source_provider == self._target_provider,
             request_id=request_id,
