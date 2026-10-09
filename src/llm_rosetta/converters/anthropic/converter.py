@@ -50,7 +50,7 @@ from ..base.tools import (
     strip_orphaned_tool_config,
 )
 from ..base.helpers.system_message_hoist import hoist_system_in_converter
-from ...shims.transforms import auto_cache_breakpoints, hoist_late_system_messages
+from ...transforms.ir import auto_cache_breakpoints, hoist_late_system_messages
 from ._constants import (
     ANTHROPIC_REASON_FROM_PROVIDER,
     ANTHROPIC_REASON_TO_PROVIDER,

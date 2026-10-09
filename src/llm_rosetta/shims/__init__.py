@@ -23,7 +23,7 @@ from .provider_shim import (
     resolve_shim,
     unregister_shim,
 )
-from .transforms import (
+from llm_rosetta.transforms import (
     IRTransform,
     Transform,
     TransformContext,

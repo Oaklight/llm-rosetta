@@ -29,12 +29,11 @@ from .converters import (
 from .converters.base.simple_converter import BaseSimpleConverter
 from . import tool_ops
 from .converters.base.context import ConversionContext, StreamContext
+from .transforms import Transform, apply_transforms
 from .shims import (
     ConnectionConfig,
     ProviderShim,
     ToolsConfig,
-    Transform,
-    apply_transforms,
     get_shim,
     list_shims,
     register_shim,

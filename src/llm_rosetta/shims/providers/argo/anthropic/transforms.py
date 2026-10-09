@@ -24,7 +24,7 @@ import copy
 import json
 from typing import Any
 
-from llm_rosetta.shims.transforms import (
+from llm_rosetta.transforms import (
     _NamedTransform,
     strip_fields_for_model,
 )

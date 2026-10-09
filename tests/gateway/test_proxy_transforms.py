@@ -22,7 +22,7 @@ from llm_rosetta.shims.provider_shim import (
     _reset_registry,
     register_shim,
 )
-from llm_rosetta.shims.transforms import rename_field, strip_fields
+from llm_rosetta.transforms import rename_field, strip_fields
 
 
 # ---------------------------------------------------------------------------

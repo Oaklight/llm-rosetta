@@ -10,7 +10,7 @@ from llm_rosetta.shims.provider_shim import (
     get_shim,
     register_shim,
 )
-from llm_rosetta.shims.transforms import (
+from llm_rosetta.transforms import (
     apply_transforms,
     default_message_field,
     rename_field,
@@ -660,7 +660,7 @@ class TestFlattenSystemContent:
 
     def test_flattens_array_to_string(self):
         """Content array is joined into a plain string."""
-        from llm_rosetta.shims.transforms import flatten_system_content
+        from llm_rosetta.transforms import flatten_system_content
 
         body = {
             "model": "gemini-3.5-flash",
@@ -680,7 +680,7 @@ class TestFlattenSystemContent:
 
     def test_idempotent_string_unchanged(self):
         """Already-string content is left as-is."""
-        from llm_rosetta.shims.transforms import flatten_system_content
+        from llm_rosetta.transforms import flatten_system_content
 
         body = {
             "model": "gpt-4o",
@@ -694,7 +694,7 @@ class TestFlattenSystemContent:
 
     def test_idempotent_double_apply(self):
         """Applying twice produces the same result."""
-        from llm_rosetta.shims.transforms import flatten_system_content
+        from llm_rosetta.transforms import flatten_system_content
 
         body = {
             "model": "test",
@@ -712,7 +712,7 @@ class TestFlattenSystemContent:
 
     def test_no_system_message_noop(self):
         """No system message → no-op."""
-        from llm_rosetta.shims.transforms import flatten_system_content
+        from llm_rosetta.transforms import flatten_system_content
 
         body = {
             "model": "test",
@@ -723,7 +723,7 @@ class TestFlattenSystemContent:
 
     def test_no_messages_noop(self):
         """Missing messages key → no-op."""
-        from llm_rosetta.shims.transforms import flatten_system_content
+        from llm_rosetta.transforms import flatten_system_content
 
         body = {"model": "test"}
         result = flatten_system_content()(body)
@@ -731,7 +731,7 @@ class TestFlattenSystemContent:
 
     def test_pattern_match(self):
         """Only flattens when model matches pattern."""
-        from llm_rosetta.shims.transforms import flatten_system_content
+        from llm_rosetta.transforms import flatten_system_content
 
         body = {
             "model": "gemini25flash",
@@ -747,7 +747,7 @@ class TestFlattenSystemContent:
 
     def test_pattern_no_match(self):
         """Non-matching model → no-op."""
-        from llm_rosetta.shims.transforms import flatten_system_content
+        from llm_rosetta.transforms import flatten_system_content
 
         body = {
             "model": "gpt5nano",
@@ -764,7 +764,7 @@ class TestFlattenSystemContent:
 
     def test_user_messages_untouched(self):
         """Only system messages are flattened, user messages stay as-is."""
-        from llm_rosetta.shims.transforms import flatten_system_content
+        from llm_rosetta.transforms import flatten_system_content
 
         body = {
             "model": "test",
@@ -785,7 +785,7 @@ class TestFlattenSystemContent:
 
     def test_repr(self):
         """Transform has a readable repr."""
-        from llm_rosetta.shims.transforms import flatten_system_content
+        from llm_rosetta.transforms import flatten_system_content
 
         assert repr(flatten_system_content()) == "flatten_system_content()"
         assert (
@@ -798,7 +798,7 @@ class TestDefaultToolDescription:
     """Tests for the default_tool_description transform."""
 
     def test_fills_null_description(self):
-        from llm_rosetta.shims.transforms import default_tool_description
+        from llm_rosetta.transforms import default_tool_description
 
         body = {
             "tools": [
@@ -810,7 +810,7 @@ class TestDefaultToolDescription:
         assert result["tools"][0]["function"]["description"] == ""
 
     def test_fills_missing_description(self):
-        from llm_rosetta.shims.transforms import default_tool_description
+        from llm_rosetta.transforms import default_tool_description
 
         body = {
             "tools": [
@@ -822,7 +822,7 @@ class TestDefaultToolDescription:
         assert result["tools"][0]["function"]["description"] == ""
 
     def test_preserves_existing_description(self):
-        from llm_rosetta.shims.transforms import default_tool_description
+        from llm_rosetta.transforms import default_tool_description
 
         body = {
             "tools": [
@@ -837,14 +837,14 @@ class TestDefaultToolDescription:
         assert result["tools"][0]["function"]["description"] == "Get weather"
 
     def test_no_tools_is_noop(self):
-        from llm_rosetta.shims.transforms import default_tool_description
+        from llm_rosetta.transforms import default_tool_description
 
         body = {"messages": [{"role": "user", "content": "hi"}]}
         result = default_tool_description()(body)
         assert "tools" not in result
 
     def test_custom_default(self):
-        from llm_rosetta.shims.transforms import default_tool_description
+        from llm_rosetta.transforms import default_tool_description
 
         body = {
             "tools": [
@@ -855,7 +855,7 @@ class TestDefaultToolDescription:
         assert result["tools"][0]["function"]["description"] == "n/a"
 
     def test_multiple_tools(self):
-        from llm_rosetta.shims.transforms import default_tool_description
+        from llm_rosetta.transforms import default_tool_description
 
         body = {
             "tools": [
@@ -873,7 +873,7 @@ class TestDefaultToolDescription:
         assert result["tools"][2]["function"]["description"] == ""
 
     def test_repr(self):
-        from llm_rosetta.shims.transforms import default_tool_description
+        from llm_rosetta.transforms import default_tool_description
 
         assert repr(default_tool_description()) == "default_tool_description('')"
         assert (
@@ -885,7 +885,7 @@ class TestRewriteHarmonyToolCalls:
     """Tests for the rewrite_harmony_tool_calls response transform."""
 
     def test_rewrites_nonstreaming_content(self):
-        from llm_rosetta.shims.transforms import rewrite_harmony_tool_calls
+        from llm_rosetta.transforms import rewrite_harmony_tool_calls
 
         body = {
             "choices": [
@@ -909,7 +909,7 @@ class TestRewriteHarmonyToolCalls:
         assert result["choices"][0]["finish_reason"] == "tool_calls"
 
     def test_rewrites_streaming_delta(self):
-        from llm_rosetta.shims.transforms import rewrite_harmony_tool_calls
+        from llm_rosetta.transforms import rewrite_harmony_tool_calls
 
         chunk = {
             "choices": [
@@ -929,7 +929,7 @@ class TestRewriteHarmonyToolCalls:
         assert result["choices"][0]["finish_reason"] == "tool_calls"
 
     def test_noop_when_tool_calls_present(self):
-        from llm_rosetta.shims.transforms import rewrite_harmony_tool_calls
+        from llm_rosetta.transforms import rewrite_harmony_tool_calls
 
         body = {
             "choices": [
@@ -953,7 +953,7 @@ class TestRewriteHarmonyToolCalls:
         assert result["choices"][0]["message"]["tool_calls"][0]["id"] == "call_existing"
 
     def test_noop_without_harmony_token(self):
-        from llm_rosetta.shims.transforms import rewrite_harmony_tool_calls
+        from llm_rosetta.transforms import rewrite_harmony_tool_calls
 
         body = {
             "choices": [
@@ -971,13 +971,13 @@ class TestRewriteHarmonyToolCalls:
         assert "tool_calls" not in result["choices"][0]["message"]
 
     def test_noop_empty_body(self):
-        from llm_rosetta.shims.transforms import rewrite_harmony_tool_calls
+        from llm_rosetta.transforms import rewrite_harmony_tool_calls
 
         assert rewrite_harmony_tool_calls()({}) == {}
         assert rewrite_harmony_tool_calls()({"choices": []}) == {"choices": []}
 
     def test_malformed_json_in_harmony_token(self):
-        from llm_rosetta.shims.transforms import rewrite_harmony_tool_calls
+        from llm_rosetta.transforms import rewrite_harmony_tool_calls
 
         body = {
             "choices": [
@@ -994,7 +994,7 @@ class TestRewriteHarmonyToolCalls:
         assert "tool_calls" not in result["choices"][0]["message"]
 
     def test_call_delimiter_variant(self):
-        from llm_rosetta.shims.transforms import rewrite_harmony_tool_calls
+        from llm_rosetta.transforms import rewrite_harmony_tool_calls
 
         body = {
             "choices": [
@@ -1011,7 +1011,7 @@ class TestRewriteHarmonyToolCalls:
         assert len(result["choices"][0]["message"]["tool_calls"]) == 1
 
     def test_arguments_key_variant(self):
-        from llm_rosetta.shims.transforms import rewrite_harmony_tool_calls
+        from llm_rosetta.transforms import rewrite_harmony_tool_calls
 
         body = {
             "choices": [
@@ -1029,6 +1029,6 @@ class TestRewriteHarmonyToolCalls:
         assert '"x"' in tc["function"]["arguments"]
 
     def test_repr(self):
-        from llm_rosetta.shims.transforms import rewrite_harmony_tool_calls
+        from llm_rosetta.transforms import rewrite_harmony_tool_calls
 
         assert repr(rewrite_harmony_tool_calls()) == "rewrite_harmony_tool_calls()"

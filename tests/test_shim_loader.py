@@ -42,7 +42,7 @@ class TestLoadTransforms:
         tf = tmp_path / "transforms.py"
         tf.write_text(
             textwrap.dedent("""\
-            from llm_rosetta.shims.transforms import strip_fields
+            from llm_rosetta.transforms import strip_fields
             post_ir_transforms = (strip_fields("foo"),)
         """)
         )
@@ -61,7 +61,7 @@ class TestLoadTransforms:
         tf = tmp_path / "transforms.py"
         tf.write_text(
             textwrap.dedent("""\
-            from llm_rosetta.shims.transforms import strip_fields, rename_field
+            from llm_rosetta.transforms import strip_fields, rename_field
             post_ir_transforms = (strip_fields("x"),)
             pre_ir_transforms = (rename_field("a", "b"),)
         """)
@@ -462,7 +462,7 @@ class TestLoadProvidersFromDir:
         d.mkdir()
         (d / "provider.yaml").write_text("name: myplugin\nbase: openai_chat\n")
         (d / "transforms.py").write_text(
-            "from llm_rosetta.shims.transforms import strip_fields\n"
+            "from llm_rosetta.transforms import strip_fields\n"
             'post_ir_transforms = (strip_fields("foo"),)\n'
         )
         shims = load_providers_from_dir(tmp_path)

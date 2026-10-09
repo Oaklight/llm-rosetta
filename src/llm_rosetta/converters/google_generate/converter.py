@@ -51,7 +51,7 @@ from ..base.tools import (
     strip_orphaned_tool_config,
 )
 from ..base.helpers.system_message_hoist import hoist_system_in_converter
-from ...shims.transforms import hoist_late_system_messages
+from ...transforms.ir import hoist_late_system_messages
 from ._constants import (
     GOOGLE_REASON_FROM_PROVIDER,
     GOOGLE_REASON_TO_PROVIDER,

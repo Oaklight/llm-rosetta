@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from llm_rosetta.shims.transforms import _NamedTransform, hoist_late_system_messages
+from llm_rosetta.transforms import _NamedTransform, hoist_late_system_messages
 
 
 def _rename_reasoning_field(body: dict[str, Any]) -> dict[str, Any]:

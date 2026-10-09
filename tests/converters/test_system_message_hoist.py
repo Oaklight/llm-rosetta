@@ -221,7 +221,7 @@ class TestIdempotency:
 
 class TestTransformIntegration:
     def test_factory_repr(self):
-        from llm_rosetta.shims.transforms import hoist_late_system_messages
+        from llm_rosetta.transforms import hoist_late_system_messages
 
         t = hoist_late_system_messages()
         assert repr(t) == "hoist_late_system_messages()"
