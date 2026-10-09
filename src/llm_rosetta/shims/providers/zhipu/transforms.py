@@ -13,7 +13,7 @@ References:
     https://docs.z.ai/api-reference/llm/chat-completion
 """
 
-from llm_rosetta.shims.transforms import hoist_late_system_messages, strip_fields
+from llm_rosetta.transforms import hoist_late_system_messages, strip_fields
 
 post_ir_transforms = (
     strip_fields(

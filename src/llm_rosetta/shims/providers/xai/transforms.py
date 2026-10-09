@@ -7,7 +7,7 @@ References:
     https://docs.x.ai/docs/api-reference#chat-completions
 """
 
-from llm_rosetta.shims.transforms import hoist_late_system_messages, strip_fields
+from llm_rosetta.transforms import hoist_late_system_messages, strip_fields
 
 post_ir_transforms = (strip_fields("logit_bias"),)
 pre_ir_transforms = ()

@@ -669,7 +669,7 @@ class TestDualShimPipeline:
         from llm_rosetta.pipeline import ConversionPipeline
         from llm_rosetta.shims import register_shim, unregister_shim
         from llm_rosetta.shims.provider_shim import ProviderShim
-        from llm_rosetta.shims.transforms import strip_fields
+        from llm_rosetta.transforms import strip_fields
 
         shim = ProviderShim(
             name="__test_src__",
@@ -700,7 +700,7 @@ class TestDualShimPipeline:
         from llm_rosetta.pipeline import ConversionPipeline
         from llm_rosetta.shims import register_shim, unregister_shim
         from llm_rosetta.shims.provider_shim import ProviderShim
-        from llm_rosetta.shims.transforms import set_defaults, strip_fields
+        from llm_rosetta.transforms import set_defaults, strip_fields
 
         src_shim = ProviderShim(
             name="__test_dual_src__",
@@ -738,7 +738,7 @@ class TestDualShimPipeline:
         from llm_rosetta.pipeline import ConversionPipeline
         from llm_rosetta.shims import register_shim, unregister_shim
         from llm_rosetta.shims.provider_shim import ProviderShim
-        from llm_rosetta.shims.transforms import set_defaults, strip_fields
+        from llm_rosetta.transforms import set_defaults, strip_fields
 
         src_shim = ProviderShim(
             name="__test_pass_src__",

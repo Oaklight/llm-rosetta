@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from ..types.ir.configs import IREffort, IRMode  # re-exported
-from .transforms import IRTransform, Transform
+from llm_rosetta.transforms import IRTransform, Transform
 
 logger = logging.getLogger(__name__)
 

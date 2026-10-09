@@ -19,7 +19,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from llm_rosetta.shims.transforms import (
+from llm_rosetta.transforms import (
     _NamedTransform,
     hoist_late_system_messages,
     strip_fields,

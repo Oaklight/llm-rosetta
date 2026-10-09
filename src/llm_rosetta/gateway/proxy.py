@@ -718,7 +718,7 @@ async def handle_non_streaming(
 
     # Per-model system message flattening (gateway config override)
     if route.flatten_system:
-        from llm_rosetta.shims.transforms import flatten_system_content
+        from llm_rosetta.transforms import flatten_system_content
 
         target_body = flatten_system_content()(target_body)
 
@@ -1294,7 +1294,7 @@ async def handle_streaming(
 
     # Per-model system message flattening (gateway config override)
     if route.flatten_system:
-        from llm_rosetta.shims.transforms import flatten_system_content
+        from llm_rosetta.transforms import flatten_system_content
 
         target_body = flatten_system_content()(target_body)
 

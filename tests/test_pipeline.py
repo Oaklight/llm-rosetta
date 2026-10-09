@@ -23,7 +23,7 @@ from llm_rosetta.shims.provider_shim import (
     resolve_shim,
     unregister_shim,
 )
-from llm_rosetta.shims.transforms import (
+from llm_rosetta.transforms import (
     auto_cache_breakpoints,
     strip_non_vision_images,
     truncate_images as truncate_images_transform,
@@ -1144,7 +1144,7 @@ class TestIntrinsicIrTransforms:
         }
 
         class _FakeConverter:
-            from llm_rosetta.shims.transforms import hoist_late_system_messages
+            from llm_rosetta.transforms import hoist_late_system_messages
 
             _INTRINSIC_IR_TRANSFORMS = (hoist_late_system_messages(),)
 
@@ -1165,7 +1165,7 @@ class TestIntrinsicIrTransforms:
             call_order.append("shim")
             return body
 
-        from llm_rosetta.shims.transforms import _NamedIRTransform
+        from llm_rosetta.transforms import _NamedIRTransform
 
         intrinsic_t = _NamedIRTransform(_intrinsic_fn, "intrinsic()")
         shim_t = _NamedIRTransform(_shim_fn, "shim()")
@@ -1187,7 +1187,7 @@ class TestIntrinsicIrTransforms:
             call_count += 1
             return body
 
-        from llm_rosetta.shims.transforms import _NamedIRTransform
+        from llm_rosetta.transforms import _NamedIRTransform
 
         t = _NamedIRTransform(_counting_fn, "dedup_test()")
 

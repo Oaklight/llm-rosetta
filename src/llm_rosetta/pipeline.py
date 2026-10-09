@@ -45,11 +45,10 @@ from llm_rosetta.capabilities import (
 )
 from llm_rosetta.converters.base.context import ConversionContext
 from llm_rosetta.shims.provider_shim import ProviderShim, resolve_shim
-from llm_rosetta.shims.transforms import (
-    Transform,
+from llm_rosetta.transforms.body import Transform, apply_transforms
+from llm_rosetta.transforms.ir import (
     TransformContext,
     apply_ir_transforms as _apply_ir_transforms_exec,
-    apply_transforms,
 )
 
 logger = logging.getLogger(__name__)

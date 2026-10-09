@@ -32,7 +32,7 @@ from ...types.ir.stream import (
 )
 from ..base import BaseConverter
 from ..base.helpers.system_message_hoist import hoist_system_in_converter
-from ...shims.transforms import hoist_late_system_messages
+from ...transforms.ir import hoist_late_system_messages
 from ..base.context import ConversionContext, StreamContext
 from .config_ops import GoogleInteractionsConfigOps
 from .content_ops import GoogleInteractionsContentOps
