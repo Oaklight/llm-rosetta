@@ -30,6 +30,7 @@ from ...types.ir.tools import ToolCallConfig
 from ..base import BaseToolOps
 from ..base.tools import (
     extract_part_ids,
+    get_definition_kind,
     get_intrinsic_kind,
     log_orphan_warnings,
     make_intrinsic_tool_call,
@@ -39,6 +40,12 @@ from ..base.tools import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Native OpenAI Responses server tools for client-declared intrinsic kinds.
+_RESPONSES_INTRINSIC_TOOLS: dict[str, dict[str, Any]] = {
+    "web_search": {"type": "web_search"},
+    "code_interpreter": {"type": "code_interpreter", "container": {"type": "auto"}},
+}
 
 #: Responses input item type that carries tool definitions inline (Codex).
 ADDITIONAL_TOOLS_ITEM_TYPE = "additional_tools"
@@ -472,6 +479,18 @@ class OpenAIResponsesToolOps(BaseToolOps):
         Returns:
             OpenAI Responses tool definition dict.
         """
+        if ir_tool.get("type") == "intrinsic":
+            kind = get_definition_kind(ir_tool)
+            native = _RESPONSES_INTRINSIC_TOOLS.get(kind)
+            if native is None:
+                logger.warning(
+                    "OpenAI Responses has no server tool for intrinsic kind %r;"
+                    " dropping",
+                    kind,
+                )
+                return {}
+            return dict(native)
+
         # Passthrough tools (web_search, etc.) go back as-is except for the
         # name, since a rename must follow the tool upstream or nothing else
         # in the request agrees on it.

@@ -876,7 +876,10 @@ class BaseConverter(ABC):
             else:
                 converted = self.tool_ops.ir_tool_definition_to_p(t)
                 put_cached_tool(tag, t, converted)
-                results.append(converted)
+                # A falsy result means the target cannot express this tool
+                # (e.g. an intrinsic tool on a provider without server tools).
+                if converted:
+                    results.append(converted)
 
         return results
 

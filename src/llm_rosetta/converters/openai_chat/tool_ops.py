@@ -24,7 +24,13 @@ from ...types.ir import (
 )
 from ...types.ir.tools import ToolCallConfig
 from ..base import BaseToolOps
-from ..base.tools import log_orphan_warnings, sanitize_schema, sanitize_tool_call_id
+from ..base.tools import (
+    intrinsic_name_to_kind,
+    log_orphan_warnings,
+    make_intrinsic_tool_definition,
+    sanitize_schema,
+    sanitize_tool_call_id,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -185,6 +191,11 @@ class OpenAIChatToolOps(BaseToolOps):
         tool_type = ir_tool.get("type", "function")
         metadata = ir_tool.get("metadata") or {}
 
+        # OpenAI Chat has no native server tools: drop client-declared
+        # intrinsic definitions (they cannot be expressed here).
+        if tool_type == "intrinsic":
+            return {}
+
         if tool_type == "custom" or metadata.get("provider_type") == "custom":
             custom: dict[str, Any] = {
                 "name": ir_tool["name"],
@@ -254,6 +265,20 @@ class OpenAIChatToolOps(BaseToolOps):
             )
 
         func = provider_tool.get("function", {})
+        # Client-declared intrinsic tool: a function named ``intrinsic__<kind>``
+        # (OpenAI Chat has no native server tools).  Promote to an IR
+        # intrinsic definition so the target converter can emit its native
+        # server tool.
+        kind = intrinsic_name_to_kind(func.get("name", ""))
+        if kind:
+            return cast(
+                ToolDefinition,
+                make_intrinsic_tool_definition(
+                    kind,
+                    description=func.get("description", ""),
+                    parameters=func.get("parameters", {}),
+                ),
+            )
         result: dict[str, Any] = {
             "type": "function",
             "name": func.get("name", ""),

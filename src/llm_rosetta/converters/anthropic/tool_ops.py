@@ -31,6 +31,7 @@ from ..base import BaseToolOps
 from ..base.tools import (
     convert_nullable_to_type_array,
     extract_part_ids,
+    get_definition_kind,
     get_intrinsic_kind,
     log_orphan_warnings,
     sanitize_schema,
@@ -39,6 +40,12 @@ from ..base.tools import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Native Anthropic server tools for client-declared intrinsic kinds.
+_ANTHROPIC_INTRINSIC_TOOLS: dict[str, dict[str, Any]] = {
+    "web_search": {"type": "web_search_20250305", "name": "web_search"},
+    "code_execution": {"type": "code_execution_20250522", "name": "code_execution"},
+}
 
 
 # ==================== Orphaned Tool Call Fix ====================
@@ -177,6 +184,17 @@ class AnthropicToolOps(BaseToolOps):
         Returns:
             Anthropic tool definition dict.
         """
+        if ir_tool.get("type") == "intrinsic":
+            kind = get_definition_kind(ir_tool)
+            native = _ANTHROPIC_INTRINSIC_TOOLS.get(kind)
+            if native is None:
+                logger.warning(
+                    "Anthropic has no server tool for intrinsic kind %r; dropping",
+                    kind,
+                )
+                return {}
+            return dict(native)
+
         result: dict[str, Any] = {
             "name": ir_tool["name"],
             "description": ir_tool.get("description", ""),

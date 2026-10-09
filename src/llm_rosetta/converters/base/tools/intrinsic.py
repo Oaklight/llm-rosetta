@@ -168,3 +168,48 @@ def intrinsic_result_to_function(part: dict[str, Any]) -> dict[str, Any]:
     if "cache_hint" in part:
         translated["cache_hint"] = part["cache_hint"]
     return translated
+
+
+# ---------------------------------------------------------------------------
+# Client-side declaration convention
+# ---------------------------------------------------------------------------
+#
+# APIs without native server tools (OpenAI Chat) cannot express an intrinsic
+# tool directly.  Convention: a client declares a function tool whose name is
+# ``intrinsic__<kind>`` (e.g. ``intrinsic__web_search``).  Source converters
+# promote it to an IR ``type="intrinsic"`` definition; target converters emit
+# their native server tool (or drop it if they have no equivalent).
+
+INTRINSIC_NAME_PREFIX = "intrinsic__"
+
+
+def intrinsic_name_to_kind(name: str) -> str | None:
+    """Return the intrinsic kind encoded in a client tool name, or ``None``."""
+    if isinstance(name, str) and name.startswith(INTRINSIC_NAME_PREFIX):
+        return name[len(INTRINSIC_NAME_PREFIX) :]
+    return None
+
+
+def make_intrinsic_tool_definition(
+    kind: str,
+    *,
+    description: str = "",
+    parameters: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build an IR ToolDefinition of ``type="intrinsic"`` from a kind."""
+    return {
+        "type": "intrinsic",
+        "name": f"{INTRINSIC_NAME_PREFIX}{kind}",
+        "description": description,
+        "parameters": parameters or {},
+        "metadata": {"intrinsic_kind": kind},
+    }
+
+
+def get_definition_kind(ir_tool: Any) -> str:
+    """Read the intrinsic kind from an IR ToolDefinition (metadata or name)."""
+    meta = ir_tool.get("metadata") or {}
+    kind = meta.get("intrinsic_kind")
+    if kind:
+        return kind
+    return intrinsic_name_to_kind(ir_tool.get("name", "")) or ""

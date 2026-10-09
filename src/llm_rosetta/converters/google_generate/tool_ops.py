@@ -14,6 +14,7 @@ Google-specific:
 - Tool choice uses ToolConfig → FunctionCallingConfig (mode: NONE/AUTO/ANY)
 """
 
+import logging
 import warnings
 from typing import Any, cast
 
@@ -27,11 +28,14 @@ from ...types.ir.tools import ToolCallConfig
 from ..base import BaseToolOps
 from ..base.tools import sanitize_schema, sanitize_tool_call_id
 from ..base.tools.intrinsic import (
+    get_definition_kind,
     get_intrinsic_kind,
     make_intrinsic_tool_call,
     make_intrinsic_tool_result,
 )
 from ._constants import generate_tool_call_id
+
+logger = logging.getLogger(__name__)
 
 # Google generateContent intrinsic tool kinds and their provider-format keys.
 _INTRINSIC_TOOL_KEYS: dict[str, str] = {
@@ -154,11 +158,18 @@ class GoogleGenerateToolOps(BaseToolOps):
             Google Tool dict with function_declarations.
         """
         if ir_tool.get("type") == "intrinsic":
-            kind = (ir_tool.get("metadata") or {}).get(
-                "intrinsic_kind", ir_tool["name"]
-            )
-
-            return {kind: ir_tool.get("parameters") or {}}
+            kind = get_definition_kind(ir_tool)
+            key = _INTRINSIC_TOOL_KEYS.get(kind)
+            if key is None:
+                logger.warning(
+                    "Google Generate has no server tool for intrinsic kind %r;"
+                    " dropping",
+                    kind,
+                )
+                return {}
+            # Server-tool config is provider-defined; the client's function
+            # schema does not apply here.
+            return {key: {}}
 
         func_decl: dict[str, Any] = {
             "name": ir_tool["name"],

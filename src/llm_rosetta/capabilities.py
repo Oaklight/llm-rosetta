@@ -362,10 +362,12 @@ def translate_intrinsic_tools(
 ) -> dict[str, Any]:
     """Translate intrinsic tools for cross-format conversion.
 
-    Tool **definitions** are stripped (they are request-level declarations
-    that cannot be translated).  Tool **calls and results** in conversation
-    history are degraded to function-typed equivalents so the target model
-    retains the semantic context.
+    Tool **definitions** are kept so the target converter can emit its own
+    native server tool (each converter's ``ir_tool_definition_to_p`` maps
+    the intrinsic kind to a native tool, or drops it if it has no
+    equivalent).  Tool **calls and results** in conversation history are
+    degraded to function-typed equivalents so the target model retains the
+    semantic context.
 
     No-op when same_format is True.
 
@@ -387,28 +389,21 @@ def translate_intrinsic_tools(
         return ir_request
 
     ir_request = dict(ir_request)
-    stripped_defs = 0
     translated_parts = 0
 
-    if has_intrinsic_defs:
-        ir_request["tools"] = [
-            t
-            for t in tools
-            if not (isinstance(t, dict) and t.get("type") == "intrinsic")
-        ]
-        stripped_defs = len(tools) - len(ir_request["tools"])
-
+    # Definitions are left in place; the target converter maps each intrinsic
+    # kind to its native server tool (or drops it).  See #839 / #880.
     if has_parts:
         ir_request["messages"], translated_parts = _translate_intrinsic_in_messages(
             messages
         )
 
-    if stripped_defs or translated_parts:
+    if has_intrinsic_defs or translated_parts:
         logger.info(
-            "[%s] intrinsic tools: stripped %d definition(s), "
-            "translated %d part(s) for cross-format conversion",
+            "[%s] intrinsic tools: kept definitions=%s, translated %d part(s) "
+            "for cross-format conversion",
             request_id,
-            stripped_defs,
+            bool(has_intrinsic_defs),
             translated_parts,
         )
 
