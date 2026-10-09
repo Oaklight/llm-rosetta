@@ -34,6 +34,7 @@ from ..base.tools import (
     log_orphan_warnings,
     make_intrinsic_tool_call,
     sanitize_schema,
+    set_intrinsic_kind,
     sanitize_tool_call_id,
 )
 
@@ -46,6 +47,14 @@ ADDITIONAL_TOOLS_ITEM_TYPE = "additional_tools"
 _RESULT_ITEM_TOOL_TYPES: dict[str, Literal["custom", "mcp"]] = {
     "custom_tool_call_output": "custom",
     "mcp_call_output": "mcp",
+}
+
+_INTRINSIC_RESULT_TYPES: dict[str, str] = {
+    "code_interpreter_call_output": "code_interpreter",
+    "web_search_call_output": "web_search",
+    "file_search_call_output": "file_search",
+    "shell_call_output": "shell",
+    "computer_call_output": "computer_use",
 }
 
 
@@ -933,9 +942,14 @@ class OpenAIResponsesToolOps(BaseToolOps):
         # Record the non-default types so the outbound leg can emit the
         # same item kind.  The context it would otherwise consult is only
         # populated while streaming a response, never by parsing history.
-        tool_type = _RESULT_ITEM_TOOL_TYPES.get(provider_tool_result.get("type", ""))
+        item_type = provider_tool_result.get("type", "")
+        tool_type = _RESULT_ITEM_TOOL_TYPES.get(item_type)
         if tool_type is not None:
             part["tool_type"] = tool_type
+        intrinsic_kind = _INTRINSIC_RESULT_TYPES.get(item_type)
+        if intrinsic_kind is not None:
+            part["tool_type"] = "intrinsic"
+            set_intrinsic_kind(part, intrinsic_kind)
         return part
 
     # ==================== Tool Config ====================
