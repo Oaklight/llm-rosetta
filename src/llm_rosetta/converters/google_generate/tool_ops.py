@@ -41,11 +41,6 @@ _INTRINSIC_TOOL_KEYS: dict[str, str] = {
     "codeExecution": "code_execution",
 }
 
-_INTRINSIC_KIND_TO_PROVIDER_KEY: dict[str, str] = {
-    "google_search": "google_search",
-    "code_execution": "code_execution",
-}
-
 
 def _normalize_schema_types(schema: Any, to_upper: bool = False) -> Any:
     """Recursively normalize ``type`` values in a JSON Schema dict.
@@ -162,8 +157,8 @@ class GoogleGenerateToolOps(BaseToolOps):
             kind = (ir_tool.get("metadata") or {}).get(
                 "intrinsic_kind", ir_tool["name"]
             )
-            provider_key = _INTRINSIC_KIND_TO_PROVIDER_KEY.get(kind, kind)
-            return {provider_key: ir_tool.get("parameters") or {}}
+
+            return {kind: ir_tool.get("parameters") or {}}
 
         func_decl: dict[str, Any] = {
             "name": ir_tool["name"],
@@ -587,8 +582,10 @@ class GoogleGenerateToolOps(BaseToolOps):
     def ir_intrinsic_call_to_p(ir_part: ToolCallPart) -> dict[str, Any] | None:
         """IR intrinsic ToolCallPart → Google intrinsic part.
 
-        Currently supports ``code_execution`` (→ ``executableCode``).
-        Returns ``None`` for unsupported intrinsic kinds.
+        Only ``code_execution`` has inline content parts
+        (``executableCode``).  ``google_search`` is definition-only —
+        Google surfaces search results via ``groundingMetadata``, not
+        as content parts.
         """
         kind = get_intrinsic_kind(ir_part)
         if kind == "code_execution":
@@ -598,14 +595,20 @@ class GoogleGenerateToolOps(BaseToolOps):
                     "language": ir_part.get("tool_input", {}).get("language", "PYTHON"),
                 }
             }
+        if kind:
+            warnings.warn(
+                f"Unsupported intrinsic kind {kind!r} for Google Generate "
+                f"call part — dropping silently"
+            )
         return None
 
     @staticmethod
     def ir_intrinsic_result_to_p(ir_part: ToolResultPart) -> dict[str, Any] | None:
         """IR intrinsic ToolResultPart → Google intrinsic result part.
 
-        Currently supports ``code_execution`` (→ ``codeExecutionResult``).
-        Returns ``None`` for unsupported intrinsic kinds.
+        Only ``code_execution`` has inline result parts.
+        See :meth:`ir_intrinsic_call_to_p` for why ``google_search``
+        is definition-only.
         """
         kind = get_intrinsic_kind(ir_part)
         if kind == "code_execution":
@@ -617,6 +620,11 @@ class GoogleGenerateToolOps(BaseToolOps):
                     "outcome": outcome,
                 }
             }
+        if kind:
+            warnings.warn(
+                f"Unsupported intrinsic kind {kind!r} for Google Generate "
+                f"result part — dropping silently"
+            )
         return None
 
     @staticmethod
