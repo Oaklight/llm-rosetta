@@ -26,7 +26,25 @@ from ...types.ir import (
 from ...types.ir.tools import ToolCallConfig
 from ..base import BaseToolOps
 from ..base.tools import sanitize_schema, sanitize_tool_call_id
+from ..base.tools.intrinsic import (
+    get_intrinsic_kind,
+    make_intrinsic_tool_call,
+    make_intrinsic_tool_result,
+)
 from ._constants import generate_tool_call_id
+
+# Google generateContent intrinsic tool kinds and their provider-format keys.
+_INTRINSIC_TOOL_KEYS: dict[str, str] = {
+    "google_search": "google_search",
+    "googleSearch": "google_search",
+    "code_execution": "code_execution",
+    "codeExecution": "code_execution",
+}
+
+_INTRINSIC_KIND_TO_PROVIDER_KEY: dict[str, str] = {
+    "google_search": "google_search",
+    "code_execution": "code_execution",
+}
 
 
 def _normalize_schema_types(schema: Any, to_upper: bool = False) -> Any:
@@ -140,6 +158,13 @@ class GoogleGenerateToolOps(BaseToolOps):
         Returns:
             Google Tool dict with function_declarations.
         """
+        if ir_tool.get("type") == "intrinsic":
+            kind = (ir_tool.get("metadata") or {}).get(
+                "intrinsic_kind", ir_tool["name"]
+            )
+            provider_key = _INTRINSIC_KIND_TO_PROVIDER_KEY.get(kind, kind)
+            return {provider_key: ir_tool.get("parameters") or {}}
+
         func_decl: dict[str, Any] = {
             "name": ir_tool["name"],
             "description": ir_tool.get("description", ""),
@@ -208,6 +233,20 @@ class GoogleGenerateToolOps(BaseToolOps):
             if len(results) == 1:
                 return results[0]
             return results
+
+        # Intrinsic tool declarations (e.g. {"google_search": {}}, {"code_execution": {}})
+        for key, kind in _INTRINSIC_TOOL_KEYS.items():
+            if key in provider_tool:
+                return cast(
+                    ToolDefinition,
+                    {
+                        "type": "intrinsic",
+                        "name": kind,
+                        "description": "",
+                        "parameters": provider_tool[key] or {},
+                        "metadata": {"intrinsic_kind": kind},
+                    },
+                )
 
         # Bare function declaration (no wrapper)
         func = provider_tool
@@ -541,6 +580,89 @@ class GoogleGenerateToolOps(BaseToolOps):
             result=result,
             is_error=is_error,
         )
+
+    # ==================== Intrinsic Tool Parts ====================
+
+    @staticmethod
+    def ir_intrinsic_call_to_p(ir_part: ToolCallPart) -> dict[str, Any] | None:
+        """IR intrinsic ToolCallPart → Google intrinsic part.
+
+        Currently supports ``code_execution`` (→ ``executableCode``).
+        Returns ``None`` for unsupported intrinsic kinds.
+        """
+        kind = get_intrinsic_kind(ir_part)
+        if kind == "code_execution":
+            return {
+                "executableCode": {
+                    "code": ir_part.get("tool_input", {}).get("code", ""),
+                    "language": ir_part.get("tool_input", {}).get("language", "PYTHON"),
+                }
+            }
+        return None
+
+    @staticmethod
+    def ir_intrinsic_result_to_p(ir_part: ToolResultPart) -> dict[str, Any] | None:
+        """IR intrinsic ToolResultPart → Google intrinsic result part.
+
+        Currently supports ``code_execution`` (→ ``codeExecutionResult``).
+        Returns ``None`` for unsupported intrinsic kinds.
+        """
+        kind = get_intrinsic_kind(ir_part)
+        if kind == "code_execution":
+            outcome = "OUTCOME_FAILED" if ir_part.get("is_error") else "OUTCOME_OK"
+            result = ir_part.get("result", "")
+            return {
+                "codeExecutionResult": {
+                    "output": result if isinstance(result, str) else str(result),
+                    "outcome": outcome,
+                }
+            }
+        return None
+
+    @staticmethod
+    def p_intrinsic_call_to_ir(part: dict[str, Any]) -> ToolCallPart | None:
+        """Google intrinsic part (executableCode) → IR intrinsic ToolCallPart.
+
+        Returns ``None`` if the part does not contain a recognized
+        intrinsic call key.
+        """
+        exec_code = part.get("executableCode") or part.get("executable_code")
+        if exec_code is not None:
+            return cast(
+                ToolCallPart,
+                make_intrinsic_tool_call(
+                    tool_call_id=f"google_exec_{generate_tool_call_id()}",
+                    tool_name="code_execution",
+                    tool_input={
+                        "code": exec_code.get("code", ""),
+                        "language": exec_code.get("language", "PYTHON"),
+                    },
+                    intrinsic_kind="code_execution",
+                ),
+            )
+        return None
+
+    @staticmethod
+    def p_intrinsic_result_to_ir(part: dict[str, Any]) -> ToolResultPart | None:
+        """Google intrinsic part (codeExecutionResult) → IR intrinsic ToolResultPart.
+
+        Returns ``None`` if the part does not contain a recognized
+        intrinsic result key.
+        """
+        code_result = part.get("codeExecutionResult") or part.get(
+            "code_execution_result"
+        )
+        if code_result is not None:
+            return cast(
+                ToolResultPart,
+                make_intrinsic_tool_result(
+                    tool_call_id="",
+                    result=code_result.get("output", ""),
+                    intrinsic_kind="code_execution",
+                    is_error=code_result.get("outcome", "OUTCOME_OK") != "OUTCOME_OK",
+                ),
+            )
+        return None
 
     # ==================== Tool Config ====================
 
