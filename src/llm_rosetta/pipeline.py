@@ -51,6 +51,11 @@ from llm_rosetta.transforms.ir import (
     apply_ir_transforms as _apply_ir_transforms_exec,
 )
 
+
+class _HasIntrinsicTransforms(Protocol):
+    _INTRINSIC_IR_TRANSFORMS: tuple
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -85,7 +90,7 @@ def apply_ir_transforms(
     model_capabilities: list[str] | None = None,
     request_id: str = "-",
     hoist_system_messages: bool = True,
-    converter: Any = None,
+    converter: _HasIntrinsicTransforms | None = None,
 ) -> dict[str, Any]:
     """Apply converter-intrinsic and shim-driven IR-level transforms.
 

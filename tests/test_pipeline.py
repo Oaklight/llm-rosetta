@@ -1216,7 +1216,7 @@ class TestIntrinsicIrTransforms:
         class _PlainConverter:
             pass
 
-        result = apply_ir_transforms(ir, None, converter=_PlainConverter())
+        result = apply_ir_transforms(ir, None, converter=_PlainConverter())  # ty: ignore[invalid-argument-type]
         assert result == original
 
     def test_openai_chat_has_no_intrinsic_transforms(self):
