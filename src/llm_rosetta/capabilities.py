@@ -29,6 +29,8 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from llm_rosetta.converters.base.tools.intrinsic import (
+    intrinsic_call_to_function as _intrinsic_call_to_function,
+    intrinsic_result_to_function as _intrinsic_result_to_function,
     is_intrinsic_part as _is_intrinsic_part,
 )
 
@@ -272,6 +274,10 @@ def strip_intrinsic_tools(
     Tool-role messages that become empty after stripping are removed entirely.
 
     No-op when ``same_format`` is True.
+
+    .. deprecated::
+       Prefer :func:`translate_intrinsic_tools`, which preserves
+       conversation context instead of discarding it.
     """
     if same_format:
         return ir_request
@@ -309,6 +315,103 @@ def strip_intrinsic_tools(
             "[%s] stripped %d intrinsic tool element(s) for cross-format conversion",
             request_id,
             stripped_count,
+        )
+
+    return ir_request
+
+
+def _translate_intrinsic_in_messages(
+    messages: list[Any],
+) -> tuple[list[Any], int]:
+    """Translate intrinsic tool parts to function equivalents in messages."""
+    new_messages: list[Any] = []
+    translated = 0
+    for msg in messages:
+        if not isinstance(msg, dict):
+            new_messages.append(msg)
+            continue
+        content = msg.get("content")
+        if not isinstance(content, list):
+            new_messages.append(msg)
+            continue
+        new_content: list[Any] = []
+        changed = False
+        for part in content:
+            if not _is_intrinsic_part(part):
+                new_content.append(part)
+                continue
+            if part.get("type") == "tool_call":
+                new_content.append(_intrinsic_call_to_function(part))
+            elif part.get("type") == "tool_result":
+                new_content.append(_intrinsic_result_to_function(part))
+            else:
+                new_content.append(part)
+                continue
+            translated += 1
+            changed = True
+        if changed:
+            new_messages.append({**msg, "content": new_content})
+        else:
+            new_messages.append(msg)
+    return new_messages, translated
+
+
+def translate_intrinsic_tools(
+    ir_request: dict[str, Any],
+    *,
+    same_format: bool = False,
+    request_id: str = "-",
+) -> dict[str, Any]:
+    """Translate intrinsic tools for cross-format conversion.
+
+    Tool **definitions** are stripped (they are request-level declarations
+    that cannot be translated).  Tool **calls and results** in conversation
+    history are degraded to function-typed equivalents so the target model
+    retains the semantic context.
+
+    No-op when same_format is True.
+
+    .. versionadded:: 0.15.0
+       Replaces :func:`strip_intrinsic_tools` in the pipeline.
+    """
+    if same_format:
+        return ir_request
+
+    tools = ir_request.get("tools")
+    has_intrinsic_defs = tools and any(
+        isinstance(t, dict) and t.get("type") == "intrinsic" for t in tools
+    )
+
+    messages = ir_request.get("messages")
+    has_parts = messages and _has_intrinsic_parts(messages)
+
+    if not has_intrinsic_defs and not has_parts:
+        return ir_request
+
+    ir_request = dict(ir_request)
+    stripped_defs = 0
+    translated_parts = 0
+
+    if has_intrinsic_defs:
+        ir_request["tools"] = [
+            t
+            for t in tools
+            if not (isinstance(t, dict) and t.get("type") == "intrinsic")
+        ]
+        stripped_defs = len(tools) - len(ir_request["tools"])
+
+    if has_parts:
+        ir_request["messages"], translated_parts = _translate_intrinsic_in_messages(
+            messages
+        )
+
+    if stripped_defs or translated_parts:
+        logger.info(
+            "[%s] intrinsic tools: stripped %d definition(s), "
+            "translated %d part(s) for cross-format conversion",
+            request_id,
+            stripped_defs,
+            translated_parts,
         )
 
     return ir_request
