@@ -284,7 +284,7 @@ def _build_function_call_item(
 
 
 _INTRINSIC_KIND_TO_ITEM: dict[str, str] = {
-    "web_search": "function_web_search",
+    "web_search": "web_search_call",
     "code_interpreter": "code_interpreter_call",
     "file_search": "file_search_call",
     "shell": "shell_call",
@@ -314,7 +314,7 @@ def _ir_intrinsic_to_responses(
         "call_id": tool_call_id,
         "arguments": arguments,
     }
-    if item_type == "function_web_search":
+    if item_type == "web_search_call":
         result_item["query"] = (
             tool_input.get("query", "") if isinstance(tool_input, dict) else ""
         )
