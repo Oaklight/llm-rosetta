@@ -63,7 +63,7 @@ logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/deepse
 Example `transforms.py`:
 
 ```python
-from llm_rosetta.shims.transforms import strip_fields
+from llm_rosetta.transforms import strip_fields
 
 # DeepSeek does not support n, logit_bias, or seed
 post_ir_transforms = (strip_fields("n", "logit_bias", "seed"),)
@@ -336,7 +336,7 @@ response_body_transforms: true
 
 ```python
 # transforms.py
-from llm_rosetta.shims.transforms import harmony_tool_call_safeguard
+from llm_rosetta.transforms import harmony_tool_call_safeguard
 
 response_body_transforms = (harmony_tool_call_safeguard(),)
 ```
@@ -417,7 +417,7 @@ Register a custom provider shim for any OpenAI-compatible service:
 
 ```python
 from llm_rosetta import ProviderShim, register_shim
-from llm_rosetta.shims.transforms import strip_fields
+from llm_rosetta.transforms import strip_fields
 
 my_shim = ProviderShim(
     name="my-provider",
@@ -449,7 +449,7 @@ To add a new provider to the built-in registry:
 3. Optionally add a `transforms.py` if the provider has field-level quirks:
 
     ```python
-    from llm_rosetta.shims.transforms import strip_fields
+    from llm_rosetta.transforms import strip_fields
 
     post_ir_transforms = (strip_fields("unsupported_field"),)
     pre_ir_transforms = ()

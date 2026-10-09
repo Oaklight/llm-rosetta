@@ -20,12 +20,12 @@ title: Shims
 
 ## Transforms
 
-::: llm_rosetta.shims.transforms.Transform
+::: llm_rosetta.transforms.Transform
 
-::: llm_rosetta.shims.transforms.apply_transforms
+::: llm_rosetta.transforms.apply_transforms
 
-::: llm_rosetta.shims.transforms.strip_fields
+::: llm_rosetta.transforms.strip_fields
 
-::: llm_rosetta.shims.transforms.rename_field
+::: llm_rosetta.transforms.rename_field
 
-::: llm_rosetta.shims.transforms.set_defaults
+::: llm_rosetta.transforms.set_defaults
