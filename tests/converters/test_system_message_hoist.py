@@ -226,28 +226,22 @@ class TestTransformIntegration:
         t = hoist_late_system_messages()
         assert repr(t) == "hoist_late_system_messages()"
 
-    def test_argo_anthropic_includes_hoist(self):
-        from llm_rosetta.shims.provider_shim import get_shim
+    def test_anthropic_converter_has_intrinsic_hoist(self):
+        from llm_rosetta.converters.anthropic import AnthropicConverter
 
-        shim = get_shim("argo--anthropic")
-        assert shim is not None
-        names = [repr(t) for t in shim.ir_transforms]
+        names = [repr(t) for t in AnthropicConverter._INTRINSIC_IR_TRANSFORMS]
         assert "hoist_late_system_messages()" in names
 
-    def test_openrouter_anthropic_includes_hoist(self):
-        from llm_rosetta.shims.provider_shim import get_shim
+    def test_google_generate_converter_has_intrinsic_hoist(self):
+        from llm_rosetta.converters.google_generate import GoogleGenerateConverter
 
-        shim = get_shim("openrouter--anthropic")
-        assert shim is not None
-        names = [repr(t) for t in shim.ir_transforms]
+        names = [repr(t) for t in GoogleGenerateConverter._INTRINSIC_IR_TRANSFORMS]
         assert "hoist_late_system_messages()" in names
 
     def test_hoist_before_cache_breakpoints(self):
-        from llm_rosetta.shims.provider_shim import get_shim
+        from llm_rosetta.converters.anthropic import AnthropicConverter
 
-        shim = get_shim("argo--anthropic")
-        assert shim is not None
-        names = [repr(t) for t in shim.ir_transforms]
+        names = [repr(t) for t in AnthropicConverter._INTRINSIC_IR_TRANSFORMS]
         hoist_idx = names.index("hoist_late_system_messages()")
         cache_idx = names.index("auto_cache_breakpoints()")
         assert hoist_idx < cache_idx
@@ -273,7 +267,11 @@ class TestTransformIntegration:
                 {"role": "user", "content": [{"type": "text", "text": "ok"}]},
             ],
         }
-        result = apply_ir_transforms(ir_request, "argo--anthropic")
+        from llm_rosetta.converters.anthropic import AnthropicConverter
+
+        result = apply_ir_transforms(
+            ir_request, "argo--anthropic", converter=AnthropicConverter()
+        )
         # No system messages in the messages array
         for msg in result["messages"]:
             assert msg["role"] != "system", f"system message leaked: {msg}"
@@ -311,7 +309,11 @@ class TestTransformIntegration:
                 {"role": "user", "content": [{"type": "text", "text": "ok"}]},
             ],
         }
-        hoisted = apply_ir_transforms(ir_request, "argo--anthropic")
+        from llm_rosetta.converters.anthropic import AnthropicConverter
+
+        hoisted = apply_ir_transforms(
+            ir_request, "argo--anthropic", converter=AnthropicConverter()
+        )
 
         # No system messages remain
         for msg in hoisted["messages"]:

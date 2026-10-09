@@ -67,6 +67,12 @@ class BaseConverter(ABC):
     # Enable/disable IR validation on from_provider output
     validate_output: bool = True
 
+    # IR transforms that are intrinsic to this converter's target format.
+    # Applied by the pipeline before shim transforms, even when no shim is
+    # configured.  Subclasses override when the target API cannot handle
+    # certain IR patterns (e.g. inline system messages).
+    _INTRINSIC_IR_TRANSFORMS: tuple = ()
+
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
         if (

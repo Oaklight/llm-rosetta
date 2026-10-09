@@ -50,6 +50,7 @@ from ..base.tools import (
     strip_orphaned_tool_config,
 )
 from ..base.helpers.system_message_hoist import hoist_system_in_converter
+from ...shims.transforms import auto_cache_breakpoints, hoist_late_system_messages
 from ._constants import (
     ANTHROPIC_REASON_FROM_PROVIDER,
     ANTHROPIC_REASON_TO_PROVIDER,
@@ -121,6 +122,7 @@ class AnthropicConverter(BaseConverter):
     config_ops_class = AnthropicConfigOps
     _CONVERTER_TAG = "anthropic"
     _PASSTHROUGH_RESTORE_KEY = "content"
+    _INTRINSIC_IR_TRANSFORMS = (hoist_late_system_messages(), auto_cache_breakpoints())
 
     def __init__(self):
         self.content_ops = self.content_ops_class()
@@ -155,7 +157,7 @@ class AnthropicConverter(BaseConverter):
         ir_messages = assign_tool_batch_ids(ir_messages)
         ctx.warnings.extend(strip_orphaned_tool_config(ir_request))
 
-        # Hoist system messages: leading → system_instruction, late → user envelope.
+        # Defense-in-depth: idempotent with pipeline's intrinsic transform.
         ir_messages, hoisted_si = hoist_system_in_converter(ir_messages, ir_request)
         if hoisted_si and "system" not in result:
             result["system"] = self.message_ops._ir_system_to_p(hoisted_si)

@@ -26,8 +26,6 @@ from typing import Any
 
 from llm_rosetta.shims.transforms import (
     _NamedTransform,
-    auto_cache_breakpoints,
-    hoist_late_system_messages,
     strip_fields_for_model,
 )
 
@@ -153,4 +151,3 @@ post_ir_transforms = (
 pre_ir_transforms = (
     _NamedTransform(_normalize_openai_response, "normalize_openai_response()"),
 )
-ir_transforms = (hoist_late_system_messages(), auto_cache_breakpoints())

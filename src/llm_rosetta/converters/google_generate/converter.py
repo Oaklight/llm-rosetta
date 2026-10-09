@@ -51,6 +51,7 @@ from ..base.tools import (
     strip_orphaned_tool_config,
 )
 from ..base.helpers.system_message_hoist import hoist_system_in_converter
+from ...shims.transforms import hoist_late_system_messages
 from ._constants import (
     GOOGLE_REASON_FROM_PROVIDER,
     GOOGLE_REASON_TO_PROVIDER,
@@ -104,7 +105,10 @@ def _hoist_and_extract_system(
     ir_request: Mapping[str, Any],
     system_instruction: dict[str, Any] | None,
 ) -> tuple[list, dict[str, Any] | None]:
-    """Hoist late system messages and extract leading ones for system_instruction."""
+    """Hoist late system messages and extract leading ones for system_instruction.
+
+    Defense-in-depth: idempotent with pipeline's intrinsic transform.
+    """
     ir_messages, hoisted_si = hoist_system_in_converter(ir_messages, ir_request)
     if hoisted_si and system_instruction is None:
         texts = [
@@ -152,6 +156,7 @@ class GoogleGenerateConverter(BaseConverter):
     config_ops_class = GoogleGenerateConfigOps
     _CONVERTER_TAG = "google_generate"
     _PASSTHROUGH_RESTORE_KEY = "candidates"
+    _INTRINSIC_IR_TRANSFORMS = (hoist_late_system_messages(),)
 
     def __init__(self):
         self.content_ops = self.content_ops_class()

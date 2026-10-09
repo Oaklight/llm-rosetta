@@ -84,10 +84,11 @@ class TestSystemMessagePreservation:
         )
         assert found_in_user, "Late system should be rewritten as user envelope"
 
-        # Top-level system should be unchanged
-        assert out["system"] == [
-            {"type": "text", "text": "You are a careful assistant."}
-        ]
+        # Top-level system text should be preserved (may have cache_control)
+        system_parts = out["system"]
+        assert len(system_parts) == 1
+        assert system_parts[0]["type"] == "text"
+        assert system_parts[0]["text"] == "You are a careful assistant."
 
     def test_late_system_preserved_without_top_level_system(self):
         """Late system message stays in-place, not hoisted to top-level."""
@@ -122,7 +123,10 @@ class TestSystemMessagePreservation:
         pipe = ConversionPipeline("anthropic", "anthropic")
         out = pipe.convert_request(req)
 
-        assert out.get("system") == [{"type": "text", "text": "You are helpful."}]
+        system_parts = out.get("system")
+        assert system_parts is not None and len(system_parts) == 1
+        assert system_parts[0]["type"] == "text"
+        assert system_parts[0]["text"] == "You are helpful."
 
 
 # ---------------------------------------------------------------------------
