@@ -54,6 +54,19 @@ msg = create_tool_message(
 | `CitationPart` | 来源引用 |
 | `AudioPart` | 音频内容 |
 
+### ReasoningPart.signature 与 redacted_data
+
+`ReasoningPart` 有两个用于不透明 provider 数据的可选字段，语义不同：
+
+- **`signature`** —— 与可见推理文本**共存**的验证签名。对应 Anthropic
+  `thinking.signature`、Google `thoughtSignature`、Google Interactions
+  `thought.signature`。
+- **`redacted_data`** —— **代替**可见文本的不透明内容块（加密或被编辑的
+  推理内容），原样往返。对应 Anthropic `redacted_thinking.data` 以及
+  OpenAI Responses/Chat 的 `encrypted_content`。
+
+流式处理有自己专用的字段 `ReasoningDeltaEvent.encrypted_content`，不受此区分影响。
+
 ## IRRequest
 
 ```python
