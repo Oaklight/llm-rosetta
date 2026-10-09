@@ -56,6 +56,22 @@ msg = create_tool_message(
 | `CitationPart` | Source citations |
 | `AudioPart` | Audio content |
 
+### ReasoningPart.signature vs. redacted_data
+
+`ReasoningPart` has two optional fields for opaque provider data, with distinct
+semantics:
+
+- **`signature`** — a verification signature that *coexists* with visible
+  reasoning text. Maps to Anthropic `thinking.signature`, Google
+  `thoughtSignature`, and Google Interactions `thought.signature`.
+- **`redacted_data`** — an opaque content blob *instead of* visible text
+  (encrypted or redacted reasoning), round-tripped verbatim. Maps to
+  Anthropic `redacted_thinking.data` and OpenAI Responses/Chat
+  `encrypted_content`.
+
+Streaming has its own dedicated field, `ReasoningDeltaEvent.encrypted_content`,
+which is unaffected by this distinction.
+
 ## IRRequest
 
 ```python

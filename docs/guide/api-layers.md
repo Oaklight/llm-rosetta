@@ -55,10 +55,10 @@ Implementation details used within the library. Import at your own risk — thes
 |----------|----------|-------------|
 | Type mappings | `TYPE_CLASS_MAP`, `get_part_type`, `isinstance_part` | `llm_rosetta.types.ir.type_guards` |
 | Validation | `ValidationError`, `validate_ir_request`, `validate_ir_response` | `llm_rosetta.types.ir.validation` |
-| Ops base classes | `BaseContentOps`, `BaseToolOps`, `BaseMessageOps`, `BaseConfigOps` | `llm_rosetta.converters.base.content`, etc. |
-| Schema utilities | `sanitize_schema` | `llm_rosetta.converters.base.helpers.schema` |
-| Content helpers | `convert_content_blocks_to_ir`, `convert_ir_content_blocks_to_p` | `llm_rosetta.converters.base.helpers.tool_content` |
-| Orphan fix | `fix_orphaned_tool_calls_ir`, `strip_orphaned_tool_config` | `llm_rosetta.converters.base.helpers.tool_orphan_fix` |
+| Ops base classes | `BaseContentOps`, `BaseToolOps`, `BaseMessageOps`, `BaseConfigOps` | `llm_rosetta.converters.base.content`, `llm_rosetta.converters.base.tools`, etc. |
+| Schema utilities | `sanitize_schema` | `llm_rosetta.converters.base.tools.schema` |
+| Content helpers | `convert_content_blocks_to_ir`, `convert_ir_content_blocks_to_p` | `llm_rosetta.converters.base.tools.content` |
+| Orphan fix | `fix_orphaned_tool_calls_ir`, `strip_orphaned_tool_config` | `llm_rosetta.converters.base.tools.orphan_fix` |
 
 ```python
 # Internal: use deep submodule imports
@@ -77,8 +77,8 @@ llm_rosetta.types.ir.helpers             # Advanced: extract_*, create_tool_resu
 llm_rosetta.types.ir.validation          # Internal: validation utilities
 llm_rosetta.converters.base              # Stable: BaseConverter, context classes
 llm_rosetta.converters.base.content      # Internal: BaseContentOps
-llm_rosetta.converters.base.tools        # Internal: BaseToolOps (pure ABC)
-llm_rosetta.converters.base.helpers      # Internal: utility functions (schema, cache, orphan fix, etc.)
+llm_rosetta.converters.base.tools        # Internal: BaseToolOps + tool helpers (schema, orphan fix, batch, intrinsic, etc.)
+llm_rosetta.converters.base.helpers      # Internal: non-tool utility functions (cache, reasoning, truncate, etc.)
 ```
 
 ## CI Enforcement
