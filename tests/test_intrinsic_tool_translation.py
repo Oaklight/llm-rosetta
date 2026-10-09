@@ -1,6 +1,7 @@
 """Tests for translate_intrinsic_tools and intrinsic-to-function helpers."""
 
 import json
+import re
 
 import pytest
 
@@ -545,3 +546,148 @@ class TestTranslateIntrinsicTools:
         result = translate_intrinsic_tools(ir_request, same_format=False)
         assert result["messages"][0]["content"] == "plain string content"
         assert result["messages"][1]["content"][0]["tool_type"] == "function"
+
+
+class TestFlattenResultEdges:
+    """Explicit coverage for ``_flatten_result`` non-string inputs."""
+
+    def _flatten(self, result):
+        from llm_rosetta.converters.base.tools.intrinsic import _flatten_result
+
+        return _flatten_result(result)
+
+    def test_none(self):
+        assert self._flatten(None) == "None"
+
+    def test_int(self):
+        assert self._flatten(42) == "42"
+
+    def test_float(self):
+        assert self._flatten(3.14) == "3.14"
+
+    def test_bool(self):
+        assert self._flatten(True) == "True"
+
+    def test_empty_list(self):
+        assert self._flatten([]) == ""
+
+    def test_nested_dict_in_list(self):
+        out = self._flatten([{"nested": {"a": 1}}])
+        assert json.loads(out) == {"nested": {"a": 1}}
+
+
+class TestTranslatedMetadata:
+    """Extra provider_metadata keys survive translation."""
+
+    def test_extra_keys_preserved_on_call(self):
+        part = {
+            "type": "tool_call",
+            "tool_call_id": "c1",
+            "tool_name": "ws",
+            "tool_input": {},
+            "tool_type": "intrinsic",
+            "provider_metadata": {"intrinsic_kind": "web_search", "trace": "abc"},
+        }
+        pm = intrinsic_call_to_function(part)["provider_metadata"]
+        assert pm["trace"] == "abc"
+        assert pm["_original_intrinsic_kind"] == "web_search"
+        assert "intrinsic_kind" not in pm
+
+    def test_extra_keys_preserved_on_result(self):
+        part = {
+            "type": "tool_result",
+            "tool_call_id": "c1",
+            "result": "ok",
+            "tool_type": "intrinsic",
+            "provider_metadata": {"intrinsic_kind": "web_search", "trace": "xyz"},
+        }
+        pm = intrinsic_result_to_function(part)["provider_metadata"]
+        assert pm["trace"] == "xyz"
+        assert pm["_original_intrinsic_kind"] == "web_search"
+
+
+class TestConverterSerialization:
+    """Translated parts must serialize through real converters.
+
+    These exercise the actual converter name/ID handling so provider-side
+    constraints (e.g. ``^[a-zA-Z0-9_-]+$`` tool names) are caught here.
+    """
+
+    IR_REQUEST = {
+        "model": "m",
+        "max_tokens": 10,
+        "messages": [
+            {
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "tool_call",
+                        "tool_call_id": "call_1",
+                        "tool_name": "ws",
+                        "tool_input": {"query": "hi"},
+                        "tool_type": "intrinsic",
+                        "provider_metadata": {"intrinsic_kind": "web_search"},
+                    }
+                ],
+            },
+            {
+                "role": "tool",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_call_id": "call_1",
+                        "result": "results",
+                        "tool_type": "intrinsic",
+                        "provider_metadata": {"intrinsic_kind": "web_search"},
+                    }
+                ],
+            },
+        ],
+    }
+
+    def _translated(self):
+        return translate_intrinsic_tools(
+            json.loads(json.dumps(self.IR_REQUEST)), same_format=False
+        )
+
+    def test_openai_chat_serialization(self):
+        from llm_rosetta.converters.openai_chat import OpenAIChatConverter
+
+        req = self._translated()
+        body, _ = OpenAIChatConverter().request_to_provider(req)
+        names = [
+            tc["function"]["name"]
+            for m in body["messages"]
+            for tc in m.get("tool_calls", [])
+        ]
+        assert names, "tool call should serialize"
+        for name in names:
+            assert re.match(r"^[a-zA-Z0-9_-]+$", name), name
+
+    def test_anthropic_serialization(self):
+        from llm_rosetta.converters.anthropic import AnthropicConverter
+
+        req = self._translated()
+        body, _ = AnthropicConverter().request_to_provider(req)
+        for m in body["messages"]:
+            content = m.get("content")
+            if isinstance(content, list):
+                for p in content:
+                    name = p.get("name")
+                    if name:
+                        assert re.match(r"^[a-zA-Z0-9_-]+$", name), name
+                    tuid = p.get("tool_use_id")
+                    if tuid:
+                        assert re.match(r"^[a-zA-Z0-9_-]+$", tuid), tuid
+
+    def test_openai_responses_serialization(self):
+        from llm_rosetta.converters.openai_responses import OpenAIResponsesConverter
+
+        req = self._translated()
+        body, _ = OpenAIResponsesConverter().request_to_provider(req)
+        items = body.get("input", [])
+        for item in items:
+            if isinstance(item, dict):
+                name = item.get("name")
+                if name:
+                    assert re.match(r"^[a-zA-Z0-9_-]+$", name), name
