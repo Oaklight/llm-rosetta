@@ -34,6 +34,7 @@ from ...types.ir import (
 )
 from ..base import BaseMessageOps
 from ..base.tools.batch import assign_tool_batch_ids, merge_tool_messages
+from ..base.tools.intrinsic import get_intrinsic_kind, is_intrinsic_part
 from .content_ops import GoogleGenerateContentOps
 from .tool_ops import GoogleGenerateToolOps
 
@@ -62,6 +63,30 @@ def _match_tool_name(result_id: str, known_names: dict[str, list[str]]) -> str:
         if result_id == name or result_id.startswith(name + "_"):
             return name
     return result_id
+
+
+def _pair_intrinsic_ids(content_parts: list[Any], tool_result_parts: list[Any]) -> None:
+    """Pair intrinsic tool results with their calls by kind (in-place).
+
+    Google code_execution puts both ``executableCode`` and
+    ``codeExecutionResult`` in the same model message.  The result
+    gets ``tool_call_id=""`` from ``p_intrinsic_result_to_ir``.
+    Match by ``intrinsic_kind`` so the IDs agree.
+    """
+    calls = [
+        p
+        for p in content_parts
+        if is_intrinsic_part(p) and p.get("type") == "tool_call"
+    ]
+    for result_part in tool_result_parts:
+        if not is_intrinsic_part(result_part) or result_part.get("tool_call_id"):
+            continue
+        r_kind = get_intrinsic_kind(result_part)
+        for call_part in calls:
+            if get_intrinsic_kind(call_part) == r_kind:
+                result_part["tool_call_id"] = call_part["tool_call_id"]
+                calls.remove(call_part)
+                break
 
 
 class GoogleGenerateMessageOps(BaseMessageOps):
@@ -414,11 +439,13 @@ class GoogleGenerateMessageOps(BaseMessageOps):
         if content_parts and not tool_result_parts:
             return {"role": ir_role, "content": content_parts}
 
-        # Mixed: tool results first (to keep them adjacent to the preceding
-        # assistant tool_calls), then regular content.
+        _pair_intrinsic_ids(content_parts, tool_result_parts)
+
+        # Mixed: assistant content (including tool calls) first,
+        # then tool results (paired by ID above).
         return [
-            {"role": "tool", "content": tool_result_parts},
             {"role": ir_role, "content": content_parts},
+            {"role": "tool", "content": tool_result_parts},
         ]
 
     # ==================== System Instruction Helpers ====================

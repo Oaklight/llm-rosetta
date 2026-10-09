@@ -362,16 +362,23 @@ class AnthropicMessageOps(BaseMessageOps):
                 converted_parts = self._p_content_part_to_ir(part)
                 ir_content.extend(converted_parts)
 
-        # Normalize: Anthropic user messages with tool_result parts
-        # should use role="tool" in IR for consistent cross-format handling.
-        if role == "user" and ir_content:
+        # Normalize: Anthropic messages with tool_result parts.
+        # IR requires tool results in role="tool" messages; Anthropic places
+        # them inline in user or assistant content.
+        if role in ("user", "assistant") and ir_content:
             tool_result_parts = [p for p in ir_content if is_tool_result_part(p)]
             if tool_result_parts:
                 other_parts = [p for p in ir_content if not is_tool_result_part(p)]
                 if not other_parts:
-                    # Pure tool_result → normalize to role="tool"
                     return cast(Message, {"role": "tool", "content": ir_content})
-                # Mixed content → split into tool + user messages
+                # Mixed: keep non-result parts in original role, results in tool msg.
+                # assistant: [calls + text, ...] then tool: [results]
+                # user: tool: [results] then user: [text, ...]
+                if role == "assistant":
+                    return [
+                        cast(Message, {"role": "assistant", "content": other_parts}),
+                        cast(Message, {"role": "tool", "content": tool_result_parts}),
+                    ]
                 return [
                     cast(Message, {"role": "tool", "content": tool_result_parts}),
                     cast(Message, {"role": "user", "content": other_parts}),

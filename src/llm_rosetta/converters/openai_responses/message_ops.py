@@ -354,6 +354,8 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
             "shell_call",
             "computer_call",
             "code_interpreter_call",
+            "web_search_call",
+            "file_search_call",
         }
     )
 
@@ -362,7 +364,16 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
     )
 
     _TOOL_RESULT_TYPES = frozenset(
-        {"function_call_output", "custom_tool_call_output", "mcp_call_output"}
+        {
+            "function_call_output",
+            "custom_tool_call_output",
+            "mcp_call_output",
+            "code_interpreter_call_output",
+            "web_search_call_output",
+            "file_search_call_output",
+            "shell_call_output",
+            "computer_call_output",
+        }
     )
 
     @classmethod
