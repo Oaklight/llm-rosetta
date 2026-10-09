@@ -13,7 +13,6 @@ Google-specific:
 - All content is represented as Part objects in a flat list
 """
 
-import uuid
 import warnings
 from collections.abc import Sequence
 from typing import Any, cast
@@ -35,11 +34,6 @@ from ...types.ir import (
 )
 from ..base import BaseMessageOps
 from ..base.tools.batch import assign_tool_batch_ids, merge_tool_messages
-from ..base.tools.intrinsic import (
-    get_intrinsic_kind,
-    make_intrinsic_tool_call,
-    make_intrinsic_tool_result,
-)
 from .content_ops import GoogleGenerateContentOps
 from .tool_ops import GoogleGenerateToolOps
 
@@ -68,30 +62,6 @@ def _match_tool_name(result_id: str, known_names: dict[str, list[str]]) -> str:
         if result_id == name or result_id.startswith(name + "_"):
             return name
     return result_id
-
-
-def _ir_intrinsic_tool_call_to_google(content_part: Any) -> dict[str, Any] | None:
-    if get_intrinsic_kind(content_part) != "code_execution":
-        return None
-    return {
-        "executableCode": {
-            "code": content_part.get("tool_input", {}).get("code", ""),
-            "language": content_part.get("tool_input", {}).get("language", "PYTHON"),
-        }
-    }
-
-
-def _ir_intrinsic_tool_result_to_google(content_part: Any) -> dict[str, Any] | None:
-    if get_intrinsic_kind(content_part) != "code_execution":
-        return None
-    outcome = "OUTCOME_FAILED" if content_part.get("is_error") else "OUTCOME_OK"
-    result = content_part.get("result", "")
-    return {
-        "codeExecutionResult": {
-            "output": result if isinstance(result, str) else str(result),
-            "outcome": outcome,
-        }
-    }
 
 
 class GoogleGenerateMessageOps(BaseMessageOps):
@@ -242,11 +212,11 @@ class GoogleGenerateMessageOps(BaseMessageOps):
             return self.content_ops.ir_refusal_to_p(content_part)
         elif is_tool_call_part(content_part):
             if content_part.get("tool_type") == "intrinsic":
-                return _ir_intrinsic_tool_call_to_google(content_part)
+                return self.tool_ops.ir_intrinsic_call_to_p(content_part)
             return self.tool_ops.ir_tool_call_to_p(content_part)
         elif is_tool_result_part(content_part):
             if content_part.get("tool_type") == "intrinsic":
-                return _ir_intrinsic_tool_result_to_google(content_part)
+                return self.tool_ops.ir_intrinsic_result_to_p(content_part)
             tool_call_id = content_part.get("tool_call_id")
             tool_name = (
                 tool_call_index.get(tool_call_id)
@@ -410,44 +380,15 @@ class GoogleGenerateMessageOps(BaseMessageOps):
                 tool_result_parts.append(self.tool_ops.p_tool_result_to_ir(part))
                 continue
 
-            # Handle executableCode / codeExecutionResult as intrinsic tools
-            exec_code = part.get("executableCode") or part.get("executable_code")
-            if exec_code is not None:
-                call_id = f"google_exec_{uuid.uuid4().hex[:12]}"
-                content_parts.append(
-                    cast(
-                        ContentPart,
-                        make_intrinsic_tool_call(
-                            tool_call_id=call_id,
-                            tool_name="code_execution",
-                            tool_input={
-                                "code": exec_code.get("code", ""),
-                                "language": exec_code.get("language", "PYTHON"),
-                            },
-                            intrinsic_kind="code_execution",
-                        ),
-                    )
-                )
+            # Handle intrinsic tool parts (executableCode, codeExecutionResult)
+            intrinsic_call = self.tool_ops.p_intrinsic_call_to_ir(part)
+            if intrinsic_call is not None:
+                content_parts.append(cast(ContentPart, intrinsic_call))
                 continue
 
-            code_result = part.get("codeExecutionResult") or part.get(
-                "code_execution_result"
-            )
-            if code_result is not None:
-                # Google's codeExecutionResult has no ID field to pair with
-                # executableCode; _reconcile_tool_call_ids handles matching.
-                tool_result_parts.append(
-                    cast(
-                        ContentPart,
-                        make_intrinsic_tool_result(
-                            tool_call_id="",
-                            result=code_result.get("output", ""),
-                            intrinsic_kind="code_execution",
-                            is_error=code_result.get("outcome", "OUTCOME_OK")
-                            != "OUTCOME_OK",
-                        ),
-                    )
-                )
+            intrinsic_result = self.tool_ops.p_intrinsic_result_to_ir(part)
+            if intrinsic_result is not None:
+                tool_result_parts.append(cast(ContentPart, intrinsic_result))
                 continue
 
             # Handle content parts (text, image, file, audio)
