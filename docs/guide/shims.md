@@ -63,7 +63,7 @@ logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/deepse
 `transforms.py` 示例：
 
 ```python
-from llm_rosetta.shims.transforms import strip_fields
+from llm_rosetta.transforms import strip_fields
 
 # DeepSeek 不支持 n、logit_bias 和 seed
 post_ir_transforms = (strip_fields("n", "logit_bias", "seed"),)
@@ -335,7 +335,7 @@ response_body_transforms: true
 
 ```python
 # transforms.py
-from llm_rosetta.shims.transforms import harmony_tool_call_safeguard
+from llm_rosetta.transforms import harmony_tool_call_safeguard
 
 response_body_transforms = (harmony_tool_call_safeguard(),)
 ```
@@ -416,7 +416,7 @@ resolve_base("unknown")        # → "unknown"（直接透传）
 
 ```python
 from llm_rosetta import ProviderShim, register_shim
-from llm_rosetta.shims.transforms import strip_fields
+from llm_rosetta.transforms import strip_fields
 
 my_shim = ProviderShim(
     name="my-provider",
@@ -448,7 +448,7 @@ register_shim(my_shim)
 3. 如果提供方有字段级差异，可选添加 `transforms.py`：
 
     ```python
-    from llm_rosetta.shims.transforms import strip_fields
+    from llm_rosetta.transforms import strip_fields
 
     post_ir_transforms = (strip_fields("unsupported_field"),)
     pre_ir_transforms = ()
