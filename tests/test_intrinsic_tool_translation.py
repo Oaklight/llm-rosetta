@@ -27,7 +27,7 @@ class TestIntrinsicCallToFunction:
         result = intrinsic_call_to_function(part)
         assert result["type"] == "tool_call"
         assert result["tool_type"] == "function"
-        assert result["tool_name"] == "_intrinsic/web_search"
+        assert result["tool_name"] == "_intrinsic_web_search"
         assert result["tool_call_id"] == "c1"
         assert result["tool_input"] == {"query": "AI"}
 
@@ -81,7 +81,7 @@ class TestIntrinsicCallToFunction:
             "provider_metadata": {},
         }
         result = intrinsic_call_to_function(part)
-        assert result["tool_name"] == "_intrinsic/my_search"
+        assert result["tool_name"] == "_intrinsic_my_search"
 
     def test_does_not_mutate_original(self):
         part = {
@@ -296,7 +296,7 @@ class TestTranslateIntrinsicTools:
         assert msg["content"][0]["type"] == "text"
         call = msg["content"][1]
         assert call["tool_type"] == "function"
-        assert call["tool_name"] == "_intrinsic/web_search"
+        assert call["tool_name"] == "_intrinsic_web_search"
         assert call["tool_call_id"] == "c1"
         assert call["tool_input"] == {"query": "AI"}
 
@@ -377,7 +377,7 @@ class TestTranslateIntrinsicTools:
         assert content[0]["tool_type"] == "function"
         assert content[0]["tool_call_id"] == "c1"
         assert content[1]["tool_type"] == "function"
-        assert content[1]["tool_name"] == "_intrinsic/web_search"
+        assert content[1]["tool_name"] == "_intrinsic_web_search"
 
     def test_call_result_id_pairing(self):
         ir_request = {
@@ -520,7 +520,7 @@ class TestTranslateIntrinsicTools:
         }
         result = translate_intrinsic_tools(ir_request, same_format=False)
         call = result["messages"][0]["content"][0]
-        assert call["tool_name"] == f"_intrinsic/{kind}"
+        assert call["tool_name"] == f"_intrinsic_{kind}"
         assert call["tool_type"] == "function"
 
     def test_non_list_content_passthrough(self):

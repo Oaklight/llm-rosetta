@@ -106,14 +106,14 @@ def intrinsic_call_to_function(part: dict[str, Any]) -> dict[str, Any]:
     """Degrade an intrinsic tool_call to a function tool_call.
 
     Used during cross-format conversion to preserve conversation context
-    that would otherwise be stripped.  The ``_intrinsic/`` prefix on the
+    that would otherwise be stripped.  The ``_intrinsic_`` prefix on the
     tool name prevents collisions with user-defined functions.
     """
     kind = get_intrinsic_kind(part, part.get("tool_name", "unknown"))
     translated: dict[str, Any] = {
         "type": "tool_call",
         "tool_call_id": part["tool_call_id"],
-        "tool_name": f"_intrinsic/{kind}",
+        "tool_name": f"_intrinsic_{kind}",
         "tool_input": part.get("tool_input", {}),
         "tool_type": "function",
         "provider_metadata": {
