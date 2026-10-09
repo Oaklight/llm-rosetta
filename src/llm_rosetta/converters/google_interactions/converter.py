@@ -32,6 +32,7 @@ from ...types.ir.stream import (
 )
 from ..base import BaseConverter
 from ..base.helpers.system_message_hoist import hoist_system_in_converter
+from ...shims.transforms import hoist_late_system_messages
 from ..base.context import ConversionContext, StreamContext
 from .config_ops import GoogleInteractionsConfigOps
 from .content_ops import GoogleInteractionsContentOps
@@ -104,6 +105,7 @@ class GoogleInteractionsConverter(BaseConverter):
     _CONVERTER_TAG = "google_interactions"
     _RESPONSE_ID_PREFIX = ""
     _PASSTHROUGH_RESTORE_KEY = "steps"
+    _INTRINSIC_IR_TRANSFORMS = (hoist_late_system_messages(),)
 
     content_ops_class = GoogleInteractionsContentOps
     tool_ops_class = GoogleInteractionsToolOps
@@ -163,8 +165,7 @@ class GoogleInteractionsConverter(BaseConverter):
     ) -> None:
         messages = list(ir_request.get("messages", []))
 
-        # Hoist mid-conversation system messages to <system> user envelopes
-        # so they are not silently dropped. Idempotent if shim already ran.
+        # Defense-in-depth: idempotent with pipeline's intrinsic transform.
         messages, hoisted_si = hoist_system_in_converter(messages, ir_request)
         if hoisted_si and "system_instruction" not in result:
             texts = [

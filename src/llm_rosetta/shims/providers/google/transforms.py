@@ -1,10 +1,5 @@
 """Google GenAI schema transforms.
 
-IR-level: hoist late system messages for prompt cache prefix stability.
+No shim-level IR transforms — system message hoisting is now
+intrinsic to GoogleGenerateConverter.
 """
-
-from llm_rosetta.shims.transforms import hoist_late_system_messages
-
-post_ir_transforms = ()
-pre_ir_transforms = ()
-ir_transforms = (hoist_late_system_messages(),)

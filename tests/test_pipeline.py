@@ -1123,3 +1123,134 @@ class TestStreamProcessorIterEvents:
         processor = self._make_processor("openai_chat", "openai_chat")
         events = list(processor.iter_events([]))
         assert events == []
+
+
+# ---------------------------------------------------------------------------
+# Intrinsic IR transforms (converter._INTRINSIC_IR_TRANSFORMS)
+# ---------------------------------------------------------------------------
+
+
+class TestIntrinsicIrTransforms:
+    """Verify that converter-intrinsic IR transforms are applied by the pipeline."""
+
+    def test_intrinsic_without_shim(self):
+        """Intrinsic transforms run even when shim is None."""
+        ir = {
+            "messages": [
+                {"role": "user", "content": [{"type": "text", "text": "hi"}]},
+                {"role": "system", "content": [{"type": "text", "text": "late sys"}]},
+                {"role": "user", "content": [{"type": "text", "text": "bye"}]},
+            ],
+        }
+
+        class _FakeConverter:
+            from llm_rosetta.shims.transforms import hoist_late_system_messages
+
+            _INTRINSIC_IR_TRANSFORMS = (hoist_late_system_messages(),)
+
+        result = apply_ir_transforms(ir, shim=None, converter=_FakeConverter())
+        # The late system message should have been rewritten to role: "user"
+        roles = [m["role"] for m in result["messages"]]
+        assert "system" not in roles
+
+    def test_intrinsic_and_shim_compose(self):
+        """Intrinsic transforms run first, then shim transforms."""
+        call_order: list[str] = []
+
+        def _intrinsic_fn(body, ctx):
+            call_order.append("intrinsic")
+            return body
+
+        def _shim_fn(body, ctx):
+            call_order.append("shim")
+            return body
+
+        from llm_rosetta.shims.transforms import _NamedIRTransform
+
+        intrinsic_t = _NamedIRTransform(_intrinsic_fn, "intrinsic()")
+        shim_t = _NamedIRTransform(_shim_fn, "shim()")
+
+        class _FakeConverter:
+            _INTRINSIC_IR_TRANSFORMS = (intrinsic_t,)
+
+        shim = _make_shim(ir_transforms=(shim_t,))
+        ir = _simple_ir_request()
+        apply_ir_transforms(ir, shim, converter=_FakeConverter())
+        assert call_order == ["intrinsic", "shim"]
+
+    def test_intrinsic_dedup_with_shim(self):
+        """Same transform in intrinsic and shim runs only once."""
+        call_count = 0
+
+        def _counting_fn(body, ctx):
+            nonlocal call_count
+            call_count += 1
+            return body
+
+        from llm_rosetta.shims.transforms import _NamedIRTransform
+
+        t = _NamedIRTransform(_counting_fn, "dedup_test()")
+
+        class _FakeConverter:
+            _INTRINSIC_IR_TRANSFORMS = (t,)
+
+        # Shim has a transform with the same repr
+        shim_t = _NamedIRTransform(_counting_fn, "dedup_test()")
+        shim = _make_shim(ir_transforms=(shim_t,))
+        ir = _simple_ir_request()
+        apply_ir_transforms(ir, shim, converter=_FakeConverter())
+        assert call_count == 1
+
+    def test_no_converter_no_shim_is_noop(self):
+        """Both converter=None and shim=None → no-op (backward compat)."""
+        ir = _simple_ir_request()
+        original = copy.deepcopy(ir)
+        result = apply_ir_transforms(ir, None, converter=None)
+        assert result == original
+
+    def test_converter_without_intrinsic_attr(self):
+        """Converter without _INTRINSIC_IR_TRANSFORMS attr → no-op."""
+        ir = _simple_ir_request()
+        original = copy.deepcopy(ir)
+
+        class _PlainConverter:
+            pass
+
+        result = apply_ir_transforms(ir, None, converter=_PlainConverter())
+        assert result == original
+
+    def test_openai_chat_has_no_intrinsic_transforms(self):
+        """OpenAI Chat converter should not declare intrinsic transforms."""
+        from llm_rosetta.converters.openai_chat import OpenAIChatConverter
+
+        assert OpenAIChatConverter._INTRINSIC_IR_TRANSFORMS == ()
+
+    def test_openai_responses_has_no_intrinsic_transforms(self):
+        """OpenAI Responses converter should not declare intrinsic transforms."""
+        from llm_rosetta.converters.openai_responses import OpenAIResponsesConverter
+
+        assert OpenAIResponsesConverter._INTRINSIC_IR_TRANSFORMS == ()
+
+    def test_anthropic_has_intrinsic_transforms(self):
+        """Anthropic converter declares hoist + cache breakpoints."""
+        from llm_rosetta.converters.anthropic import AnthropicConverter
+
+        names = [repr(t) for t in AnthropicConverter._INTRINSIC_IR_TRANSFORMS]
+        assert "hoist_late_system_messages()" in names
+        assert "auto_cache_breakpoints()" in names
+
+    def test_google_generate_has_intrinsic_transforms(self):
+        """Google Generate converter declares hoist."""
+        from llm_rosetta.converters.google_generate import GoogleGenerateConverter
+
+        names = [repr(t) for t in GoogleGenerateConverter._INTRINSIC_IR_TRANSFORMS]
+        assert "hoist_late_system_messages()" in names
+
+    def test_google_interactions_has_intrinsic_transforms(self):
+        """Google Interactions converter declares hoist."""
+        from llm_rosetta.converters.google_interactions import (
+            GoogleInteractionsConverter,
+        )
+
+        names = [repr(t) for t in GoogleInteractionsConverter._INTRINSIC_IR_TRANSFORMS]
+        assert "hoist_late_system_messages()" in names

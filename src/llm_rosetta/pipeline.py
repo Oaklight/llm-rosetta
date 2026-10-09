@@ -86,29 +86,47 @@ def apply_ir_transforms(
     model_capabilities: list[str] | None = None,
     request_id: str = "-",
     hoist_system_messages: bool = True,
+    converter: Any = None,
 ) -> dict[str, Any]:
-    """Apply all shim-driven IR-level transforms.
+    """Apply converter-intrinsic and shim-driven IR-level transforms.
 
-    Builds a :class:`~llm_rosetta.shims.transforms.TransformContext` from
-    the provided parameters and runs the shim's ``ir_transforms`` tuple
-    through :func:`~llm_rosetta.shims.transforms.apply_ir_transforms`.
+    Intrinsic transforms (from ``converter._INTRINSIC_IR_TRANSFORMS``) run
+    first — they are format-level prerequisites (e.g. hoisting system
+    messages for APIs that don't support them inline).  Shim transforms
+    follow, with duplicates removed so an idempotent transform is not
+    executed twice.
 
     Args:
         ir_request: The IR request dict.  Some operations mutate in-place,
             others return a new dict — **always use the return value**.
-        shim: ProviderShim instance, registered name, or None (no-op).
+        shim: ProviderShim instance, registered name, or None.
         upstream_model: The upstream model ID (for pattern matching).
         model_capabilities: Model capability list (e.g. ``["text", "vision"]``).
             When ``None``, transforms that check capabilities treat the
             model as unknown and skip capability-dependent operations.
         request_id: Request identifier for logging.
+        hoist_system_messages: Whether hoisting transforms should fire.
+        converter: Target converter instance.  When provided, its
+            ``_INTRINSIC_IR_TRANSFORMS`` are prepended to the transform
+            chain.
 
     Returns:
         The IR request dict after all applicable transforms.  Always
         assign the return value: ``ir = apply_ir_transforms(ir, shim, ...)``.
     """
+    intrinsic: tuple = getattr(converter, "_INTRINSIC_IR_TRANSFORMS", ())
     resolved = resolve_shim(shim)
-    if resolved is None or not resolved.ir_transforms:
+    shim_transforms: tuple = resolved.ir_transforms if resolved else ()
+
+    # Merge: intrinsic first, then shim (dedup by repr to avoid re-running
+    # the same idempotent transform).
+    if intrinsic and shim_transforms:
+        seen = {repr(t) for t in intrinsic}
+        combined = intrinsic + tuple(t for t in shim_transforms if repr(t) not in seen)
+    else:
+        combined = intrinsic or shim_transforms
+
+    if not combined:
         return ir_request
 
     ctx = TransformContext(
@@ -117,7 +135,7 @@ def apply_ir_transforms(
         request_id=request_id,
         hoist_system_messages=hoist_system_messages,
     )
-    return _apply_ir_transforms_exec(resolved.ir_transforms, ir_request, ctx)
+    return _apply_ir_transforms_exec(combined, ir_request, ctx)
 
 
 # ---------------------------------------------------------------------------
@@ -571,7 +589,7 @@ class ConversionPipeline:
             request_id=request_id,
         )
 
-        # Phase 2a: Shim-driven IR transforms
+        # Phase 2a: Intrinsic + shim-driven IR transforms
         ir_request = apply_ir_transforms(
             ir_request,
             self._target_shim,
@@ -579,6 +597,7 @@ class ConversionPipeline:
             model_capabilities=self._model_capabilities,
             request_id=request_id,
             hoist_system_messages=self._hoist_system_messages,
+            converter=self._target_converter,
         )
         self._profile["ir_transforms_ms"] = round((time.perf_counter() - t0) * 1000, 2)
 
