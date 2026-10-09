@@ -355,7 +355,7 @@ class TestOpenAIResponsesToolOps:
             provider_metadata={"intrinsic_kind": "web_search"},
         )
         result = OpenAIResponsesToolOps.ir_tool_call_to_p(ir_tc)
-        assert result["type"] == "function_web_search"
+        assert result["type"] == "web_search_call"
         assert result["query"] == "test"
 
     def test_ir_tool_call_to_p_code_interpreter(self):
