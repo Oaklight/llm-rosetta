@@ -506,7 +506,7 @@ class TestLoadProvidersFromDir:
         assert s.post_ir_transforms[0]({"gone": 1, "keep": 2}) == {"keep": 2}
 
     def test_distinct_roots_do_not_collide(self, tmp_path: Path):
-        """Two providers roots with the same group/leaf names stay independent."""
+        """Two roots with the same group/leaf names get independent modules."""
         import sys
 
         for root, marker in ((tmp_path / "a", "a"), (tmp_path / "b", "b")):
@@ -514,16 +514,22 @@ class TestLoadProvidersFromDir:
             leaf.mkdir(parents=True)
             (leaf / "provider.yaml").write_text("name: grp--leaf\nbase: openai_chat\n")
             (leaf / "tag.py").write_text(f"MARK = {marker!r}\n")
-            (leaf / "transforms.py").write_text("from .tag import MARK\n")
+            (leaf / "transforms.py").write_text(
+                "from .tag import MARK\nLOADED = MARK\n"
+            )
             load_providers_from_dir(root)
 
-        prefixes = {
-            m.split(".", 1)[0]
-            for m in sys.modules
-            if m.startswith("_llm_rosetta_plugin_shims")
-        }
-        # One private namespace per providers root.
-        assert len(prefixes) >= 2
+        leaves = [
+            m
+            for name, m in sys.modules.items()
+            if name.startswith("_llm_rosetta_plugin_shims")
+            and name.endswith("grp.leaf.transforms")
+        ]
+        # Two distinct module objects, each resolving its own root's MARK — not
+        # one shared module reached under two namespace prefixes.
+        assert len(leaves) == 2
+        assert len({id(m) for m in leaves}) == 2
+        assert {m.LOADED for m in leaves} == {"a", "b"}
 
     def test_failed_plugin_transform_rolls_back(self, tmp_path: Path):
         """A transforms.py that raises leaves nothing half-registered —
@@ -547,11 +553,14 @@ class TestLoadProvidersFromDir:
 
     def test_failed_load_does_not_poison_later_loads(self, tmp_path: Path):
         """A failed plugin load must not make the next load raise KeyError —
-        the rollback has to clear the namespace bookkeeping too."""
+        and must not evict an already-loaded shim's modules."""
+        import sys
+
         good = tmp_path / "aaa_good"
         good.mkdir()
         (good / "provider.yaml").write_text("name: aaa_good\nbase: openai_chat\n")
-        load_providers_from_dir(tmp_path)  # namespace now exists
+        (good / "transforms.py").write_text("post_ir_transforms = ()\n")
+        load_providers_from_dir(tmp_path)  # namespace + aaa_good.transforms now exist
 
         bad = tmp_path / "zzz_bad"
         bad.mkdir()
@@ -559,6 +568,9 @@ class TestLoadProvidersFromDir:
         (bad / "transforms.py").write_text("raise RuntimeError('boom')\n")
         with pytest.raises(RuntimeError, match="boom"):
             load_providers_from_dir(tmp_path)
+
+        # The earlier good shim's modules survive the failed load.
+        assert any(n.endswith("aaa_good.transforms") for n in sys.modules)
 
         # The shim's own error again, not a KeyError from stale bookkeeping.
         with pytest.raises(RuntimeError, match="boom"):

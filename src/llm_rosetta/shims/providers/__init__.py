@@ -91,7 +91,7 @@ _PLUGIN_NS_PREFIX = "_llm_rosetta_plugin_shims"
 _plugin_namespaces: dict[str, list[str]] = {}
 
 
-def _ensure_pkg(name: str, dir_path: Path) -> bool:
+def _ensure_pkg(name: str, dir_path: Path) -> None:
     """Register *name* as a package whose ``__path__`` points at *dir_path*.
 
     External shim transforms are executed by path rather than imported as part
@@ -101,14 +101,9 @@ def _ensure_pkg(name: str, dir_path: Path) -> bool:
     through the normal path finder.  (A *bare* ``import helpers`` still fails —
     the directory is not on ``sys.path`` — so plugin transforms must use
     relative or fully-qualified plugin imports.)
-
-    Returns:
-        ``True`` when the package was newly created (so a failed load can roll
-        it back), ``False`` when it already existed.
     """
     locs = _plugin_namespaces.get(name)
-    created = locs is None
-    if created:
+    if locs is None:
         locs = []
         _plugin_namespaces[name] = locs
         spec = importlib.machinery.ModuleSpec(name, loader=None, is_package=True)
@@ -120,7 +115,6 @@ def _ensure_pkg(name: str, dir_path: Path) -> bool:
     if str(dir_path) not in locs:
         locs.append(str(dir_path))
     sys.modules[name].__path__ = locs
-    return created
 
 
 def _clear_plugin_namespaces() -> None:
@@ -132,7 +126,7 @@ def _clear_plugin_namespaces() -> None:
 
 def _register_plugin_chain(
     provider_dir: Path, group: str | None, root: Path | None
-) -> tuple[str, str]:
+) -> str:
     """Register the synthetic package chain for a plugin shim's transforms.
 
     The namespace is keyed on the *resolved* providers root so the same
@@ -140,9 +134,14 @@ def _register_plugin_chain(
     namespace.
 
     Returns:
-        ``(namespace, transforms_module_name)``.
+        The dotted name to load ``transforms.py`` under.
     """
-    resolved = Path(root or provider_dir.parent).resolve()
+    if root is None:
+        # Walk up past the group directories so the namespace is keyed on the
+        # providers root even when the caller does not pass one.
+        depth = len(group.split(".")) if group else 0
+        root = provider_dir.parents[depth]
+    resolved = Path(root).resolve()
     ns = f"{_PLUGIN_NS_PREFIX}_{hashlib.sha1(str(resolved).encode()).hexdigest()[:8]}"
     cur, cur_dir = ns, resolved
     chain = [(ns, resolved)]
@@ -154,26 +153,26 @@ def _register_plugin_chain(
     chain.append((leaf, provider_dir))
     for name, path in chain:
         _ensure_pkg(name, path)
-    return ns, f"{leaf}.transforms"
+    return f"{leaf}.transforms"
 
 
-def _rollback_plugin_load(module_name: str, ns: str | None) -> None:
-    """Undo a failed plugin transforms load.
+def _rollback_plugin_load(module_name: str, before: frozenset[str]) -> None:
+    """Undo a failed load, removing only what *this* load registered.
 
-    Drops the half-initialised module plus every package and submodule this
-    load registered under *ns* — ``transforms.py`` may have imported siblings
-    before raising.  The ``_plugin_namespaces`` bookkeeping is cleared for
-    whatever was actually removed, not only for packages this load created: a
-    later failed load shares the namespace of an earlier successful one, so
-    leaving it in ``_plugin_namespaces`` without its ``sys.modules`` entry makes
-    the next ``_ensure_pkg`` skip the rebuild and raise ``KeyError``.
+    Drops the half-initialised module plus any package/submodule it imported
+    before raising, but keeps modules an earlier successful load of the same
+    root registered: the namespace is shared per root, so a blanket namespace
+    wipe would silently evict a working shim's modules.  The
+    ``_plugin_namespaces`` bookkeeping is pruned for whatever was removed, so
+    the next ``_ensure_pkg`` rebuilds instead of raising ``KeyError``.
     """
-    doomed = {module_name}
-    if ns is not None:
-        doomed.update(m for m in sys.modules if m == ns or m.startswith(f"{ns}."))
-    for mod_name in doomed:
-        sys.modules.pop(mod_name, None)
-    for pkg_name in [k for k in _plugin_namespaces if k in doomed]:
+    for name in [
+        m
+        for m in sys.modules
+        if m not in before and (m == module_name or m.startswith(_PLUGIN_NS_PREFIX))
+    ]:
+        sys.modules.pop(name, None)
+    for pkg_name in [k for k in _plugin_namespaces if k not in sys.modules]:
         _plugin_namespaces.pop(pkg_name, None)
 
 
@@ -282,7 +281,9 @@ def _load_transforms(
     tf_path = provider_dir / "transforms.py"
     if not tf_path.exists():
         return (), (), (), (), None
-    ns: str | None = None
+    # Snapshot before the synthetic packages are registered: the rollback only
+    # undoes what this load added, and those packages count as added.
+    before = frozenset(sys.modules)
     if _builtin:
         prefix = "llm_rosetta.shims.providers"
         module_name = (
@@ -291,17 +292,21 @@ def _load_transforms(
             else f"{prefix}.{provider_dir.name}.transforms"
         )
     else:
-        ns, module_name = _register_plugin_chain(provider_dir, group, root)
+        module_name = _register_plugin_chain(provider_dir, group, root)
     spec = importlib.util.spec_from_file_location(module_name, tf_path)
     if spec is None or spec.loader is None:
         logger.warning("Could not load %s", tf_path)
         return (), (), (), (), None
     mod = importlib.util.module_from_spec(spec)
-    sys.modules[module_name] = mod
+    if not _builtin:
+        # Built-in transforms resolve through their real package, so they need
+        # no sys.modules entry; only plugin loads register one (and roll it back
+        # on failure).
+        sys.modules[module_name] = mod
     try:
         spec.loader.exec_module(mod)
     except BaseException:
-        _rollback_plugin_load(module_name, ns)
+        _rollback_plugin_load(module_name, before)
         raise
     # New names take precedence; fall back to legacy names.
     # Use `is None` (not `or`) since empty tuple () is falsy but valid.
