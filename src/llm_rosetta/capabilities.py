@@ -14,6 +14,7 @@ Functions follow the ``enforce_*`` naming convention:
 - :func:`strip_reasoning_for_non_reasoning` — strip reasoning for non-reasoning models (post-IR)
 - :func:`enforce_vision` — strip images for non-vision models (post-IR)
 - :func:`enforce_custom_tools` — downgrade custom tools for non-supporting providers (post-IR)
+- :func:`dedupe_tool_definitions` — collapse duplicate tool definitions (post-IR)
 
 Called by :class:`~llm_rosetta.pipeline.ConversionPipeline` at the
 appropriate pipeline stages.
@@ -1120,3 +1121,108 @@ def relocate_oversized_tool_descriptions(
         len(oversized),
     )
     return ir_request
+
+
+def dedupe_tool_definitions(
+    ir_request: dict[str, Any],
+    *,
+    warnings: list[str] | None = None,
+) -> dict[str, Any]:
+    """Collapse duplicate tool definitions and report name collisions.
+
+    A request may declare the same tool name more than once.  Upstreams
+    disagree on whether that is legal — Anthropic, DeepSeek, xAI and Google
+    all answer 400, while OpenAI and several others accept it — so the same
+    body succeeds or fails depending on the target provider.
+
+    Two cases are treated differently:
+
+    - **Exact duplicates** — same name *and* identical definition — collapse
+      to the first occurrence.  Lossless, and the request stops being rejected
+      by the strict upstreams above.
+    - **Conflicting duplicates** — same name, differing definition — are left
+      untouched and reported in *warnings*.  The definitions describe
+      different tools, so silently keeping one would drop a legitimate tool
+      and hide a client-side mistake no converter can repair.
+
+    Tools harvested from a namespace container are exempt: the namespace is
+    part of their identity, so two byte-identical definitions there are still
+    two distinct tools, left to ``_dedup_ir_tool_names`` / ``ToolNameMap``.
+
+    Equality is on the whole definition dict, so this is not semantic dedup:
+    any incidental per-copy difference (``metadata``, an optional field set on
+    one copy only) downgrades a pair from "exact duplicate" to "conflicting".
+    Erring that way is deliberate — it only ever keeps a tool, never drops one.
+
+    Must be called after source → IR conversion and after the intrinsic /
+    custom tool passes, and **before**
+    :func:`relocate_oversized_tool_descriptions`: collapsing first keeps a
+    dropped tool's description out of the relocated system message.
+
+    Args:
+        ir_request: The IR request dict — **always use the return value**.
+        warnings: Optional list to append collision reports to.
+
+    Returns:
+        The IR request with exact duplicates collapsed, or the original
+        request unchanged when nothing was duplicated.
+    """
+    tools = ir_request.get("tools")
+    if not tools or len(tools) < 2:
+        return ir_request
+
+    kept: list[Any] = []
+    # name -> distinct definitions seen so far, in first-seen order
+    definitions: dict[str, list[Any]] = {}
+    dropped: Counter[str] = Counter()
+
+    for tool in tools:
+        if not isinstance(tool, dict):
+            kept.append(tool)
+            continue
+        name = tool.get("name")
+        if not isinstance(name, str) or not name:
+            kept.append(tool)
+            continue
+        # A tool harvested from a namespace container carries its identity in
+        # ``metadata.namespace``, so two byte-identical definitions there are
+        # still two tools the client addresses separately.  Left to the
+        # namespace machinery (``_dedup_ir_tool_names`` / ``ToolNameMap``).
+        # The exemption is ``is not None``, not truthiness: a container with
+        # no name of its own yields "", and its children are exactly the
+        # contested case that machinery keeps and warns about — collapsing
+        # them here would silence that warning instead of resolving it.
+        meta = tool.get("metadata")
+        if isinstance(meta, dict) and meta.get("namespace") is not None:
+            kept.append(tool)
+            continue
+        seen = definitions.setdefault(name, [])
+        if any(tool == existing for existing in seen):
+            dropped[name] += 1
+            continue
+        seen.append(tool)
+        kept.append(tool)
+
+    conflicted = {
+        name: len(defs) for name, defs in definitions.items() if len(defs) > 1
+    }
+    if not dropped and not conflicted:
+        return ir_request
+
+    if warnings is not None:
+        for name in sorted(dropped):
+            warnings.append(
+                f"Tool {name!r} was declared {dropped[name] + 1} times with an "
+                f"identical definition; {dropped[name]} duplicate(s) were dropped"
+            )
+        for name in sorted(conflicted):
+            warnings.append(
+                f"Tool name {name!r} is declared with {conflicted[name]} "
+                "distinct definitions and is forwarded as-is; upstreams that "
+                "require unique tool names will reject it"
+            )
+
+    if not dropped:
+        return ir_request
+
+    return {**ir_request, "tools": kept}
