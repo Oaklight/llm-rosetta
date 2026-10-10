@@ -28,6 +28,7 @@ from collections.abc import Callable, Iterable, Iterator
 from typing import Any, Literal, Protocol, runtime_checkable
 
 from llm_rosetta.capabilities import (
+    dedupe_tool_definitions,
     enforce_custom_tools,
     resolve_intrinsic_tools,
     relocate_oversized_tool_descriptions,
@@ -614,7 +615,18 @@ class ConversionPipeline:
             config_override=self._supports_custom_tools,
         )
 
-        # Capability enforcement: oversized tool descriptions (post-custom-tools)
+        # Capability enforcement: duplicate tool definitions (post-custom-tools).
+        # Runs before description relocation so a dropped tool does not leave
+        # its documentation duplicated in the relocated system message.
+        # Exact duplicates are collapsed because several upstreams reject a
+        # repeated name outright; differing definitions under one name are
+        # reported but left alone — only the client can disambiguate them.
+        ir_request = dedupe_tool_definitions(
+            ir_request,
+            warnings=ctx.warnings,
+        )
+
+        # Capability enforcement: oversized tool descriptions
         ir_request = relocate_oversized_tool_descriptions(
             ir_request,
             max_description_length=self._max_tool_description_length,
