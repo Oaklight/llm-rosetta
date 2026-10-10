@@ -1,4 +1,9 @@
-"""Tests for the ``base_formats`` payload of the admin config route."""
+"""Tests for the ``base_formats`` payload helper of the admin config route.
+
+These pin ``_base_formats_payload()`` directly. The route that serves it
+(``get_config`` at ``/admin/api/config``) is not exercised here — only the
+helper's shape, the custom-tools defaults, and the recommendation null-guard.
+"""
 
 from __future__ import annotations
 

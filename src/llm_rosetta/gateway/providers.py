@@ -99,6 +99,9 @@ def known_provider_types() -> list[str]:
 # Whether each base format's standard natively accepts ``{type: "custom"}``
 # tool definitions.  A bare format uses this as its default when no vendor shim
 # supplies one — the OpenAI-shaped standards do, Anthropic/Google do not.
+# In the picker this only decides formats without an eponymous shim, since a
+# shim entry wins in the merged lookup; the table is the format's own default
+# regardless of whether a shim shadows it.
 _CUSTOM_TOOLS_BY_TYPE: dict[str, bool] = {
     "openai_chat": True,
     "openai_responses": True,
