@@ -32,6 +32,24 @@ Decision APIs use typed questions with constrained answer spaces:
     `score` (**ordinal proposition**).  The IR name `assertion` is translated to
     the TypeSafe wire name `noul` by `TypeSafeDecisionConverter`.
 
+### Entries
+
+Every question is a list of **entries**, and the answer is a distribution over them:
+
+| type | `criteria` | ordering | answer |
+|------|-----------|----------|--------|
+| `assertion` | 0 or 2 entries labeled `False` / `True` | unordered | scalar `probability` = P(True) |
+| `choice` | N entries | unordered | `choice` + distribution |
+| `score` | N entries | **ordered** (ordinal = position) | `score` + distribution |
+
+`DecisionEntry` is `{label: str | bool, description?: Description}`: `label` is the
+entry's identity (and the key used in the answer's `probabilities`); `description`
+is an optional rich rubric (mirrors TypeSafe's `string | object | array`).
+
+`choice` / `score` / `confidence` are optional (derived by
+`converters.decision.derived` when a provider omits them); `abstained` is always
+derived from `unknown_probability`.
+
 ### State
 
 The input context to evaluate. Can be a string, JSON object, or array:
@@ -52,15 +70,21 @@ state = {
 
 ```python
 from llm_rosetta.types.ir.decision import (
-    # Questions
+    # Shared entry + value aliases
+    DecisionEntry,       # {label, description?} — one option / level / claim side
+    Description,         # str | dict | list (rich text slot)
+    DecisionInputPart,   # TextPart | ImagePart (multimodal evidence)
+
+    # Questions — all three carry `criteria: list[DecisionEntry]`
     AssertionQuestion,   # proposition → P(true)
     ChoiceQuestion,      # categorical proposition → categorical distribution
     ScoreQuestion,       # ordinal proposition → ordinal distribution
 
     # Answers
     AssertionAnswer,     # {type, probability}
-    ChoiceAnswer,        # {type, choice, probabilities, confidence}
-    ScoreAnswer,         # {type, score, legend, probabilities, confidence}
+    ChoiceAnswer,        # {type, choice, probabilities, confidence?}
+    ScoreAnswer,         # {type, score, probabilities, confidence?}
+    RefusalAnswer,       # {type, refusal, reason?}
 
     # Request/Response
     IRDecisionRequest,
@@ -113,13 +137,19 @@ request: IRDecisionRequest = {
         "department": ChoiceQuestion(
             type="choice",
             instructions="Which team should handle this?",
-            criteria={"billing": "Payments, invoicing, refunds",
-                      "technical": "Bugs, outages, integrations"},
+            criteria=[
+                {"label": "billing", "description": "Payments, invoicing, refunds"},
+                {"label": "technical", "description": "Bugs, outages, integrations"},
+            ],
         ),
         "frustration": ScoreQuestion(
             type="score",
             instructions="How frustrated is the customer?",
-            criteria=["Calm", "Frustrated", "Very angry"],
+            criteria=[
+                {"label": "Calm"},
+                {"label": "Frustrated"},
+                {"label": "Very angry"},
+            ],
         ),
     },
 }
@@ -157,7 +187,7 @@ request: IRDecisionRequest = {
 
 ### IR Equivalent
 
-The converter adds `object: "decision"` and translates the `assertion` primitive to/from the wire name `noul`:
+The converter adds `object: "decision"`, translates the `assertion` primitive to/from the wire name `noul`, and re-keys score probabilities from ordinal positions to level labels:
 
 ```python
 response: IRDecisionResponse = {
@@ -170,7 +200,11 @@ response: IRDecisionResponse = {
             probabilities={"billing": 0.08, "technical": 0.85, "sales": 0.07},
             confidence=0.82,
         ),
-        # ...
+        "frustration": ScoreAnswer(
+            type="score", score=1.6,
+            probabilities={"Calm": 0.05, "Frustrated": 0.3, "Very angry": 0.65},
+            confidence=0.78,
+        ),
     },
     "usage": {"input_tokens": 588, "output_tokens": 212},
 }
