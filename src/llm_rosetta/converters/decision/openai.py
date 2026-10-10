@@ -60,7 +60,7 @@ class OpenAIDecisionsConverter(BaseDecisionConverter):
     ) -> dict[str, Any]:
         result: dict[str, Any] = {
             "model": ir_request["model"],
-            "input": _state_to_input(ir_request["state"]),
+            "input": _state_to_input(ir_request["state"], context.warnings),
             "questions": [
                 _question_to_wire(name, q, context.warnings)
                 for name, q in ir_request["questions"].items()
@@ -82,7 +82,7 @@ class OpenAIDecisionsConverter(BaseDecisionConverter):
             questions[name] = _question_from_wire(q)
         return {
             "model": provider_request["model"],
-            "state": _state_from_input(provider_request.get("input")),
+            "state": _state_from_input(provider_request.get("input"), context.warnings),
             "questions": questions,
         }
 
@@ -150,34 +150,50 @@ class OpenAIDecisionsConverter(BaseDecisionConverter):
 # ============================================================================
 
 
-def _state_to_input(state: Any) -> Any:
+def _image_to_input(part: dict[str, Any]) -> dict[str, Any]:
+    obj: dict[str, Any] = {"type": "input_image", "image_url": _image_data_url(part)}
+    if part.get("detail") is not None:
+        obj["detail"] = part["detail"]
+    return obj
+
+
+def _state_to_input(state: Any, warnings: list[str]) -> Any:
     """IR state → OpenAI ``input`` (string or user-message array).
 
     A structured record is JSON-stringified (OpenAI ``input`` rejects a bare
     object).  This direction is lossy: ``_state_from_input`` cannot tell a
-    JSON-encoded record back from a plain string.
+    JSON-encoded record back from a plain string.  Parts other than text/image
+    are dropped with a warning.
     """
     if isinstance(state, str):
         return state
     if isinstance(state, list):
         parts: list[dict[str, Any]] = []
         for part in state:
-            if isinstance(part, dict) and part.get("type") == "image":
-                parts.append(
-                    {"type": "input_image", "image_url": _image_data_url(part)}
+            if not isinstance(part, dict):
+                warnings.append(
+                    f"Dropping unsupported state part: {type(part).__name__}"
                 )
-            elif isinstance(part, dict) and part.get("type") == "text":
+            elif part.get("type") == "image":
+                parts.append(_image_to_input(part))
+            elif part.get("type") == "text":
                 parts.append({"type": "input_text", "text": part.get("text", "")})
+            else:
+                warnings.append(
+                    f"Dropping unsupported state part type {part.get('type')!r}"
+                )
         return [{"role": "user", "content": parts}]
     # structured record: JSON-stringified (OpenAI input rejects a bare object)
     return json.dumps(state, ensure_ascii=False)
 
 
-def _state_from_input(input_value: Any) -> Any:
+def _state_from_input(input_value: Any, warnings: list[str]) -> Any:
     """OpenAI ``input`` → IR state.
 
     A string comes back as-is — a JSON-encoded record from ``_state_to_input``
     is *not* decoded back to a dict, since the wire cannot tell them apart.
+    Content parts other than ``input_text``/``input_image`` are dropped with a
+    warning.
     """
     if isinstance(input_value, str):
         return input_value
@@ -192,8 +208,16 @@ def _state_from_input(input_value: Any) -> Any:
                     if p.get("type") == "input_text":
                         parts.append({"type": "text", "text": p.get("text", "")})
                     elif p.get("type") == "input_image":
-                        parts.append(
-                            {"type": "image", "image_url": p.get("image_url", "")}
+                        img: dict[str, Any] = {
+                            "type": "image",
+                            "image_url": p.get("image_url", ""),
+                        }
+                        if p.get("detail") is not None:
+                            img["detail"] = p["detail"]
+                        parts.append(img)
+                    else:
+                        warnings.append(
+                            f"Dropping unsupported input part type {p.get('type')!r}"
                         )
         return parts
     return input_value
@@ -221,14 +245,18 @@ def _encode_assertion(q: Mapping[str, Any], warnings: list[str]) -> str:
 
 def _decode_assertion(text: str) -> dict[str, Any]:
     if isinstance(text, str) and text.startswith(_MARK):
-        payload = json.loads(text[len(_MARK) :])
-        result: dict[str, Any] = {
-            "type": "assertion",
-            "instructions": payload["instructions"],
-        }
-        if payload.get("criteria") is not None:
-            result["criteria"] = payload["criteria"]
-        return result
+        try:
+            payload = json.loads(text[len(_MARK) :])
+        except (ValueError, TypeError):
+            payload = None
+        if isinstance(payload, dict) and "instructions" in payload:
+            result: dict[str, Any] = {
+                "type": "assertion",
+                "instructions": payload["instructions"],
+            }
+            if payload.get("criteria") is not None:
+                result["criteria"] = payload["criteria"]
+            return result
     return {"type": "assertion", "instructions": text}
 
 
@@ -247,16 +275,15 @@ def _question_to_wire(
     wire: dict[str, Any] = {
         "type": _IR_TO_WIRE_TYPE.get(ir_type, ir_type),
         "name": name,
+        "instructions": q.get("instructions"),
     }
     if ir_type == "assertion":
         wire["instructions"] = _encode_assertion(q, warnings)
     elif ir_type == "choice":
-        wire["instructions"] = q["instructions"]
         wire["choices"] = [
             _with_desc("value", e["label"], e.get("description")) for e in q["criteria"]
         ]
     elif ir_type == "score":
-        wire["instructions"] = q["instructions"]
         wire["levels"] = [
             _with_desc("label", str(e["label"]), e.get("description"))
             for e in q["criteria"]
