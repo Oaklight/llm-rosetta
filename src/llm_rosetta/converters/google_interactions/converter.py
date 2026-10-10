@@ -134,7 +134,8 @@ class GoogleInteractionsConverter(BaseConverter):
 
         tools = ir_request.get("tools")
         if tools:
-            result["tools"] = [self.tool_ops.ir_tool_to_p(t) for t in tools]
+            converted = [self.tool_ops.ir_tool_to_p(t) for t in tools]
+            result["tools"] = [t for t in converted if t]
 
         self._build_generation_config(ir_request, result)
 

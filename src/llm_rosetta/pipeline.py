@@ -29,6 +29,7 @@ from typing import Any, Literal, Protocol, runtime_checkable
 
 from llm_rosetta.capabilities import (
     enforce_custom_tools,
+    resolve_intrinsic_tools,
     translate_intrinsic_tools,
     relocate_oversized_tool_descriptions,
     enforce_reasoning,
@@ -572,10 +573,19 @@ class ConversionPipeline:
             request_id=request_id,
         )
 
-        # Capability enforcement: intrinsic tools — translate for cross-format (post-IR)
+        # Capability enforcement: intrinsic tools — translate history parts
+        # and reconcile definitions against the target provider's shim.
+        _same_format = self._source_provider == self._target_provider
         ir_request = translate_intrinsic_tools(
             ir_request,
-            same_format=self._source_provider == self._target_provider,
+            same_format=_same_format,
+            request_id=request_id,
+        )
+        ir_request = resolve_intrinsic_tools(
+            ir_request,
+            shim=self._target_shim,
+            same_format=_same_format,
+            allow_name_promotion=self._source_provider == "openai_chat",
             request_id=request_id,
         )
 

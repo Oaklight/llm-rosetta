@@ -31,7 +31,10 @@ from ..base import BaseToolOps
 from ..base.tools import (
     convert_nullable_to_type_array,
     extract_part_ids,
+    get_definition_kind,
     get_intrinsic_kind,
+    get_native_definition,
+    make_intrinsic_tool_definition,
     log_orphan_warnings,
     sanitize_schema,
     sanitize_tool_call_id,
@@ -39,6 +42,18 @@ from ..base.tools import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Native Anthropic server tools for client-declared intrinsic kinds.
+# Native Anthropic server-tool type prefixes → canonical intrinsic kind.
+_ANTHROPIC_NATIVE_TYPE_TO_KIND: dict[str, str] = {
+    "web_search": "web_search",
+    "code_execution": "code_execution",
+}
+
+_ANTHROPIC_INTRINSIC_TOOLS: dict[str, dict[str, Any]] = {
+    "web_search": {"type": "web_search_20250305", "name": "web_search"},
+    "code_execution": {"type": "code_execution_20250522", "name": "code_execution"},
+}
 
 
 # ==================== Orphaned Tool Call Fix ====================
@@ -177,6 +192,20 @@ class AnthropicToolOps(BaseToolOps):
         Returns:
             Anthropic tool definition dict.
         """
+        if ir_tool.get("type") == "intrinsic":
+            stored = get_native_definition(ir_tool, "anthropic")
+            if stored is not None:
+                return dict(stored)
+            kind = get_definition_kind(ir_tool)
+            native = _ANTHROPIC_INTRINSIC_TOOLS.get(kind)
+            if native is None:
+                logger.warning(
+                    "Anthropic has no server tool for intrinsic kind %r; dropping",
+                    kind,
+                )
+                return {}
+            return dict(native)
+
         result: dict[str, Any] = {
             "name": ir_tool["name"],
             "description": ir_tool.get("description", ""),
@@ -211,6 +240,21 @@ class AnthropicToolOps(BaseToolOps):
         Returns:
             IR ToolDefinition.
         """
+        # Native server tool (e.g. {"type": "web_search_20250305"}).
+        prov_type = provider_tool.get("type", "")
+        if isinstance(prov_type, str):
+            for prefix, kind in _ANTHROPIC_NATIVE_TYPE_TO_KIND.items():
+                if prov_type == prefix or prov_type.startswith(prefix + "_"):
+                    return cast(
+                        ToolDefinition,
+                        make_intrinsic_tool_definition(
+                            kind,
+                            description=provider_tool.get("description", ""),
+                            native=provider_tool,
+                            native_base="anthropic",
+                        ),
+                    )
+
         parameters = provider_tool.get("input_schema", {})
         result: dict[str, Any] = {
             "type": "function",

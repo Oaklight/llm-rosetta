@@ -6,16 +6,23 @@ and IR ToolDefinition/ToolCallPart/ToolResultPart.
 """
 
 import json
+import logging
 from typing import Any, cast
 
 from ...types.ir import ToolCallPart, ToolResultPart
 from ...types.ir.tools import ToolChoice, ToolDefinition
 from ..base import BaseToolOps
 from ..base.tools.intrinsic import (
+    get_definition_kind,
     get_intrinsic_kind,
+    get_native_definition,
+    make_intrinsic_tool_definition,
     make_intrinsic_tool_call,
     make_intrinsic_tool_result,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 SERVER_CALL_TYPES: dict[str, str] = {
@@ -39,6 +46,21 @@ SERVER_RESULT_TYPES: dict[str, str] = {
 INTRINSIC_KIND_TO_CALL_TYPE = {v: k for k, v in SERVER_CALL_TYPES.items()}
 INTRINSIC_KIND_TO_RESULT_TYPE = {v: k for k, v in SERVER_RESULT_TYPES.items()}
 
+# Native Interactions server tools for client-declared intrinsic kinds.
+_GI_INTRINSIC_TOOLS: dict[str, dict[str, Any]] = {
+    "google_search": {"type": "google_search"},
+    "code_execution": {"type": "code_execution"},
+    "url_context": {"type": "url_context"},
+    "google_maps": {"type": "google_maps"},
+    "file_search": {"type": "file_search"},
+    "retrieval": {"type": "retrieval"},
+}
+
+# Native Interactions server-tool type → canonical intrinsic kind.
+_GI_NATIVE_TYPE_TO_KIND: dict[str, str] = {
+    v["type"]: k for k, v in _GI_INTRINSIC_TOOLS.items()
+}
+
 
 class GoogleInteractionsToolOps(BaseToolOps):
     """Google Interactions API tool conversion operations."""
@@ -48,6 +70,21 @@ class GoogleInteractionsToolOps(BaseToolOps):
     @staticmethod
     def ir_tool_to_p(ir_tool: ToolDefinition, **kwargs: Any) -> dict:
         """IR ToolDefinition → Interactions Function tool."""
+        if ir_tool.get("type") == "intrinsic":
+            stored = get_native_definition(ir_tool, "google_interactions")
+            if stored is not None:
+                return dict(stored)
+            kind = get_definition_kind(ir_tool)
+            native = _GI_INTRINSIC_TOOLS.get(kind)
+            if native is None:
+                logger.warning(
+                    "Google Interactions has no server tool for intrinsic kind"
+                    " %r; dropping",
+                    kind,
+                )
+                return {}
+            return dict(native)
+
         result: dict[str, Any] = {
             "type": "function",
             "name": ir_tool["name"],
@@ -62,6 +99,17 @@ class GoogleInteractionsToolOps(BaseToolOps):
     def p_tool_to_ir(provider_tool: Any, **kwargs: Any) -> ToolDefinition:
         """Interactions Function tool → IR ToolDefinition."""
         tool_type = provider_tool.get("type", "function")
+        kind = _GI_NATIVE_TYPE_TO_KIND.get(tool_type)
+        if kind is not None:
+            return cast(
+                ToolDefinition,
+                make_intrinsic_tool_definition(
+                    kind,
+                    description=provider_tool.get("description", ""),
+                    native=provider_tool,
+                    native_base="google_interactions",
+                ),
+            )
         ir_type = "mcp" if tool_type == "mcp_server" else "function"
         result: ToolDefinition = {
             "type": ir_type,

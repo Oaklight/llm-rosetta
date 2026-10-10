@@ -7,6 +7,10 @@ connection:
   api_key_env: OPENAI_API_KEY
 
 tools:
+  intrinsic_tools:
+    - web_search
+    - code_interpreter
+    - file_search
   custom_tools: true
   search_mode: native
 response_id_prefix: "resp_"
