@@ -62,7 +62,7 @@ class OpenAIDecisionsConverter(BaseDecisionConverter):
             "model": ir_request["model"],
             "input": _state_to_input(ir_request["state"]),
             "questions": [
-                _question_to_wire(name, q)
+                _question_to_wire(name, q, context.warnings)
                 for name, q in ir_request["questions"].items()
             ],
         }
@@ -151,7 +151,12 @@ class OpenAIDecisionsConverter(BaseDecisionConverter):
 
 
 def _state_to_input(state: Any) -> Any:
-    """IR state → OpenAI ``input`` (string or user-message array)."""
+    """IR state → OpenAI ``input`` (string or user-message array).
+
+    A structured record is JSON-stringified (OpenAI ``input`` rejects a bare
+    object).  This direction is lossy: ``_state_from_input`` cannot tell a
+    JSON-encoded record back from a plain string.
+    """
     if isinstance(state, str):
         return state
     if isinstance(state, list):
@@ -169,7 +174,11 @@ def _state_to_input(state: Any) -> Any:
 
 
 def _state_from_input(input_value: Any) -> Any:
-    """OpenAI ``input`` → IR state."""
+    """OpenAI ``input`` → IR state.
+
+    A string comes back as-is — a JSON-encoded record from ``_state_to_input``
+    is *not* decoded back to a dict, since the wire cannot tell them apart.
+    """
     if isinstance(input_value, str):
         return input_value
     if isinstance(input_value, list):
@@ -195,12 +204,16 @@ def _state_from_input(input_value: Any) -> Any:
 # ============================================================================
 
 
-def _encode_assertion(q: Mapping[str, Any]) -> str:
+def _encode_assertion(q: Mapping[str, Any], warnings: list[str]) -> str:
     """Fold an assertion's entries into a reversible marked JSON envelope."""
     instructions = q["instructions"]
     criteria = q.get("criteria")
     if criteria is None and isinstance(instructions, str) and _MARK not in instructions:
         return instructions
+    warnings.append(
+        "Folded assertion criteria into a marked JSON envelope in `instructions` "
+        "(OpenAI predicate has no criteria field; not natural language for the vendor)"
+    )
     return _MARK + json.dumps(
         {"instructions": instructions, "criteria": criteria}, ensure_ascii=False
     )
@@ -227,14 +240,16 @@ def _with_desc(key: str, value: Any, description: Any) -> dict[str, Any]:
     return option
 
 
-def _question_to_wire(name: str, q: Mapping[str, Any]) -> dict[str, Any]:
+def _question_to_wire(
+    name: str, q: Mapping[str, Any], warnings: list[str]
+) -> dict[str, Any]:
     ir_type = q["type"]
     wire: dict[str, Any] = {
         "type": _IR_TO_WIRE_TYPE.get(ir_type, ir_type),
         "name": name,
     }
     if ir_type == "assertion":
-        wire["instructions"] = _encode_assertion(q)
+        wire["instructions"] = _encode_assertion(q, warnings)
     elif ir_type == "choice":
         wire["instructions"] = q["instructions"]
         wire["choices"] = [
@@ -281,15 +296,16 @@ def _question_from_wire(q: dict[str, Any]) -> dict[str, Any]:
 
 def _answer_from_wire(a: dict[str, Any]) -> dict[str, Any]:
     wire_type = a.get("type", "")
-    ir_type = _WIRE_TO_IR_TYPE.get(wire_type, wire_type)
     if wire_type == "refusal":
         result: dict[str, Any] = {"type": "refusal"}
         if a.get("reason"):
             result["reason"] = a["reason"]
         return result
-    if ir_type == "assertion":
-        return {"type": "assertion", "probability": a["probability"]}
-    if ir_type == "choice":
+    if wire_type == "predicate":
+        result = {"type": "assertion", "probability": a["probability"]}
+        _maybe_set(result, a, "unknown_probability")
+        return result
+    if wire_type == "choice":
         result = {
             "type": "choice",
             "choice": a["choice"],
@@ -298,26 +314,35 @@ def _answer_from_wire(a: dict[str, Any]) -> dict[str, Any]:
             },
         }
         _maybe_set(result, a, "confidence")
+        _maybe_set(result, a, "unknown_probability")
         return result
-    if ir_type == "score":
+    if wire_type == "score":
+        # Order by the wire ordinal so the IR insertion order matches the
+        # ordinal position (the response leg carries no question to consult).
+        levels = sorted(a.get("probabilities", []), key=lambda p: p.get("value", 0))
         result = {
             "type": "score",
             "score": a["score"],
-            "probabilities": {
-                p["label"]: p["probability"] for p in a.get("probabilities", [])
-            },
+            "probabilities": {p["label"]: p["probability"] for p in levels},
         }
         _maybe_set(result, a, "confidence")
+        _maybe_set(result, a, "unknown_probability")
         return result
-    return {"type": "refusal"}
+    raise ValueError(f"Unknown OpenAI Decisions answer type: {wire_type!r}")
 
 
 def _answer_to_wire(name: str, a: Mapping[str, Any]) -> dict[str, Any]:
     ir_type = a.get("type", "")
     if ir_type == "assertion":
-        return {"type": "predicate", "name": name, "probability": a["probability"]}
-    if ir_type == "choice":
         result: dict[str, Any] = {
+            "type": "predicate",
+            "name": name,
+            "probability": a["probability"],
+        }
+        _maybe_set(result, a, "unknown_probability")
+        return result
+    if ir_type == "choice":
+        result = {
             "type": "choice",
             "name": name,
             "choice": a["choice"],
@@ -326,8 +351,11 @@ def _answer_to_wire(name: str, a: Mapping[str, Any]) -> dict[str, Any]:
             ],
         }
         _maybe_set(result, a, "confidence")
+        _maybe_set(result, a, "unknown_probability")
         return result
     if ir_type == "score":
+        # `value` is the 0-based ordinal placeholder (OpenAI score levels are
+        # 0-indexed); the IR answer carries no per-level ordinal to restore.
         result = {
             "type": "score",
             "name": name,
@@ -338,6 +366,7 @@ def _answer_to_wire(name: str, a: Mapping[str, Any]) -> dict[str, Any]:
             ],
         }
         _maybe_set(result, a, "confidence")
+        _maybe_set(result, a, "unknown_probability")
         return result
     result = {"type": "refusal", "name": name}
     if a.get("reason"):
