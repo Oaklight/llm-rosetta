@@ -297,3 +297,93 @@ class TestRoundTrip:
 
     def test_converter_tag(self, converter):
         assert converter._CONVERTER_TAG == "openai_decisions"
+
+
+class TestReviewFixes:
+    def test_unknown_probability_round_trip(self, converter):
+        resp = {
+            "model": "gpt-6-luna",
+            "answers": [
+                {
+                    "type": "predicate",
+                    "name": "a",
+                    "probability": 0.9,
+                    "unknown_probability": 0.1,
+                },
+                {
+                    "type": "choice",
+                    "name": "c",
+                    "choice": "billing",
+                    "probabilities": [
+                        {"value": "billing", "probability": 0.8},
+                        {"value": "technical", "probability": 0.2},
+                    ],
+                    "unknown_probability": 0.05,
+                },
+                {
+                    "type": "score",
+                    "name": "s",
+                    "score": 1.0,
+                    "probabilities": [
+                        {"value": 0, "label": "A", "probability": 0.4},
+                        {"value": 1, "label": "B", "probability": 0.6},
+                    ],
+                    "unknown_probability": 0.02,
+                },
+            ],
+        }
+        ir = converter.response_from_provider(resp)
+        for qid in ("a", "c", "s"):
+            assert ir["answers"][qid]["unknown_probability"] is not None
+        wire = converter.response_to_provider(ir)
+        by_name = {x["name"]: x for x in wire["answers"]}
+        assert by_name["a"]["unknown_probability"] == 0.1
+        assert by_name["c"]["unknown_probability"] == 0.05
+        assert by_name["s"]["unknown_probability"] == 0.02
+
+    def test_unknown_answer_type_raises(self, converter):
+        with pytest.raises(ValueError, match="Unknown OpenAI Decisions answer type"):
+            converter.response_from_provider(
+                {"model": "gpt-6-luna", "answers": [{"type": "weird", "name": "q"}]}
+            )
+
+    def test_score_levels_sorted_by_ordinal(self, converter):
+        resp = {
+            "model": "gpt-6-luna",
+            "answers": [
+                {
+                    "type": "score",
+                    "name": "s",
+                    "score": 1.0,
+                    "probabilities": [
+                        {"value": 1, "label": "Blocked", "probability": 0.9},
+                        {"value": 0, "label": "Cosmetic", "probability": 0.1},
+                    ],
+                },
+            ],
+        }
+        ir = converter.response_from_provider(resp)
+        # IR insertion order follows the ordinal, not the wire array order.
+        assert list(ir["answers"]["s"]["probabilities"]) == ["Cosmetic", "Blocked"]
+        wire = converter.response_to_provider(ir)
+        assert wire["answers"][0]["probabilities"] == [
+            {"value": 0, "label": "Cosmetic", "probability": 0.1},
+            {"value": 1, "label": "Blocked", "probability": 0.9},
+        ]
+
+    def test_assertion_fold_warns(self, converter):
+        from llm_rosetta.converters.base.context import ConversionContext
+
+        ir = {
+            "model": "gpt-6-luna",
+            "state": "x",
+            "questions": {
+                "q": {
+                    "type": "assertion",
+                    "instructions": "Is it urgent?",
+                    "criteria": [{"label": True, "description": "yes"}],
+                }
+            },
+        }
+        _, warnings = converter.request_to_provider(ir, context=ConversionContext())
+        assert any("Folded assertion criteria" in w for w in warnings)
