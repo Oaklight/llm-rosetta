@@ -474,7 +474,10 @@ class OpenResponsesConverter(BaseConverter):
         else:
             finish_reason_val = RESPONSES_STATUS_TO_REASON.get(status or "", "stop")
 
-        # Convert output items to IR message content
+        # Convert output items to IR message content.  Unlike the request leg,
+        # no ``provider=`` is passed: non-portable response items (e.g.
+        # ``compaction``) are captured as ``provider_passthrough_items`` by the
+        # caller, so this leg must not also emit ``ProviderPassthroughItem``.
         ir_items = self.message_ops.p_messages_to_ir(output_items)
 
         # Collect all content parts into a single assistant message
@@ -771,10 +774,14 @@ class OpenResponsesConverter(BaseConverter):
         """Extract tool_choice and tool_config from provider request into IR."""
         tool_choice = provider_request.get("tool_choice")
         if tool_choice is not None:
+            # Collect into a scratch dict so an empty ``provider_extensions`` is
+            # not created when the tool choice carries no provider-bound object.
+            extensions: dict[str, Any] = {}
             ir_request["tool_choice"] = self.tool_ops.p_tool_choice_to_ir(
-                tool_choice,
-                extensions=ir_request.setdefault("provider_extensions", {}),
+                tool_choice, extensions=extensions
             )
+            if extensions:
+                ir_request.setdefault("provider_extensions", {}).update(extensions)
         tool_config_fields: dict[str, Any] = {}
         if "parallel_tool_calls" in provider_request:
             tool_config_fields["parallel_tool_calls"] = provider_request[
