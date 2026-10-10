@@ -113,13 +113,22 @@ class ReasoningCapability:
 
 @dataclass(frozen=True)
 class ConnectionConfig:
-    """How to reach the upstream provider."""
+    """How to reach the upstream provider.
+
+    Attributes:
+        keyless: When ``True``, the upstream accepts requests without a
+            credential.  A keyless provider sends no auth header as long as
+            no API key is configured; supplying one switches it back to the
+            base type's auth (Bearer for OpenAI-compatible upstreams), so a
+            paid account can use the same shim.
+    """
 
     base_url: str | None = None
     api_key_env: str | None = None
     models_path: str | None = None
     model_id_field: str | None = None
     auth_header: str | None = None
+    keyless: bool = False
 
 
 @dataclass(frozen=True)
@@ -205,6 +214,10 @@ class ProviderShim:
             converter type strings (``"openai_chat"``, ``"anthropic"``,
             ``"google"``, ``"openai_responses"``).
         logo: URL to the provider's logo image (SVG preferred).
+        free_source: Marks the provider as a free model source.  The admin
+            UI uses this to group it under a neutral "Free" bucket, add a
+            refresh action, and show the third-party disclosure — without
+            naming the upstream vendor.
         connection: Upstream connection config (URL, API key env,
             models endpoint, model ID field).
         tools: Tool handling config (custom tools, description length,
@@ -231,6 +244,7 @@ class ProviderShim:
     name: str
     base: str
     logo: str | None = None
+    free_source: bool = False
     connection: ConnectionConfig = ConnectionConfig()
     tools: ToolsConfig = ToolsConfig()
     pre_ir_transforms: tuple[Transform, ...] = ()
@@ -315,6 +329,7 @@ class ProviderShim:
         # ── Apply defaults ───────────────────────────────────────────
         _FIELD_DEFAULTS: dict[str, Any] = {
             "logo": None,
+            "free_source": False,
             "connection": ConnectionConfig(),
             "tools": ToolsConfig(),
             "pre_ir_transforms": (),

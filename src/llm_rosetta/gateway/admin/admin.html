@@ -101,6 +101,7 @@
           <button class="btn btn-sm" id="viewListBtn" onclick="setProviderView('list')" data-i18n-title="label.listView" title="List view"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
         </div>
         <button class="btn btn-primary btn-sm" onclick="openProviderModal()" data-i18n="btn.addProvider">+ Add Provider</button>
+        <span id="freeProviderButtons" style="display:contents"></span>
       </div>
       <div class="provider-grid" id="providerGrid"></div>
     </div>
@@ -735,8 +736,8 @@
         <input id="provName" placeholder="e.g. my-openai, openrouter-claude">
       </div>
     </div>
-    <div class="form-group">
-      <label data-i18n="label.apiKey">API Key <span style="color:var(--red)">*</span></label>
+    <div class="form-group" id="provApiKeyGroup">
+      <label data-i18n="label.apiKey">API Key <span style="color:var(--red)">*</span> <span id="provOptionalTag" style="color:var(--text-dim);font-weight:normal" data-i18n="label.optional">(optional)</span></label>
       <div style="display:flex;gap:4px;align-items:center" id="provApiKeyRow">
         <input id="provApiKey" placeholder="${OPENAI_API_KEY}" type="password" style="flex:1" oninput="_syncKeyField()" onpaste="setTimeout(()=>_syncKeyField(),0)">
       </div>
@@ -745,6 +746,10 @@
         <button type="button" class="btn btn-sm" onclick="_promoteToMultiKey()">+ <span data-i18n="label.addKey">Add key</span></button>
         <button type="button" class="key-btn" id="provKeyToggleBtn" title="Toggle visibility" onclick="toggleModalKeyVisibility()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
         <button type="button" class="key-btn" id="provKeyCopyBtn" title="Copy" onclick="copyModalKey()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+      </div>
+      <div id="provKeylessHint" style="display:none;font-size:0.82em;color:var(--text-dim);margin-top:2px">
+        <span data-i18n="label.keylessHint">No API key needed.</span>
+        <a href="#" onclick="revealProviderKey();return false;" data-i18n="btn.useOwnKey">Use my own key</a>
       </div>
     </div>
     <div class="form-row" style="display:flex;gap:8px;align-items:flex-end">

@@ -758,3 +758,36 @@ class TestShimLoaderFieldCoverage:
             f"_SPECIAL_FIELDS lists {stale} which no longer exist "
             f"in ProviderShim — remove them."
         )
+
+
+class TestFreeSourceShim:
+    """The free-source shim declares keyless + free_source and no logo."""
+
+    @pytest.fixture(autouse=True)
+    def _load_builtins(self):
+        from llm_rosetta.shims.providers import load_providers
+
+        load_providers()
+
+    def test_connection_config_keyless_flag(self):
+        from llm_rosetta.shims.provider_shim import ConnectionConfig
+
+        assert ConnectionConfig().keyless is False
+        assert ConnectionConfig(keyless=True).keyless is True
+
+    def test_free_shim_fields(self):
+        shim = get_shim("free--openai_chat")
+
+        assert shim is not None
+        assert shim.base == "openai_chat"
+        assert shim.free_source is True
+        assert shim.connection.keyless is True
+        assert shim.connection.models_path == "/models"
+        assert shim.logo is None
+
+    def test_default_shim_is_not_free_source(self):
+        shim = get_shim("openrouter--openai_chat")
+
+        assert shim is not None
+        assert shim.free_source is False
+        assert shim.connection.keyless is False

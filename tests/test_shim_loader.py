@@ -107,6 +107,7 @@ class TestLoadProviders:
             "open_responses",
             "openrouter--openai_chat",
             "openrouter--anthropic",
+            "free--openai_chat",
             "anthropic",
             "google_generate",
             "deepseek--openai_chat",
@@ -125,7 +126,7 @@ class TestLoadProviders:
             "alcf--minerva",
             "typesafe",
         }, (
-            f"Unexpected shim diff: {names.symmetric_difference({'argo--anthropic', 'argo--openai_chat', 'argo--openai_responses', 'asksage--openai_chat', 'asksage--openai_responses', 'asksage--anthropic', 'asksage--google_generate', 'openai', 'openai_responses', 'open_responses', 'openrouter--openai_chat', 'openrouter--anthropic', 'anthropic', 'google_generate', 'deepseek--openai_chat', 'deepseek--openai_responses', 'minimax--openai_chat', 'minimax--anthropic', 'moonshot', 'qwen', 'volcengine--openai_chat', 'volcengine--openai_responses', 'xai', 'zhipu', 'google_interactions', 'alcf--sophia', 'alcf--metis', 'alcf--minerva', 'typesafe'})}"
+            f"Unexpected shim diff: {names.symmetric_difference({'argo--anthropic', 'argo--openai_chat', 'argo--openai_responses', 'asksage--openai_chat', 'asksage--openai_responses', 'asksage--anthropic', 'asksage--google_generate', 'openai', 'openai_responses', 'open_responses', 'openrouter--openai_chat', 'openrouter--anthropic', 'free--openai_chat', 'anthropic', 'google_generate', 'deepseek--openai_chat', 'deepseek--openai_responses', 'minimax--openai_chat', 'minimax--anthropic', 'moonshot', 'qwen', 'volcengine--openai_chat', 'volcengine--openai_responses', 'xai', 'zhipu', 'google_interactions', 'alcf--sophia', 'alcf--metis', 'alcf--minerva', 'typesafe'})}"
         )
 
     def test_all_registered_after_load(self):
@@ -135,6 +136,7 @@ class TestLoadProviders:
             "openai",
             "openrouter--openai_chat",
             "openrouter--anthropic",
+            "free--openai_chat",
             "anthropic",
             "google_generate",
             "deepseek--openai_chat",
@@ -329,6 +331,7 @@ class TestLoadProviders:
             "openai_responses": "openai_responses",
             "openrouter--openai_chat": "openai_chat",
             "openrouter--anthropic": "anthropic",
+            "free--openai_chat": "openai_chat",
             "anthropic": "anthropic",
             "google_generate": "google_generate",
             "google_interactions": "google_interactions",
@@ -372,10 +375,11 @@ class TestLoadProviders:
     }
 
     def test_all_shims_have_logos(self):
-        """Every built-in shim (except exempted ones) should have a logo URL."""
+        """Every built-in shim (except exempted / de-branded free sources)
+        should have a logo URL."""
         shims = load_providers()
         for shim in shims:
-            if shim.name in self._LOGO_EXEMPT:
+            if shim.name in self._LOGO_EXEMPT or shim.free_source:
                 continue
             assert shim.logo is not None, f"Shim {shim.name!r} missing logo"
             assert shim.logo.startswith("https://"), (

@@ -161,6 +161,7 @@ class ProviderInfo:
         timeout: float | None = None,
         token_command: list[str] | None = None,
         token_refresh_interval: int = 3600,
+        keyless: bool = False,
     ) -> None:
         if not base_url.startswith(("http://", "https://")):
             raise ValueError(
@@ -179,6 +180,7 @@ class ProviderInfo:
         self.token_command = token_command
         self.token_refresh_interval = token_refresh_interval
         self.token_status: dict | None = None
+        self.keyless = keyless
 
     # -- readiness ----------------------------------------------------------
 
@@ -188,14 +190,22 @@ class ProviderInfo:
 
         Returns ``False`` when the key ring contains only the deferred
         token-command sentinel, meaning the initial token fetch has not
-        yet completed.
+        yet completed.  A keyless provider is always ready.
         """
+        if self.keyless:
+            return True
         return not self.key_ring.contains_only(TOKEN_PENDING_SENTINEL)
 
     # -- public helpers used by the proxy -----------------------------------
 
     def auth_headers(self) -> dict[str, str]:
-        """Return auth headers using the next rotated or affinity-selected key."""
+        """Return auth headers using the next rotated or affinity-selected key.
+
+        A keyless provider builds its headers without the key ring, so it
+        never raises "No API keys configured".
+        """
+        if self.keyless:
+            return self._auth_header_fn("")
         if self._affinity_identity is not None:
             return self._auth_header_fn(self.key_ring.select(self._affinity_identity))
         return self._auth_header_fn(self.key_ring.next())
@@ -264,6 +274,11 @@ class ProviderInfo:
 # ---------------------------------------------------------------------------
 # Per-provider auth header builders
 # ---------------------------------------------------------------------------
+
+
+def no_auth(_api_key: str) -> dict[str, str]:
+    """Auth header builder for keyless upstreams: sends no credential."""
+    return {}
 
 
 def openai_auth(api_key: str) -> dict[str, str]:
