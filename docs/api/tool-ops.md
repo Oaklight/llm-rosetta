@@ -132,7 +132,8 @@ tool_ops.to_google_generate(ir_tool)
 | 规范名称 | 可接受的别名 |
 |---|---|
 | `openai_chat` | `openai-chat` |
-| `openai_responses` | `openai-responses`、`open_responses`、`open-responses` |
+| `openai_responses` | `openai-responses` |
+| `open_responses` | `open-responses` |
 | `anthropic` | — |
 | `google` | `google-genai` |
 | `google_interactions` | `google-interactions` |
