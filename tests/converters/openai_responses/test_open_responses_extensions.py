@@ -68,6 +68,7 @@ class TestAllowedToolsToolChoice:
         assert out["tool_choice"] == _ALLOWED_TOOLS
         # Not duplicated as a top-level field.
         assert "allowed_tools" not in out
+        assert "_open_responses_allowed_tools" not in out
 
     def test_lossless_to_openai_profile(self):
         out = convert(
@@ -84,7 +85,10 @@ class TestAllowedToolsToolChoice:
         conv = OpenResponsesConverter()
         ir = conv.request_from_provider(body, context=ConversionContext())
         assert ir["tool_choice"]["mode"] == "any"
-        assert ir["provider_extensions"]["allowed_tools"] == body["tool_choice"]
+        assert (
+            ir["provider_extensions"]["_open_responses_allowed_tools"]
+            == (body["tool_choice"])
+        )
 
     def test_degrades_across_format_keeping_mode(self):
         # The restriction has no IR equivalent; the mode degrades to the
@@ -96,6 +100,20 @@ class TestAllowedToolsToolChoice:
             baseline=False,
         )
         assert out["tool_choice"] == {"type": "auto"}
+        # The provider-bound object must not escape onto another dialect's wire.
+        assert "allowed_tools" not in out
+        assert "_open_responses_allowed_tools" not in out
+
+    def test_no_leak_onto_openai_chat(self):
+        out = convert(
+            self._body(),
+            "openai_chat",
+            source_provider="open_responses",
+            baseline=False,
+        )
+        assert out["tool_choice"] == "auto"
+        assert "allowed_tools" not in out
+        assert "_open_responses_allowed_tools" not in out
 
 
 class TestCompaction:

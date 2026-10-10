@@ -58,8 +58,8 @@ ToolProvider = Literal[
 _PROVIDER_ALIASES: dict[str, str] = {
     "openai-chat": "openai_chat",
     "openai-responses": "openai_responses",
-    "open_responses": "openai_responses",
-    "open-responses": "openai_responses",
+    "open_responses": "open_responses",
+    "open-responses": "open_responses",
     "google-genai": "google",
     "google-interactions": "google_interactions",
 }
@@ -77,10 +77,10 @@ def _get_tool_ops(provider: str) -> Any:
         from .converters.openai_chat import OpenAIChatToolOps
 
         return OpenAIChatToolOps
-    if canonical == "openai_responses":
-        from .converters.openai_responses import OpenAIResponsesToolOps
+    if canonical in ("openai_responses", "open_responses"):
+        from .converters.openai_responses import OpenResponsesToolOps
 
-        return OpenAIResponsesToolOps
+        return OpenResponsesToolOps
     if canonical == "anthropic":
         from .converters.anthropic import AnthropicToolOps
 
@@ -95,8 +95,8 @@ def _get_tool_ops(provider: str) -> Any:
         return GoogleInteractionsToolOps
     raise ValueError(
         f"Unknown provider: {provider!r}. "
-        f"Supported: openai_chat, openai_responses, anthropic, google, "
-        f"google_interactions "
+        f"Supported: openai_chat, openai_responses, open_responses, "
+        f"anthropic, google, google_interactions "
         f"(aliases: openai-chat, openai-responses, google-genai, google-interactions)"
     )
 

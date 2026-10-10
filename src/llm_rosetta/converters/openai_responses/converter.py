@@ -40,6 +40,7 @@ from ...types.ir.stream import (
 )
 from ..base import BaseConverter
 from ..base.context import ConversionContext, StreamContext
+from ..base.helpers.extensions import wire_extensions
 from ..base.helpers.truncate import truncate_with_digest
 from ..base.tools import (
     assign_tool_batch_ids,
@@ -321,19 +322,16 @@ class OpenResponsesConverter(BaseConverter):
         # 11. Provider extensions (pass-through)
         extensions = ir_request.get("provider_extensions")
         if extensions:
-            extensions = dict(extensions)
             # Merge _text_verbosity back into the text object
-            verbosity = extensions.pop("_text_verbosity", None)
+            verbosity = extensions.get("_text_verbosity")
             if verbosity is not None:
                 result.setdefault("text", {})["verbosity"] = verbosity
-            # The Open Responses ``allowed_tools`` object is re-emitted inside
-            # ``tool_choice`` (see ``_apply_tool_config``); do not also leak it
-            # as a top-level field.  A legacy top-level ``allowed_tools`` (a bare
-            # list, or a dict without a ``"type"``) passes through untouched.
-            _allowed = extensions.get("allowed_tools")
-            if isinstance(_allowed, dict) and _allowed.get("type") == "allowed_tools":
-                extensions.pop("allowed_tools")
-            result.update(extensions)
+            # ``wire_extensions`` drops internal ``_``-prefixed keys, so the
+            # spec-form ``_open_responses_allowed_tools`` (re-emitted inside
+            # ``tool_choice`` by ``_apply_tool_config``) never leaks as a
+            # top-level field.  A legacy top-level ``allowed_tools`` is a plain
+            # key and still passes through.
+            result.update(wire_extensions(ir_request))
 
         return result
 
@@ -755,7 +753,7 @@ class OpenResponsesConverter(BaseConverter):
         tool_choice = ir_request.get("tool_choice")
         if tool_choice:
             allowed_tools = (ir_request.get("provider_extensions") or {}).get(
-                "allowed_tools"
+                "_open_responses_allowed_tools"
             )
             result["tool_choice"] = self.tool_ops.ir_tool_choice_to_p(
                 tool_choice, allowed_tools=allowed_tools

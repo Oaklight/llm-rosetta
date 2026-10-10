@@ -885,12 +885,13 @@ def apply_upstream_tool_names(
 
     extensions = ir_request.get("provider_extensions")
     if isinstance(extensions, dict):
-        _apply_upstream_allowed_tools(
-            extensions.get("allowed_tools"),
-            name_map=name_map,
-            declared=declared,
-            warnings=warnings,
-        )
+        for key in ("allowed_tools", "_open_responses_allowed_tools"):
+            _apply_upstream_allowed_tools(
+                extensions.get(key),
+                name_map=name_map,
+                declared=declared,
+                warnings=warnings,
+            )
 
     # Only the history rewrite below depends on a rename having happened:
     # with an empty map every name resolves to itself and nothing is
