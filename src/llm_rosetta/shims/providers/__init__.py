@@ -132,7 +132,7 @@ def _clear_plugin_namespaces() -> None:
 
 def _register_plugin_chain(
     provider_dir: Path, group: str | None, root: Path | None
-) -> tuple[str, str, list[str]]:
+) -> tuple[str, str]:
     """Register the synthetic package chain for a plugin shim's transforms.
 
     The namespace is keyed on the *resolved* providers root so the same
@@ -140,7 +140,7 @@ def _register_plugin_chain(
     namespace.
 
     Returns:
-        ``(namespace, transforms_module_name, created_package_names)``.
+        ``(namespace, transforms_module_name)``.
     """
     resolved = Path(root or provider_dir.parent).resolve()
     ns = f"{_PLUGIN_NS_PREFIX}_{hashlib.sha1(str(resolved).encode()).hexdigest()[:8]}"
@@ -152,25 +152,28 @@ def _register_plugin_chain(
         chain.append((cur, cur_dir))
     leaf = f"{cur}.{provider_dir.name}"
     chain.append((leaf, provider_dir))
-    created = [name for name, path in chain if _ensure_pkg(name, path)]
-    return ns, f"{leaf}.transforms", created
+    for name, path in chain:
+        _ensure_pkg(name, path)
+    return ns, f"{leaf}.transforms"
 
 
-def _rollback_plugin_load(
-    module_name: str, ns: str | None, created_pkgs: list[str]
-) -> None:
+def _rollback_plugin_load(module_name: str, ns: str | None) -> None:
     """Undo a failed plugin transforms load.
 
     Drops the half-initialised module plus every package and submodule this
     load registered under *ns* — ``transforms.py`` may have imported siblings
-    before raising.
+    before raising.  The ``_plugin_namespaces`` bookkeeping is cleared for
+    whatever was actually removed, not only for packages this load created: a
+    later failed load shares the namespace of an earlier successful one, so
+    leaving it in ``_plugin_namespaces`` without its ``sys.modules`` entry makes
+    the next ``_ensure_pkg`` skip the rebuild and raise ``KeyError``.
     """
     doomed = {module_name}
     if ns is not None:
         doomed.update(m for m in sys.modules if m == ns or m.startswith(f"{ns}."))
     for mod_name in doomed:
         sys.modules.pop(mod_name, None)
-    for pkg_name in created_pkgs:
+    for pkg_name in [k for k in _plugin_namespaces if k in doomed]:
         _plugin_namespaces.pop(pkg_name, None)
 
 
@@ -279,7 +282,6 @@ def _load_transforms(
     tf_path = provider_dir / "transforms.py"
     if not tf_path.exists():
         return (), (), (), (), None
-    created_pkgs: list[str] = []
     ns: str | None = None
     if _builtin:
         prefix = "llm_rosetta.shims.providers"
@@ -289,9 +291,7 @@ def _load_transforms(
             else f"{prefix}.{provider_dir.name}.transforms"
         )
     else:
-        ns, module_name, created_pkgs = _register_plugin_chain(
-            provider_dir, group, root
-        )
+        ns, module_name = _register_plugin_chain(provider_dir, group, root)
     spec = importlib.util.spec_from_file_location(module_name, tf_path)
     if spec is None or spec.loader is None:
         logger.warning("Could not load %s", tf_path)
@@ -301,7 +301,7 @@ def _load_transforms(
     try:
         spec.loader.exec_module(mod)
     except BaseException:
-        _rollback_plugin_load(module_name, ns, created_pkgs)
+        _rollback_plugin_load(module_name, ns)
         raise
     # New names take precedence; fall back to legacy names.
     # Use `is None` (not `or`) since empty tuple () is falsy but valid.

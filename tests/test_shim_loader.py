@@ -545,6 +545,29 @@ class TestLoadProvidersFromDir:
         after = {m for m in sys.modules if m.startswith("_llm_rosetta_plugin_shims")}
         assert after == before
 
+    def test_failed_load_does_not_poison_later_loads(self, tmp_path: Path):
+        """A failed plugin load must not make the next load raise KeyError —
+        the rollback has to clear the namespace bookkeeping too."""
+        good = tmp_path / "aaa_good"
+        good.mkdir()
+        (good / "provider.yaml").write_text("name: aaa_good\nbase: openai_chat\n")
+        load_providers_from_dir(tmp_path)  # namespace now exists
+
+        bad = tmp_path / "zzz_bad"
+        bad.mkdir()
+        (bad / "provider.yaml").write_text("name: zzz_bad\nbase: openai_chat\n")
+        (bad / "transforms.py").write_text("raise RuntimeError('boom')\n")
+        with pytest.raises(RuntimeError, match="boom"):
+            load_providers_from_dir(tmp_path)
+
+        # The shim's own error again, not a KeyError from stale bookkeeping.
+        with pytest.raises(RuntimeError, match="boom"):
+            load_providers_from_dir(tmp_path)
+
+        (bad / "transforms.py").write_text("post_ir_transforms = ()\n")
+        shims = load_providers_from_dir(tmp_path)
+        assert {s.name for s in shims} == {"aaa_good", "zzz_bad"}
+
     def test_plugin_namespaces_cleared_on_reset(self, tmp_path: Path):
         """_reset_registry drops the synthetic plugin packages from sys.modules."""
         import sys
