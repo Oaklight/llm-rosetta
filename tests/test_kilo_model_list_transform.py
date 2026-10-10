@@ -1,4 +1,4 @@
-"""Tests for the free-source shim's model_list_transform."""
+"""Tests for the Kilo shim's model_list_transform."""
 
 from __future__ import annotations
 
@@ -14,12 +14,12 @@ def _ensure_transforms_loaded():
 
 
 def _transform():
-    t = get_model_list_transform("free--openai_chat")
+    t = get_model_list_transform("kilo--openai_chat")
     assert t is not None
     return t
 
 
-class TestFreeModelListTransform:
+class TestKiloModelListTransform:
     def test_keeps_only_free_models(self):
         raw = [
             {"id": "nvidia/nemotron-3-ultra-550b-a55b:free", "isFree": True},
@@ -34,14 +34,14 @@ class TestFreeModelListTransform:
         ]
         assert upstream == {}
 
-    def test_drops_branded_router_ids(self):
+    def test_branded_ids_are_kept(self):
         raw = [
             {"id": "kilo-auto/free", "isFree": True},
             {"id": "cohere/north-mini-code:free", "isFree": True},
         ]
         ids, _ = _transform()(raw)
 
-        assert ids == ["cohere/north-mini-code:free"]
+        assert ids == ["kilo-auto/free", "cohere/north-mini-code:free"]
 
     def test_missing_isFree_is_dropped(self):
         raw = [{"id": "some/model"}]
