@@ -28,6 +28,11 @@
       "format": "uri",
       "description": "URL to the provider's logo image (SVG preferred)."
     },
+    "free_source": {
+      "type": "boolean",
+      "description": "Mark this provider as a free model source. The admin UI groups it under a neutral 'Free' bucket and shows the third-party disclosure, without naming the upstream vendor.",
+      "default": false
+    },
     "response_id_prefix": {
       "type": "string",
       "description": "Provider-specific prefix for response IDs (e.g. 'chatcmpl-', 'msg_', 'resp_'). Empty string means passthrough.",
@@ -63,6 +68,11 @@
         "auth_header": {
           "type": "string",
           "description": "Custom auth header name (e.g. 'x-access-tokens'). When set, the API key is sent as this header instead of the base-type default (Bearer, x-api-key, x-goog-api-key)."
+        },
+        "keyless": {
+          "type": "boolean",
+          "description": "The upstream accepts requests with no credential. No auth header is sent while no API key is configured; supplying one falls back to the base-type auth.",
+          "default": false
         }
       }
     },

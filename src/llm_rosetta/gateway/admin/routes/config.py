@@ -249,6 +249,8 @@ async def get_config(request: Any) -> Response:
                     "name": s.name,
                     "base": s.base,
                     "logo": s.logo,
+                    "free_source": s.free_source,
+                    "keyless": s.connection.keyless,
                     "default_base_url": s.connection.base_url,
                     "default_api_key_env": s.connection.api_key_env,
                     "supports_custom_tools": s.tools.custom_tools,

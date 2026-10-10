@@ -177,6 +177,29 @@ tr:hover td { background: var(--bg-hover); }
 .provider-card .pc-field { margin-bottom: 4px; }
 .provider-card .pc-field code { background: var(--bg); padding: 2px 6px; border-radius: 4px; }
 .provider-card .pc-actions { margin-top: auto; padding-top: 12px; }
+.provider-card .pc-free-note {
+  margin-top: 6px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text-dim);
+}
+.provider-grid.list-view .pc-free-note { display: none; }
+.provider-section-head {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin: 12px 0 0;
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--border);
+}
+.provider-section-head:first-child { margin-top: 0; }
+.provider-section-head.is-free { color: var(--accent); border-bottom: 2px solid var(--accent); }
 .provider-card .pc-models { margin-left: auto; }
 .provider-card .pc-models-empty { display: none; }
 
