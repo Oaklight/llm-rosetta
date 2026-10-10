@@ -196,6 +196,14 @@ class ConversionError(Exception):
 
 _EMPTY_TRANSFORMS: tuple[Transform, ...] = ()
 
+# Provider names (base type or shim name) that resolve to the
+# ``google_generate`` converter and therefore use the Generative
+# Language REST body shape by default.  ``"google"`` is the shim name
+# and ``"google_generate"`` the canonical base type — both must select
+# the REST output format so the emitted body is accepted by the REST
+# endpoint (SDK-shaped ``config`` is rejected with HTTP 400).
+_GOOGLE_GENERATE_PROVIDERS: frozenset[str] = frozenset({"google", "google_generate"})
+
 
 @runtime_checkable
 class StreamProcessorProtocol(Protocol):
@@ -519,7 +527,7 @@ class ConversionPipeline:
             )
             return result
         ctx.options["metadata_mode"] = self._metadata_mode
-        if self._target_provider == "google":
+        if self._target_provider in _GOOGLE_GENERATE_PROVIDERS:
             ctx.options["output_format"] = self._google_output_format
 
         if self._multimodal_tool_result is not None:
