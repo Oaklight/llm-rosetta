@@ -273,7 +273,7 @@ def _answer_from_wire(a: dict[str, Any]) -> dict[str, Any]:
             result["unknown_probability"] = a["unknown_probability"]
         return result
     if ir_type == "choice":
-        return _copy(a, "choice", "probabilities", "confidence")
+        return _copy(a, "choice", "probabilities", "confidence", "unknown_probability")
     if ir_type == "score":
         # Re-key probabilities from index keys to level labels via ``legend``.
         legend = a.get("legend", {})
@@ -294,7 +294,7 @@ def _answer_to_wire(a: Mapping[str, Any], warnings: list[str]) -> dict[str, Any]
         _maybe_set(result, a, "unknown_probability")
         return result
     if ir_type == "choice":
-        return _copy(a, "choice", "probabilities", "confidence")
+        return _copy(a, "choice", "probabilities", "confidence", "unknown_probability")
     if ir_type == "score":
         probs = a.get("probabilities", {})
         result = {

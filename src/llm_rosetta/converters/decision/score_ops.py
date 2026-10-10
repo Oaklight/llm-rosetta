@@ -131,7 +131,7 @@ def scores_to_answer(
 
     if qtype == "choice":
         labels = [str(e["label"]) for e in _entries(question)]
-        prob_dict = {k: p for k, p in zip(labels, probs)}
+        prob_dict = {k: p for k, p in zip(labels, probs, strict=True)}
         choice = max(prob_dict, key=lambda k: prob_dict[k]) if prob_dict else ""
         return ChoiceAnswer(
             type="choice",
@@ -142,7 +142,7 @@ def scores_to_answer(
 
     if qtype == "score":
         labels = [str(e["label"]) for e in _entries(question)]
-        prob_dict = {k: p for k, p in zip(labels, probs)}
+        prob_dict = {k: p for k, p in zip(labels, probs, strict=True)}
         score_val = sum(i * p for i, p in enumerate(probs))
         return ScoreAnswer(
             type="score",
