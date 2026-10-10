@@ -256,13 +256,16 @@ async def get_config(request: Any) -> Response:
                     "base": name,
                     "default_base_url": get_default_base_url(name),
                     "default_api_key_env": get_default_api_key_env(name),
+                    # A same-standard provider shim, when one is registered, is
+                    # the recommended way to reach a vendor's own endpoint.
+                    "recommended_provider": rec if get_shim(rec) is not None else None,
                 }
-                for name in (
-                    "openai_chat",
-                    "openai_responses",
-                    "anthropic",
-                    "google_generate",
-                    "google_interactions",
+                for name, rec in (
+                    ("openai_chat", "openai"),
+                    ("openai_responses", "openai_responses"),
+                    ("anthropic", "anthropic"),
+                    ("google_generate", "google"),
+                    ("google_interactions", "google_interactions"),
                 )
             ],
             "registered_shims": [
