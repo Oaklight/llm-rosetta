@@ -6,13 +6,14 @@ title: Decision API Formats
 
 Decision models evaluate state against typed questions and return structured probabilistic answers — no text generation involved. This is a distinct model paradigm alongside chat completions, embedding, and rerank.
 
-LLM-Rosetta currently supports **1 format family** for decision APIs, with more expected as the paradigm matures.
+LLM-Rosetta currently supports **2 format families** for decision APIs, with more expected as the paradigm matures.
 
 ## Overview
 
 | Format Family | Provider | Endpoint | Converter Class |
 |--------------|----------|----------|-----------------|
 | TypeSafe System One | TypeSafe AI (Jev) | `POST /v1/systemone` | `TypeSafeDecisionConverter` |
+| OpenAI Decisions | OpenAI | `POST /v1/decisions` | `OpenAIDecisionsConverter` |
 
 ## Key Concepts
 
@@ -155,6 +156,34 @@ request: IRDecisionRequest = {
 }
 ```
 
+### OpenAI Decisions
+
+OpenAI's Decisions API takes an `input` (string or user messages) and a
+`questions` **array**; each question is named and typed `predicate` / `choice`
+/ `score`.
+
+```json
+{
+  "model": "gpt-6-luna",
+  "input": "Help! My payouts have been failing for 3 days.",
+  "questions": [
+    {"type": "predicate", "name": "is_urgent",
+     "instructions": "Does this convey urgency?"},
+    {"type": "choice", "name": "department",
+     "instructions": "Which team should handle this?",
+     "choices": [{"value": "billing", "description": "Payments, invoicing, refunds"},
+                 {"value": "technical", "description": "Bugs, outages, integrations"}]},
+    {"type": "score", "name": "frustration",
+     "instructions": "How frustrated is the customer?",
+     "levels": [{"label": "Calm"}, {"label": "Frustrated"}, {"label": "Very angry"}]}
+  ]
+}
+```
+
+The IR request is identical to the TypeSafe one above; `OpenAIDecisionsConverter`
+maps the `questions` map to the array (keyed by `name`) and folds an assertion's
+entries into a marked, reversible JSON envelope inside `instructions`.
+
 ## Response Format
 
 ### TypeSafe System One
@@ -210,6 +239,30 @@ response: IRDecisionResponse = {
 }
 ```
 
+### OpenAI Decisions
+
+```json
+{
+  "model": "gpt-6-luna",
+  "answers": [
+    {"type": "predicate", "name": "is_urgent", "probability": 0.92},
+    {"type": "choice", "name": "department", "choice": "billing",
+     "probabilities": [{"value": "billing", "probability": 0.95},
+                       {"value": "technical", "probability": 0.02}],
+     "confidence": 0.93},
+    {"type": "score", "name": "frustration", "score": 1.1,
+     "probabilities": [{"value": 0, "label": "Calm", "probability": 0.1},
+                       {"value": 1, "label": "Frustrated", "probability": 0.6},
+                       {"value": 2, "label": "Very angry", "probability": 0.3}],
+     "confidence": 0.55}
+  ]
+}
+```
+
+`answers` is an array keyed by `name`; an entry may also be a
+`{"type": "refusal", "name": ...}`. `OpenAIDecisionsConverter` re-keys the
+`probabilities` arrays into the IR distribution dicts.
+
 ## Using the Converter
 
 ```python
@@ -228,9 +281,10 @@ wire_response = converter.response_to_provider(ir_response)
 
 ## Gateway
 
-The gateway registers two routes for decision requests:
+The gateway registers three routes for decision requests:
 
 - `POST /v1/decision` — canonical route
+- `POST /v1/decisions` — OpenAI-compatible alias
 - `POST /v1/systemone` — TypeSafe-compatible alias
 
 !!! warning "Phase 1 limitation"
