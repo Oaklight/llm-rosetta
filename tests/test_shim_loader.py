@@ -474,6 +474,56 @@ class TestLoadProvidersFromDir:
         assert "foo" not in result
         assert result["bar"] == 2
 
+    def test_plugin_transforms_relative_import(self, tmp_path: Path):
+        """A plugin transforms.py can import a sibling helper via `from .x`."""
+        d = tmp_path / "relimp"
+        d.mkdir()
+        (d / "provider.yaml").write_text("name: relimp\nbase: openai_chat\n")
+        (d / "helpers.py").write_text("def mark():\n    return 'sentinel'\n")
+        (d / "transforms.py").write_text(
+            "from .helpers import mark\n"
+            "from llm_rosetta.transforms import strip_fields\n"
+            "post_ir_transforms = (strip_fields(mark()),)\n"
+        )
+        shims = load_providers_from_dir(tmp_path)
+        s = [s for s in shims if s.name == "relimp"][0]
+        assert len(s.post_ir_transforms) == 1
+        assert s.post_ir_transforms[0]({"sentinel": 1, "keep": 2}) == {"keep": 2}
+
+    def test_plugin_grouped_relative_import(self, tmp_path: Path):
+        """Grouped plugin layout also supports sibling imports."""
+        leaf = tmp_path / "grp" / "leaf"
+        leaf.mkdir(parents=True)
+        (leaf / "provider.yaml").write_text("name: grp--leaf\nbase: openai_chat\n")
+        (leaf / "helper.py").write_text("NAME = 'gone'\n")
+        (leaf / "transforms.py").write_text(
+            "from .helper import NAME\n"
+            "from llm_rosetta.transforms import strip_fields\n"
+            "post_ir_transforms = (strip_fields(NAME),)\n"
+        )
+        shims = load_providers_from_dir(tmp_path)
+        s = [s for s in shims if s.name == "grp--leaf"][0]
+        assert s.post_ir_transforms[0]({"gone": 1, "keep": 2}) == {"keep": 2}
+
+    def test_plugin_namespaces_cleared_on_reset(self, tmp_path: Path):
+        """_reset_registry drops the synthetic plugin packages from sys.modules."""
+        import sys
+
+        from llm_rosetta.shims.provider_shim import _reset_registry
+        from llm_rosetta.shims.providers import load_providers
+
+        d = tmp_path / "resettest"
+        d.mkdir()
+        (d / "provider.yaml").write_text("name: resettest\nbase: openai_chat\n")
+        (d / "helpers.py").write_text("VALUE = 1\n")
+        (d / "transforms.py").write_text("from .helpers import VALUE\n")
+        load_providers_from_dir(tmp_path)
+        assert any(m.startswith("_llm_rosetta_plugin_shims") for m in sys.modules)
+
+        _reset_registry()
+        assert not any(m.startswith("_llm_rosetta_plugin_shims") for m in sys.modules)
+        load_providers()  # restore built-ins for the remaining tests
+
 
 class TestPluginEntryPoints:
     """Tests for the entry-point plugin loader."""

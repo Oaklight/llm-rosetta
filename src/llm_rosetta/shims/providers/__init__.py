@@ -51,8 +51,12 @@ in ``load_providers()``'s combined result.
 
 from __future__ import annotations
 
+import hashlib
+import importlib.machinery
 import importlib.util
 import logging
+import sys
+import types
 from importlib.metadata import entry_points
 from pathlib import Path
 from collections.abc import Callable
@@ -79,6 +83,43 @@ _PROVIDERS_DIR = Path(__file__).parent
 ModelListTransform = Callable[[list[dict[str, Any]]], tuple[list[str], dict[str, str]]]
 
 _model_list_transforms: dict[str, ModelListTransform] = {}
+
+# Synthetic package namespace for plugin (non-builtin) shim transforms.  The
+# namespace is keyed per providers root so two external sources with the same
+# group/leaf names do not collide in ``sys.modules``.
+_PLUGIN_NS_PREFIX = "_llm_rosetta_plugin_shims"
+_plugin_namespaces: dict[str, list[str]] = {}
+
+
+def _ensure_pkg(name: str, dir_path: Path) -> None:
+    """Register *name* as a package whose ``__path__`` points at *dir_path*.
+
+    External shim transforms are executed by path rather than imported as part
+    of a real package, so a relative import such as ``from .helpers import x``
+    would otherwise raise ``ModuleNotFoundError``.  Giving each directory level
+    a synthetic package with a ``__path__`` makes relative imports — and plain
+    sibling-module imports — resolve through the normal path finder.
+    """
+    locs = _plugin_namespaces.get(name)
+    if locs is None:
+        locs = []
+        _plugin_namespaces[name] = locs
+        spec = importlib.machinery.ModuleSpec(name, loader=None, is_package=True)
+        spec.submodule_search_locations = locs
+        mod = types.ModuleType(name)
+        mod.__spec__ = spec
+        mod.__package__ = name
+        sys.modules[name] = mod
+    if str(dir_path) not in locs:
+        locs.append(str(dir_path))
+    sys.modules[name].__path__ = locs
+
+
+def _clear_plugin_namespaces() -> None:
+    """Drop the synthetic plugin packages and their submodules (on reload)."""
+    for name in [m for m in sys.modules if m.startswith(_PLUGIN_NS_PREFIX)]:
+        sys.modules.pop(name, None)
+    _plugin_namespaces.clear()
 
 
 def get_model_list_transform(
@@ -160,7 +201,11 @@ def _parse_reasoning_cap(
 
 
 def _load_transforms(
-    provider_dir: Path, *, group: str | None = None, _builtin: bool = True
+    provider_dir: Path,
+    *,
+    group: str | None = None,
+    _builtin: bool = True,
+    root: Path | None = None,
 ) -> tuple[tuple, tuple, tuple, tuple, Any]:
     """Import transforms.py if present, return (pre, post, ir, response_body, module).
 
@@ -183,15 +228,31 @@ def _load_transforms(
     if not tf_path.exists():
         return (), (), (), (), None
     prefix = "llm_rosetta.shims.providers" if _builtin else "_llm_rosetta_plugin_shims"
-    if group is not None:
-        module_name = f"{prefix}.{group}.{provider_dir.name}.transforms"
+    if _builtin:
+        if group is not None:
+            module_name = f"{prefix}.{group}.{provider_dir.name}.transforms"
+        else:
+            module_name = f"{prefix}.{provider_dir.name}.transforms"
     else:
-        module_name = f"{prefix}.{provider_dir.name}.transforms"
+        # Register the directory chain as synthetic packages so the transforms
+        # module can use relative/sibling imports (see _ensure_pkg).
+        root = root or provider_dir.parent
+        ns = f"{_PLUGIN_NS_PREFIX}_{hashlib.sha1(str(root).encode()).hexdigest()[:8]}"
+        _ensure_pkg(ns, root)
+        cur, cur_dir = ns, root
+        for part in group.split(".") if group else []:
+            cur_dir = cur_dir / part
+            cur = f"{cur}.{part}"
+            _ensure_pkg(cur, cur_dir)
+        leaf = f"{cur}.{provider_dir.name}"
+        _ensure_pkg(leaf, provider_dir)
+        module_name = f"{leaf}.transforms"
     spec = importlib.util.spec_from_file_location(module_name, tf_path)
     if spec is None or spec.loader is None:
         logger.warning("Could not load %s", tf_path)
         return (), (), (), (), None
     mod = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = mod
     spec.loader.exec_module(mod)
     # New names take precedence; fall back to legacy names.
     # Use `is None` (not `or`) since empty tuple () is falsy but valid.
@@ -221,7 +282,11 @@ def _load_transforms(
 
 
 def _load_single_provider(
-    provider_dir: Path, *, group: str | None = None, _builtin: bool = True
+    provider_dir: Path,
+    *,
+    group: str | None = None,
+    _builtin: bool = True,
+    root: Path | None = None,
 ) -> ProviderShim | None:
     """Load a single provider from *provider_dir* and register it.
 
@@ -241,7 +306,7 @@ def _load_single_provider(
         return None
 
     pre_t, post_t, ir_t, resp_t, transforms_mod = _load_transforms(
-        provider_dir, group=group, _builtin=_builtin
+        provider_dir, group=group, _builtin=_builtin, root=root
     )
 
     # Parse optional reasoning capability config from YAML.
@@ -381,7 +446,9 @@ def load_providers_from_dir(
             continue
         yaml_path = d / "provider.yaml"
         if yaml_path.exists():
-            shim = _load_single_provider(d, group=group, _builtin=builtin)
+            shim = _load_single_provider(
+                d, group=group, _builtin=builtin, root=providers_dir
+            )
             if shim is not None:
                 shims.append(shim)
         else:
@@ -392,7 +459,7 @@ def load_providers_from_dir(
                     continue
                 if (sub / "provider.yaml").exists():
                     shim = _load_single_provider(
-                        sub, group=child_group, _builtin=builtin
+                        sub, group=child_group, _builtin=builtin, root=providers_dir
                     )
                     if shim is not None:
                         shims.append(shim)
