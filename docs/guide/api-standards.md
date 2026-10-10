@@ -12,7 +12,7 @@ LLM-Rosetta 支持 4 家 LLM 提供方的 6 种 API 标准，各自有不同的�
 |---|---|---|---|
 | `openai_chat` | OpenAI Chat Completions | `POST /v1/chat/completions` | `OpenAIChatConverter` |
 | `openai_responses` | OpenAI Responses | `POST /v1/responses` | `OpenAIResponsesConverter` |
-| `open_responses` | Open Responses | `POST /v1/responses` | `OpenAIResponsesConverter` |
+| `open_responses` | Open Responses | `POST /v1/responses` | `OpenResponsesConverter` |
 | `anthropic` | Anthropic Messages | `POST /v1/messages` | `AnthropicConverter` |
 | `google` | Google GenAI | `POST /v1beta/models/{model}:generateContent` | `GoogleConverter` |
 | `google_interactions` | Google Interactions | `POST /v1beta/interactions` | `GoogleInteractionsConverter` |
@@ -110,17 +110,20 @@ OpenAI 较新的 API 格式（2025 年）。使用扁平的类型化项目列表
 
 [Open Responses](https://www.openresponses.org/) 是一个开源的、厂商中立的规范（Apache 2.0），扩展了 OpenAI Responses API。由 OpenAI 于 2026 年 1 月发起，在保持完全向后兼容的同时增加了正式的可扩展性规则。
 
-在 LLM-Rosetta 中，`open_responses` 是 `openai_responses` 的别名 — 同一个 `OpenAIResponsesConverter` 处理两种格式。
+该规范作为基础，OpenAI Responses API 是其一个合规 profile：`OpenResponsesConverter` 实现厂商中立的规范，`OpenAIResponsesConverter` 派生自它，额外提供 `resp_` 响应 ID 前缀、OpenAI 专有的生命周期回显字段（`billing`、`moderation` 等）以及 OpenAI 的 `store: true` 默认值。两个类都可导入；`OpenAIResponses*` ops 类保留为 `OpenResponses*` 的别名。
 
-**与 OpenAI Responses 的区别：**
+`open_responses` 拥有独立的 shim（`shims/providers/open_responses/provider.yaml`），不设默认主机、不带响应 ID 前缀，因此部署时必须自行提供 base URL（例如 OpenRouter、vLLM 或 Ollama 端点）—— 网关不再将其默认为 OpenAI。
+
+**与 OpenAI Responses profile 的区别：**
 
 | 功能 | 说明 |
 |-----|------|
 | `OpenResponses-Version` 头部 | 规范版本控制机制 — 网关将此头部转发到上游 |
-| Slug 前缀扩展 | `implementor:type_name` 格式的项目、工具和事件（如 `openai:web_search_call`） |
-| Reasoning `content` 字段 | 开源模型的原始推理链 |
-| `allowed_tools` 字段 | 缓存友好的工具限制 |
-| 默认无状态 | 不假设服务端状态 |
+| Slug 前缀扩展 | `implementor:type_name` 格式的项目、工具和事件（如 `openai:web_search_call`），同格式往返时按不透明方式保留 |
+| Reasoning `content` 字段 | 开源模型的原始推理链（与 `summary` 并存） |
+| `allowed_tools` | 缓存友好的工具限制，以 `tool_choice` 变体表示（`{"type": "allowed_tools", ...}`） |
+| `compaction` item | 加密的上下文压缩项（2026-04-24 新增）—— 同格式往返保留，转换到其他目标时丢弃 |
+| 默认无状态 | 不假设服务端状态；`previous_response_id` 直接透传而非强制 |
 
 **采用者：** OpenRouter、Hugging Face、Vercel、LM Studio、Ollama、vLLM。
 

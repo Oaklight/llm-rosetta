@@ -33,6 +33,8 @@ title: Converters
 
 ::: llm_rosetta.converters.openai_chat.converter.OpenAIChatConverter
 
+::: llm_rosetta.converters.openai_responses.converter.OpenResponsesConverter
+
 ::: llm_rosetta.converters.openai_responses.converter.OpenAIResponsesConverter
 
 ::: llm_rosetta.converters.anthropic.converter.AnthropicConverter
