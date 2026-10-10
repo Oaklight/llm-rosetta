@@ -133,10 +133,10 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
     for (const s of items) {
       const opt = document.createElement('option');
       opt.value = s.name;
-      // Suppress the hint when the format recommends itself (e.g. `anthropic`),
-      // so only openai_chat / google_generate — whose vendor shims are named
-      // differently — carry a `prefer "…"` suffix.
-      opt.textContent = (s.recommended_provider && s.recommended_provider !== s.name)
+      // The backend leaves recommended_provider null when there is nothing to
+      // recommend (the format recommends itself, or no shim is registered), so
+      // only openai_chat / google_generate carry a `prefer "…"` suffix.
+      opt.textContent = s.recommended_provider
         ? `${s.name} — ${t('label.preferProvider', {name: s.recommended_provider})}`
         : s.name;
       if (s.name === provType) opt.selected = true;

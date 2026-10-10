@@ -53,7 +53,9 @@ def _base_formats_payload() -> list[dict[str, Any]]:
     The set of formats follows ``BASE_FORMATS`` (next to ``_PROVIDER_REGISTRY``)
     so a new base type is added in one place.  ``supports_custom_tools`` carries
     the format's own default so a bare format matches its vendor shim instead of
-    silently dropping the toggle.
+    silently dropping the toggle.  ``recommended_provider`` is ``None`` when the
+    recommendation is not actionable — the format recommends itself, or the
+    shim is not registered — so the payload is self-describing.
     """
     out: list[dict[str, Any]] = []
     for name in BASE_FORMATS:
@@ -64,7 +66,9 @@ def _base_formats_payload() -> list[dict[str, Any]]:
                 "default_base_url": get_default_base_url(name),
                 "default_api_key_env": get_default_api_key_env(name),
                 "supports_custom_tools": get_default_supports_custom_tools(name),
-                "recommended_provider": rec if rec and get_shim(rec) else None,
+                "recommended_provider": (
+                    rec if rec and rec != name and get_shim(rec) else None
+                ),
             }
         )
     return out

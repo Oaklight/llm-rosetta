@@ -41,9 +41,10 @@ def test_recommended_provider_points_at_shim():
 
     assert by_name["openai_chat"]["recommended_provider"] == "openai"
     assert by_name["google_generate"]["recommended_provider"] == "google"
-    # A format whose vendor shim has the same name recommends itself; the UI
-    # suppresses the redundant suffix.
-    assert by_name["anthropic"]["recommended_provider"] == "anthropic"
+    # Self-recommendation and no-shim cases degrade to None, so the payload is
+    # self-describing and the UI shows no hint.
+    assert by_name["anthropic"]["recommended_provider"] is None
+    assert by_name["open_responses"]["recommended_provider"] is None
 
 
 def test_supports_custom_tools_defaults():
