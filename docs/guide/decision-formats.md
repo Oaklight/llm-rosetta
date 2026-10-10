@@ -29,6 +29,20 @@ Decision API 使用类型化的 questions，每种对应固定的答案空间：
 !!! note "命名"
     三种 IR 原语按所评估的命题类型命名：`assertion`（**命题**）、`choice`（**分类命题**）、`score`（**有序命题**）。IR 名称 `assertion` 由 `TypeSafeDecisionConverter` 转换为 TypeSafe wire 名称 `noul`。
 
+### Entry
+
+每个问题都是一组 **entry** 的列表，答案是在它们之上的概率分布：
+
+| 类型 | `criteria` | 顺序 | 答案 |
+|------|-----------|------|------|
+| `assertion` | 0 或 2 个 entry，label 为 `False` / `True` | 无序 | 标量 `probability` = P(True) |
+| `choice` | N 个 entry | 无序 | `choice` + 分布 |
+| `score` | N 个 entry | **有序**（序号 = 位置） | `score` + 分布 |
+
+`DecisionEntry` 为 `{label: str | bool, description?: Description}`：`label` 是 entry 的标识（也是答案 `probabilities` 的 key）；`description` 是可选的丰富判据（对应 TypeSafe 的 `string | object | array`）。
+
+`choice` / `score` / `confidence` 均为可选（provider 未返回时由 `converters.decision.derived` 推导）；`abstained` 始终由 `unknown_probability` 推导。
+
 ### State
 
 评估的输入上下文。可以是字符串、JSON 对象或数组：
@@ -49,15 +63,21 @@ state = {
 
 ```python
 from llm_rosetta.types.ir.decision import (
-    # 问题类型
+    # 共享 entry 与值别名
+    DecisionEntry,       # {label, description?} —— 一个选项 / 层级 / 断言侧
+    Description,         # str | dict | list（丰富文本槽）
+    DecisionInputPart,   # TextPart | ImagePart（多模态证据）
+
+    # 问题类型 —— 三者都携带 `criteria: list[DecisionEntry]`
     AssertionQuestion,   # 命题 → P(true)
     ChoiceQuestion,      # 分类命题 → 类别分布
     ScoreQuestion,       # 有序命题 → 有序分布
 
     # 答案类型
     AssertionAnswer,     # {type, probability}
-    ChoiceAnswer,        # {type, choice, probabilities, confidence}
-    ScoreAnswer,         # {type, score, legend, probabilities, confidence}
+    ChoiceAnswer,        # {type, choice, probabilities, confidence?}
+    ScoreAnswer,         # {type, score, probabilities, confidence?}
+    RefusalAnswer,       # {type, refusal, reason?}
 
     # 请求/响应
     IRDecisionRequest,
@@ -110,13 +130,19 @@ request: IRDecisionRequest = {
         "department": ChoiceQuestion(
             type="choice",
             instructions="哪个团队应该处理？",
-            criteria={"billing": "付款、发票、退款",
-                      "technical": "Bug、故障、集成"},
+            criteria=[
+                {"label": "billing", "description": "付款、发票、退款"},
+                {"label": "technical", "description": "Bug、故障、集成"},
+            ],
         ),
         "frustration": ScoreQuestion(
             type="score",
             instructions="客户有多沮丧？",
-            criteria=["平静", "沮丧", "非常愤怒"],
+            criteria=[
+                {"label": "平静"},
+                {"label": "沮丧"},
+                {"label": "非常愤怒"},
+            ],
         ),
     },
 }
@@ -154,7 +180,7 @@ request: IRDecisionRequest = {
 
 ### IR 等价形式
 
-Converter 添加 `object: "decision"`，并将 `assertion` 原语与 wire 名称 `noul` 互相转换：
+Converter 添加 `object: "decision"`，将 `assertion` 原语与 wire 名称 `noul` 互相转换，并把 score 的概率从序号位置重映射到层级 label：
 
 ```python
 response: IRDecisionResponse = {
@@ -167,7 +193,11 @@ response: IRDecisionResponse = {
             probabilities={"billing": 0.08, "technical": 0.85, "sales": 0.07},
             confidence=0.82,
         ),
-        # ...
+        "frustration": ScoreAnswer(
+            type="score", score=1.6,
+            probabilities={"平静": 0.05, "沮丧": 0.3, "非常愤怒": 0.65},
+            confidence=0.78,
+        ),
     },
     "usage": {"input_tokens": 588, "output_tokens": 212},
 }
