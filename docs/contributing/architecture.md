@@ -83,7 +83,9 @@ The gateway forces IR conversion for all routes, including same-format — this 
 
 Same-format IR round-trip is the most basic fidelity check. If we can't round-trip a single format without information loss, then cross-format translation doesn't stand a chance either. That's the main reason everything goes through IR, and the conversion overhead has been kept low enough that it hasn't been a practical issue.
 
-The pipeline had no passthrough path at all until `25924518` (Aug 2026). We added it, together with a fidelity checker, to make it easier to do shadow-comparison testing — diff passthrough output against converted output to catch round-trip regressions. It's a testing tool, not a production path we expect people to rely on.
+Before `25924518` (Aug 2026) the pipeline had no `baseline` mode at all. We added it, together with a fidelity checker, so that translation problems surface **synchronously**: the same request runs through both the IR path and `baseline`, and the two outputs are diffed to catch round-trip regressions. `baseline` is a diagnostic mode for finding translation problems — not a production path.
+
+This is a standing design decision, not an implementation detail: **the gateway never shortcuts same-format routes — every request still converts through IR.** `baseline` exists only to surface translation problems synchronously; there is deliberately no path that skips IR. `prefer_same_format` affects only *which* upstream provider is chosen for a model — it never bypasses IR conversion. Decision record: [#577, comment](https://github.com/Oaklight/llm-rosetta/issues/577#issuecomment-5461182245).
 
 ## Round-Trip Compatibility
 
