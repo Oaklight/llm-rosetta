@@ -54,8 +54,8 @@ with calibrated probabilities.
 |-----------|-------------|--------|
 | `typesafe_decision` | TypeSafe System One (Jev) | `converters/decision/` |
 
-IR question types: `noul` (P(true) ∈ [0,1], from ber-**noul**-li),
-`choice` (categorical distribution), `score` (ordinal distribution).
+IR question types: `assertion` (a proposition → P(true) ∈ [0,1]),
+`choice` (a categorical proposition), `score` (an ordinal proposition).
 
 ### Shim layer
 

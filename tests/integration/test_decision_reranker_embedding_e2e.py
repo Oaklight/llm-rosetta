@@ -32,7 +32,7 @@ from llm_rosetta.converters.decision.reranker import RerankerDecisionConverter
 from llm_rosetta.types.ir.decision import (
     ChoiceQuestion,
     IRDecisionRequest,
-    NoulQuestion,
+    AssertionQuestion,
     ScoreQuestion,
 )
 
@@ -43,8 +43,8 @@ DECISION_REQUEST: IRDecisionRequest = {
         "This is ridiculous. I'm disputing the charge."
     ),
     "questions": {
-        "wants_refund": NoulQuestion(
-            type="noul",
+        "wants_refund": AssertionQuestion(
+            type="assertion",
             instructions="Is the customer requesting a refund?",
             criteria={
                 "true": "Asks for money back or refund",
@@ -117,9 +117,9 @@ def _validate_structure(ir: dict[str, Any]) -> None:
     assert ir["object"] == "decision"
     a = ir["answers"]
 
-    noul_a = a["wants_refund"]
-    assert noul_a["type"] == "noul"
-    assert 0.01 <= noul_a["noul"] <= 0.99
+    assertion_a = a["wants_refund"]
+    assert assertion_a["type"] == "assertion"
+    assert 0.01 <= assertion_a["probability"] <= 0.99
 
     choice_a = a["department"]
     assert choice_a["type"] == "choice"
@@ -159,7 +159,7 @@ class TestJinaReranker:
         )
         _validate_structure(ir)
         print(
-            f"\n  Jina Reranker: refund={ir['answers']['wants_refund']['noul']:.2f}, "
+            f"\n  Jina Reranker: refund={ir['answers']['wants_refund']['probability']:.2f}, "
             f"dept={ir['answers']['department']['choice']}, "
             f"frustration={ir['answers']['frustration']['score']:.2f}"
         )
@@ -187,7 +187,7 @@ class TestCohereReranker:
         )
         _validate_structure(ir)
         print(
-            f"\n  Cohere Reranker: refund={ir['answers']['wants_refund']['noul']:.2f}, "
+            f"\n  Cohere Reranker: refund={ir['answers']['wants_refund']['probability']:.2f}, "
             f"dept={ir['answers']['department']['choice']}, "
             f"frustration={ir['answers']['frustration']['score']:.2f}"
         )
@@ -215,7 +215,7 @@ class TestVoyageReranker:
         )
         _validate_structure(ir)
         print(
-            f"\n  Voyage Reranker: refund={ir['answers']['wants_refund']['noul']:.2f}, "
+            f"\n  Voyage Reranker: refund={ir['answers']['wants_refund']['probability']:.2f}, "
             f"dept={ir['answers']['department']['choice']}, "
             f"frustration={ir['answers']['frustration']['score']:.2f}"
         )
@@ -247,7 +247,7 @@ class TestOpenAIEmbedding:
         ir = converter.response_from_provider(resp, context=ctx)
         _validate_structure(ir)
         print(
-            f"\n  OpenAI Embedding: refund={ir['answers']['wants_refund']['noul']:.2f}, "
+            f"\n  OpenAI Embedding: refund={ir['answers']['wants_refund']['probability']:.2f}, "
             f"dept={ir['answers']['department']['choice']}, "
             f"frustration={ir['answers']['frustration']['score']:.2f}"
         )
@@ -273,7 +273,7 @@ class TestJinaEmbedding:
         ir = converter.response_from_provider(resp, context=ctx)
         _validate_structure(ir)
         print(
-            f"\n  Jina Embedding: refund={ir['answers']['wants_refund']['noul']:.2f}, "
+            f"\n  Jina Embedding: refund={ir['answers']['wants_refund']['probability']:.2f}, "
             f"dept={ir['answers']['department']['choice']}, "
             f"frustration={ir['answers']['frustration']['score']:.2f}"
         )

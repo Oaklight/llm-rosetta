@@ -49,7 +49,7 @@ _INTERACTIONS_STEP_TYPES = frozenset(
 )
 
 
-# Wire-format type names (not IR names — IR uses "bernoulli" instead of "noul")
+# Wire-format type names (not IR names — the IR calls the "noul" wire type "assertion")
 _EVAL_QUESTION_TYPES = frozenset({"noul", "choice", "score"})
 
 

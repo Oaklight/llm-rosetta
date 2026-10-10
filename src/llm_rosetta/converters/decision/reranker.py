@@ -5,7 +5,7 @@ Decision converter backed by rerank API relevance scores.
 
 For each question, builds (query, document) pairs where query = state +
 instructions and documents = option texts.  Rerank relevance scores are
-softmaxed into probability distributions, then mapped to noul/choice/score
+softmaxed into probability distributions, then mapped to assertion/choice/score
 answers.
 
 Requires a rerank endpoint that returns per-document relevance_score.

@@ -9,7 +9,7 @@ from llm_rosetta.converters.decision.reranker import RerankerDecisionConverter
 from llm_rosetta.types.ir.decision import (
     ChoiceQuestion,
     IRDecisionRequest,
-    NoulQuestion,
+    AssertionQuestion,
     ScoreQuestion,
 )
 
@@ -23,8 +23,8 @@ IR_REQUEST: IRDecisionRequest = {
     "model": "cross-encoder/ettin-reranker-150m-v1",
     "state": "Customer wants a refund for broken item",
     "questions": {
-        "wants_refund": NoulQuestion(
-            type="noul",
+        "wants_refund": AssertionQuestion(
+            type="assertion",
             instructions="Is the customer requesting a refund?",
             criteria={"true": "Wants money back", "false": "No refund request"},
         ),
@@ -88,8 +88,8 @@ class TestRequestToProvider:
     ):
         ctx = ConversionContext()
         wire, _ = converter.request_to_provider(IR_REQUEST, context=ctx)
-        noul_q = wire["queries"][0]
-        assert noul_q["documents"] == ["Wants money back", "No refund request"]
+        assertion_q = wire["queries"][0]
+        assert assertion_q["documents"] == ["Wants money back", "No refund request"]
 
     def test_stores_questions_in_context(self, converter: RerankerDecisionConverter):
         ctx = ConversionContext()
@@ -98,13 +98,13 @@ class TestRequestToProvider:
 
 
 class TestResponseFromProvider:
-    def test_parses_noul(self, converter: RerankerDecisionConverter):
+    def test_parses_assertion(self, converter: RerankerDecisionConverter):
         ctx = ConversionContext()
         converter.request_to_provider(IR_REQUEST, context=ctx)
         ir = converter.response_from_provider(MOCK_RERANK_RESPONSE, context=ctx)
         a = ir["answers"]["wants_refund"]
-        assert a["type"] == "noul"
-        assert a["noul"] > 0.5
+        assert a["type"] == "assertion"
+        assert a["probability"] > 0.5
 
     def test_parses_choice(self, converter: RerankerDecisionConverter):
         ctx = ConversionContext()
