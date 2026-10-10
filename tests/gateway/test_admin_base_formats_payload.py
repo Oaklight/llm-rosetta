@@ -28,7 +28,11 @@ def test_base_formats_shape():
     for entry in payload:
         assert set(entry) == _KEYS
         assert "base" not in entry
-        assert entry["default_base_url"]
+        # A default host is expected for the vendor standards, but is not
+        # universal — open_responses has none, so only its *type* is pinned.
+        assert isinstance(entry["default_base_url"], str)
+    by_name = {b["name"]: b for b in payload}
+    assert by_name["openai_chat"]["default_base_url"]
 
 
 def test_recommended_provider_null_when_shim_absent(monkeypatch):
