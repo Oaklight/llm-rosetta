@@ -87,7 +87,7 @@ class TypeSafeDecisionConverter(BaseDecisionConverter):
         context: ConversionContext,
     ) -> IRDecisionResponse:
         answers: dict[str, Any] = {
-            aid: _answer_from_wire(a)
+            aid: _answer_from_wire(a, context.warnings)
             for aid, a in provider_response.get("answers", {}).items()
         }
         result: IRDecisionResponse = {
@@ -166,6 +166,9 @@ def _state_to_wire(state: Any, warnings: list[str]) -> Any:
                 texts.append(str(part))
         return "\n".join(texts)
     if isinstance(state, dict):
+        # Unwrap the ``{"items": [...]}`` array form produced by _state_from_wire.
+        if set(state) == {"items"} and isinstance(state["items"], list):
+            return state["items"]
         return _strip_images(state, warnings)
     return state
 
@@ -264,17 +267,15 @@ def _entry(label: Any, description: Any = None) -> DecisionEntry:
 # ============================================================================
 
 
-def _answer_from_wire(a: dict[str, Any]) -> dict[str, Any]:
+def _answer_from_wire(a: Mapping[str, Any], warnings: list[str]) -> dict[str, Any]:
     wire_type = a.get("type", "")
-    ir_type = _WIRE_TO_IR_TYPE.get(wire_type, wire_type)
-    if ir_type == "assertion":
+    if wire_type == "noul":
         result: dict[str, Any] = {"type": "assertion", "probability": a["noul"]}
-        if "unknown_probability" in a:
-            result["unknown_probability"] = a["unknown_probability"]
+        _maybe_set(result, a, "unknown_probability")
         return result
-    if ir_type == "choice":
+    if wire_type == "choice":
         return _copy(a, "choice", "probabilities", "confidence", "unknown_probability")
-    if ir_type == "score":
+    if wire_type == "score":
         # Re-key probabilities from index keys to level labels via ``legend``.
         legend = a.get("legend", {})
         probs = {
@@ -284,7 +285,12 @@ def _answer_from_wire(a: dict[str, Any]) -> dict[str, Any]:
         _maybe_set(result, a, "confidence")
         _maybe_set(result, a, "unknown_probability")
         return result
-    return {"type": "refusal"}
+    # Unknown / malformed type: warn and pass the payload through rather than
+    # silently upgrading it to a (stronger) refusal claim.
+    warnings.append(
+        f"Unrecognized TypeSafe answer type {wire_type!r}; passed through unchanged"
+    )
+    return dict(a)
 
 
 def _answer_to_wire(a: Mapping[str, Any], warnings: list[str]) -> dict[str, Any]:
