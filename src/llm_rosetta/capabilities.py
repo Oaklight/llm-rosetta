@@ -277,9 +277,12 @@ def strip_intrinsic_tools(
 
     No-op when ``same_format`` is True.
 
-    .. deprecated::
-       Prefer :func:`translate_intrinsic_tools`, which preserves
-       conversation context instead of discarding it.
+    .. deprecated:: 0.15.0
+       No longer used by the pipeline, which calls
+       :func:`translate_intrinsic_tools` and :func:`resolve_intrinsic_tools`
+       instead.  Kept for backward compatibility (public since before this
+       change); slated for removal in a future release.  Do not add new
+       callers — the two paths would drift.
     """
     if same_format:
         return ir_request
