@@ -96,6 +96,40 @@ def known_provider_types() -> list[str]:
     return list(_PROVIDER_REGISTRY)
 
 
+# Whether each base format's standard natively accepts ``{type: "custom"}``
+# tool definitions.  A bare format uses this as its default when no vendor shim
+# supplies one — the OpenAI-shaped standards do, Anthropic/Google do not.
+_CUSTOM_TOOLS_BY_TYPE: dict[str, bool] = {
+    "openai_chat": True,
+    "openai_responses": True,
+    "open_responses": True,
+    "anthropic": False,
+    "google": False,
+    "google_generate": False,
+    "google_interactions": False,
+}
+
+
+def get_default_supports_custom_tools(provider_type: str) -> bool:
+    """Default custom-tools support for a base format (``False`` if unknown)."""
+    return _CUSTOM_TOOLS_BY_TYPE.get(provider_type, False)
+
+
+# Base formats offered as bare formats in the admin provider picker, in display
+# order — the chat API standards.  A vendor-named shim may also exist for the
+# same standard (see ``registered_shims``).  ``google`` is a plain alias of
+# ``google_generate`` and stays reachable through the ``google`` shim, so it is
+# not listed separately here.
+BASE_FORMATS: tuple[str, ...] = (
+    "openai_chat",
+    "openai_responses",
+    "open_responses",
+    "anthropic",
+    "google_generate",
+    "google_interactions",
+)
+
+
 # ---------------------------------------------------------------------------
 # Factory
 # ---------------------------------------------------------------------------
