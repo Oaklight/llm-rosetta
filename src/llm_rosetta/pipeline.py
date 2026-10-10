@@ -572,10 +572,24 @@ class ConversionPipeline:
             request_id=request_id,
         )
 
-        # Capability enforcement: intrinsic tool definitions, reconciled
-        # against the target provider's shim.  Intrinsic *history* is left
-        # for the target converter to map (native where supported, generic
-        # function otherwise) — see #839.
+        # Capability enforcement: intrinsic tool *definitions*, reconciled
+        # against the target provider's shim (unsupported kinds dropped,
+        # bare-name functions promoted).
+        #
+        # Intrinsic *history* is intentionally NOT touched here.  Each target
+        # converter maps those parts its own way:
+        #   - natively where the kind is in its vocabulary (anthropic
+        #     `server_tool_use`; openai_responses `web_search_call`;
+        #     google_generate `code_execution`; google_interactions
+        #     `google_search_call` / `code_execution_call` / …);
+        #   - as a plain function call otherwise (openai_chat by natural
+        #     name; openai_responses `function_call` for kinds needing
+        #     provider config; google_interactions `{kind}_call` for a kind
+        #     outside its vocabulary, e.g. `web_search` -> `web_search_call`);
+        #   - or dropped (google_generate for a kind it has no form for).
+        # History is context, not a capability declaration, so it is
+        # deliberately not gated by the target shim (definitions are).  See
+        # #839.
         ir_request = resolve_intrinsic_tools(
             ir_request,
             shim=self._target_shim,

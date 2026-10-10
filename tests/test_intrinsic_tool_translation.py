@@ -133,3 +133,60 @@ class TestPipelineKeepsIntrinsicHistory:
         s = json.dumps(body)
         assert "web_search_call" in s  # native, not degraded
         assert "_intrinsic" not in s
+
+
+class TestHistoryIndependentOfShim:
+    """Definitions are shim-gated; history is not (it is context).
+
+    Documents/locks the deliberate split flagged in review: a target shim that
+    drops the `web_search` *definition* still gets a native `web_search_call`
+    in history rather than a silently mangled part.
+    """
+
+    IR = _ir_with_intrinsic_history("web_search")
+
+    def test_definition_dropped_but_history_native(self):
+        from llm_rosetta.shims.provider_shim import ProviderShim, ToolsConfig
+
+        # A responses shim that declares NO intrinsic tools.
+        bare = ProviderShim(name="x", base="openai_responses", tools=ToolsConfig())
+        pipe = ConversionPipeline("anthropic", "openai_responses", target_shim=bare)
+        # feed an anthropic provider request (the shim is the target's)
+        req = {
+            "model": "m",
+            "max_tokens": 50,
+            "tools": [{"type": "web_search_20250305", "name": "web_search"}],
+            "messages": [
+                {"role": "user", "content": "Search Iceland"},
+                {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "server_tool_use",
+                            "id": "s1",
+                            "name": "web_search",
+                            "input": {"query": "Iceland"},
+                        },
+                        {
+                            "type": "web_search_tool_result",
+                            "tool_use_id": "s1",
+                            "content": [
+                                {
+                                    "type": "web_search_result",
+                                    "url": "u",
+                                    "title": "t",
+                                    "encrypted_content": "e",
+                                }
+                            ],
+                        },
+                        {"type": "text", "text": "~400k"},
+                    ],
+                },
+                {"role": "user", "content": "more"},
+            ],
+        }
+        body = pipe.convert_request(req)
+        # Definition: gated out (shim declares nothing).
+        assert not body.get("tools")
+        # History: still mapped natively (shim-independent).
+        assert "web_search_call" in json.dumps(body)
