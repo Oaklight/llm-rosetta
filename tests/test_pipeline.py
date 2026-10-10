@@ -544,14 +544,17 @@ class TestConversionPipeline:
         assert "messages" in target
         assert target["model"] == "gpt-4"
 
-    @pytest.mark.parametrize("target_provider", ["google", "google_generate"])
+    @pytest.mark.parametrize(
+        "target_provider",
+        ["google", "google_generate", "asksage--google_generate"],
+    )
     def test_google_target_emits_rest_body(self, target_provider):
-        """Both google provider names select the REST body shape (#882).
+        """Every google provider name selects the REST body shape (#882).
 
         SDK-shaped output (``config``) is rejected by the Generative
         Language REST endpoint, so the canonical ``google_generate``
-        name must apply the same REST transform as the ``google`` shim
-        name.
+        name — and any shim name resolving to it — must apply the same
+        REST transform as the ``google`` shim name.
         """
         from llm_rosetta.pipeline import ConversionPipeline
 
