@@ -21,11 +21,11 @@ from typing import Annotated, Any, Literal, cast
 
 from llm_rosetta._vendor.validate import Ge, Le, create_struct, json_schema
 from llm_rosetta.types.ir.decision import (
+    AssertionAnswer,
     ChoiceAnswer,
     DecisionAnswer,
     DecisionQuestion,
     DecisionState,
-    NoulAnswer,
     ScoreAnswer,
 )
 
@@ -43,7 +43,7 @@ the document.
 Return every requested answer using the supplied schema."""
 
 _PROBABILITY_SUFFIX = """
-For noul (binary probability) questions, return the probability that the \
+For assertion (binary probability) questions, return the probability that the \
 answer is yes or the assertion is true. For choice and score questions, \
 return an object mapping every allowed label to its probability. Preserve \
 genuine uncertainty. Include every allowed label, do not add labels, keep \
@@ -82,12 +82,12 @@ def build_system_prompt(
     for qid, q in questions.items():
         qtype = q["type"]
         instructions = _serialize_value(q["instructions"])
-        if qtype == "noul":
-            desc = f"  {qid} (noul): {instructions}"
-            noul_criteria: Any = q.get("criteria")
-            if isinstance(noul_criteria, dict):
-                true_desc = noul_criteria.get("true", "")
-                false_desc = noul_criteria.get("false", "")
+        if qtype == "assertion":
+            desc = f"  {qid} (assertion): {instructions}"
+            assertion_criteria: Any = q.get("criteria")
+            if isinstance(assertion_criteria, dict):
+                true_desc = assertion_criteria.get("true", "")
+                false_desc = assertion_criteria.get("false", "")
                 if true_desc or false_desc:
                     desc += f" [true={true_desc}, false={false_desc}]"
         elif qtype == "choice":
@@ -254,7 +254,7 @@ def _question_field_type(
         schema as ``{"enum": [...]}`` on the corresponding property.
     """
     qtype = q["type"]
-    if qtype == "noul":
+    if qtype == "assertion":
         if answer_mode == "discrete":
             return bool, None
         return Annotated[float, Ge(0), Le(1)], None
@@ -313,8 +313,8 @@ def _parse_single_answer(
     answer_mode: AnswerMode,
 ) -> DecisionAnswer:
     qtype = question["type"]
-    if qtype == "noul":
-        return _parse_noul(raw_answer, answer_mode)
+    if qtype == "assertion":
+        return _parse_assertion(raw_answer, answer_mode)
     if qtype == "choice":
         return _parse_choice(raw_answer, question, answer_mode)
     if qtype == "score":
@@ -322,11 +322,11 @@ def _parse_single_answer(
     raise ValueError(f"Unknown question type: {qtype}")
 
 
-def _parse_noul(raw_answer: Any, answer_mode: AnswerMode) -> NoulAnswer:
+def _parse_assertion(raw_answer: Any, answer_mode: AnswerMode) -> AssertionAnswer:
     if answer_mode == "discrete":
-        return NoulAnswer(type="noul", noul=float(bool(raw_answer)))
+        return AssertionAnswer(type="assertion", probability=float(bool(raw_answer)))
     val = float(raw_answer) if not isinstance(raw_answer, float) else raw_answer
-    return NoulAnswer(type="noul", noul=val)
+    return AssertionAnswer(type="assertion", probability=val)
 
 
 def _parse_choice(

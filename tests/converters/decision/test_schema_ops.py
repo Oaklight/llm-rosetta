@@ -14,7 +14,7 @@ from llm_rosetta.converters.decision.schema_ops import (
 )
 from llm_rosetta.types.ir.decision import (
     ChoiceQuestion,
-    NoulQuestion,
+    AssertionQuestion,
     ScoreQuestion,
 )
 
@@ -25,9 +25,9 @@ from llm_rosetta.types.ir.decision import (
 
 
 class TestBuildDecisionSchema:
-    def test_noul_question(self):
+    def test_assertion_question(self):
         questions = {
-            "q": NoulQuestion(type="noul", instructions="Is this urgent?"),
+            "q": AssertionQuestion(type="assertion", instructions="Is this urgent?"),
         }
         schema = build_decision_schema(questions)
         prop = schema["properties"]["answers"]["properties"]["q"]
@@ -71,7 +71,7 @@ class TestBuildDecisionSchema:
 
     def test_multi_question(self):
         questions = {
-            "a": NoulQuestion(type="noul", instructions="q1"),
+            "a": AssertionQuestion(type="assertion", instructions="q1"),
             "b": ChoiceQuestion(
                 type="choice",
                 instructions="q2",
@@ -85,7 +85,7 @@ class TestBuildDecisionSchema:
         assert schema["properties"]["answers"]["required"] == ["a", "b"]
 
     def test_top_level_structure(self):
-        questions = {"q": NoulQuestion(type="noul", instructions="test")}
+        questions = {"q": AssertionQuestion(type="assertion", instructions="test")}
         schema = build_decision_schema(questions)
         assert schema["type"] == "object"
         assert schema["required"] == ["answers"]
@@ -98,8 +98,8 @@ class TestBuildDecisionSchema:
 
 
 class TestDiscreteSchema:
-    def test_noul_boolean(self):
-        questions = {"q": NoulQuestion(type="noul", instructions="test")}
+    def test_assertion_boolean(self):
+        questions = {"q": AssertionQuestion(type="assertion", instructions="test")}
         schema = build_decision_schema(questions, answer_mode="discrete")
         prop = schema["properties"]["answers"]["properties"]["q"]
         assert prop["type"] == "boolean"
@@ -137,7 +137,9 @@ class TestDiscreteSchema:
 class TestBuildSystemPrompt:
     def test_contains_question_ids(self):
         questions = {
-            "is_urgent": NoulQuestion(type="noul", instructions="Is this urgent?"),
+            "is_urgent": AssertionQuestion(
+                type="assertion", instructions="Is this urgent?"
+            ),
             "dept": ChoiceQuestion(
                 type="choice",
                 instructions="Which team?",
@@ -147,13 +149,13 @@ class TestBuildSystemPrompt:
         prompt = build_system_prompt(questions)
         assert "is_urgent" in prompt
         assert "dept" in prompt
-        assert "(noul)" in prompt
+        assert "(assertion)" in prompt
         assert "(choice)" in prompt
 
-    def test_noul_with_criteria(self):
+    def test_assertion_with_criteria(self):
         questions = {
-            "q": NoulQuestion(
-                type="noul",
+            "q": AssertionQuestion(
+                type="assertion",
                 instructions="Is it true?",
                 criteria={"true": "Yes", "false": "No"},
             ),
@@ -176,24 +178,24 @@ class TestBuildSystemPrompt:
         assert "2=High" in prompt
 
     def test_probability_mode_prompt(self):
-        questions = {"q": NoulQuestion(type="noul", instructions="test")}
+        questions = {"q": AssertionQuestion(type="assertion", instructions="test")}
         prompt = build_system_prompt(questions, answer_mode="probabilities")
         assert "sum to 1" in prompt
 
     def test_discrete_mode_prompt(self):
-        questions = {"q": NoulQuestion(type="noul", instructions="test")}
+        questions = {"q": AssertionQuestion(type="assertion", instructions="test")}
         prompt = build_system_prompt(questions, answer_mode="discrete")
         assert "exactly one allowed value" in prompt
 
     def test_prompted_fallback_embeds_schema(self):
-        questions = {"q": NoulQuestion(type="noul", instructions="test")}
+        questions = {"q": AssertionQuestion(type="assertion", instructions="test")}
         schema = build_decision_schema(questions)
         prompt = build_system_prompt(questions, schema=schema)
         assert "Return one JSON object that matches this schema exactly" in prompt
         assert '"answers"' in prompt
 
     def test_untrusted_data_warning(self):
-        questions = {"q": NoulQuestion(type="noul", instructions="test")}
+        questions = {"q": AssertionQuestion(type="assertion", instructions="test")}
         prompt = build_system_prompt(questions)
         assert "untrusted data" in prompt
 
@@ -250,12 +252,12 @@ class TestExtractJson:
 
 
 class TestParseDecisionAnswers:
-    def test_noul_answer(self):
-        questions = {"q": NoulQuestion(type="noul", instructions="test")}
+    def test_assertion_answer(self):
+        questions = {"q": AssertionQuestion(type="assertion", instructions="test")}
         raw = {"answers": {"q": 0.85}}
         answers = parse_decision_answers(raw, questions)
-        assert answers["q"]["type"] == "noul"
-        assert cast(Any, answers["q"])["noul"] == 0.85
+        assert answers["q"]["type"] == "assertion"
+        assert cast(Any, answers["q"])["probability"] == 0.85
 
     def test_choice_answer(self):
         questions = {
@@ -289,14 +291,14 @@ class TestParseDecisionAnswers:
         assert a["legend"] == {"0": "Low", "1": "Mid", "2": "High"}
 
     def test_missing_answer_skipped(self):
-        questions = {"q": NoulQuestion(type="noul", instructions="test")}
+        questions = {"q": AssertionQuestion(type="assertion", instructions="test")}
         raw = {"answers": {}}
         answers = parse_decision_answers(raw, questions)
         assert "q" not in answers
 
     def test_multi_question(self):
         questions = {
-            "n": NoulQuestion(type="noul", instructions="noul q"),
+            "n": AssertionQuestion(type="assertion", instructions="assertion q"),
             "c": ChoiceQuestion(
                 type="choice",
                 instructions="choice q",
@@ -305,7 +307,7 @@ class TestParseDecisionAnswers:
         }
         raw = {"answers": {"n": 0.5, "c": {"x": 0.4, "y": 0.6}}}
         answers = parse_decision_answers(raw, questions)
-        assert answers["n"]["type"] == "noul"
+        assert answers["n"]["type"] == "assertion"
         assert answers["c"]["type"] == "choice"
 
 
@@ -315,17 +317,17 @@ class TestParseDecisionAnswers:
 
 
 class TestParseDiscreteAnswers:
-    def test_noul_bool_true(self):
-        questions = {"q": NoulQuestion(type="noul", instructions="test")}
+    def test_assertion_bool_true(self):
+        questions = {"q": AssertionQuestion(type="assertion", instructions="test")}
         raw = {"answers": {"q": True}}
         answers = parse_decision_answers(raw, questions, answer_mode="discrete")
-        assert cast(Any, answers["q"])["noul"] == 1.0
+        assert cast(Any, answers["q"])["probability"] == 1.0
 
-    def test_noul_bool_false(self):
-        questions = {"q": NoulQuestion(type="noul", instructions="test")}
+    def test_assertion_bool_false(self):
+        questions = {"q": AssertionQuestion(type="assertion", instructions="test")}
         raw = {"answers": {"q": False}}
         answers = parse_decision_answers(raw, questions, answer_mode="discrete")
-        assert cast(Any, answers["q"])["noul"] == 0.0
+        assert cast(Any, answers["q"])["probability"] == 0.0
 
     def test_choice_discrete(self):
         questions = {
