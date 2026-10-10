@@ -717,7 +717,7 @@ function renderProviders() {
     return `
     <div class="provider-card${enabled ? '' : ' disabled'}" data-provider="${esc(name)}">
       <div class="pc-head">
-        <div class="pc-name">${logoHtml}<span class="pc-name-text">${esc(title)}</span></div>
+        <div class="pc-name"${isFree ? ` title="${esc(t('free.disclosure'))}"` : ''}>${logoHtml}<span class="pc-name-text">${esc(title)}</span></div>
         <label class="pc-toggle toggle" title="${enabled ? t('provider.enabled') : t('provider.disabled')}">
           <input type="checkbox" ${enabled ? 'checked' : ''} role="switch" aria-checked="${enabled}" aria-label="${esc(name)}" onchange="this.setAttribute('aria-checked',this.checked);toggleProvider('${esc(name)}')">
           <span class="slider"></span>
@@ -1010,31 +1010,31 @@ function openFreeProvider(shimName) {
   const shims = _freeShims();
   const shim = shims.find(s => s.name === shimName) || shims[0];
   if (!shim) { openProviderModal(); return; }
-  const existing = (S.configData && S.configData.providers) || {};
   const brand = (shim.display_name || shim.name.split('--')[0]).toLowerCase();
+  // Prefill the name so a re-click never opens an anonymous Add dialog; if the
+  // provider already exists the operator lands on that same (now prefilled) id.
   const id = `${brand}-free`;
-  const name = existing[id] ? '' : id;
   _freeKeyRevealed = false;
-  openProviderModal(name, shim.default_base_url || '', '', '', shim.name);
+  openProviderModal(id, shim.default_base_url || '', '', '', shim.name);
 }
 
-/** Re-fetch a free provider's roster and offer to apply anything new. */
+/** Re-fetch a free provider's roster (in the Fetch modal) and report the diff. */
 async function refreshFreeModels(name) {
   const card = document.querySelector(`.provider-card[data-provider="${name}"]`);
   const btn = card?.querySelector('.btn-refresh-models');
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>'; }
   try {
-    const data = await api.get(`/admin/api/config/providers/${encodeURIComponent(name)}/models`);
-    if (data.error) { showToast(data.error, 'error'); return; }
-    const fetched = data.models || [];
-    const existing = new Set(_modelsForProvider(name));
-    const newCount = fetched.filter(m => !existing.has(m)).length;
-    showToast(t('toast.freeModelsRefreshed', {total: fetched.length, new: newCount}));
-    if (newCount > 0) {
-      window.openFetchModelsModal();
-      const sel = document.getElementById('fetchProvider');
-      if (sel) sel.value = name;
-      window.doFetchModels();
+    // The modal owns the request — calling doFetchModels() here is what fetches;
+    // a separate pre-fetch would pull the same roster twice.
+    window.openFetchModelsModal();
+    const sel = document.getElementById('fetchProvider');
+    if (sel) sel.value = name;
+    await window.doFetchModels();
+    const fetched = S._fetchedModels || [];
+    if (fetched.length) {
+      const routed = new Set(_modelsForProvider(name));
+      const newCount = fetched.filter(m => !routed.has(m)).length;
+      showToast(t('toast.freeModelsRefreshed', {total: fetched.length, new: newCount}));
     }
   } catch (e) {
     showToast(String(e.message || e), 'error');

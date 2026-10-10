@@ -38,16 +38,16 @@ logger = logging.getLogger("llm-rosetta-gateway")
 
 # Opinionated: the vendor shim to recommend for each base format.  Entries that
 # name the format itself (anthropic / openai_responses / google_interactions)
-# are inert — the payload treats an unregistered or self-recommendation as None,
-# so the picker shows no hint; they are kept only to document the canonical
-# shim per format.  `open_responses` is deliberately absent: it is a distinct
-# type that merely shares the Responses converter, so recommending
-# `openai_responses` for it would silently change the selected provider type.
+# are inert — the payload treats a self-recommendation as None, so the picker
+# shows no hint; they are kept only to document the canonical shim per format.
+# `google_generate` has no entry: its vendor shim is named `google_generate`, so
+# there is nothing differently-named to recommend.  `open_responses` is absent
+# too: it is a distinct type that merely shares the Responses converter, so
+# recommending `openai_responses` for it would silently change the saved type.
 _BASE_FORMAT_RECOMMENDED: dict[str, str] = {
     "openai_chat": "openai",
     "openai_responses": "openai_responses",
     "anthropic": "anthropic",
-    "google_generate": "google",
     "google_interactions": "google_interactions",
 }
 
@@ -60,10 +60,13 @@ def _base_formats_payload() -> list[dict[str, Any]]:
     the format's own default so a bare format matches its vendor shim instead of
     silently dropping the toggle.  ``recommended_provider`` is ``None`` when the
     recommendation is not actionable — the format recommends itself, or the
-    shim is not registered — so the payload is self-describing.
+    shim is not a registered provider name (so it can never dangle in the
+    picker, even if the name is later aliased) — so the payload is
+    self-describing.
     ``hoist_system_messages`` is not carried: every format defaults it to true
     (the JS reads ``!== false``), so there is nothing to override.
     """
+    registered = {shim.name for shim in list_shims()}
     out: list[dict[str, Any]] = []
     for name in BASE_FORMATS:
         rec = _BASE_FORMAT_RECOMMENDED.get(name)
@@ -74,7 +77,7 @@ def _base_formats_payload() -> list[dict[str, Any]]:
                 "default_api_key_env": get_default_api_key_env(name),
                 "supports_custom_tools": get_default_supports_custom_tools(name),
                 "recommended_provider": (
-                    rec if rec and rec != name and get_shim(rec) else None
+                    rec if rec and rec != name and rec in registered else None
                 ),
             }
         )
@@ -348,9 +351,14 @@ async def put_provider(request: Any, **kwargs: Any) -> Response:
         shim = get_shim(body.get("type") or resolve_name)
         shim_base = bool(shim and shim.connection.base_url)
         keyless_ok = bool(shim and shim.connection.keyless)
-        if (not base_url and not shim_base) or (not api_key and not keyless_ok):
+        missing = []
+        if not base_url and not shim_base:
+            missing.append("base_url")
+        if not api_key and not keyless_ok:
+            missing.append("api_key")
+        if missing:
             return JSONResponse(
-                {"error": "Both 'api_key' and 'base_url' are required"},
+                {"error": f"Missing required field(s): {', '.join(missing)}"},
                 status_code=400,
             )
 

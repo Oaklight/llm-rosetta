@@ -36,8 +36,8 @@ def test_base_formats_shape():
 
 
 def test_recommended_provider_null_when_shim_absent(monkeypatch):
-    """An unregistered recommendation degrades to None, not a dangling name."""
-    monkeypatch.setattr(admin_config, "get_shim", lambda name: None)
+    """With no registered provider names, no recommendation is emitted."""
+    monkeypatch.setattr(admin_config, "list_shims", lambda: [])
 
     payload = admin_config._base_formats_payload()
 
@@ -49,7 +49,10 @@ def test_recommended_provider_points_at_shim():
     by_name = {b["name"]: b for b in admin_config._base_formats_payload()}
 
     assert by_name["openai_chat"]["recommended_provider"] == "openai"
-    assert by_name["google_generate"]["recommended_provider"] == "google"
+    # `google_generate`'s vendor shim is named `google_generate`, so the
+    # recommendation is a self-recommendation and degrades to None (no dangling
+    # name that isn't in the picker).
+    assert by_name["google_generate"]["recommended_provider"] is None
     # Self-recommendation and no-shim cases degrade to None, so the payload is
     # self-describing and the UI shows no hint.
     assert by_name["anthropic"]["recommended_provider"] is None
