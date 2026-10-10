@@ -159,3 +159,66 @@ class TestAsyncConfigLock:
         # Should be able to reacquire
         async with async_config_lock(str(cfg)):
             pass
+
+
+class TestShimConnectionDefaults:
+    """A provider configured via a shim inherits the shim's connection
+    defaults at runtime.
+
+    Regression: ``GatewayConfig`` used to pass the base converter type to
+    ``build_provider_info`` and drop the shim name, so ``get_shim()`` found
+    nothing and every shim's ``connection.*`` defaults (base_url, custom
+    auth header) were silently ignored.
+    """
+
+    def test_shim_base_url_applied(self):
+        from llm_rosetta.shims.providers import load_providers
+
+        load_providers()
+        raw = {
+            "providers": {
+                "openrouter": {
+                    "type": "openrouter--openai_chat",
+                    "api_key": "sk-x",
+                }
+            },
+            "models": {"m": "openrouter"},
+            "server": {},
+        }
+        cfg = GatewayConfig(raw)
+        info = cfg.providers["openrouter"]
+        assert info.base_url == "https://openrouter.ai/api/v1"
+        # ProviderInfo.name keeps the base type (unchanged semantics)
+        assert info.name == "openai_chat"
+
+    def test_shim_custom_auth_header_applied(self):
+        from llm_rosetta.shims.providers import load_providers
+
+        load_providers()
+        raw = {
+            "providers": {
+                "asksage": {"type": "asksage--google_generate", "api_key": "k"}
+            },
+            "models": {"m": "asksage"},
+            "server": {},
+        }
+        cfg = GatewayConfig(raw)
+        assert cfg.providers["asksage"].auth_headers() == {"x-access-tokens": "k"}
+
+    def test_explicit_base_url_wins_over_shim_default(self):
+        from llm_rosetta.shims.providers import load_providers
+
+        load_providers()
+        raw = {
+            "providers": {
+                "openrouter": {
+                    "type": "openrouter--openai_chat",
+                    "api_key": "sk-x",
+                    "base_url": "https://proxy.internal/v1",
+                }
+            },
+            "models": {"m": "openrouter"},
+            "server": {},
+        }
+        cfg = GatewayConfig(raw)
+        assert cfg.providers["openrouter"].base_url == "https://proxy.internal/v1"
