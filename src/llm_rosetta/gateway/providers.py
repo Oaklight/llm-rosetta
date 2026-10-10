@@ -15,6 +15,7 @@ from .transport.provider_info import (
     ProviderInfo,
     anthropic_auth,
     google_auth,
+    no_auth,
     openai_auth,
 )
 
@@ -216,6 +217,11 @@ def build_provider_info(
     else:
         base_type = provider_type
 
+    # Keyless upstream (a free public gateway): send no credential while no
+    # API key is configured. Supplying a key switches back to the base type's
+    # auth, so a paid account can use the same shim.
+    keyless = bool(shim and shim.connection.keyless and not cfg.get("api_key"))
+
     reg = _PROVIDER_REGISTRY.get(base_type)
 
     if reg:
@@ -238,6 +244,10 @@ def build_provider_info(
         header_name = shim.connection.auth_header
         auth_fn = lambda key, _h=header_name: {_h: key}  # noqa: E731
 
+    # A keyless provider sends no auth header at all.
+    if keyless:
+        auth_fn = no_auth
+
     # Per-provider url_template / stream_url_template override from config
     if "url_template" in cfg:
         url_tpl = cfg["url_template"]
@@ -259,9 +269,12 @@ def build_provider_info(
     proxy_url = cfg.get("proxy") or global_proxy or None
 
     # -- token_command: dynamic key refresh ------------------------------------
-    api_key, token_command, token_refresh_interval = _resolve_token_command(
-        provider_type, cfg
-    )
+    if keyless:
+        api_key, token_command, token_refresh_interval = "", None, 3600
+    else:
+        api_key, token_command, token_refresh_interval = _resolve_token_command(
+            provider_type, cfg
+        )
 
     if not cfg.get("base_url"):
         raise ValueError(
@@ -281,4 +294,5 @@ def build_provider_info(
         timeout=float(cfg["timeout"]) if "timeout" in cfg else None,
         token_command=token_command,
         token_refresh_interval=token_refresh_interval,
+        keyless=keyless,
     )

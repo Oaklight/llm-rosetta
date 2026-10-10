@@ -16,6 +16,69 @@ import { initLogoPicker, setLogoPickerValue, getLogoPickerValue } from '../compo
 /** Capitalize the first letter of a string. */
 function _capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 
+// ── Free sources ────────────────────────────────────────────────────
+
+/** Free-source shims advertised by the server (presented neutrally as "Free"). */
+function _freeShims() {
+  return ((S.configData && S.configData.registered_shims) || []).filter(s => s.free_source);
+}
+
+/** True when provider *name* is configured through a free-source shim. */
+function _isFreeProvider(name) {
+  const cfg = S.configData && S.configData.providers ? S.configData.providers[name] : null;
+  const typeName = (cfg && cfg.type) || name;
+  return _freeShims().some(s => s.name === typeName);
+}
+
+/** Model ids currently routed to provider *name*. */
+function _modelsForProvider(name) {
+  const models = (S.configData && S.configData.models) || {};
+  const out = [];
+  for (const [mid, entry] of Object.entries(models)) {
+    const provs = typeof entry === 'string' ? [entry]
+      : entry.providers ? entry.providers.map(p => typeof p === 'string' ? p : p.name)
+        : entry.provider ? [entry.provider] : [];
+    if (provs.includes(name)) out.push(mid);
+  }
+  return out;
+}
+
+// Key field is collapsed for a keyless provider until the operator asks for it.
+let _freeKeyRevealed = false;
+
+function revealProviderKey() {
+  _freeKeyRevealed = true;
+  _syncKeylessUI();
+}
+
+/** Collapse the API-key field when the selected shim needs no credential. */
+function _syncKeylessUI() {
+  const typeSel = document.getElementById('provType');
+  if (!typeSel) return;
+  const shim = (S.configData?.registered_shims || []).find(s => s.name === typeSel.value);
+  const keyless = !!(shim && shim.keyless) && !_freeKeyRevealed;
+  const show = k => { const el = document.getElementById(k); if (el) el.style.display = keyless ? 'none' : ''; };
+  show('provApiKeyRow');
+  show('provApiKeySingleFooter');
+  const hint = document.getElementById('provKeylessHint');
+  if (hint) hint.style.display = keyless ? '' : 'none';
+  const optTag = document.getElementById('provOptionalTag');
+  if (optTag) optTag.style.display = keyless ? '' : 'none';
+  if (keyless) {
+    const multiBox = document.getElementById('provApiKeyMultiBox');
+    if (multiBox) multiBox.style.display = 'none';
+  }
+}
+
+/** Render one preset button per free-source shim (de-branded label). */
+function renderFreeSourceButtons() {
+  const host = document.getElementById('freeProviderButtons');
+  if (!host) return;
+  host.innerHTML = _freeShims().map(s =>
+    `<button class="btn btn-sm" data-free-shim="${esc(s.name)}" aria-label="${esc(t('btn.addFree'))}" onclick="openFreeProvider('${esc(s.name)}')">${esc(t('btn.addFree'))}</button>`
+  ).join('');
+}
+
 // ── Module-local state ──────────────────────────────────────────────
 
 let _editingProviderName = null; // original name when editing (for rename)
@@ -58,6 +121,7 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
   let _prevShimUrl = (shimMap[provType || ''] || {}).default_base_url || '';
   typeSel.onchange = () => {
     _updateTypeLogo();
+    _syncKeylessUI();
     const s = shimMap[typeSel.value];
     if (!s) return;
     const urlInput = document.getElementById('provBaseUrl');
@@ -156,6 +220,9 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
     }
   }
   toggleProvCapSection();
+  // Reveal the key field for a free provider that already carries a key.
+  _freeKeyRevealed = !!(provCfg && (provCfg.api_key || provCfg.token_command));
+  _syncKeylessUI();
   openModal('providerModal');
   // When editing, fetch the real (unmasked) key
   if (name && S._credentialVisible) {
@@ -541,6 +608,7 @@ function renderProviders() {
   // Apply view mode class
   _applyProviderView();
   _updateViewToggle();
+  renderFreeSourceButtons();
 
   if (totalCount === 0) {
     grid.innerHTML = `<p style="color:var(--text-dim)">${t('empty.providers')}</p>`;
@@ -585,7 +653,8 @@ function renderProviders() {
 
   // One markup shape for both views — layout is decided entirely by CSS.
   // See design/ui/provider-list-responsive.html and issue #611.
-  grid.innerHTML = entries.map(([name, cfg]) => {
+  grid.innerHTML = '';
+  const cardHtml = ([name, cfg]) => {
     const enabled = cfg.enabled !== false;
     const typeName = cfg.type || name;
     const logo = cfg.logo || shimLogo[name] || shimLogo[typeName] || '';
@@ -607,6 +676,7 @@ function renderProviders() {
     const apiKeyField = S._credentialVisible
       ? `<div class="pc-field" data-field="api-key" data-label="${t('card.apiKey')}" title="${esc(apiKeyDisplay)}"><code class="${apiKeyMuted ? 'text-muted' : ''}">${esc(apiKeyDisplay)}</code></div>`
       : '';
+    const isFree = _isFreeProvider(name);
     const modelCount = _countModelsForProvider(name);
     const modelLink = modelCount > 0
       ? `<span class="pc-models" onclick="goToModelsForProvider('${esc(name)}')">${modelCount} model${modelCount !== 1 ? 's' : ''} →</span>`
@@ -628,15 +698,28 @@ function renderProviders() {
           : `<code>${esc(baseUrl)}</code>`}</div>
         ${apiKeyField}
       </div>
+      ${isFree ? `<div class="pc-free-note">${esc(t('free.disclosure'))}</div>` : ''}
       <div class="pc-actions">
         <button class="btn btn-sm" aria-label="${t('btn.clone')} ${esc(name)}" onclick="copyProviderEntry('${esc(name)}')">${t('btn.clone')}</button>
         <button class="btn btn-sm" aria-label="${t('btn.edit')} ${esc(name)}" onclick="editProvider('${esc(name)}')">${t('btn.edit')}</button>
+        ${isFree ? `<button class="btn btn-sm btn-refresh-models" aria-label="${t('btn.refreshModels')} ${esc(name)}" onclick="refreshFreeModels('${esc(name)}')">${t('btn.refreshModels')}</button>` : ''}
         <button class="btn btn-sm btn-test-conn" aria-label="${t('btn.test')} ${esc(name)}" onclick="testProviderConnectivity('${esc(name)}')">${t('btn.test')}</button>
         <button class="btn btn-sm btn-danger" aria-label="${t('btn.delete')} ${esc(name)}" onclick="deleteProvider('${esc(name)}')">${t('btn.delete')}</button>
         ${modelLink}
       </div>
     </div>`;
-  }).join('');
+  };
+  // Free sources get their own section; regular providers follow.
+  const freeEntries = entries.filter(([name]) => _isFreeProvider(name));
+  const regularEntries = entries.filter(([name]) => !_isFreeProvider(name));
+  const sectionHead = (label, isFree) => `<div class="provider-section-head${isFree ? ' is-free' : ''}">${esc(label)}</div>`;
+  const parts = [];
+  if (freeEntries.length) {
+    parts.push(sectionHead(t('free.section'), true), ...freeEntries.map(cardHtml));
+  }
+  if (freeEntries.length && regularEntries.length) parts.push(sectionHead(t('provider.section')));
+  parts.push(...regularEntries.map(cardHtml));
+  grid.innerHTML = parts.join('');
 }
 
 // ── Provider CRUD ───────────────────────────────────────────────────
@@ -859,6 +942,7 @@ Object.assign(window, {
   saveServerSettings, runNetDiag, loadConfig,
   goToModelsForProvider, goToProviderFromModel, testProviderConnectivity,
   _activateSegChild,
+  openFreeProvider, refreshFreeModels, revealProviderKey,
 });
 
 // ── Provider health indicators ───────────────────────────────────────
@@ -885,6 +969,44 @@ async function applyProviderHealth() {
 }
 
 export { renderProviders, loadConfig, _activateSegChild, _getProviderCaps, applyProviderHealth };
+
+// ── Free source actions ─────────────────────────────────────────────
+
+/** Open the Add-Provider modal preset to a free-source shim (no vendor name). */
+function openFreeProvider(shimName) {
+  const shims = _freeShims();
+  const shim = shims.find(s => s.name === shimName) || shims[0];
+  if (!shim) { openProviderModal(); return; }
+  const existing = (S.configData && S.configData.providers) || {};
+  const name = existing['free-resource'] ? '' : 'free-resource';
+  _freeKeyRevealed = false;
+  openProviderModal(name, shim.default_base_url || '', '', '', shim.name);
+}
+
+/** Re-fetch a free provider's roster and offer to apply anything new. */
+async function refreshFreeModels(name) {
+  const card = document.querySelector(`.provider-card[data-provider="${name}"]`);
+  const btn = card?.querySelector('.btn-refresh-models');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>'; }
+  try {
+    const data = await api.get(`/admin/api/config/providers/${encodeURIComponent(name)}/models`);
+    if (data.error) { showToast(data.error, 'error'); return; }
+    const fetched = data.models || [];
+    const existing = new Set(_modelsForProvider(name));
+    const newCount = fetched.filter(m => !existing.has(m)).length;
+    showToast(t('toast.freeModelsRefreshed', {total: fetched.length, new: newCount}));
+    if (newCount > 0) {
+      window.openFetchModelsModal();
+      const sel = document.getElementById('fetchProvider');
+      if (sel) sel.value = name;
+      window.doFetchModels();
+    }
+  } catch (e) {
+    showToast(String(e.message || e), 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = t('btn.refreshModels'); }
+  }
+}
 
 // ── Provider Connectivity Test ──────────────────────────────────────
 

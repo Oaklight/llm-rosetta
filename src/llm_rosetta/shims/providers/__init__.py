@@ -392,6 +392,7 @@ def _load_single_provider(
             models_path=conn_raw.get("models_path"),
             model_id_field=conn_raw.get("model_id_field"),
             auth_header=conn_raw.get("auth_header"),
+            keyless=conn_raw.get("keyless", False),
         )
     else:
         connection = ConnectionConfig(
@@ -399,6 +400,7 @@ def _load_single_provider(
             api_key_env=cfg.get("default_api_key_env"),
             models_path=cfg.get("models_path"),
             model_id_field=cfg.get("model_id_field"),
+            keyless=cfg.get("keyless", False),
         )
 
     # Parse tools config (grouped or flat fallback).
@@ -440,6 +442,7 @@ def _load_single_provider(
         name=cfg["name"],
         base=cfg["base"],
         logo=cfg.get("logo"),
+        free_source=cfg.get("free_source", False),
         connection=connection,
         tools=tools,
         pre_ir_transforms=pre_t,
