@@ -95,14 +95,16 @@ src/llm_rosetta/
 ├── __init__.py              # Public API: convert(), get_converter_for_provider()
 ├── auto_detect.py           # Provider auto-detection from request body
 ├── tool_ops.py              # Cross-provider tool call utilities
-├── converters/              # 5 bidirectional converters
+├── converters/              # chat converters + embedding / rerank / decision
 │   ├── base/                # Abstract base + ConversionContext
 │   ├── openai_chat/
-│   ├── openai_responses/
+│   ├── openai_responses/    # OpenResponsesConverter + OpenAIResponsesConverter
 │   ├── anthropic/
 │   ├── google_generate/
 │   ├── google_interactions/
-│   └── eval/                # Decision paradigm (TypeSafe System One)
+│   ├── embedding/
+│   ├── rerank/
+│   └── decision/            # Decision paradigm (TypeSafe System One)
 ├── shims/                   # Provider/model identity cards + transforms
 │   ├── provider_shim.py
 │   ├── transforms.py
