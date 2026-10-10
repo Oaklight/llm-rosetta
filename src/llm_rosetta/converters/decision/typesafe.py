@@ -297,6 +297,8 @@ def _answer_to_wire(a: Mapping[str, Any], warnings: list[str]) -> dict[str, Any]
         return _copy(a, "choice", "probabilities", "confidence", "unknown_probability")
     if ir_type == "score":
         probs = a.get("probabilities", {})
+        # Level order comes from the IR ``probabilities`` key order; the response
+        # carries no question, so the true ordinal cannot be re-derived here.
         result = {
             "type": "score",
             "score": a.get("score", 0.0),
@@ -306,9 +308,10 @@ def _answer_to_wire(a: Mapping[str, Any], warnings: list[str]) -> dict[str, Any]
         _maybe_set(result, a, "confidence")
         _maybe_set(result, a, "unknown_probability")
         return result
-    # refusal
-    warnings.append("TypeSafe has no refusal answer type; refusal dropped")
-    return {"type": "noul", "noul": 0.0}
+    # TypeSafe has no refusal type. Emit a maximally-uncertain noul rather than
+    # a fabricated confident 0/1, which downstream would misread as a real answer.
+    warnings.append("TypeSafe has no refusal answer type; emitted noul=0.5")
+    return {"type": "noul", "noul": 0.5}
 
 
 _ANSWER_KEYS = ("type",)

@@ -45,15 +45,19 @@ def confidence(answer: dict[str, Any]) -> float:
     """Confidence of the answer.
 
     Uses the provider's ``confidence`` when present; otherwise derives it as
-    ``1 - normalized Shannon entropy`` of ``probabilities``.
+    ``1 - normalized Shannon entropy`` of ``probabilities``, or — for an
+    assertion (which has no distribution) — the credence ``max(p, 1 - p)``.
     """
     stored = _stored(answer, "confidence")
     if stored is not None:
         return stored
     probs = answer.get("probabilities")
-    if not probs:
-        return 0.0
-    return compute_confidence(probs)
+    if probs:
+        return compute_confidence(probs)
+    probability = answer.get("probability")
+    if probability is not None:
+        return max(probability, 1.0 - probability)
+    return 0.0
 
 
 def choice(answer: dict[str, Any]) -> Any:
