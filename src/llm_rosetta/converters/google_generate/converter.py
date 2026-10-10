@@ -50,6 +50,7 @@ from ..base.tools import (
     sanitize_tool_call_id,
     strip_orphaned_tool_config,
 )
+from ..base.helpers.extensions import wire_extensions
 from ..base.helpers.system_message_hoist import hoist_system_in_converter
 from ...transforms.ir import hoist_late_system_messages
 from ._constants import (
@@ -358,9 +359,7 @@ class GoogleGenerateConverter(BaseConverter):
             config.update(cache_fields)
 
         # Provider extensions
-        extensions = ir_request.get("provider_extensions")
-        if extensions:
-            config.update(extensions)
+        config.update(wire_extensions(ir_request))
 
         if output_format == "rest":
             return self._to_rest_body(result)

@@ -34,6 +34,7 @@ from ...types.ir.stream import (
     UsageEvent,
 )
 from ..base import BaseConverter
+from ..base.helpers.extensions import wire_extensions
 from ..base.context import ConversionContext, StreamContext
 from ..base.tools import (
     assign_tool_batch_ids,
@@ -213,9 +214,7 @@ class OpenAIChatConverter(BaseConverter):
             result.update(cache_fields)
 
         # 11. Provider extensions (pass-through)
-        extensions = ir_request.get("provider_extensions")
-        if extensions:
-            result.update(extensions)
+        result.update(wire_extensions(ir_request))
 
         return result
 

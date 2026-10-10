@@ -49,6 +49,7 @@ from ..base.tools import (
     sanitize_tool_call_id,
     strip_orphaned_tool_config,
 )
+from ..base.helpers.extensions import wire_extensions
 from ..base.helpers.system_message_hoist import hoist_system_in_converter
 from ...transforms.ir import auto_cache_breakpoints, hoist_late_system_messages
 from ._constants import (
@@ -206,9 +207,7 @@ class AnthropicConverter(BaseConverter):
             result.update(cache_fields)
 
         # 11. Provider extensions (pass-through)
-        extensions = ir_request.get("provider_extensions")
-        if extensions:
-            result.update(extensions)
+        result.update(wire_extensions(ir_request))
 
         return result
 

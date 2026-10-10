@@ -753,7 +753,8 @@ class OpenResponsesToolOps(BaseToolOps):
         - ``"required"`` → ``mode:"any"``
         - ``{"type":"function","function":{"name":"..."}}`` → ``mode:"tool"``
         - ``{"type":"allowed_tools","tools":[...],"mode":...}`` → the whole
-          object is stashed in *extensions* under ``"allowed_tools"`` (the IR has
+          object is stashed in *extensions* under
+          ``"_open_responses_allowed_tools"`` (the IR has
           no equivalent), and the IR ``mode`` mirrors the inner ``mode``.
 
         Args:
@@ -770,7 +771,7 @@ class OpenResponsesToolOps(BaseToolOps):
             and provider_tool_choice.get("type") == "allowed_tools"
         ):
             if extensions is not None:
-                extensions["allowed_tools"] = dict(provider_tool_choice)
+                extensions["_open_responses_allowed_tools"] = dict(provider_tool_choice)
             wire_mode = str(provider_tool_choice.get("mode") or "auto")
             ir_mode = {
                 "required": "any",
