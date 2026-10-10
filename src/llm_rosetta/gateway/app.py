@@ -489,14 +489,14 @@ async def handle_google_generate(
         model = model_path.removesuffix(":streamGenerateContent")
         return await _proxy_handler(
             request,
-            source_provider="google",
+            source_provider="google_generate",
             model_override=model,
             force_stream=True,
         )
     elif model_path.endswith(":generateContent"):
         model = model_path.removesuffix(":generateContent")
         return await _proxy_handler(
-            request, source_provider="google", model_override=model
+            request, source_provider="google_generate", model_override=model
         )
     else:
         return Response(

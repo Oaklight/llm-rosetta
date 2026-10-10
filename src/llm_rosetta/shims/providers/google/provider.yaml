@@ -1,4 +1,4 @@
-name: google
+name: google_generate
 base: google_generate
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/google.svg
 

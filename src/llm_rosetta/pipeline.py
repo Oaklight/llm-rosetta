@@ -45,6 +45,7 @@ from llm_rosetta.capabilities import (
     unwrap_custom_tool_input,
 )
 from llm_rosetta.converters.base.context import ConversionContext
+from llm_rosetta.provider_names import normalize_provider_name
 from llm_rosetta.shims.provider_shim import ProviderShim, resolve_base, resolve_shim
 from llm_rosetta.transforms.body import Transform, apply_transforms
 from llm_rosetta.transforms.ir import (
@@ -292,6 +293,11 @@ class ConversionPipeline:
         google_output_format: str = "rest",
     ) -> None:
         from llm_rosetta import get_converter_for_provider
+
+        # Legacy provider spellings are accepted but normalised to canonical
+        # names before any internal comparison (see provider_names).
+        source_provider = normalize_provider_name(source_provider)
+        target_provider = normalize_provider_name(target_provider)
 
         # Backward compat: accept legacy ``shim=`` as alias for target_shim
         if shim is not None:

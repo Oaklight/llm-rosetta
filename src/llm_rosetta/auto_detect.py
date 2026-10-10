@@ -7,13 +7,19 @@ Utility functions for auto-detecting LLM provider request body formats
 
 from typing import Any, Literal
 
+from .provider_names import normalize_provider_name
+
+# Canonical provider/format names.  Legacy spellings are mapped onto these by
+# :func:`llm_rosetta.provider_names.normalize_provider_name` at every public
+# boundary; see that module for the single alias table.  Legacy entries are
+# kept in the union for backward-compatible type hints.
 ProviderType = Literal[
     "openai_chat",
     "openai_responses",
     "open_responses",
     "anthropic",
-    "google",
     "google_generate",
+    "google",  # legacy alias of "google_generate"
     "google_interactions",
     "decision",
 ]
@@ -150,7 +156,7 @@ def detect_provider(body: dict[str, Any]) -> ProviderType | None:
         >>> detect_provider({"messages": [{"role": "user", "content": [{"type": "text"}]}]})
         'anthropic'
         >>> detect_provider({"contents": [{"role": "user", "parts": [{"text": "Hi"}]}]})
-        'google'
+        'google_generate'
     """
     if not isinstance(body, dict):
         return None
@@ -159,7 +165,7 @@ def detect_provider(body: dict[str, Any]) -> ProviderType | None:
         return "decision"
 
     if _is_google_format(body):
-        return "google"
+        return "google_generate"
 
     if ("input" in body or "output" in body) and _is_responses_format(body):
         return "openai_responses"
@@ -190,6 +196,8 @@ _converter_cache: dict[str, Any] = {}
 def get_converter_for_provider(provider: str):
     """Get the corresponding converter for a provider type or shim name.
 
+    Legacy provider names are normalised to their canonical spelling first
+    (see :func:`llm_rosetta.provider_names.normalize_provider_name`).
     Converter instances are cached — the same object is returned for the
     same resolved base provider.  This is safe because converters are
     stateless (all per-request state lives in ``ConversionContext``).
@@ -203,6 +211,7 @@ def get_converter_for_provider(provider: str):
     Raises:
         ValueError: If the provider is not a known type or shim name.
     """
+    provider = normalize_provider_name(provider)
     if provider in _converter_cache:
         return _converter_cache[provider]
 
@@ -249,7 +258,7 @@ def _detect_source(
 ) -> str:
     """Detect or validate the source provider, raising on failure."""
     if source_provider is not None:
-        return str(source_provider)
+        return normalize_provider_name(str(source_provider))
     detected = detect_provider(source_body)
     if detected is None:
         raise ValueError(
@@ -309,12 +318,13 @@ def convert(
     from .shims import get_shim
 
     src = _detect_source(source_body, source_provider)
+    tgt = normalize_provider_name(str(target_provider))
 
     pipeline = ConversionPipeline(
         src,
-        str(target_provider),
+        tgt,
         source_shim=get_shim(src),
-        target_shim=get_shim(str(target_provider)),
+        target_shim=get_shim(tgt),
         upstream_model=model,
         baseline=baseline,
         # Library callers expect Google SDK format; gateway uses "rest"
@@ -358,8 +368,8 @@ def convert_response(
     from .pipeline import ConversionPipeline
     from .shims import get_shim
 
-    src = str(source_provider)
-    tgt = str(target_provider)
+    src = normalize_provider_name(str(source_provider))
+    tgt = normalize_provider_name(str(target_provider))
 
     pipeline = ConversionPipeline(
         src,

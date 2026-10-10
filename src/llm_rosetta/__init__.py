@@ -12,6 +12,7 @@ from .auto_detect import (
     detect_provider,
     get_converter_for_provider,
 )
+from .provider_names import normalize_provider_name
 from .pipeline import ConversionError, ConversionPipeline
 from .converters.decision.pipeline import DecisionConversionPipeline
 from .converters.embedding.pipeline import EmbeddingConversionPipeline
@@ -70,6 +71,7 @@ __all__ = [
     "convert",
     "convert_response",
     "ProviderType",
+    "normalize_provider_name",
     # Conversion pipeline
     "ConversionPipeline",
     "ConversionError",

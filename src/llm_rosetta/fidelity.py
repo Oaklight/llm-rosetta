@@ -95,7 +95,7 @@ _CRITICAL_REQUEST_BY_FORMAT: dict[str, list[str]] = {
         "tools.*.type",
         "tools.*.name",
     ],
-    "google": [
+    "google_generate": [
         "contents.*.role",
         "contents.*.parts.*.text",
         "contents.*.parts.*.functionCall.name",
@@ -135,7 +135,7 @@ _CRITICAL_RESPONSE_BY_FORMAT: dict[str, list[str]] = {
         "output.*.name",
         "output.*.status",
     ],
-    "google": [
+    "google_generate": [
         "candidates.*.content.role",
         "candidates.*.content.parts.*.text",
         "candidates.*.content.parts.*.functionCall.name",
@@ -153,6 +153,8 @@ def _get_critical_paths(
     by_format: dict[str, list[str]],
 ) -> list[str]:
     """Return critical paths for a specific format, or all if format is None."""
+    if format_name == "google":
+        format_name = "google_generate"  # legacy alias
     if format_name is not None and format_name in by_format:
         return common + by_format[format_name]
     # Unknown format or None: check all paths (union)

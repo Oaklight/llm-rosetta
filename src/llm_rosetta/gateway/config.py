@@ -905,22 +905,32 @@ class GatewayConfig:
           2. ``type`` field → resolve via shim registry
           3. provider name itself (backward-compatible fallback)
 
+        Legacy provider/format names are normalised to canonical spellings
+        (see :func:`llm_rosetta.provider_names.normalize_provider_name`), so
+        a config declaring e.g. ``type: google_generate`` resolves to the
+        canonical ``google`` type.
+
         Returns:
             Tuple of (provider_types, provider_shim_names).
         """
+        from llm_rosetta.provider_names import normalize_provider_name
         from llm_rosetta.shims import resolve_base
 
         provider_types: dict[str, str] = {}
         provider_shim_names: dict[str, str | None] = {}
         for name, cfg in raw_providers.items():
             if "shim" in cfg:
-                provider_types[name] = resolve_base(cfg["shim"])
+                provider_types[name] = normalize_provider_name(
+                    resolve_base(cfg["shim"])
+                )
                 provider_shim_names[name] = cfg["shim"]
             elif "type" in cfg:
-                provider_types[name] = resolve_base(cfg["type"])
+                provider_types[name] = normalize_provider_name(
+                    resolve_base(cfg["type"])
+                )
                 provider_shim_names[name] = cfg["type"]
             else:
-                provider_types[name] = name
+                provider_types[name] = normalize_provider_name(name)
                 provider_shim_names[name] = name
         return provider_types, provider_shim_names
 
