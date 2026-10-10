@@ -387,3 +387,79 @@ class TestReviewFixes:
         }
         _, warnings = converter.request_to_provider(ir, context=ConversionContext())
         assert any("Folded assertion criteria" in w for w in warnings)
+
+
+class TestReviewFixes2:
+    def test_unknown_question_type_keeps_instructions(self, converter):
+        ir = {
+            "model": "m",
+            "state": "x",
+            "questions": {"q": {"type": "rating", "instructions": "Rate it"}},
+        }
+        wire, _ = converter.request_to_provider(ir)
+        assert wire["questions"][0]["instructions"] == "Rate it"
+
+    def test_unsupported_state_part_warns(self, converter):
+        ir = {
+            "model": "m",
+            "state": [{"type": "audio", "data": "x"}, {"type": "text", "text": "hi"}],
+            "questions": {},
+        }
+        wire, warnings = converter.request_to_provider(ir)
+        assert wire["input"][0]["content"] == [{"type": "input_text", "text": "hi"}]
+        assert any("unsupported state part" in w for w in warnings)
+
+    def test_unsupported_input_part_warns(self, converter):
+        from llm_rosetta.converters.base.context import ConversionContext
+
+        req = {
+            "model": "m",
+            "input": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "input_file", "file_id": "f1"},
+                        {"type": "input_text", "text": "hi"},
+                    ],
+                }
+            ],
+            "questions": [],
+        }
+        ctx = ConversionContext()
+        ir = converter.request_from_provider(req, context=ctx)
+        assert ir["state"] == [{"type": "text", "text": "hi"}]
+        assert any("unsupported input part" in w for w in ctx.warnings)
+
+    def test_image_detail_passthrough(self, converter):
+        ir = {
+            "model": "m",
+            "state": [
+                {
+                    "type": "image",
+                    "image_url": "data:image/png;base64,AA",
+                    "detail": "low",
+                }
+            ],
+            "questions": {},
+        }
+        wire, _ = converter.request_to_provider(ir)
+        assert wire["input"][0]["content"][0]["detail"] == "low"
+        back = converter.request_from_provider(wire)
+        assert back["state"][0]["detail"] == "low"
+
+    def test_malformed_mark_falls_back_to_plain(self, converter):
+        req = {
+            "model": "m",
+            "input": "x",
+            "questions": [
+                {
+                    "type": "predicate",
+                    "name": "q",
+                    "instructions": "<<<rosetta:assertion>>> is this urgent?",
+                }
+            ],
+        }
+        out = converter.request_from_provider(req)
+        assert out["questions"]["q"]["instructions"] == (
+            "<<<rosetta:assertion>>> is this urgent?"
+        )
