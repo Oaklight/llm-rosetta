@@ -53,8 +53,16 @@ class TestConfidence:
         assert confidence({"probabilities": {"a": 1.0, "b": 0.0}}) == pytest.approx(1.0)
         assert confidence({"probabilities": {"a": 0.5, "b": 0.5}}) == pytest.approx(0.0)
 
-    def test_no_probabilities(self):
-        assert confidence({"type": "assertion", "probability": 0.9}) == 0.0
+    def test_assertion_derived_from_probability(self):
+        assert confidence({"type": "assertion", "probability": 0.9}) == pytest.approx(
+            0.9
+        )
+        assert confidence({"type": "assertion", "probability": 0.2}) == pytest.approx(
+            0.8
+        )
+
+    def test_nothing_to_derive(self):
+        assert confidence({"type": "assertion"}) == 0.0
 
 
 class TestChoice:
