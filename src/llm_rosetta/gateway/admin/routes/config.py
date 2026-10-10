@@ -36,8 +36,13 @@ import logging
 
 logger = logging.getLogger("llm-rosetta-gateway")
 
-# Opinionated: the vendor shim to recommend for each base format.  A shim that
-# is not registered degrades to None (the picker then shows no hint).
+# Opinionated: the vendor shim to recommend for each base format.  Entries that
+# name the format itself (anthropic / openai_responses / google_interactions)
+# are inert — the payload treats an unregistered or self-recommendation as None,
+# so the picker shows no hint; they are kept only to document the canonical
+# shim per format.  `open_responses` is deliberately absent: it is a distinct
+# type that merely shares the Responses converter, so recommending
+# `openai_responses` for it would silently change the selected provider type.
 _BASE_FORMAT_RECOMMENDED: dict[str, str] = {
     "openai_chat": "openai",
     "openai_responses": "openai_responses",
@@ -56,6 +61,8 @@ def _base_formats_payload() -> list[dict[str, Any]]:
     silently dropping the toggle.  ``recommended_provider`` is ``None`` when the
     recommendation is not actionable — the format recommends itself, or the
     shim is not registered — so the payload is self-describing.
+    ``hoist_system_messages`` is not carried: every format defaults it to true
+    (the JS reads ``!== false``), so there is nothing to override.
     """
     out: list[dict[str, Any]] = []
     for name in BASE_FORMATS:
