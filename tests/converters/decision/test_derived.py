@@ -30,6 +30,24 @@ class TestAbstained:
     def test_no_unknown(self):
         assert abstained({"type": "choice", "probabilities": {"a": 1.0}}) is False
 
+    def test_tie_counts_as_abstained(self):
+        assert (
+            abstained(
+                {"type": "assertion", "probability": 0.5, "unknown_probability": 0.5}
+            )
+            is True
+        )
+        assert (
+            abstained(
+                {
+                    "type": "choice",
+                    "probabilities": {"a": 0.5},
+                    "unknown_probability": 0.5,
+                }
+            )
+            is True
+        )
+
     def test_assertion(self):
         assert (
             abstained(
@@ -63,6 +81,16 @@ class TestConfidence:
 
     def test_nothing_to_derive(self):
         assert confidence({"type": "assertion"}) == 0.0
+
+    def test_scaled_by_unknown(self):
+        a = {"type": "assertion", "probability": 0.9, "unknown_probability": 0.95}
+        assert confidence(a) == pytest.approx(0.9 * 0.05)
+
+    def test_choice_scaled_by_unknown(self):
+        probs = {"a": 0.8, "b": 0.2}
+        base = confidence({"probabilities": probs})
+        scaled = confidence({"probabilities": probs, "unknown_probability": 0.5})
+        assert scaled == pytest.approx(base * 0.5)
 
 
 class TestChoice:
