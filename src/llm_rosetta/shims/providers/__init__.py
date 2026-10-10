@@ -97,8 +97,10 @@ def _ensure_pkg(name: str, dir_path: Path) -> bool:
     External shim transforms are executed by path rather than imported as part
     of a real package, so a relative import such as ``from .helpers import x``
     would otherwise raise ``ModuleNotFoundError``.  Giving each directory level
-    a synthetic package with a ``__path__`` makes relative imports — and plain
-    sibling-module imports — resolve through the normal path finder.
+    a synthetic package with a ``__path__`` makes relative imports resolve
+    through the normal path finder.  (A *bare* ``import helpers`` still fails —
+    the directory is not on ``sys.path`` — so plugin transforms must use
+    relative or fully-qualified plugin imports.)
 
     Returns:
         ``True`` when the package was newly created (so a failed load can roll
@@ -126,6 +128,50 @@ def _clear_plugin_namespaces() -> None:
     for name in [m for m in sys.modules if m.startswith(_PLUGIN_NS_PREFIX)]:
         sys.modules.pop(name, None)
     _plugin_namespaces.clear()
+
+
+def _register_plugin_chain(
+    provider_dir: Path, group: str | None, root: Path | None
+) -> tuple[str, str, list[str]]:
+    """Register the synthetic package chain for a plugin shim's transforms.
+
+    The namespace is keyed on the *resolved* providers root so the same
+    directory reached by different paths (relative, symlink, …) shares one
+    namespace.
+
+    Returns:
+        ``(namespace, transforms_module_name, created_package_names)``.
+    """
+    resolved = Path(root or provider_dir.parent).resolve()
+    ns = f"{_PLUGIN_NS_PREFIX}_{hashlib.sha1(str(resolved).encode()).hexdigest()[:8]}"
+    cur, cur_dir = ns, resolved
+    chain = [(ns, resolved)]
+    for part in group.split(".") if group else []:
+        cur_dir = cur_dir / part
+        cur = f"{cur}.{part}"
+        chain.append((cur, cur_dir))
+    leaf = f"{cur}.{provider_dir.name}"
+    chain.append((leaf, provider_dir))
+    created = [name for name, path in chain if _ensure_pkg(name, path)]
+    return ns, f"{leaf}.transforms", created
+
+
+def _rollback_plugin_load(
+    module_name: str, ns: str | None, created_pkgs: list[str]
+) -> None:
+    """Undo a failed plugin transforms load.
+
+    Drops the half-initialised module plus every package and submodule this
+    load registered under *ns* — ``transforms.py`` may have imported siblings
+    before raising.
+    """
+    doomed = {module_name}
+    if ns is not None:
+        doomed.update(m for m in sys.modules if m == ns or m.startswith(f"{ns}."))
+    for mod_name in doomed:
+        sys.modules.pop(mod_name, None)
+    for pkg_name in created_pkgs:
+        _plugin_namespaces.pop(pkg_name, None)
 
 
 def get_model_list_transform(
@@ -234,6 +280,7 @@ def _load_transforms(
     if not tf_path.exists():
         return (), (), (), (), None
     created_pkgs: list[str] = []
+    ns: str | None = None
     if _builtin:
         prefix = "llm_rosetta.shims.providers"
         module_name = (
@@ -242,23 +289,9 @@ def _load_transforms(
             else f"{prefix}.{provider_dir.name}.transforms"
         )
     else:
-        # Register the directory chain as synthetic packages so the transforms
-        # module can use relative/sibling imports (see _ensure_pkg).  The
-        # namespace is keyed on the *resolved* root so the same directory
-        # reached by different paths (relative, symlink, …) shares one.
-        root = Path(root or provider_dir.parent).resolve()
-        ns = f"{_PLUGIN_NS_PREFIX}_{hashlib.sha1(str(root).encode()).hexdigest()[:8]}"
-        cur, cur_dir = ns, root
-        chain = [(ns, root)]
-        for part in group.split(".") if group else []:
-            cur_dir = cur_dir / part
-            cur = f"{cur}.{part}"
-            chain.append((cur, cur_dir))
-        chain.append((f"{cur}.{provider_dir.name}", provider_dir))
-        for pkg_name, pkg_dir in chain:
-            if _ensure_pkg(pkg_name, pkg_dir):
-                created_pkgs.append(pkg_name)
-        module_name = f"{cur}.{provider_dir.name}.transforms"
+        ns, module_name, created_pkgs = _register_plugin_chain(
+            provider_dir, group, root
+        )
     spec = importlib.util.spec_from_file_location(module_name, tf_path)
     if spec is None or spec.loader is None:
         logger.warning("Could not load %s", tf_path)
@@ -268,12 +301,7 @@ def _load_transforms(
     try:
         spec.loader.exec_module(mod)
     except BaseException:
-        # Roll back the half-initialised module (and any packages this load
-        # created) so a later load does not hit a broken module.
-        sys.modules.pop(module_name, None)
-        for pkg_name in created_pkgs:
-            sys.modules.pop(pkg_name, None)
-            _plugin_namespaces.pop(pkg_name, None)
+        _rollback_plugin_load(module_name, ns, created_pkgs)
         raise
     # New names take precedence; fall back to legacy names.
     # Use `is None` (not `or`) since empty tuple () is falsy but valid.
