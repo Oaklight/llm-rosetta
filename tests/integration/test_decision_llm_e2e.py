@@ -48,21 +48,31 @@ DECISION_REQUEST: IRDecisionRequest = {
         "wants_refund": AssertionQuestion(
             type="assertion",
             instructions="Is the customer requesting a refund?",
-            criteria={"true": "Explicitly asks for money back", "false": "No refund request"},
+            criteria=[
+                {"label": False, "description": "No refund request"},
+                {"label": True, "description": "Explicitly asks for money back"},
+            ],
         ),
         "department": ChoiceQuestion(
             type="choice",
             instructions="Which team should handle this ticket?",
-            criteria={
-                "billing": "Payments, refunds, charges",
-                "support": "General customer help",
-                "escalation": "Urgent complaints, legal threats",
-            },
+            criteria=[
+                {"label": "billing", "description": "Payments, refunds, charges"},
+                {"label": "support", "description": "General customer help"},
+                {
+                    "label": "escalation",
+                    "description": "Urgent complaints, legal threats",
+                },
+            ],
         ),
         "frustration": ScoreQuestion(
             type="score",
             instructions="How frustrated is the customer?",
-            criteria=["Calm and factual", "Annoyed but civil", "Very frustrated and angry"],
+            criteria=[
+                {"label": "Calm and factual"},
+                {"label": "Annoyed but civil"},
+                {"label": "Very frustrated and angry"},
+            ],
         ),
     },
 }
@@ -212,10 +222,10 @@ def _validate_decision_response(ir_response: dict[str, Any]) -> None:
     assert 0.0 <= score_a["score"] <= 2.0
     assert score_a["score"] > 1.0, "Customer is clearly frustrated"
     assert abs(sum(score_a["probabilities"].values()) - 1.0) < 0.05
-    assert score_a["legend"] == {
-        "0": "Calm and factual",
-        "1": "Annoyed but civil",
-        "2": "Very frustrated and angry",
+    assert set(score_a["probabilities"]) == {
+        "Calm and factual",
+        "Annoyed but civil",
+        "Very frustrated and angry",
     }
 
 

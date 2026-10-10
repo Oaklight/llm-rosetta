@@ -61,15 +61,19 @@ IR_REQUEST: IRDecisionRequest = {
         "department": ChoiceQuestion(
             type="choice",
             instructions="Which team should handle this?",
-            criteria={
-                "billing": "Payments, invoicing, refunds",
-                "technical": "Bugs, outages, integrations",
-            },
+            criteria=[
+                {"label": "billing", "description": "Payments, invoicing, refunds"},
+                {"label": "technical", "description": "Bugs, outages, integrations"},
+            ],
         ),
         "frustration": ScoreQuestion(
             type="score",
             instructions="How frustrated is the customer?",
-            criteria=["Calm", "Frustrated", "Very angry"],
+            criteria=[
+                {"label": "Calm"},
+                {"label": "Frustrated"},
+                {"label": "Very angry"},
+            ],
         ),
     },
 }

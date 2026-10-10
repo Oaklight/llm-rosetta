@@ -26,17 +26,27 @@ IR_REQUEST: IRDecisionRequest = {
         "wants_refund": AssertionQuestion(
             type="assertion",
             instructions="Is the customer requesting a refund?",
-            criteria={"true": "Wants money back", "false": "No refund request"},
+            criteria=[
+                {"label": False, "description": "No refund request"},
+                {"label": True, "description": "Wants money back"},
+            ],
         ),
         "department": ChoiceQuestion(
             type="choice",
             instructions="Which team?",
-            criteria={"billing": "Payments", "support": "Help"},
+            criteria=[
+                {"label": "billing", "description": "Payments"},
+                {"label": "support", "description": "Help"},
+            ],
         ),
         "frustration": ScoreQuestion(
             type="score",
             instructions="How frustrated?",
-            criteria=["Calm", "Annoyed", "Angry"],
+            criteria=[
+                {"label": "Calm"},
+                {"label": "Annoyed"},
+                {"label": "Angry"},
+            ],
         ),
     },
 }
@@ -46,8 +56,8 @@ MOCK_RERANK_RESPONSE: dict[str, Any] = {
     "results": [
         {
             "results": [
-                {"index": 0, "relevance_score": 0.9},
-                {"index": 1, "relevance_score": 0.1},
+                {"index": 0, "relevance_score": 0.1},
+                {"index": 1, "relevance_score": 0.9},
             ]
         },
         {
@@ -89,7 +99,7 @@ class TestRequestToProvider:
         ctx = ConversionContext()
         wire, _ = converter.request_to_provider(IR_REQUEST, context=ctx)
         assertion_q = wire["queries"][0]
-        assert assertion_q["documents"] == ["Wants money back", "No refund request"]
+        assert assertion_q["documents"] == ["No refund request", "Wants money back"]
 
     def test_stores_questions_in_context(self, converter: RerankerDecisionConverter):
         ctx = ConversionContext()
@@ -122,7 +132,7 @@ class TestResponseFromProvider:
         a: Any = ir["answers"]["frustration"]
         assert a["type"] == "score"
         assert a["score"] > 1.0
-        assert a["legend"] == {"0": "Calm", "1": "Annoyed", "2": "Angry"}
+        assert set(a["probabilities"]) == {"Calm", "Annoyed", "Angry"}
 
     def test_object_field(self, converter: RerankerDecisionConverter):
         ctx = ConversionContext()

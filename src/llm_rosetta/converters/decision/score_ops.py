@@ -21,6 +21,7 @@ from llm_rosetta.types.ir.decision import (
     AssertionAnswer,
     ChoiceAnswer,
     DecisionAnswer,
+    DecisionEntry,
     DecisionQuestion,
     DecisionState,
     DecisionUsageInfo,
@@ -60,26 +61,37 @@ def build_context(state: DecisionState, instructions: Any) -> str:
     return f"{state_str} {instr_str}"
 
 
+def _entry_text(entry: DecisionEntry) -> str:
+    """Display text for an entry: its description, else its label."""
+    description = entry.get("description")
+    if description is None:
+        return str(entry["label"])
+    if isinstance(description, str):
+        return description
+    return json.dumps(description, ensure_ascii=False)
+
+
+def _entries(question: DecisionQuestion) -> list[DecisionEntry]:
+    return list(cast(Any, question).get("criteria", []) or [])
+
+
 def get_option_texts(question: DecisionQuestion) -> list[str]:
     """Extract option texts from a question for scoring.
 
-    Returns a list of option descriptions that can be scored against
-    the context.  For assertion: ["true description", "false description"].
-    For choice: one description per label.  For score: one description
-    per level.
+    Returns a list of option descriptions (falling back to the label) that
+    can be scored against the context.  For assertion the two entries are
+    ordered ``[false, true]``; without criteria it defaults to
+    ``["no", "yes"]``.
     """
     qtype = question["type"]
     if qtype == "assertion":
-        criteria: Any = question.get("criteria")
-        if isinstance(criteria, dict):
-            return [criteria.get("true", "yes"), criteria.get("false", "no")]
-        return ["yes", "no"]
-    if qtype == "choice":
-        criteria_dict: dict[str, Any] = cast(Any, question).get("criteria", {})
-        return [desc or key for key, desc in criteria_dict.items()]
-    if qtype == "score":
-        criteria_list: list[str] = cast(Any, question).get("criteria", [])
-        return list(criteria_list)
+        entries = _entries(question)
+        if not entries:
+            return ["no", "yes"]
+        ordered = sorted(entries, key=lambda e: bool(e["label"]))  # False < True
+        return [_entry_text(e) for e in ordered]
+    if qtype in ("choice", "score"):
+        return [_entry_text(e) for e in _entries(question)]
     return []
 
 
@@ -92,7 +104,8 @@ def scores_to_answer(
     """Convert raw per-option scores into a typed decision answer.
 
     Applies softmax to the raw scores, then maps probabilities to the
-    appropriate answer type (assertion/choice/score).
+    appropriate answer type (assertion/choice/score).  Probabilities are
+    keyed by ``str(label)`` for choice/score.
 
     Args:
         scores: Raw per-option scores.
@@ -105,14 +118,21 @@ def scores_to_answer(
     qtype = question["type"]
 
     if qtype == "assertion":
-        probability = max(0.01, min(0.99, probs[0])) if len(probs) >= 2 else 0.5
-        return AssertionAnswer(type="assertion", probability=probability)
+        entries = _entries(question)
+        if entries:
+            ordered = sorted(entries, key=lambda e: bool(e["label"]))
+            true_idx = 1 if bool(ordered[-1]["label"]) else 0
+        else:
+            true_idx = len(probs) - 1 if probs else 0
+        p_true = probs[true_idx] if true_idx < len(probs) else 0.5
+        return AssertionAnswer(
+            type="assertion", probability=max(0.01, min(0.99, p_true))
+        )
 
     if qtype == "choice":
-        criteria_dict: dict[str, Any] = cast(Any, question).get("criteria", {})
-        keys = list(criteria_dict.keys())
-        prob_dict = {k: p for k, p in zip(keys, probs, strict=True)}
-        choice = max(prob_dict, key=lambda k: prob_dict[k])
+        labels = [str(e["label"]) for e in _entries(question)]
+        prob_dict = {k: p for k, p in zip(labels, probs)}
+        choice = max(prob_dict, key=lambda k: prob_dict[k]) if prob_dict else ""
         return ChoiceAnswer(
             type="choice",
             choice=choice,
@@ -121,14 +141,12 @@ def scores_to_answer(
         )
 
     if qtype == "score":
-        criteria_list: list[str] = cast(Any, question).get("criteria", [])
-        prob_dict = {str(i): p for i, p in enumerate(probs)}
-        legend = {str(i): desc for i, desc in enumerate(criteria_list)}
+        labels = [str(e["label"]) for e in _entries(question)]
+        prob_dict = {k: p for k, p in zip(labels, probs)}
         score_val = sum(i * p for i, p in enumerate(probs))
         return ScoreAnswer(
             type="score",
             score=score_val,
-            legend=legend,
             probabilities=prob_dict,
             confidence=compute_confidence(prob_dict),
         )
