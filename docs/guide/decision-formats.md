@@ -20,14 +20,17 @@ LLM-Rosetta currently supports **1 format family** for decision APIs, with more 
 
 Decision APIs use typed questions with constrained answer spaces:
 
-| IR Type | TypeSafe Wire Name | Input | Output |
-|---------|-------------------|-------|--------|
-| `noul` | `noul` | Yes/no proposition + optional criteria | P(true) ∈ [0, 1] |
-| `choice` | `choice` | Options with descriptions | Selected option + probability distribution |
-| `score` | `score` | Ordered rubric levels (≥ 2) | Weighted score + probability distribution |
+| IR Type | TypeSafe Wire Name | Proposition | Input | Output |
+|---------|-------------------|-------------|-------|--------|
+| `assertion` | `noul` | proposition | Yes/no claim + optional criteria | P(true) ∈ [0, 1] |
+| `choice` | `choice` | categorical proposition | Options with descriptions | Selected option + probability distribution |
+| `score` | `score` | ordinal proposition | Ordered rubric levels (≥ 2) | Weighted score + probability distribution |
 
-!!! note "Noul etymology"
-    "Noul" comes from the middle of "ber-**noul**-li" — a probabilistic counterpart to bool. The IR uses the same name as the TypeSafe wire format.
+!!! note "Naming"
+    The three IR primitives are named for the kind of proposition they evaluate:
+    `assertion` (**proposition**), `choice` (**categorical proposition**), and
+    `score` (**ordinal proposition**).  The IR name `assertion` is translated to
+    the TypeSafe wire name `noul` by `TypeSafeDecisionConverter`.
 
 ### State
 
@@ -50,12 +53,12 @@ state = {
 ```python
 from llm_rosetta.types.ir.decision import (
     # Questions
-    NoulQuestion,   # yes/no → P(true)
-    ChoiceQuestion,      # pick one → categorical distribution
-    ScoreQuestion,       # rate on scale → ordinal distribution
+    AssertionQuestion,   # proposition → P(true)
+    ChoiceQuestion,      # categorical proposition → categorical distribution
+    ScoreQuestion,       # ordinal proposition → ordinal distribution
 
     # Answers
-    NoulAnswer,     # {type, value}
+    AssertionAnswer,     # {type, probability}
     ChoiceAnswer,        # {type, choice, probabilities, confidence}
     ScoreAnswer,         # {type, score, legend, probabilities, confidence}
 
@@ -103,8 +106,8 @@ request: IRDecisionRequest = {
     "model": "jev-latest",
     "state": "Help! My payouts have been failing for 3 days.",
     "questions": {
-        "is_urgent": NoulQuestion(
-            type="noul",
+        "is_urgent": AssertionQuestion(
+            type="assertion",
             instructions="Does this convey urgency?",
         ),
         "department": ChoiceQuestion(
@@ -154,14 +157,14 @@ request: IRDecisionRequest = {
 
 ### IR Equivalent
 
-The converter adds `object: "decision"` and passes questions/answers through:
+The converter adds `object: "decision"` and translates the `assertion` primitive to/from the wire name `noul`:
 
 ```python
 response: IRDecisionResponse = {
     "object": "decision",
     "model": "jev-1.13.0",
     "answers": {
-        "is_urgent": NoulAnswer(type="noul", noul=0.92),
+        "is_urgent": AssertionAnswer(type="assertion", probability=0.92),
         "department": ChoiceAnswer(
             type="choice", choice="technical",
             probabilities={"billing": 0.08, "technical": 0.85, "sales": 0.07},
@@ -210,7 +213,7 @@ Decision models and LLM structured output both return typed data, but they diffe
 | Output cost | $0 | Per token |
 | Streaming | No | Yes |
 | Confidence | Native (derived from probabilities) | Not available |
-| Flexibility | Fixed primitives (noul/choice/score) | Arbitrary JSON schema |
+| Flexibility | Fixed primitives (assertion/choice/score) | Arbitrary JSON schema |
 
 ## Related
 
