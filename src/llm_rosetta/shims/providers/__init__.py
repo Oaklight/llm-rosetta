@@ -442,6 +442,7 @@ def _load_single_provider(
         name=cfg["name"],
         base=cfg["base"],
         logo=cfg.get("logo"),
+        display_name=cfg.get("display_name"),
         free_source=cfg.get("free_source", False),
         connection=connection,
         tools=tools,

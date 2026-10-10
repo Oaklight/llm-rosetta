@@ -32,9 +32,13 @@
       "format": "uri",
       "description": "URL to the provider's logo image (SVG preferred)."
     },
+    "display_name": {
+      "type": "string",
+      "description": "Human-readable brand label (e.g. 'Kilo') for the admin UI. Falls back to the shim name when unset."
+    },
     "free_source": {
       "type": "boolean",
-      "description": "Mark this provider as a free model source. The admin UI groups it under a neutral 'Free' bucket and shows the third-party disclosure, without naming the upstream vendor.",
+      "description": "Mark this provider as a source with a free model pool. The admin UI groups its keyless entry under a 'Free Resource' section.",
       "default": false
     },
     "response_id_prefix": {

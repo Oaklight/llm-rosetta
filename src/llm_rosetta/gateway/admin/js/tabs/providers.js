@@ -23,11 +23,26 @@ function _freeShims() {
   return ((S.configData && S.configData.registered_shims) || []).filter(s => s.free_source);
 }
 
-/** True when provider *name* is configured through a free-source shim. */
-function _isFreeProvider(name) {
+/** The registered shim backing provider *name*, or null. */
+function _shimOf(name) {
   const cfg = S.configData && S.configData.providers ? S.configData.providers[name] : null;
   const typeName = (cfg && cfg.type) || name;
-  return _freeShims().some(s => s.name === typeName);
+  return ((S.configData && S.configData.registered_shims) || []).find(s => s.name === typeName) || null;
+}
+
+/** A free *entry*: a keyless provider backed by a free-source shim.
+ *  The same source configured with a key is a normal provider. */
+function _isFreeProvider(name) {
+  const cfg = S.configData && S.configData.providers ? S.configData.providers[name] : null;
+  const shim = _shimOf(name);
+  return !!(shim && shim.free_source && cfg && cfg.keyless === true);
+}
+
+/** Display title for a free entry, e.g. "Kilo (Free)". */
+function _freeTitle(name) {
+  const shim = _shimOf(name);
+  const brand = (shim && shim.display_name) || (shim ? _capitalize(shim.name.split('--')[0]) : name);
+  return `${brand} ${t('free.suffix')}`;
 }
 
 /** Model ids currently routed to provider *name*. */
@@ -70,13 +85,15 @@ function _syncKeylessUI() {
   }
 }
 
-/** Render one preset button per free-source shim (de-branded label). */
+/** Render one preset button per free-source shim, labelled "<Brand> (Free)". */
 function renderFreeSourceButtons() {
   const host = document.getElementById('freeProviderButtons');
   if (!host) return;
-  host.innerHTML = _freeShims().map(s =>
-    `<button class="btn btn-sm" data-free-shim="${esc(s.name)}" aria-label="${esc(t('btn.addFree'))}" onclick="openFreeProvider('${esc(s.name)}')">${esc(t('btn.addFree'))}</button>`
-  ).join('');
+  host.innerHTML = _freeShims().map(s => {
+    const brand = s.display_name || _capitalize(s.name.split('--')[0]);
+    const label = `+ ${brand} ${t('free.suffix')}`;
+    return `<button class="btn btn-sm" data-free-shim="${esc(s.name)}" aria-label="${esc(label)}" onclick="openFreeProvider('${esc(s.name)}')">${esc(label)}</button>`;
+  }).join('');
 }
 
 // ── Module-local state ──────────────────────────────────────────────
@@ -677,6 +694,7 @@ function renderProviders() {
       ? `<div class="pc-field" data-field="api-key" data-label="${t('card.apiKey')}" title="${esc(apiKeyDisplay)}"><code class="${apiKeyMuted ? 'text-muted' : ''}">${esc(apiKeyDisplay)}</code></div>`
       : '';
     const isFree = _isFreeProvider(name);
+    const title = isFree ? _freeTitle(name) : name;
     const modelCount = _countModelsForProvider(name);
     const modelLink = modelCount > 0
       ? `<span class="pc-models" onclick="goToModelsForProvider('${esc(name)}')">${modelCount} model${modelCount !== 1 ? 's' : ''} →</span>`
@@ -684,7 +702,7 @@ function renderProviders() {
     return `
     <div class="provider-card${enabled ? '' : ' disabled'}" data-provider="${esc(name)}">
       <div class="pc-head">
-        <div class="pc-name">${logoHtml}<span class="pc-name-text">${esc(name)}</span></div>
+        <div class="pc-name">${logoHtml}<span class="pc-name-text">${esc(title)}</span></div>
         <label class="pc-toggle toggle" title="${enabled ? t('provider.enabled') : t('provider.disabled')}">
           <input type="checkbox" ${enabled ? 'checked' : ''} role="switch" aria-checked="${enabled}" aria-label="${esc(name)}" onchange="this.setAttribute('aria-checked',this.checked);toggleProvider('${esc(name)}')">
           <span class="slider"></span>
@@ -712,10 +730,10 @@ function renderProviders() {
   // Free sources get their own section; regular providers follow.
   const freeEntries = entries.filter(([name]) => _isFreeProvider(name));
   const regularEntries = entries.filter(([name]) => !_isFreeProvider(name));
-  const sectionHead = (label, isFree) => `<div class="provider-section-head${isFree ? ' is-free' : ''}">${esc(label)}</div>`;
+  const sectionHead = label => `<div class="provider-section-head">${esc(label)}</div>`;
   const parts = [];
   if (freeEntries.length) {
-    parts.push(sectionHead(t('free.section'), true), ...freeEntries.map(cardHtml));
+    parts.push(sectionHead(t('free.section')), ...freeEntries.map(cardHtml));
   }
   if (freeEntries.length && regularEntries.length) parts.push(sectionHead(t('provider.section')));
   parts.push(...regularEntries.map(cardHtml));
@@ -978,7 +996,9 @@ function openFreeProvider(shimName) {
   const shim = shims.find(s => s.name === shimName) || shims[0];
   if (!shim) { openProviderModal(); return; }
   const existing = (S.configData && S.configData.providers) || {};
-  const name = existing['free-resource'] ? '' : 'free-resource';
+  const brand = (shim.display_name || shim.name.split('--')[0]).toLowerCase();
+  const id = `${brand}-free`;
+  const name = existing[id] ? '' : id;
   _freeKeyRevealed = false;
   openProviderModal(name, shim.default_base_url || '', '', '', shim.name);
 }
