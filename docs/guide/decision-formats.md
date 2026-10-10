@@ -20,14 +20,14 @@ LLM-Rosetta 目前支持 **1 个格式族**，预计随着范式成熟会有更�
 
 Decision API 使用类型化的 questions，每种对应固定的答案空间：
 
-| IR 类型 | 输入 | 输出 |
-|---------|------|------|
-| `noul` | 是/否命题 + 可选 criteria | P(true) ∈ [0, 1] |
-| `choice` | 选项及描述 | 选中选项 + 概率分布 |
-| `score` | 有序等级（≥ 2 级） | 加权分数 + 概率分布 |
+| IR 类型 | TypeSafe Wire 名 | 命题类型 | 输入 | 输出 |
+|---------|------------------|----------|------|------|
+| `assertion` | `noul` | 命题 | 是/否断言 + 可选 criteria | P(true) ∈ [0, 1] |
+| `choice` | `choice` | 分类命题 | 选项及描述 | 选中选项 + 概率分布 |
+| `score` | `score` | 有序命题 | 有序等级（≥ 2 级） | 加权分数 + 概率分布 |
 
-!!! note "Noul 词源"
-    "Noul" 取自 "ber-**noul**-li" 的中间四个字母——bool 的概率化版本。IR 使用与 TypeSafe wire format 相同的名称。
+!!! note "命名"
+    三种 IR 原语按所评估的命题类型命名：`assertion`（**命题**）、`choice`（**分类命题**）、`score`（**有序命题**）。IR 名称 `assertion` 由 `TypeSafeDecisionConverter` 转换为 TypeSafe wire 名称 `noul`。
 
 ### State
 
@@ -50,12 +50,12 @@ state = {
 ```python
 from llm_rosetta.types.ir.decision import (
     # 问题类型
-    NoulQuestion,        # 是/否 → P(true)
-    ChoiceQuestion,      # 选一个 → 类别分布
-    ScoreQuestion,       # 打分 → 有序分布
+    AssertionQuestion,   # 命题 → P(true)
+    ChoiceQuestion,      # 分类命题 → 类别分布
+    ScoreQuestion,       # 有序命题 → 有序分布
 
     # 答案类型
-    NoulAnswer,          # {type, noul}
+    AssertionAnswer,     # {type, probability}
     ChoiceAnswer,        # {type, choice, probabilities, confidence}
     ScoreAnswer,         # {type, score, legend, probabilities, confidence}
 
@@ -103,8 +103,8 @@ request: IRDecisionRequest = {
     "model": "jev-latest",
     "state": "帮帮我！我的付款已经失败三天了。",
     "questions": {
-        "is_urgent": NoulQuestion(
-            type="noul",
+        "is_urgent": AssertionQuestion(
+            type="assertion",
             instructions="是否表达了紧急性？",
         ),
         "department": ChoiceQuestion(
@@ -154,14 +154,14 @@ request: IRDecisionRequest = {
 
 ### IR 等价形式
 
-Converter 添加 `object: "decision"` 并直接透传 questions/answers：
+Converter 添加 `object: "decision"`，并将 `assertion` 原语与 wire 名称 `noul` 互相转换：
 
 ```python
 response: IRDecisionResponse = {
     "object": "decision",
     "model": "jev-1.13.0",
     "answers": {
-        "is_urgent": NoulAnswer(type="noul", noul=0.92),
+        "is_urgent": AssertionAnswer(type="assertion", probability=0.92),
         "department": ChoiceAnswer(
             type="choice", choice="technical",
             probabilities={"billing": 0.08, "technical": 0.85, "sales": 0.07},
@@ -208,7 +208,7 @@ wire_response = converter.response_to_provider(ir_response)
 | 输出成本 | $0 | 按 token 计费 |
 | 流式 | 不支持 | 支持 |
 | 置信度 | 原生支持（从概率推导） | 不可用 |
-| 灵活性 | 固定原语（noul/choice/score） | 任意 JSON schema |
+| 灵活性 | 固定原语（assertion/choice/score） | 任意 JSON schema |
 
 ## 相关链接
 
