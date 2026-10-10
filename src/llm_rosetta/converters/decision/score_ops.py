@@ -18,12 +18,12 @@ from typing import Any, cast
 
 from llm_rosetta.converters.decision.schema_ops import compute_confidence
 from llm_rosetta.types.ir.decision import (
+    AssertionAnswer,
     ChoiceAnswer,
     DecisionAnswer,
     DecisionQuestion,
     DecisionState,
     DecisionUsageInfo,
-    NoulAnswer,
     ScoreAnswer,
 )
 
@@ -64,12 +64,12 @@ def get_option_texts(question: DecisionQuestion) -> list[str]:
     """Extract option texts from a question for scoring.
 
     Returns a list of option descriptions that can be scored against
-    the context.  For noul: ["true description", "false description"].
+    the context.  For assertion: ["true description", "false description"].
     For choice: one description per label.  For score: one description
     per level.
     """
     qtype = question["type"]
-    if qtype == "noul":
+    if qtype == "assertion":
         criteria: Any = question.get("criteria")
         if isinstance(criteria, dict):
             return [criteria.get("true", "yes"), criteria.get("false", "no")]
@@ -92,7 +92,7 @@ def scores_to_answer(
     """Convert raw per-option scores into a typed decision answer.
 
     Applies softmax to the raw scores, then maps probabilities to the
-    appropriate answer type (noul/choice/score).
+    appropriate answer type (assertion/choice/score).
 
     Args:
         scores: Raw per-option scores.
@@ -104,9 +104,9 @@ def scores_to_answer(
     probs = softmax(scores, temperature=temperature)
     qtype = question["type"]
 
-    if qtype == "noul":
-        noul_val = max(0.01, min(0.99, probs[0])) if len(probs) >= 2 else 0.5
-        return NoulAnswer(type="noul", noul=noul_val)
+    if qtype == "assertion":
+        probability = max(0.01, min(0.99, probs[0])) if len(probs) >= 2 else 0.5
+        return AssertionAnswer(type="assertion", probability=probability)
 
     if qtype == "choice":
         criteria_dict: dict[str, Any] = cast(Any, question).get("criteria", {})

@@ -5,7 +5,7 @@ Decision converter backed by embedding API cosine similarity.
 
 For each question, embeds the context (state + instructions) and each
 option text, computes cosine similarity, then softmaxes into probability
-distributions mapped to noul/choice/score answers.
+distributions mapped to assertion/choice/score answers.
 
 Requires an embedding endpoint that returns vector arrays.
 Compatible with OpenAI, Cohere, Voyage, Jina, and any embedding API.

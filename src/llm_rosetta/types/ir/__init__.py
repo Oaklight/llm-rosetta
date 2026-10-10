@@ -128,9 +128,9 @@ from .rerank import (
 
 # Decision 类型 Decision types
 from .decision import (
-    NoulAnswer,
-    NoulCriteria,
-    NoulQuestion,
+    AssertionAnswer,
+    AssertionCriteria,
+    AssertionQuestion,
     ChoiceAnswer,
     ChoiceQuestion,
     DecisionAnswer,
@@ -301,12 +301,12 @@ __all__ = [
     "IRRerankResponse",
     # ========== Eval 类型 Eval types ==========
     "DecisionQuestionType",
-    "NoulCriteria",
-    "NoulQuestion",
+    "AssertionCriteria",
+    "AssertionQuestion",
     "ChoiceQuestion",
     "ScoreQuestion",
     "DecisionQuestion",
-    "NoulAnswer",
+    "AssertionAnswer",
     "ChoiceAnswer",
     "ScoreAnswer",
     "DecisionAnswer",

@@ -3,7 +3,7 @@ Decision Converter End-to-End Integration Test
 
 Tests the LLMChatDecisionConverter against real LLM APIs across multiple
 providers and output formats, verifying that decision requests produce
-valid typed answers (noul/choice/score) with proper probability distributions.
+valid typed answers (assertion/choice/score) with proper probability distributions.
 
 Requires API keys in .env (see project root).
 
@@ -29,7 +29,7 @@ from llm_rosetta.converters.decision.schema_ops import extract_json
 from llm_rosetta.types.ir.decision import (
     ChoiceQuestion,
     IRDecisionRequest,
-    NoulQuestion,
+    AssertionQuestion,
     ScoreQuestion,
 )
 
@@ -45,8 +45,8 @@ DECISION_REQUEST: IRDecisionRequest = {
         "I want my money back immediately or I'm disputing the charge.'"
     ),
     "questions": {
-        "wants_refund": NoulQuestion(
-            type="noul",
+        "wants_refund": AssertionQuestion(
+            type="assertion",
             instructions="Is the customer requesting a refund?",
             criteria={"true": "Explicitly asks for money back", "false": "No refund request"},
         ),
@@ -193,11 +193,11 @@ def _validate_decision_response(ir_response: dict[str, Any]) -> None:
     assert ir_response["object"] == "decision"
     answers = ir_response["answers"]
 
-    # Noul
-    noul_a = answers["wants_refund"]
-    assert noul_a["type"] == "noul"
-    assert 0.0 <= noul_a["noul"] <= 1.0
-    assert noul_a["noul"] > 0.5, "Customer clearly wants a refund"
+    # Assertion
+    assertion_a = answers["wants_refund"]
+    assert assertion_a["type"] == "assertion"
+    assert 0.0 <= assertion_a["probability"] <= 1.0
+    assert assertion_a["probability"] > 0.5, "Customer clearly wants a refund"
 
     # Choice
     choice_a = answers["department"]
@@ -242,7 +242,7 @@ class TestOpenAIChatDecision:
 
         ir = converter.response_from_provider(resp, context=ctx)
         _validate_decision_response(ir)
-        print(f"\n  gpt-4o-mini: refund={ir['answers']['wants_refund']['noul']:.2f}, "
+        print(f"\n  gpt-4o-mini: refund={ir['answers']['wants_refund']['probability']:.2f}, "
               f"dept={ir['answers']['department']['choice']}, "
               f"frustration={ir['answers']['frustration']['score']:.2f}")
 
@@ -270,7 +270,7 @@ class TestAnthropicDecision:
 
         ir = converter.response_from_provider(resp, context=ctx)
         _validate_decision_response(ir)
-        print(f"\n  claude-haiku: refund={ir['answers']['wants_refund']['noul']:.2f}, "
+        print(f"\n  claude-haiku: refund={ir['answers']['wants_refund']['probability']:.2f}, "
               f"dept={ir['answers']['department']['choice']}, "
               f"frustration={ir['answers']['frustration']['score']:.2f}")
 
@@ -297,7 +297,7 @@ class TestGoogleDecision:
 
         ir = converter.response_from_provider(resp, context=ctx)
         _validate_decision_response(ir)
-        print(f"\n  gemini-flash: refund={ir['answers']['wants_refund']['noul']:.2f}, "
+        print(f"\n  gemini-flash: refund={ir['answers']['wants_refund']['probability']:.2f}, "
               f"dept={ir['answers']['department']['choice']}, "
               f"frustration={ir['answers']['frustration']['score']:.2f}")
 
@@ -326,7 +326,7 @@ class TestDeepSeekDecision:
 
         ir = converter.response_from_provider(resp, context=ctx)
         _validate_decision_response(ir)
-        print(f"\n  deepseek-chat: refund={ir['answers']['wants_refund']['noul']:.2f}, "
+        print(f"\n  deepseek-chat: refund={ir['answers']['wants_refund']['probability']:.2f}, "
               f"dept={ir['answers']['department']['choice']}, "
               f"frustration={ir['answers']['frustration']['score']:.2f}")
 
@@ -355,7 +355,7 @@ class TestXAIDecision:
 
         ir = converter.response_from_provider(resp, context=ctx)
         _validate_decision_response(ir)
-        print(f"\n  grok: refund={ir['answers']['wants_refund']['noul']:.2f}, "
+        print(f"\n  grok: refund={ir['answers']['wants_refund']['probability']:.2f}, "
               f"dept={ir['answers']['department']['choice']}, "
               f"frustration={ir['answers']['frustration']['score']:.2f}")
 
@@ -385,8 +385,8 @@ class TestDiscreteMode:
 
         ir = converter.response_from_provider(resp, context=ctx)
         assert ir["object"] == "decision"
-        assert ir["answers"]["wants_refund"]["noul"] in (0.0, 1.0)
+        assert ir["answers"]["wants_refund"]["probability"] in (0.0, 1.0)
         assert ir["answers"]["department"]["confidence"] == 1.0
-        print(f"\n  discrete gpt-4o-mini: refund={ir['answers']['wants_refund']['noul']}, "
+        print(f"\n  discrete gpt-4o-mini: refund={ir['answers']['wants_refund']['probability']}, "
               f"dept={ir['answers']['department']['choice']}, "
               f"frustration={ir['answers']['frustration']['score']}")

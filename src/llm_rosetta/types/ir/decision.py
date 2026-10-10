@@ -8,11 +8,12 @@ Decision is a distinct model paradigm alongside chat, embedding, and rerank.
 Decision models evaluate a state (context) against typed questions and return
 structured probabilistic answers — no text generation involved.
 
-Three question/answer primitives:
+Three question/answer primitives, each named for the kind of proposition it
+evaluates:
 
-- Noul: yes/no proposition → P(true) ∈ [0, 1]
-- Choice: pick one from a labeled set → categorical probability distribution
-- Score: rate on ordered levels → ordinal probability distribution + E[X]
+- Assertion: a proposition (yes/no claim) → P(true) ∈ [0, 1]
+- Choice: a categorical proposition (unordered set) → categorical distribution
+- Score: an ordinal proposition (ordered levels) → ordinal distribution + E[X]
 
 Reference implementation: TypeSafe.ai System One (Jev)
 API docs: https://docs.typesafe.ai/api
@@ -31,32 +32,32 @@ else:
 # Question types
 # ============================================================================
 
-DecisionQuestionType = Literal["noul", "choice", "score"]
+DecisionQuestionType = Literal["assertion", "choice", "score"]
 
 
-class NoulCriteria(TypedDict, total=False):
-    """Optional descriptions clarifying what yes and no mean."""
+class AssertionCriteria(TypedDict, total=False):
+    """Optional descriptions clarifying what true and false mean."""
 
     true: str
     false: str
 
 
-class NoulQuestion(TypedDict):
-    """A yes/no question returning P(true) ∈ [0, 1].
+class AssertionQuestion(TypedDict):
+    """A proposition: a yes/no claim → P(true) ∈ [0, 1].
 
-    Named "noul" after the middle of "ber-noul-li" — a probabilistic
-    counterpart to bool, representing calibrated credence rather than
-    a binary value.
+    The probabilistic counterpart to bool — the answer is a calibrated
+    credence rather than a binary value.
     """
 
-    type: Required[Literal["noul"]]
+    type: Required[Literal["assertion"]]
     instructions: Required[str | dict[str, Any] | list[Any]]
-    criteria: NotRequired[NoulCriteria]
+    criteria: NotRequired[AssertionCriteria]
 
 
 class ChoiceQuestion(TypedDict):
-    """Pick one option from a labeled set with probability distribution.
+    """A categorical proposition: pick one option from an unordered set.
 
+    The answer is a categorical probability distribution over the labels.
     criteria maps option labels to their descriptions.  A null/None
     description means the label is self-explanatory.
     """
@@ -67,11 +68,11 @@ class ChoiceQuestion(TypedDict):
 
 
 class ScoreQuestion(TypedDict):
-    """Rate on ordered levels with probability distribution.
+    """An ordinal proposition: rate on ordered levels.
 
+    The answer is an ordinal probability distribution; the score is the
+    probability-weighted expected value across levels.
     criteria is an ordered list of level descriptions (minimum 2).
-    The score answer is the probability-weighted expected value
-    across levels.
     """
 
     type: Required[Literal["score"]]
@@ -79,7 +80,7 @@ class ScoreQuestion(TypedDict):
     criteria: Required[list[str]]
 
 
-DecisionQuestion = Union[NoulQuestion, ChoiceQuestion, ScoreQuestion]
+DecisionQuestion = Union[AssertionQuestion, ChoiceQuestion, ScoreQuestion]
 
 
 # ============================================================================
@@ -87,11 +88,11 @@ DecisionQuestion = Union[NoulQuestion, ChoiceQuestion, ScoreQuestion]
 # ============================================================================
 
 
-class NoulAnswer(TypedDict):
-    """Answer to a Noul question: P(true) ∈ [0, 1]."""
+class AssertionAnswer(TypedDict):
+    """Answer to an assertion question: P(true) ∈ [0, 1]."""
 
-    type: Required[Literal["noul"]]
-    noul: Required[float]
+    type: Required[Literal["assertion"]]
+    probability: Required[float]
 
 
 class ChoiceAnswer(TypedDict):
@@ -113,7 +114,7 @@ class ScoreAnswer(TypedDict):
     confidence: Required[float]
 
 
-DecisionAnswer = Union[NoulAnswer, ChoiceAnswer, ScoreAnswer]
+DecisionAnswer = Union[AssertionAnswer, ChoiceAnswer, ScoreAnswer]
 
 
 # ============================================================================
@@ -178,12 +179,12 @@ class IRDecisionResponse(TypedDict):
 
 __all__ = [
     "DecisionQuestionType",
-    "NoulCriteria",
-    "NoulQuestion",
+    "AssertionCriteria",
+    "AssertionQuestion",
     "ChoiceQuestion",
     "ScoreQuestion",
     "DecisionQuestion",
-    "NoulAnswer",
+    "AssertionAnswer",
     "ChoiceAnswer",
     "ScoreAnswer",
     "DecisionAnswer",

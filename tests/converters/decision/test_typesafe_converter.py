@@ -1,15 +1,16 @@
 """Tests for the TypeSafe decision converter.
 
-Covers bidirectional conversion between TypeSafe wire format and IR,
-verifying near-passthrough conversion for all three question types.
+Covers bidirectional conversion between TypeSafe wire format and IR.  The
+``choice`` and ``score`` primitives are identical between IR and wire; the
+``assertion`` primitive is translated to/from the wire name ``noul``.
 """
 
 import pytest
 
 from llm_rosetta.converters.decision.typesafe import TypeSafeDecisionConverter
 from llm_rosetta.types.ir.decision import (
-    NoulAnswer,
-    NoulQuestion,
+    AssertionAnswer,
+    AssertionQuestion,
     ChoiceAnswer,
     ChoiceQuestion,
     IRDecisionRequest,
@@ -81,8 +82,8 @@ IR_REQUEST: IRDecisionRequest = {
     "model": "jev-latest",
     "state": "Help! My payouts have been failing for 3 days.",
     "questions": {
-        "is_urgent": NoulQuestion(
-            type="noul",
+        "is_urgent": AssertionQuestion(
+            type="assertion",
             instructions="Does this convey urgency?",
         ),
         "department": ChoiceQuestion(
@@ -105,7 +106,7 @@ IR_RESPONSE: IRDecisionResponse = {
     "object": "decision",
     "model": "jev-1.13.0",
     "answers": {
-        "is_urgent": NoulAnswer(type="noul", noul=0.92),
+        "is_urgent": AssertionAnswer(type="assertion", probability=0.92),
         "department": ChoiceAnswer(
             type="choice",
             choice="technical",
@@ -130,10 +131,10 @@ IR_RESPONSE: IRDecisionResponse = {
 
 
 class TestRequestFromProvider:
-    def test_noul_passthrough(self, converter):
+    def test_assertion_translated(self, converter):
         ir = converter.request_from_provider(TYPESAFE_REQUEST)
         q = ir["questions"]["is_urgent"]
-        assert q["type"] == "noul"
+        assert q["type"] == "assertion"
         assert q["instructions"] == "Does this convey urgency?"
 
     def test_choice_preserved(self, converter):
@@ -155,7 +156,7 @@ class TestRequestFromProvider:
 
 
 class TestRequestToProvider:
-    def test_noul_passthrough(self, converter):
+    def test_assertion_to_wire(self, converter):
         wire, warnings = converter.request_to_provider(IR_REQUEST)
         q = wire["questions"]["is_urgent"]
         assert q["type"] == "noul"
@@ -181,11 +182,11 @@ class TestRequestToProvider:
 
 
 class TestResponseFromProvider:
-    def test_noul_answer_passthrough(self, converter):
+    def test_assertion_answer_translated(self, converter):
         ir = converter.response_from_provider(TYPESAFE_RESPONSE)
         a = ir["answers"]["is_urgent"]
-        assert a["type"] == "noul"
-        assert a["noul"] == 0.92
+        assert a["type"] == "assertion"
+        assert a["probability"] == 0.92
 
     def test_choice_answer(self, converter):
         ir = converter.response_from_provider(TYPESAFE_RESPONSE)
@@ -211,7 +212,7 @@ class TestResponseFromProvider:
 
 
 class TestResponseToProvider:
-    def test_noul_answer_passthrough(self, converter):
+    def test_assertion_answer_to_wire(self, converter):
         wire = converter.response_to_provider(IR_RESPONSE)
         a = wire["answers"]["is_urgent"]
         assert a["type"] == "noul"
@@ -247,6 +248,7 @@ class TestRoundTrip:
     def test_provider_to_ir_to_provider(self, converter):
         """TypeSafe → IR → TypeSafe preserves data."""
         ir = converter.request_from_provider(TYPESAFE_REQUEST)
+        assert ir["questions"]["is_urgent"]["type"] == "assertion"
         wire, _ = converter.request_to_provider(ir)
         assert wire["model"] == TYPESAFE_REQUEST["model"]
         assert wire["state"] == TYPESAFE_REQUEST["state"]
@@ -257,14 +259,17 @@ class TestRoundTrip:
     def test_ir_to_provider_to_ir(self, converter):
         """IR → TypeSafe → IR preserves data."""
         wire, _ = converter.request_to_provider(IR_REQUEST)
+        assert wire["questions"]["is_urgent"]["type"] == "noul"
         ir = converter.request_from_provider(wire)
-        assert ir["questions"]["is_urgent"]["type"] == "noul"
+        assert ir["questions"]["is_urgent"]["type"] == "assertion"
         assert ir["questions"]["department"]["type"] == "choice"
         assert ir["questions"]["frustration"]["type"] == "score"
 
     def test_response_round_trip(self, converter):
         """TypeSafe response → IR → TypeSafe preserves data."""
         ir = converter.response_from_provider(TYPESAFE_RESPONSE)
+        assert ir["answers"]["is_urgent"]["type"] == "assertion"
+        assert ir["answers"]["is_urgent"]["probability"] == 0.92
         wire = converter.response_to_provider(ir)
         assert wire["answers"]["is_urgent"]["type"] == "noul"
         assert wire["answers"]["is_urgent"]["noul"] == 0.92
@@ -279,7 +284,7 @@ class TestRoundTrip:
 
 
 class TestEdgeCases:
-    def test_noul_with_criteria(self, converter):
+    def test_assertion_with_criteria(self, converter):
         req = {
             "model": "jev-latest",
             "state": "test",
@@ -292,7 +297,7 @@ class TestEdgeCases:
             },
         }
         ir = converter.request_from_provider(req)
-        assert ir["questions"]["q"]["type"] == "noul"
+        assert ir["questions"]["q"]["type"] == "assertion"
         assert ir["questions"]["q"]["criteria"] == {"true": "Yes", "false": "No"}
 
     def test_structured_state(self, converter):

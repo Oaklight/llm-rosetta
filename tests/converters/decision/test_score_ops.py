@@ -12,7 +12,7 @@ from llm_rosetta.converters.decision.score_ops import (
 )
 from llm_rosetta.types.ir.decision import (
     ChoiceQuestion,
-    NoulQuestion,
+    AssertionQuestion,
     ScoreQuestion,
 )
 
@@ -51,17 +51,17 @@ class TestBuildContext:
 
 
 class TestGetOptionTexts:
-    def test_noul_with_criteria(self):
-        q = NoulQuestion(
-            type="noul",
+    def test_assertion_with_criteria(self):
+        q = AssertionQuestion(
+            type="assertion",
             instructions="test",
             criteria={"true": "Yes it is", "false": "No it isn't"},
         )
         opts = get_option_texts(q)
         assert opts == ["Yes it is", "No it isn't"]
 
-    def test_noul_without_criteria(self):
-        q = NoulQuestion(type="noul", instructions="test")
+    def test_assertion_without_criteria(self):
+        q = AssertionQuestion(type="assertion", instructions="test")
         opts = get_option_texts(q)
         assert opts == ["yes", "no"]
 
@@ -85,24 +85,24 @@ class TestGetOptionTexts:
 
 
 class TestScoresToAnswer:
-    def test_noul_high_true(self):
-        q = NoulQuestion(type="noul", instructions="test")
+    def test_assertion_high_true(self):
+        q = AssertionQuestion(type="assertion", instructions="test")
         answer = scores_to_answer([5.0, -1.0], q)
-        assert answer["type"] == "noul"
-        assert cast(Any, answer)["noul"] > 0.9
+        assert answer["type"] == "assertion"
+        assert cast(Any, answer)["probability"] > 0.9
 
-    def test_noul_high_false(self):
-        q = NoulQuestion(type="noul", instructions="test")
+    def test_assertion_high_false(self):
+        q = AssertionQuestion(type="assertion", instructions="test")
         answer = scores_to_answer([-1.0, 5.0], q)
-        assert answer["type"] == "noul"
-        assert cast(Any, answer)["noul"] < 0.1
+        assert answer["type"] == "assertion"
+        assert cast(Any, answer)["probability"] < 0.1
 
-    def test_noul_clamped(self):
-        q = NoulQuestion(type="noul", instructions="test")
+    def test_assertion_clamped(self):
+        q = AssertionQuestion(type="assertion", instructions="test")
         answer = scores_to_answer([100.0, -100.0], q)
-        assert cast(Any, answer)["noul"] <= 0.99
+        assert cast(Any, answer)["probability"] <= 0.99
         answer2 = scores_to_answer([-100.0, 100.0], q)
-        assert cast(Any, answer2)["noul"] >= 0.01
+        assert cast(Any, answer2)["probability"] >= 0.01
 
     def test_choice(self):
         q = ChoiceQuestion(

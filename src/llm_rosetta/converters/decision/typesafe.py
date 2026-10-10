@@ -4,10 +4,11 @@ LLM-Rosetta - TypeSafe Decision Converter
 TypeSafe System One (Jev) API 的 decision 转换器
 Decision converter for the TypeSafe System One (Jev) API
 
-Near-passthrough converter: the TypeSafe wire format and the IR decision
-types share the same question/answer primitives (noul, choice, score),
-so conversion is mostly structural (adding/removing ``object`` field,
-copying questions/answers).
+The IR names the probabilistic yes/no proposition ``assertion``, while the
+TypeSafe wire format calls the same primitive ``noul`` (and names its answer
+value field ``noul`` as well).  This converter translates the assertion
+primitive in both directions.  The ``choice`` and ``score`` primitives are
+identical between IR and wire and pass through unchanged.
 """
 
 from __future__ import annotations
@@ -21,6 +22,9 @@ from llm_rosetta.types.ir.decision import (
     IRDecisionRequest,
     IRDecisionResponse,
 )
+
+# TypeSafe wire name for the assertion primitive.
+_WIRE_ASSERTION = "noul"
 
 
 class TypeSafeDecisionConverter(BaseDecisionConverter):
@@ -39,7 +43,7 @@ class TypeSafeDecisionConverter(BaseDecisionConverter):
         result: dict[str, Any] = {
             "model": ir_request["model"],
             "state": ir_request["state"],
-            "questions": dict(ir_request["questions"]),
+            "questions": self._questions_to_wire(ir_request["questions"]),
         }
         if "provider_extensions" in ir_request:
             result.update(ir_request["provider_extensions"])
@@ -54,7 +58,7 @@ class TypeSafeDecisionConverter(BaseDecisionConverter):
         return {
             "model": provider_request["model"],
             "state": provider_request["state"],
-            "questions": dict(provider_request["questions"]),
+            "questions": self._questions_to_ir(provider_request["questions"]),
         }
 
     # ==================== Response conversion ====================
@@ -68,7 +72,7 @@ class TypeSafeDecisionConverter(BaseDecisionConverter):
         result: IRDecisionResponse = {
             "object": "decision",
             "model": provider_response["model"],
-            "answers": dict(provider_response.get("answers", {})),
+            "answers": self._answers_to_ir(provider_response.get("answers", {})),
         }
         p_usage = provider_response.get("usage")
         if p_usage:
@@ -83,11 +87,55 @@ class TypeSafeDecisionConverter(BaseDecisionConverter):
     ) -> dict[str, Any]:
         result: dict[str, Any] = {
             "model": ir_response["model"],
-            "answers": dict(ir_response["answers"]),
+            "answers": self._answers_to_wire(ir_response["answers"]),
         }
         if "usage" in ir_response:
             result["usage"] = self._build_ir_usage_to_p(ir_response["usage"])
         return result
+
+    # ==================== Assertion primitive translation ====================
+
+    def _questions_to_wire(self, questions: dict[str, Any]) -> dict[str, Any]:
+        return {qid: self._question_to_wire(q) for qid, q in questions.items()}
+
+    def _questions_to_ir(self, questions: dict[str, Any]) -> dict[str, Any]:
+        return {qid: self._question_to_ir(q) for qid, q in questions.items()}
+
+    def _answers_to_ir(self, answers: dict[str, Any]) -> dict[str, Any]:
+        return {aid: self._answer_to_ir(a) for aid, a in answers.items()}
+
+    def _answers_to_wire(self, answers: dict[str, Any]) -> dict[str, Any]:
+        return {aid: self._answer_to_wire(a) for aid, a in answers.items()}
+
+    @staticmethod
+    def _question_to_wire(question: dict[str, Any]) -> dict[str, Any]:
+        if question.get("type") == "assertion":
+            return {**question, "type": _WIRE_ASSERTION}
+        return dict(question)
+
+    @staticmethod
+    def _question_to_ir(question: dict[str, Any]) -> dict[str, Any]:
+        if question.get("type") == _WIRE_ASSERTION:
+            return {**question, "type": "assertion"}
+        return dict(question)
+
+    @staticmethod
+    def _answer_to_ir(answer: dict[str, Any]) -> dict[str, Any]:
+        if answer.get("type") == _WIRE_ASSERTION:
+            result = {**answer, "type": "assertion"}
+            if _WIRE_ASSERTION in result:
+                result["probability"] = result.pop(_WIRE_ASSERTION)
+            return result
+        return dict(answer)
+
+    @staticmethod
+    def _answer_to_wire(answer: dict[str, Any]) -> dict[str, Any]:
+        if answer.get("type") == "assertion":
+            result = {**answer, "type": _WIRE_ASSERTION}
+            if "probability" in result:
+                result[_WIRE_ASSERTION] = result.pop("probability")
+            return result
+        return dict(answer)
 
     # ==================== Usage conversion ====================
 
