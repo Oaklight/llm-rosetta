@@ -216,12 +216,14 @@ class TestDecisionDescriptor:
         assert desc is not None
         paths = [r.path for r in desc.routes]
         assert "/v1/decision" in paths
+        assert "/v1/decisions" in paths
         assert "/v1/systemone" in paths
 
     def test_decision_formats(self) -> None:
         desc = get_model_type("decision")
         assert desc is not None
         assert "typesafe" in desc.formats
+        assert "openai_decisions" in desc.formats
 
     def test_decision_no_streaming(self) -> None:
         desc = get_model_type("decision")
