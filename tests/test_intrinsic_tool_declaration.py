@@ -286,3 +286,87 @@ class TestPipeline:
             "web_search_20250305" not in str(t) and t.get("type") != "intrinsic"
             for t in tools
         )
+
+
+class TestShimEmitConsistency:
+    """Every kind a shim declares must be emittable by the target converter.
+
+    Otherwise ``resolve_intrinsic_tools`` accepts a kind as supported and the
+    target converter then silently drops it at emit time (review feedback on
+    PR #878: `file_search` was declared for openai_responses but had no emit
+    entry).
+    """
+
+    def _shim_kinds(self, name):
+        from llm_rosetta.shims.providers import load_providers
+
+        shims = {s.name: s for s in load_providers()}
+        return set(shims[name].tools.intrinsic_tools) if name in shims else set()
+
+    def test_anthropic(self):
+        from llm_rosetta.converters.anthropic.tool_ops import _ANTHROPIC_INTRINSIC_TOOLS
+
+        assert self._shim_kinds("anthropic") <= set(_ANTHROPIC_INTRINSIC_TOOLS)
+
+    def test_openai_responses(self):
+        from llm_rosetta.converters.openai_responses.tool_ops import (
+            _RESPONSES_INTRINSIC_TOOLS,
+        )
+
+        assert self._shim_kinds("openai_responses") <= set(_RESPONSES_INTRINSIC_TOOLS)
+
+    def test_google(self):
+        from llm_rosetta.converters.google_generate.tool_ops import _INTRINSIC_TOOL_KEYS
+
+        assert self._shim_kinds("google") <= set(_INTRINSIC_TOOL_KEYS.values())
+
+    def test_google_interactions(self):
+        from llm_rosetta.converters.google_interactions.tool_ops import (
+            _GI_INTRINSIC_TOOLS,
+        )
+
+        assert self._shim_kinds("google_interactions") <= set(_GI_INTRINSIC_TOOLS)
+
+
+class TestUnsupportedKindNotCachedAsEmpty:
+    """A dropped (`{}`) tool must not resurface on a cache hit (PR #878 review).
+
+    The tool-conversion cache stores the falsy result too, so the truthiness
+    check has to run on the cache-hit branch as well.
+    """
+
+    def _calls(self, converter, tool, n=3):
+        return [converter._get_cached_ir_tools_to_p([tool]) for _ in range(n)]
+
+    def test_unsupported_intrinsic_stays_dropped(self):
+        out = self._calls(
+            AnthropicConverter(), make_intrinsic_tool_definition("google_maps")
+        )
+        assert all(o == [] for o in out), out
+
+    def test_chat_drops_intrinsic_every_time(self):
+        out = self._calls(
+            OpenAIChatConverter(), make_intrinsic_tool_definition("web_search")
+        )
+        assert all(o == [] for o in out), out
+
+    def test_supported_still_emits_every_time(self):
+        out = self._calls(
+            AnthropicConverter(), make_intrinsic_tool_definition("web_search")
+        )
+        assert all(
+            o == [{"type": "web_search_20250305", "name": "web_search"}] for o in out
+        )
+
+
+class TestSameFormatNativeRoundTrip:
+    """A kind that needs config (file_search) round-trips same-provider via the
+    preserved native payload, even though it has no synthetic emit entry."""
+
+    def test_responses_file_search_roundtrip(self):
+        conv = OpenAIResponsesConverter()
+        tool = {"type": "file_search", "vector_store_ids": ["vs_123"]}
+        ir = conv.tool_ops.p_tool_definition_to_ir(tool)
+        assert ir["type"] == "intrinsic"
+        out = conv.tool_ops.ir_tool_definition_to_p(ir)
+        assert out == tool
