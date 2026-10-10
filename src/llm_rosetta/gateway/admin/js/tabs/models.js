@@ -366,16 +366,29 @@ function _getProviderDetails(info) {
   return [{name: info.provider || '', upstream_model: info.upstream_model}];
 }
 
+/** True when *providerName* is configured through a free-source shim. */
+function _isFreeProviderName(providerName) {
+  const cfg = S.configData?.providers?.[providerName];
+  const typeName = (cfg && cfg.type) || providerName;
+  return (S.configData?.registered_shims || []).some(s => s.name === typeName && s.free_source);
+}
+
+/** Neutral FREE tag shown next to a free-source provider. */
+function _freeBadge(providerName) {
+  if (!_isFreeProviderName(providerName)) return '';
+  return ` <span style="font-size:10px;padding:0 4px;border-radius:3px;background:var(--bg-card);border:1px solid var(--border);color:var(--text-dim);vertical-align:middle">${esc(t('free.badge'))}</span>`;
+}
+
 function _renderProviderCell(name, info, disabledProviders) {
   const details = _getProviderDetails(info);
   if (details.length <= 1) {
     const p = details[0] || {name: ''};
     const dis = disabledProviders.has(p.name);
-    return `<span class="provider-link" onclick="goToProviderFromModel('${esc(p.name)}')">${esc(p.name)}</span>${dis ? ` <span style="color:var(--text-dim);font-size:11px">(${t('provider.disabled')})</span>` : ''}`;
+    return `<span class="provider-link" onclick="goToProviderFromModel('${esc(p.name)}')">${esc(p.name)}</span>${_freeBadge(p.name)}${dis ? ` <span style="color:var(--text-dim);font-size:11px">(${t('provider.disabled')})</span>` : ''}`;
   }
   const primary = details.find(p => !disabledProviders.has(p.name)) || details[0];
   const priDis = disabledProviders.has(primary.name);
-  return `<span class="provider-link" onclick="goToProviderFromModel('${esc(primary.name)}')">${esc(primary.name)}</span>${priDis ? ` <span style="color:var(--text-dim);font-size:11px">(${t('provider.disabled')})</span>` : ''}
+  return `<span class="provider-link" onclick="goToProviderFromModel('${esc(primary.name)}')">${esc(primary.name)}</span>${_freeBadge(primary.name)}${priDis ? ` <span style="color:var(--text-dim);font-size:11px">(${t('provider.disabled')})</span>` : ''}
     <span class="provider-expand-toggle" onclick="toggleProviderRows(this,'${esc(name)}')" style="cursor:pointer;font-size:11px;color:var(--text-dim);margin-left:4px;user-select:none"><span class="arrow" style="font-size:8px;display:inline-block;transition:transform 0.15s">▸</span> ${details.length} providers</span>`;
 }
 
