@@ -477,3 +477,8 @@ def _reset_registry() -> None:
     from llm_rosetta.shims.providers import _model_list_transforms
 
     _model_list_transforms.clear()
+
+    # Drop the synthetic packages registered for plugin shim transforms.
+    from llm_rosetta.shims.providers import _clear_plugin_namespaces
+
+    _clear_plugin_namespaces()
