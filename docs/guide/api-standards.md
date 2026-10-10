@@ -112,7 +112,7 @@ OpenAI 较新的 API 格式（2025 年）。使用扁平的类型化项目列表
 
 该规范作为基础，OpenAI Responses API 是其一个合规 profile：`OpenResponsesConverter` 实现厂商中立的规范，`OpenAIResponsesConverter` 派生自它，额外提供 `resp_` 响应 ID 前缀、OpenAI 专有的生命周期回显字段（`billing`、`moderation` 等）以及 OpenAI 的 `store: true` 默认值。两个类都可导入；`OpenAIResponses*` ops 类保留为 `OpenResponses*` 的别名。
 
-`open_responses` 拥有独立的 shim（`shims/providers/open_responses/provider.yaml`），不设默认主机、不带响应 ID 前缀，因此部署时必须自行提供 base URL（例如 OpenRouter、vLLM 或 Ollama 端点）—— 网关不再将其默认为 OpenAI。
+`open_responses` 拥有独立的 shim（`shims/providers/open_responses/provider.yaml`），不声明默认主机、不带响应 ID 前缀。由于规范没有 canonical host，网关将其默认指向 OpenRouter；面向其他主机（例如 vLLM 或 Ollama）的部署需自行设置 `base_url`。
 
 **与 OpenAI Responses profile 的区别：**
 
