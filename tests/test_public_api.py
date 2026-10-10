@@ -33,6 +33,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "GoogleConverter",
             "GoogleInteractionsConverter",
             "OpenAIResponsesConverter",
+            "OpenResponsesConverter",
             # Conversion context
             "ConversionContext",
             "StreamContext",
@@ -66,7 +67,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "rename_field",
             "set_defaults",
         ],
-        "max_count": 39,
+        "max_count": 40,
     },
     "llm_rosetta.types.ir": {
         "items": None,  # too many to enumerate; just check count

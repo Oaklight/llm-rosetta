@@ -159,3 +159,30 @@ RESPONSES_REQUIRED_DEFAULTS: dict[str, Any] = {
     "frequency_penalty": 0,
     "presence_penalty": 0,
 }
+
+
+# --- Open Responses (vendor-neutral) variants ---------------------------------
+#
+# The Open Responses spec is the vendor-neutral superset; the OpenAI Responses
+# API is a conforming profile.  The base converter uses these spec-level sets so
+# it does not inject OpenAI-only lifecycle fields and does not assume
+# server-side storage (``store`` is left to the client, i.e. stateless).
+
+# OpenAI-specific lifecycle/echo fields absent from the spec.
+_OPENAI_ONLY_PRESERVE_FIELDS: frozenset[str] = frozenset(
+    {
+        "access_programs",
+        "billing",
+        "content_filters",
+        "moderation",
+        "tool_usage",
+    }
+)
+
+OPEN_RESPONSES_PRESERVE_FIELDS: set[str] = (
+    RESPONSES_PRESERVE_FIELDS - _OPENAI_ONLY_PRESERVE_FIELDS
+)
+
+OPEN_RESPONSES_REQUIRED_DEFAULTS: dict[str, Any] = {
+    k: v for k, v in RESPONSES_REQUIRED_DEFAULTS.items() if k != "store"
+}

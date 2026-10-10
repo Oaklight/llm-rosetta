@@ -43,8 +43,8 @@ _PROVIDER_REGISTRY: dict[str, dict[str, Any]] = {
         "url_template": "{base_url}/responses",
     },
     "open_responses": {
-        "default_base_url": "https://api.openai.com/v1",
-        "default_api_key_env": "OPENAI_API_KEY",
+        # Vendor-neutral spec: no canonical host, so no default base URL.
+        # A deployment must supply ``base_url`` (config or shim connection).
         "auth_header_fn": openai_auth,
         "url_template": "{base_url}/responses",
     },
@@ -81,13 +81,17 @@ _PROVIDER_REGISTRY: dict[str, dict[str, Any]] = {
 def get_default_base_url(provider_type: str) -> str:
     """Return the default base URL for a known provider type, or ``""``."""
     entry = _PROVIDER_REGISTRY.get(provider_type)
-    return entry["default_base_url"] if entry else ""
+    return entry.get("default_base_url", "") if entry else ""
 
 
 def get_default_api_key_env(provider_type: str) -> str:
     """Return the default env-var name for a provider's API key."""
     entry = _PROVIDER_REGISTRY.get(provider_type)
-    return entry["default_api_key_env"] if entry else f"{provider_type.upper()}_API_KEY"
+    return (
+        entry.get("default_api_key_env", f"{provider_type.upper()}_API_KEY")
+        if entry
+        else f"{provider_type.upper()}_API_KEY"
+    )
 
 
 def known_provider_types() -> list[str]:
@@ -247,6 +251,13 @@ def build_provider_info(
     api_key, token_command, token_refresh_interval = _resolve_token_command(
         provider_type, cfg
     )
+
+    if not cfg.get("base_url"):
+        raise ValueError(
+            f"Provider {provider_type!r} (base type {base_type!r}) has no "
+            "base_url configured; set it in the provider config or via a shim "
+            "connection.base_url."
+        )
 
     return ProviderInfo(
         name=provider_type,

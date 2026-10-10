@@ -43,7 +43,7 @@ def _extract_content_text(raw_content: Any) -> str:
     return ""
 
 
-class OpenAIResponsesContentOps(BaseContentOps):
+class OpenResponsesContentOps(BaseContentOps):
     """OpenAI Responses API content conversion operations.
 
     All methods are static and stateless. Handles TextPart, ImagePart,
@@ -462,3 +462,8 @@ class OpenAIResponsesContentOps(BaseContentOps):
             )
         # Fallback: store raw data
         return CitationPart(type="citation")
+
+
+# Backward-compatible alias (deprecated): the OpenAI Responses profile reuses
+# the same content operations as the vendor-neutral Open Responses base.
+OpenAIResponsesContentOps = OpenResponsesContentOps
