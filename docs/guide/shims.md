@@ -47,8 +47,13 @@ src/llm_rosetta/shims/providers/
 
 每个提供方子目录包含：
 
-- **`provider.yaml`**（必需）—— 声明 `name`、`base`、连接设置（`connection.base_url`、`connection.api_key_env`、`connection.auth_header`）和 `logo`
+- **`provider.yaml`**（必需）—— 声明 `name`、`base`、连接设置（`connection.base_url`、`connection.api_key_env`、`connection.auth_header`、`connection.keyless`、`connection.models_path`），以及可选的 `logo`、`display_name`、`free_source`
 - **`transforms.py`**（可选）—— 导出 `post_ir_transforms` 和/或 `pre_ir_transforms` 元组（旧名 `to_transforms` / `from_transforms` 也可用）
+
+`connection.keyless` 表示该上游无需凭据即可访问：未配置 `api_key` 时不发送任何鉴权头，
+配置了则回退到基础类型的鉴权方式。`free_source: true` 表示该 shim 的网关提供免费模型池
+—— 管理台会把它的 keyless 条目归入 "Free Resource" 分区，并命名为
+`<display_name> (Free)`。`display_name` 是管理台中显示的品牌名，缺省为 shim 名称。
 
 `provider.yaml` 示例：
 

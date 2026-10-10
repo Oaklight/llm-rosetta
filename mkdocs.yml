@@ -145,6 +145,7 @@ nav:
               - Argo: guide/providers/argo.md
               - AskSage: guide/providers/asksage.md
               - ALCF: guide/providers/alcf.md
+              - Kilo: guide/providers/kilo.md
           - 推理 / 思考参数: guide/reasoning.md
           - 提供方推理行为: guide/provider-reasoning.md
       - 示例:
