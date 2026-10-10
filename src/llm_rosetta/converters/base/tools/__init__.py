@@ -53,8 +53,6 @@ from .intrinsic import (
     get_definition_kind,
     get_intrinsic_kind,
     get_native_definition,
-    intrinsic_call_to_function,
-    intrinsic_result_to_function,
     is_intrinsic_part,
     make_intrinsic_tool_call,
     make_intrinsic_tool_definition,
@@ -97,8 +95,6 @@ __all__ = [
     # intrinsic
     "get_definition_kind",
     "get_native_definition",
-    "intrinsic_call_to_function",
-    "intrinsic_result_to_function",
     "make_intrinsic_tool_definition",
     "is_intrinsic_part",
     "get_intrinsic_kind",

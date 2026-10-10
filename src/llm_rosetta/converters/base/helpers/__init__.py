@@ -36,8 +36,6 @@ _MOVED_TO_TOOLS: set[str] = {
     "unwind_parallel_tool_calls_ir",
     "convert_content_blocks_to_ir",
     "convert_ir_content_blocks_to_p",
-    "intrinsic_call_to_function",
-    "intrinsic_result_to_function",
     "is_intrinsic_part",
     "get_intrinsic_kind",
     "set_intrinsic_kind",

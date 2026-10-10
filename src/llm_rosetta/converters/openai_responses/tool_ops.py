@@ -332,19 +332,39 @@ def _ir_intrinsic_to_responses(
     tool_name: str,
     tool_input: Any,
     arguments: str,
+    *,
+    for_history: bool = False,
 ) -> dict[str, Any]:
     intrinsic_kind = get_intrinsic_kind(ir_tool_call, tool_name)
     item_type = _INTRINSIC_KIND_TO_ITEM.get(intrinsic_kind, "function_call")
+
+    # A `web_search_call` has a valid replay shape for history (an `action`,
+    # no `call_id`/`arguments`) and no separate output item.
+    if item_type == "web_search_call":
+        query = tool_input.get("query", "") if isinstance(tool_input, dict) else ""
+        item: dict[str, Any] = {"type": "web_search_call"}
+        if query:
+            item["action"] = {"type": "search", "query": query, "queries": [query]}
+        return item
+
+    # Other server items need provider config we cannot synthesise from a
+    # foreign request (code_interpreter: container_id; file_search:
+    # vector_store_ids; …).  In history, degrade them to a plain function call
+    # so the request stays valid; on the response leg keep the native type.
+    if for_history and item_type != "function_call":
+        return {
+            "type": "function_call",
+            "call_id": tool_call_id,
+            "name": intrinsic_kind,
+            "arguments": arguments,
+        }
+
     result_item: dict[str, Any] = {
         "type": item_type,
         "call_id": tool_call_id,
         "arguments": arguments,
     }
-    if item_type == "web_search_call":
-        result_item["query"] = (
-            tool_input.get("query", "") if isinstance(tool_input, dict) else ""
-        )
-    elif item_type == "code_interpreter_call":
+    if item_type == "code_interpreter_call":
         result_item["code"] = (
             tool_input.get("code", "") if isinstance(tool_input, dict) else ""
         )
@@ -798,7 +818,12 @@ class OpenAIResponsesToolOps(BaseToolOps):
             return item
         elif tool_type == "intrinsic":
             return _ir_intrinsic_to_responses(
-                ir_tool_call, tool_call_id, tool_name, tool_input, arguments
+                ir_tool_call,
+                tool_call_id,
+                tool_name,
+                tool_input,
+                arguments,
+                for_history=bool(kwargs.get("for_history")),
             )
         else:
             # Default to function_call
@@ -912,7 +937,15 @@ class OpenAIResponsesToolOps(BaseToolOps):
 
         Emits ``custom_tool_call_output`` when the context indicates the
         tool call was custom, otherwise ``function_call_output``.
+
+        Returns ``{}`` for an intrinsic result whose call we emit as a native
+        server item (``web_search_call``) — those have no separate output item.
         """
+        if ir_tool_result.get("tool_type") == "intrinsic":
+            kind = get_intrinsic_kind(ir_tool_result, "")
+            if _INTRINSIC_KIND_TO_ITEM.get(kind) == "web_search_call":
+                return {}
+
         result_content = ir_tool_result.get("result") or ir_tool_result.get(
             "content", ""
         )
