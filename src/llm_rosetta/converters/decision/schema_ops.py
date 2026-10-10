@@ -24,6 +24,7 @@ from llm_rosetta.types.ir.decision import (
     AssertionAnswer,
     ChoiceAnswer,
     DecisionAnswer,
+    DecisionEntry,
     DecisionQuestion,
     DecisionState,
     ScoreAnswer,
@@ -59,6 +60,18 @@ _SCHEMA_INSTRUCTION_TEMPLATE = (
 )
 
 
+def _entries(question: DecisionQuestion) -> list[DecisionEntry]:
+    return list(cast(Any, question).get("criteria", []) or [])
+
+
+def _labels(question: DecisionQuestion) -> list[str]:
+    return [str(entry["label"]) for entry in _entries(question)]
+
+
+def _entry_text(entry: DecisionEntry) -> str:
+    return _serialize_value(entry.get("description"))
+
+
 def build_system_prompt(
     questions: Mapping[str, DecisionQuestion],
     *,
@@ -84,20 +97,32 @@ def build_system_prompt(
         instructions = _serialize_value(q["instructions"])
         if qtype == "assertion":
             desc = f"  {qid} (assertion): {instructions}"
-            assertion_criteria: Any = q.get("criteria")
-            if isinstance(assertion_criteria, dict):
-                true_desc = assertion_criteria.get("true", "")
-                false_desc = assertion_criteria.get("false", "")
-                if true_desc or false_desc:
-                    desc += f" [true={true_desc}, false={false_desc}]"
+            by_side = {
+                bool(entry["label"]): _entry_text(entry) for entry in _entries(q)
+            }
+            true_desc = by_side.get(True, "")
+            false_desc = by_side.get(False, "")
+            if true_desc or false_desc:
+                desc += f" [true={true_desc}, false={false_desc}]"
         elif qtype == "choice":
-            options: dict[str, Any] = cast(Any, q).get("criteria", {})
-            opts_str = ", ".join(f"{k}: {v}" if v else k for k, v in options.items())
-            desc = f"  {qid} (choice): {instructions} [{opts_str}]"
+            opts = ", ".join(
+                f"{entry['label']}: {_entry_text(entry)}"
+                if entry.get("description") is not None
+                else str(entry["label"])
+                for entry in _entries(q)
+            )
+            desc = f"  {qid} (choice): {instructions} [{opts}]"
         elif qtype == "score":
-            levels: list[str] = cast(Any, q).get("criteria", [])
-            levels_str = ", ".join(f"{i}={lv}" for i, lv in enumerate(levels))
-            desc = f"  {qid} (score): {instructions} [{levels_str}]"
+            levels = ", ".join(
+                f"{i}={entry['label']}"
+                + (
+                    f": {_entry_text(entry)}"
+                    if entry.get("description") is not None
+                    else ""
+                )
+                for i, entry in enumerate(_entries(q))
+            )
+            desc = f"  {qid} (score): {instructions} [{levels}]"
         else:
             desc = f"  {qid} ({qtype}): {instructions}"
         parts.append(desc)
@@ -259,20 +284,22 @@ def _question_field_type(
             return bool, None
         return Annotated[float, Ge(0), Le(1)], None
     if qtype == "choice":
-        criteria_dict: dict[str, Any] = cast(Any, q).get("criteria", {})
+        labels = _labels(q)
         if answer_mode == "discrete":
-            return str, list(criteria_dict.keys())
+            return str, labels
         return create_struct(
             "ChoiceProbs",
-            {label: (float, ...) for label in criteria_dict},
+            {label: (float, ...) for label in labels},
         ), None
     if qtype == "score":
-        criteria_list: list[str] = cast(Any, q).get("criteria", [])
+        # Score probabilities are declared by ordinal position (keys "0".."n-1");
+        # ``_parse_score`` re-keys them to the level labels.
+        count = len(_labels(q))
         if answer_mode == "discrete":
             return int, None
         return create_struct(
             "ScoreProbs",
-            {str(i): (float, ...) for i in range(len(criteria_list))},
+            {str(i): (float, ...) for i in range(count)},
         ), None
     return str, None
 
@@ -332,13 +359,13 @@ def _parse_assertion(raw_answer: Any, answer_mode: AnswerMode) -> AssertionAnswe
 def _parse_choice(
     raw_answer: Any, question: DecisionQuestion, answer_mode: AnswerMode
 ) -> ChoiceAnswer:
+    labels = _labels(question)
     if answer_mode == "discrete":
         label = str(raw_answer)
-        criteria_dict: dict[str, Any] = cast(Any, question).get("criteria", {})
-        if criteria_dict and label not in criteria_dict:
-            label = next(iter(criteria_dict))
-        probs = {k: (1.0 if k == label else 0.0) for k in criteria_dict}
-        conf = 1.0 if str(raw_answer) in criteria_dict else 0.0
+        if labels and label not in labels:
+            label = labels[0]
+        probs = {lab: (1.0 if lab == label else 0.0) for lab in labels}
+        conf = 1.0 if str(raw_answer) in labels else 0.0
         return ChoiceAnswer(
             type="choice", choice=label, probabilities=probs, confidence=conf
         )
@@ -354,23 +381,25 @@ def _parse_choice(
 def _parse_score(
     raw_answer: Any, question: DecisionQuestion, answer_mode: AnswerMode
 ) -> ScoreAnswer:
-    criteria_list: list[str] = cast(Any, question).get("criteria", [])
-    legend = {str(i): desc for i, desc in enumerate(criteria_list)}
+    labels = _labels(question)
     if answer_mode == "discrete":
         idx = int(raw_answer)
-        probs = {str(i): (1.0 if i == idx else 0.0) for i in range(len(criteria_list))}
+        probs = {lab: (1.0 if i == idx else 0.0) for i, lab in enumerate(labels)}
         return ScoreAnswer(
             type="score",
             score=float(idx),
-            legend=legend,
             probabilities=probs,
             confidence=1.0,
         )
-    probs = _normalize_probs({str(k): float(v) for k, v in raw_answer.items()})
+    # probabilities mode: LLM returns {"0": p, "1": p, ...} by ordinal position.
+    raw_probs = {int(k): float(v) for k, v in raw_answer.items()}
+    total = sum(raw_probs.values())
+    norm = {i: (p / total if total > 0 else 0.0) for i, p in raw_probs.items()}
+    probs = {labels[i]: p for i, p in norm.items() if i < len(labels)}
+    score_val = sum(i * p for i, p in norm.items())
     return ScoreAnswer(
         type="score",
-        score=sum(int(k) * v for k, v in probs.items()),
-        legend=legend,
+        score=score_val,
         probabilities=probs,
         confidence=compute_confidence(probs),
     )
