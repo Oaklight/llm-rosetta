@@ -210,13 +210,16 @@ def get_converter_for_provider(provider: str):
     from .converters.google_generate import GoogleGenerateConverter
     from .converters.google_interactions import GoogleInteractionsConverter
     from .converters.openai_chat import OpenAIChatConverter
-    from .converters.openai_responses import OpenAIResponsesConverter
+    from .converters.openai_responses import (
+        OpenAIResponsesConverter,
+        OpenResponsesConverter,
+    )
     from .shims import resolve_base
 
     converter_map = {
         "openai_chat": OpenAIChatConverter,
         "openai_responses": OpenAIResponsesConverter,
-        "open_responses": OpenAIResponsesConverter,
+        "open_responses": OpenResponsesConverter,
         "anthropic": AnthropicConverter,
         "google": GoogleGenerateConverter,
         "google_generate": GoogleGenerateConverter,

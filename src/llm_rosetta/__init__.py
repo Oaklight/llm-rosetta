@@ -25,6 +25,7 @@ from .converters import (
     GoogleInteractionsConverter,
     OpenAIChatConverter,
     OpenAIResponsesConverter,
+    OpenResponsesConverter,
 )
 from .converters.base.simple_converter import BaseSimpleConverter
 from . import tool_ops
@@ -57,6 +58,7 @@ __all__ = [
     "GoogleConverter",
     "GoogleInteractionsConverter",
     "OpenAIResponsesConverter",
+    "OpenResponsesConverter",
     # Conversion context
     "ConversionContext",
     "StreamContext",

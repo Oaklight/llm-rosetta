@@ -12,7 +12,7 @@ nested messages. The converter handles this structural difference.
 import time
 from collections import defaultdict
 from collections.abc import Mapping
-from typing import Any, cast
+from typing import Any, ClassVar, cast
 
 from ...types.ir import (
     TextPart,
@@ -47,8 +47,10 @@ from ..base.tools import (
     sanitize_tool_call_id,
     strip_orphaned_tool_config,
 )
-from .stream_context import OpenAIResponsesStreamContext
+from .stream_context import OpenResponsesStreamContext
 from ._constants import (
+    OPEN_RESPONSES_PRESERVE_FIELDS,
+    OPEN_RESPONSES_REQUIRED_DEFAULTS,
     RESPONSES_INCOMPLETE_REASON_TO_IR,
     RESPONSES_PRESERVE_FIELDS,
     RESPONSES_REASON_TO_INCOMPLETE_REASON,
@@ -59,10 +61,10 @@ from ._constants import (
     generate_message_id,
     generate_reasoning_id,
 )
-from .config_ops import OpenAIResponsesConfigOps
-from .content_ops import OpenAIResponsesContentOps
-from .message_ops import OpenAIResponsesMessageOps
-from .tool_ops import OpenAIResponsesToolOps, harvest_additional_tools
+from .config_ops import OpenResponsesConfigOps
+from .content_ops import OpenResponsesContentOps
+from .message_ops import OpenResponsesMessageOps
+from .tool_ops import OpenResponsesToolOps, harvest_additional_tools
 from .utils import build_message_preamble_events, resolve_call_id
 
 
@@ -182,28 +184,35 @@ def _qualify_tool_name(
     return generated
 
 
-class OpenAIResponsesConverter(BaseConverter):
-    """OpenAI Responses API converter.
+class OpenResponsesConverter(BaseConverter):
+    """Open Responses spec converter (vendor-neutral base).
 
     Implements the 6 explicit conversion interfaces defined by BaseConverter.
 
     Uses composition of Ops classes for modular, testable conversion logic.
 
-    Note: Responses API uses ``input`` for request items and ``output`` for
-    response items, with a flat item list structure.
+    Note: the spec uses ``input`` for request items and ``output`` for response
+    items, with a flat item list structure.  :class:`OpenAIResponsesConverter`
+    derives from this class and layers the OpenAI-specific profile on top.
     """
 
-    content_ops_class = OpenAIResponsesContentOps
-    tool_ops_class = OpenAIResponsesToolOps
-    message_ops_class = OpenAIResponsesMessageOps
-    config_ops_class = OpenAIResponsesConfigOps
-    _CONVERTER_TAG = "openai_responses"
+    content_ops_class = OpenResponsesContentOps
+    tool_ops_class = OpenResponsesToolOps
+    message_ops_class = OpenResponsesMessageOps
+    config_ops_class = OpenResponsesConfigOps
+    _CONVERTER_TAG = "open_responses"
     _PASSTHROUGH_RESTORE_KEY = "output"
 
-    # Default response ID prefix for the OpenAI Responses format.
-    # Used as fallback when no shim-driven prefix is available in the
-    # conversion context.
-    _RESPONSE_ID_PREFIX = "resp_"
+    # Preserve-mode echo fields and required response defaults.  The base uses
+    # the spec-level sets (no OpenAI-only lifecycle fields, no forced
+    # ``store: true``); ``OpenAIResponsesConverter`` overrides both.
+    _PRESERVE_FIELDS: ClassVar[set[str]] = OPEN_RESPONSES_PRESERVE_FIELDS
+    _REQUIRED_DEFAULTS: ClassVar[dict[str, Any]] = OPEN_RESPONSES_REQUIRED_DEFAULTS
+
+    # Default response ID prefix.  The vendor-neutral spec has none; the OpenAI
+    # profile sets ``"resp_"``.  Used as a fallback when no shim-driven prefix
+    # (``context.options["response_id_prefix"]``) is available.
+    _RESPONSE_ID_PREFIX = ""
 
     def _get_response_id_prefix(
         self, context: ConversionContext | StreamContext | None = None
@@ -234,9 +243,9 @@ class OpenAIResponsesConverter(BaseConverter):
         self.config_ops = self.config_ops_class()
 
     @classmethod
-    def create_stream_context(cls) -> OpenAIResponsesStreamContext:
+    def create_stream_context(cls) -> OpenResponsesStreamContext:
         """Create a stream context with Responses API specific state."""
-        return OpenAIResponsesStreamContext()
+        return OpenResponsesStreamContext()
 
     # ==================== Top-level Interfaces ====================
 
@@ -317,6 +326,13 @@ class OpenAIResponsesConverter(BaseConverter):
             verbosity = extensions.pop("_text_verbosity", None)
             if verbosity is not None:
                 result.setdefault("text", {})["verbosity"] = verbosity
+            # The Open Responses ``allowed_tools`` object is re-emitted inside
+            # ``tool_choice`` (see ``_apply_tool_config``); do not also leak it
+            # as a top-level field.  A legacy top-level ``allowed_tools`` (a bare
+            # list, or a dict without a ``"type"``) passes through untouched.
+            _allowed = extensions.get("allowed_tools")
+            if isinstance(_allowed, dict) and _allowed.get("type") == "allowed_tools":
+                extensions.pop("allowed_tools")
             result.update(extensions)
 
         return result
@@ -362,7 +378,9 @@ class OpenAIResponsesConverter(BaseConverter):
         )
 
         if isinstance(input_items, list):
-            ir_messages = self.message_ops.p_messages_to_ir(input_items)
+            ir_messages = self.message_ops.p_messages_to_ir(
+                input_items, provider=self._CONVERTER_TAG
+            )
             ir_request["messages"] = ir_messages
 
         # 3. Tools (with process-level cache)
@@ -425,9 +443,7 @@ class OpenAIResponsesConverter(BaseConverter):
         ctx = context if context is not None else ConversionContext()
         if ctx.metadata_mode == "preserve":
             echo = {
-                k: v
-                for k, v in provider_request.items()
-                if k in RESPONSES_PRESERVE_FIELDS
+                k: v for k, v in provider_request.items() if k in self._PRESERVE_FIELDS
             }
             if echo:
                 ctx.store_request_echo(echo)
@@ -738,7 +754,12 @@ class OpenAIResponsesConverter(BaseConverter):
             result["tools"] = self._get_cached_ir_tools_to_p(tools)
         tool_choice = ir_request.get("tool_choice")
         if tool_choice:
-            result["tool_choice"] = self.tool_ops.ir_tool_choice_to_p(tool_choice)
+            allowed_tools = (ir_request.get("provider_extensions") or {}).get(
+                "allowed_tools"
+            )
+            result["tool_choice"] = self.tool_ops.ir_tool_choice_to_p(
+                tool_choice, allowed_tools=allowed_tools
+            )
         tool_config = ir_request.get("tool_config")
         if tool_config:
             tc_fields = self.tool_ops.ir_tool_config_to_p(tool_config)
@@ -752,7 +773,10 @@ class OpenAIResponsesConverter(BaseConverter):
         """Extract tool_choice and tool_config from provider request into IR."""
         tool_choice = provider_request.get("tool_choice")
         if tool_choice is not None:
-            ir_request["tool_choice"] = self.tool_ops.p_tool_choice_to_ir(tool_choice)
+            ir_request["tool_choice"] = self.tool_ops.p_tool_choice_to_ir(
+                tool_choice,
+                extensions=ir_request.setdefault("provider_extensions", {}),
+            )
         tool_config_fields: dict[str, Any] = {}
         if "parallel_tool_calls" in provider_request:
             tool_config_fields["parallel_tool_calls"] = provider_request[
@@ -792,7 +816,7 @@ class OpenAIResponsesConverter(BaseConverter):
         extras = {
             k: v
             for k, v in provider_response.items()
-            if k in RESPONSES_PRESERVE_FIELDS and v is not None
+            if k in self._PRESERVE_FIELDS and v is not None
         }
         if extras:
             ctx.store_response_extras(extras)
@@ -800,7 +824,7 @@ class OpenAIResponsesConverter(BaseConverter):
         items_meta = [
             _capture_item_metadata(item)
             for item in output_items
-            if OpenAIResponsesMessageOps.is_portable_response_output_item(item)
+            if OpenResponsesMessageOps.is_portable_response_output_item(item)
         ]
         if items_meta:
             ctx.store_output_items_meta(items_meta)
@@ -823,7 +847,7 @@ class OpenAIResponsesConverter(BaseConverter):
             "usage",
         }
         # Apply required defaults first, then override with actual echo
-        for k, v in RESPONSES_REQUIRED_DEFAULTS.items():
+        for k, v in self._REQUIRED_DEFAULTS.items():
             if k not in core_keys and k not in provider_response:
                 provider_response[k] = v
         for k, v in echo.items():
@@ -934,7 +958,7 @@ class OpenAIResponsesConverter(BaseConverter):
             # Preserve mode: capture echo fields from the initial response
             if context.metadata_mode == "preserve" and isinstance(response, dict):
                 extras = {
-                    k: v for k, v in response.items() if k in RESPONSES_PRESERVE_FIELDS
+                    k: v for k, v in response.items() if k in self._PRESERVE_FIELDS
                 }
                 if extras:
                     context.store_response_extras(extras)
@@ -963,7 +987,7 @@ class OpenAIResponsesConverter(BaseConverter):
             reasoning=chunk.get("delta", ""),
         )
         if (
-            isinstance(context, OpenAIResponsesStreamContext)
+            isinstance(context, OpenResponsesStreamContext)
             and context._inbound_reasoning_item_id
         ):
             event["provider_metadata"] = {
@@ -1020,7 +1044,7 @@ class OpenAIResponsesConverter(BaseConverter):
                 events.append(start_event_tc)
 
             elif item_type == "reasoning" and isinstance(
-                context, OpenAIResponsesStreamContext
+                context, OpenResponsesStreamContext
             ):
                 # Capture early so deltas can carry the source ID;
                 # done event re-confirms authoritatively.
@@ -1113,7 +1137,7 @@ class OpenAIResponsesConverter(BaseConverter):
                 if call_id:
                     context.set_tool_call_args(call_id, item.get("input", ""))
         elif item_type == "reasoning" and isinstance(
-            context, OpenAIResponsesStreamContext
+            context, OpenResponsesStreamContext
         ):
             item_id = item.get("id", "")
             if item_id:
@@ -1354,17 +1378,15 @@ class OpenAIResponsesConverter(BaseConverter):
         """Convert IR stream event with automatic context upgrade.
 
         If a base ``StreamContext`` is passed, it is automatically upgraded
-        to ``OpenAIResponsesStreamContext`` (preserving existing state) so
+        to ``OpenResponsesStreamContext`` (preserving existing state) so
         that callers do not need to know about the provider-specific subclass.
         """
         # Auto-upgrade base StreamContext to the provider-specific subclass.
         # Cache the upgraded instance in metadata so state persists across calls.
-        if context is not None and not isinstance(
-            context, OpenAIResponsesStreamContext
-        ):
+        if context is not None and not isinstance(context, OpenResponsesStreamContext):
             cached = context.metadata.get("_responses_stream_ctx")
             if cached is None:
-                cached = OpenAIResponsesStreamContext.from_base(context)
+                cached = OpenResponsesStreamContext.from_base(context)
                 context.metadata["_responses_stream_ctx"] = cached
             context = cached
 
@@ -1377,7 +1399,7 @@ class OpenAIResponsesConverter(BaseConverter):
         context: StreamContext | None,
     ) -> dict[str, Any] | list[dict[str, Any]]:
         """Inject sequence_number into emitted Responses events."""
-        if isinstance(context, OpenAIResponsesStreamContext):
+        if isinstance(context, OpenResponsesStreamContext):
             if isinstance(result, list):
                 for r in result:
                     if isinstance(r, dict) and "type" in r:
@@ -1429,7 +1451,7 @@ class OpenAIResponsesConverter(BaseConverter):
                 "status",
                 "usage",
             }
-            for k, v in RESPONSES_REQUIRED_DEFAULTS.items():
+            for k, v in self._REQUIRED_DEFAULTS.items():
                 if k not in core_keys and k not in response:
                     response[k] = v
             for k, v in echo.items():
@@ -1478,7 +1500,7 @@ class OpenAIResponsesConverter(BaseConverter):
     def _handle_ir_content_block_start_to_p(
         self,
         event: ContentBlockStartEvent,
-        context: OpenAIResponsesStreamContext | None,
+        context: OpenResponsesStreamContext | None,
     ) -> dict[str, Any] | list[dict[str, Any]]:
         block_type = event["block_type"]
         if context is not None:
@@ -1504,7 +1526,7 @@ class OpenAIResponsesConverter(BaseConverter):
     def _handle_ir_content_block_end_to_p(
         self,
         event: ContentBlockEndEvent,
-        context: OpenAIResponsesStreamContext | None,
+        context: OpenResponsesStreamContext | None,
     ) -> dict[str, Any] | list[dict[str, Any]]:
         if context is not None:
             context.content_part_done_emitted = True
@@ -1565,7 +1587,7 @@ class OpenAIResponsesConverter(BaseConverter):
     def _handle_ir_text_delta_to_p(
         self,
         event: TextDeltaEvent,
-        context: OpenAIResponsesStreamContext | None,
+        context: OpenResponsesStreamContext | None,
     ) -> dict[str, Any] | list[dict[str, Any]]:
         text = event["text"]
 
@@ -1597,7 +1619,7 @@ class OpenAIResponsesConverter(BaseConverter):
     def _handle_ir_refusal_delta_to_p(
         self,
         event: RefusalDeltaEvent,
-        context: OpenAIResponsesStreamContext | None,
+        context: OpenResponsesStreamContext | None,
     ) -> dict[str, Any] | list[dict[str, Any]]:
         refusal = event["refusal"]
 
@@ -1628,7 +1650,7 @@ class OpenAIResponsesConverter(BaseConverter):
         context: StreamContext | None,
     ) -> list[dict[str, Any]]:
         results: list[dict[str, Any]] = []
-        ctx = context if isinstance(context, OpenAIResponsesStreamContext) else None
+        ctx = context if isinstance(context, OpenResponsesStreamContext) else None
         provider_metadata = event.get("provider_metadata") or {}
         source_item_id = provider_metadata.get("responses_reasoning_id", "")
         if not isinstance(source_item_id, str):
@@ -1714,7 +1736,7 @@ class OpenAIResponsesConverter(BaseConverter):
             context.register_tool_call_item(call_id, item_id)
 
         stream_ctx = (
-            context if isinstance(context, OpenAIResponsesStreamContext) else None
+            context if isinstance(context, OpenResponsesStreamContext) else None
         )
 
         if stream_ctx is not None:
@@ -1782,7 +1804,7 @@ class OpenAIResponsesConverter(BaseConverter):
         if not item_id and call_id:
             item_id = call_id
 
-        if isinstance(context, OpenAIResponsesStreamContext) and call_id:
+        if isinstance(context, OpenResponsesStreamContext) and call_id:
             output_index = context._tool_call_output_indices.get(call_id, 0)
         else:
             output_index = tc_index if tc_index is not None else 0
@@ -1810,7 +1832,7 @@ class OpenAIResponsesConverter(BaseConverter):
     def _handle_ir_finish_to_p(
         self,
         event: FinishEvent,
-        context: OpenAIResponsesStreamContext | None,
+        context: OpenResponsesStreamContext | None,
     ) -> dict[str, Any] | list[dict[str, Any]]:
         reason = event["finish_reason"]["reason"]
         status = RESPONSES_REASON_TO_STATUS.get(reason, "completed")
@@ -1845,7 +1867,7 @@ class OpenAIResponsesConverter(BaseConverter):
     def _build_finish_response(
         self,
         status: str,
-        context: OpenAIResponsesStreamContext | None,
+        context: OpenResponsesStreamContext | None,
         finish_reason: str = "length",
     ) -> dict[str, Any]:
         """Build the response dict for a FinishEvent."""
@@ -1885,7 +1907,7 @@ class OpenAIResponsesConverter(BaseConverter):
         return response
 
     def _collect_finish_output(
-        self, context: OpenAIResponsesStreamContext | None
+        self, context: OpenResponsesStreamContext | None
     ) -> list[dict[str, Any]]:
         """Collect text and tool call output items from stream context."""
         output: list[dict[str, Any]] = []
@@ -1979,7 +2001,7 @@ class OpenAIResponsesConverter(BaseConverter):
 
     @staticmethod
     def _build_stream_function_call_item(
-        context: OpenAIResponsesStreamContext | None,
+        context: OpenResponsesStreamContext | None,
         *,
         item_id: str,
         call_id: str,
@@ -2010,7 +2032,7 @@ class OpenAIResponsesConverter(BaseConverter):
 
     @staticmethod
     def _build_stream_custom_tool_call_item(
-        context: OpenAIResponsesStreamContext | None,
+        context: OpenResponsesStreamContext | None,
         *,
         item_id: str,
         call_id: str,
@@ -2056,9 +2078,9 @@ class OpenAIResponsesConverter(BaseConverter):
         }
         return usage
 
-    @staticmethod
+    @classmethod
     def _apply_finish_echo(
-        response: dict[str, Any], context: OpenAIResponsesStreamContext
+        cls, response: dict[str, Any], context: OpenResponsesStreamContext
     ) -> None:
         """Inject preserve-mode echo fields into the finish response."""
         echo = context.get_echo_fields()
@@ -2071,7 +2093,7 @@ class OpenAIResponsesConverter(BaseConverter):
             "status",
             "usage",
         }
-        for k, v in RESPONSES_REQUIRED_DEFAULTS.items():
+        for k, v in cls._REQUIRED_DEFAULTS.items():
             if k not in core_keys and k not in response:
                 response[k] = v
         for k, v in echo.items():
@@ -2080,7 +2102,7 @@ class OpenAIResponsesConverter(BaseConverter):
 
     def _emit_reasoning_done_events(
         self,
-        context: OpenAIResponsesStreamContext,
+        context: OpenResponsesStreamContext,
         results: list[dict[str, Any]],
     ) -> None:
         """Emit reasoning lifecycle done events, one set per item."""
@@ -2122,7 +2144,7 @@ class OpenAIResponsesConverter(BaseConverter):
 
     def _emit_text_done_events(
         self,
-        context: OpenAIResponsesStreamContext,
+        context: OpenResponsesStreamContext,
         results: list[dict[str, Any]],
     ) -> None:
         """Emit text done events if we had text output."""
@@ -2183,7 +2205,7 @@ class OpenAIResponsesConverter(BaseConverter):
 
     def _emit_tool_call_done_events(
         self,
-        context: OpenAIResponsesStreamContext,
+        context: OpenResponsesStreamContext,
         results: list[dict[str, Any]],
     ) -> None:
         """Emit done events for each tool call."""
@@ -2274,3 +2296,20 @@ class OpenAIResponsesConverter(BaseConverter):
             "type": ResponsesEventType.RESPONSE_COMPLETED,
             "response": resp,
         }
+
+
+class OpenAIResponsesConverter(OpenResponsesConverter):
+    """OpenAI Responses API converter (OpenAI profile).
+
+    A conforming profile of the Open Responses spec that layers OpenAI-specific
+    behavior on top of the vendor-neutral base:
+
+    - the ``resp_`` response-id prefix (the spec defines no prefix);
+    - OpenAI-only lifecycle echo fields (``billing``, ``moderation``, ...);
+    - OpenAI's default of server-side storage (``store: true``).
+    """
+
+    _CONVERTER_TAG = "openai_responses"
+    _RESPONSE_ID_PREFIX = "resp_"
+    _PRESERVE_FIELDS = RESPONSES_PRESERVE_FIELDS
+    _REQUIRED_DEFAULTS = RESPONSES_REQUIRED_DEFAULTS

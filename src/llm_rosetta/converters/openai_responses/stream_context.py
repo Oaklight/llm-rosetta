@@ -23,7 +23,7 @@ class ReasoningItemState:
 
 
 @dataclass
-class OpenAIResponsesStreamContext(StreamContext):
+class OpenResponsesStreamContext(StreamContext):
     """Stream context with OpenAI Responses API specific state.
 
     Extends the base StreamContext with fields needed for Responses API
@@ -117,14 +117,14 @@ class OpenAIResponsesStreamContext(StreamContext):
         return self._sequence_number + 1
 
     @classmethod
-    def from_base(cls, base: StreamContext) -> OpenAIResponsesStreamContext:
+    def from_base(cls, base: StreamContext) -> OpenResponsesStreamContext:
         """Create from a base StreamContext, preserving existing state.
 
         Args:
             base: The base StreamContext whose state should be carried over.
 
         Returns:
-            A new OpenAIResponsesStreamContext with the base state copied.
+            A new OpenResponsesStreamContext with the base state copied.
         """
         ctx = cls()
         # Copy base StreamContext fields
@@ -169,3 +169,8 @@ class OpenAIResponsesStreamContext(StreamContext):
         super().register_tool_call_item(tool_call_id, item_id)
         if tool_call_id and item_id:
             self.item_id_to_call_id[item_id] = tool_call_id
+
+
+# Backward-compatible alias (deprecated): the OpenAI Responses profile reuses
+# the same stream context as the vendor-neutral Open Responses base.
+OpenAIResponsesStreamContext = OpenResponsesStreamContext

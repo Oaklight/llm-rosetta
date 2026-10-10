@@ -25,7 +25,7 @@ from ..base import BaseConfigOps
 from ..base.helpers.reasoning import DEFAULT_REASONING_CAPS, apply_reasoning_config
 
 
-class OpenAIResponsesConfigOps(BaseConfigOps):
+class OpenResponsesConfigOps(BaseConfigOps):
     """OpenAI Responses API configuration conversion operations.
 
     All methods are static and stateless.
@@ -352,3 +352,8 @@ class OpenAIResponsesConfigOps(BaseConfigOps):
             result["retention"] = provider_cache["prompt_cache_retention"]
 
         return cast(CacheConfig, result)
+
+
+# Backward-compatible alias (deprecated): the OpenAI Responses profile reuses
+# the same config operations as the vendor-neutral Open Responses base.
+OpenAIResponsesConfigOps = OpenResponsesConfigOps

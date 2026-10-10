@@ -254,7 +254,7 @@ def _flatten_namespace_tool(
             )
             continue
 
-        converted = OpenAIResponsesToolOps.p_tool_definition_to_ir(child)
+        converted = OpenResponsesToolOps.p_tool_definition_to_ir(child)
         if converted is None:
             continue
 
@@ -488,7 +488,7 @@ def harvest_additional_tools(
     return nested_tools, stripped
 
 
-class OpenAIResponsesToolOps(BaseToolOps):
+class OpenResponsesToolOps(BaseToolOps):
     """OpenAI Responses API tool conversion operations.
 
     All methods are static and stateless. Handles tool definitions,
@@ -674,7 +674,12 @@ class OpenAIResponsesToolOps(BaseToolOps):
     # ==================== Tool Choice ====================
 
     @staticmethod
-    def ir_tool_choice_to_p(ir_tool_choice: ToolChoice, **kwargs: Any) -> str | dict:
+    def ir_tool_choice_to_p(
+        ir_tool_choice: ToolChoice,
+        *,
+        allowed_tools: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> str | dict:
         """IR ToolChoice → OpenAI Responses tool_choice parameter.
 
         Mapping:
@@ -688,10 +693,30 @@ class OpenAIResponsesToolOps(BaseToolOps):
 
         Args:
             ir_tool_choice: IR tool choice.
+            allowed_tools: Open Responses ``allowed_tools`` object retrieved
+                from ``provider_extensions``.  When present it is re-emitted
+                verbatim, with its ``mode`` refreshed from the IR mode, so the
+                tool restriction survives the round-trip.
 
         Returns:
             OpenAI tool_choice value (string or dict).
         """
+        # Open Responses ``allowed_tools`` has no IR equivalent: reconstruct the
+        # object around the IR mode so the restriction is preserved.
+        if (
+            isinstance(allowed_tools, dict)
+            and allowed_tools.get("type") == "allowed_tools"
+        ):
+            out = dict(allowed_tools)
+            mode = ir_tool_choice.get("mode") or ir_tool_choice.get("type")
+            out["mode"] = {
+                "any": "required",
+                "required": "required",
+                "none": "none",
+                "auto": "auto",
+            }.get(str(mode), "auto")
+            return out
+
         # Support both "mode" and legacy "type" field
         mode = ir_tool_choice.get("mode") or ir_tool_choice.get("type")
 
@@ -714,7 +739,12 @@ class OpenAIResponsesToolOps(BaseToolOps):
         return "auto"
 
     @staticmethod
-    def p_tool_choice_to_ir(provider_tool_choice: Any, **kwargs: Any) -> ToolChoice:
+    def p_tool_choice_to_ir(
+        provider_tool_choice: Any,
+        *,
+        extensions: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> ToolChoice:
         """OpenAI Responses tool_choice → IR ToolChoice.
 
         Mapping:
@@ -722,13 +752,33 @@ class OpenAIResponsesToolOps(BaseToolOps):
         - ``"auto"`` → ``mode:"auto"``
         - ``"required"`` → ``mode:"any"``
         - ``{"type":"function","function":{"name":"..."}}`` → ``mode:"tool"``
+        - ``{"type":"allowed_tools","tools":[...],"mode":...}`` → the whole
+          object is stashed in *extensions* under ``"allowed_tools"`` (the IR has
+          no equivalent), and the IR ``mode`` mirrors the inner ``mode``.
 
         Args:
             provider_tool_choice: OpenAI tool_choice value.
+            extensions: Optional ``provider_extensions`` dict that receives the
+                Open Responses ``allowed_tools`` object for lossless
+                round-trip.
 
         Returns:
             IR ToolChoice.
         """
+        if (
+            isinstance(provider_tool_choice, dict)
+            and provider_tool_choice.get("type") == "allowed_tools"
+        ):
+            if extensions is not None:
+                extensions["allowed_tools"] = dict(provider_tool_choice)
+            wire_mode = str(provider_tool_choice.get("mode") or "auto")
+            ir_mode = {
+                "required": "any",
+                "auto": "auto",
+                "none": "none",
+            }.get(wire_mode, "auto")
+            return cast(ToolChoice, {"mode": ir_mode, "tool_name": ""})
+
         if isinstance(provider_tool_choice, str):
             if provider_tool_choice == "none":
                 return cast(ToolChoice, {"mode": "none", "tool_name": ""})
@@ -955,10 +1005,10 @@ class OpenAIResponsesToolOps(BaseToolOps):
         )
 
         if isinstance(result_content, list):
-            from .content_ops import OpenAIResponsesContentOps
+            from .content_ops import OpenResponsesContentOps
 
             output = convert_ir_content_blocks_to_p(
-                result_content, OpenAIResponsesContentOps
+                result_content, OpenResponsesContentOps
             )
         elif isinstance(result_content, dict):
             output = json.dumps(result_content)
@@ -1007,9 +1057,9 @@ class OpenAIResponsesToolOps(BaseToolOps):
         # String outputs are opaque tool data, even when they contain JSON.
         # Only an actual list represents multimodal content blocks.
         if isinstance(output, list):
-            from .content_ops import OpenAIResponsesContentOps
+            from .content_ops import OpenResponsesContentOps
 
-            output = convert_content_blocks_to_ir(output, OpenAIResponsesContentOps)
+            output = convert_content_blocks_to_ir(output, OpenResponsesContentOps)
 
         part = ToolResultPart(
             type="tool_result",
@@ -1084,3 +1134,8 @@ class OpenAIResponsesToolOps(BaseToolOps):
                 result["max_calls"] = max_calls
 
         return cast(ToolCallConfig, result)
+
+
+# Backward-compatible alias (deprecated): the OpenAI Responses profile reuses
+# the same tool operations as the vendor-neutral Open Responses base.
+OpenAIResponsesToolOps = OpenResponsesToolOps

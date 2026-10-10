@@ -1064,8 +1064,9 @@ class GatewayConfig:
         load-balancing state.
 
         Provider types are compared as exact strings:
-        ``open_responses`` and ``openai_responses`` share a converter
-        but are distinct types and would still cross-convert.
+        ``open_responses`` and ``openai_responses`` are distinct types
+        (a vendor-neutral base converter vs. its OpenAI profile), so they
+        still cross-convert rather than taking the same-format shortcut.
         """
         if not self.prefer_same_format:
             return None

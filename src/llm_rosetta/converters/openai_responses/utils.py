@@ -6,7 +6,7 @@ from typing import Any
 
 from ..base.context import StreamContext
 from ._constants import ResponsesEventType, generate_message_id
-from .stream_context import OpenAIResponsesStreamContext
+from .stream_context import OpenResponsesStreamContext
 
 
 def resolve_call_id(chunk: dict[str, Any], context: StreamContext | None) -> str:
@@ -19,14 +19,14 @@ def resolve_call_id(chunk: dict[str, Any], context: StreamContext | None) -> str
 
     Args:
         chunk: Responses API event dict.
-        context: Stream context (must be ``OpenAIResponsesStreamContext``
+        context: Stream context (must be ``OpenResponsesStreamContext``
             for item_id resolution to work).
 
     Returns:
         The resolved call_id, or ``""`` if unresolvable.
     """
     call_id = chunk.get("call_id", "")
-    if not call_id and isinstance(context, OpenAIResponsesStreamContext):
+    if not call_id and isinstance(context, OpenResponsesStreamContext):
         item_id = chunk.get("item_id", "")
         if item_id:
             call_id = context.item_id_to_call_id.get(item_id, "")
@@ -35,7 +35,7 @@ def resolve_call_id(chunk: dict[str, Any], context: StreamContext | None) -> str
 
 def _build_message_item_skeleton(
     item_id: str,
-    context: OpenAIResponsesStreamContext,
+    context: OpenResponsesStreamContext,
 ) -> dict[str, Any]:
     """Build message item dict for output_item.added, including phase if available."""
     item: dict[str, Any] = {
@@ -64,7 +64,7 @@ def _build_content_part(content_part_type: str) -> dict[str, Any]:
 
 
 def build_message_preamble_events(
-    context: OpenAIResponsesStreamContext,
+    context: OpenResponsesStreamContext,
     content_part_type: str = "output_text",
 ) -> list[dict[str, Any]]:
     """Build output_item.added + content_part.added for a new message item.

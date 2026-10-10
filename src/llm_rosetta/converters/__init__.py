@@ -19,7 +19,7 @@ from .google_generate import (
 )  # deprecated alias
 from .google_interactions import GoogleInteractionsConverter
 from .openai_chat import OpenAIChatConverter
-from .openai_responses import OpenAIResponsesConverter
+from .openai_responses import OpenAIResponsesConverter, OpenResponsesConverter
 from .decision import (
     EmbeddingDecisionConverter,
     LLMChatDecisionConverter,
@@ -43,6 +43,7 @@ __all__ = [
     "GoogleConverter",
     "GoogleInteractionsConverter",
     "OpenAIResponsesConverter",
+    "OpenResponsesConverter",
     "JinaRerankConverter",
     "CohereRerankConverter",
     "VoyageRerankConverter",

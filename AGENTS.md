@@ -29,10 +29,16 @@ Five chat converters, one per API standard:
 | Converter | API Standard | Module |
 |-----------|-------------|--------|
 | `openai_chat` | OpenAI Chat Completions | `converters/openai_chat/` |
-| `openai_responses` | OpenAI Responses API | `converters/openai_responses/` |
+| `openai_responses` / `open_responses` | OpenAI Responses API / Open Responses spec | `converters/openai_responses/` |
 | `anthropic` | Anthropic Messages API | `converters/anthropic/` |
 | `google_generate` | Google generateContent API | `converters/google_generate/` |
 | `google_interactions` | Google Interactions API | `converters/google_interactions/` |
+
+`OpenResponsesConverter` implements the vendor-neutral Open Responses spec (the
+base of the two Responses classes); `OpenAIResponsesConverter` derives from it as
+the OpenAI profile (adds the `resp_` id prefix, `store: true`, and OpenAI-only
+echo fields). The `OpenAIResponses*` ops classes are aliases of the
+`OpenResponses*` ones.
 
 Each chat converter implements bidirectional conversion (request/response) and
 streaming. Converters are provider-agnostic — provider-specific quirks are

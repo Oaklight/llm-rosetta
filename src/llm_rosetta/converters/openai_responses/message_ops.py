@@ -30,13 +30,14 @@ from ...types.ir import (
     is_tool_result_part,
 )
 from ...types.ir.messages import MessageMetadata
+from ...types.ir.passthrough import ProviderPassthroughItem
 from ..base import BaseMessageOps
 from ..base.tools.batch import assign_tool_batch_ids
-from .content_ops import OpenAIResponsesContentOps
-from .tool_ops import OpenAIResponsesToolOps
+from .content_ops import OpenResponsesContentOps
+from .tool_ops import OpenResponsesToolOps
 
 
-class OpenAIResponsesMessageOps(BaseMessageOps):
+class OpenResponsesMessageOps(BaseMessageOps):
     """OpenAI Responses API message conversion operations.
 
     Stateful: holds references to content_ops and tool_ops instances.
@@ -45,8 +46,8 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
 
     def __init__(
         self,
-        content_ops: OpenAIResponsesContentOps,
-        tool_ops: OpenAIResponsesToolOps,
+        content_ops: OpenResponsesContentOps,
+        tool_ops: OpenResponsesToolOps,
     ):
         self.content_ops = content_ops
         self.tool_ops = tool_ops
@@ -373,6 +374,13 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
         {"tool_search_call", "tool_search_output", "additional_tools"}
     )
 
+    # Bare (non-slug) item types with no IR equivalent.  Unlike
+    # ``_PASSTHROUGH_INPUT_TYPES`` — which re-emits across providers — these
+    # are tagged with the source provider via ``ProviderPassthroughItem`` so
+    # they survive same-format round-trips but are dropped for other targets
+    # (the payload is provider-bound, e.g. ``compaction``'s encrypted blob).
+    _OPAQUE_ITEM_TYPES = frozenset({"compaction"})
+
     _TOOL_RESULT_TYPES = frozenset(
         {
             "function_call_output",
@@ -403,6 +411,8 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
     def p_messages_to_ir(  # noqa: C901
         self,
         provider_messages: list[Any],
+        *,
+        provider: str = "",
         **kwargs: Any,
     ) -> list[IRInputItem]:
         """OpenAI Responses items → IR Messages.
@@ -456,6 +466,18 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
                     ir_input.append(current_message)
                     current_message = None
                 ir_input.append(self._make_system_event(item))
+
+            elif item_type in self._OPAQUE_ITEM_TYPES and provider:
+                if current_message:
+                    ir_input.append(current_message)
+                    current_message = None
+                ir_input.append(
+                    ProviderPassthroughItem(
+                        type="provider_passthrough_item",
+                        provider=provider,
+                        payload=dict(item),
+                    )
+                )
 
             elif self._is_passthrough_item_type(item_type):
                 current_message = self._handle_p_extension_item(
@@ -620,3 +642,8 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
             ]
 
         return []
+
+
+# Backward-compatible alias (deprecated): the OpenAI Responses profile reuses
+# the same message operations as the vendor-neutral Open Responses base.
+OpenAIResponsesMessageOps = OpenResponsesMessageOps

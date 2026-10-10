@@ -20,6 +20,7 @@
       "enum": [
         "openai_chat",
         "openai_responses",
+        "open_responses",
         "anthropic",
         "google_generate",
         "google_interactions",
