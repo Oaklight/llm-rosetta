@@ -211,6 +211,8 @@ async def get_config(request: Any) -> Response:
                     "consecutive_failures": 0,
                     "last_error": None,
                 }
+            if pinfo is not None:
+                masked["keyless"] = pinfo.keyless
         masked_providers[name] = masked
 
     # Normalize models to dict format for consistent admin UI
@@ -249,6 +251,7 @@ async def get_config(request: Any) -> Response:
                     "name": s.name,
                     "base": s.base,
                     "logo": s.logo,
+                    "display_name": s.display_name,
                     "free_source": s.free_source,
                     "keyless": s.connection.keyless,
                     "default_base_url": s.connection.base_url,

@@ -199,7 +199,6 @@ tr:hover td { background: var(--bg-hover); }
   border-bottom: 1px solid var(--border);
 }
 .provider-section-head:first-child { margin-top: 0; }
-.provider-section-head.is-free { color: var(--accent); border-bottom: 2px solid var(--accent); }
 .provider-card .pc-models { margin-left: auto; }
 .provider-card .pc-models-empty { display: none; }
 

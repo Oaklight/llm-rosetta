@@ -42,7 +42,7 @@ class TestKeylessProvider:
 
     def test_free_shim_sends_no_auth(self):
         load_providers()
-        info = build_provider_info("openai_chat", {}, shim_name="free--openai_chat")
+        info = build_provider_info("openai_chat", {}, shim_name="kilo--openai_chat")
 
         assert info.auth_headers() == {}
         assert info.ready is True
@@ -52,7 +52,7 @@ class TestKeylessProvider:
     def test_free_shim_with_key_sends_bearer(self):
         load_providers()
         info = build_provider_info(
-            "openai_chat", {"api_key": "sk-x"}, shim_name="free--openai_chat"
+            "openai_chat", {"api_key": "sk-x"}, shim_name="kilo--openai_chat"
         )
 
         assert info.auth_headers() == {"Authorization": "Bearer sk-x"}
