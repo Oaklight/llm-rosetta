@@ -342,7 +342,13 @@ async def put_provider(request: Any, **kwargs: Any) -> Response:
         if not api_key and resolve_name in existing_providers:
             api_key = existing_providers[resolve_name].get("api_key", "")
 
-        if not api_key or not base_url:
+        # A shim can supply the connection defaults, so neither field is
+        # mandatory when the selected type is one: the shim's base_url, and —
+        # for a keyless shim (free resource) — no credential at all.
+        shim = get_shim(body.get("type") or resolve_name)
+        shim_base = bool(shim and shim.connection.base_url)
+        keyless_ok = bool(shim and shim.connection.keyless)
+        if (not base_url and not shim_base) or (not api_key and not keyless_ok):
             return JSONResponse(
                 {"error": "Both 'api_key' and 'base_url' are required"},
                 status_code=400,
