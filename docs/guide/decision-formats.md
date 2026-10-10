@@ -6,13 +6,14 @@ title: Decision API 格式
 
 Decision 模型对 state（上下文）执行类型化的 questions，返回结构化的概率分布答案——不涉及文本生成。这是与 chat completions、embedding、rerank 并列的独立模型范式。
 
-LLM-Rosetta 目前支持 **1 个格式族**，预计随着范式成熟会有更多 provider 加入。
+LLM-Rosetta 目前支持 **2 个格式族**，预计随着范式成熟会有更多 provider 加入。
 
 ## 概览
 
 | 格式族 | Provider | Endpoint | Converter 类 |
 |-------|----------|----------|--------------|
 | TypeSafe System One | TypeSafe AI (Jev) | `POST /v1/systemone` | `TypeSafeDecisionConverter` |
+| OpenAI Decisions | OpenAI | `POST /v1/decisions` | `OpenAIDecisionsConverter` |
 
 ## 核心概念
 
@@ -148,6 +149,33 @@ request: IRDecisionRequest = {
 }
 ```
 
+### OpenAI Decisions
+
+OpenAI Decisions API 接收 `input`（字符串或 user messages）与 `questions`
+**数组**；每个问题带 `name`，类型为 `predicate` / `choice` / `score`。
+
+```json
+{
+  "model": "gpt-6-luna",
+  "input": "帮帮我！我的付款已经失败三天了。",
+  "questions": [
+    {"type": "predicate", "name": "is_urgent",
+     "instructions": "是否表达了紧急性？"},
+    {"type": "choice", "name": "department",
+     "instructions": "哪个团队应该处理？",
+     "choices": [{"value": "billing", "description": "付款、发票、退款"},
+                 {"value": "technical", "description": "Bug、故障、集成"}]},
+    {"type": "score", "name": "frustration",
+     "instructions": "客户有多沮丧？",
+     "levels": [{"label": "平静"}, {"label": "沮丧"}, {"label": "非常愤怒"}]}
+  ]
+}
+```
+
+其 IR 请求与上方 TypeSafe 的 IR 完全一致；`OpenAIDecisionsConverter` 把
+`questions` 映射为数组（按 `name` 作 key），并把断言的 entries 折进
+`instructions` 里一个带标记、可逆的 JSON 信封。
+
 ## 响应格式
 
 ### TypeSafe System One
@@ -203,6 +231,29 @@ response: IRDecisionResponse = {
 }
 ```
 
+### OpenAI Decisions
+
+```json
+{
+  "model": "gpt-6-luna",
+  "answers": [
+    {"type": "predicate", "name": "is_urgent", "probability": 0.92},
+    {"type": "choice", "name": "department", "choice": "billing",
+     "probabilities": [{"value": "billing", "probability": 0.95},
+                       {"value": "technical", "probability": 0.02}],
+     "confidence": 0.93},
+    {"type": "score", "name": "frustration", "score": 1.1,
+     "probabilities": [{"value": 0, "label": "平静", "probability": 0.1},
+                       {"value": 1, "label": "沮丧", "probability": 0.6},
+                       {"value": 2, "label": "非常愤怒", "probability": 0.3}],
+     "confidence": 0.55}
+  ]
+}
+```
+
+`answers` 为数组、按 `name` 作 key；也可能是 `{"type": "refusal", "name": ...}`。
+`OpenAIDecisionsConverter` 把 `probabilities` 数组重映射回 IR 的分布字典。
+
 ## 使用 Converter
 
 ```python
@@ -221,9 +272,10 @@ wire_response = converter.response_to_provider(ir_response)
 
 ## 网关路由
 
-网关注册了两个 decision 路由：
+网关注册了三个 decision 路由：
 
 - `POST /v1/decision` — 标准路由
+- `POST /v1/decisions` — OpenAI 兼容别名
 - `POST /v1/systemone` — TypeSafe 兼容别名
 
 !!! warning "Phase 1 限制"
