@@ -335,6 +335,10 @@ def _ir_intrinsic_to_responses(
     *,
     for_history: bool = False,
 ) -> dict[str, Any]:
+    # History mapping keys off the kind only.  It is deliberately not gated
+    # by the target shim (which gates *definitions*): a history part is
+    # context, and its shape here is independent of whether the same kind is
+    # currently declared.  See the note in pipeline.py / #839.
     intrinsic_kind = get_intrinsic_kind(ir_tool_call, tool_name)
     item_type = _INTRINSIC_KIND_TO_ITEM.get(intrinsic_kind, "function_call")
 
