@@ -217,7 +217,7 @@ def _question_to_wire(q: Mapping[str, Any], warnings: list[str]) -> dict[str, An
         }
     elif ir_type == "score":
         result["criteria"] = [
-            entry.get("description", entry["label"]) for entry in q["criteria"]
+            entry.get("description") or str(entry["label"]) for entry in q["criteria"]
         ]
     return result
 
