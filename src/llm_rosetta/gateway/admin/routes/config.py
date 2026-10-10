@@ -12,8 +12,10 @@ from llm_rosetta.shims import get_shim, list_shims
 
 from ...config import GatewayConfig
 from ...providers import (
+    BASE_FORMATS,
     get_default_api_key_env,
     get_default_base_url,
+    get_default_supports_custom_tools,
     known_provider_types,
 )
 from ._shared import (
@@ -33,6 +35,39 @@ from ._shared import (
 import logging
 
 logger = logging.getLogger("llm-rosetta-gateway")
+
+# Opinionated: the vendor shim to recommend for each base format.  A shim that
+# is not registered degrades to None (the picker then shows no hint).
+_BASE_FORMAT_RECOMMENDED: dict[str, str] = {
+    "openai_chat": "openai",
+    "openai_responses": "openai_responses",
+    "anthropic": "anthropic",
+    "google_generate": "google",
+    "google_interactions": "google_interactions",
+}
+
+
+def _base_formats_payload() -> list[dict[str, Any]]:
+    """Payload for the base-format options in the provider-type picker.
+
+    The set of formats follows ``BASE_FORMATS`` (next to ``_PROVIDER_REGISTRY``)
+    so a new base type is added in one place.  ``supports_custom_tools`` carries
+    the format's own default so a bare format matches its vendor shim instead of
+    silently dropping the toggle.
+    """
+    out: list[dict[str, Any]] = []
+    for name in BASE_FORMATS:
+        rec = _BASE_FORMAT_RECOMMENDED.get(name)
+        out.append(
+            {
+                "name": name,
+                "default_base_url": get_default_base_url(name),
+                "default_api_key_env": get_default_api_key_env(name),
+                "supports_custom_tools": get_default_supports_custom_tools(name),
+                "recommended_provider": rec if rec and get_shim(rec) else None,
+            }
+        )
+    return out
 
 
 def _get_model_type_metadata() -> list[dict[str, Any]]:
@@ -250,24 +285,7 @@ async def get_config(request: Any) -> Response:
             "api_keys_db": config.api_keys_db,
             "version": _get_version(),
             "known_provider_types": known_provider_types(),
-            "base_formats": [
-                {
-                    "name": name,
-                    "base": name,
-                    "default_base_url": get_default_base_url(name),
-                    "default_api_key_env": get_default_api_key_env(name),
-                    # A same-standard provider shim, when one is registered, is
-                    # the recommended way to reach a vendor's own endpoint.
-                    "recommended_provider": rec if get_shim(rec) is not None else None,
-                }
-                for name, rec in (
-                    ("openai_chat", "openai"),
-                    ("openai_responses", "openai_responses"),
-                    ("anthropic", "anthropic"),
-                    ("google_generate", "google"),
-                    ("google_interactions", "google_interactions"),
-                )
-            ],
+            "base_formats": _base_formats_payload(),
             "registered_shims": [
                 {
                     "name": s.name,
