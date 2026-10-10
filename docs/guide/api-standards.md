@@ -12,7 +12,7 @@ LLM-Rosetta supports 6 API standards across 4 LLM providers. Each standard defin
 |---|---|---|---|
 | `openai_chat` | OpenAI Chat Completions | `POST /v1/chat/completions` | `OpenAIChatConverter` |
 | `openai_responses` | OpenAI Responses | `POST /v1/responses` | `OpenAIResponsesConverter` |
-| `open_responses` | Open Responses | `POST /v1/responses` | `OpenAIResponsesConverter` |
+| `open_responses` | Open Responses | `POST /v1/responses` | `OpenResponsesConverter` |
 | `anthropic` | Anthropic Messages | `POST /v1/messages` | `AnthropicConverter` |
 | `google` | Google GenAI | `POST /v1beta/models/{model}:generateContent` | `GoogleConverter` |
 | `google_interactions` | Google Interactions | `POST /v1beta/interactions` | `GoogleInteractionsConverter` |
@@ -110,17 +110,20 @@ OpenAI's newer API format (2025). Uses a flat list of typed items instead of nes
 
 [Open Responses](https://www.openresponses.org/) is an open-source, vendor-neutral specification (Apache 2.0) that extends the OpenAI Responses API. Initiated by OpenAI in January 2026, it adds formal extensibility rules while maintaining full backward compatibility.
 
-In LLM-Rosetta, `open_responses` is an alias for `openai_responses` — the same `OpenAIResponsesConverter` handles both formats.
+The spec is the base and the OpenAI Responses API is a conforming profile: `OpenResponsesConverter` implements the vendor-neutral standard, and `OpenAIResponsesConverter` derives from it — adding the `resp_` response-id prefix, OpenAI-only lifecycle echo fields (`billing`, `moderation`, …), and OpenAI's `store: true` default. Both classes are importable; the `OpenAIResponses*` ops classes are kept as aliases of the `OpenResponses*` ones.
 
-**Differences from OpenAI Responses:**
+`open_responses` has its own shim (`shims/providers/open_responses/provider.yaml`) with no canonical host and no response-id prefix, so a deployment must supply a base URL (for example an OpenRouter, vLLM, or Ollama endpoint) — the gateway no longer defaults it to OpenAI.
+
+**Differences from the OpenAI Responses profile:**
 
 | Feature | Description |
 |---------|-------------|
 | `OpenResponses-Version` header | Spec versioning mechanism — the gateway forwards this header to upstream |
-| Slug-prefixed extensions | `implementor:type_name` items, tools, and events (e.g., `openai:web_search_call`) |
-| Reasoning `content` field | Raw reasoning traces from open-weight models |
-| `allowed_tools` field | Cache-preserving tool restriction |
-| Stateless default | No server-side state assumption |
+| Slug-prefixed extensions | `implementor:type_name` items, tools, and events (e.g., `openai:web_search_call`), preserved opaquely on same-format round-trips |
+| Reasoning `content` field | Raw reasoning traces from open-weight models (alongside `summary`) |
+| `allowed_tools` | Cache-preserving tool restriction, expressed as a `tool_choice` variant (`{"type": "allowed_tools", ...}`) |
+| `compaction` items | Encrypted context-compaction items (added 2026-04-24) — preserved on same-format round-trips, dropped for other targets |
+| Stateless default | No server-side state assumption; `previous_response_id` is passed through rather than enforced |
 
 **Adopters:** OpenRouter, Hugging Face, Vercel, LM Studio, Ollama, vLLM.
 
