@@ -104,6 +104,21 @@ class TestAllowedToolsToolChoice:
         assert "allowed_tools" not in out
         assert "_open_responses_allowed_tools" not in out
 
+    def test_tool_choice_auto_creates_no_empty_extensions(self):
+        conv = OpenResponsesConverter()
+        ir = conv.request_from_provider(
+            {"model": "m", "input": [_user()], "tool_choice": "auto"},
+            context=ConversionContext(),
+        )
+        assert "provider_extensions" not in ir
+
+    def test_cross_format_drop_warns_the_restriction_is_lost(self):
+        pipe = ConversionPipeline("open_responses", "openai_chat", baseline=False)
+        pipe.convert_request(self._body())
+        assert any(
+            "allowed_tools" in w and "unrestricted" in w for w in pipe.warnings
+        ), pipe.warnings
+
     def test_no_leak_onto_openai_chat(self):
         out = convert(
             self._body(),
