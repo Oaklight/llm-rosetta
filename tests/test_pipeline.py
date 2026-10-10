@@ -544,6 +544,45 @@ class TestConversionPipeline:
         assert "messages" in target
         assert target["model"] == "gpt-4"
 
+    @pytest.mark.parametrize("target_provider", ["google", "google_generate"])
+    def test_google_target_emits_rest_body(self, target_provider):
+        """Both google provider names select the REST body shape (#882).
+
+        SDK-shaped output (``config``) is rejected by the Generative
+        Language REST endpoint, so the canonical ``google_generate``
+        name must apply the same REST transform as the ``google`` shim
+        name.
+        """
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        pipeline = ConversionPipeline("anthropic", target_provider)
+        target = pipeline.convert_request(
+            {
+                "model": "gemini-2.0-flash",
+                "messages": [{"role": "user", "content": "hello"}],
+                "max_tokens": 16,
+            }
+        )
+        assert "generationConfig" in target
+        assert "config" not in target
+
+    def test_google_generate_sdk_override_still_honoured(self):
+        """Explicit ``google_output_format='sdk'`` bypasses the REST default."""
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        pipeline = ConversionPipeline(
+            "anthropic", "google_generate", google_output_format="sdk"
+        )
+        target = pipeline.convert_request(
+            {
+                "model": "gemini-2.0-flash",
+                "messages": [{"role": "user", "content": "hello"}],
+                "max_tokens": 16,
+            }
+        )
+        assert "config" in target
+        assert "generationConfig" not in target
+
     def test_chat_reasoning_request_omits_unproven_native_item(self):
         """Chat reasoning is not portable as a native Responses input item."""
         from llm_rosetta.pipeline import ConversionPipeline
