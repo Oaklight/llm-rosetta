@@ -262,5 +262,23 @@ class TestEdgeCases:
         wire, warnings = converter.request_to_provider(ir)
         assert any("image" in w.lower() for w in warnings)
 
+    def test_choice_unknown_probability_round_trip(self, converter):
+        resp = {
+            "model": "jev-1.13.0",
+            "answers": {
+                "q": {
+                    "type": "choice",
+                    "choice": "a",
+                    "probabilities": {"a": 0.7, "b": 0.3},
+                    "confidence": 0.5,
+                    "unknown_probability": 0.2,
+                }
+            },
+        }
+        ir = converter.response_from_provider(resp)
+        assert ir["answers"]["q"]["unknown_probability"] == 0.2
+        wire = converter.response_to_provider(ir)
+        assert wire["answers"]["q"]["unknown_probability"] == 0.2
+
     def test_converter_tag(self, converter):
         assert converter._CONVERTER_TAG == "typesafe_decision"
