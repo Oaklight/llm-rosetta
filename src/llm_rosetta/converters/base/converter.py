@@ -872,14 +872,15 @@ class BaseConverter(ABC):
         for t in ir_tools:
             cached = get_cached_tool(tag, t)
             if cached is not _SENTINEL:
-                results.append(cached)
+                converted = cached
             else:
                 converted = self.tool_ops.ir_tool_definition_to_p(t)
                 put_cached_tool(tag, t, converted)
-                # A falsy result means the target cannot express this tool
-                # (e.g. an intrinsic tool on a provider without server tools).
-                if converted:
-                    results.append(converted)
+            # A falsy result means the target cannot express this tool (e.g. an
+            # intrinsic tool on a provider without server tools).  Check it on
+            # both branches — the cache stores the falsy result too.
+            if converted:
+                results.append(converted)
 
         return results
 

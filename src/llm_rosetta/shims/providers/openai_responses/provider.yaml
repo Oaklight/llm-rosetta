@@ -7,10 +7,14 @@ connection:
   api_key_env: OPENAI_API_KEY
 
 tools:
+  # Kinds this provider can accept from cross-format translation.  A bare
+  # `file_search` requires `vector_store_ids`, which cannot be synthesised
+  # from a foreign request, so it is not listed here (it is still recognised
+  # on the source side and round-trips same-format via the preserved native
+  # payload).
   intrinsic_tools:
     - web_search
     - code_interpreter
-    - file_search
   custom_tools: true
   search_mode: native
 response_id_prefix: "resp_"
