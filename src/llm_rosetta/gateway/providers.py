@@ -213,16 +213,6 @@ def build_provider_info(
     else:
         base_type = provider_type
 
-    # Keyless upstream (a free public gateway): send no credential while no
-    # API key and no token_command is configured. Supplying either switches
-    # back to the base type's auth, so a paid account can use the same shim.
-    keyless = bool(
-        shim
-        and shim.connection.keyless
-        and not cfg.get("api_key")
-        and not cfg.get("token_command")
-    )
-
     reg = _PROVIDER_REGISTRY.get(base_type)
 
     if reg:
@@ -245,10 +235,6 @@ def build_provider_info(
         header_name = shim.connection.auth_header
         auth_fn = lambda key, _h=header_name: {_h: key}  # noqa: E731
 
-    # A keyless provider sends no auth header at all.
-    if keyless:
-        auth_fn = no_auth
-
     # Per-provider url_template / stream_url_template override from config
     if "url_template" in cfg:
         url_tpl = cfg["url_template"]
@@ -265,6 +251,21 @@ def build_provider_info(
         env_val = os.environ.get(default_env, "")
         if env_val:
             cfg = {**cfg, "api_key": env_val}
+
+    # Keyless upstream (a free public gateway): send no credential while no
+    # api_key and no token_command is configured.  Computed only after every
+    # api_key source (config, shim env, base-type env) so a key resolved from
+    # the environment still disables keyless.  Supplying a key or a
+    # token_command switches back to the base type's auth, so a paid account
+    # can use the same shim.
+    keyless = bool(
+        shim
+        and shim.connection.keyless
+        and not cfg.get("api_key")
+        and not cfg.get("token_command")
+    )
+    if keyless:
+        auth_fn = no_auth
 
     # Per-provider proxy overrides global proxy
     proxy_url = cfg.get("proxy") or global_proxy or None
