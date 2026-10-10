@@ -45,6 +45,8 @@ _PROVIDER_REGISTRY: dict[str, dict[str, Any]] = {
     "open_responses": {
         # Vendor-neutral spec: no canonical host, so no default base URL.
         # A deployment must supply ``base_url`` (config or shim connection).
+        # The default key env is kept independent of the host.
+        "default_api_key_env": "OPENAI_API_KEY",
         "auth_header_fn": openai_auth,
         "url_template": "{base_url}/responses",
     },
@@ -127,7 +129,9 @@ def _resolve_token_command(
     token_refresh_interval = int(cfg.get("token_refresh_interval", 3600))
 
     if token_command is None:
-        return cfg["api_key"], None, token_refresh_interval
+        # ``api_key`` may legitimately be absent; return an empty string so the
+        # caller reaches its own clear error rather than a bare ``KeyError``.
+        return cfg.get("api_key", ""), None, token_refresh_interval
 
     if isinstance(token_command, str):
         raise ValueError(
