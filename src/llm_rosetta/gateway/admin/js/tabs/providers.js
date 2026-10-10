@@ -8,7 +8,7 @@
 
 import { S, _CAP_ICONS, populateCapIcons } from '../core/state.js';
 import { t } from '../core/i18n.js';
-import { api, showToast, showToastHtml, closeModal, esc, copyText, inlineConfirm } from '../core/utils.js';
+import { api, showToast, showToastHtml, closeModal, esc, copyText, inlineConfirm, isFreeEntry, freeEntryLabel } from '../core/utils.js';
 import { initLogoPicker, setLogoPickerValue, getLogoPickerValue } from '../components/logo-picker.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -23,26 +23,18 @@ function _freeShims() {
   return ((S.configData && S.configData.registered_shims) || []).filter(s => s.free_source);
 }
 
-/** The registered shim backing provider *name*, or null. */
-function _shimOf(name) {
-  const cfg = S.configData && S.configData.providers ? S.configData.providers[name] : null;
-  const typeName = (cfg && cfg.type) || name;
-  return ((S.configData && S.configData.registered_shims) || []).find(s => s.name === typeName) || null;
-}
-
 /** A free *entry*: a keyless provider backed by a free-source shim.
- *  The same source configured with a key is a normal provider. */
+ *  The same source configured with a key is a normal provider.
+ *  Shared with models.js via core/utils.js so the rule lives in one place. */
 function _isFreeProvider(name) {
-  const cfg = S.configData && S.configData.providers ? S.configData.providers[name] : null;
-  const shim = _shimOf(name);
-  return !!(shim && shim.free_source && cfg && cfg.keyless === true);
+  return isFreeEntry(S.configData?.providers, S.configData?.registered_shims, name);
 }
 
 /** Display title for a free entry, e.g. "Kilo (Free)". */
 function _freeTitle(name) {
-  const shim = _shimOf(name);
-  const brand = (shim && shim.display_name) || (shim ? _capitalize(shim.name.split('--')[0]) : name);
-  return `${brand} ${t('free.suffix')}`;
+  return freeEntryLabel(
+    S.configData?.providers, S.configData?.registered_shims, name, t('free.suffix'),
+  );
 }
 
 /** Model ids currently routed to provider *name*. */
@@ -75,6 +67,9 @@ function _syncKeylessUI() {
   const show = k => { const el = document.getElementById(k); if (el) el.style.display = keyless ? 'none' : ''; };
   show('provApiKeyRow');
   show('provApiKeySingleFooter');
+  // Hide the required asterisk when the key is optional, so the label never
+  // reads "API Key * (optional)".
+  show('provRequiredMark');
   const hint = document.getElementById('provKeylessHint');
   if (hint) hint.style.display = keyless ? '' : 'none';
   const optTag = document.getElementById('provOptionalTag');

@@ -177,7 +177,9 @@ def build_provider_info(
     *shim_name* is the registered shim name (e.g. ``"deepseek"``) when the
     provider was configured via a shim.  Shim defaults are looked up from it;
     when omitted, *provider_type* is tried as a shim name too (callers that
-    pass a shim name as *provider_type* keep working).
+    pass a shim name as *provider_type* keep working).  Gateway callers should
+    pass *shim_name* explicitly: they resolve the shim to its base type first,
+    so otherwise the shim — and its connection defaults — would be lost.
 
     *cfg* is the dict from the JSONC config, e.g.
     ``{"api_key": "sk-...", "base_url": "https://..."}``
@@ -197,10 +199,14 @@ def build_provider_info(
     shim = get_shim(shim_name or provider_type)
     if shim is not None:
         base_type = shim.base
-        # Apply shim defaults where config is missing
-        if "base_url" not in cfg and shim.connection.base_url:
+        # Apply shim defaults where the config value is missing *or empty*.
+        # The admin's _build_provider_entry always writes both keys (possibly
+        # ""), and a hand-edited jsonc may carry "base_url": "" — an empty
+        # string must not shadow the shim default, or ProviderInfo would raise
+        # on a base_url that doesn't start with http.
+        if not cfg.get("base_url") and shim.connection.base_url:
             cfg = {**cfg, "base_url": shim.connection.base_url}
-        if "api_key" not in cfg and shim.connection.api_key_env:
+        if not cfg.get("api_key") and shim.connection.api_key_env:
             env_val = os.environ.get(shim.connection.api_key_env, "")
             if env_val:
                 cfg = {**cfg, "api_key": env_val}
@@ -208,9 +214,14 @@ def build_provider_info(
         base_type = provider_type
 
     # Keyless upstream (a free public gateway): send no credential while no
-    # API key is configured. Supplying a key switches back to the base type's
-    # auth, so a paid account can use the same shim.
-    keyless = bool(shim and shim.connection.keyless and not cfg.get("api_key"))
+    # API key and no token_command is configured. Supplying either switches
+    # back to the base type's auth, so a paid account can use the same shim.
+    keyless = bool(
+        shim
+        and shim.connection.keyless
+        and not cfg.get("api_key")
+        and not cfg.get("token_command")
+    )
 
     reg = _PROVIDER_REGISTRY.get(base_type)
 
@@ -244,12 +255,12 @@ def build_provider_info(
     if "stream_url_template" in cfg:
         stream_tpl = cfg["stream_url_template"]
 
-    # Fall back to base-type defaults if still missing
-    if "base_url" not in cfg:
+    # Fall back to base-type defaults if still missing or empty
+    if not cfg.get("base_url"):
         default_url = get_default_base_url(base_type)
         if default_url:
             cfg = {**cfg, "base_url": default_url}
-    if "api_key" not in cfg:
+    if not cfg.get("api_key"):
         default_env = get_default_api_key_env(base_type)
         env_val = os.environ.get(default_env, "")
         if env_val:
@@ -260,7 +271,8 @@ def build_provider_info(
 
     # -- token_command: dynamic key refresh ------------------------------------
     if keyless:
-        api_key, token_command, token_refresh_interval = "", None, 3600
+        # Inert: a keyless provider has no credential and no refresh.
+        api_key, token_command, token_refresh_interval = "", None, 0
     else:
         api_key, token_command, token_refresh_interval = _resolve_token_command(
             provider_type, cfg

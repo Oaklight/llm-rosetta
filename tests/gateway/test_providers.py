@@ -64,3 +64,27 @@ class TestKeylessProvider:
 
         with pytest.raises(ValueError, match="No API keys configured"):
             info.auth_headers()
+
+    def test_token_command_disables_keyless(self):
+        """A keyless shim driven by token_command is not treated as keyless —
+        the command (and its dynamic credential) must not be dropped."""
+        load_providers()
+        info = build_provider_info(
+            "openai_chat",
+            {"token_command": ["echo", "tok"]},
+            shim_name="kilo--openai_chat",
+        )
+
+        assert info.keyless is False
+        assert info.token_command == ["echo", "tok"]
+
+    def test_empty_base_url_falls_back_to_shim_default(self):
+        """An empty base_url string must not shadow the shim's default."""
+        load_providers()
+        info = build_provider_info(
+            "openai_chat",
+            {"api_key": "sk-x", "base_url": ""},
+            shim_name="kilo--openai_chat",
+        )
+
+        assert info.base_url == "https://api.kilo.ai/api/gateway"

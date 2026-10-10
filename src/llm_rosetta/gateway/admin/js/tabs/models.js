@@ -1,7 +1,7 @@
 // models.js — Model management: modal, CRUD, rendering, filtering, bulk ops
 import { S, _CAP_ICONS } from '../core/state.js';
 import { t } from '../core/i18n.js';
-import { api, showToast, closeModal, esc, inlineConfirm } from '../core/utils.js';
+import { api, showToast, closeModal, esc, inlineConfirm, isFreeEntry, freeEntryLabel } from '../core/utils.js';
 
 // ── helpers (module-private) ──
 
@@ -366,22 +366,13 @@ function _getProviderDetails(info) {
   return [{name: info.provider || '', upstream_model: info.upstream_model}];
 }
 
-/** True when *providerName* is a keyless entry of a free-source shim. */
-function _isFreeProviderName(providerName) {
-  const cfg = S.configData?.providers?.[providerName];
-  const typeName = (cfg && cfg.type) || providerName;
-  const shim = (S.configData?.registered_shims || []).find(s => s.name === typeName);
-  return !!(shim && shim.free_source && cfg && cfg.keyless === true);
-}
-
-/** Label for a provider cell — "<Brand> (Free)" for a free entry, else the name. */
+/** Label for a provider cell — "<Brand> (Free)" for a free entry, else the name.
+ *  The free-entry rule is shared with providers.js via core/utils.js. */
 function _providerLabel(providerName) {
-  if (!_isFreeProviderName(providerName)) return providerName;
-  const cfg = S.configData?.providers?.[providerName];
-  const typeName = (cfg && cfg.type) || providerName;
-  const shim = (S.configData?.registered_shims || []).find(s => s.name === typeName);
-  const brand = (shim && shim.display_name) || providerName;
-  return `${brand} ${t('free.suffix')}`;
+  const providers = S.configData?.providers;
+  const shims = S.configData?.registered_shims;
+  if (!isFreeEntry(providers, shims, providerName)) return providerName;
+  return freeEntryLabel(providers, shims, providerName, t('free.suffix'));
 }
 
 function _renderProviderCell(name, info, disabledProviders) {
