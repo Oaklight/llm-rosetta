@@ -83,7 +83,9 @@ Passthrough 数据带有 converter dialect 标签，例如 `openai_responses` �
 
 同格式的 IR 往返是最基本的保真度检验。如果连单一格式的往返都会丢信息，跨格式转换就更不用提了。这是所有请求都走 IR 的根本原因，而且转换开销控制得够低，实际使用中不构成问题。
 
-在 `25924518`（2026 年 8 月）之前，pipeline 根本没有 passthrough 路径。后来加上它和配套的保真度检查器，是为了方便做影子对比测试——把 passthrough 输出和 IR 转换输出做 diff，抓往返回归问题。这是个测试工具，不是预期的生产路径。
+在 `25924518`（2026 年 8 月）之前，pipeline 根本没有 `baseline` 模式。后来加上它和配套的保真度检查器，是为了让翻译问题**同步暴露**：同一个请求同时走 IR 路径和 `baseline`，把两者输出做 diff，抓往返回归问题。`baseline` 是定位翻译问题的诊断模式，不是生产路径。
+
+这是一项长期的设计决定，而非实现细节：**网关不会对同格式路由走捷径——所有请求依然经过 IR 转换。** `baseline` 只为同步暴露翻译问题而存在，不存在绕过 IR 的路径。`prefer_same_format` 只影响为某个模型*挑选哪个*上游 provider——它绝不会绕过 IR 转换。决策记录：[#577 评论](https://github.com/Oaklight/llm-rosetta/issues/577#issuecomment-5461182245)。
 
 ## Round-Trip 兼容性
 
