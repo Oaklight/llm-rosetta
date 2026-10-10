@@ -448,7 +448,10 @@ class GatewayConfig:
         # Build ProviderInfo objects (with key rotation support)
         self.providers: dict[str, ProviderInfo] = {
             name: build_provider_info(
-                self.provider_types[name], cfg, global_proxy=self.proxy
+                self.provider_types[name],
+                cfg,
+                global_proxy=self.proxy,
+                shim_name=self.provider_shim_names.get(name),
             )
             for name, cfg in self._raw_providers.items()
         }

@@ -175,13 +175,18 @@ def build_provider_info(
     cfg: dict[str, Any],
     *,
     global_proxy: str | None = None,
+    shim_name: str | None = None,
 ) -> ProviderInfo:
     """Create a :class:`ProviderInfo` from a provider config dict.
 
-    *provider_type* may be a base converter type (e.g. ``"openai_chat"``)
-    or a registered shim name (e.g. ``"deepseek"``).  When a shim is
-    found, its ``default_base_url`` and ``default_api_key_env`` are used
-    as fallbacks when the config does not specify them.
+    *provider_type* is the base converter type (e.g. ``"openai_chat"``).
+    When a shim is found, its ``default_base_url`` and ``default_api_key_env``
+    are used as fallbacks when the config does not specify them.
+
+    *shim_name* is the registered shim name (e.g. ``"deepseek"``) when the
+    provider was configured via a shim.  Shim defaults are looked up from it;
+    when omitted, *provider_type* is tried as a shim name too (callers that
+    pass a shim name as *provider_type* keep working).
 
     *cfg* is the dict from the JSONC config, e.g.
     ``{"api_key": "sk-...", "base_url": "https://..."}``
@@ -198,7 +203,7 @@ def build_provider_info(
     from llm_rosetta.shims import get_shim
 
     # Resolve through shim registry for defaults
-    shim = get_shim(provider_type)
+    shim = get_shim(shim_name or provider_type)
     if shim is not None:
         base_type = shim.base
         # Apply shim defaults where config is missing
