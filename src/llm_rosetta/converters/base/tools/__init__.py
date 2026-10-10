@@ -50,11 +50,14 @@ from .batch import assign_tool_batch_ids, merge_tool_messages
 
 # -- Intrinsic --
 from .intrinsic import (
+    get_definition_kind,
+    get_intrinsic_kind,
+    get_native_definition,
     intrinsic_call_to_function,
     intrinsic_result_to_function,
-    get_intrinsic_kind,
     is_intrinsic_part,
     make_intrinsic_tool_call,
+    make_intrinsic_tool_definition,
     make_intrinsic_tool_result,
     set_intrinsic_kind,
 )
@@ -92,8 +95,11 @@ __all__ = [
     "assign_tool_batch_ids",
     "merge_tool_messages",
     # intrinsic
+    "get_definition_kind",
+    "get_native_definition",
     "intrinsic_call_to_function",
     "intrinsic_result_to_function",
+    "make_intrinsic_tool_definition",
     "is_intrinsic_part",
     "get_intrinsic_kind",
     "set_intrinsic_kind",

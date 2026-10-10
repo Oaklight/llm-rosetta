@@ -30,7 +30,10 @@ from ...types.ir.tools import ToolCallConfig
 from ..base import BaseToolOps
 from ..base.tools import (
     extract_part_ids,
+    get_definition_kind,
     get_intrinsic_kind,
+    get_native_definition,
+    make_intrinsic_tool_definition,
     log_orphan_warnings,
     make_intrinsic_tool_call,
     sanitize_schema,
@@ -39,6 +42,20 @@ from ..base.tools import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Native OpenAI Responses server tools for client-declared intrinsic kinds.
+# Responses native server-tool types → canonical intrinsic kind.
+_RESPONSES_NATIVE_TYPE_TO_KIND: dict[str, str] = {
+    "web_search": "web_search",
+    "web_search_preview": "web_search",
+    "code_interpreter": "code_interpreter",
+    "file_search": "file_search",
+}
+
+_RESPONSES_INTRINSIC_TOOLS: dict[str, dict[str, Any]] = {
+    "web_search": {"type": "web_search"},
+    "code_interpreter": {"type": "code_interpreter", "container": {"type": "auto"}},
+}
 
 #: Responses input item type that carries tool definitions inline (Codex).
 ADDITIONAL_TOOLS_ITEM_TYPE = "additional_tools"
@@ -472,6 +489,21 @@ class OpenAIResponsesToolOps(BaseToolOps):
         Returns:
             OpenAI Responses tool definition dict.
         """
+        if ir_tool.get("type") == "intrinsic":
+            stored = get_native_definition(ir_tool, "openai_responses")
+            if stored is not None:
+                return dict(stored)
+            kind = get_definition_kind(ir_tool)
+            native = _RESPONSES_INTRINSIC_TOOLS.get(kind)
+            if native is None:
+                logger.warning(
+                    "OpenAI Responses has no server tool for intrinsic kind %r;"
+                    " dropping",
+                    kind,
+                )
+                return {}
+            return dict(native)
+
         # Passthrough tools (web_search, etc.) go back as-is except for the
         # name, since a rename must follow the tool upstream or nothing else
         # in the request agrees on it.
@@ -561,6 +593,17 @@ class OpenAIResponsesToolOps(BaseToolOps):
             tool_type = provider_tool.get("type", "function")
             if tool_type == "namespace":
                 return _flatten_namespace_tool(provider_tool)
+            kind = _RESPONSES_NATIVE_TYPE_TO_KIND.get(tool_type)
+            if kind is not None:
+                return cast(
+                    ToolDefinition,
+                    make_intrinsic_tool_definition(
+                        kind,
+                        description=provider_tool.get("description", ""),
+                        native=provider_tool,
+                        native_base="openai_responses",
+                    ),
+                )
             # Non-function tools outside the IR type set (e.g. web_search or
             # Codex custom apply_patch) are stored as passthrough to avoid
             # lossy conversion. IR ``type`` is forced to "function" to

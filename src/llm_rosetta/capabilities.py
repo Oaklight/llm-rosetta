@@ -29,9 +29,11 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from llm_rosetta.converters.base.tools.intrinsic import (
+    get_definition_kind as _get_definition_kind,
     intrinsic_call_to_function as _intrinsic_call_to_function,
     intrinsic_result_to_function as _intrinsic_result_to_function,
     is_intrinsic_part as _is_intrinsic_part,
+    make_intrinsic_tool_definition as _make_intrinsic_tool_definition,
 )
 
 from llm_rosetta.converters.base.context import ConversionContext
@@ -360,12 +362,13 @@ def translate_intrinsic_tools(
     same_format: bool = False,
     request_id: str = "-",
 ) -> dict[str, Any]:
-    """Translate intrinsic tools for cross-format conversion.
+    """Translate intrinsic tool history for cross-format conversion.
 
-    Tool **definitions** are stripped (they are request-level declarations
-    that cannot be translated).  Tool **calls and results** in conversation
-    history are degraded to function-typed equivalents so the target model
-    retains the semantic context.
+    Intrinsic **calls and results** in conversation history are degraded to
+    function-typed equivalents so the target model retains the semantic
+    context.  Tool **definitions** are handled separately by
+    :func:`resolve_intrinsic_tools`, which reconciles them against the
+    target provider's shim.
 
     No-op when same_format is True.
 
@@ -375,43 +378,98 @@ def translate_intrinsic_tools(
     if same_format:
         return ir_request
 
-    tools = ir_request.get("tools")
-    has_intrinsic_defs = tools and any(
-        isinstance(t, dict) and t.get("type") == "intrinsic" for t in tools
-    )
-
     messages = ir_request.get("messages")
-    has_parts = messages and _has_intrinsic_parts(messages)
-
-    if not has_intrinsic_defs and not has_parts:
+    if not (messages and _has_intrinsic_parts(messages)):
         return ir_request
 
     ir_request = dict(ir_request)
-    stripped_defs = 0
-    translated_parts = 0
+    ir_request["messages"], translated_parts = _translate_intrinsic_in_messages(
+        messages
+    )
 
-    if has_intrinsic_defs:
-        ir_request["tools"] = [
-            t
-            for t in tools
-            if not (isinstance(t, dict) and t.get("type") == "intrinsic")
-        ]
-        stripped_defs = len(tools) - len(ir_request["tools"])
-
-    if has_parts:
-        ir_request["messages"], translated_parts = _translate_intrinsic_in_messages(
-            messages
-        )
-
-    if stripped_defs or translated_parts:
+    if translated_parts:
         logger.info(
-            "[%s] intrinsic tools: stripped %d definition(s), "
-            "translated %d part(s) for cross-format conversion",
+            "[%s] intrinsic tools: translated %d history part(s) for "
+            "cross-format conversion",
             request_id,
-            stripped_defs,
             translated_parts,
         )
 
+    return ir_request
+
+
+def resolve_intrinsic_tools(
+    ir_request: dict[str, Any],
+    *,
+    shim: Any = None,
+    same_format: bool = False,
+    allow_name_promotion: bool = False,
+    request_id: str = "-",
+) -> dict[str, Any]:
+    """Reconcile intrinsic tool definitions with the target provider's shim.
+
+    A provider's shim declares which intrinsic kinds it supports
+    (``ToolsConfig.intrinsic_tools``).  This function:
+
+    - **promotes** a function tool whose name matches a supported intrinsic
+      kind into an IR ``type="intrinsic"`` definition (for client formats,
+      like OpenAI Chat, that cannot declare server tools natively);
+    - **drops** an intrinsic definition whose kind the target does not
+      support.
+
+    A provider with no shim, or an empty ``intrinsic_tools`` list, supports
+    no intrinsic tools — everything intrinsic is dropped.  Same-format
+    conversions are left untouched (a provider always understands its own
+    native declarations).
+    """
+    if same_format:
+        return ir_request
+
+    tools = ir_request.get("tools")
+    if not tools:
+        return ir_request
+
+    supported = set(getattr(getattr(shim, "tools", None), "intrinsic_tools", ()) or ())
+
+    new_tools: list[Any] = []
+    dropped = 0
+    promoted = 0
+    for t in tools:
+        if not isinstance(t, dict):
+            new_tools.append(t)
+            continue
+        ttype = t.get("type")
+        if ttype == "intrinsic":
+            kind = _get_definition_kind(t)
+            if kind in supported:
+                new_tools.append(t)
+            else:
+                dropped += 1
+            continue
+        if allow_name_promotion and ttype == "function" and t.get("name") in supported:
+            new_tools.append(
+                _make_intrinsic_tool_definition(
+                    t["name"],
+                    description=t.get("description", ""),
+                    parameters=t.get("parameters", {}),
+                )
+            )
+            promoted += 1
+            continue
+        new_tools.append(t)
+
+    if not dropped and not promoted:
+        return ir_request
+
+    ir_request = dict(ir_request)
+    ir_request["tools"] = new_tools
+    logger.info(
+        "[%s] intrinsic tool definitions: promoted %d, dropped %d (target supports %s)",
+        request_id,
+        promoted,
+        dropped,
+        sorted(supported) or "none",
+    )
     return ir_request
 
 

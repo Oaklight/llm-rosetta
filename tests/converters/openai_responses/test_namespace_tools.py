@@ -171,8 +171,8 @@ class TestFlattenNamespaceTool:
         assert result[0]["metadata"].get("defer_loading") is True
         assert "defer_loading" not in result[1]["metadata"]
 
-    def test_passthrough_child_type(self):
-        """Unknown child type goes through _synthesize_passthrough_tool."""
+    def test_intrinsic_child_type(self):
+        """A server-tool child is recognized as an intrinsic definition."""
         ns = _ns_tool(
             "ns",
             children=[
@@ -182,7 +182,21 @@ class TestFlattenNamespaceTool:
         result = _flatten_namespace_tool(ns)
         assert len(result) == 1
         assert result[0]["metadata"]["namespace"] == "ns"
-        assert result[0]["metadata"].get("provider_type") == "web_search"
+        assert result[0]["type"] == "intrinsic"
+        assert result[0]["metadata"].get("intrinsic_kind") == "web_search"
+
+    def test_passthrough_child_type(self):
+        """An unknown child type goes through _synthesize_passthrough_tool."""
+        ns = _ns_tool(
+            "ns",
+            children=[
+                {"type": "totally_unknown_type", "name": "x"},
+            ],
+        )
+        result = _flatten_namespace_tool(ns)
+        assert len(result) == 1
+        assert result[0]["metadata"]["namespace"] == "ns"
+        assert result[0]["metadata"].get("provider_type") == "totally_unknown_type"
 
     def test_nested_format_child(self):
         """Child in nested format: {"type": "function", "function": {...}}."""

@@ -43,3 +43,8 @@ reasoning:
       thinking_modes: {auto: adaptive, enabled: adaptive, disabled: disabled}
     claude-opus-5-5:
       thinking_modes: {auto: adaptive, enabled: adaptive}
+
+tools:
+  intrinsic_tools:
+    - web_search
+    - code_execution

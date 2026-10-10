@@ -168,3 +168,56 @@ def intrinsic_result_to_function(part: dict[str, Any]) -> dict[str, Any]:
     if "cache_hint" in part:
         translated["cache_hint"] = part["cache_hint"]
     return translated
+
+
+# ---------------------------------------------------------------------------
+# Intrinsic tool definitions
+# ---------------------------------------------------------------------------
+#
+# An IR ToolDefinition may be ``type="intrinsic"`` for a provider-hosted
+# server tool (web search, code execution, …).  The kind is stored in
+# ``metadata["intrinsic_kind"]``.  Whether a provider enables it is declared
+# by that provider's shim (``ToolsConfig.intrinsic_tools``).
+
+
+def make_intrinsic_tool_definition(
+    kind: str,
+    *,
+    description: str = "",
+    parameters: dict[str, Any] | None = None,
+    native: dict[str, Any] | None = None,
+    native_base: str | None = None,
+) -> dict[str, Any]:
+    """Build an IR ToolDefinition of ``type="intrinsic"`` from a kind.
+
+    ``native`` (with ``native_base``) stores the provider's original tool
+    payload so a same-provider round-trip can restore it verbatim (extra
+    config such as search filters is otherwise lost when the def is
+    reduced to a canonical kind).
+    """
+    meta: dict[str, Any] = {"intrinsic_kind": kind}
+    if native is not None:
+        meta["_native"] = {"base": native_base, "tool": native}
+    return {
+        "type": "intrinsic",
+        "name": kind,
+        "description": description,
+        "parameters": parameters or {},
+        "metadata": meta,
+    }
+
+
+def get_definition_kind(ir_tool: Any) -> str:
+    """Read the intrinsic kind from an IR ToolDefinition's metadata."""
+    meta = ir_tool.get("metadata") or {}
+    return meta.get("intrinsic_kind") or ""
+
+
+def get_native_definition(ir_tool: Any, base: str) -> dict[str, Any] | None:
+    """Return the stored native payload if it came from ``base``, else None."""
+    meta = ir_tool.get("metadata") or {}
+    native = meta.get("_native")
+    if isinstance(native, dict) and native.get("base") == base:
+        tool = native.get("tool")
+        return tool if isinstance(tool, dict) else None
+    return None

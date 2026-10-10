@@ -8,3 +8,12 @@ connection:
 reasoning:
   effort_field: thinking_level
   effort_range: [minimal, high]
+
+tools:
+  intrinsic_tools:
+    - google_search
+    - code_execution
+    - url_context
+    - google_maps
+    - file_search
+    - retrieval

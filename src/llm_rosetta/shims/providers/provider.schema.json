@@ -4,7 +4,10 @@
   "title": "LLM-Rosetta Provider Shim",
   "description": "Schema for provider.yaml shim configuration files.",
   "type": "object",
-  "required": ["name", "base"],
+  "required": [
+    "name",
+    "base"
+  ],
   "additionalProperties": false,
   "properties": {
     "name": {
@@ -83,13 +86,25 @@
         },
         "search_mode": {
           "type": "string",
-          "enum": ["disabled", "native", "bridge"],
+          "enum": [
+            "disabled",
+            "native",
+            "bridge"
+          ],
           "description": "'disabled' drops tool_search items. 'native' passes through. 'bridge' emulates via BM25 search.",
           "default": "disabled"
         },
         "multimodal_result": {
           "type": "boolean",
           "description": "Whether the provider supports multimodal content in tool results natively. null defers to the converter default."
+        },
+        "intrinsic_tools": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Provider-hosted server tools this provider supports natively (e.g. web_search, code_execution, google_search). Empty means no intrinsic tool support — the provider must opt in. Declaring a kind lets clients request it and lets cross-format conversion map it to this provider's native server tool.",
+          "default": []
         }
       }
     },
@@ -121,7 +136,11 @@
     },
     "tool_search_mode": {
       "type": "string",
-      "enum": ["disabled", "native", "bridge"],
+      "enum": [
+        "disabled",
+        "native",
+        "bridge"
+      ],
       "description": "Deprecated: use tools.search_mode instead."
     },
     "multimodal_tool_result": {
@@ -135,11 +154,17 @@
         "thinking_modes": {
           "type": "object",
           "description": "Maps IR mode (auto/enabled/disabled) to provider thinking type value.",
-          "additionalProperties": { "type": "string" }
+          "additionalProperties": {
+            "type": "string"
+          }
         },
         "thinking_default": {
           "type": "string",
-          "enum": ["auto", "enabled", "disabled"],
+          "enum": [
+            "auto",
+            "enabled",
+            "disabled"
+          ],
           "description": "Default IR mode when the request has no explicit mode."
         },
         "effort_field": {
@@ -149,7 +174,9 @@
         },
         "effort_range": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "minItems": 2,
           "maxItems": 2,
           "description": "Supported IR effort range [floor, ceiling]. Values: minimal, low, medium, high, xhigh, max."
@@ -163,11 +190,16 @@
         "visibility_modes": {
           "type": "object",
           "description": "Maps IR summary value to provider visibility value.",
-          "additionalProperties": { "type": "string" }
+          "additionalProperties": {
+            "type": "string"
+          }
         },
         "unsigned_blocks": {
           "type": "string",
-          "enum": ["as_is", "preserve"],
+          "enum": [
+            "as_is",
+            "preserve"
+          ],
           "description": "How to handle unsigned reasoning blocks in responses.",
           "default": "as_is"
         },
@@ -179,16 +211,24 @@
             "properties": {
               "thinking_modes": {
                 "type": "object",
-                "additionalProperties": { "type": "string" }
+                "additionalProperties": {
+                  "type": "string"
+                }
               },
-              "effort_field": { "type": "string" },
+              "effort_field": {
+                "type": "string"
+              },
               "effort_range": {
                 "type": "array",
-                "items": { "type": "string" },
+                "items": {
+                  "type": "string"
+                },
                 "minItems": 2,
                 "maxItems": 2
               },
-              "budget_ratio": { "type": "number" }
+              "budget_ratio": {
+                "type": "number"
+              }
             }
           }
         }

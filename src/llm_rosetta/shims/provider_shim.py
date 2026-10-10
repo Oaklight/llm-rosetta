@@ -129,6 +129,15 @@ class ToolsConfig:
     max_description_length: int | None = None
     search_mode: ToolSearchMode = "disabled"
     multimodal_result: bool | None = None
+    intrinsic_tools: tuple[str, ...] = ()
+    """Intrinsic (provider-hosted) server tools this provider supports.
+
+    Each entry is a canonical kind (``"web_search"``, ``"code_execution"``,
+    ``"google_search"``, …).  Empty (the default) means no intrinsic tool
+    support: a provider must opt in.  Declaring a kind here lets clients
+    request it (by name in their tools JSON) and lets cross-format
+    conversion map it to this provider's native server tool.
+    """
 
 
 # Legacy flat kwarg names → (grouped field, sub-field)

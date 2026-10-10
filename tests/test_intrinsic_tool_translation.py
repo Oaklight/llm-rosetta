@@ -255,7 +255,9 @@ class TestTranslateIntrinsicTools:
         result = translate_intrinsic_tools(ir_request, same_format=False)
         assert result is ir_request
 
-    def test_strip_intrinsic_definitions(self):
+    def test_keep_intrinsic_definitions(self):
+        """Intrinsic definitions are kept; the target converter maps them
+        to a native server tool (or drops them)."""
         ir_request = {
             "tools": [
                 {"type": "function", "name": "f", "description": "", "parameters": {}},
@@ -269,8 +271,8 @@ class TestTranslateIntrinsicTools:
             "messages": [],
         }
         result = translate_intrinsic_tools(ir_request, same_format=False)
-        assert len(result["tools"]) == 1
-        assert result["tools"][0]["name"] == "f"
+        assert len(result["tools"]) == 2
+        assert any(t.get("type") == "intrinsic" for t in result["tools"])
 
     def test_translate_tool_call(self):
         ir_request = {
@@ -440,7 +442,7 @@ class TestTranslateIntrinsicTools:
         assert len(ir_request["tools"]) == 1
         assert ir_request["messages"][0]["content"][0]["tool_type"] == "intrinsic"
 
-    def test_strip_defs_and_translate_parts(self):
+    def test_keep_defs_and_translate_parts(self):
         ir_request = {
             "tools": [
                 {"type": "function", "name": "f", "description": "", "parameters": {}},
@@ -480,8 +482,9 @@ class TestTranslateIntrinsicTools:
             ],
         }
         result = translate_intrinsic_tools(ir_request, same_format=False)
-        assert len(result["tools"]) == 1
-        assert result["tools"][0]["name"] == "f"
+        # Definitions are kept (target converter maps/drops them).
+        assert len(result["tools"]) == 2
+        # Calls/results are translated to function equivalents.
         assert len(result["messages"]) == 2
         assert result["messages"][0]["content"][0]["tool_type"] == "function"
         assert result["messages"][1]["content"][0]["tool_type"] == "function"
