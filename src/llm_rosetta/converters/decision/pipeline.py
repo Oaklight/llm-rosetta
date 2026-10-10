@@ -5,8 +5,8 @@ provider formats via IR, using the decision converter family.
 Mirrors :class:`~llm_rosetta.converters.embedding.pipeline.EmbeddingConversionPipeline`
 and :class:`~llm_rosetta.converters.rerank.pipeline.RerankConversionPipeline`.
 
-Currently only the ``typesafe`` native format is supported through this
-pipeline.  Cross-paradigm decision converters (``llm_chat``, ``embedding``,
+Currently the ``typesafe`` and ``openai_decisions`` native formats are
+supported through this pipeline.  Cross-paradigm decision converters (``llm_chat``, ``embedding``,
 ``reranker``) convert decision IR to other paradigm IRs (chat, embedding,
 rerank) and require a second-hop converter to reach a provider wire format.
 They are available as standalone converter classes but are not yet wired
@@ -21,6 +21,7 @@ from typing import Any
 # circular imports — __init__.py re-exports from this module.
 from llm_rosetta.converters.base.context import ConversionContext
 from llm_rosetta.converters.base.decision_converter import BaseDecisionConverter
+from llm_rosetta.converters.decision.openai import OpenAIDecisionsConverter
 from llm_rosetta.converters.decision.typesafe import TypeSafeDecisionConverter
 
 __all__ = [
@@ -31,6 +32,7 @@ __all__ = [
 
 _DECISION_CONVERTERS: dict[str, type[BaseDecisionConverter]] = {
     "typesafe": TypeSafeDecisionConverter,
+    "openai_decisions": OpenAIDecisionsConverter,
 }
 
 DECISION_FORMATS = frozenset(_DECISION_CONVERTERS.keys())

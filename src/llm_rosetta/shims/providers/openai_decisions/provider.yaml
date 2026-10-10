@@ -1,0 +1,4 @@
+name: openai_decisions
+base: decision
+default_base_url: https://api.openai.com
+default_api_key_env: OPENAI_API_KEY

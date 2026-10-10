@@ -117,6 +117,7 @@ class TestLoadProviders:
             "moonshot",
             "openai--chat_completions",
             "openai--open_responses",
+            "openai_decisions",
             "openrouter--messages",
             "openrouter--chat_completions",
             "openrouter--open_responses",
@@ -386,6 +387,7 @@ class TestLoadProviders:
         "asksage--messages",
         "asksage--google_generate",
         "typesafe",
+        "openai_decisions",
     }
 
     def test_all_shims_have_logos(self):

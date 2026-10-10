@@ -7,6 +7,7 @@ Decision converter module
 
 from .embedding import EmbeddingDecisionConverter
 from .llm_chat import LLMChatDecisionConverter
+from .openai import OpenAIDecisionsConverter
 from .pipeline import (
     DECISION_FORMATS,
     DecisionConversionPipeline,
@@ -20,6 +21,7 @@ __all__ = [
     "DecisionConversionPipeline",
     "EmbeddingDecisionConverter",
     "LLMChatDecisionConverter",
+    "OpenAIDecisionsConverter",
     "RerankerDecisionConverter",
     "TypeSafeDecisionConverter",
     "get_decision_converter",
