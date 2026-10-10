@@ -30,8 +30,6 @@ from typing import Any
 
 from llm_rosetta.converters.base.tools.intrinsic import (
     get_definition_kind as _get_definition_kind,
-    intrinsic_call_to_function as _intrinsic_call_to_function,
-    intrinsic_result_to_function as _intrinsic_result_to_function,
     is_intrinsic_part as _is_intrinsic_part,
     make_intrinsic_tool_definition as _make_intrinsic_tool_definition,
 )
@@ -278,9 +276,9 @@ def strip_intrinsic_tools(
     No-op when ``same_format`` is True.
 
     .. deprecated:: 0.15.0
-       No longer used by the pipeline, which calls
-       :func:`translate_intrinsic_tools` and :func:`resolve_intrinsic_tools`
-       instead.  Kept for backward compatibility (public since before this
+       No longer used by the pipeline, which keeps intrinsic history for the
+       target converter to map (:func:`resolve_intrinsic_tools` gates
+       definitions only).  Kept for backward compatibility (public since before this
        change); slated for removal in a future release.  Do not add new
        callers — the two paths would drift.
     """
@@ -320,82 +318,6 @@ def strip_intrinsic_tools(
             "[%s] stripped %d intrinsic tool element(s) for cross-format conversion",
             request_id,
             stripped_count,
-        )
-
-    return ir_request
-
-
-def _translate_intrinsic_in_messages(
-    messages: list[Any],
-) -> tuple[list[Any], int]:
-    """Translate intrinsic tool parts to function equivalents in messages."""
-    new_messages: list[Any] = []
-    translated = 0
-    for msg in messages:
-        if not isinstance(msg, dict):
-            new_messages.append(msg)
-            continue
-        content = msg.get("content")
-        if not isinstance(content, list):
-            new_messages.append(msg)
-            continue
-        new_content: list[Any] = []
-        changed = False
-        for part in content:
-            if not _is_intrinsic_part(part):
-                new_content.append(part)
-                continue
-            # _is_intrinsic_part guarantees type is tool_call or tool_result.
-            if part.get("type") == "tool_call":
-                new_content.append(_intrinsic_call_to_function(part))
-            else:
-                new_content.append(_intrinsic_result_to_function(part))
-            translated += 1
-            changed = True
-        if changed:
-            new_messages.append({**msg, "content": new_content})
-        else:
-            new_messages.append(msg)
-    return new_messages, translated
-
-
-def translate_intrinsic_tools(
-    ir_request: dict[str, Any],
-    *,
-    same_format: bool = False,
-    request_id: str = "-",
-) -> dict[str, Any]:
-    """Translate intrinsic tool history for cross-format conversion.
-
-    Intrinsic **calls and results** in conversation history are degraded to
-    function-typed equivalents so the target model retains the semantic
-    context.  Tool **definitions** are handled separately by
-    :func:`resolve_intrinsic_tools`, which reconciles them against the
-    target provider's shim.
-
-    No-op when same_format is True.
-
-    .. versionadded:: 0.15.0
-       Replaces :func:`strip_intrinsic_tools` in the pipeline.
-    """
-    if same_format:
-        return ir_request
-
-    messages = ir_request.get("messages")
-    if not (messages and _has_intrinsic_parts(messages)):
-        return ir_request
-
-    ir_request = dict(ir_request)
-    ir_request["messages"], translated_parts = _translate_intrinsic_in_messages(
-        messages
-    )
-
-    if translated_parts:
-        logger.info(
-            "[%s] intrinsic tools: translated %d history part(s) for "
-            "cross-format conversion",
-            request_id,
-            translated_parts,
         )
 
     return ir_request

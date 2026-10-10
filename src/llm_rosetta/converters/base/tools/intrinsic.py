@@ -6,7 +6,6 @@ code execution, file search, etc.) represented in the IR with
 string identifying the specific capability.
 """
 
-import json as _json
 from typing import Any
 
 
@@ -74,100 +73,6 @@ def make_intrinsic_tool_result(
     if is_error:
         part["is_error"] = True
     return part
-
-
-# ---------------------------------------------------------------------------
-# Cross-format translation: degrade intrinsic parts to function equivalents
-# ---------------------------------------------------------------------------
-
-
-def _flatten_result(result: Any) -> str:
-    """Normalise an intrinsic tool result to a plain string.
-
-    Lists of content blocks are joined with newlines (non-text blocks are
-    JSON-serialised), dicts are JSON-serialised, and everything else —
-    including ``None`` and numbers — falls back to ``str()``.
-
-    Note: non-text blocks (e.g. base64 image data) are serialised verbatim,
-    which can produce a large string.  Degrading them to text is still
-    preferable to dropping the tool result entirely.
-    """
-    if isinstance(result, str):
-        return result
-    if isinstance(result, list):
-        parts: list[str] = []
-        for item in result:
-            if isinstance(item, dict):
-                text = item.get("text")
-                if text is not None:
-                    parts.append(str(text))
-                else:
-                    parts.append(_json.dumps(item, ensure_ascii=False))
-            else:
-                parts.append(str(item))
-        return "\n".join(parts)
-    if isinstance(result, dict):
-        return _json.dumps(result, ensure_ascii=False)
-    return str(result)
-
-
-def _translated_metadata(part: dict[str, Any], kind: str) -> dict[str, Any]:
-    """Build provider_metadata for a translated part.
-
-    Preserves any original metadata keys (other than ``intrinsic_kind``,
-    which no longer applies once the part is a function call) and records
-    the translation lineage.
-    """
-    meta = {
-        k: v
-        for k, v in (part.get("provider_metadata") or {}).items()
-        if k != "intrinsic_kind"
-    }
-    meta["_translated_from"] = "intrinsic"
-    meta["_original_intrinsic_kind"] = kind
-    return meta
-
-
-def intrinsic_call_to_function(part: dict[str, Any]) -> dict[str, Any]:
-    """Degrade an intrinsic tool_call to a function tool_call.
-
-    Used during cross-format conversion to preserve conversation context
-    that would otherwise be stripped.  The ``_intrinsic--`` prefix on the
-    tool name prevents collisions with user-defined functions.
-    """
-    kind = get_intrinsic_kind(part, part.get("tool_name", "unknown"))
-    translated: dict[str, Any] = {
-        "type": "tool_call",
-        "tool_call_id": part["tool_call_id"],
-        "tool_name": f"_intrinsic--{kind}",
-        "tool_input": part.get("tool_input", {}),
-        "tool_type": "function",
-        "provider_metadata": _translated_metadata(part, kind),
-    }
-    if "cache_hint" in part:
-        translated["cache_hint"] = part["cache_hint"]
-    return translated
-
-
-def intrinsic_result_to_function(part: dict[str, Any]) -> dict[str, Any]:
-    """Degrade an intrinsic tool_result to a function tool_result.
-
-    Result content is flattened to a plain string so every target
-    converter can serialize it.
-    """
-    kind = get_intrinsic_kind(part, "unknown")
-    translated: dict[str, Any] = {
-        "type": "tool_result",
-        "tool_call_id": part["tool_call_id"],
-        "result": _flatten_result(part.get("result", "")),
-        "tool_type": "function",
-        "provider_metadata": _translated_metadata(part, kind),
-    }
-    if part.get("is_error"):
-        translated["is_error"] = True
-    if "cache_hint" in part:
-        translated["cache_hint"] = part["cache_hint"]
-    return translated
 
 
 # ---------------------------------------------------------------------------

@@ -356,7 +356,9 @@ class TestOpenAIResponsesToolOps:
         )
         result = OpenAIResponsesToolOps.ir_tool_call_to_p(ir_tc)
         assert result["type"] == "web_search_call"
-        assert result["query"] == "test"
+        # Native server-item shape: an `action`, no `call_id`/`arguments`.
+        assert result["action"]["query"] == "test"
+        assert "call_id" not in result
 
     def test_ir_tool_call_to_p_code_interpreter(self):
         """Test IR ToolCallPart with intrinsic code_interpreter type."""

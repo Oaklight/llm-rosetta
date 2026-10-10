@@ -155,10 +155,16 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
                 content_parts.append(self.content_ops.ir_file_to_p(part))
             elif is_tool_call_part(part):
                 # Tool calls become separate function_call items
-                extra_items.append(self.tool_ops.ir_tool_call_to_p(part))
+                extra_items.append(
+                    self.tool_ops.ir_tool_call_to_p(part, for_history=True)
+                )
             elif is_tool_result_part(part):
-                # Tool results become separate function_call_output items
-                extra_items.append(self.tool_ops.ir_tool_result_to_p(part))
+                # Tool results become separate function_call_output items.
+                # An intrinsic result whose call is a native server item
+                # (web_search_call) yields {} — it has no output item.
+                item = self.tool_ops.ir_tool_result_to_p(part)
+                if item:
+                    extra_items.append(item)
             elif is_reasoning_part(part):
                 reasoning_item = self.content_ops.ir_reasoning_to_p(part)
                 if reasoning_item is not None:
@@ -223,7 +229,9 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
                     continue
                 content_parts.append({"type": "output_text", "text": part["text"]})
             elif is_tool_call_part(part):
-                tool_items.append(self.tool_ops.ir_tool_call_to_p(part))
+                tool_items.append(
+                    self.tool_ops.ir_tool_call_to_p(part, for_history=True)
+                )
             elif is_reasoning_part(part):
                 reasoning_item = self.content_ops.ir_reasoning_to_p(part)
                 if reasoning_item is not None:
@@ -274,7 +282,9 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
 
         for part in content:
             if is_tool_result_part(part):
-                tool_result_items.append(self.tool_ops.ir_tool_result_to_p(part))
+                item = self.tool_ops.ir_tool_result_to_p(part)
+                if item:
+                    tool_result_items.append(item)
 
         return tool_result_items, warnings
 
