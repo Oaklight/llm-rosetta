@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from llm_rosetta.gateway.providers import build_provider_info
 from llm_rosetta.shims.providers import load_providers
 
@@ -37,18 +35,18 @@ class TestBuildProviderInfo:
         )
 
 
-class TestOpenResponsesVendorNeutral:
-    """open_responses has no canonical host but keeps the default key env."""
+class TestOpenResponsesDefaults:
+    """The spec has no canonical host, so open_responses defaults to OpenRouter."""
 
-    def test_missing_base_url_raises_clear_error(self):
-        with pytest.raises(ValueError, match="no base_url configured"):
-            build_provider_info("open_responses", {})
+    def test_resolves_to_openrouter_without_config(self):
+        info = build_provider_info("open_responses", {})
+        assert info.upstream_url("m") == "https://openrouter.ai/api/v1/responses"
 
-    def test_default_key_env_is_preserved(self):
+    def test_registry_defaults(self):
         from llm_rosetta.gateway.providers import (
             get_default_api_key_env,
             get_default_base_url,
         )
 
-        assert get_default_base_url("open_responses") == ""
-        assert get_default_api_key_env("open_responses") == "OPENAI_API_KEY"
+        assert get_default_base_url("open_responses") == "https://openrouter.ai/api/v1"
+        assert get_default_api_key_env("open_responses") == "OPENROUTER_API_KEY"

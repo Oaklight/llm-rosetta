@@ -43,10 +43,12 @@ _PROVIDER_REGISTRY: dict[str, dict[str, Any]] = {
         "url_template": "{base_url}/responses",
     },
     "open_responses": {
-        # Vendor-neutral spec: no canonical host, so no default base URL.
-        # A deployment must supply ``base_url`` (config or shim connection).
-        # The default key env is kept independent of the host.
-        "default_api_key_env": "OPENAI_API_KEY",
+        # The spec is vendor-neutral and has no canonical host of its own, so
+        # the gateway defaults to OpenRouter (a multi-vendor router that speaks
+        # the spec).  A deployment targeting another host must set ``base_url``
+        # in its provider config or a shim ``connection.base_url``.
+        "default_base_url": "https://openrouter.ai/api/v1",
+        "default_api_key_env": "OPENROUTER_API_KEY",
         "auth_header_fn": openai_auth,
         "url_template": "{base_url}/responses",
     },
