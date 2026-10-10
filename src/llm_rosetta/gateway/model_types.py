@@ -261,18 +261,20 @@ def _decision_pipeline() -> Callable[..., Any]:
 def _register_decision() -> None:
     """Register the decision model type.
 
-    Currently TypeSafe System One (Jev) is the only native decision API,
-    so ``"typesafe"`` is the sole format.  LLM-backed decision (via
-    structured output) uses the chat pipeline, not this route.
+    Native decision APIs: TypeSafe System One (Jev) and OpenAI's Decisions
+    API, exposed through the ``typesafe`` and ``openai_decisions`` formats.
+    LLM-backed decision (via structured output) uses the chat pipeline, not
+    this route.
     """
     register_model_type(
         ModelTypeDescriptor(
             name="decision",
             routes=[
                 RouteSpec("/v1/decision"),
+                RouteSpec("/v1/decisions"),
                 RouteSpec("/v1/systemone"),
             ],
-            formats=["typesafe"],
+            formats=["typesafe", "openai_decisions"],
             pipeline=_decision_pipeline,
             supports_streaming=False,
             badge_class="cap-badge-decision",
