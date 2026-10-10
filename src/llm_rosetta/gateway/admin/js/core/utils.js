@@ -222,6 +222,30 @@ function fmtTokens(n) {
 }
 
 // ===================== Window globals =====================
+// ── Free-source entries (shared by the Providers and Models tabs) ──
+
+/** The registered shim backing provider *name*, or null. */
+export function shimOf(providers, shims, name) {
+  const cfg = (providers || {})[name];
+  const typeName = (cfg && cfg.type) || name;
+  return (shims || []).find(s => s.name === typeName) || null;
+}
+
+/** True when *name* is a keyless entry of a free-source shim. */
+export function isFreeEntry(providers, shims, name) {
+  const cfg = (providers || {})[name];
+  const shim = shimOf(providers, shims, name);
+  return !!(shim && shim.free_source && cfg && cfg.keyless === true);
+}
+
+/** Display label for a free entry — "<Brand> <suffix>" (e.g. "Kilo (Free)"). */
+export function freeEntryLabel(providers, shims, name, suffix) {
+  const shim = shimOf(providers, shims, name);
+  const brand = (shim && shim.display_name)
+    || (shim ? shim.name.split('--')[0].replace(/^./, c => c.toUpperCase()) : name);
+  return `${brand} ${suffix}`;
+}
+
 Object.assign(window, {
   setScheme, setMode, setTheme, api, doLogout, copyText, copyProviderEntry,
   showToast, showToastHtml, openModal, closeModal, inlineConfirm, esc, formatDuration,
