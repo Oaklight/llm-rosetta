@@ -51,14 +51,14 @@ DecisionInputPart = Union[TextPart, ImagePart]
 class DecisionEntry(TypedDict):
     """A single entry a question judges: a labeled option / level / proposition.
 
-    - ``assertion``: exactly **one** entry — the claim itself.
+    - ``assertion``: 0 or 2 entries (labels ``False`` / ``True``) — the claim's
+      two sides; 0 when no criteria are given.
     - ``choice``: N entries, unordered — the option values.
     - ``score``: N entries, ordered (position = ordinal) — the levels.
 
     ``label`` doubles as the machine value (the key used in the answer's
     ``probabilities``) and the display name. ``description`` is an optional
-    fuller rubric/meaning; for a Noul assertion it may hold the two-sided
-    ``{"true": ..., "false": ...}`` clarifications.
+    fuller rubric/meaning; for an assertion entry it holds that side's meaning.
     """
 
     label: Required[str | bool]
