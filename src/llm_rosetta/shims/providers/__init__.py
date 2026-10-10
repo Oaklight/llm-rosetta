@@ -150,7 +150,7 @@ def _register_plugin_chain(
         cur = f"{cur}.{part}"
         chain.append((cur, cur_dir))
     leaf = f"{cur}.{provider_dir.name}"
-    chain.append((leaf, provider_dir))
+    chain.append((leaf, provider_dir.resolve()))
     for name, path in chain:
         _ensure_pkg(name, path)
     return f"{leaf}.transforms"
