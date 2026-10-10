@@ -106,13 +106,35 @@ class TestKeylessProvider:
 
         assert info.base_url == "https://api.kilo.ai/api/gateway"
 
-    def test_base_type_env_key_disables_keyless(self, monkeypatch):
-        """A key resolved from the base-type env var turns keyless off — it is
-        computed after the env fallback, not before."""
+    def test_base_type_env_key_does_not_disable_keyless(self, monkeypatch):
+        """An unrelated base-type env var must not turn a keyless shim into an
+        authed provider — it is not this provider's credential."""
         load_providers()
         monkeypatch.setenv("OPENAI_API_KEY", "sk-env")
 
         info = build_provider_info("openai_chat", {}, shim_name="kilo--openai_chat")
 
+        assert info.keyless is True
+        assert info.auth_headers() == {}
+
+    def test_explicit_empty_api_key_is_not_refilled_from_env(self, monkeypatch):
+        """A key the operator cleared ("") stays cleared, even with the env set."""
+        load_providers()
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-env")
+
+        info = build_provider_info(
+            "openai_chat", {"api_key": "", "base_url": "https://x/v1"}
+        )
+
         assert info.keyless is False
+        with pytest.raises(ValueError, match="No API keys configured"):
+            info.auth_headers()
+
+    def test_base_type_env_key_used_when_api_key_absent(self, monkeypatch):
+        """A provider with no key at all still takes the base-type env var."""
+        load_providers()
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-env")
+
+        info = build_provider_info("openai_chat", {"base_url": "https://x/v1"})
+
         assert info.auth_headers() == {"Authorization": "Bearer sk-env"}

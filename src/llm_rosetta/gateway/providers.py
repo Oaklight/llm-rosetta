@@ -208,6 +208,48 @@ def _resolve_token_command(
     return TOKEN_PENDING_SENTINEL, token_command, token_refresh_interval
 
 
+def _apply_shim_defaults(cfg: dict[str, Any], shim: Any) -> dict[str, Any]:
+    """Fill base_url / api_key from the shim when the config omits them.
+
+    An empty string counts as omitted: the admin writes ``""`` keys, and an
+    empty base_url must fall back to the shim rather than reach ProviderInfo,
+    which would raise on a URL that doesn't start with http.
+    """
+    import os
+
+    if not cfg.get("base_url") and shim.connection.base_url:
+        cfg = {**cfg, "base_url": shim.connection.base_url}
+    if cfg.get("api_key") is None and shim.connection.api_key_env:
+        env_val = os.environ.get(shim.connection.api_key_env, "")
+        if env_val:
+            cfg = {**cfg, "api_key": env_val}
+    return cfg
+
+
+def _apply_base_defaults(
+    cfg: dict[str, Any], base_type: str, keyless_shim: bool
+) -> dict[str, Any]:
+    """Fill base_url / api_key from the base type's registry defaults.
+
+    The base-type api_key env var is a generic convenience, not this provider's
+    own credential, so it is skipped for a keyless shim — an unrelated
+    ``OPENAI_API_KEY`` in the environment must not silently enable auth against
+    a free pool.  ``is None`` (not falsy) leaves a key the operator deliberately
+    cleared (``"api_key": ""``) cleared rather than refilling it.
+    """
+    import os
+
+    if not cfg.get("base_url"):
+        default_url = get_default_base_url(base_type)
+        if default_url:
+            cfg = {**cfg, "base_url": default_url}
+    if cfg.get("api_key") is None and not keyless_shim:
+        env_val = os.environ.get(get_default_api_key_env(base_type), "")
+        if env_val:
+            cfg = {**cfg, "api_key": env_val}
+    return cfg
+
+
 def build_provider_info(
     provider_type: str,
     cfg: dict[str, Any],
@@ -238,8 +280,6 @@ def build_provider_info(
     registry.  Unknown types fall back to Bearer-token auth and a simple
     ``{base_url}/`` URL template.
     """
-    import os
-
     from llm_rosetta.shims import get_shim
 
     # Resolve through shim registry for defaults
@@ -247,18 +287,11 @@ def build_provider_info(
     if shim is not None:
         base_type = shim.base
         # Apply shim defaults where the config value is missing *or empty*.
-        # The admin's _build_provider_entry always writes both keys (possibly
-        # ""), and a hand-edited jsonc may carry "base_url": "" — an empty
-        # string must not shadow the shim default, or ProviderInfo would raise
-        # on a base_url that doesn't start with http.
-        if not cfg.get("base_url") and shim.connection.base_url:
-            cfg = {**cfg, "base_url": shim.connection.base_url}
-        if not cfg.get("api_key") and shim.connection.api_key_env:
-            env_val = os.environ.get(shim.connection.api_key_env, "")
-            if env_val:
-                cfg = {**cfg, "api_key": env_val}
+        cfg = _apply_shim_defaults(cfg, shim)
     else:
         base_type = provider_type
+
+    keyless_shim = bool(shim and shim.connection.keyless)
 
     reg = _PROVIDER_REGISTRY.get(base_type)
 
@@ -289,15 +322,7 @@ def build_provider_info(
         stream_tpl = cfg["stream_url_template"]
 
     # Fall back to base-type defaults if still missing or empty
-    if not cfg.get("base_url"):
-        default_url = get_default_base_url(base_type)
-        if default_url:
-            cfg = {**cfg, "base_url": default_url}
-    if not cfg.get("api_key"):
-        default_env = get_default_api_key_env(base_type)
-        env_val = os.environ.get(default_env, "")
-        if env_val:
-            cfg = {**cfg, "api_key": env_val}
+    cfg = _apply_base_defaults(cfg, base_type, keyless_shim)
 
     # Keyless upstream (a free public gateway): send no credential while no
     # api_key and no token_command is configured.  Computed only after every
@@ -306,10 +331,7 @@ def build_provider_info(
     # token_command switches back to the base type's auth, so a paid account
     # can use the same shim.
     keyless = bool(
-        shim
-        and shim.connection.keyless
-        and not cfg.get("api_key")
-        and not cfg.get("token_command")
+        keyless_shim and not cfg.get("api_key") and not cfg.get("token_command")
     )
     if keyless:
         auth_fn = no_auth
