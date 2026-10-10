@@ -2,8 +2,9 @@ name: open_responses
 base: open_responses
 logo: https://cdn.jsdelivr.net/gh/openresponses/openresponses@main/public/svg/openresponses.svg
 # Open Responses is a vendor-neutral specification, so this shim declares no
-# canonical host (no ``connection.base_url``).  Deployments must supply a base
-# URL in their provider config (e.g. an OpenRouter, vLLM, or Ollama endpoint).
+# canonical host (no ``connection.base_url``); the gateway registry falls back
+# to OpenRouter.  Deployments targeting another host (e.g. vLLM or Ollama) must
+# set ``connection.base_url`` here or ``base_url`` in their provider config.
 tools:
   custom_tools: true
   search_mode: native
