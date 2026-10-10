@@ -113,16 +113,30 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
   document.getElementById('provName').readOnly = false;
 
   const registeredShims = (S.configData && S.configData.registered_shims) || [];
-  const shimMap = Object.fromEntries(registeredShims.map(s => [s.name, s]));
+  const baseFormats = (S.configData && S.configData.base_formats) || [];
+  // Shim entries win on name collision — they carry richer metadata (logo, …).
+  const shimMap = Object.fromEntries(
+    [...baseFormats, ...registeredShims].map(s => [s.name, s])
+  );
 
-  // Populate Provider Type dropdown from registered shims
+  // Populate Provider Type dropdown: base formats first, then providers.
   const typeSel = document.getElementById('provType');
   typeSel.innerHTML = '<option value="">' + t('label.selectOne', '— select —') + '</option>';
-  for (const s of registeredShims) {
-    const opt = document.createElement('option');
-    opt.value = s.name; opt.textContent = s.name;
-    if (s.name === provType) opt.selected = true;
-    typeSel.appendChild(opt);
+  const groups = [
+    [t('label.baseFormats'), baseFormats],
+    [t('label.providerShims'), registeredShims],
+  ];
+  for (const [label, items] of groups) {
+    if (!items.length) continue;
+    const og = document.createElement('optgroup');
+    og.label = label;
+    for (const s of items) {
+      const opt = document.createElement('option');
+      opt.value = s.name; opt.textContent = s.name;
+      if (s.name === provType) opt.selected = true;
+      og.appendChild(opt);
+    }
+    typeSel.appendChild(og);
   }
 
   // Update the logo preview beside the dropdown
