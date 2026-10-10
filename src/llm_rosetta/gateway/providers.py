@@ -271,7 +271,10 @@ def build_provider_info(
 
     # -- token_command: dynamic key refresh ------------------------------------
     if keyless:
-        # Inert: a keyless provider has no credential and no refresh.
+        # No token_command, so no refresher is ever scheduled and the interval
+        # is inert — 0 rather than the 3600 default, so it cannot read as
+        # "refreshes hourly".  (It skips _resolve_token_command's >= 60 check,
+        # which only guards the command path.)
         api_key, token_command, token_refresh_interval = "", None, 0
     else:
         api_key, token_command, token_refresh_interval = _resolve_token_command(
