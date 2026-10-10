@@ -1136,7 +1136,7 @@ def _extract_model_ids(
             shim_name,
         )
         return [], {}
-    elif ptype == "google":
+    elif ptype in ("google", "google_generate"):
         for m in body.get("models", []):
             name = m.get("name", "")
             if name.startswith("models/"):
@@ -1179,7 +1179,7 @@ async def fetch_upstream_models(request: Any, **kwargs: Any) -> Response:
             models_url = explicit_path
         else:
             models_url = f"{pinfo.base_url}{explicit_path}"
-    elif ptype == "google":
+    elif ptype in ("google", "google_generate"):
         models_url = f"{pinfo.base_url}/v1beta/models"
     elif ptype == "anthropic":
         models_url = f"{pinfo.base_url}/v1/models"

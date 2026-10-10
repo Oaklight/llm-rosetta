@@ -45,6 +45,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "convert",
             "convert_response",
             "ProviderType",
+            "normalize_provider_name",
             # Conversion pipeline
             "ConversionPipeline",
             "ConversionError",

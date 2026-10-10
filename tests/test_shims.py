@@ -241,7 +241,7 @@ class TestResolveBase:
     def test_base_type_passthrough(self):
         assert resolve_base("openai_chat") == "openai_chat"
         assert resolve_base("anthropic") == "anthropic"
-        assert resolve_base("google") == "google"
+        assert resolve_base("google_generate") == "google_generate"
         assert resolve_base("openai_responses") == "openai_responses"
         assert resolve_base("open_responses") == "open_responses"
 
@@ -319,7 +319,7 @@ class TestBuiltinShims:
         assert shim.model_reasoning["claudeopus47"].unsigned_blocks == "preserve"
 
     def test_google_base_type(self):
-        shim = get_shim("google")
+        shim = get_shim("google_generate")
         assert shim is not None
         assert shim.base == "google_generate"
 

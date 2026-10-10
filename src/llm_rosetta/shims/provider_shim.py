@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from ..types.ir.configs import IREffort, IRMode  # re-exported
+from llm_rosetta.provider_names import normalize_provider_name
 from llm_rosetta.transforms import IRTransform, Transform
 
 logger = logging.getLogger(__name__)
@@ -420,23 +421,32 @@ _BASE_TYPES: frozenset[str] = frozenset(
 def register_shim(shim: ProviderShim) -> None:
     """Register (or replace) a :class:`ProviderShim` in the global registry.
 
+    The shim is keyed by its name normalised to the canonical spelling, so a
+    shim registered under a legacy name is reachable via both that spelling
+    and its canonical form (lookups normalise identically).
+
     If a shim with the same name is already registered, it is silently
     replaced and an INFO-level log is emitted.  This allows plugin shims
     to override built-in defaults without raising errors.
     """
-    if shim.name in _SHIM_REGISTRY:
-        logger.info("Shim %r overridden (base: %s)", shim.name, shim.base)
-    _SHIM_REGISTRY[shim.name] = shim
+    key = normalize_provider_name(shim.name)
+    if key in _SHIM_REGISTRY:
+        logger.info("Shim %r overridden (base: %s)", key, shim.base)
+    _SHIM_REGISTRY[key] = shim
 
 
 def unregister_shim(name: str) -> ProviderShim | None:
     """Remove and return a shim by name.  Returns ``None`` if not found."""
-    return _SHIM_REGISTRY.pop(name, None)
+    return _SHIM_REGISTRY.pop(normalize_provider_name(name), None)
 
 
 def get_shim(name: str) -> ProviderShim | None:
-    """Look up a registered :class:`ProviderShim` by *name*."""
-    return _SHIM_REGISTRY.get(name)
+    """Look up a registered :class:`ProviderShim` by *name*.
+
+    Legacy names are normalised to canonical first, so a shim registered under
+    its canonical name stays reachable via a legacy alias (e.g. ``"google"``).
+    """
+    return _SHIM_REGISTRY.get(normalize_provider_name(name))
 
 
 def resolve_shim(shim: ProviderShim | str | None) -> ProviderShim | None:
@@ -460,11 +470,16 @@ def list_shims() -> list[ProviderShim]:
 def resolve_base(name: str) -> str:
     """Resolve a provider/shim *name* to its base converter type.
 
-    If *name* is already a known base type (e.g. ``"openai_chat"``),
-    it is returned unchanged.  Otherwise the shim registry is consulted.
-    If the name is not found in either, it is returned as-is (caller
-    decides how to handle unknown names).
+    Legacy *name* inputs are normalised to canonical spellings first (see
+    :func:`llm_rosetta.provider_names.normalize_provider_name`).  A shim's
+    declared ``base`` is returned as-is; callers that need a canonical
+    provider type normalise the result themselves.
+    If the normalised *name* is already a known base type (e.g.
+    ``"openai_chat"``), it is returned unchanged.  Otherwise the shim
+    registry is consulted.  If the name is not found in either, it is
+    returned as-is (caller decides how to handle unknown names).
     """
+    name = normalize_provider_name(name)
     if name in _BASE_TYPES:
         return name
     shim = _SHIM_REGISTRY.get(name)

@@ -180,7 +180,7 @@ class TestDetectProvider:
     def test_detect_google_simple(self):
         """测试检测简单的 Google GenAI 格式"""
         body = {"contents": [{"role": "user", "parts": [{"text": "Hello"}]}]}
-        assert detect_provider(body) == "google"
+        assert detect_provider(body) == "google_generate"
 
     def test_detect_google_with_system_instruction(self):
         """测试检测带 system_instruction 的 Google 格式"""
@@ -188,7 +188,7 @@ class TestDetectProvider:
             "system_instruction": {"parts": [{"text": "You are helpful"}]},
             "contents": [{"role": "user", "parts": [{"text": "Hello"}]}],
         }
-        assert detect_provider(body) == "google"
+        assert detect_provider(body) == "google_generate"
 
     def test_detect_google_with_function_call(self):
         """测试检测带函数调用的 Google 格式"""
@@ -207,7 +207,7 @@ class TestDetectProvider:
                 }
             ]
         }
-        assert detect_provider(body) == "google"
+        assert detect_provider(body) == "google_generate"
 
     def test_detect_google_with_inline_data(self):
         """测试检测带 inline_data 的 Google 格式"""
@@ -226,7 +226,7 @@ class TestDetectProvider:
                 }
             ]
         }
-        assert detect_provider(body) == "google"
+        assert detect_provider(body) == "google_generate"
 
     def test_detect_invalid_input(self):
         """测试无效输入"""
@@ -877,7 +877,7 @@ class TestDetectGoogleInteractions:
         body = {
             "contents": [{"role": "user", "parts": [{"text": "Hello"}]}],
         }
-        assert detect_provider(body) == "google"
+        assert detect_provider(body) == "google_generate"
 
     def test_not_confused_with_openai_responses(self):
         """OpenAI Responses input items should not match interactions."""

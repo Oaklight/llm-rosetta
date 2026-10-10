@@ -36,6 +36,7 @@ Example usage::
 
 from typing import Any, Literal
 
+from .provider_names import normalize_provider_name
 from .types.ir.tools import ToolCallConfig, ToolChoice, ToolDefinition
 from .types.ir.parts import ToolCallPart, ToolResultPart
 
@@ -45,6 +46,7 @@ ToolProvider = Literal[
     "openai_responses",
     "anthropic",
     "google",
+    "google_generate",
     "google_interactions",
     # Hyphenated aliases for ergonomic use
     "openai-chat",
@@ -55,19 +57,10 @@ ToolProvider = Literal[
     "google-interactions",
 ]
 
-_PROVIDER_ALIASES: dict[str, str] = {
-    "openai-chat": "openai_chat",
-    "openai-responses": "openai_responses",
-    "open_responses": "open_responses",
-    "open-responses": "open_responses",
-    "google-genai": "google",
-    "google-interactions": "google_interactions",
-}
-
 
 def _resolve(provider: str) -> str:
     """Normalize provider name to canonical form."""
-    return _PROVIDER_ALIASES.get(provider, provider)
+    return normalize_provider_name(provider)
 
 
 def _get_tool_ops(provider: str) -> Any:
@@ -85,7 +78,7 @@ def _get_tool_ops(provider: str) -> Any:
         from .converters.anthropic import AnthropicToolOps
 
         return AnthropicToolOps
-    if canonical == "google":
+    if canonical in ("google", "google_generate"):
         from .converters.google_generate import GoogleGenerateToolOps
 
         return GoogleGenerateToolOps
@@ -96,8 +89,9 @@ def _get_tool_ops(provider: str) -> Any:
     raise ValueError(
         f"Unknown provider: {provider!r}. "
         f"Supported: openai_chat, openai_responses, open_responses, "
-        f"anthropic, google, google_interactions "
-        f"(aliases: openai-chat, openai-responses, google-genai, google-interactions)"
+        f"anthropic, google_generate, google_interactions "
+        f"(aliases: openai-chat, openai-responses, google, google-genai, "
+        f"google-interactions)"
     )
 
 
