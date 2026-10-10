@@ -214,10 +214,13 @@ class ProviderShim:
             converter type strings (``"openai_chat"``, ``"anthropic"``,
             ``"google"``, ``"openai_responses"``).
         logo: URL to the provider's logo image (SVG preferred).
-        free_source: Marks the provider as a free model source.  The admin
-            UI uses this to group it under a neutral "Free" bucket, add a
-            refresh action, and show the third-party disclosure — without
-            naming the upstream vendor.
+        display_name: Human-readable brand label (e.g. ``"Kilo"``), used by the
+            admin UI for the provider title.  Falls back to the shim name when
+            unset.  The vendor's own casing, unlike ``name``.
+        free_source: Marks the provider as a source with a free model pool.
+            The admin UI groups its free (keyless) entry under a "Free
+            Resource" section, adds a refresh action, and shows the
+            third-party disclosure.
         connection: Upstream connection config (URL, API key env,
             models endpoint, model ID field).
         tools: Tool handling config (custom tools, description length,
@@ -244,6 +247,7 @@ class ProviderShim:
     name: str
     base: str
     logo: str | None = None
+    display_name: str | None = None
     free_source: bool = False
     connection: ConnectionConfig = ConnectionConfig()
     tools: ToolsConfig = ToolsConfig()
@@ -329,6 +333,7 @@ class ProviderShim:
         # ── Apply defaults ───────────────────────────────────────────
         _FIELD_DEFAULTS: dict[str, Any] = {
             "logo": None,
+            "display_name": None,
             "free_source": False,
             "connection": ConnectionConfig(),
             "tools": ToolsConfig(),

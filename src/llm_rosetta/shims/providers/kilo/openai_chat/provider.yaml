@@ -1,0 +1,17 @@
+# Kilo — free model source.
+#
+# Kilo's public gateway serves a free model pool. Requests carry no credential
+# while no API key is configured (`keyless`); supplying a key switches back to
+# Bearer auth, so a user with a subscription uses the same shim. As a keyless
+# entry the admin UI shows it as "Kilo (Free)" and groups it under the Free
+# Resource section.
+name: kilo--openai_chat
+base: openai_chat
+display_name: Kilo
+logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/kilocode.svg
+free_source: true
+
+connection:
+  base_url: https://api.kilo.ai/api/gateway
+  models_path: /models
+  keyless: true

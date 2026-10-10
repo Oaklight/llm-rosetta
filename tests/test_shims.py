@@ -761,7 +761,7 @@ class TestShimLoaderFieldCoverage:
 
 
 class TestFreeSourceShim:
-    """The free-source shim declares keyless + free_source and no logo."""
+    """The Kilo shim declares keyless + free_source, a display name, and a logo."""
 
     @pytest.fixture(autouse=True)
     def _load_builtins(self):
@@ -775,15 +775,16 @@ class TestFreeSourceShim:
         assert ConnectionConfig().keyless is False
         assert ConnectionConfig(keyless=True).keyless is True
 
-    def test_free_shim_fields(self):
-        shim = get_shim("free--openai_chat")
+    def test_kilo_shim_fields(self):
+        shim = get_shim("kilo--openai_chat")
 
         assert shim is not None
         assert shim.base == "openai_chat"
         assert shim.free_source is True
         assert shim.connection.keyless is True
         assert shim.connection.models_path == "/models"
-        assert shim.logo is None
+        assert shim.display_name == "Kilo"
+        assert shim.logo is not None
 
     def test_default_shim_is_not_free_source(self):
         shim = get_shim("openrouter--openai_chat")
@@ -791,3 +792,4 @@ class TestFreeSourceShim:
         assert shim is not None
         assert shim.free_source is False
         assert shim.connection.keyless is False
+        assert shim.display_name is None
