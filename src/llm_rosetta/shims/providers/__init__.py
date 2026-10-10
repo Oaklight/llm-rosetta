@@ -91,7 +91,7 @@ _PLUGIN_NS_PREFIX = "_llm_rosetta_plugin_shims"
 _plugin_namespaces: dict[str, list[str]] = {}
 
 
-def _ensure_pkg(name: str, dir_path: Path) -> None:
+def _ensure_pkg(name: str, dir_path: Path) -> bool:
     """Register *name* as a package whose ``__path__`` points at *dir_path*.
 
     External shim transforms are executed by path rather than imported as part
@@ -99,9 +99,14 @@ def _ensure_pkg(name: str, dir_path: Path) -> None:
     would otherwise raise ``ModuleNotFoundError``.  Giving each directory level
     a synthetic package with a ``__path__`` makes relative imports — and plain
     sibling-module imports — resolve through the normal path finder.
+
+    Returns:
+        ``True`` when the package was newly created (so a failed load can roll
+        it back), ``False`` when it already existed.
     """
     locs = _plugin_namespaces.get(name)
-    if locs is None:
+    created = locs is None
+    if created:
         locs = []
         _plugin_namespaces[name] = locs
         spec = importlib.machinery.ModuleSpec(name, loader=None, is_package=True)
@@ -113,6 +118,7 @@ def _ensure_pkg(name: str, dir_path: Path) -> None:
     if str(dir_path) not in locs:
         locs.append(str(dir_path))
     sys.modules[name].__path__ = locs
+    return created
 
 
 def _clear_plugin_namespaces() -> None:
@@ -227,33 +233,48 @@ def _load_transforms(
     tf_path = provider_dir / "transforms.py"
     if not tf_path.exists():
         return (), (), (), (), None
-    prefix = "llm_rosetta.shims.providers" if _builtin else "_llm_rosetta_plugin_shims"
+    created_pkgs: list[str] = []
     if _builtin:
-        if group is not None:
-            module_name = f"{prefix}.{group}.{provider_dir.name}.transforms"
-        else:
-            module_name = f"{prefix}.{provider_dir.name}.transforms"
+        prefix = "llm_rosetta.shims.providers"
+        module_name = (
+            f"{prefix}.{group}.{provider_dir.name}.transforms"
+            if group is not None
+            else f"{prefix}.{provider_dir.name}.transforms"
+        )
     else:
         # Register the directory chain as synthetic packages so the transforms
-        # module can use relative/sibling imports (see _ensure_pkg).
-        root = root or provider_dir.parent
+        # module can use relative/sibling imports (see _ensure_pkg).  The
+        # namespace is keyed on the *resolved* root so the same directory
+        # reached by different paths (relative, symlink, …) shares one.
+        root = Path(root or provider_dir.parent).resolve()
         ns = f"{_PLUGIN_NS_PREFIX}_{hashlib.sha1(str(root).encode()).hexdigest()[:8]}"
-        _ensure_pkg(ns, root)
         cur, cur_dir = ns, root
+        chain = [(ns, root)]
         for part in group.split(".") if group else []:
             cur_dir = cur_dir / part
             cur = f"{cur}.{part}"
-            _ensure_pkg(cur, cur_dir)
-        leaf = f"{cur}.{provider_dir.name}"
-        _ensure_pkg(leaf, provider_dir)
-        module_name = f"{leaf}.transforms"
+            chain.append((cur, cur_dir))
+        chain.append((f"{cur}.{provider_dir.name}", provider_dir))
+        for pkg_name, pkg_dir in chain:
+            if _ensure_pkg(pkg_name, pkg_dir):
+                created_pkgs.append(pkg_name)
+        module_name = f"{cur}.{provider_dir.name}.transforms"
     spec = importlib.util.spec_from_file_location(module_name, tf_path)
     if spec is None or spec.loader is None:
         logger.warning("Could not load %s", tf_path)
         return (), (), (), (), None
     mod = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = mod
-    spec.loader.exec_module(mod)
+    try:
+        spec.loader.exec_module(mod)
+    except BaseException:
+        # Roll back the half-initialised module (and any packages this load
+        # created) so a later load does not hit a broken module.
+        sys.modules.pop(module_name, None)
+        for pkg_name in created_pkgs:
+            sys.modules.pop(pkg_name, None)
+            _plugin_namespaces.pop(pkg_name, None)
+        raise
     # New names take precedence; fall back to legacy names.
     # Use `is None` (not `or`) since empty tuple () is falsy but valid.
     pre = getattr(mod, "pre_ir_transforms", None)

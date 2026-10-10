@@ -505,6 +505,42 @@ class TestLoadProvidersFromDir:
         s = [s for s in shims if s.name == "grp--leaf"][0]
         assert s.post_ir_transforms[0]({"gone": 1, "keep": 2}) == {"keep": 2}
 
+    def test_distinct_roots_do_not_collide(self, tmp_path: Path):
+        """Two providers roots with the same group/leaf names stay independent."""
+        import sys
+
+        for root, marker in ((tmp_path / "a", "a"), (tmp_path / "b", "b")):
+            leaf = root / "grp" / "leaf"
+            leaf.mkdir(parents=True)
+            (leaf / "provider.yaml").write_text("name: grp--leaf\nbase: openai_chat\n")
+            (leaf / "tag.py").write_text(f"MARK = {marker!r}\n")
+            (leaf / "transforms.py").write_text("from .tag import MARK\n")
+            load_providers_from_dir(root)
+
+        prefixes = {
+            m.split(".", 1)[0]
+            for m in sys.modules
+            if m.startswith("_llm_rosetta_plugin_shims")
+        }
+        # One private namespace per providers root.
+        assert len(prefixes) >= 2
+
+    def test_failed_plugin_transform_rolls_back(self, tmp_path: Path):
+        """A transforms.py that raises leaves nothing half-registered."""
+        import sys
+
+        d = tmp_path / "bad"
+        d.mkdir()
+        (d / "provider.yaml").write_text("name: bad\nbase: openai_chat\n")
+        (d / "transforms.py").write_text("raise RuntimeError('boom')\n")
+        before = {m for m in sys.modules if m.startswith("_llm_rosetta_plugin_shims")}
+
+        with pytest.raises(RuntimeError, match="boom"):
+            load_providers_from_dir(tmp_path)
+
+        after = {m for m in sys.modules if m.startswith("_llm_rosetta_plugin_shims")}
+        assert after == before
+
     def test_plugin_namespaces_cleared_on_reset(self, tmp_path: Path):
         """_reset_registry drops the synthetic plugin packages from sys.modules."""
         import sys
