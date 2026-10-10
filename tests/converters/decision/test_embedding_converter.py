@@ -28,12 +28,18 @@ IR_REQUEST: IRDecisionRequest = {
         "wants_refund": AssertionQuestion(
             type="assertion",
             instructions="Requesting refund?",
-            criteria={"true": "Wants money back", "false": "No refund"},
+            criteria=[
+                {"label": False, "description": "No refund"},
+                {"label": True, "description": "Wants money back"},
+            ],
         ),
         "department": ChoiceQuestion(
             type="choice",
             instructions="Which team?",
-            criteria={"billing": "Payments", "support": "Help"},
+            criteria=[
+                {"label": "billing", "description": "Payments"},
+                {"label": "support", "description": "Help"},
+            ],
         ),
     },
 }
@@ -87,8 +93,8 @@ class TestResponseFromProvider:
         resp = _make_embedding_response(
             [
                 [1.0, 0.0],  # context for q1
-                [0.9, 0.1],  # "Wants money back" (similar to context)
-                [0.1, 0.9],  # "No refund" (dissimilar)
+                [0.1, 0.9],  # "No refund" (false) — dissimilar
+                [0.9, 0.1],  # "Wants money back" (true) — similar
                 [1.0, 0.0],  # context for q2
                 [0.8, 0.2],  # "Payments" (similar)
                 [0.2, 0.8],  # "Help" (dissimilar)

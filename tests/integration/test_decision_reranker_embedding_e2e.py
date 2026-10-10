@@ -46,27 +46,30 @@ DECISION_REQUEST: IRDecisionRequest = {
         "wants_refund": AssertionQuestion(
             type="assertion",
             instructions="Is the customer requesting a refund?",
-            criteria={
-                "true": "Asks for money back or refund",
-                "false": "No refund request",
-            },
+            criteria=[
+                {"label": False, "description": "No refund request"},
+                {"label": True, "description": "Asks for money back or refund"},
+            ],
         ),
         "department": ChoiceQuestion(
             type="choice",
             instructions="Which team should handle this?",
-            criteria={
-                "billing": "Payments, refunds, charges",
-                "support": "General customer help",
-                "escalation": "Urgent complaints, legal threats",
-            },
+            criteria=[
+                {"label": "billing", "description": "Payments, refunds, charges"},
+                {"label": "support", "description": "General customer help"},
+                {
+                    "label": "escalation",
+                    "description": "Urgent complaints, legal threats",
+                },
+            ],
         ),
         "frustration": ScoreQuestion(
             type="score",
             instructions="How frustrated is the customer?",
             criteria=[
-                "Calm and factual",
-                "Annoyed but civil",
-                "Very frustrated and angry",
+                {"label": "Calm and factual"},
+                {"label": "Annoyed but civil"},
+                {"label": "Very frustrated and angry"},
             ],
         ),
     },
