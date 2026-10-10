@@ -47,8 +47,15 @@ src/llm_rosetta/shims/providers/
 
 Each provider subdirectory contains:
 
-- **`provider.yaml`** (required) — declares `name`, `base`, connection settings (`connection.base_url`, `connection.api_key_env`, `connection.auth_header`), and `logo`
+- **`provider.yaml`** (required) — declares `name`, `base`, connection settings (`connection.base_url`, `connection.api_key_env`, `connection.auth_header`, `connection.keyless`, `connection.models_path`), plus optional `logo`, `display_name`, and `free_source`
 - **`transforms.py`** (optional) — exports `post_ir_transforms` and/or `pre_ir_transforms` tuples (the old names `to_transforms` / `from_transforms` also work)
+
+`connection.keyless` marks an upstream that accepts requests with no credential: the
+provider sends no auth header while no `api_key` is configured, and falls back to the
+base type's auth when one is supplied. `free_source: true` marks a shim whose gateway
+serves a free model pool — the admin UI groups its keyless entry under a "Free
+Resource" section and titles it `<display_name> (Free)`. `display_name` is the brand
+label shown in the admin UI; it defaults to the shim name.
 
 Example `provider.yaml`:
 

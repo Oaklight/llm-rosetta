@@ -22,5 +22,6 @@ Per-provider guides covering shim configuration, transforms, authentication, and
 | [Argo](argo.md) | `argo-*` | `openai_chat` | Argonne internal gateway |
 | [AskSage](asksage.md) | `asksage--*` | multiple | Multi-format aggregator |
 | [ALCF](alcf.md) | `alcf--*` | `openai_chat` | Globus OAuth, token_command |
+| [Kilo](kilo.md) | `kilo--openai_chat` | `openai_chat` | Free pool, keyless |
 
 For general shim concepts and custom shim registration, see [Provider Shims](../shims.md).

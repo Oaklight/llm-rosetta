@@ -145,6 +145,7 @@ nav:
               - Argo: guide/providers/argo.md
               - AskSage: guide/providers/asksage.md
               - ALCF: guide/providers/alcf.md
+              - Kilo: guide/providers/kilo.md
           - Reasoning / Thinking: guide/reasoning.md
           - Provider Reasoning Behavior: guide/provider-reasoning.md
       - Examples:
