@@ -112,7 +112,7 @@ OpenAI's newer API format (2025). Uses a flat list of typed items instead of nes
 
 The spec is the base and the OpenAI Responses API is a conforming profile: `OpenResponsesConverter` implements the vendor-neutral standard, and `OpenAIResponsesConverter` derives from it — adding the `resp_` response-id prefix, OpenAI-only lifecycle echo fields (`billing`, `moderation`, …), and OpenAI's `store: true` default. Both classes are importable; the `OpenAIResponses*` ops classes are kept as aliases of the `OpenResponses*` ones.
 
-`open_responses` has its own shim (`shims/providers/open_responses/provider.yaml`) with no canonical host and no response-id prefix, so a deployment must supply a base URL (for example an OpenRouter, vLLM, or Ollama endpoint) — the gateway no longer defaults it to OpenAI.
+`open_responses` has its own shim (`shims/providers/open_responses/provider.yaml`) with no canonical host and no response-id prefix. Since the spec has no canonical host, the gateway defaults it to OpenRouter; deployments targeting another host (for example vLLM or Ollama) must set `base_url`.
 
 **Differences from the OpenAI Responses profile:**
 
