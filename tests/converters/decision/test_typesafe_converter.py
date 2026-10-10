@@ -280,5 +280,27 @@ class TestEdgeCases:
         wire = converter.response_to_provider(ir)
         assert wire["answers"]["q"]["unknown_probability"] == 0.2
 
+    def test_unknown_answer_type_warns_and_passes_through(self, converter):
+        from llm_rosetta.converters.base.context import ConversionContext
+
+        ctx = ConversionContext()
+        resp = {
+            "model": "m",
+            "answers": {"q": {"type": "distribution", "probabilities": {"a": 0.9}}},
+        }
+        ir = converter.response_from_provider(resp, context=ctx)
+        assert ir["answers"]["q"] == {
+            "type": "distribution",
+            "probabilities": {"a": 0.9},
+        }
+        assert any("Unrecognized TypeSafe answer type" in w for w in ctx.warnings)
+
+    def test_array_state_round_trip(self, converter):
+        req = {"model": "m", "state": ["alpha", "beta"], "questions": {}}
+        ir = converter.request_from_provider(req)
+        assert ir["state"] == {"items": ["alpha", "beta"]}
+        wire, _ = converter.request_to_provider(ir)
+        assert wire["state"] == ["alpha", "beta"]
+
     def test_converter_tag(self, converter):
         assert converter._CONVERTER_TAG == "typesafe_decision"

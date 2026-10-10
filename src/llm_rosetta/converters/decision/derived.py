@@ -27,7 +27,8 @@ def abstained(answer: dict[str, Any]) -> bool:
     """Whether the model abstained — the unknown mass is the largest option.
 
     Always derived (``abstained`` is not a stored field).  An answer with no
-    ``unknown_probability`` never abstains.
+    ``unknown_probability`` never abstains.  A tie counts as abstained
+    (``unknown_probability`` equal to the largest option).
     """
     unknown = answer.get("unknown_probability")
     if unknown is None:
@@ -38,26 +39,31 @@ def abstained(answer: dict[str, Any]) -> bool:
     probability = answer.get("probability")
     if probability is None:
         return unknown >= 0.5
-    return unknown > max(probability, 1.0 - probability)
+    return unknown >= max(probability, 1.0 - probability)
 
 
 def confidence(answer: dict[str, Any]) -> float:
     """Confidence of the answer.
 
-    Uses the provider's ``confidence`` when present; otherwise derives it as
-    ``1 - normalized Shannon entropy`` of ``probabilities``, or — for an
-    assertion (which has no distribution) — the credence ``max(p, 1 - p)``.
+    Uses the provider's ``confidence`` when present; otherwise derives it from
+    the distribution (``1 - normalized Shannon entropy`` of ``probabilities``,
+    or the credence ``max(p, 1 - p)`` for an assertion) and scales it by
+    ``(1 - unknown_probability)`` so an abstained answer reads as low
+    confidence — consistent with :func:`abstained`.
     """
     stored = _stored(answer, "confidence")
     if stored is not None:
         return stored
     probs = answer.get("probabilities")
     if probs:
-        return compute_confidence(probs)
-    probability = answer.get("probability")
-    if probability is not None:
-        return max(probability, 1.0 - probability)
-    return 0.0
+        base = compute_confidence(probs)
+    else:
+        probability = answer.get("probability")
+        base = max(probability, 1.0 - probability) if probability is not None else 0.0
+    unknown = answer.get("unknown_probability")
+    if unknown is not None:
+        base *= max(0.0, 1.0 - unknown)
+    return base
 
 
 def choice(answer: dict[str, Any]) -> Any:
