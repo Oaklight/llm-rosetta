@@ -132,7 +132,10 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
     og.label = label;
     for (const s of items) {
       const opt = document.createElement('option');
-      opt.value = s.name; opt.textContent = s.name;
+      opt.value = s.name;
+      opt.textContent = (s.recommended_provider && s.recommended_provider !== s.name)
+        ? `${s.name} — ${t('label.preferProvider', {name: s.recommended_provider})}`
+        : s.name;
       if (s.name === provType) opt.selected = true;
       og.appendChild(opt);
     }
