@@ -105,3 +105,14 @@ class TestKeylessProvider:
         )
 
         assert info.base_url == "https://api.kilo.ai/api/gateway"
+
+    def test_base_type_env_key_disables_keyless(self, monkeypatch):
+        """A key resolved from the base-type env var turns keyless off — it is
+        computed after the env fallback, not before."""
+        load_providers()
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-env")
+
+        info = build_provider_info("openai_chat", {}, shim_name="kilo--openai_chat")
+
+        assert info.keyless is False
+        assert info.auth_headers() == {"Authorization": "Bearer sk-env"}
