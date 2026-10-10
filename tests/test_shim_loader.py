@@ -526,13 +526,17 @@ class TestLoadProvidersFromDir:
         assert len(prefixes) >= 2
 
     def test_failed_plugin_transform_rolls_back(self, tmp_path: Path):
-        """A transforms.py that raises leaves nothing half-registered."""
+        """A transforms.py that raises leaves nothing half-registered —
+        including a sibling module it imported before raising."""
         import sys
 
         d = tmp_path / "bad"
         d.mkdir()
         (d / "provider.yaml").write_text("name: bad\nbase: openai_chat\n")
-        (d / "transforms.py").write_text("raise RuntimeError('boom')\n")
+        (d / "leaky.py").write_text("VALUE = 1\n")
+        (d / "transforms.py").write_text(
+            "from . import leaky\nraise RuntimeError('boom')\n"
+        )
         before = {m for m in sys.modules if m.startswith("_llm_rosetta_plugin_shims")}
 
         with pytest.raises(RuntimeError, match="boom"):
