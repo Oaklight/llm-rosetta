@@ -11,7 +11,11 @@ from llm_rosetta._vendor.httpserver import JSONResponse, Response
 from llm_rosetta.shims import get_shim, list_shims
 
 from ...config import GatewayConfig
-from ...providers import known_provider_types
+from ...providers import (
+    get_default_api_key_env,
+    get_default_base_url,
+    known_provider_types,
+)
 from ._shared import (
     _build_provider_entry,
     _get_config_io,
@@ -246,6 +250,21 @@ async def get_config(request: Any) -> Response:
             "api_keys_db": config.api_keys_db,
             "version": _get_version(),
             "known_provider_types": known_provider_types(),
+            "base_formats": [
+                {
+                    "name": name,
+                    "base": name,
+                    "default_base_url": get_default_base_url(name),
+                    "default_api_key_env": get_default_api_key_env(name),
+                }
+                for name in (
+                    "openai_chat",
+                    "openai_responses",
+                    "anthropic",
+                    "google_generate",
+                    "google_interactions",
+                )
+            ],
             "registered_shims": [
                 {
                     "name": s.name,
