@@ -7,6 +7,7 @@ converter maps them to TypeSafe's per-type criteria shapes.
 
 import pytest
 
+from llm_rosetta.converters.base.context import ConversionContext
 from llm_rosetta.converters.decision.typesafe import TypeSafeDecisionConverter
 
 # ============================================================================
@@ -304,3 +305,78 @@ class TestEdgeCases:
 
     def test_converter_tag(self, converter):
         assert converter._CONVERTER_TAG == "typesafe_decision"
+
+
+class TestMultimodal:
+    """System One family ``images[]`` extension (Clef / classifier.dev)."""
+
+    def test_parts_to_state_and_images(self, converter):
+        ir = {
+            "model": "m",
+            "state": [
+                {"type": "text", "text": "look"},
+                {
+                    "type": "image",
+                    "image_data": {"media_type": "image/png", "data": "AAAA"},
+                },
+            ],
+            "questions": {},
+        }
+        wire, _ = converter.request_to_provider(ir)
+        assert wire["state"] == "look"
+        assert wire["images"] == ["data:image/png;base64,AAAA"]
+
+    def test_state_and_images_to_parts(self, converter):
+        req = {
+            "model": "m",
+            "state": "look",
+            "images": ["data:image/png;base64,AAAA"],
+            "questions": {},
+        }
+        ir = converter.request_from_provider(req)
+        assert ir["state"] == [
+            {"type": "text", "text": "look"},
+            {"type": "image", "image_url": "data:image/png;base64,AAAA"},
+        ]
+
+    def test_round_trip(self, converter):
+        req = {
+            "model": "m",
+            "state": "look",
+            "images": ["data:image/png;base64,AAAA"],
+            "questions": {},
+        }
+        ir = converter.request_from_provider(req)
+        wire, _ = converter.request_to_provider(ir)
+        assert wire["state"] == "look"
+        assert wire["images"] == ["data:image/png;base64,AAAA"]
+
+    def test_no_images_key_when_absent(self, converter):
+        wire, _ = converter.request_to_provider(
+            {"model": "m", "state": "x", "questions": {}}
+        )
+        assert "images" not in wire
+
+    def test_image_only_state(self, converter):
+        req = {
+            "model": "m",
+            "state": "",
+            "images": ["data:image/png;base64,AAAA"],
+            "questions": {},
+        }
+        ir = converter.request_from_provider(req)
+        assert ir["state"] == [
+            {"type": "image", "image_url": "data:image/png;base64,AAAA"}
+        ]
+
+    def test_dict_embedded_image_warns(self, converter):
+        req = {
+            "model": "m",
+            "state": {
+                "photo": {"type": "image", "image_url": "data:image/png;base64,AA"}
+            },
+            "questions": {},
+        }
+        ir = converter.request_from_provider(req)
+        _, warnings = converter.request_to_provider(ir, context=ConversionContext())
+        assert any("embedded in a structured state" in w for w in warnings)
