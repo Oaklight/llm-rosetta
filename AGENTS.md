@@ -29,7 +29,7 @@ Five chat converters, one per API standard:
 | Converter | API Standard | Module |
 |-----------|-------------|--------|
 | `chat_completions` | OpenAI Chat Completions | `converters/chat_completions/` |
-| `open_responses` (OpenAI profile via the `openai_responses` shim) | Open Responses spec | `converters/open_responses/` |
+| `open_responses` | Open Responses spec (vendor-neutral) | `converters/open_responses/` |
 | `anthropic` | Anthropic Messages API | `converters/anthropic/` |
 | `google_generate` | Google generateContent API | `converters/google_generate/` |
 | `google_interactions` | Google Interactions API | `converters/google_interactions/` |
@@ -39,6 +39,14 @@ base of the two Responses classes); `OpenAIResponsesConverter` derives from it a
 the OpenAI profile (adds the `resp_` id prefix, `store: true`, and OpenAI-only
 echo fields). The `OpenAIResponses*` ops classes are aliases of the
 `OpenResponses*` ones.
+
+Base formats are vendor-neutral: a bare `type: <base>` provider (e.g.
+`type: open_responses`) carries no implied host or credential env var and must
+set `base_url` explicitly. Vendors ship a `<vendor>--<base>` shim (e.g.
+`openrouter--open_responses`, `openai--open_responses`) whose
+`connection.base_url` / `connection.api_key_env` supply the defaults; the
+vendor URL for a bare format is offered in the admin UI as a *placeholder*
+hint only.
 
 `ChatCompletionsConverter` (module `converters/chat_completions/`) is the
 canonical name of the Chat Completions converter; the `OpenAIChat*` classes and

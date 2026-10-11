@@ -138,8 +138,19 @@ def _cmd_add_provider(args: argparse.Namespace) -> None:
     data, path = _load_or_create_config(config_path)
 
     name: str = args.name
-    default_key = f"${{{get_default_api_key_env(name)}}}"
-    default_url = get_default_base_url(name)
+    # A vendor shim (reachable under a vendor spelling like ``anthropic`` or
+    # ``openai``) supplies a connection default; a bare base format is
+    # vendor-neutral, so its base_url must be given explicitly.
+    from llm_rosetta.shims import get_shim
+
+    shim = get_shim(name)
+    env = (shim.connection.api_key_env if shim else None) or get_default_api_key_env(
+        name
+    )
+    default_key = f"${{{env or f'{name.upper()}_API_KEY'}}}"
+    default_url = (shim.connection.base_url if shim else None) or get_default_base_url(
+        name
+    )
 
     # api_key: CLI flag > interactive > auto-default
     api_key: str = args.api_key or ""

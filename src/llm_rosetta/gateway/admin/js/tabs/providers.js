@@ -16,6 +16,22 @@ import { initLogoPicker, setLogoPickerValue, getLogoPickerValue } from '../compo
 /** Capitalize the first letter of a string. */
 function _capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 
+/** Render a provider type's vendor hints as input *placeholders*.
+ *
+ *  A bare base format is vendor-neutral: its vendor URL / key env is only a
+ *  hint (``placeholder_*`` fields from ``_base_formats_payload``), never a
+ *  pre-filled value.  A vendor shim's real connection defaults are still
+ *  auto-filled as values by the caller. */
+function _applyTypePlaceholders(s, { preserveKeyHint = false } = {}) {
+  const urlInput = document.getElementById('provBaseUrl');
+  const urlHint = (s && (s.placeholder_base_url || s.default_base_url)) || '';
+  urlInput.placeholder = urlHint || 'https://api.openai.com/v1';
+  if (preserveKeyHint) return;
+  const keyInput = document.getElementById('provApiKey');
+  const env = (s && (s.placeholder_api_key_env || s.default_api_key_env)) || '';
+  keyInput.placeholder = env ? '${' + env + '}' : '${OPENAI_API_KEY}';
+}
+
 // ── Free sources ────────────────────────────────────────────────────
 
 /** Free-source shims advertised by the server (presented neutrally as "Free"). */
@@ -144,7 +160,9 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
   }
   _updateTypeLogo();
 
-  // Auto-fill base URL and API key placeholder when selecting a type
+  // Auto-fill base URL / API key *values* from a vendor shim's connection
+  // defaults; a bare base format instead surfaces a vendor hint as the input
+  // placeholder (never a value) — see _applyTypePlaceholders.
   let _prevShimUrl = (shimMap[provType || ''] || {}).default_base_url || '';
   typeSel.onchange = () => {
     _updateTypeLogo();
@@ -160,6 +178,7 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
     _prevShimUrl = s.default_base_url || '';
     const keyInput = document.getElementById('provApiKey');
     if (!keyInput.value && s.default_api_key_env) keyInput.value = '${' + s.default_api_key_env + '}';
+    _applyTypePlaceholders(s);
     // Update custom tools checkbox to match new shim default
     const provCfg = _editingProviderName && S.configData ? S.configData.providers[_editingProviderName] : null;
     if (!provCfg || !('supports_custom_tools' in provCfg)) {
@@ -190,6 +209,11 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
     keyInput.placeholder = '${OPENAI_API_KEY}';
     _syncKeyField();
   }
+  // Vendor hint placeholders for the initially selected type.  Preserve the
+  // "leave blank to keep current key" hint when editing a stored key.
+  _applyTypePlaceholders(shimMap[typeSel.value], {
+    preserveKeyHint: !S._credentialVisible && !!name,
+  });
   document.getElementById('provProxy').value = proxy || '';
 
   // URL template overrides

@@ -13,8 +13,8 @@ from llm_rosetta.shims.providers import load_providers
 
 _KEYS = {
     "name",
-    "default_base_url",
-    "default_api_key_env",
+    "placeholder_base_url",
+    "placeholder_api_key_env",
     "supports_custom_tools",
 }
 
@@ -27,11 +27,15 @@ def test_base_formats_shape():
     for entry in payload:
         assert set(entry) == _KEYS
         assert "base" not in entry
-        # A default host is expected for the vendor standards, but is not
-        # universal — open_responses has none, so only its *type* is pinned.
-        assert isinstance(entry["default_base_url"], str)
+        # Vendor URL / key env are *hint* strings; the JS renders them as input
+        # placeholders, never as pre-filled values.
+        assert isinstance(entry["placeholder_base_url"], str)
+        assert isinstance(entry["placeholder_api_key_env"], str)
+        assert "default_base_url" not in entry
+        assert "default_api_key_env" not in entry
     by_name = {b["name"]: b for b in payload}
-    assert by_name["chat_completions"]["default_base_url"]
+    assert by_name["chat_completions"]["placeholder_base_url"]
+    assert by_name["chat_completions"]["placeholder_api_key_env"]
 
 
 def test_supports_custom_tools_defaults():

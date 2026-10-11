@@ -13,8 +13,7 @@ from llm_rosetta.shims import get_shim, list_shims
 from ...config import GatewayConfig
 from ...providers import (
     BASE_FORMATS,
-    get_default_api_key_env,
-    get_default_base_url,
+    get_base_type_hints,
     get_default_supports_custom_tools,
     known_provider_types,
 )
@@ -44,16 +43,21 @@ def _base_formats_payload() -> list[dict[str, Any]]:
     so a new base type is added in one place.  ``supports_custom_tools`` carries
     the format's own default so a bare format matches its vendor shim instead of
     silently dropping the toggle.
+    ``placeholder_base_url`` / ``placeholder_api_key_env`` carry a vendor
+    suggestion for the input's ``placeholder`` attribute only: a bare base
+    format is vendor-neutral, so these are hints, never pre-filled values or
+    runtime fallbacks.
     ``hoist_system_messages`` is not carried: every format defaults it to true
     (the JS reads ``!== false``), so there is nothing to override.
     """
     out: list[dict[str, Any]] = []
     for name in BASE_FORMATS:
+        hints = get_base_type_hints(name)
         out.append(
             {
                 "name": name,
-                "default_base_url": get_default_base_url(name),
-                "default_api_key_env": get_default_api_key_env(name),
+                "placeholder_base_url": hints.get("base_url", ""),
+                "placeholder_api_key_env": hints.get("api_key_env", ""),
                 "supports_custom_tools": get_default_supports_custom_tools(name),
             }
         )

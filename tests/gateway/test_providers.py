@@ -37,21 +37,44 @@ class TestBuildProviderInfo:
         )
 
 
-class TestOpenResponsesDefaults:
-    """The spec has no canonical host, so open_responses defaults to OpenRouter."""
+class TestVendorNeutralBaseFormats:
+    """A bare base format is vendor-neutral: no implied host or credential env.
 
-    def test_resolves_to_openrouter_without_config(self):
-        info = build_provider_info("open_responses", {})
+    The vendor URL is only a UI placeholder hint (``get_base_type_hints``);
+    runtime resolution requires an explicit ``base_url`` or a vendor shim.
+    """
+
+    def test_bare_open_responses_requires_explicit_base_url(self):
+        with pytest.raises(ValueError, match="no base_url configured"):
+            build_provider_info("open_responses", {})
+
+    def test_explicit_base_url_is_used(self):
+        info = build_provider_info("open_responses", {"base_url": "https://x/v1"})
+        assert info.upstream_url("m") == "https://x/v1/responses"
+
+    def test_vendor_shim_supplies_base_url(self):
+        load_providers()
+        info = build_provider_info(
+            "open_responses", {"api_key": "k"}, shim_name="openrouter--open_responses"
+        )
         assert info.upstream_url("m") == "https://openrouter.ai/api/v1/responses"
 
-    def test_registry_defaults(self):
+    def test_registry_defaults_are_empty(self):
         from llm_rosetta.gateway.providers import (
             get_default_api_key_env,
             get_default_base_url,
         )
 
-        assert get_default_base_url("open_responses") == "https://openrouter.ai/api/v1"
-        assert get_default_api_key_env("open_responses") == "OPENROUTER_API_KEY"
+        assert get_default_base_url("open_responses") == ""
+        assert get_default_api_key_env("open_responses") == ""
+
+    def test_hints_are_ui_placeholders(self):
+        from llm_rosetta.gateway.providers import get_base_type_hints
+
+        assert get_base_type_hints("open_responses") == {
+            "base_url": "https://openrouter.ai/api/v1",
+            "api_key_env": "OPENROUTER_API_KEY",
+        }
 
 
 class TestKeylessProvider:
@@ -79,7 +102,9 @@ class TestKeylessProvider:
 
     def test_non_keyless_provider_without_key_still_raises(self):
         load_providers()
-        info = build_provider_info("openai_chat", {"api_key": ""})
+        info = build_provider_info(
+            "openai_chat", {"api_key": "", "base_url": "https://x/v1"}
+        )
 
         with pytest.raises(ValueError, match="No API keys configured"):
             info.auth_headers()
@@ -134,11 +159,16 @@ class TestKeylessProvider:
         with pytest.raises(ValueError, match="No API keys configured"):
             info.auth_headers()
 
-    def test_base_type_env_key_used_when_api_key_absent(self, monkeypatch):
-        """A provider with no key at all still takes the base-type env var."""
+    def test_base_type_env_key_is_not_consulted(self, monkeypatch):
+        """A bare base format does not inherit a vendor credential env var.
+
+        ``chat_completions`` is vendor-neutral: an ``OPENAI_API_KEY`` in the
+        environment is not this provider's credential.
+        """
         load_providers()
         monkeypatch.setenv("OPENAI_API_KEY", "sk-env")
 
         info = build_provider_info("openai_chat", {"base_url": "https://x/v1"})
 
-        assert info.auth_headers() == {"Authorization": "Bearer sk-env"}
+        with pytest.raises(ValueError, match="No API keys configured"):
+            info.auth_headers()

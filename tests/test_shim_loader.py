@@ -115,7 +115,6 @@ class TestLoadProviders:
             "minimax--anthropic",
             "minimax--chat_completions",
             "moonshot",
-            "open_responses",
             "openai--chat_completions",
             "openai--open_responses",
             "openrouter--anthropic",

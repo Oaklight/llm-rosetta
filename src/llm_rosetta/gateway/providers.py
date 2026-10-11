@@ -34,66 +34,88 @@ logger = logging.getLogger("llm-rosetta-gateway")
 
 _PROVIDER_REGISTRY: dict[str, dict[str, Any]] = {
     "chat_completions": {
-        "default_base_url": "https://api.openai.com/v1",
-        "default_api_key_env": "OPENAI_API_KEY",
         "auth_header_fn": openai_auth,
         "url_template": "{base_url}/chat/completions",
     },
     "open_responses": {
-        # The spec is vendor-neutral and has no canonical host of its own, so
-        # the gateway defaults to OpenRouter (a multi-vendor router that speaks
-        # the spec).  A deployment targeting another host must set ``base_url``
-        # in its provider config or a shim ``connection.base_url``.
-        "default_base_url": "https://openrouter.ai/api/v1",
-        "default_api_key_env": "OPENROUTER_API_KEY",
         "auth_header_fn": openai_auth,
         "url_template": "{base_url}/responses",
     },
     "anthropic": {
-        "default_base_url": "https://api.anthropic.com",
-        "default_api_key_env": "ANTHROPIC_API_KEY",
         "auth_header_fn": anthropic_auth,
         "url_template": "{base_url}/v1/messages",
     },
     "google": {
-        "default_base_url": "https://generativelanguage.googleapis.com",
-        "default_api_key_env": "GOOGLE_API_KEY",
         "auth_header_fn": google_auth,
         "url_template": "{base_url}/v1beta/models/{model}:generateContent",
         "stream_url_template": "{base_url}/v1beta/models/{model}:streamGenerateContent?alt=sse",
     },
     "google_generate": {
-        "default_base_url": "https://generativelanguage.googleapis.com",
-        "default_api_key_env": "GOOGLE_API_KEY",
         "auth_header_fn": google_auth,
         "url_template": "{base_url}/v1beta/models/{model}:generateContent",
         "stream_url_template": "{base_url}/v1beta/models/{model}:streamGenerateContent?alt=sse",
     },
     "google_interactions": {
-        "default_base_url": "https://generativelanguage.googleapis.com",
-        "default_api_key_env": "GOOGLE_API_KEY",
         "auth_header_fn": google_auth,
         "url_template": "{base_url}/v1beta/interactions",
         "stream_url_template": "{base_url}/v1beta/interactions?alt=sse",
     },
 }
 
+# Vendor hints for bare base formats, surfaced by the admin provider picker as
+# input *placeholders* only.  They are never runtime fallbacks: a bare base
+# type with no ``base_url`` fails to load rather than silently inheriting a
+# vendor host, and its credential env var is not consulted either.
+_BASE_TYPE_HINTS: dict[str, dict[str, str]] = {
+    "chat_completions": {
+        "base_url": "https://api.openai.com/v1",
+        "api_key_env": "OPENAI_API_KEY",
+    },
+    "open_responses": {
+        "base_url": "https://openrouter.ai/api/v1",
+        "api_key_env": "OPENROUTER_API_KEY",
+    },
+    "anthropic": {
+        "base_url": "https://api.anthropic.com",
+        "api_key_env": "ANTHROPIC_API_KEY",
+    },
+    "google_generate": {
+        "base_url": "https://generativelanguage.googleapis.com",
+        "api_key_env": "GOOGLE_API_KEY",
+    },
+    "google_interactions": {
+        "base_url": "https://generativelanguage.googleapis.com",
+        "api_key_env": "GOOGLE_API_KEY",
+    },
+}
+
+
+def get_base_type_hints(provider_type: str) -> dict[str, str]:
+    """Return UI placeholder hints (``base_url`` / ``api_key_env``) for a base.
+
+    These suggest a common vendor for a bare base format but are **not**
+    runtime defaults — see :data:`_BASE_TYPE_HINTS`.  Empty for unknown types.
+    """
+    return dict(_BASE_TYPE_HINTS.get(canonical_provider_name(provider_type), {}))
+
 
 def get_default_base_url(provider_type: str) -> str:
-    """Return the default base URL for a known provider type, or ``""``."""
-    entry = _PROVIDER_REGISTRY.get(canonical_provider_name(provider_type))
-    return entry.get("default_base_url", "") if entry else ""
+    """Return ``\"\"`` — a base format has no implied host.
+
+    Base formats are vendor-neutral; the vendor URL shown in the admin picker
+    is only a placeholder hint (:func:`get_base_type_hints`).  A provider must
+    set ``base_url`` explicitly, or use a vendor ``<vendor>--<base>`` shim
+    whose ``connection.base_url`` supplies it.
+    """
+    return ""
 
 
 def get_default_api_key_env(provider_type: str) -> str:
-    """Return the default env-var name for a provider's API key."""
-    provider_type = canonical_provider_name(provider_type)
-    entry = _PROVIDER_REGISTRY.get(provider_type)
-    return (
-        entry.get("default_api_key_env", f"{provider_type.upper()}_API_KEY")
-        if entry
-        else f"{provider_type.upper()}_API_KEY"
-    )
+    """Return ``\"\"`` — a base format has no implied credential env var.
+
+    See :func:`get_default_base_url`.
+    """
+    return ""
 
 
 def known_provider_types() -> list[str]:
@@ -221,30 +243,6 @@ def _apply_shim_defaults(cfg: dict[str, Any], shim: Any) -> dict[str, Any]:
     return cfg
 
 
-def _apply_base_defaults(
-    cfg: dict[str, Any], base_type: str, keyless_shim: bool
-) -> dict[str, Any]:
-    """Fill base_url / api_key from the base type's registry defaults.
-
-    The base-type api_key env var is a generic convenience, not this provider's
-    own credential, so it is skipped for a keyless shim — an unrelated
-    ``OPENAI_API_KEY`` in the environment must not silently enable auth against
-    a free pool.  ``is None`` (not falsy) leaves a key the operator deliberately
-    cleared (``"api_key": ""``) cleared rather than refilling it.
-    """
-    import os
-
-    if not cfg.get("base_url"):
-        default_url = get_default_base_url(base_type)
-        if default_url:
-            cfg = {**cfg, "base_url": default_url}
-    if cfg.get("api_key") is None and not keyless_shim:
-        env_val = os.environ.get(get_default_api_key_env(base_type), "")
-        if env_val:
-            cfg = {**cfg, "api_key": env_val}
-    return cfg
-
-
 def build_provider_info(
     provider_type: str,
     cfg: dict[str, Any],
@@ -255,8 +253,10 @@ def build_provider_info(
     """Create a :class:`ProviderInfo` from a provider config dict.
 
     *provider_type* is the base converter type (e.g. ``"chat_completions"``).
-    When a shim is found, its ``default_base_url`` and ``default_api_key_env``
-    are used as fallbacks when the config does not specify them.
+    When a shim is found, its ``connection.base_url`` and
+    ``connection.api_key_env`` are used as fallbacks when the config does not
+    specify them.  A bare base type has no such fallback (it is vendor-neutral),
+    so a missing ``base_url`` raises.
 
     *shim_name* is the registered shim name (e.g. ``"deepseek"``) when the
     provider was configured via a shim.  Shim defaults are looked up from it;
@@ -320,15 +320,11 @@ def build_provider_info(
     if "stream_url_template" in cfg:
         stream_tpl = cfg["stream_url_template"]
 
-    # Fall back to base-type defaults if still missing or empty
-    cfg = _apply_base_defaults(cfg, base_type, keyless_shim)
-
     # Keyless upstream (a free public gateway): send no credential while no
     # api_key and no token_command is configured.  Computed only after every
-    # api_key source (config, shim env, base-type env) so a key resolved from
-    # the environment still disables keyless.  Supplying a key or a
-    # token_command switches back to the base type's auth, so a paid account
-    # can use the same shim.
+    # api_key source (config, shim env) so a key resolved from the environment
+    # still disables keyless.  Supplying a key or a token_command switches back
+    # to the base type's auth, so a paid account can use the same shim.
     keyless = bool(
         keyless_shim and not cfg.get("api_key") and not cfg.get("token_command")
     )
