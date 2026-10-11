@@ -28,6 +28,34 @@ from ..transport import UpstreamConnectionError, UpstreamTimeoutError, UpstreamT
 logger = get_logger()
 
 
+def _detect_decision_source_format(
+    request: Any, body: dict[str, Any], config: GatewayConfig
+) -> str:
+    """Infer the source decision format from the request path and body.
+
+    Detection order:
+    1. ``/v1/decisions`` path → OpenAI Decisions
+    2. ``/v1/systemone`` path → TypeSafe System One
+    3. OpenAI-shaped body (``input`` + list ``questions``) → OpenAI Decisions
+    4. System One-shaped body (``state`` + map ``questions``) → TypeSafe
+    5. Fall back to ``config.default_decision_format``
+
+    The canonical ``/v1/decision`` route predates both conventions, so it falls
+    through to body detection (then the configured default).
+    """
+    path: str = (getattr(request, "path", "") or "").rstrip("/")
+    if path == "/v1/decisions":
+        return "openai_decisions"
+    if path == "/v1/systemone":
+        return "typesafe"
+    questions = body.get("questions")
+    if "input" in body and isinstance(questions, list):
+        return "openai_decisions"
+    if "state" in body and isinstance(questions, dict):
+        return "typesafe"
+    return config.default_decision_format
+
+
 async def handle_decision(
     request: Any,
     config: GatewayConfig,
@@ -88,7 +116,7 @@ async def handle_decision(
         )
 
     # --- Build pipeline for format conversion ---
-    source_format = config.default_decision_format
+    source_format = _detect_decision_source_format(request, body, config)
     target_format = route.format
     pipeline = (
         DecisionConversionPipeline(source_format, target_format)
