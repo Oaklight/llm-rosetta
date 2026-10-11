@@ -407,3 +407,31 @@ class TestMultimodal:
         assert wire["state"] == ""
         assert "images" not in wire
         assert any("neither image_url nor image_data" in w for w in warnings)
+
+    def test_empty_list_state_with_images_has_no_bracket_text(self, converter):
+        req = {
+            "model": "m",
+            "state": [],
+            "images": ["data:image/png;base64,AA"],
+            "questions": {},
+        }
+        ir = converter.request_from_provider(req)
+        assert ir["state"] == [
+            {"type": "image", "image_url": "data:image/png;base64,AA"}
+        ]
+
+    def test_items_wrap_extracts_images(self, converter):
+        ir = {
+            "model": "m",
+            "state": {
+                "items": [
+                    {"type": "text", "text": "look"},
+                    {"type": "image", "image_url": "data:image/png;base64,AA"},
+                ]
+            },
+            "questions": {},
+        }
+        wire, warnings = converter.request_to_provider(ir)
+        assert wire["state"] == "look"
+        assert wire["images"] == ["data:image/png;base64,AA"]
+        assert warnings == []

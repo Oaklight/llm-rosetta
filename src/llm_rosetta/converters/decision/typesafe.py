@@ -11,8 +11,11 @@ score: ``[description]``).  This converter translates the entries to and from
 those shapes; ``choice``/``score`` answers pass through, the assertion answer
 is ``noul`` ↔ ``probability``.
 
-TypeSafe has no image support and no refusal type, so images in ``state`` and
-``RefusalAnswer`` are dropped with a warning.
+The System One family exposes an optional top-level ``images`` array (Cloudflare
+Clef, classifier.dev); the converter maps it to and from the IR ``state``
+content parts.  An image embedded in a structured ``state`` dict is dropped
+with a warning, and there is no refusal answer type (``RefusalAnswer`` is
+dropped).
 """
 
 from __future__ import annotations
@@ -197,8 +200,16 @@ def _state_to_wire(state: Any, warnings: list[str]) -> tuple[Any, list[str]]:
         return "\n".join(texts), images
     if isinstance(state, dict):
         # Unwrap the ``{"items": [...]}`` array form produced by _state_from_wire.
+        # A content-part list is split (text + images); a structured array of
+        # arbitrary values is passed through as a bare array.
         if set(state) == {"items"} and isinstance(state["items"], list):
-            return state["items"], []
+            items = state["items"]
+            if items and all(
+                isinstance(p, dict) and p.get("type") in ("text", "image")
+                for p in items
+            ):
+                return _state_to_wire(items, warnings)
+            return items, []
         return _strip_images(state, warnings), []
     return state, []
 
@@ -235,7 +246,7 @@ def _state_from_wire(state: Any, images: Any, warnings: list[str]) -> Any:
             )
             images = []
         parts: list[dict[str, Any]] = []
-        if state not in (None, "", {}):
+        if state not in (None, "", {}, []):
             text = (
                 state
                 if isinstance(state, str)
