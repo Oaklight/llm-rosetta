@@ -53,6 +53,7 @@ with calibrated probabilities.
 | Converter | API Standard | Module |
 |-----------|-------------|--------|
 | `typesafe_decision` | TypeSafe System One (Jev) | `converters/decision/` |
+| `openai_decisions` | OpenAI Decisions API | `converters/decision/` |
 
 IR question types: `assertion` (a proposition → P(true) ∈ [0,1]),
 `choice` (a categorical proposition), `score` (an ordinal proposition).
