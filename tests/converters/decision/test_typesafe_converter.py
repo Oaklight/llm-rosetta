@@ -1,28 +1,13 @@
 """Tests for the TypeSafe decision converter.
 
-Covers bidirectional conversion between TypeSafe wire format and IR,
-verifying near-passthrough conversion for all three question types.
+Covers bidirectional conversion between TypeSafe wire format and IR.  All
+three primitives unify on ``criteria: list[DecisionEntry]`` in the IR; the
+converter maps them to TypeSafe's per-type criteria shapes.
 """
 
 import pytest
 
 from llm_rosetta.converters.decision.typesafe import TypeSafeDecisionConverter
-from llm_rosetta.types.ir.decision import (
-    NoulAnswer,
-    NoulQuestion,
-    ChoiceAnswer,
-    ChoiceQuestion,
-    IRDecisionRequest,
-    IRDecisionResponse,
-    ScoreAnswer,
-    ScoreQuestion,
-)
-
-
-@pytest.fixture
-def converter():
-    return TypeSafeDecisionConverter()
-
 
 # ============================================================================
 # Wire format fixtures (TypeSafe native)
@@ -35,6 +20,7 @@ TYPESAFE_REQUEST = {
         "is_urgent": {
             "type": "noul",
             "instructions": "Does this convey urgency?",
+            "criteria": {"true": "Time-sensitive", "false": "No urgency"},
         },
         "department": {
             "type": "choice",
@@ -77,244 +63,244 @@ TYPESAFE_RESPONSE = {
 # IR format fixtures
 # ============================================================================
 
-IR_REQUEST: IRDecisionRequest = {
+IR_REQUEST = {
     "model": "jev-latest",
     "state": "Help! My payouts have been failing for 3 days.",
     "questions": {
-        "is_urgent": NoulQuestion(
-            type="noul",
-            instructions="Does this convey urgency?",
-        ),
-        "department": ChoiceQuestion(
-            type="choice",
-            instructions="Which team should handle this?",
-            criteria={
-                "billing": "Payments, invoicing, refunds",
-                "technical": "Bugs, outages, integrations",
-            },
-        ),
-        "frustration": ScoreQuestion(
-            type="score",
-            instructions="How frustrated is the customer?",
-            criteria=["Calm", "Frustrated", "Very angry"],
-        ),
+        "is_urgent": {
+            "type": "assertion",
+            "instructions": "Does this convey urgency?",
+            "criteria": [
+                {"label": False, "description": "No urgency"},
+                {"label": True, "description": "Time-sensitive"},
+            ],
+        },
+        "department": {
+            "type": "choice",
+            "instructions": "Which team should handle this?",
+            "criteria": [
+                {"label": "billing", "description": "Payments, invoicing, refunds"},
+                {"label": "technical", "description": "Bugs, outages, integrations"},
+            ],
+        },
+        "frustration": {
+            "type": "score",
+            "instructions": "How frustrated is the customer?",
+            "criteria": [
+                {"label": "Calm"},
+                {"label": "Frustrated"},
+                {"label": "Very angry"},
+            ],
+        },
     },
 }
 
-IR_RESPONSE: IRDecisionResponse = {
+IR_RESPONSE = {
     "object": "decision",
     "model": "jev-1.13.0",
     "answers": {
-        "is_urgent": NoulAnswer(type="noul", noul=0.92),
-        "department": ChoiceAnswer(
-            type="choice",
-            choice="technical",
-            probabilities={"billing": 0.08, "technical": 0.85, "sales": 0.07},
-            confidence=0.82,
-        ),
-        "frustration": ScoreAnswer(
-            type="score",
-            score=1.6,
-            legend={"0": "Calm", "1": "Frustrated", "2": "Very angry"},
-            probabilities={"0": 0.05, "1": 0.3, "2": 0.65},
-            confidence=0.78,
-        ),
+        "is_urgent": {"type": "assertion", "probability": 0.92},
+        "department": {
+            "type": "choice",
+            "choice": "technical",
+            "probabilities": {"billing": 0.08, "technical": 0.85, "sales": 0.07},
+            "confidence": 0.82,
+        },
+        "frustration": {
+            "type": "score",
+            "score": 1.6,
+            "probabilities": {"Calm": 0.05, "Frustrated": 0.3, "Very angry": 0.65},
+            "confidence": 0.78,
+        },
     },
     "usage": {"input_tokens": 588, "output_tokens": 212},
 }
 
 
-# ============================================================================
-# Request conversion tests
-# ============================================================================
+@pytest.fixture
+def converter():
+    return TypeSafeDecisionConverter()
 
 
 class TestRequestFromProvider:
-    def test_noul_passthrough(self, converter):
+    def test_assertion_criteria(self, converter):
         ir = converter.request_from_provider(TYPESAFE_REQUEST)
         q = ir["questions"]["is_urgent"]
-        assert q["type"] == "noul"
-        assert q["instructions"] == "Does this convey urgency?"
+        assert q["type"] == "assertion"
+        assert {e["label"]: e["description"] for e in q["criteria"]} == {
+            False: "No urgency",
+            True: "Time-sensitive",
+        }
 
-    def test_choice_preserved(self, converter):
+    def test_choice_criteria(self, converter):
         ir = converter.request_from_provider(TYPESAFE_REQUEST)
         q = ir["questions"]["department"]
         assert q["type"] == "choice"
-        assert "billing" in q["criteria"]
+        assert {e["label"]: e["description"] for e in q["criteria"]} == {
+            "billing": "Payments, invoicing, refunds",
+            "technical": "Bugs, outages, integrations",
+        }
 
-    def test_score_preserved(self, converter):
+    def test_score_criteria(self, converter):
         ir = converter.request_from_provider(TYPESAFE_REQUEST)
         q = ir["questions"]["frustration"]
         assert q["type"] == "score"
-        assert q["criteria"] == ["Calm", "Frustrated", "Very angry"]
+        assert [e["label"] for e in q["criteria"]] == [
+            "Calm",
+            "Frustrated",
+            "Very angry",
+        ]
 
     def test_state_and_model(self, converter):
         ir = converter.request_from_provider(TYPESAFE_REQUEST)
         assert ir["model"] == "jev-latest"
-        assert ir["state"] == "Help! My payouts have been failing for 3 days."
+        assert ir["state"] == TYPESAFE_REQUEST["state"]
 
 
 class TestRequestToProvider:
-    def test_noul_passthrough(self, converter):
+    def test_assertion_to_wire(self, converter):
         wire, warnings = converter.request_to_provider(IR_REQUEST)
         q = wire["questions"]["is_urgent"]
         assert q["type"] == "noul"
+        assert q["criteria"] == {"true": "Time-sensitive", "false": "No urgency"}
 
-    def test_choice_preserved(self, converter):
+    def test_choice_to_wire(self, converter):
         wire, _ = converter.request_to_provider(IR_REQUEST)
-        q = wire["questions"]["department"]
-        assert q["type"] == "choice"
+        assert wire["questions"]["department"]["criteria"] == {
+            "billing": "Payments, invoicing, refunds",
+            "technical": "Bugs, outages, integrations",
+        }
 
-    def test_score_preserved(self, converter):
+    def test_score_to_wire(self, converter):
         wire, _ = converter.request_to_provider(IR_REQUEST)
-        q = wire["questions"]["frustration"]
-        assert q["type"] == "score"
+        assert wire["questions"]["frustration"]["criteria"] == [
+            "Calm",
+            "Frustrated",
+            "Very angry",
+        ]
 
     def test_no_warnings(self, converter):
         _, warnings = converter.request_to_provider(IR_REQUEST)
         assert warnings == []
 
 
-# ============================================================================
-# Response conversion tests
-# ============================================================================
-
-
 class TestResponseFromProvider:
-    def test_noul_answer_passthrough(self, converter):
+    def test_assertion_answer(self, converter):
         ir = converter.response_from_provider(TYPESAFE_RESPONSE)
         a = ir["answers"]["is_urgent"]
-        assert a["type"] == "noul"
-        assert a["noul"] == 0.92
+        assert a == {"type": "assertion", "probability": 0.92}
 
     def test_choice_answer(self, converter):
         ir = converter.response_from_provider(TYPESAFE_RESPONSE)
         a = ir["answers"]["department"]
-        assert a["type"] == "choice"
         assert a["choice"] == "technical"
         assert a["probabilities"]["technical"] == 0.85
 
-    def test_score_answer(self, converter):
+    def test_score_answer_rekeyed_by_label(self, converter):
         ir = converter.response_from_provider(TYPESAFE_RESPONSE)
         a = ir["answers"]["frustration"]
-        assert a["type"] == "score"
         assert a["score"] == 1.6
-
-    def test_object_field(self, converter):
-        ir = converter.response_from_provider(TYPESAFE_RESPONSE)
-        assert ir["object"] == "decision"
+        assert a["probabilities"] == {
+            "Calm": 0.05,
+            "Frustrated": 0.3,
+            "Very angry": 0.65,
+        }
+        assert "legend" not in a
 
     def test_usage(self, converter):
         ir = converter.response_from_provider(TYPESAFE_RESPONSE)
         assert ir["usage"]["input_tokens"] == 588
-        assert ir["usage"]["output_tokens"] == 212
 
 
 class TestResponseToProvider:
-    def test_noul_answer_passthrough(self, converter):
+    def test_assertion_answer(self, converter):
         wire = converter.response_to_provider(IR_RESPONSE)
-        a = wire["answers"]["is_urgent"]
-        assert a["type"] == "noul"
-        assert a["noul"] == 0.92
+        assert wire["answers"]["is_urgent"] == {"type": "noul", "noul": 0.92}
 
-    def test_choice_answer(self, converter):
-        wire = converter.response_to_provider(IR_RESPONSE)
-        a = wire["answers"]["department"]
-        assert a["type"] == "choice"
-        assert a["choice"] == "technical"
-
-    def test_score_answer(self, converter):
+    def test_score_answer_rekeyed_by_index(self, converter):
         wire = converter.response_to_provider(IR_RESPONSE)
         a = wire["answers"]["frustration"]
-        assert a["type"] == "score"
-        assert a["score"] == 1.6
+        assert a["probabilities"] == {"0": 0.05, "1": 0.3, "2": 0.65}
+        assert a["legend"] == {"0": "Calm", "1": "Frustrated", "2": "Very angry"}
 
     def test_no_object_field(self, converter):
         wire = converter.response_to_provider(IR_RESPONSE)
         assert "object" not in wire
 
-    def test_usage(self, converter):
-        wire = converter.response_to_provider(IR_RESPONSE)
-        assert wire["usage"]["input_tokens"] == 588
-
-
-# ============================================================================
-# Round-trip tests
-# ============================================================================
-
 
 class TestRoundTrip:
-    def test_provider_to_ir_to_provider(self, converter):
-        """TypeSafe → IR → TypeSafe preserves data."""
+    def test_request_round_trip(self, converter):
         ir = converter.request_from_provider(TYPESAFE_REQUEST)
         wire, _ = converter.request_to_provider(ir)
-        assert wire["model"] == TYPESAFE_REQUEST["model"]
-        assert wire["state"] == TYPESAFE_REQUEST["state"]
-        assert wire["questions"]["is_urgent"]["type"] == "noul"
-        assert wire["questions"]["department"]["type"] == "choice"
-        assert wire["questions"]["frustration"]["type"] == "score"
-
-    def test_ir_to_provider_to_ir(self, converter):
-        """IR → TypeSafe → IR preserves data."""
-        wire, _ = converter.request_to_provider(IR_REQUEST)
-        ir = converter.request_from_provider(wire)
-        assert ir["questions"]["is_urgent"]["type"] == "noul"
-        assert ir["questions"]["department"]["type"] == "choice"
-        assert ir["questions"]["frustration"]["type"] == "score"
+        assert wire["questions"] == TYPESAFE_REQUEST["questions"]
 
     def test_response_round_trip(self, converter):
-        """TypeSafe response → IR → TypeSafe preserves data."""
         ir = converter.response_from_provider(TYPESAFE_RESPONSE)
         wire = converter.response_to_provider(ir)
-        assert wire["answers"]["is_urgent"]["type"] == "noul"
-        assert wire["answers"]["is_urgent"]["noul"] == 0.92
-        assert wire["answers"]["department"]["choice"] == "technical"
-        assert wire["answers"]["frustration"]["score"] == 1.6
-        assert wire["usage"]["input_tokens"] == 588
-
-
-# ============================================================================
-# Edge cases
-# ============================================================================
+        assert wire["answers"] == TYPESAFE_RESPONSE["answers"]
 
 
 class TestEdgeCases:
-    def test_noul_with_criteria(self, converter):
+    def test_array_state_wrapped(self, converter):
         req = {
             "model": "jev-latest",
-            "state": "test",
-            "questions": {
-                "q": {
-                    "type": "noul",
-                    "instructions": "Is this true?",
-                    "criteria": {"true": "Yes", "false": "No"},
-                }
-            },
+            "state": [{"a": 1}, {"b": 2}],
+            "questions": {"q": {"type": "noul", "instructions": "x"}},
         }
         ir = converter.request_from_provider(req)
-        assert ir["questions"]["q"]["type"] == "noul"
-        assert ir["questions"]["q"]["criteria"] == {"true": "Yes", "false": "No"}
+        assert ir["state"] == {"items": [{"a": 1}, {"b": 2}]}
 
-    def test_structured_state(self, converter):
+    def test_image_in_state_warns_and_drops(self, converter):
         req = {
             "model": "jev-latest",
-            "state": {"message": "hello", "history": [1, 2, 3]},
-            "questions": {
-                "q": {"type": "noul", "instructions": "test"},
+            "state": {
+                "photo": {"type": "image", "image_url": "data:image/png;base64,AA"}
             },
+            "questions": {"q": {"type": "noul", "instructions": "x"}},
         }
         ir = converter.request_from_provider(req)
-        assert ir["state"] == {"message": "hello", "history": [1, 2, 3]}
+        wire, warnings = converter.request_to_provider(ir)
+        assert any("image" in w.lower() for w in warnings)
 
-    def test_response_without_usage(self, converter):
+    def test_choice_unknown_probability_round_trip(self, converter):
         resp = {
             "model": "jev-1.13.0",
             "answers": {
-                "q": {"type": "noul", "noul": 0.5},
+                "q": {
+                    "type": "choice",
+                    "choice": "a",
+                    "probabilities": {"a": 0.7, "b": 0.3},
+                    "confidence": 0.5,
+                    "unknown_probability": 0.2,
+                }
             },
         }
         ir = converter.response_from_provider(resp)
-        assert "usage" not in ir
+        assert ir["answers"]["q"]["unknown_probability"] == 0.2
+        wire = converter.response_to_provider(ir)
+        assert wire["answers"]["q"]["unknown_probability"] == 0.2
+
+    def test_unknown_answer_type_warns_and_passes_through(self, converter):
+        from llm_rosetta.converters.base.context import ConversionContext
+
+        ctx = ConversionContext()
+        resp = {
+            "model": "m",
+            "answers": {"q": {"type": "distribution", "probabilities": {"a": 0.9}}},
+        }
+        ir = converter.response_from_provider(resp, context=ctx)
+        assert ir["answers"]["q"] == {
+            "type": "distribution",
+            "probabilities": {"a": 0.9},
+        }
+        assert any("Unrecognized TypeSafe answer type" in w for w in ctx.warnings)
+
+    def test_array_state_round_trip(self, converter):
+        req = {"model": "m", "state": ["alpha", "beta"], "questions": {}}
+        ir = converter.request_from_provider(req)
+        assert ir["state"] == {"items": ["alpha", "beta"]}
+        wire, _ = converter.request_to_provider(ir)
+        assert wire["state"] == ["alpha", "beta"]
 
     def test_converter_tag(self, converter):
         assert converter._CONVERTER_TAG == "typesafe_decision"

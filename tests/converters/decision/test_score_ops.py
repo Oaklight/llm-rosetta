@@ -10,11 +10,6 @@ from llm_rosetta.converters.decision.score_ops import (
     scores_to_answer,
     softmax,
 )
-from llm_rosetta.types.ir.decision import (
-    ChoiceQuestion,
-    NoulQuestion,
-    ScoreQuestion,
-)
 
 
 class TestSoftmax:
@@ -51,105 +46,107 @@ class TestBuildContext:
 
 
 class TestGetOptionTexts:
-    def test_noul_with_criteria(self):
-        q = NoulQuestion(
-            type="noul",
-            instructions="test",
-            criteria={"true": "Yes it is", "false": "No it isn't"},
-        )
-        opts = get_option_texts(q)
-        assert opts == ["Yes it is", "No it isn't"]
+    def test_assertion_with_criteria(self):
+        q = {
+            "type": "assertion",
+            "instructions": "test",
+            "criteria": [
+                {"label": False, "description": "No it isn't"},
+                {"label": True, "description": "Yes it is"},
+            ],
+        }
+        assert get_option_texts(cast(Any, q)) == ["No it isn't", "Yes it is"]
 
-    def test_noul_without_criteria(self):
-        q = NoulQuestion(type="noul", instructions="test")
-        opts = get_option_texts(q)
-        assert opts == ["yes", "no"]
+    def test_assertion_without_criteria(self):
+        q = {"type": "assertion", "instructions": "test"}
+        assert get_option_texts(cast(Any, q)) == ["no", "yes"]
 
     def test_choice(self):
-        q = ChoiceQuestion(
-            type="choice",
-            instructions="test",
-            criteria={"billing": "Payments", "tech": None},
-        )
-        opts = get_option_texts(q)
-        assert opts == ["Payments", "tech"]
+        q = {
+            "type": "choice",
+            "instructions": "test",
+            "criteria": [
+                {"label": "billing", "description": "Payments"},
+                {"label": "tech"},
+            ],
+        }
+        assert get_option_texts(cast(Any, q)) == ["Payments", "tech"]
 
     def test_score(self):
-        q = ScoreQuestion(
-            type="score",
-            instructions="test",
-            criteria=["Low", "Medium", "High"],
-        )
-        opts = get_option_texts(q)
-        assert opts == ["Low", "Medium", "High"]
+        q = {
+            "type": "score",
+            "instructions": "test",
+            "criteria": [{"label": "Low"}, {"label": "Medium"}, {"label": "High"}],
+        }
+        assert get_option_texts(cast(Any, q)) == ["Low", "Medium", "High"]
 
 
 class TestScoresToAnswer:
-    def test_noul_high_true(self):
-        q = NoulQuestion(type="noul", instructions="test")
-        answer = scores_to_answer([5.0, -1.0], q)
-        assert answer["type"] == "noul"
-        assert cast(Any, answer)["noul"] > 0.9
+    def test_assertion_high_true(self):
+        # options are ordered [false, true]; a high score on index 1 → P(true) high
+        q = {"type": "assertion", "instructions": "test"}
+        answer = scores_to_answer([-1.0, 5.0], cast(Any, q))
+        assert answer["type"] == "assertion"
+        assert cast(Any, answer)["probability"] > 0.9
 
-    def test_noul_high_false(self):
-        q = NoulQuestion(type="noul", instructions="test")
-        answer = scores_to_answer([-1.0, 5.0], q)
-        assert answer["type"] == "noul"
-        assert cast(Any, answer)["noul"] < 0.1
+    def test_assertion_high_false(self):
+        q = {"type": "assertion", "instructions": "test"}
+        answer = scores_to_answer([5.0, -1.0], cast(Any, q))
+        assert cast(Any, answer)["probability"] < 0.1
 
-    def test_noul_clamped(self):
-        q = NoulQuestion(type="noul", instructions="test")
-        answer = scores_to_answer([100.0, -100.0], q)
-        assert cast(Any, answer)["noul"] <= 0.99
-        answer2 = scores_to_answer([-100.0, 100.0], q)
-        assert cast(Any, answer2)["noul"] >= 0.01
+    def test_assertion_clamped(self):
+        q = {"type": "assertion", "instructions": "test"}
+        assert (
+            cast(Any, scores_to_answer([-100.0, 100.0], cast(Any, q)))["probability"]
+            <= 0.99
+        )
+        assert (
+            cast(Any, scores_to_answer([100.0, -100.0], cast(Any, q)))["probability"]
+            >= 0.01
+        )
 
     def test_choice(self):
-        q = ChoiceQuestion(
-            type="choice",
-            instructions="test",
-            criteria={"a": "A", "b": "B", "c": "C"},
-        )
-        answer = scores_to_answer([0.5, 3.0, 0.1], q)
+        q = {
+            "type": "choice",
+            "instructions": "test",
+            "criteria": [{"label": "a"}, {"label": "b"}, {"label": "c"}],
+        }
+        answer = scores_to_answer([0.5, 3.0, 0.1], cast(Any, q))
         assert answer["type"] == "choice"
         assert answer["choice"] == "b"
+        assert set(answer["probabilities"]) == {"a", "b", "c"}
         assert abs(sum(answer["probabilities"].values()) - 1.0) < 1e-6
-        assert 0 <= answer["confidence"] <= 1
 
-    def test_score(self):
-        q = ScoreQuestion(
-            type="score",
-            instructions="test",
-            criteria=["Low", "High"],
-        )
-        answer = scores_to_answer([0.0, 5.0], q)
+    def test_score_keyed_by_label(self):
+        q = {
+            "type": "score",
+            "instructions": "test",
+            "criteria": [{"label": "Low"}, {"label": "High"}],
+        }
+        answer = scores_to_answer([0.0, 5.0], cast(Any, q))
         assert answer["type"] == "score"
         assert cast(Any, answer)["score"] > 0.5
-        assert answer["legend"] == {"0": "Low", "1": "High"}
-        assert abs(sum(answer["probabilities"].values()) - 1.0) < 1e-6
+        assert "legend" not in answer
+        assert set(answer["probabilities"]) == {"Low", "High"}
 
     def test_score_equal(self):
-        q = ScoreQuestion(
-            type="score",
-            instructions="test",
-            criteria=["A", "B", "C"],
-        )
-        answer = scores_to_answer([0.0, 0.0, 0.0], q)
+        q = {
+            "type": "score",
+            "instructions": "test",
+            "criteria": [{"label": "A"}, {"label": "B"}, {"label": "C"}],
+        }
+        answer = scores_to_answer([0.0, 0.0, 0.0], cast(Any, q))
         assert cast(Any, answer)["score"] == pytest.approx(1.0, abs=0.01)
 
 
 class TestTemperature:
     def test_low_temperature_sharpens(self):
         scores = [0.82, 0.85, 0.83]
-        probs_default = softmax(scores)
-        probs_sharp = softmax(scores, temperature=0.1)
-        assert max(probs_sharp) > max(probs_default)
+        assert max(softmax(scores, temperature=0.1)) > max(softmax(scores))
 
     def test_high_temperature_flattens(self):
         scores = [1.0, 2.0, 3.0]
-        probs_default = softmax(scores)
-        probs_flat = softmax(scores, temperature=5.0)
-        assert max(probs_flat) < max(probs_default)
+        assert max(softmax(scores, temperature=5.0)) < max(softmax(scores))
 
     def test_temperature_one_is_default(self):
         scores = [1.0, 2.0, 3.0]

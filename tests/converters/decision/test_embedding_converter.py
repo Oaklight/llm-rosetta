@@ -12,7 +12,7 @@ from llm_rosetta.converters.decision.embedding import (
 from llm_rosetta.types.ir.decision import (
     ChoiceQuestion,
     IRDecisionRequest,
-    NoulQuestion,
+    AssertionQuestion,
 )
 
 
@@ -25,15 +25,21 @@ IR_REQUEST: IRDecisionRequest = {
     "model": "text-embedding-3-small",
     "state": "Customer wants a refund",
     "questions": {
-        "wants_refund": NoulQuestion(
-            type="noul",
+        "wants_refund": AssertionQuestion(
+            type="assertion",
             instructions="Requesting refund?",
-            criteria={"true": "Wants money back", "false": "No refund"},
+            criteria=[
+                {"label": False, "description": "No refund"},
+                {"label": True, "description": "Wants money back"},
+            ],
         ),
         "department": ChoiceQuestion(
             type="choice",
             instructions="Which team?",
-            criteria={"billing": "Payments", "support": "Help"},
+            criteria=[
+                {"label": "billing", "description": "Payments"},
+                {"label": "support", "description": "Help"},
+            ],
         ),
     },
 }
@@ -64,7 +70,7 @@ class TestRequestToProvider:
     def test_produces_input_texts(self, converter: EmbeddingDecisionConverter):
         ctx = ConversionContext()
         wire, _ = converter.request_to_provider(IR_REQUEST, context=ctx)
-        # 2 questions: noul has context+2opts=3, choice has context+2opts=3 → 6 total
+        # 2 questions: assertion has context+2opts=3, choice has context+2opts=3 → 6 total
         assert len(wire["input"]) == 6
 
     def test_stores_layout_in_context(self, converter: EmbeddingDecisionConverter):
@@ -80,23 +86,23 @@ class TestRequestToProvider:
 
 
 class TestResponseFromProvider:
-    def test_parses_noul(self, converter: EmbeddingDecisionConverter):
+    def test_parses_assertion(self, converter: EmbeddingDecisionConverter):
         ctx = ConversionContext()
         converter.request_to_provider(IR_REQUEST, context=ctx)
         # ctx=[1,0], true_opt=[0.9,0.1] (sim~0.9), false_opt=[0.1,0.9] (sim~0.1)
         resp = _make_embedding_response(
             [
                 [1.0, 0.0],  # context for q1
-                [0.9, 0.1],  # "Wants money back" (similar to context)
-                [0.1, 0.9],  # "No refund" (dissimilar)
+                [0.1, 0.9],  # "No refund" (false) — dissimilar
+                [0.9, 0.1],  # "Wants money back" (true) — similar
                 [1.0, 0.0],  # context for q2
                 [0.8, 0.2],  # "Payments" (similar)
                 [0.2, 0.8],  # "Help" (dissimilar)
             ]
         )
         ir = converter.response_from_provider(resp, context=ctx)
-        assert ir["answers"]["wants_refund"]["type"] == "noul"
-        assert ir["answers"]["wants_refund"]["noul"] > 0.5
+        assert ir["answers"]["wants_refund"]["type"] == "assertion"
+        assert ir["answers"]["wants_refund"]["probability"] > 0.5
 
     def test_parses_choice(self, converter: EmbeddingDecisionConverter):
         ctx = ConversionContext()

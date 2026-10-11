@@ -10,7 +10,7 @@ from llm_rosetta.converters.decision.llm_chat import LLMChatDecisionConverter
 from llm_rosetta.types.ir.decision import (
     ChoiceQuestion,
     IRDecisionRequest,
-    NoulQuestion,
+    AssertionQuestion,
     ScoreQuestion,
 )
 
@@ -54,22 +54,26 @@ IR_REQUEST: IRDecisionRequest = {
     "model": "gpt-4o-mini",
     "state": "Help! My payouts have been failing for 3 days.",
     "questions": {
-        "is_urgent": NoulQuestion(
-            type="noul",
+        "is_urgent": AssertionQuestion(
+            type="assertion",
             instructions="Does this convey urgency?",
         ),
         "department": ChoiceQuestion(
             type="choice",
             instructions="Which team should handle this?",
-            criteria={
-                "billing": "Payments, invoicing, refunds",
-                "technical": "Bugs, outages, integrations",
-            },
+            criteria=[
+                {"label": "billing", "description": "Payments, invoicing, refunds"},
+                {"label": "technical", "description": "Bugs, outages, integrations"},
+            ],
         ),
         "frustration": ScoreQuestion(
             type="score",
             instructions="How frustrated is the customer?",
-            criteria=["Calm", "Frustrated", "Very angry"],
+            criteria=[
+                {"label": "Calm"},
+                {"label": "Frustrated"},
+                {"label": "Very angry"},
+            ],
         ),
     },
 }
@@ -226,7 +230,7 @@ class TestOpenAIFormat:
         ctx = ConversionContext()
         converter.request_to_provider(IR_REQUEST, context=ctx)
         ir = converter.response_from_provider(MOCK_CHAT_RESPONSE, context=ctx)
-        assert cast(Any, ir["answers"]["is_urgent"])["noul"] == 0.92
+        assert cast(Any, ir["answers"]["is_urgent"])["probability"] == 0.92
         assert cast(Any, ir["answers"]["department"])["choice"] == "technical"
 
     def test_no_warnings(self, converter: LLMChatDecisionConverter):
@@ -264,7 +268,7 @@ class TestAnthropicFormat:
         ir = anthropic_converter.response_from_provider(
             MOCK_ANTHROPIC_RESPONSE, context=ctx
         )
-        assert cast(Any, ir["answers"]["is_urgent"])["noul"] == 0.92
+        assert cast(Any, ir["answers"]["is_urgent"])["probability"] == 0.92
         assert cast(Any, ir["answers"]["department"])["choice"] == "technical"
         assert ir["usage"]["input_tokens"] == 200
 
@@ -298,7 +302,7 @@ class TestGoogleGenerateFormat:
         ir = google_generate_converter.response_from_provider(
             MOCK_GOOGLE_RESPONSE, context=ctx
         )
-        assert cast(Any, ir["answers"]["is_urgent"])["noul"] == 0.92
+        assert cast(Any, ir["answers"]["is_urgent"])["probability"] == 0.92
         assert cast(Any, ir["answers"]["department"])["choice"] == "technical"
 
 
@@ -330,7 +334,7 @@ class TestOpenAIResponsesFormat:
         ir = openai_responses_converter.response_from_provider(
             MOCK_OPENAI_RESPONSES_RESPONSE, context=ctx
         )
-        assert cast(Any, ir["answers"]["is_urgent"])["noul"] == 0.92
+        assert cast(Any, ir["answers"]["is_urgent"])["probability"] == 0.92
         assert cast(Any, ir["answers"]["department"])["choice"] == "technical"
 
 
@@ -363,7 +367,7 @@ class TestGoogleInteractionsFormat:
         ir = google_interactions_converter.response_from_provider(
             MOCK_GOOGLE_RESPONSE, context=ctx
         )
-        assert cast(Any, ir["answers"]["is_urgent"])["noul"] == 0.92
+        assert cast(Any, ir["answers"]["is_urgent"])["probability"] == 0.92
 
 
 # ============================================================================
@@ -393,12 +397,14 @@ class TestPromptedFallback:
         req: IRDecisionRequest = {
             "model": "m",
             "state": "test",
-            "questions": {"is_urgent": NoulQuestion(type="noul", instructions="test")},
+            "questions": {
+                "is_urgent": AssertionQuestion(type="assertion", instructions="test")
+            },
         }
         ctx = ConversionContext()
         prompted_converter.request_to_provider(req, context=ctx)
         ir = prompted_converter.response_from_provider(response, context=ctx)
-        assert cast(Any, ir["answers"]["is_urgent"])["noul"] == 0.8
+        assert cast(Any, ir["answers"]["is_urgent"])["probability"] == 0.8
 
 
 # ============================================================================
@@ -407,13 +413,13 @@ class TestPromptedFallback:
 
 
 class TestDiscreteMode:
-    def test_schema_uses_boolean_for_noul(
+    def test_schema_uses_boolean_for_assertion(
         self, discrete_converter: LLMChatDecisionConverter
     ):
         wire, _ = discrete_converter.request_to_provider(IR_REQUEST)
         schema = wire["response_format"]["json_schema"]["schema"]
-        noul_prop = schema["properties"]["answers"]["properties"]["is_urgent"]
-        assert noul_prop["type"] == "boolean"
+        assertion_prop = schema["properties"]["answers"]["properties"]["is_urgent"]
+        assert assertion_prop["type"] == "boolean"
 
     def test_schema_uses_enum_for_choice(
         self, discrete_converter: LLMChatDecisionConverter
@@ -440,7 +446,7 @@ class TestDiscreteMode:
         ir = discrete_converter.response_from_provider(
             MOCK_DISCRETE_RESPONSE, context=ctx
         )
-        assert cast(Any, ir["answers"]["is_urgent"])["noul"] == 1.0
+        assert cast(Any, ir["answers"]["is_urgent"])["probability"] == 1.0
         assert cast(Any, ir["answers"]["department"])["choice"] == "technical"
         assert cast(Any, ir["answers"]["department"])["confidence"] == 1.0
         a: Any = ir["answers"]["frustration"]
@@ -457,7 +463,9 @@ class TestStateInjection:
         req: IRDecisionRequest = {
             "model": "m",
             "state": "<script>alert('xss')</script>",
-            "questions": {"q": NoulQuestion(type="noul", instructions="test")},
+            "questions": {
+                "q": AssertionQuestion(type="assertion", instructions="test")
+            },
         }
         wire, _ = converter.request_to_provider(req)
         user = wire["messages"][1]["content"]

@@ -8,11 +8,13 @@ Decision is a distinct model paradigm alongside chat, embedding, and rerank.
 Decision models evaluate a state (context) against typed questions and return
 structured probabilistic answers — no text generation involved.
 
-Three question/answer primitives:
+Every question is a set of one or more :class:`DecisionEntry` items, and the
+answer is a probability distribution over those entries. The three primitives
+are named for the kind of proposition they evaluate:
 
-- Noul: yes/no proposition → P(true) ∈ [0, 1]
-- Choice: pick one from a labeled set → categorical probability distribution
-- Score: rate on ordered levels → ordinal probability distribution + E[X]
+- Assertion: a proposition (yes/no claim) → P(true) ∈ [0, 1]
+- Choice: a categorical proposition (unordered set) → categorical distribution
+- Score: an ordinal proposition (ordered levels) → ordinal distribution + E[X]
 
 Reference implementation: TypeSafe.ai System One (Jev)
 API docs: https://docs.typesafe.ai/api
@@ -21,6 +23,8 @@ API docs: https://docs.typesafe.ai/api
 import sys
 from typing import Any, Literal, Union
 
+from .parts import ImagePart, TextPart
+
 if sys.version_info >= (3, 11):
     from typing import NotRequired, Required, TypedDict
 else:
@@ -28,58 +32,86 @@ else:
 
 
 # ============================================================================
+# Shared value / entry types
+# ============================================================================
+
+# A plain JSON value (no binary media).
+JSONValue = Union[
+    str, int, float, bool, None, list["JSONValue"], dict[str, "JSONValue"]
+]
+
+# A description slot: plain text or structured data. Mirrors TypeSafe's
+# ``string | object | array`` for ``instructions`` and ``criteria`` values.
+Description = Union[str, dict[str, Any], list[Any]]
+
+# A multimodal evidence part (reuses the chat IR part types).
+DecisionInputPart = Union[TextPart, ImagePart]
+
+
+class DecisionEntry(TypedDict):
+    """A single entry a question judges: a labeled option / level / proposition.
+
+    - ``assertion``: 0 or 2 entries (labels ``False`` / ``True``) — the claim's
+      two sides; 0 when no criteria are given.
+    - ``choice``: N entries, unordered — the option values.
+    - ``score``: N entries, ordered (position = ordinal) — the levels.
+
+    ``label`` doubles as the machine value (the key used in the answer's
+    ``probabilities``) and the display name. ``description`` is an optional
+    fuller rubric/meaning; for an assertion entry it holds that side's meaning.
+    """
+
+    label: Required[str | bool]
+    description: NotRequired[Description]
+
+
+# ============================================================================
 # Question types
 # ============================================================================
 
-DecisionQuestionType = Literal["noul", "choice", "score"]
+DecisionQuestionType = Literal["assertion", "choice", "score"]
 
 
-class NoulCriteria(TypedDict, total=False):
-    """Optional descriptions clarifying what yes and no mean."""
+class AssertionQuestion(TypedDict):
+    """A proposition: a yes/no claim → P(true) ∈ [0, 1].
 
-    true: str
-    false: str
-
-
-class NoulQuestion(TypedDict):
-    """A yes/no question returning P(true) ∈ [0, 1].
-
-    Named "noul" after the middle of "ber-noul-li" — a probabilistic
-    counterpart to bool, representing calibrated credence rather than
-    a binary value.
+    The probabilistic counterpart to bool — the answer is a calibrated
+    credence rather than a binary value. Holds 0 or 2 entries; TypeSafe's
+    two-sided ``criteria{true,false}`` maps to entries labeled ``False`` /
+    ``True`` whose ``description`` carries each side's meaning.
     """
 
-    type: Required[Literal["noul"]]
-    instructions: Required[str | dict[str, Any] | list[Any]]
-    criteria: NotRequired[NoulCriteria]
+    type: Required[Literal["assertion"]]
+    instructions: Required[Description]
+    criteria: NotRequired[list[DecisionEntry]]
 
 
 class ChoiceQuestion(TypedDict):
-    """Pick one option from a labeled set with probability distribution.
+    """A categorical proposition: pick one option from an unordered set.
 
-    criteria maps option labels to their descriptions.  A null/None
-    description means the label is self-explanatory.
+    The answer is a categorical probability distribution over the entries'
+    labels.
     """
 
     type: Required[Literal["choice"]]
-    instructions: Required[str | dict[str, Any] | list[Any]]
-    criteria: Required[dict[str, str | None]]
+    instructions: Required[Description]
+    criteria: Required[list[DecisionEntry]]
 
 
 class ScoreQuestion(TypedDict):
-    """Rate on ordered levels with probability distribution.
+    """An ordinal proposition: rate on ordered levels.
 
-    criteria is an ordered list of level descriptions (minimum 2).
-    The score answer is the probability-weighted expected value
-    across levels.
+    The answer is an ordinal probability distribution over the entries
+    (position = ordinal); the score is the probability-weighted expected
+    value.
     """
 
     type: Required[Literal["score"]]
-    instructions: Required[str | dict[str, Any] | list[Any]]
-    criteria: Required[list[str]]
+    instructions: Required[Description]
+    criteria: Required[list[DecisionEntry]]
 
 
-DecisionQuestion = Union[NoulQuestion, ChoiceQuestion, ScoreQuestion]
+DecisionQuestion = Union[AssertionQuestion, ChoiceQuestion, ScoreQuestion]
 
 
 # ============================================================================
@@ -87,33 +119,49 @@ DecisionQuestion = Union[NoulQuestion, ChoiceQuestion, ScoreQuestion]
 # ============================================================================
 
 
-class NoulAnswer(TypedDict):
-    """Answer to a Noul question: P(true) ∈ [0, 1]."""
+class AssertionAnswer(TypedDict):
+    """Answer to an assertion question: P(true) ∈ [0, 1]."""
 
-    type: Required[Literal["noul"]]
-    noul: Required[float]
+    type: Required[Literal["assertion"]]
+    probability: Required[float]
+
+    unknown_probability: NotRequired[float]
 
 
 class ChoiceAnswer(TypedDict):
-    """Answer to a Choice question: selected option + full distribution."""
+    """Answer to a choice question: selected option + full distribution."""
 
     type: Required[Literal["choice"]]
-    choice: Required[str]
+    choice: Required[str | bool]
     probabilities: Required[dict[str, float]]
-    confidence: Required[float]
+
+    confidence: NotRequired[float]
+    unknown_probability: NotRequired[float]
 
 
 class ScoreAnswer(TypedDict):
-    """Answer to a Score question: weighted score + full distribution."""
+    """Answer to a score question: weighted score + full distribution.
+
+    ``probabilities`` is keyed by the level label (``str(entry.label)``);
+    the level labels/descriptions live on the question's ``criteria``.
+    """
 
     type: Required[Literal["score"]]
     score: Required[float]
-    legend: Required[dict[str, str]]
     probabilities: Required[dict[str, float]]
-    confidence: Required[float]
+
+    confidence: NotRequired[float]
+    unknown_probability: NotRequired[float]
 
 
-DecisionAnswer = Union[NoulAnswer, ChoiceAnswer, ScoreAnswer]
+class RefusalAnswer(TypedDict):
+    """The model declined to answer a question."""
+
+    type: Required[Literal["refusal"]]
+    reason: NotRequired[str]
+
+
+DecisionAnswer = Union[AssertionAnswer, ChoiceAnswer, ScoreAnswer, RefusalAnswer]
 
 
 # ============================================================================
@@ -132,7 +180,10 @@ class DecisionUsageInfo(TypedDict, total=False):
 # Request
 # ============================================================================
 
-DecisionState = Union[str, dict[str, Any], list[Any]]
+# Shared evidence for every question. A plain string, a structured record
+# (values may be an ``ImagePart`` for image-as-a-field evidence), or an
+# explicit list of content parts.
+DecisionState = Union[str, dict[str, JSONValue | ImagePart], list[DecisionInputPart]]
 
 
 class IRDecisionRequest(TypedDict):
@@ -140,7 +191,7 @@ class IRDecisionRequest(TypedDict):
 
     Required fields:
     - model: model identifier
-    - state: context to evaluate (string, object, or array)
+    - state: shared evidence (string, structured record, or content-part list)
     - questions: map of question ID → typed question
 
     Optional fields:
@@ -177,15 +228,19 @@ class IRDecisionResponse(TypedDict):
 # ============================================================================
 
 __all__ = [
+    "JSONValue",
+    "Description",
+    "DecisionInputPart",
+    "DecisionEntry",
     "DecisionQuestionType",
-    "NoulCriteria",
-    "NoulQuestion",
+    "AssertionQuestion",
     "ChoiceQuestion",
     "ScoreQuestion",
     "DecisionQuestion",
-    "NoulAnswer",
+    "AssertionAnswer",
     "ChoiceAnswer",
     "ScoreAnswer",
+    "RefusalAnswer",
     "DecisionAnswer",
     "DecisionUsageInfo",
     "DecisionState",
