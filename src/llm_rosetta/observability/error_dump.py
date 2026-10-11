@@ -150,7 +150,7 @@ async def dump_error(
         response_text: Upstream error response text (usually small).
         converted_body: The converted target-format body, if available.
         model: Model name from the request.
-        source_provider: Source API format (e.g. ``"openai_chat"``).
+        source_provider: Source API format (e.g. ``"chat_completions"``).
         target_provider: Target API format (e.g. ``"anthropic"``).
         provider_name: Human-readable provider name.
         status_code: Upstream HTTP status code.

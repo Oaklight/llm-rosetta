@@ -21,7 +21,7 @@ class TestDetectProvider:
                 {"role": "assistant", "content": "Hi there!"},
             ]
         }
-        assert detect_provider(body) == "openai_chat"
+        assert detect_provider(body) == "chat_completions"
 
     def test_detect_openai_chat_with_multimodal(self):
         """测试检测带多模态内容的 OpenAI Chat 格式"""
@@ -39,7 +39,7 @@ class TestDetectProvider:
                 }
             ]
         }
-        assert detect_provider(body) == "openai_chat"
+        assert detect_provider(body) == "chat_completions"
 
     def test_detect_openai_chat_with_tools(self):
         """测试检测带工具调用的 OpenAI Chat 格式"""
@@ -62,7 +62,7 @@ class TestDetectProvider:
                 },
             ]
         }
-        assert detect_provider(body) == "openai_chat"
+        assert detect_provider(body) == "chat_completions"
 
     def test_detect_openai_responses_with_input(self):
         """测试检测 OpenAI Responses API 格式（input 字段）"""
@@ -116,7 +116,7 @@ class TestDetectProvider:
         }
         # 注意：仅有 messages 和 text 类型的内容无法明确区分，会默认为 openai_chat
         # 需要添加 Anthropic 特有字段
-        assert detect_provider(body) == "openai_chat"  # 默认行为
+        assert detect_provider(body) == "chat_completions"  # 默认行为
 
         # 添加 system 字段后可以识别为 Anthropic
         body_with_system = {
@@ -239,7 +239,7 @@ class TestDetectProvider:
         """测试空消息列表"""
         body = {"messages": []}
         # 空消息列表应该返回 openai_chat（默认）
-        assert detect_provider(body) == "openai_chat"
+        assert detect_provider(body) == "chat_completions"
 
 
 class TestGetConverterForProvider:
@@ -247,10 +247,10 @@ class TestGetConverterForProvider:
 
     def test_get_openai_chat_converter(self):
         """测试获取 OpenAI Chat 转换器"""
-        from llm_rosetta.converters import OpenAIChatConverter
+        from llm_rosetta.converters import ChatCompletionsConverter
 
         converter = get_converter_for_provider("openai_chat")
-        assert isinstance(converter, OpenAIChatConverter)
+        assert isinstance(converter, ChatCompletionsConverter)
 
     def test_get_openai_responses_converter(self):
         """测试获取 OpenAI Responses 转换器"""
@@ -509,7 +509,7 @@ class TestEdgeCases:
         body = {"messages": [{"role": "user", "content": []}]}
         result = detect_provider(body)
         # 应该返回某个有效的 provider，不应该是 None
-        assert result in ["openai_chat", "anthropic"]
+        assert result in ["chat_completions", "anthropic"]
 
     def test_convert_empty_messages(self):
         """测试空消息列表的转换"""
@@ -532,7 +532,7 @@ class TestEdgeCases:
                 }
             ]
         }
-        assert detect_provider(body) == "openai_chat"  # 默认行为
+        assert detect_provider(body) == "chat_completions"  # 默认行为
 
         # 添加 Anthropic 特有内容类型可以识别
         body_with_image = {
@@ -780,7 +780,7 @@ class TestDualShimPipeline:
 
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            pipeline = ConversionPipeline("openai_chat", "anthropic", shim=None)
+            pipeline = ConversionPipeline("chat_completions", "anthropic", shim=None)
             assert not any(issubclass(x.category, DeprecationWarning) for x in w)
 
         body = {

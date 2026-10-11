@@ -31,7 +31,7 @@ class ResolvedRoute:
 
     Attributes:
         source_provider: API standard of the incoming request
-            (e.g. ``"openai_chat"``).
+            (e.g. ``"chat_completions"``).
         target_provider: API standard of the upstream provider
             (e.g. ``"anthropic"``).
         provider_name: User-configured provider name

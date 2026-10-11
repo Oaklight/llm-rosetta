@@ -27,7 +27,7 @@ class RouteSpec:
         path: URL path (e.g. ``"/v1/embeddings"``).
         methods: HTTP methods (e.g. ``["POST"]``).
         source_format: Optional source format identifier for LLM routes
-            (e.g. ``"openai_chat"``).  ``None`` for non-LLM types whose
+            (e.g. ``"chat_completions"``).  ``None`` for non-LLM types whose
             handler does its own format detection.
     """
 
@@ -165,7 +165,7 @@ def _register_builtins() -> None:
         ModelTypeDescriptor(
             name="llm",
             routes=[
-                RouteSpec("/v1/chat/completions", source_format="openai_chat"),
+                RouteSpec("/v1/chat/completions", source_format="chat_completions"),
                 RouteSpec("/v1/messages", source_format="anthropic"),
                 RouteSpec("/v1/responses", source_format="openai_responses"),
                 RouteSpec(
@@ -175,7 +175,7 @@ def _register_builtins() -> None:
                 RouteSpec("/v1beta/interactions", source_format="google_interactions"),
             ],
             formats=[
-                "openai_chat",
+                "chat_completions",
                 "anthropic",
                 "openai_responses",
                 "google_generate",

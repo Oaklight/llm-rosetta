@@ -13,7 +13,7 @@ from typing import cast
 from llm_rosetta.converters.base.tools import strip_orphaned_tool_config
 from llm_rosetta.converters.anthropic.converter import AnthropicConverter
 from llm_rosetta.converters.google_generate.converter import GoogleGenerateConverter
-from llm_rosetta.converters.openai_chat.converter import OpenAIChatConverter
+from llm_rosetta.converters.chat_completions.converter import ChatCompletionsConverter
 from llm_rosetta.converters.openai_responses.converter import OpenAIResponsesConverter
 from llm_rosetta.types.ir import ToolChoice
 from llm_rosetta.types.ir.request import IRRequest
@@ -162,7 +162,7 @@ class TestOpenAIChatStripOrphanedToolConfig:
     """OpenAI Chat converter strips orphaned tool_choice."""
 
     def setup_method(self):
-        self.converter = OpenAIChatConverter()
+        self.converter = ChatCompletionsConverter()
 
     def test_orphaned_tool_choice_stripped(self):
         ir = _make_ir_request_with_orphaned_tool_choice()

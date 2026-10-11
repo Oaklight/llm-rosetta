@@ -9,21 +9,25 @@ from llm_rosetta.converters.base.tools.multimodal_patch import (
     has_multimodal_content,
     is_synthetic_tool_content_msg,
 )
-from llm_rosetta.converters.openai_chat.content_ops import OpenAIChatContentOps
-from llm_rosetta.converters.openai_chat.message_ops import OpenAIChatMessageOps
-from llm_rosetta.converters.openai_chat.tool_ops import OpenAIChatToolOps
+from llm_rosetta.converters.chat_completions.content_ops import (
+    ChatCompletionsContentOps,
+)
+from llm_rosetta.converters.chat_completions.message_ops import (
+    ChatCompletionsMessageOps,
+)
+from llm_rosetta.converters.chat_completions.tool_ops import ChatCompletionsToolOps
 from llm_rosetta.types.ir import Message, ToolCallPart, ToolResultPart
 from llm_rosetta.types.ir.extensions_experimental import ExtensionItem
 
 
-class TestOpenAIChatMessageOps:
-    """Unit tests for OpenAIChatMessageOps."""
+class TestChatCompletionsMessageOps:
+    """Unit tests for ChatCompletionsMessageOps."""
 
     def setup_method(self):
         """Set up test fixtures."""
-        self.content_ops = OpenAIChatContentOps()
-        self.tool_ops = OpenAIChatToolOps()
-        self.message_ops = OpenAIChatMessageOps(self.content_ops, self.tool_ops)
+        self.content_ops = ChatCompletionsContentOps()
+        self.tool_ops = ChatCompletionsToolOps()
+        self.message_ops = ChatCompletionsMessageOps(self.content_ops, self.tool_ops)
 
     # ==================== IR → Provider ====================
 
@@ -721,9 +725,9 @@ class TestMultimodalToolResultPacking:
 
     def setup_method(self):
         """Set up test fixtures."""
-        self.content_ops = OpenAIChatContentOps()
-        self.tool_ops = OpenAIChatToolOps()
-        self.message_ops = OpenAIChatMessageOps(self.content_ops, self.tool_ops)
+        self.content_ops = ChatCompletionsContentOps()
+        self.tool_ops = ChatCompletionsToolOps()
+        self.message_ops = ChatCompletionsMessageOps(self.content_ops, self.tool_ops)
 
     # --- Helper builders ---
 
@@ -1206,9 +1210,9 @@ class TestRefusalFieldAlwaysPresent:
     """Tests for refusal field always present on assistant messages (#427 follow-up)."""
 
     def setup_method(self):
-        content_ops = OpenAIChatContentOps()
-        tool_ops = OpenAIChatToolOps()
-        self.ops = OpenAIChatMessageOps(content_ops, tool_ops)
+        content_ops = ChatCompletionsContentOps()
+        tool_ops = ChatCompletionsToolOps()
+        self.ops = ChatCompletionsMessageOps(content_ops, tool_ops)
 
     def test_normal_response_has_refusal_null(self):
         """Normal assistant message includes refusal: None."""
@@ -1266,9 +1270,9 @@ class TestRefusalBuildResponseMessage:
     """Tests for refusal in _build_response_message (response path, #430)."""
 
     def setup_method(self):
-        from llm_rosetta.converters.openai_chat import OpenAIChatConverter
+        from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
 
-        self.converter = OpenAIChatConverter()
+        self.converter = ChatCompletionsConverter()
 
     def test_response_message_always_has_refusal(self):
         """_build_response_message outputs refusal: None for normal response."""

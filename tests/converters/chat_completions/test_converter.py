@@ -6,7 +6,7 @@ from typing import Any, cast
 
 import pytest
 
-from llm_rosetta.converters.openai_chat import OpenAIChatConverter
+from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
 from llm_rosetta.types.ir import (
     FinishEvent,
     IRRequest,
@@ -18,11 +18,11 @@ from llm_rosetta.types.ir import (
 )
 
 
-class TestOpenAIChatConverter:
-    """Integration tests for OpenAIChatConverter."""
+class TestChatCompletionsConverter:
+    """Integration tests for ChatCompletionsConverter."""
 
     def setup_method(self):
-        self.converter = OpenAIChatConverter()
+        self.converter = ChatCompletionsConverter()
 
     # ==================== request_to_provider ====================
 
@@ -432,7 +432,7 @@ class TestOpenAIChatConverter:
     def test_normalize_dict(self):
         """Test _normalize with dict input."""
         data = {"key": "value"}
-        assert OpenAIChatConverter._normalize(data) is data
+        assert ChatCompletionsConverter._normalize(data) is data
 
     def test_normalize_pydantic(self):
         """Test _normalize with Pydantic-like object."""
@@ -441,13 +441,13 @@ class TestOpenAIChatConverter:
             def model_dump(self):
                 return {"model": "gpt-4o"}
 
-        result = OpenAIChatConverter._normalize(MockModel())
+        result = ChatCompletionsConverter._normalize(MockModel())
         assert result == {"model": "gpt-4o"}
 
     def test_normalize_invalid(self):
         """Test _normalize raises on unsupported type."""
         with pytest.raises(TypeError, match="Cannot normalize"):
-            OpenAIChatConverter._normalize(42)
+            ChatCompletionsConverter._normalize(42)
 
     # ==================== Stream ====================
 
@@ -578,11 +578,11 @@ class TestOpenAIChatConverter:
         assert result["usage"]["total_tokens"] == 15
 
 
-class TestOpenAIChatConverterFullRoundTrip:
+class TestChatCompletionsConverterFullRoundTrip:
     """Full round-trip conversion tests."""
 
     def setup_method(self):
-        self.converter = OpenAIChatConverter()
+        self.converter = ChatCompletionsConverter()
 
     def test_request_round_trip(self):
         """Test IRRequest -> OpenAI -> IRRequest round-trip."""

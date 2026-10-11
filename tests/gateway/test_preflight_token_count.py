@@ -33,7 +33,7 @@ class TestBuildPreflightBody:
             "stream_options": {"include_usage": True},
             "reasoning": {"effort": "high"},
         }
-        result = _build_preflight_body(body, "openai_chat")
+        result = _build_preflight_body(body, "chat_completions")
         assert result["max_tokens"] == 1
         assert "stream" not in result
         assert "stream_options" not in result
@@ -73,7 +73,7 @@ class TestBuildPreflightBody:
             "max_tokens": 4096,
             "stream": True,
         }
-        _build_preflight_body(body, "openai_chat")
+        _build_preflight_body(body, "chat_completions")
         assert body["max_tokens"] == 4096
         assert body["stream"] is True
 
@@ -99,7 +99,7 @@ class TestBuildPreflightBody:
 class TestExtractPreflightInputTokens:
     def test_openai_chat(self):
         resp = {"usage": {"prompt_tokens": 42, "completion_tokens": 1}}
-        assert _extract_preflight_input_tokens(resp, "openai_chat") == 42
+        assert _extract_preflight_input_tokens(resp, "chat_completions") == 42
 
     def test_anthropic(self):
         resp = {"usage": {"input_tokens": 100, "output_tokens": 1}}
@@ -114,11 +114,11 @@ class TestExtractPreflightInputTokens:
         assert _extract_preflight_input_tokens(resp, "google") == 200
 
     def test_missing_usage(self):
-        assert _extract_preflight_input_tokens({}, "openai_chat") is None
+        assert _extract_preflight_input_tokens({}, "chat_completions") is None
 
     def test_malformed_usage(self):
         resp = {"usage": {"prompt_tokens": "not_a_number"}}
-        assert _extract_preflight_input_tokens(resp, "openai_chat") is None
+        assert _extract_preflight_input_tokens(resp, "chat_completions") is None
 
 
 # ---------------------------------------------------------------------------
@@ -144,7 +144,7 @@ class TestRunPreflight:
                 transport,
                 provider_info,
                 {"model": "gpt-4", "messages": [], "max_tokens": 4096},
-                "openai_chat",
+                "chat_completions",
                 "gpt-4",
             )
         )
@@ -166,7 +166,7 @@ class TestRunPreflight:
                 transport,
                 provider_info,
                 {"model": "gpt-4", "messages": []},
-                "openai_chat",
+                "chat_completions",
                 "gpt-4",
             )
         )
@@ -185,7 +185,7 @@ class TestRunPreflight:
                 transport,
                 provider_info,
                 {"model": "gpt-4", "messages": []},
-                "openai_chat",
+                "chat_completions",
                 "gpt-4",
             )
         )
@@ -206,7 +206,7 @@ class TestRunPreflight:
                 transport,
                 provider_info,
                 {"model": "gpt-4", "messages": []},
-                "openai_chat",
+                "chat_completions",
                 "gpt-4",
             )
         )

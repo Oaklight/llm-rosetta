@@ -115,7 +115,7 @@ class TestFormatAffinity:
             config.resolve("openai_chat", "m")[0].provider_name for _ in range(10)
         ]
         assert set(picked) == {"chat_a", "chat_b"}
-        assert config._same_format_routes[("m", "openai_chat")] is None
+        assert config._same_format_routes[("m", "chat_completions")] is None
 
     def test_load_balances_within_matched_subset(self):
         """Two same-format providers still share load, excluding the third."""

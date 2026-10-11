@@ -50,7 +50,7 @@ def _format_sse_google_interactions(chunk: dict[str, Any]) -> str:
 
 
 SSE_FORMATTERS: dict[str, Any] = {
-    "openai_chat": _format_sse_openai_chat,
+    "chat_completions": _format_sse_openai_chat,
     "openai_responses": _format_sse_openai_responses,
     "open_responses": _format_sse_openai_responses,
     "anthropic": _format_sse_anthropic,
@@ -104,7 +104,7 @@ def build_stream_error_events(
             event["sequence_number"] = sequence_number
         return [event]
 
-    if source_provider == "openai_chat":
+    if source_provider == "chat_completions":
         return [{"error": {"message": message, "type": "server_error", "code": None}}]
 
     if source_provider == "anthropic":

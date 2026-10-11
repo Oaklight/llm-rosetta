@@ -19,6 +19,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from llm_rosetta.provider_names import normalize_provider_name
+
 FidelityMode = Literal["critical", "full"]
 
 #: Severity levels for fidelity differences, most severe first.
@@ -64,7 +66,7 @@ _COMMON_RESPONSE_PATHS: list[str] = [
 ]
 
 _CRITICAL_REQUEST_BY_FORMAT: dict[str, list[str]] = {
-    "openai_chat": [
+    "chat_completions": [
         "max_tokens",
         "max_completion_tokens",
         "tools.*.type",
@@ -108,7 +110,7 @@ _CRITICAL_REQUEST_BY_FORMAT: dict[str, list[str]] = {
 }
 
 _CRITICAL_RESPONSE_BY_FORMAT: dict[str, list[str]] = {
-    "openai_chat": [
+    "chat_completions": [
         "object",
         "choices.*.finish_reason",
         "choices.*.message.role",
@@ -400,7 +402,7 @@ class FidelityChecker:
         mode: ``"critical"`` checks only format-specific fragile fields
             (~0.01ms). ``"full"`` does recursive leaf-level diff (~1ms
             for 50KB).
-        format_name: API format to check against (``"openai_chat"``,
+        format_name: API format to check against (``"chat_completions"``,
             ``"anthropic"``, ``"openai_responses"``).  When ``None``,
             checks all formats' paths (slower but safe when format is
             unknown).
@@ -412,7 +414,10 @@ class FidelityChecker:
         format_name: str | None = None,
     ) -> None:
         self.mode = mode
-        self.format_name = format_name
+        # Accept legacy base/format spellings (e.g. ``openai_chat``).
+        self.format_name = (
+            normalize_provider_name(format_name) if format_name is not None else None
+        )
 
     def compare_request(
         self,

@@ -239,7 +239,7 @@ class TestRegistry:
 
 class TestResolveBase:
     def test_base_type_passthrough(self):
-        assert resolve_base("openai_chat") == "openai_chat"
+        assert resolve_base("openai_chat") == "chat_completions"
         assert resolve_base("anthropic") == "anthropic"
         assert resolve_base("google_generate") == "google_generate"
         assert resolve_base("openai_responses") == "openai_responses"
@@ -288,12 +288,12 @@ class TestBuiltinShims:
     def test_openai_base_type(self):
         shim = get_shim("openai")
         assert shim is not None
-        assert shim.base == "openai_chat"
+        assert shim.base == "chat_completions"
 
     def test_deepseek_base_type(self):
         shim = get_shim("deepseek--openai_chat")
         assert shim is not None
-        assert shim.base == "openai_chat"
+        assert shim.base == "chat_completions"
 
     def test_deepseek_responses_base_type(self):
         shim = get_shim("deepseek--openai_responses")
@@ -357,10 +357,10 @@ class TestShimConverterIntegration:
 
     def test_deepseek_resolves_to_openai_chat_converter(self):
         from llm_rosetta.auto_detect import get_converter_for_provider
-        from llm_rosetta.converters import OpenAIChatConverter
+        from llm_rosetta.converters import ChatCompletionsConverter
 
         converter = get_converter_for_provider("deepseek--openai_chat")
-        assert isinstance(converter, OpenAIChatConverter)
+        assert isinstance(converter, ChatCompletionsConverter)
 
     def test_deepseek_responses_resolves_to_responses_converter(self):
         from llm_rosetta.auto_detect import get_converter_for_provider
@@ -378,21 +378,21 @@ class TestShimConverterIntegration:
 
     def test_volcengine_resolves_to_openai_chat_converter(self):
         from llm_rosetta.auto_detect import get_converter_for_provider
-        from llm_rosetta.converters import OpenAIChatConverter
+        from llm_rosetta.converters import ChatCompletionsConverter
 
         converter = get_converter_for_provider("volcengine--openai_chat")
-        assert isinstance(converter, OpenAIChatConverter)
+        assert isinstance(converter, ChatCompletionsConverter)
 
     def test_base_types_still_work(self):
         from llm_rosetta.auto_detect import get_converter_for_provider
         from llm_rosetta.converters import (
             AnthropicConverter,
             GoogleConverter,
-            OpenAIChatConverter,
+            ChatCompletionsConverter,
         )
 
         assert isinstance(
-            get_converter_for_provider("openai_chat"), OpenAIChatConverter
+            get_converter_for_provider("openai_chat"), ChatCompletionsConverter
         )
         assert isinstance(get_converter_for_provider("anthropic"), AnthropicConverter)
         assert isinstance(get_converter_for_provider("google"), GoogleConverter)
@@ -428,7 +428,7 @@ class TestGroupedProviders:
         anth = get_shim("argo--anthropic")
         oai = get_shim("argo--openai_chat")
         assert anth is not None and anth.base == "anthropic"
-        assert oai is not None and oai.base == "openai_chat"
+        assert oai is not None and oai.base == "chat_completions"
 
     def test_grouped_provider_transforms_loaded(self):
         """Grouped shims have their transforms.py imported."""
@@ -521,9 +521,11 @@ class TestMultimodalToolResultCapability:
 
         captured_ctx: list[Any] = []
 
-        from llm_rosetta.converters.openai_chat.converter import OpenAIChatConverter
+        from llm_rosetta.converters.chat_completions.converter import (
+            ChatCompletionsConverter,
+        )
 
-        orig_req_to = OpenAIChatConverter.request_to_provider
+        orig_req_to = ChatCompletionsConverter.request_to_provider
 
         def capture_ctx(
             self: Any, ir_request: Any, *, context: Any = None, **kwargs: Any
@@ -531,7 +533,7 @@ class TestMultimodalToolResultCapability:
             captured_ctx.append(context)
             return orig_req_to(self, ir_request, context=context, **kwargs)
 
-        with patch.object(OpenAIChatConverter, "request_to_provider", capture_ctx):
+        with patch.object(ChatCompletionsConverter, "request_to_provider", capture_ctx):
             body = {
                 "messages": [
                     {"role": "user", "content": [{"type": "text", "text": "hi"}]}
@@ -557,9 +559,11 @@ class TestMultimodalToolResultCapability:
 
         captured_ctx: list[Any] = []
 
-        from llm_rosetta.converters.openai_chat.converter import OpenAIChatConverter
+        from llm_rosetta.converters.chat_completions.converter import (
+            ChatCompletionsConverter,
+        )
 
-        orig_req_to = OpenAIChatConverter.request_to_provider
+        orig_req_to = ChatCompletionsConverter.request_to_provider
 
         def capture_ctx(
             self: Any, ir_request: Any, *, context: Any = None, **kwargs: Any
@@ -567,7 +571,7 @@ class TestMultimodalToolResultCapability:
             captured_ctx.append(context)
             return orig_req_to(self, ir_request, context=context, **kwargs)
 
-        with patch.object(OpenAIChatConverter, "request_to_provider", capture_ctx):
+        with patch.object(ChatCompletionsConverter, "request_to_provider", capture_ctx):
             body = {
                 "messages": [
                     {"role": "user", "content": [{"type": "text", "text": "hi"}]}
@@ -779,7 +783,7 @@ class TestFreeSourceShim:
         shim = get_shim("kilo--openai_chat")
 
         assert shim is not None
-        assert shim.base == "openai_chat"
+        assert shim.base == "chat_completions"
         assert shim.free_source is True
         assert shim.connection.keyless is True
         assert shim.connection.models_path == "/models"

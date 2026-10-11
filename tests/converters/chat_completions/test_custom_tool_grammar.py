@@ -7,7 +7,7 @@ upstream is rejected with
 ``Missing required parameter: 'tools[N].custom.format.grammar'``.
 """
 
-from llm_rosetta.converters.openai_chat.tool_ops import OpenAIChatToolOps
+from llm_rosetta.converters.chat_completions.tool_ops import ChatCompletionsToolOps
 from llm_rosetta.converters.openai_responses.tool_ops import OpenAIResponsesToolOps
 
 LARK_DEFINITION = 'start: "*** Begin Patch" /(.|\\n)+/ "*** End Patch"'
@@ -48,7 +48,7 @@ class TestCustomToolGrammarShape:
         """Responses → IR → Chat nests syntax/definition under ``grammar``."""
         ir_tool = OpenAIResponsesToolOps.p_tool_definition_to_ir(RESPONSES_CUSTOM_TOOL)
         assert isinstance(ir_tool, dict)
-        chat_tool = OpenAIChatToolOps.ir_tool_definition_to_p(ir_tool)
+        chat_tool = ChatCompletionsToolOps.ir_tool_definition_to_p(ir_tool)
 
         fmt = chat_tool["custom"]["format"]
         assert fmt["type"] == "grammar"
@@ -62,7 +62,7 @@ class TestCustomToolGrammarShape:
 
     def test_chat_nested_format_becomes_flat_for_responses(self):
         """Chat → IR → Responses flattens ``grammar`` back into ``format``."""
-        ir_tool = OpenAIChatToolOps.p_tool_definition_to_ir(CHAT_CUSTOM_TOOL)
+        ir_tool = ChatCompletionsToolOps.p_tool_definition_to_ir(CHAT_CUSTOM_TOOL)
         responses_tool = OpenAIResponsesToolOps.ir_tool_definition_to_p(ir_tool)
 
         assert responses_tool["format"] == {
@@ -73,8 +73,8 @@ class TestCustomToolGrammarShape:
 
     def test_chat_round_trip_does_not_double_nest(self):
         """Chat → IR → Chat is stable (no ``grammar.grammar``)."""
-        ir_tool = OpenAIChatToolOps.p_tool_definition_to_ir(CHAT_CUSTOM_TOOL)
-        chat_tool = OpenAIChatToolOps.ir_tool_definition_to_p(ir_tool)
+        ir_tool = ChatCompletionsToolOps.p_tool_definition_to_ir(CHAT_CUSTOM_TOOL)
+        chat_tool = ChatCompletionsToolOps.ir_tool_definition_to_p(ir_tool)
 
         expected_fmt = CHAT_CUSTOM_TOOL["custom"]
         assert isinstance(expected_fmt, dict)
@@ -84,8 +84,8 @@ class TestCustomToolGrammarShape:
         """Responses → IR → Chat → IR → Responses preserves the flat shape."""
         ir_a = OpenAIResponsesToolOps.p_tool_definition_to_ir(RESPONSES_CUSTOM_TOOL)
         assert isinstance(ir_a, dict)
-        chat_tool = OpenAIChatToolOps.ir_tool_definition_to_p(ir_a)
-        ir_b = OpenAIChatToolOps.p_tool_definition_to_ir(chat_tool)
+        chat_tool = ChatCompletionsToolOps.ir_tool_definition_to_p(ir_a)
+        ir_b = ChatCompletionsToolOps.p_tool_definition_to_ir(chat_tool)
         assert isinstance(ir_b, dict)
         responses_tool = OpenAIResponsesToolOps.ir_tool_definition_to_p(ir_b)
 
@@ -96,7 +96,7 @@ class TestCustomToolGrammarShape:
         tool = dict(RESPONSES_CUSTOM_TOOL, format={"type": "text"})
         ir_tool = OpenAIResponsesToolOps.p_tool_definition_to_ir(tool)
         assert isinstance(ir_tool, dict)
-        chat_tool = OpenAIChatToolOps.ir_tool_definition_to_p(ir_tool)
+        chat_tool = ChatCompletionsToolOps.ir_tool_definition_to_p(ir_tool)
 
         assert chat_tool["custom"]["format"] == {"type": "text"}
 
@@ -105,6 +105,6 @@ class TestCustomToolGrammarShape:
         tool = {k: v for k, v in RESPONSES_CUSTOM_TOOL.items() if k != "format"}
         ir_tool = OpenAIResponsesToolOps.p_tool_definition_to_ir(tool)
         assert isinstance(ir_tool, dict)
-        chat_tool = OpenAIChatToolOps.ir_tool_definition_to_p(ir_tool)
+        chat_tool = ChatCompletionsToolOps.ir_tool_definition_to_p(ir_tool)
 
         assert "format" not in chat_tool["custom"]

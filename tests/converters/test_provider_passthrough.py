@@ -11,7 +11,7 @@ from llm_rosetta.converters.base.tools.orphan_fix import (
     fix_orphaned_tool_calls_ir,
 )
 from llm_rosetta.converters.openai_responses.converter import OpenAIResponsesConverter
-from llm_rosetta.converters.openai_chat.converter import OpenAIChatConverter
+from llm_rosetta.converters.chat_completions.converter import ChatCompletionsConverter
 from llm_rosetta.converters.google_generate.converter import GoogleGenerateConverter
 from llm_rosetta.types.ir import (
     IRInputItem,
@@ -159,7 +159,7 @@ class TestNonStreamPassthroughHelpers:
     def test_all_message_ops_restore_same_tag_and_drop_foreign(self):
         converters = [
             OpenAIResponsesConverter(),
-            OpenAIChatConverter(),
+            ChatCompletionsConverter(),
             AnthropicConverter(),
             GoogleGenerateConverter(),
         ]
@@ -354,7 +354,7 @@ class TestNonStreamPassthroughHelpers:
     def test_response_converters_restore_matching_passthrough_items(self):
         converters_and_keys: list[tuple[BaseConverter, str]] = [
             (OpenAIResponsesConverter(), "output"),
-            (OpenAIChatConverter(), "choices"),
+            (ChatCompletionsConverter(), "choices"),
             (AnthropicConverter(), "content"),
             (GoogleGenerateConverter(), "candidates"),
         ]

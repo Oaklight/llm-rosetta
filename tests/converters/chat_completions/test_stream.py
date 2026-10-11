@@ -5,7 +5,7 @@ OpenAI Chat Completions stream converter unit tests.
 from typing import Any, cast
 
 from llm_rosetta.converters.base.context import StreamContext
-from llm_rosetta.converters.openai_chat import OpenAIChatConverter
+from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
 from llm_rosetta.types.ir.stream import (
     ContentBlockEndEvent,
     ContentBlockStartEvent,
@@ -24,7 +24,7 @@ class TestStreamResponseFromProvider:
     """Tests for stream_response_from_provider."""
 
     def setup_method(self):
-        self.converter = OpenAIChatConverter()
+        self.converter = ChatCompletionsConverter()
 
     # --- Text delta ---
 
@@ -313,7 +313,7 @@ class TestStreamResponseToProvider:
     """Tests for stream_response_to_provider."""
 
     def setup_method(self):
-        self.converter = OpenAIChatConverter()
+        self.converter = ChatCompletionsConverter()
 
     def test_text_delta(self):
         """TextDeltaEvent → OpenAI chunk."""
@@ -493,7 +493,7 @@ class TestStreamRoundTrip:
     """Round-trip tests: provider → IR → provider."""
 
     def setup_method(self):
-        self.converter = OpenAIChatConverter()
+        self.converter = ChatCompletionsConverter()
 
     def test_text_delta_round_trip(self):
         """Text delta round-trip preserves content."""
@@ -648,7 +648,7 @@ class TestStreamResponseFromProviderWithContext:
     """Tests for stream_response_from_provider with StreamContext."""
 
     def setup_method(self):
-        self.converter = OpenAIChatConverter()
+        self.converter = ChatCompletionsConverter()
 
     def test_stream_start_event_emitted(self):
         """First chunk with id/model/created emits StreamStartEvent when context provided."""
@@ -876,7 +876,7 @@ class TestStreamResponseToProviderWithContext:
     """Tests for stream_response_to_provider with StreamContext."""
 
     def setup_method(self):
-        self.converter = OpenAIChatConverter()
+        self.converter = ChatCompletionsConverter()
 
     def test_stream_start_event_to_initial_chunk(self):
         """StreamStartEvent produces initial chunk with role and metadata."""
@@ -1109,9 +1109,9 @@ class TestStreamingRefusal:
     """Tests for streaming refusal handling (#430)."""
 
     def setup_method(self):
-        from llm_rosetta.converters.openai_chat import OpenAIChatConverter
+        from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
 
-        self.converter = OpenAIChatConverter()
+        self.converter = ChatCompletionsConverter()
 
     def test_streaming_role_chunk_has_refusal_null(self):
         """First streaming delta includes refusal: null."""
@@ -1179,7 +1179,7 @@ class TestDeferredStreamEnd:
     """Tests for #838: deferred StreamEndEvent when upstream has no usage."""
 
     def setup_method(self):
-        self.converter = OpenAIChatConverter()
+        self.converter = ChatCompletionsConverter()
 
     def _make_started_ctx(self) -> StreamContext:
         ctx = StreamContext()
@@ -1344,7 +1344,7 @@ class TestDeferredStreamEnd:
         """
         from llm_rosetta.converters.anthropic import AnthropicConverter
 
-        oc = OpenAIChatConverter()
+        oc = ChatCompletionsConverter()
         ac = AnthropicConverter()
         from_ctx = oc.create_stream_context()
         to_ctx = ac.create_stream_context()
@@ -1394,7 +1394,7 @@ class TestIterStreamFromProvider:
     """Tests for BaseConverter.iter_stream_from_provider (#872)."""
 
     def setup_method(self):
-        self.converter = OpenAIChatConverter()
+        self.converter = ChatCompletionsConverter()
 
     def test_iter_stream_yields_all_events(self):
         """iter_stream_from_provider yields events from all chunks."""

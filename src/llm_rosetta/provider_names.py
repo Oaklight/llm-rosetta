@@ -43,15 +43,19 @@ LEGACY_PROVIDER_ALIASES: dict[str, str] = {
     # canonical name; ``google`` is not retained as a standalone name.
     "google": "google_generate",
     "google-genai": "google_generate",
+    # OpenAI Chat Completions: ``chat_completions`` is the canonical,
+    # API-standard name.  ``openai_chat`` was the old base/converter name and
+    # stays accepted (deprecated); the hyphenated tool-ops spelling maps
+    # straight to the canonical name.
+    "openai_chat": "chat_completions",
     # Hyphenated spellings accepted by the tool-ops convenience API.
-    "openai-chat": "openai_chat",
+    "openai-chat": "chat_completions",
     "openai-responses": "openai_responses",
     "open-responses": "open_responses",
     "google-interactions": "google_interactions",
     # --- Reserved for upcoming renames (kept here so the mechanism is
     #     exercised by a single table).  Add the line when the rename lands:
-    #       "openai_responses": "open_responses",   # #910
-    #       "openai_chat": "chat_completion",         # #909
+    #       "openai_responses": "open_responses",   # #909
 }
 
 
@@ -73,7 +77,7 @@ def normalize_provider_name(name: str) -> str:
         >>> normalize_provider_name("openai-responses")
         'openai_responses'
         >>> normalize_provider_name("openai_chat")
-        'openai_chat'
+        'chat_completions'
     """
     canonical = LEGACY_PROVIDER_ALIASES.get(name)
     if canonical is None:

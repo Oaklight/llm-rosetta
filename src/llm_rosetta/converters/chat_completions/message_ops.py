@@ -41,13 +41,13 @@ from ..base.tools.multimodal_patch import (
     unpack_tool_content,
 )
 from ..base.tools.content import convert_content_blocks_to_ir
-from .content_ops import OpenAIChatContentOps
-from .tool_ops import OpenAIChatToolOps
+from .content_ops import ChatCompletionsContentOps
+from .tool_ops import ChatCompletionsToolOps
 
 logger = logging.getLogger(__name__)
 
 
-class OpenAIChatMessageOps(BaseMessageOps):
+class ChatCompletionsMessageOps(BaseMessageOps):
     """OpenAI Chat Completions message conversion operations.
 
     Stateful: holds references to content_ops and tool_ops instances.
@@ -56,8 +56,8 @@ class OpenAIChatMessageOps(BaseMessageOps):
 
     def __init__(
         self,
-        content_ops: OpenAIChatContentOps,
-        tool_ops: OpenAIChatToolOps,
+        content_ops: ChatCompletionsContentOps,
+        tool_ops: ChatCompletionsToolOps,
     ):
         self.content_ops = content_ops
         self.tool_ops = tool_ops
@@ -650,7 +650,7 @@ class OpenAIChatMessageOps(BaseMessageOps):
 
         content = msg.get("content", "")
         if isinstance(content, list):
-            content = convert_content_blocks_to_ir(content, OpenAIChatContentOps)
+            content = convert_content_blocks_to_ir(content, ChatCompletionsContentOps)
 
         return {
             "role": "tool",
@@ -714,3 +714,8 @@ class OpenAIChatMessageOps(BaseMessageOps):
             ]
 
         return []
+
+
+# Backward-compatible alias (deprecated): ``chat_completions`` is the canonical
+# base name now.
+OpenAIChatMessageOps = ChatCompletionsMessageOps

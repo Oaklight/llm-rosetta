@@ -194,7 +194,7 @@ class TestMultiProviderResolve:
         )
         route, pinfo = config.resolve("openai_chat", "gpt-4o")
         assert route.provider_name in ("openai_a", "openai_b")
-        assert pinfo.name in ("openai_chat", "openai_chat")
+        assert pinfo.name in ("chat_completions", "chat_completions")
 
     def test_resolve_rotates_providers(self):
         config = _make_config({"gpt-4o": {"providers": ["openai_a", "openai_b"]}})

@@ -12,15 +12,15 @@ from typing import Any, cast
 
 import pytest
 
-from llm_rosetta.converters.openai_chat import OpenAIChatConverter
+from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
 from llm_rosetta.converters.base.helpers.system_message_hoist import (
     hoist_late_system_messages_ir,
 )
 
 
 @pytest.fixture
-def converter() -> OpenAIChatConverter:
-    return OpenAIChatConverter()
+def converter() -> ChatCompletionsConverter:
+    return ChatCompletionsConverter()
 
 
 def _chat_request(messages: list[dict[str, Any]]) -> dict[str, Any]:
@@ -31,7 +31,7 @@ class TestLeadingDeveloperExtraction:
     """Leading developer messages should be extracted to system_instruction."""
 
     def test_leading_developer_to_system_instruction(
-        self, converter: OpenAIChatConverter
+        self, converter: ChatCompletionsConverter
     ):
         req = _chat_request(
             [
@@ -47,7 +47,7 @@ class TestLeadingDeveloperExtraction:
             assert msg["role"] != "developer"
 
     def test_multiple_leading_developer_all_extracted(
-        self, converter: OpenAIChatConverter
+        self, converter: ChatCompletionsConverter
     ):
         req = _chat_request(
             [
@@ -65,7 +65,9 @@ class TestLeadingDeveloperExtraction:
 class TestLateDeveloperPreservation:
     """Late developer messages should stay in messages as system role for hoist."""
 
-    def test_late_developer_stays_in_messages(self, converter: OpenAIChatConverter):
+    def test_late_developer_stays_in_messages(
+        self, converter: ChatCompletionsConverter
+    ):
         req = _chat_request(
             [
                 {"role": "user", "content": "hi"},
@@ -80,7 +82,7 @@ class TestLateDeveloperPreservation:
         text = system_msgs[0]["content"][0]["text"]
         assert text == "Now be formal"
 
-    def test_developer_content_preserved(self, converter: OpenAIChatConverter):
+    def test_developer_content_preserved(self, converter: ChatCompletionsConverter):
         """Developer message content (list format) is properly preserved."""
         req = _chat_request(
             [
@@ -105,7 +107,9 @@ class TestLateDeveloperPreservation:
 class TestFullRoundTrip:
     """End-to-end: Chat with late developer → IR → hoist → envelope."""
 
-    def test_late_developer_gets_system_envelope(self, converter: OpenAIChatConverter):
+    def test_late_developer_gets_system_envelope(
+        self, converter: ChatCompletionsConverter
+    ):
         """Late developer message should end up as user-role <system> envelope after hoist."""
         req = _chat_request(
             [

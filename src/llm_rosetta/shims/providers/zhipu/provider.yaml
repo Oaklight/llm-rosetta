@@ -1,5 +1,5 @@
 name: zhipu
-base: openai_chat
+base: chat_completions
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/zhipu.svg
 
 # Domestic (China mainland): open.bigmodel.cn; international: api.z.ai

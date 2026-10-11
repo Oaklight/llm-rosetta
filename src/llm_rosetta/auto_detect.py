@@ -14,7 +14,8 @@ from .provider_names import normalize_provider_name
 # boundary; see that module for the single alias table.  Legacy entries are
 # kept in the union for backward-compatible type hints.
 ProviderType = Literal[
-    "openai_chat",
+    "chat_completions",
+    "openai_chat",  # legacy alias of "chat_completions"
     "openai_responses",
     "open_responses",
     "anthropic",
@@ -150,7 +151,7 @@ def detect_provider(body: dict[str, Any]) -> ProviderType | None:
 
     Examples:
         >>> detect_provider({"messages": [{"role": "user", "content": "Hello"}]})
-        'openai_chat'
+        'chat_completions'
         >>> detect_provider({"input": [{"type": "message", "role": "user"}]})
         'openai_responses'
         >>> detect_provider({"messages": [{"role": "user", "content": [{"type": "text"}]}]})
@@ -184,10 +185,10 @@ def detect_provider(body: dict[str, Any]) -> ProviderType | None:
     if isinstance(messages, list):
         for msg in messages:
             if isinstance(msg, dict) and "tool_calls" in msg:
-                return "openai_chat"
+                return "chat_completions"
 
     # Default: OpenAI Chat is the most common messages-based format
-    return "openai_chat"
+    return "chat_completions"
 
 
 _converter_cache: dict[str, Any] = {}
@@ -218,7 +219,7 @@ def get_converter_for_provider(provider: str):
     from .converters.anthropic import AnthropicConverter
     from .converters.google_generate import GoogleGenerateConverter
     from .converters.google_interactions import GoogleInteractionsConverter
-    from .converters.openai_chat import OpenAIChatConverter
+    from .converters.chat_completions import ChatCompletionsConverter
     from .converters.openai_responses import (
         OpenAIResponsesConverter,
         OpenResponsesConverter,
@@ -226,7 +227,7 @@ def get_converter_for_provider(provider: str):
     from .shims import resolve_base
 
     converter_map = {
-        "openai_chat": OpenAIChatConverter,
+        "chat_completions": ChatCompletionsConverter,
         "openai_responses": OpenAIResponsesConverter,
         "open_responses": OpenResponsesConverter,
         "anthropic": AnthropicConverter,
@@ -241,8 +242,9 @@ def get_converter_for_provider(provider: str):
         _converter_cache[provider] = instance
         return instance
 
-    # Resolve through shim registry
-    base = resolve_base(provider)
+    # Resolve through shim registry.  A shim's declared ``base`` may itself be
+    # a legacy spelling, so normalise it before the map lookup.
+    base = normalize_provider_name(resolve_base(provider))
     if base in converter_map:
         instance = converter_map[base]()
         _converter_cache[provider] = instance
@@ -305,14 +307,14 @@ def convert(
         >>> google_body = convert(openai_body, "google")
 
         >>> anthropic_body = {"messages": [...]}
-        >>> openai_body = convert(anthropic_body, "openai_chat", source_provider="anthropic")
+        >>> openai_body = convert(anthropic_body, "chat_completions", source_provider="anthropic")
 
         >>> # With shim transforms
         >>> body = convert(req, "anthropic", source_provider="deepseek", model="deepseek-r1")
 
         >>> # Force IR round-trip even for same-provider
         >>> body = {"messages": [...], "max_tokens": 256}
-        >>> normalised = convert(body, "openai_chat", baseline=False)
+        >>> normalised = convert(body, "chat_completions", baseline=False)
     """
     from .pipeline import ConversionPipeline
     from .shims import get_shim

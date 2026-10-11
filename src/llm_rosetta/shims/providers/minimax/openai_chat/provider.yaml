@@ -1,5 +1,5 @@
 name: minimax--openai_chat
-base: openai_chat
+base: chat_completions
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/minimax.svg
 
 # Domestic (China mainland): api.minimaxi.com; international: api.minimax.io

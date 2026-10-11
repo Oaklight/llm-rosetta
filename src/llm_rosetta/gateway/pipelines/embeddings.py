@@ -51,8 +51,8 @@ class _ResolvedEmbedding:
     provider_info: ProviderInfo
     upstream_url: str
     provider_name: str
-    target_format: str = "openai_chat"
-    source_format: str = "openai_chat"
+    target_format: str = "chat_completions"
+    source_format: str = "chat_completions"
     pipeline: EmbeddingConversionPipeline | None = field(default=None)
 
 
@@ -86,7 +86,7 @@ def _resolve_embedding_provider(
 
     # Fall back to chat provider routing (backward compat)
     try:
-        chat_route, provider_info = config.resolve("openai_chat", model)
+        chat_route, provider_info = config.resolve("chat_completions", model)
     except KeyError:
         return None
 

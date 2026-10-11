@@ -20,7 +20,7 @@ from ..base import BaseConfigOps
 from ..base.helpers.reasoning import DEFAULT_REASONING_CAPS, apply_reasoning_config
 
 
-class OpenAIChatConfigOps(BaseConfigOps):
+class ChatCompletionsConfigOps(BaseConfigOps):
     """OpenAI Chat Completions configuration conversion operations.
 
     All methods are static and stateless.
@@ -260,11 +260,11 @@ class OpenAIChatConfigOps(BaseConfigOps):
         Returns:
             Dict of OpenAI request fields to merge.
         """
-        cap = kwargs.get("reasoning_cap", DEFAULT_REASONING_CAPS["openai_chat"])
+        cap = kwargs.get("reasoning_cap", DEFAULT_REASONING_CAPS["chat_completions"])
         return apply_reasoning_config(
             ir_reasoning,
             cap,
-            converter_type="openai_chat",
+            converter_type="chat_completions",
             max_tokens=kwargs.get("max_tokens"),
         )
 
@@ -365,3 +365,8 @@ class OpenAIChatConfigOps(BaseConfigOps):
             result["retention"] = provider_cache["prompt_cache_retention"]
 
         return cast(CacheConfig, result)
+
+
+# Backward-compatible alias (deprecated): ``chat_completions`` is the canonical
+# base name now.
+OpenAIChatConfigOps = ChatCompletionsConfigOps

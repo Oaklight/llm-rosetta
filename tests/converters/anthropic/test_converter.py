@@ -925,9 +925,9 @@ class TestAnthropicStructuredRefusal:
         assert result["stop_details"]["explanation"] == "Declined."
 
     def test_cross_format_refusal_round_trip(self):
-        from llm_rosetta.converters.openai_chat import OpenAIChatConverter
+        from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
 
-        chat = OpenAIChatConverter()
+        chat = ChatCompletionsConverter()
         ir_msg = chat.message_ops._p_message_to_ir(
             {"role": "assistant", "content": None, "refusal": "I cannot help."}
         )
@@ -1096,9 +1096,9 @@ class TestAnthropicUsageRoundTrip:
 
     def setup_method(self):
         self.anthropic = AnthropicConverter()
-        from llm_rosetta.converters.openai_chat import OpenAIChatConverter
+        from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
 
-        self.openai_chat = OpenAIChatConverter()
+        self.openai_chat = ChatCompletionsConverter()
 
     _ANTHROPIC_RESPONSE = {
         "id": "msg_usage_rt",
@@ -1316,9 +1316,9 @@ class TestAnthropicStopFieldsCompliance:
 
     def test_cross_format_stop_fields_present(self):
         """B→IR→A: stop_sequence/stop_details present even from OpenAI source."""
-        from llm_rosetta.converters.openai_chat import OpenAIChatConverter
+        from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
 
-        openai = OpenAIChatConverter()
+        openai = ChatCompletionsConverter()
         openai_response = {
             "id": "chatcmpl-x",
             "object": "chat.completion",
@@ -1465,9 +1465,9 @@ class TestAnthropicContentBlockCompliance:
 
     def test_cross_format_tool_use_has_caller(self):
         """B→IR→A: OpenAI tool call gets default caller."""
-        from llm_rosetta.converters.openai_chat import OpenAIChatConverter
+        from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
 
-        openai = OpenAIChatConverter()
+        openai = ChatCompletionsConverter()
         openai_response = {
             "id": "chatcmpl-c",
             "object": "chat.completion",

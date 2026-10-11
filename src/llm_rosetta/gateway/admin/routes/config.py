@@ -45,7 +45,7 @@ logger = logging.getLogger("llm-rosetta-gateway")
 # too: it is a distinct type that merely shares the Responses converter, so
 # recommending `openai_responses` for it would silently change the saved type.
 _BASE_FORMAT_RECOMMENDED: dict[str, str] = {
-    "openai_chat": "openai",
+    "chat_completions": "openai",
     "openai_responses": "openai_responses",
     "anthropic": "anthropic",
     "google_interactions": "google_interactions",

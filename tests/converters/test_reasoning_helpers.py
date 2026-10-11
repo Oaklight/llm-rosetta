@@ -60,13 +60,13 @@ class TestNormalizeReasoningInput:
 class TestOpenAIChatShim:
     """OpenAI Chat: no thinking_modes, effort clamped to [minimal, high]."""
 
-    cap = DEFAULT_REASONING_CAPS["openai_chat"]
+    cap = DEFAULT_REASONING_CAPS["chat_completions"]
 
     def test_disabled_omits_all(self):
         result = apply_reasoning_config(
             cast(ReasoningConfig, {"mode": "disabled"}),
             self.cap,
-            converter_type="openai_chat",
+            converter_type="chat_completions",
         )
         assert result == {}
 
@@ -74,7 +74,7 @@ class TestOpenAIChatShim:
         result = apply_reasoning_config(
             cast(ReasoningConfig, {"effort": "high"}),
             self.cap,
-            converter_type="openai_chat",
+            converter_type="chat_completions",
         )
         assert result["reasoning_effort"] == "high"
 
@@ -82,7 +82,7 @@ class TestOpenAIChatShim:
         result = apply_reasoning_config(
             cast(ReasoningConfig, {"effort": "minimal"}),
             self.cap,
-            converter_type="openai_chat",
+            converter_type="chat_completions",
         )
         assert result["reasoning_effort"] == "minimal"
 
@@ -90,7 +90,7 @@ class TestOpenAIChatShim:
         result = apply_reasoning_config(
             cast(ReasoningConfig, {"effort": "xhigh"}),
             self.cap,
-            converter_type="openai_chat",
+            converter_type="chat_completions",
         )
         assert result["reasoning_effort"] == "high"
 
@@ -98,7 +98,7 @@ class TestOpenAIChatShim:
         result = apply_reasoning_config(
             cast(ReasoningConfig, {"effort": "max"}),
             self.cap,
-            converter_type="openai_chat",
+            converter_type="chat_completions",
         )
         assert result["reasoning_effort"] == "high"
 
@@ -107,7 +107,7 @@ class TestOpenAIChatShim:
         result = apply_reasoning_config(
             cast(ReasoningConfig, {"mode": "auto"}),
             self.cap,
-            converter_type="openai_chat",
+            converter_type="chat_completions",
         )
         assert "thinking" not in result
 
@@ -116,7 +116,7 @@ class TestOpenAIChatShim:
         result = apply_reasoning_config(
             cast(ReasoningConfig, {"mode": "enabled", "budget_tokens": 2048}),
             self.cap,
-            converter_type="openai_chat",
+            converter_type="chat_completions",
         )
         assert "thinking" not in result
 
@@ -141,7 +141,7 @@ class TestOpenAIChatThinkingCapable:
         result = apply_reasoning_config(
             cast(ReasoningConfig, {"mode": "auto"}),
             self.cap,
-            converter_type="openai_chat",
+            converter_type="chat_completions",
         )
         assert result["thinking"]["type"] == "adaptive"
 
@@ -149,7 +149,7 @@ class TestOpenAIChatThinkingCapable:
         result = apply_reasoning_config(
             cast(ReasoningConfig, {"mode": "enabled", "budget_tokens": 2048}),
             self.cap,
-            converter_type="openai_chat",
+            converter_type="chat_completions",
         )
         assert result["thinking"]["type"] == "enabled"
         assert result["thinking"]["budget_tokens"] == 2048
@@ -158,7 +158,7 @@ class TestOpenAIChatThinkingCapable:
         result = apply_reasoning_config(
             cast(ReasoningConfig, {"mode": "disabled"}),
             self.cap,
-            converter_type="openai_chat",
+            converter_type="chat_completions",
         )
         assert result["thinking"]["type"] == "disabled"
 
@@ -303,7 +303,7 @@ class TestDeepSeekShim:
         result = apply_reasoning_config(
             cast(ReasoningConfig, {"mode": "disabled"}),
             self.cap,
-            converter_type="openai_chat",
+            converter_type="chat_completions",
         )
         assert result["thinking"]["type"] == "disabled"
 
@@ -312,7 +312,7 @@ class TestDeepSeekShim:
         result = apply_reasoning_config(
             cast(ReasoningConfig, {"mode": "auto"}),
             self.cap,
-            converter_type="openai_chat",
+            converter_type="chat_completions",
         )
         assert "thinking" not in result
 
@@ -320,7 +320,7 @@ class TestDeepSeekShim:
         result = apply_reasoning_config(
             cast(ReasoningConfig, {"mode": "enabled", "budget_tokens": 4096}),
             self.cap,
-            converter_type="openai_chat",
+            converter_type="chat_completions",
         )
         assert result["thinking"]["type"] == "enabled"
         assert result["thinking"]["budget_tokens"] == 4096
@@ -349,8 +349,8 @@ class TestSummaryIncludeThoughtsCrossFormat:
     def test_summary_forwarded_to_openai_chat(self):
         result = apply_reasoning_config(
             cast(ReasoningConfig, {"effort": "high", "summary": "detailed"}),
-            DEFAULT_REASONING_CAPS["openai_chat"],
-            converter_type="openai_chat",
+            DEFAULT_REASONING_CAPS["chat_completions"],
+            converter_type="chat_completions",
         )
         assert result["reasoning"]["summary"] == "detailed"
 
@@ -373,8 +373,8 @@ class TestSummaryIncludeThoughtsCrossFormat:
     def test_include_thoughts_true_to_openai_chat(self):
         result = apply_reasoning_config(
             cast(ReasoningConfig, {"effort": "high", "include_thoughts": True}),
-            DEFAULT_REASONING_CAPS["openai_chat"],
-            converter_type="openai_chat",
+            DEFAULT_REASONING_CAPS["chat_completions"],
+            converter_type="chat_completions",
         )
         assert result["reasoning"]["summary"] == "auto"
 
@@ -423,7 +423,7 @@ class TestCustomShim:
         result = apply_reasoning_config(
             cast(ReasoningConfig, {"effort": "max"}),
             custom,
-            converter_type="openai_chat",
+            converter_type="chat_completions",
         )
         assert result["reasoning_effort"] == "high"
 
@@ -444,7 +444,7 @@ class TestCustomShim:
         result = apply_reasoning_config(
             cast(ReasoningConfig, {"effort": "max"}),
             custom,
-            converter_type="openai_chat",
+            converter_type="chat_completions",
         )
         assert result["reasoning_effort"] == "max"
 
@@ -609,7 +609,7 @@ class TestCustomShim:
         result = apply_reasoning_config(
             cast(ReasoningConfig, {"mode": "enabled"}),
             custom,
-            converter_type="openai_chat",
+            converter_type="chat_completions",
             max_tokens=10000,
         )
         assert result["thinking"]["type"] == "enabled"
@@ -630,3 +630,23 @@ class TestCustomShim:
         assert "output_config" not in result
         assert result["thinking"]["type"] == "enabled"
         assert result["thinking"]["budget_tokens"] == 6553
+
+
+class TestLegacyConverterTypeAlias:
+    """The public helper accepts the legacy ``openai_chat`` converter label.
+
+    Regression: ``apply_reasoning_config`` keys on the canonical
+    ``chat_completions`` literal; a caller passing the old label used to
+    silently lose the Chat structural pass.
+    """
+
+    def test_legacy_label_matches_canonical(self):
+        cap = DEFAULT_REASONING_CAPS["chat_completions"]
+        ir = cast(Any, {"mode": "enabled", "effort": "high", "budget_tokens": 8000})
+        canonical = apply_reasoning_config(
+            ir, cap, converter_type="chat_completions", max_tokens=16000
+        )
+        legacy = apply_reasoning_config(
+            ir, cap, converter_type="openai_chat", max_tokens=16000
+        )
+        assert legacy == canonical

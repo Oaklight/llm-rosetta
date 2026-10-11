@@ -70,7 +70,7 @@ class TestLLMDescriptor:
     def test_llm_formats(self) -> None:
         desc = get_model_type("llm")
         assert desc is not None
-        assert "openai_chat" in desc.formats
+        assert "chat_completions" in desc.formats
         assert "anthropic" in desc.formats
 
     def test_llm_pipeline_is_none(self) -> None:

@@ -27,7 +27,7 @@ from llm_rosetta.types.ir.reasoning import ReasoningConfig
 # ── Default reasoning capability configs per base converter type ──────────
 # Used as fallback when no shim-level config is present.
 
-_DEFAULT_OPENAI_CHAT = ReasoningCapability(
+_DEFAULT_CHAT_COMPLETIONS = ReasoningCapability(
     effort_field="reasoning_effort",
     effort_range=("minimal", "high"),
 )
@@ -49,7 +49,7 @@ _DEFAULT_GOOGLE = ReasoningCapability(
 )
 
 DEFAULT_REASONING_CAPS: dict[str, ReasoningCapability] = {
-    "openai_chat": _DEFAULT_OPENAI_CHAT,
+    "chat_completions": _DEFAULT_CHAT_COMPLETIONS,
     "openai_responses": _DEFAULT_OPENAI_RESPONSES,
     "anthropic": _DEFAULT_ANTHROPIC,
     "google": _DEFAULT_GOOGLE,
@@ -104,6 +104,12 @@ def apply_reasoning_config(
     4. Converter-specific structural pass-through (thinking blocks,
        budget, visibility).
     """
+    # Legacy alias: the OpenAI Chat base type was renamed openai_chat →
+    # chat_completions; accept the old label so external callers of this
+    # public helper don't silently lose the Chat structural pass.
+    if converter_type == "openai_chat":
+        converter_type = "chat_completions"
+
     ir = normalize_reasoning_input(ir_reasoning)
 
     mode = ir.get("mode")
@@ -130,7 +136,7 @@ def apply_reasoning_config(
         _deep_merge(result, effort_fields)
 
     # Converter-specific structural pass-through.
-    if converter_type == "openai_chat":
+    if converter_type == "chat_completions":
         _apply_openai_chat_extras(ir, result, mode, budget_tokens, cap, max_tokens)
     elif converter_type == "openai_responses":
         _apply_openai_responses_extras(ir, result, mode, budget_tokens, cap)

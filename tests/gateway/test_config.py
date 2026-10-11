@@ -189,7 +189,7 @@ class TestShimConnectionDefaults:
         info = cfg.providers["openrouter"]
         assert info.base_url == "https://openrouter.ai/api/v1"
         # ProviderInfo.name keeps the base type (unchanged semantics)
-        assert info.name == "openai_chat"
+        assert info.name == "chat_completions"
 
     def test_shim_custom_auth_header_applied(self):
         from llm_rosetta.shims.providers import load_providers

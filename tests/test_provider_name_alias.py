@@ -36,7 +36,8 @@ class TestNormalizeProviderName:
         [
             ("google", "google_generate"),
             ("google-genai", "google_generate"),
-            ("openai-chat", "openai_chat"),
+            ("openai_chat", "chat_completions"),
+            ("openai-chat", "chat_completions"),
             ("openai-responses", "openai_responses"),
             ("open-responses", "open_responses"),
             ("google-interactions", "google_interactions"),
@@ -49,7 +50,6 @@ class TestNormalizeProviderName:
     @pytest.mark.parametrize(
         "name",
         [
-            "openai_chat",
             "openai_responses",
             "open_responses",
             "anthropic",
@@ -98,7 +98,7 @@ class TestConverterLookupBoundary:
         [
             ("google", "google_generate"),
             ("google-genai", "google_generate"),
-            ("openai-chat", "openai_chat"),
+            ("openai-chat", "chat_completions"),
         ],
     )
     def test_legacy_resolves_to_same_converter(self, legacy: str, canonical: str):

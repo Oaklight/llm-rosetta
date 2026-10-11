@@ -9,7 +9,7 @@ import json
 from typing import cast
 
 from llm_rosetta.converters.anthropic import AnthropicConverter
-from llm_rosetta.converters.openai_chat import OpenAIChatConverter
+from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
 from llm_rosetta.converters.openai_responses import OpenAIResponsesConverter
 from llm_rosetta.pipeline import ConversionPipeline
 from llm_rosetta.types.ir import IRRequest
@@ -69,7 +69,7 @@ class TestConverterMapsIntrinsicHistory:
         assert "server_tool_use" in json.dumps(body)
 
     def test_openai_chat_falls_back_to_natural_function_name(self):
-        body, _ = OpenAIChatConverter().request_to_provider(
+        body, _ = ChatCompletionsConverter().request_to_provider(
             _ir_with_intrinsic_history()
         )
         names = [

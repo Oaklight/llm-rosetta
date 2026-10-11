@@ -1,5 +1,5 @@
 name: volcengine--openai_chat
-base: openai_chat
+base: chat_completions
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/volcengine.svg
 
 # Domestic (China mainland) endpoint; international: ark.ap-southeast.bytepluses.com/api/v3

@@ -1263,9 +1263,9 @@ class TestIntrinsicIrTransforms:
 
     def test_openai_chat_has_no_intrinsic_transforms(self):
         """OpenAI Chat converter should not declare intrinsic transforms."""
-        from llm_rosetta.converters.openai_chat import OpenAIChatConverter
+        from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
 
-        assert OpenAIChatConverter._INTRINSIC_IR_TRANSFORMS == ()
+        assert ChatCompletionsConverter._INTRINSIC_IR_TRANSFORMS == ()
 
     def test_openai_responses_has_no_intrinsic_transforms(self):
         """OpenAI Responses converter should not declare intrinsic transforms."""

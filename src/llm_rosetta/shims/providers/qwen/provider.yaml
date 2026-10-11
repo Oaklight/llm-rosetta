@@ -1,5 +1,5 @@
 name: qwen
-base: openai_chat
+base: chat_completions
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/qwen.svg
 
 # Shared China endpoint; international uses workspace-dedicated domains:

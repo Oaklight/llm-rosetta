@@ -20,11 +20,12 @@ from .converters.rerank.pipeline import RerankConversionPipeline
 from .converters import (
     AnthropicConverter,
     BaseConverter,
+    ChatCompletionsConverter,
     GoogleConverter,
     GoogleGenerateConverter,
     GoogleGenAIConverter,  # deprecated alias
     GoogleInteractionsConverter,
-    OpenAIChatConverter,
+    OpenAIChatConverter,  # deprecated alias
     OpenAIResponsesConverter,
     OpenResponsesConverter,
 )
@@ -52,7 +53,8 @@ __all__ = [
     # Converters
     "BaseConverter",
     "BaseSimpleConverter",
-    "OpenAIChatConverter",
+    "ChatCompletionsConverter",
+    "OpenAIChatConverter",  # deprecated alias
     "AnthropicConverter",
     "GoogleGenerateConverter",
     "GoogleGenAIConverter",  # deprecated alias

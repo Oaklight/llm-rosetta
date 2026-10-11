@@ -11,7 +11,7 @@ from typing import cast
 
 from llm_rosetta.converters.anthropic.content_ops import AnthropicContentOps
 from llm_rosetta.converters.google_generate.content_ops import GoogleGenerateContentOps
-from llm_rosetta.converters.openai_chat import OpenAIChatConverter
+from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
 from llm_rosetta.converters.openai_responses.content_ops import (
     OpenAIResponsesContentOps,
 )
@@ -67,7 +67,7 @@ class TestOpenAIChatEncryptedContent:
     """Chat encrypted_content maps to redacted_data, not provider_metadata."""
 
     def test_round_trip(self):
-        conv = OpenAIChatConverter()
+        conv = ChatCompletionsConverter()
         resp = {
             "id": "c1",
             "object": "chat.completion",
@@ -104,7 +104,7 @@ class TestOpenAIChatEncryptedContent:
 
     def test_reasoning_details_still_in_provider_metadata(self):
         """reasoning_details stays in provider_metadata (structured metadata)."""
-        conv = OpenAIChatConverter()
+        conv = ChatCompletionsConverter()
         resp = {
             "id": "c2",
             "object": "chat.completion",

@@ -183,9 +183,9 @@ def bench_rosetta_to_anthropic(payload: dict, iterations: int) -> list[float]:
     import copy
 
     from llm_rosetta.converters.anthropic import AnthropicConverter
-    from llm_rosetta.converters.openai_chat import OpenAIChatConverter
+    from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
 
-    oc_conv = OpenAIChatConverter()
+    oc_conv = ChatCompletionsConverter()
     an_conv = AnthropicConverter()
 
     # Warmup
@@ -209,9 +209,9 @@ def bench_rosetta_to_google(payload: dict, iterations: int) -> list[float]:
     import copy
 
     from llm_rosetta.converters.google_genai import GoogleGenAIConverter
-    from llm_rosetta.converters.openai_chat import OpenAIChatConverter
+    from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
 
-    oc_conv = OpenAIChatConverter()
+    oc_conv = ChatCompletionsConverter()
     gg_conv = GoogleGenAIConverter()
 
     # Warmup

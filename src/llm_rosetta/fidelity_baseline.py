@@ -27,7 +27,7 @@ Usage::
     baseline = FidelityBaseline("fidelity-baseline.json")
     report = check_fidelity_against_baseline(
         baseline,
-        source_provider="openai_chat",
+        source_provider="chat_completions",
         target_provider="anthropic",
         original=request_body,
         roundtripped=roundtrip(request_body),

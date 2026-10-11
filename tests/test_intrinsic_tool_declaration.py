@@ -11,7 +11,7 @@ from llm_rosetta.capabilities import resolve_intrinsic_tools
 from llm_rosetta.converters.anthropic import AnthropicConverter
 from llm_rosetta.converters.google_generate import GoogleGenerateConverter
 from llm_rosetta.converters.google_interactions import GoogleInteractionsConverter
-from llm_rosetta.converters.openai_chat import OpenAIChatConverter
+from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
 from llm_rosetta.converters.openai_responses import OpenAIResponsesConverter
 from llm_rosetta.converters.base.tools.intrinsic import (
     get_definition_kind,
@@ -85,14 +85,14 @@ class TestSourceRecognition:
         assert get_definition_kind(ir) == "google_search"
 
     def test_chat_explicit_intrinsic(self):
-        ir = OpenAIChatConverter().tool_ops.p_tool_definition_to_ir(
+        ir = ChatCompletionsConverter().tool_ops.p_tool_definition_to_ir(
             {"type": "intrinsic", "name": "web_search"}
         )
         assert ir["type"] == "intrinsic"
         assert get_definition_kind(ir) == "web_search"
 
     def test_chat_plain_function_not_promoted_at_source(self):
-        ir = OpenAIChatConverter().tool_ops.p_tool_definition_to_ir(
+        ir = ChatCompletionsConverter().tool_ops.p_tool_definition_to_ir(
             {"type": "function", "function": {"name": "web_search"}}
         )
         # Bare-name promotion happens later, driven by the target shim.
@@ -140,7 +140,7 @@ class TestTargetEmission:
 
     def test_chat_drops(self):
         assert (
-            OpenAIChatConverter().tool_ops.ir_tool_definition_to_p(
+            ChatCompletionsConverter().tool_ops.ir_tool_definition_to_p(
                 self._ir("web_search")
             )
             == {}
@@ -346,7 +346,7 @@ class TestUnsupportedKindNotCachedAsEmpty:
 
     def test_chat_drops_intrinsic_every_time(self):
         out = self._calls(
-            OpenAIChatConverter(), make_intrinsic_tool_definition("web_search")
+            ChatCompletionsConverter(), make_intrinsic_tool_definition("web_search")
         )
         assert all(o == [] for o in out), out
 

@@ -107,7 +107,7 @@ def _cmd_init(args: argparse.Namespace) -> None:
 
     template = {
         "providers": {
-            "openai_chat": {
+            "chat_completions": {
                 "api_key": "${OPENAI_API_KEY}",
                 "base_url": "https://api.openai.com/v1",
             },
@@ -121,7 +121,7 @@ def _cmd_init(args: argparse.Namespace) -> None:
             },
         },
         "models": {
-            "gpt-4o": "openai_chat",
+            "gpt-4o": "chat_completions",
             "claude-sonnet-4-20250514": "anthropic",
             "gemini-2.0-flash": "google_generate",
         },

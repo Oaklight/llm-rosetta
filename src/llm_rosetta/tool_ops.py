@@ -27,11 +27,11 @@ Example usage::
     gemini_tool = tool_ops.to_provider(ir_tool, provider="google")
 
     # Reverse direction
-    recovered = tool_ops.from_provider(openai_tool, provider="openai_chat")
+    recovered = tool_ops.from_provider(openai_tool, provider="chat_completions")
 
     # Full lifecycle dispatch (choice, call, result, config)
     provider_choice = tool_ops.choice_to_provider(ir_choice, provider="anthropic")
-    provider_call = tool_ops.call_to_provider(ir_call, provider="openai_chat")
+    provider_call = tool_ops.call_to_provider(ir_call, provider="chat_completions")
 """
 
 from typing import Any, Literal
@@ -42,7 +42,8 @@ from .types.ir.parts import ToolCallPart, ToolResultPart
 
 ToolProvider = Literal[
     # Canonical names (match ProviderType / internal module names)
-    "openai_chat",
+    "chat_completions",
+    "openai_chat",  # legacy alias of "chat_completions"
     "openai_responses",
     "anthropic",
     "google",
@@ -66,10 +67,10 @@ def _resolve(provider: str) -> str:
 def _get_tool_ops(provider: str) -> Any:
     """Lazy-import and return the ToolOps class for *provider*."""
     canonical = _resolve(provider)
-    if canonical == "openai_chat":
-        from .converters.openai_chat import OpenAIChatToolOps
+    if canonical == "chat_completions":
+        from .converters.chat_completions import ChatCompletionsToolOps
 
-        return OpenAIChatToolOps
+        return ChatCompletionsToolOps
     if canonical in ("openai_responses", "open_responses"):
         from .converters.openai_responses import OpenResponsesToolOps
 
@@ -88,10 +89,10 @@ def _get_tool_ops(provider: str) -> Any:
         return GoogleInteractionsToolOps
     raise ValueError(
         f"Unknown provider: {provider!r}. "
-        f"Supported: openai_chat, openai_responses, open_responses, "
+        f"Supported: chat_completions, openai_responses, open_responses, "
         f"anthropic, google_generate, google_interactions "
-        f"(aliases: openai-chat, openai-responses, google, google-genai, "
-        f"google-interactions)"
+        f"(aliases: openai_chat, openai-chat, openai-responses, google, "
+        f"google-genai, google-interactions)"
     )
 
 
@@ -208,9 +209,9 @@ def config_from_provider(
 
 def to_openai_chat(ir_tool: ToolDefinition, **kwargs: Any) -> dict[str, Any]:
     """Convert IR tool definition to OpenAI Chat format."""
-    from .converters.openai_chat import OpenAIChatToolOps
+    from .converters.chat_completions import ChatCompletionsToolOps
 
-    return OpenAIChatToolOps.ir_tool_definition_to_p(ir_tool, **kwargs)
+    return ChatCompletionsToolOps.ir_tool_definition_to_p(ir_tool, **kwargs)
 
 
 def to_openai_responses(ir_tool: ToolDefinition, **kwargs: Any) -> dict[str, Any]:
@@ -243,9 +244,9 @@ def to_google_interactions(ir_tool: ToolDefinition, **kwargs: Any) -> dict[str, 
 
 def from_openai_chat(provider_tool: Any, **kwargs: Any) -> ToolDefinition | None:
     """Convert OpenAI Chat tool definition to IR format."""
-    from .converters.openai_chat import OpenAIChatToolOps
+    from .converters.chat_completions import ChatCompletionsToolOps
 
-    return OpenAIChatToolOps.p_tool_definition_to_ir(provider_tool, **kwargs)
+    return ChatCompletionsToolOps.p_tool_definition_to_ir(provider_tool, **kwargs)
 
 
 def from_openai_responses(

@@ -20,7 +20,7 @@ from ...types.ir import (
 from ..base import BaseContentOps
 
 
-class OpenAIChatContentOps(BaseContentOps):
+class ChatCompletionsContentOps(BaseContentOps):
     """OpenAI Chat Completions content conversion operations.
 
     All methods are static and stateless. Handles TextPart, ImagePart
@@ -291,3 +291,8 @@ class OpenAIChatContentOps(BaseContentOps):
             )
         # Fallback: store raw data
         return CitationPart(type="citation")
+
+
+# Backward-compatible alias (deprecated): ``chat_completions`` is the canonical
+# base name now.
+OpenAIChatContentOps = ChatCompletionsContentOps

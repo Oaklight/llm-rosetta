@@ -18,6 +18,7 @@
       "type": "string",
       "description": "API standard this provider follows.",
       "enum": [
+        "chat_completions",
         "openai_chat",
         "openai_responses",
         "open_responses",

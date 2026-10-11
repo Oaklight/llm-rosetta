@@ -575,9 +575,9 @@ class TestCacheHintIgnoredByOtherConverters:
 
     def test_openai_ignores_cache_hint_on_text(self):
         """OpenAI converter output does not include cache_control."""
-        from llm_rosetta.converters.openai_chat import OpenAIChatConverter
+        from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
 
-        converter = OpenAIChatConverter()
+        converter = ChatCompletionsConverter()
         # Create an IR request with cache_hint on text
         ir_request: IRRequest = {
             "model": "gpt-4",
@@ -610,10 +610,10 @@ class TestCrossFormatSystemCacheHint:
 
     def test_anthropic_system_cache_to_openai_flattens(self):
         """Anthropic system with cache_control → IR → OpenAI: string, no cache_control."""
-        from llm_rosetta.converters.openai_chat import OpenAIChatConverter
+        from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
 
         anthropic_converter = AnthropicConverter()
-        openai_converter = OpenAIChatConverter()
+        openai_converter = ChatCompletionsConverter()
 
         provider_request = {
             "model": "claude-sonnet-4-20250514",

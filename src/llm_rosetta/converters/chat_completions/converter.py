@@ -43,10 +43,10 @@ from ..base.tools import (
     strip_orphaned_tool_config,
 )
 from ._constants import OPENAI_CHAT_REASON_FROM_PROVIDER, OPENAI_CHAT_REASON_TO_PROVIDER
-from .config_ops import OpenAIChatConfigOps
-from .content_ops import OpenAIChatContentOps
-from .message_ops import OpenAIChatMessageOps
-from .tool_ops import OpenAIChatToolOps
+from .config_ops import ChatCompletionsConfigOps
+from .content_ops import ChatCompletionsContentOps
+from .message_ops import ChatCompletionsMessageOps
+from .tool_ops import ChatCompletionsToolOps
 
 logger = logging.getLogger(__name__)
 
@@ -97,7 +97,7 @@ def _resolve_tool_call_delta(
     return "function", tc_func.get("name", ""), tc_func.get("arguments", "")
 
 
-class OpenAIChatConverter(BaseConverter):
+class ChatCompletionsConverter(BaseConverter):
     """OpenAI Chat Completions API converter.
 
     Implements the 6 explicit conversion interfaces defined by BaseConverter,
@@ -108,11 +108,11 @@ class OpenAIChatConverter(BaseConverter):
 
     _RESPONSE_ID_PREFIX = "chatcmpl-"
 
-    content_ops_class = OpenAIChatContentOps
-    tool_ops_class = OpenAIChatToolOps
-    message_ops_class = OpenAIChatMessageOps
-    config_ops_class = OpenAIChatConfigOps
-    _CONVERTER_TAG = "openai_chat"
+    content_ops_class = ChatCompletionsContentOps
+    tool_ops_class = ChatCompletionsToolOps
+    message_ops_class = ChatCompletionsMessageOps
+    config_ops_class = ChatCompletionsConfigOps
+    _CONVERTER_TAG = "chat_completions"
     _PASSTHROUGH_RESTORE_KEY = "choices"
     _SUPPORTS_MULTIMODAL_TOOL_RESULT = False
 
@@ -1141,3 +1141,7 @@ class OpenAIChatConverter(BaseConverter):
             "choices": [],
             "usage": self._build_ir_usage_to_p(usage),
         }
+
+
+# Deprecated alias — ``chat_completions`` is the canonical base name now.
+OpenAIChatConverter = ChatCompletionsConverter
