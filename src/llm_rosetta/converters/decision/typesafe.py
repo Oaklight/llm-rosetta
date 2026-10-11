@@ -17,6 +17,7 @@ TypeSafe has no image support and no refusal type, so images in ``state`` and
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from typing import Any
 
@@ -50,14 +51,17 @@ class TypeSafeDecisionConverter(BaseDecisionConverter):
         context: ConversionContext,
     ) -> dict[str, Any]:
         warnings = context.warnings
+        wire_state, images = _state_to_wire(ir_request["state"], warnings)
         result: dict[str, Any] = {
             "model": ir_request["model"],
-            "state": _state_to_wire(ir_request["state"], warnings),
+            "state": wire_state,
             "questions": {
                 qid: _question_to_wire(q, warnings)
                 for qid, q in ir_request["questions"].items()
             },
         }
+        if images:
+            result["images"] = images
         if "provider_extensions" in ir_request:
             result.update(ir_request["provider_extensions"])
         return result
@@ -74,7 +78,9 @@ class TypeSafeDecisionConverter(BaseDecisionConverter):
         }
         return {
             "model": provider_request["model"],
-            "state": _state_from_wire(provider_request["state"]),
+            "state": _state_from_wire(
+                provider_request["state"], provider_request.get("images")
+            ),
             "questions": questions,
         }
 
@@ -147,35 +153,53 @@ def _is_image_part(value: Any) -> bool:
     return isinstance(value, dict) and value.get("type") == "image"
 
 
-def _state_to_wire(state: Any, warnings: list[str]) -> Any:
-    """IR state → TypeSafe ``state`` (string | object | array).
+def _image_to_data_url(part: Mapping[str, Any]) -> str:
+    """IR image part → an inline base64 data URL for the System One ``images``."""
+    url = part.get("image_url")
+    if url:
+        return url
+    data = part.get("image_data") or {}
+    media = data.get("media_type", "image/jpeg")
+    return f"data:{media};base64,{data.get('data', '')}"
 
-    TypeSafe has no image support: images are replaced by a text placeholder
-    (with a warning), and a content-part list collapses to joined text.
+
+def _state_to_wire(state: Any, warnings: list[str]) -> tuple[Any, list[str]]:
+    """IR state → (TypeSafe ``state``, ``images``).
+
+    The System One ``state`` is ``string | object | array``.  The Cloudflare
+    Clef / classifier.dev extension adds a separate top-level ``images`` array
+    (inline base64 data URLs), so a content-part list is split: text parts join
+    into ``state`` and image parts become ``images``.  An image embedded in a
+    structured dict is dropped with a warning (no positional key to re-attach).
     """
     if isinstance(state, str):
-        return state
+        return state, []
     if isinstance(state, list):
         texts: list[str] = []
+        images: list[str] = []
         for part in state:
-            if isinstance(part, dict) and part.get("type") == "text":
+            if _is_image_part(part):
+                images.append(_image_to_data_url(part))
+            elif isinstance(part, dict) and part.get("type") == "text":
                 texts.append(str(part.get("text", "")))
-            elif _is_image_part(part):
-                warnings.append("TypeSafe does not support image input; image omitted")
             else:
                 texts.append(str(part))
-        return "\n".join(texts)
+        return "\n".join(texts), images
     if isinstance(state, dict):
         # Unwrap the ``{"items": [...]}`` array form produced by _state_from_wire.
         if set(state) == {"items"} and isinstance(state["items"], list):
-            return state["items"]
-        return _strip_images(state, warnings)
-    return state
+            return state["items"], []
+        return _strip_images(state, warnings), []
+    return state, []
 
 
 def _strip_images(value: Any, warnings: list[str]) -> Any:
     if _is_image_part(value):
-        warnings.append("TypeSafe does not support image input; image omitted")
+        warnings.append(
+            "Image embedded in a structured state; not carried (no positional "
+            "key). Move it to a top-level content-part list to use the images[] "
+            "extension."
+        )
         return _IMAGE_PLACEHOLDER
     if isinstance(value, dict):
         return {k: _strip_images(v, warnings) for k, v in value.items()}
@@ -184,12 +208,25 @@ def _strip_images(value: Any, warnings: list[str]) -> Any:
     return value
 
 
-def _state_from_wire(state: Any) -> Any:
-    """TypeSafe ``state`` → IR state.
+def _state_from_wire(state: Any, images: Any) -> Any:
+    """TypeSafe ``state`` (+ optional ``images``) → IR state.
 
-    A bare array is wrapped as ``{"items": [...]}`` because the IR reserves
+    With ``images`` present the IR state is a content-part list (a text part for
+    the wire ``state`` followed by an image part per entry).  A bare array
+    without images is wrapped as ``{"items": [...]}`` because the IR reserves
     ``list`` for content parts.
     """
+    if images:
+        parts: list[dict[str, Any]] = []
+        if state not in (None, "", {}):
+            text = (
+                state
+                if isinstance(state, str)
+                else json.dumps(state, ensure_ascii=False)
+            )
+            parts.append({"type": "text", "text": text})
+        parts.extend({"type": "image", "image_url": str(img)} for img in images)
+        return parts
     if isinstance(state, list):
         return {"items": state}
     return state
