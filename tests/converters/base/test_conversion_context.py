@@ -6,7 +6,7 @@ from llm_rosetta.converters.base import BaseConverter
 from llm_rosetta.converters.base.context import ConversionContext, StreamContext
 from llm_rosetta.converters.chat_completions.converter import ChatCompletionsConverter
 from llm_rosetta.converters.open_responses.converter import OpenAIResponsesConverter
-from llm_rosetta.converters.anthropic.converter import AnthropicConverter
+from llm_rosetta.converters.messages.converter import MessagesConverter
 from llm_rosetta.converters.google_generate.converter import GoogleGenerateConverter
 from llm_rosetta.converters.open_responses.stream_context import (
     OpenAIResponsesStreamContext,
@@ -272,7 +272,7 @@ class TestWarningsSingleSource:
 
     def test_with_context_returns_same_list_object_anthropic(self):
         ctx = ConversionContext()
-        converter = AnthropicConverter()
+        converter = MessagesConverter()
         _, warnings = converter.request_to_provider(
             self._make_ir_request(), context=ctx
         )

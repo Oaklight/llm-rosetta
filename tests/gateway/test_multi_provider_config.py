@@ -23,7 +23,7 @@ def _make_config(models: dict, providers: dict | None = None) -> GatewayConfig:
                 "base_url": "https://b.example.com",
             },
             "anthropic_a": {
-                "type": "anthropic",
+                "type": "messages",
                 "api_key": "sk-c",
                 "base_url": "https://c.example.com",
             },

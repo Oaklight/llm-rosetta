@@ -231,13 +231,13 @@ class TestArgoShimLoading:
         from llm_rosetta.shims import get_shim
         from llm_rosetta.shims.providers import load_providers
 
-        if get_shim("argo--anthropic") is None:
+        if get_shim("argo--messages") is None:
             load_providers()
 
     def test_argo_anthropic_shim_has_patterns(self):
         from llm_rosetta.shims import get_shim
 
-        shim = get_shim("argo--anthropic")
+        shim = get_shim("argo--messages")
         assert shim is not None
         assert len(shim.soft_error_patterns) > 0
         p = shim.soft_error_patterns[0]

@@ -362,7 +362,7 @@ class TestConvertWithTransforms:
             "custom_field": "gpt-4",
             "messages": [{"role": "user", "content": "hello"}],
         }
-        result = convert(body, "anthropic", source_provider="custom-oai")
+        result = convert(body, "messages", source_provider="custom-oai")
         assert "model" in result
 
     def test_convert_applies_target_post_ir_transforms(self):
@@ -391,7 +391,7 @@ class TestConvertWithTransforms:
             "model": "gpt-4",
             "messages": [{"role": "user", "content": "hello"}],
         }
-        result = convert(body, "anthropic", source_provider="openai_chat")
+        result = convert(body, "messages", source_provider="openai_chat")
         assert "messages" in result
 
     def test_convert_idempotent_transforms(self):

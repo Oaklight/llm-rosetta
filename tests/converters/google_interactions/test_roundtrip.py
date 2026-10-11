@@ -141,7 +141,7 @@ INTERACTIONS_RESPONSE_TOOL_CALL = {
     ],
 }
 
-VIA_PROVIDERS = ["openai_chat", "anthropic", "google_generate"]
+VIA_PROVIDERS = ["openai_chat", "messages", "google_generate"]
 
 
 # ── Request round-trip tests ───────────────────────────────────────

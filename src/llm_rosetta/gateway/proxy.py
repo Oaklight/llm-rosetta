@@ -361,7 +361,7 @@ def _inject_stream_flags(
     if target_provider == "chat_completions":
         body["stream"] = True
         body["stream_options"] = {"include_usage": True}
-    elif target_provider in ("openai_responses", "open_responses", "anthropic"):
+    elif target_provider in ("openai_responses", "open_responses", "messages"):
         body["stream"] = True
     elif target_provider == "google_interactions":
         body["stream"] = True
@@ -375,7 +375,7 @@ def detect_stream_request(source_provider: ProviderType, body: dict[str, Any]) -
         "chat_completions",
         "openai_responses",
         "open_responses",
-        "anthropic",
+        "messages",
         "google_interactions",
     ):
         return bool(body.get("stream", False))

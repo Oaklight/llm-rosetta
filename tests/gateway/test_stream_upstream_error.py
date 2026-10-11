@@ -102,8 +102,7 @@ def test_content_chunks_are_not_errors(chunk):
 
 def test_error_event_uses_source_envelope():
     assert (
-        build_stream_error_events("anthropic", "boom")[0]["error"]["type"]
-        == "api_error"
+        build_stream_error_events("messages", "boom")[0]["error"]["type"] == "api_error"
     )
     assert build_stream_error_events("google", "boom")[0]["error"]["code"] == 500
     assert (

@@ -47,11 +47,11 @@ class TestPipelineProfile:
         }
 
     def test_profile_empty_before_conversion(self):
-        pipeline = ConversionPipeline("openai_chat", "anthropic")
+        pipeline = ConversionPipeline("openai_chat", "messages")
         assert pipeline.profile == {}
 
     def test_profile_populated_after_convert_request(self):
-        pipeline = ConversionPipeline("openai_chat", "anthropic")
+        pipeline = ConversionPipeline("openai_chat", "messages")
         pipeline.convert_request(self._make_simple_request())
 
         p = pipeline.profile
@@ -76,7 +76,7 @@ class TestPipelineProfile:
         )
 
     def test_profile_populated_after_convert_response(self):
-        pipeline = ConversionPipeline("openai_chat", "anthropic")
+        pipeline = ConversionPipeline("openai_chat", "messages")
         pipeline.convert_request(self._make_simple_request())
         pipeline.convert_response(self._make_simple_response())
 
@@ -93,7 +93,7 @@ class TestPipelineProfile:
         )
 
     def test_profile_has_all_keys_after_full_roundtrip(self):
-        pipeline = ConversionPipeline("openai_chat", "anthropic")
+        pipeline = ConversionPipeline("openai_chat", "messages")
         pipeline.convert_request(self._make_simple_request())
         pipeline.convert_response(self._make_simple_response())
 

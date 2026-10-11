@@ -1231,7 +1231,7 @@ async def fetch_upstream_models(request: Any, **kwargs: Any) -> Response:
             models_url = f"{pinfo.base_url}{explicit_path}"
     elif ptype in ("google", "google_generate"):
         models_url = f"{pinfo.base_url}/v1beta/models"
-    elif ptype == "anthropic":
+    elif ptype == "messages":
         models_url = f"{pinfo.base_url}/v1/models"
     else:
         models_url = f"{pinfo.base_url}/models"

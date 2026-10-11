@@ -125,7 +125,7 @@ class TestDetectProvider:
                 {"role": "user", "content": [{"type": "text", "text": "Hello"}]}
             ],
         }
-        assert detect_provider(body_with_system) == "anthropic"
+        assert detect_provider(body_with_system) == "messages"
 
     def test_detect_anthropic_with_system(self):
         """测试检测带 system 的 Anthropic 格式"""
@@ -135,7 +135,7 @@ class TestDetectProvider:
                 {"role": "user", "content": [{"type": "text", "text": "Hello"}]}
             ],
         }
-        assert detect_provider(body) == "anthropic"
+        assert detect_provider(body) == "messages"
 
     def test_detect_anthropic_with_tool_use(self):
         """测试检测带工具使用的 Anthropic 格式"""
@@ -154,7 +154,7 @@ class TestDetectProvider:
                 }
             ]
         }
-        assert detect_provider(body) == "anthropic"
+        assert detect_provider(body) == "messages"
 
     def test_detect_anthropic_with_image(self):
         """测试检测带图像的 Anthropic 格式"""
@@ -175,7 +175,7 @@ class TestDetectProvider:
                 }
             ]
         }
-        assert detect_provider(body) == "anthropic"
+        assert detect_provider(body) == "messages"
 
     def test_detect_google_simple(self):
         """测试检测简单的 Google GenAI 格式"""
@@ -261,10 +261,10 @@ class TestGetConverterForProvider:
 
     def test_get_anthropic_converter(self):
         """测试获取 Anthropic 转换器"""
-        from llm_rosetta.converters import AnthropicConverter
+        from llm_rosetta.converters import MessagesConverter
 
-        converter = get_converter_for_provider("anthropic")
-        assert isinstance(converter, AnthropicConverter)
+        converter = get_converter_for_provider("messages")
+        assert isinstance(converter, MessagesConverter)
 
     def test_get_google_converter(self):
         """测试获取 Google 转换器"""
@@ -331,7 +331,7 @@ class TestConvert:
             "config": {},
         }
 
-        anthropic_body = convert(google_body, "anthropic", source_provider="google")
+        anthropic_body = convert(google_body, "messages", source_provider="google")
 
         assert "messages" in anthropic_body
         assert len(anthropic_body["messages"]) == 1
@@ -471,7 +471,7 @@ class TestConvert:
             ]
         }
 
-        anthropic_body = convert(openai_body, "anthropic")
+        anthropic_body = convert(openai_body, "messages")
 
         assert "messages" in anthropic_body
         assert len(anthropic_body["messages"][0]["content"]) == 2
@@ -488,9 +488,9 @@ class TestConvert:
         }
 
         # OpenAI -> Anthropic -> OpenAI (更简单的往返路径)
-        anthropic_body = convert(original, "anthropic")
+        anthropic_body = convert(original, "messages")
         back_to_openai = convert(
-            anthropic_body, "openai_chat", source_provider="anthropic"
+            anthropic_body, "openai_chat", source_provider="messages"
         )
 
         assert "messages" in back_to_openai
@@ -509,7 +509,7 @@ class TestEdgeCases:
         body = {"messages": [{"role": "user", "content": []}]}
         result = detect_provider(body)
         # 应该返回某个有效的 provider，不应该是 None
-        assert result in ["chat_completions", "anthropic"]
+        assert result in ["chat_completions", "messages"]
 
     def test_convert_empty_messages(self):
         """测试空消息列表的转换"""
@@ -552,7 +552,7 @@ class TestEdgeCases:
                 }
             ]
         }
-        assert detect_provider(body_with_image) == "anthropic"
+        assert detect_provider(body_with_image) == "messages"
 
 
 # ---------------------------------------------------------------------------
@@ -574,7 +574,7 @@ class TestConvertResponse:
 
         # Convert request to Anthropic format
         anthropic_request = convert(
-            request_body, "anthropic", source_provider="openai_chat"
+            request_body, "messages", source_provider="openai_chat"
         )
         assert "messages" in anthropic_request
 
@@ -594,7 +594,7 @@ class TestConvertResponse:
             anthropic_response,
             request_body,
             source_provider="openai_chat",
-            target_provider="anthropic",
+            target_provider="messages",
         )
 
         assert "choices" in openai_response
@@ -680,7 +680,7 @@ class TestDualShimPipeline:
         try:
             pipeline = ConversionPipeline(
                 "openai_chat",
-                "anthropic",
+                "messages",
                 source_shim="__test_src__",
             )
             body = {
@@ -709,7 +709,7 @@ class TestDualShimPipeline:
         )
         tgt_shim = ProviderShim(
             name="__test_dual_tgt__",
-            base="anthropic",
+            base="messages",
             post_ir_transforms=(set_defaults(tgt_marker=True),),
         )
         register_shim(src_shim)
@@ -717,7 +717,7 @@ class TestDualShimPipeline:
         try:
             pipeline = ConversionPipeline(
                 "openai_chat",
-                "anthropic",
+                "messages",
                 source_shim="__test_dual_src__",
                 target_shim="__test_dual_tgt__",
             )
@@ -780,7 +780,7 @@ class TestDualShimPipeline:
 
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            pipeline = ConversionPipeline("chat_completions", "anthropic", shim=None)
+            pipeline = ConversionPipeline("chat_completions", "messages", shim=None)
             assert not any(issubclass(x.category, DeprecationWarning) for x in w)
 
         body = {
@@ -798,7 +798,7 @@ class TestDualShimPipeline:
 
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            ConversionPipeline("openai_chat", "anthropic", shim="nonexistent")
+            ConversionPipeline("openai_chat", "messages", shim="nonexistent")
             assert any(issubclass(x.category, DeprecationWarning) for x in w)
 
     def test_shim_and_target_shim_raises(self):
@@ -810,7 +810,7 @@ class TestDualShimPipeline:
         with pytest.raises(ValueError, match="Cannot pass both"):
             ConversionPipeline(
                 "openai_chat",
-                "anthropic",
+                "messages",
                 target_shim="some-shim",
                 shim="other-shim",
             )
@@ -819,7 +819,7 @@ class TestDualShimPipeline:
         """source_shim=None means no source-side transforms."""
         from llm_rosetta.pipeline import ConversionPipeline
 
-        pipeline = ConversionPipeline("openai_chat", "anthropic", source_shim=None)
+        pipeline = ConversionPipeline("openai_chat", "messages", source_shim=None)
         assert pipeline._source_pre_ir_transforms == ()
         assert pipeline._source_post_ir_transforms == ()
 

@@ -4,7 +4,7 @@ This module tests that the TypedDict replicas correctly represent
 the Anthropic SDK types and can be used for type checking.
 """
 
-from llm_rosetta.types.anthropic import (
+from llm_rosetta.types.messages import (
     # Request types
     MessageCreateParams,
     MessageParam,

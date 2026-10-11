@@ -180,7 +180,7 @@ class TestGroupedConfig:
         assert ds.connection.base_url == "https://api.deepseek.com"
         assert ds.tools.custom_tools is False
 
-        argo = get_shim("argo--anthropic")
+        argo = get_shim("argo--messages")
         assert argo is not None
         assert argo.connection.model_id_field == "internal_id"
 
@@ -201,12 +201,12 @@ class TestRegistry:
 
     def test_register_replaces(self):
         s1 = ProviderShim(name="test", base="openai_chat")
-        s2 = ProviderShim(name="test", base="anthropic")
+        s2 = ProviderShim(name="test", base="messages")
         register_shim(s1)
         register_shim(s2)
         result = get_shim("test")
         assert result is not None
-        assert result.base == "anthropic"
+        assert result.base == "messages"
 
     def test_unregister(self):
         s = ProviderShim(name="test", base="openai_chat")
@@ -220,7 +220,7 @@ class TestRegistry:
 
     def test_list_shims(self):
         s1 = ProviderShim(name="a", base="openai_chat")
-        s2 = ProviderShim(name="b", base="anthropic")
+        s2 = ProviderShim(name="b", base="messages")
         register_shim(s1)
         register_shim(s2)
         shims = list_shims()
@@ -240,7 +240,7 @@ class TestRegistry:
 class TestResolveBase:
     def test_base_type_passthrough(self):
         assert resolve_base("openai_chat") == "chat_completions"
-        assert resolve_base("anthropic") == "anthropic"
+        assert resolve_base("anthropic") == "messages"
         assert resolve_base("google_generate") == "google_generate"
         assert resolve_base("open_responses") == "open_responses"
 
@@ -280,7 +280,7 @@ class TestBuiltinShims:
         for name in (
             "openai--chat_completions",
             "openai--open_responses",
-            "anthropic",
+            "anthropic--messages",
             "google--google_generate",
             "typesafe",
         ):
@@ -294,9 +294,9 @@ class TestBuiltinShims:
             "volcengine--chat_completions",
             "volcengine--open_responses",
             "openrouter--chat_completions",
-            "openrouter--anthropic",
+            "openrouter--messages",
             "minimax--chat_completions",
-            "minimax--anthropic",
+            "minimax--messages",
         ):
             shim = get_shim(name)
             assert shim is not None, f"Built-in shim '{name}' not registered"
@@ -305,8 +305,7 @@ class TestBuiltinShims:
         """Old shim names resolve to the same object as canonical ones (#917)."""
         pairs = (
             ("openai", "openai--chat_completions"),
-            ("google_generate", "google--google_generate"),
-            ("google_interactions", "google--google_interactions"),
+            ("anthropic", "anthropic--messages"),
             ("argo--chat_completions", "argo--chat_completions"),
             ("deepseek--open_responses", "deepseek--open_responses"),
             ("volcengine--chat_completions", "volcengine--chat_completions"),
@@ -335,12 +334,12 @@ class TestBuiltinShims:
         assert shim.base == "open_responses"
 
     def test_anthropic_base_type(self):
-        shim = get_shim("anthropic")
+        shim = get_shim("anthropic--messages")
         assert shim is not None
-        assert shim.base == "anthropic"
+        assert shim.base == "messages"
 
     def test_argo_anthropic_preserves_unsigned_blocks(self):
-        shim = get_shim("argo--anthropic")
+        shim = get_shim("argo--messages")
         assert shim is not None
         assert shim.reasoning is not None
         assert shim.reasoning.unsigned_blocks == "preserve"
@@ -367,7 +366,7 @@ class TestBuiltinShims:
             )
 
     def test_max_tool_description_length_absent_stays_none(self):
-        shim = get_shim("anthropic")
+        shim = get_shim("anthropic--messages")
         assert shim is not None
         assert shim.max_tool_description_length is None
 
@@ -415,7 +414,7 @@ class TestShimConverterIntegration:
     def test_base_types_still_work(self):
         from llm_rosetta.auto_detect import get_converter_for_provider
         from llm_rosetta.converters import (
-            AnthropicConverter,
+            MessagesConverter,
             GoogleConverter,
             ChatCompletionsConverter,
         )
@@ -423,7 +422,7 @@ class TestShimConverterIntegration:
         assert isinstance(
             get_converter_for_provider("openai_chat"), ChatCompletionsConverter
         )
-        assert isinstance(get_converter_for_provider("anthropic"), AnthropicConverter)
+        assert isinstance(get_converter_for_provider("messages"), MessagesConverter)
         assert isinstance(get_converter_for_provider("google"), GoogleConverter)
 
     def test_unknown_provider_raises(self):
@@ -448,27 +447,27 @@ class TestGroupedProviders:
 
     def test_grouped_providers_registered(self):
         """Shims under a group folder register with their YAML name."""
-        for name in ("argo--anthropic", "argo--chat_completions"):
+        for name in ("argo--messages", "argo--chat_completions"):
             shim = get_shim(name)
             assert shim is not None, f"Grouped shim '{name}' not registered"
 
     def test_grouped_provider_base_types(self):
         """Grouped shims resolve to the correct base converter."""
-        anth = get_shim("argo--anthropic")
+        anth = get_shim("argo--messages")
         oai = get_shim("argo--chat_completions")
-        assert anth is not None and anth.base == "anthropic"
+        assert anth is not None and anth.base == "messages"
         assert oai is not None and oai.base == "chat_completions"
 
     def test_grouped_provider_transforms_loaded(self):
         """Grouped shims have their transforms.py imported."""
-        anth = get_shim("argo--anthropic")
+        anth = get_shim("argo--messages")
         assert anth is not None
         # argo_anthropic has pre_ir_transforms (post_ir_transforms retired)
         assert len(anth.pre_ir_transforms) > 0
 
     def test_grouped_provider_reasoning_configs_loaded(self):
         """Grouped shims load reasoning capability configs."""
-        anth = get_shim("argo--anthropic")
+        anth = get_shim("argo--messages")
         oai = get_shim("argo--chat_completions")
         assert anth is not None and anth.reasoning is not None
         assert oai is not None and oai.reasoning is not None
@@ -479,7 +478,7 @@ class TestGroupedProviders:
 
     def test_argo_anthropic_model_reasoning_overrides(self):
         """Argo anthropic has model_reasoning for claudeopus47."""
-        anth = get_shim("argo--anthropic")
+        anth = get_shim("argo--messages")
         assert anth is not None
         assert anth.model_reasoning is not None
         assert "claudeopus47" in anth.model_reasoning
@@ -494,7 +493,7 @@ class TestGroupedProviders:
 
     def test_argo_anthropic_provider_thinking_modes(self):
         """Argo anthropic provider-level thinking_modes includes all three modes."""
-        anth = get_shim("argo--anthropic")
+        anth = get_shim("argo--messages")
         assert anth is not None and anth.reasoning is not None
         assert anth.reasoning.thinking_modes is not None
         assert "auto" in anth.reasoning.thinking_modes
@@ -505,11 +504,11 @@ class TestGroupedProviders:
         """Flat shims and grouped shims coexist in the registry."""
         flat_names = (
             "openai--chat_completions",
-            "anthropic",
+            "anthropic--messages",
             "google--google_generate",
         )
         grouped_names = (
-            "argo--anthropic",
+            "argo--messages",
             "argo--chat_completions",
             "argo--open_responses",
             "deepseek--chat_completions",
@@ -534,7 +533,7 @@ class TestMultimodalToolResultCapability:
         assert s.multimodal_tool_result is True
 
     def test_shim_explicit_false(self):
-        s = ProviderShim(name="test", base="anthropic", multimodal_tool_result=False)
+        s = ProviderShim(name="test", base="messages", multimodal_tool_result=False)
         assert s.multimodal_tool_result is False
 
     def test_convert_wires_shim_override_into_context(self):
@@ -550,7 +549,7 @@ class TestMultimodalToolResultCapability:
                 name="mm-target", base="openai_chat", multimodal_tool_result=True
             )
         )
-        register_shim(ProviderShim(name="mm-source", base="anthropic"))
+        register_shim(ProviderShim(name="mm-source", base="messages"))
 
         captured_ctx: list[Any] = []
 
@@ -588,7 +587,7 @@ class TestMultimodalToolResultCapability:
         from llm_rosetta.auto_detect import convert
 
         register_shim(ProviderShim(name="plain-target", base="openai_chat"))
-        register_shim(ProviderShim(name="plain-source", base="anthropic"))
+        register_shim(ProviderShim(name="plain-source", base="messages"))
 
         captured_ctx: list[Any] = []
 
@@ -628,7 +627,7 @@ class TestMultimodalToolResultCapability:
         )
 
         pipeline = ConversionPipeline(
-            source_provider="anthropic",
+            source_provider="messages",
             target_provider="openai_chat",
             shim="pipe-target",
         )
@@ -652,7 +651,7 @@ class TestMultimodalToolResultCapability:
         )
 
         pipeline = ConversionPipeline(
-            source_provider="anthropic",
+            source_provider="messages",
             target_provider="openai_chat",
             shim="mm-chat",
         )

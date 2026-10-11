@@ -78,7 +78,7 @@ _CRITICAL_REQUEST_BY_FORMAT: dict[str, list[str]] = {
         "messages.*.tool_calls.*.type",
         "messages.*.tool_calls.*.function.name",
     ],
-    "anthropic": [
+    "messages": [
         "max_tokens",
         "system",
         "messages.*.role",
@@ -119,7 +119,7 @@ _CRITICAL_RESPONSE_BY_FORMAT: dict[str, list[str]] = {
         "choices.*.message.tool_calls.*.id",
         "choices.*.message.tool_calls.*.function.name",
     ],
-    "anthropic": [
+    "messages": [
         "type",
         "stop_reason",
         "content.*.type",
@@ -403,7 +403,7 @@ class FidelityChecker:
             (~0.01ms). ``"full"`` does recursive leaf-level diff (~1ms
             for 50KB).
         format_name: API format to check against (``"chat_completions"``,
-            ``"anthropic"``, ``"open_responses"``).  When ``None``,
+            ``"messages"``, ``"open_responses"``).  When ``None``,
             checks all formats' paths (slower but safe when format is
             unknown).
     """

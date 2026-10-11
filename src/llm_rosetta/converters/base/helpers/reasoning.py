@@ -54,7 +54,7 @@ DEFAULT_REASONING_CAPS: dict[str, ReasoningCapability] = {
     # Legacy alias of ``open_responses``, kept for the deprecated
     # ``OpenAIResponsesConverter`` preset and direct callers.
     "openai_responses": _DEFAULT_OPEN_RESPONSES,
-    "anthropic": _DEFAULT_ANTHROPIC,
+    "messages": _DEFAULT_ANTHROPIC,
     "google_generate": _DEFAULT_GOOGLE_GENERATE,
     # Legacy alias — the Google generate base type was renamed
     # ``google`` → ``google_generate``.
@@ -146,7 +146,7 @@ def apply_reasoning_config(
         _apply_chat_completions_extras(ir, result, mode, budget_tokens, cap, max_tokens)
     elif converter_type in ("open_responses", "openai_responses"):
         _apply_open_responses_extras(ir, result, mode, budget_tokens, cap)
-    elif converter_type == "anthropic":
+    elif converter_type == "messages":
         _apply_anthropic_extras(
             ir, result, mode, effort, budget_tokens, cap, max_tokens
         )

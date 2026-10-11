@@ -227,9 +227,9 @@ class TestTransformIntegration:
         assert repr(t) == "hoist_late_system_messages()"
 
     def test_anthropic_converter_has_intrinsic_hoist(self):
-        from llm_rosetta.converters.anthropic import AnthropicConverter
+        from llm_rosetta.converters.messages import MessagesConverter
 
-        names = [repr(t) for t in AnthropicConverter._INTRINSIC_IR_TRANSFORMS]
+        names = [repr(t) for t in MessagesConverter._INTRINSIC_IR_TRANSFORMS]
         assert "hoist_late_system_messages()" in names
 
     def test_google_generate_converter_has_intrinsic_hoist(self):
@@ -239,9 +239,9 @@ class TestTransformIntegration:
         assert "hoist_late_system_messages()" in names
 
     def test_hoist_before_cache_breakpoints(self):
-        from llm_rosetta.converters.anthropic import AnthropicConverter
+        from llm_rosetta.converters.messages import MessagesConverter
 
-        names = [repr(t) for t in AnthropicConverter._INTRINSIC_IR_TRANSFORMS]
+        names = [repr(t) for t in MessagesConverter._INTRINSIC_IR_TRANSFORMS]
         hoist_idx = names.index("hoist_late_system_messages()")
         cache_idx = names.index("auto_cache_breakpoints()")
         assert hoist_idx < cache_idx
@@ -267,10 +267,10 @@ class TestTransformIntegration:
                 {"role": "user", "content": [{"type": "text", "text": "ok"}]},
             ],
         }
-        from llm_rosetta.converters.anthropic import AnthropicConverter
+        from llm_rosetta.converters.messages import MessagesConverter
 
         result = apply_ir_transforms(
-            ir_request, "argo--anthropic", converter=AnthropicConverter()
+            ir_request, "argo--anthropic", converter=MessagesConverter()
         )
         # No system messages in the messages array
         for msg in result["messages"]:
@@ -309,10 +309,10 @@ class TestTransformIntegration:
                 {"role": "user", "content": [{"type": "text", "text": "ok"}]},
             ],
         }
-        from llm_rosetta.converters.anthropic import AnthropicConverter
+        from llm_rosetta.converters.messages import MessagesConverter
 
         hoisted = apply_ir_transforms(
-            ir_request, "argo--anthropic", converter=AnthropicConverter()
+            ir_request, "argo--anthropic", converter=MessagesConverter()
         )
 
         # No system messages remain

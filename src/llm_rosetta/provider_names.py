@@ -12,9 +12,9 @@ direct callers); internal lookups stay silent.  Legacy *shim* names live in a
 separate table (:data:`LEGACY_SHIM_ALIASES`) and warn through
 :func:`warn_legacy_shim_names`; shim-registry lookups stay silent too.
 
-The canonical names are the ones understood internally; legacy names stay
-accepted forever for backward compatibility but emit a
-:class:`DeprecationWarning` pointing at the replacement.
+The canonical names are the ones understood internally; legacy names are
+still accepted but emit a :class:`DeprecationWarning` pointing at the
+replacement.  They are scheduled for removal in 0.16.0 (#919).
 
 Adding a new rename is a one-line change to :data:`LEGACY_PROVIDER_ALIASES`
 (and, where relevant, the ``ProviderType`` literal in
@@ -25,7 +25,7 @@ Example:
     >>> normalize_provider_name("google-genai")
     'google_generate'
     >>> normalize_provider_name("anthropic")
-    'anthropic'
+    'messages'
 """
 
 from __future__ import annotations
@@ -60,6 +60,11 @@ LEGACY_PROVIDER_ALIASES: dict[str, str] = {
     # rather than silently downgrading to the neutral base.  ``open-responses``
     # (the spec spelling, no ``ai``) is the neutral base.
     "openai_responses": "openai--open_responses",
+    # Anthropic Messages API: ``messages`` is the canonical, API-standard name
+    # (the format is widely re-implemented by other providers, so it is no
+    # longer tied to the ``anthropic`` vendor).  ``anthropic`` was the old base
+    # name and stays accepted (deprecated).
+    "anthropic": "messages",
     # Hyphenated spellings accepted by the tool-ops convenience API.
     "openai-chat": "chat_completions",
     "openai-responses": "openai--open_responses",
@@ -80,13 +85,16 @@ LEGACY_PROVIDER_ALIASES: dict[str, str] = {
 # ``<provider>--<base>`` name stays reachable under the old spelling.
 #
 # The ``<provider>--<old base>`` entries are removed in 0.16.0 (#919); the
-# bare-name entries are the ``openai`` / ``google_*`` shims folded into the
-# grouped layout in #917.
+# bare-name entries are the ``openai`` / ``google*`` / ``anthropic`` shims
+# folded into the grouped layout (#917) or renamed (``anthropic`` →
+# ``anthropic--messages``).
 LEGACY_SHIM_ALIASES: dict[str, str] = {
     # Bare shim names → grouped ``<provider>--<base>`` names.
     "openai": "openai--chat_completions",
+    "google": "google--google_generate",
     "google_generate": "google--google_generate",
     "google_interactions": "google--google_interactions",
+    "anthropic": "anthropic--messages",
     # ``<provider>--<old base>`` → ``<provider>--<canonical base>``.
     "argo--openai_chat": "argo--chat_completions",
     "asksage--openai_chat": "asksage--chat_completions",

@@ -6,7 +6,7 @@ from llm_rosetta.converters.base.tools.content import (
     convert_content_blocks_to_ir,
     convert_ir_content_blocks_to_p,
 )
-from llm_rosetta.converters.anthropic.content_ops import AnthropicContentOps
+from llm_rosetta.converters.messages.content_ops import MessagesContentOps
 from llm_rosetta.converters.open_responses.content_ops import (
     OpenAIResponsesContentOps,
 )
@@ -18,7 +18,7 @@ class TestConvertContentBlocksToIR:
     def test_text_block(self):
         """Test provider text block → IR TextPart."""
         blocks = [{"type": "text", "text": "hello"}]
-        result = convert_content_blocks_to_ir(blocks, AnthropicContentOps)
+        result = convert_content_blocks_to_ir(blocks, MessagesContentOps)
         assert len(result) == 1
         assert result[0]["type"] == "text"
         assert result[0]["text"] == "hello"
@@ -43,7 +43,7 @@ class TestConvertContentBlocksToIR:
                 },
             }
         ]
-        result = convert_content_blocks_to_ir(blocks, AnthropicContentOps)
+        result = convert_content_blocks_to_ir(blocks, MessagesContentOps)
         assert len(result) == 1
         assert result[0]["type"] == "image"
         assert result[0]["image_data"]["data"] == "AAAA"
@@ -65,7 +65,7 @@ class TestConvertContentBlocksToIR:
     def test_string_block(self):
         """Test plain string block → IR TextPart."""
         blocks = ["just a string"]
-        result = convert_content_blocks_to_ir(blocks, AnthropicContentOps)
+        result = convert_content_blocks_to_ir(blocks, MessagesContentOps)
         assert len(result) == 1
         assert result[0]["type"] == "text"
         assert result[0]["text"] == "just a string"
@@ -73,7 +73,7 @@ class TestConvertContentBlocksToIR:
     def test_unknown_type_passthrough(self):
         """Test unknown block type passes through unchanged."""
         blocks = [{"type": "custom_thing", "data": "xyz"}]
-        result = convert_content_blocks_to_ir(blocks, AnthropicContentOps)
+        result = convert_content_blocks_to_ir(blocks, MessagesContentOps)
         assert len(result) == 1
         assert result[0] == {"type": "custom_thing", "data": "xyz"}
 
@@ -90,14 +90,14 @@ class TestConvertContentBlocksToIR:
                 },
             },
         ]
-        result = convert_content_blocks_to_ir(blocks, AnthropicContentOps)
+        result = convert_content_blocks_to_ir(blocks, MessagesContentOps)
         assert len(result) == 2
         assert result[0]["type"] == "text"
         assert result[1]["type"] == "image"
 
     def test_empty_list(self):
         """Test empty list returns empty list."""
-        result = convert_content_blocks_to_ir([], AnthropicContentOps)
+        result = convert_content_blocks_to_ir([], MessagesContentOps)
         assert result == []
 
 
@@ -107,7 +107,7 @@ class TestConvertIRContentBlocksToP:
     def test_text_to_anthropic(self):
         """Test IR TextPart → Anthropic text block."""
         blocks = [{"type": "text", "text": "hello"}]
-        result = convert_ir_content_blocks_to_p(blocks, AnthropicContentOps)
+        result = convert_ir_content_blocks_to_p(blocks, MessagesContentOps)
         assert len(result) == 1
         assert result[0]["type"] == "text"
         assert result[0]["text"] == "hello"
@@ -128,7 +128,7 @@ class TestConvertIRContentBlocksToP:
                 "image_data": {"data": "DDDD", "media_type": "image/png"},
             }
         ]
-        result = convert_ir_content_blocks_to_p(blocks, AnthropicContentOps)
+        result = convert_ir_content_blocks_to_p(blocks, MessagesContentOps)
         assert len(result) == 1
         assert result[0]["type"] == "image"
         assert result[0]["source"]["type"] == "base64"
@@ -150,7 +150,7 @@ class TestConvertIRContentBlocksToP:
     def test_string_block(self):
         """Test plain string → provider text block."""
         blocks = ["a string"]
-        result = convert_ir_content_blocks_to_p(blocks, AnthropicContentOps)
+        result = convert_ir_content_blocks_to_p(blocks, MessagesContentOps)
         assert len(result) == 1
         assert result[0]["type"] == "text"
         assert result[0]["text"] == "a string"
@@ -158,13 +158,13 @@ class TestConvertIRContentBlocksToP:
     def test_unknown_type_passthrough(self):
         """Test unknown IR block type passes through unchanged."""
         blocks = [{"type": "audio", "data": "xyz"}]
-        result = convert_ir_content_blocks_to_p(blocks, AnthropicContentOps)
+        result = convert_ir_content_blocks_to_p(blocks, MessagesContentOps)
         assert len(result) == 1
         assert result[0] == {"type": "audio", "data": "xyz"}
 
     def test_empty_list(self):
         """Test empty list returns empty list."""
-        result = convert_ir_content_blocks_to_p([], AnthropicContentOps)
+        result = convert_ir_content_blocks_to_p([], MessagesContentOps)
         assert result == []
 
 
@@ -190,9 +190,7 @@ class TestCrossProviderRoundTrip:
         assert ir_blocks[0]["type"] == "image"
 
         # Step 2: IR → Anthropic provider blocks
-        anthropic_blocks = convert_ir_content_blocks_to_p(
-            ir_blocks, AnthropicContentOps
-        )
+        anthropic_blocks = convert_ir_content_blocks_to_p(ir_blocks, MessagesContentOps)
         assert len(anthropic_blocks) == 1
         assert anthropic_blocks[0]["type"] == "image"
         assert anthropic_blocks[0]["source"]["type"] == "base64"
@@ -211,7 +209,7 @@ class TestCrossProviderRoundTrip:
                 },
             }
         ]
-        ir_blocks = convert_content_blocks_to_ir(anthropic_blocks, AnthropicContentOps)
+        ir_blocks = convert_content_blocks_to_ir(anthropic_blocks, MessagesContentOps)
         assert ir_blocks[0]["type"] == "image"
 
         openai_blocks = convert_ir_content_blocks_to_p(
@@ -234,9 +232,7 @@ class TestCrossProviderRoundTrip:
         )
         assert len(ir_blocks) == 2
 
-        anthropic_blocks = convert_ir_content_blocks_to_p(
-            ir_blocks, AnthropicContentOps
-        )
+        anthropic_blocks = convert_ir_content_blocks_to_p(ir_blocks, MessagesContentOps)
         assert len(anthropic_blocks) == 2
         assert anthropic_blocks[0]["type"] == "text"
         assert anthropic_blocks[0]["text"] == "Here is the chart:"

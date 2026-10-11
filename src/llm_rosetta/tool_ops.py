@@ -21,7 +21,7 @@ Example usage::
 
     # Per-provider shortcuts (definitions only)
     openai_tool = tool_ops.to_chat_completions(ir_tool)
-    anthropic_tool = tool_ops.to_anthropic(ir_tool)
+    messages_tool = tool_ops.to_messages(ir_tool)
 
     # Unified dispatch (definitions)
     gemini_tool = tool_ops.to_provider(ir_tool, provider="google_generate")
@@ -30,7 +30,7 @@ Example usage::
     recovered = tool_ops.from_provider(openai_tool, provider="chat_completions")
 
     # Full lifecycle dispatch (choice, call, result, config)
-    provider_choice = tool_ops.choice_to_provider(ir_choice, provider="anthropic")
+    provider_choice = tool_ops.choice_to_provider(ir_choice, provider="messages")
     provider_call = tool_ops.call_to_provider(ir_call, provider="chat_completions")
 """
 
@@ -43,7 +43,7 @@ from .types.ir.parts import ToolCallPart, ToolResultPart
 
 ToolProvider = Literal[
     # Canonical names — the base converter types (underscore spelling).
-    "anthropic",
+    "messages",
     "google_generate",
     "google_interactions",
     "chat_completions",
@@ -53,7 +53,7 @@ ToolProvider = Literal[
 # Canonical tool_ops provider names, one per base converter type.
 _CANONICAL_TOOL_PROVIDERS = frozenset(
     {
-        "anthropic",
+        "messages",
         "google_generate",
         "google_interactions",
         "chat_completions",
@@ -113,10 +113,10 @@ def _get_tool_ops(provider: str) -> Any:
         from .converters.open_responses import OpenResponsesToolOps
 
         return OpenResponsesToolOps
-    if canonical == "anthropic":
-        from .converters.anthropic import AnthropicToolOps
+    if canonical == "messages":
+        from .converters.messages import MessagesToolOps
 
-        return AnthropicToolOps
+        return MessagesToolOps
     if canonical == "google_generate":
         from .converters.google_generate import GoogleGenerateToolOps
 
@@ -280,11 +280,11 @@ def to_openai_responses(ir_tool: ToolDefinition, **kwargs: Any) -> dict[str, Any
     return to_open_responses(ir_tool, **kwargs)
 
 
-def to_anthropic(ir_tool: ToolDefinition, **kwargs: Any) -> dict[str, Any]:
-    """Convert IR tool definition to Anthropic format."""
-    from .converters.anthropic import AnthropicToolOps
+def to_messages(ir_tool: ToolDefinition, **kwargs: Any) -> dict[str, Any]:
+    """Convert IR tool definition to Messages format."""
+    from .converters.messages import MessagesToolOps
 
-    return AnthropicToolOps.ir_tool_definition_to_p(ir_tool, **kwargs)
+    return MessagesToolOps.ir_tool_definition_to_p(ir_tool, **kwargs)
 
 
 def to_google_generate(ir_tool: ToolDefinition, **kwargs: Any) -> dict[str, Any]:
@@ -339,11 +339,11 @@ def from_openai_responses(
     return from_open_responses(provider_tool, **kwargs)
 
 
-def from_anthropic(provider_tool: Any, **kwargs: Any) -> ToolDefinition | None:
-    """Convert Anthropic tool definition to IR format."""
-    from .converters.anthropic import AnthropicToolOps
+def from_messages(provider_tool: Any, **kwargs: Any) -> ToolDefinition | None:
+    """Convert Messages tool definition to IR format."""
+    from .converters.messages import MessagesToolOps
 
-    return AnthropicToolOps.p_tool_definition_to_ir(provider_tool, **kwargs)
+    return MessagesToolOps.p_tool_definition_to_ir(provider_tool, **kwargs)
 
 
 def from_google_generate(
@@ -362,3 +362,23 @@ def from_google_interactions(
     from .converters.google_interactions import GoogleInteractionsToolOps
 
     return GoogleInteractionsToolOps.p_tool_definition_to_ir(provider_tool, **kwargs)
+
+
+def to_anthropic(ir_tool: ToolDefinition, **kwargs: Any) -> dict[str, Any]:
+    """Deprecated alias for :func:`to_messages` (removed in 0.16.0)."""
+    warnings.warn(
+        "tool_ops.to_anthropic is deprecated; use to_messages instead",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return to_messages(ir_tool, **kwargs)
+
+
+def from_anthropic(provider_tool: Any, **kwargs: Any) -> ToolDefinition | None:
+    """Deprecated alias for :func:`from_messages` (removed in 0.16.0)."""
+    warnings.warn(
+        "tool_ops.from_anthropic is deprecated; use from_messages instead",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return from_messages(provider_tool, **kwargs)

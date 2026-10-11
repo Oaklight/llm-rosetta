@@ -8,8 +8,8 @@ Covers tool_call, tool_result, and reasoning parts.
 Refs: https://github.com/Oaklight/llm-rosetta/issues/225
 """
 
-from llm_rosetta.converters.anthropic.content_ops import AnthropicContentOps
-from llm_rosetta.converters.anthropic.tool_ops import AnthropicToolOps
+from llm_rosetta.converters.messages.content_ops import MessagesContentOps
+from llm_rosetta.converters.messages.tool_ops import MessagesToolOps
 from llm_rosetta.converters.google_generate.content_ops import GoogleGenerateContentOps
 from llm_rosetta.converters.google_generate.tool_ops import GoogleGenerateToolOps
 from llm_rosetta.types.ir import ToolCallPart, ToolResultPart, ReasoningPart
@@ -41,7 +41,7 @@ class TestGoogleAnthropicToolCallRoundTrip:
         )
 
         # IR → Anthropic
-        anthropic_block = AnthropicToolOps.ir_tool_call_to_p(ir)
+        anthropic_block = MessagesToolOps.ir_tool_call_to_p(ir)
         assert anthropic_block["type"] == "tool_use"
         assert (
             anthropic_block["_provider_metadata"]["google"]["thought_signature"]
@@ -49,7 +49,7 @@ class TestGoogleAnthropicToolCallRoundTrip:
         )
 
         # Anthropic → IR (simulating client sending it back)
-        ir2 = AnthropicToolOps.p_tool_call_to_ir(anthropic_block)
+        ir2 = MessagesToolOps.p_tool_call_to_ir(anthropic_block)
         assert (
             ir2["provider_metadata"]["google"]["thought_signature"] == self.THOUGHT_SIG
         )
@@ -67,10 +67,10 @@ class TestGoogleAnthropicToolCallRoundTrip:
             tool_input={"x": 1},
             tool_type="function",
         )
-        anthropic = AnthropicToolOps.ir_tool_call_to_p(ir)
+        anthropic = MessagesToolOps.ir_tool_call_to_p(ir)
         assert "_provider_metadata" not in anthropic
 
-        ir2 = AnthropicToolOps.p_tool_call_to_ir(anthropic)
+        ir2 = MessagesToolOps.p_tool_call_to_ir(anthropic)
         assert "provider_metadata" not in ir2
 
 
@@ -87,10 +87,10 @@ class TestGoogleAnthropicToolResultRoundTrip:
         )
         ir["provider_metadata"] = {"google": {"some_field": "value"}}
 
-        anthropic = AnthropicToolOps.ir_tool_result_to_p(ir)
+        anthropic = MessagesToolOps.ir_tool_result_to_p(ir)
         assert anthropic["_provider_metadata"]["google"]["some_field"] == "value"
 
-        ir2 = AnthropicToolOps.p_tool_result_to_ir(anthropic)
+        ir2 = MessagesToolOps.p_tool_result_to_ir(anthropic)
         assert ir2["provider_metadata"]["google"]["some_field"] == "value"
 
     def test_tool_result_no_metadata_unaffected(self):
@@ -101,7 +101,7 @@ class TestGoogleAnthropicToolResultRoundTrip:
             result="data",
             is_error=False,
         )
-        anthropic = AnthropicToolOps.ir_tool_result_to_p(ir)
+        anthropic = MessagesToolOps.ir_tool_result_to_p(ir)
         assert "_provider_metadata" not in anthropic
 
 
@@ -133,12 +133,12 @@ class TestGoogleAnthropicReasoningRoundTrip:
         assert ir["signature"] == self.THOUGHT_SIG
 
         # IR → Anthropic: signature → thinking.signature
-        anthropic_block = AnthropicContentOps.ir_reasoning_to_p(ir)
+        anthropic_block = MessagesContentOps.ir_reasoning_to_p(ir)
         assert anthropic_block["type"] == "thinking"
         assert anthropic_block["signature"] == self.THOUGHT_SIG
 
         # Anthropic → IR: thinking.signature → signature
-        ir2 = AnthropicContentOps.p_reasoning_to_ir(anthropic_block)
+        ir2 = MessagesContentOps.p_reasoning_to_ir(anthropic_block)
         assert ir2["signature"] == self.THOUGHT_SIG
 
         # IR → Google: signature → thoughtSignature
@@ -154,16 +154,16 @@ class TestGoogleAnthropicReasoningRoundTrip:
         )
         ir["signature"] = "some-verification-sig"
 
-        anthropic = AnthropicContentOps.ir_reasoning_to_p(ir)
+        anthropic = MessagesContentOps.ir_reasoning_to_p(ir)
         assert anthropic["signature"] == "some-verification-sig"
 
-        ir2 = AnthropicContentOps.p_reasoning_to_ir(anthropic)
+        ir2 = MessagesContentOps.p_reasoning_to_ir(anthropic)
         assert ir2["signature"] == "some-verification-sig"
 
     def test_reasoning_no_metadata_unaffected(self):
         """Reasoning blocks without signature still work normally."""
         ir = ReasoningPart(type="reasoning", reasoning="hmm")
-        anthropic = AnthropicContentOps.ir_reasoning_to_p(ir)
+        anthropic = MessagesContentOps.ir_reasoning_to_p(ir)
         assert "signature" not in anthropic
         assert "_provider_metadata" not in anthropic
         assert anthropic["type"] == "thinking"

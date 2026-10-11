@@ -8,7 +8,7 @@ name (``{"type":"function","function":{"name":"web_search"}}``) or explicitly
 """
 
 from llm_rosetta.capabilities import resolve_intrinsic_tools
-from llm_rosetta.converters.anthropic import AnthropicConverter
+from llm_rosetta.converters.messages import MessagesConverter
 from llm_rosetta.converters.google_generate import GoogleGenerateConverter
 from llm_rosetta.converters.google_interactions import GoogleInteractionsConverter
 from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
@@ -32,21 +32,21 @@ def _shim(base, kinds):
 
 class TestSourceRecognition:
     def test_anthropic_web_search(self):
-        ir = AnthropicConverter().tool_ops.p_tool_definition_to_ir(
+        ir = MessagesConverter().tool_ops.p_tool_definition_to_ir(
             {"type": "web_search_20250305", "name": "web_search", "max_uses": 3}
         )
         assert ir["type"] == "intrinsic"
         assert get_definition_kind(ir) == "web_search"
 
     def test_anthropic_code_execution(self):
-        ir = AnthropicConverter().tool_ops.p_tool_definition_to_ir(
+        ir = MessagesConverter().tool_ops.p_tool_definition_to_ir(
             {"type": "code_execution_20250522", "name": "code_execution"}
         )
         assert ir["type"] == "intrinsic"
         assert get_definition_kind(ir) == "code_execution"
 
     def test_anthropic_plain_function_unaffected(self):
-        ir = AnthropicConverter().tool_ops.p_tool_definition_to_ir(
+        ir = MessagesConverter().tool_ops.p_tool_definition_to_ir(
             {"name": "get_weather", "input_schema": {}}
         )
         assert ir["type"] == "function"
@@ -107,14 +107,14 @@ class TestTargetEmission:
         return make_intrinsic_tool_definition(kind)
 
     def test_anthropic(self):
-        out = AnthropicConverter().tool_ops.ir_tool_definition_to_p(
+        out = MessagesConverter().tool_ops.ir_tool_definition_to_p(
             self._ir("web_search")
         )
         assert out == {"type": "web_search_20250305", "name": "web_search"}
 
     def test_anthropic_unsupported_dropped(self):
         assert (
-            AnthropicConverter().tool_ops.ir_tool_definition_to_p(
+            MessagesConverter().tool_ops.ir_tool_definition_to_p(
                 self._ir("google_maps")
             )
             == {}
@@ -158,7 +158,7 @@ class TestResolve:
 
     def test_keeps_supported_kind(self):
         ir = {"tools": [make_intrinsic_tool_definition("web_search")]}
-        out = resolve_intrinsic_tools(ir, shim=_shim("anthropic", ["web_search"]))
+        out = resolve_intrinsic_tools(ir, shim=_shim("messages", ["web_search"]))
         assert len(out["tools"]) == 1
         assert get_definition_kind(out["tools"][0]) == "web_search"
 
@@ -184,20 +184,20 @@ class TestResolve:
             ]
         }
         out = resolve_intrinsic_tools(
-            ir, shim=_shim("anthropic", ["web_search"]), allow_name_promotion=True
+            ir, shim=_shim("messages", ["web_search"]), allow_name_promotion=True
         )
         assert get_definition_kind(out["tools"][0]) == "web_search"
         assert out["tools"][0]["type"] == "intrinsic"
 
     def test_no_promote_when_disallowed(self):
         ir = {"tools": [{"type": "function", "name": "web_search", "parameters": {}}]}
-        out = resolve_intrinsic_tools(ir, shim=_shim("anthropic", ["web_search"]))
+        out = resolve_intrinsic_tools(ir, shim=_shim("messages", ["web_search"]))
         assert out["tools"][0]["type"] == "function"
 
     def test_promote_only_supported_names(self):
         ir = {"tools": [{"type": "function", "name": "get_weather", "parameters": {}}]}
         out = resolve_intrinsic_tools(
-            ir, shim=_shim("anthropic", ["web_search"]), allow_name_promotion=True
+            ir, shim=_shim("messages", ["web_search"]), allow_name_promotion=True
         )
         assert out["tools"][0]["type"] == "function"
 
@@ -209,7 +209,7 @@ class TestPipeline:
     def test_anthropic_web_search_to_google_is_dropped(self):
         """Anthropic web_search → google: google has no web_search kind."""
         pipe = ConversionPipeline(
-            "anthropic",
+            "messages",
             "google",
             target_shim=_shim("google", ["code_execution", "google_search"]),
         )
@@ -227,7 +227,7 @@ class TestPipeline:
     def test_anthropic_code_execution_to_google_maps(self):
         """Anthropic code_execution → google emits google's code_execution."""
         pipe = ConversionPipeline(
-            "anthropic",
+            "messages",
             "google",
             target_shim=_shim("google", ["code_execution", "google_search"]),
         )
@@ -246,7 +246,7 @@ class TestPipeline:
 
     def test_chat_bare_name_promoted_via_target_shim(self):
         pipe = ConversionPipeline(
-            "openai_chat", "anthropic", target_shim=_shim("anthropic", ["web_search"])
+            "openai_chat", "messages", target_shim=_shim("messages", ["web_search"])
         )
         body = pipe.convert_request(
             {
@@ -265,7 +265,7 @@ class TestPipeline:
 
     def test_no_shim_no_intrinsic(self):
         """Without a shim the provider supports nothing intrinsic."""
-        pipe = ConversionPipeline("openai_chat", "anthropic")
+        pipe = ConversionPipeline("openai_chat", "messages")
         body = pipe.convert_request(
             {
                 "model": "m",
@@ -304,9 +304,11 @@ class TestShimEmitConsistency:
         return set(shims[name].tools.intrinsic_tools) if name in shims else set()
 
     def test_anthropic(self):
-        from llm_rosetta.converters.anthropic.tool_ops import _ANTHROPIC_INTRINSIC_TOOLS
+        from llm_rosetta.converters.messages.tool_ops import _ANTHROPIC_INTRINSIC_TOOLS
 
-        assert self._shim_kinds("anthropic") <= set(_ANTHROPIC_INTRINSIC_TOOLS)
+        assert self._shim_kinds("anthropic--messages") <= set(
+            _ANTHROPIC_INTRINSIC_TOOLS
+        )
 
     def test_openai_responses(self):
         from llm_rosetta.converters.open_responses.tool_ops import (
@@ -340,7 +342,7 @@ class TestUnsupportedKindNotCachedAsEmpty:
 
     def test_unsupported_intrinsic_stays_dropped(self):
         out = self._calls(
-            AnthropicConverter(), make_intrinsic_tool_definition("google_maps")
+            MessagesConverter(), make_intrinsic_tool_definition("google_maps")
         )
         assert all(o == [] for o in out), out
 
@@ -352,7 +354,7 @@ class TestUnsupportedKindNotCachedAsEmpty:
 
     def test_supported_still_emits_every_time(self):
         out = self._calls(
-            AnthropicConverter(), make_intrinsic_tool_definition("web_search")
+            MessagesConverter(), make_intrinsic_tool_definition("web_search")
         )
         assert all(
             o == [{"type": "web_search_20250305", "name": "web_search"}] for o in out

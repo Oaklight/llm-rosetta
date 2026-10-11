@@ -253,14 +253,20 @@ class JsoncConfigIO:
         raw: dict[str, Any], path: str, *, is_raw: bool = False
     ) -> dict[str, Any]:
         from .migrations import migrate
+        from .name_migration import correct_legacy_names
 
         raw, changed = migrate(raw)
+        # Name correction is scoped and idempotent, not a ``config_version``
+        # schema bump; it runs on top of the versioned migrations.
+        if correct_legacy_names(raw):
+            changed = True
         if changed:
             if is_raw:
                 disk_data = raw
             else:
                 disk_data = load_config_raw(path)
                 migrate(disk_data)
+                correct_legacy_names(disk_data)
             import shutil
 
             bak = path + ".pre-migration.bak"
@@ -927,27 +933,31 @@ class GatewayConfig:
         )
         from llm_rosetta.shims import resolve_base
 
+        from .name_migration import correct_legacy_names, legacy_name_error
+
+        # Migrate legacy names in place.  File-backed configs are also
+        # corrected and written back by ``JsoncConfigIO``; this covers
+        # programmatic configs.  A name that survives was one we could not map,
+        # so reject it rather than resolving a legacy alias at runtime.
+        correct_legacy_names({"providers": raw_providers})
+        error = legacy_name_error(raw_providers)
+        if error is not None:
+            raise ValueError(error)
+
         provider_types: dict[str, str] = {}
         provider_shim_names: dict[str, str | None] = {}
         for name, cfg in raw_providers.items():
+            # ``shim:`` / ``type:`` values were already canonicalised above, so
+            # no deprecation warning fires for them — the gateway *corrects*
+            # the config (and a file-backed one is rewritten on disk), logging
+            # each rewrite at INFO.  Only a legacy provider *key* still warns:
+            # keys are user identifiers and are not rewritten.
             if "shim" in cfg:
-                warn_legacy_provider_names(cfg["shim"])
-                # A ``shim:`` value is unambiguously a shim identity, so a
-                # legacy bare shim name (``openai``, ``google_generate``) warns
-                # here even though it is also a base format.
-                warn_legacy_shim_names(cfg["shim"])
                 provider_types[name] = canonical_provider_name(
                     resolve_base(cfg["shim"])
                 )
                 provider_shim_names[name] = cfg["shim"]
             elif "type" in cfg:
-                warn_legacy_provider_names(cfg["type"])
-                # ``type:`` names a shim only when it is not itself a base
-                # format; ``google_generate`` etc. are canonical formats that
-                # merely double as legacy bare shim names, so warning would be
-                # a false positive.
-                if cfg["type"] not in BASE_FORMATS:
-                    warn_legacy_shim_names(cfg["type"])
                 provider_types[name] = canonical_provider_name(
                     resolve_base(cfg["type"])
                 )

@@ -39,6 +39,7 @@ class TestNormalizeProviderName:
             ("google-genai", "google_generate"),
             ("openai_chat", "chat_completions"),
             ("openai-chat", "chat_completions"),
+            ("anthropic", "messages"),
             ("openai_responses", "openai--open_responses"),
             ("openai-responses", "openai--open_responses"),
             ("open-responses", "open_responses"),
@@ -54,7 +55,7 @@ class TestNormalizeProviderName:
         [
             "open_responses",
             "openai--open_responses",
-            "anthropic",
+            "messages",
             "google_generate",
             "google_interactions",
             "decision",
@@ -200,10 +201,9 @@ class TestLibraryArgumentBoundary:
 class TestGatewayConfigBoundary:
     """Gateway JSONC ``type:`` / ``shim:`` resolution migrates legacy names.
 
-    Config resolution migrates a legacy spelling and emits one
-    ``DeprecationWarning`` per legacy provider, so an operator who writes a
-    legacy ``type:`` / ``shim:`` in the JSONC file is nudged to migrate
-    before 0.16.0 (#919).
+    The gateway *corrects* legacy names in place (a file-backed config is
+    rewritten at load by ``JsoncConfigIO``) instead of warning, so an
+    operator's config always ends up holding canonical names.
     """
 
     @staticmethod
@@ -218,21 +218,24 @@ class TestGatewayConfigBoundary:
     def test_type_field_migrates(self):
         from llm_rosetta.gateway.config import GatewayConfig
 
-        with pytest.warns(DeprecationWarning):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
             cfg = GatewayConfig(self._raw({"type": "google"}))
         assert cfg.provider_types["g"] == "google_generate"
 
     def test_hyphen_type_field_migrates(self):
         from llm_rosetta.gateway.config import GatewayConfig
 
-        with pytest.warns(DeprecationWarning):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
             cfg = GatewayConfig(self._raw({"type": "google-genai"}))
         assert cfg.provider_types["g"] == "google_generate"
 
     def test_shim_field_migrates(self):
         from llm_rosetta.gateway.config import GatewayConfig
 
-        with pytest.warns(DeprecationWarning):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
             cfg = GatewayConfig(self._raw({"shim": "google-genai"}))
         assert cfg.provider_types["g"] == "google_generate"
 
@@ -261,7 +264,10 @@ class TestCanonicalNameResolvesToShim:
     def test_canonical_and_legacy_resolve(self):
         from llm_rosetta.shims import resolve_shim
 
-        assert resolve_shim("google_generate") is not None
+        # A bare base format is never a shim: ``google_generate`` resolves to
+        # None, while the canonical shim name and its legacy alias both work.
+        assert resolve_shim("google_generate") is None
+        assert resolve_shim("google--google_generate") is not None
         with warnings.catch_warnings():
             warnings.simplefilter("error", DeprecationWarning)
             assert resolve_shim("google") is not None
@@ -305,7 +311,7 @@ class TestBoundaryWarningAttribution:
     def test_pipeline_warns_once_at_caller_frame(self):
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
-            ConversionPipeline("openai_chat", "anthropic")
+            ConversionPipeline("openai_chat", "messages")
         dep = [w for w in caught if issubclass(w.category, DeprecationWarning)]
         assert len(dep) == 1
         assert dep[0].filename == __file__
@@ -348,13 +354,13 @@ class TestBoundaryWarningAttribution:
         with warnings.catch_warnings():
             warnings.simplefilter("error", DeprecationWarning)
             convert(OPENAI_CHAT_BODY, "chat_completions")
-            ConversionPipeline("chat_completions", "anthropic")
+            ConversionPipeline("chat_completions", "messages")
 
 
 class TestRegisterShimKeys:
     """``register_shim`` keys on the exact name, with a free canonical alias."""
 
-    def test_exact_name_is_primary_and_canonical_alias_added_when_free(self):
+    def test_exact_name_is_primary_and_base_format_is_not_a_shim(self):
         import llm_rosetta.shims.provider_shim as ps
         from llm_rosetta.shims import ProviderShim, register_shim
 
@@ -362,9 +368,12 @@ class TestRegisterShimKeys:
         try:
             ps._SHIM_REGISTRY.clear()
             register_shim(ProviderShim(name="google", base="google_generate"))
+            # The registry holds canonical (exact) names only; a base format
+            # is never a shim key.
             assert "google" in ps._SHIM_REGISTRY
-            assert "google_generate" in ps._SHIM_REGISTRY
-            assert ps.get_shim("google_generate") is ps.get_shim("google")
+            assert "google_generate" not in ps._SHIM_REGISTRY
+            assert ps.get_shim("google_generate") is None
+            assert ps.get_shim("google") is not None
         finally:
             ps._SHIM_REGISTRY.clear()
             ps._SHIM_REGISTRY.update(saved)
@@ -516,17 +525,21 @@ class TestShimBoundaryWarnings:
                 target_shim="google_generate",
             )
 
-    def test_gateway_shim_field_warns(self):
+    def test_gateway_shim_field_corrects(self):
         from llm_rosetta.gateway.config import GatewayConfig
 
-        with pytest.warns(DeprecationWarning, match="Shim name"):
-            GatewayConfig(self._gw({"shim": "deepseek--openai_chat"}))
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
+            cfg = GatewayConfig(self._gw({"shim": "deepseek--openai_chat"}))
+        assert cfg.provider_shim_names["g"] == "deepseek--chat_completions"
 
-    def test_gateway_type_field_warns_for_legacy_shim(self):
+    def test_gateway_type_field_corrects_legacy_shim(self):
         from llm_rosetta.gateway.config import GatewayConfig
 
-        with pytest.warns(DeprecationWarning, match="Shim name"):
-            GatewayConfig(self._gw({"type": "deepseek--openai_chat"}))
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
+            cfg = GatewayConfig(self._gw({"type": "deepseek--openai_chat"}))
+        assert cfg.provider_types["g"] == "chat_completions"
 
     def test_gateway_name_fallback_warns_for_legacy_shim(self):
         from llm_rosetta.gateway.config import GatewayConfig
@@ -543,11 +556,13 @@ class TestShimBoundaryWarnings:
         with pytest.warns(DeprecationWarning, match="Shim name"):
             GatewayConfig(raw)
 
-    def test_gateway_bare_shim_field_warns(self):
+    def test_gateway_bare_shim_field_corrects(self):
         from llm_rosetta.gateway.config import GatewayConfig
 
-        with pytest.warns(DeprecationWarning, match="Shim name"):
-            GatewayConfig(self._gw({"shim": "google_generate"}))
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
+            cfg = GatewayConfig(self._gw({"shim": "google_generate"}))
+        assert cfg.provider_shim_names["g"] == "google--google_generate"
 
     def test_gateway_base_format_type_does_not_warn_shim(self):
         """``type: google_generate`` names the base format, not a shim.
@@ -677,7 +692,7 @@ class TestLegacyShimAliasStillResolves:
             ("deepseek--openai_chat", "deepseek--chat_completions"),
             ("argo--openai_chat", "argo--chat_completions"),
             ("openai", "openai--chat_completions"),
-            ("google_generate", "google--google_generate"),
+            ("anthropic", "anthropic--messages"),
         ],
     )
     def test_get_shim_legacy_is_canonical(self, legacy: str, canonical: str):

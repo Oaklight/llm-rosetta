@@ -837,14 +837,14 @@ GOOGLE_COMPOUND_TEXT_FINISH: list[dict[str, Any]] = [
 
 ROUNDTRIP_CASES = [
     # Basic cases
-    ("anthropic", "basic", ANTHROPIC_BASIC),
+    ("messages", "basic", ANTHROPIC_BASIC),
     ("openai_chat", "basic", OPENAI_CHAT_BASIC),
     ("openai_responses", "basic", OPENAI_RESPONSES_BASIC),
     ("google", "basic", GOOGLE_BASIC),
     # Anthropic edge cases
-    ("anthropic", "thinking+tool", ANTHROPIC_THINKING_TOOL),
-    ("anthropic", "no-initial-usage", ANTHROPIC_NO_INITIAL_USAGE),
-    ("anthropic", "finish-no-usage", ANTHROPIC_FINISH_NO_USAGE),
+    ("messages", "thinking+tool", ANTHROPIC_THINKING_TOOL),
+    ("messages", "no-initial-usage", ANTHROPIC_NO_INITIAL_USAGE),
+    ("messages", "finish-no-usage", ANTHROPIC_FINISH_NO_USAGE),
     # OpenAI Chat edge cases
     ("openai_chat", "tool-calls", OPENAI_CHAT_TOOL_CALLS),
     ("openai_chat", "reasoning", OPENAI_CHAT_REASONING),

@@ -31,7 +31,7 @@ IR_RESULT = {
 }
 
 ALL_PROVIDERS = [
-    "anthropic",
+    "messages",
     "google_generate",
     "google_interactions",
     "chat_completions",
@@ -81,8 +81,8 @@ class TestToProvider:
         assert legacy_chat == tool_ops.to_chat_completions(IR_TOOL)
         assert legacy_responses == tool_ops.to_open_responses(IR_TOOL)
 
-    def test_to_anthropic(self):
-        result = tool_ops.to_anthropic(IR_TOOL)
+    def test_to_messages(self):
+        result = tool_ops.to_messages(IR_TOOL)
         assert result["name"] == "get_weather"
         assert "input_schema" in result
 
@@ -134,9 +134,9 @@ class TestFromProvider:
             tool_ops.to_open_responses(IR_TOOL)
         )
 
-    def test_from_anthropic(self):
-        provider_tool = tool_ops.to_anthropic(IR_TOOL)
-        recovered = tool_ops.from_anthropic(provider_tool)
+    def test_from_messages(self):
+        provider_tool = tool_ops.to_messages(IR_TOOL)
+        recovered = tool_ops.from_messages(provider_tool)
         assert recovered is not None
         assert recovered["name"] == "get_weather"
 
@@ -265,7 +265,7 @@ class TestResultDispatch:
 
     @pytest.mark.parametrize(
         "provider",
-        ["chat_completions", "open_responses", "anthropic", "google_interactions"],
+        ["chat_completions", "open_responses", "messages", "google_interactions"],
     )
     def test_result_round_trip(self, provider: str):
         provider_result = tool_ops.result_to_provider(IR_RESULT, provider=provider)  # ty: ignore[invalid-argument-type]

@@ -318,7 +318,7 @@ class TestRoundTrip:
         """End-to-end: an OpenAI Chat request converted to Anthropic
         body should have cache_control on the expected blocks after
         auto_cache_breakpoints fires."""
-        from llm_rosetta.converters.anthropic.converter import AnthropicConverter
+        from llm_rosetta.converters.messages.converter import MessagesConverter
         from llm_rosetta.converters.chat_completions.converter import (
             ChatCompletionsConverter,
         )
@@ -355,7 +355,7 @@ class TestRoundTrip:
         assert _count_cache_hints(ir_dict) == 4
 
         # IR → Anthropic (returns (body, warnings) tuple)
-        anthropic = AnthropicConverter()
+        anthropic = MessagesConverter()
         anthropic_body, _warnings = anthropic.request_to_provider(ir)
 
         # Verify Anthropic body has cache_control

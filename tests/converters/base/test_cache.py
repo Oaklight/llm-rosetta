@@ -739,7 +739,7 @@ class TestEpochCacheIntegration:
         """On second call with same data, epoch guard should short-circuit."""
         import copy
 
-        from llm_rosetta.converters.anthropic import AnthropicConverter
+        from llm_rosetta.converters.messages import MessagesConverter
 
         clear_all_caches()
         request = {
@@ -752,12 +752,12 @@ class TestEpochCacheIntegration:
             ],
         }
 
-        conv = AnthropicConverter()
+        conv = MessagesConverter()
         ir1 = conv.request_from_provider(copy.deepcopy(request))
         info1 = cache_info()["ir_validation"]
 
         # Second call with identical input
-        conv2 = AnthropicConverter()
+        conv2 = MessagesConverter()
         ir2 = conv2.request_from_provider(copy.deepcopy(request))
         info2 = cache_info()["ir_validation"]
 

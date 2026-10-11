@@ -479,8 +479,8 @@ async def handle_chat_completion(request: Any) -> Response | StreamingResponse:
     return await _proxy_handler(request, source_provider="chat_completions")
 
 
-async def handle_anthropic(request: Any) -> Response | StreamingResponse:
-    return await _proxy_handler(request, source_provider="anthropic")
+async def handle_messages(request: Any) -> Response | StreamingResponse:
+    return await _proxy_handler(request, source_provider="messages")
 
 
 async def handle_open_responses(request: Any) -> Response | StreamingResponse:
@@ -1278,7 +1278,7 @@ async def create_app(
     if not ext.skip_default_routes:
         # LLM routes: explicit registration (complex per-format handler logic)
         app.route("/v1/chat/completions", methods=["POST"])(handle_chat_completion)
-        app.route("/v1/messages", methods=["POST"])(handle_anthropic)
+        app.route("/v1/messages", methods=["POST"])(handle_messages)
         app.route("/v1/responses", methods=["POST"])(handle_open_responses)
         app.route("/v1beta/models/<path:model_path>", methods=["POST"])(
             handle_google_generate

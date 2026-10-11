@@ -73,7 +73,7 @@ def test_done_emitted(provider: str) -> None:
 
 @pytest.mark.parametrize(
     "provider",
-    ["anthropic", "google"],
+    ["messages", "google"],
 )
 def test_done_not_emitted(provider: str) -> None:
     events = asyncio.run(_collect(cast(ProviderType, provider)))

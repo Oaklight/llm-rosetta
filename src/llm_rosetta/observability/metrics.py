@@ -301,7 +301,7 @@ class MetricsCollector:
         self.by_model[model] = self.by_model.get(model, 0) + 1
         self.by_source_provider[source] = self.by_source_provider.get(source, 0) + 1
         # Use provider_name (e.g. "Argo Claude") when available,
-        # fall back to API type (e.g. "anthropic") for backward compat.
+        # fall back to API type (e.g. "messages") for backward compat.
         target_key = provider_name or target
         self.by_target_provider[target_key] = (
             self.by_target_provider.get(target_key, 0) + 1

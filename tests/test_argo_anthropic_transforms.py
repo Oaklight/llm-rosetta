@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 
-from llm_rosetta.shims.providers.argo.anthropic.transforms import (
+from llm_rosetta.shims.providers.argo.messages.transforms import (
     _normalize_openai_response,
 )
 
@@ -283,9 +283,9 @@ class TestNormalizeOpenAIResponse:
         ]
         assert result["stop_reason"] == "end_turn"
 
-        from llm_rosetta.converters.anthropic import AnthropicConverter
+        from llm_rosetta.converters.messages import MessagesConverter
 
-        conv = AnthropicConverter()
+        conv = MessagesConverter()
         ir = conv.response_from_provider(result)
         choices = ir.get("choices", [])
         assert choices
@@ -331,9 +331,9 @@ class TestNormalizeOpenAIResponse:
         assert result["model"] == "claudeopus46"
 
         # Verify the Anthropic converter can now parse this
-        from llm_rosetta.converters.anthropic import AnthropicConverter
+        from llm_rosetta.converters.messages import MessagesConverter
 
-        conv = AnthropicConverter()
+        conv = MessagesConverter()
         ir = conv.response_from_provider(result)
         choices = ir.get("choices", [])
         assert choices

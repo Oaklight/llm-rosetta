@@ -43,4 +43,4 @@ def test_supports_custom_tools_defaults():
     by_name = {b["name"]: b for b in admin_config._base_formats_payload()}
 
     assert by_name["chat_completions"]["supports_custom_tools"] is True
-    assert by_name["anthropic"]["supports_custom_tools"] is False
+    assert by_name["messages"]["supports_custom_tools"] is False

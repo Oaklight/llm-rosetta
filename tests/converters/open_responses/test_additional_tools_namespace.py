@@ -212,7 +212,7 @@ class TestAdditionalToolsCrossFormat:
     def test_roundtrip_to_anthropic(self):
         from llm_rosetta.pipeline import ConversionPipeline
 
-        out = ConversionPipeline("openai_responses", "anthropic").convert_request(
+        out = ConversionPipeline("openai_responses", "messages").convert_request(
             _codex_request()
         )
         assert [t["name"] for t in out["tools"]] == ["exec", "wait", "spawn_agent"]

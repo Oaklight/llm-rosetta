@@ -41,7 +41,7 @@ _PROVIDER_REGISTRY: dict[str, dict[str, Any]] = {
         "auth_header_fn": openai_auth,
         "url_template": "{base_url}/responses",
     },
-    "anthropic": {
+    "messages": {
         "auth_header_fn": anthropic_auth,
         "url_template": "{base_url}/v1/messages",
     },
@@ -75,7 +75,7 @@ _BASE_TYPE_HINTS: dict[str, dict[str, str]] = {
         "base_url": "https://openrouter.ai/api/v1",
         "api_key_env": "OPENROUTER_API_KEY",
     },
-    "anthropic": {
+    "messages": {
         "base_url": "https://api.anthropic.com",
         "api_key_env": "ANTHROPIC_API_KEY",
     },
@@ -132,7 +132,7 @@ def known_provider_types() -> list[str]:
 _CUSTOM_TOOLS_BY_TYPE: dict[str, bool] = {
     "chat_completions": True,
     "open_responses": True,
-    "anthropic": False,
+    "messages": False,
     "google": False,
     "google_generate": False,
     "google_interactions": False,
@@ -152,7 +152,7 @@ def get_default_supports_custom_tools(provider_type: str) -> bool:
 BASE_FORMATS: tuple[str, ...] = (
     "chat_completions",
     "open_responses",
-    "anthropic",
+    "messages",
     "google_generate",
     "google_interactions",
 )

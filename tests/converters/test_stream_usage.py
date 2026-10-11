@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Any, cast
 
-from llm_rosetta.converters.anthropic import AnthropicConverter
+from llm_rosetta.converters.messages import MessagesConverter
 from llm_rosetta.converters.base.context import StreamContext
 from llm_rosetta.converters.google_generate import GoogleGenerateConverter
 from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
@@ -76,7 +76,7 @@ class TestAnthropicStreamUsage:
     """Anthropic stream usage detail fields."""
 
     def setup_method(self) -> None:
-        self.converter = AnthropicConverter()
+        self.converter = MessagesConverter()
 
     def test_message_start_cache_tokens_from_provider(self) -> None:
         """message_start.usage cache fields → UsageEvent."""

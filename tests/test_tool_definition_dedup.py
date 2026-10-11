@@ -140,14 +140,14 @@ class TestDedupeInPipeline:
 
         dup = self._tool("dup", "x")
         other = self._tool("other", "y")
-        pipe = ConversionPipeline("anthropic", "openai_chat")
+        pipe = ConversionPipeline("messages", "openai_chat")
         body = pipe.convert_request(self._anthropic_req([dup, dict(dup), other]))
         assert [t["function"]["name"] for t in body["tools"]] == ["dup", "other"]
 
     def test_conflicting_definitions_kept(self):
         from llm_rosetta.pipeline import ConversionPipeline
 
-        pipe = ConversionPipeline("anthropic", "openai_chat")
+        pipe = ConversionPipeline("messages", "openai_chat")
         body = pipe.convert_request(
             self._anthropic_req([self._tool("dup", "one"), self._tool("dup", "two")])
         )

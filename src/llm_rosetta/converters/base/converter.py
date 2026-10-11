@@ -53,7 +53,7 @@ class BaseConverter(ABC):
     message_ops: Any
 
     # Converter identity tag for cache key namespacing.
-    # Subclasses MUST set this to a unique string (e.g. "anthropic").
+    # Subclasses MUST set this to a unique string (e.g. "messages").
     _CONVERTER_TAG: str = ""
 
     # Provider response list field for passthrough item restoration.

@@ -95,7 +95,7 @@ class TestAllowedToolsToolChoice:
         # selector and no tool_choice-shaped object leaks into the target.
         out = convert(
             self._body(),
-            "anthropic",
+            "messages",
             source_provider="open_responses",
             baseline=False,
         )
@@ -151,7 +151,7 @@ class TestCompaction:
         assert out["input"][1] == self._COMPACTION
 
     def test_cross_format_drops_with_warning(self):
-        pipe = ConversionPipeline("open_responses", "anthropic", baseline=False)
+        pipe = ConversionPipeline("open_responses", "messages", baseline=False)
         pipe.convert_request(self._body())
         assert any("Dropped provider passthrough item" in w for w in pipe.warnings), (
             pipe.warnings

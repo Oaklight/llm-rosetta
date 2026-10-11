@@ -700,7 +700,7 @@ class TestNamespaceRequestConversion:
         """Namespace tools survive Responses → Anthropic conversion."""
         from llm_rosetta.pipeline import ConversionPipeline
 
-        pipeline = ConversionPipeline("openai_responses", "anthropic")
+        pipeline = ConversionPipeline("openai_responses", "messages")
         request = {
             "model": "gpt-5",
             "tools": [

@@ -9,7 +9,7 @@ Covers same-format round-trips and cross-format conversions.
 
 from typing import cast
 
-from llm_rosetta.converters.anthropic.content_ops import AnthropicContentOps
+from llm_rosetta.converters.messages.content_ops import MessagesContentOps
 from llm_rosetta.converters.google_generate.content_ops import GoogleGenerateContentOps
 from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
 from llm_rosetta.converters.open_responses.content_ops import (
@@ -204,7 +204,7 @@ class TestCrossFormatConversion:
         assert ir is not None
         assert ir["redacted_data"] == "cross-format-blob"
 
-        anthropic_block = AnthropicContentOps.ir_reasoning_to_p(ir)
+        anthropic_block = MessagesContentOps.ir_reasoning_to_p(ir)
         assert anthropic_block["type"] == "redacted_thinking"
         assert anthropic_block["data"] == "cross-format-blob"
 
@@ -225,7 +225,7 @@ class TestCrossFormatConversion:
             "thoughtSignature": "google-verification-sig",
         }
         ir = GoogleGenerateContentOps.p_reasoning_to_ir(google_part)
-        anthropic = AnthropicContentOps.ir_reasoning_to_p(ir)
+        anthropic = MessagesContentOps.ir_reasoning_to_p(ir)
         assert anthropic["type"] == "thinking"
         assert anthropic["signature"] == "google-verification-sig"
         assert anthropic["thinking"] == "Let me think..."
@@ -235,7 +235,7 @@ class TestCrossFormatConversion:
         ir = ReasoningPart(type="reasoning", reasoning="visible text")
         ir["signature"] = "verification-only"
 
-        anthropic = AnthropicContentOps.ir_reasoning_to_p(ir)
+        anthropic = MessagesContentOps.ir_reasoning_to_p(ir)
         assert anthropic["type"] == "thinking"
         assert anthropic["signature"] == "verification-only"
         assert anthropic["thinking"] == "visible text"
@@ -243,6 +243,6 @@ class TestCrossFormatConversion:
         ir2 = ReasoningPart(type="reasoning")
         ir2["redacted_data"] = "opaque-content"
 
-        anthropic2 = AnthropicContentOps.ir_reasoning_to_p(ir2)
+        anthropic2 = MessagesContentOps.ir_reasoning_to_p(ir2)
         assert anthropic2["type"] == "redacted_thinking"
         assert anthropic2["data"] == "opaque-content"

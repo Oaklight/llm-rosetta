@@ -9,7 +9,7 @@ Usage (sync)::
     from llm_rosetta.profiling import DeepProfiler
 
     with DeepProfiler() as dp:
-        result = convert(body, "anthropic")
+        result = convert(body, "messages")
     print(dp.output_text())
 
 Usage (async)::
@@ -22,7 +22,7 @@ Usage (async)::
 Per-call tracing (higher overhead, finer granularity)::
 
     with DeepProfiler(tracing=True) as dp:
-        result = convert(body, "anthropic")
+        result = convert(body, "messages")
     records = dp.traces()  # list of TraceRecord
 """
 

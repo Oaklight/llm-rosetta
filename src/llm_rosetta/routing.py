@@ -33,7 +33,7 @@ class ResolvedRoute:
         source_provider: API standard of the incoming request
             (e.g. ``"chat_completions"``).
         target_provider: API standard of the upstream provider
-            (e.g. ``"anthropic"``).
+            (e.g. ``"messages"``).
         provider_name: User-configured provider name
             (e.g. ``"deepseek"``, ``"my-openai"``).
         shim_name: Shim/type identifier for transform lookup

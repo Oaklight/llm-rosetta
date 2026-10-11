@@ -25,7 +25,8 @@ ProviderType = Literal[
     "open_responses",
     # ``openai_responses`` is not a base type: it is a legacy alias of the
     # ``openai--open_responses`` shim (an OpenAI profile over ``open_responses``).
-    "anthropic",
+    "messages",
+    "anthropic",  # legacy alias of "messages"
     "google_generate",
     "google",  # legacy alias of "google_generate"
     "google_interactions",
@@ -41,7 +42,7 @@ _BASE_FORMAT_NAMES: frozenset[str] = frozenset(
     {
         "chat_completions",
         "open_responses",
-        "anthropic",
+        "messages",
         "google_generate",
         "google_interactions",
         "decision",
@@ -206,7 +207,7 @@ def detect_provider(body: dict[str, Any]) -> ProviderType | None:
         >>> detect_provider({"input": [{"type": "message", "role": "user"}]})
         'open_responses'
         >>> detect_provider({"messages": [{"role": "user", "content": [{"type": "text"}]}]})
-        'anthropic'
+        'messages'
         >>> detect_provider({"contents": [{"role": "user", "parts": [{"text": "Hi"}]}]})
         'google_generate'
     """
@@ -229,7 +230,7 @@ def detect_provider(body: dict[str, Any]) -> ProviderType | None:
         return None
 
     if _is_anthropic_messages(body):
-        return "anthropic"
+        return "messages"
 
     # Check for OpenAI-specific tool_calls in message history
     messages = body.get("messages")
@@ -274,7 +275,7 @@ def get_converter_for_provider(provider: str):
     if provider in _converter_cache:
         return _converter_cache[provider]
 
-    from .converters.anthropic import AnthropicConverter
+    from .converters.messages import MessagesConverter
     from .converters.google_generate import GoogleGenerateConverter
     from .converters.google_interactions import GoogleInteractionsConverter
     from .converters.chat_completions import ChatCompletionsConverter
@@ -284,7 +285,7 @@ def get_converter_for_provider(provider: str):
     converter_map = {
         "chat_completions": ChatCompletionsConverter,
         "open_responses": OpenResponsesConverter,
-        "anthropic": AnthropicConverter,
+        "messages": MessagesConverter,
         "google": GoogleGenerateConverter,
         "google_generate": GoogleGenerateConverter,
         "google_interactions": GoogleInteractionsConverter,
@@ -365,10 +366,10 @@ def convert(
         >>> google_body = convert(openai_body, "google")
 
         >>> anthropic_body = {"messages": [...]}
-        >>> openai_body = convert(anthropic_body, "chat_completions", source_provider="anthropic")
+        >>> openai_body = convert(anthropic_body, "chat_completions", source_provider="messages")
 
         >>> # With shim transforms
-        >>> body = convert(req, "anthropic", source_provider="deepseek", model="deepseek-r1")
+        >>> body = convert(req, "messages", source_provider="deepseek", model="deepseek-r1")
 
         >>> # Force IR round-trip even for same-provider
         >>> body = {"messages": [...], "max_tokens": 256}

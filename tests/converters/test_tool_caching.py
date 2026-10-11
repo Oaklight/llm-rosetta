@@ -9,7 +9,7 @@ import copy
 
 import pytest
 
-from llm_rosetta.converters.anthropic import AnthropicConverter
+from llm_rosetta.converters.messages import MessagesConverter
 from llm_rosetta.converters.base.helpers.cache import (
     cache_info,
     clear_all_caches,
@@ -162,9 +162,7 @@ def _google_request(tools):
 
 # (converter_class, tools, request_builder)
 CONVERTER_CONFIGS = [
-    pytest.param(
-        AnthropicConverter, ANTHROPIC_TOOLS, _anthropic_request, id="anthropic"
-    ),
+    pytest.param(MessagesConverter, ANTHROPIC_TOOLS, _anthropic_request, id="messages"),
     pytest.param(
         ChatCompletionsConverter,
         OPENAI_CHAT_TOOLS,
@@ -279,7 +277,7 @@ def test_cross_converter_no_pollution():
     """Cache entries from one converter should not leak to another."""
     clear_all_caches()
 
-    anth = AnthropicConverter()
+    anth = MessagesConverter()
     anth.request_from_provider(copy.deepcopy(_anthropic_request(ANTHROPIC_TOOLS)))
 
     oai = ChatCompletionsConverter()
@@ -301,12 +299,12 @@ def test_cache_survives_new_instance():
     """Module-level cache persists across converter instances."""
     clear_all_caches()
 
-    conv1 = AnthropicConverter()
+    conv1 = MessagesConverter()
     req = _anthropic_request(ANTHROPIC_TOOLS)
     conv1.request_from_provider(copy.deepcopy(req))
 
     # Brand new instance
-    conv2 = AnthropicConverter()
+    conv2 = MessagesConverter()
     conv2.request_from_provider(copy.deepcopy(req))
 
     info = cache_info()["tool_entry"]
@@ -326,7 +324,7 @@ def test_invalid_tools_not_cached():
     """
     clear_all_caches()
 
-    conv = AnthropicConverter()
+    conv = MessagesConverter()
     # A non-dict entry will fail in p_tool_definition_to_ir (tries .get on a string)
     broken_tools = ["not_a_tool_dict"]
     broken_req = {

@@ -12,7 +12,7 @@ from llm_rosetta.gateway.proxy import (
 )
 from llm_rosetta.gateway.transport._base import UpstreamResponse
 from llm_rosetta.converters.base.context import StreamContext
-from llm_rosetta.converters.anthropic.converter import AnthropicConverter
+from llm_rosetta.converters.messages.converter import MessagesConverter
 from llm_rosetta.types.ir.stream import StreamStartEvent
 from llm_rosetta.gateway.config import GatewayConfig
 from llm_rosetta.gateway.middleware.headers import get_preflight_tokens_override
@@ -48,7 +48,7 @@ class TestBuildPreflightBody:
             "stream": True,
             "thinking": {"type": "enabled", "budget_tokens": 10000},
         }
-        result = _build_preflight_body(body, "anthropic")
+        result = _build_preflight_body(body, "messages")
         assert result["max_tokens"] == 1
         assert "stream" not in result
         assert "thinking" not in result
@@ -103,7 +103,7 @@ class TestExtractPreflightInputTokens:
 
     def test_anthropic(self):
         resp = {"usage": {"input_tokens": 100, "output_tokens": 1}}
-        assert _extract_preflight_input_tokens(resp, "anthropic") == 100
+        assert _extract_preflight_input_tokens(resp, "messages") == 100
 
     def test_openai_responses(self):
         resp = {"usage": {"input_tokens": 55, "output_tokens": 1}}
@@ -223,7 +223,7 @@ class TestPreflightUsageIntegration:
         ctx = StreamContext()
         ctx.preflight_usage = {"prompt_tokens": 42}
 
-        converter = AnthropicConverter()
+        converter = MessagesConverter()
         event: StreamStartEvent = {
             "type": "stream_start",
             "response_id": "msg_123",
@@ -237,7 +237,7 @@ class TestPreflightUsageIntegration:
         ctx.preflight_usage = {"prompt_tokens": 42}
         ctx.pending_usage = {"prompt_tokens": 100}
 
-        converter = AnthropicConverter()
+        converter = MessagesConverter()
         event: StreamStartEvent = {
             "type": "stream_start",
             "response_id": "msg_123",
@@ -249,7 +249,7 @@ class TestPreflightUsageIntegration:
     def test_no_preflight_no_pending_gives_zero(self):
         ctx = StreamContext()
 
-        converter = AnthropicConverter()
+        converter = MessagesConverter()
         event: StreamStartEvent = {
             "type": "stream_start",
             "response_id": "msg_123",
@@ -265,9 +265,9 @@ class TestPreflightSkipSameFormat:
         from llm_rosetta.routing import ResolvedRoute
 
         route = ResolvedRoute(
-            source_provider="anthropic",
-            target_provider="anthropic",
-            provider_name="anthropic",
+            source_provider="messages",
+            target_provider="messages",
+            provider_name="messages",
             preflight_token_count=True,
         )
         # The guard in handle_streaming checks source != target;

@@ -36,7 +36,7 @@ from llm_rosetta.fidelity_baseline import (
     normalize_entries,
 )
 
-KEY = "openai_chat->anthropic:request:0123456789abcdef"
+KEY = "openai_chat->messages:request:0123456789abcdef"
 
 
 def _entry(
@@ -85,67 +85,67 @@ class TestFingerprint:
             "messages": [{"content": "hi", "role": "user"}],
             "model": "gpt-4o",
         }
-        fp_a = compute_fingerprint("openai_chat", "anthropic", body=body_a)
-        fp_b = compute_fingerprint("openai_chat", "anthropic", body=body_b)
+        fp_a = compute_fingerprint("openai_chat", "messages", body=body_a)
+        fp_b = compute_fingerprint("openai_chat", "messages", body=body_b)
         assert fp_a == fp_b
 
     def test_different_request_characteristics_change_fingerprint(self) -> None:
         fp_a = compute_fingerprint(
-            "openai_chat", "anthropic", body={"messages": [{"content": "a"}]}
+            "openai_chat", "messages", body={"messages": [{"content": "a"}]}
         )
         fp_b = compute_fingerprint(
-            "openai_chat", "anthropic", body={"messages": [{"content": "b"}]}
+            "openai_chat", "messages", body={"messages": [{"content": "b"}]}
         )
         assert fp_a != fp_b
 
     def test_provider_pair_and_direction_participate(self) -> None:
         body = {"messages": [{"content": "hi"}]}
-        fp = compute_fingerprint("openai_chat", "anthropic", body=body)
+        fp = compute_fingerprint("openai_chat", "messages", body=body)
         assert (
-            compute_fingerprint("anthropic", "anthropic", body=body) != fp
+            compute_fingerprint("messages", "messages", body=body) != fp
         )  # other source
         assert (
             compute_fingerprint("openai_chat", "openai_chat", body=body) != fp
         )  # other target
         assert (
             compute_fingerprint(
-                "openai_chat", "anthropic", direction="response", body=body
+                "openai_chat", "messages", direction="response", body=body
             )
             != fp
         )
 
     def test_repeated_run_is_stable(self) -> None:
         body = {"model": "x", "messages": [{"role": "user", "content": "n=42"}]}
-        fp_1 = compute_fingerprint("openai_chat", "anthropic", body=body)
-        fp_2 = compute_fingerprint("openai_chat", "anthropic", body=body)
+        fp_1 = compute_fingerprint("openai_chat", "messages", body=body)
+        fp_2 = compute_fingerprint("openai_chat", "messages", body=body)
         assert fp_1 == fp_2
 
     def test_features_override_body(self) -> None:
         fp = compute_fingerprint(
             "openai_chat",
-            "anthropic",
+            "messages",
             body={"volatile": "x", "stable": 1},
             features={"stable": 1},
         )
         same = compute_fingerprint(
             "openai_chat",
-            "anthropic",
+            "messages",
             body={"volatile": "y", "stable": 1},
             features={"stable": 1},
         )
         different = compute_fingerprint(
-            "openai_chat", "anthropic", features={"stable": 2}
+            "openai_chat", "messages", features={"stable": 2}
         )
         assert fp == same != different
 
     def test_requires_body_or_features(self) -> None:
         with pytest.raises(ValueError, match="body.*features"):
-            compute_fingerprint("openai_chat", "anthropic")
+            compute_fingerprint("openai_chat", "messages")
 
     def test_key_uses_full_digest_and_pair(self) -> None:
-        fp = compute_fingerprint("openai_chat", "anthropic", body={"a": 1})
-        key = make_baseline_key("openai_chat", "anthropic", fp)
-        assert key == f"openai_chat->anthropic:request:{fp}"
+        fp = compute_fingerprint("openai_chat", "messages", body={"a": 1})
+        key = make_baseline_key("openai_chat", "messages", fp)
+        assert key == f"openai_chat->messages:request:{fp}"
 
     def test_canonical_json_ignores_dict_order(self) -> None:
         assert canonical_json({"a": 1, "b": 2}) == canonical_json({"b": 2, "a": 1})
@@ -179,7 +179,7 @@ class TestBaselineWriteRead:
             diffs,
             update=True,
             source_provider="openai_chat",
-            target_provider="anthropic",
+            target_provider="messages",
             fingerprint=KEY.rsplit(":", 1)[-1],
         )
         assert path.exists()
@@ -189,7 +189,7 @@ class TestBaselineWriteRead:
         assert raw["format_version"] == BASELINE_FORMAT_VERSION
         record = raw["entries"][KEY]
         assert record["source_provider"] == "openai_chat"
-        assert record["target_provider"] == "anthropic"
+        assert record["target_provider"] == "messages"
         assert record["direction"] == "request"
         # Missing-field paths ("lost fields") and severity are persisted.
         stored = {(d["path"], d["kind"], d["severity"]) for d in record["diffs"]}
@@ -607,7 +607,7 @@ def _multiprocess_worker(path: str, work: list[tuple[str, str]]) -> None:
             [FidelityDiff(path=field_path, kind="missing")],
             update=True,
             source_provider="openai_chat",
-            target_provider="anthropic",
+            target_provider="messages",
         )
 
 
@@ -724,7 +724,7 @@ class TestCheckAgainstBaseline:
         report_1 = check_fidelity_against_baseline(
             FidelityBaseline(path),
             source_provider="openai_chat",
-            target_provider="anthropic",
+            target_provider="messages",
             original=original,
             roundtripped=broken,
             update=True,
@@ -732,7 +732,7 @@ class TestCheckAgainstBaseline:
         report_2 = check_fidelity_against_baseline(
             FidelityBaseline(path),
             source_provider="openai_chat",
-            target_provider="anthropic",
+            target_provider="messages",
             original=dict(reversed(list(original.items()))),  # reordered keys
             roundtripped=broken,
         )
@@ -762,8 +762,8 @@ class TestCheckAgainstBaseline:
         body = {"a": 1}
         report = check_fidelity_against_baseline(
             FidelityBaseline(path),
-            source_provider="anthropic",
-            target_provider="anthropic",
+            source_provider="messages",
+            target_provider="messages",
             original=body,
             roundtripped=body,
             checker=checker,

@@ -111,7 +111,7 @@ def _cmd_init(args: argparse.Namespace) -> None:
                 "api_key": "${OPENAI_API_KEY}",
                 "base_url": "https://api.openai.com/v1",
             },
-            "anthropic": {
+            "messages": {
                 "api_key": "${ANTHROPIC_API_KEY}",
                 "base_url": "https://api.anthropic.com",
             },
@@ -122,7 +122,7 @@ def _cmd_init(args: argparse.Namespace) -> None:
         },
         "models": {
             "gpt-4o": "chat_completions",
-            "claude-sonnet-4-20250514": "anthropic",
+            "claude-sonnet-4-20250514": "messages",
             "gemini-2.0-flash": "google_generate",
         },
         "server": {"host": "0.0.0.0", "port": 8765},

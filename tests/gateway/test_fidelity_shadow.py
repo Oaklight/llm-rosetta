@@ -11,7 +11,7 @@ class TestCheckFidelity:
     def test_cross_format_skips_check(self):
         profile: dict = {}
         result = _check_fidelity(
-            "openai_chat", "anthropic", {"a": 1}, {"b": 2}, "request", profile
+            "openai_chat", "messages", {"a": 1}, {"b": 2}, "request", profile
         )
         assert result is False
         assert "fidelity" not in profile

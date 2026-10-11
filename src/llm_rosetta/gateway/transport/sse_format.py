@@ -26,7 +26,7 @@ def format_sse_done() -> str:
     return "data: [DONE]\n\n"
 
 
-def _format_sse_anthropic(chunk: dict[str, Any]) -> str:
+def _format_sse_messages(chunk: dict[str, Any]) -> str:
     """Format a chunk as Anthropic SSE (``event: type\\ndata: json``)."""
     event_type = chunk.get("type", "unknown")
     return f"event: {event_type}\ndata: {json.dumps(chunk, ensure_ascii=False)}\n\n"
@@ -53,7 +53,7 @@ SSE_FORMATTERS: dict[str, Any] = {
     "chat_completions": _format_sse_chat_completions,
     "openai_responses": _format_sse_open_responses,
     "open_responses": _format_sse_open_responses,
-    "anthropic": _format_sse_anthropic,
+    "messages": _format_sse_messages,
     "google": _format_sse_google,
     "google_generate": _format_sse_google,
     "google_interactions": _format_sse_google_interactions,
@@ -107,7 +107,7 @@ def build_stream_error_events(
     if source_provider == "chat_completions":
         return [{"error": {"message": message, "type": "server_error", "code": None}}]
 
-    if source_provider == "anthropic":
+    if source_provider == "messages":
         return [{"type": "error", "error": {"type": "api_error", "message": message}}]
 
     if source_provider in ("google", "google_generate"):

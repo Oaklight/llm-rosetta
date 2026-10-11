@@ -25,6 +25,7 @@ from .converters import (
     GoogleGenerateConverter,
     GoogleGenAIConverter,  # deprecated alias
     GoogleInteractionsConverter,
+    MessagesConverter,
     OpenAIChatConverter,  # deprecated alias
     OpenAIResponsesConverter,
     OpenResponsesConverter,
@@ -55,7 +56,8 @@ __all__ = [
     "BaseSimpleConverter",
     "ChatCompletionsConverter",
     "OpenAIChatConverter",  # deprecated alias
-    "AnthropicConverter",
+    "MessagesConverter",
+    "AnthropicConverter",  # deprecated alias of MessagesConverter
     "GoogleGenerateConverter",
     "GoogleGenAIConverter",  # deprecated alias
     "GoogleConverter",

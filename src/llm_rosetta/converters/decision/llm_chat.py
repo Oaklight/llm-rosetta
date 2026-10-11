@@ -38,7 +38,7 @@ OutputFormat = Literal[
     "chat_completions",  # canonical name for the OpenAI Chat wire
     "openai_chat",  # legacy alias
     "openai_responses",
-    "anthropic",
+    "messages",
     "google_generate",
     "google_interactions",
     "prompted",
@@ -52,7 +52,7 @@ class LLMChatDecisionConverter(BaseDecisionConverter):
         output_format: How to constrain the LLM's output.
             - "openai_chat": response_format with json_schema (default)
             - "openai_responses": text.format with json_schema
-            - "anthropic": output_config.format with json_schema
+            - "messages": output_config.format with json_schema
             - "google_generate": response_mime_type + response_schema
             - "google_interactions": response_format with mime_type + response_schema
             - "prompted": embed schema in system prompt (universal fallback)
@@ -121,7 +121,7 @@ class LLMChatDecisionConverter(BaseDecisionConverter):
                     "strict": True,
                 }
             }
-        elif self.output_format == "anthropic":
+        elif self.output_format == "messages":
             result["output_config"] = {
                 "format": {"type": "json_schema", "schema": schema}
             }

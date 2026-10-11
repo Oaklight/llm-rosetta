@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, cast
 
-from llm_rosetta.converters.anthropic.converter import AnthropicConverter
+from llm_rosetta.converters.messages.converter import MessagesConverter
 from llm_rosetta.converters.base import BaseConverter
 from llm_rosetta.converters.base.context import ConversionContext, StreamContext
 from llm_rosetta.pipeline import StreamProcessor
@@ -41,7 +41,7 @@ class TestPassthroughTypes:
     def test_event_type_guard(self):
         event = ProviderPassthroughEvent(
             type="provider_passthrough",
-            provider="anthropic",
+            provider="messages",
             payload={"type": "ping"},
         )
         assert is_provider_passthrough_event(event)
@@ -83,11 +83,11 @@ class TestPassthroughTypes:
 class TestStreamPassthrough:
     def test_anthropic_ping_emits_passthrough(self):
         chunk = {"type": "ping"}
-        events = AnthropicConverter().stream_response_from_provider(chunk)
+        events = MessagesConverter().stream_response_from_provider(chunk)
         assert events == [
             {
                 "type": "provider_passthrough",
-                "provider": "anthropic",
+                "provider": "messages",
                 "payload": chunk,
             }
         ]
@@ -105,10 +105,10 @@ class TestStreamPassthrough:
         assert events == []
 
     def test_same_format_restores_copy(self):
-        converter = AnthropicConverter()
+        converter = MessagesConverter()
         event = ProviderPassthroughEvent(
             type="provider_passthrough",
-            provider="anthropic",
+            provider="messages",
             payload={"type": "ping"},
         )
         restored = converter.stream_response_to_provider(event)
@@ -118,7 +118,7 @@ class TestStreamPassthrough:
     def test_cross_format_drops_event(self):
         event = ProviderPassthroughEvent(
             type="provider_passthrough",
-            provider="anthropic",
+            provider="messages",
             payload={"type": "ping"},
         )
         ctx = StreamContext()
@@ -150,7 +150,7 @@ class TestNonStreamPassthroughHelpers:
         assert warnings == []
 
     def test_message_ops_drop_cross_provider_with_warning(self):
-        messages, warnings = AnthropicConverter().message_ops.ir_messages_to_p(
+        messages, warnings = MessagesConverter().message_ops.ir_messages_to_p(
             [_item(position=0)]
         )
         assert messages == []
@@ -160,7 +160,7 @@ class TestNonStreamPassthroughHelpers:
         converters = [
             OpenAIResponsesConverter(),
             ChatCompletionsConverter(),
-            AnthropicConverter(),
+            MessagesConverter(),
             GoogleGenerateConverter(),
         ]
         for converter in converters:
@@ -216,12 +216,12 @@ class TestNonStreamPassthroughHelpers:
         )
 
         payload, warning = restore_provider_passthrough_item(
-            _item(), target_provider="anthropic"
+            _item(), target_provider="messages"
         )
         assert payload is None
         assert warning is not None
         assert "openai_responses" in warning
-        assert "anthropic" in warning
+        assert "messages" in warning
 
     def test_merge_output_items_by_position(self):
         from llm_rosetta.converters.base.passthrough import merge_provider_output_items
@@ -251,7 +251,7 @@ class TestNonStreamPassthroughHelpers:
         merged, warnings = merge_provider_output_items(
             [{"type": "message"}],
             [_item(position=0)],
-            target_provider="anthropic",
+            target_provider="messages",
         )
         assert merged == [{"type": "message"}]
         assert len(warnings) == 1
@@ -355,7 +355,7 @@ class TestNonStreamPassthroughHelpers:
         converters_and_keys: list[tuple[BaseConverter, str]] = [
             (OpenAIResponsesConverter(), "output"),
             (ChatCompletionsConverter(), "choices"),
-            (AnthropicConverter(), "content"),
+            (MessagesConverter(), "content"),
             (GoogleGenerateConverter(), "candidates"),
         ]
         for converter, output_key in converters_and_keys:
@@ -383,7 +383,7 @@ class TestNonStreamPassthroughHelpers:
                 _item(provider="openai_responses", position=0)
             ],
         }
-        restored = AnthropicConverter().response_to_provider(response, context=ctx)
+        restored = MessagesConverter().response_to_provider(response, context=ctx)
         assert restored["content"] == []
         assert len(ctx.warnings) == 1
 
@@ -404,8 +404,8 @@ class TestNonStreamPassthroughHelpers:
 class TestStreamProcessorPassthrough:
     def test_same_format_forwards_passthrough(self):
         """Anthropic ping events pass through same-format round-trip."""
-        target = AnthropicConverter()
-        source = AnthropicConverter()
+        target = MessagesConverter()
+        source = MessagesConverter()
         processor = StreamProcessor(
             target_converter=target,
             source_converter=source,
@@ -417,7 +417,7 @@ class TestStreamProcessorPassthrough:
 
     def test_cross_format_drops_passthrough(self):
         target = OpenAIResponsesConverter()
-        source = AnthropicConverter()
+        source = MessagesConverter()
         processor = StreamProcessor(
             target_converter=target,
             source_converter=source,

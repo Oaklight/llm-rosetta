@@ -558,7 +558,7 @@ class TestConversionPipeline:
         """
         from llm_rosetta.pipeline import ConversionPipeline
 
-        pipeline = ConversionPipeline("anthropic", target_provider)
+        pipeline = ConversionPipeline("messages", target_provider)
         target = pipeline.convert_request(
             {
                 "model": "gemini-2.0-flash",
@@ -574,7 +574,7 @@ class TestConversionPipeline:
         from llm_rosetta.pipeline import ConversionPipeline
 
         pipeline = ConversionPipeline(
-            "anthropic", "google_generate", google_output_format="sdk"
+            "messages", "google_generate", google_output_format="sdk"
         )
         target = pipeline.convert_request(
             {
@@ -724,7 +724,7 @@ class TestConversionPipeline:
         """Anthropic thinking is not portable as a native Responses input item."""
         from llm_rosetta.pipeline import ConversionPipeline
 
-        pipeline = ConversionPipeline("anthropic", "openai_responses")
+        pipeline = ConversionPipeline("messages", "openai_responses")
         target = pipeline.convert_request(
             {
                 "model": "claude-sonnet-4-20250514",
@@ -960,7 +960,7 @@ class TestConversionPipeline:
         """Cross-format conversion produces valid target body."""
         from llm_rosetta.pipeline import ConversionPipeline
 
-        pipeline = ConversionPipeline("openai_chat", "anthropic")
+        pipeline = ConversionPipeline("openai_chat", "messages")
         target = pipeline.convert_request(
             {"model": "claude-3", "messages": [{"role": "user", "content": "hi"}]}
         )
@@ -1107,7 +1107,7 @@ class TestConversionPipeline:
 class TestStreamProcessorIterEvents:
     """Tests for StreamProcessor.iter_events (#872)."""
 
-    def _make_processor(self, source="openai_chat", target="anthropic"):
+    def _make_processor(self, source="openai_chat", target="messages"):
         from llm_rosetta.pipeline import ConversionPipeline
 
         pipeline = ConversionPipeline(source, target)
@@ -1144,7 +1144,7 @@ class TestStreamProcessorIterEvents:
 
     def test_iter_events_flushes_deferred_stream_end(self):
         """iter_events auto-flushes deferred StreamEndEvent for Anthropic output."""
-        processor = self._make_processor("anthropic", "openai_chat")
+        processor = self._make_processor("messages", "openai_chat")
         chunks = [
             {
                 "id": "chatcmpl-abc",
@@ -1279,9 +1279,9 @@ class TestIntrinsicIrTransforms:
 
     def test_anthropic_has_intrinsic_transforms(self):
         """Anthropic converter declares hoist + cache breakpoints."""
-        from llm_rosetta.converters.anthropic import AnthropicConverter
+        from llm_rosetta.converters.messages import MessagesConverter
 
-        names = [repr(t) for t in AnthropicConverter._INTRINSIC_IR_TRANSFORMS]
+        names = [repr(t) for t in MessagesConverter._INTRINSIC_IR_TRANSFORMS]
         assert "hoist_late_system_messages()" in names
         assert "auto_cache_breakpoints()" in names
 

@@ -22,7 +22,7 @@ class TestPassthroughMode:
         assert result is body
 
     def test_same_format_response_baseline(self) -> None:
-        pipeline = ConversionPipeline("anthropic", "anthropic", baseline=True)
+        pipeline = ConversionPipeline("messages", "messages", baseline=True)
         body = {
             "model": "claude-sonnet-4",
             "messages": [{"role": "user", "content": "hi"}],
@@ -51,7 +51,7 @@ class TestPassthroughMode:
         assert result["model"] == "gpt-4o"
 
     def test_different_format_always_converts(self) -> None:
-        pipeline = ConversionPipeline("openai_chat", "anthropic", baseline=True)
+        pipeline = ConversionPipeline("openai_chat", "messages", baseline=True)
         body = {
             "model": "claude-sonnet-4",
             "messages": [{"role": "user", "content": "hi"}],
@@ -105,8 +105,8 @@ class TestConverterCaching:
         # After getting via a base name, cache should have it
         from llm_rosetta.auto_detect import get_converter_for_provider
 
-        get_converter_for_provider("anthropic")
-        assert "anthropic" in _converter_cache
+        get_converter_for_provider("messages")
+        assert "messages" in _converter_cache
 
 
 # ============================================================================
@@ -214,7 +214,7 @@ class TestFidelityIntegration:
     def test_fidelity_mode_only_on_baseline(self) -> None:
         pipeline = ConversionPipeline(
             "openai_chat",
-            "anthropic",
+            "messages",
             baseline=True,
             fidelity_mode="critical",
         )

@@ -11,7 +11,7 @@ structural integrity (see llm-rosetta#87):
 from typing import cast
 
 from llm_rosetta.converters.base.tools import strip_orphaned_tool_config
-from llm_rosetta.converters.anthropic.converter import AnthropicConverter
+from llm_rosetta.converters.messages.converter import MessagesConverter
 from llm_rosetta.converters.google_generate.converter import GoogleGenerateConverter
 from llm_rosetta.converters.chat_completions.converter import ChatCompletionsConverter
 from llm_rosetta.converters.open_responses.converter import OpenAIResponsesConverter
@@ -200,7 +200,7 @@ class TestAnthropicStripOrphanedToolConfig:
     """Anthropic converter strips orphaned tool_choice."""
 
     def setup_method(self):
-        self.converter = AnthropicConverter()
+        self.converter = MessagesConverter()
 
     def test_orphaned_tool_choice_stripped(self):
         ir = _make_ir_request_with_orphaned_tool_choice()

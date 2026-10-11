@@ -28,7 +28,7 @@ Usage::
     report = check_fidelity_against_baseline(
         baseline,
         source_provider="chat_completions",
-        target_provider="anthropic",
+        target_provider="messages",
         original=request_body,
         roundtripped=roundtrip(request_body),
         mode="critical",

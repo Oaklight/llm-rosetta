@@ -8,7 +8,7 @@ call (with the intrinsic's natural name) otherwise.  See #839.
 import json
 from typing import cast
 
-from llm_rosetta.converters.anthropic import AnthropicConverter
+from llm_rosetta.converters.messages import MessagesConverter
 from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
 from llm_rosetta.converters.open_responses import OpenAIResponsesConverter
 from llm_rosetta.pipeline import ConversionPipeline
@@ -65,7 +65,7 @@ class TestConverterMapsIntrinsicHistory:
         assert "web_search_call" in json.dumps(body)
 
     def test_anthropic_emits_native_server_tool_use(self):
-        body, _ = AnthropicConverter().request_to_provider(_ir_with_intrinsic_history())
+        body, _ = MessagesConverter().request_to_provider(_ir_with_intrinsic_history())
         assert "server_tool_use" in json.dumps(body)
 
     def test_openai_chat_falls_back_to_natural_function_name(self):
@@ -124,7 +124,7 @@ class TestPipelineKeepsIntrinsicHistory:
 
         shims = {s.name: s for s in load_providers()}
         pipe = ConversionPipeline(
-            "anthropic",
+            "messages",
             "openai_responses",
             target_shim=shims["openai--open_responses"],
             upstream_model="gpt-5-nano",
@@ -150,7 +150,7 @@ class TestHistoryIndependentOfShim:
 
         # A responses shim that declares NO intrinsic tools.
         bare = ProviderShim(name="x", base="openai_responses", tools=ToolsConfig())
-        pipe = ConversionPipeline("anthropic", "openai_responses", target_shim=bare)
+        pipe = ConversionPipeline("messages", "openai_responses", target_shim=bare)
         # feed an anthropic provider request (the shim is the target's)
         req = {
             "model": "m",

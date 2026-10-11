@@ -22,7 +22,7 @@ def converter():  # openai_chat default
 
 @pytest.fixture
 def anthropic_converter():
-    return LLMChatDecisionConverter(output_format="anthropic")
+    return LLMChatDecisionConverter(output_format="messages")
 
 
 @pytest.fixture

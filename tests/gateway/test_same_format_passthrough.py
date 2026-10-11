@@ -47,7 +47,7 @@ PROVIDERS = {
         "base_url": "https://d.example.com",
     },
     "claude": {
-        "type": "anthropic",
+        "type": "messages",
         "api_key": "sk-e",
         "base_url": "https://e.example.com",
     },
@@ -117,7 +117,7 @@ class TestFormatAffinity:
         config = _make_config(
             {"m": {"providers": ["chat_a", "resp_a"]}}, prefer_same_format=True
         )
-        picked = {config.resolve("anthropic", "m")[0].provider_name for _ in range(10)}
+        picked = {config.resolve("messages", "m")[0].provider_name for _ in range(10)}
         assert picked == {"chat_a", "resp_a"}
 
     def test_homogeneous_route_needs_no_subroute(self):

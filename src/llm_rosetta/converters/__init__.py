@@ -5,7 +5,7 @@ LLM-Rosetta - Converters Package
 Provides converter implementations between various providers
 """
 
-from .anthropic import AnthropicConverter
+from .messages import AnthropicConverter, MessagesConverter
 from .base import BaseConverter, BaseEmbeddingConverter, BaseRerankConverter
 from .embedding import (
     CohereEmbeddingConverter,
@@ -38,7 +38,8 @@ __all__ = [
     "CohereEmbeddingConverter",
     "ChatCompletionsConverter",
     "OpenAIChatConverter",  # deprecated alias
-    "AnthropicConverter",
+    "MessagesConverter",
+    "AnthropicConverter",  # deprecated alias of MessagesConverter
     "GoogleGenerateConverter",
     "GoogleGenAIConverter",  # deprecated alias,
     "GoogleConverter",

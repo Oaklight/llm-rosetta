@@ -71,7 +71,7 @@ class TestLLMDescriptor:
         desc = get_model_type("llm")
         assert desc is not None
         assert "chat_completions" in desc.formats
-        assert "anthropic" in desc.formats
+        assert "messages" in desc.formats
 
     def test_llm_pipeline_is_none(self) -> None:
         """LLM uses the full converter pipeline; pipeline should be None."""

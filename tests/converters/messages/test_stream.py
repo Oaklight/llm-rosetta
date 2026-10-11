@@ -1,0 +1,1702 @@
+"""
+Anthropic Messages API stream converter unit tests.
+"""
+
+from typing import Any, cast
+
+from llm_rosetta.converters.messages import MessagesConverter
+from llm_rosetta.converters.base.context import StreamContext
+from llm_rosetta.types.ir.stream import (
+    ContentBlockEndEvent,
+    ContentBlockStartEvent,
+    FinishEvent,
+    IRStreamEvent,
+    ReasoningDeltaEvent,
+    StreamEndEvent,
+    StreamStartEvent,
+    TextDeltaEvent,
+    ToolCallDeltaEvent,
+    ToolCallStartEvent,
+    UsageEvent,
+)
+
+
+class TestStreamResponseFromProvider:
+    """Tests for stream_response_from_provider."""
+
+    def setup_method(self):
+        self.converter = MessagesConverter()
+
+    # --- Text delta ---
+
+    def test_text_delta(self):
+        """text_delta in content_block_delta produces TextDeltaEvent."""
+        event = {
+            "type": "content_block_delta",
+            "index": 0,
+            "delta": {"type": "text_delta", "text": "Hello"},
+        }
+        events = cast(list[Any], self.converter.stream_response_from_provider(event))
+        assert len(events) == 1
+        assert events[0]["type"] == "text_delta"
+        assert events[0]["text"] == "Hello"
+
+    def test_text_delta_empty_string(self):
+        """Empty text delta still produces an event."""
+        event = {
+            "type": "content_block_delta",
+            "index": 0,
+            "delta": {"type": "text_delta", "text": ""},
+        }
+        events = cast(list[Any], self.converter.stream_response_from_provider(event))
+        assert len(events) == 1
+        assert events[0]["type"] == "text_delta"
+        assert events[0]["text"] == ""
+
+    # --- Reasoning delta (thinking) ---
+
+    def test_thinking_delta(self):
+        """thinking_delta produces ReasoningDeltaEvent."""
+        event = {
+            "type": "content_block_delta",
+            "index": 0,
+            "delta": {"type": "thinking_delta", "thinking": "Let me analyze..."},
+        }
+        events = cast(list[Any], self.converter.stream_response_from_provider(event))
+        assert len(events) == 1
+        assert events[0]["type"] == "reasoning_delta"
+        assert events[0]["reasoning"] == "Let me analyze..."
+
+    def test_signature_delta(self):
+        """signature_delta produces ReasoningDeltaEvent with signature field."""
+        event = {
+            "type": "content_block_delta",
+            "index": 0,
+            "delta": {"type": "signature_delta", "signature": "sig_abc123"},
+        }
+        events = cast(list[Any], self.converter.stream_response_from_provider(event))
+        assert len(events) == 1
+        assert events[0]["type"] == "reasoning_delta"
+        assert events[0]["reasoning"] == ""
+        assert events[0]["signature"] == "sig_abc123"
+
+    # --- Tool call start ---
+
+    def test_tool_call_start_tool_use(self):
+        """content_block_start with tool_use type produces ToolCallStartEvent."""
+        event = {
+            "type": "content_block_start",
+            "index": 1,
+            "content_block": {
+                "type": "tool_use",
+                "id": "toolu_abc",
+                "name": "get_weather",
+                "input": {},
+            },
+        }
+        events = cast(list[Any], self.converter.stream_response_from_provider(event))
+        assert len(events) == 1
+        assert events[0]["type"] == "tool_call_start"
+        assert events[0]["tool_call_id"] == "toolu_abc"
+        assert events[0]["tool_name"] == "get_weather"
+
+    def test_tool_call_start_server_tool_use(self):
+        """content_block_start with server_tool_use type also produces ToolCallStartEvent."""
+        event = {
+            "type": "content_block_start",
+            "index": 0,
+            "content_block": {
+                "type": "server_tool_use",
+                "id": "toolu_srv",
+                "name": "web_search",
+                "input": {},
+            },
+        }
+        events = cast(list[Any], self.converter.stream_response_from_provider(event))
+        assert len(events) == 1
+        assert events[0]["type"] == "tool_call_start"
+        assert events[0]["tool_call_id"] == "toolu_srv"
+        assert events[0]["tool_name"] == "web_search"
+
+    def test_content_block_start_text_ignored(self):
+        """content_block_start with text type produces no events."""
+        event = {
+            "type": "content_block_start",
+            "index": 0,
+            "content_block": {"type": "text", "text": ""},
+        }
+        events = self.converter.stream_response_from_provider(event)
+        assert events == []
+
+    # --- Tool call arguments delta ---
+
+    def test_tool_call_arguments_delta(self):
+        """input_json_delta produces ToolCallDeltaEvent."""
+        event = {
+            "type": "content_block_delta",
+            "index": 1,
+            "delta": {"type": "input_json_delta", "partial_json": '{"city":'},
+        }
+        events = cast(list[Any], self.converter.stream_response_from_provider(event))
+        assert len(events) == 1
+        assert events[0]["type"] == "tool_call_delta"
+        assert events[0]["arguments_delta"] == '{"city":'
+        assert events[0]["tool_call_id"] == ""  # Anthropic doesn't repeat ID
+
+    # --- Finish event ---
+
+    def test_finish_end_turn(self):
+        """message_delta with stop_reason 'end_turn' maps to 'stop'."""
+        event = {
+            "type": "message_delta",
+            "delta": {"stop_reason": "end_turn", "stop_sequence": None},
+        }
+        events = cast(list[Any], self.converter.stream_response_from_provider(event))
+        finish_events = [e for e in events if e["type"] == "finish"]
+        assert len(finish_events) == 1
+        assert finish_events[0]["finish_reason"]["reason"] == "stop"
+
+    def test_finish_max_tokens(self):
+        """message_delta with stop_reason 'max_tokens' maps to 'length'."""
+        event = {
+            "type": "message_delta",
+            "delta": {"stop_reason": "max_tokens"},
+        }
+        events = cast(list[Any], self.converter.stream_response_from_provider(event))
+        finish_events = [e for e in events if e["type"] == "finish"]
+        assert len(finish_events) == 1
+        assert finish_events[0]["finish_reason"]["reason"] == "length"
+
+    def test_finish_tool_use(self):
+        """message_delta with stop_reason 'tool_use' maps to 'tool_calls'."""
+        event = {
+            "type": "message_delta",
+            "delta": {"stop_reason": "tool_use"},
+        }
+        events = cast(list[Any], self.converter.stream_response_from_provider(event))
+        finish_events = [e for e in events if e["type"] == "finish"]
+        assert len(finish_events) == 1
+        assert finish_events[0]["finish_reason"]["reason"] == "tool_calls"
+
+    def test_finish_stop_sequence(self):
+        """message_delta with stop_reason 'stop_sequence' maps to 'stop'."""
+        event = {
+            "type": "message_delta",
+            "delta": {"stop_reason": "stop_sequence"},
+        }
+        events = cast(list[Any], self.converter.stream_response_from_provider(event))
+        finish_events = [e for e in events if e["type"] == "finish"]
+        assert len(finish_events) == 1
+        assert finish_events[0]["finish_reason"]["reason"] == "stop"
+
+    # --- Usage event ---
+
+    def test_message_start_usage(self):
+        """message_start with usage produces UsageEvent."""
+        event = {
+            "type": "message_start",
+            "message": {
+                "id": "msg_abc",
+                "type": "message",
+                "role": "assistant",
+                "content": [],
+                "model": "claude-sonnet-4-20250514",
+                "usage": {"input_tokens": 25, "output_tokens": 0},
+            },
+        }
+        events = cast(list[Any], self.converter.stream_response_from_provider(event))
+        assert len(events) == 1
+        assert events[0]["type"] == "usage"
+        assert events[0]["usage"]["prompt_tokens"] == 25
+        assert events[0]["usage"]["completion_tokens"] == 0
+        assert events[0]["usage"]["total_tokens"] == 25
+
+    def test_message_delta_with_usage(self):
+        """message_delta with usage produces both FinishEvent and UsageEvent."""
+        event = {
+            "type": "message_delta",
+            "delta": {"stop_reason": "end_turn"},
+            "usage": {"input_tokens": 0, "output_tokens": 42},
+        }
+        events = cast(list[Any], self.converter.stream_response_from_provider(event))
+        types = [e["type"] for e in events]
+        assert "finish" in types
+        assert "usage" in types
+        usage_event = [e for e in events if e["type"] == "usage"][0]
+        assert usage_event["usage"]["completion_tokens"] == 42
+
+    # --- Ignored events ---
+
+    def test_content_block_stop_ignored(self):
+        """content_block_stop produces no events."""
+        event = {"type": "content_block_stop", "index": 0}
+        events = self.converter.stream_response_from_provider(event)
+        assert events == []
+
+    def test_message_stop_ignored(self):
+        """message_stop produces no events."""
+        event = {"type": "message_stop"}
+        events = self.converter.stream_response_from_provider(event)
+        assert events == []
+
+    def test_ping_passthrough(self):
+        """Ping is preserved as a provider passthrough event."""
+        event = {"type": "ping"}
+        events = self.converter.stream_response_from_provider(event)
+        assert events == [
+            {"type": "provider_passthrough", "provider": "messages", "payload": event}
+        ]
+
+    # --- SDK object normalization ---
+
+    def test_normalize_sdk_object(self):
+        """SDK objects with model_dump() are normalized."""
+
+        class MockEvent:
+            def model_dump(self):
+                return {
+                    "type": "content_block_delta",
+                    "index": 0,
+                    "delta": {"type": "text_delta", "text": "sdk"},
+                }
+
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(
+                cast(dict[str, Any], MockEvent())
+            ),
+        )
+        assert len(events) == 1
+        assert events[0]["text"] == "sdk"
+
+
+class TestStreamResponseToProvider:
+    """Tests for stream_response_to_provider."""
+
+    def setup_method(self):
+        self.converter = MessagesConverter()
+
+    def test_text_delta(self):
+        """TextDeltaEvent → Anthropic content_block_delta."""
+        event = cast(TextDeltaEvent, {"type": "text_delta", "text": "Hello"})
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
+        assert result["type"] == "content_block_delta"
+        assert result["delta"]["type"] == "text_delta"
+        assert result["delta"]["text"] == "Hello"
+
+    def test_reasoning_delta_thinking(self):
+        """ReasoningDeltaEvent without signature → thinking_delta."""
+        event = cast(
+            ReasoningDeltaEvent,
+            {"type": "reasoning_delta", "reasoning": "step 1"},
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
+        assert result["type"] == "content_block_delta"
+        assert result["delta"]["type"] == "thinking_delta"
+        assert result["delta"]["thinking"] == "step 1"
+
+    def test_reasoning_delta_signature(self):
+        """ReasoningDeltaEvent with signature → signature_delta."""
+        event = cast(
+            ReasoningDeltaEvent,
+            {
+                "type": "reasoning_delta",
+                "reasoning": "",
+                "signature": "sig_xyz",
+            },
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
+        assert result["type"] == "content_block_delta"
+        assert result["delta"]["type"] == "signature_delta"
+        assert result["delta"]["signature"] == "sig_xyz"
+
+    def test_tool_call_start(self):
+        """ToolCallStartEvent → Anthropic content_block_start."""
+        event = cast(
+            ToolCallStartEvent,
+            {
+                "type": "tool_call_start",
+                "tool_call_id": "toolu_abc",
+                "tool_name": "get_weather",
+            },
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
+        assert result["type"] == "content_block_start"
+        assert result["content_block"]["type"] == "tool_use"
+        assert result["content_block"]["id"] == "toolu_abc"
+        assert result["content_block"]["name"] == "get_weather"
+        assert result["content_block"]["input"] == {}
+
+    def test_tool_call_delta(self):
+        """ToolCallDeltaEvent → Anthropic content_block_delta."""
+        event = cast(
+            ToolCallDeltaEvent,
+            {
+                "type": "tool_call_delta",
+                "tool_call_id": "",
+                "arguments_delta": '{"city": "NYC"}',
+            },
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
+        assert result["type"] == "content_block_delta"
+        assert result["delta"]["type"] == "input_json_delta"
+        assert result["delta"]["partial_json"] == '{"city": "NYC"}'
+
+    def test_finish_event_stop(self):
+        """FinishEvent with 'stop' → message_delta with 'end_turn'."""
+        event = cast(
+            FinishEvent,
+            {"type": "finish", "finish_reason": {"reason": "stop"}},
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
+        assert result["type"] == "message_delta"
+        assert result["delta"]["stop_reason"] == "end_turn"
+
+    def test_finish_event_length(self):
+        """FinishEvent with 'length' → message_delta with 'max_tokens'."""
+        event = cast(
+            FinishEvent,
+            {"type": "finish", "finish_reason": {"reason": "length"}},
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
+        assert result["delta"]["stop_reason"] == "max_tokens"
+
+    def test_finish_event_tool_calls(self):
+        """FinishEvent with 'tool_calls' → message_delta with 'tool_use'."""
+        event = cast(
+            FinishEvent,
+            {"type": "finish", "finish_reason": {"reason": "tool_calls"}},
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
+        assert result["delta"]["stop_reason"] == "tool_use"
+
+    def test_finish_event_content_filter(self):
+        """FinishEvent with 'content_filter' → message_delta with 'end_turn'."""
+        event = cast(
+            FinishEvent,
+            {"type": "finish", "finish_reason": {"reason": "content_filter"}},
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
+        assert result["delta"]["stop_reason"] == "end_turn"
+
+    def test_usage_event(self):
+        """UsageEvent → Anthropic message_delta with usage."""
+        event = cast(
+            UsageEvent,
+            {
+                "type": "usage",
+                "usage": {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 5,
+                    "total_tokens": 15,
+                },
+            },
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
+        assert result["type"] == "message_delta"
+        assert result["delta"] == {}
+        assert result["usage"]["output_tokens"] == 5
+
+    def test_unknown_event_type(self):
+        """Unknown event type returns empty dict."""
+        event = cast(TextDeltaEvent, {"type": "unknown_event"})
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
+        assert result == {}
+
+
+class TestStreamRoundTrip:
+    """Round-trip tests: provider → IR → provider."""
+
+    def setup_method(self):
+        self.converter = MessagesConverter()
+
+    def test_text_delta_round_trip(self):
+        """Text delta round-trip preserves content."""
+        original = {
+            "type": "content_block_delta",
+            "index": 0,
+            "delta": {"type": "text_delta", "text": "Hello"},
+        }
+        events = cast(list[Any], self.converter.stream_response_from_provider(original))
+        restored = cast(
+            dict[str, Any], self.converter.stream_response_to_provider(events[0])
+        )
+        assert restored["delta"]["text"] == "Hello"
+        assert restored["delta"]["type"] == "text_delta"
+
+    def test_thinking_delta_round_trip(self):
+        """Thinking delta round-trip preserves content."""
+        original = {
+            "type": "content_block_delta",
+            "index": 0,
+            "delta": {"type": "thinking_delta", "thinking": "analyzing..."},
+        }
+        events = cast(list[Any], self.converter.stream_response_from_provider(original))
+        restored = cast(
+            dict[str, Any], self.converter.stream_response_to_provider(events[0])
+        )
+        assert restored["delta"]["thinking"] == "analyzing..."
+
+    def test_signature_delta_round_trip(self):
+        """Signature delta round-trip preserves signature."""
+        original = {
+            "type": "content_block_delta",
+            "index": 0,
+            "delta": {"type": "signature_delta", "signature": "sig_test"},
+        }
+        events = cast(list[Any], self.converter.stream_response_from_provider(original))
+        restored = cast(
+            dict[str, Any], self.converter.stream_response_to_provider(events[0])
+        )
+        assert restored["delta"]["signature"] == "sig_test"
+
+    def test_tool_call_start_round_trip(self):
+        """Tool call start round-trip preserves id and name."""
+        original = {
+            "type": "content_block_start",
+            "index": 1,
+            "content_block": {
+                "type": "tool_use",
+                "id": "toolu_abc",
+                "name": "search",
+                "input": {},
+            },
+        }
+        events = cast(list[Any], self.converter.stream_response_from_provider(original))
+        restored = cast(
+            dict[str, Any], self.converter.stream_response_to_provider(events[0])
+        )
+        assert restored["content_block"]["id"] == "toolu_abc"
+        assert restored["content_block"]["name"] == "search"
+
+    def test_finish_round_trip(self):
+        """Finish event round-trip preserves reason mapping."""
+        original = {
+            "type": "message_delta",
+            "delta": {"stop_reason": "end_turn"},
+        }
+        events = cast(list[Any], self.converter.stream_response_from_provider(original))
+        finish = [e for e in events if e["type"] == "finish"][0]
+        restored = cast(
+            dict[str, Any], self.converter.stream_response_to_provider(finish)
+        )
+        assert restored["delta"]["stop_reason"] == "end_turn"
+
+    def test_full_stream_round_trip_no_inflation(self):
+        """Full stream round-trip produces same event count (7→7)."""
+        input_events = [
+            {
+                "type": "message_start",
+                "message": {
+                    "id": "msg_001",
+                    "type": "message",
+                    "role": "assistant",
+                    "model": "claude-sonnet-4-20250514",
+                    "content": [],
+                    "stop_reason": None,
+                    "usage": {"input_tokens": 12, "output_tokens": 1},
+                },
+            },
+            {
+                "type": "content_block_start",
+                "index": 0,
+                "content_block": {"type": "text", "text": ""},
+            },
+            {
+                "type": "content_block_delta",
+                "index": 0,
+                "delta": {"type": "text_delta", "text": "Hello"},
+            },
+            {
+                "type": "content_block_delta",
+                "index": 0,
+                "delta": {"type": "text_delta", "text": " world!"},
+            },
+            {"type": "content_block_stop", "index": 0},
+            {
+                "type": "message_delta",
+                "delta": {"stop_reason": "end_turn"},
+                "usage": {"output_tokens": 5},
+            },
+            {"type": "message_stop"},
+        ]
+
+        from_ctx = StreamContext()
+        to_ctx = StreamContext()
+        output_events: list[dict[str, Any]] = []
+
+        for inp in input_events:
+            ir_events = self.converter.stream_response_from_provider(
+                inp, context=from_ctx
+            )
+            for ir_event in ir_events:
+                result = self.converter.stream_response_to_provider(
+                    ir_event, context=to_ctx
+                )
+                if isinstance(result, list):
+                    output_events.extend(e for e in result if e)
+                elif result:
+                    output_events.append(result)
+
+        assert len(output_events) == 7
+        out_types = [e["type"] for e in output_events]
+        assert out_types == [
+            "message_start",
+            "content_block_start",
+            "content_block_delta",
+            "content_block_delta",
+            "content_block_stop",
+            "message_delta",
+            "message_stop",
+        ]
+        # Verify the message_delta has stop_reason and usage merged
+        msg_delta = output_events[5]
+        assert msg_delta["delta"]["stop_reason"] == "end_turn"
+        assert msg_delta["usage"]["output_tokens"] == 5
+
+    def test_thinking_then_text_block_index_round_trip(self):
+        """Regression test for #246: text deltas must keep index 1 after thinking block.
+
+        Upstream Anthropic emits:
+          thinking block start index 0 → thinking deltas index 0 →
+          signature delta index 0 → thinking stop index 0 →
+          text block start index 1 → text deltas index 1 → text stop index 1
+
+        After IR round-trip, text deltas must remain index 1, not regress
+        to index 0 (which would cause "Content block is not a text block"
+        in Claude CLI).
+        """
+        input_events: list[dict[str, Any]] = [
+            {
+                "type": "message_start",
+                "message": {
+                    "id": "msg_246",
+                    "type": "message",
+                    "role": "assistant",
+                    "model": "claude-opus-4-20250514",
+                    "content": [],
+                    "stop_reason": None,
+                    "usage": {"input_tokens": 50, "output_tokens": 1},
+                },
+            },
+            # Thinking block at index 0
+            {
+                "type": "content_block_start",
+                "index": 0,
+                "content_block": {"type": "thinking", "thinking": ""},
+            },
+            {
+                "type": "content_block_delta",
+                "index": 0,
+                "delta": {"type": "thinking_delta", "thinking": "Let me think..."},
+            },
+            {
+                "type": "content_block_delta",
+                "index": 0,
+                "delta": {"type": "thinking_delta", "thinking": " about this."},
+            },
+            {
+                "type": "content_block_delta",
+                "index": 0,
+                "delta": {"type": "signature_delta", "signature": "ErUB"},
+            },
+            {"type": "content_block_stop", "index": 0},
+            # Text block at index 1
+            {
+                "type": "content_block_start",
+                "index": 1,
+                "content_block": {"type": "text", "text": ""},
+            },
+            {
+                "type": "content_block_delta",
+                "index": 1,
+                "delta": {"type": "text_delta", "text": "Llamas are "},
+            },
+            {
+                "type": "content_block_delta",
+                "index": 1,
+                "delta": {"type": "text_delta", "text": "social animals."},
+            },
+            {"type": "content_block_stop", "index": 1},
+            {
+                "type": "message_delta",
+                "delta": {"stop_reason": "end_turn"},
+                "usage": {"output_tokens": 20},
+            },
+            {"type": "message_stop"},
+        ]
+
+        from_ctx = StreamContext()
+        to_ctx = StreamContext()
+        output_events: list[dict[str, Any]] = []
+
+        for inp in input_events:
+            ir_events = self.converter.stream_response_from_provider(
+                inp, context=from_ctx
+            )
+            for ir_event in ir_events:
+                result = self.converter.stream_response_to_provider(
+                    ir_event, context=to_ctx
+                )
+                if isinstance(result, list):
+                    output_events.extend(e for e in result if e)
+                elif result:
+                    output_events.append(result)
+
+        # Extract all content_block_delta events
+        deltas = [e for e in output_events if e.get("type") == "content_block_delta"]
+
+        # Thinking deltas must be at index 0
+        thinking_deltas = [
+            d
+            for d in deltas
+            if d["delta"]["type"] in ("thinking_delta", "signature_delta")
+        ]
+        for td in thinking_deltas:
+            assert td["index"] == 0, (
+                f"thinking/signature delta should be index 0, got {td['index']}"
+            )
+
+        # Text deltas must be at index 1 (the #246 bug had these at index 0)
+        text_deltas = [d for d in deltas if d["delta"]["type"] == "text_delta"]
+        assert len(text_deltas) == 2, f"expected 2 text deltas, got {len(text_deltas)}"
+        for td in text_deltas:
+            assert td["index"] == 1, (
+                f"text delta should be index 1, got {td['index']} "
+                f"(#246 regression: text delta landed on thinking block)"
+            )
+
+        # Block start/stop indexes must also be consistent
+        starts = [e for e in output_events if e.get("type") == "content_block_start"]
+        stops = [e for e in output_events if e.get("type") == "content_block_stop"]
+        assert starts[0]["index"] == 0  # thinking start
+        assert starts[1]["index"] == 1  # text start
+        assert stops[0]["index"] == 0  # thinking stop
+        assert stops[1]["index"] == 1  # text stop
+
+        # Verify content preserved
+        assert text_deltas[0]["delta"]["text"] == "Llamas are "
+        assert text_deltas[1]["delta"]["text"] == "social animals."
+
+    def test_thinking_then_text_block_index_on_ir_events(self):
+        """Verify from_p copies chunk index onto IR delta events."""
+        chunks = [
+            {
+                "type": "content_block_delta",
+                "index": 0,
+                "delta": {"type": "thinking_delta", "thinking": "hmm"},
+            },
+            {
+                "type": "content_block_delta",
+                "index": 1,
+                "delta": {"type": "text_delta", "text": "answer"},
+            },
+        ]
+        ctx = StreamContext()
+        # Need a block start first to initialize context
+        self.converter.stream_response_from_provider(
+            {
+                "type": "content_block_start",
+                "index": 0,
+                "content_block": {"type": "thinking", "thinking": ""},
+            },
+            context=ctx,
+        )
+        ir_thinking = self.converter.stream_response_from_provider(
+            chunks[0], context=ctx
+        )
+        thinking_evt = cast(ReasoningDeltaEvent, ir_thinking[0])
+        assert thinking_evt["block_index"] == 0
+
+        self.converter.stream_response_from_provider(
+            {"type": "content_block_stop", "index": 0}, context=ctx
+        )
+        self.converter.stream_response_from_provider(
+            {
+                "type": "content_block_start",
+                "index": 1,
+                "content_block": {"type": "text", "text": ""},
+            },
+            context=ctx,
+        )
+        ir_text = self.converter.stream_response_from_provider(chunks[1], context=ctx)
+        text_evt = cast(TextDeltaEvent, ir_text[0])
+        assert text_evt["block_index"] == 1
+
+
+class TestStreamResponseFromProviderWithContext:
+    """Tests for stream_response_from_provider with StreamContext."""
+
+    def setup_method(self):
+        self.converter = MessagesConverter()
+
+    # --- StreamStartEvent ---
+
+    def test_message_start_emits_stream_start_with_context(self):
+        """message_start emits StreamStartEvent when context is provided."""
+        ctx = StreamContext()
+        event = {
+            "type": "message_start",
+            "message": {
+                "id": "msg_abc123",
+                "type": "message",
+                "role": "assistant",
+                "content": [],
+                "model": "claude-sonnet-4-20250514",
+                "usage": {"input_tokens": 25, "output_tokens": 0},
+            },
+        }
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(event, context=ctx),
+        )
+        start_events = [e for e in events if e["type"] == "stream_start"]
+        assert len(start_events) == 1
+        assert start_events[0]["response_id"] == "msg_abc123"
+        assert start_events[0]["model"] == "claude-sonnet-4-20250514"
+
+    def test_message_start_updates_context(self):
+        """message_start stores metadata in context and marks started."""
+        ctx = StreamContext()
+        event = {
+            "type": "message_start",
+            "message": {
+                "id": "msg_abc123",
+                "type": "message",
+                "role": "assistant",
+                "content": [],
+                "model": "claude-sonnet-4-20250514",
+                "usage": {"input_tokens": 25, "output_tokens": 0},
+            },
+        }
+        self.converter.stream_response_from_provider(event, context=ctx)
+        assert ctx.response_id == "abc123"
+        assert ctx.model == "claude-sonnet-4-20250514"
+        assert ctx.is_started is True
+
+    def test_message_start_emits_stream_start_and_usage(self):
+        """message_start with usage emits both StreamStartEvent and UsageEvent."""
+        ctx = StreamContext()
+        event = {
+            "type": "message_start",
+            "message": {
+                "id": "msg_abc123",
+                "type": "message",
+                "role": "assistant",
+                "content": [],
+                "model": "claude-sonnet-4-20250514",
+                "usage": {"input_tokens": 25, "output_tokens": 0},
+            },
+        }
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(event, context=ctx),
+        )
+        types = [e["type"] for e in events]
+        assert "stream_start" in types
+        assert "usage" in types
+        # UsageEvent emitted before StreamStartEvent so ir→p has
+        # pending_usage available for message_start.input_tokens.
+        start_idx = types.index("stream_start")
+        usage_idx = types.index("usage")
+        assert usage_idx < start_idx
+
+    def test_message_start_stream_start_before_usage(self):
+        """StreamStartEvent is emitted before UsageEvent from message_start."""
+        ctx = StreamContext()
+        event = {
+            "type": "message_start",
+            "message": {
+                "id": "msg_abc",
+                "type": "message",
+                "role": "assistant",
+                "content": [],
+                "model": "claude-sonnet-4-20250514",
+                "usage": {"input_tokens": 10, "output_tokens": 0},
+            },
+        }
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(event, context=ctx),
+        )
+        assert events[0]["type"] == "usage"
+        assert events[1]["type"] == "stream_start"
+
+    # --- ContentBlockStartEvent ---
+
+    def test_content_block_start_text_with_context(self):
+        """content_block_start (text) emits ContentBlockStartEvent with context."""
+        ctx = StreamContext()
+        ctx.mark_started()
+        event = {
+            "type": "content_block_start",
+            "index": 0,
+            "content_block": {"type": "text", "text": ""},
+        }
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(event, context=ctx),
+        )
+        block_events = [e for e in events if e["type"] == "content_block_start"]
+        assert len(block_events) == 1
+        assert block_events[0]["block_index"] == 0
+        assert block_events[0]["block_type"] == "text"
+
+    def test_content_block_start_thinking_with_context(self):
+        """content_block_start (thinking) emits ContentBlockStartEvent with context."""
+        ctx = StreamContext()
+        ctx.mark_started()
+        event = {
+            "type": "content_block_start",
+            "index": 0,
+            "content_block": {"type": "thinking", "thinking": ""},
+        }
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(event, context=ctx),
+        )
+        block_events = [e for e in events if e["type"] == "content_block_start"]
+        assert len(block_events) == 1
+        assert block_events[0]["block_index"] == 0
+        assert block_events[0]["block_type"] == "thinking"
+
+    def test_content_block_start_tool_use_with_context(self):
+        """content_block_start (tool_use) emits both ContentBlockStartEvent and ToolCallStartEvent."""
+        ctx = StreamContext()
+        ctx.mark_started()
+        event = {
+            "type": "content_block_start",
+            "index": 1,
+            "content_block": {
+                "type": "tool_use",
+                "id": "toolu_abc",
+                "name": "get_weather",
+                "input": {},
+            },
+        }
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(event, context=ctx),
+        )
+        types = [e["type"] for e in events]
+        assert "content_block_start" in types
+        assert "tool_call_start" in types
+        # ContentBlockStartEvent should come before ToolCallStartEvent
+        block_idx = types.index("content_block_start")
+        tool_idx = types.index("tool_call_start")
+        assert block_idx < tool_idx
+        # Verify ContentBlockStartEvent fields
+        block_event = [e for e in events if e["type"] == "content_block_start"][0]
+        assert block_event["block_index"] == 1
+        assert block_event["block_type"] == "tool_use"
+
+    def test_parallel_tool_calls_get_distinct_tool_call_index(self):
+        """Parallel tool calls get distinct tool_call_index values."""
+        ctx = StreamContext()
+        ctx.mark_started()
+
+        # First: a text block
+        self.converter.stream_response_from_provider(
+            {
+                "type": "content_block_start",
+                "index": 0,
+                "content_block": {"type": "text", "text": ""},
+            },
+            context=ctx,
+        )
+
+        # Second: tool_use block (block_index=1, tool_call_index=0)
+        events1 = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(
+                {
+                    "type": "content_block_start",
+                    "index": 1,
+                    "content_block": {
+                        "type": "tool_use",
+                        "id": "toolu_1",
+                        "name": "get_weather",
+                        "input": {},
+                    },
+                },
+                context=ctx,
+            ),
+        )
+        tc1 = [e for e in events1 if e["type"] == "tool_call_start"][0]
+        assert tc1["tool_call_index"] == 0
+
+        # Delta for first tool call (sequential: deltas come before next start)
+        delta_events1 = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(
+                {
+                    "type": "content_block_delta",
+                    "index": 1,
+                    "delta": {
+                        "type": "input_json_delta",
+                        "partial_json": '{"city":',
+                    },
+                },
+                context=ctx,
+            ),
+        )
+        td1 = [e for e in delta_events1 if e["type"] == "tool_call_delta"][0]
+        assert td1["tool_call_index"] == 0
+
+        # Third: another tool_use block (block_index=2, tool_call_index=1)
+        events2 = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(
+                {
+                    "type": "content_block_start",
+                    "index": 2,
+                    "content_block": {
+                        "type": "tool_use",
+                        "id": "toolu_2",
+                        "name": "get_time",
+                        "input": {},
+                    },
+                },
+                context=ctx,
+            ),
+        )
+        tc2 = [e for e in events2 if e["type"] == "tool_call_start"][0]
+        assert tc2["tool_call_index"] == 1
+
+    def test_content_block_start_updates_context_block_index(self):
+        """content_block_start increments context block index."""
+        ctx = StreamContext()
+        ctx.mark_started()
+        event = {
+            "type": "content_block_start",
+            "index": 0,
+            "content_block": {"type": "text", "text": ""},
+        }
+        self.converter.stream_response_from_provider(event, context=ctx)
+        assert ctx.current_block_index == 0
+
+    # --- ContentBlockEndEvent ---
+
+    def test_content_block_stop_with_context(self):
+        """content_block_stop emits ContentBlockEndEvent with context."""
+        ctx = StreamContext()
+        ctx.mark_started()
+        event = {"type": "content_block_stop", "index": 0}
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(event, context=ctx),
+        )
+        assert len(events) == 1
+        assert events[0]["type"] == "content_block_end"
+        assert events[0]["block_index"] == 0
+
+    def test_content_block_stop_different_index(self):
+        """content_block_stop with different index is preserved."""
+        ctx = StreamContext()
+        ctx.mark_started()
+        event = {"type": "content_block_stop", "index": 2}
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(event, context=ctx),
+        )
+        assert events[0]["block_index"] == 2
+
+    # --- StreamEndEvent ---
+
+    def test_message_stop_emits_stream_end_with_context(self):
+        """message_stop emits StreamEndEvent when context is provided."""
+        ctx = StreamContext()
+        ctx.mark_started()
+        event = {"type": "message_stop"}
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(event, context=ctx),
+        )
+        assert len(events) == 1
+        assert events[0]["type"] == "stream_end"
+        assert ctx.is_ended is True
+
+    # --- Tool call registration in context ---
+
+    def test_tool_call_registered_in_context(self):
+        """Tool call is registered in context when content_block_start (tool_use)."""
+        ctx = StreamContext()
+        ctx.mark_started()
+        event = {
+            "type": "content_block_start",
+            "index": 1,
+            "content_block": {
+                "type": "tool_use",
+                "id": "toolu_abc",
+                "name": "get_weather",
+                "input": {},
+            },
+        }
+        self.converter.stream_response_from_provider(event, context=ctx)
+        assert ctx.get_tool_name("toolu_abc") == "get_weather"
+
+    def test_tool_call_delta_gets_id_from_context(self):
+        """input_json_delta gets tool_call_id from context when available."""
+        ctx = StreamContext()
+        ctx.mark_started()
+        # First register a tool call
+        start_event = {
+            "type": "content_block_start",
+            "index": 1,
+            "content_block": {
+                "type": "tool_use",
+                "id": "toolu_abc",
+                "name": "get_weather",
+                "input": {},
+            },
+        }
+        self.converter.stream_response_from_provider(start_event, context=ctx)
+        # Then send a delta
+        delta_event = {
+            "type": "content_block_delta",
+            "index": 1,
+            "delta": {"type": "input_json_delta", "partial_json": '{"city":'},
+        }
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(delta_event, context=ctx),
+        )
+        delta_events = [e for e in events if e["type"] == "tool_call_delta"]
+        assert len(delta_events) == 1
+        assert delta_events[0]["tool_call_id"] == "toolu_abc"
+
+    # --- Backward compatibility (no context) ---
+
+    def test_no_context_no_stream_start(self):
+        """Without context, message_start does not emit StreamStartEvent."""
+        event = {
+            "type": "message_start",
+            "message": {
+                "id": "msg_abc",
+                "type": "message",
+                "role": "assistant",
+                "content": [],
+                "model": "claude-sonnet-4-20250514",
+                "usage": {"input_tokens": 25, "output_tokens": 0},
+            },
+        }
+        events = cast(list[Any], self.converter.stream_response_from_provider(event))
+        types = [e["type"] for e in events]
+        assert "stream_start" not in types
+        # Usage should still be emitted
+        assert "usage" in types
+
+    def test_no_context_no_content_block_events(self):
+        """Without context, content_block_start (text) produces no events."""
+        event = {
+            "type": "content_block_start",
+            "index": 0,
+            "content_block": {"type": "text", "text": ""},
+        }
+        events = self.converter.stream_response_from_provider(event)
+        assert events == []
+
+    def test_no_context_content_block_stop_ignored(self):
+        """Without context, content_block_stop produces no events."""
+        event = {"type": "content_block_stop", "index": 0}
+        events = self.converter.stream_response_from_provider(event)
+        assert events == []
+
+    def test_no_context_message_stop_ignored(self):
+        """Without context, message_stop produces no events."""
+        event = {"type": "message_stop"}
+        events = self.converter.stream_response_from_provider(event)
+        assert events == []
+
+    def test_no_context_tool_call_delta_empty_id(self):
+        """Without context, tool_call_delta has empty tool_call_id."""
+        event = {
+            "type": "content_block_delta",
+            "index": 1,
+            "delta": {"type": "input_json_delta", "partial_json": '{"city":'},
+        }
+        events = cast(list[Any], self.converter.stream_response_from_provider(event))
+        delta_events = [e for e in events if e["type"] == "tool_call_delta"]
+        assert len(delta_events) == 1
+        assert delta_events[0]["tool_call_id"] == ""
+
+
+class TestStreamResponseToProviderWithContext:
+    """Tests for stream_response_to_provider with StreamContext."""
+
+    def setup_method(self):
+        self.converter = MessagesConverter()
+
+    # --- StreamStartEvent ---
+
+    def test_stream_start_to_message_start(self):
+        """StreamStartEvent produces message_start event."""
+        event = cast(
+            StreamStartEvent,
+            {
+                "type": "stream_start",
+                "response_id": "abc123",
+                "model": "claude-sonnet-4-20250514",
+            },
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
+        assert result["type"] == "message_start"
+        assert result["message"]["id"] == "msg_abc123"
+        assert result["message"]["model"] == "claude-sonnet-4-20250514"
+        assert result["message"]["role"] == "assistant"
+        assert result["message"]["content"] == []
+        assert result["message"]["stop_reason"] is None
+        assert result["message"]["usage"]["input_tokens"] == 0
+        assert result["message"]["usage"]["output_tokens"] == 0
+
+    def test_stream_start_updates_context(self):
+        """StreamStartEvent stores metadata in context."""
+        ctx = StreamContext()
+        event = cast(
+            StreamStartEvent,
+            {
+                "type": "stream_start",
+                "response_id": "abc123",
+                "model": "claude-sonnet-4-20250514",
+            },
+        )
+        self.converter.stream_response_to_provider(event, context=ctx)
+        assert ctx.response_id == "abc123"
+        assert ctx.model == "claude-sonnet-4-20250514"
+        assert ctx.is_started is True
+
+    def test_stream_start_uses_buffered_input_tokens(self):
+        """StreamStartEvent uses real input_tokens from buffered usage."""
+        ctx = StreamContext()
+        ctx.buffer_usage({"prompt_tokens": 42, "completion_tokens": 0})
+        event = cast(
+            StreamStartEvent,
+            {
+                "type": "stream_start",
+                "response_id": "msg_buf",
+                "model": "claude-sonnet-4-20250514",
+            },
+        )
+        result = cast(
+            dict[str, Any],
+            self.converter.stream_response_to_provider(event, context=ctx),
+        )
+        assert result["message"]["usage"]["input_tokens"] == 42
+        assert result["message"]["usage"]["output_tokens"] == 0
+
+    def test_stream_start_without_context(self):
+        """StreamStartEvent works without context."""
+        event = cast(
+            StreamStartEvent,
+            {
+                "type": "stream_start",
+                "response_id": "abc123",
+                "model": "claude-sonnet-4-20250514",
+            },
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
+        assert result["type"] == "message_start"
+        assert result["message"]["id"] == "msg_abc123"
+
+    # --- StreamEndEvent ---
+
+    def test_stream_end_to_message_stop(self):
+        """StreamEndEvent produces message_stop event."""
+        event = cast(StreamEndEvent, {"type": "stream_end"})
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
+        assert result["type"] == "message_stop"
+
+    def test_stream_end_updates_context(self):
+        """StreamEndEvent marks context as ended."""
+        ctx = StreamContext()
+        ctx.mark_started()
+        event = cast(StreamEndEvent, {"type": "stream_end"})
+        self.converter.stream_response_to_provider(event, context=ctx)
+        assert ctx.is_ended is True
+
+    # --- ContentBlockStartEvent ---
+
+    def test_content_block_start_text(self):
+        """ContentBlockStartEvent (text) produces content_block_start."""
+        event = cast(
+            ContentBlockStartEvent,
+            {
+                "type": "content_block_start",
+                "block_index": 0,
+                "block_type": "text",
+            },
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
+        assert result["type"] == "content_block_start"
+        assert result["index"] == 0
+        assert result["content_block"]["type"] == "text"
+        assert result["content_block"]["text"] == ""
+
+    def test_content_block_start_thinking(self):
+        """ContentBlockStartEvent (thinking) produces content_block_start."""
+        event = cast(
+            ContentBlockStartEvent,
+            {
+                "type": "content_block_start",
+                "block_index": 0,
+                "block_type": "thinking",
+            },
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
+        assert result["type"] == "content_block_start"
+        assert result["index"] == 0
+        assert result["content_block"]["type"] == "thinking"
+        assert result["content_block"]["thinking"] == ""
+
+    def test_content_block_start_tool_use_returns_empty(self):
+        """ContentBlockStartEvent (tool_use) returns empty dict (handled by ToolCallStartEvent)."""
+        event = cast(
+            ContentBlockStartEvent,
+            {
+                "type": "content_block_start",
+                "block_index": 1,
+                "block_type": "tool_use",
+            },
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
+        assert result == {}
+
+    def test_content_block_start_updates_context(self):
+        """ContentBlockStartEvent increments context block index."""
+        ctx = StreamContext()
+        ctx.mark_started()
+        event = cast(
+            ContentBlockStartEvent,
+            {
+                "type": "content_block_start",
+                "block_index": 0,
+                "block_type": "text",
+            },
+        )
+        self.converter.stream_response_to_provider(event, context=ctx)
+        assert ctx.current_block_index == 0
+
+    # --- ContentBlockEndEvent ---
+
+    def test_content_block_end(self):
+        """ContentBlockEndEvent produces content_block_stop."""
+        event = cast(
+            ContentBlockEndEvent,
+            {"type": "content_block_end", "block_index": 0},
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
+        assert result["type"] == "content_block_stop"
+        assert result["index"] == 0
+
+    def test_content_block_end_different_index(self):
+        """ContentBlockEndEvent with different index is preserved."""
+        event = cast(
+            ContentBlockEndEvent,
+            {"type": "content_block_end", "block_index": 2},
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
+        assert result["index"] == 2
+
+    # --- Delta events with context index ---
+
+    def test_text_delta_with_context_has_index(self):
+        """TextDeltaEvent includes index when context has block index."""
+        ctx = StreamContext()
+        ctx.mark_started()
+        ctx.next_block_index()  # block_index = 0
+        event = cast(TextDeltaEvent, {"type": "text_delta", "text": "Hello"})
+        result = cast(
+            dict[str, Any],
+            self.converter.stream_response_to_provider(event, context=ctx),
+        )
+        assert result["type"] == "content_block_delta"
+        assert result["index"] == 0
+        assert result["delta"]["text"] == "Hello"
+
+    def test_text_delta_without_context_no_index(self):
+        """TextDeltaEvent without context does not include index."""
+        event = cast(TextDeltaEvent, {"type": "text_delta", "text": "Hello"})
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
+        assert "index" not in result
+
+    def test_reasoning_delta_with_context_has_index(self):
+        """ReasoningDeltaEvent includes index when context has block index."""
+        ctx = StreamContext()
+        ctx.mark_started()
+        ctx.next_block_index()  # block_index = 0
+        event = cast(
+            ReasoningDeltaEvent,
+            {"type": "reasoning_delta", "reasoning": "thinking..."},
+        )
+        result = cast(
+            dict[str, Any],
+            self.converter.stream_response_to_provider(event, context=ctx),
+        )
+        assert result["index"] == 0
+
+    def test_signature_delta_with_context_has_index(self):
+        """ReasoningDeltaEvent (signature) includes index when context has block index."""
+        ctx = StreamContext()
+        ctx.mark_started()
+        ctx.next_block_index()  # block_index = 0
+        event = cast(
+            ReasoningDeltaEvent,
+            {"type": "reasoning_delta", "reasoning": "", "signature": "sig_abc"},
+        )
+        result = cast(
+            dict[str, Any],
+            self.converter.stream_response_to_provider(event, context=ctx),
+        )
+        assert result["index"] == 0
+
+    def test_tool_call_start_with_context_has_index(self):
+        """ToolCallStartEvent includes index when context has block index."""
+        ctx = StreamContext()
+        ctx.mark_started()
+        ctx.next_block_index()  # block_index = 0
+        event = cast(
+            ToolCallStartEvent,
+            {
+                "type": "tool_call_start",
+                "tool_call_id": "toolu_abc",
+                "tool_name": "get_weather",
+            },
+        )
+        result = cast(
+            dict[str, Any],
+            self.converter.stream_response_to_provider(event, context=ctx),
+        )
+        assert result["index"] == 0
+
+    def test_tool_call_delta_with_context_has_index(self):
+        """ToolCallDeltaEvent includes index when context has block index."""
+        ctx = StreamContext()
+        ctx.mark_started()
+        ctx.next_block_index()  # block_index = 0
+        event = cast(
+            ToolCallDeltaEvent,
+            {
+                "type": "tool_call_delta",
+                "tool_call_id": "",
+                "arguments_delta": '{"city":',
+            },
+        )
+        result = cast(
+            dict[str, Any],
+            self.converter.stream_response_to_provider(event, context=ctx),
+        )
+        assert result["index"] == 0
+
+
+class TestStreamBlockTypeTransition:
+    """Tests for #250: synthetic block boundary on content-type transition.
+
+    When IR events from providers that don't emit ContentBlock{Start,End}
+    (OpenAI Chat, OpenAI Responses, Google) transition between reasoning
+    and text deltas, the Anthropic to_provider path must synthesize
+    content_block_stop + content_block_start at the boundary.
+    """
+
+    def setup_method(self):
+        self.converter = MessagesConverter()
+
+    def _run_to_provider(self, events: list[IRStreamEvent]) -> list[dict[str, Any]]:
+        """Run a sequence of IR events through to_provider with context."""
+        ctx = StreamContext()
+        output: list[dict[str, Any]] = []
+        for event in events:
+            result = self.converter.stream_response_to_provider(event, context=ctx)
+            if isinstance(result, list):
+                output.extend(result)
+            elif result:
+                output.append(result)
+        return output
+
+    def test_reasoning_then_text_emits_block_boundary(self):
+        """ReasoningDelta -> TextDelta without block_index gets synthetic
+        content_block_stop + content_block_start between them."""
+        events: list[IRStreamEvent] = [
+            {"type": "stream_start", "response_id": "test-123", "model": "test"},
+            {"type": "reasoning_delta", "reasoning": "Let me think..."},
+            {"type": "reasoning_delta", "reasoning": " about this."},
+            {"type": "text_delta", "text": "The answer is "},
+            {"type": "text_delta", "text": "42."},
+            {"type": "finish", "finish_reason": {"reason": "stop"}},
+            {"type": "stream_end"},
+        ]
+        output = self._run_to_provider(events)
+
+        # Find the key events
+        block_starts = [e for e in output if e.get("type") == "content_block_start"]
+        block_stops = [e for e in output if e.get("type") == "content_block_stop"]
+        deltas = [e for e in output if e.get("type") == "content_block_delta"]
+
+        # Should have 2 block starts: thinking (index=0) and text (index=1)
+        assert len(block_starts) == 2
+        assert block_starts[0]["content_block"]["type"] == "thinking"
+        assert block_starts[0]["index"] == 0
+        assert block_starts[1]["content_block"]["type"] == "text"
+        assert block_starts[1]["index"] == 1
+
+        # Should have a block stop for thinking (index=0) before text starts
+        assert len(block_stops) >= 1
+        assert block_stops[0]["index"] == 0
+
+        # The thinking block stop must come before the text block start
+        stop_pos = output.index(block_stops[0])
+        text_start_pos = output.index(block_starts[1])
+        assert stop_pos < text_start_pos
+
+        # All thinking deltas should have index 0
+        thinking_deltas = [d for d in deltas if d["delta"]["type"] == "thinking_delta"]
+        for d in thinking_deltas:
+            assert d["index"] == 0
+
+        # All text deltas should have index 1
+        text_deltas = [d for d in deltas if d["delta"]["type"] == "text_delta"]
+        for d in text_deltas:
+            assert d["index"] == 1
+
+    def test_text_then_reasoning_emits_block_boundary(self):
+        """TextDelta -> ReasoningDelta gets proper block transition."""
+        events: list[IRStreamEvent] = [
+            {"type": "stream_start", "response_id": "test-123", "model": "test"},
+            {"type": "text_delta", "text": "Hello "},
+            {"type": "reasoning_delta", "reasoning": "Wait, let me reconsider..."},
+            {"type": "finish", "finish_reason": {"reason": "stop"}},
+            {"type": "stream_end"},
+        ]
+        output = self._run_to_provider(events)
+
+        block_starts = [e for e in output if e.get("type") == "content_block_start"]
+        block_stops = [e for e in output if e.get("type") == "content_block_stop"]
+
+        assert len(block_starts) == 2
+        assert block_starts[0]["content_block"]["type"] == "text"
+        assert block_starts[0]["index"] == 0
+        assert block_starts[1]["content_block"]["type"] == "thinking"
+        assert block_starts[1]["index"] == 1
+
+        assert len(block_stops) >= 1
+        assert block_stops[0]["index"] == 0
+
+    def test_reasoning_then_tool_emits_block_boundary(self):
+        """ReasoningDelta -> ToolCallStart gets proper block transition."""
+        events: list[IRStreamEvent] = [
+            {"type": "stream_start", "response_id": "test-123", "model": "test"},
+            {"type": "reasoning_delta", "reasoning": "I need to call a tool..."},
+            {
+                "type": "tool_call_start",
+                "tool_call_id": "toolu_abc",
+                "tool_name": "get_weather",
+            },
+            {
+                "type": "tool_call_delta",
+                "tool_call_id": "toolu_abc",
+                "arguments_delta": '{"city": "NYC"}',
+            },
+            {"type": "finish", "finish_reason": {"reason": "tool_calls"}},
+            {"type": "stream_end"},
+        ]
+        output = self._run_to_provider(events)
+
+        block_starts = [e for e in output if e.get("type") == "content_block_start"]
+        block_stops = [e for e in output if e.get("type") == "content_block_stop"]
+
+        assert len(block_starts) == 2
+        assert block_starts[0]["content_block"]["type"] == "thinking"
+        assert block_starts[0]["index"] == 0
+        assert block_starts[1]["content_block"]["type"] == "tool_use"
+        assert block_starts[1]["index"] == 1
+
+        # Thinking block should be closed before tool_use starts
+        assert len(block_stops) >= 1
+        assert block_stops[0]["index"] == 0
+
+    def test_text_then_tool_emits_block_boundary(self):
+        """TextDelta -> ToolCallStart gets proper block transition."""
+        events: list[IRStreamEvent] = [
+            {"type": "stream_start", "response_id": "test-123", "model": "test"},
+            {"type": "text_delta", "text": "Let me check..."},
+            {
+                "type": "tool_call_start",
+                "tool_call_id": "toolu_abc",
+                "tool_name": "search",
+            },
+            {"type": "finish", "finish_reason": {"reason": "tool_calls"}},
+            {"type": "stream_end"},
+        ]
+        output = self._run_to_provider(events)
+
+        block_starts = [e for e in output if e.get("type") == "content_block_start"]
+        block_stops = [e for e in output if e.get("type") == "content_block_stop"]
+
+        assert len(block_starts) == 2
+        assert block_starts[0]["content_block"]["type"] == "text"
+        assert block_starts[1]["content_block"]["type"] == "tool_use"
+
+        assert len(block_stops) >= 1
+        assert block_stops[0]["index"] == 0
+
+    def test_same_type_consecutive_no_extra_boundary(self):
+        """Multiple TextDeltas without block_index don't create extra boundaries."""
+        events: list[IRStreamEvent] = [
+            {"type": "stream_start", "response_id": "test-123", "model": "test"},
+            {"type": "text_delta", "text": "Hello "},
+            {"type": "text_delta", "text": "world"},
+            {"type": "text_delta", "text": "!"},
+            {"type": "finish", "finish_reason": {"reason": "stop"}},
+            {"type": "stream_end"},
+        ]
+        output = self._run_to_provider(events)
+
+        block_starts = [e for e in output if e.get("type") == "content_block_start"]
+        assert len(block_starts) == 1
+        assert block_starts[0]["content_block"]["type"] == "text"
+
+        text_deltas = [
+            e
+            for e in output
+            if e.get("type") == "content_block_delta"
+            and e["delta"]["type"] == "text_delta"
+        ]
+        assert len(text_deltas) == 3
+        assert all(d["index"] == 0 for d in text_deltas)
+
+    def test_explicit_block_index_bypasses_type_tracking(self):
+        """Events with explicit block_index use that index regardless of type."""
+        events: list[IRStreamEvent] = [
+            {"type": "stream_start", "response_id": "test-123", "model": "test"},
+            {
+                "type": "reasoning_delta",
+                "reasoning": "thinking...",
+                "block_index": 0,
+            },
+            {"type": "text_delta", "text": "hello", "block_index": 1},
+            {"type": "finish", "finish_reason": {"reason": "stop"}},
+            {"type": "stream_end"},
+        ]
+        output = self._run_to_provider(events)
+
+        deltas = [e for e in output if e.get("type") == "content_block_delta"]
+        assert len(deltas) == 2
+        assert deltas[0]["index"] == 0
+        assert deltas[1]["index"] == 1
+
+        # No synthetic block starts should be emitted for explicit indexes
+        block_starts = [e for e in output if e.get("type") == "content_block_start"]
+        assert len(block_starts) == 0
+
+
+class TestStreamingInputTokensFix:
+    """Tests for streaming input_tokens fix (#424)."""
+
+    def setup_method(self):
+        self.converter = MessagesConverter()
+
+    def test_same_format_input_tokens_in_message_start(self):
+        """Anthropic→Anthropic: message_start has correct input_tokens."""
+        ctx = StreamContext()
+
+        # Simulate p→ir→p for a message_start with usage
+        chunk = {
+            "type": "message_start",
+            "message": {
+                "id": "msg_test",
+                "type": "message",
+                "role": "assistant",
+                "content": [],
+                "model": "claude-3",
+                "usage": {"input_tokens": 42, "output_tokens": 0},
+            },
+        }
+        ir_events = self.converter.stream_response_from_provider(chunk, context=ctx)
+
+        # Process each IR event through ir→p
+        results = []
+        for ev in ir_events:
+            out = self.converter.stream_response_to_provider(ev, context=ctx)
+            if isinstance(out, dict) and out:
+                results.append(out)
+
+        # Find message_start in results
+        msg_starts = [r for r in results if r.get("type") == "message_start"]
+        assert len(msg_starts) == 1
+        assert msg_starts[0]["message"]["usage"]["input_tokens"] == 42
+
+    def test_no_usage_returns_zero(self):
+        """Without pending_usage, input_tokens defaults to 0."""
+        ctx = StreamContext()
+
+        from llm_rosetta.types.ir.stream import StreamStartEvent
+
+        start = StreamStartEvent(
+            type="stream_start", response_id="msg_test", model="gpt-4"
+        )
+        result = self.converter.stream_response_to_provider(start, context=ctx)
+        assert isinstance(result, dict)
+        assert result["message"]["usage"]["input_tokens"] == 0
+
+
+class TestStreamingRefusal:
+    """Tests for streaming structured refusal (#432)."""
+
+    def setup_method(self):
+        self.converter = MessagesConverter()
+
+    def test_p_to_ir_streaming_refusal(self):
+        """message_delta with stop_reason=refusal extracts stop_details."""
+        ctx = StreamContext()
+        ctx.mark_started()
+        chunk = {
+            "type": "message_delta",
+            "delta": {
+                "stop_reason": "refusal",
+                "stop_details": {
+                    "type": "refusal",
+                    "category": "bio",
+                    "explanation": "Request declined.",
+                },
+            },
+            "usage": {"output_tokens": 0},
+        }
+        events = cast(
+            list, self.converter.stream_response_from_provider(chunk, context=ctx)
+        )
+        finish_events = [e for e in events if e.get("type") == "finish"]
+        assert len(finish_events) == 1
+        fe = dict(finish_events[0])
+        assert fe["finish_reason"]["reason"] == "refusal"
+        assert fe["provider_metadata"]["refusal_text"] == "Request declined."
+        assert fe["provider_metadata"]["anthropic_refusal_category"] == "bio"
+
+    def test_ir_to_p_streaming_refusal_emits_stop_details(self):
+        """FinishEvent with reason=refusal emits stop_details in message_delta."""
+        ctx = StreamContext()
+        ctx.mark_started()
+        ctx.buffer_usage(
+            {"prompt_tokens": 10, "completion_tokens": 0, "total_tokens": 10}
+        )
+        finish: dict = {
+            "type": "finish",
+            "finish_reason": {"reason": "refusal"},
+            "provider_metadata": {
+                "refusal_text": "Declined.",
+                "anthropic_refusal_category": "cyber",
+            },
+        }
+        result = self.converter.stream_response_to_provider(finish, context=ctx)  # ty: ignore[invalid-argument-type]
+        if isinstance(result, list):
+            deltas = [
+                r
+                for r in result
+                if isinstance(r, dict) and r.get("type") == "message_delta"
+            ]
+        else:
+            deltas = [result] if result.get("type") == "message_delta" else []
+        assert len(deltas) >= 1
+        d = deltas[-1]
+        assert d["delta"]["stop_reason"] == "refusal"
+        assert d["delta"]["stop_details"]["type"] == "refusal"
+        assert d["delta"]["stop_details"]["category"] == "cyber"
+        assert d["delta"]["stop_details"]["explanation"] == "Declined."

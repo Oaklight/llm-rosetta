@@ -210,13 +210,13 @@ class TestOpenAIResponsesShim:
 class TestAnthropicShim:
     """Anthropic: disabled → thinking.type=disabled, effort clamped to [low, max]."""
 
-    cap = DEFAULT_REASONING_CAPS["anthropic"]
+    cap = DEFAULT_REASONING_CAPS["messages"]
 
     def test_disabled_emits_thinking_disabled(self):
         result = apply_reasoning_config(
             cast(ReasoningConfig, {"mode": "disabled"}),
             self.cap,
-            converter_type="anthropic",
+            converter_type="messages",
         )
         assert result["thinking"]["type"] == "disabled"
 
@@ -224,7 +224,7 @@ class TestAnthropicShim:
         result = apply_reasoning_config(
             cast(ReasoningConfig, {"effort": "minimal"}),
             self.cap,
-            converter_type="anthropic",
+            converter_type="messages",
         )
         assert result["output_config"]["effort"] == "low"
 
@@ -232,7 +232,7 @@ class TestAnthropicShim:
         result = apply_reasoning_config(
             cast(ReasoningConfig, {"effort": "xhigh"}),
             self.cap,
-            converter_type="anthropic",
+            converter_type="messages",
         )
         assert result["output_config"]["effort"] == "xhigh"
 
@@ -240,7 +240,7 @@ class TestAnthropicShim:
         result = apply_reasoning_config(
             cast(ReasoningConfig, {"effort": "max"}),
             self.cap,
-            converter_type="anthropic",
+            converter_type="messages",
         )
         assert result["output_config"]["effort"] == "max"
 
@@ -248,7 +248,7 @@ class TestAnthropicShim:
         result = apply_reasoning_config(
             cast(ReasoningConfig, {"effort": "high"}),
             self.cap,
-            converter_type="anthropic",
+            converter_type="messages",
         )
         assert result["output_config"]["effort"] == "high"
 
@@ -357,16 +357,16 @@ class TestSummaryIncludeThoughtsCrossFormat:
     def test_summary_to_anthropic_display_summarized(self):
         result = apply_reasoning_config(
             cast(ReasoningConfig, {"effort": "high", "summary": "concise"}),
-            DEFAULT_REASONING_CAPS["anthropic"],
-            converter_type="anthropic",
+            DEFAULT_REASONING_CAPS["messages"],
+            converter_type="messages",
         )
         assert result["thinking"]["display"] == "summarized"
 
     def test_summary_none_to_anthropic_display_omitted(self):
         result = apply_reasoning_config(
             cast(ReasoningConfig, {"effort": "high", "summary": "none"}),
-            DEFAULT_REASONING_CAPS["anthropic"],
-            converter_type="anthropic",
+            DEFAULT_REASONING_CAPS["messages"],
+            converter_type="messages",
         )
         assert result["thinking"]["display"] == "omitted"
 
@@ -381,16 +381,16 @@ class TestSummaryIncludeThoughtsCrossFormat:
     def test_include_thoughts_true_to_anthropic(self):
         result = apply_reasoning_config(
             cast(ReasoningConfig, {"effort": "high", "include_thoughts": True}),
-            DEFAULT_REASONING_CAPS["anthropic"],
-            converter_type="anthropic",
+            DEFAULT_REASONING_CAPS["messages"],
+            converter_type="messages",
         )
         assert result["thinking"]["display"] == "summarized"
 
     def test_include_thoughts_false_to_anthropic(self):
         result = apply_reasoning_config(
             cast(ReasoningConfig, {"effort": "high", "include_thoughts": False}),
-            DEFAULT_REASONING_CAPS["anthropic"],
-            converter_type="anthropic",
+            DEFAULT_REASONING_CAPS["messages"],
+            converter_type="messages",
         )
         assert result["thinking"]["display"] == "omitted"
 
@@ -435,7 +435,7 @@ class TestCustomShim:
         result = apply_reasoning_config(
             cast(ReasoningConfig, {"effort": "minimal"}),
             custom,
-            converter_type="anthropic",
+            converter_type="messages",
         )
         assert result["output_config"]["effort"] == "low"
 
@@ -462,7 +462,7 @@ class TestCustomShim:
         result = apply_reasoning_config(
             cast(ReasoningConfig, {"mode": "enabled", "budget_tokens": 4096}),
             custom,
-            converter_type="anthropic",
+            converter_type="messages",
         )
         assert result["thinking"]["type"] == "adaptive"
 
@@ -482,7 +482,7 @@ class TestCustomShim:
                 {"mode": "auto", "effort": "high", "budget_tokens": 4096},
             ),
             custom,
-            converter_type="anthropic",
+            converter_type="messages",
         )
         assert result["thinking"]["type"] == "adaptive"
 
@@ -500,7 +500,7 @@ class TestCustomShim:
         result = apply_reasoning_config(
             cast(ReasoningConfig, {"mode": "enabled"}),
             custom,
-            converter_type="anthropic",
+            converter_type="messages",
             max_tokens=10000,
         )
         assert result["thinking"]["type"] == "enabled"
@@ -519,7 +519,7 @@ class TestCustomShim:
         result = apply_reasoning_config(
             cast(ReasoningConfig, {"mode": "enabled"}),
             custom,
-            converter_type="anthropic",
+            converter_type="messages",
             max_tokens=2000,
         )
         assert result["thinking"]["type"] == "enabled"
@@ -538,7 +538,7 @@ class TestCustomShim:
         result = apply_reasoning_config(
             cast(ReasoningConfig, {"mode": "enabled"}),
             custom,
-            converter_type="anthropic",
+            converter_type="messages",
             max_tokens=2000,
         )
         assert result["thinking"]["type"] == "enabled"
@@ -557,7 +557,7 @@ class TestCustomShim:
         result = apply_reasoning_config(
             cast(ReasoningConfig, {"mode": "enabled"}),
             custom,
-            converter_type="anthropic",
+            converter_type="messages",
             max_tokens=1024,
         )
         assert result["thinking"]["type"] == "adaptive"
@@ -574,7 +574,7 @@ class TestCustomShim:
         result = apply_reasoning_config(
             cast(ReasoningConfig, {"mode": "enabled"}),
             custom,
-            converter_type="anthropic",
+            converter_type="messages",
             max_tokens=10000,
         )
         assert result["thinking"]["type"] == "adaptive"
@@ -592,7 +592,7 @@ class TestCustomShim:
         result = apply_reasoning_config(
             cast(ReasoningConfig, {"mode": "enabled"}),
             custom,
-            converter_type="anthropic",
+            converter_type="messages",
         )
         assert result["thinking"]["type"] == "adaptive"
 
@@ -624,7 +624,7 @@ class TestCustomShim:
         result = apply_reasoning_config(
             cast(ReasoningConfig, {"mode": "enabled", "effort": "medium"}),
             custom,
-            converter_type="anthropic",
+            converter_type="messages",
             max_tokens=8192,
         )
         assert "output_config" not in result

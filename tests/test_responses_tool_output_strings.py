@@ -44,7 +44,7 @@ def _request(output):
         "ordinary text",
     ],
 )
-@pytest.mark.parametrize("target", ["openai_chat", "anthropic", "google"])
+@pytest.mark.parametrize("target", ["openai_chat", "messages", "google"])
 def test_string_output_keeps_its_type_and_exact_contents(output, target):
     request = _request(output)
     original = copy.deepcopy(request)

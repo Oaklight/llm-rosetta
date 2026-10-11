@@ -99,11 +99,11 @@ class TestLoadProviders:
             "alcf--metis",
             "alcf--minerva",
             "alcf--sophia",
-            "anthropic",
-            "argo--anthropic",
+            "anthropic--messages",
+            "argo--messages",
             "argo--chat_completions",
             "argo--open_responses",
-            "asksage--anthropic",
+            "asksage--messages",
             "asksage--chat_completions",
             "asksage--google_generate",
             "asksage--open_responses",
@@ -112,12 +112,12 @@ class TestLoadProviders:
             "google--google_generate",
             "google--google_interactions",
             "kilo--chat_completions",
-            "minimax--anthropic",
+            "minimax--messages",
             "minimax--chat_completions",
             "moonshot",
             "openai--chat_completions",
             "openai--open_responses",
-            "openrouter--anthropic",
+            "openrouter--messages",
             "openrouter--chat_completions",
             "openrouter--open_responses",
             "qwen",
@@ -137,10 +137,10 @@ class TestLoadProviders:
         for name in (
             "openai--chat_completions",
             "openrouter--chat_completions",
-            "openrouter--anthropic",
+            "openrouter--messages",
             "openrouter--open_responses",
             "kilo--chat_completions",
-            "anthropic",
+            "anthropic--messages",
             "google--google_generate",
             "deepseek--chat_completions",
             "deepseek--open_responses",
@@ -150,7 +150,7 @@ class TestLoadProviders:
             "qwen",
             "moonshot",
             "minimax--chat_completions",
-            "minimax--anthropic",
+            "minimax--messages",
             "zhipu",
             "google--google_interactions",
             "alcf--sophia",
@@ -159,7 +159,7 @@ class TestLoadProviders:
             "typesafe",
             "asksage--chat_completions",
             "asksage--open_responses",
-            "asksage--anthropic",
+            "asksage--messages",
             "asksage--google_generate",
         ):
             shim = get_shim(name)
@@ -169,8 +169,7 @@ class TestLoadProviders:
         # Legacy spellings are deprecated aliases of the same shim (#917).
         for legacy, canonical in (
             ("openai", "openai--chat_completions"),
-            ("google_generate", "google--google_generate"),
-            ("google_interactions", "google--google_interactions"),
+            ("anthropic", "anthropic--messages"),
             ("deepseek--chat_completions", "deepseek--chat_completions"),
             ("volcengine--open_responses", "volcengine--open_responses"),
         ):
@@ -324,7 +323,7 @@ class TestLoadProviders:
     def test_asksage_anthropic_no_transforms(self):
         """AskSage Anthropic shim should have no transforms."""
         load_providers()
-        s = get_shim("asksage--anthropic")
+        s = get_shim("asksage--messages")
         assert s is not None
         assert len(s.post_ir_transforms) == 0
         assert len(s.pre_ir_transforms) == 0
@@ -343,10 +342,10 @@ class TestLoadProviders:
             "openai--chat_completions": "chat_completions",
             "openai--open_responses": "open_responses",
             "openrouter--chat_completions": "chat_completions",
-            "openrouter--anthropic": "anthropic",
+            "openrouter--messages": "messages",
             "openrouter--open_responses": "open_responses",
             "kilo--chat_completions": "chat_completions",
-            "anthropic": "anthropic",
+            "anthropic--messages": "messages",
             "google--google_generate": "google_generate",
             "google--google_interactions": "google_interactions",
             "deepseek--chat_completions": "chat_completions",
@@ -354,7 +353,7 @@ class TestLoadProviders:
             "argo--chat_completions": "chat_completions",
             "argo--open_responses": "open_responses",
             "minimax--chat_completions": "chat_completions",
-            "minimax--anthropic": "anthropic",
+            "minimax--messages": "messages",
             "moonshot": "chat_completions",
             "qwen": "chat_completions",
             "volcengine--chat_completions": "chat_completions",
@@ -367,7 +366,7 @@ class TestLoadProviders:
             "typesafe": "decision",
             "asksage--chat_completions": "chat_completions",
             "asksage--open_responses": "open_responses",
-            "asksage--anthropic": "anthropic",
+            "asksage--messages": "messages",
             "asksage--google_generate": "google_generate",
         }
         for name, base in expected.items():
@@ -379,12 +378,12 @@ class TestLoadProviders:
 
     # Shims that intentionally have no public logo
     _LOGO_EXEMPT = {
-        "argo--anthropic",
+        "argo--messages",
         "argo--chat_completions",
         "argo--open_responses",
         "asksage--chat_completions",
         "asksage--open_responses",
-        "asksage--anthropic",
+        "asksage--messages",
         "asksage--google_generate",
         "typesafe",
     }
@@ -448,7 +447,7 @@ class TestLoadProviders:
         d = tmp_path / "nomm"
         d.mkdir()
         (d / "provider.yaml").write_text(
-            "name: nomm\nbase: anthropic\nmultimodal_tool_result: false\n"
+            "name: nomm\nbase: messages\nmultimodal_tool_result: false\n"
         )
         shims = load_providers_from_dir(tmp_path)
         assert len(shims) == 1

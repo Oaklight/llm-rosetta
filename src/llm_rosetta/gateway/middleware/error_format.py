@@ -30,6 +30,9 @@ _PROVIDER_FORMAT_MAP: dict[str, str] = {
     "chat_completions": "openai",
     "openai_responses": "openai",
     "open_responses": "openai",
+    # ``messages`` is the canonical provider type for the Anthropic Messages
+    # standard; it maps to the vendor-shaped ``anthropic`` *label* (kept as-is).
+    "messages": "anthropic",
     "anthropic": "anthropic",
     "google": "google",
     "google_generate": "google",

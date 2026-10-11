@@ -126,7 +126,7 @@ class TestSanitizationInConverters:
         assert "\n" not in result["tool_call_id"]
 
     def test_anthropic_tool_call_sanitized(self):
-        from llm_rosetta.converters.anthropic.tool_ops import AnthropicToolOps
+        from llm_rosetta.converters.messages.tool_ops import MessagesToolOps
 
         ir_tool_call = {
             "type": "tool_call",
@@ -135,19 +135,19 @@ class TestSanitizationInConverters:
             "tool_input": {"x": 1},
             "tool_type": "function",
         }
-        result = AnthropicToolOps.ir_tool_call_to_p(ir_tool_call)  # ty: ignore[invalid-argument-type]
+        result = MessagesToolOps.ir_tool_call_to_p(ir_tool_call)  # ty: ignore[invalid-argument-type]
         assert len(result["id"]) <= 64
         assert re.match(r"^[a-zA-Z0-9_-]+$", result["id"])
 
     def test_anthropic_tool_result_sanitized(self):
-        from llm_rosetta.converters.anthropic.tool_ops import AnthropicToolOps
+        from llm_rosetta.converters.messages.tool_ops import MessagesToolOps
 
         ir_tool_result = {
             "type": "tool_result",
             "tool_call_id": "has spaces and.dots",
             "result": [{"type": "text", "text": "ok"}],
         }
-        result = AnthropicToolOps.ir_tool_result_to_p(ir_tool_result)  # ty: ignore[invalid-argument-type]
+        result = MessagesToolOps.ir_tool_result_to_p(ir_tool_result)  # ty: ignore[invalid-argument-type]
         assert result["tool_use_id"] == "has_spaces_and_dots"
 
     def test_openai_chat_tool_call_result_ids_match(self):

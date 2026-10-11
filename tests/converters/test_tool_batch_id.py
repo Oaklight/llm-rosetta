@@ -235,7 +235,7 @@ class TestCrossFormatGrouping:
 
     def test_chat_to_anthropic_groups_tool_results(self):
         body = self._chat_request_with_parallel_tools(3)
-        result = ConversionPipeline("openai_chat", "anthropic").convert_request(body)
+        result = ConversionPipeline("openai_chat", "messages").convert_request(body)
         messages = result["messages"]
         roles = [m["role"] for m in messages]
         assert roles == ["user", "assistant", "user"]
@@ -293,7 +293,7 @@ class TestCrossFormatGrouping:
                 {"role": "tool", "tool_call_id": "call_b", "content": "result_b"},
             ],
         }
-        result = ConversionPipeline("openai_chat", "anthropic").convert_request(body)
+        result = ConversionPipeline("openai_chat", "messages").convert_request(body)
         messages = result["messages"]
         roles = [m["role"] for m in messages]
         assert roles == ["user", "assistant", "user", "assistant", "user"]
@@ -309,9 +309,9 @@ class TestCrossFormatGrouping:
 
     def test_backward_compat_ir_without_batch_id(self):
         """IR messages without batch_id should still merge by adjacency."""
-        from llm_rosetta.converters.anthropic import AnthropicConverter
+        from llm_rosetta.converters.messages import MessagesConverter
 
-        converter = AnthropicConverter()
+        converter = MessagesConverter()
         ir_messages = [
             _user("hi"),
             _assistant_with_tools("c1", "c2"),
@@ -331,7 +331,7 @@ class TestCrossFormatGrouping:
     @pytest.mark.parametrize("n_calls", [1, 2, 3, 5])
     def test_chat_to_anthropic_various_counts(self, n_calls):
         body = self._chat_request_with_parallel_tools(n_calls)
-        result = ConversionPipeline("openai_chat", "anthropic").convert_request(body)
+        result = ConversionPipeline("openai_chat", "messages").convert_request(body)
         messages = result["messages"]
         roles = [m["role"] for m in messages]
         assert roles == ["user", "assistant", "user"]

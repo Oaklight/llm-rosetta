@@ -1342,10 +1342,10 @@ class TestDeferredStreamEnd:
         Verifies that message_delta (with stop_reason) and message_stop
         are present — the exact bug reported in #838.
         """
-        from llm_rosetta.converters.anthropic import AnthropicConverter
+        from llm_rosetta.converters.messages import MessagesConverter
 
         oc = ChatCompletionsConverter()
-        ac = AnthropicConverter()
+        ac = MessagesConverter()
         from_ctx = oc.create_stream_context()
         to_ctx = ac.create_stream_context()
 
