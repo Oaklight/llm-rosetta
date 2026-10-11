@@ -60,6 +60,23 @@ state = {
 }
 ```
 
+### 多模态（`images[]`）
+
+System One 家族（Cloudflare Clef、classifier.dev）在请求上扩展了一个顶层
+`images` 数组，元素为内联 base64 data URL。`TypeSafeDecisionConverter` 把它
+映射到 IR 的 `state` content parts —— 文本 part 拼进 `state`，图片 part 变成
+`images`（入方向反向）：
+
+```python
+state = [
+    {"type": "text", "text": "检查这张照片中的商品。"},
+    {"type": "image", "image_data": {"media_type": "image/png", "data": "..."}},
+]
+```
+
+嵌在**结构化** `state` dict 里的图片不会携带（没有位置 key 可回填）——请把图片
+放在顶层 part 列表里。
+
 ## IR 类型
 
 ```python
