@@ -380,3 +380,30 @@ class TestMultimodal:
         ir = converter.request_from_provider(req)
         _, warnings = converter.request_to_provider(ir, context=ConversionContext())
         assert any("embedded in a structured state" in w for w in warnings)
+
+    def test_images_only_without_state_key(self, converter):
+        req = {"model": "m", "questions": {}, "images": ["data:image/png;base64,AA"]}
+        ir = converter.request_from_provider(req)
+        assert ir["state"] == [
+            {"type": "image", "image_url": "data:image/png;base64,AA"}
+        ]
+
+    def test_images_bare_string_not_char_split(self, converter):
+        req = {
+            "model": "m",
+            "state": "look",
+            "images": "data:image/png;base64,AA",
+            "questions": {},
+        }
+        ir = converter.request_from_provider(req)
+        assert ir["state"] == [
+            {"type": "text", "text": "look"},
+            {"type": "image", "image_url": "data:image/png;base64,AA"},
+        ]
+
+    def test_image_without_data_warns_and_omitted(self, converter):
+        ir = {"model": "m", "state": [{"type": "image"}], "questions": {}}
+        wire, warnings = converter.request_to_provider(ir)
+        assert wire["state"] == ""
+        assert "images" not in wire
+        assert any("neither image_url nor image_data" in w for w in warnings)

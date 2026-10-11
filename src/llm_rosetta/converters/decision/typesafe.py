@@ -79,7 +79,9 @@ class TypeSafeDecisionConverter(BaseDecisionConverter):
         return {
             "model": provider_request["model"],
             "state": _state_from_wire(
-                provider_request["state"], provider_request.get("images")
+                provider_request.get("state"),
+                provider_request.get("images"),
+                context.warnings,
             ),
             "questions": questions,
         }
@@ -153,14 +155,16 @@ def _is_image_part(value: Any) -> bool:
     return isinstance(value, dict) and value.get("type") == "image"
 
 
-def _image_to_data_url(part: Mapping[str, Any]) -> str:
-    """IR image part → an inline base64 data URL for the System One ``images``."""
+def _image_to_data_url(part: Mapping[str, Any]) -> str | None:
+    """IR image part → an inline base64 data URL, or ``None`` if it has no data."""
     url = part.get("image_url")
     if url:
         return url
-    data = part.get("image_data") or {}
+    data = part.get("image_data")
+    if not data or not data.get("data"):
+        return None
     media = data.get("media_type", "image/jpeg")
-    return f"data:{media};base64,{data.get('data', '')}"
+    return f"data:{media};base64,{data['data']}"
 
 
 def _state_to_wire(state: Any, warnings: list[str]) -> tuple[Any, list[str]]:
@@ -179,7 +183,13 @@ def _state_to_wire(state: Any, warnings: list[str]) -> tuple[Any, list[str]]:
         images: list[str] = []
         for part in state:
             if _is_image_part(part):
-                images.append(_image_to_data_url(part))
+                url = _image_to_data_url(part)
+                if url is None:
+                    warnings.append(
+                        "Image part has neither image_url nor image_data; omitted"
+                    )
+                else:
+                    images.append(url)
             elif isinstance(part, dict) and part.get("type") == "text":
                 texts.append(str(part.get("text", "")))
             else:
@@ -208,7 +218,7 @@ def _strip_images(value: Any, warnings: list[str]) -> Any:
     return value
 
 
-def _state_from_wire(state: Any, images: Any) -> Any:
+def _state_from_wire(state: Any, images: Any, warnings: list[str]) -> Any:
     """TypeSafe ``state`` (+ optional ``images``) → IR state.
 
     With ``images`` present the IR state is a content-part list (a text part for
@@ -217,6 +227,13 @@ def _state_from_wire(state: Any, images: Any) -> Any:
     ``list`` for content parts.
     """
     if images:
+        if isinstance(images, str):
+            images = [images]
+        if not isinstance(images, list):
+            warnings.append(
+                f"Unsupported 'images' value ({type(images).__name__}); ignored"
+            )
+            images = []
         parts: list[dict[str, Any]] = []
         if state not in (None, "", {}):
             text = (
@@ -226,7 +243,8 @@ def _state_from_wire(state: Any, images: Any) -> Any:
             )
             parts.append({"type": "text", "text": text})
         parts.extend({"type": "image", "image_url": str(img)} for img in images)
-        return parts
+        if parts:
+            return parts
     if isinstance(state, list):
         return {"items": state}
     return state
