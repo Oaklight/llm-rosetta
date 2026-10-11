@@ -22,7 +22,7 @@ from typing import Any, Literal
 from ..types.ir.configs import IREffort, IRMode  # re-exported
 from llm_rosetta.provider_names import (
     LEGACY_PROVIDER_ALIASES,
-    normalize_provider_name,
+    canonical_provider_name,
 )
 from llm_rosetta.transforms import IRTransform, Transform
 
@@ -478,10 +478,14 @@ def register_shim(shim: ProviderShim) -> None:
 
 
 def unregister_shim(name: str) -> ProviderShim | None:
-    """Remove and return a shim by name.  Returns ``None`` if not found."""
+    """Remove and return a shim by name.  Returns ``None`` if not found.
+
+    The exact name is tried first; only if that misses is *name* resolved to
+    its canonical spelling.  This internal lookup never warns.
+    """
     shim = _SHIM_REGISTRY.pop(name, None)
     if shim is None:
-        shim = _SHIM_REGISTRY.pop(normalize_provider_name(name), None)
+        shim = _SHIM_REGISTRY.pop(canonical_provider_name(name), None)
     if shim is not None:
         # Drop any canonical alias that pointed at the removed shim.
         for key in [k for k, v in _SHIM_REGISTRY.items() if v is shim]:
@@ -494,15 +498,16 @@ def get_shim(name: str) -> ProviderShim | None:
 
     The exact name is tried first, so a shim whose name is itself a legacy
     alias (a plugin case) is reachable under that name.  Only if there is no
-    exact match is *name* normalised to canonical and looked up again, keeping
-    a shim registered under its canonical name reachable via a legacy alias
-    (e.g. ``"google"`` → ``"google_generate"``, or the OpenAI Responses profile
-    ``"openai_responses"`` → ``"openai--open_responses"``).
+    exact match is *name* resolved to its canonical spelling and looked up
+    again, keeping a shim registered under its canonical name reachable via a
+    legacy alias (e.g. ``"google"`` → ``"google_generate"``, or the OpenAI
+    Responses profile ``"openai_responses"`` → ``"openai--open_responses"``).
+    This is an internal lookup and never warns.
     """
     shim = _SHIM_REGISTRY.get(name)
     if shim is not None:
         return shim
-    return _SHIM_REGISTRY.get(normalize_provider_name(name))
+    return _SHIM_REGISTRY.get(canonical_provider_name(name))
 
 
 def resolve_shim(shim: ProviderShim | str | None) -> ProviderShim | None:
@@ -530,9 +535,10 @@ def resolve_base(name: str) -> str:
     a legacy alias resolves to *its* declared base rather than being rewritten
     (the OpenAI Responses profile ``"openai_responses"`` now normalises to the
     ``"openai--open_responses"`` shim, whose base is ``"open_responses"``).
-    Otherwise legacy *name* inputs are normalised
+    Otherwise legacy *name* inputs are resolved
     to canonical spellings (see
-    :func:`llm_rosetta.provider_names.normalize_provider_name`).  A shim's
+    :func:`llm_rosetta.provider_names.canonical_provider_name`); this is an
+    internal lookup and never warns.  A shim's
     declared ``base`` is returned as-is; callers that need a canonical provider
     type normalise the result themselves.  If the normalised *name* is already
     a known base type (e.g. ``"chat_completions"``), it is returned unchanged.
@@ -542,7 +548,7 @@ def resolve_base(name: str) -> str:
     shim = _SHIM_REGISTRY.get(name)
     if shim is not None:
         return shim.base
-    name = normalize_provider_name(name)
+    name = canonical_provider_name(name)
     if name in _BASE_TYPES:
         return name
     shim = _SHIM_REGISTRY.get(name)

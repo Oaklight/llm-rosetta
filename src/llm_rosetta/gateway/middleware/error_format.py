@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from llm_rosetta._vendor.httpserver import JSONResponse, Response
 
-from llm_rosetta.provider_names import normalize_provider_name
+from llm_rosetta.provider_names import canonical_provider_name
 
 # ---------------------------------------------------------------------------
 # Path → API format detection (single mapping table)
@@ -57,7 +57,7 @@ def detect_api_format_from_provider(source_provider: str) -> str:
         One of ``"openai"``, ``"anthropic"``, or ``"google"``.
         Defaults to ``"openai"`` for unknown provider types.
     """
-    return _PROVIDER_FORMAT_MAP.get(normalize_provider_name(source_provider), "openai")
+    return _PROVIDER_FORMAT_MAP.get(canonical_provider_name(source_provider), "openai")
 
 
 # ---------------------------------------------------------------------------

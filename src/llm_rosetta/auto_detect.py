@@ -7,12 +7,17 @@ Utility functions for auto-detecting LLM provider request body formats
 
 from typing import Any, Literal
 
-from .provider_names import normalize_provider_name
+from .provider_names import (
+    canonical_provider_name,
+    warn_legacy_provider_names,
+)
 
 # Canonical provider/format names.  Legacy spellings are mapped onto these by
-# :func:`llm_rosetta.provider_names.normalize_provider_name` at every public
-# boundary; see that module for the single alias table.  Legacy entries are
-# kept in the union for backward-compatible type hints.
+# :func:`llm_rosetta.provider_names.canonical_provider_name` at every internal
+# lookup, after the public boundary (:func:`convert` / :func:`convert_response`
+# / :class:`~llm_rosetta.pipeline.ConversionPipeline`) has emitted the single
+# deprecation warning; see that module for the single alias table.  Legacy
+# entries are kept in the union for backward-compatible type hints.
 ProviderType = Literal[
     "chat_completions",
     "openai_chat",  # legacy alias of "chat_completions"
@@ -199,7 +204,8 @@ def get_converter_for_provider(provider: str):
     """Get the corresponding converter for a provider type or shim name.
 
     Legacy provider names are normalised to their canonical spelling first
-    (see :func:`llm_rosetta.provider_names.normalize_provider_name`).
+    (see :func:`llm_rosetta.provider_names.canonical_provider_name`); this is
+    an internal lookup and never warns.
     Converter instances are cached — the same object is returned for the
     same resolved base provider.  This is safe because converters are
     stateless (all per-request state lives in ``ConversionContext``).
@@ -213,7 +219,7 @@ def get_converter_for_provider(provider: str):
     Raises:
         ValueError: If the provider is not a known type or shim name.
     """
-    provider = normalize_provider_name(provider)
+    provider = canonical_provider_name(provider)
     # The OpenAI Responses profile shim shares the base converter (its traits
     # come from the shim's ``context.options``, not a subclass).  Fold it onto
     # the base so both spellings return the same cached instance, and so a
@@ -247,7 +253,7 @@ def get_converter_for_provider(provider: str):
 
     # Resolve through shim registry.  A shim's declared ``base`` may itself be
     # a legacy spelling, so normalise it before the map lookup.
-    base = normalize_provider_name(resolve_base(provider))
+    base = canonical_provider_name(resolve_base(provider))
     if base in converter_map:
         instance = converter_map[base]()
         _converter_cache[provider] = instance
@@ -261,9 +267,13 @@ def _detect_source(
     source_body: dict[str, Any],
     source_provider: ProviderType | str | None,
 ) -> str:
-    """Detect or validate the source provider, raising on failure."""
+    """Detect or validate the source provider, raising on failure.
+
+    This is an internal helper; it never warns (the public :func:`convert`
+    boundary warns for a user-supplied legacy name before delegating here).
+    """
     if source_provider is not None:
-        return normalize_provider_name(str(source_provider))
+        return canonical_provider_name(str(source_provider))
     detected = detect_provider(source_body)
     if detected is None:
         raise ValueError(
@@ -322,8 +332,13 @@ def convert(
     from .pipeline import ConversionPipeline
     from .shims import get_shim
 
+    # Public boundary: emit one warning per distinct user-supplied legacy
+    # name, attributed to the caller of ``convert``.  Every lookup below uses
+    # the canonical form, so no duplicate or mis-attributed warnings fire.
+    warn_legacy_provider_names(source_provider, target_provider)
+
     src = _detect_source(source_body, source_provider)
-    tgt = normalize_provider_name(str(target_provider))
+    tgt = canonical_provider_name(str(target_provider))
 
     # Resolve shims from the *raw* names: a legacy spelling such as
     # ``openai_responses`` (aliased to the ``openai--open_responses`` shim, a
@@ -381,8 +396,12 @@ def convert_response(
     from .pipeline import ConversionPipeline
     from .shims import get_shim
 
-    src = normalize_provider_name(str(source_provider))
-    tgt = normalize_provider_name(str(target_provider))
+    # Public boundary: one warning per distinct user-supplied legacy name,
+    # attributed to the caller of ``convert_response`` (see ``convert``).
+    warn_legacy_provider_names(source_provider, target_provider)
+
+    src = canonical_provider_name(str(source_provider))
+    tgt = canonical_provider_name(str(target_provider))
 
     pipeline = ConversionPipeline(
         src,

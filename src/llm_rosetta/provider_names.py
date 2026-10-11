@@ -5,7 +5,10 @@ provider or format names into their canonical spelling.  Every boundary
 that accepts a provider/format name from the outside world (gateway
 JSONC config, request auto-detection, library ``source_provider`` /
 ``target_provider`` arguments, shim resolution) routes the name through
-:func:`normalize_provider_name` before comparing it as a string.
+:func:`canonical_provider_name` before comparing it as a string.  Public
+entry points emit the deprecation warning themselves via
+:func:`warn_legacy_provider_names` (or :func:`normalize_provider_name` for
+direct callers); internal lookups stay silent.
 
 The canonical names are the ones understood internally; legacy names stay
 accepted forever for backward compatibility but emit a
@@ -63,8 +66,37 @@ LEGACY_PROVIDER_ALIASES: dict[str, str] = {
 }
 
 
-def normalize_provider_name(name: str) -> str:
+def canonical_provider_name(name: str) -> str:
     """Resolve a legacy provider/format name to its canonical spelling.
+
+    This is the pure, non-warning lookup.  Use it for internal lookups and
+    after a public boundary has already emitted the deprecation warning, so
+    a single legacy input does not produce a cascade of warnings through the
+    call stack.  Callers that accept a name from the outside world and want
+    the deprecation signal should use :func:`normalize_provider_name`.
+
+    Args:
+        name: Provider type, shim name, or format identifier.
+
+    Returns:
+        The canonical name if *name* is a known legacy alias, otherwise
+        *name* unchanged (canonical or unknown names pass through).
+
+    Examples:
+        >>> canonical_provider_name("openai-responses")
+        'openai--open_responses'
+        >>> canonical_provider_name("openai_chat")
+        'chat_completions'
+    """
+    return LEGACY_PROVIDER_ALIASES.get(name, name)
+
+
+def normalize_provider_name(name: str) -> str:
+    """Resolve a legacy provider/format name and warn when it is deprecated.
+
+    Public helper for callers that accept a provider/format name directly
+    from the outside world.  Internally, prefer :func:`canonical_provider_name`
+    so a boundary that has already warned does not warn again.
 
     Args:
         name: Provider type, shim name, or format identifier.
@@ -74,8 +106,9 @@ def normalize_provider_name(name: str) -> str:
         *name* unchanged (canonical or unknown names pass through).
 
     Warns:
-        DeprecationWarning: When *name* is a known legacy alias.  The
-            message names the canonical replacement.
+        DeprecationWarning: When *name* is a known legacy alias, attributed
+            to the caller's frame.  The message names the canonical
+            replacement.
 
     Examples:
         >>> normalize_provider_name("openai-responses")
@@ -94,4 +127,40 @@ def normalize_provider_name(name: str) -> str:
     return canonical
 
 
-__all__ = ["LEGACY_PROVIDER_ALIASES", "normalize_provider_name"]
+def warn_legacy_provider_names(*names: str | None) -> None:
+    """Emit one :class:`DeprecationWarning` per distinct legacy *name*.
+
+    Public boundaries (:func:`llm_rosetta.convert`,
+    :func:`llm_rosetta.convert_response`,
+    :class:`llm_rosetta.ConversionPipeline`) call this with the names the
+    user supplied, then resolve them with :func:`canonical_provider_name`.
+    A name supplied in two roles (e.g. the same legacy spelling as both
+    ``source_provider`` and ``target_provider``) warns only once.
+
+    ``stacklevel=3`` attributes the warning to the caller of the public
+    boundary: :func:`warnings.warn` → this helper → boundary → user frame.
+
+    Args:
+        *names: Provider/format names supplied by the user.  ``None``
+            entries are ignored.
+    """
+    seen: set[str] = set()
+    for name in names:
+        if name is None or name in seen:
+            continue
+        seen.add(name)
+        canonical = LEGACY_PROVIDER_ALIASES.get(name)
+        if canonical is not None:
+            warnings.warn(
+                f"Provider name {name!r} is deprecated; use {canonical!r} instead.",
+                DeprecationWarning,
+                stacklevel=3,
+            )
+
+
+__all__ = [
+    "LEGACY_PROVIDER_ALIASES",
+    "canonical_provider_name",
+    "normalize_provider_name",
+    "warn_legacy_provider_names",
+]

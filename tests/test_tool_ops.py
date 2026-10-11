@@ -31,11 +31,27 @@ IR_RESULT = {
 }
 
 ALL_PROVIDERS = [
-    "openai_chat",
-    "openai_responses",
     "anthropic",
-    "google",
+    "google_generate",
     "google_interactions",
+    "chat_completions",
+    "open_responses",
+]
+
+# Deprecated spellings still accepted by the convenience API; each maps to the
+# canonical name it resolves to.  All are removed in 0.16.0 (#919 / #921).
+DEPRECATED_ALIASES = [
+    ("openai_chat", "chat_completions"),
+    ("openai-chat", "chat_completions"),
+    ("chat-completions", "chat_completions"),
+    ("openai_responses", "open_responses"),
+    ("openai-responses", "open_responses"),
+    ("openai--open_responses", "open_responses"),
+    ("open-responses", "open_responses"),
+    ("google", "google_generate"),
+    ("google-genai", "google_generate"),
+    ("google-generate", "google_generate"),
+    ("google-interactions", "google_interactions"),
 ]
 
 
@@ -132,17 +148,19 @@ class TestUnifiedDispatch:
         result = tool_ops.to_provider(IR_TOOL, provider=provider)  # ty: ignore[invalid-argument-type]
         assert isinstance(result, dict)
 
-    @pytest.mark.parametrize(
-        "alias,canonical",
-        [
-            ("openai-chat", "openai_chat"),
-            ("openai-responses", "open_responses"),
-            ("google-genai", "google"),
-            ("google-interactions", "google_interactions"),
-        ],
-    )
+    @pytest.mark.parametrize("provider", ALL_PROVIDERS)
+    def test_canonical_names_do_not_warn(self, provider: str):
+        import warnings
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
+            result = tool_ops.to_provider(IR_TOOL, provider=provider)  # ty: ignore[invalid-argument-type]
+        assert isinstance(result, dict)
+
+    @pytest.mark.parametrize("alias,canonical", DEPRECATED_ALIASES)
     def test_to_provider_aliases(self, alias: str, canonical: str):
-        result_alias = tool_ops.to_provider(IR_TOOL, provider=alias)  # ty: ignore[invalid-argument-type]
+        with pytest.warns(DeprecationWarning):
+            result_alias = tool_ops.to_provider(IR_TOOL, provider=alias)  # ty: ignore[invalid-argument-type]
         result_canonical = tool_ops.to_provider(IR_TOOL, provider=canonical)  # ty: ignore[invalid-argument-type]
         assert result_alias == result_canonical
 
@@ -223,7 +241,7 @@ class TestResultDispatch:
 
     @pytest.mark.parametrize(
         "provider",
-        ["openai_chat", "openai_responses", "anthropic", "google_interactions"],
+        ["chat_completions", "open_responses", "anthropic", "google_interactions"],
     )
     def test_result_round_trip(self, provider: str):
         provider_result = tool_ops.result_to_provider(IR_RESULT, provider=provider)  # ty: ignore[invalid-argument-type]

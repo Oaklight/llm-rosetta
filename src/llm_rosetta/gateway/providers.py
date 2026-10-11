@@ -19,7 +19,7 @@ from .transport.provider_info import (
     openai_auth,
 )
 
-from llm_rosetta.provider_names import normalize_provider_name
+from llm_rosetta.provider_names import canonical_provider_name
 
 # Re-export ProviderInfo so existing ``from .providers import ProviderInfo``
 # continues to work without changes across the codebase.
@@ -81,13 +81,13 @@ _PROVIDER_REGISTRY: dict[str, dict[str, Any]] = {
 
 def get_default_base_url(provider_type: str) -> str:
     """Return the default base URL for a known provider type, or ``""``."""
-    entry = _PROVIDER_REGISTRY.get(normalize_provider_name(provider_type))
+    entry = _PROVIDER_REGISTRY.get(canonical_provider_name(provider_type))
     return entry.get("default_base_url", "") if entry else ""
 
 
 def get_default_api_key_env(provider_type: str) -> str:
     """Return the default env-var name for a provider's API key."""
-    provider_type = normalize_provider_name(provider_type)
+    provider_type = canonical_provider_name(provider_type)
     entry = _PROVIDER_REGISTRY.get(provider_type)
     return (
         entry.get("default_api_key_env", f"{provider_type.upper()}_API_KEY")
@@ -119,7 +119,7 @@ _CUSTOM_TOOLS_BY_TYPE: dict[str, bool] = {
 
 def get_default_supports_custom_tools(provider_type: str) -> bool:
     """Default custom-tools support for a base format (``False`` if unknown)."""
-    return _CUSTOM_TOOLS_BY_TYPE.get(normalize_provider_name(provider_type), False)
+    return _CUSTOM_TOOLS_BY_TYPE.get(canonical_provider_name(provider_type), False)
 
 
 # Base formats offered as bare formats in the admin provider picker, in display
@@ -279,12 +279,12 @@ def build_provider_info(
 
     # Legacy spellings (e.g. ``openai_chat``) migrate to canonical names so the
     # registry lookup below hits.
-    provider_type = normalize_provider_name(provider_type)
+    provider_type = canonical_provider_name(provider_type)
 
     # Resolve through shim registry for defaults
     shim = get_shim(shim_name or provider_type)
     if shim is not None:
-        base_type = normalize_provider_name(shim.base)
+        base_type = canonical_provider_name(shim.base)
         # Apply shim defaults where the config value is missing *or empty*.
         cfg = _apply_shim_defaults(cfg, shim)
     else:

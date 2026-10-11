@@ -18,7 +18,7 @@ from llm_rosetta._vendor.httpserver import (
     StreamingResponse,
 )
 from llm_rosetta.auto_detect import ProviderType
-from llm_rosetta.provider_names import normalize_provider_name
+from llm_rosetta.provider_names import canonical_provider_name
 
 from .middleware.auth import (
     AuthState,
@@ -248,7 +248,7 @@ async def _proxy_handler(
 
     # Legacy provider spellings (e.g. ``openai_chat``) migrate to the
     # canonical format so downstream route/table lookups match.
-    source_provider = cast(ProviderType, normalize_provider_name(str(source_provider)))
+    source_provider = cast(ProviderType, canonical_provider_name(str(source_provider)))
 
     # Read request ID from context (populated by the early middleware
     # hook) and fall back to header extraction for safety.

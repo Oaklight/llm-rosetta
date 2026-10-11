@@ -908,37 +908,44 @@ class GatewayConfig:
           2. ``type`` field → resolve via shim registry
           3. provider name itself (backward-compatible fallback)
 
-        Legacy provider/format names are normalised to canonical spellings
-        (see :func:`llm_rosetta.provider_names.normalize_provider_name`), so
-        a config declaring e.g. ``type: google_generate`` resolves to the
-        canonical ``google`` type.
+        Legacy provider/format names are resolved to canonical spellings
+        (see :func:`llm_rosetta.provider_names.canonical_provider_name`).  A
+        config declaring e.g. ``type: google`` is migrated to
+        ``google_generate`` but emits one ``DeprecationWarning`` per legacy
+        provider so operators migrate before 0.16.0 (#919).
 
         Returns:
             Tuple of (provider_types, provider_shim_names).
         """
-        from llm_rosetta.provider_names import normalize_provider_name
+        from llm_rosetta.provider_names import (
+            canonical_provider_name,
+            warn_legacy_provider_names,
+        )
         from llm_rosetta.shims import resolve_base
 
         provider_types: dict[str, str] = {}
         provider_shim_names: dict[str, str | None] = {}
         for name, cfg in raw_providers.items():
             if "shim" in cfg:
-                provider_types[name] = normalize_provider_name(
+                warn_legacy_provider_names(cfg["shim"])
+                provider_types[name] = canonical_provider_name(
                     resolve_base(cfg["shim"])
                 )
                 provider_shim_names[name] = cfg["shim"]
             elif "type" in cfg:
-                provider_types[name] = normalize_provider_name(
+                warn_legacy_provider_names(cfg["type"])
+                provider_types[name] = canonical_provider_name(
                     resolve_base(cfg["type"])
                 )
                 provider_shim_names[name] = cfg["type"]
             else:
+                warn_legacy_provider_names(name)
                 # Resolve through the shim registry too: a provider named after
                 # a shim (e.g. ``openai--open_responses``, or the legacy
                 # ``openai_responses`` alias of it) uses that shim's base and
                 # keeps its identity, rather than being read as a bare format
                 # name.
-                provider_types[name] = normalize_provider_name(resolve_base(name))
+                provider_types[name] = canonical_provider_name(resolve_base(name))
                 provider_shim_names[name] = name
         return provider_types, provider_shim_names
 
@@ -1163,12 +1170,12 @@ class GatewayConfig:
 
         from .deferred_startup import ProviderInitState, ProviderNotReady
 
-        from llm_rosetta.provider_names import normalize_provider_name
+        from llm_rosetta.provider_names import canonical_provider_name
 
         # Accept legacy provider spellings (e.g. ``openai_chat``) so a
         # same-format route compares against canonical provider types.
         source_provider = cast(
-            ProviderType, normalize_provider_name(str(source_provider))
+            ProviderType, canonical_provider_name(str(source_provider))
         )
 
         model_route = self.models[model]

@@ -24,7 +24,7 @@ Example usage::
     anthropic_tool = tool_ops.to_anthropic(ir_tool)
 
     # Unified dispatch (definitions)
-    gemini_tool = tool_ops.to_provider(ir_tool, provider="google")
+    gemini_tool = tool_ops.to_provider(ir_tool, provider="google_generate")
 
     # Reverse direction
     recovered = tool_ops.from_provider(openai_tool, provider="chat_completions")
@@ -34,37 +34,72 @@ Example usage::
     provider_call = tool_ops.call_to_provider(ir_call, provider="chat_completions")
 """
 
+import warnings
 from typing import Any, Literal
 
-from .provider_names import normalize_provider_name
+from .provider_names import LEGACY_PROVIDER_ALIASES
 from .types.ir.tools import ToolCallConfig, ToolChoice, ToolDefinition
 from .types.ir.parts import ToolCallPart, ToolResultPart
 
 ToolProvider = Literal[
-    # Canonical names (match ProviderType / internal module names)
-    "chat_completions",
-    "openai_chat",  # legacy alias of "chat_completions"
-    "open_responses",
-    # The OpenAI Responses profile shim; ``openai_responses`` /
-    # ``openai-responses`` are legacy aliases that normalise onto this name.
-    "openai--open_responses",
+    # Canonical names — the base converter types (underscore spelling).
     "anthropic",
-    "google",
     "google_generate",
     "google_interactions",
-    # Legacy / hyphenated aliases for ergonomic use
-    "openai-chat",
-    "openai_responses",
-    "openai-responses",
-    "open-responses",
-    "google-genai",
-    "google-interactions",
+    "chat_completions",
+    "open_responses",
 ]
+
+# Canonical tool_ops provider names, one per base converter type.
+_CANONICAL_TOOL_PROVIDERS = frozenset(
+    {
+        "anthropic",
+        "google_generate",
+        "google_interactions",
+        "chat_completions",
+        "open_responses",
+    }
+)
+
+# Deprecated spellings accepted only by this convenience API (removed in
+# 0.16.0, see #919 / #921).  Everything else that was once accepted is a key
+# in the shared ``LEGACY_PROVIDER_ALIASES`` table and is handled by
+# :func:`normalize_provider_name`.
+_TOOL_LOCAL_ALIASES: dict[str, str] = {
+    # OpenAI-Responses flavoured spellings.  tool_ops has no OpenAI-profile
+    # variant, so they all collapse onto the neutral ``open_responses`` base
+    # (the shared table would route them to the ``openai--open_responses``
+    # shim instead).
+    "openai_responses": "open_responses",
+    "openai-responses": "open_responses",
+    "openai--open_responses": "open_responses",
+    # Earlier-proposed hyphenated spellings (tool_ops only).
+    "google-generate": "google_generate",
+    "chat-completions": "chat_completions",
+}
 
 
 def _resolve(provider: str) -> str:
-    """Normalize provider name to canonical form."""
-    return normalize_provider_name(provider)
+    """Normalize *provider* to one of the canonical tool_ops names.
+
+    Deprecated spellings are still accepted but emit a
+    :class:`DeprecationWarning`; they are removed in 0.16.0.
+    """
+    if provider in _CANONICAL_TOOL_PROVIDERS:
+        return provider
+    canonical = _TOOL_LOCAL_ALIASES.get(provider)
+    if canonical is None:
+        canonical = LEGACY_PROVIDER_ALIASES.get(provider, provider)
+    if canonical != provider:
+        # Both alias sources warn from here; ``stacklevel=4`` points at the
+        # user's call site (the public ``to_provider`` / ``from_provider`` /
+        # ``to_*`` / ``from_*`` entry point is one frame below).
+        warnings.warn(
+            f"Provider name {provider!r} is deprecated; use {canonical!r} instead.",
+            DeprecationWarning,
+            stacklevel=4,
+        )
+    return canonical
 
 
 def _get_tool_ops(provider: str) -> Any:
@@ -74,7 +109,7 @@ def _get_tool_ops(provider: str) -> Any:
         from .converters.chat_completions import ChatCompletionsToolOps
 
         return ChatCompletionsToolOps
-    if canonical in ("open_responses", "openai--open_responses", "openai_responses"):
+    if canonical == "open_responses":
         from .converters.open_responses import OpenResponsesToolOps
 
         return OpenResponsesToolOps
@@ -82,7 +117,7 @@ def _get_tool_ops(provider: str) -> Any:
         from .converters.anthropic import AnthropicToolOps
 
         return AnthropicToolOps
-    if canonical in ("google", "google_generate"):
+    if canonical == "google_generate":
         from .converters.google_generate import GoogleGenerateToolOps
 
         return GoogleGenerateToolOps
@@ -92,10 +127,11 @@ def _get_tool_ops(provider: str) -> Any:
         return GoogleInteractionsToolOps
     raise ValueError(
         f"Unknown provider: {provider!r}. "
-        f"Supported: chat_completions, open_responses, openai--open_responses, "
-        f"anthropic, google_generate, google_interactions "
-        f"(aliases: openai_chat, openai-chat, openai_responses, "
-        f"openai-responses, google, google-genai, google-interactions)"
+        f"Supported: {', '.join(sorted(_CANONICAL_TOOL_PROVIDERS))}. "
+        f"Deprecated aliases (removed in 0.16.0): openai_chat, openai-chat, "
+        f"openai_responses, openai-responses, openai--open_responses, "
+        f"open-responses, google, google-genai, google-generate, "
+        f"google-interactions, chat-completions"
     )
 
 

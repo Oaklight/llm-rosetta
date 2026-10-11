@@ -19,7 +19,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-from llm_rosetta.provider_names import normalize_provider_name
+from llm_rosetta.provider_names import canonical_provider_name
 
 FidelityMode = Literal["critical", "full"]
 
@@ -414,9 +414,10 @@ class FidelityChecker:
         format_name: str | None = None,
     ) -> None:
         self.mode = mode
-        # Accept legacy base/format spellings (e.g. ``openai_chat``).
+        # Accept legacy base/format spellings (e.g. ``openai_chat``) in the
+        # internal format name without emitting a duplicate warning.
         self.format_name = (
-            normalize_provider_name(format_name) if format_name is not None else None
+            canonical_provider_name(format_name) if format_name is not None else None
         )
 
     def compare_request(

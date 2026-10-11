@@ -7,6 +7,7 @@ JSONC config resolution.
 
 from __future__ import annotations
 
+import warnings
 from typing import get_args
 
 import pytest
@@ -99,7 +100,12 @@ class TestNormalizeProviderName:
 
 
 class TestConverterLookupBoundary:
-    """``get_converter_for_provider`` migrates legacy names."""
+    """``get_converter_for_provider`` is an internal lookup.
+
+    It migrates legacy names silently: the public boundary
+    (``convert`` / ``convert_response`` / ``ConversionPipeline``) owns the
+    deprecation warning, so resolving a converter does not warn again.
+    """
 
     @pytest.mark.parametrize(
         "legacy,canonical",
@@ -109,8 +115,11 @@ class TestConverterLookupBoundary:
             ("openai-chat", "chat_completions"),
         ],
     )
-    def test_legacy_resolves_to_same_converter(self, legacy: str, canonical: str):
-        with pytest.warns(DeprecationWarning):
+    def test_legacy_resolves_to_same_converter_without_warning(
+        self, legacy: str, canonical: str
+    ):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
             legacy_converter = get_converter_for_provider(legacy)
         assert legacy_converter is get_converter_for_provider(canonical)
 
@@ -120,14 +129,16 @@ class TestConverterLookupBoundary:
 
 
 class TestResolveBaseBoundary:
-    """``resolve_base`` migrates legacy names before shim lookup."""
+    """``resolve_base`` is an internal lookup: legacy names migrate silently."""
 
-    def test_google_legacy_migrates(self):
-        with pytest.warns(DeprecationWarning):
+    def test_google_legacy_migrates_without_warning(self):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
             assert resolve_base("google") == "google_generate"
 
-    def test_google_genai_migrates(self):
-        with pytest.warns(DeprecationWarning):
+    def test_google_genai_migrates_without_warning(self):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
             assert resolve_base("google-genai") == "google_generate"
 
 
@@ -187,7 +198,13 @@ class TestLibraryArgumentBoundary:
 
 
 class TestGatewayConfigBoundary:
-    """Gateway JSONC ``type:`` / ``shim:`` resolution migrates legacy names."""
+    """Gateway JSONC ``type:`` / ``shim:`` resolution migrates legacy names.
+
+    Config resolution migrates a legacy spelling and emits one
+    ``DeprecationWarning`` per legacy provider, so an operator who writes a
+    legacy ``type:`` / ``shim:`` in the JSONC file is nudged to migrate
+    before 0.16.0 (#919).
+    """
 
     @staticmethod
     def _raw(provider_cfg: dict) -> dict:
@@ -237,15 +254,101 @@ class TestCanonicalNameResolvesToShim:
     """A shim registered under its canonical name must stay reachable.
 
     Regression: normalising a name before a raw shim lookup silently dropped
-    the shim when it was registered only under the other spelling.
+    the shim when it was registered only under the other spelling.  Shim
+    lookup is internal and must not warn.
     """
 
     def test_canonical_and_legacy_resolve(self):
         from llm_rosetta.shims import resolve_shim
 
         assert resolve_shim("google_generate") is not None
-        with pytest.warns(DeprecationWarning):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
             assert resolve_shim("google") is not None
+
+
+class TestBoundaryWarningAttribution:
+    """Public boundaries warn exactly once, at the user's frame (#921).
+
+    A legacy name must not produce duplicated warnings, and each warning must
+    point at the caller of the public entry point rather than at a library
+    internal frame.
+    """
+
+    def test_normalize_warns_at_caller_frame(self):
+        with pytest.warns(DeprecationWarning) as record:
+            normalize_provider_name("google")
+        assert record.list[0].filename == __file__
+
+    def test_convert_same_legacy_name_warns_once(self):
+        """One distinct legacy name used for both roles warns a single time."""
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            convert(OPENAI_CHAT_BODY, "openai_chat", source_provider="openai_chat")
+        dep = [w for w in caught if issubclass(w.category, DeprecationWarning)]
+        assert len(dep) == 1
+        assert dep[0].filename == __file__
+
+    def test_convert_distinct_legacy_names_warn_once_each(self):
+        """Each distinct user-supplied legacy name warns exactly once."""
+        body = {
+            "contents": [{"role": "user", "parts": [{"text": "hi"}]}],
+            "model": "gemini-2.0-flash",
+        }
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            convert(body, "openai_chat", source_provider="google")
+        dep = [w for w in caught if issubclass(w.category, DeprecationWarning)]
+        assert len(dep) == 2
+        assert {w.filename for w in dep} == {__file__}
+
+    def test_pipeline_warns_once_at_caller_frame(self):
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            ConversionPipeline("openai_chat", "anthropic")
+        dep = [w for w in caught if issubclass(w.category, DeprecationWarning)]
+        assert len(dep) == 1
+        assert dep[0].filename == __file__
+
+    def test_convert_response_warns_once_at_caller_frame(self):
+        response = {
+            "id": "chatcmpl-1",
+            "object": "chat.completion",
+            "model": "gpt-4o",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {"role": "assistant", "content": "hi"},
+                    "finish_reason": "stop",
+                }
+            ],
+        }
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            convert_response(
+                response,
+                OPENAI_CHAT_BODY,
+                source_provider="openai_chat",
+                target_provider="openai_chat",
+            )
+        dep = [w for w in caught if issubclass(w.category, DeprecationWarning)]
+        assert len(dep) == 1
+        assert dep[0].filename == __file__
+
+    def test_internal_lookups_never_warn(self):
+        from llm_rosetta.shims import get_shim
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
+            get_converter_for_provider("openai_chat")
+            resolve_base("google")
+            get_shim("google")
+
+    def test_canonical_names_never_warn(self):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
+            convert(OPENAI_CHAT_BODY, "chat_completions")
+            ConversionPipeline("chat_completions", "anthropic")
 
 
 class TestRegisterShimKeys:
