@@ -207,12 +207,12 @@ class TestBuiltinTransforms:
         load_providers()
 
     def test_volcengine_has_post_ir_transforms(self):
-        shim = get_shim("volcengine--openai_chat")
+        shim = get_shim("volcengine--chat_completions")
         assert shim is not None
         assert len(shim.post_ir_transforms) > 0
 
     def test_volcengine_strips_logprobs(self):
-        shim = get_shim("volcengine--openai_chat")
+        shim = get_shim("volcengine--chat_completions")
         assert shim is not None
         body = {"model": "test", "logprobs": True, "top_logprobs": 5, "messages": []}
         result = apply_transforms(shim.post_ir_transforms, body)
@@ -221,7 +221,7 @@ class TestBuiltinTransforms:
         assert result["model"] == "test"
 
     def test_deepseek_strips_unsupported(self):
-        shim = get_shim("deepseek--openai_chat")
+        shim = get_shim("deepseek--chat_completions")
         assert shim is not None
         body = {
             "model": "deepseek-chat",
@@ -289,7 +289,7 @@ class TestBuiltinTransforms:
         assert result["temperature"] == 0.7
 
     def test_minimax_strips_unsupported(self):
-        shim = get_shim("minimax--openai_chat")
+        shim = get_shim("minimax--chat_completions")
         assert shim is not None
         body = {
             "model": "MiniMax-M2",
@@ -566,7 +566,7 @@ class TestArgoOpenaiChatTransforms:
         load_providers()
 
     def test_argo_downgrades_developer_role(self):
-        shim = get_shim("argo--openai_chat")
+        shim = get_shim("argo--chat_completions")
         assert shim is not None
         body = {
             "model": "gpt-4",
@@ -576,7 +576,7 @@ class TestArgoOpenaiChatTransforms:
         assert result["messages"][0]["role"] == "system"
 
     def test_argo_normalizes_null_content(self):
-        shim = get_shim("argo--openai_chat")
+        shim = get_shim("argo--chat_completions")
         assert shim is not None
         body = {
             "model": "gpt-4",
@@ -589,7 +589,7 @@ class TestArgoOpenaiChatTransforms:
 
     def test_argo_strips_sampling_for_matching_models(self):
         """Models that reject sampling params get them stripped."""
-        shim = get_shim("argo--openai_chat")
+        shim = get_shim("argo--chat_completions")
         assert shim is not None
         for model in (
             "claudeopus47",
@@ -611,7 +611,7 @@ class TestArgoOpenaiChatTransforms:
 
     def test_argo_keeps_sampling_for_non_matching_models(self):
         """Models that accept sampling params keep them."""
-        shim = get_shim("argo--openai_chat")
+        shim = get_shim("argo--chat_completions")
         assert shim is not None
         for model in ("gpt-4o", "gpt41nano", "gpt51", "gpt54", "claudehaiku45"):
             body = {
@@ -623,7 +623,7 @@ class TestArgoOpenaiChatTransforms:
             assert result["temperature"] == 0.7, f"{model}: temperature stripped"
 
     def test_argo_renames_max_tokens_for_gemini(self):
-        shim = get_shim("argo--openai_chat")
+        shim = get_shim("argo--chat_completions")
         assert shim is not None
         body = {
             "model": "gemini25flash",
@@ -637,7 +637,7 @@ class TestArgoOpenaiChatTransforms:
     def test_argo_keeps_max_tokens_for_non_gemini(self):
         """Non-Gemini models keep max_tokens unchanged — Claude via Argo
         OAI rejects max_completion_tokens alone."""
-        shim = get_shim("argo--openai_chat")
+        shim = get_shim("argo--chat_completions")
         assert shim is not None
         for model in ("gpt-4o", "claudeopus47"):
             body = {

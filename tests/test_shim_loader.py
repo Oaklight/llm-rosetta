@@ -94,68 +94,72 @@ class TestLoadProviders:
         """Verify the real providers/ directory loads all built-in shims."""
         shims = load_providers()
         names = {s.name for s in shims}
-        assert names == {
-            "argo--anthropic",
-            "argo--openai_chat",
-            "argo--openai_responses",
-            "asksage--openai_chat",
-            "asksage--openai_responses",
-            "asksage--anthropic",
-            "asksage--google_generate",
-            "openai",
-            "openai--open_responses",
-            "open_responses",
-            "openrouter--openai_chat",
-            "openrouter--anthropic",
-            "kilo--openai_chat",
-            "anthropic",
-            "google_generate",
-            "deepseek--openai_chat",
-            "deepseek--openai_responses",
-            "minimax--openai_chat",
-            "minimax--anthropic",
-            "moonshot",
-            "qwen",
-            "volcengine--openai_chat",
-            "volcengine--openai_responses",
-            "xai",
-            "zhipu",
-            "google_interactions",
-            "alcf--sophia",
+        expected = {
+            # Grouped vendor shims use the canonical ``<provider>--<base>`` form.
             "alcf--metis",
             "alcf--minerva",
+            "alcf--sophia",
+            "anthropic",
+            "argo--anthropic",
+            "argo--chat_completions",
+            "argo--open_responses",
+            "asksage--anthropic",
+            "asksage--chat_completions",
+            "asksage--google_generate",
+            "asksage--open_responses",
+            "deepseek--chat_completions",
+            "deepseek--open_responses",
+            "google--google_generate",
+            "google--google_interactions",
+            "kilo--chat_completions",
+            "minimax--anthropic",
+            "minimax--chat_completions",
+            "moonshot",
+            "open_responses",
+            "openai--chat_completions",
+            "openai--open_responses",
+            "openrouter--anthropic",
+            "openrouter--chat_completions",
+            "openrouter--open_responses",
+            "qwen",
             "typesafe",
-        }, (
-            f"Unexpected shim diff: {names.symmetric_difference({'argo--anthropic', 'argo--openai_chat', 'argo--openai_responses', 'asksage--openai_chat', 'asksage--openai_responses', 'asksage--anthropic', 'asksage--google_generate', 'openai', 'openai--open_responses', 'open_responses', 'openrouter--openai_chat', 'openrouter--anthropic', 'kilo--openai_chat', 'anthropic', 'google_generate', 'deepseek--openai_chat', 'deepseek--openai_responses', 'minimax--openai_chat', 'minimax--anthropic', 'moonshot', 'qwen', 'volcengine--openai_chat', 'volcengine--openai_responses', 'xai', 'zhipu', 'google_interactions', 'alcf--sophia', 'alcf--metis', 'alcf--minerva', 'typesafe'})}"
+            "volcengine--chat_completions",
+            "volcengine--open_responses",
+            "xai",
+            "zhipu",
+        }
+        assert names == expected, (
+            f"Unexpected shim diff: {names.symmetric_difference(expected)}"
         )
 
     def test_all_registered_after_load(self):
         """After load_providers, all shims are queryable via get_shim."""
         load_providers()
         for name in (
-            "openai",
-            "openrouter--openai_chat",
+            "openai--chat_completions",
+            "openrouter--chat_completions",
             "openrouter--anthropic",
-            "kilo--openai_chat",
+            "openrouter--open_responses",
+            "kilo--chat_completions",
             "anthropic",
-            "google_generate",
-            "deepseek--openai_chat",
-            "deepseek--openai_responses",
-            "volcengine--openai_chat",
-            "volcengine--openai_responses",
+            "google--google_generate",
+            "deepseek--chat_completions",
+            "deepseek--open_responses",
+            "volcengine--chat_completions",
+            "volcengine--open_responses",
             "xai",
             "qwen",
             "moonshot",
-            "minimax--openai_chat",
+            "minimax--chat_completions",
             "minimax--anthropic",
             "zhipu",
-            "google_interactions",
+            "google--google_interactions",
             "alcf--sophia",
             "alcf--metis",
             "alcf--minerva",
             "typesafe",
-            "asksage--openai_chat",
-            "asksage--openai_responses",
+            "asksage--chat_completions",
+            "asksage--open_responses",
             "asksage--anthropic",
             "asksage--google_generate",
         ):
@@ -163,10 +167,20 @@ class TestLoadProviders:
             assert shim is not None
             assert shim.name == name
 
+        # Legacy spellings are deprecated aliases of the same shim (#917).
+        for legacy, canonical in (
+            ("openai", "openai--chat_completions"),
+            ("google_generate", "google--google_generate"),
+            ("google_interactions", "google--google_interactions"),
+            ("deepseek--chat_completions", "deepseek--chat_completions"),
+            ("volcengine--open_responses", "volcengine--open_responses"),
+        ):
+            assert get_shim(legacy) is get_shim(canonical)
+
     def test_volcengine_has_transforms(self):
         """Volcengine shim should have strip_fields transforms loaded."""
         load_providers()
-        v = get_shim("volcengine--openai_chat")
+        v = get_shim("volcengine--chat_completions")
         assert v is not None
         assert len(v.post_ir_transforms) == 1
         assert len(v.pre_ir_transforms) == 0
@@ -179,7 +193,7 @@ class TestLoadProviders:
     def test_deepseek_has_transforms(self):
         """DeepSeek chat shim should strip n, logit_bias, seed."""
         load_providers()
-        s = get_shim("deepseek--openai_chat")
+        s = get_shim("deepseek--chat_completions")
         assert s is not None
         assert len(s.post_ir_transforms) == 1
         assert len(s.pre_ir_transforms) == 0
@@ -239,7 +253,7 @@ class TestLoadProviders:
     def test_minimax_has_transforms(self):
         """MiniMax shim should strip fields + inject reasoning_split."""
         load_providers()
-        s = get_shim("minimax--openai_chat")
+        s = get_shim("minimax--chat_completions")
         assert s is not None
         assert len(s.post_ir_transforms) == 2  # strip_fields + inject_reasoning_split
         assert len(s.pre_ir_transforms) == 1  # parse_think_tags
@@ -287,7 +301,7 @@ class TestLoadProviders:
     def test_asksage_openai_chat_has_transforms(self):
         """AskSage OpenAI Chat shim should rename max_tokens to max_completion_tokens."""
         load_providers()
-        s = get_shim("asksage--openai_chat")
+        s = get_shim("asksage--chat_completions")
         assert s is not None
         assert len(s.post_ir_transforms) == 1
         assert len(s.pre_ir_transforms) == 0
@@ -300,7 +314,7 @@ class TestLoadProviders:
     def test_asksage_openai_responses_has_transforms(self):
         """AskSage OpenAI Responses shim should rename max_tokens."""
         load_providers()
-        s = get_shim("asksage--openai_responses")
+        s = get_shim("asksage--open_responses")
         assert s is not None
         assert len(s.post_ir_transforms) == 1
         body = {"max_tokens": 50, "input": "hello"}
@@ -327,31 +341,33 @@ class TestLoadProviders:
         """Each shim should have the expected base converter type."""
         load_providers()
         expected = {
-            "openai": "chat_completions",
+            "openai--chat_completions": "chat_completions",
             "openai--open_responses": "open_responses",
-            "openrouter--openai_chat": "chat_completions",
+            "openrouter--chat_completions": "chat_completions",
             "openrouter--anthropic": "anthropic",
-            "kilo--openai_chat": "chat_completions",
+            "openrouter--open_responses": "open_responses",
+            "kilo--chat_completions": "chat_completions",
             "anthropic": "anthropic",
-            "google_generate": "google_generate",
-            "google_interactions": "google_interactions",
-            "deepseek--openai_chat": "chat_completions",
-            "deepseek--openai_responses": "open_responses",
-            "argo--openai_responses": "open_responses",
-            "minimax--openai_chat": "chat_completions",
+            "google--google_generate": "google_generate",
+            "google--google_interactions": "google_interactions",
+            "deepseek--chat_completions": "chat_completions",
+            "deepseek--open_responses": "open_responses",
+            "argo--chat_completions": "chat_completions",
+            "argo--open_responses": "open_responses",
+            "minimax--chat_completions": "chat_completions",
             "minimax--anthropic": "anthropic",
             "moonshot": "chat_completions",
             "qwen": "chat_completions",
-            "volcengine--openai_chat": "chat_completions",
-            "volcengine--openai_responses": "open_responses",
+            "volcengine--chat_completions": "chat_completions",
+            "volcengine--open_responses": "open_responses",
             "xai": "chat_completions",
             "zhipu": "chat_completions",
             "alcf--sophia": "chat_completions",
             "alcf--metis": "chat_completions",
             "alcf--minerva": "chat_completions",
             "typesafe": "decision",
-            "asksage--openai_chat": "chat_completions",
-            "asksage--openai_responses": "open_responses",
+            "asksage--chat_completions": "chat_completions",
+            "asksage--open_responses": "open_responses",
             "asksage--anthropic": "anthropic",
             "asksage--google_generate": "google_generate",
         }
@@ -365,10 +381,10 @@ class TestLoadProviders:
     # Shims that intentionally have no public logo
     _LOGO_EXEMPT = {
         "argo--anthropic",
-        "argo--openai_chat",
-        "argo--openai_responses",
-        "asksage--openai_chat",
-        "asksage--openai_responses",
+        "argo--chat_completions",
+        "argo--open_responses",
+        "asksage--chat_completions",
+        "asksage--open_responses",
         "asksage--anthropic",
         "asksage--google_generate",
         "typesafe",

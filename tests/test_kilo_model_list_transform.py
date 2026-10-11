@@ -14,7 +14,7 @@ def _ensure_transforms_loaded():
 
 
 def _transform():
-    t = get_model_list_transform("kilo--openai_chat")
+    t = get_model_list_transform("kilo--chat_completions")
     assert t is not None
     return t
 

@@ -1,4 +1,4 @@
-name: minimax--openai_chat
+name: minimax--chat_completions
 base: chat_completions
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/minimax.svg
 

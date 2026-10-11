@@ -178,7 +178,7 @@ class TestShimConnectionDefaults:
         raw = {
             "providers": {
                 "openrouter": {
-                    "type": "openrouter--openai_chat",
+                    "type": "openrouter--chat_completions",
                     "api_key": "sk-x",
                 }
             },
@@ -212,7 +212,7 @@ class TestShimConnectionDefaults:
         raw = {
             "providers": {
                 "openrouter": {
-                    "type": "openrouter--openai_chat",
+                    "type": "openrouter--chat_completions",
                     "api_key": "sk-x",
                     "base_url": "https://proxy.internal/v1",
                 }

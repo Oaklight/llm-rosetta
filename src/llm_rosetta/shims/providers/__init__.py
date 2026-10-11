@@ -24,7 +24,7 @@ may export ``pre_ir_transforms`` and/or ``post_ir_transforms`` tuples
 
 **Grouped directories** are also supported: a child directory that does
 NOT contain ``provider.yaml`` but DOES contain subdirectories with one is
-treated as a *group folder* (e.g. ``argo/anthropic/``, ``argo/openai_chat/``).
+treated as a *group folder* (e.g. ``argo/anthropic/``, ``argo/chat_completions/``).
 
 Plugin shims
 ------------
@@ -179,8 +179,24 @@ def _rollback_plugin_load(module_name: str, before: frozenset[str]) -> None:
 def get_model_list_transform(
     shim_name: str,
 ) -> ModelListTransform | None:
-    """Return the model_list_transform for *shim_name*, or ``None``."""
-    return _model_list_transforms.get(shim_name)
+    """Return the model_list_transform for *shim_name*, or ``None``.
+
+    Transforms are registered under the canonical shim name; a legacy spelling
+    (e.g. ``"kilo--chat_completions"``) is normalised before lookup so both resolve
+    to the same hook.
+    """
+    transform = _model_list_transforms.get(shim_name)
+    if transform is not None:
+        return transform
+    from llm_rosetta.provider_names import (
+        canonical_provider_name,
+        canonical_shim_name,
+    )
+
+    canonical = canonical_shim_name(canonical_provider_name(shim_name))
+    if canonical == shim_name:
+        return None
+    return _model_list_transforms.get(canonical)
 
 
 def register_model_list_transform(name: str, transform: ModelListTransform) -> None:
@@ -488,7 +504,7 @@ def load_providers_from_dir(
 
     * **Flat** — a direct child with ``provider.yaml`` (e.g. ``openai/``).
     * **Grouped** — a child WITHOUT ``provider.yaml`` whose own children
-      each contain one (e.g. ``argo/anthropic/``, ``argo/openai_chat/``).
+      each contain one (e.g. ``argo/anthropic/``, ``argo/chat_completions/``).
 
     Args:
         providers_dir: Root directory to scan for provider subdirectories.

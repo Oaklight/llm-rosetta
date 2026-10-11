@@ -168,14 +168,14 @@ class TestGroupedConfig:
 
         _load_providers()
 
-        openai = get_shim("openai")
+        openai = get_shim("openai--chat_completions")
         assert openai is not None
         assert openai.connection.base_url == "https://api.openai.com/v1"
         assert openai.connection.api_key_env == "OPENAI_API_KEY"
         assert openai.tools.custom_tools is True
         assert openai.tools.max_description_length == 1024
 
-        ds = get_shim("deepseek--openai_chat")
+        ds = get_shim("deepseek--chat_completions")
         assert ds is not None
         assert ds.connection.base_url == "https://api.deepseek.com"
         assert ds.tools.custom_tools is False
@@ -254,8 +254,10 @@ class TestResolveBase:
         assert resolve_base("openai--open_responses") == "open_responses"
 
     def test_shim_name_resolves(self):
-        register_shim(ProviderShim(name="deepseek--openai_chat", base="openai_chat"))
-        assert resolve_base("deepseek--openai_chat") == "openai_chat"
+        register_shim(
+            ProviderShim(name="deepseek--chat_completions", base="openai_chat")
+        )
+        assert resolve_base("deepseek--chat_completions") == "openai_chat"
 
     def test_unknown_name_passthrough(self):
         assert resolve_base("unknown") == "unknown"
@@ -275,41 +277,60 @@ class TestBuiltinShims:
         load_providers()
 
     def test_official_providers_registered(self):
-        for name in ("openai", "openai_responses", "anthropic", "google", "typesafe"):
+        for name in (
+            "openai--chat_completions",
+            "openai--open_responses",
+            "anthropic",
+            "google--google_generate",
+            "typesafe",
+        ):
             shim = get_shim(name)
             assert shim is not None, f"Built-in shim '{name}' not registered"
 
     def test_third_party_providers_registered(self):
         for name in (
-            "deepseek--openai_chat",
-            "deepseek--openai_responses",
-            "volcengine--openai_chat",
-            "volcengine--openai_responses",
-            "openrouter--openai_chat",
+            "deepseek--chat_completions",
+            "deepseek--open_responses",
+            "volcengine--chat_completions",
+            "volcengine--open_responses",
+            "openrouter--chat_completions",
             "openrouter--anthropic",
-            "minimax--openai_chat",
+            "minimax--chat_completions",
             "minimax--anthropic",
         ):
             shim = get_shim(name)
             assert shim is not None, f"Built-in shim '{name}' not registered"
 
+    def test_legacy_shim_names_are_aliases(self):
+        """Old shim names resolve to the same object as canonical ones (#917)."""
+        pairs = (
+            ("openai", "openai--chat_completions"),
+            ("google_generate", "google--google_generate"),
+            ("google_interactions", "google--google_interactions"),
+            ("argo--chat_completions", "argo--chat_completions"),
+            ("deepseek--open_responses", "deepseek--open_responses"),
+            ("volcengine--chat_completions", "volcengine--chat_completions"),
+        )
+        for legacy, canonical in pairs:
+            assert get_shim(legacy) is get_shim(canonical) is not None
+
     def test_openai_base_type(self):
-        shim = get_shim("openai")
+        shim = get_shim("openai--chat_completions")
         assert shim is not None
         assert shim.base == "chat_completions"
 
     def test_deepseek_base_type(self):
-        shim = get_shim("deepseek--openai_chat")
+        shim = get_shim("deepseek--chat_completions")
         assert shim is not None
         assert shim.base == "chat_completions"
 
     def test_deepseek_responses_base_type(self):
-        shim = get_shim("deepseek--openai_responses")
+        shim = get_shim("deepseek--open_responses")
         assert shim is not None
         assert shim.base == "open_responses"
 
     def test_argo_responses_base_type(self):
-        shim = get_shim("argo--openai_responses")
+        shim = get_shim("argo--open_responses")
         assert shim is not None
         assert shim.base == "open_responses"
 
@@ -327,7 +348,7 @@ class TestBuiltinShims:
         assert shim.model_reasoning["claudeopus47"].unsigned_blocks == "preserve"
 
     def test_google_base_type(self):
-        shim = get_shim("google_generate")
+        shim = get_shim("google--google_generate")
         assert shim is not None
         assert shim.base == "google_generate"
 
@@ -338,7 +359,7 @@ class TestBuiltinShims:
         the route resolver, but the YAML loader never read the key, so the
         declared value was silently dropped and relocation never fired.
         """
-        for name in ("openai", "argo--openai_chat"):
+        for name in ("openai--chat_completions", "argo--chat_completions"):
             shim = get_shim(name)
             assert shim is not None
             assert shim.max_tool_description_length == 1024, (
@@ -367,28 +388,28 @@ class TestShimConverterIntegration:
         from llm_rosetta.auto_detect import get_converter_for_provider
         from llm_rosetta.converters import ChatCompletionsConverter
 
-        converter = get_converter_for_provider("deepseek--openai_chat")
+        converter = get_converter_for_provider("deepseek--chat_completions")
         assert isinstance(converter, ChatCompletionsConverter)
 
     def test_deepseek_responses_resolves_to_responses_converter(self):
         from llm_rosetta.auto_detect import get_converter_for_provider
         from llm_rosetta.converters import OpenResponsesConverter
 
-        converter = get_converter_for_provider("deepseek--openai_responses")
+        converter = get_converter_for_provider("deepseek--open_responses")
         assert isinstance(converter, OpenResponsesConverter)
 
     def test_argo_responses_resolves_to_responses_converter(self):
         from llm_rosetta.auto_detect import get_converter_for_provider
         from llm_rosetta.converters import OpenResponsesConverter
 
-        converter = get_converter_for_provider("argo--openai_responses")
+        converter = get_converter_for_provider("argo--open_responses")
         assert isinstance(converter, OpenResponsesConverter)
 
     def test_volcengine_resolves_to_openai_chat_converter(self):
         from llm_rosetta.auto_detect import get_converter_for_provider
         from llm_rosetta.converters import ChatCompletionsConverter
 
-        converter = get_converter_for_provider("volcengine--openai_chat")
+        converter = get_converter_for_provider("volcengine--chat_completions")
         assert isinstance(converter, ChatCompletionsConverter)
 
     def test_base_types_still_work(self):
@@ -427,14 +448,14 @@ class TestGroupedProviders:
 
     def test_grouped_providers_registered(self):
         """Shims under a group folder register with their YAML name."""
-        for name in ("argo--anthropic", "argo--openai_chat"):
+        for name in ("argo--anthropic", "argo--chat_completions"):
             shim = get_shim(name)
             assert shim is not None, f"Grouped shim '{name}' not registered"
 
     def test_grouped_provider_base_types(self):
         """Grouped shims resolve to the correct base converter."""
         anth = get_shim("argo--anthropic")
-        oai = get_shim("argo--openai_chat")
+        oai = get_shim("argo--chat_completions")
         assert anth is not None and anth.base == "anthropic"
         assert oai is not None and oai.base == "chat_completions"
 
@@ -448,7 +469,7 @@ class TestGroupedProviders:
     def test_grouped_provider_reasoning_configs_loaded(self):
         """Grouped shims load reasoning capability configs."""
         anth = get_shim("argo--anthropic")
-        oai = get_shim("argo--openai_chat")
+        oai = get_shim("argo--chat_completions")
         assert anth is not None and anth.reasoning is not None
         assert oai is not None and oai.reasoning is not None
         assert anth.reasoning.effort_field == "output_config.effort"
@@ -482,13 +503,17 @@ class TestGroupedProviders:
 
     def test_mixed_flat_and_grouped(self):
         """Flat shims and grouped shims coexist in the registry."""
-        flat_names = ("openai", "anthropic", "google")
+        flat_names = (
+            "openai--chat_completions",
+            "anthropic",
+            "google--google_generate",
+        )
         grouped_names = (
             "argo--anthropic",
-            "argo--openai_chat",
-            "argo--openai_responses",
-            "deepseek--openai_chat",
-            "deepseek--openai_responses",
+            "argo--chat_completions",
+            "argo--open_responses",
+            "deepseek--chat_completions",
+            "deepseek--open_responses",
         )
         for name in (*flat_names, *grouped_names):
             assert get_shim(name) is not None, f"Shim '{name}' not found"
@@ -788,7 +813,7 @@ class TestFreeSourceShim:
         assert ConnectionConfig(keyless=True).keyless is True
 
     def test_kilo_shim_fields(self):
-        shim = get_shim("kilo--openai_chat")
+        shim = get_shim("kilo--chat_completions")
 
         assert shim is not None
         assert shim.base == "chat_completions"
@@ -799,7 +824,7 @@ class TestFreeSourceShim:
         assert shim.logo is not None
 
     def test_default_shim_is_not_free_source(self):
-        shim = get_shim("openrouter--openai_chat")
+        shim = get_shim("openrouter--chat_completions")
 
         assert shim is not None
         assert shim.free_source is False

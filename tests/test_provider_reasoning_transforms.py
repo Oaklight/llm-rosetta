@@ -5,11 +5,11 @@ Covers MiniMax, OpenRouter reasoning field normalization transforms.
 
 from __future__ import annotations
 
-from llm_rosetta.shims.providers.minimax.openai_chat.transforms import (
+from llm_rosetta.shims.providers.minimax.chat_completions.transforms import (
     _inject_reasoning_split,
     _parse_think_tags,
 )
-from llm_rosetta.shims.providers.openrouter.openai_chat.transforms import (
+from llm_rosetta.shims.providers.openrouter.chat_completions.transforms import (
     _rename_reasoning_field,
 )
 

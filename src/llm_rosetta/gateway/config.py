@@ -16,7 +16,7 @@ from llm_rosetta._vendor import jsonx
 from llm_rosetta.auto_detect import ProviderType
 from llm_rosetta.routing import ResolvedRoute
 
-from .providers import build_provider_info
+from .providers import BASE_FORMATS, build_provider_info
 from .routing_strategy import (
     DEFAULT_STRATEGY,
     ModelRoute,
@@ -909,10 +909,13 @@ class GatewayConfig:
           3. provider name itself (backward-compatible fallback)
 
         Legacy provider/format names are resolved to canonical spellings
-        (see :func:`llm_rosetta.provider_names.canonical_provider_name`).  A
-        config declaring e.g. ``type: google`` is migrated to
-        ``google_generate`` but emits one ``DeprecationWarning`` per legacy
-        provider so operators migrate before 0.16.0 (#919).
+        (see :func:`llm_rosetta.provider_names.canonical_provider_name`), and
+        legacy shim names to their canonical ``<provider>--<base>`` spelling.
+        A config declaring e.g. ``type: google`` is migrated to
+        ``google_generate``; a ``shim:`` / ``type:`` naming a legacy shim (e.g.
+        ``deepseek--openai_chat``) is migrated to ``deepseek--chat_completions``.
+        Each emits one ``DeprecationWarning`` per distinct legacy name so
+        operators migrate before 0.16.0 (#919).
 
         Returns:
             Tuple of (provider_types, provider_shim_names).
@@ -920,6 +923,7 @@ class GatewayConfig:
         from llm_rosetta.provider_names import (
             canonical_provider_name,
             warn_legacy_provider_names,
+            warn_legacy_shim_names,
         )
         from llm_rosetta.shims import resolve_base
 
@@ -928,18 +932,30 @@ class GatewayConfig:
         for name, cfg in raw_providers.items():
             if "shim" in cfg:
                 warn_legacy_provider_names(cfg["shim"])
+                # A ``shim:`` value is unambiguously a shim identity, so a
+                # legacy bare shim name (``openai``, ``google_generate``) warns
+                # here even though it is also a base format.
+                warn_legacy_shim_names(cfg["shim"])
                 provider_types[name] = canonical_provider_name(
                     resolve_base(cfg["shim"])
                 )
                 provider_shim_names[name] = cfg["shim"]
             elif "type" in cfg:
                 warn_legacy_provider_names(cfg["type"])
+                # ``type:`` names a shim only when it is not itself a base
+                # format; ``google_generate`` etc. are canonical formats that
+                # merely double as legacy bare shim names, so warning would be
+                # a false positive.
+                if cfg["type"] not in BASE_FORMATS:
+                    warn_legacy_shim_names(cfg["type"])
                 provider_types[name] = canonical_provider_name(
                     resolve_base(cfg["type"])
                 )
                 provider_shim_names[name] = cfg["type"]
             else:
                 warn_legacy_provider_names(name)
+                if name not in BASE_FORMATS:
+                    warn_legacy_shim_names(name)
                 # Resolve through the shim registry too: a provider named after
                 # a shim (e.g. ``openai--open_responses``, or the legacy
                 # ``openai_responses`` alias of it) uses that shim's base and

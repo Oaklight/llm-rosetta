@@ -13,7 +13,7 @@ class TestBuildProviderInfo:
         load_providers()
         monkeypatch.setenv("ARGO_API_KEY", "pding")
 
-        info = build_provider_info("argo--openai_chat", {})
+        info = build_provider_info("argo--chat_completions", {})
 
         assert info.auth_headers() == {"Authorization": "Bearer pding"}
         assert (
@@ -59,7 +59,9 @@ class TestKeylessProvider:
 
     def test_free_shim_sends_no_auth(self):
         load_providers()
-        info = build_provider_info("openai_chat", {}, shim_name="kilo--openai_chat")
+        info = build_provider_info(
+            "openai_chat", {}, shim_name="kilo--chat_completions"
+        )
 
         assert info.auth_headers() == {}
         assert info.ready is True
@@ -69,7 +71,7 @@ class TestKeylessProvider:
     def test_free_shim_with_key_sends_bearer(self):
         load_providers()
         info = build_provider_info(
-            "openai_chat", {"api_key": "sk-x"}, shim_name="kilo--openai_chat"
+            "openai_chat", {"api_key": "sk-x"}, shim_name="kilo--chat_completions"
         )
 
         assert info.auth_headers() == {"Authorization": "Bearer sk-x"}
@@ -89,7 +91,7 @@ class TestKeylessProvider:
         info = build_provider_info(
             "openai_chat",
             {"token_command": ["echo", "tok"]},
-            shim_name="kilo--openai_chat",
+            shim_name="kilo--chat_completions",
         )
 
         assert info.keyless is False
@@ -101,7 +103,7 @@ class TestKeylessProvider:
         info = build_provider_info(
             "openai_chat",
             {"api_key": "sk-x", "base_url": ""},
-            shim_name="kilo--openai_chat",
+            shim_name="kilo--chat_completions",
         )
 
         assert info.base_url == "https://api.kilo.ai/api/gateway"
@@ -112,7 +114,9 @@ class TestKeylessProvider:
         load_providers()
         monkeypatch.setenv("OPENAI_API_KEY", "sk-env")
 
-        info = build_provider_info("openai_chat", {}, shim_name="kilo--openai_chat")
+        info = build_provider_info(
+            "openai_chat", {}, shim_name="kilo--chat_completions"
+        )
 
         assert info.keyless is True
         assert info.auth_headers() == {}

@@ -48,6 +48,7 @@ from llm_rosetta.converters.base.context import ConversionContext
 from llm_rosetta.provider_names import (
     canonical_provider_name,
     warn_legacy_provider_names,
+    warn_legacy_shim_names,
 )
 from llm_rosetta.shims.provider_shim import ProviderShim, resolve_base, resolve_shim
 from llm_rosetta.transforms.body import Transform, apply_transforms
@@ -317,6 +318,14 @@ class ConversionPipeline:
                 stacklevel=2,
             )
             target_shim = shim
+
+        # Public boundary: warn once per distinct legacy *shim* name supplied
+        # as a string, attributed to the caller of ``ConversionPipeline(...)``.
+        # Shim-registry resolution below stays silent.
+        warn_legacy_shim_names(
+            source_shim if isinstance(source_shim, str) else None,
+            target_shim if isinstance(target_shim, str) else None,
+        )
 
         self._source_provider = source_provider
         self._target_provider = target_provider

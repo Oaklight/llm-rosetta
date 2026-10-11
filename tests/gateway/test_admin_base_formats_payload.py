@@ -2,7 +2,7 @@
 
 These pin ``_base_formats_payload()`` directly. The route that serves it
 (``get_config`` at ``/admin/api/config``) is not exercised here — only the
-helper's shape, the custom-tools defaults, and the recommendation null-guard.
+helper's shape and the custom-tools defaults.
 """
 
 from __future__ import annotations
@@ -16,7 +16,6 @@ _KEYS = {
     "default_base_url",
     "default_api_key_env",
     "supports_custom_tools",
-    "recommended_provider",
 }
 
 
@@ -33,31 +32,6 @@ def test_base_formats_shape():
         assert isinstance(entry["default_base_url"], str)
     by_name = {b["name"]: b for b in payload}
     assert by_name["chat_completions"]["default_base_url"]
-
-
-def test_recommended_provider_null_when_shim_absent(monkeypatch):
-    """With no registered provider names, no recommendation is emitted."""
-    monkeypatch.setattr(admin_config, "list_shims", lambda: [])
-
-    payload = admin_config._base_formats_payload()
-
-    assert all(b["recommended_provider"] is None for b in payload)
-
-
-def test_recommended_provider_points_at_shim():
-    load_providers()
-    by_name = {b["name"]: b for b in admin_config._base_formats_payload()}
-
-    assert by_name["chat_completions"]["recommended_provider"] == "openai"
-    # `google_generate`'s vendor shim is named `google_generate`, so the
-    # recommendation is a self-recommendation and degrades to None (no dangling
-    # name that isn't in the picker).
-    assert by_name["google_generate"]["recommended_provider"] is None
-    # Self-recommendation and no-shim cases degrade to None, so the payload is
-    # self-describing and the UI shows no hint.
-    assert by_name["anthropic"]["recommended_provider"] is None
-    # #909: open_responses recommends the OpenAI profile shim (same base type).
-    assert by_name["open_responses"]["recommended_provider"] == "openai--open_responses"
 
 
 def test_supports_custom_tools_defaults():

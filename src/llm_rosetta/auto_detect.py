@@ -10,6 +10,7 @@ from typing import Any, Literal
 from .provider_names import (
     canonical_provider_name,
     warn_legacy_provider_names,
+    warn_legacy_shim_names,
 )
 
 # Canonical provider/format names.  Legacy spellings are mapped onto these by
@@ -30,6 +31,50 @@ ProviderType = Literal[
     "google_interactions",
     "decision",
 ]
+
+# Canonical base converter/format names.  A bare base format (e.g.
+# ``google_generate``) must not be mistaken for a legacy *shim* name that
+# merely shares its spelling: ``google_generate`` doubles as a legacy shim
+# alias for ``google--google_generate``, but at a provider/format boundary it
+# names the base format.
+_BASE_FORMAT_NAMES: frozenset[str] = frozenset(
+    {
+        "chat_completions",
+        "open_responses",
+        "anthropic",
+        "google_generate",
+        "google_interactions",
+        "decision",
+    }
+)
+
+
+def _legacy_shim_boundary_names(*names: str | None) -> list[str]:
+    """Filter user-supplied names down to legacy *shim* spellings.
+
+    The public :func:`convert` / :func:`convert_response` boundaries resolve
+    shim names to :class:`~llm_rosetta.shims.provider_shim.ProviderShim`
+    objects before constructing the pipeline, so the pipeline's own
+    string-based shim warning never sees them.  These boundaries therefore
+    warn for a legacy shim name (``deepseek--openai_chat``) themselves.
+
+    Base formats (``google_generate``) and legacy *provider* aliases
+    (``openai_chat``) are skipped: the former is a canonical format that
+    merely doubles as a legacy shim key, and the latter is handled by
+    :func:`~llm_rosetta.provider_names.warn_legacy_provider_names`, so warning
+    again here would be a false positive.
+    """
+    out: list[str] = []
+    for name in names:
+        if name is None:
+            continue
+        text = str(name)
+        if text in _BASE_FORMAT_NAMES:
+            continue
+        if canonical_provider_name(text) != text:
+            continue
+        out.append(text)
+    return out
 
 
 _RESPONSES_ITEM_TYPES = frozenset(
@@ -335,7 +380,13 @@ def convert(
     # Public boundary: emit one warning per distinct user-supplied legacy
     # name, attributed to the caller of ``convert``.  Every lookup below uses
     # the canonical form, so no duplicate or mis-attributed warnings fire.
+    # Legacy *shim* names (``deepseek--openai_chat``) need their own warning:
+    # the shim is resolved to a ProviderShim object below, so the pipeline's
+    # string check never sees the raw name.
     warn_legacy_provider_names(source_provider, target_provider)
+    warn_legacy_shim_names(
+        *_legacy_shim_boundary_names(source_provider, target_provider)
+    )
 
     src = _detect_source(source_body, source_provider)
     tgt = canonical_provider_name(str(target_provider))
@@ -398,7 +449,12 @@ def convert_response(
 
     # Public boundary: one warning per distinct user-supplied legacy name,
     # attributed to the caller of ``convert_response`` (see ``convert``).
+    # A legacy shim name warns here too — the shim is resolved to a
+    # ProviderShim object below, bypassing the pipeline's string check.
     warn_legacy_provider_names(source_provider, target_provider)
+    warn_legacy_shim_names(
+        *_legacy_shim_boundary_names(source_provider, target_provider)
+    )
 
     src = canonical_provider_name(str(source_provider))
     tgt = canonical_provider_name(str(target_provider))

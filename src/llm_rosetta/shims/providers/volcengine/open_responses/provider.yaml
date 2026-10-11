@@ -1,5 +1,5 @@
-name: volcengine--openai_chat
-base: chat_completions
+name: volcengine--open_responses
+base: open_responses
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/volcengine.svg
 
 # Domestic (China mainland) endpoint; international: ark.ap-southeast.bytepluses.com/api/v3
@@ -11,5 +11,14 @@ reasoning:
     auto: auto
     enabled: enabled
     disabled: disabled
-  effort_field: reasoning_effort
+  effort_field: reasoning.effort
   effort_range: [minimal, max]
+# OpenAI Responses profile: extra lifecycle/echo fields + server-side
+# storage default (the vendor-neutral spec omits both).
+preserve_fields:
+  - access_programs
+  - billing
+  - content_filters
+  - moderation
+  - tool_usage
+store_default: true

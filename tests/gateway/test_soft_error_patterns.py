@@ -247,7 +247,7 @@ class TestArgoShimLoading:
     def test_argo_openai_chat_shim_has_patterns(self):
         from llm_rosetta.shims import get_shim
 
-        shim = get_shim("argo--openai_chat")
+        shim = get_shim("argo--chat_completions")
         assert shim is not None
         assert len(shim.soft_error_patterns) > 0
         p = shim.soft_error_patterns[0]

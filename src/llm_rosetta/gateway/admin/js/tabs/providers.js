@@ -128,12 +128,7 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
     for (const s of items) {
       const opt = document.createElement('option');
       opt.value = s.name;
-      // The backend leaves recommended_provider null when there is nothing to
-      // recommend (the format recommends itself, or no shim is registered), so
-      // only chat_completions / google_generate carry a `prefer "…"` suffix.
-      opt.textContent = s.recommended_provider
-        ? `${s.name} — ${t('label.preferProvider', {name: s.recommended_provider})}`
-        : s.name;
+      opt.textContent = s.name;
       if (s.name === provType) opt.selected = true;
       og.appendChild(opt);
     }

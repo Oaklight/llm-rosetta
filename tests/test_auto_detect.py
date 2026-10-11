@@ -378,7 +378,7 @@ class TestConvert:
         }
 
         result = convert(
-            openai_body, "deepseek--openai_chat", source_provider="openai_chat"
+            openai_body, "deepseek--chat_completions", source_provider="openai_chat"
         )
 
         assert result["thinking"] == {"type": "disabled"}

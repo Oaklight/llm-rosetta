@@ -20,7 +20,7 @@ Example usage::
     }
 
     # Per-provider shortcuts (definitions only)
-    openai_tool = tool_ops.to_openai_chat(ir_tool)
+    openai_tool = tool_ops.to_chat_completions(ir_tool)
     anthropic_tool = tool_ops.to_anthropic(ir_tool)
 
     # Unified dispatch (definitions)
@@ -246,18 +246,38 @@ def config_from_provider(
 # ==================== Per-provider definition shortcuts ====================
 
 
-def to_openai_chat(ir_tool: ToolDefinition, **kwargs: Any) -> dict[str, Any]:
-    """Convert IR tool definition to OpenAI Chat format."""
+def to_chat_completions(ir_tool: ToolDefinition, **kwargs: Any) -> dict[str, Any]:
+    """Convert IR tool definition to OpenAI Chat Completions format."""
     from .converters.chat_completions import ChatCompletionsToolOps
 
     return ChatCompletionsToolOps.ir_tool_definition_to_p(ir_tool, **kwargs)
 
 
-def to_openai_responses(ir_tool: ToolDefinition, **kwargs: Any) -> dict[str, Any]:
+def to_openai_chat(ir_tool: ToolDefinition, **kwargs: Any) -> dict[str, Any]:
+    """Deprecated alias for :func:`to_chat_completions` (removed in 0.16.0)."""
+    warnings.warn(
+        "tool_ops.to_openai_chat is deprecated; use to_chat_completions instead",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return to_chat_completions(ir_tool, **kwargs)
+
+
+def to_open_responses(ir_tool: ToolDefinition, **kwargs: Any) -> dict[str, Any]:
     """Convert IR tool definition to OpenAI Responses format."""
     from .converters.open_responses import OpenAIResponsesToolOps
 
     return OpenAIResponsesToolOps.ir_tool_definition_to_p(ir_tool, **kwargs)
+
+
+def to_openai_responses(ir_tool: ToolDefinition, **kwargs: Any) -> dict[str, Any]:
+    """Deprecated alias for :func:`to_open_responses` (removed in 0.16.0)."""
+    warnings.warn(
+        "tool_ops.to_openai_responses is deprecated; use to_open_responses instead",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return to_open_responses(ir_tool, **kwargs)
 
 
 def to_anthropic(ir_tool: ToolDefinition, **kwargs: Any) -> dict[str, Any]:
@@ -281,20 +301,42 @@ def to_google_interactions(ir_tool: ToolDefinition, **kwargs: Any) -> dict[str, 
     return GoogleInteractionsToolOps.ir_tool_definition_to_p(ir_tool, **kwargs)
 
 
-def from_openai_chat(provider_tool: Any, **kwargs: Any) -> ToolDefinition | None:
-    """Convert OpenAI Chat tool definition to IR format."""
+def from_chat_completions(provider_tool: Any, **kwargs: Any) -> ToolDefinition | None:
+    """Convert OpenAI Chat Completions tool definition to IR format."""
     from .converters.chat_completions import ChatCompletionsToolOps
 
     return ChatCompletionsToolOps.p_tool_definition_to_ir(provider_tool, **kwargs)
 
 
-def from_openai_responses(
+def from_openai_chat(provider_tool: Any, **kwargs: Any) -> ToolDefinition | None:
+    """Deprecated alias for :func:`from_chat_completions` (removed in 0.16.0)."""
+    warnings.warn(
+        "tool_ops.from_openai_chat is deprecated; use from_chat_completions instead",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return from_chat_completions(provider_tool, **kwargs)
+
+
+def from_open_responses(
     provider_tool: Any, **kwargs: Any
 ) -> ToolDefinition | list[ToolDefinition] | None:
     """Convert OpenAI Responses tool definition to IR format."""
     from .converters.open_responses import OpenAIResponsesToolOps
 
     return OpenAIResponsesToolOps.p_tool_definition_to_ir(provider_tool, **kwargs)
+
+
+def from_openai_responses(
+    provider_tool: Any, **kwargs: Any
+) -> ToolDefinition | list[ToolDefinition] | None:
+    """Deprecated alias for :func:`from_open_responses` (removed in 0.16.0)."""
+    warnings.warn(
+        "tool_ops.from_openai_responses is deprecated; use from_open_responses instead",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return from_open_responses(provider_tool, **kwargs)
 
 
 def from_anthropic(provider_tool: Any, **kwargs: Any) -> ToolDefinition | None:

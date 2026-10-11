@@ -1,4 +1,4 @@
-name: asksage--openai_responses
+name: asksage--open_responses
 base: open_responses
 
 connection:

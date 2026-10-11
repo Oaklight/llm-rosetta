@@ -1,4 +1,4 @@
-name: openai
+name: openai--chat_completions
 base: chat_completions
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/openai.svg
 

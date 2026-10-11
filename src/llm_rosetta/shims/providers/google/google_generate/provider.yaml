@@ -1,5 +1,5 @@
-name: google_interactions
-base: google_interactions
+name: google--google_generate
+base: google_generate
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/google.svg
 
 connection:
@@ -11,9 +11,5 @@ reasoning:
 
 tools:
   intrinsic_tools:
-    - google_search
     - code_execution
-    - url_context
-    - google_maps
-    - file_search
-    - retrieval
+    - google_search

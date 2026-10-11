@@ -61,17 +61,25 @@ DEPRECATED_ALIASES = [
 class TestToProvider:
     """Test IR → provider conversion shortcuts."""
 
-    def test_to_openai_chat(self):
-        result = tool_ops.to_openai_chat(IR_TOOL)
+    def test_to_chat_completions(self):
+        result = tool_ops.to_chat_completions(IR_TOOL)
         assert result["type"] == "function"
         assert result["function"]["name"] == "get_weather"
         assert "parameters" in result["function"]
 
-    def test_to_openai_responses(self):
-        result = tool_ops.to_openai_responses(IR_TOOL)
+    def test_to_open_responses(self):
+        result = tool_ops.to_open_responses(IR_TOOL)
         assert result["type"] == "function"
         assert result["name"] == "get_weather"
         assert "parameters" in result
+
+    def test_deprecated_to_aliases_warn_and_match(self):
+        with pytest.warns(DeprecationWarning):
+            legacy_chat = tool_ops.to_openai_chat(IR_TOOL)
+        with pytest.warns(DeprecationWarning):
+            legacy_responses = tool_ops.to_openai_responses(IR_TOOL)
+        assert legacy_chat == tool_ops.to_chat_completions(IR_TOOL)
+        assert legacy_responses == tool_ops.to_open_responses(IR_TOOL)
 
     def test_to_anthropic(self):
         result = tool_ops.to_anthropic(IR_TOOL)
@@ -96,19 +104,35 @@ class TestToProvider:
 class TestFromProvider:
     """Test provider → IR conversion shortcuts."""
 
-    def test_from_openai_chat(self):
-        provider_tool = tool_ops.to_openai_chat(IR_TOOL)
-        recovered = tool_ops.from_openai_chat(provider_tool)
+    def test_from_chat_completions(self):
+        provider_tool = tool_ops.to_chat_completions(IR_TOOL)
+        recovered = tool_ops.from_chat_completions(provider_tool)
         assert recovered is not None
         assert recovered["name"] == "get_weather"
         assert recovered["type"] == "function"
 
-    def test_from_openai_responses(self):
-        provider_tool = tool_ops.to_openai_responses(IR_TOOL)
-        recovered = tool_ops.from_openai_responses(provider_tool)
+    def test_from_open_responses(self):
+        provider_tool = tool_ops.to_open_responses(IR_TOOL)
+        recovered = tool_ops.from_open_responses(provider_tool)
         assert recovered is not None
         assert isinstance(recovered, dict)
         assert recovered["name"] == "get_weather"
+
+    def test_deprecated_from_aliases_warn_and_match(self):
+        with pytest.warns(DeprecationWarning):
+            legacy_chat = tool_ops.from_openai_chat(
+                tool_ops.to_chat_completions(IR_TOOL)
+            )
+        with pytest.warns(DeprecationWarning):
+            legacy_responses = tool_ops.from_openai_responses(
+                tool_ops.to_open_responses(IR_TOOL)
+            )
+        assert legacy_chat == tool_ops.from_chat_completions(
+            tool_ops.to_chat_completions(IR_TOOL)
+        )
+        assert legacy_responses == tool_ops.from_open_responses(
+            tool_ops.to_open_responses(IR_TOOL)
+        )
 
     def test_from_anthropic(self):
         provider_tool = tool_ops.to_anthropic(IR_TOOL)

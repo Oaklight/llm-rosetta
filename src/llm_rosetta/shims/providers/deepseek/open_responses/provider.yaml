@@ -1,18 +1,16 @@
-name: volcengine--openai_responses
+name: deepseek--open_responses
 base: open_responses
-logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/volcengine.svg
+logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/deepseek.svg
 
-# Domestic (China mainland) endpoint; international: ark.ap-southeast.bytepluses.com/api/v3
 connection:
-  base_url: https://ark.cn-beijing.volces.com/api/v3
-  api_key_env: ARK_API_KEY
+  base_url: https://api.deepseek.com
+  api_key_env: DEEPSEEK_API_KEY
 reasoning:
   thinking_modes:
-    auto: auto
     enabled: enabled
     disabled: disabled
   effort_field: reasoning.effort
-  effort_range: [minimal, max]
+  effort_range: [low, max]
 # OpenAI Responses profile: extra lifecycle/echo fields + server-side
 # storage default (the vendor-neutral spec omits both).
 preserve_fields:

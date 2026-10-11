@@ -36,21 +36,6 @@ import logging
 
 logger = logging.getLogger("llm-rosetta-gateway")
 
-# Opinionated: the vendor shim to recommend for each base format.  Entries that
-# name the format itself (anthropic / google_interactions) are inert — the
-# payload treats a self-recommendation as None, so the picker shows no hint;
-# they are kept only to document the canonical shim per format.
-# `google_generate` has no entry: its vendor shim is named `google_generate`, so
-# there is nothing differently-named to recommend.  `open_responses` now
-# recommends the `openai--open_responses` shim: the latter is the OpenAI profile
-# of the same base, so selecting it no longer changes the saved base type.
-_BASE_FORMAT_RECOMMENDED: dict[str, str] = {
-    "chat_completions": "openai",
-    "open_responses": "openai--open_responses",
-    "anthropic": "anthropic",
-    "google_interactions": "google_interactions",
-}
-
 
 def _base_formats_payload() -> list[dict[str, Any]]:
     """Payload for the base-format options in the provider-type picker.
@@ -58,27 +43,18 @@ def _base_formats_payload() -> list[dict[str, Any]]:
     The set of formats follows ``BASE_FORMATS`` (next to ``_PROVIDER_REGISTRY``)
     so a new base type is added in one place.  ``supports_custom_tools`` carries
     the format's own default so a bare format matches its vendor shim instead of
-    silently dropping the toggle.  ``recommended_provider`` is ``None`` when the
-    recommendation is not actionable — the format recommends itself, or the
-    shim is not a registered provider name (so it can never dangle in the
-    picker, even if the name is later aliased) — so the payload is
-    self-describing.
+    silently dropping the toggle.
     ``hoist_system_messages`` is not carried: every format defaults it to true
     (the JS reads ``!== false``), so there is nothing to override.
     """
-    registered = {shim.name for shim in list_shims()}
     out: list[dict[str, Any]] = []
     for name in BASE_FORMATS:
-        rec = _BASE_FORMAT_RECOMMENDED.get(name)
         out.append(
             {
                 "name": name,
                 "default_base_url": get_default_base_url(name),
                 "default_api_key_env": get_default_api_key_env(name),
                 "supports_custom_tools": get_default_supports_custom_tools(name),
-                "recommended_provider": (
-                    rec if rec and rec != name and rec in registered else None
-                ),
             }
         )
     return out

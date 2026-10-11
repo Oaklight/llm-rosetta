@@ -1,5 +1,5 @@
-name: argo--openai_chat
-base: chat_completions
+name: argo--open_responses
+base: open_responses
 logo: https://i.111666.best/image/wgp6hAUArNq2O6pICMRRvj.png
 
 connection:
@@ -11,8 +11,7 @@ tools:
   custom_tools: true
   max_description_length: 1024
 reasoning:
-  effort_field: reasoning_effort
-  # effort_range not set = full IR ladder (minimal–max)
+  effort_field: reasoning.effort
 
 soft_error_patterns:
   - pattern: "AUTHENTICATION NOTICE FROM ARGO"
@@ -20,3 +19,13 @@ soft_error_patterns:
     message: >-
       ARGO authentication error: the upstream ARGO gateway rejected the
       request. Verify your username and API key configuration.
+
+# OpenAI Responses profile: extra lifecycle/echo fields + server-side
+# storage default (the vendor-neutral spec omits both).
+preserve_fields:
+  - access_programs
+  - billing
+  - content_filters
+  - moderation
+  - tool_usage
+store_default: true

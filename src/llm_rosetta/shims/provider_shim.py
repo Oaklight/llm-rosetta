@@ -22,7 +22,9 @@ from typing import Any, Literal
 from ..types.ir.configs import IREffort, IRMode  # re-exported
 from llm_rosetta.provider_names import (
     LEGACY_PROVIDER_ALIASES,
+    LEGACY_SHIM_ALIASES,
     canonical_provider_name,
+    canonical_shim_name,
 )
 from llm_rosetta.transforms import IRTransform, Transform
 
@@ -457,12 +459,13 @@ _BASE_TYPES: frozenset[str] = frozenset(
 def register_shim(shim: ProviderShim) -> None:
     """Register (or replace) a :class:`ProviderShim` in the global registry.
 
-    The shim is keyed by its **exact** declared name.  A legacy name is *also*
-    registered under its canonical spelling when that key is still free, so a
-    shim registered under a legacy name stays reachable via both spellings.
-    The canonical key is never allowed to overwrite an existing entry: a
-    (plugin) shim may legitimately be named like a legacy alias, and the
-    exact-name registrant must win.
+    The shim is keyed by its **exact** declared name.  Legacy spellings are
+    *also* registered as aliases when their key is still free, so a shim
+    registered under its canonical ``<provider>--<base>`` name (or under a
+    legacy provider name) stays reachable via both spellings.  An alias key is
+    never allowed to overwrite an existing entry: a (plugin) shim may
+    legitimately be named like a legacy alias, and the exact-name registrant
+    must win.
 
     If a shim with the same name is already registered, it is silently
     replaced and an INFO-level log is emitted.  This allows plugin shims
@@ -472,9 +475,22 @@ def register_shim(shim: ProviderShim) -> None:
     if key in _SHIM_REGISTRY:
         logger.info("Shim %r overridden (base: %s)", key, shim.base)
     _SHIM_REGISTRY[key] = shim
+    # A shim registered under a legacy provider name stays reachable under its
+    # canonical provider spelling (existing behaviour, e.g. plugin shims).
     canonical = LEGACY_PROVIDER_ALIASES.get(key)
     if canonical is not None and canonical not in _SHIM_REGISTRY:
         _SHIM_REGISTRY[canonical] = shim
+    # Register every legacy shim spelling that targets this canonical name, so
+    # ``get_shim(legacy) is get_shim(canonical)`` (#917).  A re-registration of
+    # the canonical shim must refresh the alias (drop the stale instance), but
+    # an exact-name registrant (a plugin shim literally named like the legacy
+    # alias) wins and is never clobbered.
+    for legacy, target in LEGACY_SHIM_ALIASES.items():
+        if target != key:
+            continue
+        existing = _SHIM_REGISTRY.get(legacy)
+        if existing is None or existing.name != legacy:
+            _SHIM_REGISTRY[legacy] = shim
 
 
 def unregister_shim(name: str) -> ProviderShim | None:
@@ -486,6 +502,8 @@ def unregister_shim(name: str) -> ProviderShim | None:
     shim = _SHIM_REGISTRY.pop(name, None)
     if shim is None:
         shim = _SHIM_REGISTRY.pop(canonical_provider_name(name), None)
+    if shim is None:
+        shim = _SHIM_REGISTRY.pop(canonical_shim_name(name), None)
     if shim is not None:
         # Drop any canonical alias that pointed at the removed shim.
         for key in [k for k, v in _SHIM_REGISTRY.items() if v is shim]:
@@ -498,16 +516,22 @@ def get_shim(name: str) -> ProviderShim | None:
 
     The exact name is tried first, so a shim whose name is itself a legacy
     alias (a plugin case) is reachable under that name.  Only if there is no
-    exact match is *name* resolved to its canonical spelling and looked up
-    again, keeping a shim registered under its canonical name reachable via a
-    legacy alias (e.g. ``"google"`` → ``"google_generate"``, or the OpenAI
-    Responses profile ``"openai_responses"`` → ``"openai--open_responses"``).
+    exact match is *name* resolved to its canonical provider spelling and
+    looked up again, then to its canonical *shim* spelling, keeping a shim
+    registered under its canonical name reachable via a legacy alias (e.g.
+    ``"google"`` → ``"google--google_generate"``, the OpenAI Responses profile
+    ``"openai_responses"`` → ``"openai--open_responses"``, or the old base
+    spelling ``"deepseek--openai_chat"`` → ``"deepseek--chat_completions"``).
     This is an internal lookup and never warns.
     """
     shim = _SHIM_REGISTRY.get(name)
     if shim is not None:
         return shim
-    return _SHIM_REGISTRY.get(canonical_provider_name(name))
+    name = canonical_provider_name(name)
+    shim = _SHIM_REGISTRY.get(name)
+    if shim is not None:
+        return shim
+    return _SHIM_REGISTRY.get(canonical_shim_name(name))
 
 
 def resolve_shim(shim: ProviderShim | str | None) -> ProviderShim | None:
@@ -524,8 +548,20 @@ def resolve_shim(shim: ProviderShim | str | None) -> ProviderShim | None:
 
 
 def list_shims() -> list[ProviderShim]:
-    """Return all registered provider shims."""
-    return list(_SHIM_REGISTRY.values())
+    """Return all registered provider shims, deduplicated.
+
+    Legacy alias keys (see :data:`llm_rosetta.provider_names.LEGACY_SHIM_ALIASES`)
+    point at the same instance as their canonical name, so they are collapsed
+    to one entry per shim while preserving registration order.
+    """
+    seen: set[int] = set()
+    out: list[ProviderShim] = []
+    for shim in _SHIM_REGISTRY.values():
+        if id(shim) in seen:
+            continue
+        seen.add(id(shim))
+        out.append(shim)
+    return out
 
 
 def resolve_base(name: str) -> str:
@@ -552,6 +588,9 @@ def resolve_base(name: str) -> str:
     if name in _BASE_TYPES:
         return name
     shim = _SHIM_REGISTRY.get(name)
+    if shim is not None:
+        return shim.base
+    shim = _SHIM_REGISTRY.get(canonical_shim_name(name))
     if shim is not None:
         return shim.base
     return name

@@ -5,7 +5,7 @@
 # Bearer auth, so a user with a subscription uses the same shim. As a keyless
 # entry the admin UI shows it as "Kilo (Free)" and groups it under the Free
 # Resource section.
-name: kilo--openai_chat
+name: kilo--chat_completions
 base: chat_completions
 display_name: Kilo
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/kilocode.svg

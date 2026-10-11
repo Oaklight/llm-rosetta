@@ -41,7 +41,7 @@ def _clean_registry():
 def volcengine_shim():
     """Register a volcengine-like shim with post_ir_transforms that strip fields."""
     shim = ProviderShim(
-        name="volcengine--openai_chat",
+        name="volcengine--chat_completions",
         base="openai_chat",
         post_ir_transforms=(strip_fields("logprobs", "top_logprobs"),),
     )
@@ -79,7 +79,9 @@ class TestPipelineTransformResolution:
         assert p._target_post_ir_transforms == ()
 
     def test_volcengine_shim(self, volcengine_shim):
-        p = ConversionPipeline("openai_chat", "openai_chat", "volcengine--openai_chat")
+        p = ConversionPipeline(
+            "openai_chat", "openai_chat", "volcengine--chat_completions"
+        )
         assert p._target_post_ir_transforms == volcengine_shim.post_ir_transforms
         assert p._target_pre_ir_transforms == ()
 
@@ -160,7 +162,7 @@ class TestNonStreamingTransforms:
 
         async def run():
             await handle_non_streaming(
-                _make_route(shim_name="volcengine--openai_chat"),
+                _make_route(shim_name="volcengine--chat_completions"),
                 _make_provider_info(),
                 {
                     "model": "test-model",

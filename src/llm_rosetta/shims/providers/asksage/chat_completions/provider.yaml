@@ -1,4 +1,4 @@
-name: asksage--openai_chat
+name: asksage--chat_completions
 base: chat_completions
 
 connection:

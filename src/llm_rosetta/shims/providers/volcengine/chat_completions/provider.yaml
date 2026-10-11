@@ -1,0 +1,15 @@
+name: volcengine--chat_completions
+base: chat_completions
+logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/volcengine.svg
+
+# Domestic (China mainland) endpoint; international: ark.ap-southeast.bytepluses.com/api/v3
+connection:
+  base_url: https://ark.cn-beijing.volces.com/api/v3
+  api_key_env: ARK_API_KEY
+reasoning:
+  thinking_modes:
+    auto: auto
+    enabled: enabled
+    disabled: disabled
+  effort_field: reasoning_effort
+  effort_range: [minimal, max]
