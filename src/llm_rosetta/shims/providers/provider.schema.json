@@ -47,6 +47,18 @@
       "description": "Provider-specific prefix for response IDs (e.g. 'chatcmpl-', 'msg_', 'resp_'). Empty string means passthrough.",
       "default": ""
     },
+    "preserve_fields": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Extra response/echo fields this provider adds to the base format's preserve set (e.g. the OpenAI-only lifecycle fields). Additive; the base format's spec-level set always applies.",
+      "default": []
+    },
+    "store_default": {
+      "type": "boolean",
+      "description": "Value for the 'store' field injected into a response resource when the upstream echo omits it. Omit to keep the base format's spec behavior (no forced store); true selects OpenAI's server-side-storage default."
+    },
     "hoist_system_messages": {
       "type": "boolean",
       "description": "Whether to hoist late system messages for prompt cache prefix stability.",

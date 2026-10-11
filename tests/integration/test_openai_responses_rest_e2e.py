@@ -29,7 +29,7 @@ import requests
 from typing import cast
 
 from examples.tools import available_tools, tools_spec
-from llm_rosetta.converters.openai_responses import OpenAIResponsesConverter
+from llm_rosetta.converters.open_responses import OpenAIResponsesConverter
 from llm_rosetta.types.ir import (
     IRRequest,
     Message,

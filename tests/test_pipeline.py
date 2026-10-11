@@ -1014,7 +1014,11 @@ class TestConversionPipeline:
         """Pipeline sets response_id_prefix from shim on context."""
         from llm_rosetta.pipeline import ConversionPipeline
 
-        pipeline = ConversionPipeline("openai_chat", "openai_responses")
+        # #909: the ``resp_`` prefix is a shim trait, so the OpenAI-profile
+        # shim must be named explicitly (the neutral base has no prefix).
+        pipeline = ConversionPipeline(
+            "openai_chat", "open_responses", target_shim="openai_responses"
+        )
         pipeline.convert_request(
             {"model": "gpt-4", "messages": [{"role": "user", "content": "hi"}]}
         )
@@ -1269,7 +1273,7 @@ class TestIntrinsicIrTransforms:
 
     def test_openai_responses_has_no_intrinsic_transforms(self):
         """OpenAI Responses converter should not declare intrinsic transforms."""
-        from llm_rosetta.converters.openai_responses import OpenAIResponsesConverter
+        from llm_rosetta.converters.open_responses import OpenAIResponsesConverter
 
         assert OpenAIResponsesConverter._INTRINSIC_IR_TRANSFORMS == ()
 

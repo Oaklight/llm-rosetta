@@ -44,15 +44,18 @@ ToolProvider = Literal[
     # Canonical names (match ProviderType / internal module names)
     "chat_completions",
     "openai_chat",  # legacy alias of "chat_completions"
-    "openai_responses",
+    "open_responses",
+    # The OpenAI Responses profile shim; ``openai_responses`` /
+    # ``openai-responses`` are legacy aliases that normalise onto this name.
+    "openai--open_responses",
     "anthropic",
     "google",
     "google_generate",
     "google_interactions",
-    # Hyphenated aliases for ergonomic use
+    # Legacy / hyphenated aliases for ergonomic use
     "openai-chat",
+    "openai_responses",
     "openai-responses",
-    "open_responses",
     "open-responses",
     "google-genai",
     "google-interactions",
@@ -71,8 +74,8 @@ def _get_tool_ops(provider: str) -> Any:
         from .converters.chat_completions import ChatCompletionsToolOps
 
         return ChatCompletionsToolOps
-    if canonical in ("openai_responses", "open_responses"):
-        from .converters.openai_responses import OpenResponsesToolOps
+    if canonical in ("open_responses", "openai--open_responses", "openai_responses"):
+        from .converters.open_responses import OpenResponsesToolOps
 
         return OpenResponsesToolOps
     if canonical == "anthropic":
@@ -89,10 +92,10 @@ def _get_tool_ops(provider: str) -> Any:
         return GoogleInteractionsToolOps
     raise ValueError(
         f"Unknown provider: {provider!r}. "
-        f"Supported: chat_completions, openai_responses, open_responses, "
+        f"Supported: chat_completions, open_responses, openai--open_responses, "
         f"anthropic, google_generate, google_interactions "
-        f"(aliases: openai_chat, openai-chat, openai-responses, google, "
-        f"google-genai, google-interactions)"
+        f"(aliases: openai_chat, openai-chat, openai_responses, "
+        f"openai-responses, google, google-genai, google-interactions)"
     )
 
 
@@ -216,7 +219,7 @@ def to_openai_chat(ir_tool: ToolDefinition, **kwargs: Any) -> dict[str, Any]:
 
 def to_openai_responses(ir_tool: ToolDefinition, **kwargs: Any) -> dict[str, Any]:
     """Convert IR tool definition to OpenAI Responses format."""
-    from .converters.openai_responses import OpenAIResponsesToolOps
+    from .converters.open_responses import OpenAIResponsesToolOps
 
     return OpenAIResponsesToolOps.ir_tool_definition_to_p(ir_tool, **kwargs)
 
@@ -253,7 +256,7 @@ def from_openai_responses(
     provider_tool: Any, **kwargs: Any
 ) -> ToolDefinition | list[ToolDefinition] | None:
     """Convert OpenAI Responses tool definition to IR format."""
-    from .converters.openai_responses import OpenAIResponsesToolOps
+    from .converters.open_responses import OpenAIResponsesToolOps
 
     return OpenAIResponsesToolOps.p_tool_definition_to_ir(provider_tool, **kwargs)
 

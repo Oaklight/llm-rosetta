@@ -5,8 +5,8 @@ OpenAI Responses API stream converter unit tests.
 from typing import Any, cast
 
 from llm_rosetta.converters.base.context import StreamContext
-from llm_rosetta.converters.openai_responses import OpenAIResponsesConverter
-from llm_rosetta.converters.openai_responses.stream_context import (
+from llm_rosetta.converters.open_responses import OpenAIResponsesConverter
+from llm_rosetta.converters.open_responses.stream_context import (
     OpenAIResponsesStreamContext,
 )
 from llm_rosetta.pipeline import ConversionPipeline

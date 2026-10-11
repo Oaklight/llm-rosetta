@@ -167,7 +167,7 @@ def _register_builtins() -> None:
             routes=[
                 RouteSpec("/v1/chat/completions", source_format="chat_completions"),
                 RouteSpec("/v1/messages", source_format="anthropic"),
-                RouteSpec("/v1/responses", source_format="openai_responses"),
+                RouteSpec("/v1/responses", source_format="open_responses"),
                 RouteSpec(
                     "/v1beta/models/<path:model_path>",
                     source_format="google_generate",
@@ -177,7 +177,7 @@ def _register_builtins() -> None:
             formats=[
                 "chat_completions",
                 "anthropic",
-                "openai_responses",
+                "open_responses",
                 "google_generate",
                 "google_interactions",
             ],

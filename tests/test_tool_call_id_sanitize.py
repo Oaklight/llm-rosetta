@@ -194,7 +194,7 @@ class TestSanitizationInConverters:
         assert re.match(r"^[a-zA-Z0-9_-]+$", fc["id"])
 
     def test_openai_responses_tool_call_sanitized(self):
-        from llm_rosetta.converters.openai_responses.tool_ops import (
+        from llm_rosetta.converters.open_responses.tool_ops import (
             OpenAIResponsesToolOps,
         )
 

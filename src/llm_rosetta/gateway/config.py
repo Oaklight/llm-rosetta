@@ -933,7 +933,12 @@ class GatewayConfig:
                 )
                 provider_shim_names[name] = cfg["type"]
             else:
-                provider_types[name] = normalize_provider_name(name)
+                # Resolve through the shim registry too: a provider named after
+                # a shim (e.g. ``openai--open_responses``, or the legacy
+                # ``openai_responses`` alias of it) uses that shim's base and
+                # keeps its identity, rather than being read as a bare format
+                # name.
+                provider_types[name] = normalize_provider_name(resolve_base(name))
                 provider_shim_names[name] = name
         return provider_types, provider_shim_names
 
@@ -1076,10 +1081,11 @@ class GatewayConfig:
         everything matches — reusing the original route then preserves its
         load-balancing state.
 
-        Provider types are compared as exact strings:
-        ``open_responses`` and ``openai_responses`` are distinct types
-        (a vendor-neutral base converter vs. its OpenAI profile), so they
-        still cross-convert rather than taking the same-format shortcut.
+        Provider types are compared as normalised base types: since #909
+        ``open_responses`` is the only Responses base and
+        ``openai--open_responses`` is a shim over it, so an OpenAI-profile
+        provider and a neutral-spec provider count as the same format and may
+        take the shortcut.
         """
         if not self.prefer_same_format:
             return None

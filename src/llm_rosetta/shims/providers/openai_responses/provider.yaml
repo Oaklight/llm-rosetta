@@ -1,5 +1,11 @@
-name: openai_responses
-base: openai_responses
+# Name is ``openai--open_responses`` (provider--base) so the OpenAI profile is
+# distinguishable from the vendor-neutral ``open_responses`` base.  The legacy
+# spellings ``openai_responses`` / ``openai-responses`` are aliased to this name
+# in ``provider_names.LEGACY_PROVIDER_ALIASES``.
+name: openai--open_responses
+# OpenAI Responses is a profile of the vendor-neutral Open Responses base;
+# the profile traits are opt-in settings below.
+base: open_responses
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/openai.svg
 
 connection:
@@ -18,6 +24,15 @@ tools:
   custom_tools: true
   search_mode: native
 response_id_prefix: "resp_"
+# OpenAI-only lifecycle/echo fields, added to the base spec's preserve set.
+preserve_fields:
+  - access_programs
+  - billing
+  - content_filters
+  - moderation
+  - tool_usage
+# OpenAI stores responses server-side by default; the spec is stateless.
+store_default: true
 reasoning:
   effort_field: reasoning.effort
   effort_range: [minimal, max]

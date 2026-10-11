@@ -38,7 +38,8 @@ class TestNormalizeProviderName:
             ("google-genai", "google_generate"),
             ("openai_chat", "chat_completions"),
             ("openai-chat", "chat_completions"),
-            ("openai-responses", "openai_responses"),
+            ("openai_responses", "openai--open_responses"),
+            ("openai-responses", "openai--open_responses"),
             ("open-responses", "open_responses"),
             ("google-interactions", "google_interactions"),
         ],
@@ -50,8 +51,8 @@ class TestNormalizeProviderName:
     @pytest.mark.parametrize(
         "name",
         [
-            "openai_responses",
             "open_responses",
+            "openai--open_responses",
             "anthropic",
             "google_generate",
             "google_interactions",
@@ -78,10 +79,17 @@ class TestNormalizeProviderName:
         assert "google" in str(record.list[0].message)
         assert "google_generate" in str(record.list[0].message)
 
-    def test_every_alias_target_is_a_valid_provider_type(self):
-        """The map may only map onto ProviderType members."""
-        canonical = set(get_args(ProviderType))
-        assert set(LEGACY_PROVIDER_ALIASES.values()) <= canonical
+    def test_every_alias_target_is_a_valid_provider_name(self):
+        """The map may only target a base ProviderType or a registered shim.
+
+        Since #909 the Responses aliases target the ``openai--open_responses``
+        shim (the OpenAI profile), not the neutral ``open_responses`` base, so
+        shim names are legitimate alias targets.
+        """
+        from llm_rosetta.shims import list_shims
+
+        valid = set(get_args(ProviderType)) | {s.name for s in list_shims()}
+        assert set(LEGACY_PROVIDER_ALIASES.values()) <= valid
 
     def test_no_alias_target_is_a_legacy_key(self):
         """Canonical targets must not themselves be aliases (no chains)."""
@@ -240,20 +248,44 @@ class TestCanonicalNameResolvesToShim:
             assert resolve_shim("google") is not None
 
 
-class TestRegisterShimNormalises:
-    """``register_shim`` keys on the normalised name, matching lookups."""
+class TestRegisterShimKeys:
+    """``register_shim`` keys on the exact name, with a free canonical alias."""
 
-    def test_legacy_name_is_normalised_on_register(self):
+    def test_exact_name_is_primary_and_canonical_alias_added_when_free(self):
         import llm_rosetta.shims.provider_shim as ps
         from llm_rosetta.shims import ProviderShim, register_shim
 
         saved = dict(ps._SHIM_REGISTRY)
         try:
-            with pytest.warns(DeprecationWarning):
-                register_shim(ProviderShim(name="google", base="google_generate"))
+            ps._SHIM_REGISTRY.clear()
+            register_shim(ProviderShim(name="google", base="google_generate"))
+            assert "google" in ps._SHIM_REGISTRY
             assert "google_generate" in ps._SHIM_REGISTRY
-            assert "google" not in ps._SHIM_REGISTRY
             assert ps.get_shim("google_generate") is ps.get_shim("google")
+        finally:
+            ps._SHIM_REGISTRY.clear()
+            ps._SHIM_REGISTRY.update(saved)
+
+    def test_canonical_shim_not_clobbered_by_legacy_named_shim(self):
+        """A shim named like a legacy alias keeps its own identity (#909).
+
+        ``openai_responses`` is an alias key that normalises to the
+        ``openai--open_responses`` shim; if a (plugin) shim is registered under
+        that exact legacy spelling, it must stay reachable under its exact name
+        rather than being clobbered by the canonical alias resolution.
+        """
+        import llm_rosetta.shims.provider_shim as ps
+        from llm_rosetta.shims import ProviderShim, register_shim
+
+        saved = dict(ps._SHIM_REGISTRY)
+        try:
+            ps._SHIM_REGISTRY.clear()
+            neutral = ProviderShim(name="open_responses", base="open_responses")
+            profile = ProviderShim(name="openai_responses", base="open_responses")
+            register_shim(neutral)
+            register_shim(profile)
+            assert ps.get_shim("open_responses") is neutral
+            assert ps.get_shim("openai_responses") is profile
         finally:
             ps._SHIM_REGISTRY.clear()
             ps._SHIM_REGISTRY.update(saved)

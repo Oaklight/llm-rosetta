@@ -29,7 +29,7 @@ Five chat converters, one per API standard:
 | Converter | API Standard | Module |
 |-----------|-------------|--------|
 | `chat_completions` | OpenAI Chat Completions | `converters/chat_completions/` |
-| `openai_responses` / `open_responses` | OpenAI Responses API / Open Responses spec | `converters/openai_responses/` |
+| `open_responses` (OpenAI profile via the `openai_responses` shim) | Open Responses spec | `converters/open_responses/` |
 | `anthropic` | Anthropic Messages API | `converters/anthropic/` |
 | `google_generate` | Google generateContent API | `converters/google_generate/` |
 | `google_interactions` | Google Interactions API | `converters/google_interactions/` |

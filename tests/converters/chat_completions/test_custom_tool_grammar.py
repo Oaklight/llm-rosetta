@@ -8,7 +8,7 @@ upstream is rejected with
 """
 
 from llm_rosetta.converters.chat_completions.tool_ops import ChatCompletionsToolOps
-from llm_rosetta.converters.openai_responses.tool_ops import OpenAIResponsesToolOps
+from llm_rosetta.converters.open_responses.tool_ops import OpenAIResponsesToolOps
 
 LARK_DEFINITION = 'start: "*** Begin Patch" /(.|\\n)+/ "*** End Patch"'
 

@@ -63,7 +63,7 @@ def _format_sse(event):
     return f"data: {json.dumps(event)}\n\n"
 
 
-async def _collect(chunks, source_provider="openai_responses"):
+async def _collect(chunks, source_provider="open_responses"):
     out = []
     async for piece in _stream_event_generator(
         source_provider=source_provider,

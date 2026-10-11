@@ -5,10 +5,10 @@ from typing import Any, cast
 from llm_rosetta.converters.base import BaseConverter
 from llm_rosetta.converters.base.context import ConversionContext, StreamContext
 from llm_rosetta.converters.chat_completions.converter import ChatCompletionsConverter
-from llm_rosetta.converters.openai_responses.converter import OpenAIResponsesConverter
+from llm_rosetta.converters.open_responses.converter import OpenAIResponsesConverter
 from llm_rosetta.converters.anthropic.converter import AnthropicConverter
 from llm_rosetta.converters.google_generate.converter import GoogleGenerateConverter
-from llm_rosetta.converters.openai_responses.stream_context import (
+from llm_rosetta.converters.open_responses.stream_context import (
     OpenAIResponsesStreamContext,
 )
 from llm_rosetta.types.ir import UserMessage

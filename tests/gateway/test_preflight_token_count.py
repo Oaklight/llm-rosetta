@@ -85,7 +85,7 @@ class TestBuildPreflightBody:
             "stream": True,
             "reasoning": {"effort": "medium"},
         }
-        result = _build_preflight_body(body, "openai_responses")
+        result = _build_preflight_body(body, "open_responses")
         assert result["max_output_tokens"] == 1
         assert "stream" not in result
         assert "reasoning" not in result
@@ -107,7 +107,7 @@ class TestExtractPreflightInputTokens:
 
     def test_openai_responses(self):
         resp = {"usage": {"input_tokens": 55, "output_tokens": 1}}
-        assert _extract_preflight_input_tokens(resp, "openai_responses") == 55
+        assert _extract_preflight_input_tokens(resp, "open_responses") == 55
 
     def test_google(self):
         resp = {"usageMetadata": {"promptTokenCount": 200}}

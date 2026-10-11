@@ -10,7 +10,7 @@ from typing import cast
 
 from llm_rosetta.converters.anthropic import AnthropicConverter
 from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
-from llm_rosetta.converters.openai_responses import OpenAIResponsesConverter
+from llm_rosetta.converters.open_responses import OpenAIResponsesConverter
 from llm_rosetta.pipeline import ConversionPipeline
 from llm_rosetta.types.ir import IRRequest
 
@@ -126,7 +126,7 @@ class TestPipelineKeepsIntrinsicHistory:
         pipe = ConversionPipeline(
             "anthropic",
             "openai_responses",
-            target_shim=shims["openai_responses"],
+            target_shim=shims["openai--open_responses"],
             upstream_model="gpt-5-nano",
         )
         body = pipe.convert_request(json.loads(json.dumps(self.ANTHROPIC_REQ)))

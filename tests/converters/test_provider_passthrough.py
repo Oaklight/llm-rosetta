@@ -10,7 +10,7 @@ from llm_rosetta.pipeline import StreamProcessor
 from llm_rosetta.converters.base.tools.orphan_fix import (
     fix_orphaned_tool_calls_ir,
 )
-from llm_rosetta.converters.openai_responses.converter import OpenAIResponsesConverter
+from llm_rosetta.converters.open_responses.converter import OpenAIResponsesConverter
 from llm_rosetta.converters.chat_completions.converter import ChatCompletionsConverter
 from llm_rosetta.converters.google_generate.converter import GoogleGenerateConverter
 from llm_rosetta.types.ir import (

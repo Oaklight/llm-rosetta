@@ -204,9 +204,12 @@ class OpenResponsesConverter(BaseConverter):
     _CONVERTER_TAG = "open_responses"
     _PASSTHROUGH_RESTORE_KEY = "output"
 
-    # Preserve-mode echo fields and required response defaults.  The base uses
-    # the spec-level sets (no OpenAI-only lifecycle fields, no forced
-    # ``store: true``); ``OpenAIResponsesConverter`` overrides both.
+    # Preserve-mode echo fields and required response defaults.  These are the
+    # spec-level defaults (no OpenAI-only lifecycle fields, no forced
+    # ``store: true``); the conversion pipeline layers a provider shim's
+    # ``preserve_fields`` / ``store_default`` settings on top via
+    # ``context.options``, and ``OpenAIResponsesConverter`` overrides the class
+    # attributes directly for direct, context-free use.
     _PRESERVE_FIELDS: ClassVar[set[str]] = OPEN_RESPONSES_PRESERVE_FIELDS
     _REQUIRED_DEFAULTS: ClassVar[dict[str, Any]] = OPEN_RESPONSES_REQUIRED_DEFAULTS
 
@@ -231,6 +234,39 @@ class OpenResponsesConverter(BaseConverter):
             if prefix is not None:
                 return prefix
         return self._RESPONSE_ID_PREFIX
+
+    def _get_preserve_fields(
+        self, context: ConversionContext | StreamContext | None = None
+    ) -> set[str]:
+        """Return the effective preserve/echo field set.
+
+        Starts from the class-level spec set and adds any shim-declared
+        ``preserve_fields`` carried in ``context.options`` (populated by the
+        pipeline from the provider shim).  Direct converter use without a
+        pipeline falls back to the class attribute.
+        """
+        fields = set(self._PRESERVE_FIELDS)
+        if context is not None:
+            extra = context.options.get("preserve_fields")
+            if extra:
+                fields.update(extra)
+        return fields
+
+    def _get_required_defaults(
+        self, context: ConversionContext | StreamContext | None = None
+    ) -> dict[str, Any]:
+        """Return the effective response required-defaults map.
+
+        Starts from the class-level spec defaults and, when the provider shim
+        declares a ``store_default`` in ``context.options``, sets the ``store``
+        field accordingly (the OpenAI profile stores responses server-side).
+        """
+        defaults = dict(self._REQUIRED_DEFAULTS)
+        if context is not None:
+            store_default = context.options.get("store_default")
+            if store_default is not None:
+                defaults["store"] = store_default
+        return defaults
 
     @staticmethod
     def _completion_timestamp() -> int:
@@ -440,9 +476,8 @@ class OpenResponsesConverter(BaseConverter):
         # Preserve mode: capture request fields for echo-back in response
         ctx = context if context is not None else ConversionContext()
         if ctx.metadata_mode == "preserve":
-            echo = {
-                k: v for k, v in provider_request.items() if k in self._PRESERVE_FIELDS
-            }
+            preserve = self._get_preserve_fields(ctx)
+            echo = {k: v for k, v in provider_request.items() if k in preserve}
             if echo:
                 ctx.store_request_echo(echo)
 
@@ -818,10 +853,11 @@ class OpenResponsesConverter(BaseConverter):
     ) -> None:
         """Capture extra fields from provider response for lossless round-trip."""
         output_items = provider_response.get("output", [])
+        preserve = self._get_preserve_fields(ctx)
         extras = {
             k: v
             for k, v in provider_response.items()
-            if k in self._PRESERVE_FIELDS and v is not None
+            if k in preserve and v is not None
         }
         if extras:
             ctx.store_response_extras(extras)
@@ -852,7 +888,7 @@ class OpenResponsesConverter(BaseConverter):
             "usage",
         }
         # Apply required defaults first, then override with actual echo
-        for k, v in self._REQUIRED_DEFAULTS.items():
+        for k, v in self._get_required_defaults(ctx).items():
             if k not in core_keys and k not in provider_response:
                 provider_response[k] = v
         for k, v in echo.items():
@@ -963,7 +999,9 @@ class OpenResponsesConverter(BaseConverter):
             # Preserve mode: capture echo fields from the initial response
             if context.metadata_mode == "preserve" and isinstance(response, dict):
                 extras = {
-                    k: v for k, v in response.items() if k in self._PRESERVE_FIELDS
+                    k: v
+                    for k, v in response.items()
+                    if k in self._get_preserve_fields(context)
                 }
                 if extras:
                     context.store_response_extras(extras)
@@ -1456,7 +1494,7 @@ class OpenResponsesConverter(BaseConverter):
                 "status",
                 "usage",
             }
-            for k, v in self._REQUIRED_DEFAULTS.items():
+            for k, v in self._get_required_defaults(context).items():
                 if k not in core_keys and k not in response:
                     response[k] = v
             for k, v in echo.items():
@@ -2083,9 +2121,8 @@ class OpenResponsesConverter(BaseConverter):
         }
         return usage
 
-    @classmethod
     def _apply_finish_echo(
-        cls, response: dict[str, Any], context: OpenResponsesStreamContext
+        self, response: dict[str, Any], context: OpenResponsesStreamContext
     ) -> None:
         """Inject preserve-mode echo fields into the finish response."""
         echo = context.get_echo_fields()
@@ -2098,7 +2135,7 @@ class OpenResponsesConverter(BaseConverter):
             "status",
             "usage",
         }
-        for k, v in cls._REQUIRED_DEFAULTS.items():
+        for k, v in self._get_required_defaults(context).items():
             if k not in core_keys and k not in response:
                 response[k] = v
         for k, v in echo.items():
@@ -2304,14 +2341,20 @@ class OpenResponsesConverter(BaseConverter):
 
 
 class OpenAIResponsesConverter(OpenResponsesConverter):
-    """OpenAI Responses API converter (OpenAI profile).
+    """OpenAI Responses API converter (OpenAI profile preset).
 
-    A conforming profile of the Open Responses spec that layers OpenAI-specific
-    behavior on top of the vendor-neutral base:
+    A thin preset over the vendor-neutral :class:`OpenResponsesConverter` that
+    turns the OpenAI profile on for **direct, context-free use**:
 
     - the ``resp_`` response-id prefix (the spec defines no prefix);
     - OpenAI-only lifecycle echo fields (``billing``, ``moderation``, ...);
     - OpenAI's default of server-side storage (``store: true``).
+
+    The conversion pipeline no longer selects this class: ``openai_responses``
+    is a *shim* over the ``open_responses`` base, and the shim's
+    ``response_id_prefix`` / ``preserve_fields`` / ``store_default`` settings
+    carry the same traits through ``context.options``.  This class is retained
+    as an importable preset so existing direct users keep their behavior.
     """
 
     _CONVERTER_TAG = "openai_responses"

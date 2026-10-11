@@ -1,6 +1,16 @@
 name: asksage--openai_responses
-base: openai_responses
+base: open_responses
 
 connection:
   base_url: https://api.asksage.ai/server/openai/v1
   api_key_env: ASKSAGE_API_KEY
+
+# OpenAI Responses profile: extra lifecycle/echo fields + server-side
+# storage default (the vendor-neutral spec omits both).
+preserve_fields:
+  - access_programs
+  - billing
+  - content_filters
+  - moderation
+  - tool_usage
+store_default: true

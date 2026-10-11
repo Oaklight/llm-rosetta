@@ -48,14 +48,18 @@ LEGACY_PROVIDER_ALIASES: dict[str, str] = {
     # stays accepted (deprecated); the hyphenated tool-ops spelling maps
     # straight to the canonical name.
     "openai_chat": "chat_completions",
+    # Responses: ``open_responses`` is the canonical, vendor-neutral base
+    # type.  The OpenAI profile is a *shim* over it, named
+    # ``openai--open_responses`` (provider--base); the OpenAI-flavoured legacy
+    # spellings target that shim so they resolve to the same OpenAI provider
+    # rather than silently downgrading to the neutral base.  ``open-responses``
+    # (the spec spelling, no ``ai``) is the neutral base.
+    "openai_responses": "openai--open_responses",
     # Hyphenated spellings accepted by the tool-ops convenience API.
     "openai-chat": "chat_completions",
-    "openai-responses": "openai_responses",
+    "openai-responses": "openai--open_responses",
     "open-responses": "open_responses",
     "google-interactions": "google_interactions",
-    # --- Reserved for upcoming renames (kept here so the mechanism is
-    #     exercised by a single table).  Add the line when the rename lands:
-    #       "openai_responses": "open_responses",   # #909
 }
 
 
@@ -75,7 +79,7 @@ def normalize_provider_name(name: str) -> str:
 
     Examples:
         >>> normalize_provider_name("openai-responses")
-        'openai_responses'
+        'openai--open_responses'
         >>> normalize_provider_name("openai_chat")
         'chat_completions'
     """

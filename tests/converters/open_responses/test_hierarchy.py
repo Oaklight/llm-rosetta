@@ -9,7 +9,7 @@ as backward-compatible aliases.
 from __future__ import annotations
 
 from llm_rosetta.auto_detect import get_converter_for_provider
-from llm_rosetta.converters.openai_responses import (
+from llm_rosetta.converters.open_responses import (
     OpenAIResponsesConfigOps,
     OpenAIResponsesContentOps,
     OpenAIResponsesConverter,
@@ -48,12 +48,17 @@ class TestHierarchy:
         assert "billing" not in OpenResponsesConverter._PRESERVE_FIELDS
         assert "store" in OpenResponsesConverter._PRESERVE_FIELDS
 
-    def test_dispatch_returns_distinct_classes(self):
+    def test_dispatch_returns_single_base_class(self):
+        # #909: both names resolve to the one Responses base converter; the
+        # OpenAI traits come from the ``openai_responses`` shim, not a subclass.
         assert type(get_converter_for_provider("open_responses")) is (
             OpenResponsesConverter
         )
         assert type(get_converter_for_provider("openai_responses")) is (
-            OpenAIResponsesConverter
+            OpenResponsesConverter
+        )
+        assert get_converter_for_provider("openai_responses") is (
+            get_converter_for_provider("open_responses")
         )
 
     def test_ops_aliases_are_identical_objects(self):

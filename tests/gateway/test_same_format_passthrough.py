@@ -11,6 +11,20 @@ import pytest
 
 from llm_rosetta.gateway.config import GatewayConfig
 
+
+@pytest.fixture(autouse=True)
+def _load_shims():
+    """Ensure built-in shims are registered before config resolution.
+
+    The legacy ``openai_responses`` config type resolves to its base through the
+    ``openai--open_responses`` shim, so the registry must be populated (other
+    test modules reset it and do not always restore the built-ins).
+    """
+    from llm_rosetta.shims.providers import load_providers
+
+    load_providers()
+
+
 PROVIDERS = {
     "chat_a": {
         "type": "openai_chat",
@@ -70,7 +84,7 @@ class TestDefaultsUnchanged:
         """Without the flag, a responses client still lands on WRR's pick."""
         config = _make_config({"m": {"providers": ["chat_a", "resp_a"]}})
         picked = {
-            config.resolve("openai_responses", "m")[0].provider_name for _ in range(10)
+            config.resolve("open_responses", "m")[0].provider_name for _ in range(10)
         }
         assert picked == {"chat_a", "resp_a"}
 
@@ -87,7 +101,7 @@ class TestFormatAffinity:
             {"m": {"providers": ["chat_a", "resp_a"]}}, prefer_same_format=True
         )
         for _ in range(10):
-            route, _ = config.resolve("openai_responses", "m")
+            route, _ = config.resolve("open_responses", "m")
             assert route.provider_name == "resp_a"
 
     def test_affinity_is_per_source_format(self):
@@ -95,7 +109,7 @@ class TestFormatAffinity:
         config = _make_config(
             {"m": {"providers": ["chat_a", "resp_a"]}}, prefer_same_format=True
         )
-        assert config.resolve("openai_responses", "m")[0].provider_name == "resp_a"
+        assert config.resolve("open_responses", "m")[0].provider_name == "resp_a"
         assert config.resolve("openai_chat", "m")[0].provider_name == "chat_a"
 
     def test_no_match_falls_back_to_full_route(self):
@@ -124,7 +138,7 @@ class TestFormatAffinity:
             prefer_same_format=True,
         )
         picked = [
-            config.resolve("openai_responses", "m")[0].provider_name for _ in range(20)
+            config.resolve("open_responses", "m")[0].provider_name for _ in range(20)
         ]
         assert set(picked) == {"resp_a", "resp_b"}
         assert picked.count("resp_a") == picked.count("resp_b") == 10
@@ -143,7 +157,7 @@ class TestFormatAffinity:
             prefer_same_format=True,
         )
         picked = [
-            config.resolve("openai_responses", "m")[0].provider_name for _ in range(20)
+            config.resolve("open_responses", "m")[0].provider_name for _ in range(20)
         ]
         assert picked.count("resp_a") == 15
         assert picked.count("resp_b") == 5
@@ -152,10 +166,10 @@ class TestFormatAffinity:
         config = _make_config(
             {"m": {"providers": ["chat_a", "resp_a"]}}, prefer_same_format=True
         )
-        config.resolve("openai_responses", "m")
-        first = config._same_format_routes[("m", "openai_responses")]
-        config.resolve("openai_responses", "m")
-        assert config._same_format_routes[("m", "openai_responses")] is first
+        config.resolve("open_responses", "m")
+        first = config._same_format_routes[("m", "open_responses")]
+        config.resolve("open_responses", "m")
+        assert config._same_format_routes[("m", "open_responses")] is first
 
     def test_upstream_model_comes_from_matched_entry(self):
         """Per-entry upstream_model follows the affine provider, not WRR."""
@@ -170,7 +184,7 @@ class TestFormatAffinity:
             },
             prefer_same_format=True,
         )
-        route, _ = config.resolve("openai_responses", "m")
+        route, _ = config.resolve("open_responses", "m")
         assert route.upstream_model == "resp-id"
 
 
@@ -201,7 +215,7 @@ class TestReadinessInteraction:
             {"m": {"providers": ["chat_a", "resp_a"]}}, prefer_same_format=True
         )
         self._unready(config, "resp_a")
-        route, _ = config.resolve("openai_responses", "m")
+        route, _ = config.resolve("open_responses", "m")
         assert route.provider_name == "chat_a"
 
     def test_unready_affine_prefers_ready_affine(self):
@@ -211,7 +225,7 @@ class TestReadinessInteraction:
         )
         self._unready(config, "resp_a")
         for _ in range(5):
-            route, _ = config.resolve("openai_responses", "m")
+            route, _ = config.resolve("open_responses", "m")
             assert route.provider_name == "resp_b"
 
     def test_all_unready_still_raises(self):
@@ -222,4 +236,4 @@ class TestReadinessInteraction:
         )
         self._unready(config, "chat_a", "resp_a")
         with pytest.raises(ProviderNotReady):
-            config.resolve("openai_responses", "m")
+            config.resolve("open_responses", "m")

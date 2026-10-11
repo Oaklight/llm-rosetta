@@ -12,8 +12,8 @@ from __future__ import annotations
 
 from typing import cast
 
-from llm_rosetta.converters.openai_responses import OpenAIResponsesConverter
-from llm_rosetta.converters.openai_responses.tool_ops import (
+from llm_rosetta.converters.open_responses import OpenAIResponsesConverter
+from llm_rosetta.converters.open_responses.tool_ops import (
     harvest_additional_tools,
     strip_additional_tools_items,
 )

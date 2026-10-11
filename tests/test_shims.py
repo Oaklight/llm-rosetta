@@ -242,8 +242,16 @@ class TestResolveBase:
         assert resolve_base("openai_chat") == "chat_completions"
         assert resolve_base("anthropic") == "anthropic"
         assert resolve_base("google_generate") == "google_generate"
-        assert resolve_base("openai_responses") == "openai_responses"
         assert resolve_base("open_responses") == "open_responses"
+
+    def test_responses_legacy_alias_resolves_to_shim_base(self):
+        """The legacy Responses spellings resolve via the OpenAI profile shim."""
+        register_shim(
+            ProviderShim(name="openai--open_responses", base="open_responses")
+        )
+        assert resolve_base("openai_responses") == "open_responses"
+        assert resolve_base("openai-responses") == "open_responses"
+        assert resolve_base("openai--open_responses") == "open_responses"
 
     def test_shim_name_resolves(self):
         register_shim(ProviderShim(name="deepseek--openai_chat", base="openai_chat"))
@@ -298,12 +306,12 @@ class TestBuiltinShims:
     def test_deepseek_responses_base_type(self):
         shim = get_shim("deepseek--openai_responses")
         assert shim is not None
-        assert shim.base == "openai_responses"
+        assert shim.base == "open_responses"
 
     def test_argo_responses_base_type(self):
         shim = get_shim("argo--openai_responses")
         assert shim is not None
-        assert shim.base == "openai_responses"
+        assert shim.base == "open_responses"
 
     def test_anthropic_base_type(self):
         shim = get_shim("anthropic")
@@ -364,17 +372,17 @@ class TestShimConverterIntegration:
 
     def test_deepseek_responses_resolves_to_responses_converter(self):
         from llm_rosetta.auto_detect import get_converter_for_provider
-        from llm_rosetta.converters import OpenAIResponsesConverter
+        from llm_rosetta.converters import OpenResponsesConverter
 
         converter = get_converter_for_provider("deepseek--openai_responses")
-        assert isinstance(converter, OpenAIResponsesConverter)
+        assert isinstance(converter, OpenResponsesConverter)
 
     def test_argo_responses_resolves_to_responses_converter(self):
         from llm_rosetta.auto_detect import get_converter_for_provider
-        from llm_rosetta.converters import OpenAIResponsesConverter
+        from llm_rosetta.converters import OpenResponsesConverter
 
         converter = get_converter_for_provider("argo--openai_responses")
-        assert isinstance(converter, OpenAIResponsesConverter)
+        assert isinstance(converter, OpenResponsesConverter)
 
     def test_volcengine_resolves_to_openai_chat_converter(self):
         from llm_rosetta.auto_detect import get_converter_for_provider

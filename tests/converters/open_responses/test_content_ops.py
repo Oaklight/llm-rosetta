@@ -4,7 +4,7 @@ OpenAI Responses ContentOps unit tests.
 
 import pytest
 
-from llm_rosetta.converters.openai_responses.content_ops import (
+from llm_rosetta.converters.open_responses.content_ops import (
     OpenAIResponsesContentOps,
 )
 from typing import cast

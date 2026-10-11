@@ -103,7 +103,7 @@ class TestLoadProviders:
             "asksage--anthropic",
             "asksage--google_generate",
             "openai",
-            "openai_responses",
+            "openai--open_responses",
             "open_responses",
             "openrouter--openai_chat",
             "openrouter--anthropic",
@@ -126,7 +126,7 @@ class TestLoadProviders:
             "alcf--minerva",
             "typesafe",
         }, (
-            f"Unexpected shim diff: {names.symmetric_difference({'argo--anthropic', 'argo--openai_chat', 'argo--openai_responses', 'asksage--openai_chat', 'asksage--openai_responses', 'asksage--anthropic', 'asksage--google_generate', 'openai', 'openai_responses', 'open_responses', 'openrouter--openai_chat', 'openrouter--anthropic', 'kilo--openai_chat', 'anthropic', 'google_generate', 'deepseek--openai_chat', 'deepseek--openai_responses', 'minimax--openai_chat', 'minimax--anthropic', 'moonshot', 'qwen', 'volcengine--openai_chat', 'volcengine--openai_responses', 'xai', 'zhipu', 'google_interactions', 'alcf--sophia', 'alcf--metis', 'alcf--minerva', 'typesafe'})}"
+            f"Unexpected shim diff: {names.symmetric_difference({'argo--anthropic', 'argo--openai_chat', 'argo--openai_responses', 'asksage--openai_chat', 'asksage--openai_responses', 'asksage--anthropic', 'asksage--google_generate', 'openai', 'openai--open_responses', 'open_responses', 'openrouter--openai_chat', 'openrouter--anthropic', 'kilo--openai_chat', 'anthropic', 'google_generate', 'deepseek--openai_chat', 'deepseek--openai_responses', 'minimax--openai_chat', 'minimax--anthropic', 'moonshot', 'qwen', 'volcengine--openai_chat', 'volcengine--openai_responses', 'xai', 'zhipu', 'google_interactions', 'alcf--sophia', 'alcf--metis', 'alcf--minerva', 'typesafe'})}"
         )
 
     def test_all_registered_after_load(self):
@@ -328,7 +328,7 @@ class TestLoadProviders:
         load_providers()
         expected = {
             "openai": "chat_completions",
-            "openai_responses": "openai_responses",
+            "openai--open_responses": "open_responses",
             "openrouter--openai_chat": "chat_completions",
             "openrouter--anthropic": "anthropic",
             "kilo--openai_chat": "chat_completions",
@@ -336,14 +336,14 @@ class TestLoadProviders:
             "google_generate": "google_generate",
             "google_interactions": "google_interactions",
             "deepseek--openai_chat": "chat_completions",
-            "deepseek--openai_responses": "openai_responses",
-            "argo--openai_responses": "openai_responses",
+            "deepseek--openai_responses": "open_responses",
+            "argo--openai_responses": "open_responses",
             "minimax--openai_chat": "chat_completions",
             "minimax--anthropic": "anthropic",
             "moonshot": "chat_completions",
             "qwen": "chat_completions",
             "volcengine--openai_chat": "chat_completions",
-            "volcengine--openai_responses": "openai_responses",
+            "volcengine--openai_responses": "open_responses",
             "xai": "chat_completions",
             "zhipu": "chat_completions",
             "alcf--sophia": "chat_completions",
@@ -351,7 +351,7 @@ class TestLoadProviders:
             "alcf--minerva": "chat_completions",
             "typesafe": "decision",
             "asksage--openai_chat": "chat_completions",
-            "asksage--openai_responses": "openai_responses",
+            "asksage--openai_responses": "open_responses",
             "asksage--anthropic": "anthropic",
             "asksage--google_generate": "google_generate",
         }

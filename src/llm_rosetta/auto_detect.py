@@ -16,8 +16,9 @@ from .provider_names import normalize_provider_name
 ProviderType = Literal[
     "chat_completions",
     "openai_chat",  # legacy alias of "chat_completions"
-    "openai_responses",
     "open_responses",
+    # ``openai_responses`` is not a base type: it is a legacy alias of the
+    # ``openai--open_responses`` shim (an OpenAI profile over ``open_responses``).
     "anthropic",
     "google_generate",
     "google",  # legacy alias of "google_generate"
@@ -153,7 +154,7 @@ def detect_provider(body: dict[str, Any]) -> ProviderType | None:
         >>> detect_provider({"messages": [{"role": "user", "content": "Hello"}]})
         'chat_completions'
         >>> detect_provider({"input": [{"type": "message", "role": "user"}]})
-        'openai_responses'
+        'open_responses'
         >>> detect_provider({"messages": [{"role": "user", "content": [{"type": "text"}]}]})
         'anthropic'
         >>> detect_provider({"contents": [{"role": "user", "parts": [{"text": "Hi"}]}]})
@@ -169,7 +170,7 @@ def detect_provider(body: dict[str, Any]) -> ProviderType | None:
         return "google_generate"
 
     if ("input" in body or "output" in body) and _is_responses_format(body):
-        return "openai_responses"
+        return "open_responses"
 
     if _is_google_interactions_format(body):
         return "google_interactions"
@@ -213,6 +214,12 @@ def get_converter_for_provider(provider: str):
         ValueError: If the provider is not a known type or shim name.
     """
     provider = normalize_provider_name(provider)
+    # The OpenAI Responses profile shim shares the base converter (its traits
+    # come from the shim's ``context.options``, not a subclass).  Fold it onto
+    # the base so both spellings return the same cached instance, and so a
+    # legacy ``openai_responses`` spelling resolves without the shim registry.
+    if provider == "openai--open_responses":
+        provider = "open_responses"
     if provider in _converter_cache:
         return _converter_cache[provider]
 
@@ -220,15 +227,11 @@ def get_converter_for_provider(provider: str):
     from .converters.google_generate import GoogleGenerateConverter
     from .converters.google_interactions import GoogleInteractionsConverter
     from .converters.chat_completions import ChatCompletionsConverter
-    from .converters.openai_responses import (
-        OpenAIResponsesConverter,
-        OpenResponsesConverter,
-    )
+    from .converters.open_responses import OpenResponsesConverter
     from .shims import resolve_base
 
     converter_map = {
         "chat_completions": ChatCompletionsConverter,
-        "openai_responses": OpenAIResponsesConverter,
         "open_responses": OpenResponsesConverter,
         "anthropic": AnthropicConverter,
         "google": GoogleGenerateConverter,
@@ -322,11 +325,19 @@ def convert(
     src = _detect_source(source_body, source_provider)
     tgt = normalize_provider_name(str(target_provider))
 
+    # Resolve shims from the *raw* names: a legacy spelling such as
+    # ``openai_responses`` (aliased to the ``openai--open_responses`` shim, a
+    # distinct OpenAI-profile provider over the neutral ``open_responses`` base)
+    # must keep its shim identity, which normalisation to the canonical name
+    # preserves via the shim registry.
+    source_shim = (
+        get_shim(str(source_provider)) if source_provider is not None else get_shim(src)
+    )
     pipeline = ConversionPipeline(
         src,
         tgt,
-        source_shim=get_shim(src),
-        target_shim=get_shim(tgt),
+        source_shim=source_shim,
+        target_shim=get_shim(str(target_provider)),
         upstream_model=model,
         baseline=baseline,
         # Library callers expect Google SDK format; gateway uses "rest"
@@ -376,8 +387,9 @@ def convert_response(
     pipeline = ConversionPipeline(
         src,
         tgt,
-        source_shim=get_shim(src),
-        target_shim=get_shim(tgt),
+        # Raw names preserve shim identity (see ``convert`` above).
+        source_shim=get_shim(str(source_provider)),
+        target_shim=get_shim(str(target_provider)),
         upstream_model=model,
         baseline=baseline,
         # Library callers expect Google SDK format; gateway uses "rest"

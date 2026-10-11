@@ -17,7 +17,7 @@ from llm_rosetta.converters.anthropic import AnthropicConverter
 from llm_rosetta.converters.base.context import StreamContext
 from llm_rosetta.converters.google_generate import GoogleGenerateConverter
 from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
-from llm_rosetta.converters.openai_responses import OpenAIResponsesConverter
+from llm_rosetta.converters.open_responses import OpenAIResponsesConverter
 from llm_rosetta.types.ir.stream import IRStreamEvent
 
 

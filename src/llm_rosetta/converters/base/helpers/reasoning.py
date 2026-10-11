@@ -50,6 +50,9 @@ _DEFAULT_GOOGLE = ReasoningCapability(
 
 DEFAULT_REASONING_CAPS: dict[str, ReasoningCapability] = {
     "chat_completions": _DEFAULT_CHAT_COMPLETIONS,
+    "open_responses": _DEFAULT_OPENAI_RESPONSES,
+    # Legacy alias of ``open_responses``, kept for the deprecated
+    # ``OpenAIResponsesConverter`` preset and direct callers.
     "openai_responses": _DEFAULT_OPENAI_RESPONSES,
     "anthropic": _DEFAULT_ANTHROPIC,
     "google": _DEFAULT_GOOGLE,
@@ -138,7 +141,7 @@ def apply_reasoning_config(
     # Converter-specific structural pass-through.
     if converter_type == "chat_completions":
         _apply_openai_chat_extras(ir, result, mode, budget_tokens, cap, max_tokens)
-    elif converter_type == "openai_responses":
+    elif converter_type in ("open_responses", "openai_responses"):
         _apply_openai_responses_extras(ir, result, mode, budget_tokens, cap)
     elif converter_type == "anthropic":
         _apply_anthropic_extras(

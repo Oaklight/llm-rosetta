@@ -16,7 +16,7 @@ from llm_rosetta.converters.base.helpers.cache import (
 )
 from llm_rosetta.converters.google_generate import GoogleConverter
 from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
-from llm_rosetta.converters.openai_responses import OpenAIResponsesConverter
+from llm_rosetta.converters.open_responses import OpenAIResponsesConverter
 
 # ---------------------------------------------------------------------------
 # Fixtures — provider-specific tool definitions and minimal requests

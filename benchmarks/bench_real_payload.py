@@ -104,7 +104,7 @@ def bench_rosetta_anthropic_roundtrip(payload: dict, iterations: int) -> list[fl
 def bench_rosetta_responses_to_anthropic(payload: dict, iterations: int) -> list[float]:
     """Benchmark OpenAI Responses → IR → Anthropic conversion."""
     from llm_rosetta.converters.anthropic import AnthropicConverter
-    from llm_rosetta.converters.openai_responses import OpenAIResponsesConverter
+    from llm_rosetta.converters.open_responses import OpenAIResponsesConverter
 
     resp_conv = OpenAIResponsesConverter()
     anth_conv = AnthropicConverter()

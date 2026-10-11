@@ -484,7 +484,7 @@ async def handle_anthropic(request: Any) -> Response | StreamingResponse:
 
 
 async def handle_openai_responses(request: Any) -> Response | StreamingResponse:
-    return await _proxy_handler(request, source_provider="openai_responses")
+    return await _proxy_handler(request, source_provider="open_responses")
 
 
 async def handle_google_generate(

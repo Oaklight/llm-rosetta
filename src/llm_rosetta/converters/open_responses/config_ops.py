@@ -257,11 +257,11 @@ class OpenResponsesConfigOps(BaseConfigOps):
         Returns:
             Dict of OpenAI Responses request fields to merge.
         """
-        cap = kwargs.get("reasoning_cap", DEFAULT_REASONING_CAPS["openai_responses"])
+        cap = kwargs.get("reasoning_cap", DEFAULT_REASONING_CAPS["open_responses"])
         return apply_reasoning_config(
             ir_reasoning,
             cap,
-            converter_type="openai_responses",
+            converter_type="open_responses",
         )
 
     @staticmethod

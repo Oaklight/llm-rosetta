@@ -37,16 +37,16 @@ import logging
 logger = logging.getLogger("llm-rosetta-gateway")
 
 # Opinionated: the vendor shim to recommend for each base format.  Entries that
-# name the format itself (anthropic / openai_responses / google_interactions)
-# are inert — the payload treats a self-recommendation as None, so the picker
-# shows no hint; they are kept only to document the canonical shim per format.
+# name the format itself (anthropic / google_interactions) are inert — the
+# payload treats a self-recommendation as None, so the picker shows no hint;
+# they are kept only to document the canonical shim per format.
 # `google_generate` has no entry: its vendor shim is named `google_generate`, so
-# there is nothing differently-named to recommend.  `open_responses` is absent
-# too: it is a distinct type that merely shares the Responses converter, so
-# recommending `openai_responses` for it would silently change the saved type.
+# there is nothing differently-named to recommend.  `open_responses` now
+# recommends the `openai--open_responses` shim: the latter is the OpenAI profile
+# of the same base, so selecting it no longer changes the saved base type.
 _BASE_FORMAT_RECOMMENDED: dict[str, str] = {
     "chat_completions": "openai",
-    "openai_responses": "openai_responses",
+    "open_responses": "openai--open_responses",
     "anthropic": "anthropic",
     "google_interactions": "google_interactions",
 }

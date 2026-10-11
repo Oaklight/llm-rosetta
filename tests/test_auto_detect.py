@@ -75,7 +75,7 @@ class TestDetectProvider:
                 }
             ]
         }
-        assert detect_provider(body) == "openai_responses"
+        assert detect_provider(body) == "open_responses"
 
     def test_detect_openai_responses_with_output(self):
         """测试检测 OpenAI Responses API 格式（output 字段）"""
@@ -88,7 +88,7 @@ class TestDetectProvider:
                 }
             ]
         }
-        assert detect_provider(body) == "openai_responses"
+        assert detect_provider(body) == "open_responses"
 
     def test_detect_openai_responses_with_function_call(self):
         """测试检测带函数调用的 Responses API 格式"""
@@ -97,12 +97,12 @@ class TestDetectProvider:
                 {"type": "function_call", "call_id": "123", "name": "get_weather"}
             ]
         }
-        assert detect_provider(body) == "openai_responses"
+        assert detect_provider(body) == "open_responses"
 
     def test_detect_openai_responses_with_reasoning(self):
         """测试检测带推理的 Responses API 格式"""
         body = {"output": [{"type": "reasoning", "reasoning": "Let me think..."}]}
-        assert detect_provider(body) == "openai_responses"
+        assert detect_provider(body) == "open_responses"
 
     def test_detect_anthropic_simple(self):
         """测试检测简单的 Anthropic 格式"""
@@ -253,11 +253,11 @@ class TestGetConverterForProvider:
         assert isinstance(converter, ChatCompletionsConverter)
 
     def test_get_openai_responses_converter(self):
-        """测试获取 OpenAI Responses 转换器"""
-        from llm_rosetta.converters import OpenAIResponsesConverter
+        """测试获取 Responses 转换器（openai_responses 别名到 open_responses 基类）"""
+        from llm_rosetta.converters import OpenResponsesConverter
 
         converter = get_converter_for_provider("openai_responses")
-        assert isinstance(converter, OpenAIResponsesConverter)
+        assert isinstance(converter, OpenResponsesConverter)
 
     def test_get_anthropic_converter(self):
         """测试获取 Anthropic 转换器"""
@@ -890,7 +890,7 @@ class TestDetectGoogleInteractions:
                 },
             ],
         }
-        assert detect_provider(body) == "openai_responses"
+        assert detect_provider(body) == "open_responses"
 
     def test_get_interactions_converter(self):
         converter = get_converter_for_provider("google_interactions")

@@ -12,7 +12,7 @@ from typing import cast
 from llm_rosetta.converters.anthropic.content_ops import AnthropicContentOps
 from llm_rosetta.converters.google_generate.content_ops import GoogleGenerateContentOps
 from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
-from llm_rosetta.converters.openai_responses.content_ops import (
+from llm_rosetta.converters.open_responses.content_ops import (
     OpenAIResponsesContentOps,
 )
 from llm_rosetta.types.ir import ReasoningPart

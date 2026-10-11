@@ -136,7 +136,7 @@ class TestUnifiedDispatch:
         "alias,canonical",
         [
             ("openai-chat", "openai_chat"),
-            ("openai-responses", "openai_responses"),
+            ("openai-responses", "open_responses"),
             ("google-genai", "google"),
             ("google-interactions", "google_interactions"),
         ],

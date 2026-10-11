@@ -56,7 +56,8 @@ def test_recommended_provider_points_at_shim():
     # Self-recommendation and no-shim cases degrade to None, so the payload is
     # self-describing and the UI shows no hint.
     assert by_name["anthropic"]["recommended_provider"] is None
-    assert by_name["open_responses"]["recommended_provider"] is None
+    # #909: open_responses recommends the OpenAI profile shim (same base type).
+    assert by_name["open_responses"]["recommended_provider"] == "openai--open_responses"
 
 
 def test_supports_custom_tools_defaults():

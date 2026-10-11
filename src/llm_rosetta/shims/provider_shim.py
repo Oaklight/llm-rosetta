@@ -20,7 +20,10 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from ..types.ir.configs import IREffort, IRMode  # re-exported
-from llm_rosetta.provider_names import normalize_provider_name
+from llm_rosetta.provider_names import (
+    LEGACY_PROVIDER_ALIASES,
+    normalize_provider_name,
+)
 from llm_rosetta.transforms import IRTransform, Transform
 
 logger = logging.getLogger(__name__)
@@ -212,7 +215,7 @@ class ProviderShim:
         name: Canonical provider identifier (e.g. ``"deepseek"``).
         base: API standard this provider follows.  Must be one of the
             converter type strings (``"chat_completions"``, ``"anthropic"``,
-            ``"google"``, ``"openai_responses"``).
+            ``"google"``, ``"open_responses"``).
         logo: URL to the provider's logo image (SVG preferred).
         display_name: Human-readable brand label (e.g. ``"Kilo"``), used by the
             admin UI for the provider title.  Falls back to the shim name when
@@ -240,6 +243,16 @@ class ProviderShim:
             (e.g. ``"resp_"`` for OpenAI Responses, ``"chatcmpl-"`` for
             OpenAI Chat).  Default ``""`` means passthrough (no
             prefix stripping or adding).
+        preserve_fields: Extra response/echo fields this provider adds to
+            the base format's preserve set (e.g. the OpenAI-only lifecycle
+            fields ``access_programs``, ``billing``, ``content_filters``,
+            ``moderation``, ``tool_usage``).  Additive; the base format's
+            spec-level set always applies.
+        store_default: Value for the ``store`` field injected into a
+            response resource when the upstream echo omits it.  ``None``
+            (default) leaves the base format's spec behavior (no forced
+            ``store``); ``True`` selects OpenAI's server-side-storage
+            default.
         hoist_system_messages: Whether to hoist late system messages
             for prompt cache prefix stability.  Default ``True``.
     """
@@ -258,6 +271,8 @@ class ProviderShim:
     reasoning: ReasoningCapability | None = None
     model_reasoning: dict[str, ReasoningCapability] | None = None
     response_id_prefix: str = ""
+    preserve_fields: tuple[str, ...] = ()
+    store_default: bool | None = None
     hoist_system_messages: bool = True
     soft_error_patterns: tuple[SoftErrorPattern, ...] = ()
 
@@ -344,6 +359,8 @@ class ProviderShim:
             "reasoning": None,
             "model_reasoning": None,
             "response_id_prefix": "",
+            "preserve_fields": (),
+            "store_default": None,
             "hoist_system_messages": True,
             "soft_error_patterns": (),
         }
@@ -427,7 +444,6 @@ _SHIM_REGISTRY: dict[str, ProviderShim] = {}
 _BASE_TYPES: frozenset[str] = frozenset(
     {
         "chat_completions",
-        "openai_responses",
         "open_responses",
         "anthropic",
         "google",
@@ -441,31 +457,51 @@ _BASE_TYPES: frozenset[str] = frozenset(
 def register_shim(shim: ProviderShim) -> None:
     """Register (or replace) a :class:`ProviderShim` in the global registry.
 
-    The shim is keyed by its name normalised to the canonical spelling, so a
-    shim registered under a legacy name is reachable via both that spelling
-    and its canonical form (lookups normalise identically).
+    The shim is keyed by its **exact** declared name.  A legacy name is *also*
+    registered under its canonical spelling when that key is still free, so a
+    shim registered under a legacy name stays reachable via both spellings.
+    The canonical key is never allowed to overwrite an existing entry: a
+    (plugin) shim may legitimately be named like a legacy alias, and the
+    exact-name registrant must win.
 
     If a shim with the same name is already registered, it is silently
     replaced and an INFO-level log is emitted.  This allows plugin shims
     to override built-in defaults without raising errors.
     """
-    key = normalize_provider_name(shim.name)
+    key = shim.name
     if key in _SHIM_REGISTRY:
         logger.info("Shim %r overridden (base: %s)", key, shim.base)
     _SHIM_REGISTRY[key] = shim
+    canonical = LEGACY_PROVIDER_ALIASES.get(key)
+    if canonical is not None and canonical not in _SHIM_REGISTRY:
+        _SHIM_REGISTRY[canonical] = shim
 
 
 def unregister_shim(name: str) -> ProviderShim | None:
     """Remove and return a shim by name.  Returns ``None`` if not found."""
-    return _SHIM_REGISTRY.pop(normalize_provider_name(name), None)
+    shim = _SHIM_REGISTRY.pop(name, None)
+    if shim is None:
+        shim = _SHIM_REGISTRY.pop(normalize_provider_name(name), None)
+    if shim is not None:
+        # Drop any canonical alias that pointed at the removed shim.
+        for key in [k for k, v in _SHIM_REGISTRY.items() if v is shim]:
+            del _SHIM_REGISTRY[key]
+    return shim
 
 
 def get_shim(name: str) -> ProviderShim | None:
     """Look up a registered :class:`ProviderShim` by *name*.
 
-    Legacy names are normalised to canonical first, so a shim registered under
-    its canonical name stays reachable via a legacy alias (e.g. ``"google"``).
+    The exact name is tried first, so a shim whose name is itself a legacy
+    alias (a plugin case) is reachable under that name.  Only if there is no
+    exact match is *name* normalised to canonical and looked up again, keeping
+    a shim registered under its canonical name reachable via a legacy alias
+    (e.g. ``"google"`` → ``"google_generate"``, or the OpenAI Responses profile
+    ``"openai_responses"`` → ``"openai--open_responses"``).
     """
+    shim = _SHIM_REGISTRY.get(name)
+    if shim is not None:
+        return shim
     return _SHIM_REGISTRY.get(normalize_provider_name(name))
 
 
@@ -490,15 +526,22 @@ def list_shims() -> list[ProviderShim]:
 def resolve_base(name: str) -> str:
     """Resolve a provider/shim *name* to its base converter type.
 
-    Legacy *name* inputs are normalised to canonical spellings first (see
+    An exact registered shim name is tried first, so a shim whose name is also
+    a legacy alias resolves to *its* declared base rather than being rewritten
+    (the OpenAI Responses profile ``"openai_responses"`` now normalises to the
+    ``"openai--open_responses"`` shim, whose base is ``"open_responses"``).
+    Otherwise legacy *name* inputs are normalised
+    to canonical spellings (see
     :func:`llm_rosetta.provider_names.normalize_provider_name`).  A shim's
-    declared ``base`` is returned as-is; callers that need a canonical
-    provider type normalise the result themselves.
-    If the normalised *name* is already a known base type (e.g.
-    ``"chat_completions"``), it is returned unchanged.  Otherwise the shim
-    registry is consulted.  If the name is not found in either, it is
-    returned as-is (caller decides how to handle unknown names).
+    declared ``base`` is returned as-is; callers that need a canonical provider
+    type normalise the result themselves.  If the normalised *name* is already
+    a known base type (e.g. ``"chat_completions"``), it is returned unchanged.
+    If the name is not found in either, it is returned as-is (caller decides
+    how to handle unknown names).
     """
+    shim = _SHIM_REGISTRY.get(name)
+    if shim is not None:
+        return shim.base
     name = normalize_provider_name(name)
     if name in _BASE_TYPES:
         return name

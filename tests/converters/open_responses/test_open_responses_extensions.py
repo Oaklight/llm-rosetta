@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from llm_rosetta import convert
 from llm_rosetta.converters.base.context import ConversionContext
-from llm_rosetta.converters.openai_responses import (
+from llm_rosetta.converters.open_responses import (
     OpenAIResponsesConverter,
     OpenResponsesConverter,
 )
@@ -157,16 +157,21 @@ class TestCompaction:
             pipe.warnings
         )
 
-    def test_openai_profile_is_a_different_tag(self):
-        # ``open_responses`` and ``openai_responses`` are distinct dialects, so
-        # the provider-bound blob is dropped rather than replayed.
+    def test_openai_profile_shares_the_base_and_preserves_item(self):
+        # #909: ``openai_responses`` is a shim over the same ``open_responses``
+        # base, so base-type equality makes this a same-format round-trip and
+        # the provider-bound blob is replayed.
         out = convert(
             self._body(),
             "openai_responses",
             source_provider="open_responses",
             baseline=False,
         )
-        assert [i["type"] for i in out["input"]] == ["message", "message"]
+        assert [i["type"] for i in out["input"]] == [
+            "message",
+            "compaction",
+            "message",
+        ]
 
     def test_response_leg_preserves_item(self):
         conv = OpenResponsesConverter()

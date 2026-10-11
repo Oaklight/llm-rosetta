@@ -378,6 +378,30 @@ class ConversionPipeline:
             else ""
         )
 
+        # Shim-declared Responses profile traits, threaded to the converter
+        # through ``context.options`` exactly like ``response_id_prefix``.
+        # Default (no shim / neutral shim) = spec behavior.
+        self._target_preserve_fields = (
+            resolved_target_for_prefix.preserve_fields
+            if resolved_target_for_prefix
+            else ()
+        )
+        self._target_store_default = (
+            resolved_target_for_prefix.store_default
+            if resolved_target_for_prefix
+            else None
+        )
+        self._source_preserve_fields = (
+            resolved_source_for_prefix.preserve_fields
+            if resolved_source_for_prefix
+            else ()
+        )
+        self._source_store_default = (
+            resolved_source_for_prefix.store_default
+            if resolved_source_for_prefix
+            else None
+        )
+
         # Set after convert_request()
         self._ctx: ConversionContext | None = None
         self._ir_request: dict[str, Any] | None = None
@@ -535,6 +559,10 @@ class ConversionPipeline:
             )
             return result
         ctx.options["metadata_mode"] = self._metadata_mode
+        # Source-side profile traits: request echo is captured from the source
+        # request (see the converter's ``request_from_provider``).
+        ctx.options["preserve_fields"] = self._source_preserve_fields
+        ctx.options["store_default"] = self._source_store_default
         if resolve_base(self._target_provider) in _GOOGLE_GENERATE_PROVIDERS:
             ctx.options["output_format"] = self._google_output_format
 
@@ -770,6 +798,8 @@ class ConversionPipeline:
         # Phase 4b: Target response → IR
         t0 = time.perf_counter()
         ctx.options["response_id_prefix"] = self._target_id_prefix
+        ctx.options["preserve_fields"] = self._target_preserve_fields
+        ctx.options["store_default"] = self._target_store_default
         try:
             ir_response = self._target_converter.response_from_provider(
                 response, context=ctx
@@ -806,6 +836,8 @@ class ConversionPipeline:
         # Phase 4c: IR → Source response
         t0 = time.perf_counter()
         ctx.options["response_id_prefix"] = self._source_id_prefix
+        ctx.options["preserve_fields"] = self._source_preserve_fields
+        ctx.options["store_default"] = self._source_store_default
         try:
             source_response = self._source_converter.response_to_provider(
                 ir_response, context=ctx
@@ -871,6 +903,10 @@ class ConversionPipeline:
         from_ctx.options["metadata_mode"] = self._metadata_mode
         from_ctx.options["response_id_prefix"] = self._target_id_prefix
         to_ctx.options["response_id_prefix"] = self._source_id_prefix
+        from_ctx.options["preserve_fields"] = self._target_preserve_fields
+        to_ctx.options["preserve_fields"] = self._source_preserve_fields
+        from_ctx.options["store_default"] = self._target_store_default
+        to_ctx.options["store_default"] = self._source_store_default
         if "_request_echo" in ctx.metadata:
             to_ctx.metadata["_request_echo"] = ctx.metadata["_request_echo"]
 

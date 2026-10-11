@@ -4,13 +4,13 @@ OpenAI Responses MessageOps unit tests.
 
 from typing import Any, Union, cast
 
-from llm_rosetta.converters.openai_responses.content_ops import (
+from llm_rosetta.converters.open_responses.content_ops import (
     OpenAIResponsesContentOps,
 )
-from llm_rosetta.converters.openai_responses.message_ops import (
+from llm_rosetta.converters.open_responses.message_ops import (
     OpenAIResponsesMessageOps,
 )
-from llm_rosetta.converters.openai_responses.tool_ops import OpenAIResponsesToolOps
+from llm_rosetta.converters.open_responses.tool_ops import OpenAIResponsesToolOps
 from llm_rosetta.types.ir import Message, ToolCallPart, ToolResultPart
 from llm_rosetta.types.ir.extensions_experimental import ExtensionItem
 

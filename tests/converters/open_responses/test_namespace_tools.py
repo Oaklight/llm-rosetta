@@ -6,10 +6,10 @@ from typing import Any
 import pytest
 
 from llm_rosetta.converters.base.context import ConversionContext
-from llm_rosetta.converters.openai_responses.converter import (
+from llm_rosetta.converters.open_responses.converter import (
     OpenAIResponsesConverter,
 )
-from llm_rosetta.converters.openai_responses.tool_ops import (
+from llm_rosetta.converters.open_responses.tool_ops import (
     OpenAIResponsesToolOps,
     _flatten_namespace_tool,
 )

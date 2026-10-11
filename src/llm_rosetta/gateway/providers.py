@@ -39,12 +39,6 @@ _PROVIDER_REGISTRY: dict[str, dict[str, Any]] = {
         "auth_header_fn": openai_auth,
         "url_template": "{base_url}/chat/completions",
     },
-    "openai_responses": {
-        "default_base_url": "https://api.openai.com/v1",
-        "default_api_key_env": "OPENAI_API_KEY",
-        "auth_header_fn": openai_auth,
-        "url_template": "{base_url}/responses",
-    },
     "open_responses": {
         # The spec is vendor-neutral and has no canonical host of its own, so
         # the gateway defaults to OpenRouter (a multi-vendor router that speaks
@@ -115,7 +109,6 @@ def known_provider_types() -> list[str]:
 # regardless of whether a shim shadows it.
 _CUSTOM_TOOLS_BY_TYPE: dict[str, bool] = {
     "chat_completions": True,
-    "openai_responses": True,
     "open_responses": True,
     "anthropic": False,
     "google": False,
@@ -136,7 +129,6 @@ def get_default_supports_custom_tools(provider_type: str) -> bool:
 # not listed separately here.
 BASE_FORMATS: tuple[str, ...] = (
     "chat_completions",
-    "openai_responses",
     "open_responses",
     "anthropic",
     "google_generate",

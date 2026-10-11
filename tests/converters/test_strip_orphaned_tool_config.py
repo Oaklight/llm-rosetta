@@ -14,7 +14,7 @@ from llm_rosetta.converters.base.tools import strip_orphaned_tool_config
 from llm_rosetta.converters.anthropic.converter import AnthropicConverter
 from llm_rosetta.converters.google_generate.converter import GoogleGenerateConverter
 from llm_rosetta.converters.chat_completions.converter import ChatCompletionsConverter
-from llm_rosetta.converters.openai_responses.converter import OpenAIResponsesConverter
+from llm_rosetta.converters.open_responses.converter import OpenAIResponsesConverter
 from llm_rosetta.types.ir import ToolChoice
 from llm_rosetta.types.ir.request import IRRequest
 

@@ -87,7 +87,7 @@ _CRITICAL_REQUEST_BY_FORMAT: dict[str, list[str]] = {
         "tools.*.name",
         "tool_choice.type",
     ],
-    "openai_responses": [
+    "open_responses": [
         "input.*.type",
         "input.*.role",
         "input.*.content.*.type",
@@ -127,7 +127,7 @@ _CRITICAL_RESPONSE_BY_FORMAT: dict[str, list[str]] = {
         "content.*.name",
         "content.*.tool_use_id",
     ],
-    "openai_responses": [
+    "open_responses": [
         "object",
         "status",
         "output.*.type",
@@ -403,7 +403,7 @@ class FidelityChecker:
             (~0.01ms). ``"full"`` does recursive leaf-level diff (~1ms
             for 50KB).
         format_name: API format to check against (``"chat_completions"``,
-            ``"anthropic"``, ``"openai_responses"``).  When ``None``,
+            ``"anthropic"``, ``"open_responses"``).  When ``None``,
             checks all formats' paths (slower but safe when format is
             unknown).
     """

@@ -453,6 +453,8 @@ def _load_single_provider(
         reasoning=reasoning_cap,
         model_reasoning=model_reasoning,
         response_id_prefix=cfg.get("response_id_prefix", ""),
+        preserve_fields=tuple(cfg.get("preserve_fields") or ()),
+        store_default=cfg.get("store_default"),
         hoist_system_messages=cfg.get("hoist_system_messages", True),
         soft_error_patterns=soft_errors,
     )

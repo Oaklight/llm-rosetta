@@ -19,7 +19,7 @@ from .google_generate import (
 )  # deprecated alias
 from .google_interactions import GoogleInteractionsConverter
 from .chat_completions import ChatCompletionsConverter, OpenAIChatConverter
-from .openai_responses import OpenAIResponsesConverter, OpenResponsesConverter
+from .open_responses import OpenAIResponsesConverter, OpenResponsesConverter
 from .decision import (
     EmbeddingDecisionConverter,
     LLMChatDecisionConverter,

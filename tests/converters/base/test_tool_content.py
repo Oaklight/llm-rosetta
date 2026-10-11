@@ -7,7 +7,7 @@ from llm_rosetta.converters.base.tools.content import (
     convert_ir_content_blocks_to_p,
 )
 from llm_rosetta.converters.anthropic.content_ops import AnthropicContentOps
-from llm_rosetta.converters.openai_responses.content_ops import (
+from llm_rosetta.converters.open_responses.content_ops import (
     OpenAIResponsesContentOps,
 )
 

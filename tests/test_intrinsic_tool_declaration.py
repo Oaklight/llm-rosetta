@@ -12,7 +12,7 @@ from llm_rosetta.converters.anthropic import AnthropicConverter
 from llm_rosetta.converters.google_generate import GoogleGenerateConverter
 from llm_rosetta.converters.google_interactions import GoogleInteractionsConverter
 from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
-from llm_rosetta.converters.openai_responses import OpenAIResponsesConverter
+from llm_rosetta.converters.open_responses import OpenAIResponsesConverter
 from llm_rosetta.converters.base.tools.intrinsic import (
     get_definition_kind,
     make_intrinsic_tool_definition,
@@ -309,7 +309,7 @@ class TestShimEmitConsistency:
         assert self._shim_kinds("anthropic") <= set(_ANTHROPIC_INTRINSIC_TOOLS)
 
     def test_openai_responses(self):
-        from llm_rosetta.converters.openai_responses.tool_ops import (
+        from llm_rosetta.converters.open_responses.tool_ops import (
             _RESPONSES_INTRINSIC_TOOLS,
         )
 

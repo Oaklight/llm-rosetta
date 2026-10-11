@@ -2,7 +2,7 @@
 
 import pytest
 
-from llm_rosetta.converters.openai_responses._constants import (
+from llm_rosetta.converters.open_responses._constants import (
     RESPONSES_INCOMPLETE_REASON_TO_IR,
     RESPONSES_REASON_TO_INCOMPLETE_REASON,
     RESPONSES_REASON_TO_STATUS,

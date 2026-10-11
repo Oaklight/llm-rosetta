@@ -8,8 +8,8 @@ produce exactly one set of ``*.done`` / ``output_item.done`` SSE events.
 
 from llm_rosetta.converters.base.context import StreamContext
 from llm_rosetta.converters.chat_completions.converter import ChatCompletionsConverter
-from llm_rosetta.converters.openai_responses.converter import OpenAIResponsesConverter
-from llm_rosetta.converters.openai_responses.stream_context import (
+from llm_rosetta.converters.open_responses.converter import OpenAIResponsesConverter
+from llm_rosetta.converters.open_responses.stream_context import (
     OpenAIResponsesStreamContext,
 )
 
