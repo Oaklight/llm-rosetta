@@ -103,18 +103,18 @@ _INTERACTIONS_STEP_TYPES = frozenset(
 
 
 # Wire-format type names (not IR names — the IR calls the "noul" wire type "assertion")
-_EVAL_QUESTION_TYPES = frozenset({"noul", "choice", "score"})
+_DECISION_QUESTION_TYPES = frozenset({"noul", "choice", "score"})
 
 
 def _is_decision_format(body: dict[str, Any]) -> bool:
-    """Check if body matches eval (System One) format: state + questions."""
+    """Check if body matches the System One decision format: state + questions."""
     if "state" not in body or "questions" not in body:
         return False
     questions = body["questions"]
     if not isinstance(questions, dict) or not questions:
         return False
     first_q = next(iter(questions.values()))
-    return isinstance(first_q, dict) and first_q.get("type") in _EVAL_QUESTION_TYPES
+    return isinstance(first_q, dict) and first_q.get("type") in _DECISION_QUESTION_TYPES
 
 
 def _is_google_interactions_format(body: dict[str, Any]) -> bool:
