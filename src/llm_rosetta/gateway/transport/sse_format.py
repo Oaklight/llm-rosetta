@@ -16,7 +16,7 @@ from typing import Any
 # ---------------------------------------------------------------------------
 
 
-def _format_sse_openai_chat(chunk: dict[str, Any]) -> str:
+def _format_sse_chat_completions(chunk: dict[str, Any]) -> str:
     """Format a chunk as OpenAI Chat SSE line."""
     return f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
 
@@ -32,7 +32,7 @@ def _format_sse_anthropic(chunk: dict[str, Any]) -> str:
     return f"event: {event_type}\ndata: {json.dumps(chunk, ensure_ascii=False)}\n\n"
 
 
-def _format_sse_openai_responses(chunk: dict[str, Any]) -> str:
+def _format_sse_open_responses(chunk: dict[str, Any]) -> str:
     """Format a chunk as OpenAI Responses SSE (``event: type\\ndata: json``)."""
     event_type = chunk.get("type", "unknown")
     return f"event: {event_type}\ndata: {json.dumps(chunk, ensure_ascii=False)}\n\n"
@@ -50,9 +50,9 @@ def _format_sse_google_interactions(chunk: dict[str, Any]) -> str:
 
 
 SSE_FORMATTERS: dict[str, Any] = {
-    "chat_completions": _format_sse_openai_chat,
-    "openai_responses": _format_sse_openai_responses,
-    "open_responses": _format_sse_openai_responses,
+    "chat_completions": _format_sse_chat_completions,
+    "openai_responses": _format_sse_open_responses,
+    "open_responses": _format_sse_open_responses,
     "anthropic": _format_sse_anthropic,
     "google": _format_sse_google,
     "google_generate": _format_sse_google,

@@ -259,8 +259,8 @@ class LLMChatDecisionConverter(BaseDecisionConverter):
     def _extract_content(response: dict[str, Any]) -> str:
         """Extract message content from a chat completion response."""
         return (
-            _extract_openai_chat(response)
-            or _extract_openai_responses(response)
+            _extract_chat_completions(response)
+            or _extract_open_responses(response)
             or _extract_google(response)
             or _extract_anthropic(response)
             or ""
@@ -280,14 +280,14 @@ def _strip_additional_properties(schema: Any) -> Any:
     return schema
 
 
-def _extract_openai_chat(response: dict[str, Any]) -> str:
+def _extract_chat_completions(response: dict[str, Any]) -> str:
     choices = response.get("choices", [])
     if choices:
         return choices[0].get("message", {}).get("content", "")
     return ""
 
 
-def _extract_openai_responses(response: dict[str, Any]) -> str:
+def _extract_open_responses(response: dict[str, Any]) -> str:
     output_text = response.get("output_text")
     if isinstance(output_text, str):
         return output_text

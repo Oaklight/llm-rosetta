@@ -271,11 +271,11 @@ class GoogleGenerateConfigOps(BaseConfigOps):
         Returns:
             Dict of Google config fields to merge (may be empty).
         """
-        cap = kwargs.get("reasoning_cap", DEFAULT_REASONING_CAPS["google"])
+        cap = kwargs.get("reasoning_cap", DEFAULT_REASONING_CAPS["google_generate"])
         return apply_reasoning_config(
             ir_reasoning,
             cap,
-            converter_type="google",
+            converter_type="google_generate",
         )
 
     @staticmethod

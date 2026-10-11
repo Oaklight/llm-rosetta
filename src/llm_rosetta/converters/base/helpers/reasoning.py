@@ -32,7 +32,7 @@ _DEFAULT_CHAT_COMPLETIONS = ReasoningCapability(
     effort_range=("minimal", "high"),
 )
 
-_DEFAULT_OPENAI_RESPONSES = ReasoningCapability(
+_DEFAULT_OPEN_RESPONSES = ReasoningCapability(
     effort_field="reasoning.effort",
     effort_range=("minimal", "high"),
 )
@@ -43,19 +43,22 @@ _DEFAULT_ANTHROPIC = ReasoningCapability(
     effort_range=("low", "max"),
 )
 
-_DEFAULT_GOOGLE = ReasoningCapability(
+_DEFAULT_GOOGLE_GENERATE = ReasoningCapability(
     effort_field="thinking_level",
     effort_range=("minimal", "high"),
 )
 
 DEFAULT_REASONING_CAPS: dict[str, ReasoningCapability] = {
     "chat_completions": _DEFAULT_CHAT_COMPLETIONS,
-    "open_responses": _DEFAULT_OPENAI_RESPONSES,
+    "open_responses": _DEFAULT_OPEN_RESPONSES,
     # Legacy alias of ``open_responses``, kept for the deprecated
     # ``OpenAIResponsesConverter`` preset and direct callers.
-    "openai_responses": _DEFAULT_OPENAI_RESPONSES,
+    "openai_responses": _DEFAULT_OPEN_RESPONSES,
     "anthropic": _DEFAULT_ANTHROPIC,
-    "google": _DEFAULT_GOOGLE,
+    "google_generate": _DEFAULT_GOOGLE_GENERATE,
+    # Legacy alias — the Google generate base type was renamed
+    # ``google`` → ``google_generate``.
+    "google": _DEFAULT_GOOGLE_GENERATE,
 }
 
 
@@ -127,7 +130,7 @@ def apply_reasoning_config(
     # Do NOT add thinking_modes to Google's shim — _serialize_disabled
     # would produce the wrong structure (thinking.type vs thinking_config).
     if mode == "disabled":
-        if converter_type == "google":
+        if converter_type in ("google_generate", "google"):
             _apply_google_extras(ir, result, mode, budget_tokens, cap)
             return result
         return _serialize_disabled(cap)
@@ -140,14 +143,14 @@ def apply_reasoning_config(
 
     # Converter-specific structural pass-through.
     if converter_type == "chat_completions":
-        _apply_openai_chat_extras(ir, result, mode, budget_tokens, cap, max_tokens)
+        _apply_chat_completions_extras(ir, result, mode, budget_tokens, cap, max_tokens)
     elif converter_type in ("open_responses", "openai_responses"):
-        _apply_openai_responses_extras(ir, result, mode, budget_tokens, cap)
+        _apply_open_responses_extras(ir, result, mode, budget_tokens, cap)
     elif converter_type == "anthropic":
         _apply_anthropic_extras(
             ir, result, mode, effort, budget_tokens, cap, max_tokens
         )
-    elif converter_type == "google":
+    elif converter_type in ("google_generate", "google"):
         _apply_google_extras(ir, result, mode, budget_tokens, cap)
 
     return result
@@ -305,7 +308,7 @@ def _apply_visibility(
 # ── Converter-specific pass-through extras ─────────────────────────────────
 
 
-def _apply_openai_chat_extras(
+def _apply_chat_completions_extras(
     ir: ReasoningConfig,
     result: dict[str, Any],
     mode: str | None,
@@ -336,7 +339,7 @@ def _apply_openai_chat_extras(
     _apply_visibility(ir, result, cap)
 
 
-def _apply_openai_responses_extras(
+def _apply_open_responses_extras(
     ir: ReasoningConfig,
     result: dict[str, Any],
     mode: str | None,
