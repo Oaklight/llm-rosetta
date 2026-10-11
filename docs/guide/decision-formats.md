@@ -67,6 +67,23 @@ state = {
 }
 ```
 
+### Multimodal (`images[]`)
+
+The System One family (Cloudflare Clef, classifier.dev) extends the request with
+a top-level `images` array of inline base64 data URLs. `TypeSafeDecisionConverter`
+maps it to the IR `state` content parts — text parts join into `state`, image
+parts become `images` (and back on ingest):
+
+```python
+state = [
+    {"type": "text", "text": "Inspect the product in this photo."},
+    {"type": "image", "image_data": {"media_type": "image/png", "data": "..."}},
+]
+```
+
+An image embedded in a *structured* `state` dict is not carried (there is no
+positional key to re-attach it) — put images in the top-level part list.
+
 ## IR Types
 
 ```python
