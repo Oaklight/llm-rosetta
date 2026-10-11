@@ -463,3 +463,66 @@ class TestReviewFixes2:
         assert out["questions"]["q"]["instructions"] == (
             "<<<rosetta:assertion>>> is this urgent?"
         )
+
+    def test_non_dict_input_message_and_part_warn(self, converter):
+        from llm_rosetta.converters.base.context import ConversionContext
+
+        req = {
+            "model": "m",
+            "input": [
+                "raw",
+                {
+                    "role": "user",
+                    "content": ["raw-part", {"type": "input_text", "text": "hi"}],
+                },
+            ],
+            "questions": [],
+        }
+        ctx = ConversionContext()
+        ir = converter.request_from_provider(req, context=ctx)
+        assert ir["state"] == [{"type": "text", "text": "hi"}]
+        joined = " ".join(ctx.warnings)
+        assert "input message" in joined
+        assert "input part" in joined
+
+    def test_non_dict_question_and_answer_warn(self, converter):
+        from llm_rosetta.converters.base.context import ConversionContext
+
+        ctx = ConversionContext()
+        ir = converter.request_from_provider(
+            {
+                "model": "m",
+                "input": "x",
+                "questions": [
+                    "raw",
+                    {"type": "predicate", "name": "q", "instructions": "i"},
+                ],
+            },
+            context=ctx,
+        )
+        assert set(ir["questions"]) == {"q"}
+        assert any("question entry" in w for w in ctx.warnings)
+
+        ctx2 = ConversionContext()
+        resp = converter.response_from_provider(
+            {
+                "model": "m",
+                "answers": [
+                    "raw",
+                    {"type": "predicate", "name": "q", "probability": 0.5},
+                ],
+            },
+            context=ctx2,
+        )
+        assert set(resp["answers"]) == {"q"}
+        assert any("answer entry" in w for w in ctx2.warnings)
+
+    def test_unknown_ir_answer_type_raises_on_egress(self, converter):
+        with pytest.raises(ValueError, match="Unknown decision answer type"):
+            converter.response_to_provider(
+                {
+                    "model": "m",
+                    "object": "decision",
+                    "answers": {"q": {"type": "rating", "score": 3}},
+                }
+            )

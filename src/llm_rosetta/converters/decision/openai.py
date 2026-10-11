@@ -78,6 +78,11 @@ class OpenAIDecisionsConverter(BaseDecisionConverter):
     ) -> IRDecisionRequest:
         questions: dict[str, Any] = {}
         for i, q in enumerate(provider_request.get("questions", [])):
+            if not isinstance(q, dict):
+                context.warnings.append(
+                    f"Dropping unsupported question entry: {type(q).__name__}"
+                )
+                continue
             name = q.get("name") or f"q{i}"
             questions[name] = _question_from_wire(q)
         return {
@@ -96,6 +101,11 @@ class OpenAIDecisionsConverter(BaseDecisionConverter):
     ) -> IRDecisionResponse:
         answers: dict[str, Any] = {}
         for i, a in enumerate(provider_response.get("answers", [])):
+            if not isinstance(a, dict):
+                context.warnings.append(
+                    f"Dropping unsupported answer entry: {type(a).__name__}"
+                )
+                continue
             name = a.get("name") or f"q{i}"
             answers[name] = _answer_from_wire(a)
         result: IRDecisionResponse = {
@@ -162,8 +172,9 @@ def _state_to_input(state: Any, warnings: list[str]) -> Any:
 
     A structured record is JSON-stringified (OpenAI ``input`` rejects a bare
     object).  This direction is lossy: ``_state_from_input`` cannot tell a
-    JSON-encoded record back from a plain string.  Parts other than text/image
-    are dropped with a warning.
+    JSON-encoded record back from a plain string, and an ``ImagePart`` given as
+    ``image_data`` is normalized to a data-URL ``image_url`` (not restored as
+    ``image_data``).  Parts other than text/image are dropped with a warning.
     """
     if isinstance(state, str):
         return state
@@ -200,12 +211,21 @@ def _state_from_input(input_value: Any, warnings: list[str]) -> Any:
     if isinstance(input_value, list):
         parts: list[dict[str, Any]] = []
         for msg in input_value:
-            content = msg.get("content") if isinstance(msg, dict) else None
+            if not isinstance(msg, dict):
+                warnings.append(
+                    f"Dropping unsupported input message: {type(msg).__name__}"
+                )
+                continue
+            content = msg.get("content")
             if isinstance(content, str):
                 parts.append({"type": "text", "text": content})
             elif isinstance(content, list):
                 for p in content:
-                    if p.get("type") == "input_text":
+                    if not isinstance(p, dict):
+                        warnings.append(
+                            f"Dropping unsupported input part: {type(p).__name__}"
+                        )
+                    elif p.get("type") == "input_text":
                         parts.append({"type": "text", "text": p.get("text", "")})
                     elif p.get("type") == "input_image":
                         img: dict[str, Any] = {
@@ -395,10 +415,12 @@ def _answer_to_wire(name: str, a: Mapping[str, Any]) -> dict[str, Any]:
         _maybe_set(result, a, "confidence")
         _maybe_set(result, a, "unknown_probability")
         return result
-    result = {"type": "refusal", "name": name}
-    if a.get("reason"):
-        result["reason"] = a["reason"]
-    return result
+    if ir_type == "refusal":
+        result: dict[str, Any] = {"type": "refusal", "name": name}
+        if a.get("reason"):
+            result["reason"] = a["reason"]
+        return result
+    raise ValueError(f"Unknown decision answer type: {ir_type!r}")
 
 
 def _maybe_set(target: dict[str, Any], source: Mapping[str, Any], key: str) -> None:
