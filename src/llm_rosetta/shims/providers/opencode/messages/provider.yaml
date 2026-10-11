@@ -1,0 +1,14 @@
+# OpenCode — paid access gateway (Anthropic Messages endpoint).
+#
+# Serves the Claude / MiniMax / Qwen models that OpenCode routes through
+# /messages.  Shares the credential and lanes described in the sibling
+# chat_completions shim; Zen is a base_url override.
+name: opencode--messages
+base: messages
+logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/opencode.svg
+
+connection:
+  base_url: https://opencode.ai/zen/go/v1
+  api_key_env: OPENCODE_API_KEY
+  models_path: https://opencode.ai/zen/go/v1/models
+  session_header: x-opencode-session

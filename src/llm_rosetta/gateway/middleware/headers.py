@@ -26,8 +26,17 @@ def get_hop_count(request: Any) -> int:
         return 0
 
 
-def build_upstream_extra_headers(request: Any, request_id: str) -> dict[str, str]:
-    """Build the explicit request headers that may be forwarded upstream."""
+def build_upstream_extra_headers(
+    request: Any,
+    request_id: str,
+    session_header: str | None = None,
+) -> dict[str, str]:
+    """Build the explicit request headers that may be forwarded upstream.
+
+    When *session_header* is set (a shim-declared per-conversation header, e.g.
+    ``x-opencode-session``) the client's value for it is forwarded verbatim,
+    overriding the gateway-derived one in the transport.
+    """
     extra_headers: dict[str, str] = {}
 
     if request_id:
@@ -43,6 +52,11 @@ def build_upstream_extra_headers(request: Any, request_id: str) -> dict[str, str
     or_version = request.headers.get("openresponses-version")
     if or_version:
         extra_headers["OpenResponses-Version"] = or_version
+
+    if session_header:
+        client_session = request.headers.get(session_header)
+        if client_session:
+            extra_headers[session_header] = client_session
 
     return extra_headers
 

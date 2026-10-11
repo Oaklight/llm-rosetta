@@ -316,8 +316,13 @@ async def _proxy_handler(
 
     store: ProviderMetadataStore = request.app.metadata_store
 
-    # Forward only explicitly supported client headers to upstream.
-    extra_headers = build_upstream_extra_headers(request, request_id)
+    # Forward only explicitly supported client headers to upstream. For
+    # providers that declare a per-conversation session header, a client-sent
+    # value is preserved (docs recommend forwarding it verbatim); it overrides
+    # the gateway-derived value in the transport.
+    extra_headers = build_upstream_extra_headers(
+        request, request_id, session_header=provider_info.session_header
+    )
 
     # --- Metrics instrumentation ---
     if is_stream:

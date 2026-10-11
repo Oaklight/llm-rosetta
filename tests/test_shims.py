@@ -158,6 +158,7 @@ class TestGroupedConfig:
         s = ProviderShim(name="test", base="openai_chat")
         assert s.connection.base_url is None
         assert s.connection.api_key_env is None
+        assert s.connection.session_header is None
         assert s.tools.custom_tools is False
         assert s.tools.max_description_length is None
         assert s.tools.search_mode == "disabled"
@@ -183,6 +184,12 @@ class TestGroupedConfig:
         argo = get_shim("argo--messages")
         assert argo is not None
         assert argo.connection.model_id_field == "internal_id"
+
+        # session_header is parsed from the shim's connection block.
+        oc = get_shim("opencode--chat_completions")
+        assert oc is not None
+        assert oc.connection.session_header == "x-opencode-session"
+        assert oc.connection.api_key_env == "OPENCODE_API_KEY"
 
 
 # ---------------------------------------------------------------------------

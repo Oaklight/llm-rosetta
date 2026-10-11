@@ -99,6 +99,10 @@ class HttpTransport:
         headers = {
             "Content-Type": "application/json",
             **provider_info.auth_headers(),
+            # Shim-declared per-conversation session header; a request-scoped
+            # extra header of the same name (e.g. forwarded from the client)
+            # overrides it below.
+            **provider_info.session_headers(),
         }
         if extra_headers:
             headers.update(extra_headers)

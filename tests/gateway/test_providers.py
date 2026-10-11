@@ -172,3 +172,53 @@ class TestKeylessProvider:
 
         with pytest.raises(ValueError, match="No API keys configured"):
             info.auth_headers()
+
+
+class TestSessionHeader:
+    """Shim-declared per-conversation session headers."""
+
+    def test_opencode_shim_declares_session_header(self, monkeypatch):
+        load_providers()
+        monkeypatch.setenv("OPENCODE_API_KEY", "oc_sk_test")
+
+        info = build_provider_info("opencode--chat_completions", {})
+
+        assert info.session_header == "x-opencode-session"
+        assert info.upstream_url("glm-5.3") == (
+            "https://opencode.ai/zen/go/v1/chat/completions"
+        )
+        # No id derived yet -> no header emitted.
+        assert info.session_headers() == {}
+        assert info.with_session("abc").session_headers() == {
+            "x-opencode-session": "abc"
+        }
+
+    def test_opencode_messages_variant_uses_x_api_key(self, monkeypatch):
+        load_providers()
+        monkeypatch.setenv("OPENCODE_API_KEY", "oc_sk_test")
+
+        info = build_provider_info("opencode--messages", {})
+
+        assert info.auth_headers() == {
+            "x-api-key": "oc_sk_test",
+            "anthropic-version": "2023-06-01",
+        }
+        assert info.upstream_url("m") == "https://opencode.ai/zen/go/v1/messages"
+
+    def test_config_overrides_session_header(self, monkeypatch):
+        load_providers()
+        monkeypatch.setenv("OPENCODE_API_KEY", "oc_sk_test")
+
+        info = build_provider_info(
+            "opencode--chat_completions", {"session_header": "x-other-session"}
+        )
+
+        assert info.session_header == "x-other-session"
+
+    def test_provider_without_session_header(self):
+        load_providers()
+        info = build_provider_info("xai", {"api_key": "k"})
+
+        assert info.session_header is None
+        assert info.session_headers() == {}
+        assert info.with_session("abc") is info

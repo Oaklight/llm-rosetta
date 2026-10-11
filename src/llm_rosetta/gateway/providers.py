@@ -365,4 +365,6 @@ def build_provider_info(
         token_command=token_command,
         token_refresh_interval=token_refresh_interval,
         keyless=keyless,
+        session_header=cfg.get("session_header")
+        or (shim.connection.session_header if shim is not None else None),
     )

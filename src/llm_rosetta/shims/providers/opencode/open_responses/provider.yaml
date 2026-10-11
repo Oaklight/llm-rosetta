@@ -1,0 +1,25 @@
+# OpenCode — paid access gateway (OpenAI Responses endpoint).
+#
+# Serves the Grok / GPT / Muse Spark models that OpenCode routes through
+# /responses.  Shares the credential and lanes described in the sibling
+# chat_completions shim; Zen is a base_url override.
+name: opencode--open_responses
+base: open_responses
+logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/opencode.svg
+
+connection:
+  base_url: https://opencode.ai/zen/go/v1
+  api_key_env: OPENCODE_API_KEY
+  models_path: https://opencode.ai/zen/go/v1/models
+  session_header: x-opencode-session
+
+# OpenAI Responses profile: extra lifecycle/echo fields + server-side storage
+# default (the vendor-neutral spec omits both).  OpenCode fronts OpenAI models
+# here, so it echoes the same lifecycle fields the asksage shim preserves.
+preserve_fields:
+  - access_programs
+  - billing
+  - content_filters
+  - moderation
+  - tool_usage
+store_default: true

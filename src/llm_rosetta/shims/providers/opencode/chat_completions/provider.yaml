@@ -1,0 +1,21 @@
+# OpenCode — paid access gateway (OpenAI Chat Completions endpoint).
+#
+# OpenCode exposes two paid lanes that share one credential and differ only by
+# base URL: Go (monthly subscription) at /zen/go/v1, and Zen (pay-as-you-go
+# account balance) at /zen/v1.  This shim defaults to the Go lane; set
+# ``base_url: https://opencode.ai/zen/v1`` in the provider config to use Zen.
+#
+# The Go lane requires a stable ``x-opencode-session`` on every inference
+# request (a missing one is a 400); the gateway derives a per-conversation
+# value.  Zen ignores the header.
+name: opencode--chat_completions
+base: chat_completions
+logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/opencode.svg
+
+connection:
+  base_url: https://opencode.ai/zen/go/v1
+  api_key_env: OPENCODE_API_KEY
+  # A full URL: base_url is normalised per format (the anthropic shim strips a
+  # duplicated /v1), so a relative path would resolve differently per format.
+  models_path: https://opencode.ai/zen/go/v1/models
+  session_header: x-opencode-session

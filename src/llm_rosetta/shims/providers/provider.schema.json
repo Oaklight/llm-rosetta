@@ -95,6 +95,10 @@
           "type": "boolean",
           "description": "The upstream accepts requests with no credential. No auth header is sent while no API key is configured; supplying one falls back to the base-type auth.",
           "default": false
+        },
+        "session_header": {
+          "type": "string",
+          "description": "Name of a per-conversation session header the gateway injects on every inference request (e.g. 'x-opencode-session'). The value is derived per conversation; a client-supplied value is passed through verbatim."
         }
       }
     },

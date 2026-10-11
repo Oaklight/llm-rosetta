@@ -124,6 +124,8 @@ class ConnectionConfig:
             no API key is configured; supplying one switches it back to the
             base type's auth (Bearer for OpenAI-compatible upstreams), so a
             paid account can use the same shim.
+        session_header: Name of a per-conversation session header the gateway
+            injects on every inference request (see :attr:`session_header`).
     """
 
     base_url: str | None = None
@@ -132,6 +134,15 @@ class ConnectionConfig:
     model_id_field: str | None = None
     auth_header: str | None = None
     keyless: bool = False
+    session_header: str | None = None
+    """Name of a per-conversation session header the gateway must add.
+
+    Some upstreams (e.g. OpenCode Go) require a stable session identifier on
+    every inference request for routing and prompt-cache locality.  When set,
+    the gateway injects this header with a value derived per conversation
+    (see ``gateway.proxy``); a client-supplied value is passed through
+    verbatim.  ``None`` means the provider needs no session header.
+    """
 
 
 @dataclass(frozen=True)

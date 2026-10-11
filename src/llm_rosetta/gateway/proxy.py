@@ -15,8 +15,10 @@ Downstream SSE formatting lives in :mod:`transport.sse_format`.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import time
+import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import Any, Literal
@@ -543,18 +545,59 @@ def _strip_internal_metadata(obj: dict | list) -> None:
             _strip_internal_metadata(item)
 
 
+# Stable per-process fallback for the session header: used only when a
+# provider declares one but no per-conversation identity could be derived, so
+# the header is never absent (some upstreams reject a missing session with 400).
+# Every such request shares this one id — acceptable for the fallback, since a
+# request with neither a client key nor a message prefix carries nothing to key
+# a conversation on.
+_SESSION_FALLBACK = uuid.uuid4().hex
+
+
 def _maybe_apply_affinity(
     provider_info: ProviderInfo,
     ir_request: dict,
     client_key_hash: str,
     key_affinity: bool,
 ) -> ProviderInfo:
-    """Apply key affinity if conditions are met, otherwise return unchanged."""
-    if key_affinity and client_key_hash and len(provider_info.key_ring) > 1:
-        prefix = extract_prefix_from_ir(ir_request)
-        identity = compute_affinity_identity(client_key_hash, prefix)
+    """Apply key affinity and/or a per-conversation session id.
+
+    Key affinity applies only when the provider has more than one key and a
+    client identity is available.  A shim-declared session header (see
+    :attr:`ConnectionConfig.session_header`) is set whenever the provider
+    declares one, using a per-conversation identity so the upstream sees one
+    stable session across every turn of a conversation — which is what its
+    routing and prompt-cache optimisation key on.
+    """
+    needs_affinity = (
+        key_affinity and client_key_hash and len(provider_info.key_ring) > 1
+    )
+    needs_session = bool(provider_info.session_header)
+    if not needs_affinity and not needs_session:
+        return provider_info
+
+    if needs_affinity:
+        # Key affinity keys on a 2-message prefix for more entropy.
+        identity = compute_affinity_identity(
+            client_key_hash, extract_prefix_from_ir(ir_request)
+        )
         if identity is not None:
-            return provider_info.with_affinity(identity)
+            provider_info = provider_info.with_affinity(identity)
+
+    if needs_session:
+        # Derive from the first message only.  History is append-only, so the
+        # first message is identical on every turn — a 2-message prefix would
+        # change between turn 1 and turn 2 and hand the first request a
+        # different session than the rest of the conversation.
+        first_prefix = extract_prefix_from_ir(ir_request, max_messages=1)
+        seed = (
+            compute_affinity_identity(client_key_hash, first_prefix)
+            or first_prefix
+            or _SESSION_FALLBACK
+        )
+        session_id = hashlib.sha256(seed.encode("utf-8")).hexdigest()[:32]
+        provider_info = provider_info.with_session(session_id)
+
     return provider_info
 
 

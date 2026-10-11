@@ -31,6 +31,30 @@ def test_build_upstream_extra_headers_preserves_user_agent_and_responses_version
     }
 
 
+def test_build_upstream_extra_headers_forwards_session_header():
+    """A shim-declared session header is forwarded from the client verbatim."""
+    request = MagicMock()
+    request.headers = {"x-opencode-session": "ses_client"}
+
+    headers = build_upstream_extra_headers(
+        request, "req-1", session_header="x-opencode-session"
+    )
+
+    assert headers["x-opencode-session"] == "ses_client"
+
+
+def test_build_upstream_extra_headers_omits_absent_session_header():
+    """No client session header -> nothing forwarded (the gateway derives one)."""
+    request = MagicMock()
+    request.headers = {}
+
+    headers = build_upstream_extra_headers(
+        request, "req-1", session_header="x-opencode-session"
+    )
+
+    assert "x-opencode-session" not in headers
+
+
 def test_proxy_handler_forwards_user_agent_to_non_streaming_proxy(monkeypatch):
     """The main proxy handler should pass client User-Agent to the upstream call."""
     captured_headers: dict[str, str] = {}

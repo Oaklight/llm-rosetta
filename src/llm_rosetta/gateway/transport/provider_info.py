@@ -162,6 +162,7 @@ class ProviderInfo:
         token_command: list[str] | None = None,
         token_refresh_interval: int = 3600,
         keyless: bool = False,
+        session_header: str | None = None,
     ) -> None:
         if not base_url.startswith(("http://", "https://")):
             raise ValueError(
@@ -181,6 +182,11 @@ class ProviderInfo:
         self.token_refresh_interval = token_refresh_interval
         self.token_status: dict | None = None
         self.keyless = keyless
+        # Per-conversation session header (name declared by the shim, value
+        # derived per request in gateway.proxy).  ``session_id`` stays None
+        # until the request pipeline sets it; both must be present to emit.
+        self.session_header = session_header
+        self.session_id: str | None = None
 
     # -- readiness ----------------------------------------------------------
 
@@ -209,6 +215,17 @@ class ProviderInfo:
         if self._affinity_identity is not None:
             return self._auth_header_fn(self.key_ring.select(self._affinity_identity))
         return self._auth_header_fn(self.key_ring.next())
+
+    def session_headers(self) -> dict[str, str]:
+        """Return the per-conversation session header, if configured.
+
+        Empty until both the shim-declared header name and a derived
+        ``session_id`` are present, so a provider that needs no session header
+        (or a request that never reached derivation) contributes nothing.
+        """
+        if self.session_header and self.session_id:
+            return {self.session_header: self.session_id}
+        return {}
 
     def upstream_url(self, model: str, *, stream: bool = False) -> str:
         """Build the upstream URL for the given model."""
@@ -268,6 +285,21 @@ class ProviderInfo:
 
         clone = copy.copy(self)
         clone._affinity_identity = identity
+        return clone
+
+    def with_session(self, session_id: str | None) -> ProviderInfo:
+        """Return a shallow copy with a derived per-conversation session id.
+
+        The new instance shares the same :class:`KeyRing` and affinity state.
+        Returns ``self`` unchanged when *session_id* is empty or the provider
+        declares no session header, so callers can apply it unconditionally.
+        """
+        if not session_id or not self.session_header:
+            return self
+        import copy
+
+        clone = copy.copy(self)
+        clone.session_id = session_id
         return clone
 
 
