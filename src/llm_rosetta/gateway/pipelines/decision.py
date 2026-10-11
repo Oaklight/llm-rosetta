@@ -43,10 +43,10 @@ def _detect_decision_source_format(
     The canonical ``/v1/decision`` route predates both conventions, so it falls
     through to body detection (then the configured default).
     """
-    path: str = getattr(request, "path", "") or ""
-    if path.startswith("/v1/decisions"):
+    path: str = (getattr(request, "path", "") or "").rstrip("/")
+    if path == "/v1/decisions":
         return "openai_decisions"
-    if path.startswith("/v1/systemone"):
+    if path == "/v1/systemone":
         return "typesafe"
     questions = body.get("questions")
     if "input" in body and isinstance(questions, list):

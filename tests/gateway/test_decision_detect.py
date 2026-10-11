@@ -49,3 +49,9 @@ class TestDetectDecisionSourceFormat:
             _detect_decision_source_format(_req("/v1/decision"), {}, cfg)
             == "openai_decisions"
         )
+
+    def test_related_prefix_is_not_matched(self):
+        assert (
+            _detect_decision_source_format(_req("/v1/decisionsXYZ"), {}, _CFG)
+            == "typesafe"
+        )
