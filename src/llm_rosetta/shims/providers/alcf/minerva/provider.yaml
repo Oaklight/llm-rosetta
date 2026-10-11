@@ -1,5 +1,5 @@
 name: alcf--minerva
-base: openai_chat
+base: chat_completions
 logo: https://docs.alcf.anl.gov/images/favicon.svg
 
 connection:

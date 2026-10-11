@@ -164,7 +164,7 @@ def fix_orphaned_tool_calls(
     return patched
 
 
-class OpenAIChatToolOps(BaseToolOps):
+class ChatCompletionsToolOps(BaseToolOps):
     """OpenAI Chat Completions tool conversion operations.
 
     All methods are static and stateless. Handles tool definitions,
@@ -497,9 +497,9 @@ class OpenAIChatToolOps(BaseToolOps):
             # (tool_ops ↔ content_ops via base helpers)
             from ..base.tools.content import convert_ir_content_blocks_to_p
 
-            from .content_ops import OpenAIChatContentOps
+            from .content_ops import ChatCompletionsContentOps
 
-            content = convert_ir_content_blocks_to_p(result, OpenAIChatContentOps)
+            content = convert_ir_content_blocks_to_p(result, ChatCompletionsContentOps)
             # Return list content directly — Chat API supports list-valued
             # tool message content for multimodal results
         elif isinstance(result, dict):
@@ -575,3 +575,8 @@ class OpenAIChatToolOps(BaseToolOps):
                 result["disable_parallel"] = not parallel
 
         return cast(ToolCallConfig, result)
+
+
+# Backward-compatible alias (deprecated): ``chat_completions`` is the canonical
+# base name now.
+OpenAIChatToolOps = ChatCompletionsToolOps

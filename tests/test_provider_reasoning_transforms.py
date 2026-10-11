@@ -172,9 +172,9 @@ class TestOpenAIChatReasoningMetadataRoundTrip:
     """Test reasoning_details and encrypted_content survive IR round-trip."""
 
     def test_reasoning_details_preserved(self):
-        from llm_rosetta.converters.openai_chat import OpenAIChatConverter
+        from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
 
-        conv = OpenAIChatConverter()
+        conv = ChatCompletionsConverter()
         resp = {
             "id": "c1",
             "object": "chat.completion",
@@ -209,9 +209,9 @@ class TestOpenAIChatReasoningMetadataRoundTrip:
         assert msg["reasoning_details"][0]["signature"] == "sig_abc123"
 
     def test_encrypted_content_preserved(self):
-        from llm_rosetta.converters.openai_chat import OpenAIChatConverter
+        from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
 
-        conv = OpenAIChatConverter()
+        conv = ChatCompletionsConverter()
         resp = {
             "id": "c2",
             "object": "chat.completion",
@@ -237,9 +237,9 @@ class TestOpenAIChatReasoningMetadataRoundTrip:
         assert msg["encrypted_content"] == "gAAAAABq_encrypted_data_here"
 
     def test_no_metadata_when_absent(self):
-        from llm_rosetta.converters.openai_chat import OpenAIChatConverter
+        from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
 
-        conv = OpenAIChatConverter()
+        conv = ChatCompletionsConverter()
         resp = {
             "id": "c3",
             "object": "chat.completion",

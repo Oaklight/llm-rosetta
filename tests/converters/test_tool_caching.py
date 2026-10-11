@@ -15,7 +15,7 @@ from llm_rosetta.converters.base.helpers.cache import (
     clear_all_caches,
 )
 from llm_rosetta.converters.google_generate import GoogleConverter
-from llm_rosetta.converters.openai_chat import OpenAIChatConverter
+from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
 from llm_rosetta.converters.openai_responses import OpenAIResponsesConverter
 
 # ---------------------------------------------------------------------------
@@ -166,7 +166,10 @@ CONVERTER_CONFIGS = [
         AnthropicConverter, ANTHROPIC_TOOLS, _anthropic_request, id="anthropic"
     ),
     pytest.param(
-        OpenAIChatConverter, OPENAI_CHAT_TOOLS, _openai_chat_request, id="openai_chat"
+        ChatCompletionsConverter,
+        OPENAI_CHAT_TOOLS,
+        _openai_chat_request,
+        id="openai_chat",
     ),
     pytest.param(
         OpenAIResponsesConverter,
@@ -279,7 +282,7 @@ def test_cross_converter_no_pollution():
     anth = AnthropicConverter()
     anth.request_from_provider(copy.deepcopy(_anthropic_request(ANTHROPIC_TOOLS)))
 
-    oai = OpenAIChatConverter()
+    oai = ChatCompletionsConverter()
     oai.request_from_provider(copy.deepcopy(_openai_chat_request(OPENAI_CHAT_TOOLS)))
 
     # Per-entry: both converters have 2 tools each → 4 misses total

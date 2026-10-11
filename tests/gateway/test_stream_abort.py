@@ -110,7 +110,7 @@ async def _drain(
 
 @pytest.mark.parametrize(
     "provider",
-    ["openai_chat", "openai_responses", "open_responses", "anthropic", "google"],
+    ["chat_completions", "openai_responses", "open_responses", "anthropic", "google"],
 )
 def test_terminal_event_emitted_on_abort(provider: str) -> None:
     """Every format gets a terminal notice carrying the upstream reason."""
@@ -229,7 +229,7 @@ def test_builder_returns_empty_for_unknown_format() -> None:
 
 @pytest.mark.parametrize(
     "provider",
-    ["openai_chat", "openai_responses", "anthropic", "google"],
+    ["chat_completions", "openai_responses", "anthropic", "google"],
 )
 def test_context_exposes_abort_path_attributes(provider: str) -> None:
     """Every converter's stream context satisfies the abort-path contract.

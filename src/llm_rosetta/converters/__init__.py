@@ -18,7 +18,7 @@ from .google_generate import (
     GoogleGenerateConverter as GoogleGenAIConverter,
 )  # deprecated alias
 from .google_interactions import GoogleInteractionsConverter
-from .openai_chat import OpenAIChatConverter
+from .chat_completions import ChatCompletionsConverter, OpenAIChatConverter
 from .openai_responses import OpenAIResponsesConverter, OpenResponsesConverter
 from .decision import (
     EmbeddingDecisionConverter,
@@ -36,7 +36,8 @@ __all__ = [
     "JinaEmbeddingConverter",
     "VoyageEmbeddingConverter",
     "CohereEmbeddingConverter",
-    "OpenAIChatConverter",
+    "ChatCompletionsConverter",
+    "OpenAIChatConverter",  # deprecated alias
     "AnthropicConverter",
     "GoogleGenerateConverter",
     "GoogleGenAIConverter",  # deprecated alias,

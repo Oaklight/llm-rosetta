@@ -171,7 +171,7 @@ def _format_sse(event):
 
 
 async def _collect_stream(
-    chunks, soft_error_patterns=(), source_provider="openai_chat"
+    chunks, soft_error_patterns=(), source_provider="chat_completions"
 ):
     out = []
     async for piece in _stream_event_generator(

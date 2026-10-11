@@ -4,7 +4,7 @@ OpenAI Chat ToolOps unit tests.
 
 import json
 
-from llm_rosetta.converters.openai_chat.tool_ops import OpenAIChatToolOps
+from llm_rosetta.converters.chat_completions.tool_ops import ChatCompletionsToolOps
 from typing import cast
 
 from llm_rosetta.types.ir import (
@@ -16,8 +16,8 @@ from llm_rosetta.types.ir import (
 )
 
 
-class TestOpenAIChatToolOps:
-    """Unit tests for OpenAIChatToolOps."""
+class TestChatCompletionsToolOps:
+    """Unit tests for ChatCompletionsToolOps."""
 
     # ==================== Tool Definition ====================
 
@@ -38,7 +38,7 @@ class TestOpenAIChatToolOps:
                 "metadata": {},
             },
         )
-        result = OpenAIChatToolOps.ir_tool_definition_to_p(ir_tool)
+        result = ChatCompletionsToolOps.ir_tool_definition_to_p(ir_tool)
         assert result["type"] == "function"
         assert result["function"]["name"] == "get_weather"
         assert result["function"]["description"] == "Get current weather"
@@ -62,7 +62,7 @@ class TestOpenAIChatToolOps:
                 },
             },
         )
-        result = OpenAIChatToolOps.ir_tool_definition_to_p(ir_tool)
+        result = ChatCompletionsToolOps.ir_tool_definition_to_p(ir_tool)
         assert result["type"] == "custom"
         assert result["custom"]["name"] == "apply_patch"
         assert result["custom"]["description"] == "Apply a patch"
@@ -80,7 +80,7 @@ class TestOpenAIChatToolOps:
                 "metadata": {"provider_type": "custom"},
             },
         )
-        result = OpenAIChatToolOps.ir_tool_definition_to_p(ir_tool)
+        result = ChatCompletionsToolOps.ir_tool_definition_to_p(ir_tool)
         assert result["type"] == "custom"
         assert result["custom"]["name"] == "apply_patch"
 
@@ -98,7 +98,7 @@ class TestOpenAIChatToolOps:
                 },
             },
         }
-        result = OpenAIChatToolOps.p_tool_definition_to_ir(provider_tool)
+        result = ChatCompletionsToolOps.p_tool_definition_to_ir(provider_tool)
         assert result["type"] == "function"
         assert result["name"] == "get_weather"
         assert result["description"] == "Get weather"
@@ -118,8 +118,8 @@ class TestOpenAIChatToolOps:
                 "metadata": {},
             },
         )
-        provider = OpenAIChatToolOps.ir_tool_definition_to_p(ir_tool)
-        restored = OpenAIChatToolOps.p_tool_definition_to_ir(provider)
+        provider = ChatCompletionsToolOps.ir_tool_definition_to_p(ir_tool)
+        restored = ChatCompletionsToolOps.p_tool_definition_to_ir(provider)
         assert restored["name"] == ir_tool["name"]
         assert restored["description"] == ir_tool["description"]
 
@@ -127,48 +127,50 @@ class TestOpenAIChatToolOps:
 
     def test_ir_tool_choice_none(self):
         """Test mode:none → 'none'."""
-        result = OpenAIChatToolOps.ir_tool_choice_to_p(
+        result = ChatCompletionsToolOps.ir_tool_choice_to_p(
             {"mode": "none", "tool_name": ""}
         )
         assert result == "none"
 
     def test_ir_tool_choice_auto(self):
         """Test mode:auto → 'auto'."""
-        result = OpenAIChatToolOps.ir_tool_choice_to_p(
+        result = ChatCompletionsToolOps.ir_tool_choice_to_p(
             {"mode": "auto", "tool_name": ""}
         )
         assert result == "auto"
 
     def test_ir_tool_choice_any(self):
         """Test mode:any → 'required'."""
-        result = OpenAIChatToolOps.ir_tool_choice_to_p({"mode": "any", "tool_name": ""})
+        result = ChatCompletionsToolOps.ir_tool_choice_to_p(
+            {"mode": "any", "tool_name": ""}
+        )
         assert result == "required"
 
     def test_ir_tool_choice_specific(self):
         """Test mode:tool → specific function."""
-        result = OpenAIChatToolOps.ir_tool_choice_to_p(
+        result = ChatCompletionsToolOps.ir_tool_choice_to_p(
             {"mode": "tool", "tool_name": "get_weather"}
         )
         assert result == {"type": "function", "function": {"name": "get_weather"}}
 
     def test_p_tool_choice_none(self):
         """Test 'none' → mode:none."""
-        result = OpenAIChatToolOps.p_tool_choice_to_ir("none")
+        result = ChatCompletionsToolOps.p_tool_choice_to_ir("none")
         assert result["mode"] == "none"
 
     def test_p_tool_choice_auto(self):
         """Test 'auto' → mode:auto."""
-        result = OpenAIChatToolOps.p_tool_choice_to_ir("auto")
+        result = ChatCompletionsToolOps.p_tool_choice_to_ir("auto")
         assert result["mode"] == "auto"
 
     def test_p_tool_choice_required(self):
         """Test 'required' → mode:any."""
-        result = OpenAIChatToolOps.p_tool_choice_to_ir("required")
+        result = ChatCompletionsToolOps.p_tool_choice_to_ir("required")
         assert result["mode"] == "any"
 
     def test_p_tool_choice_specific(self):
         """Test specific function → mode:tool."""
-        result = OpenAIChatToolOps.p_tool_choice_to_ir(
+        result = ChatCompletionsToolOps.p_tool_choice_to_ir(
             {"type": "function", "function": {"name": "get_weather"}}
         )
         assert result["mode"] == "tool"
@@ -178,8 +180,8 @@ class TestOpenAIChatToolOps:
         """Test tool choice round-trip."""
         for mode in ["none", "auto", "any"]:
             ir = cast(ToolChoice, {"mode": mode, "tool_name": ""})
-            provider = OpenAIChatToolOps.ir_tool_choice_to_p(ir)
-            restored = OpenAIChatToolOps.p_tool_choice_to_ir(provider)
+            provider = ChatCompletionsToolOps.ir_tool_choice_to_p(ir)
+            restored = ChatCompletionsToolOps.p_tool_choice_to_ir(provider)
             assert restored["mode"] == mode
 
     # ==================== Tool Call ====================
@@ -192,7 +194,7 @@ class TestOpenAIChatToolOps:
             tool_name="get_weather",
             tool_input={"city": "Beijing"},
         )
-        result = OpenAIChatToolOps.ir_tool_call_to_p(ir_tc)
+        result = ChatCompletionsToolOps.ir_tool_call_to_p(ir_tc)
         assert result["id"] == "call_123"
         assert result["type"] == "function"
         assert result["function"]["name"] == "get_weather"
@@ -208,7 +210,7 @@ class TestOpenAIChatToolOps:
                 "arguments": '{"query": "test"}',
             },
         }
-        result = OpenAIChatToolOps.p_tool_call_to_ir(provider_tc)
+        result = ChatCompletionsToolOps.p_tool_call_to_ir(provider_tc)
         assert result["type"] == "tool_call"
         assert result["tool_call_id"] == "call_456"
         assert result["tool_name"] == "search"
@@ -224,7 +226,7 @@ class TestOpenAIChatToolOps:
                 "arguments": "not valid json",
             },
         }
-        result = OpenAIChatToolOps.p_tool_call_to_ir(provider_tc)
+        result = ChatCompletionsToolOps.p_tool_call_to_ir(provider_tc)
         assert result["tool_input"] == {"raw_arguments": "not valid json"}
 
     def test_tool_call_round_trip(self):
@@ -235,8 +237,8 @@ class TestOpenAIChatToolOps:
             tool_name="func",
             tool_input={"a": 1, "b": "two"},
         )
-        provider = OpenAIChatToolOps.ir_tool_call_to_p(original)
-        restored = OpenAIChatToolOps.p_tool_call_to_ir(provider)
+        provider = ChatCompletionsToolOps.ir_tool_call_to_p(original)
+        restored = ChatCompletionsToolOps.p_tool_call_to_ir(provider)
         assert restored["tool_call_id"] == original["tool_call_id"]
         assert restored["tool_name"] == original["tool_name"]
         assert restored["tool_input"] == original["tool_input"]
@@ -253,7 +255,7 @@ class TestOpenAIChatToolOps:
                 "result": "Sunny, 25°C",
             },
         )
-        result = OpenAIChatToolOps.ir_tool_result_to_p(ir_tr)
+        result = ChatCompletionsToolOps.ir_tool_result_to_p(ir_tr)
         assert result["role"] == "tool"
         assert result["tool_call_id"] == "call_123"
         assert result["content"] == "Sunny, 25°C"
@@ -265,7 +267,7 @@ class TestOpenAIChatToolOps:
             "tool_call_id": "call_456",
             "content": "Result data",
         }
-        result = OpenAIChatToolOps.p_tool_result_to_ir(provider_tr)
+        result = ChatCompletionsToolOps.p_tool_result_to_ir(provider_tr)
         assert result["type"] == "tool_result"
         assert result["tool_call_id"] == "call_456"
         assert result["result"] == "Result data"
@@ -280,8 +282,8 @@ class TestOpenAIChatToolOps:
                 "result": "42",
             },
         )
-        provider = OpenAIChatToolOps.ir_tool_result_to_p(original)
-        restored = OpenAIChatToolOps.p_tool_result_to_ir(provider)
+        provider = ChatCompletionsToolOps.ir_tool_result_to_p(original)
+        restored = ChatCompletionsToolOps.p_tool_result_to_ir(provider)
         assert restored["tool_call_id"] == original["tool_call_id"]
         assert restored["result"] == original["result"]
 
@@ -295,7 +297,7 @@ class TestOpenAIChatToolOps:
                 "result": [{"type": "text", "text": "hello"}],
             },
         )
-        result = OpenAIChatToolOps.ir_tool_result_to_p(ir_tr)
+        result = ChatCompletionsToolOps.ir_tool_result_to_p(ir_tr)
         # List content is converted to Chat format (not json.dumps'd)
         assert isinstance(result["content"], list)
         assert result["content"] == [{"type": "text", "text": "hello"}]
@@ -310,32 +312,36 @@ class TestOpenAIChatToolOps:
                 "result": {"temperature": 72},
             },
         )
-        result = OpenAIChatToolOps.ir_tool_result_to_p(ir_tr)
+        result = ChatCompletionsToolOps.ir_tool_result_to_p(ir_tr)
         assert result["content"] == '{"temperature": 72}'
 
     # ==================== Tool Config ====================
 
     def test_ir_tool_config_to_p(self):
         """Test IR ToolCallConfig → OpenAI parallel_tool_calls."""
-        result = OpenAIChatToolOps.ir_tool_config_to_p({"disable_parallel": True})
+        result = ChatCompletionsToolOps.ir_tool_config_to_p({"disable_parallel": True})
         assert result["parallel_tool_calls"] is False
 
-        result = OpenAIChatToolOps.ir_tool_config_to_p({"disable_parallel": False})
+        result = ChatCompletionsToolOps.ir_tool_config_to_p({"disable_parallel": False})
         assert result["parallel_tool_calls"] is True
 
     def test_p_tool_config_to_ir(self):
         """Test OpenAI parallel_tool_calls → IR ToolCallConfig."""
-        result = OpenAIChatToolOps.p_tool_config_to_ir({"parallel_tool_calls": False})
+        result = ChatCompletionsToolOps.p_tool_config_to_ir(
+            {"parallel_tool_calls": False}
+        )
         assert result["disable_parallel"] is True
 
-        result = OpenAIChatToolOps.p_tool_config_to_ir({"parallel_tool_calls": True})
+        result = ChatCompletionsToolOps.p_tool_config_to_ir(
+            {"parallel_tool_calls": True}
+        )
         assert result["disable_parallel"] is False
 
     def test_tool_config_round_trip(self):
         """Test tool config round-trip."""
         original = cast(ToolCallConfig, {"disable_parallel": True})
-        provider = OpenAIChatToolOps.ir_tool_config_to_p(original)
-        restored = OpenAIChatToolOps.p_tool_config_to_ir(provider)
+        provider = ChatCompletionsToolOps.ir_tool_config_to_p(original)
+        restored = ChatCompletionsToolOps.p_tool_config_to_ir(provider)
         assert restored["disable_parallel"] == original["disable_parallel"]
 
 
@@ -358,7 +364,7 @@ class TestProviderMetadataPreservation:
                 "provider_metadata": {"responses_item_id": "fc_abc123"},
             },
         )
-        result = OpenAIChatToolOps.ir_tool_call_to_p(ir_part)
+        result = ChatCompletionsToolOps.ir_tool_call_to_p(ir_part)
         assert result["_provider_metadata"] == {"responses_item_id": "fc_abc123"}
 
     def test_p_to_ir_restores_provider_metadata(self):
@@ -369,7 +375,7 @@ class TestProviderMetadataPreservation:
             "function": {"name": "get_weather", "arguments": '{"city": "London"}'},
             "_provider_metadata": {"responses_item_id": "fc_abc123"},
         }
-        result = OpenAIChatToolOps.p_tool_call_to_ir(p_call)
+        result = ChatCompletionsToolOps.p_tool_call_to_ir(p_call)
         assert result.get("provider_metadata") == {"responses_item_id": "fc_abc123"}
 
     def test_no_metadata_when_absent(self):
@@ -384,7 +390,7 @@ class TestProviderMetadataPreservation:
                 "tool_type": "function",
             },
         )
-        result = OpenAIChatToolOps.ir_tool_call_to_p(ir_part)
+        result = ChatCompletionsToolOps.ir_tool_call_to_p(ir_part)
         assert "_provider_metadata" not in result
 
     def test_provider_metadata_round_trip(self):
@@ -400,8 +406,8 @@ class TestProviderMetadataPreservation:
                 "provider_metadata": {"responses_item_id": "fc_abc123"},
             },
         )
-        chat_call = OpenAIChatToolOps.ir_tool_call_to_p(ir_part)
-        restored = OpenAIChatToolOps.p_tool_call_to_ir(chat_call)
+        chat_call = ChatCompletionsToolOps.ir_tool_call_to_p(ir_part)
+        restored = ChatCompletionsToolOps.p_tool_call_to_ir(chat_call)
         assert restored.get("provider_metadata") == {"responses_item_id": "fc_abc123"}
 
 
@@ -423,7 +429,7 @@ class TestCustomToolSupport:
                 },
             },
         }
-        result = OpenAIChatToolOps.p_tool_definition_to_ir(provider_tool)
+        result = ChatCompletionsToolOps.p_tool_definition_to_ir(provider_tool)
         assert result["type"] == "custom"
         assert result["name"] == "apply_patch"
         assert result["description"] == "Apply a V4A patch"
@@ -432,7 +438,7 @@ class TestCustomToolSupport:
     def test_p_tool_definition_to_ir_custom_minimal(self):
         """Custom tool with only name."""
         provider_tool = {"type": "custom", "custom": {"name": "my_tool"}}
-        result = OpenAIChatToolOps.p_tool_definition_to_ir(provider_tool)
+        result = ChatCompletionsToolOps.p_tool_definition_to_ir(provider_tool)
         assert result["type"] == "custom"
         assert result["name"] == "my_tool"
         assert result["parameters"] == {}
@@ -449,9 +455,9 @@ class TestCustomToolSupport:
                 "metadata": {"format": {"type": "text"}},
             },
         )
-        provider = OpenAIChatToolOps.ir_tool_definition_to_p(ir_tool)
+        provider = ChatCompletionsToolOps.ir_tool_definition_to_p(ir_tool)
         assert provider["type"] == "custom"
-        restored = OpenAIChatToolOps.p_tool_definition_to_ir(provider)
+        restored = ChatCompletionsToolOps.p_tool_definition_to_ir(provider)
         assert restored["type"] == "custom"
         assert restored["name"] == "apply_patch"
         assert restored["metadata"]["format"] == {"type": "text"}
@@ -467,7 +473,7 @@ class TestCustomToolSupport:
             tool_input={"input": "*** Begin Patch\n+hi\n*** End Patch"},
             tool_type="custom",
         )
-        result = OpenAIChatToolOps.ir_tool_call_to_p(ir_tc)
+        result = ChatCompletionsToolOps.ir_tool_call_to_p(ir_tc)
         assert result["type"] == "custom"
         assert result["custom"]["name"] == "apply_patch"
         assert result["custom"]["input"] == "*** Begin Patch\n+hi\n*** End Patch"
@@ -483,7 +489,7 @@ class TestCustomToolSupport:
                 "input": "*** Begin Patch\n+hi\n*** End Patch",
             },
         }
-        result = OpenAIChatToolOps.p_tool_call_to_ir(provider_tc)
+        result = ChatCompletionsToolOps.p_tool_call_to_ir(provider_tc)
         assert result["tool_type"] == "custom"
         assert result["tool_name"] == "apply_patch"
         assert result["tool_input"] == {"input": "*** Begin Patch\n+hi\n*** End Patch"}
@@ -498,8 +504,8 @@ class TestCustomToolSupport:
             tool_input={"input": "patch content"},
             tool_type="custom",
         )
-        provider = OpenAIChatToolOps.ir_tool_call_to_p(ir_tc)
-        restored = OpenAIChatToolOps.p_tool_call_to_ir(provider)
+        provider = ChatCompletionsToolOps.ir_tool_call_to_p(ir_tc)
+        restored = ChatCompletionsToolOps.p_tool_call_to_ir(provider)
         assert restored["tool_type"] == "custom"
         assert restored["tool_name"] == "apply_patch"
         assert restored["tool_input"] == {"input": "patch content"}
@@ -508,14 +514,14 @@ class TestCustomToolSupport:
 
     def test_ir_tool_choice_to_p_custom(self):
         """IR tool choice with tool_type=custom → Chat custom tool choice."""
-        result = OpenAIChatToolOps.ir_tool_choice_to_p(
+        result = ChatCompletionsToolOps.ir_tool_choice_to_p(
             {"mode": "tool", "tool_name": "apply_patch", "tool_type": "custom"}
         )
         assert result == {"type": "custom", "custom": {"name": "apply_patch"}}
 
     def test_p_tool_choice_to_ir_custom(self):
         """Chat custom tool choice → IR with tool_type=custom."""
-        result = OpenAIChatToolOps.p_tool_choice_to_ir(
+        result = ChatCompletionsToolOps.p_tool_choice_to_ir(
             {"type": "custom", "custom": {"name": "apply_patch"}}
         )
         assert result["mode"] == "tool"
@@ -528,8 +534,8 @@ class TestCustomToolSupport:
             ToolChoice,
             {"mode": "tool", "tool_name": "apply_patch", "tool_type": "custom"},
         )
-        provider = OpenAIChatToolOps.ir_tool_choice_to_p(ir)
-        restored = OpenAIChatToolOps.p_tool_choice_to_ir(provider)
+        provider = ChatCompletionsToolOps.ir_tool_choice_to_p(ir)
+        restored = ChatCompletionsToolOps.p_tool_choice_to_ir(provider)
         assert restored["mode"] == "tool"
         assert restored["tool_name"] == "apply_patch"
         assert restored["tool_type"] == "custom"

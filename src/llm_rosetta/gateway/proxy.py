@@ -358,7 +358,7 @@ def _inject_stream_flags(
     if not stream:
         return body
     body = dict(body)
-    if target_provider == "openai_chat":
+    if target_provider == "chat_completions":
         body["stream"] = True
         body["stream_options"] = {"include_usage": True}
     elif target_provider in ("openai_responses", "open_responses", "anthropic"):
@@ -372,7 +372,7 @@ def _inject_stream_flags(
 def detect_stream_request(source_provider: ProviderType, body: dict[str, Any]) -> bool:
     """Detect if the incoming request asks for streaming."""
     if source_provider in (
-        "openai_chat",
+        "chat_completions",
         "openai_responses",
         "open_responses",
         "anthropic",
@@ -927,7 +927,11 @@ def _terminal_error_sse(
             sequence_number=getattr(ctx, "next_sequence_number", None),
         )
         out = [format_sse(event) for event in events]
-        if source_provider in ("openai_chat", "openai_responses", "open_responses"):
+        if source_provider in (
+            "chat_completions",
+            "openai_responses",
+            "open_responses",
+        ):
             out.append(format_sse_done())
         return out
     except Exception:
@@ -989,7 +993,7 @@ def _flush_and_finalize(
 ) -> list[str]:
     """Flush deferred terminal events and append the SSE done sentinel."""
     tail = [format_sse(e) for e in processor.process_chunk(None)]
-    if source_provider in ("openai_chat", "openai_responses", "open_responses"):
+    if source_provider in ("chat_completions", "openai_responses", "open_responses"):
         tail.append(format_sse_done())
     return tail
 
@@ -1170,7 +1174,7 @@ def _extract_preflight_input_tokens(
         if target_provider == "google_interactions":
             return int(response_body["usage"]["total_input_tokens"])
         usage = response_body.get("usage", {})
-        if target_provider in ("openai_chat",):
+        if target_provider in ("chat_completions",):
             return int(usage["prompt_tokens"])
         # Anthropic, OpenAI Responses, Open Responses
         return int(usage["input_tokens"])

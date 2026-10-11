@@ -1,5 +1,5 @@
 name: argo--openai_chat
-base: openai_chat
+base: chat_completions
 logo: https://i.111666.best/image/wgp6hAUArNq2O6pICMRRvj.png
 
 connection:

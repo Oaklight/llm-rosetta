@@ -4,7 +4,7 @@ from typing import Any, cast
 
 from llm_rosetta.converters.base import BaseConverter
 from llm_rosetta.converters.base.context import ConversionContext, StreamContext
-from llm_rosetta.converters.openai_chat.converter import OpenAIChatConverter
+from llm_rosetta.converters.chat_completions.converter import ChatCompletionsConverter
 from llm_rosetta.converters.openai_responses.converter import OpenAIResponsesConverter
 from llm_rosetta.converters.anthropic.converter import AnthropicConverter
 from llm_rosetta.converters.google_generate.converter import GoogleGenerateConverter
@@ -213,7 +213,7 @@ class TestBaseConverterDispatch:
         assert out is result
 
     def test_unknown_event_returns_empty(self):
-        converter = OpenAIChatConverter()
+        converter = ChatCompletionsConverter()
         result = converter.stream_response_to_provider(
             {"type": "nonexistent"}  # ty: ignore[invalid-argument-type]
         )
@@ -256,7 +256,7 @@ class TestWarningsSingleSource:
 
     def test_with_context_returns_same_list_object_openai_chat(self):
         ctx = ConversionContext()
-        converter = OpenAIChatConverter()
+        converter = ChatCompletionsConverter()
         _, warnings = converter.request_to_provider(
             self._make_ir_request(), context=ctx
         )
@@ -287,14 +287,14 @@ class TestWarningsSingleSource:
         assert warnings is ctx.warnings
 
     def test_without_context_still_returns_warnings(self):
-        converter = OpenAIChatConverter()
+        converter = ChatCompletionsConverter()
         _, warnings = converter.request_to_provider(self._make_ir_request())
         assert isinstance(warnings, list)
 
     def test_no_double_write(self):
         """Warnings must not appear duplicated in context.warnings."""
         ctx = ConversionContext()
-        converter = OpenAIChatConverter()
+        converter = ChatCompletionsConverter()
         ir = self._make_ir_request()
         # Provide tools so strip_orphaned_tool_config doesn't remove tool_config
         ir["tools"] = [
@@ -315,7 +315,7 @@ class TestWarningsSingleSource:
         """Warnings from earlier pipeline steps are not lost."""
         ctx = ConversionContext()
         ctx.warnings.append("earlier-step-warning")
-        converter = OpenAIChatConverter()
+        converter = ChatCompletionsConverter()
         _, warnings = converter.request_to_provider(
             self._make_ir_request(), context=ctx
         )

@@ -1157,6 +1157,14 @@ class GatewayConfig:
 
         from .deferred_startup import ProviderInitState, ProviderNotReady
 
+        from llm_rosetta.provider_names import normalize_provider_name
+
+        # Accept legacy provider spellings (e.g. ``openai_chat``) so a
+        # same-format route compares against canonical provider types.
+        source_provider = cast(
+            ProviderType, normalize_provider_name(str(source_provider))
+        )
+
         model_route = self.models[model]
 
         # Fall back to the full provider list when affinity is off, matches

@@ -128,10 +128,10 @@ def bench_rosetta_responses_to_anthropic(payload: dict, iterations: int) -> list
 def bench_rosetta_to_openai_chat(payload: dict, iterations: int) -> list[float]:
     """Benchmark Anthropic → IR → OpenAI Chat conversion."""
     from llm_rosetta.converters.anthropic import AnthropicConverter
-    from llm_rosetta.converters.openai_chat import OpenAIChatConverter
+    from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
 
     anth_conv = AnthropicConverter()
-    chat_conv = OpenAIChatConverter()
+    chat_conv = ChatCompletionsConverter()
 
     # Warmup
     for _ in range(5):

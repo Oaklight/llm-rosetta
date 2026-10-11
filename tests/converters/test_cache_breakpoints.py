@@ -319,7 +319,9 @@ class TestRoundTrip:
         body should have cache_control on the expected blocks after
         auto_cache_breakpoints fires."""
         from llm_rosetta.converters.anthropic.converter import AnthropicConverter
-        from llm_rosetta.converters.openai_chat.converter import OpenAIChatConverter
+        from llm_rosetta.converters.chat_completions.converter import (
+            ChatCompletionsConverter,
+        )
 
         openai_request = {
             "model": "claude-opus-4",
@@ -342,7 +344,7 @@ class TestRoundTrip:
         }
 
         # OpenAI → IR
-        oai = OpenAIChatConverter()
+        oai = ChatCompletionsConverter()
         ir = oai.request_from_provider(openai_request)
         ir_dict = cast(dict[str, Any], ir)
 

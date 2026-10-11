@@ -6,7 +6,7 @@
 # entry the admin UI shows it as "Kilo (Free)" and groups it under the Free
 # Resource section.
 name: kilo--openai_chat
-base: openai_chat
+base: chat_completions
 display_name: Kilo
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/kilocode.svg
 free_source: true

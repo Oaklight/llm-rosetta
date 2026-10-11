@@ -1,6 +1,6 @@
 """Tests for OpenAI Chat converter constants."""
 
-from llm_rosetta.converters.openai_chat._constants import (
+from llm_rosetta.converters.chat_completions._constants import (
     OPENAI_CHAT_REASON_FROM_PROVIDER,
     OPENAI_CHAT_REASON_TO_PROVIDER,
 )

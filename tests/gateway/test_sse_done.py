@@ -64,7 +64,7 @@ DONE_MARKER = format_sse_done()
 
 @pytest.mark.parametrize(
     "provider",
-    ["openai_chat", "openai_responses", "open_responses"],
+    ["chat_completions", "openai_responses", "open_responses"],
 )
 def test_done_emitted(provider: str) -> None:
     events = asyncio.run(_collect(cast(ProviderType, provider)))

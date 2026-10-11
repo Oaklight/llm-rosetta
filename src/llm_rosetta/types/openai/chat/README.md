@@ -283,7 +283,7 @@ For reference when updating types:
 
 ```
 <python_env>/lib/python3.10/site-packages/openai/types/chat/
-├── chat_completion.py                    → response_types.py
+├── chat_completions.py                    → response_types.py
 ├── completion_create_params.py           → request_types.py
 ├── chat_completion_message_param.py      → message_types.py
 ├── chat_completion_message.py            → response_types.py

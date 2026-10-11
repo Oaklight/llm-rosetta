@@ -211,7 +211,7 @@ class ProviderShim:
     Attributes:
         name: Canonical provider identifier (e.g. ``"deepseek"``).
         base: API standard this provider follows.  Must be one of the
-            converter type strings (``"openai_chat"``, ``"anthropic"``,
+            converter type strings (``"chat_completions"``, ``"anthropic"``,
             ``"google"``, ``"openai_responses"``).
         logo: URL to the provider's logo image (SVG preferred).
         display_name: Human-readable brand label (e.g. ``"Kilo"``), used by the
@@ -426,7 +426,7 @@ _SHIM_REGISTRY: dict[str, ProviderShim] = {}
 # Base converter types — used by resolve_base() for pass-through detection
 _BASE_TYPES: frozenset[str] = frozenset(
     {
-        "openai_chat",
+        "chat_completions",
         "openai_responses",
         "open_responses",
         "anthropic",
@@ -495,7 +495,7 @@ def resolve_base(name: str) -> str:
     declared ``base`` is returned as-is; callers that need a canonical
     provider type normalise the result themselves.
     If the normalised *name* is already a known base type (e.g.
-    ``"openai_chat"``), it is returned unchanged.  Otherwise the shim
+    ``"chat_completions"``), it is returned unchanged.  Otherwise the shim
     registry is consulted.  If the name is not found in either, it is
     returned as-is (caller decides how to handle unknown names).
     """

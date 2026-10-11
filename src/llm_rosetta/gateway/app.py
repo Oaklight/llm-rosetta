@@ -18,6 +18,7 @@ from llm_rosetta._vendor.httpserver import (
     StreamingResponse,
 )
 from llm_rosetta.auto_detect import ProviderType
+from llm_rosetta.provider_names import normalize_provider_name
 
 from .middleware.auth import (
     AuthState,
@@ -245,6 +246,10 @@ async def _proxy_handler(
     """Shared handler for all proxy endpoints."""
     assert _config is not None
 
+    # Legacy provider spellings (e.g. ``openai_chat``) migrate to the
+    # canonical format so downstream route/table lookups match.
+    source_provider = cast(ProviderType, normalize_provider_name(str(source_provider)))
+
     # Read request ID from context (populated by the early middleware
     # hook) and fall back to header extraction for safety.
     rctx = request_context_var.get()
@@ -470,8 +475,8 @@ async def _proxy_handler(
 # --- Endpoint handlers ---
 
 
-async def handle_openai_chat(request: Any) -> Response | StreamingResponse:
-    return await _proxy_handler(request, source_provider="openai_chat")
+async def handle_chat_completion(request: Any) -> Response | StreamingResponse:
+    return await _proxy_handler(request, source_provider="chat_completions")
 
 
 async def handle_anthropic(request: Any) -> Response | StreamingResponse:
@@ -825,7 +830,7 @@ def _register_non_llm_routes(app: App, config: GatewayConfig) -> None:
                     from .proxy import error_response_for_source
 
                     resp = error_response_for_source(
-                        "openai_chat",
+                        "chat_completions",
                         500,
                         f"Internal server error: {exc}",
                     )
@@ -1272,7 +1277,7 @@ async def create_app(
     # --- Routes ---
     if not ext.skip_default_routes:
         # LLM routes: explicit registration (complex per-format handler logic)
-        app.route("/v1/chat/completions", methods=["POST"])(handle_openai_chat)
+        app.route("/v1/chat/completions", methods=["POST"])(handle_chat_completion)
         app.route("/v1/messages", methods=["POST"])(handle_anthropic)
         app.route("/v1/responses", methods=["POST"])(handle_openai_responses)
         app.route("/v1beta/models/<path:model_path>", methods=["POST"])(

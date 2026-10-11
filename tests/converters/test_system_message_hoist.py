@@ -336,7 +336,7 @@ class TestDeveloperRole:
 
     def test_chat_developer_to_ir_system(self):
         """Leading Chat developer messages are extracted to system_instruction."""
-        from llm_rosetta.converters.openai_chat import OpenAIChatConverter
+        from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
 
         body = {
             "model": "gpt-4o",
@@ -345,7 +345,7 @@ class TestDeveloperRole:
                 {"role": "user", "content": "Hello"},
             ],
         }
-        converter = OpenAIChatConverter()
+        converter = ChatCompletionsConverter()
         ir_request = cast(dict[str, Any], converter.request_from_provider(body))
         assert ir_request["system_instruction"][0]["text"] == "You are helpful."
         assert len(ir_request["messages"]) == 1

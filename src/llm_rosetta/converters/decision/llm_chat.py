@@ -35,7 +35,8 @@ from .schema_ops import (
 )
 
 OutputFormat = Literal[
-    "openai_chat",
+    "chat_completions",  # canonical name for the OpenAI Chat wire
+    "openai_chat",  # legacy alias
     "openai_responses",
     "anthropic",
     "google_generate",
@@ -102,7 +103,7 @@ class LLMChatDecisionConverter(BaseDecisionConverter):
             ],
         }
 
-        if self.output_format == "openai_chat":
+        if self.output_format in ("openai_chat", "chat_completions"):
             result["response_format"] = {
                 "type": "json_schema",
                 "json_schema": {

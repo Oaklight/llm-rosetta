@@ -26,7 +26,8 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             # Converters
             "BaseConverter",
             "BaseSimpleConverter",
-            "OpenAIChatConverter",
+            "ChatCompletionsConverter",
+            "OpenAIChatConverter",  # deprecated alias
             "AnthropicConverter",
             "GoogleGenerateConverter",
             "GoogleGenAIConverter",

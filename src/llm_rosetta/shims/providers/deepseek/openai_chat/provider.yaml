@@ -1,5 +1,5 @@
 name: deepseek--openai_chat
-base: openai_chat
+base: chat_completions
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/deepseek.svg
 
 connection:

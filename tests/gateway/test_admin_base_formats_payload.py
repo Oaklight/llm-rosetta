@@ -32,7 +32,7 @@ def test_base_formats_shape():
         # universal — open_responses has none, so only its *type* is pinned.
         assert isinstance(entry["default_base_url"], str)
     by_name = {b["name"]: b for b in payload}
-    assert by_name["openai_chat"]["default_base_url"]
+    assert by_name["chat_completions"]["default_base_url"]
 
 
 def test_recommended_provider_null_when_shim_absent(monkeypatch):
@@ -48,7 +48,7 @@ def test_recommended_provider_points_at_shim():
     load_providers()
     by_name = {b["name"]: b for b in admin_config._base_formats_payload()}
 
-    assert by_name["openai_chat"]["recommended_provider"] == "openai"
+    assert by_name["chat_completions"]["recommended_provider"] == "openai"
     # `google_generate`'s vendor shim is named `google_generate`, so the
     # recommendation is a self-recommendation and degrades to None (no dangling
     # name that isn't in the picker).
@@ -63,5 +63,5 @@ def test_supports_custom_tools_defaults():
     load_providers()
     by_name = {b["name"]: b for b in admin_config._base_formats_payload()}
 
-    assert by_name["openai_chat"]["supports_custom_tools"] is True
+    assert by_name["chat_completions"]["supports_custom_tools"] is True
     assert by_name["anthropic"]["supports_custom_tools"] is False

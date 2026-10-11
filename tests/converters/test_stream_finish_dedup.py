@@ -7,7 +7,7 @@ produce exactly one set of ``*.done`` / ``output_item.done`` SSE events.
 """
 
 from llm_rosetta.converters.base.context import StreamContext
-from llm_rosetta.converters.openai_chat.converter import OpenAIChatConverter
+from llm_rosetta.converters.chat_completions.converter import ChatCompletionsConverter
 from llm_rosetta.converters.openai_responses.converter import OpenAIResponsesConverter
 from llm_rosetta.converters.openai_responses.stream_context import (
     OpenAIResponsesStreamContext,
@@ -105,7 +105,7 @@ def _make_text_chunks():
 
 def _collect_ir(chunks):
     """Parse Chat chunks into IR events."""
-    conv = OpenAIChatConverter()
+    conv = ChatCompletionsConverter()
     ctx = StreamContext()
     ir_events = []
     for chunk in chunks:

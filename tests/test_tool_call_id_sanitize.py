@@ -97,7 +97,9 @@ class TestSanitizationInConverters:
     """Integration tests: verify sanitized IDs flow through converter output."""
 
     def test_openai_chat_tool_call_sanitized(self):
-        from llm_rosetta.converters.openai_chat.tool_ops import OpenAIChatToolOps
+        from llm_rosetta.converters.chat_completions.tool_ops import (
+            ChatCompletionsToolOps,
+        )
 
         ir_tool_call = {
             "type": "tool_call",
@@ -106,19 +108,21 @@ class TestSanitizationInConverters:
             "tool_input": {"x": 1},
             "tool_type": "function",
         }
-        result = OpenAIChatToolOps.ir_tool_call_to_p(ir_tool_call)  # ty: ignore[invalid-argument-type]
+        result = ChatCompletionsToolOps.ir_tool_call_to_p(ir_tool_call)  # ty: ignore[invalid-argument-type]
         assert "\n" not in result["id"]
         assert re.match(r"^[a-zA-Z0-9_-]+$", result["id"])
 
     def test_openai_chat_tool_result_sanitized(self):
-        from llm_rosetta.converters.openai_chat.tool_ops import OpenAIChatToolOps
+        from llm_rosetta.converters.chat_completions.tool_ops import (
+            ChatCompletionsToolOps,
+        )
 
         ir_tool_result = {
             "type": "tool_result",
             "tool_call_id": "bad\nid",
             "result": "ok",
         }
-        result = OpenAIChatToolOps.ir_tool_result_to_p(ir_tool_result)  # ty: ignore[invalid-argument-type]
+        result = ChatCompletionsToolOps.ir_tool_result_to_p(ir_tool_result)  # ty: ignore[invalid-argument-type]
         assert "\n" not in result["tool_call_id"]
 
     def test_anthropic_tool_call_sanitized(self):
@@ -148,11 +152,13 @@ class TestSanitizationInConverters:
 
     def test_openai_chat_tool_call_result_ids_match(self):
         """Tool call and result must produce matching sanitized IDs."""
-        from llm_rosetta.converters.openai_chat.tool_ops import OpenAIChatToolOps
+        from llm_rosetta.converters.chat_completions.tool_ops import (
+            ChatCompletionsToolOps,
+        )
 
         raw_id = "call-bad\nid-0\nfc_other_0"
 
-        call_result = OpenAIChatToolOps.ir_tool_call_to_p(
+        call_result = ChatCompletionsToolOps.ir_tool_call_to_p(
             {
                 "type": "tool_call",
                 "tool_call_id": raw_id,
@@ -161,7 +167,7 @@ class TestSanitizationInConverters:
                 "tool_type": "function",
             }
         )
-        result_result = OpenAIChatToolOps.ir_tool_result_to_p(
+        result_result = ChatCompletionsToolOps.ir_tool_result_to_p(
             {
                 "type": "tool_result",
                 "tool_call_id": raw_id,

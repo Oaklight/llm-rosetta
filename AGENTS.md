@@ -28,7 +28,7 @@ Five chat converters, one per API standard:
 
 | Converter | API Standard | Module |
 |-----------|-------------|--------|
-| `openai_chat` | OpenAI Chat Completions | `converters/openai_chat/` |
+| `chat_completions` | OpenAI Chat Completions | `converters/chat_completions/` |
 | `openai_responses` / `open_responses` | OpenAI Responses API / Open Responses spec | `converters/openai_responses/` |
 | `anthropic` | Anthropic Messages API | `converters/anthropic/` |
 | `google_generate` | Google generateContent API | `converters/google_generate/` |
@@ -39,6 +39,10 @@ base of the two Responses classes); `OpenAIResponsesConverter` derives from it a
 the OpenAI profile (adds the `resp_` id prefix, `store: true`, and OpenAI-only
 echo fields). The `OpenAIResponses*` ops classes are aliases of the
 `OpenResponses*` ones.
+
+`ChatCompletionsConverter` (module `converters/chat_completions/`) is the
+canonical name of the Chat Completions converter; the `OpenAIChat*` classes and
+the `converters/openai_chat/` module are retained as deprecated aliases.
 
 Each chat converter implements bidirectional conversion (request/response) and
 streaming. Converters are provider-agnostic — provider-specific quirks are
@@ -103,7 +107,7 @@ src/llm_rosetta/
 ├── tool_ops.py              # Cross-provider tool call utilities
 ├── converters/              # 5 bidirectional converters
 │   ├── base/                # Abstract base + ConversionContext
-│   ├── openai_chat/
+│   ├── chat_completions/
 │   ├── openai_responses/
 │   ├── anthropic/
 │   ├── google_generate/

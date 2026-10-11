@@ -33,7 +33,7 @@ from examples.tools import (
     multimodal_tools_spec,
     tools_spec,
 )
-from llm_rosetta.converters.openai_chat import OpenAIChatConverter
+from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
 from llm_rosetta.types.ir import (
     IRRequest,
     ToolCallPart,
@@ -66,7 +66,7 @@ if not openai_api_key:
     sys.exit(1)
 
 client = OpenAI(api_key=openai_api_key, base_url=openai_base_url)
-converter = OpenAIChatConverter()
+converter = ChatCompletionsConverter()
 
 
 # ============================================================================

@@ -6,7 +6,7 @@ This module provides two layers of API:
 full conversion lifecycle (Phase 1→2→4).  Use this when you need
 request conversion, response conversion, and/or streaming:
 
-    pipeline = ConversionPipeline("openai_chat", "anthropic", target_shim="argo--anthropic")
+    pipeline = ConversionPipeline("chat_completions", "anthropic", target_shim="argo--anthropic")
     target_body = pipeline.convert_request(body)
     # ... transport sends target_body, receives upstream_response ...
     source_response = pipeline.convert_response(upstream_response)
@@ -231,7 +231,7 @@ class ConversionPipeline:
 
     Usage::
 
-        pipeline = ConversionPipeline("openai_chat", "anthropic",
+        pipeline = ConversionPipeline("chat_completions", "anthropic",
                                       shim="argo--anthropic")
 
         # Phase 1+2: request conversion
@@ -264,7 +264,7 @@ class ConversionPipeline:
     path.  The gateway always converts through IR.  See #577.
 
     Args:
-        source_provider: Client API format (e.g. ``"openai_chat"``).
+        source_provider: Client API format (e.g. ``"chat_completions"``).
         target_provider: Upstream API format (e.g. ``"anthropic"``).
         target_shim: Provider shim for the upstream/target side.
         source_shim: Provider shim for the client/source side.
@@ -598,7 +598,7 @@ class ConversionPipeline:
         #     `server_tool_use`; openai_responses `web_search_call`;
         #     google_generate `code_execution`; google_interactions
         #     `google_search_call` / `code_execution_call` / …);
-        #   - as a plain function call otherwise (openai_chat by natural
+        #   - as a plain function call otherwise (chat_completions by natural
         #     name; openai_responses `function_call` for kinds needing
         #     provider config; google_interactions `{kind}_call` for a kind
         #     outside its vocabulary, e.g. `web_search` -> `web_search_call`);
@@ -610,7 +610,7 @@ class ConversionPipeline:
             ir_request,
             shim=self._target_shim,
             same_format=self._source_provider == self._target_provider,
-            allow_name_promotion=self._source_provider == "openai_chat",
+            allow_name_promotion=self._source_provider == "chat_completions",
             request_id=request_id,
         )
 
