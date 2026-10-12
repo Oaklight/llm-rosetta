@@ -21,6 +21,12 @@ from ...types.ir import (
     TextPart,
 )
 from ..base import BaseContentOps
+from ..base.helpers.opaque import (
+    carrier_metadata,
+    get_opaque_origin,
+    is_own_origin,
+    set_opaque_origin,
+)
 
 
 class MessagesContentOps(BaseContentOps):
@@ -249,34 +255,44 @@ class MessagesContentOps(BaseContentOps):
     # ==================== Reasoning ====================
 
     @staticmethod
-    def ir_reasoning_to_p(ir_reasoning: ReasoningPart, **kwargs: Any) -> dict:
+    def ir_reasoning_to_p(ir_reasoning: ReasoningPart, **kwargs: Any) -> dict | None:
         """IR ReasoningPart → Anthropic thinking or redacted_thinking block.
 
-        Emits ``redacted_thinking`` when ``redacted_data`` is present,
-        otherwise ``thinking``.
+        Emits ``redacted_thinking`` when a same-origin ``redacted_data`` is
+        present, otherwise ``thinking``.  An opaque value that originated with
+        a different provider is dropped — Anthropic rejects foreign opaque
+        fields — and ``None`` is returned when nothing Anthropic can consume
+        remains, so the caller skips the block.
 
         Args:
             ir_reasoning: IR reasoning part.
 
         Returns:
-            Anthropic thinking or redacted_thinking content dict.
+            Anthropic thinking or redacted_thinking content dict, or ``None``.
         """
         redacted_data = ir_reasoning.get("redacted_data")
-        if redacted_data is not None:
+        if redacted_data is not None and is_own_origin(
+            get_opaque_origin(ir_reasoning, "redacted_data"), "messages"
+        ):
             return {"type": "redacted_thinking", "data": redacted_data}
 
-        result: dict = {
-            "type": "thinking",
-            "thinking": ir_reasoning.get("reasoning", ""),
-        }
+        text = ir_reasoning.get("reasoning", "")
+        result: dict = {"type": "thinking", "thinking": text}
 
         signature = ir_reasoning.get("signature")
-        if signature is not None:
+        if signature is not None and is_own_origin(
+            get_opaque_origin(ir_reasoning, "signature"), "messages"
+        ):
             result["signature"] = signature
 
+        if not text and "signature" not in result:
+            # Nothing Anthropic can consume (only a foreign opaque value).
+            return None
+
         # Preserve provider_metadata for cross-provider round-trip
-        # (e.g. Google thought_signature on reasoning parts)
-        pm = ir_reasoning.get("provider_metadata")
+        # (e.g. Google thought_signature on reasoning parts).  The reserved
+        # origin key is converter bookkeeping, so it is filtered out.
+        pm = carrier_metadata(ir_reasoning)
         if pm:
             result["_provider_metadata"] = pm
 
@@ -311,6 +327,10 @@ class MessagesContentOps(BaseContentOps):
         if pm:
             result["provider_metadata"] = pm
 
+        # Record origin so a foreign target can drop this signature.
+        if signature is not None:
+            set_opaque_origin(result, signature="messages")
+
         # Read cache_control → cache_hint
         cache_control = provider_reasoning.get("cache_control")
         if cache_control is not None:
@@ -328,10 +348,12 @@ class MessagesContentOps(BaseContentOps):
         Returns:
             IR ReasoningPart carrying opaque redacted data.
         """
-        return ReasoningPart(
+        result = ReasoningPart(
             type="reasoning",
             redacted_data=provider_part.get("data", ""),
         )
+        set_opaque_origin(result, redacted_data="messages")
+        return result
 
     # ==================== Refusal ====================
 

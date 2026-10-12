@@ -180,6 +180,7 @@ class TestReasoningCacheHint:
         )
         ir_reasoning["cache_hint"] = CACHE_CONTROL_EPHEMERAL
         result = MessagesContentOps.ir_reasoning_to_p(ir_reasoning)
+        assert result is not None
         assert result["cache_control"] == CACHE_CONTROL_EPHEMERAL
 
     def test_reasoning_round_trip(self):
@@ -191,6 +192,7 @@ class TestReasoningCacheHint:
         }
         ir = MessagesContentOps.p_reasoning_to_ir(provider_reasoning)
         result = MessagesContentOps.ir_reasoning_to_p(ir)
+        assert result is not None
         assert result["cache_control"] == CACHE_CONTROL_EPHEMERAL
 
 

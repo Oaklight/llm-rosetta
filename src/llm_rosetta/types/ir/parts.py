@@ -195,6 +195,22 @@ class ReasoningPart(TypedDict):
 
     有些provider只返回signature而不返回完整的reasoning内容。
     Some providers only return signature without full reasoning content.
+
+    ``signature`` 与 ``redacted_data`` 是 **provider 专有的不透明值**，仅对签发的
+    provider 有效。为避免把它发给别的 provider（对方会以 400 拒绝），转换器在读取
+    时会把出处记录在 ``provider_metadata["_opaque_origin"]`` 下：
+
+        {"signature": "<converter_tag>", "redacted_data": "<converter_tag>"}
+
+    未记录出处视为“未知”，按同源处理以兼容手工构造的 IR。跨 provider 转换时：
+    Anthropic/OpenAI 丢弃异源值；Google 目标在每轮首个 ``functionCall`` 上注入
+    文档规定的 dummy 签名。
+
+    ``signature`` and ``redacted_data`` are **provider-specific opaque values**
+    valid only for the provider that issued them.  Converters record the origin
+    under ``provider_metadata["_opaque_origin"]`` so a foreign target can drop
+    the value (Anthropic/OpenAI) or replace it with Google's documented dummy
+    signature.  See :mod:`llm_rosetta.converters.base.helpers.opaque`.
     """
 
     type: Required[Literal["reasoning"]]
@@ -203,7 +219,7 @@ class ReasoningPart(TypedDict):
     ]  # 推理内容，某些provider可能不提供 Reasoning content, may not be provided by some providers
     signature: NotRequired[
         str
-    ]  # Verification signature coexisting with visible reasoning text (Anthropic, Google)
+    ]  # Provider-specific verification signature (Anthropic thinking, Google thoughtSignature); see _opaque_origin provenance above
     status: NotRequired[
         Literal["in_progress", "completed", "incomplete"]
     ]  # 推理状态 Reasoning status
@@ -211,7 +227,7 @@ class ReasoningPart(TypedDict):
     cache_hint: NotRequired[dict[str, Any]]
     redacted_data: NotRequired[
         str
-    ]  # Opaque reasoning blob, round-tripped verbatim (Anthropic redacted_thinking, OpenAI encrypted_content)
+    ]  # Provider-specific opaque blob (Anthropic redacted_thinking, OpenAI encrypted_content); see _opaque_origin provenance above
 
 
 class UrlCitation(TypedDict, total=False):

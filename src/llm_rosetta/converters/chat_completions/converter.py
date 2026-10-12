@@ -330,7 +330,7 @@ class ChatCompletionsConverter(BaseConverter):
                     pm = part.get("provider_metadata", {}).get("openai_chat", {})
                     if "reasoning_details" in pm:
                         openai_message["reasoning_details"] = pm["reasoning_details"]
-                    redacted = part.get("redacted_data")
+                    redacted = ChatCompletionsContentOps.own_encrypted_content(part)
                     if redacted:
                         openai_message["encrypted_content"] = redacted
                     break

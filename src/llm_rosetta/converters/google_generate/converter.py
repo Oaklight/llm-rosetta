@@ -51,6 +51,10 @@ from ..base.tools import (
     strip_orphaned_tool_config,
 )
 from ..base.helpers.extensions import wire_extensions
+from ..base.helpers.opaque import (
+    google_thought_signature,
+    inject_google_function_call_signature,
+)
 from ..base.helpers.system_message_hoist import hoist_system_in_converter
 from ...transforms.ir import hoist_late_system_messages
 from ._constants import (
@@ -570,6 +574,9 @@ class GoogleGenerateConverter(BaseConverter):
                     parts.append(self.content_ops.ir_reasoning_to_p(part))
                 elif is_refusal_part(part):
                     parts.append(self.content_ops.ir_refusal_to_p(part))
+
+            if google_role == "model":
+                inject_google_function_call_signature(parts)
 
             finish_reason = choice.get("finish_reason", {})
             reason = finish_reason.get("reason", "stop")
@@ -1103,7 +1110,11 @@ class GoogleGenerateConverter(BaseConverter):
     ) -> dict[str, Any]:
         """Handle ToolCallStartEvent → register in context, no output."""
         if context is not None:
-            context.register_tool_call(event["tool_call_id"], event["tool_name"])
+            context.register_tool_call(
+                event["tool_call_id"],
+                event["tool_name"],
+                provider_metadata=event.get("provider_metadata"),
+            )
         return {}
 
     def _handle_ir_tool_call_delta_to_p(
@@ -1142,7 +1153,22 @@ class GoogleGenerateConverter(BaseConverter):
                 fc: dict[str, Any] = {"name": tool_name, "args": args}
                 if call_id:
                     fc["id"] = sanitize_tool_call_id(call_id)
-                parts.append({"functionCall": fc})
+                flushed_part: dict[str, Any] = {"functionCall": fc}
+                thought_sig = google_thought_signature(
+                    {
+                        "provider_metadata": context.get_tool_call_provider_metadata(
+                            call_id
+                        )
+                        or {}
+                    }
+                )
+                if thought_sig:
+                    flushed_part["thoughtSignature"] = thought_sig
+                parts.append(flushed_part)
+
+        # Gemini 3 requires a thought signature on replayed function-call
+        # history; inject the documented dummy when the real one is absent.
+        inject_google_function_call_signature(parts)
 
         finish_chunk: dict[str, Any] = {
             "candidates": [

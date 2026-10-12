@@ -29,6 +29,13 @@ from ...types.ir import (
 )
 from ...types.ir.parts import ContentPart
 from ..base import BaseContentOps
+from ..base.helpers.opaque import (
+    get_opaque_origin,
+    google_thought_signature,
+    is_own_origin,
+    set_google_thought_signature,
+    set_opaque_origin,
+)
 
 
 class GoogleGenerateContentOps(BaseContentOps):
@@ -295,7 +302,13 @@ class GoogleGenerateContentOps(BaseContentOps):
             "thought": True,
             "text": ir_reasoning.get("reasoning", ""),
         }
-        signature = ir_reasoning.get("signature")
+        # Prefer the Google-namespace carrier (survives a foreign hop); a
+        # flat signature is used only when it is Google-origin or unrecorded.
+        signature = google_thought_signature(ir_reasoning)
+        if signature is None and is_own_origin(
+            get_opaque_origin(ir_reasoning, "signature"), "google_generate"
+        ):
+            signature = ir_reasoning.get("signature")
         if signature:
             part["thoughtSignature"] = signature
         return part
@@ -318,6 +331,10 @@ class GoogleGenerateContentOps(BaseContentOps):
         ) or provider_reasoning.get("thought_signature")
         if thought_sig:
             result["signature"] = thought_sig
+            set_opaque_origin(result, signature="google_generate")
+            # Mirror into the Google namespace so the value survives a hop
+            # through a foreign converter (which drops the flat signature).
+            set_google_thought_signature(result, thought_sig)
         return result
 
     # ==================== Refusal (not natively supported) ====================

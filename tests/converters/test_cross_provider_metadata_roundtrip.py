@@ -8,8 +8,6 @@ Covers tool_call, tool_result, and reasoning parts.
 Refs: https://github.com/Oaklight/llm-rosetta/issues/225
 """
 
-import pytest
-
 from llm_rosetta.converters.messages.content_ops import MessagesContentOps
 from llm_rosetta.converters.messages.tool_ops import MessagesToolOps
 from llm_rosetta.converters.google_generate.content_ops import GoogleGenerateContentOps
@@ -213,16 +211,25 @@ class TestGoogleAnthropicReasoningRoundTrip:
         assert ir["reasoning"] == "Let me think about this..."
         assert ir["signature"] == self.THOUGHT_SIG
 
-        # IR → Anthropic: signature → thinking.signature
+        # IR → Anthropic: the foreign signature is dropped from the flat
+        # field (#881) — Anthropic would reject a Google signature — but it
+        # is ferried through provider_metadata so the value survives.
         anthropic_block = MessagesContentOps.ir_reasoning_to_p(ir)
+        assert anthropic_block is not None
         assert anthropic_block["type"] == "thinking"
-        assert anthropic_block["signature"] == self.THOUGHT_SIG
+        assert "signature" not in anthropic_block
+        assert (
+            anthropic_block["_provider_metadata"]["google"]["thought_signature"]
+            == self.THOUGHT_SIG
+        )
 
-        # Anthropic → IR: thinking.signature → signature
+        # Anthropic → IR: the signature comes back from the Google namespace.
         ir2 = MessagesContentOps.p_reasoning_to_ir(anthropic_block)
-        assert ir2["signature"] == self.THOUGHT_SIG
+        assert (
+            ir2["provider_metadata"]["google"]["thought_signature"] == self.THOUGHT_SIG
+        )
 
-        # IR → Google: signature → thoughtSignature
+        # IR → Google: thoughtSignature restored from the Google namespace.
         google_out = GoogleGenerateContentOps.ir_reasoning_to_p(ir2)
         assert google_out["thoughtSignature"] == self.THOUGHT_SIG
         assert google_out["thought"] is True
@@ -236,6 +243,8 @@ class TestGoogleAnthropicReasoningRoundTrip:
         ir["signature"] = "some-verification-sig"
 
         anthropic = MessagesContentOps.ir_reasoning_to_p(ir)
+
+        assert anthropic is not None
         assert anthropic["signature"] == "some-verification-sig"
 
         ir2 = MessagesContentOps.p_reasoning_to_ir(anthropic)
@@ -245,23 +254,19 @@ class TestGoogleAnthropicReasoningRoundTrip:
         """Reasoning blocks without signature still work normally."""
         ir = ReasoningPart(type="reasoning", reasoning="hmm")
         anthropic = MessagesContentOps.ir_reasoning_to_p(ir)
+        assert anthropic is not None
         assert "signature" not in anthropic
         assert "_provider_metadata" not in anthropic
         assert anthropic["type"] == "thinking"
 
 
-class TestKnownCarrierGaps:
-    """Pre-existing gaps in the provider_metadata carrier set.
+class TestToolCallCarrierRoundTrip:
+    """The ``open_responses`` tool-call carrier now ferries provider_metadata.
 
-    Recorded here as xfail so the set stays visible. Both are unrelated to
-    the GI ``function_call`` signature fix in #880 — tracked in #930.
+    Formerly an ``xfail`` for the missing carrier; fixed in #930 (folded into
+    #881), so this is a plain regression test.
     """
 
-    @pytest.mark.xfail(
-        reason="open_responses ir_tool_call_to_p emits no provider_metadata "
-        "carrier; the signature is dropped (#930)",
-        strict=True,
-    )
     def test_open_responses_preserves_tool_call_provider_metadata(self):
         ir = ToolCallPart(
             type="tool_call",

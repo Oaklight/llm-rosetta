@@ -5,6 +5,10 @@ Verifies the two semantic categories map to the correct IR fields:
   - redacted_data: opaque content blob (encrypted_content, redacted_thinking)
 
 Covers same-format round-trips and cross-format conversions.
+
+After #881 the cross-format rows are no longer lossless: an opaque value that
+originated with one provider is dropped when the target is a different
+provider, because the target rejects a foreign opaque field.
 """
 
 from typing import cast
@@ -155,7 +159,14 @@ class TestGoogleGenerateThoughtSignature:
         }
         ir = GoogleGenerateContentOps.p_reasoning_to_ir(provider)
         assert ir["signature"] == "google-sig-123"
-        assert "provider_metadata" not in ir
+        # The value is mirrored into the Google namespace (#881) so it can
+        # survive a hop through a foreign converter.
+        assert (
+            ir["provider_metadata"]["google"]["thought_signature"] == "google-sig-123"
+        )
+        assert (
+            ir["provider_metadata"]["_opaque_origin"]["signature"] == "google_generate"
+        )
 
     def test_ir_to_provider(self):
         ir = ReasoningPart(type="reasoning", reasoning="Deep thinking...")
@@ -192,8 +203,12 @@ class TestGoogleGenerateThoughtSignature:
 class TestCrossFormatConversion:
     """Cross-format reasoning conversions after #857 unification."""
 
-    def test_responses_to_anthropic_encrypted_content_becomes_redacted_thinking(self):
-        """OpenAI Responses encrypted_content → Anthropic redacted_thinking."""
+    def test_responses_to_anthropic_encrypted_content_is_dropped(self):
+        """OpenAI Responses encrypted_content is NOT emitted as redacted_thinking (#881).
+
+        Anthropic rejects a foreign ``redacted_thinking.data`` with
+        ``400 Invalid data in redacted_thinking block``.
+        """
         responses_item = {
             "type": "reasoning",
             "id": "rs_cross",
@@ -204,9 +219,8 @@ class TestCrossFormatConversion:
         assert ir is not None
         assert ir["redacted_data"] == "cross-format-blob"
 
-        anthropic_block = MessagesContentOps.ir_reasoning_to_p(ir)
-        assert anthropic_block["type"] == "redacted_thinking"
-        assert anthropic_block["data"] == "cross-format-blob"
+        # Foreign opaque blob → dropped; nothing Anthropic can consume remains.
+        assert MessagesContentOps.ir_reasoning_to_p(ir) is None
 
     def test_anthropic_redacted_to_responses_encrypted_content(self):
         """Anthropic redacted_thinking → OpenAI Responses encrypted_content."""
@@ -217,8 +231,8 @@ class TestCrossFormatConversion:
         assert result is not None
         assert result["encrypted_content"] == "anthropic-redacted-blob"
 
-    def test_google_signature_to_anthropic_signature(self):
-        """Google thoughtSignature → Anthropic thinking.signature."""
+    def test_google_signature_is_dropped_for_anthropic(self):
+        """Google thoughtSignature is NOT emitted as an Anthropic signature (#881)."""
         google_part = {
             "thought": True,
             "text": "Let me think...",
@@ -226,9 +240,15 @@ class TestCrossFormatConversion:
         }
         ir = GoogleGenerateContentOps.p_reasoning_to_ir(google_part)
         anthropic = MessagesContentOps.ir_reasoning_to_p(ir)
+        assert anthropic is not None
         assert anthropic["type"] == "thinking"
-        assert anthropic["signature"] == "google-verification-sig"
+        assert "signature" not in anthropic
         assert anthropic["thinking"] == "Let me think..."
+        # ...but the value is ferried so a round trip back to Google recovers it.
+        assert (
+            anthropic["_provider_metadata"]["google"]["thought_signature"]
+            == "google-verification-sig"
+        )
 
     def test_signature_and_redacted_data_are_independent_concepts(self):
         """signature (verification) and redacted_data (opaque content) don't interfere."""
@@ -236,6 +256,8 @@ class TestCrossFormatConversion:
         ir["signature"] = "verification-only"
 
         anthropic = MessagesContentOps.ir_reasoning_to_p(ir)
+
+        assert anthropic is not None
         assert anthropic["type"] == "thinking"
         assert anthropic["signature"] == "verification-only"
         assert anthropic["thinking"] == "visible text"
@@ -244,5 +266,7 @@ class TestCrossFormatConversion:
         ir2["redacted_data"] = "opaque-content"
 
         anthropic2 = MessagesContentOps.ir_reasoning_to_p(ir2)
+
+        assert anthropic2 is not None
         assert anthropic2["type"] == "redacted_thinking"
         assert anthropic2["data"] == "opaque-content"

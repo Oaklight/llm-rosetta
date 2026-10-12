@@ -196,6 +196,7 @@ class TestMessagesContentOps:
         """Test IR ReasoningPart → Anthropic thinking block."""
         ir_reasoning = ReasoningPart(type="reasoning", reasoning="I need to think.")
         result = MessagesContentOps.ir_reasoning_to_p(ir_reasoning)
+        assert result is not None
         assert result["type"] == "thinking"
         assert result["thinking"] == "I need to think."
 
@@ -205,6 +206,7 @@ class TestMessagesContentOps:
             type="reasoning", reasoning="thinking...", signature="sig123"
         )
         result = MessagesContentOps.ir_reasoning_to_p(ir_reasoning)
+        assert result is not None
         assert result["type"] == "thinking"
         assert result["thinking"] == "thinking..."
         assert result["signature"] == "sig123"
@@ -214,6 +216,7 @@ class TestMessagesContentOps:
         ir_reasoning = ReasoningPart(type="reasoning", reasoning="thinking...")
         ir_reasoning["signature"] = ""
         result = MessagesContentOps.ir_reasoning_to_p(ir_reasoning)
+        assert result is not None
         assert result["signature"] == ""
 
     def test_p_reasoning_to_ir(self):
@@ -245,6 +248,7 @@ class TestMessagesContentOps:
         """Test reasoning round-trip."""
         original = ReasoningPart(type="reasoning", reasoning="deep thought")
         provider = MessagesContentOps.ir_reasoning_to_p(original)
+        assert provider is not None
         restored = MessagesContentOps.p_reasoning_to_ir(provider)
         assert restored["reasoning"] == original["reasoning"]
 

@@ -41,6 +41,11 @@ from ...types.ir.stream import (
 from ..base import BaseConverter
 from ..base.context import ConversionContext, StreamContext
 from ..base.helpers.extensions import wire_extensions
+from ..base.helpers.opaque import (
+    get_opaque_origin,
+    is_own_origin,
+    set_opaque_origin,
+)
 from ..base.helpers.truncate import truncate_with_digest
 from ..base.tools import (
     assign_tool_batch_ids,
@@ -1198,6 +1203,7 @@ class OpenResponsesConverter(BaseConverter):
                     event["provider_metadata"] = {
                         "responses_reasoning_id": item_id,
                     }
+                set_opaque_origin(event, redacted_data="open_responses")
                 events.append(event)
         elif item_type in ("tool_search_call", "tool_search_output"):
             events.append(
@@ -1740,6 +1746,11 @@ class OpenResponsesConverter(BaseConverter):
             )
 
         enc = event.get("encrypted_content", "")
+        if enc and not is_own_origin(
+            get_opaque_origin(event, "redacted_data"), "open_responses"
+        ):
+            # Foreign opaque blob — not valid for the Responses API.
+            enc = ""
         if item is not None and source_item_id and enc:
             item.encrypted_content = enc
             if not event["reasoning"]:

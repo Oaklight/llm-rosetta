@@ -12,11 +12,23 @@ Modules:
     cache              — LRU cache for tool definition conversion results.
     cache_breakpoints  — Cache breakpoint detection.
     image_limit        — Truncate images to provider-declared limits.
+    opaque             — Provenance for opaque provider-specific reasoning values.
     reasoning          — Shim-driven reasoning configuration helpers.
     system_message_hoist — Hoist late system messages to the front.
     truncate           — Fit an identifier into a length budget uniquely.
 """
 
+from .opaque import (
+    DUMMY_THOUGHT_SIGNATURE,
+    OPAQUE_SAME_ORIGIN,
+    carrier_metadata,
+    get_opaque_origin,
+    google_thought_signature,
+    inject_google_function_call_signature,
+    inject_interactions_function_call_signature,
+    set_google_thought_signature,
+    set_opaque_origin,
+)
 from .reasoning import DEFAULT_REASONING_CAPS, apply_reasoning_config
 from .truncate import truncate_with_digest
 from .system_message_hoist import hoist_late_system_messages_ir
@@ -57,7 +69,17 @@ def __getattr__(name: str) -> object:
 
 __all__ = [
     "DEFAULT_REASONING_CAPS",
+    "DUMMY_THOUGHT_SIGNATURE",
+    "OPAQUE_SAME_ORIGIN",
+    "carrier_metadata",
     "apply_reasoning_config",
-    "truncate_with_digest",
+    "get_opaque_origin",
+    "google_thought_signature",
     "hoist_late_system_messages_ir",
+    "inject_google_function_call_signature",
+    "inject_interactions_function_call_signature",
+    "is_own_origin",
+    "set_google_thought_signature",
+    "set_opaque_origin",
+    "truncate_with_digest",
 ]

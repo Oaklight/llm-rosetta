@@ -17,6 +17,13 @@ from ...types.ir import (
 )
 from ...types.ir.parts import ContentPart
 from ..base import BaseContentOps
+from ..base.helpers.opaque import (
+    get_opaque_origin,
+    google_thought_signature,
+    is_own_origin,
+    set_google_thought_signature,
+    set_opaque_origin,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +78,10 @@ class GoogleInteractionsContentOps(BaseContentOps):
         part: ReasoningPart = {"type": "reasoning"}
         if "signature" in thought_step:
             part["signature"] = thought_step["signature"]
+            set_opaque_origin(part, signature="google_interactions")
+            # Mirror into the Google namespace so the value survives a hop
+            # through a foreign converter (which drops the flat signature).
+            set_google_thought_signature(part, thought_step["signature"])
         summary = thought_step.get("summary")
         if summary and isinstance(summary, list):
             texts = [s["text"] for s in summary if isinstance(s, dict) and "text" in s]
@@ -82,8 +93,15 @@ class GoogleInteractionsContentOps(BaseContentOps):
     def ir_reasoning_to_p(ir_reasoning: ReasoningPart, **kwargs: Any) -> dict:
         """IR ReasoningPart → Interactions ThoughtStep."""
         step: dict[str, Any] = {"type": "thought"}
-        if "signature" in ir_reasoning:
-            step["signature"] = ir_reasoning["signature"]
+        # Prefer the Google-namespace carrier (survives a foreign hop); a
+        # flat signature is used only when it is Google-origin or unrecorded.
+        signature = google_thought_signature(ir_reasoning)
+        if signature is None and is_own_origin(
+            get_opaque_origin(ir_reasoning, "signature"), "google_interactions"
+        ):
+            signature = ir_reasoning.get("signature")
+        if signature:
+            step["signature"] = signature
         reasoning_text = ir_reasoning.get("reasoning")
         if reasoning_text:
             step["summary"] = [{"type": "text", "text": reasoning_text}]

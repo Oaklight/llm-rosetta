@@ -16,6 +16,7 @@ from ...types.ir import (
 from ...types.ir.parts import AssistantContentPart, ContentPart
 from ...types.ir.request import IRInputItem
 from ..base import BaseMessageOps
+from ..base.helpers.opaque import inject_interactions_function_call_signature
 from ..base.tools.batch import assign_tool_batch_ids
 from .content_ops import GoogleInteractionsContentOps
 from .tool_ops import (
@@ -179,6 +180,9 @@ class GoogleInteractionsMessageOps(BaseMessageOps):
                 steps.append(self.content_ops.ir_reasoning_to_p(part))
             elif ptype == "tool_call":
                 steps.append(self.tool_ops.ir_tool_call_to_p(part))
+        # Replayed function-call history needs a signature (Google dummy when
+        # the real one is foreign or absent).
+        inject_interactions_function_call_signature(steps)
         return steps
 
     def _ir_tool_to_steps(

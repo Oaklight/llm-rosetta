@@ -18,6 +18,7 @@ from ...types.ir import (
     TextPart,
 )
 from ..base import BaseContentOps
+from ..base.helpers.opaque import get_opaque_origin, is_own_origin
 
 
 class ChatCompletionsContentOps(BaseContentOps):
@@ -187,6 +188,26 @@ class ChatCompletionsContentOps(BaseContentOps):
             Dict with ``reasoning_content`` key.
         """
         return {"reasoning_content": ir_reasoning.get("reasoning", "")}
+
+    @staticmethod
+    def own_encrypted_content(part: Any) -> str | None:
+        """Return ``redacted_data`` when it is this format's own opaque blob.
+
+        A blob that originated with a different provider is not valid for the
+        Chat Completions API and is dropped (issue #881).
+
+        Args:
+            part: IR reasoning part.
+
+        Returns:
+            The opaque blob, or ``None`` when it is absent or foreign.
+        """
+        redacted = part.get("redacted_data")
+        if redacted and is_own_origin(
+            get_opaque_origin(part, "redacted_data"), "chat_completions"
+        ):
+            return str(redacted)
+        return None
 
     @staticmethod
     def p_reasoning_to_ir(provider_reasoning: Any, **kwargs: Any) -> ReasoningPart:

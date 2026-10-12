@@ -31,6 +31,11 @@ from ...types.ir.stream import (
     UsageEvent,
 )
 from ..base import BaseConverter
+from ..base.helpers.opaque import (
+    get_opaque_origin,
+    is_own_origin,
+    set_opaque_origin,
+)
 from ..base.helpers.system_message_hoist import hoist_system_in_converter
 from ...transforms.ir import hoist_late_system_messages
 from ..base.context import ConversionContext, StreamContext
@@ -500,14 +505,16 @@ class GoogleInteractionsConverter(BaseConverter):
                 )
             ]
         if delta_type == "thought_signature":
-            return [
-                ReasoningDeltaEvent(
-                    type="reasoning_delta",
-                    reasoning="",
-                    signature=delta.get("signature", ""),
-                    block_index=index,
-                )
-            ]
+            sig = delta.get("signature", "")
+            signature_event = ReasoningDeltaEvent(
+                type="reasoning_delta",
+                reasoning="",
+                signature=sig,
+                block_index=index,
+            )
+            if sig:
+                set_opaque_origin(signature_event, signature="google_interactions")
+            return [signature_event]
         if delta_type == "arguments":
             return [
                 ToolCallDeltaEvent(
@@ -683,11 +690,19 @@ class GoogleInteractionsConverter(BaseConverter):
     def _handle_ir_reasoning_delta_to_p(
         self, event: ReasoningDeltaEvent, context: StreamContext | None
     ) -> dict[str, Any]:
-        if event.get("signature"):
+        signature = event.get("signature")
+        if signature is not None and not is_own_origin(
+            get_opaque_origin(event, "signature"), "google_interactions"
+        ):
+            # Foreign signature — not valid for Google.
+            signature = None
+            if not event.get("reasoning"):
+                return {}
+        if signature:
             return {
                 "event_type": "step.delta",
                 "index": event.get("block_index", 0),
-                "delta": {"type": "thought_signature", "signature": event["signature"]},
+                "delta": {"type": "thought_signature", "signature": signature},
             }
         return {
             "event_type": "step.delta",

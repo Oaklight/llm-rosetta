@@ -22,6 +22,11 @@ from ...types.ir import (
     TextPart,
 )
 from ..base import BaseContentOps
+from ..base.helpers.opaque import (
+    get_opaque_origin,
+    is_own_origin,
+    set_opaque_origin,
+)
 from ._constants import generate_reasoning_id
 
 
@@ -311,9 +316,12 @@ class OpenResponsesContentOps(BaseContentOps):
         if raw_content:
             result["content"] = raw_content
 
-        # Preserve opaque encrypted reasoning blob.
+        # Preserve the opaque encrypted reasoning blob, but only when it
+        # originated here — a foreign blob is not valid for this API.
         redacted = ir_reasoning.get("redacted_data")
-        if redacted:
+        if redacted and is_own_origin(
+            get_opaque_origin(ir_reasoning, "redacted_data"), "open_responses"
+        ):
             result["encrypted_content"] = redacted
 
         return result
@@ -377,6 +385,10 @@ class OpenResponsesContentOps(BaseContentOps):
 
         if metadata:
             part["provider_metadata"] = metadata
+
+        # Record origin so a foreign target can drop this blob.
+        if encrypted:
+            set_opaque_origin(part, redacted_data="open_responses")
 
         # Return part if it has any meaningful content or metadata to preserve.
         if reasoning_content or encrypted or metadata:

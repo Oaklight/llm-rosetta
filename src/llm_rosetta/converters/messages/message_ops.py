@@ -218,7 +218,9 @@ class MessagesMessageOps(BaseMessageOps):
                         "Unsigned reasoning content in assistant message not supported by target provider, preserved in metadata"
                     )
                     continue
-                anthropic_content.append(self.content_ops.ir_reasoning_to_p(part))
+                reasoning_block = self.content_ops.ir_reasoning_to_p(part)
+                if reasoning_block is not None:
+                    anthropic_content.append(reasoning_block)
             elif is_refusal_part(part):
                 # Convert refusal to text since Anthropic has no refusal type
                 refusal_block = self.content_ops.ir_refusal_to_p(part)

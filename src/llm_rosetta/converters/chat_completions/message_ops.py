@@ -33,6 +33,9 @@ from ...types.ir import (
     is_tool_result_part,
 )
 from ..base import BaseMessageOps
+from ..base.helpers.opaque import (
+    set_opaque_origin,
+)
 from ..base.tools.batch import assign_tool_batch_ids
 from ..base.tools.multimodal_patch import (
     has_multimodal_content,
@@ -352,7 +355,7 @@ class ChatCompletionsMessageOps(BaseMessageOps):
                     pm = part.get("provider_metadata", {}).get("openai_chat", {})
                     if "reasoning_details" in pm:
                         openai_message["reasoning_details"] = pm["reasoning_details"]
-                    redacted = part.get("redacted_data")
+                    redacted = self.content_ops.own_encrypted_content(part)
                     if redacted:
                         openai_message["encrypted_content"] = redacted
                     break
@@ -582,6 +585,7 @@ class ChatCompletionsMessageOps(BaseMessageOps):
             encrypted_content = msg.get("encrypted_content")
             if encrypted_content:
                 reasoning_part["redacted_data"] = encrypted_content
+                set_opaque_origin(reasoning_part, redacted_data="chat_completions")
             ir_content.append(reasoning_part)
 
         # Handle text content

@@ -33,6 +33,7 @@ from ...types.ir import (
     is_tool_result_part,
 )
 from ..base import BaseMessageOps
+from ..base.helpers.opaque import inject_google_function_call_signature
 from ..base.tools.batch import assign_tool_batch_ids, merge_tool_messages
 from ..base.tools.intrinsic import get_intrinsic_kind, is_intrinsic_part
 from .content_ops import GoogleGenerateContentOps
@@ -205,6 +206,12 @@ class GoogleGenerateMessageOps(BaseMessageOps):
             part = self._ir_content_part_to_p(content_part, tool_call_index)
             if part is not None:
                 parts.append(part)
+
+        if google_role == "model":
+            # Gemini 3 requires a thought signature on replayed function-call
+            # history; inject the documented dummy when the real one is
+            # foreign or absent (cross-model traces).
+            inject_google_function_call_signature(parts)
 
         return {"role": google_role, "parts": parts}
 

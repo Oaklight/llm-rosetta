@@ -50,6 +50,11 @@ from ..base.tools import (
     strip_orphaned_tool_config,
 )
 from ..base.helpers.extensions import wire_extensions
+from ..base.helpers.opaque import (
+    get_opaque_origin,
+    is_own_origin,
+    set_opaque_origin,
+)
 from ..base.helpers.system_message_hoist import hoist_system_in_converter
 from ...transforms.ir import auto_cache_breakpoints, hoist_late_system_messages
 from ._constants import (
@@ -355,6 +360,27 @@ class MessagesConverter(BaseConverter):
 
         return ir_response
 
+    def _ir_part_to_anthropic_block(self, part: Any) -> dict[str, Any] | None:
+        """Convert one IR content part to an Anthropic block, or ``None``.
+
+        Reasoning parts return ``None`` when the block was dropped (nothing
+        Anthropic could consume, e.g. only a foreign opaque value — #881).
+
+        Args:
+            part: IR content part.
+
+        Returns:
+            The Anthropic content block, or ``None`` when the part maps to no
+            block.
+        """
+        if is_text_part(part):
+            return self.content_ops.ir_text_to_p(part)
+        if is_tool_call_part(part):
+            return self.tool_ops.ir_tool_call_to_p(part)
+        if is_reasoning_part(part):
+            return self.content_ops.ir_reasoning_to_p(part)
+        return None
+
     def _do_response_to_provider(
         self,
         ir_response: IRResponse,
@@ -383,16 +409,12 @@ class MessagesConverter(BaseConverter):
 
                 refusal_part = None
                 for part in content_parts:
-                    if is_text_part(part):
-                        anthropic_content.append(self.content_ops.ir_text_to_p(part))
-                    elif is_tool_call_part(part):
-                        anthropic_content.append(self.tool_ops.ir_tool_call_to_p(part))
-                    elif is_reasoning_part(part):
-                        anthropic_content.append(
-                            self.content_ops.ir_reasoning_to_p(part)
-                        )
-                    elif is_refusal_part(part):
+                    if is_refusal_part(part):
                         refusal_part = part
+                        continue
+                    block = self._ir_part_to_anthropic_block(part)
+                    if block is not None:
+                        anthropic_content.append(block)
 
                 # Add citations: null to text blocks (spec requires it on ResponseTextBlock)
                 for block in anthropic_content:
@@ -808,11 +830,14 @@ class MessagesConverter(BaseConverter):
                 evt_r["block_index"] = chunk_block_index
             events.append(evt_r)
         elif delta_type == "signature_delta":
+            sig_delta = delta.get("signature", "")
             evt_s = ReasoningDeltaEvent(
                 type="reasoning_delta",
                 reasoning="",
-                signature=delta.get("signature", ""),
+                signature=sig_delta,
             )
+            if sig_delta:
+                set_opaque_origin(evt_s, signature="messages")
             if chunk_block_index is not None:
                 evt_s["block_index"] = chunk_block_index
             events.append(evt_s)
@@ -1049,6 +1074,15 @@ class MessagesConverter(BaseConverter):
     ) -> dict[str, Any] | list[dict[str, Any]]:
         """Handle ReasoningDeltaEvent → content_block_delta (thinking or signature)."""
         signature = event.get("signature")
+        if signature is not None and not is_own_origin(
+            get_opaque_origin(event, "signature"), "messages"
+        ):
+            # Foreign verification signature — not valid for Anthropic.  Drop
+            # only the signature: any visible reasoning on the same event still
+            # has to reach the client.
+            signature = None
+            if not event["reasoning"]:
+                return {}
         rd_result: dict[str, Any]
         if signature is not None:
             rd_result = {

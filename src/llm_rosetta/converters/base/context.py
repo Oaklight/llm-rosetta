@@ -146,6 +146,9 @@ class StreamContext(ConversionContext):
     _tool_call_order: list[str] = field(default_factory=list, repr=False)
     _tool_call_index: dict[str, int] = field(default_factory=dict, repr=False)
     _tool_call_types: dict[str, str] = field(default_factory=dict, repr=False)
+    _tool_call_provider_metadata: dict[str, dict] = field(
+        default_factory=dict, repr=False
+    )
 
     def next_block_index(self) -> int:
         """Increment and return the next block index.
@@ -157,7 +160,11 @@ class StreamContext(ConversionContext):
         return self.current_block_index
 
     def register_tool_call(
-        self, tool_call_id: str, tool_name: str, tool_type: str = "function"
+        self,
+        tool_call_id: str,
+        tool_name: str,
+        tool_type: str = "function",
+        provider_metadata: dict | None = None,
     ) -> None:
         """Register a tool call ID to name mapping.
 
@@ -165,13 +172,28 @@ class StreamContext(ConversionContext):
             tool_call_id: The unique identifier for the tool call.
             tool_name: The name of the tool being called.
             tool_type: The type of tool call ("function" or "custom").
+            provider_metadata: Provider-specific metadata to carry through the
+                stream (e.g. a Google ``thought_signature``).
         """
         self.tool_call_id_map[tool_call_id] = tool_name
         self._tool_call_args[tool_call_id] = ""
         self._tool_call_types[tool_call_id] = tool_type
+        if provider_metadata:
+            self._tool_call_provider_metadata[tool_call_id] = provider_metadata
         if tool_call_id not in self._tool_call_index:
             self._tool_call_index[tool_call_id] = len(self._tool_call_order)
             self._tool_call_order.append(tool_call_id)
+
+    def get_tool_call_provider_metadata(self, tool_call_id: str) -> dict | None:
+        """Get the provider metadata registered for a tool call, if any.
+
+        Args:
+            tool_call_id: The unique identifier for the tool call.
+
+        Returns:
+            The provider metadata dict, or ``None`` when absent.
+        """
+        return self._tool_call_provider_metadata.get(tool_call_id)
 
     def get_tool_type(self, tool_call_id: str) -> str:
         """Get tool type by tool call ID.
