@@ -294,7 +294,7 @@ class ConversionPipeline:
         baseline: bool = False,
         fidelity_mode: Literal["critical", "full"] | None = None,
         metadata_mode: str = "preserve",
-        google_output_format: str = "rest",
+        google_output_format: Literal["rest", "sdk"] = "rest",
     ) -> None:
         from llm_rosetta import get_converter_for_provider
 
@@ -326,6 +326,23 @@ class ConversionPipeline:
             source_shim if isinstance(source_shim, str) else None,
             target_shim if isinstance(target_shim, str) else None,
         )
+
+        # ``google_output_format`` is read only when the target is a Google
+        # Generate provider (see ``convert_request``), so validate it under the
+        # same condition rather than rejecting a value that would never be
+        # used.  Where it *is* used, the converter selects the REST body by
+        # exact match and otherwise emits the SDK shape, which the Generative
+        # Language REST endpoint rejects with HTTP 400 ``Unknown name
+        # "config"`` (#882) — so fail at construction, not on the upstream
+        # call.
+        if resolve_base(target_provider) in _GOOGLE_GENERATE_PROVIDERS:
+            from llm_rosetta.converters.google_generate import (
+                validate_google_output_format,
+            )
+
+            validate_google_output_format(
+                google_output_format, param="google_output_format"
+            )
 
         self._source_provider = source_provider
         self._target_provider = target_provider

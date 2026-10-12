@@ -212,6 +212,48 @@ class TestGoogleGenerateConverter:
         config = result["config"]
         assert config["safety_settings"] == [{"category": "HARM"}]
 
+    @pytest.mark.parametrize("bad_format", ["REST", "Rest", "restful", "", "sdk "])
+    def test_request_rejects_unknown_output_format(self, bad_format):
+        """An unrecognised ``output_format`` must not fall through to the SDK body.
+
+        The converter selects REST by exact match and otherwise emits the SDK
+        shape, which the Generative Language REST endpoint rejects with HTTP
+        400 ``Unknown name "config"`` (#882).  Rejecting the value here keeps a
+        typo from reaching the upstream call.
+        """
+        ir_request: IRRequest = {
+            "model": "gemini-2.0-flash",
+            "messages": [
+                {"role": "user", "content": [{"type": "text", "text": "Hello"}]}
+            ],
+        }
+        with pytest.raises(ValueError, match="output_format"):
+            self.converter.request_to_provider(ir_request, output_format=bad_format)
+
+    @pytest.mark.parametrize(
+        ("output_format", "present", "absent"),
+        [
+            ("rest", "generationConfig", "config"),
+            ("sdk", "config", "generationConfig"),
+        ],
+    )
+    def test_valid_output_format_selects_expected_body(
+        self, output_format: str, present: str, absent: str
+    ):
+        """Both supported values still reach their own body shape past the guard."""
+        ir_request: IRRequest = {
+            "model": "gemini-2.0-flash",
+            "messages": [
+                {"role": "user", "content": [{"type": "text", "text": "Hello"}]}
+            ],
+            "generation": {"temperature": 0.7, "max_tokens": 1024},
+        }
+        result, warnings = self.converter.request_to_provider(
+            ir_request, output_format=output_format
+        )
+        assert present in result
+        assert absent not in result
+
     # ==================== request_from_provider ====================
 
     def test_request_from_provider_basic(self):

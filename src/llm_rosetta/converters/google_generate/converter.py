@@ -57,6 +57,7 @@ from ._constants import (
     GOOGLE_REASON_FROM_PROVIDER,
     GOOGLE_REASON_TO_PROVIDER,
     generate_tool_call_id,
+    validate_google_output_format,
 )
 from .config_ops import GoogleGenerateConfigOps
 from .content_ops import GoogleGenerateContentOps
@@ -285,10 +286,16 @@ class GoogleGenerateConverter(BaseConverter):
         **kwargs: Any,
     ) -> dict[str, Any]:
         ctx = context
+        # The default is the SDK shape because this converter's callers consume
+        # the result as ``google.genai`` client arguments (see the converters
+        # guide).  ``ConversionPipeline`` defaults to ``"rest"`` instead, since
+        # its callers put the body on the wire directly (#882); the divergence
+        # is deliberate, not an oversight.
         output_format: str = kwargs.pop(
             "output_format",
             ctx.options.get("output_format", "sdk"),
         )
+        validate_google_output_format(output_format)
         result: dict[str, Any] = {"model": ir_request["model"]}
 
         # 1. Handle system_instruction

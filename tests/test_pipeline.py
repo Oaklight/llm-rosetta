@@ -5,7 +5,7 @@ directly from llm_rosetta.capabilities for unit-testing internal logic.
 """
 
 import copy
-from typing import Any
+from typing import Any, get_args, get_type_hints
 
 import pytest
 
@@ -585,6 +585,68 @@ class TestConversionPipeline:
         )
         assert "config" in target
         assert "generationConfig" not in target
+
+    @pytest.mark.parametrize("bad_format", ["REST", "Rest", "restful", "", "sdk "])
+    def test_google_output_format_rejects_unknown_values(self, bad_format):
+        """A mistyped ``google_output_format`` fails here, not upstream (#901).
+
+        The converter selects REST only on an exact ``"rest"`` match and
+        falls through to the SDK body shape for anything else — a shape
+        the Generative Language REST endpoint rejects with HTTP 400
+        ``Unknown name "config"``.  An unrecognised value must therefore
+        be rejected at construction rather than silently mis-selecting.
+
+        The value is routed through a ``str`` on purpose: a caller whose
+        value comes from config is exactly the case the ``Literal``
+        annotation cannot protect.
+        """
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        value: str = bad_format
+        with pytest.raises(ValueError, match="google_output_format"):
+            ConversionPipeline(
+                "messages",
+                "google_generate",
+                # ty cannot protect this call — that is the case under test.
+                google_output_format=value,  # ty: ignore[invalid-argument-type]
+            )
+
+    @pytest.mark.parametrize(
+        "target_provider",
+        ["chat_completions", "messages", "google_interactions"],
+    )
+    def test_google_output_format_inert_for_non_google_target(self, target_provider):
+        """The value is validated only where it is read (#901 review).
+
+        ``google_output_format`` is consulted only for a Google Generate
+        target, so a config-driven caller that always carries the key must
+        not fail on a route that ignores it.
+        """
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        value: str = "REST"
+        ConversionPipeline(
+            "messages",
+            target_provider,
+            # ty cannot protect this call — that is the case under test.
+            google_output_format=value,  # ty: ignore[invalid-argument-type]
+        )
+
+    def test_google_output_format_literal_tracks_converter_constant(self):
+        """The annotation and the runtime guard must not drift apart (#901).
+
+        ``google_output_format`` is annotated ``Literal["rest", "sdk"]``
+        while the accepted set is owned by ``GOOGLE_OUTPUT_FORMATS`` in the
+        converter.  A ``Literal`` cannot be derived from a constant, so pin
+        the two in lockstep here.
+        """
+        from llm_rosetta.converters.google_generate import GOOGLE_OUTPUT_FORMATS
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        hints = get_type_hints(ConversionPipeline.__init__)
+        assert set(get_args(hints["google_output_format"])) == set(
+            GOOGLE_OUTPUT_FORMATS
+        )
 
     def test_chat_reasoning_request_omits_unproven_native_item(self):
         """Chat reasoning is not portable as a native Responses input item."""
