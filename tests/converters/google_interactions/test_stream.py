@@ -1,6 +1,8 @@
 """Tests for Google Interactions streaming conversion."""
 
 from llm_rosetta.converters.google_interactions import GoogleInteractionsConverter
+from llm_rosetta.converters.base.context import StreamContext
+from llm_rosetta.types.ir.stream import ToolCallStartEvent
 
 
 class TestStreamChunkToIR:
@@ -68,6 +70,43 @@ class TestStreamChunkToIR:
         assert events[1]["type"] == "tool_call_start"
         assert events[1]["tool_call_id"] == "call_123"
         assert events[1]["tool_name"] == "get_weather"
+
+    def test_step_start_function_call_with_signature(self):
+        chunk = {
+            "data": {
+                "event_type": "step.start",
+                "index": 1,
+                "step": {
+                    "type": "function_call",
+                    "id": "call_sig",
+                    "name": "get_weather",
+                    "signature": "sig_stream",
+                },
+            }
+        }
+        events = self.converter.stream_response_from_provider(chunk)
+        assert len(events) == 2
+        tc_start = events[1]
+        assert tc_start["type"] == "tool_call_start"
+        assert (
+            tc_start["provider_metadata"]["google"]["thought_signature"] == "sig_stream"
+        )
+
+    def test_step_start_function_call_no_signature(self):
+        chunk = {
+            "data": {
+                "event_type": "step.start",
+                "index": 1,
+                "step": {
+                    "type": "function_call",
+                    "id": "call_no",
+                    "name": "fn",
+                },
+            }
+        }
+        events = self.converter.stream_response_from_provider(chunk)
+        tc_start = events[1]
+        assert "provider_metadata" not in tc_start
 
     def test_step_delta_text(self):
         chunk = {
@@ -179,6 +218,80 @@ class TestStreamChunkToIR:
         assert events[1]["type"] == "usage"
         assert events[1]["usage"]["total_tokens"] == 30
         assert events[2]["type"] == "stream_end"
+
+    def test_ir_tool_call_start_to_p_with_signature(self):
+        """ToolCallStartEvent with provider_metadata → exactly one enriched
+        step.start carrying the signature."""
+        event = ToolCallStartEvent(
+            type="tool_call_start",
+            tool_call_id="call_out",
+            tool_name="fn",
+            tool_call_index=0,
+            provider_metadata={"google": {"thought_signature": "sig_outbound"}},
+        )
+        result = self.converter.stream_response_to_provider(event, StreamContext())
+        steps = result if isinstance(result, list) else [result]
+        signed = [
+            s
+            for s in steps
+            if s.get("event_type") == "step.start"
+            and s.get("step", {}).get("signature")
+        ]
+        assert len(signed) == 1
+        assert signed[0]["step"]["signature"] == "sig_outbound"
+        assert signed[0]["step"]["id"] == "call_out"
+        assert signed[0]["step"]["name"] == "fn"
+
+    def test_ir_tool_call_start_to_p_no_signature(self):
+        """ToolCallStartEvent without provider_metadata → no step.start
+        carries a signature."""
+        event = ToolCallStartEvent(
+            type="tool_call_start",
+            tool_call_id="call_plain",
+            tool_name="fn",
+            tool_call_index=0,
+        )
+        result = self.converter.stream_response_to_provider(event, StreamContext())
+        steps = result if isinstance(result, list) else [result]
+        assert all(
+            "signature" not in s.get("step", {})
+            for s in steps
+            if s.get("event_type") == "step.start"
+        )
+
+    def test_function_call_roundtrip_signature_on_enriched_step_only(self):
+        """Inbound step.start → IR → outbound: the signature lands on the
+        enriched step.start (with id/name) and on no other.
+
+        GI emits two same-index ``step.start`` for one function_call — a bare
+        one from ``ContentBlockStartEvent`` plus the enriched one from
+        ``ToolCallStartEvent``. Asserting the signature is present on exactly
+        one (the enriched) guards against it silently moving to the bare one.
+        """
+        chunk = {
+            "data": {
+                "event_type": "step.start",
+                "index": 1,
+                "step": {
+                    "type": "function_call",
+                    "id": "call_rt",
+                    "name": "fn",
+                    "signature": "sig_rt",
+                },
+            }
+        }
+        ir_events = self.converter.stream_response_from_provider(chunk)
+        ctx = StreamContext()
+        out: list = []
+        for e in ir_events:
+            r = self.converter.stream_response_to_provider(e, ctx)
+            out.extend(r if isinstance(r, list) else [r])
+        step_starts = [s for s in out if s.get("event_type") == "step.start"]
+        signed = [s for s in step_starts if s.get("step", {}).get("signature")]
+        assert len(signed) == 1
+        assert signed[0]["step"]["signature"] == "sig_rt"
+        assert signed[0]["step"]["id"] == "call_rt"
+        assert signed[0]["step"]["name"] == "fn"
 
     def test_interaction_completed_requires_action(self):
         chunk = {

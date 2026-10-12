@@ -127,19 +127,30 @@ class GoogleInteractionsToolOps(BaseToolOps):
     # ── Tool calls (FunctionCallStep) ──────────────────────────────
 
     @staticmethod
-    def p_function_call_to_ir(step: dict) -> ToolCallPart:
+    def p_function_call_to_ir(step: dict, **kwargs: Any) -> ToolCallPart:
         """Interactions FunctionCallStep → IR ToolCallPart."""
-        return {
+        result: dict[str, Any] = {
             "type": "tool_call",
             "tool_call_id": step["id"],
             "tool_name": step["name"],
             "tool_input": step.get("arguments", {}),
         }
+        preserve_metadata = kwargs.get("preserve_metadata", True)
+        signature = step.get("signature")
+        if preserve_metadata and signature:
+            result.setdefault("provider_metadata", {}).setdefault("google", {})[
+                "thought_signature"
+            ] = signature
+        return cast(ToolCallPart, result)
 
     @staticmethod
-    def ir_function_call_to_p(ir_part: ToolCallPart) -> dict:
+    def ir_function_call_to_p(ir_part: ToolCallPart, **kwargs: Any) -> dict:
         """IR ToolCallPart → Interactions FunctionCallStep."""
+        preserve_metadata = kwargs.get("preserve_metadata", True)
         if ir_part.get("tool_type") == "intrinsic":
+            # Native server-call steps (google_search_call, ...) do not
+            # carry a thought signature and are replayable without one, so
+            # only the plain ``function_call`` branch below preserves it.
             intrinsic_kind = get_intrinsic_kind(ir_part, ir_part["tool_name"])
             step_type = INTRINSIC_KIND_TO_CALL_TYPE.get(
                 intrinsic_kind, f"{intrinsic_kind}_call"
@@ -150,12 +161,19 @@ class GoogleInteractionsToolOps(BaseToolOps):
                 "name": ir_part["tool_name"],
                 "arguments": ir_part["tool_input"],
             }
-        return {
+        step: dict[str, Any] = {
             "type": "function_call",
             "id": ir_part["tool_call_id"],
             "name": ir_part["tool_name"],
             "arguments": ir_part["tool_input"],
         }
+        # ``provider_metadata`` may be present-but-None (optional IR field),
+        # so guard with ``or {}`` rather than a default.
+        pm = ir_part.get("provider_metadata") or {}
+        sig = pm.get("google", {}).get("thought_signature")
+        if preserve_metadata and sig:
+            step["signature"] = sig
+        return step
 
     # ── Server step calls ─────────────────────────────────────────
 
@@ -297,11 +315,13 @@ class GoogleInteractionsToolOps(BaseToolOps):
 
     @staticmethod
     def ir_tool_call_to_p(ir_tool_call: ToolCallPart, **kwargs: Any) -> Any:
-        return GoogleInteractionsToolOps.ir_function_call_to_p(ir_tool_call)
+        return GoogleInteractionsToolOps.ir_function_call_to_p(ir_tool_call, **kwargs)
 
     @staticmethod
     def p_tool_call_to_ir(provider_tool_call: Any, **kwargs: Any) -> ToolCallPart:
-        return GoogleInteractionsToolOps.p_function_call_to_ir(provider_tool_call)
+        return GoogleInteractionsToolOps.p_function_call_to_ir(
+            provider_tool_call, **kwargs
+        )
 
     @staticmethod
     def ir_tool_result_to_p(ir_tool_result: ToolResultPart, **kwargs: Any) -> Any:

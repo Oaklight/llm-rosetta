@@ -469,14 +469,16 @@ class GoogleInteractionsConverter(BaseConverter):
             )
         ]
         if step_type == "function_call":
-            events.append(
-                ToolCallStartEvent(
-                    type="tool_call_start",
-                    tool_call_id=step.get("id", ""),
-                    tool_name=step.get("name", ""),
-                    tool_call_index=index,
-                )
+            tc_event = ToolCallStartEvent(
+                type="tool_call_start",
+                tool_call_id=step.get("id", ""),
+                tool_name=step.get("name", ""),
+                tool_call_index=index,
             )
+            sig = step.get("signature")
+            if sig:
+                tc_event["provider_metadata"] = {"google": {"thought_signature": sig}}
+            events.append(tc_event)
         return events
 
     def _stream_step_delta(self, data: dict) -> list[IRStreamEvent]:
@@ -672,14 +674,19 @@ class GoogleInteractionsConverter(BaseConverter):
     def _handle_ir_tool_call_start_to_p(
         self, event: ToolCallStartEvent, context: StreamContext | None
     ) -> dict[str, Any]:
+        step: dict[str, Any] = {
+            "type": "function_call",
+            "id": event["tool_call_id"],
+            "name": event["tool_name"],
+        }
+        pm = event.get("provider_metadata") or {}
+        sig = pm.get("google", {}).get("thought_signature")
+        if sig:
+            step["signature"] = sig
         return {
             "event_type": "step.start",
             "index": event.get("tool_call_index", 0),
-            "step": {
-                "type": "function_call",
-                "id": event["tool_call_id"],
-                "name": event["tool_name"],
-            },
+            "step": step,
         }
 
     def _handle_ir_tool_call_delta_to_p(

@@ -3,6 +3,7 @@
 from llm_rosetta.converters.google_interactions.tool_ops import (
     GoogleInteractionsToolOps,
 )
+from llm_rosetta.types.ir.parts import ToolCallPart
 
 
 class TestToolDefinitionConversion:
@@ -76,6 +77,32 @@ class TestFunctionCallConversion:
         assert result["tool_name"] == "get_weather"
         assert result["tool_input"] == {"location": "San Francisco"}
 
+    def test_provider_function_call_to_ir_with_signature(self):
+        step = {
+            "type": "function_call",
+            "id": "call_sig",
+            "name": "get_weather",
+            "arguments": {"location": "SF"},
+            "signature": "eyJhbGciOiAiUlMyNTYifQ.test-sig",
+        }
+        result = GoogleInteractionsToolOps.p_function_call_to_ir(step)
+        assert result["type"] == "tool_call"
+        assert result["tool_call_id"] == "call_sig"
+        assert (
+            result["provider_metadata"]["google"]["thought_signature"]
+            == "eyJhbGciOiAiUlMyNTYifQ.test-sig"
+        )
+
+    def test_provider_function_call_to_ir_no_signature(self):
+        step = {
+            "type": "function_call",
+            "id": "call_no_sig",
+            "name": "fn",
+            "arguments": {},
+        }
+        result = GoogleInteractionsToolOps.p_function_call_to_ir(step)
+        assert "provider_metadata" not in result
+
     def test_ir_tool_call_to_provider(self):
         ir = {
             "type": "tool_call",
@@ -89,6 +116,88 @@ class TestFunctionCallConversion:
         assert result["name"] == "search"
         assert result["arguments"] == {"query": "hello"}
 
+    def test_ir_tool_call_to_provider_with_signature(self):
+        ir = {
+            "type": "tool_call",
+            "tool_call_id": "call_sig",
+            "tool_name": "fn",
+            "tool_input": {},
+            "provider_metadata": {"google": {"thought_signature": "sig_from_ir"}},
+        }
+        result = GoogleInteractionsToolOps.ir_tool_call_to_p(ir)  # ty: ignore
+        assert result["type"] == "function_call"
+        assert result["signature"] == "sig_from_ir"
+
+    def test_ir_tool_call_to_provider_no_signature(self):
+        ir = {
+            "type": "tool_call",
+            "tool_call_id": "call_no",
+            "tool_name": "fn",
+            "tool_input": {},
+        }
+        result = GoogleInteractionsToolOps.ir_tool_call_to_p(ir)  # ty: ignore
+        assert "signature" not in result
+
+    def test_ir_tool_call_to_provider_none_provider_metadata(self):
+        """An explicit ``provider_metadata: None`` must not crash."""
+        ir = {
+            "type": "tool_call",
+            "tool_call_id": "call_none",
+            "tool_name": "fn",
+            "tool_input": {},
+            "provider_metadata": None,
+        }
+        result = GoogleInteractionsToolOps.ir_tool_call_to_p(ir)  # ty: ignore
+        assert result["type"] == "function_call"
+        assert "signature" not in result
+
+    def test_ir_tool_call_to_provider_preserve_metadata_false(self):
+        """`preserve_metadata=False` suppresses the signature (parity with GG)."""
+        ir = ToolCallPart(
+            type="tool_call",
+            tool_call_id="call_sig",
+            tool_name="fn",
+            tool_input={},
+            provider_metadata={"google": {"thought_signature": "sig_keep"}},
+        )
+        result = GoogleInteractionsToolOps.ir_tool_call_to_p(
+            ir, preserve_metadata=False
+        )
+        assert result["type"] == "function_call"
+        assert "signature" not in result
+
+    def test_p_function_call_to_ir_preserve_metadata_false(self):
+        """`preserve_metadata=False` does not capture the signature."""
+        step = {
+            "type": "function_call",
+            "id": "call_sig",
+            "name": "fn",
+            "arguments": {},
+            "signature": "sig_drop",
+        }
+        result = GoogleInteractionsToolOps.p_function_call_to_ir(
+            step, preserve_metadata=False
+        )
+        assert "provider_metadata" not in result
+
+    def test_intrinsic_call_does_not_emit_signature(self):
+        """Intrinsic server-call steps replay without a thought signature, so
+        a stored signature is intentionally not surfaced for them."""
+        ir = {
+            "type": "tool_call",
+            "tool_call_id": "call_intr",
+            "tool_name": "google_search",
+            "tool_input": {},
+            "tool_type": "intrinsic",
+            "provider_metadata": {
+                "intrinsic_kind": "google_search",
+                "google": {"thought_signature": "should_be_ignored"},
+            },
+        }
+        result = GoogleInteractionsToolOps.ir_tool_call_to_p(ir)  # ty: ignore
+        assert result["type"] == "google_search_call"
+        assert "signature" not in result
+
     def test_roundtrip_function_call(self):
         step = {
             "type": "function_call",
@@ -101,6 +210,21 @@ class TestFunctionCallConversion:
         assert back["id"] == step["id"]
         assert back["name"] == step["name"]
         assert back["arguments"] == step["arguments"]
+
+    def test_roundtrip_function_call_with_signature(self):
+        step = {
+            "type": "function_call",
+            "id": "call_rt_sig",
+            "name": "fn",
+            "arguments": {"x": 1},
+            "signature": "sig_roundtrip",
+        }
+        ir = GoogleInteractionsToolOps.p_function_call_to_ir(step)
+        back = GoogleInteractionsToolOps.ir_tool_call_to_p(ir)
+        assert back["id"] == step["id"]
+        assert back["name"] == step["name"]
+        assert back["arguments"] == step["arguments"]
+        assert back["signature"] == "sig_roundtrip"
 
 
 class TestFunctionResultConversion:

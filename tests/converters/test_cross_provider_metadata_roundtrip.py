@@ -8,10 +8,16 @@ Covers tool_call, tool_result, and reasoning parts.
 Refs: https://github.com/Oaklight/llm-rosetta/issues/225
 """
 
+import pytest
+
 from llm_rosetta.converters.messages.content_ops import MessagesContentOps
 from llm_rosetta.converters.messages.tool_ops import MessagesToolOps
 from llm_rosetta.converters.google_generate.content_ops import GoogleGenerateContentOps
 from llm_rosetta.converters.google_generate.tool_ops import GoogleGenerateToolOps
+from llm_rosetta.converters.google_interactions.tool_ops import (
+    GoogleInteractionsToolOps,
+)
+from llm_rosetta.converters.open_responses.tool_ops import OpenResponsesToolOps
 from llm_rosetta.types.ir import ToolCallPart, ToolResultPart, ReasoningPart
 
 
@@ -105,6 +111,81 @@ class TestGoogleAnthropicToolResultRoundTrip:
         assert "_provider_metadata" not in anthropic
 
 
+class TestGoogleInteractionsToolCallSignatureRoundTrip:
+    """GI ↔ GG round-trip for function_call signature via provider_metadata.google."""
+
+    THOUGHT_SIG = "eyJhbGciOiAiUlMyNTYifQ.gi-function-call-sig"
+
+    def test_gi_to_gg_signature_survives(self):
+        """GI function_call signature → IR → GG functionCall thoughtSignature."""
+        gi_step = {
+            "type": "function_call",
+            "id": "call_1",
+            "name": "get_weather",
+            "arguments": {"loc": "SF"},
+            "signature": self.THOUGHT_SIG,
+        }
+        ir = GoogleInteractionsToolOps.p_function_call_to_ir(gi_step)
+        assert (
+            ir["provider_metadata"]["google"]["thought_signature"] == self.THOUGHT_SIG
+        )
+
+        gg_part = GoogleGenerateToolOps.ir_tool_call_to_p(ir)
+        assert gg_part["thoughtSignature"] == self.THOUGHT_SIG
+
+    def test_gg_to_gi_signature_survives(self):
+        """GG functionCall thoughtSignature → IR → GI function_call signature."""
+        gg_part = {
+            "functionCall": {"name": "search", "args": {"q": "test"}},
+            "thoughtSignature": self.THOUGHT_SIG,
+        }
+        ir = GoogleGenerateToolOps.p_tool_call_to_ir(gg_part)
+        assert (
+            ir["provider_metadata"]["google"]["thought_signature"] == self.THOUGHT_SIG
+        )
+
+        gi_step = GoogleInteractionsToolOps.ir_function_call_to_p(ir)
+        assert gi_step["signature"] == self.THOUGHT_SIG
+
+    def test_gi_to_messages_to_gi_signature_survives(self):
+        """GI → IR → Messages → IR → GI: signature carried via _provider_metadata."""
+        gi_step = {
+            "type": "function_call",
+            "id": "call_cross",
+            "name": "fn",
+            "arguments": {},
+            "signature": self.THOUGHT_SIG,
+        }
+        ir = GoogleInteractionsToolOps.p_function_call_to_ir(gi_step)
+
+        messages_block = MessagesToolOps.ir_tool_call_to_p(ir)
+        assert (
+            messages_block["_provider_metadata"]["google"]["thought_signature"]
+            == self.THOUGHT_SIG
+        )
+
+        ir2 = MessagesToolOps.p_tool_call_to_ir(messages_block)
+        assert (
+            ir2["provider_metadata"]["google"]["thought_signature"] == self.THOUGHT_SIG
+        )
+
+        gi_back = GoogleInteractionsToolOps.ir_function_call_to_p(ir2)
+        assert gi_back["signature"] == self.THOUGHT_SIG
+
+    def test_no_signature_no_metadata(self):
+        gi_step = {
+            "type": "function_call",
+            "id": "call_plain",
+            "name": "fn",
+            "arguments": {},
+        }
+        ir = GoogleInteractionsToolOps.p_function_call_to_ir(gi_step)
+        assert "provider_metadata" not in ir
+
+        gi_back = GoogleInteractionsToolOps.ir_function_call_to_p(ir)
+        assert "signature" not in gi_back
+
+
 class TestGoogleAnthropicReasoningRoundTrip:
     """Google → Anthropic → Google round-trip for reasoning with thought_signature."""
 
@@ -167,3 +248,31 @@ class TestGoogleAnthropicReasoningRoundTrip:
         assert "signature" not in anthropic
         assert "_provider_metadata" not in anthropic
         assert anthropic["type"] == "thinking"
+
+
+class TestKnownCarrierGaps:
+    """Pre-existing gaps in the provider_metadata carrier set.
+
+    Recorded here as xfail so the set stays visible. Both are unrelated to
+    the GI ``function_call`` signature fix in #880 — tracked in #930.
+    """
+
+    @pytest.mark.xfail(
+        reason="open_responses ir_tool_call_to_p emits no provider_metadata "
+        "carrier; the signature is dropped (#930)",
+        strict=True,
+    )
+    def test_open_responses_preserves_tool_call_provider_metadata(self):
+        ir = ToolCallPart(
+            type="tool_call",
+            tool_call_id="c1",
+            tool_name="fn",
+            tool_input={},
+            provider_metadata={"google": {"thought_signature": "sig"}},
+        )
+        block = OpenResponsesToolOps.ir_tool_call_to_p(ir)
+        back = OpenResponsesToolOps.p_tool_call_to_ir(block)
+        assert (
+            back.get("provider_metadata", {}).get("google", {}).get("thought_signature")
+            == "sig"
+        )

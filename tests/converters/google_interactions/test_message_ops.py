@@ -95,6 +95,22 @@ class TestStepsToIRMessages:
         assert messages[0]["content"][0]["type"] == "tool_call"
         assert messages[0]["content"][0]["tool_name"] == "get_weather"
 
+    def test_function_call_with_signature(self, ops):
+        steps = [
+            {
+                "type": "function_call",
+                "id": "call_sig",
+                "name": "get_weather",
+                "arguments": {"location": "SF"},
+                "signature": "sig_fc",
+            }
+        ]
+        messages = ops.p_steps_to_ir_messages(steps)
+        assert len(messages) == 1
+        tc = messages[0]["content"][0]
+        assert tc["type"] == "tool_call"
+        assert tc["provider_metadata"]["google"]["thought_signature"] == "sig_fc"
+
     def test_function_result(self, ops):
         steps = [
             {
