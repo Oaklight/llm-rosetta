@@ -24,6 +24,7 @@ from ...types.ir import (
 )
 from ...types.ir.tools import ToolCallConfig
 from ..base import BaseToolOps
+from ..base.helpers.opaque import CARRIER_KEY
 from ..base.tools import (
     log_orphan_warnings,
     make_intrinsic_tool_definition,
@@ -413,7 +414,7 @@ class ChatCompletionsToolOps(BaseToolOps):
                 },
             }
             if "provider_metadata" in ir_tool_call:
-                result["_provider_metadata"] = ir_tool_call["provider_metadata"]
+                result[CARRIER_KEY] = ir_tool_call["provider_metadata"]
             return result
 
         arguments = (
@@ -428,7 +429,7 @@ class ChatCompletionsToolOps(BaseToolOps):
             },
         }
         if "provider_metadata" in ir_tool_call:
-            result["_provider_metadata"] = ir_tool_call["provider_metadata"]
+            result[CARRIER_KEY] = ir_tool_call["provider_metadata"]
         return result
 
     @staticmethod
@@ -453,7 +454,7 @@ class ChatCompletionsToolOps(BaseToolOps):
                 tool_input={"input": input_str},
                 tool_type="custom",
             )
-            pm = provider_tool_call.get("_provider_metadata")
+            pm = provider_tool_call.get(CARRIER_KEY)
             if pm:
                 part["provider_metadata"] = pm
             return part
@@ -473,7 +474,7 @@ class ChatCompletionsToolOps(BaseToolOps):
             tool_input=tool_input,
             tool_type="function",
         )
-        pm = provider_tool_call.get("_provider_metadata")
+        pm = provider_tool_call.get(CARRIER_KEY)
         if pm:
             part["provider_metadata"] = pm
         return part

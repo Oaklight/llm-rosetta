@@ -246,7 +246,7 @@ class TestCrossFormatConversion:
         assert anthropic["thinking"] == "Let me think..."
         # ...but the value is ferried so a round trip back to Google recovers it.
         assert (
-            anthropic["_provider_metadata"]["google"]["thought_signature"]
+            anthropic["_llm_rosetta_provider_metadata"]["google"]["thought_signature"]
             == "google-verification-sig"
         )
 

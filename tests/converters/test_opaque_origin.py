@@ -275,8 +275,11 @@ class TestStreamingOpaqueGating:
         )
         block = MessagesContentOps.ir_reasoning_to_p(ir)
         assert block is not None
-        assert "_opaque_origin" not in block["_provider_metadata"]
-        assert block["_provider_metadata"]["google"]["thought_signature"] == "GSIG"
+        assert "_opaque_origin" not in block["_llm_rosetta_provider_metadata"]
+        assert (
+            block["_llm_rosetta_provider_metadata"]["google"]["thought_signature"]
+            == "GSIG"
+        )
 
     def test_anthropic_outbound_keeps_text_when_dropping_foreign_signature(self):
         conv = MessagesConverter()

@@ -22,6 +22,7 @@ from ...types.ir import (
 )
 from ..base import BaseContentOps
 from ..base.helpers.opaque import (
+    CARRIER_KEY,
     carrier_metadata,
     get_opaque_origin,
     is_own_origin,
@@ -53,7 +54,7 @@ class MessagesContentOps(BaseContentOps):
         # Preserve provider_metadata for cross-provider round-trip
         pm = ir_text.get("provider_metadata")
         if pm:
-            result["_provider_metadata"] = pm
+            result[CARRIER_KEY] = pm
         # Preserve cache_hint → cache_control
         cache_hint = ir_text.get("cache_hint")
         if cache_hint is not None:
@@ -80,7 +81,7 @@ class MessagesContentOps(BaseContentOps):
         if isinstance(provider_text, dict) and provider_text.get("type") == "text":
             result = TextPart(type="text", text=provider_text["text"])
             # Read back provider_metadata for cross-provider round-trip
-            pm = provider_text.get("_provider_metadata")
+            pm = provider_text.get(CARRIER_KEY)
             if pm:
                 result["provider_metadata"] = pm
             # Read cache_control → cache_hint
@@ -294,7 +295,7 @@ class MessagesContentOps(BaseContentOps):
         # origin key is converter bookkeeping, so it is filtered out.
         pm = carrier_metadata(ir_reasoning)
         if pm:
-            result["_provider_metadata"] = pm
+            result[CARRIER_KEY] = pm
 
         # Preserve cache_hint → cache_control
         cache_hint = ir_reasoning.get("cache_hint")
@@ -323,7 +324,7 @@ class MessagesContentOps(BaseContentOps):
             result["signature"] = signature
 
         # Read back provider_metadata for cross-provider round-trip
-        pm = provider_reasoning.get("_provider_metadata")
+        pm = provider_reasoning.get(CARRIER_KEY)
         if pm:
             result["provider_metadata"] = pm
 

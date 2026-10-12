@@ -26,6 +26,7 @@ from typing import Any, Literal
 from llm_rosetta._vendor.httpserver import JSONResponse, Response, StreamingResponse
 
 from llm_rosetta.auto_detect import ProviderType
+from llm_rosetta.converters.base.helpers import strip_internal_metadata
 from llm_rosetta.pipeline import ConversionError, ConversionPipeline
 from llm_rosetta.routing import ResolvedRoute
 from llm_rosetta.shims.provider_shim import SoftErrorPattern
@@ -525,24 +526,15 @@ _default_metadata_store = ProviderMetadataStore()
 
 
 def _strip_internal_metadata(obj: dict | list) -> None:
-    """Recursively remove ``_provider_metadata`` from an outbound request body.
+    """Remove ``_llm_rosetta_provider_metadata`` from an outbound body, in place.
 
-    Converters attach ``_provider_metadata`` to provider-format objects
-    for cross-converter round-trip fidelity.  This must be stripped
-    before sending to upstream providers, which do not recognise it.
-
-    Operates in-place for zero-copy overhead.  Accepts both dict and
-    list inputs for natural recursion through nested structures.
+    Thin wrapper over
+    :func:`llm_rosetta.converters.base.helpers.strip_internal_metadata`, kept
+    as a defensive guard at the HTTP boundary: the converters already strip the
+    carrier from their ``*_to_provider`` output (issue #941), so this is a
+    belt-and-braces pass over bodies that may have been post-processed.
     """
-    if isinstance(obj, dict):
-        for key in list(obj.keys()):
-            if key == "_provider_metadata":
-                del obj[key]
-            else:
-                _strip_internal_metadata(obj[key])
-    elif isinstance(obj, list):
-        for item in obj:
-            _strip_internal_metadata(item)
+    strip_internal_metadata(obj)
 
 
 # Stable per-process fallback for the session header: used only when a

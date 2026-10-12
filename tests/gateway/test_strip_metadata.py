@@ -5,9 +5,9 @@ from llm_rosetta.gateway.proxy import _strip_internal_metadata
 
 class TestStripInternalMetadata:
     def test_strips_top_level(self):
-        body = {"model": "gpt-4", "_provider_metadata": {"id": "x"}}
+        body = {"model": "gpt-4", "_llm_rosetta_provider_metadata": {"id": "x"}}
         _strip_internal_metadata(body)
-        assert "_provider_metadata" not in body
+        assert "_llm_rosetta_provider_metadata" not in body
         assert body["model"] == "gpt-4"
 
     def test_strips_nested_in_tool_calls(self):
@@ -19,12 +19,16 @@ class TestStripInternalMetadata:
                         {
                             "id": "call_1",
                             "function": {"name": "fn", "arguments": "{}"},
-                            "_provider_metadata": {"responses_item_id": "fc_1"},
+                            "_llm_rosetta_provider_metadata": {
+                                "responses_item_id": "fc_1"
+                            },
                         },
                         {
                             "id": "call_2",
                             "function": {"name": "fn2", "arguments": "{}"},
-                            "_provider_metadata": {"responses_item_id": "fc_2"},
+                            "_llm_rosetta_provider_metadata": {
+                                "responses_item_id": "fc_2"
+                            },
                         },
                     ],
                 }
@@ -32,7 +36,7 @@ class TestStripInternalMetadata:
         }
         _strip_internal_metadata(body)
         for tc in body["messages"][0]["tool_calls"]:
-            assert "_provider_metadata" not in tc
+            assert "_llm_rosetta_provider_metadata" not in tc
             assert "id" in tc
 
     def test_strips_in_content_blocks(self):
@@ -44,14 +48,14 @@ class TestStripInternalMetadata:
                         {
                             "type": "text",
                             "text": "hi",
-                            "_provider_metadata": {"k": "v"},
+                            "_llm_rosetta_provider_metadata": {"k": "v"},
                         },
                     ],
                 }
             ]
         }
         _strip_internal_metadata(body)
-        assert "_provider_metadata" not in body["messages"][0]["content"][0]
+        assert "_llm_rosetta_provider_metadata" not in body["messages"][0]["content"][0]
 
     def test_no_op_without_metadata(self):
         body = {
@@ -63,15 +67,21 @@ class TestStripInternalMetadata:
         assert body == original
 
     def test_deeply_nested(self):
-        body = {"a": {"b": [{"c": {"_provider_metadata": {"deep": True}, "keep": 1}}]}}
+        body = {
+            "a": {
+                "b": [
+                    {"c": {"_llm_rosetta_provider_metadata": {"deep": True}, "keep": 1}}
+                ]
+            }
+        }
         _strip_internal_metadata(body)
         assert body["a"]["b"][0]["c"] == {"keep": 1}
 
     def test_preserves_other_underscore_fields(self):
-        body = {"_other_field": "keep", "_provider_metadata": "strip"}
+        body = {"_other_field": "keep", "_llm_rosetta_provider_metadata": "strip"}
         _strip_internal_metadata(body)
         assert "_other_field" in body
-        assert "_provider_metadata" not in body
+        assert "_llm_rosetta_provider_metadata" not in body
 
     def test_empty_body(self):
         body = {}
@@ -79,12 +89,12 @@ class TestStripInternalMetadata:
         assert body == {}
 
     def test_list_of_list(self):
-        body = {"nested": [[{"_provider_metadata": {"x": 1}, "keep": 2}]]}
+        body = {"nested": [[{"_llm_rosetta_provider_metadata": {"x": 1}, "keep": 2}]]}
         _strip_internal_metadata(body)
         assert body["nested"][0][0] == {"keep": 2}
 
     def test_non_dict_input(self):
-        items = [{"_provider_metadata": {"a": 1}, "id": "x"}, {"id": "y"}]
+        items = [{"_llm_rosetta_provider_metadata": {"a": 1}, "id": "x"}, {"id": "y"}]
         _strip_internal_metadata(items)
         assert items[0] == {"id": "x"}
         assert items[1] == {"id": "y"}

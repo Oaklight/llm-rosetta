@@ -30,6 +30,7 @@ from ...types.ir import (
 from ...types.ir.parts import ContentPart
 from ..base import BaseContentOps
 from ..base.helpers.opaque import (
+    CARRIER_KEY,
     get_opaque_origin,
     google_thought_signature,
     is_own_origin,
@@ -344,7 +345,7 @@ class GoogleGenerateContentOps(BaseContentOps):
         """IR RefusalPart → Google GenAI text Part.
 
         Google does not have a native refusal type. Refusals are converted
-        to text parts with a `_provider_metadata` marker so they can be
+        to text parts with a `_llm_rosetta_provider_metadata` marker so they can be
         recognized and restored on the return path.
 
         Args:
@@ -355,7 +356,7 @@ class GoogleGenerateContentOps(BaseContentOps):
         """
         return {
             "text": ir_refusal["refusal"],
-            "_provider_metadata": {"is_refusal": True},
+            CARRIER_KEY: {"is_refusal": True},
         }
 
     @staticmethod
@@ -363,7 +364,7 @@ class GoogleGenerateContentOps(BaseContentOps):
         """Google GenAI text Part → IR RefusalPart.
 
         Converts a text part that was marked as a refusal (via
-        `_provider_metadata.is_refusal`) back to an IR RefusalPart.
+        `_llm_rosetta_provider_metadata.is_refusal`) back to an IR RefusalPart.
 
         Args:
             provider_refusal: Google text Part dict with refusal marker.
@@ -434,7 +435,7 @@ class GoogleGenerateContentOps(BaseContentOps):
             and provider_part["text"] is not None
             and provider_part["text"] != ""
         ):
-            pm = provider_part.get("_provider_metadata") or {}
+            pm = provider_part.get(CARRIER_KEY) or {}
             if pm.get("is_refusal"):
                 ir_parts.append(GoogleGenerateContentOps.p_refusal_to_ir(provider_part))
             else:

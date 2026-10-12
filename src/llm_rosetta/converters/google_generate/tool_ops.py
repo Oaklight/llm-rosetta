@@ -26,6 +26,7 @@ from ...types.ir import (
 )
 from ...types.ir.tools import ToolCallConfig
 from ..base import BaseToolOps
+from ..base.helpers.opaque import CARRIER_KEY
 from ..base.tools import sanitize_schema, sanitize_tool_call_id
 from ..base.tools.intrinsic import (
     get_definition_kind,
@@ -383,7 +384,7 @@ class GoogleGenerateToolOps(BaseToolOps):
             metadata = ir_tool_call["provider_metadata"]
             if "google" in metadata and "thought_signature" in metadata["google"]:
                 part["thoughtSignature"] = metadata["google"]["thought_signature"]
-            part["_provider_metadata"] = metadata
+            part[CARRIER_KEY] = metadata
 
         return part
 
@@ -421,7 +422,7 @@ class GoogleGenerateToolOps(BaseToolOps):
 
         preserve_metadata = kwargs.get("preserve_metadata", True)
         if preserve_metadata:
-            pm = provider_tool_call.get("_provider_metadata")
+            pm = provider_tool_call.get(CARRIER_KEY)
             if pm:
                 tool_call_kwargs["provider_metadata"] = pm
             thought_sig = provider_tool_call.get(

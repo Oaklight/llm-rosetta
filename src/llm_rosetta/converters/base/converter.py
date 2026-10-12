@@ -20,6 +20,7 @@ from ...types.ir.validation import (
     validate_tools,
 )
 from .context import ConversionContext, StreamContext
+from .helpers import strip_internal_metadata
 from .passthrough import merge_provider_output_items
 
 
@@ -135,10 +136,13 @@ class BaseConverter(ABC):
         """Convert IRRequest to provider request parameters.
 
         Template method: creates a fallback ConversionContext, delegates to
-        ``_do_request_to_provider``, and returns ``(result, ctx.warnings)``.
+        ``_do_request_to_provider``, strips the internal
+        ``_llm_rosetta_provider_metadata`` carrier so the body is wire-ready, and returns
+        ``(result, ctx.warnings)``.
         """
         ctx = context if context is not None else ConversionContext()
         result = self._do_request_to_provider(ir_request, context=ctx, **kwargs)
+        strip_internal_metadata(result)
         return result, ctx.warnings
 
     def request_from_provider(
@@ -192,8 +196,9 @@ class BaseConverter(ABC):
         """Convert IRResponse to provider response.
 
         Template method: creates a fallback ConversionContext, delegates to
-        ``_do_response_to_provider``, runs preserve-mode apply,
-        and restores passthrough items.
+        ``_do_response_to_provider``, runs preserve-mode apply, restores
+        passthrough items, then strips the internal ``_llm_rosetta_provider_metadata``
+        carrier so the response is wire-ready.
         """
         ctx = context if context is not None else ConversionContext()
         provider_response = self._do_response_to_provider(
@@ -209,6 +214,7 @@ class BaseConverter(ABC):
             output_key=self._PASSTHROUGH_RESTORE_KEY,
             context=ctx,
         )
+        strip_internal_metadata(provider_response)
         return provider_response
 
     def messages_to_provider(
@@ -220,15 +226,19 @@ class BaseConverter(ABC):
     ) -> tuple[list[Any], list[str]]:
         """Convert IR messages to provider format.
 
-        Default implementation delegates to ``message_ops.ir_messages_to_p``.
-        Override if the converter needs custom pre/post processing.
+        Default implementation delegates to ``message_ops.ir_messages_to_p``,
+        then strips the internal ``_llm_rosetta_provider_metadata`` carrier so the result
+        is wire-ready.  Override if the converter needs custom pre/post
+        processing.
         """
         kwargs["target_provider"] = self._CONVERTER_TAG
         kwargs.setdefault(
             "supports_multimodal_tool_result",
             self._supports_multimodal_tool_result(context),
         )
-        return self.message_ops.ir_messages_to_p(messages, **kwargs)
+        result, warnings = self.message_ops.ir_messages_to_p(messages, **kwargs)
+        strip_internal_metadata(result)
+        return result, warnings
 
     def messages_from_provider(
         self,
@@ -420,6 +430,12 @@ class BaseConverter(ABC):
         Subclasses that need pre-dispatch logic (e.g., context upgrades)
         may override this method, perform their pre-processing, and call
         ``super().stream_response_to_provider(event, context)``.
+
+        Unlike the non-streaming ``*_to_provider`` writers, this does **not**
+        call :func:`strip_internal_metadata`: stream handlers build structured
+        provider chunks and carry IR-level ``provider_metadata`` as a normal
+        field, never the internal ``_llm_rosetta_provider_metadata`` carrier.  A handler
+        that starts emitting that carrier must strip it here.
 
         Args:
             event: IR stream event to convert.

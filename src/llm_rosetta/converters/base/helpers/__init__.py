@@ -19,6 +19,7 @@ Modules:
 """
 
 from .opaque import (
+    CARRIER_KEY,
     DUMMY_THOUGHT_SIGNATURE,
     OPAQUE_SAME_ORIGIN,
     carrier_metadata,
@@ -28,6 +29,7 @@ from .opaque import (
     inject_interactions_function_call_signature,
     set_google_thought_signature,
     set_opaque_origin,
+    strip_internal_metadata,
 )
 from .reasoning import DEFAULT_REASONING_CAPS, apply_reasoning_config
 from .truncate import truncate_with_digest
@@ -68,6 +70,7 @@ def __getattr__(name: str) -> object:
 
 
 __all__ = [
+    "CARRIER_KEY",
     "DEFAULT_REASONING_CAPS",
     "DUMMY_THOUGHT_SIGNATURE",
     "OPAQUE_SAME_ORIGIN",
@@ -81,5 +84,6 @@ __all__ = [
     "is_own_origin",
     "set_google_thought_signature",
     "set_opaque_origin",
+    "strip_internal_metadata",
     "truncate_with_digest",
 ]

@@ -775,7 +775,7 @@ class TestProviderMetadataPreservation:
     """
 
     def test_ir_to_p_preserves_full_provider_metadata(self):
-        """ir_tool_call_to_p stashes entire provider_metadata as _provider_metadata."""
+        """ir_tool_call_to_p stashes entire provider_metadata as _llm_rosetta_provider_metadata."""
         ir_part = cast(
             ToolCallPart,
             {
@@ -788,13 +788,15 @@ class TestProviderMetadataPreservation:
             },
         )
         result = GoogleGenerateToolOps.ir_tool_call_to_p(ir_part)
-        assert result["_provider_metadata"] == {"responses_item_id": "fc_abc123"}
+        assert result["_llm_rosetta_provider_metadata"] == {
+            "responses_item_id": "fc_abc123"
+        }
 
     def test_p_to_ir_restores_provider_metadata(self):
-        """p_tool_call_to_ir restores _provider_metadata to provider_metadata."""
+        """p_tool_call_to_ir restores _llm_rosetta_provider_metadata to provider_metadata."""
         p_call = {
             "functionCall": {"name": "get_weather", "args": {"city": "London"}},
-            "_provider_metadata": {"responses_item_id": "fc_abc123"},
+            "_llm_rosetta_provider_metadata": {"responses_item_id": "fc_abc123"},
         }
         result = GoogleGenerateToolOps.p_tool_call_to_ir(p_call)
         assert (
@@ -806,7 +808,7 @@ class TestProviderMetadataPreservation:
         p_call = {
             "functionCall": {"name": "get_weather", "args": {}},
             "thoughtSignature": "sig_123",
-            "_provider_metadata": {"responses_item_id": "fc_abc123"},
+            "_llm_rosetta_provider_metadata": {"responses_item_id": "fc_abc123"},
         }
         result = GoogleGenerateToolOps.p_tool_call_to_ir(p_call)
         pm = result.get("provider_metadata", {})

@@ -32,6 +32,7 @@ from __future__ import annotations
 from typing import Any
 
 __all__ = [
+    "CARRIER_KEY",
     "DUMMY_THOUGHT_SIGNATURE",
     "GOOGLE_NS",
     "OPAQUE_ORIGIN_KEY",
@@ -44,7 +45,13 @@ __all__ = [
     "is_own_origin",
     "set_google_thought_signature",
     "set_opaque_origin",
+    "strip_internal_metadata",
 ]
+
+#: Provider-format key carrying ``provider_metadata`` across an in-process hop.
+#: Never wire-legal; :func:`strip_internal_metadata` removes it at the
+#: converter boundary.
+CARRIER_KEY = "_llm_rosetta_provider_metadata"
 
 #: Reserved ``provider_metadata`` key holding opaque-value provenance.
 OPAQUE_ORIGIN_KEY = "_opaque_origin"
@@ -144,12 +151,12 @@ def is_own_origin(origin: str | None, tag: str) -> bool:
 
 
 def carrier_metadata(part: Any) -> dict[str, Any] | None:
-    """Return ``provider_metadata`` for the ``_provider_metadata`` carrier.
+    """Return ``provider_metadata`` for the ``_llm_rosetta_provider_metadata`` carrier.
 
     The reserved :data:`OPAQUE_ORIGIN_KEY` is converter-internal bookkeeping,
     not provider data, so it is filtered out here — it must not ride along into
-    a provider payload for callers that bypass the gateway's
-    ``_strip_internal_metadata``.
+    a provider payload.  The whole carrier is removed at the converter boundary
+    by :func:`strip_internal_metadata`.
 
     Args:
         part: IR part carrying ``provider_metadata``.
@@ -160,6 +167,37 @@ def carrier_metadata(part: Any) -> dict[str, Any] | None:
     metadata = part.get("provider_metadata") or {}
     remaining = {k: v for k, v in metadata.items() if k != OPAQUE_ORIGIN_KEY}
     return remaining or None
+
+
+def strip_internal_metadata(obj: Any) -> None:
+    """Recursively remove the :data:`CARRIER_KEY` from a provider body, in place.
+
+    Converters attach ``_llm_rosetta_provider_metadata`` to provider-format objects so an
+    in-process **ops-level** hop (``ir_*_to_p`` → ``p_*_to_ir``) can recover
+    provider-specific values.  The key is not part of any provider's schema, so
+    it must not reach the wire: Anthropic and Google reject a body that carries
+    it, and chat completions silently ignores it.  This runs at the end of the
+    top-level ``*_to_provider`` conversions so their output is directly
+    sendable; a top-level round trip (``request_to_provider`` →
+    ``request_from_provider``) therefore no longer recovers a ferried value.
+
+    :data:`CARRIER_KEY` is treated as reserved: a caller-supplied key of the
+    same name is removed wherever it appears, including inside a tool schema or
+    tool arguments.
+
+    Operates in-place for zero-copy overhead, recursing through nested dicts
+    and lists.
+
+    Args:
+        obj: Provider-format value (dict, list, or scalar) to clean.
+    """
+    if isinstance(obj, dict):
+        obj.pop(CARRIER_KEY, None)
+        for value in obj.values():
+            strip_internal_metadata(value)
+    elif isinstance(obj, list):
+        for item in obj:
+            strip_internal_metadata(item)
 
 
 def google_thought_signature(part: Any) -> str | None:

@@ -352,7 +352,7 @@ class TestProviderMetadataPreservation:
     """
 
     def test_ir_to_p_preserves_provider_metadata(self):
-        """ir_tool_call_to_p stashes provider_metadata as _provider_metadata."""
+        """ir_tool_call_to_p stashes provider_metadata as _llm_rosetta_provider_metadata."""
         ir_part = cast(
             ToolCallPart,
             {
@@ -365,21 +365,23 @@ class TestProviderMetadataPreservation:
             },
         )
         result = ChatCompletionsToolOps.ir_tool_call_to_p(ir_part)
-        assert result["_provider_metadata"] == {"responses_item_id": "fc_abc123"}
+        assert result["_llm_rosetta_provider_metadata"] == {
+            "responses_item_id": "fc_abc123"
+        }
 
     def test_p_to_ir_restores_provider_metadata(self):
-        """p_tool_call_to_ir restores _provider_metadata to provider_metadata."""
+        """p_tool_call_to_ir restores _llm_rosetta_provider_metadata to provider_metadata."""
         p_call = {
             "id": "call_xyz",
             "type": "function",
             "function": {"name": "get_weather", "arguments": '{"city": "London"}'},
-            "_provider_metadata": {"responses_item_id": "fc_abc123"},
+            "_llm_rosetta_provider_metadata": {"responses_item_id": "fc_abc123"},
         }
         result = ChatCompletionsToolOps.p_tool_call_to_ir(p_call)
         assert result.get("provider_metadata") == {"responses_item_id": "fc_abc123"}
 
     def test_no_metadata_when_absent(self):
-        """No _provider_metadata when IR part has no provider_metadata."""
+        """No _llm_rosetta_provider_metadata when IR part has no provider_metadata."""
         ir_part = cast(
             ToolCallPart,
             {
@@ -391,7 +393,7 @@ class TestProviderMetadataPreservation:
             },
         )
         result = ChatCompletionsToolOps.ir_tool_call_to_p(ir_part)
-        assert "_provider_metadata" not in result
+        assert "_llm_rosetta_provider_metadata" not in result
 
     def test_provider_metadata_round_trip(self):
         """provider_metadata survives IR → Chat → IR round-trip."""

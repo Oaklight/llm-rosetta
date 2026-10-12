@@ -48,7 +48,9 @@ class TestGoogleAnthropicToolCallRoundTrip:
         anthropic_block = MessagesToolOps.ir_tool_call_to_p(ir)
         assert anthropic_block["type"] == "tool_use"
         assert (
-            anthropic_block["_provider_metadata"]["google"]["thought_signature"]
+            anthropic_block["_llm_rosetta_provider_metadata"]["google"][
+                "thought_signature"
+            ]
             == self.THOUGHT_SIG
         )
 
@@ -72,7 +74,7 @@ class TestGoogleAnthropicToolCallRoundTrip:
             tool_type="function",
         )
         anthropic = MessagesToolOps.ir_tool_call_to_p(ir)
-        assert "_provider_metadata" not in anthropic
+        assert "_llm_rosetta_provider_metadata" not in anthropic
 
         ir2 = MessagesToolOps.p_tool_call_to_ir(anthropic)
         assert "provider_metadata" not in ir2
@@ -92,7 +94,10 @@ class TestGoogleAnthropicToolResultRoundTrip:
         ir["provider_metadata"] = {"google": {"some_field": "value"}}
 
         anthropic = MessagesToolOps.ir_tool_result_to_p(ir)
-        assert anthropic["_provider_metadata"]["google"]["some_field"] == "value"
+        assert (
+            anthropic["_llm_rosetta_provider_metadata"]["google"]["some_field"]
+            == "value"
+        )
 
         ir2 = MessagesToolOps.p_tool_result_to_ir(anthropic)
         assert ir2["provider_metadata"]["google"]["some_field"] == "value"
@@ -106,7 +111,7 @@ class TestGoogleAnthropicToolResultRoundTrip:
             is_error=False,
         )
         anthropic = MessagesToolOps.ir_tool_result_to_p(ir)
-        assert "_provider_metadata" not in anthropic
+        assert "_llm_rosetta_provider_metadata" not in anthropic
 
 
 class TestGoogleInteractionsToolCallSignatureRoundTrip:
@@ -146,7 +151,7 @@ class TestGoogleInteractionsToolCallSignatureRoundTrip:
         assert gi_step["signature"] == self.THOUGHT_SIG
 
     def test_gi_to_messages_to_gi_signature_survives(self):
-        """GI → IR → Messages → IR → GI: signature carried via _provider_metadata."""
+        """GI → IR → Messages → IR → GI: signature carried via _llm_rosetta_provider_metadata."""
         gi_step = {
             "type": "function_call",
             "id": "call_cross",
@@ -158,7 +163,9 @@ class TestGoogleInteractionsToolCallSignatureRoundTrip:
 
         messages_block = MessagesToolOps.ir_tool_call_to_p(ir)
         assert (
-            messages_block["_provider_metadata"]["google"]["thought_signature"]
+            messages_block["_llm_rosetta_provider_metadata"]["google"][
+                "thought_signature"
+            ]
             == self.THOUGHT_SIG
         )
 
@@ -219,7 +226,9 @@ class TestGoogleAnthropicReasoningRoundTrip:
         assert anthropic_block["type"] == "thinking"
         assert "signature" not in anthropic_block
         assert (
-            anthropic_block["_provider_metadata"]["google"]["thought_signature"]
+            anthropic_block["_llm_rosetta_provider_metadata"]["google"][
+                "thought_signature"
+            ]
             == self.THOUGHT_SIG
         )
 
@@ -256,7 +265,7 @@ class TestGoogleAnthropicReasoningRoundTrip:
         anthropic = MessagesContentOps.ir_reasoning_to_p(ir)
         assert anthropic is not None
         assert "signature" not in anthropic
-        assert "_provider_metadata" not in anthropic
+        assert "_llm_rosetta_provider_metadata" not in anthropic
         assert anthropic["type"] == "thinking"
 
 

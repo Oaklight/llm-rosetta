@@ -28,6 +28,7 @@ from ...types.ir import (
 )
 from ...types.ir.tools import ToolCallConfig
 from ..base import BaseToolOps
+from ..base.helpers.opaque import CARRIER_KEY
 from ..base.tools import (
     extract_part_ids,
     get_definition_kind,
@@ -309,7 +310,7 @@ def _build_function_call_item(
     # Ferry the full provider_metadata so a foreign-converter carrier
     # (e.g. a Google thought_signature) survives a Responses hop.
     if metadata:
-        item["_provider_metadata"] = metadata
+        item[CARRIER_KEY] = metadata
     return item
 
 
@@ -411,7 +412,7 @@ def _custom_tool_call_to_ir(provider_tool_call: dict[str, Any]) -> ToolCallPart:
         tool_type="custom",
     )
     # Keep it: (name, namespace) is what the request leg maps back.
-    restored = provider_tool_call.get("_provider_metadata")
+    restored = provider_tool_call.get(CARRIER_KEY)
     pm: dict[str, Any] = dict(restored) if isinstance(restored, dict) else {}
     namespace = provider_tool_call.get("namespace")
     if namespace:
@@ -880,7 +881,7 @@ class OpenResponsesToolOps(BaseToolOps):
             if namespace:
                 item["namespace"] = namespace
             if metadata:
-                item["_provider_metadata"] = metadata
+                item[CARRIER_KEY] = metadata
             return item
         elif tool_type == "intrinsic":
             return _ir_intrinsic_to_responses(
@@ -948,7 +949,7 @@ class OpenResponsesToolOps(BaseToolOps):
                 tool_input=tool_input,
                 tool_type="function",
             )
-            restored = provider_tool_call.get("_provider_metadata")
+            restored = provider_tool_call.get(CARRIER_KEY)
             pm: dict[str, Any] = dict(restored) if isinstance(restored, dict) else {}
             if item_id and item_id != call_id:
                 pm["responses_item_id"] = item_id

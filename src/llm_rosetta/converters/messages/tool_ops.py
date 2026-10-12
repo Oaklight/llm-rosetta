@@ -28,6 +28,7 @@ from ...types.ir import (
 )
 from ...types.ir.tools import ToolCallConfig
 from ..base import BaseToolOps
+from ..base.helpers.opaque import CARRIER_KEY
 from ..base.tools import (
     convert_nullable_to_type_array,
     extract_part_ids,
@@ -379,7 +380,7 @@ class MessagesToolOps(BaseToolOps):
         # Preserve provider_metadata for cross-provider round-trip
         # (e.g. Google thought_signature)
         if "provider_metadata" in ir_tool_call:
-            result["_provider_metadata"] = ir_tool_call["provider_metadata"]
+            result[CARRIER_KEY] = ir_tool_call["provider_metadata"]
 
         # Restore caller from provider_metadata (only if originally present)
         caller = pm.get("anthropic_caller")
@@ -422,7 +423,7 @@ class MessagesToolOps(BaseToolOps):
         )
 
         # Read back provider_metadata for cross-provider round-trip
-        pm = provider_tool_call.get("_provider_metadata")
+        pm = provider_tool_call.get(CARRIER_KEY)
         if pm:
             part["provider_metadata"] = pm
 
@@ -478,7 +479,7 @@ class MessagesToolOps(BaseToolOps):
 
         # Preserve provider_metadata for cross-provider round-trip
         if "provider_metadata" in ir_tool_result:
-            result["_provider_metadata"] = ir_tool_result["provider_metadata"]
+            result[CARRIER_KEY] = ir_tool_result["provider_metadata"]
 
         # Preserve cache_hint → cache_control
         cache_hint = ir_tool_result.get("cache_hint")
@@ -513,7 +514,7 @@ class MessagesToolOps(BaseToolOps):
             part["is_error"] = is_error
 
         # Read back provider_metadata for cross-provider round-trip
-        pm = provider_tool_result.get("_provider_metadata")
+        pm = provider_tool_result.get(CARRIER_KEY)
         if pm:
             part["provider_metadata"] = pm
 
@@ -557,7 +558,7 @@ class MessagesToolOps(BaseToolOps):
         )
         set_intrinsic_kind(part, kind)
 
-        pm = provider_block.get("_provider_metadata")
+        pm = provider_block.get(CARRIER_KEY)
         if pm:
             part["provider_metadata"].update(pm)
 

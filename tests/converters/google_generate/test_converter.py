@@ -1331,8 +1331,14 @@ class TestGooglePromptBlockHandling:
         finish = [e for e in events if e["type"] == "finish"][0]
         assert finish["finish_reason"]["reason"] == "content_filter"
 
-    def test_refusal_round_trip(self):
-        """IR refusal → Google → IR preserves refusal via _provider_metadata marker."""
+    def test_refusal_wire_body_is_clean(self):
+        """IR refusal → Google response carries no internal carrier (#941).
+
+        Google has no native refusal type, so the converter emits the refusal
+        text plus an internal ``_llm_rosetta_provider_metadata`` marker for round-trip
+        recovery.  That marker must not reach the wire — Google rejects an
+        unknown field — so ``response_to_provider`` strips it.
+        """
         ir = {
             "id": "test",
             "object": "response",
@@ -1354,13 +1360,30 @@ class TestGooglePromptBlockHandling:
         parts = google_resp["candidates"][0]["content"]["parts"]
         assert len(parts) == 1
         assert parts[0]["text"] == "I cannot help."
-        assert parts[0]["_provider_metadata"]["is_refusal"] is True
+        assert "_llm_rosetta_provider_metadata" not in parts[0]
 
+        # Reading the clean wire body back yields text: the refusal marker only
+        # survives the ops-level round trip (see test_refusal_ops_round_trip).
         ir2 = self.converter.response_from_provider(google_resp)
         content = ir2["choices"][0]["message"]["content"]
         assert len(content) == 1
-        assert content[0]["type"] == "refusal"
-        assert content[0]["refusal"] == "I cannot help."
+        assert content[0]["type"] == "text"
+
+    def test_refusal_ops_round_trip(self):
+        """The ops-level refusal round trip still recovers the refusal (#941)."""
+        from llm_rosetta.converters.google_generate.content_ops import (
+            GoogleGenerateContentOps,
+        )
+
+        part = GoogleGenerateContentOps.ir_refusal_to_p(
+            cast(Any, {"type": "refusal", "refusal": "I cannot help."})
+        )
+        assert part["_llm_rosetta_provider_metadata"]["is_refusal"] is True
+
+        restored = GoogleGenerateContentOps.p_part_to_ir(part)
+        assert len(restored) == 1
+        assert restored[0]["type"] == "refusal"
+        assert restored[0]["refusal"] == "I cannot help."
 
     def test_rest_thinking_config_round_trip(self):
         """REST generationConfig.thinkingConfig survives request round-trip (regression for #584)."""
