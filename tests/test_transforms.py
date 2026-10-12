@@ -1032,3 +1032,187 @@ class TestRewriteHarmonyToolCalls:
         from llm_rosetta.transforms import rewrite_harmony_tool_calls
 
         assert repr(rewrite_harmony_tool_calls()) == "rewrite_harmony_tool_calls()"
+
+
+class TestBackfillReasoningContent:
+    """DeepSeek thinking mode requires ``reasoning_content`` on assistant
+    tool-call messages when the history ends on a tool result."""
+
+    @staticmethod
+    def _tool_call_msg(**extra):
+        msg = {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "c1",
+                    "type": "function",
+                    "function": {"name": "f", "arguments": "{}"},
+                }
+            ],
+        }
+        msg.update(extra)
+        return msg
+
+    @staticmethod
+    def _tool_result():
+        return {"role": "tool", "tool_call_id": "c1", "content": "ok"}
+
+    def test_fills_when_history_ends_on_tool(self):
+        from llm_rosetta.transforms import backfill_reasoning_content
+
+        body = {
+            "messages": [
+                {"role": "user", "content": "hi"},
+                self._tool_call_msg(),
+                self._tool_result(),
+            ]
+        }
+        result = backfill_reasoning_content()(body)
+        assert result["messages"][1]["reasoning_content"] == ""
+
+    def test_noop_when_history_ends_on_user(self):
+        from llm_rosetta.transforms import backfill_reasoning_content
+
+        body = {
+            "messages": [
+                {"role": "user", "content": "hi"},
+                self._tool_call_msg(),
+                {"role": "user", "content": "and now"},
+            ]
+        }
+        result = backfill_reasoning_content()(body)
+        assert "reasoning_content" not in result["messages"][1]
+
+    def test_preserves_existing_value(self):
+        from llm_rosetta.transforms import backfill_reasoning_content
+
+        body = {
+            "messages": [
+                {"role": "user", "content": "hi"},
+                self._tool_call_msg(reasoning_content="reasoned"),
+                self._tool_result(),
+            ]
+        }
+        result = backfill_reasoning_content()(body)
+        assert result["messages"][1]["reasoning_content"] == "reasoned"
+
+    def test_fills_plain_assistant_turns_too(self):
+        """The requirement covers every assistant turn, not only tool calls."""
+        from llm_rosetta.transforms import backfill_reasoning_content
+
+        plain = {"role": "assistant", "content": "no tools here"}
+        body = {
+            "messages": [
+                {"role": "user", "content": "hi"},
+                plain,
+                self._tool_call_msg(),
+                self._tool_result(),
+            ]
+        }
+        result = backfill_reasoning_content()(body)
+        assert result["messages"][1]["reasoning_content"] == ""
+        assert result["messages"][2]["reasoning_content"] == ""
+
+    def test_fills_when_trailing_turn_is_an_assistant_answer(self):
+        """A history that ends on an assistant answer after a tool round."""
+        from llm_rosetta.transforms import backfill_reasoning_content
+
+        body = {
+            "messages": [
+                {"role": "user", "content": "hi"},
+                self._tool_call_msg(),
+                self._tool_result(),
+                {"role": "assistant", "content": "done"},
+            ],
+            "tools": [{"type": "function", "function": {"name": "f"}}],
+        }
+        result = backfill_reasoning_content()(body)
+        assert result["messages"][1]["reasoning_content"] == ""
+        assert result["messages"][3]["reasoning_content"] == ""
+
+    def test_noop_when_ends_on_assistant_without_tools(self):
+        from llm_rosetta.transforms import backfill_reasoning_content
+
+        body = {
+            "messages": [
+                {"role": "user", "content": "hi"},
+                {"role": "assistant", "content": "done"},
+            ]
+        }
+        result = backfill_reasoning_content()(body)
+        assert "reasoning_content" not in result["messages"][1]
+
+    def test_fills_ending_on_tool_even_without_tools_parameter(self):
+        from llm_rosetta.transforms import backfill_reasoning_content
+
+        body = {
+            "messages": [
+                {"role": "user", "content": "hi"},
+                self._tool_call_msg(),
+                self._tool_result(),
+            ]
+        }
+        result = backfill_reasoning_content()(body)
+        assert result["messages"][1]["reasoning_content"] == ""
+
+    def test_idempotent(self):
+        from llm_rosetta.transforms import backfill_reasoning_content
+
+        transform = backfill_reasoning_content()
+        body = {
+            "messages": [
+                {"role": "user", "content": "hi"},
+                self._tool_call_msg(),
+                self._tool_result(),
+            ]
+        }
+        once = transform(body)
+        twice = transform(once)
+        assert once == twice
+
+    def test_noop_without_messages(self):
+        from llm_rosetta.transforms import backfill_reasoning_content
+
+        assert backfill_reasoning_content()({"model": "m"}) == {"model": "m"}
+
+    def test_logs_the_backfill_count(self, caplog):
+        """The drop upstream is silent on the wire; the count goes to the log."""
+        import logging
+
+        from llm_rosetta.transforms import backfill_reasoning_content
+
+        body = {
+            "messages": [
+                {"role": "user", "content": "hi"},
+                self._tool_call_msg(),
+                self._tool_result(),
+            ]
+        }
+        with caplog.at_level(logging.DEBUG, logger="llm_rosetta.transforms.body"):
+            backfill_reasoning_content()(body)
+        assert "backfilled reasoning_content on 1" in caplog.text
+
+    def test_silent_when_nothing_to_backfill(self, caplog):
+        import logging
+
+        from llm_rosetta.transforms import backfill_reasoning_content
+
+        body = {
+            "messages": [
+                {"role": "user", "content": "hi"},
+                self._tool_call_msg(reasoning_content="reasoned"),
+                self._tool_result(),
+            ]
+        }
+        with caplog.at_level(logging.DEBUG, logger="llm_rosetta.transforms.body"):
+            backfill_reasoning_content()(body)
+        assert "backfilled" not in caplog.text
+
+    def test_repr(self):
+        from llm_rosetta.transforms import backfill_reasoning_content
+
+        assert (
+            repr(backfill_reasoning_content())
+            == "backfill_reasoning_content('reasoning_content')"
+        )

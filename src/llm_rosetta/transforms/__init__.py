@@ -18,6 +18,7 @@ from llm_rosetta.transforms.body import (  # noqa: F401
     Transform,
     _NamedTransform,
     apply_transforms,
+    backfill_reasoning_content,
     default_message_field,
     default_tool_description,
     flatten_system_content,

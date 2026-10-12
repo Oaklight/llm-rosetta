@@ -1362,3 +1362,111 @@ class TestIntrinsicIrTransforms:
 
         names = [repr(t) for t in GoogleInteractionsConverter._INTRINSIC_IR_TRANSFORMS]
         assert "hoist_late_system_messages()" in names
+
+
+class TestDeepSeekReasoningContentBackfill:
+    """DeepSeek's thinking mode rejects a history that ends on a tool result
+    unless every assistant tool-call message carries ``reasoning_content``.
+
+    Reproduces the shape a cross-format agent harness produces when it drops
+    the model's reasoning for a turn: a Messages history whose last turn is a
+    bare ``tool_use`` (no ``thinking``), converted to Chat Completions.  The
+    deepseek shim backfills an empty value; a bare conversion does not.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _load_shims(self):
+        from llm_rosetta.shims.providers import load_providers
+
+        load_providers()
+
+    @staticmethod
+    def _source_body():
+        return {
+            "model": "deepseek-flash",
+            "messages": [
+                {"role": "user", "content": [{"type": "text", "text": "read it"}]},
+                {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "thinking",
+                            "thinking": "I should read the file.",
+                            "signature": "",
+                        },
+                        {
+                            "type": "tool_use",
+                            "id": "c1",
+                            "name": "read",
+                            "input": {"path": "/x"},
+                        },
+                    ],
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "c1",
+                            "content": "data",
+                        }
+                    ],
+                },
+                # This turn's thinking was dropped by the client.
+                {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "tool_use",
+                            "id": "c2",
+                            "name": "read",
+                            "input": {"path": "/y"},
+                        }
+                    ],
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "c2",
+                            "content": "more",
+                        }
+                    ],
+                },
+            ],
+        }
+
+    @staticmethod
+    def _callers(out):
+        return [
+            m
+            for m in out["messages"]
+            if m.get("role") == "assistant" and m.get("tool_calls")
+        ]
+
+    def test_deepseek_shim_backfills_missing_reasoning_content(self):
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        out = ConversionPipeline(
+            "messages",
+            "chat_completions",
+            target_shim="deepseek--chat_completions",
+        ).convert_request(self._source_body())
+
+        callers = self._callers(out)
+        assert len(callers) == 2
+        assert callers[0]["reasoning_content"] == "I should read the file."
+        assert callers[1]["reasoning_content"] == ""
+        assert out["messages"][-1]["role"] == "tool"
+
+    def test_bare_conversion_leaves_field_absent(self):
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        out = ConversionPipeline("messages", "chat_completions").convert_request(
+            self._source_body()
+        )
+
+        callers = self._callers(out)
+        assert callers[0]["reasoning_content"] == "I should read the file."
+        assert "reasoning_content" not in callers[1]

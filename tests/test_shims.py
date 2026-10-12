@@ -330,6 +330,14 @@ class TestBuiltinShims:
         assert shim is not None
         assert shim.base == "chat_completions"
 
+    def test_deepseek_backfills_reasoning_content(self):
+        """The thinking-mode fix rides on the shim's post-IR transforms."""
+        shim = get_shim("deepseek--chat_completions")
+        assert shim is not None
+        assert any(
+            "backfill_reasoning_content" in repr(t) for t in shim.post_ir_transforms
+        )
+
     def test_deepseek_responses_base_type(self):
         shim = get_shim("deepseek--open_responses")
         assert shim is not None

@@ -14,10 +14,13 @@ Design principles:
 from __future__ import annotations
 
 import json
+import logging
 import re
 import uuid
 from collections.abc import Callable
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Core type
@@ -179,6 +182,82 @@ def default_message_field(field: str, default: Any) -> Transform:
         _default,
         f"default_message_field({field!r}, {default!r})",
     )
+
+
+def backfill_reasoning_content(field: str = "reasoning_content") -> Transform:
+    """Fill a missing reasoning field on assistant messages.
+
+    DeepSeek's thinking mode requires the model's reasoning to be replayed once
+    a request involves tools: "for requests carrying the ``tools`` parameter,
+    the ``reasoning_content`` must be fully passed back to the API in all
+    subsequent requests — even for turns where the model did not perform a tool
+    call."  A request that violates this returns HTTP 400 "The
+    ``reasoning_content`` in the thinking mode must be passed back to the API".
+    An empty string satisfies the check (verified against the live API), so a
+    client that drops the reasoning when replaying history — a cross-format
+    agent harness, for example — can still round-trip.
+
+    The requirement bites whenever the message list does not end on a ``user``
+    message and the history involves tools, so the transform fills **every**
+    assistant message that lacks the field — not only tool-call ones.  Verified
+    live on ``deepseek-flash``: a history ending on a tool result (with or
+    without the ``tools`` parameter) and a history ending on an assistant turn
+    with ``tools`` present both fail as-is and pass once every assistant
+    message carries the field; filling only the tool-call message, or only the
+    trailing one, still fails.  Ending on a ``user`` message needs nothing.
+
+    The gate is provider-wide even though the requirement is specific to
+    thinking mode, so a non-thinking request routed through the same shim also
+    gets the field.  DeepSeek accepts it there: both models the shim serves
+    (``deepseek-flash``, ``deepseek-v4-pro``) return 200 with
+    ``reasoning_content`` set to ``""`` or to text, with and without
+    ``reasoning_effort``, and with thinking explicitly disabled.  No model
+    guard is needed for the reachable models; one would only be warranted if a
+    deployment pinned to the older "never echo ``reasoning_content``"
+    behaviour were added.
+
+    Idempotent: a message that already carries a non-empty value is left
+    untouched.
+
+    The backfill keeps the request alive but also makes the client-side drop
+    invisible — the wire body shows a clean ``reasoning_content`` and nothing
+    points at the harness that lost the reasoning.  Body-level transforms have
+    no warning sink (the pipeline's ``ctx.warnings`` is converter-level), so
+    the count is logged at DEBUG on this module's logger instead.
+
+    Example::
+
+        backfill_reasoning_content()
+    """
+
+    def _backfill(body: dict[str, Any]) -> dict[str, Any]:
+        messages = body.get("messages")
+        if not messages or not isinstance(messages, list):
+            return body
+        last = messages[-1]
+        if not isinstance(last, dict) or last.get("role") == "user":
+            return body
+        # Ending on a tool result trips the check even without the tools
+        # parameter; a trailing assistant turn only does when tools are sent.
+        if last.get("role") != "tool" and not body.get("tools"):
+            return body
+        filled = 0
+        for msg in messages:
+            if not isinstance(msg, dict) or msg.get("role") != "assistant":
+                continue
+            if not msg.get(field):
+                msg[field] = ""
+                filled += 1
+        if filled:
+            logger.debug(
+                "backfilled %s on %d assistant message(s); the client replayed "
+                "history without the model's reasoning",
+                field,
+                filled,
+            )
+        return body
+
+    return _NamedTransform(_backfill, f"backfill_reasoning_content({field!r})")
 
 
 def strip_fields_for_model(pattern: str, *keys: str) -> Transform:

@@ -196,11 +196,11 @@ class TestLoadProviders:
         assert "messages" in result
 
     def test_deepseek_has_transforms(self):
-        """DeepSeek chat shim should strip n, logit_bias, seed."""
+        """DeepSeek chat shim strips n, logit_bias, seed and backfills reasoning."""
         load_providers()
         s = get_shim("deepseek--chat_completions")
         assert s is not None
-        assert len(s.post_ir_transforms) == 1
+        assert len(s.post_ir_transforms) == 2
         assert len(s.pre_ir_transforms) == 0
         body = {"n": 2, "logit_bias": {}, "seed": 42, "messages": []}
         result = s.post_ir_transforms[0](body)
@@ -208,6 +208,9 @@ class TestLoadProviders:
         assert "logit_bias" not in result
         assert "seed" not in result
         assert "messages" in result
+        assert repr(s.post_ir_transforms[1]) == (
+            "backfill_reasoning_content('reasoning_content')"
+        )
 
     def test_xai_has_transforms(self):
         """xAI shim should strip logit_bias."""
