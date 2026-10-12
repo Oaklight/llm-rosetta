@@ -52,8 +52,12 @@ from ..base.tools import (
 )
 from ..base.helpers.extensions import wire_extensions
 from ..base.helpers.opaque import (
+    get_opaque_origin,
     google_thought_signature,
     inject_google_function_call_signature,
+    is_own_origin,
+    set_google_thought_signature,
+    set_opaque_origin,
 )
 from ..base.helpers.system_message_hoist import hoist_system_in_converter
 from ...transforms.ir import hoist_late_system_messages
@@ -878,13 +882,19 @@ class GoogleGenerateConverter(BaseConverter):
     ) -> None:
         """Process a single part from a candidate's content."""
         is_thought = part.get("thought", False)
+        text = part.get("text")
+        func_call = part.get("function_call") or part.get("functionCall")
+        thought_sig = part.get("thoughtSignature") or part.get("thought_signature")
+        # Google puts a turn's thought signature on its own part, where the
+        # empty ``text`` is a placeholder for the signature rather than content.
+        signature_only = bool(thought_sig) and text == ""
 
-        if "text" in part and part["text"] is not None:
+        if text is not None and not signature_only:
             if is_thought:
                 events.append(
                     ReasoningDeltaEvent(
                         type="reasoning_delta",
-                        reasoning=part["text"],
+                        reasoning=text,
                         choice_index=choice_index,
                     )
                 )
@@ -892,12 +902,28 @@ class GoogleGenerateConverter(BaseConverter):
                 events.append(
                     TextDeltaEvent(
                         type="text_delta",
-                        text=part["text"],
+                        text=text,
                         choice_index=choice_index,
                     )
                 )
 
-        func_call = part.get("function_call") or part.get("functionCall")
+        # The signature cannot ride on a text delta -- TextDeltaEvent has no
+        # opaque slot -- so it travels on a signature-only reasoning delta, the
+        # same shape the Anthropic and Interactions readers use.  A functionCall
+        # part is excluded: _handle_p_function_call_to_ir already carries its
+        # signature on the tool_call_start, and emitting it here too would put
+        # one signature on two IR carriers.
+        if thought_sig and not func_call:
+            sig_event = ReasoningDeltaEvent(
+                type="reasoning_delta",
+                reasoning="",
+                signature=thought_sig,
+                choice_index=choice_index,
+            )
+            set_opaque_origin(sig_event, signature=self._CONVERTER_TAG)
+            set_google_thought_signature(sig_event, thought_sig)
+            events.append(sig_event)
+
         if func_call:
             self._handle_p_function_call_to_ir(
                 func_call, part, choice_index, context, events
@@ -1097,15 +1123,22 @@ class GoogleGenerateConverter(BaseConverter):
     ) -> dict[str, Any]:
         """Handle ReasoningDeltaEvent → thought text part chunk."""
         choice_index = event.get("choice_index", 0)
+        part: dict[str, Any] = {"thought": True, "text": event["reasoning"]}
+        # Prefer the Google-namespace carrier (survives a foreign hop); a flat
+        # signature is used only when it is Google-origin or unrecorded.
+        signature = google_thought_signature(event)
+        if signature is None and is_own_origin(
+            get_opaque_origin(event, "signature"), self._CONVERTER_TAG
+        ):
+            signature = event.get("signature")
+        if signature:
+            part["thoughtSignature"] = signature
         return self._inject_stream_metadata(
             {
                 "candidates": [
                     {
                         "index": choice_index,
-                        "content": {
-                            "role": "model",
-                            "parts": [{"thought": True, "text": event["reasoning"]}],
-                        },
+                        "content": {"role": "model", "parts": [part]},
                     }
                 ]
             },

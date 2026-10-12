@@ -1072,38 +1072,19 @@ class MessagesConverter(BaseConverter):
     def _handle_ir_reasoning_delta_to_p(
         self, event: ReasoningDeltaEvent, context: StreamContext | None
     ) -> dict[str, Any] | list[dict[str, Any]]:
-        """Handle ReasoningDeltaEvent → content_block_delta (thinking or signature)."""
-        signature = event.get("signature")
-        if signature is not None and not is_own_origin(
-            get_opaque_origin(event, "signature"), "messages"
-        ):
-            # Foreign verification signature — not valid for Anthropic.  Drop
-            # only the signature: any visible reasoning on the same event still
-            # has to reach the client.
-            signature = None
-            if not event["reasoning"]:
-                return {}
-        rd_result: dict[str, Any]
-        if signature is not None:
-            rd_result = {
-                "type": AnthropicEventType.CONTENT_BLOCK_DELTA,
-                "delta": {
-                    "type": "signature_delta",
-                    "signature": signature,
-                },
-            }
-        else:
-            rd_result = {
-                "type": AnthropicEventType.CONTENT_BLOCK_DELTA,
-                "delta": {
-                    "type": "thinking_delta",
-                    "thinking": event["reasoning"],
-                },
-            }
+        """Handle ReasoningDeltaEvent → content_block_delta (thinking and/or signature)."""
+        deltas = self._ir_reasoning_deltas(event)
+        if not deltas:
+            return {}
+        rd_results: list[dict[str, Any]] = [
+            {"type": AnthropicEventType.CONTENT_BLOCK_DELTA, "delta": delta}
+            for delta in deltas
+        ]
         # Prefer explicit block_index from the IR event (#246)
         explicit_idx: int | None = event.get("block_index")
         if explicit_idx is not None:
-            rd_result["index"] = explicit_idx
+            for result in rd_results:
+                result["index"] = explicit_idx
             if context is not None:
                 _stream_blocks(context).open(context, explicit_idx)
                 context.current_block_type = "thinking"
@@ -1116,18 +1097,53 @@ class MessagesConverter(BaseConverter):
                 preamble = _close_content_blocks(context)
                 _stream_blocks(context).open(context)
                 context.current_block_type = "thinking"
-                rd_result["index"] = context.current_block_index
-                preamble.append(
+                index = context.current_block_index
+                for result in rd_results:
+                    result["index"] = index
+                return [
+                    *preamble,
                     {
                         "type": AnthropicEventType.CONTENT_BLOCK_START,
-                        "index": context.current_block_index,
+                        "index": index,
                         "content_block": {"type": "thinking", "thinking": ""},
-                    }
-                )
-                preamble.append(rd_result)
-                return preamble
-            rd_result["index"] = context.current_block_index
-        return rd_result
+                    },
+                    *rd_results,
+                ]
+            for result in rd_results:
+                result["index"] = context.current_block_index
+        return rd_results[0] if len(rd_results) == 1 else rd_results
+
+    def _ir_reasoning_deltas(self, event: ReasoningDeltaEvent) -> list[dict[str, Any]]:
+        """Split an IR reasoning delta event into Anthropic ``delta`` payloads.
+
+        Anthropic carries the visible thinking text and the verification
+        signature as separate deltas, so an event holding both yields two
+        payloads: the text first, then the signature.  A foreign signature is
+        dropped without taking the text along with it.
+
+        Both fields are tested for emptiness rather than presence: an empty
+        signature is not a signature, and emitting an empty ``signature_delta``
+        would be a delta with no content.  The Interactions writer drops empty
+        signatures the same way.
+
+        Args:
+            event: IR reasoning delta event.
+
+        Returns:
+            ``content_block_delta`` payloads to emit, in order.
+        """
+        signature = event.get("signature")
+        if signature and not is_own_origin(
+            get_opaque_origin(event, "signature"), self._CONVERTER_TAG
+        ):
+            # Foreign verification signature — not valid for Anthropic.
+            signature = None
+        deltas: list[dict[str, Any]] = []
+        if event["reasoning"]:
+            deltas.append({"type": "thinking_delta", "thinking": event["reasoning"]})
+        if signature:
+            deltas.append({"type": "signature_delta", "signature": signature})
+        return deltas
 
     def _handle_ir_tool_call_start_to_p(
         self, event: ToolCallStartEvent, context: StreamContext | None

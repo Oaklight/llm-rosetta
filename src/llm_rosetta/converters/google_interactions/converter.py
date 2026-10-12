@@ -689,26 +689,29 @@ class GoogleInteractionsConverter(BaseConverter):
 
     def _handle_ir_reasoning_delta_to_p(
         self, event: ReasoningDeltaEvent, context: StreamContext | None
-    ) -> dict[str, Any]:
+    ) -> list[dict[str, Any]]:
+        """Handle ReasoningDeltaEvent → thought summary and/or signature deltas.
+
+        The Interactions wire carries the thought summary and its signature as
+        separate deltas, so an event holding both yields two.  A foreign
+        signature is dropped without taking the summary along with it.
+        """
         signature = event.get("signature")
         if signature is not None and not is_own_origin(
-            get_opaque_origin(event, "signature"), "google_interactions"
+            get_opaque_origin(event, "signature"), self._CONVERTER_TAG
         ):
             # Foreign signature — not valid for Google.
             signature = None
-            if not event.get("reasoning"):
-                return {}
+        index = event.get("block_index", 0)
+        payloads: list[dict[str, Any]] = []
+        if event.get("reasoning"):
+            payloads.append({"type": "thought_summary", "text": event["reasoning"]})
         if signature:
-            return {
-                "event_type": "step.delta",
-                "index": event.get("block_index", 0),
-                "delta": {"type": "thought_signature", "signature": signature},
-            }
-        return {
-            "event_type": "step.delta",
-            "index": event.get("block_index", 0),
-            "delta": {"type": "thought_summary", "text": event["reasoning"]},
-        }
+            payloads.append({"type": "thought_signature", "signature": signature})
+        return [
+            {"event_type": "step.delta", "index": index, "delta": payload}
+            for payload in payloads
+        ]
 
     def _handle_ir_tool_call_start_to_p(
         self, event: ToolCallStartEvent, context: StreamContext | None

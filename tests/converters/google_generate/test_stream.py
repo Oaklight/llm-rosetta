@@ -1418,3 +1418,329 @@ class TestStreamResponseToProviderWithContext:
             ),
         )
         assert result == {}
+
+
+class TestStreamThoughtSignature:
+    """Thought-signature capture and emission on the streaming paths (#939).
+
+    Google returns a thinking turn's signature on its own part, where the empty
+    ``text`` is a placeholder for the signature rather than content.  The
+    signature cannot ride on a text delta -- ``TextDeltaEvent`` has no opaque
+    slot -- so it travels on a signature-only reasoning delta.
+    """
+
+    def setup_method(self):
+        self.converter = GoogleGenerateConverter()
+
+    def _signature_part(self, signature: str, key: str = "thoughtSignature"):
+        return {
+            "candidates": [
+                {
+                    "index": 0,
+                    "content": {
+                        "role": "model",
+                        "parts": [{"text": "", key: signature}],
+                    },
+                }
+            ]
+        }
+
+    # --- inbound ---
+
+    def test_signature_only_part_produces_reasoning_delta(self):
+        """Trailing signature part becomes a signature-only reasoning delta."""
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(
+                self._signature_part("sig-abc")
+            ),
+        )
+        assert len(events) == 1
+        assert events[0]["type"] == "reasoning_delta"
+        assert events[0]["reasoning"] == ""
+        assert events[0]["signature"] == "sig-abc"
+        assert events[0]["choice_index"] == 0
+        assert (
+            events[0]["provider_metadata"]["google"]["thought_signature"] == "sig-abc"
+        )
+        assert (
+            events[0]["provider_metadata"]["_opaque_origin"]["signature"]
+            == "google_generate"
+        )
+
+    def test_signature_only_part_emits_no_empty_text_delta(self):
+        """The placeholder empty text does not leak out as a text delta."""
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(
+                self._signature_part("sig-abc")
+            ),
+        )
+        assert [e for e in events if e["type"] == "text_delta"] == []
+
+    def test_snake_case_signature_key(self):
+        """``thought_signature`` is accepted alongside ``thoughtSignature``."""
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(
+                self._signature_part("sig-snake", key="thought_signature")
+            ),
+        )
+        assert events[0]["signature"] == "sig-snake"
+
+    def test_answer_then_signature_keeps_stream_order(self):
+        """A real thinking turn sends the answer text first, signature last."""
+        chunks = [
+            {
+                "candidates": [
+                    {
+                        "index": 0,
+                        "content": {"role": "model", "parts": [{"text": "3 r's"}]},
+                    }
+                ]
+            },
+            self._signature_part("sig-trailing"),
+        ]
+        events: list[Any] = []
+        for chunk in chunks:
+            events.extend(
+                cast(list[Any], self.converter.stream_response_from_provider(chunk))
+            )
+        assert [e["type"] for e in events] == ["text_delta", "reasoning_delta"]
+        assert events[0]["text"] == "3 r's"
+        assert events[1]["signature"] == "sig-trailing"
+
+    def test_thought_part_with_signature_splits_text_from_signature(self):
+        """A combined thought part yields the text and the signature separately."""
+        chunk = {
+            "candidates": [
+                {
+                    "index": 0,
+                    "content": {
+                        "role": "model",
+                        "parts": [
+                            {
+                                "thought": True,
+                                "text": "let me think",
+                                "thoughtSignature": "sig-combined",
+                            }
+                        ],
+                    },
+                }
+            ]
+        }
+        events = cast(list[Any], self.converter.stream_response_from_provider(chunk))
+        assert [e["type"] for e in events] == ["reasoning_delta", "reasoning_delta"]
+        assert events[0]["reasoning"] == "let me think"
+        assert "signature" not in events[0]
+        assert events[1]["reasoning"] == ""
+        assert events[1]["signature"] == "sig-combined"
+
+    def test_empty_text_without_signature_still_emits_text_delta(self):
+        """An empty part with no signature keeps the pre-existing behaviour."""
+        chunk = {
+            "candidates": [
+                {
+                    "index": 0,
+                    "content": {"role": "model", "parts": [{"text": ""}]},
+                }
+            ]
+        }
+        events = cast(list[Any], self.converter.stream_response_from_provider(chunk))
+        assert len(events) == 1
+        assert events[0]["type"] == "text_delta"
+        assert events[0]["text"] == ""
+
+    # --- outbound ---
+
+    def test_outbound_emits_thought_signature(self):
+        """An own-origin signature is written onto the thought part."""
+        event = cast(
+            ReasoningDeltaEvent,
+            {
+                "type": "reasoning_delta",
+                "reasoning": "thinking",
+                "signature": "sig-abc",
+                "provider_metadata": {
+                    "_opaque_origin": {"signature": "google_generate"},
+                },
+                "choice_index": 0,
+            },
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
+        part = result["candidates"][0]["content"]["parts"][0]
+        assert part["thought"] is True
+        assert part["text"] == "thinking"
+        assert part["thoughtSignature"] == "sig-abc"
+
+    def test_outbound_prefers_google_namespace_carrier(self):
+        """A signature ferried through a foreign hop is still emitted."""
+        event = cast(
+            ReasoningDeltaEvent,
+            {
+                "type": "reasoning_delta",
+                "reasoning": "",
+                "provider_metadata": {
+                    "google": {"thought_signature": "sig-ferried"},
+                },
+                "choice_index": 0,
+            },
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
+        part = result["candidates"][0]["content"]["parts"][0]
+        assert part["thoughtSignature"] == "sig-ferried"
+        assert part["text"] == ""
+
+    def test_outbound_drops_foreign_signature_but_keeps_text(self):
+        """A foreign signature is dropped without taking the reasoning text."""
+        event = cast(
+            ReasoningDeltaEvent,
+            {
+                "type": "reasoning_delta",
+                "reasoning": "visible reasoning",
+                "signature": "sig-openai",
+                "provider_metadata": {
+                    "_opaque_origin": {"signature": "open_responses"},
+                },
+                "choice_index": 0,
+            },
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
+        part = result["candidates"][0]["content"]["parts"][0]
+        assert part["text"] == "visible reasoning"
+        assert "thoughtSignature" not in part
+
+    def test_outbound_treats_google_interactions_signature_as_own(self):
+        """Interactions and Generate share the Google signature family."""
+        event = cast(
+            ReasoningDeltaEvent,
+            {
+                "type": "reasoning_delta",
+                "reasoning": "",
+                "signature": "sig-interactions",
+                "provider_metadata": {
+                    "_opaque_origin": {"signature": "google_interactions"},
+                },
+                "choice_index": 0,
+            },
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
+        part = result["candidates"][0]["content"]["parts"][0]
+        assert part["thoughtSignature"] == "sig-interactions"
+
+    def test_signature_round_trip(self):
+        """provider → IR → provider preserves the thought signature."""
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(
+                self._signature_part("sig-rt")
+            ),
+        )
+        restored = cast(
+            dict[str, Any], self.converter.stream_response_to_provider(events[0])
+        )
+        part = restored["candidates"][0]["content"]["parts"][0]
+        assert part["thought"] is True
+        assert part["thoughtSignature"] == "sig-rt"
+
+    def test_function_call_signature_travels_on_one_carrier(self):
+        """A functionCall part's signature stays on the tool call alone.
+
+        ``_handle_p_function_call_to_ir`` already carries it on the
+        ``tool_call_start``; the standalone signature carrier must not fire here
+        too, or one signature would occupy two IR carriers.
+        """
+        chunk = {
+            "candidates": [
+                {
+                    "index": 0,
+                    "content": {
+                        "role": "model",
+                        "parts": [
+                            {
+                                "functionCall": {
+                                    "name": "get_weather",
+                                    "args": {"city": "Paris"},
+                                },
+                                "thoughtSignature": "sig-tool",
+                            }
+                        ],
+                    },
+                }
+            ]
+        }
+        events = cast(list[Any], self.converter.stream_response_from_provider(chunk))
+        assert [e["type"] for e in events] == ["tool_call_start", "tool_call_delta"]
+        assert (
+            events[0]["provider_metadata"]["google"]["thought_signature"] == "sig-tool"
+        )
+        carriers = [
+            e
+            for e in events
+            if e.get("signature") or (e.get("provider_metadata") or {})
+        ]
+        assert len(carriers) == 1
+
+    def test_function_call_with_signature_round_trips_on_the_call(self):
+        """The tool-call carrier survives the write path on the functionCall."""
+        chunk = {
+            "candidates": [
+                {
+                    "index": 0,
+                    "content": {
+                        "role": "model",
+                        "parts": [
+                            {
+                                "functionCall": {
+                                    "name": "get_weather",
+                                    "args": {"city": "Paris"},
+                                },
+                                "thoughtSignature": "sig-tool",
+                            }
+                        ],
+                    },
+                }
+            ]
+        }
+        events = cast(list[Any], self.converter.stream_response_from_provider(chunk))
+        ctx = StreamContext()
+        for event in events:
+            self.converter.stream_response_to_provider(event, context=ctx)
+        finished = cast(
+            list[dict[str, Any]],
+            self.converter.stream_response_to_provider(
+                cast(
+                    FinishEvent, {"type": "finish", "finish_reason": {"reason": "stop"}}
+                ),
+                context=ctx,
+            ),
+        )
+        parts = finished[-1]["candidates"][0]["content"]["parts"]
+        calls = [p for p in parts if "functionCall" in p]
+        assert calls[0]["thoughtSignature"] == "sig-tool"
+
+    def test_plain_text_part_with_signature_splits_the_same_way(self):
+        """A non-thought text part carrying a signature keeps both halves.
+
+        This is the streaming twin of the non-streaming shape, where Google
+        hangs the signature on the answering text part.  The text must reach the
+        client as text and the signature as its own carrier; there is no test
+        covering a single same-part text+sig payload otherwise.
+        """
+        chunk = {
+            "candidates": [
+                {
+                    "index": 0,
+                    "content": {
+                        "role": "model",
+                        "parts": [{"text": "3 r's", "thoughtSignature": "SIG-TEXT"}],
+                    },
+                }
+            ]
+        }
+        events = cast(list[Any], self.converter.stream_response_from_provider(chunk))
+        assert [e["type"] for e in events] == ["text_delta", "reasoning_delta"]
+        assert events[0]["text"] == "3 r's"
+        assert events[0].get("signature") is None
+        assert events[1]["reasoning"] == ""
+        assert events[1]["signature"] == "SIG-TEXT"
