@@ -8,7 +8,7 @@ converter maps them to TypeSafe's per-type criteria shapes.
 import pytest
 
 from llm_rosetta.converters.base.context import ConversionContext
-from llm_rosetta.converters.decision.typesafe import TypeSafeDecisionConverter
+from llm_rosetta.converters.decision.systemone import SystemOneDecisionConverter
 
 # ============================================================================
 # Wire format fixtures (TypeSafe native)
@@ -120,7 +120,7 @@ IR_RESPONSE = {
 
 @pytest.fixture
 def converter():
-    return TypeSafeDecisionConverter()
+    return SystemOneDecisionConverter()
 
 
 class TestRequestFromProvider:
@@ -304,7 +304,7 @@ class TestEdgeCases:
         assert wire["state"] == ["alpha", "beta"]
 
     def test_converter_tag(self, converter):
-        assert converter._CONVERTER_TAG == "typesafe_decision"
+        assert converter._CONVERTER_TAG == "systemone"
 
 
 class TestMultimodal:

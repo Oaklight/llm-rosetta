@@ -222,7 +222,7 @@ class TestDecisionDescriptor:
     def test_decision_formats(self) -> None:
         desc = get_model_type("decision")
         assert desc is not None
-        assert "typesafe" in desc.formats
+        assert "systemone" in desc.formats
         assert "openai_decisions" in desc.formats
 
     def test_decision_no_streaming(self) -> None:

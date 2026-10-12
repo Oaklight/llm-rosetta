@@ -35,9 +35,9 @@ def _detect_decision_source_format(
 
     Detection order:
     1. ``/v1/decisions`` path → OpenAI Decisions
-    2. ``/v1/systemone`` path → TypeSafe System One
+    2. ``/v1/systemone`` path → System One
     3. OpenAI-shaped body (``input`` + list ``questions``) → OpenAI Decisions
-    4. System One-shaped body (``state`` + map ``questions``) → TypeSafe
+    4. System One-shaped body (``state`` + map ``questions``) → System One
     5. Fall back to ``config.default_decision_format``
 
     The canonical ``/v1/decision`` route predates both conventions, so it falls
@@ -47,12 +47,12 @@ def _detect_decision_source_format(
     if path == "/v1/decisions":
         return "openai_decisions"
     if path == "/v1/systemone":
-        return "typesafe"
+        return "systemone"
     questions = body.get("questions")
     if "input" in body and isinstance(questions, list):
         return "openai_decisions"
     if "state" in body and isinstance(questions, dict):
-        return "typesafe"
+        return "systemone"
     return config.default_decision_format
 
 

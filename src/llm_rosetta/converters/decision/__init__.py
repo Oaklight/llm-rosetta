@@ -14,7 +14,7 @@ from .pipeline import (
     get_decision_converter,
 )
 from .reranker import RerankerDecisionConverter
-from .typesafe import TypeSafeDecisionConverter
+from .systemone import SystemOneDecisionConverter
 
 __all__ = [
     "DECISION_FORMATS",
@@ -23,6 +23,6 @@ __all__ = [
     "LLMChatDecisionConverter",
     "OpenAIDecisionsConverter",
     "RerankerDecisionConverter",
-    "TypeSafeDecisionConverter",
+    "SystemOneDecisionConverter",
     "get_decision_converter",
 ]

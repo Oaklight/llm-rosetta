@@ -1,5 +1,5 @@
 """
-LLM-Rosetta - TypeSafe Decision Converter
+LLM-Rosetta - System One Decision Converter
 
 TypeSafe System One (Jev) API 的 decision 转换器
 Decision converter for the TypeSafe System One (Jev) API
@@ -40,10 +40,10 @@ _IR_TO_WIRE_TYPE = {"assertion": "noul", "choice": "choice", "score": "score"}
 _WIRE_TO_IR_TYPE = {"noul": "assertion", "choice": "choice", "score": "score"}
 
 
-class TypeSafeDecisionConverter(BaseDecisionConverter):
+class SystemOneDecisionConverter(BaseDecisionConverter):
     """Converter for the TypeSafe System One (Jev) API."""
 
-    _CONVERTER_TAG = "typesafe_decision"
+    _CONVERTER_TAG = "systemone"
 
     # ==================== Request conversion ====================
 

@@ -64,7 +64,7 @@ with calibrated probabilities.
 
 | Converter | API Standard | Module |
 |-----------|-------------|--------|
-| `typesafe_decision` | TypeSafe System One (Jev) | `converters/decision/` |
+| `systemone` | System One (Jev / TypeSafe) | `converters/decision/` |
 | `openai_decisions` | OpenAI Decisions API | `converters/decision/` |
 
 IR question types: `assertion` (a proposition → P(true) ∈ [0,1]),

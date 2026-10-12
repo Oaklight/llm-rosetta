@@ -10,7 +10,7 @@ def _req(path: str = "") -> SimpleNamespace:
     return SimpleNamespace(path=path)
 
 
-_CFG = GatewayConfig({"default_decision_format": "typesafe"})
+_CFG = GatewayConfig({"default_decision_format": "systemone"})
 
 
 class TestDetectDecisionSourceFormat:
@@ -20,10 +20,10 @@ class TestDetectDecisionSourceFormat:
             == "openai_decisions"
         )
 
-    def test_path_v1_systemone_is_typesafe(self):
+    def test_path_v1_systemone_is_systemone(self):
         assert (
             _detect_decision_source_format(_req("/v1/systemone"), {}, _CFG)
-            == "typesafe"
+            == "systemone"
         )
 
     def test_openai_body_on_canonical_route(self):
@@ -40,7 +40,7 @@ class TestDetectDecisionSourceFormat:
         body = {"state": "x", "questions": {"q": {"type": "noul", "instructions": "i"}}}
         assert (
             _detect_decision_source_format(_req("/v1/decision"), body, _CFG)
-            == "typesafe"
+            == "systemone"
         )
 
     def test_falls_back_to_configured_default(self):
@@ -53,5 +53,5 @@ class TestDetectDecisionSourceFormat:
     def test_related_prefix_is_not_matched(self):
         assert (
             _detect_decision_source_format(_req("/v1/decisionsXYZ"), {}, _CFG)
-            == "typesafe"
+            == "systemone"
         )

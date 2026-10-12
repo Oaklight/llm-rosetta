@@ -24,7 +24,7 @@ from .decision import (
     EmbeddingDecisionConverter,
     LLMChatDecisionConverter,
     RerankerDecisionConverter,
-    TypeSafeDecisionConverter,
+    SystemOneDecisionConverter,
 )
 from .rerank import CohereRerankConverter, JinaRerankConverter, VoyageRerankConverter
 
@@ -49,7 +49,7 @@ __all__ = [
     "JinaRerankConverter",
     "CohereRerankConverter",
     "VoyageRerankConverter",
-    "TypeSafeDecisionConverter",
+    "SystemOneDecisionConverter",
     "LLMChatDecisionConverter",
     "RerankerDecisionConverter",
     "EmbeddingDecisionConverter",

@@ -146,7 +146,7 @@ class LLMChatDecisionConverter(BaseDecisionConverter):
     ) -> IRDecisionRequest:
         raise NotImplementedError(
             "LLMChatDecisionConverter does not support chat → IR request "
-            "conversion. Use TypeSafeDecisionConverter for native format."
+            "conversion. Use SystemOneDecisionConverter for native format."
         )
 
     # ==================== Response conversion ====================

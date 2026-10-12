@@ -539,7 +539,7 @@ class GatewayConfig:
             if provider_name in self.decision_providers:
                 self.decision_models.setdefault(model_name, provider_name)
         self.default_decision_format: str = raw.get(
-            "default_decision_format", "typesafe"
+            "default_decision_format", "systemone"
         )
 
         # --- Extract type-tagged models from unified models pool ---
