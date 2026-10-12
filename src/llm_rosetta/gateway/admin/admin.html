@@ -817,13 +817,30 @@
     <!-- LLM Endpoint panel -->
     <div class="endpoint-section" id="provLlmSection">
       <div class="section-label"><span class="dot dot-llm"></span> <span data-i18n="label.llmEndpoint">LLM Endpoint</span></div>
-      <div class="form-group">
-        <label data-i18n="label.providerType">Provider Type</label>
-        <div class="type-logo-wrapper">
-          <img id="provTypeLogo" class="type-logo-preview" src="" alt="" style="display:none">
-          <select id="provType"></select>
+      <div class="form-row" style="display:flex;gap:8px;align-items:flex-end">
+        <div class="form-group" style="flex:1;min-width:0">
+          <label data-i18n="label.topLevel">Top Level</label>
+          <div class="type-picker" id="typePickerWrapper">
+            <button type="button" id="typePickerTrigger" class="type-picker-trigger">
+              <img id="provTypeLogo" class="type-picker-logo" src="" alt="" style="display:none" onerror="this.style.display='none'">
+              <span id="typePickerLabel" class="tp-trigger-label tp-placeholder"></span>
+              <svg class="type-picker-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="type-picker-dropdown" id="typePickerDropdown">
+              <div class="tp-view-toggle" role="tablist">
+                <button type="button" data-view="top" role="tab" aria-selected="true" data-i18n="label.typeViewTop">Top level</button>
+                <button type="button" data-view="tree" role="tab" aria-selected="false" data-i18n="label.typeViewTree">Tree</button>
+              </div>
+              <div class="tp-list" id="typePickerList" role="listbox"></div>
+            </div>
+          </div>
+        </div>
+        <div class="form-group" style="flex:0 0 38%;min-width:0">
+          <label data-i18n="label.baseType">Base Type</label>
+          <select id="provBaseType"></select>
         </div>
       </div>
+      <input type="hidden" id="provType">
       <div class="form-group">
         <label data-i18n="label.urlTemplate">URL Template <span style="font-weight:normal;color:var(--text-dim)">(optional)</span></label>
         <input id="provUrlTemplate" placeholder="{base_url}/v1/chat/completions">

@@ -10,11 +10,81 @@ import { S, _CAP_ICONS, populateCapIcons } from '../core/state.js';
 import { t } from '../core/i18n.js';
 import { api, showToast, showToastHtml, closeModal, esc, copyText, inlineConfirm, isFreeEntry, freeEntryLabel } from '../core/utils.js';
 import { initLogoPicker, setLogoPickerValue, getLogoPickerValue } from '../components/logo-picker.js';
+import { setTypeTree, getSelectedValue, selectValue, onTypeSelect } from '../components/type-picker.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
 /** Capitalize the first letter of a string. */
 function _capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+/** The shim / base-format name a provider entry resolves to: an explicit
+ *  `shim` wins, then `type`, then the provider name.  A config that declares
+ *  `shim:` instead of `type:` arrives with `type` filled in from the provider
+ *  name (see admin/routes/config.py), so `cfg.type` alone misses it. */
+function _providerTypeName(cfg, name) {
+  return (cfg && (cfg.shim || cfg.type)) || name;
+}
+
+/** Preferred display order for base types within a top-level group. */
+const _BASE_TYPE_ORDER = [
+  'chat_completions', 'open_responses', 'messages',
+  'google_generate', 'google_interactions', 'decision',
+];
+
+/**
+ * Build the top-level → base tree for the provider-type picker.
+ *
+ * A shim name is ``vendor--base`` (``openai--chat_completions``); a shim
+ * without the separator (``moonshot``) is a group of its own whose single
+ * child is its base type.  Vendor-neutral base formats (``chat_completions``,
+ * …) become childless roots — they are their own top level.  Returns
+ * ``{roots, rootOf(value)}``.
+ */
+function buildTypeModel(registeredShims, baseFormats) {
+  const rootMap = new Map();
+  const valueRoot = new Map();
+  const _root = (rootName) => {
+    if (!rootMap.has(rootName))
+      rootMap.set(rootName, { name: rootName, label: rootName, logo: '', defaultValue: rootName, children: [] });
+    return rootMap.get(rootName);
+  };
+
+  for (const s of registeredShims) {
+    const sep = s.name.indexOf('--');
+    const root = _root(sep === -1 ? s.name : s.name.slice(0, sep));
+    // Without a separator the shim *is* the top level, so its child label is
+    // its base type; with one, the segment after `--` is the label (usually
+    // the base type, but e.g. `alcf--metis` names a deployment instead).
+    root.children.push({
+      value: s.name,
+      label: sep === -1 ? s.base : s.name.slice(sep + 2),
+      base: s.base,
+    });
+    if (s.logo) root.logo = s.logo;
+    if (s.display_name) root.label = s.display_name;
+    valueRoot.set(s.name, root);
+  }
+  for (const f of baseFormats) {
+    valueRoot.set(f.name, _root(f.name));
+  }
+
+  const roots = [...rootMap.values()];
+  for (const root of roots) {
+    // Unknown base types (a base added upstream, or a non-chat one like
+    // `decision`) rank last instead of first.
+    const rank = (b) => {
+      const i = _BASE_TYPE_ORDER.indexOf(b);
+      return i === -1 ? _BASE_TYPE_ORDER.length : i;
+    };
+    root.children.sort((a, b) => {
+      const d = rank(a.base) - rank(b.base);
+      return d !== 0 ? d : a.label.localeCompare(b.label);
+    });
+    if (root.children.length) root.defaultValue = root.children[0].value;
+  }
+  roots.sort((a, b) => a.name.localeCompare(b.name));
+  return { roots, rootOf: (v) => valueRoot.get(v) };
+}
 
 /** Render a provider type's vendor hints as input *placeholders*.
  *
@@ -130,44 +200,35 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
     [...baseFormats, ...registeredShims].map(s => [s.name, s])
   );
 
-  // Populate Provider Type dropdown: base formats first, then providers.
-  const typeSel = document.getElementById('provType');
-  typeSel.innerHTML = '<option value="">' + t('label.selectOne', '— select —') + '</option>';
-  const groups = [
-    [t('label.baseFormats'), baseFormats],
-    [t('label.providerShims'), registeredShims],
-  ];
-  for (const [label, items] of groups) {
-    if (!items.length) continue;
-    const og = document.createElement('optgroup');
-    og.label = label;
-    for (const s of items) {
-      const opt = document.createElement('option');
-      opt.value = s.name;
-      opt.textContent = s.name;
-      if (s.name === provType) opt.selected = true;
-      og.appendChild(opt);
-    }
-    typeSel.appendChild(og);
-  }
+  const typeModel = buildTypeModel(registeredShims, baseFormats);
 
-  // Update the logo preview beside the dropdown
-  function _updateTypeLogo() {
-    const logo = document.getElementById('provTypeLogo');
-    const s = shimMap[typeSel.value];
-    if (s && s.logo) { logo.src = s.logo; logo.style.display = ''; }
-    else { logo.src = ''; logo.style.display = 'none'; }
+  // Sync the Base type dropdown to the shims reachable under *root*.
+  function _syncBaseTypeDropdown(root, value) {
+    const baseSel = document.getElementById('provBaseType');
+    if (!root) {
+      // No top level chosen yet (e.g. Add Provider) — say so instead of
+      // rendering a blank, disabled control.
+      baseSel.innerHTML = `<option value="">${esc(t('label.pickTopLevelFirst', '— pick a top level first —'))}</option>`;
+      baseSel.disabled = true;
+      return;
+    }
+    const opts = root.children.length ? root.children : [{ value: root.name, label: root.name }];
+    baseSel.innerHTML = opts.map(c => {
+      const label = c.base && c.label !== c.base ? `${c.label} · ${c.base}` : c.label;
+      return `<option value="${esc(c.value)}">${esc(label)}</option>`;
+    }).join('');
+    baseSel.value = value;
+    baseSel.disabled = opts.length <= 1;
   }
-  _updateTypeLogo();
 
   // Auto-fill base URL / API key *values* from a vendor shim's connection
   // defaults; a bare base format instead surfaces a vendor hint as the input
   // placeholder (never a value) — see _applyTypePlaceholders.
   let _prevShimUrl = (shimMap[provType || ''] || {}).default_base_url || '';
-  typeSel.onchange = () => {
-    _updateTypeLogo();
+  function _applyType(value) {
+    _syncBaseTypeDropdown(typeModel.rootOf(value), value);
     _syncKeylessUI();
-    const s = shimMap[typeSel.value];
+    const s = shimMap[value];
     if (!s) return;
     const urlInput = document.getElementById('provBaseUrl');
     const cur = urlInput.value.trim();
@@ -190,7 +251,12 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
     if (!provCfg || !('preflight_token_count' in provCfg)) {
       document.getElementById('provPreflightTokens').checked = false;
     }
-  };
+  }
+
+  // The rich Top-level dropdown and the plain Base type dropdown drive one value.
+  setTypeTree(typeModel.roots, provType || '');
+  onTypeSelect(_applyType);
+  document.getElementById('provBaseType').onchange = function () { selectValue(this.value); };
 
   document.getElementById('provBaseUrl').value = baseUrl || '';
   const keyInput = document.getElementById('provApiKey');
@@ -211,7 +277,8 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
   }
   // Vendor hint placeholders for the initially selected type.  Preserve the
   // "leave blank to keep current key" hint when editing a stored key.
-  _applyTypePlaceholders(shimMap[typeSel.value], {
+  _syncBaseTypeDropdown(typeModel.rootOf(getSelectedValue()), getSelectedValue());
+  _applyTypePlaceholders(shimMap[getSelectedValue()] || {}, {
     preserveKeyHint: !S._credentialVisible && !!name,
   });
   document.getElementById('provProxy').value = proxy || '';
@@ -225,7 +292,7 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
   if (provCfg && 'supports_custom_tools' in provCfg) {
     customToolsCb.checked = !!provCfg.supports_custom_tools;
   } else {
-    const shimDefault = (shimMap[provType || ''] || {}).supports_custom_tools;
+    const shimDefault = (shimMap[getSelectedValue()] || {}).supports_custom_tools;
     customToolsCb.checked = !!shimDefault;
   }
   // Hoist system messages checkbox: config value > shim default
@@ -233,7 +300,7 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
   if (provCfg && 'hoist_system_messages' in provCfg) {
     hoistCb.checked = !!provCfg.hoist_system_messages;
   } else {
-    const shimHoist = (shimMap[provType || '' ] || {}).hoist_system_messages;
+    const shimHoist = (shimMap[getSelectedValue()] || {}).hoist_system_messages;
     hoistCb.checked = shimHoist !== false;
   }
   // Preflight token count checkbox: config value only (no shim default)
@@ -243,7 +310,8 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
   document.getElementById('provTimeout').placeholder = (S.configData.server && S.configData.server.upstream_timeout) || 300;
   const maxToolDescEl = document.getElementById('provMaxToolDescLen');
   maxToolDescEl.value = (provCfg && provCfg.max_tool_description_length != null) ? provCfg.max_tool_description_length : '';
-  maxToolDescEl.placeholder = (shimMap[provType] && shimMap[provType].max_tool_description_length) || '';
+  const _selShim = shimMap[getSelectedValue()] || {};
+  maxToolDescEl.placeholder = _selShim.max_tool_description_length || '';
   document.getElementById('provModelsPath').value = (provCfg && provCfg.models_path) || '';
   setLogoPickerValue((provCfg && provCfg.logo) || '');
   if (window._detectedHostIp) document.getElementById('provProxy').placeholder = `e.g. http://${window._detectedHostIp}:7890`;
@@ -588,7 +656,8 @@ function _getProviderCaps(cfg, provName) {
   // registry holds converter shims only, so embedding/rerank providers like
   // voyage or jina carry a `type` that isn't in it.
   const llmShims = (S.configData && S.configData.registered_shims) || [];
-  const typeIsLlmShim = !!cfg.type && llmShims.some(s => s.name === cfg.type);
+  const cfgType = _providerTypeName(cfg, provName);
+  const typeIsLlmShim = !!cfgType && llmShims.some(s => s.name === cfgType);
   if (hasLlmModels || typeIsLlmShim || cfg.url_template || cfg.stream_url_template || !hasNonLlmCap) caps.unshift('llm');
   if (caps.length === 0) caps.push('llm');
   return caps;
@@ -672,7 +741,7 @@ function renderProviders() {
   let entries = allEntries;
   if (query) {
     entries = entries.filter(([name, cfg]) => {
-      const typeName = cfg.type || name;
+      const typeName = _providerTypeName(cfg, name);
       return name.toLowerCase().includes(query) ||
         typeName.toLowerCase().includes(query) ||
         (cfg.base_url || '').toLowerCase().includes(query);
@@ -707,12 +776,17 @@ function renderProviders() {
   grid.innerHTML = '';
   const cardHtml = ([name, cfg]) => {
     const enabled = cfg.enabled !== false;
-    const typeName = cfg.type || name;
+    const typeName = _providerTypeName(cfg, name);
     const logo = cfg.logo || shimLogo[name] || shimLogo[typeName] || '';
     const logoHtml = logo
       ? `<img class="pc-logo" src="${esc(logo)}" alt="">`
       : '<span class="pc-logo pc-logo-empty"></span>';
     const shim = shimDefaults[typeName] || {};
+    // Base type shown as a badge beside the logo: the shim's declared base, or
+    // the type name itself when it is a bare vendor-neutral base format.
+    const baseType = shim.base || (
+      ((S.configData && S.configData.base_formats) || []).some(b => b.name === typeName)
+        ? typeName : '');
     const baseUrl = cfg.base_url || '';
     const shimBaseUrl = !baseUrl && shim.default_base_url ? shim.default_base_url : '';
     let apiKeyDisplay = cfg.api_key || '';
@@ -736,7 +810,7 @@ function renderProviders() {
     return `
     <div class="provider-card${enabled ? '' : ' disabled'}" data-provider="${esc(name)}">
       <div class="pc-head">
-        <div class="pc-name"${isFree ? ` title="${esc(t('free.disclosure'))}"` : ''}>${logoHtml}<span class="pc-name-text">${esc(title)}</span></div>
+        <div class="pc-name"${isFree ? ` title="${esc(t('free.disclosure'))}"` : ''}>${logoHtml}<span class="pc-name-text">${esc(title)}</span>${baseType ? `<span class="pc-base-badge" title="${esc(baseType)}">${esc(baseType)}</span>` : ''}</div>
         <label class="pc-toggle toggle" title="${enabled ? t('provider.enabled') : t('provider.disabled')}">
           <input type="checkbox" ${enabled ? 'checked' : ''} role="switch" aria-checked="${enabled}" aria-label="${esc(name)}" onchange="this.setAttribute('aria-checked',this.checked);toggleProvider('${esc(name)}')">
           <span class="slider"></span>
@@ -902,16 +976,16 @@ async function toggleProvider(name) {
 function editProvider(name) {
   const cfg = S.configData.providers[name] || {};
   const shims = S.configData.registered_shims || [];
-  const shim = shims.find(s => s.name === (cfg.type || name)) || {};
+  const shim = shims.find(s => s.name === _providerTypeName(cfg, name)) || {};
   const baseUrl = cfg.base_url || shim.default_base_url || '';
   const apiKey = cfg.api_key || (cfg.token_command ? 'token_command' : '') || '';
-  openProviderModal(name, baseUrl, apiKey, cfg.proxy, cfg.type);
+  openProviderModal(name, baseUrl, apiKey, cfg.proxy, _providerTypeName(cfg, name));
 }
 
 function copyProviderEntry(name) {
   const cfg = S.configData.providers[name] || {};
   // Open Add Provider modal pre-filled with non-sensitive fields; API key is intentionally omitted
-  openProviderModal('', cfg.base_url, '', cfg.proxy, cfg.type || name);
+  openProviderModal('', cfg.base_url, '', cfg.proxy, _providerTypeName(cfg, name));
 }
 
 // ── Server settings ─────────────────────────────────────────────────

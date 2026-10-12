@@ -15,6 +15,7 @@ import { loadOpsLog, switchLogView, populateOpsLogFilters } from '../tabs/ops-lo
 import { renderShimSources } from '../tabs/shims.js';
 import '../components/test-runner.js';
 import { initLogoPicker } from '../components/logo-picker.js';
+import { initTypePicker } from '../components/type-picker.js';
 
 // Disabled tabs from branding — skip data fetching for these
 const _dt = (window.__branding && window.__branding.disabled_tabs) || [];
@@ -299,6 +300,7 @@ document.addEventListener('mouseleave', (e) => {
 
 // ===================== Start =====================
 initLogoPicker();
+initTypePicker();
 setLang(S.currentLang);
 checkAuthAndInit();
 

@@ -273,9 +273,77 @@ tr:hover td { background: var(--bg-hover); }
 .view-toggle { display:inline-flex;gap:2px;margin-left:8px; }
 .view-toggle .btn { padding:4px 6px; }
 .view-toggle .btn.active { color:var(--accent);border-color:var(--accent); }
-.type-logo-wrapper { display: flex; align-items: center; gap: 8px; }
-.type-logo-wrapper select { flex: 1; }
-.type-logo-wrapper .type-logo-preview { width: 20px; height: 20px; flex-shrink: 0; }
+/* ═══ Provider type picker (Top level + Base type) ═══ */
+.type-picker { position:relative; }
+.type-picker-trigger {
+  display:flex;align-items:center;gap:8px;width:100%;min-width:0;
+  padding:8px 12px;background:var(--bg);border:1px solid var(--border);
+  border-radius:var(--radius);color:var(--text);font-size:14px;
+  font-family:var(--mono);cursor:pointer;text-align:left;
+}
+.type-picker-trigger:hover { border-color:var(--text-dim); }
+.type-picker-trigger:focus { outline:none;border-color:var(--accent); }
+.type-picker-logo { width:18px;height:18px;flex-shrink:0;object-fit:contain;border-radius:2px; }
+.tp-trigger-label { flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.tp-trigger-label.tp-placeholder { color:var(--text-muted); }
+.type-picker-chevron { flex-shrink:0;color:var(--text-dim); }
+.type-picker-dropdown {
+  display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;
+  background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);
+  box-shadow:0 8px 24px rgba(0,0,0,0.15);z-index:60;max-height:340px;overflow-y:auto;
+}
+.type-picker-dropdown.open { display:block; }
+/* Flipped above the trigger when the modal's scroll box leaves too little
+   room below (see _positionPanel). */
+.type-picker-dropdown.tp-flip-up { top:auto;bottom:calc(100% + 4px); }
+.type-picker-dropdown::-webkit-scrollbar { width:6px; }
+.type-picker-dropdown::-webkit-scrollbar-track { background:transparent; }
+.type-picker-dropdown::-webkit-scrollbar-thumb { background:var(--border);border-radius:3px; }
+.tp-view-toggle {
+  display:flex;gap:2px;padding:4px;position:sticky;top:0;z-index:1;
+  background:var(--bg-card);border-bottom:1px solid var(--border);
+}
+.tp-view-toggle button {
+  flex:1;padding:4px 8px;font-size:11px;border:1px solid transparent;border-radius:4px;
+  background:none;color:var(--text-dim);cursor:pointer;font-family:inherit;
+}
+.tp-view-toggle button:hover { background:var(--bg-hover); }
+.tp-view-toggle button.active {
+  background:color-mix(in srgb, var(--accent) 12%, transparent);
+  color:var(--accent);font-weight:600;
+}
+.tp-list { padding:4px; }
+.tp-item {
+  display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:4px;
+  cursor:pointer;font-size:13px;color:var(--text);min-width:0;
+}
+.tp-item:hover { background:var(--bg-hover); }
+.tp-item:focus { outline:none;background:var(--bg-hover);box-shadow:inset 0 0 0 1px var(--accent); }
+.tp-item.tp-active { background:color-mix(in srgb, var(--accent) 12%, transparent);color:var(--accent);font-weight:500; }
+.tp-logo { width:16px;height:16px;flex-shrink:0;object-fit:contain;border-radius:2px; }
+.tp-logo-empty { border:1px dashed var(--border);border-radius:3px; }
+.tp-name { overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.tp-child { padding-left:22px;font-size:12px;color:var(--text-dim); }
+.tp-child .tp-name { color:var(--text); }
+.tp-guide { flex-shrink:0;font-family:var(--mono);color:var(--border); }
+.tp-base { margin-left:2px;font-size:11px;color:var(--text-muted);font-family:var(--mono); }
+.tp-empty { padding:14px 10px;font-size:13px;color:var(--text-dim);text-align:center; }
+/* Dark mode: seat logo images on a light chip rather than inverting them —
+   inverting keeps monochrome vendor marks legible but shifts full-colour
+   logos (e.g. alcf) to wrong hues. */
+[data-mode="dark"] .pc-logo:not(.pc-logo-empty),
+[data-mode="dark"] .type-picker-logo,
+[data-mode="dark"] .tp-logo:not(.tp-logo-empty) {
+  background:#fff;border-radius:4px;padding:1px;box-sizing:content-box;
+}
+
+/* Base-type badge on the provider card (beside the logo) */
+.pc-base-badge {
+  flex-shrink:0;margin-left:4px;padding:1px 6px;border-radius:999px;
+  font-size:9.5px;font-weight:500;font-family:var(--mono);
+  background:var(--bg);border:1px solid var(--border);color:var(--text-dim);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:16em;
+}
 .toggle { position:relative;display:inline-block;width:36px;height:20px; }
 .toggle input { opacity:0;width:0;height:0; }
 .toggle .slider { position:absolute;cursor:pointer;inset:0;background:var(--border);border-radius:20px;transition:.2s; }
@@ -691,8 +759,7 @@ body { padding-bottom: 26px; }
 .provider-card.health-warn     { border-left: 3px solid var(--yellow, #eab308); }
 .provider-card.health-critical { border-left: 3px solid var(--red, #ef4444); }
 
-/* Invert dark provider logos in dark mode for visibility */
-[data-mode="dark"] .pc-logo { filter: invert(1); }
+/* Dark-mode logo treatment lives with the type-picker block above (light chip). */
 
 /* ── Routing loop warning banner ── */
 .loop-warning-banner {
