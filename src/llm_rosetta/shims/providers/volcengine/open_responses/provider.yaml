@@ -13,12 +13,17 @@ reasoning:
     disabled: disabled
   effort_field: reasoning.effort
   effort_range: [minimal, max]
-# OpenAI Responses profile: extra lifecycle/echo fields + server-side
-# storage default (the vendor-neutral spec omits both).
-preserve_fields:
-  - access_programs
-  - billing
-  - content_filters
-  - moderation
-  - tool_usage
+# Volcengine returns "resp_"-prefixed response ids, so the prefix is stripped
+# on the way in and re-added on the way out.  Verified live 2026-10-12 (#899).
+response_id_prefix: "resp_"
+
+# ARK is the one provider outside OpenAI where `store_default: true` is
+# correct: omitting `store` on the wire yields `store: true` in the response,
+# `store: true` echoes true, and `store: false` echoes false.  It genuinely
+# defaults to server-side storage and honors the field.  Verified live
+# 2026-10-12 (#899).
 store_default: true
+
+# ARK emits none of the OpenAI lifecycle fields (`access_programs`, `billing`,
+# `content_filters`, `moderation`, `tool_usage`), so there is nothing to
+# preserve.  Verified live 2026-10-12 (#899).

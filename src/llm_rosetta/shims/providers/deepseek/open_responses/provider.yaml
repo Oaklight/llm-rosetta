@@ -11,12 +11,9 @@ reasoning:
     disabled: disabled
   effort_field: reasoning.effort
   effort_range: [low, max]
-# OpenAI Responses profile: extra lifecycle/echo fields + server-side
-# storage default (the vendor-neutral spec omits both).
-preserve_fields:
-  - access_programs
-  - billing
-  - content_filters
-  - moderation
-  - tool_usage
-store_default: true
+# DeepSeek's /responses endpoint is stateless: it ignores a requested
+# ``store: true`` and always reports ``store: false``, so it declares no
+# ``store_default``.  Its response id is a bare UUID (no ``resp_`` prefix).
+# Of the OpenAI lifecycle fields it emits only ``content_filters`` and
+# ``moderation``, both always null, and nulls are never captured as echo, so
+# neither profile trait applies.  Verified live 2026-10-12 (see #899).

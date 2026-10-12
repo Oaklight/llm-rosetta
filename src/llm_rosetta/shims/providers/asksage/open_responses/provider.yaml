@@ -5,12 +5,26 @@ connection:
   base_url: https://api.asksage.ai/server/openai/v1
   api_key_env: ASKSAGE_API_KEY
 
-# OpenAI Responses profile: extra lifecycle/echo fields + server-side
-# storage default (the vendor-neutral spec omits both).
+# AskSage returns "resp_"-prefixed response ids on every model tested, so the
+# prefix is stripped on the way in and re-added on the way out.
+response_id_prefix: "resp_"
+
+# Verified live 2026-10-12 (see #899), against the ANL deployment.  The
+# Responses surface varies by model, so this is the union of what was
+# observed rather than one model's shape:
+#   gpt-4.1 / gpt-4.1-mini -> content_filters, tool_usage
+#   aws-bedrock-gemma-4-*  -> billing ({"payer": ...})
+#   aws-bedrock-gpt-oss-*  -> none of them
+# `access_programs` and `moderation` never carried a value.  AskSage ignores a
+# requested `store` (it reports `false` on some models and omits the field on
+# others), so it declares no `store_default`.
+#
+# Host note: this base_url serves /models with an API key, but inference needs
+# an access token from `POST /user/get-token-with-api-key` and, for an ANL
+# account, a base of `https://api.asksage.anl.gov/server/openai/v1` — the
+# token is rejected by `api.asksage.ai`. Point `base_url` at the ANL host for
+# an ANL account.
 preserve_fields:
-  - access_programs
   - billing
   - content_filters
-  - moderation
   - tool_usage
-store_default: true

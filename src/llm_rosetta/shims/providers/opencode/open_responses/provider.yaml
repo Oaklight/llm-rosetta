@@ -13,13 +13,14 @@ connection:
   models_path: https://opencode.ai/zen/go/v1/models
   session_header: x-opencode-session
 
-# OpenAI Responses profile: extra lifecycle/echo fields + server-side storage
-# default (the vendor-neutral spec omits both).  OpenCode fronts OpenAI models
-# here, so it echoes the same lifecycle fields the asksage shim preserves.
-preserve_fields:
-  - access_programs
-  - billing
-  - content_filters
-  - moderation
-  - tool_usage
-store_default: true
+# No OpenAI profile traits, verified live 2026-10-12 (see #899).  OpenCode is
+# a multi-vendor proxy, so its Responses surface is not uniform across models:
+#
+#   gpt-5.6-luna      -> id "resp_02db..."   (OpenAI-style prefix)
+#   deepseek-v4-flash -> id "48289bda-..."   (bare UUID)
+#
+# Neither model echoes a ``store`` field, and of the OpenAI lifecycle fields
+# only ``moderation`` appears, always null.  A single shim-level trait set
+# cannot describe both models, so none is declared here: ``store_default: true``
+# would fabricate a field the upstream never returns, and a shim-level
+# ``response_id_prefix`` would have to be wrong for one of the two families.

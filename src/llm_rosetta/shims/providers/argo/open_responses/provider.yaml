@@ -20,12 +20,17 @@ soft_error_patterns:
       ARGO authentication error: the upstream ARGO gateway rejected the
       request. Verify your username and API key configuration.
 
-# OpenAI Responses profile: extra lifecycle/echo fields + server-side
-# storage default (the vendor-neutral spec omits both).
+# ARGO returns "resp_"-prefixed response ids, so the prefix is stripped on the
+# way in and re-added on the way out.  Verified live 2026-10-12 (see #899).
+response_id_prefix: "resp_"
+
+# Echo fields ARGO actually populates, verified live 2026-10-12 (see #899):
+# ``content_filters`` carries per-source filter results and ``tool_usage``
+# counts image-gen and search calls.  ``access_programs``, ``billing`` and
+# ``moderation`` come back present but always null, and nulls are never
+# captured as echo, so they are not declared.  ARGO ignores a requested
+# ``store`` and always reports ``store: false``, so it declares no
+# ``store_default`` either.
 preserve_fields:
-  - access_programs
-  - billing
   - content_filters
-  - moderation
   - tool_usage
-store_default: true

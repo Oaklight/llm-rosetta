@@ -379,6 +379,169 @@ class TestBuiltinShims:
 
 
 # ---------------------------------------------------------------------------
+# Responses profile traits (#899)
+# ---------------------------------------------------------------------------
+
+
+class TestResponsesProfileTraits:
+    """OpenAI-profile traits must match what the upstream actually does.
+
+    ``open_responses`` is the vendor-neutral base; the OpenAI profile is
+    opt-in through ``response_id_prefix``, ``store_default`` and
+    ``preserve_fields``.  #909's collapse added the OpenAI block to every
+    Responses shim wholesale, so these tests pin the values that were verified
+    against the live endpoint (see #899).
+    """
+
+    @pytest.fixture(autouse=True)
+    def _load_builtins(self):
+        from llm_rosetta.shims.providers import load_providers
+
+        load_providers()
+
+    def test_openai_declares_the_full_profile(self):
+        """The reference profile: ``resp_`` ids and server-side storage."""
+        shim = get_shim("openai--open_responses")
+        assert shim is not None
+        assert shim.response_id_prefix == "resp_"
+        assert shim.store_default is True
+        assert set(shim.preserve_fields) >= {"billing", "tool_usage"}
+
+    def test_deepseek_declares_no_profile_traits(self):
+        """DeepSeek ignores ``store: true`` and returns a bare UUID id."""
+        shim = get_shim("deepseek--open_responses")
+        assert shim is not None
+        assert shim.response_id_prefix == ""
+        assert shim.store_default is None
+        assert shim.preserve_fields == ()
+
+    def test_opencode_declares_no_profile_traits(self):
+        """OpenCode's Responses surface differs per routed model."""
+        shim = get_shim("opencode--open_responses")
+        assert shim is not None
+        assert shim.response_id_prefix == ""
+        assert shim.store_default is None
+        assert shim.preserve_fields == ()
+
+    def test_argo_declares_prefix_and_only_populated_fields(self):
+        """ARGO returns ``resp_`` ids and populates two echo fields."""
+        shim = get_shim("argo--open_responses")
+        assert shim is not None
+        assert shim.response_id_prefix == "resp_"
+        assert shim.store_default is None
+        assert set(shim.preserve_fields) == {"content_filters", "tool_usage"}
+
+    def test_asksage_declares_prefix_and_observed_fields(self):
+        """AskSage returns ``resp_`` ids; its echo fields vary by model."""
+        shim = get_shim("asksage--open_responses")
+        assert shim is not None
+        assert shim.response_id_prefix == "resp_"
+        assert shim.store_default is None
+        assert set(shim.preserve_fields) == {
+            "billing",
+            "content_filters",
+            "tool_usage",
+        }
+
+    def test_volcengine_keeps_store_and_gains_prefix(self):
+        """ARK is the one non-OpenAI shim where ``store_default: true`` holds.
+
+        Removing ``store_default`` from every shim would be wrong here: ARK
+        defaults to server-side storage and honors ``store: false`` when sent.
+        """
+        shim = get_shim("volcengine--open_responses")
+        assert shim is not None
+        assert shim.response_id_prefix == "resp_"
+        assert shim.store_default is True
+        assert shim.preserve_fields == ()
+
+    def test_openrouter_declares_no_profile_traits(self):
+        """OpenRouter rejects ``store: true`` outright with HTTP 400."""
+        shim = get_shim("openrouter--open_responses")
+        assert shim is not None
+        assert shim.response_id_prefix == ""
+        assert shim.store_default is None
+        assert shim.preserve_fields == ()
+
+
+class TestResponsesProfileTraitsBehavior:
+    """The shim traits must reach the converter's output, not just the registry.
+
+    ``shim -> pipeline ``ctx.options`` -> converter defaults`` is the indirect
+    layer #909 introduced, so a trait can be read correctly from the YAML and
+    still fail to change anything.  These tests go through the pipeline.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _load_builtins(self):
+        from llm_rosetta.shims.providers import load_providers
+
+        load_providers()
+
+    _REQUEST = {"model": "gpt-4o-mini", "input": "hi"}
+    _UPSTREAM = {
+        "id": "chatcmpl-1",
+        "object": "chat.completion",
+        "created": 1700000000,
+        "model": "gpt-4o-mini",
+        "choices": [
+            {
+                "index": 0,
+                "message": {"role": "assistant", "content": "ok"},
+                "finish_reason": "stop",
+            }
+        ],
+        "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+    }
+
+    def _convert_response(self, source: str) -> dict:
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        pipeline = ConversionPipeline(source, "chat_completions")
+        pipeline.convert_request(dict(self._REQUEST))
+        return pipeline.convert_response(dict(self._UPSTREAM))
+
+    def test_deepseek_response_omits_store(self):
+        """DeepSeek is stateless, so no response may claim server-side storage."""
+        result = self._convert_response("deepseek--open_responses")
+        assert result["object"] == "response"
+        assert "store" not in result
+
+    def test_bare_open_responses_omits_store(self):
+        result = self._convert_response("open_responses")
+        assert "store" not in result
+
+    def test_openai_profile_still_forces_store(self):
+        """The removal must not have taken the OpenAI profile with it."""
+        result = self._convert_response("openai--open_responses")
+        assert result["store"] is True
+
+    def test_volcengine_response_forces_store(self):
+        """ARK defaults to server-side storage, so it keeps the default too."""
+        result = self._convert_response("volcengine--open_responses")
+        assert result["store"] is True
+
+    def test_deepseek_converter_options_are_spec_level(self):
+        """A DeepSeek context contributes no OpenAI profile to the converter."""
+        from llm_rosetta.converters.base.context import ConversionContext
+        from llm_rosetta.converters.open_responses import OpenResponsesConverter
+
+        shim = get_shim("deepseek--open_responses")
+        assert shim is not None
+
+        ctx = ConversionContext()
+        ctx.options["preserve_fields"] = shim.preserve_fields
+        ctx.options["store_default"] = shim.store_default
+
+        converter = OpenResponsesConverter()
+        assert (
+            converter._get_preserve_fields(ctx)
+            == OpenResponsesConverter._PRESERVE_FIELDS
+        )
+        assert "store" not in converter._get_required_defaults(ctx)
+
+
+# ---------------------------------------------------------------------------
 # Integration: shim → converter
 # ---------------------------------------------------------------------------
 
