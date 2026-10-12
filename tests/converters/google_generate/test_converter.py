@@ -54,8 +54,10 @@ class TestGoogleGenerateConverter:
             ],
         }
         result, warnings = self.converter.request_to_provider(ir_request)
-        assert "system_instruction" in result
-        assert result["system_instruction"]["parts"][0]["text"] == (
+        # The SDK shape nests it in ``config`` — that is where
+        # ``google.genai``'s GenerateContentConfig declares it (#936).
+        assert "system_instruction" not in result
+        assert result["config"]["system_instruction"]["parts"][0]["text"] == (
             "You are a helpful assistant."
         )
 
@@ -72,10 +74,86 @@ class TestGoogleGenerateConverter:
             ],
         }
         result, warnings = self.converter.request_to_provider(ir_request)
-        assert "system_instruction" in result
-        assert result["system_instruction"]["parts"][0]["text"] == "Be helpful."
+        assert (
+            result["config"]["system_instruction"]["parts"][0]["text"] == "Be helpful."
+        )
         # System message should not be in contents list
         assert all(c["role"] != "system" for c in result["contents"])
+
+    def test_sdk_shape_is_exactly_generate_content_kwargs(self):
+        """The SDK dict must be splattable into ``generate_content(**body)`` (#936).
+
+        ``Models.generate_content()`` accepts only ``model``, ``contents`` and
+        ``config``.  A top-level ``system_instruction`` raised ``TypeError`` on
+        every google-genai version tested (1.0.0 → 2.29.0), which is why the
+        instruction now lives in ``config``.
+        """
+        ir_request: IRRequest = {
+            "model": "gemini-2.0-flash",
+            "messages": [{"role": "user", "content": [{"type": "text", "text": "Hi"}]}],
+            "system_instruction": [{"type": "text", "text": "Be helpful."}],
+        }
+        result, warnings = self.converter.request_to_provider(ir_request)
+        assert set(result) == {"model", "contents", "config"}
+        assert "system_instruction" not in result
+
+    def test_rest_shape_keeps_top_level_system_instruction(self):
+        """The REST wire form is unchanged by #936: top-level, and no ``config``."""
+        ir_request: IRRequest = {
+            "model": "gemini-2.0-flash",
+            "messages": [{"role": "user", "content": [{"type": "text", "text": "Hi"}]}],
+            "system_instruction": [{"type": "text", "text": "Be helpful."}],
+        }
+        result, warnings = self.converter.request_to_provider(
+            ir_request, output_format="rest"
+        )
+        assert "config" not in result
+        assert result["system_instruction"]["parts"][0]["text"] == "Be helpful."
+
+    def test_both_placements_resolve_the_same_way(self):
+        """Reading back and lifting to REST agree when a dict carries both (#936).
+
+        The converter never writes both, but a hand-built request can.  Since
+        ``config`` is the shape's authoritative location, it wins in both
+        directions — otherwise the same dict would yield one instruction via
+        ``request_from_provider`` and another on the REST wire.
+        """
+        provider_request = {
+            "model": "gemini-2.0-flash",
+            "contents": [{"role": "user", "parts": [{"text": "Hi"}]}],
+            "config": {
+                "system_instruction": {"role": "user", "parts": [{"text": "CONFIG"}]}
+            },
+            "system_instruction": {"role": "user", "parts": [{"text": "TOPLEVEL"}]},
+        }
+
+        restored = self.converter.request_from_provider(provider_request)
+        assert restored["system_instruction"] == [{"type": "text", "text": "CONFIG"}]
+
+        rest = GoogleGenerateConverter._to_rest_body(provider_request)
+        assert rest["system_instruction"]["parts"][0]["text"] == "CONFIG"
+
+    @pytest.mark.parametrize("output_format", ["sdk", "rest"])
+    def test_system_instruction_round_trips(self, output_format: str):
+        """Both shapes read their system instruction back into IR (#936).
+
+        The pipeline's fidelity shadow check builds a bare ``ConversionContext``
+        so a google target always gets the SDK shape — if
+        ``request_from_provider`` could not read it out of ``config``, that
+        check would report a silent loss.
+        """
+        ir_request: IRRequest = {
+            "model": "gemini-2.0-flash",
+            "messages": [{"role": "user", "content": [{"type": "text", "text": "Hi"}]}],
+            "system_instruction": [{"type": "text", "text": "Be helpful."}],
+        }
+        provider_request, warnings = self.converter.request_to_provider(
+            ir_request, output_format=output_format
+        )
+        restored = self.converter.request_from_provider(provider_request)
+        assert restored["system_instruction"] == [
+            {"type": "text", "text": "Be helpful."}
+        ]
 
     def test_request_with_generation_config(self):
         """Test request with generation config."""

@@ -136,15 +136,13 @@ def build_sdk_config(provider_req):
     if "stop_sequences" in config:
         config_kwargs["stop_sequences"] = config["stop_sequences"]
 
-    # System instruction
-    system_instruction = provider_req.get("system_instruction")
+    # System instruction — lives in ``config`` as a Content dict since #936, so
+    # it can be handed to the SDK as-is.
+    system_instruction = config.get("system_instruction") or provider_req.get(
+        "system_instruction"
+    )
     if system_instruction:
-        if isinstance(system_instruction, dict):
-            parts = system_instruction.get("parts", [])
-            text_parts = [p["text"] for p in parts if "text" in p]
-            config_kwargs["system_instruction"] = "\n".join(text_parts)
-        elif isinstance(system_instruction, str):
-            config_kwargs["system_instruction"] = system_instruction
+        config_kwargs["system_instruction"] = system_instruction
 
     # Tools
     if config.get("tools"):

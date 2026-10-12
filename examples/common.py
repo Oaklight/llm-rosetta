@@ -695,3 +695,122 @@ def print_stream_event(event: dict) -> None:
         print(f"\n[Finished: {reason}]")
     elif event_type == "stream_end":
         print("[Stream ended]")
+
+
+# ==================== Google SDK handoff ====================
+
+
+def build_google_sdk_config(provider_request: dict):
+    """Build a Google SDK ``GenerateContentConfig`` from a converter request.
+
+    The converter's SDK shape is ``{"model", "contents", "config"}`` — exactly
+    the ``client.models.generate_content(**args)`` keyword arguments.  ``config``
+    holds plain dicts where the SDK wants ``types.*`` objects, so tools and
+    tool_config are rebuilt here; the system instruction needs no special
+    handling (it lives inside ``config``, where ``GenerateContentConfig``
+    declares it).
+
+    Args:
+        provider_request: Provider request dict from ``request_to_provider()``.
+
+    Returns:
+        A ``GenerateContentConfig`` instance, or ``None`` if nothing to configure.
+    """
+    from google.genai import types
+
+    config = provider_request.get("config", {})
+    config_kwargs: dict = {}
+
+    # Generation params
+    for key in ("temperature", "max_output_tokens", "top_p", "top_k", "stop_sequences"):
+        if key in config:
+            config_kwargs[key] = config[key]
+
+    # System instruction — already the SDK's shape inside ``config``
+    if config.get("system_instruction"):
+        config_kwargs["system_instruction"] = config["system_instruction"]
+
+    # Tools
+    if config.get("tools"):
+        sdk_tools = []
+        for tool_group in config["tools"]:
+            func_decls = tool_group.get("function_declarations", [])
+            declarations = []
+            for fd in func_decls:
+                declarations.append(
+                    types.FunctionDeclaration(
+                        name=fd["name"],
+                        description=fd.get("description", ""),
+                        parameters=fd.get("parameters"),
+                    )
+                )
+            sdk_tools.append(types.Tool(function_declarations=declarations))
+        config_kwargs["tools"] = sdk_tools
+
+    # Tool config
+    if config.get("tool_config"):
+        tc = config["tool_config"]
+        fcc = tc.get("function_calling_config", {})
+        config_kwargs["tool_config"] = types.ToolConfig(
+            function_calling_config=types.FunctionCallingConfig(
+                mode=fcc.get("mode", "AUTO"),
+                allowed_function_names=fcc.get("allowed_function_names"),
+            )
+        )
+
+    return types.GenerateContentConfig(**config_kwargs) if config_kwargs else None
+
+
+def build_google_sdk_contents(provider_request: dict) -> list:
+    """Build Google SDK ``Content`` objects from a converter's provider request.
+
+    Args:
+        provider_request: Provider request dict from ``request_to_provider()``.
+
+    Returns:
+        List of ``google.genai.types.Content`` objects.
+    """
+    from google.genai import types
+
+    sdk_contents = []
+    for content in provider_request.get("contents", []):
+        sdk_parts = []
+        for part in content.get("parts", []):
+            if "function_call" in part:
+                fc = part["function_call"]
+                sdk_parts.append(
+                    types.Part.from_function_call(
+                        name=fc["name"], args=fc.get("args", {})
+                    )
+                )
+            elif "function_response" in part:
+                fr = part["function_response"]
+                sdk_parts.append(
+                    types.Part.from_function_response(
+                        name=fr["name"], response=fr.get("response", {})
+                    )
+                )
+            elif "inline_data" in part:
+                # Image data
+                inline = part["inline_data"]
+                sdk_parts.append(
+                    types.Part.from_bytes(
+                        data=inline["data"],
+                        mime_type=inline.get("mime_type", "image/jpeg"),
+                    )
+                )
+            elif "file_data" in part:
+                # File URI reference
+                fd = part["file_data"]
+                sdk_parts.append(
+                    types.Part.from_uri(
+                        file_uri=fd["file_uri"],
+                        mime_type=fd.get("mime_type", "image/jpeg"),
+                    )
+                )
+            elif "text" in part:
+                sdk_parts.append(types.Part.from_text(text=part["text"]))
+        sdk_contents.append(
+            types.Content(role=content.get("role", "user"), parts=sdk_parts)
+        )
+    return sdk_contents

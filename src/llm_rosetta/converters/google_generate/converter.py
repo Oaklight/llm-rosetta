@@ -106,6 +106,34 @@ def _dict_to_modality_list(details: dict[str, int]) -> list[dict[str, Any]]:
     return result
 
 
+def _resolve_system_instruction(
+    provider_request: Mapping[str, Any], config: Mapping[str, Any]
+) -> Any:
+    """Resolve a Google system instruction out of either output shape.
+
+    ``config.system_instruction`` is where the SDK shape keeps it (and where
+    ``GenerateContentConfig`` declares it); the top level is where the REST
+    shape keeps it.  Both spellings are accepted in either place, and
+    ``config`` wins when a hand-built dict carries both — that way reading the
+    instruction back into IR and lifting it onto the REST wire agree on one
+    precedence instead of resolving the same dict two different ways (#936
+    review).
+
+    Args:
+        provider_request: The provider request dict.
+        config: Its ``config`` sub-dict, already extracted and type-checked.
+
+    Returns:
+        The instruction found, or ``None`` when the request carries none.
+    """
+    return (
+        config.get("system_instruction")
+        or config.get("systemInstruction")
+        or provider_request.get("system_instruction")
+        or provider_request.get("systemInstruction")
+    )
+
+
 def _hoist_and_extract_system(
     ir_messages: list,
     ir_request: Mapping[str, Any],
@@ -276,9 +304,12 @@ class GoogleGenerateConverter(BaseConverter):
         if generation_config:
             body["generationConfig"] = generation_config
 
-        # system_instruction is already at top level from the converter
-        if "system_instruction" in sdk_request:
-            body["system_instruction"] = sdk_request["system_instruction"]
+        # system_instruction lives in ``config`` in the SDK shape; the REST wire
+        # wants it at the top level.  A top-level key is still honoured so a
+        # hand-built dict keeps working.
+        system_instruction = _resolve_system_instruction(sdk_request, config)
+        if system_instruction:
+            body["system_instruction"] = system_instruction
 
         return body
 
@@ -325,9 +356,6 @@ class GoogleGenerateConverter(BaseConverter):
         ctx.warnings.extend(msg_warnings)
         result["contents"] = contents
 
-        if system_instruction:
-            result["system_instruction"] = system_instruction
-
         # 3. Build config dict (tools written by _apply_tool_config)
         self._apply_tool_config(ir_request, result, ctx)
         config = result.setdefault("config", {})
@@ -372,6 +400,15 @@ class GoogleGenerateConverter(BaseConverter):
         # Provider extensions
         config.update(wire_extensions(ir_request))
 
+        # System instruction belongs inside ``config``: that is where
+        # ``google.genai``'s ``GenerateContentConfig`` declares it, and it makes
+        # this dict exactly the ``generate_content(model=…, contents=…,
+        # config=…)`` kwargs (see ``types/google/request_types.py``).  Written
+        # last so a provider extension cannot clobber the real value.  The REST
+        # body lifts it back to the top level in ``_to_rest_body``.
+        if system_instruction:
+            config["system_instruction"] = system_instruction
+
         if output_format == "rest":
             return self._to_rest_body(result)
 
@@ -389,10 +426,15 @@ class GoogleGenerateConverter(BaseConverter):
             "messages": [],
         }
 
+        # The SDK shape keeps tools, generation params and the system
+        # instruction inside ``config``; the REST shape keeps the instruction at
+        # the top level instead.  Both are accepted.
+        config = provider_request.get("config", {})
+        if not isinstance(config, dict):
+            config = {}
+
         # 1. System instruction
-        system_instruction = provider_request.get(
-            "system_instruction"
-        ) or provider_request.get("systemInstruction")
+        system_instruction = _resolve_system_instruction(provider_request, config)
         if system_instruction:
             parsed = self._parse_system_instruction(system_instruction)
             if parsed:
@@ -406,10 +448,7 @@ class GoogleGenerateConverter(BaseConverter):
         # 3. Config fields
         # Support both SDK format (tools/tool_config inside "config" dict)
         # and REST format (tools/tool_config at top level, generation params
-        # inside "generationConfig").
-        config = provider_request.get("config", {})
-        if not isinstance(config, dict):
-            config = {}
+        # inside "generationConfig").  ``config`` was extracted above.
 
         # Tools — check SDK config first, then REST top-level (with cache)
         tools = config.get("tools") or provider_request.get("tools")

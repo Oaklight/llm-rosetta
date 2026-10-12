@@ -91,10 +91,15 @@ def call_api(provider_req: dict, max_retries: int = 3) -> dict:
     # Build REST API request body from converter output
     request_body = {"contents": provider_req.get("contents", [])}
 
-    if "system_instruction" in provider_req:
-        request_body["system_instruction"] = provider_req["system_instruction"]
-
     config = provider_req.get("config", {})
+    # The instruction sits in ``config`` in the SDK shape (#936); the REST wire
+    # wants it at the top level.
+    system_instruction = config.get("system_instruction") or provider_req.get(
+        "system_instruction"
+    )
+    if system_instruction:
+        request_body["system_instruction"] = system_instruction
+
     if config.get("tools"):
         request_body["tools"] = config["tools"]
     if config.get("tool_config"):

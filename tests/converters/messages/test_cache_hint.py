@@ -665,8 +665,9 @@ class TestCrossFormatSystemCacheHint:
         ir = anthropic_converter.request_from_provider(provider_request)
         result, warnings = google_converter.request_to_provider(ir)
 
-        # Google system_instruction should be structured but without cache_control
-        system_inst = result.get("system_instruction")
+        # Google system_instruction should be structured but without
+        # cache_control (the SDK shape nests it inside ``config``, #936)
+        system_inst = result.get("config", {}).get("system_instruction")
         assert system_inst is not None
         # Should contain the text, flattened
         system_text = str(system_inst)
