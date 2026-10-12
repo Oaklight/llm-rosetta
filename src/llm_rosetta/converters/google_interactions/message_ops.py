@@ -119,7 +119,19 @@ class GoogleInteractionsMessageOps(BaseMessageOps):
     # ── IR Messages → Steps ────────────────────────────────────────
 
     def ir_messages_to_p_steps(self, messages: list | Sequence) -> list[dict]:
-        """Convert IR messages to Interactions steps."""
+        """Convert IR messages to Interactions steps.
+
+        The function ``name`` required on a ``function_result`` step is
+        resolved from the ``tool_call`` parts in *messages*, so it is only
+        available on this batch path: the single-message entry points
+        (``ir_messages_to_p`` / ``ir_message_to_p``) that carry only a
+        ``function_result`` fall back to the ``call_id``.
+        """
+        # tool_call_id → tool_name, built **incrementally** while iterating so
+        # that a function_result resolves to the nearest preceding call — the
+        # same order google_generate uses. A pre-pass would be last-wins and
+        # mislabel results when a tool_call_id is re-used in a later turn (#934).
+        tool_call_index: dict[str, str] = {}
         steps: list[dict] = []
         for msg in messages:
             if not hasattr(msg, "get"):
@@ -130,9 +142,15 @@ class GoogleInteractionsMessageOps(BaseMessageOps):
             if role == "user":
                 steps.append(self._ir_user_to_step(content))
             elif role == "assistant":
+                for part in content:
+                    if part.get("type") == "tool_call":
+                        tc_id = part.get("tool_call_id")
+                        tc_name = part.get("tool_name")
+                        if tc_id and tc_name:
+                            tool_call_index[tc_id] = tc_name
                 steps.extend(self._ir_assistant_to_steps(content))
             elif role == "tool":
-                steps.extend(self._ir_tool_to_steps(content))
+                steps.extend(self._ir_tool_to_steps(content, tool_call_index))
 
         return steps
 
@@ -163,9 +181,11 @@ class GoogleInteractionsMessageOps(BaseMessageOps):
                 steps.append(self.tool_ops.ir_tool_call_to_p(part))
         return steps
 
-    def _ir_tool_to_steps(self, content: list) -> list[dict]:
+    def _ir_tool_to_steps(
+        self, content: list, tool_call_index: dict[str, str] | None = None
+    ) -> list[dict]:
         return [
-            self.tool_ops.ir_tool_result_to_p(part)
+            self.tool_ops.ir_tool_result_to_p(part, tool_call_index=tool_call_index)
             for part in content
             if part.get("type") == "tool_result"
         ]

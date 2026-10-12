@@ -1,9 +1,11 @@
 """Tests for Google Interactions tool_ops."""
 
+import pytest
+
 from llm_rosetta.converters.google_interactions.tool_ops import (
     GoogleInteractionsToolOps,
 )
-from llm_rosetta.types.ir.parts import ToolCallPart
+from llm_rosetta.types.ir.parts import ToolCallPart, ToolResultPart
 
 
 class TestToolDefinitionConversion:
@@ -277,6 +279,90 @@ class TestFunctionResultConversion:
         assert result["type"] == "function_result"
         assert result["call_id"] == "call_123"
         assert result["result"] == "42"
+
+    def test_ir_tool_result_to_provider_resolves_name(self):
+        """`name` is required by GI and resolved from tool_call_index (#934)."""
+        ir = ToolResultPart(type="tool_result", tool_call_id="call_123", result="42")
+        result = GoogleInteractionsToolOps.ir_tool_result_to_p(
+            ir, tool_call_index={"call_123": "add"}
+        )
+        assert result["type"] == "function_result"
+        assert result["name"] == "add"
+
+    def test_ir_tool_result_to_provider_unresolved_falls_back_to_call_id(self):
+        """No matching tool_call → name falls back to call_id (non-empty)."""
+        ir = ToolResultPart(type="tool_result", tool_call_id="call_orphan", result="42")
+        result = GoogleInteractionsToolOps.ir_tool_result_to_p(
+            ir, tool_call_index={"other": "fn"}
+        )
+        assert result["name"] == "call_orphan"
+
+    def test_empty_call_id_and_no_match_raises(self):
+        """An unresolvable name (empty call_id) fails loudly, not silently."""
+        ir = ToolResultPart(type="tool_result", tool_call_id="", result="3")
+        with pytest.raises(ValueError, match="no resolvable function name"):
+            GoogleInteractionsToolOps.ir_tool_result_to_p(
+                ir, tool_call_index={"other": "fn"}
+            )
+
+    def test_p_function_result_to_ir_keeps_name(self):
+        """The inbound function_result name is preserved on the IR part."""
+        step = {
+            "type": "function_result",
+            "call_id": "c1",
+            "name": "add",
+            "result": "3",
+        }
+        ir = GoogleInteractionsToolOps.p_function_result_to_ir(step)
+        assert ir["provider_metadata"]["google"]["tool_name"] == "add"
+
+    def test_stored_name_used_when_no_index_match(self):
+        """A result-only replay reuses the stored name, not the call_id."""
+        ir = GoogleInteractionsToolOps.p_function_result_to_ir(
+            {"type": "function_result", "call_id": "c1", "name": "add", "result": "3"}
+        )
+        result = GoogleInteractionsToolOps.ir_tool_result_to_p(  # ty: ignore
+            ir, tool_call_index={}
+        )
+        assert result["name"] == "add"
+
+    def test_stored_name_used_when_call_id_empty(self):
+        """A known name avoids the ValueError even with an empty call_id."""
+        ir = GoogleInteractionsToolOps.p_function_result_to_ir(
+            {"type": "function_result", "call_id": "", "name": "add", "result": "3"}
+        )
+        result = GoogleInteractionsToolOps.ir_tool_result_to_p(  # ty: ignore
+            ir, tool_call_index={}
+        )
+        assert result["name"] == "add"
+
+    def test_index_wins_over_stored_name(self):
+        """An explicit call in the batch is authoritative over a stale hint."""
+        ir = ToolResultPart(
+            type="tool_result",
+            tool_call_id="c1",
+            result="3",
+            provider_metadata={"google": {"tool_name": "stale"}},
+        )
+        result = GoogleInteractionsToolOps.ir_tool_result_to_p(  # ty: ignore
+            ir, tool_call_index={"c1": "add"}
+        )
+        assert result["name"] == "add"
+
+    def test_intrinsic_result_has_no_name(self):
+        """Intrinsic server results don't take a function name."""
+        ir = ToolResultPart(
+            type="tool_result",
+            tool_call_id="c1",
+            result="ok",
+            tool_type="intrinsic",
+            provider_metadata={"intrinsic_kind": "google_search"},
+        )
+        result = GoogleInteractionsToolOps.ir_tool_result_to_p(
+            ir, tool_call_index={"c1": "add"}
+        )
+        assert result["type"] == "google_search_result"
+        assert "name" not in result
 
     def test_roundtrip_function_result(self):
         ir = {

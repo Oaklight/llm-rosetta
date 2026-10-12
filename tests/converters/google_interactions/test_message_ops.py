@@ -230,6 +230,91 @@ class TestIRMessagesToSteps:
         assert steps[0]["type"] == "function_result"
         assert steps[0]["call_id"] == "c1"
 
+    def test_tool_result_name_resolved_from_history(self, ops):
+        """function_result carries the name resolved from the assistant call (#934)."""
+        messages = [
+            {
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "tool_call",
+                        "tool_call_id": "c1",
+                        "tool_name": "add",
+                        "tool_input": {"a": 1, "b": 2},
+                    }
+                ],
+            },
+            {
+                "role": "tool",
+                "content": [
+                    {"type": "tool_result", "tool_call_id": "c1", "result": "3"}
+                ],
+            },
+        ]
+        steps = ops.ir_messages_to_p_steps(messages)
+        fr = [s for s in steps if s["type"] == "function_result"]
+        assert len(fr) == 1
+        assert fr[0]["name"] == "add"
+
+    def test_tool_result_name_with_reused_call_id(self, ops):
+        """A re-used tool_call_id resolves to the nearest preceding call (#934).
+
+        The index is built incrementally, so each result picks up the name of
+        the call immediately before it rather than the last call with that id.
+        """
+        messages = [
+            {
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "tool_call",
+                        "tool_call_id": "c1",
+                        "tool_name": "add",
+                        "tool_input": {},
+                    }
+                ],
+            },
+            {
+                "role": "tool",
+                "content": [
+                    {"type": "tool_result", "tool_call_id": "c1", "result": "1"}
+                ],
+            },
+            {
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "tool_call",
+                        "tool_call_id": "c1",
+                        "tool_name": "multiply",
+                        "tool_input": {},
+                    }
+                ],
+            },
+            {
+                "role": "tool",
+                "content": [
+                    {"type": "tool_result", "tool_call_id": "c1", "result": "2"}
+                ],
+            },
+        ]
+        steps = ops.ir_messages_to_p_steps(messages)
+        names = [s["name"] for s in steps if s["type"] == "function_result"]
+        assert names == ["add", "multiply"]
+
+    def test_tool_result_name_falls_back_when_orphaned(self, ops):
+        """A tool_result with no matching call falls back to call_id."""
+        messages = [
+            {
+                "role": "tool",
+                "content": [
+                    {"type": "tool_result", "tool_call_id": "orphan", "result": "3"}
+                ],
+            },
+        ]
+        steps = ops.ir_messages_to_p_steps(messages)
+        assert steps[0]["name"] == "orphan"
+
     def test_roundtrip_multi_turn(self, ops):
         """Steps → IR → Steps preserves structure."""
         original_steps = [

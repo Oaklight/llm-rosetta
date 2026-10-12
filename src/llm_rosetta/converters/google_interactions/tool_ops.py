@@ -210,13 +210,28 @@ class GoogleInteractionsToolOps(BaseToolOps):
             "tool_call_id": step.get("call_id", step.get("id", "")),
             "result": result_val,
         }
+        # Keep the function name the step carries so it survives a passthrough
+        # and a result-only replay (no function_call in the batch to resolve it
+        # from) — see ``ir_function_result_to_p``.
+        name = step.get("name")
+        if name:
+            part.setdefault("provider_metadata", {}).setdefault("google", {})[
+                "tool_name"
+            ] = name
         if step.get("is_error"):
             part["is_error"] = True
         return part
 
     @staticmethod
-    def ir_function_result_to_p(ir_part: ToolResultPart) -> dict:
-        """IR ToolResultPart → Interactions FunctionResultStep."""
+    def ir_function_result_to_p(ir_part: ToolResultPart, **kwargs: Any) -> dict:
+        """IR ToolResultPart → Interactions FunctionResultStep.
+
+        A ``function_result`` step requires the function ``name``; the IR part
+        only carries ``tool_call_id``, so the caller passes a
+        ``tool_call_index`` (``tool_call_id → tool_name``) resolved from the
+        message history. Without it the API rejects the step with
+        ``function_response.name: Name cannot be empty``.
+        """
         if ir_part.get("tool_type") == "intrinsic":
             intrinsic_kind = get_intrinsic_kind(ir_part)
             step_type = INTRINSIC_KIND_TO_RESULT_TYPE.get(
@@ -230,11 +245,42 @@ class GoogleInteractionsToolOps(BaseToolOps):
             if ir_part.get("is_error"):
                 result["is_error"] = True
             return result
+
+        call_id = ir_part["tool_call_id"]
         result = {
             "type": "function_result",
-            "call_id": ir_part["tool_call_id"],
+            "call_id": call_id,
             "result": ir_part["result"],
         }
+        tool_call_index = kwargs.get("tool_call_index") or {}
+        tool_name = tool_call_index.get(call_id)
+        if not tool_name:
+            # A name captured on the way in (passthrough / result-only replay).
+            tool_name = (
+                (ir_part.get("provider_metadata") or {})
+                .get("google", {})
+                .get("tool_name")
+            )
+        if not tool_name:
+            # No function_call in the history and no stored name — fall back to
+            # the call_id (mirrors google_generate's behaviour). A result with
+            # an empty call_id and no name at all is unrecoverable: GI requires
+            # a non-empty ``name``, so fail loudly rather than emit a body the
+            # API will reject with ``function_response.name: Name cannot be
+            # empty``.
+            if not call_id:
+                raise ValueError(
+                    "function_result has no resolvable function name: the"
+                    " tool_call_id is empty and no matching function_call was"
+                    " found in the history"
+                )
+            tool_name = call_id
+            logger.warning(
+                "Could not resolve tool name for function_result %r; using the"
+                " call_id as the function name",
+                call_id,
+            )
+        result["name"] = tool_name
         if ir_part.get("is_error"):
             result["is_error"] = True
         return result
@@ -325,7 +371,9 @@ class GoogleInteractionsToolOps(BaseToolOps):
 
     @staticmethod
     def ir_tool_result_to_p(ir_tool_result: ToolResultPart, **kwargs: Any) -> Any:
-        return GoogleInteractionsToolOps.ir_function_result_to_p(ir_tool_result)
+        return GoogleInteractionsToolOps.ir_function_result_to_p(
+            ir_tool_result, **kwargs
+        )
 
     @staticmethod
     def p_tool_result_to_ir(provider_tool_result: Any, **kwargs: Any) -> ToolResultPart:
