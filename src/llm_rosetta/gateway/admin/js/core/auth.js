@@ -2,6 +2,7 @@
 import { S } from './state.js';
 import { t, applyI18n } from './i18n.js';
 import { api, _adminHeaders, showToast, closeModal, fmtBytesLong, _startInactivityTracking, _stopInactivityTracking } from './utils.js';
+import { renderShimSources } from '../tabs/shims.js';
 
 // --- Admin Token ---
 let _tokenRotateTimer = null;
@@ -84,6 +85,8 @@ function openSettings() {
     const el = document.getElementById(id); if (el) el.value = '';
   });
   document.getElementById('settingsPwError').textContent = '';
+  // Sync external shim sources
+  renderShimSources();
 }
 
 async function saveSettingsField(field, value) {

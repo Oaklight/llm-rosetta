@@ -8,11 +8,15 @@ import logging
 import os
 import subprocess
 import sys
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import asyncio
 
 from llm_rosetta import __version__
+from llm_rosetta.shims import ShimSourceError
+
+if TYPE_CHECKING:
+    from llm_rosetta.shims import ShimLoadReport
 
 from .banner import print_banner
 from .config import (
@@ -29,6 +33,7 @@ from .providers import (
     get_default_base_url,
     known_provider_types,
 )
+from .shim_sources import apply_shim_sources
 
 logger = get_logger()
 
@@ -468,6 +473,47 @@ def _dispatch_subcommand(args: argparse.Namespace, sub: Any) -> bool:
     return False
 
 
+def _apply_shim_sources_or_exit(
+    raw_config: dict[str, Any], config_path: str
+) -> ShimLoadReport | None:
+    """Register configured external shim sources, before the config is built.
+
+    Must run before ``GatewayConfig``, whose provider-type resolution reads the
+    shim registry.  With no ``shims`` section there is nothing to apply, and
+    skipping entirely leaves shims registered in-process via ``register_shim``
+    untouched.  A malformed section raises ``ValueError``; a ``strict`` source
+    failure raises ``ShimSourceError`` — either way the process exits.
+    """
+    if not raw_config.get("shims"):
+        return None
+    try:
+        return apply_shim_sources(raw_config, config_path)
+    except (ShimSourceError, ValueError) as exc:
+        logging.basicConfig(level=logging.ERROR)
+        logger.error("Shim source error: %s", exc)
+        sys.exit(1)
+
+
+def _report_shim_sources(report: ShimLoadReport | None) -> None:
+    """Log the shim-source outcome (called once a log handler is attached)."""
+    if report is None:
+        return
+    for status in report.failures():
+        logger.warning(
+            "Shim source failed (%s %s): %s",
+            status.kind,
+            status.location,
+            status.error,
+        )
+    if report.sources:
+        loaded = sum(s.shim_count for s in report.sources if s.ok)
+        logger.info(
+            "Shim sources: %d external source(s), %d shim(s) loaded",
+            len(report.sources),
+            loaded,
+        )
+
+
 def main() -> None:  # noqa: C901
     """Parse CLI arguments and either run a subcommand or start the server."""
     from .app import create_app
@@ -660,6 +706,8 @@ def main() -> None:  # noqa: C901
     if args.tls_key:
         raw_config.setdefault("server", {})["tls_key"] = args.tls_key
 
+    shim_source_report = _apply_shim_sources_or_exit(raw_config, config_path)
+
     config = GatewayConfig(raw_config)
 
     # Resolve verbosity: CLI --verbose wins, then config/env, then --log-level
@@ -670,6 +718,11 @@ def main() -> None:  # noqa: C901
         log_bodies=config.log_bodies,
         log_format=config.log_format,
     )
+
+    # Report the shim-source outcome now that a handler is attached — the
+    # sources are applied before setup_logging (they must be registered before
+    # GatewayConfig), so their own log records would otherwise be dropped.
+    _report_shim_sources(shim_source_report)
 
     host = args.host or config.host
     port = args.port or config.port
@@ -698,7 +751,9 @@ def main() -> None:  # noqa: C901
         logger.info("Request/response body logging enabled")
 
     async def _run() -> None:
-        app = await create_app(config, config_path=config_path)
+        app = await create_app(
+            config, config_path=config_path, shim_source_report=shim_source_report
+        )
         await run_gateway(app, host, port, socket=socket_path, ssl_context=ssl_context)
 
     from .app import run_gateway

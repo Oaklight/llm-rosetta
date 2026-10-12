@@ -17,6 +17,7 @@ from ...providers import (
     get_default_supports_custom_tools,
     known_provider_types,
 )
+from ...shim_sources import apply_shim_sources, resolve_source_config, shims_signature
 from ._shared import (
     _build_provider_entry,
     _get_config_io,
@@ -273,6 +274,8 @@ async def get_config(request: Any) -> Response:
             "providers": masked_providers,
             "models": models_normalized,
             "server": server,
+            "shims": raw.get("shims", {}),
+            "shim_sources": _shim_status_payload(request),
             "debug": raw.get("debug", {}),
             "credential_visible": config.credential_visible,
             "has_admin_password": bool(request.app.auth_state.admin_password),
@@ -1104,6 +1107,160 @@ async def put_server_settings(request: Any) -> Response:  # noqa: C901
 
     return JSONResponse(
         {"ok": True, "server": _sanitize_server_section(ctx.data.get("server", {}))}
+    )
+
+
+def _shim_status_payload(request: Any) -> dict[str, Any]:
+    """Return the last shim-source report as a JSON-safe dict."""
+    report = getattr(request.app, "shim_source_report", None)
+    if report is None:
+        return {
+            "sources": [],
+            "total_shims": 0,
+            "rebuilt_at": 0.0,
+            "failure_count": 0,
+        }
+    return report.to_dict()
+
+
+def _validate_shim_sources_body(
+    body: dict[str, Any], config_path: str
+) -> Response | None:
+    """Validate a shim-sources PUT body; return an error response, or ``None``.
+
+    Runs the same resolution the reload path will run, so a body that would
+    make ``apply_shim_sources`` raise is rejected *before* it is persisted —
+    otherwise the bad section lands on disk and the next startup fails.
+    """
+    paths = body.get("paths")
+    remotes = body.get("remotes")
+    if paths is not None and not isinstance(paths, list):
+        return JSONResponse({"error": "'paths' must be an array"}, status_code=400)
+    if remotes is not None and not isinstance(remotes, list):
+        return JSONResponse({"error": "'remotes' must be an array"}, status_code=400)
+    for entry in remotes or []:
+        if not isinstance(entry, dict) or not entry.get("url"):
+            return JSONResponse(
+                {"error": "each remote source needs a non-empty 'url'"},
+                status_code=400,
+            )
+    try:
+        resolve_source_config(body, config_path)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    return None
+
+
+async def put_shim_sources(request: Any) -> Response:
+    """Update the external shim sources (the top-level ``shims`` section)."""
+    body, err = parse_json_body(request)
+    if err:
+        return err
+    if not isinstance(body, dict):
+        return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
+
+    validation_error = _validate_shim_sources_body(body, _get_config_path(request))
+    if validation_error is not None:
+        return validation_error
+
+    paths = body.get("paths")
+    remotes = body.get("remotes")
+
+    async with config_mutate(request) as ctx:
+        if ctx.error:
+            return ctx.error
+
+        section = ctx.data.get("shims")
+        if not isinstance(section, dict):
+            section = {}
+        if paths is not None:
+            section["paths"] = paths
+        if remotes is not None:
+            section["remotes"] = remotes
+        # Optional knobs: a falsy value clears the key rather than persisting
+        # a meaningless `""` / `false` / `null`.
+        for key, empty in (
+            ("cache_dir", ""),
+            ("remote_ttl", None),
+            ("strict", False),
+        ):
+            if key not in body:
+                continue
+            value = body[key]
+            if value is None or value == empty:
+                section.pop(key, None)
+            else:
+                section[key] = value
+        # Drop empty sub-keys so the section stays tidy.
+        for key in ("paths", "remotes", "cache_dir"):
+            if key in section and not section[key]:
+                section.pop(key)
+        if section:
+            ctx.data["shims"] = section
+        else:
+            ctx.data.pop("shims", None)
+
+        ctx.commit()
+
+    if ctx.error:
+        return ctx.error
+
+    return JSONResponse(
+        {
+            "ok": True,
+            "shims": ctx.data.get("shims", {}),
+            "status": _shim_status_payload(request),
+        }
+    )
+
+
+async def post_shims_reload(request: Any) -> Response:
+    """Re-apply the declared shim sources.
+
+    An optional ``{"refresh": "always"}`` body forces every remote to be
+    re-fetched, bypassing its cache and refresh mode.
+    """
+    body, _err = parse_json_body(request)
+    force_refresh = isinstance(body, dict) and body.get("refresh") == "always"
+    config_path = _get_config_path(request)
+
+    if force_refresh:
+        # Apply with a forced refetch, then rebuild the config so provider
+        # types pick up any newly registered shims.  A forced refetch is real
+        # network I/O, so run it off the event loop (as the normal reload path
+        # does) instead of blocking every in-flight request.
+        import asyncio
+        import functools
+
+        raw = _get_config_io(request).load_raw(config_path)
+        try:
+            loop = asyncio.get_running_loop()
+            report = await loop.run_in_executor(
+                None,
+                functools.partial(
+                    apply_shim_sources, raw, config_path, force_refresh=True
+                ),
+            )
+        except Exception as exc:
+            return JSONResponse(
+                {"error": f"Shim reload failed: {exc}"}, status_code=500
+            )
+        request.app.shim_source_report = report
+        request.app.shim_source_signature = shims_signature(raw)
+
+    try:
+        new_config = await _reload_gateway_config(
+            request, config_path, force_shims=True
+        )
+    except Exception as exc:
+        return JSONResponse({"error": f"Shim reload failed: {exc}"}, status_code=500)
+
+    return JSONResponse(
+        {
+            "ok": True,
+            "status": _shim_status_payload(request),
+            "providers": list(new_config.providers.keys()),
+        }
     )
 
 

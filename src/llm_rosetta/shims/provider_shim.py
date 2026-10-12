@@ -12,10 +12,13 @@ functions (``get_shim``, ``list_shims``) read from it.
 
 from __future__ import annotations
 
+import contextlib
 import functools
 import logging
 import re
+import threading
 import warnings
+from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -452,6 +455,45 @@ class ProviderShim:
 
 _SHIM_REGISTRY: dict[str, ProviderShim] = {}
 
+# Per-thread view override for :func:`staging_registry`.  Set only on the
+# thread that is building a replacement registry, so every other thread keeps
+# reading ``_SHIM_REGISTRY`` and never observes a half-built one.
+_registry_staging = threading.local()
+
+
+def _current_registry() -> dict[str, ProviderShim]:
+    """Return the registry *this thread* reads and writes.
+
+    Normally the process-wide ``_SHIM_REGISTRY``; while the thread is inside
+    :func:`staging_registry` it is that thread's private staging dict instead.
+    """
+    staged = getattr(_registry_staging, "registry", None)
+    return staged if staged is not None else _SHIM_REGISTRY
+
+
+@contextlib.contextmanager
+def staging_registry() -> Iterator[dict[str, ProviderShim]]:
+    """Build a replacement registry off to the side, then swap it in at once.
+
+    Registration made inside the block lands in a private staging dict; other
+    threads keep reading the live registry untouched, so they never see a
+    partially-populated one.  On a clean exit the staging dict replaces the
+    global in a **single reference assignment**; if the block raises, the live
+    registry is left exactly as it was and the staging dict is discarded.
+    """
+    previous = getattr(_registry_staging, "registry", None)
+    staging: dict[str, ProviderShim] = {}
+    _registry_staging.registry = staging
+    try:
+        yield staging
+    except BaseException:
+        _registry_staging.registry = previous
+        raise
+    _registry_staging.registry = previous
+    global _SHIM_REGISTRY
+    _SHIM_REGISTRY = staging
+
+
 # Base converter types — used by resolve_base() for pass-through detection
 _BASE_TYPES: frozenset[str] = frozenset(
     {
@@ -476,11 +518,15 @@ def register_shim(shim: ProviderShim) -> None:
     If a shim with the same name is already registered, it is silently
     replaced and an INFO-level log is emitted.  This allows plugin shims
     to override built-in defaults without raising errors.
+
+    Inside :func:`staging_registry` the write goes to that thread's staging
+    dict instead of the live registry.
     """
+    registry = _current_registry()
     key = shim.name
-    if key in _SHIM_REGISTRY:
+    if key in registry:
         logger.info("Shim %r overridden (base: %s)", key, shim.base)
-    _SHIM_REGISTRY[key] = shim
+    registry[key] = shim
 
 
 def unregister_shim(name: str) -> ProviderShim | None:
@@ -489,9 +535,10 @@ def unregister_shim(name: str) -> ProviderShim | None:
     The exact name is tried first; only if that misses is *name* resolved to
     its canonical *shim* spelling.  This internal lookup never warns.
     """
-    shim = _SHIM_REGISTRY.pop(name, None)
+    registry = _current_registry()
+    shim = registry.pop(name, None)
     if shim is None:
-        shim = _SHIM_REGISTRY.pop(canonical_shim_name(name), None)
+        shim = registry.pop(canonical_shim_name(name), None)
     return shim
 
 
@@ -510,7 +557,8 @@ def get_shim(name: str) -> ProviderShim | None:
     ``"google"`` → ``"google--google_generate"``, ``"openai_responses"`` →
     ``"openai--open_responses"``).  This is an internal lookup and never warns.
     """
-    shim = _SHIM_REGISTRY.get(name)
+    registry = _current_registry()
+    shim = registry.get(name)
     if shim is not None:
         return shim
     if name in _BASE_TYPES:
@@ -518,13 +566,13 @@ def get_shim(name: str) -> ProviderShim | None:
     legacy_shim = canonical_shim_name(name)
     if legacy_shim in _BASE_TYPES:
         return None
-    shim = _SHIM_REGISTRY.get(legacy_shim)
+    shim = registry.get(legacy_shim)
     if shim is not None:
         return shim
     provider = canonical_provider_name(name)
     if provider in _BASE_TYPES:
         return None
-    return _SHIM_REGISTRY.get(provider)
+    return registry.get(provider)
 
 
 def resolve_shim(shim: ProviderShim | str | None) -> ProviderShim | None:
@@ -548,7 +596,7 @@ def list_shims() -> list[ProviderShim]:
     """
     seen: set[int] = set()
     out: list[ProviderShim] = []
-    for shim in _SHIM_REGISTRY.values():
+    for shim in _current_registry().values():
         if id(shim) in seen:
             continue
         seen.add(id(shim))
@@ -573,24 +621,28 @@ def resolve_base(name: str) -> str:
     If the name is not found in either, it is returned as-is (caller decides
     how to handle unknown names).
     """
-    shim = _SHIM_REGISTRY.get(name)
+    registry = _current_registry()
+    shim = registry.get(name)
     if shim is not None:
         return shim.base
     resolved = canonical_provider_name(name)
     if resolved in _BASE_TYPES:
         return resolved
-    shim = _SHIM_REGISTRY.get(resolved)
+    shim = registry.get(resolved)
     if shim is not None:
         return shim.base
-    shim = _SHIM_REGISTRY.get(canonical_shim_name(name))
+    shim = registry.get(canonical_shim_name(name))
     if shim is not None:
         return shim.base
     return resolved
 
 
-def _reset_registry() -> None:
-    """Clear the registry.  Intended for testing only."""
-    _SHIM_REGISTRY.clear()
+def _clear_registry_caches() -> None:
+    """Drop everything derived from the registry.
+
+    Converter instances, convention model-list transforms and plugin transform
+    namespaces all cache per-shim state, so they must not outlive a rebuild.
+    """
     # Also clear the converter cache since shim resolution may have
     # cached converters for names that are now unregistered.
     from llm_rosetta.auto_detect import _converter_cache
@@ -606,3 +658,9 @@ def _reset_registry() -> None:
     from llm_rosetta.shims.providers import _clear_plugin_namespaces
 
     _clear_plugin_namespaces()
+
+
+def _reset_registry() -> None:
+    """Clear the registry and everything derived from it.  Intended for testing."""
+    _SHIM_REGISTRY.clear()
+    _clear_registry_caches()

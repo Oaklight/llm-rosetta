@@ -683,6 +683,47 @@
       </div>
       <div id="settingsPwError" style="font-size:11px;color:var(--red);margin-top:2px"></div>
     </div>
+
+    <!-- ── Shim Sources ── -->
+    <div class="settings-section">
+      <div class="settings-section-title">
+        <svg class="section-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M2 2.75A.75.75 0 0 1 2.75 2h4.5a.75.75 0 0 1 0 1.5H3.5v9h9v-3.75a.75.75 0 0 1 1.5 0v4.5a.75.75 0 0 1-.75.75h-10.5A.75.75 0 0 1 2 13.25Zm11.28 1.03a.75.75 0 0 0-1.06-1.06L7.47 7.47a.75.75 0 0 0 0 1.06l4.75 4.75a.75.75 0 1 0 1.06-1.06L9.06 8l4.22-4.22Z"/></svg>
+        <span data-i18n="section.shimSources">Shim Sources</span>
+      </div>
+      <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px" data-i18n="hint.shimTrust"></div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div>
+          <label style="display:block;font-size:12px;margin-bottom:3px" data-i18n="label.shimPaths">Directories</label>
+          <textarea id="shimPathsInput" rows="3" spellcheck="false" style="width:100%;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;resize:vertical" placeholder="/config/shims&#10;./local-shims"></textarea>
+          <div style="font-size:11px;color:var(--text-dim)" data-i18n="label.shimPathHint"></div>
+        </div>
+        <div>
+          <label style="display:block;font-size:12px;margin-bottom:3px" data-i18n="label.shimRemotes">Remotes (JSON array)</label>
+          <textarea id="shimRemotesInput" rows="5" spellcheck="false" style="width:100%;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;resize:vertical" placeholder='[{"url": "https://github.com/owner/repo", "ref": "v1.0.0", "path": "shims"}]'></textarea>
+        </div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+          <div style="flex:1;min-width:200px">
+            <label style="display:block;font-size:12px;margin-bottom:3px" data-i18n="label.shimCacheDir">Cache directory</label>
+            <input type="text" id="shimCacheDirInput" spellcheck="false" style="width:100%;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px" placeholder="./shims-cache">
+          </div>
+          <div style="width:150px">
+            <label style="display:block;font-size:12px;margin-bottom:3px" data-i18n="label.shimTtl">Re-fetch TTL (s)</label>
+            <input type="number" id="shimTtlInput" min="0" step="3600" style="width:100%;font-size:12px" placeholder="86400">
+          </div>
+          <label class="toggle-label" style="display:flex;align-items:center;gap:6px;font-size:12px;padding-bottom:4px">
+            <input type="checkbox" id="shimStrictInput" role="switch">
+            <span data-i18n="label.shimStrict">Fail startup on a bad source</span>
+          </label>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px">
+        <button class="btn btn-sm" onclick="saveShimSources()" data-i18n="btn.save">Save</button>
+        <button class="btn btn-sm" onclick="reloadShimSources(false)" data-i18n="btn.reloadShims">Reload</button>
+        <button class="btn btn-sm" onclick="reloadShimSources(true)" data-i18n="btn.refetchShims">Refetch</button>
+        <span id="shimSourcesError" style="font-size:11px;color:var(--red)"></span>
+      </div>
+      <div id="shimSourceStatus" style="margin-top:8px;font-size:12px"></div>
+    </div>
     <!-- Version & Links -->
     <div style="text-align:center;padding:4px 0 2px">
       <div id="brandFooterName" style="font-size:14px;font-weight:600;margin-bottom:2px">llm-rosetta</div>

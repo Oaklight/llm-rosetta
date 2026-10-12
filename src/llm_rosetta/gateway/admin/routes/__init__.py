@@ -46,8 +46,10 @@ from .config import (
     fetch_upstream_models,
     get_config,
     put_model,
+    post_shims_reload,
     put_provider,
     put_server_settings,
+    put_shim_sources,
     reload_config,
     bulk_update_models,
     remove_model_provider,
@@ -199,6 +201,12 @@ def register_admin_routes(app: Any) -> None:
         check_routing_loops
     )
     app.route("/admin/api/config/server", methods=["PUT"])(put_server_settings)
+    app.route("/admin/api/config/shims", methods=["PUT"])(
+        _guard("providers", put_shim_sources)
+    )
+    app.route("/admin/api/config/shims/reload", methods=["POST"])(
+        _guard("providers", post_shims_reload)
+    )
     app.route("/admin/api/config/reload", methods=["POST"])(reload_config)
     # Metrics (dashboard tab)
     app.route("/admin/api/metrics", methods=["GET"])(get_metrics)

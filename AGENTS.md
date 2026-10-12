@@ -124,9 +124,11 @@ src/llm_rosetta/
 ├── shims/                   # Provider/model identity cards + transforms
 │   ├── provider_shim.py
 │   ├── transforms.py
+│   ├── sources.py           # External shim sources (dirs + remote archives)
 │   └── builtins.py
 ├── gateway/                 # HTTP proxy gateway
 │   ├── app.py, proxy.py, config.py, providers.py
+│   ├── shim_sources.py      # Config `shims` section → shim registry
 │   ├── model_types.py, keystore.py, logging.py
 │   ├── routing_strategy.py, migrations.py, deferred_startup.py
 │   ├── cli.py, banner.py, __main__.py

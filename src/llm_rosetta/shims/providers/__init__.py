@@ -489,8 +489,56 @@ def _load_single_provider(
     return shim
 
 
+def _load_provider_tolerant(
+    directory: Path,
+    group: str | None,
+    *,
+    builtin: bool,
+    root: Path,
+    on_error: str,
+) -> ProviderShim | None:
+    """Load one provider directory, optionally downgrading errors to a warning.
+
+    With ``on_error="warn"`` a malformed ``provider.yaml`` or a failing
+    ``transforms.py`` in *directory* is logged and skipped instead of aborting
+    the whole scan.
+    """
+    try:
+        return _load_single_provider(
+            directory, group=group, _builtin=builtin, root=root
+        )
+    except Exception as exc:
+        if on_error == "warn":
+            logger.warning("Skipping shim directory %s: %s", directory, exc)
+            return None
+        raise
+
+
+def _load_group_folder(
+    group_dir: Path,
+    group: str | None,
+    *,
+    builtin: bool,
+    root: Path,
+    on_error: str,
+) -> list[ProviderShim]:
+    """Load every leaf provider inside a *group_dir* (``<group>/<leaf>/``)."""
+    child_group = f"{group}.{group_dir.name}" if group else group_dir.name
+    loaded: list[ProviderShim] = []
+    for sub in sorted(group_dir.iterdir()):
+        if not sub.is_dir() or sub.name.startswith(("_", ".")):
+            continue
+        if (sub / "provider.yaml").exists():
+            shim = _load_provider_tolerant(
+                sub, child_group, builtin=builtin, root=root, on_error=on_error
+            )
+            if shim is not None:
+                loaded.append(shim)
+    return loaded
+
+
 def load_providers_from_dir(
-    providers_dir: Path, *, group: str | None = None
+    providers_dir: Path, *, group: str | None = None, on_error: str = "raise"
 ) -> list[ProviderShim]:
     """Scan *providers_dir* for provider shims and register them.
 
@@ -513,6 +561,11 @@ def load_providers_from_dir(
         group: Optional group name prefix for all shims loaded from this
             directory.  When ``None``, the directory structure determines
             grouping automatically.
+        on_error: ``"raise"`` (default) propagates a bad ``provider.yaml`` or
+            a failing ``transforms.py``; ``"warn"`` logs and skips that
+            provider so one bad shim cannot abort the whole scan.  External
+            sources use ``"warn"`` so a third-party repo cannot take down
+            startup; built-ins keep the strict default.
 
     Returns:
         List of registered :class:`ProviderShim` instances.
@@ -522,25 +575,19 @@ def load_providers_from_dir(
     for d in sorted(providers_dir.iterdir()):
         if not d.is_dir() or d.name.startswith(("_", ".")):
             continue
-        yaml_path = d / "provider.yaml"
-        if yaml_path.exists():
-            shim = _load_single_provider(
-                d, group=group, _builtin=builtin, root=providers_dir
+        if (d / "provider.yaml").exists():
+            shim = _load_provider_tolerant(
+                d, group, builtin=builtin, root=providers_dir, on_error=on_error
             )
             if shim is not None:
                 shims.append(shim)
         else:
-            # Potential group folder — scan children.
-            child_group = f"{group}.{d.name}" if group else d.name
-            for sub in sorted(d.iterdir()):
-                if not sub.is_dir() or sub.name.startswith(("_", ".")):
-                    continue
-                if (sub / "provider.yaml").exists():
-                    shim = _load_single_provider(
-                        sub, group=child_group, _builtin=builtin, root=providers_dir
-                    )
-                    if shim is not None:
-                        shims.append(shim)
+            # Potential group folder — scan its children.
+            shims.extend(
+                _load_group_folder(
+                    d, group, builtin=builtin, root=providers_dir, on_error=on_error
+                )
+            )
     return shims
 
 

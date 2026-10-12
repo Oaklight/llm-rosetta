@@ -45,6 +45,17 @@ from .providers import load_providers_from_dir
 
 _load_providers()
 
+# Declarative external sources (directories + remote archives).  Imported after
+# the built-ins so a rebuild can rely on them already being registered.
+from .sources import (  # noqa: E402
+    ShimArchiveMismatch,
+    ShimLoadReport,
+    ShimSourceError,
+    ShimSourceStatus,
+    rebuild_shims,
+    resolve_remote,
+)
+
 __all__ = [
     "ConnectionConfig",
     "ToolsConfig",
@@ -56,6 +67,13 @@ __all__ = [
     "list_shims",
     "resolve_base",
     "resolve_shim",
+    # External shim sources
+    "rebuild_shims",
+    "resolve_remote",
+    "ShimLoadReport",
+    "ShimSourceStatus",
+    "ShimSourceError",
+    "ShimArchiveMismatch",
     # Transforms
     "Transform",
     "apply_transforms",

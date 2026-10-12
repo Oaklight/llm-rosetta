@@ -7,9 +7,12 @@ import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from llm_rosetta._compat import sync_compat as _sync_compat
+
+if TYPE_CHECKING:
+    from llm_rosetta.shims import ShimLoadReport
 
 from llm_rosetta._vendor.httpserver import (
     App,
@@ -1249,11 +1252,34 @@ async def create_app(
     config: GatewayConfig,
     config_path: str | None = None,
     extensions: GatewayExtensions | None = None,
+    *,
+    shim_source_report: ShimLoadReport | None = None,
+    load_shim_sources: bool = True,
 ) -> App:
-    """Create the httpserver application."""
+    """Create the httpserver application.
+
+    Args:
+        config: The parsed gateway config.
+        config_path: Path to the config file being served.
+        extensions: Optional host hooks.
+        shim_source_report: Result of an earlier shim-source application.  The
+            CLI passes its report so the sources are not fetched twice; when
+            ``None`` and ``config.shims`` is set, the section is applied here so
+            programmatic callers that built ``GatewayConfig`` directly still get
+            their declared shims.
+        load_shim_sources: Set ``False`` to skip the automatic application
+            (tests, or callers that already applied the sources themselves).
+    """
     global _config
     _config = config
     ext = extensions or GatewayExtensions()
+
+    if shim_source_report is None and load_shim_sources and config.shims:
+        from .shim_sources import apply_shim_section
+
+        shim_source_report = apply_shim_section(
+            config.shims, config_path, proxy=config.proxy
+        )
 
     # Expose global proxy as env vars so downstream code (e.g. image
     # downloads in converters) can use it without threading config through.
@@ -1278,6 +1304,14 @@ async def create_app(
         else 50_000_000,
         read_timeout=config.read_timeout,
     )
+
+    # Expose the shim-source outcome to the admin API, and record the applied
+    # signature so the reload path can skip a rebuild when the section is
+    # unchanged.  ``App`` does not declare these, so set them dynamically.
+    from .shim_sources import shims_signature as _shims_signature
+
+    setattr(app, "shim_source_report", shim_source_report)
+    setattr(app, "shim_source_signature", _shims_signature({"shims": config.shims}))
 
     # --- Routes ---
     if not ext.skip_default_routes:

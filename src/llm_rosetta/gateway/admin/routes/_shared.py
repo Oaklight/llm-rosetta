@@ -188,12 +188,31 @@ def _get_config_io(request: Any) -> ConfigIO:
     return io
 
 
-async def _reload_gateway_config(request: Any, config_path: str) -> GatewayConfig:
-    """Re-read config from disk, rebuild GatewayConfig, swap into app state."""
+async def _reload_gateway_config(
+    request: Any, config_path: str, *, force_shims: bool = False
+) -> GatewayConfig:
+    """Re-read config from disk, rebuild GatewayConfig, swap into app state.
+
+    Declarative shim sources are (re)applied before the config is rebuilt, but
+    only when the ``shims`` section changed (or ``force_shims`` is set) so an
+    unrelated admin edit never triggers a remote refetch.  Applying them drops
+    shims whose source was removed.
+    """
+    import asyncio
+
     import llm_rosetta.gateway.app as _app_mod
+    from ...shim_sources import apply_shim_sources, shims_signature
 
     config_io = _get_config_io(request)
     raw = config_io.load(config_path)
+
+    signature = shims_signature(raw)
+    if force_shims or signature != getattr(request.app, "shim_source_signature", None):
+        loop = asyncio.get_running_loop()
+        report = await loop.run_in_executor(None, apply_shim_sources, raw, config_path)
+        request.app.shim_source_report = report
+        request.app.shim_source_signature = signature
+
     new_config = GatewayConfig(raw)
     _app_mod._config = new_config
     request.app.gateway_config = new_config

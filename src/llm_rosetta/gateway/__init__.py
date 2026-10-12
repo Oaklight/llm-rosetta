@@ -43,6 +43,12 @@ from .app import GatewayExtensions, create_app
 from .cli import main
 from .config import ConfigIO, GatewayConfig, JsoncConfigIO, discover_config, load_config
 from .proxy import ProviderMetadataStore
+from .shim_sources import (
+    apply_shim_section,
+    apply_shim_sources,
+    resolve_source_config,
+    shims_signature,
+)
 
 __all__ = [
     "ConfigIO",
@@ -50,8 +56,12 @@ __all__ = [
     "GatewayExtensions",
     "JsoncConfigIO",
     "ProviderMetadataStore",
+    "apply_shim_section",
+    "apply_shim_sources",
     "create_app",
     "discover_config",
     "load_config",
     "main",
+    "resolve_source_config",
+    "shims_signature",
 ]

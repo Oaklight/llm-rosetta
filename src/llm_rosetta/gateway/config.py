@@ -394,6 +394,11 @@ class GatewayConfig:
         return GatewayConfig._formats_for_type("rerank")
 
     def __init__(self, raw: dict[str, Any]) -> None:
+        # Declarative external shim sources (see gateway/shim_sources.py).
+        # Kept verbatim so create_app can apply them for programmatic callers
+        # and get_config can expose the section to the admin UI.
+        self.shims: dict[str, Any] = dict(raw.get("shims") or {})
+
         all_providers: dict[str, dict[str, str]] = raw.get("providers", {})
 
         # Filter out disabled providers (enabled defaults to True)

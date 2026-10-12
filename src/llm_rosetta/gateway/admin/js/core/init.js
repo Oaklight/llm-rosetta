@@ -12,6 +12,7 @@ import { loadKeys, loadLogKeyLabels, renderKeys } from '../tabs/keys.js';
 import { loadMetrics, loadDumps, renderPersistence } from '../tabs/dashboard.js';
 import { loadLogs, renderLogs, updateFilterOptions, updateKeyFilterOptions } from '../tabs/logs.js';
 import { loadOpsLog, switchLogView, populateOpsLogFilters } from '../tabs/ops-log.js';
+import { renderShimSources } from '../tabs/shims.js';
 import '../components/test-runner.js';
 import { initLogoPicker } from '../components/logo-picker.js';
 
