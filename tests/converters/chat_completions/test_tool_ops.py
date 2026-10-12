@@ -4,6 +4,9 @@ OpenAI Chat ToolOps unit tests.
 
 import json
 
+import pytest
+
+from llm_rosetta.converters.base.tools import TOOL_ERROR_MARKER
 from llm_rosetta.converters.chat_completions.tool_ops import ChatCompletionsToolOps
 from typing import cast
 
@@ -272,6 +275,38 @@ class TestChatCompletionsToolOps:
         assert result["tool_call_id"] == "call_456"
         assert result["result"] == "Result data"
 
+    def test_p_tool_result_to_ir_reads_foreign_is_error(self):
+        """A non-standard flag on a foreign Chat body is not dropped."""
+        result = ChatCompletionsToolOps.p_tool_result_to_ir(
+            {
+                "role": "tool",
+                "tool_call_id": "call_1",
+                "content": "exit code 1",
+                "is_error": True,
+            }
+        )
+        assert result["is_error"] is True
+
+    def test_p_tool_result_to_ir_omits_absent_is_error(self):
+        """Only a present field is read, so nothing is inflated on the way in."""
+        result = ChatCompletionsToolOps.p_tool_result_to_ir(
+            {"role": "tool", "tool_call_id": "call_1", "content": "exit code 0"}
+        )
+        assert "is_error" not in result
+
+    @pytest.mark.parametrize("malformed", ["true", 1, 0, {}, [], "False"])
+    def test_p_tool_result_to_ir_ignores_non_bool_is_error(self, malformed):
+        """The IR field is typed bool, so a malformed value must not be copied."""
+        result = ChatCompletionsToolOps.p_tool_result_to_ir(
+            {
+                "role": "tool",
+                "tool_call_id": "call_1",
+                "content": "exit code 1",
+                "is_error": malformed,
+            }
+        )
+        assert "is_error" not in result
+
     def test_tool_result_round_trip(self):
         """Test tool result round-trip."""
         original = cast(
@@ -314,6 +349,70 @@ class TestChatCompletionsToolOps:
         )
         result = ChatCompletionsToolOps.ir_tool_result_to_p(ir_tr)
         assert result["content"] == '{"temperature": 72}'
+
+    def test_ir_tool_result_to_p_is_error_appends_marker(self):
+        """Chat has no error field, so the flag rides as a trailing text block."""
+        ir_tr = cast(
+            ToolResultPart,
+            {
+                "type": "tool_result",
+                "tool_call_id": "call_err",
+                "result": "exit code 1",
+                "is_error": True,
+            },
+        )
+        warnings: list[str] = []
+        result = ChatCompletionsToolOps.ir_tool_result_to_p(ir_tr, warnings=warnings)
+        assert result["content"] == [
+            {"type": "text", "text": "exit code 1"},
+            {"type": "text", "text": TOOL_ERROR_MARKER},
+        ]
+        assert len(warnings) == 1
+        assert "call_err" in warnings[0]
+
+    def test_ir_tool_result_to_p_is_error_empty_result(self):
+        """A silent failure is the case the flag exists for."""
+        ir_tr = cast(
+            ToolResultPart,
+            {
+                "type": "tool_result",
+                "tool_call_id": "call_silent",
+                "result": "",
+                "is_error": True,
+            },
+        )
+        result = ChatCompletionsToolOps.ir_tool_result_to_p(ir_tr)
+        assert result["content"] == [{"type": "text", "text": TOOL_ERROR_MARKER}]
+
+    def test_ir_tool_result_to_p_is_error_false_is_untouched(self):
+        """Only ``true`` is re-encoded; ``false`` needs no marker."""
+        ir_tr = cast(
+            ToolResultPart,
+            {
+                "type": "tool_result",
+                "tool_call_id": "call_ok",
+                "result": "exit code 0",
+                "is_error": False,
+            },
+        )
+        warnings: list[str] = []
+        result = ChatCompletionsToolOps.ir_tool_result_to_p(ir_tr, warnings=warnings)
+        assert result["content"] == "exit code 0"
+        assert warnings == []
+
+    def test_ir_tool_result_to_p_without_warning_sink(self):
+        """The public part-level dispatch passes no warnings list."""
+        ir_tr = cast(
+            ToolResultPart,
+            {
+                "type": "tool_result",
+                "tool_call_id": "call_no_sink",
+                "result": "boom",
+                "is_error": True,
+            },
+        )
+        result = ChatCompletionsToolOps.ir_tool_result_to_p(ir_tr)
+        assert result["content"][-1]["text"] == TOOL_ERROR_MARKER
 
     # ==================== Tool Config ====================
 

@@ -28,8 +28,10 @@ from ..base.helpers.opaque import CARRIER_KEY
 from ..base.tools import (
     log_orphan_warnings,
     make_intrinsic_tool_definition,
+    mark_tool_error,
     sanitize_schema,
     sanitize_tool_call_id,
+    warn_tool_error,
 )
 
 logger = logging.getLogger(__name__)
@@ -485,8 +487,13 @@ class ChatCompletionsToolOps(BaseToolOps):
     def ir_tool_result_to_p(ir_tool_result: ToolResultPart, **kwargs: Any) -> dict:
         """IR ToolResultPart → OpenAI Chat tool role message.
 
+        Chat Completions has no tool error field, so an ``is_error`` flag is
+        re-encoded as a trailing text block (see ``base.tools.error_marker``).
+
         Args:
             ir_tool_result: IR tool result part.
+            **kwargs: ``warnings`` (list[str]) receives a note when the error
+                flag had to be re-encoded.
 
         Returns:
             OpenAI tool role message dict.
@@ -510,9 +517,19 @@ class ChatCompletionsToolOps(BaseToolOps):
         else:
             content = ""
 
+        tool_call_id = sanitize_tool_call_id(ir_tool_result["tool_call_id"])
+
+        if ir_tool_result.get("is_error"):
+            content = mark_tool_error(content, text_block_type="text")
+            warn_tool_error(
+                kwargs.get("warnings"),
+                format_name="OpenAI Chat Completions",
+                tool_call_id=tool_call_id,
+            )
+
         return {
             "role": "tool",
-            "tool_call_id": sanitize_tool_call_id(ir_tool_result["tool_call_id"]),
+            "tool_call_id": tool_call_id,
             "content": content,
         }
 
@@ -520,17 +537,26 @@ class ChatCompletionsToolOps(BaseToolOps):
     def p_tool_result_to_ir(provider_tool_result: Any, **kwargs: Any) -> ToolResultPart:
         """OpenAI Chat tool role message → IR ToolResultPart.
 
+        ``is_error`` is not a Chat field, but a foreign body may carry one —
+        the Responses reader accepts it the same way, so neither OpenAI source
+        drops a flag the other keeps.  Only a boolean is copied, since the IR
+        field is typed ``bool`` and a malformed value would fail validation.
+
         Args:
             provider_tool_result: OpenAI tool role message dict.
 
         Returns:
             IR ToolResultPart.
         """
-        return ToolResultPart(
+        part = ToolResultPart(
             type="tool_result",
             tool_call_id=provider_tool_result.get("tool_call_id", ""),
             result=provider_tool_result.get("content", ""),
         )
+        is_error = provider_tool_result.get("is_error")
+        if isinstance(is_error, bool):
+            part["is_error"] = is_error
+        return part
 
     # ==================== Tool Config ====================
 

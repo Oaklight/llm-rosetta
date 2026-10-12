@@ -468,11 +468,13 @@ class ChatCompletionsMessageOps(BaseMessageOps):
         """
         result = part.get("result", "")
         if supports_multimodal or not has_multimodal_content(result):
-            return self.tool_ops.ir_tool_result_to_p(part)
+            return self.tool_ops.ir_tool_result_to_p(part, warnings=warnings)
         residual = pack_multimodal_tool_result(
             result, self.content_ops, multimodal_packs, part["tool_call_id"], warnings
         )
-        return self.tool_ops.ir_tool_result_to_p({**part, "result": residual})
+        return self.tool_ops.ir_tool_result_to_p(
+            {**part, "result": residual}, warnings=warnings
+        )
 
     # ==================== Provider → IR ====================
 
@@ -641,31 +643,43 @@ class ChatCompletionsMessageOps(BaseMessageOps):
             for block in unpacked_content[call_id]:
                 converted = self._p_content_part_to_ir(block)
                 ir_parts.extend(converted)
-            return {
-                "role": "tool",
-                "content": [
-                    ToolResultPart(
-                        type="tool_result",
-                        tool_call_id=call_id,
-                        result=ir_parts,
-                    )
-                ],
-            }
+            part = ToolResultPart(
+                type="tool_result",
+                tool_call_id=call_id,
+                result=ir_parts,
+            )
+            self._carry_foreign_is_error(part, msg)
+            return {"role": "tool", "content": [part]}
 
         content = msg.get("content", "")
         if isinstance(content, list):
             content = convert_content_blocks_to_ir(content, ChatCompletionsContentOps)
 
-        return {
-            "role": "tool",
-            "content": [
-                ToolResultPart(
-                    type="tool_result",
-                    tool_call_id=call_id,
-                    result=content,
-                )
-            ],
-        }
+        part = ToolResultPart(
+            type="tool_result",
+            tool_call_id=call_id,
+            result=content,
+        )
+        self._carry_foreign_is_error(part, msg)
+        return {"role": "tool", "content": [part]}
+
+    @staticmethod
+    def _carry_foreign_is_error(part: ToolResultPart, msg: dict[str, Any]) -> None:
+        """Carry a non-standard ``is_error`` off a foreign Chat tool message.
+
+        Chat has no such field, but the Responses reader accepts one, so
+        reading it here keeps neither OpenAI source the silent leg.  Only a
+        present *boolean* is copied: a malformed value would fail IR
+        validation and take the whole request down, where ignoring it keeps
+        the pre-existing behaviour of passing the body through untouched.
+
+        Args:
+            part: IR tool result part to annotate in place.
+            msg: OpenAI tool role message dict.
+        """
+        is_error = msg.get("is_error")
+        if isinstance(is_error, bool):
+            part["is_error"] = is_error
 
     def _p_function_to_ir(self, msg: dict[str, Any]) -> dict[str, Any]:
         """OpenAI deprecated function role message → IR ToolMessage.

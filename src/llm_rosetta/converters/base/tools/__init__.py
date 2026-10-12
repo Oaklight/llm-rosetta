@@ -20,6 +20,7 @@ Submodules:
     intrinsic       — Intrinsic (server-side) tool helpers
     batch           — Tool result batch tracking
     multimodal_patch — Tool result dual-encoding for non-multimodal providers
+    error_marker    — Tool result error marking for formats without is_error
 """
 
 # -- Abstract base class --
@@ -58,6 +59,14 @@ from .intrinsic import (
     make_intrinsic_tool_definition,
     make_intrinsic_tool_result,
     set_intrinsic_kind,
+)
+
+# -- Error marker --
+from .error_marker import (
+    TOOL_ERROR_MARKER,
+    mark_tool_error,
+    warn_tool_error,
+    warn_tool_error_dropped,
 )
 
 # -- Multimodal patch --
@@ -101,6 +110,11 @@ __all__ = [
     "set_intrinsic_kind",
     "make_intrinsic_tool_call",
     "make_intrinsic_tool_result",
+    # error_marker
+    "TOOL_ERROR_MARKER",
+    "mark_tool_error",
+    "warn_tool_error",
+    "warn_tool_error_dropped",
     # multimodal_patch
     "TOOL_CONTENT_CLOSE_TAG",
     "TOOL_CONTENT_OPEN_TAG_RE",

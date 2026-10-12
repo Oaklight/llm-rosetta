@@ -5,6 +5,12 @@ OpenAI Responses ToolOps unit tests.
 import json
 from typing import Any, cast
 
+import pytest
+
+from llm_rosetta.converters.base.tools import (
+    TOOL_ERROR_MARKER,
+    make_intrinsic_tool_result,
+)
 from llm_rosetta.converters.open_responses.tool_ops import OpenAIResponsesToolOps
 from llm_rosetta.types.ir import (
     ToolCallConfig,
@@ -614,6 +620,35 @@ class TestOpenAIResponsesToolOps:
         # Dict result is converted to string
         assert isinstance(result["output"], str)
 
+    def test_ir_tool_result_to_p_intrinsic_error_is_warned(self):
+        """A native server item has no output payload to carry the marker."""
+        warnings: list[str] = []
+        ir_tr = make_intrinsic_tool_result(
+            tool_call_id="ws_1",
+            result="search backend unreachable",
+            intrinsic_kind="web_search",
+            is_error=True,
+        )
+        result = OpenAIResponsesToolOps.ir_tool_result_to_p(
+            cast(ToolResultPart, ir_tr), warnings=warnings
+        )
+        assert result == {}
+        assert len(warnings) == 1
+        assert "ws_1" in warnings[0]
+
+    def test_ir_tool_result_to_p_intrinsic_success_is_silent(self):
+        ir_tr = make_intrinsic_tool_result(
+            tool_call_id="ws_1",
+            result="no results",
+            intrinsic_kind="web_search",
+        )
+        warnings: list[str] = []
+        result = OpenAIResponsesToolOps.ir_tool_result_to_p(
+            cast(ToolResultPart, ir_tr), warnings=warnings
+        )
+        assert result == {}
+        assert warnings == []
+
     def test_p_tool_result_to_ir(self):
         """Test OpenAI Responses function_call_output → IR ToolResultPart."""
         provider_tr = {
@@ -646,6 +681,19 @@ class TestOpenAIResponsesToolOps:
         }
         result = OpenAIResponsesToolOps.p_tool_result_to_ir(provider_tr)
         assert result["is_error"] is True
+
+    @pytest.mark.parametrize("malformed", ["true", 1, 0, {}, [], "False"])
+    def test_p_tool_result_to_ir_ignores_non_bool_is_error(self, malformed):
+        """The IR field is typed bool, so a malformed value must not be copied."""
+        result = OpenAIResponsesToolOps.p_tool_result_to_ir(
+            {
+                "type": "function_call_output",
+                "call_id": "call_1",
+                "output": "exit code 1",
+                "is_error": malformed,
+            }
+        )
+        assert "is_error" not in result
 
     def test_tool_result_round_trip(self):
         """Test tool result round-trip."""
@@ -745,6 +793,66 @@ class TestOpenAIResponsesToolOps:
         assert output[0]["text"] == "Chart description"
         assert output[1]["type"] == "input_image"
         assert "base64,CCCC" in output[1]["image_url"]
+
+    def test_ir_tool_result_to_p_is_error_appends_marker(self):
+        """Responses has no error field, so the flag rides as a trailing block."""
+        ir_tr = ToolResultPart(
+            type="tool_result",
+            tool_call_id="call_err",
+            result="exit code 1",
+            is_error=True,
+        )
+        warnings: list[str] = []
+        result = OpenAIResponsesToolOps.ir_tool_result_to_p(ir_tr, warnings=warnings)
+        assert result["output"] == [
+            {"type": "input_text", "text": "exit code 1"},
+            {"type": "input_text", "text": TOOL_ERROR_MARKER},
+        ]
+        assert len(warnings) == 1
+        assert "call_err" in warnings[0]
+
+    def test_ir_tool_result_to_p_is_error_empty_result(self):
+        """A silent failure is the case the flag exists for."""
+        ir_tr = ToolResultPart(
+            type="tool_result",
+            tool_call_id="call_silent",
+            result="",
+            is_error=True,
+        )
+        result = OpenAIResponsesToolOps.ir_tool_result_to_p(ir_tr)
+        assert result["output"] == [{"type": "input_text", "text": TOOL_ERROR_MARKER}]
+
+    def test_ir_tool_result_to_p_is_error_false_is_untouched(self):
+        """Only ``true`` is re-encoded; ``false`` needs no marker."""
+        ir_tr = ToolResultPart(
+            type="tool_result",
+            tool_call_id="call_ok",
+            result="exit code 0",
+            is_error=False,
+        )
+        warnings: list[str] = []
+        result = OpenAIResponsesToolOps.ir_tool_result_to_p(ir_tr, warnings=warnings)
+        assert result["output"] == "exit code 0"
+        assert warnings == []
+
+    def test_ir_tool_result_to_p_is_error_custom_tool(self):
+        """custom_tool_call_output takes the same input_* block list."""
+        ir_tr = cast(
+            ToolResultPart,
+            {
+                "type": "tool_result",
+                "tool_call_id": "call_custom_err",
+                "result": "patch failed",
+                "tool_type": "custom",
+                "is_error": True,
+            },
+        )
+        result = OpenAIResponsesToolOps.ir_tool_result_to_p(ir_tr)
+        assert result["type"] == "custom_tool_call_output"
+        assert result["output"] == [
+            {"type": "input_text", "text": "patch failed"},
+            {"type": "input_text", "text": TOOL_ERROR_MARKER},
+        ]
 
     # ==================== Tool Config ====================
 

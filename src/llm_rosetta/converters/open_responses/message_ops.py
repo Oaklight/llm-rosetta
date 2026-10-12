@@ -163,7 +163,7 @@ class OpenResponsesMessageOps(BaseMessageOps):
                 # Tool results become separate function_call_output items.
                 # An intrinsic result whose call is a native server item
                 # (web_search_call) yields {} — it has no output item.
-                item = self.tool_ops.ir_tool_result_to_p(part)
+                item = self.tool_ops.ir_tool_result_to_p(part, warnings=warnings)
                 if item:
                     extra_items.append(item)
             elif is_reasoning_part(part):
@@ -283,7 +283,7 @@ class OpenResponsesMessageOps(BaseMessageOps):
 
         for part in content:
             if is_tool_result_part(part):
-                item = self.tool_ops.ir_tool_result_to_p(part)
+                item = self.tool_ops.ir_tool_result_to_p(part, warnings=warnings)
                 if item:
                     tool_result_items.append(item)
 

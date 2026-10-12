@@ -37,9 +37,12 @@ from ..base.tools import (
     make_intrinsic_tool_definition,
     log_orphan_warnings,
     make_intrinsic_tool_call,
+    mark_tool_error,
     sanitize_schema,
     set_intrinsic_kind,
     sanitize_tool_call_id,
+    warn_tool_error,
+    warn_tool_error_dropped,
 )
 
 logger = logging.getLogger(__name__)
@@ -1006,12 +1009,35 @@ class OpenResponsesToolOps(BaseToolOps):
         Emits ``custom_tool_call_output`` when the context indicates the
         tool call was custom, otherwise ``function_call_output``.
 
+        The Responses API has no tool error field, so an ``is_error`` flag is
+        re-encoded as a trailing ``input_text`` block (see
+        ``base.tools.error_marker``).
+
         Returns ``{}`` for an intrinsic result whose call we emit as a native
-        server item (``web_search_call``) — those have no separate output item.
+        server item (``web_search_call``) — those have no separate output item,
+        so an ``is_error`` flag on one is reported as a warning rather than
+        encoded as a marker.
+
+        Args:
+            ir_tool_result: IR tool result part.
+            **kwargs: ``warnings`` (list[str]) receives a note when the error
+                flag had to be re-encoded or dropped.
         """
         if ir_tool_result.get("tool_type") == "intrinsic":
             kind = get_intrinsic_kind(ir_tool_result, "")
             if _INTRINSIC_KIND_TO_ITEM.get(kind) == "web_search_call":
+                # The call ships as a native server item with no separate
+                # output item, so the flag has no payload to ride on.  Warn
+                # rather than let it vanish — the Chat target, which has no
+                # native server items, does emit a marker for the same IR.
+                if ir_tool_result.get("is_error"):
+                    warn_tool_error_dropped(
+                        kwargs.get("warnings"),
+                        format_name="OpenAI Responses",
+                        tool_call_id=sanitize_tool_call_id(
+                            ir_tool_result.get("tool_call_id", "")
+                        ),
+                    )
                 return {}
 
         result_content = ir_tool_result.get("result") or ir_tool_result.get(
@@ -1033,6 +1059,17 @@ class OpenResponsesToolOps(BaseToolOps):
 
         # Sanitize here to match the ID registered by ir_tool_call_to_p / streaming start.
         call_id = sanitize_tool_call_id(ir_tool_result["tool_call_id"])
+
+        if ir_tool_result.get("is_error"):
+            # Both function_call_output and custom_tool_call_output accept a
+            # list of input_* content blocks, so the marker rides along as one.
+            output = mark_tool_error(output, text_block_type="input_text")
+            warn_tool_error(
+                kwargs.get("warnings"),
+                format_name="OpenAI Responses",
+                tool_call_id=call_id,
+            )
+
         # The IR part wins: it survives request history, where the context's
         # tool-type map is empty because only streaming populates it.
         tool_type = ir_tool_result.get("tool_type")
@@ -1080,8 +1117,10 @@ class OpenResponsesToolOps(BaseToolOps):
             tool_call_id=provider_tool_result.get("call_id", ""),
             result=output,
         )
+        # Only a boolean is copied: the IR field is typed ``bool``, so a
+        # malformed value would fail IR validation and take the request down.
         is_error = provider_tool_result.get("is_error")
-        if is_error is not None:
+        if isinstance(is_error, bool):
             part["is_error"] = is_error
         # Record the non-default types so the outbound leg can emit the
         # same item kind.  The context it would otherwise consult is only
