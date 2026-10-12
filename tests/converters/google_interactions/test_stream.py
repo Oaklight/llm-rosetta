@@ -2,7 +2,14 @@
 
 from llm_rosetta.converters.google_interactions import GoogleInteractionsConverter
 from llm_rosetta.converters.base.context import StreamContext
-from llm_rosetta.types.ir.stream import ToolCallStartEvent
+from llm_rosetta.types.ir.stream import (
+    ContentBlockEndEvent,
+    ContentBlockStartEvent,
+    FinishEvent,
+    TextDeltaEvent,
+    ToolCallDeltaEvent,
+    ToolCallStartEvent,
+)
 
 
 class TestStreamChunkToIR:
@@ -287,6 +294,7 @@ class TestStreamChunkToIR:
             r = self.converter.stream_response_to_provider(e, ctx)
             out.extend(r if isinstance(r, list) else [r])
         step_starts = [s for s in out if s.get("event_type") == "step.start"]
+        assert len(step_starts) == 1
         signed = [s for s in step_starts if s.get("step", {}).get("signature")]
         assert len(signed) == 1
         assert signed[0]["step"]["signature"] == "sig_rt"
@@ -367,3 +375,167 @@ class TestStreamChunkToIR:
             "usage",
             "stream_end",
         ]
+
+
+class TestStreamIRToProvider:
+    """Outbound IR → GI streaming: one step.start per step (no duplicates).
+
+    Regression tests for #931 — the ContentBlockStart handler did not mark
+    the step as opened, so the delta fallback synthesized a second, wrong
+    index/type ``step.start``, and a ``tool_use`` block emitted a bare one
+    on top of the enriched ``ToolCallStartEvent``.
+    """
+
+    def setup_method(self):
+        self.converter = GoogleInteractionsConverter()
+
+    def _run(self, events):
+        ctx = StreamContext()
+        out: list = []
+        for e in events:
+            r = self.converter.stream_response_to_provider(e, ctx)
+            out.extend(r if isinstance(r, list) else ([r] if r else []))
+        return out
+
+    def test_text_stream_single_step_start(self):
+        out = self._run(
+            [
+                ContentBlockStartEvent(
+                    type="content_block_start", block_index=0, block_type="text"
+                ),
+                TextDeltaEvent(type="text_delta", text="hi", block_index=0),
+                TextDeltaEvent(type="text_delta", text="!", block_index=0),
+                ContentBlockEndEvent(type="content_block_end", block_index=0),
+            ]
+        )
+        starts = [c for c in out if c.get("event_type") == "step.start"]
+        assert len(starts) == 1
+        assert starts[0] == {
+            "event_type": "step.start",
+            "index": 0,
+            "step": {"type": "model_output"},
+        }
+        assert [c["event_type"] for c in out] == [
+            "step.start",
+            "step.delta",
+            "step.delta",
+            "step.stop",
+        ]
+
+    def test_tool_stream_single_enriched_step_start(self):
+        out = self._run(
+            [
+                ContentBlockStartEvent(
+                    type="content_block_start", block_index=1, block_type="tool_use"
+                ),
+                ToolCallStartEvent(
+                    type="tool_call_start",
+                    tool_call_id="c1",
+                    tool_name="fn",
+                    tool_call_index=1,
+                    provider_metadata={"google": {"thought_signature": "sig"}},
+                ),
+                ToolCallDeltaEvent(
+                    type="tool_call_delta",
+                    tool_call_id="c1",
+                    arguments_delta="{}",
+                    block_index=1,
+                ),
+                ContentBlockEndEvent(type="content_block_end", block_index=1),
+            ]
+        )
+        starts = [c for c in out if c.get("event_type") == "step.start"]
+        assert len(starts) == 1
+        assert starts[0]["index"] == 1
+        assert starts[0]["step"] == {
+            "type": "function_call",
+            "id": "c1",
+            "name": "fn",
+            "signature": "sig",
+        }
+        assert [c["event_type"] for c in out] == [
+            "step.start",
+            "step.delta",
+            "step.stop",
+        ]
+
+    def test_delta_without_block_start_synthesizes_once(self):
+        """The fallback fires exactly once when no ContentBlockStart is seen.
+
+        Characterisation of behaviour this fix does not change (the fallback
+        guard is untouched); kept to catch a future refactor that drops the
+        fallback entirely, not as #931 regression evidence.
+        """
+        out = self._run(
+            [
+                TextDeltaEvent(type="text_delta", text="a", block_index=0),
+                TextDeltaEvent(type="text_delta", text="b", block_index=0),
+            ]
+        )
+        starts = [c for c in out if c.get("event_type") == "step.start"]
+        assert len(starts) == 1
+        assert starts[0] == {
+            "event_type": "step.start",
+            "index": 0,
+            "step": {"type": "model_output"},
+        }
+
+    def test_tool_opener_reuses_block_index(self):
+        """Opener uses the block index, not the 0-based tool_call_index.
+
+        ``messages`` (Anthropic) emits ``ContentBlockStart(block_index=N)`` +
+        ``ToolCallStartEvent(tool_call_index=0-based)`` while the deltas carry
+        ``block_index``; the opener must match the deltas' index.
+        """
+        out = self._run(
+            [
+                ContentBlockStartEvent(
+                    type="content_block_start", block_index=2, block_type="tool_use"
+                ),
+                ToolCallStartEvent(
+                    type="tool_call_start",
+                    tool_call_id="c1",
+                    tool_name="fn",
+                    tool_call_index=0,
+                ),
+                ToolCallDeltaEvent(
+                    type="tool_call_delta",
+                    tool_call_id="c1",
+                    arguments_delta="{}",
+                    block_index=2,
+                ),
+                ContentBlockEndEvent(type="content_block_end", block_index=2),
+            ]
+        )
+        starts = [c for c in out if c.get("event_type") == "step.start"]
+        deltas = [c for c in out if c.get("event_type") == "step.delta"]
+        assert len(starts) == 1
+        assert starts[0]["index"] == 2
+        assert deltas[0]["index"] == 2
+
+    def test_content_block_end_suppresses_finish_step_stop(self):
+        """ContentBlockEnd + Finish emit exactly one step.stop (not two)."""
+        out = self._run(
+            [
+                ContentBlockStartEvent(
+                    type="content_block_start", block_index=0, block_type="text"
+                ),
+                TextDeltaEvent(type="text_delta", text="hi", block_index=0),
+                ContentBlockEndEvent(type="content_block_end", block_index=0),
+                FinishEvent(type="finish", finish_reason={"reason": "stop"}),
+            ]
+        )
+        stops = [c for c in out if c.get("event_type") == "step.stop"]
+        assert len(stops) == 1
+        assert stops[0]["index"] == 0
+
+    def test_finish_synthesizes_step_stop_when_no_block_end(self):
+        """Finish still synthesizes a step.stop when no ContentBlockEnd came."""
+        out = self._run(
+            [
+                TextDeltaEvent(type="text_delta", text="hi", block_index=0),
+                FinishEvent(type="finish", finish_reason={"reason": "stop"}),
+            ]
+        )
+        stops = [c for c in out if c.get("event_type") == "step.stop"]
+        assert len(stops) == 1

@@ -630,6 +630,26 @@ class GoogleInteractionsConverter(BaseConverter):
         self, event: ContentBlockStartEvent, context: StreamContext | None
     ) -> dict[str, Any]:
         block_type = event["block_type"]
+        # Mark the step as opened so the first delta does not synthesize a
+        # second, wrong-index ``step.start`` (see ``stream_response_to_provider``).
+        if context is not None:
+            context.metadata["_interactions_step_started"] = True
+        if block_type in ("tool_use", "server_tool_use"):
+            # The enriched ``step.start`` (carrying id/name/signature) is
+            # emitted by ``_handle_ir_tool_call_start_to_p``; emitting a bare
+            # one here would duplicate it at the same index.  Callers must
+            # therefore emit a ``ToolCallStartEvent`` for every tool block —
+            # every in-tree converter pairs the two events.
+            #
+            # Remember the block index so that opener reuses it: the
+            # ToolCallStartEvent's own ``tool_call_index`` is a 0-based
+            # enumeration of tool calls, not the provider block index, and the
+            # deltas carry the block index.
+            if context is not None:
+                context.metadata["_interactions_pending_tool_index"] = event[
+                    "block_index"
+                ]
+            return {}
         step_type = {v: k for k, v in _STEP_TYPE_TO_BLOCK_TYPE.items()}.get(
             block_type, block_type
         )
@@ -642,6 +662,10 @@ class GoogleInteractionsConverter(BaseConverter):
     def _handle_ir_content_block_end_to_p(
         self, event: ContentBlockEndEvent, context: StreamContext | None
     ) -> dict[str, Any]:
+        # Record that a step.stop was emitted so the ``finish`` fallback in
+        # ``stream_response_to_provider`` does not synthesize a second one.
+        if context is not None:
+            context.metadata["_interactions_step_stopped"] = True
         return {
             "event_type": "step.stop",
             "index": event["block_index"],
@@ -683,9 +707,20 @@ class GoogleInteractionsConverter(BaseConverter):
         sig = pm.get("google", {}).get("thought_signature")
         if sig:
             step["signature"] = sig
+        # Prefer the block index remembered by ``_handle_ir_content_block_start_to_p``
+        # so the opener matches the index its deltas carry; fall back to the
+        # tool-call enumeration when no block-start preceded it.
+        index = event.get("tool_call_index", 0)
+        if context is not None:
+            # This is a step opener too — record it so the delta fallback in
+            # ``stream_response_to_provider`` does not synthesize another one.
+            context.metadata["_interactions_step_started"] = True
+            pending = context.metadata.pop("_interactions_pending_tool_index", None)
+            if pending is not None:
+                index = pending
         return {
             "event_type": "step.start",
-            "index": event.get("tool_call_index", 0),
+            "index": index,
             "step": step,
         }
 
