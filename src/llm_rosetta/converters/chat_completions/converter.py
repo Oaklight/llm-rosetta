@@ -673,6 +673,25 @@ class ChatCompletionsConverter(BaseConverter):
         choice_index = p_choice.get("index", 0)
         delta = p_choice.get("delta") or {}
 
+        # Reasoning content delta (OpenAI o1/o3 models).  Read it before
+        # ``content``: some providers put the tail of the reasoning and the
+        # first answer token in the same chunk, and the reasoning belongs
+        # before that text.  Emitting the text first opens a text block and
+        # pushes the leftover reasoning into a new block after it (#950).
+        #
+        # This corrects the order *within* one chunk.  A stream whose deltas
+        # keep alternating between the two fields still gets one block per
+        # reasoning run, because reordering across chunks is out of scope.
+        reasoning_content = delta.get("reasoning_content")
+        if reasoning_content is not None:
+            events.append(
+                ReasoningDeltaEvent(
+                    type="reasoning_delta",
+                    reasoning=reasoning_content,
+                    choice_index=choice_index,
+                )
+            )
+
         # Text delta (skip empty content from role-only chunks)
         content = delta.get("content")
         if content:
@@ -680,17 +699,6 @@ class ChatCompletionsConverter(BaseConverter):
                 TextDeltaEvent(
                     type="text_delta",
                     text=content,
-                    choice_index=choice_index,
-                )
-            )
-
-        # Reasoning content delta (OpenAI o1/o3 models)
-        reasoning_content = delta.get("reasoning_content")
-        if reasoning_content is not None:
-            events.append(
-                ReasoningDeltaEvent(
-                    type="reasoning_delta",
-                    reasoning=reasoning_content,
                     choice_index=choice_index,
                 )
             )
