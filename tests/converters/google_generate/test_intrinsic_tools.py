@@ -90,7 +90,10 @@ class TestGoogleCodeExecutionResultToIR:
             ],
         }
         result = cast(dict[str, Any], ops._p_message_to_ir(provider_msg))
-        assert result["role"] == "tool"
+        # A server result belongs to the model turn that produced it, so it
+        # stays inline (a ``role:"tool"`` message is only for a *client*
+        # result, which a model message cannot carry).  (#965, #986)
+        assert result["role"] == "assistant"
         tr = result["content"][0]
         assert tr["type"] == "tool_result"
         assert tr["tool_type"] == "intrinsic"

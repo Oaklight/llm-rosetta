@@ -23,9 +23,6 @@ from ...types.ir import (
     TextPart,
     is_message,
     is_text_part,
-    is_tool_call_part,
-    is_reasoning_part,
-    is_refusal_part,
 )
 from ...types.ir.request import IRRequest
 from ...types.ir.response import IRResponse, UsageInfo
@@ -40,6 +37,7 @@ from ...types.ir.stream import (
     TextDeltaEvent,
     ToolCallDeltaEvent,
     ToolCallStartEvent,
+    ToolResultEvent,
     UsageEvent,
 )
 from ..base import BaseConverter
@@ -50,6 +48,7 @@ from ..base.tools import (
     sanitize_tool_call_id,
     strip_orphaned_tool_config,
 )
+from ..base.tools.intrinsic import get_intrinsic_kind, set_intrinsic_kind
 from ..base.helpers.extensions import wire_extensions
 from ..base.helpers.opaque import (
     get_opaque_origin,
@@ -195,6 +194,13 @@ class GoogleGenerateConverter(BaseConverter):
     _CONVERTER_TAG = "google_generate"
     _PASSTHROUGH_RESTORE_KEY = "candidates"
     _INTRINSIC_IR_TRANSFORMS = (hoist_late_system_messages(),)
+
+    # A server-tool result arrives whole, so the writer needs a handler for
+    # the one-shot event the reader emits.  (#986)
+    _IR_TO_P_DISPATCH: dict[str, str] = {
+        **BaseConverter._IR_TO_P_DISPATCH,
+        "tool_result": "_handle_ir_tool_result_to_p",
+    }
 
     def __init__(self):
         self.content_ops = self.content_ops_class()
@@ -528,6 +534,16 @@ class GoogleGenerateConverter(BaseConverter):
         for p_candidate in candidates:
             content = p_candidate.get("content")
             message = self.message_ops._p_message_to_ir(content) if content else None
+            # A model turn keeps the parts it owns (a server call, its inline
+            # server result, text).  Only a *client* result splits the turn
+            # into a list, which ``choices[0].message`` cannot hold and which a
+            # response candidate cannot legitimately carry — keep the assistant
+            # turn and drop the client tool turn.  (#965, #986)
+            if isinstance(message, list):
+                message = next(
+                    (m for m in message if m.get("role") == "assistant"),
+                    message[0],
+                )
             # Fallback for empty candidates (e.g. thinking consumed all tokens)
             if message is None:
                 message = {"role": "assistant", "content": []}
@@ -616,14 +632,14 @@ class GoogleGenerateConverter(BaseConverter):
             parts: list[dict[str, Any]] = []
 
             for part in message.get("content", []):
-                if is_text_part(part):
-                    parts.append(self.content_ops.ir_text_to_p(part))
-                elif is_tool_call_part(part):
-                    parts.append(self.tool_ops.ir_tool_call_to_p(part))
-                elif is_reasoning_part(part):
-                    parts.append(self.content_ops.ir_reasoning_to_p(part))
-                elif is_refusal_part(part):
-                    parts.append(self.content_ops.ir_refusal_to_p(part))
+                # Route through the intrinsic-aware part writer: an intrinsic
+                # call becomes ``executableCode`` and a server result
+                # ``codeExecutionResult`` (or is dropped when Google cannot
+                # render it), never a client ``functionCall``.  This is the
+                # same writer the message path uses.  (#986)
+                converted = self.message_ops._ir_content_part_to_p(part)
+                if converted is not None:
+                    parts.append(converted)
 
             if google_role == "model":
                 inject_google_function_call_signature(parts)
@@ -967,6 +983,117 @@ class GoogleGenerateConverter(BaseConverter):
             self._handle_p_function_call_to_ir(
                 func_call, part, choice_index, context, events
             )
+            return
+
+        # Server-tool parts.  Google delivers ``executableCode`` and
+        # ``codeExecutionResult`` whole, in their own parts.  A server call
+        # must never surface as a client call, so both are read with the same
+        # intrinsic reader the non-streaming path uses — the kind comes from
+        # the reader, never from a tool name.  (#986)
+        intrinsic_call = self.tool_ops.p_intrinsic_call_to_ir(part)
+        if intrinsic_call is not None:
+            self._handle_p_intrinsic_call_to_ir(
+                intrinsic_call, part, choice_index, context, events
+            )
+            return
+
+        intrinsic_result = self.tool_ops.p_intrinsic_result_to_ir(part)
+        if intrinsic_result is not None:
+            self._handle_p_intrinsic_result_to_ir(
+                intrinsic_result, part, choice_index, context, events
+            )
+
+    def _handle_p_intrinsic_call_to_ir(
+        self,
+        ir_call: dict[str, Any],
+        native_part: dict[str, Any],
+        choice_index: int,
+        context: StreamContext | None,
+        events: list[IRStreamEvent],
+    ) -> None:
+        """Emit ``ToolCallStartEvent`` (+ input delta) for a server call.
+
+        Google sends the call whole, so the start event carries the native
+        part in ``provider_metadata`` for a same-dialect restore.  A
+        ``ToolCallDeltaEvent`` accompanies it so every other format receives
+        the input too.
+        """
+        tool_call_id = ir_call["tool_call_id"]
+        tool_name = ir_call["tool_name"]
+        native_meta = {
+            "_native": {"base": self._CONVERTER_TAG, "part": dict(native_part)}
+        }
+        if context is not None:
+            context.register_tool_call(
+                tool_call_id,
+                tool_name,
+                tool_type="intrinsic",
+                provider_metadata=native_meta,
+            )
+        tc_index = context.tool_call_count - 1 if context is not None else 0
+        start_event: dict[str, Any] = {
+            "type": "tool_call_start",
+            "tool_call_id": tool_call_id,
+            "tool_name": tool_name,
+            "tool_type": "intrinsic",
+            "choice_index": choice_index,
+            "tool_call_index": tc_index,
+            "provider_metadata": dict(native_meta),
+        }
+        set_intrinsic_kind(start_event, get_intrinsic_kind(ir_call))
+        events.append(cast(ToolCallStartEvent, start_event))
+
+        args_json = json.dumps(ir_call.get("tool_input", {}))
+        delta_evt = ToolCallDeltaEvent(
+            type="tool_call_delta",
+            tool_call_id=tool_call_id,
+            arguments_delta=args_json,
+            choice_index=choice_index,
+        )
+        delta_evt["tool_call_index"] = tc_index
+        events.append(delta_evt)
+        if context is not None:
+            context.append_tool_call_args(tool_call_id, args_json)
+
+    def _handle_p_intrinsic_result_to_ir(
+        self,
+        ir_result: dict[str, Any],
+        native_part: dict[str, Any],
+        choice_index: int,
+        context: StreamContext | None,
+        events: list[IRStreamEvent],
+    ) -> None:
+        """Emit a one-shot ``ToolResultEvent`` for a server result.
+
+        The result arrives whole with no deltas to follow, so everything
+        rides on the event.  Google's ``codeExecutionResult`` carries no id;
+        pair it with the intrinsic call it answers, by kind, so the streaming
+        and non-streaming halves agree.
+        """
+        tool_call_id = ir_result.get("tool_call_id") or self._last_intrinsic_id(context)
+        event = ToolResultEvent(
+            type="tool_result",
+            tool_call_id=tool_call_id,
+            result=ir_result.get("result", ""),
+            is_error=ir_result.get("is_error", False),
+            tool_type="intrinsic",
+        )
+        set_intrinsic_kind(event, get_intrinsic_kind(ir_result))
+        event["provider_metadata"]["_native"] = {
+            "base": self._CONVERTER_TAG,
+            "part": dict(native_part),
+        }
+        events.append(event)
+
+    @staticmethod
+    def _last_intrinsic_id(context: StreamContext | None) -> str:
+        """Return the id of the most recent intrinsic call, or ``""``."""
+        if context is None:
+            return ""
+        for call_id in reversed(context.tool_call_ids):
+            if context.get_tool_type(call_id) == "intrinsic":
+                return call_id
+        return ""
 
     def _handle_p_function_call_to_ir(
         self,
@@ -1187,14 +1314,129 @@ class GoogleGenerateConverter(BaseConverter):
     def _handle_ir_tool_call_start_to_p(
         self, event: ToolCallStartEvent, context: StreamContext | None
     ) -> dict[str, Any]:
-        """Handle ToolCallStartEvent → register in context, no output."""
+        """Handle ToolCallStartEvent → register, and write a server call.
+
+        A client call stays pending until the finish flush, which writes it as
+        ``functionCall``.  A server call (``tool_type == "intrinsic"``) is
+        re-emitted as Google's own part type, never as a client
+        ``functionCall``: ``executableCode`` is written here, at the position
+        Google sent it, when the event carries the native part from a
+        same-dialect read.  Without a native part (a cross-format hop) it is
+        deferred to the finish flush, which rebuilds it from the accumulated
+        input.  An intrinsic kind Google cannot render is dropped silently, but
+        never as a client call.  (#986)
+        """
+        tool_type = event.get("tool_type", "function")
         if context is not None:
             context.register_tool_call(
                 event["tool_call_id"],
                 event["tool_name"],
+                tool_type=tool_type,
                 provider_metadata=event.get("provider_metadata"),
             )
-        return {}
+        if tool_type != "intrinsic":
+            return {}
+        native = self._native_executable_code(event.get("provider_metadata"))
+        if native is None:
+            return {}
+        return self._executable_code_chunk(
+            native, event.get("choice_index", 0), context
+        )
+
+    def _handle_ir_tool_result_to_p(
+        self, event: ToolResultEvent, context: StreamContext | None
+    ) -> dict[str, Any]:
+        """Handle ToolResultEvent → a Google server-result part.
+
+        Only an intrinsic result Google can render becomes a
+        ``codeExecutionResult`` part; a native part from a same-dialect read is
+        replayed verbatim so its ``outcome`` survives.  Anything else is
+        dropped — a server result is never downgraded to a client
+        ``functionResponse``.  (#986)
+        """
+        if event.get("tool_type") != "intrinsic":
+            return {}
+        kind = get_intrinsic_kind(event, "")
+        if kind != "code_execution":
+            return {}
+        native = self._native_code_execution_result(event.get("provider_metadata"))
+        result_part: dict[str, Any]
+        if native is not None:
+            result_part = {"codeExecutionResult": dict(native)}
+        else:
+            ir_part: dict[str, Any] = {
+                "type": "tool_result",
+                "tool_call_id": event["tool_call_id"],
+                "result": event.get("result", ""),
+                "tool_type": "intrinsic",
+            }
+            if event.get("is_error"):
+                ir_part["is_error"] = True
+            set_intrinsic_kind(ir_part, kind)
+            converted = self.tool_ops.ir_intrinsic_result_to_p(ir_part)
+            if converted is None:
+                return {}
+            result_part = converted
+        return self._inject_stream_metadata(
+            {
+                "candidates": [
+                    {
+                        "index": 0,
+                        "content": {"role": "model", "parts": [result_part]},
+                    }
+                ]
+            },
+            context,
+        )
+
+    def _native_executable_code(
+        self, provider_metadata: Mapping[str, Any] | None
+    ) -> dict[str, Any] | None:
+        """Return the native ``executableCode`` for a Google-origin call."""
+        native = (provider_metadata or {}).get("_native")
+        if isinstance(native, dict) and native.get("base") == self._CONVERTER_TAG:
+            part = native.get("part")
+            if isinstance(part, dict) and isinstance(part.get("executableCode"), dict):
+                return part["executableCode"]
+        return None
+
+    def _native_code_execution_result(
+        self, provider_metadata: Mapping[str, Any] | None
+    ) -> dict[str, Any] | None:
+        """Return the native ``codeExecutionResult``, if Google-origin."""
+        native = (provider_metadata or {}).get("_native")
+        if isinstance(native, dict) and native.get("base") == self._CONVERTER_TAG:
+            part = native.get("part")
+            if isinstance(part, dict) and isinstance(
+                part.get("codeExecutionResult"), dict
+            ):
+                return part["codeExecutionResult"]
+        return None
+
+    def _executable_code_chunk(
+        self,
+        executable: Mapping[str, Any],
+        choice_index: int,
+        context: StreamContext | None,
+    ) -> dict[str, Any]:
+        """Build a stream chunk carrying a single ``executableCode`` part."""
+        part = {
+            "executableCode": {
+                "code": executable.get("code", ""),
+                "language": executable.get("language", "PYTHON"),
+            }
+        }
+        return self._inject_stream_metadata(
+            {
+                "candidates": [
+                    {
+                        "index": choice_index,
+                        "content": {"role": "model", "parts": [part]},
+                    }
+                ]
+            },
+            context,
+        )
 
     def _handle_ir_tool_call_delta_to_p(
         self, event: ToolCallDeltaEvent, context: StreamContext | None
@@ -1205,6 +1447,37 @@ class GoogleGenerateConverter(BaseConverter):
                 event["tool_call_id"], event["arguments_delta"]
             )
         return {}
+
+    def _flushed_intrinsic_part(
+        self,
+        provider_metadata: Mapping[str, Any],
+        tool_name: str,
+        args_str: str,
+    ) -> dict[str, Any] | None:
+        """Build the finish part for a pending intrinsic call, or ``None``.
+
+        ``None`` means nothing is written here: the call was already written on
+        its start event (it carried a native part), or Google cannot render the
+        kind.  Either way a server call is never downgraded to a client
+        ``functionCall``.  (#986)
+        """
+        if self._native_executable_code(provider_metadata) is not None:
+            return None
+        if (
+            get_intrinsic_kind({"provider_metadata": provider_metadata}, tool_name)
+            != "code_execution"
+        ):
+            return None
+        try:
+            args = json.loads(args_str) if args_str else {}
+        except (json.JSONDecodeError, TypeError):
+            args = {}
+        return {
+            "executableCode": {
+                "code": args.get("code", ""),
+                "language": args.get("language", "PYTHON"),
+            }
+        }
 
     def _handle_ir_finish_to_p(
         self, event: FinishEvent, context: StreamContext | None
@@ -1225,6 +1498,16 @@ class GoogleGenerateConverter(BaseConverter):
 
         if context is not None:
             for call_id, tool_name, args_str in context.get_pending_tool_calls():
+                if context.get_tool_type(call_id) == "intrinsic":
+                    provider_metadata = (
+                        context.get_tool_call_provider_metadata(call_id) or {}
+                    )
+                    intrinsic_part = self._flushed_intrinsic_part(
+                        provider_metadata, tool_name, args_str
+                    )
+                    if intrinsic_part is not None:
+                        parts.append(intrinsic_part)
+                    continue
                 try:
                     args = json.loads(args_str) if args_str else {}
                 except (json.JSONDecodeError, TypeError):

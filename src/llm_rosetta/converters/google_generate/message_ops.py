@@ -66,21 +66,23 @@ def _match_tool_name(result_id: str, known_names: dict[str, list[str]]) -> str:
     return result_id
 
 
-def _pair_intrinsic_ids(content_parts: list[Any], tool_result_parts: list[Any]) -> None:
-    """Pair intrinsic tool results with their calls by kind (in-place).
+def _pair_intrinsic_ids(parts: list[Any]) -> None:
+    """Pair intrinsic tool results with their calls in one part list (in-place).
 
     Google code_execution puts both ``executableCode`` and
-    ``codeExecutionResult`` in the same model message.  The result
-    gets ``tool_call_id=""`` from ``p_intrinsic_result_to_ir``.
-    Match by ``intrinsic_kind`` so the IDs agree.
+    ``codeExecutionResult`` in the same model message, and a server result
+    belongs to the turn that produced it, so the result sits inline next to
+    its call.  The result gets ``tool_call_id=""`` from
+    ``p_intrinsic_result_to_ir``.  Match by ``intrinsic_kind`` so the IDs
+    agree.
     """
-    calls = [
-        p
-        for p in content_parts
-        if is_intrinsic_part(p) and p.get("type") == "tool_call"
-    ]
-    for result_part in tool_result_parts:
-        if not is_intrinsic_part(result_part) or result_part.get("tool_call_id"):
+    calls = [p for p in parts if is_intrinsic_part(p) and p.get("type") == "tool_call"]
+    for result_part in parts:
+        if (
+            not is_intrinsic_part(result_part)
+            or result_part.get("type") != "tool_result"
+            or result_part.get("tool_call_id")
+        ):
             continue
         r_kind = get_intrinsic_kind(result_part)
         for call_part in calls:
@@ -420,7 +422,12 @@ class GoogleGenerateMessageOps(BaseMessageOps):
 
             intrinsic_result = self.tool_ops.p_intrinsic_result_to_ir(part)
             if intrinsic_result is not None:
-                tool_result_parts.append(cast(ContentPart, intrinsic_result))
+                # A server result (``codeExecutionResult``) belongs to the
+                # turn that produced it, so it stays inline with its call and
+                # any text, in order.  Only a *client* result
+                # (``functionResponse``) is normalized to a ``role:"tool"``
+                # message — the Google instance of #965.
+                content_parts.append(cast(ContentPart, intrinsic_result))
                 continue
 
             # Handle content parts (text, image, file, audio)
@@ -437,19 +444,23 @@ class GoogleGenerateMessageOps(BaseMessageOps):
         if not content_parts and not tool_result_parts:
             return None
 
-        # If there are only tool results and no other content, return a
+        # Pair any intrinsic server results with the calls they answer, in
+        # place, so their IDs agree.  Server results already live in
+        # ``content_parts``; only client results remain in ``tool_result_parts``.
+        _pair_intrinsic_ids(content_parts)
+
+        # If there are only client tool results and no other content, return a
         # single role:"tool" message.
         if tool_result_parts and not content_parts:
             return {"role": "tool", "content": tool_result_parts}
 
-        # If there are only regular content parts, return a single message.
+        # If there are no client results, return a single message: the model
+        # turn keeps every part it owns (call, server result, text), in order.
         if content_parts and not tool_result_parts:
             return {"role": ir_role, "content": content_parts}
 
-        _pair_intrinsic_ids(content_parts, tool_result_parts)
-
-        # Mixed: assistant content (including tool calls) first,
-        # then tool results (paired by ID above).
+        # Mixed: assistant content (including tool calls) first, then client
+        # tool results (paired by ID above).
         return [
             {"role": ir_role, "content": content_parts},
             {"role": "tool", "content": tool_result_parts},
