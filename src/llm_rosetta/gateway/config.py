@@ -366,6 +366,27 @@ def detect_routing_loops(
 # ---------------------------------------------------------------------------
 
 
+class _FormatGroups(NamedTuple):
+    """Static partitions of a model's providers in one source format.
+
+    Built once per ``(model, source_format)`` and reused across requests; the
+    per-request part of tier selection (which provider is the anchor) is not
+    part of this.
+    """
+
+    covers_all: bool
+    """Every provider of the model already speaks the source format."""
+
+    all_group: ModelRoute
+    """Every provider in the source format (tier 3)."""
+
+    by_shim: dict[tuple[str | None, str], ModelRoute]
+    """Keyed by ``(shim name, base_url)`` — same endpoint (tier 1)."""
+
+    by_account: dict[str, ModelRoute]
+    """Keyed by the account token — same upstream account (tier 2)."""
+
+
 class GatewayConfig:
     """Parsed and validated gateway configuration."""
 
@@ -465,6 +486,14 @@ class GatewayConfig:
                 shim_name=self.provider_shim_names.get(name),
             )
             for name, cfg in self._raw_providers.items()
+        }
+
+        # Upstream-account identity per provider, derived from the credential
+        # source at build time.  Two providers sharing a token front one
+        # account — the key tier-2 same-format routing compares on.  Computed
+        # here because the env var *name* is already expanded away by then.
+        self.provider_account_tokens: dict[str, str] = {
+            name: pinfo.account_token(name) for name, pinfo in self.providers.items()
         }
 
         # --- Rerank routing ---
@@ -743,11 +772,12 @@ class GatewayConfig:
 
         # When a model has providers in multiple API formats, prefer the
         # one matching the client's format to avoid unnecessary cross-format
-        # conversion.  Off by default: enabling changes which upstream a
-        # multi-format model reaches.
+        # conversion.  The preference is tiered and relative to an anchor
+        # provider — see _select_tiered.  Off by default: enabling changes
+        # which upstream a multi-format model reaches.
         self.prefer_same_format: bool = bool(_server.get("prefer_same_format", False))
-        # Keyed by (model, source_provider); see _same_format_route.
-        self._same_format_routes: dict[tuple[str, str], ModelRoute | None] = {}
+        # Keyed by (model, source_provider); see _format_groups.
+        self._format_groups_cache: dict[tuple[str, str], _FormatGroups | None] = {}
 
         self.admin_password: str | None = _server.get("admin_password")
         if self.admin_password and _ENV_VAR_RE.search(self.admin_password):
@@ -1107,45 +1137,96 @@ class GatewayConfig:
         strategy = create_strategy(strategy_name)
         return ModelRoute(entries, strategy)
 
-    def _same_format_route(
-        self,
-        model: str,
-        model_route: ModelRoute,
-        source_provider: str,
-    ) -> ModelRoute | None:
-        """Return a sub-route of providers speaking *source_provider*.
+    def _shim_group_key(self, provider_name: str) -> tuple[str | None, str]:
+        """Return the tier-1 key for *provider_name*: same shim, same endpoint.
 
-        ``None`` when the feature is off, when nothing matches, or when
-        everything matches — reusing the original route then preserves its
-        load-balancing state.
+        ``base_url`` is part of the key so two unrelated bare-format providers
+        (both with no shim) are not mistaken for one endpoint.
+        """
+        return (
+            self.provider_shim_names.get(provider_name),
+            self.providers[provider_name].base_url,
+        )
+
+    def _format_groups(self, model: str, source_provider: str) -> _FormatGroups | None:
+        """Return the static tier partitions for *model* in *source_provider*.
+
+        ``None`` when the model has no provider in that format.  The result is
+        a function of the config alone, so it is cached; the anchor-relative
+        part of tier selection is per request and lives in
+        :meth:`_select_tiered`.
 
         Provider types are compared as normalised base types: since #909
         ``open_responses`` is the only Responses base and
         ``openai--open_responses`` is a shim over it, so an OpenAI-profile
-        provider and a neutral-spec provider count as the same format and may
-        take the shortcut.
+        provider and a neutral-spec provider count as the same format.
         """
-        if not self.prefer_same_format:
-            return None
-
         key = (model, source_provider)
         # ``None`` is a meaningful cached value, so test membership.
-        if key in self._same_format_routes:
-            return self._same_format_routes[key]
+        if key in self._format_groups_cache:
+            return self._format_groups_cache[key]
 
+        model_route = self.models[model]
         matching = [
             p
             for p in model_route.providers
             if self.provider_types.get(p.name) == source_provider
         ]
-        if not matching or len(matching) == len(model_route.providers):
-            sub = None
+        if not matching:
+            groups = None
         else:
-            # Its own strategy instance: weight counters are indexed by
-            # position, so the subset cannot share the parent route's.
-            sub = ModelRoute(matching, type(model_route.strategy)())
-        self._same_format_routes[key] = sub
-        return sub
+            # Each subset gets its own strategy instance: weight counters are
+            # indexed by position, so a subset cannot share the parent's.
+            def _sub(members: list[ProviderEntry]) -> ModelRoute:
+                return ModelRoute(members, type(model_route.strategy)())
+
+            by_shim: dict[tuple[str | None, str], list[ProviderEntry]] = {}
+            by_account: dict[str, list[ProviderEntry]] = {}
+            for provider in matching:
+                by_shim.setdefault(self._shim_group_key(provider.name), []).append(
+                    provider
+                )
+                by_account.setdefault(
+                    self.provider_account_tokens[provider.name], []
+                ).append(provider)
+
+            groups = _FormatGroups(
+                covers_all=len(matching) == len(model_route.providers),
+                all_group=_sub(matching),
+                by_shim={k: _sub(v) for k, v in by_shim.items()},
+                by_account={k: _sub(v) for k, v in by_account.items()},
+            )
+        self._format_groups_cache[key] = groups
+        return groups
+
+    def _select_tiered(
+        self,
+        groups: _FormatGroups,
+        anchor: ProviderEntry,
+        identity: str | None,
+    ) -> ProviderEntry | None:
+        """Pick the ready provider closest to *anchor* among same-format ones.
+
+        Tries tier 1 (same shim and endpoint as *anchor*), then tier 2 (same
+        account, possibly another format), then tier 3 (any same-format
+        provider).  ``None`` when no same-format provider is ready, leaving the
+        caller to fall back to *anchor* and convert through IR.
+
+        Tier 1 cannot change the format — a shim fixes the base — so it only
+        orders failover between identical endpoints.  Tier 2 is the tier that
+        realigns the format without moving to a different account.
+        """
+        for route in (
+            groups.by_shim.get(self._shim_group_key(anchor.name)),
+            groups.by_account.get(self.provider_account_tokens[anchor.name]),
+            groups.all_group,
+        ):
+            if route is None:
+                continue
+            entry = self._select_ready_entry(route, identity=identity)
+            if entry is not None:
+                return entry
+        return None
 
     def _select_ready_entry(
         self,
@@ -1211,15 +1292,13 @@ class GatewayConfig:
 
         model_route = self.models[model]
 
-        # Fall back to the full provider list when affinity is off, matches
-        # nothing, or matches only providers that are still initializing.
-        entry = None
-        affine_route = self._same_format_route(model, model_route, source_provider)
-        if affine_route is not None:
-            entry = self._select_ready_entry(affine_route, identity=client_identity)
-        if entry is None:
-            entry = self._select_ready_entry(model_route, identity=client_identity)
-        if entry is None:
+        # The anchor is what routing would pick with the preference off, and the
+        # full route's counter advances exactly as it would there.  Tier
+        # selection can still move the served request onto another account
+        # (tier 3), so what is preserved is the anchor selection, not the
+        # per-account served share.
+        anchor = self._select_ready_entry(model_route, identity=client_identity)
+        if anchor is None:
             deferred = getattr(self, "_deferred_startup", None)
             all_failed = deferred is not None and all(
                 deferred.provider_state(p.name) == ProviderInitState.FAILED
@@ -1227,6 +1306,14 @@ class GatewayConfig:
                 if not self.providers[p.name].ready
             )
             raise ProviderNotReady(model, failed=all_failed)
+
+        entry = anchor
+        if self.prefer_same_format:
+            groups = self._format_groups(model, source_provider)
+            # A homogeneous route has nothing to realign — the anchor already
+            # speaks the client's format — so it keeps the plain-route behavior.
+            if groups is not None and not groups.covers_all:
+                entry = self._select_tiered(groups, anchor, client_identity) or anchor
 
         provider_name = entry.name
         provider_type = self.provider_types[provider_name]

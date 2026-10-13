@@ -163,6 +163,7 @@ class ProviderInfo:
         token_refresh_interval: int = 3600,
         keyless: bool = False,
         session_header: str | None = None,
+        credential_token: str | None = None,
     ) -> None:
         if not base_url.startswith(("http://", "https://")):
             raise ValueError(
@@ -187,6 +188,10 @@ class ProviderInfo:
         # until the request pipeline sets it; both must be present to emit.
         self.session_header = session_header
         self.session_id: str | None = None
+        # Opaque digest of the credential source, or ``None`` when the provider
+        # has no stable one.  Compared by :meth:`account_token` to detect two
+        # providers that front the same upstream account.  Never the raw key.
+        self.credential_token = credential_token
 
     # -- readiness ----------------------------------------------------------
 
@@ -203,6 +208,24 @@ class ProviderInfo:
         return not self.key_ring.contains_only(TOKEN_PENDING_SENTINEL)
 
     # -- public helpers used by the proxy -----------------------------------
+
+    def account_token(self, provider_name: str) -> str:
+        """Return an opaque identity for this provider's upstream account.
+
+        Two providers whose tokens are equal front the same account.  A
+        provider with no stable credential (keyless, or an unresolved key)
+        gets a unique token keyed on *provider_name*, so it never groups.
+
+        Args:
+            provider_name: The gateway provider's config key.  Used only for
+                the ungroupable fallback; ``self.name`` holds the base type.
+
+        Returns:
+            The credential digest, or ``@{provider_name}`` when there is none.
+        """
+        if not self.credential_token:
+            return f"@{provider_name}"
+        return self.credential_token
 
     def auth_headers(self) -> dict[str, str]:
         """Return auth headers using the next rotated or affinity-selected key.

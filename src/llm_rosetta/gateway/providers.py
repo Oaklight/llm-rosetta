@@ -8,6 +8,7 @@ runtime :class:`ProviderInfo` instances.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from typing import Any
 
@@ -243,6 +244,44 @@ def _apply_shim_defaults(cfg: dict[str, Any], shim: Any) -> dict[str, Any]:
     return cfg
 
 
+def _credential_token(
+    *,
+    token_command: list[str] | None,
+    api_key: str,
+    keyless: bool,
+) -> str | None:
+    """Derive an opaque, non-secret account identity for a provider.
+
+    Two providers with the same token share one upstream account; see
+    :attr:`GatewayConfig.provider_account_tokens`.  ``None`` means "no stable
+    credential identity" — a keyless upstream, or an empty api_key — so such
+    providers are never grouped.
+
+    Note an unresolved ``${VAR}`` is not empty: config loading leaves the
+    placeholder text in place when the variable is unset, so two providers
+    sharing one do group.  That is harmless — neither can authenticate.
+
+    The token comes from the credential *source*, not its resolved value where
+    the two differ: a ``token_command`` is hashed as-is so token rotation does
+    not move the identity, while a static key is hashed by value so an
+    env-resolved key and a literal key with the same value group together.
+    Only the digest leaves this function; the raw key is never stored or logged.
+
+    The endpoint is deliberately not part of the identity: the same credential
+    pointed at two different ``base_url`` values is one account, so tier-2
+    routing may realign between those endpoints.  Tier 1 is where the endpoint
+    matters — its key pairs the shim name with ``base_url``.
+    """
+    if keyless:
+        return None
+    if token_command is not None:
+        return "cmd:" + hashlib.sha256("\x00".join(token_command).encode()).hexdigest()
+    keys = sorted(k.strip() for k in api_key.split(",") if k.strip())
+    if not keys:
+        return None
+    return "key:" + hashlib.sha256("\x00".join(keys).encode()).hexdigest()
+
+
 def build_provider_info(
     provider_type: str,
     cfg: dict[str, Any],
@@ -365,6 +404,9 @@ def build_provider_info(
         token_command=token_command,
         token_refresh_interval=token_refresh_interval,
         keyless=keyless,
+        credential_token=_credential_token(
+            token_command=token_command, api_key=api_key, keyless=keyless
+        ),
         session_header=cfg.get("session_header")
         or (shim.connection.session_header if shim is not None else None),
     )
