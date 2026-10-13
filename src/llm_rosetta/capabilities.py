@@ -327,7 +327,7 @@ def strip_intrinsic_tools(
 def resolve_intrinsic_tools(
     ir_request: dict[str, Any],
     *,
-    shim: Any = None,
+    shim: ProviderShim | str | None = None,
     same_format: bool = False,
     allow_name_promotion: bool = False,
     request_id: str = "-",
@@ -346,7 +346,8 @@ def resolve_intrinsic_tools(
     A provider with no shim, or an empty ``intrinsic_tools`` list, supports
     no intrinsic tools — everything intrinsic is dropped.  Same-format
     conversions are left untouched (a provider always understands its own
-    native declarations).
+    native declarations).  ``shim`` accepts a name as well as an object, like
+    the sibling gates; a name that does not resolve is treated as no shim.
     """
     if same_format:
         return ir_request
@@ -355,7 +356,10 @@ def resolve_intrinsic_tools(
     if not tools:
         return ir_request
 
-    supported = set(getattr(getattr(shim, "tools", None), "intrinsic_tools", ()) or ())
+    resolved = resolve_shim(shim) if isinstance(shim, str) else shim
+    supported = set(
+        getattr(getattr(resolved, "tools", None), "intrinsic_tools", ()) or ()
+    )
 
     new_tools: list[Any] = []
     dropped = 0

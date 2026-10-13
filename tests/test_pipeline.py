@@ -1165,6 +1165,124 @@ class TestConversionPipeline:
         assert isinstance(synthetic["content"], list)
         assert any(p.get("type") == "image_url" for p in synthetic["content"])
 
+    def test_implied_target_applies_the_reasoning_config(self):
+        """A shim-spelled ``target_provider`` reaches the reasoning gate.
+
+        The pipeline resolves the target shim once, so naming the shim as the
+        target *provider* gives the same traits as passing ``target_shim=``.
+        This gate read the raw argument, so with no explicit shim the target's
+        reasoning config was silently dropped.
+
+        Each of the four readers has its own case below — one equality assertion
+        only turns red for whichever reader happens to differ first.
+        """
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        body = {
+            "model": "m",
+            "messages": [{"role": "user", "content": "hi"}],
+            "reasoning_effort": "none",
+        }
+        implied = ConversionPipeline(
+            "chat_completions", "deepseek--chat_completions"
+        ).convert_request(dict(body))
+        explicit = ConversionPipeline(
+            "chat_completions",
+            "deepseek--chat_completions",
+            target_shim=resolve_shim("deepseek--chat_completions"),
+        ).convert_request(dict(body))
+        assert implied.get("thinking") == {"type": "disabled"}
+        assert implied == explicit
+
+    def test_implied_target_applies_ir_transforms(self):
+        """A late system message is hoisted for a shim-spelled target too.
+
+        Pins the IR-transforms site on its own — the equality case above only
+        turns red for the reasoning gate.  Every chat-completions shim carries
+        ``hoist_late_system_messages()``, so the request body is reshaped here,
+        not just a capability field.
+        """
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        body = {
+            "model": "m",
+            "max_tokens": 10,
+            "messages": [
+                {"role": "user", "content": "hi"},
+                {"role": "system", "content": "LATE"},
+                {"role": "assistant", "content": "ok"},
+            ],
+        }
+        out = ConversionPipeline(
+            "chat_completions", "deepseek--chat_completions"
+        ).convert_request(copy.deepcopy(body))
+        explicit = ConversionPipeline(
+            "chat_completions",
+            "deepseek--chat_completions",
+            target_shim=resolve_shim("deepseek--chat_completions"),
+        ).convert_request(copy.deepcopy(body))
+        assert not any(m.get("role") == "system" for m in out["messages"])
+        assert any("<system>" in str(m.get("content")) for m in out["messages"])
+        assert out == explicit
+
+    def test_implied_target_applies_the_custom_tool_policy(self):
+        """A custom tool survives a shim-spelled target that declares support.
+
+        Pins the custom-tools site on its own.  ``alcf--sophia`` declares
+        ``custom_tools: true``, so the implied form must keep the tool rather
+        than downgrade it to a function with a synthesised ``input`` schema.
+        """
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        body = {
+            "model": "m",
+            "max_tokens": 10,
+            "messages": [{"role": "user", "content": "hi"}],
+            "tools": [{"type": "custom", "name": "x", "format": {"type": "text"}}],
+        }
+        out = ConversionPipeline("open_responses", "alcf--sophia").convert_request(
+            copy.deepcopy(body)
+        )
+        explicit = ConversionPipeline(
+            "open_responses",
+            "alcf--sophia",
+            target_shim=resolve_shim("alcf--sophia"),
+        ).convert_request(copy.deepcopy(body))
+        assert out["tools"] == [
+            {"type": "custom", "custom": {"name": "x", "format": {"type": "text"}}}
+        ]
+        assert out == explicit
+
+    def test_implied_target_applies_body_transforms(self):
+        """The target shim's body transforms run for an implied target too.
+
+        Pins the fourth reader on its own.  This is the site a user notices most:
+        ``deepseek--chat_completions`` declares
+        ``strip_fields('n', 'logit_bias', 'seed', …)`` as a post-IR body
+        transform, so for an implied target those fields used to reach the
+        upstream intact while the explicit form stripped them.
+        """
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        body = {
+            "model": "m",
+            "max_tokens": 10,
+            "messages": [{"role": "user", "content": "hi"}],
+            "seed": 7,
+            "frequency_penalty": 0.5,
+            "n": 2,
+        }
+        out = ConversionPipeline(
+            "chat_completions", "deepseek--chat_completions"
+        ).convert_request(copy.deepcopy(body))
+        explicit = ConversionPipeline(
+            "chat_completions",
+            "deepseek--chat_completions",
+            target_shim=resolve_shim("deepseek--chat_completions"),
+        ).convert_request(copy.deepcopy(body))
+        assert "seed" not in out and "frequency_penalty" not in out and "n" not in out
+        assert out == explicit
+
 
 class TestStreamProcessorIterEvents:
     """Tests for StreamProcessor.iter_events (#872)."""

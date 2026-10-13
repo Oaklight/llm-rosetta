@@ -85,6 +85,38 @@ class TestPassthroughMode:
         )
         assert pipeline.ir_request == {}
 
+    def test_same_format_compares_the_provider_specs(self) -> None:
+        """The same-format notion is named and computed on access.
+
+        It gates baseline and the intrinsic shortcut; asserting it directly pins
+        the notion rather than only its downstream effects.
+        """
+        assert ConversionPipeline("openai_chat", "openai_chat")._same_format is True
+        assert ConversionPipeline("openai_chat", "messages")._same_format is False
+        # A legacy spelling canonicalizes onto the canonical name.
+        assert (
+            ConversionPipeline("openai_chat", "chat_completions")._same_format is True
+        )
+        # A shim target is a distinct spec even when its base matches, so the
+        # target shim's IR-level traits still apply (see
+        # test_convert_uses_target_shim_reasoning_config).
+        assert (
+            ConversionPipeline("openai_chat", "deepseek--chat_completions")._same_format
+            is False
+        )
+
+    def test_baseline_needs_both_the_flag_and_the_same_format(self) -> None:
+        assert ConversionPipeline("openai_chat", "openai_chat")._baseline is False
+        assert (
+            ConversionPipeline("openai_chat", "openai_chat", baseline=True)._baseline
+            is True
+        )
+        # Cross-format never short-circuits, whatever the flag says.
+        assert (
+            ConversionPipeline("openai_chat", "messages", baseline=True)._baseline
+            is False
+        )
+
 
 # ============================================================================
 # Converter caching tests

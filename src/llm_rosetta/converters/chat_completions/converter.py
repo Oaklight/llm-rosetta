@@ -115,6 +115,9 @@ class ChatCompletionsConverter(BaseConverter):
     _CONVERTER_TAG = "chat_completions"
     _PASSTHROUGH_RESTORE_KEY = "choices"
     _SUPPORTS_MULTIMODAL_TOOL_RESULT = False
+    # Chat Completions has no native syntax for server-side tools: a client
+    # asks for one by naming a function after the kind (see tool_ops.py).
+    _SUPPORTS_NATIVE_SERVER_TOOLS = False
 
     def __init__(self):
         self.content_ops = self.content_ops_class()

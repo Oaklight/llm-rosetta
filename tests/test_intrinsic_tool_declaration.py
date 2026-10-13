@@ -18,6 +18,7 @@ from llm_rosetta.converters.base.tools.intrinsic import (
     make_intrinsic_tool_definition,
 )
 from llm_rosetta.pipeline import ConversionPipeline
+from llm_rosetta.shims import resolve_shim
 from llm_rosetta.shims.provider_shim import ProviderShim, ToolsConfig
 
 
@@ -167,6 +168,24 @@ class TestResolve:
         out = resolve_intrinsic_tools(ir, shim=None)
         assert out["tools"] == []
 
+    def test_shim_name_resolves_here_too(self):
+        """A shim *name* is resolved in the gate itself, like the siblings.
+
+        Pins this branch on its own: the pipeline also hands over an object, so
+        the end-to-end case would stay green if this half were deleted as
+        looking unreachable.  ``enforce_custom_tools`` and ``enforce_reasoning``
+        resolve names the same way.
+        """
+        ir = {"tools": [make_intrinsic_tool_definition("web_search")]}
+        out = resolve_intrinsic_tools(ir, shim="anthropic--messages")
+        assert len(out["tools"]) == 1
+        assert get_definition_kind(out["tools"][0]) == "web_search"
+
+    def test_unresolvable_shim_name_is_no_shim(self):
+        ir = {"tools": [make_intrinsic_tool_definition("web_search")]}
+        out = resolve_intrinsic_tools(ir, shim="not-a-registered-shim")
+        assert out["tools"] == []
+
     def test_same_format_untouched(self):
         ir = {"tools": [make_intrinsic_tool_definition("web_search")]}
         out = resolve_intrinsic_tools(ir, shim=None, same_format=True)
@@ -286,6 +305,108 @@ class TestPipeline:
             "web_search_20250305" not in str(t) and t.get("type") != "intrinsic"
             for t in tools
         )
+
+    def test_shim_name_behaves_like_a_shim_object(self):
+        """A shim passed by *name* resolves, not only a shim object.
+
+        ``gateway/proxy.py`` builds the pipeline with ``target_shim=route.shim_name``
+        — a name.  Reading shim attributes off that string found nothing, so every
+        intrinsic definition was dropped on gateway requests; the library path,
+        which passes an object, was unaffected.
+        """
+        body = {
+            "model": "m",
+            "max_tokens": 10,
+            "messages": [{"role": "user", "content": "hi"}],
+            "tools": [{"type": "code_execution_20250522", "name": "code_execution"}],
+        }
+        by_name = ConversionPipeline(
+            "messages", "google_generate", target_shim="google--google_generate"
+        ).convert_request(dict(body))
+        by_object = ConversionPipeline(
+            "messages",
+            "google_generate",
+            target_shim=resolve_shim("google--google_generate"),
+        ).convert_request(dict(body))
+        named_tools = (
+            by_name.get("tools") or by_name.get("config", {}).get("tools") or []
+        )
+        assert {"code_execution": {}} in named_tools
+        assert by_name == by_object
+
+    def test_shim_name_still_drops_an_undeclared_kind(self):
+        """Resolving the name must not become a blanket keep."""
+        pipe = ConversionPipeline(
+            "messages", "google_generate", target_shim="google--google_generate"
+        )
+        body = pipe.convert_request(
+            {
+                "model": "m",
+                "max_tokens": 10,
+                "messages": [{"role": "user", "content": "hi"}],
+                "tools": [{"type": "web_search_20250305", "name": "web_search"}],
+            }
+        )
+        tools = body.get("tools") or body.get("config", {}).get("tools") or []
+        assert all("web_search" not in str(t) for t in tools)
+
+    def test_promotion_follows_the_source_converter_flag(self, monkeypatch):
+        """Promotion is read off the source converter, not the format name.
+
+        Only Chat Completions lacks native server tools today, so the two
+        derivations coincide on every shipped format; flipping the flag on the
+        converter shows which one the pipeline actually consults.
+        """
+        monkeypatch.setattr(
+            ChatCompletionsConverter, "_SUPPORTS_NATIVE_SERVER_TOOLS", True
+        )
+        pipe = ConversionPipeline(
+            "openai_chat", "messages", target_shim=_shim("messages", ["web_search"])
+        )
+        body = pipe.convert_request(
+            {
+                "model": "m",
+                "max_tokens": 10,
+                "messages": [{"role": "user", "content": "hi"}],
+                "tools": [
+                    {
+                        "type": "function",
+                        "function": {"name": "web_search", "parameters": {}},
+                    }
+                ],
+            }
+        )
+        assert not any(
+            t.get("type") == "web_search_20250305" for t in body.get("tools") or []
+        )
+
+    def test_shim_spelled_chat_source_promotes_too(self):
+        """A chat-completions *shim* source promotes, not just the bare name.
+
+        The old rule compared the literal canonical name, so
+        ``deepseek--chat_completions`` did not promote while ``chat_completions``
+        did — the same format, the same converter, and just as unable to name a
+        server tool.  Only reachable when the target shim declares the kind.
+        """
+        pipe = ConversionPipeline(
+            "deepseek--chat_completions",
+            "messages",
+            target_shim=_shim("messages", ["web_search"]),
+        )
+        body = pipe.convert_request(
+            {
+                "model": "m",
+                "max_tokens": 10,
+                "messages": [{"role": "user", "content": "hi"}],
+                "tools": [
+                    {
+                        "type": "function",
+                        "function": {"name": "web_search", "parameters": {}},
+                    }
+                ],
+            }
+        )
+        assert {"type": "web_search_20250305", "name": "web_search"} in body["tools"]
 
 
 class TestShimEmitConsistency:

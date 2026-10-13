@@ -65,6 +65,13 @@ class BaseConverter(ABC):
     # Chat Completions overrides to False (tool messages are text-only).
     _SUPPORTS_MULTIMODAL_TOOL_RESULT: bool = True
 
+    # Whether the format can declare provider-hosted (intrinsic) server tools
+    # natively.  When False the client has no syntax for them, so a plain
+    # function tool whose name matches a supported intrinsic kind is read as a
+    # request for that capability and promoted by the pipeline.  Chat
+    # Completions overrides to False.
+    _SUPPORTS_NATIVE_SERVER_TOOLS: bool = True
+
     # Enable/disable IR validation on from_provider output
     validate_output: bool = True
 

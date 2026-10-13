@@ -346,7 +346,7 @@ class ConversionPipeline:
 
         self._source_provider = source_provider
         self._target_provider = target_provider
-        self._target_shim = target_shim
+        self._target_shim_arg: ProviderShim | str | None = target_shim
         self._upstream_model = upstream_model
         self._model_capabilities = model_capabilities
         self._reasoning_config_override = reasoning_config_override
@@ -356,7 +356,10 @@ class ConversionPipeline:
         self._metadata_mode = metadata_mode
         self._google_output_format = google_output_format
 
-        self._baseline = source_provider == target_provider and baseline
+        self._source_converter = get_converter_for_provider(source_provider)
+        self._target_converter = get_converter_for_provider(target_provider)
+
+        self._baseline = self._same_format and baseline
         self._fidelity: Any = None
         if self._baseline and fidelity_mode is not None:
             from llm_rosetta.fidelity import FidelityChecker
@@ -364,9 +367,6 @@ class ConversionPipeline:
             self._fidelity = FidelityChecker(
                 mode=fidelity_mode, format_name=source_provider
             )
-
-        self._source_converter = get_converter_for_provider(source_provider)
-        self._target_converter = get_converter_for_provider(target_provider)
 
         # Resolve body-level transforms from source shim
         resolved_source = resolve_shim(source_shim)
@@ -378,7 +378,7 @@ class ConversionPipeline:
             self._source_post_ir_transforms = _EMPTY_TRANSFORMS
 
         # Resolve body-level transforms from target shim
-        resolved_target = resolve_shim(target_shim)
+        resolved_target = self._resolved_target_shim
         if resolved_target is not None:
             self._target_pre_ir_transforms = resolved_target.pre_ir_transforms
             self._target_post_ir_transforms = resolved_target.post_ir_transforms
@@ -391,7 +391,7 @@ class ConversionPipeline:
             self._target_response_body_transforms = _EMPTY_TRANSFORMS
 
         # Resolve response_id_prefix for each converter from its shim.
-        resolved_target_for_prefix = resolved_target or resolve_shim(target_provider)
+        resolved_target_for_prefix = self._resolved_target_shim
         self._target_id_prefix = (
             resolved_target_for_prefix.response_id_prefix
             if resolved_target_for_prefix
@@ -443,6 +443,40 @@ class ConversionPipeline:
 
         # Per-phase timing (always-on, ~30ns per perf_counter call)
         self._profile: dict[str, float] = {}
+
+    @property
+    def _same_format(self) -> bool:
+        """Whether source and target are the *same* provider spec.
+
+        Compares the two specs the caller passed, already canonicalized, rather
+        than comparing converters.  Converter identity is coarser than the
+        notion this gates: a bare ``chat_completions`` source and a
+        ``deepseek--chat_completions`` target share a converter class, yet they
+        are deliberately distinct here — a same-format passthrough would skip the
+        target shim's IR-level traits (its reasoning config, its transforms),
+        which is exactly what a caller targeting a shim expects to get.
+
+        Computed on access; it is one string comparison.
+        """
+        return self._source_provider == self._target_provider
+
+    @property
+    def _resolved_target_shim(self) -> ProviderShim | None:
+        """The target shim as an object, resolved on access.
+
+        The caller may hand over the shim itself, name it, or omit it and name
+        the shim as *target_provider* instead — the gateway does the second,
+        ``convert()`` the first.  Resolving here rather than storing a second
+        attribute means every reader gets the same object from one place.
+
+        The raw spelling lives in ``_target_shim_arg`` and is deliberately read
+        nowhere: a gate that reached for it would get ``None`` or a string and
+        silently behave as "no shim", which is the defect this replaced.  Reading
+        the wrong name is now an ``AttributeError`` instead.
+        """
+        return resolve_shim(self._target_shim_arg) or resolve_shim(
+            self._target_provider
+        )
 
     @property
     def context(self) -> ConversionContext:
@@ -603,7 +637,7 @@ class ConversionPipeline:
         # Capability enforcement: reasoning (pre-IR)
         enforce_reasoning(
             ctx,
-            self._target_shim,
+            self._resolved_target_shim,
             model=self._upstream_model or body.get("model"),
             config_override=self._reasoning_config_override,
         )
@@ -667,16 +701,19 @@ class ConversionPipeline:
         # #839.
         ir_request = resolve_intrinsic_tools(
             ir_request,
-            shim=self._target_shim,
-            same_format=self._source_provider == self._target_provider,
-            allow_name_promotion=self._source_provider == "chat_completions",
+            shim=self._resolved_target_shim,
+            same_format=self._same_format,
+            # Promotion exists because the *client* format cannot name a server
+            # tool natively, so it is a property of the source converter's
+            # format, not of the literal provider name.
+            allow_name_promotion=not self._source_converter._SUPPORTS_NATIVE_SERVER_TOOLS,
             request_id=request_id,
         )
 
         # Capability enforcement: custom tools (post-IR)
         ir_request = enforce_custom_tools(
             ir_request,
-            shim=self._target_shim,
+            shim=self._resolved_target_shim,
             config_override=self._supports_custom_tools,
         )
 
@@ -701,7 +738,7 @@ class ConversionPipeline:
         # Phase 2a: Intrinsic + shim-driven IR transforms
         ir_request = apply_ir_transforms(
             ir_request,
-            self._target_shim,
+            self._resolved_target_shim,
             upstream_model=self._upstream_model or body.get("model"),
             model_capabilities=self._model_capabilities,
             request_id=request_id,
