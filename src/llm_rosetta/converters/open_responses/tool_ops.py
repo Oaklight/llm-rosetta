@@ -392,6 +392,18 @@ _INTRINSIC_KIND_TO_ITEM: dict[str, str] = {
     "computer_use": "computer_call",
 }
 
+#: Server result item type per intrinsic kind.  A result for one of these
+#: kinds is its own flat ``*_call_output`` item; a web search has no separate
+#: output item (its payload rides on the call item's ``action``), so it is
+#: absent here and a web-search result is dropped on the write leg exactly as
+#: ``ir_tool_result_to_p`` drops it.
+_INTRINSIC_KIND_TO_RESULT_ITEM: dict[str, str] = {
+    "code_interpreter": "code_interpreter_call_output",
+    "file_search": "file_search_call_output",
+    "shell": "shell_call_output",
+    "computer_use": "computer_call_output",
+}
+
 _ITEM_TO_INTRINSIC_KIND: dict[str, str] = {
     "shell_call": "shell",
     "computer_call": "computer_use",
@@ -463,6 +475,106 @@ def _server_item_tool_input(item: dict[str, Any], item_type: str) -> dict[str, A
     }
 
 
+#: Server output item types this format recognises as intrinsic calls.
+_SERVER_ITEM_TYPES: frozenset[str] = frozenset(_ITEM_TO_INTRINSIC_KIND)
+
+
+def _p_server_item_to_ir(
+    provider_tool_call: dict[str, Any], item_type: str
+) -> ToolCallPart:
+    """Read a native server item into an intrinsic ``ToolCallPart``.
+
+    The canonical kind comes from the item type, not the wire name, so the
+    definition side and ``intrinsic_kind`` agree.  The item's ``status`` is kept
+    so the write leg can restore it (#981).
+    """
+    intrinsic_kind = _ITEM_TO_INTRINSIC_KIND.get(item_type, item_type)
+    extra: dict[str, Any] = {}
+    status = provider_tool_call.get("status")
+    if status is not None:
+        extra["responses_status"] = status
+    return cast(
+        ToolCallPart,
+        make_intrinsic_tool_call(
+            tool_call_id=provider_tool_call.get(
+                "call_id", provider_tool_call.get("id", "")
+            ),
+            # Canonical kind, not the raw wire type: the definition side and
+            # ``intrinsic_kind`` already speak the canonical name, so a raw
+            # ``web_search_call`` here disagrees with both.
+            tool_name=intrinsic_kind,
+            tool_input=_server_item_tool_input(provider_tool_call, item_type),
+            intrinsic_kind=intrinsic_kind,
+            extra_metadata=extra or None,
+        ),
+    )
+
+
+def _build_server_item(
+    item_type: str,
+    *,
+    item_id: str,
+    intrinsic_kind: str,
+    fields: dict[str, Any],
+    arguments: str,
+    status: str,
+) -> dict[str, Any]:
+    """Build a native server item from IR tool input.
+
+    A server item identifies itself with ``id`` — not the ``call_id`` /
+    ``arguments`` pair a client ``function_call`` uses — and carries its
+    payload under type-specific keys: ``action`` for a web search, the
+    ``code`` / ``container_id`` siblings for the interpreter.  The API
+    requires ``id`` on every server item and rejects ``arguments`` / ``call_id``
+    on one (verified live 2026-10-13: replaying a written
+    ``code_interpreter_call`` without ``id`` answers
+    ``400 Missing required parameter: 'input[2].id'``).
+    """
+    if item_type == "web_search_call":
+        action: dict[str, Any] = {
+            "type": fields.get("action_type") or _DEFAULT_WEB_SEARCH_ACTION
+        }
+        # Whatever the read side lifted goes back verbatim, so a multi-query
+        # search or an `open_page`/`find` action survives the round trip
+        # instead of being flattened to `{"type": "search", "query": …}`.
+        action.update({k: v for k, v in fields.items() if k != "action_type"})
+        item: dict[str, Any] = {
+            "type": "web_search_call",
+            "id": item_id,
+            "status": status,
+        }
+        if len(action) > 1:
+            item["action"] = action
+        return item
+
+    if item_type == "function_call":
+        return {
+            "type": "function_call",
+            "call_id": item_id,
+            "name": intrinsic_kind,
+            "arguments": arguments,
+        }
+
+    item = {"type": item_type, "id": item_id}
+    if item_type == "code_interpreter_call":
+        if fields.get("code") is not None:
+            item["code"] = fields["code"]
+        for key in ("container_id", "outputs"):
+            if fields.get(key) is not None:
+                item[key] = fields[key]
+    elif item_type == "file_search_call":
+        # The wire item carries `queries`, but this branch has always emitted
+        # `query`; read whichever the IR has so the payload the read side now
+        # preserves is not discarded here.
+        queries = fields.get("queries") or []
+        item["query"] = fields.get("query") or (queries[0] if queries else "")
+    else:
+        # shell_call / computer_call / …: the read side already lifted the
+        # payload keys, so carry them back verbatim.
+        item.update(fields)
+    return item
+
+
 def _ir_intrinsic_to_responses(
     ir_tool_call: ToolCallPart,
     tool_call_id: str,
@@ -478,24 +590,24 @@ def _ir_intrinsic_to_responses(
     # currently declared.  See the note in pipeline.py / #839.
     intrinsic_kind = get_intrinsic_kind(ir_tool_call, tool_name)
     item_type = _INTRINSIC_KIND_TO_ITEM.get(intrinsic_kind, "function_call")
+    fields = tool_input if isinstance(tool_input, dict) else {}
 
     # A `web_search_call` has a valid replay shape for history (an `action`,
-    # no `call_id`/`arguments`) and no separate output item.
+    # no `call_id`/`arguments`) and no separate output item, so it is emitted
+    # on both legs.  Its `status` is restored from the read side; a server
+    # call known to the IR is complete.
     if item_type == "web_search_call":
-        fields = tool_input if isinstance(tool_input, dict) else {}
-        action: dict[str, Any] = {
-            "type": fields.get("action_type") or _DEFAULT_WEB_SEARCH_ACTION
-        }
-        # Whatever the read side lifted goes back verbatim, so a multi-query
-        # search or an `open_page`/`find` action survives the round trip
-        # instead of being flattened to `{"type": "search", "query": …}`.
-        action.update(
-            {key: value for key, value in fields.items() if key != "action_type"}
+        status = (ir_tool_call.get("provider_metadata") or {}).get(
+            "responses_status"
+        ) or "completed"
+        return _build_server_item(
+            item_type,
+            item_id=tool_call_id,
+            intrinsic_kind=intrinsic_kind,
+            fields=fields,
+            arguments=arguments,
+            status=status,
         )
-        item: dict[str, Any] = {"type": "web_search_call"}
-        if len(action) > 1:
-            item["action"] = action
-        return item
 
     # Other server items need provider config we cannot synthesise from a
     # foreign request (code_interpreter: container_id; file_search:
@@ -509,25 +621,14 @@ def _ir_intrinsic_to_responses(
             "arguments": arguments,
         }
 
-    result_item: dict[str, Any] = {
-        "type": item_type,
-        "call_id": tool_call_id,
-        "arguments": arguments,
-    }
-    if item_type == "code_interpreter_call":
-        result_item["code"] = (
-            tool_input.get("code", "") if isinstance(tool_input, dict) else ""
-        )
-    elif item_type == "file_search_call":
-        # The wire item carries `queries`, but this branch has always emitted
-        # `query`; read whichever the IR has so the payload the read side now
-        # preserves is not discarded here.
-        fields = tool_input if isinstance(tool_input, dict) else {}
-        queries = fields.get("queries") or []
-        result_item["query"] = fields.get("query") or (queries[0] if queries else "")
-    elif item_type == "function_call":
-        result_item["name"] = intrinsic_kind
-    return result_item
+    return _build_server_item(
+        item_type,
+        item_id=tool_call_id,
+        intrinsic_kind=intrinsic_kind,
+        fields=fields,
+        arguments=arguments,
+        status="completed",
+    )
 
 
 def _custom_tool_call_to_ir(provider_tool_call: dict[str, Any]) -> ToolCallPart:
@@ -964,6 +1065,62 @@ class OpenResponsesToolOps(BaseToolOps):
     # ==================== Tool Call ====================
 
     @staticmethod
+    def stream_intrinsic_item(
+        kind: str,
+        item_id: str,
+        tool_input: dict[str, Any] | None = None,
+        *,
+        status: str = "in_progress",
+    ) -> dict[str, Any] | None:
+        """Build a native server item for a streamed intrinsic call.
+
+        The streaming counterpart of ``_build_server_item``: it lets the
+        writer re-emit the provider's own server item type for an intrinsic
+        ``ToolCallStartEvent`` instead of downgrading it to a client
+        ``function_call``.  Returns ``None`` for a kind this dialect cannot
+        render as a server item, so the caller drops the event rather than
+        emitting a client call.
+        """
+        item_type = _INTRINSIC_KIND_TO_ITEM.get(kind)
+        if item_type is None:
+            return None
+        return _build_server_item(
+            item_type,
+            item_id=item_id,
+            intrinsic_kind=kind,
+            fields=tool_input or {},
+            arguments="",
+            status=status,
+        )
+
+    @staticmethod
+    def stream_result_item(
+        kind: str, call_id: str, result: Any
+    ) -> dict[str, Any] | None:
+        """Build a server result item for a streamed ``ToolResultEvent``.
+
+        The streaming counterpart of the result half of ``ir_tool_result_to_p``:
+        it produces the provider's own ``*_call_output`` item.  Returns ``None``
+        for a kind with no separate output item (``web_search`` — its result
+        rides on the call item) or one this dialect cannot render, so the caller
+        drops the event rather than re-encoding it as a client
+        ``function_call_output``.
+        """
+        item_type = _INTRINSIC_KIND_TO_RESULT_ITEM.get(kind)
+        if item_type is None:
+            return None
+        output: Any = result
+        if isinstance(result, list):
+            from .content_ops import OpenResponsesContentOps
+
+            output = convert_ir_content_blocks_to_p(result, OpenResponsesContentOps)
+        elif isinstance(result, dict):
+            output = json.dumps(result)
+        elif result is None:
+            output = ""
+        return {"type": item_type, "call_id": call_id, "output": output}
+
+    @staticmethod
     def ir_tool_call_to_p(ir_tool_call: ToolCallPart, **kwargs: Any) -> dict:
         """IR ToolCallPart → OpenAI Responses tool call item.
 
@@ -1117,29 +1274,8 @@ class OpenResponsesToolOps(BaseToolOps):
                 tool_input=tool_input,
                 tool_type="mcp",
             )
-        elif item_type in (
-            "shell_call",
-            "computer_call",
-            "code_interpreter_call",
-            "web_search_call",
-            "file_search_call",
-        ):
-            intrinsic_kind = _ITEM_TO_INTRINSIC_KIND.get(item_type, item_type)
-            return cast(
-                ToolCallPart,
-                make_intrinsic_tool_call(
-                    tool_call_id=provider_tool_call.get(
-                        "call_id", provider_tool_call.get("id", "")
-                    ),
-                    # Canonical kind, not the raw wire type: the definition
-                    # side and ``intrinsic_kind`` already speak the canonical
-                    # name, so a raw ``web_search_call`` here disagrees with
-                    # both.
-                    tool_name=intrinsic_kind,
-                    tool_input=_server_item_tool_input(provider_tool_call, item_type),
-                    intrinsic_kind=intrinsic_kind,
-                ),
-            )
+        elif item_type in _SERVER_ITEM_TYPES:
+            return _p_server_item_to_ir(provider_tool_call, item_type)
         elif item_type == "custom_tool_call":
             return _custom_tool_call_to_ir(provider_tool_call)
         else:

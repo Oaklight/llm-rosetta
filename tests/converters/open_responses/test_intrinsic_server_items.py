@@ -176,3 +176,75 @@ class TestIntrinsicServerItemRoundTrip:
         assert ir["tool_input"]["queries"] == ["q1", "q2"]
         restored = OpenResponsesToolOps.ir_tool_call_to_p(ir)
         assert restored["query"] == "q1"
+
+
+class TestIntrinsicServerItemWriteShape:
+    """The write leg emits the fields the API requires (#981).
+
+    A native server item identifies itself with ``id`` and carries its payload
+    under type-specific keys; it must not carry the ``call_id`` / ``arguments``
+    pair a client ``function_call`` uses.  Replaying a written
+    ``code_interpreter_call`` without ``id`` answers
+    ``400 Missing required parameter: 'input[2].id'`` on the live API.
+    """
+
+    def test_web_search_call_shape(self):
+        ir = OpenResponsesToolOps.p_tool_call_to_ir(WEB_SEARCH_ITEM)
+
+        restored = OpenResponsesToolOps.ir_tool_call_to_p(ir)
+
+        assert restored == {
+            "type": "web_search_call",
+            "id": "ws_abc",
+            "status": "completed",
+            "action": {
+                "type": "search",
+                "query": "finance: NVDA",
+                "queries": ["finance: NVDA"],
+            },
+        }
+
+    def test_code_interpreter_call_shape(self):
+        ir = OpenResponsesToolOps.p_tool_call_to_ir(CODE_INTERPRETER_ITEM)
+
+        restored = OpenResponsesToolOps.ir_tool_call_to_p(ir)
+
+        assert restored == {
+            "type": "code_interpreter_call",
+            "id": "ci_abc",
+            "code": "print(1+1)",
+            "container_id": "cntr_1",
+            "outputs": [{"type": "logs", "logs": "2"}],
+        }
+
+    def test_server_item_has_no_client_fields(self):
+        for item in (WEB_SEARCH_ITEM, CODE_INTERPRETER_ITEM):
+            ir = OpenResponsesToolOps.p_tool_call_to_ir(item)
+            restored = OpenResponsesToolOps.ir_tool_call_to_p(ir)
+
+            assert "call_id" not in restored
+            assert "arguments" not in restored
+            assert restored["id"] == item["id"]
+
+    def test_status_is_restored_from_the_read_side(self):
+        item = dict(WEB_SEARCH_ITEM, status="in_progress")
+
+        restored = OpenResponsesToolOps.ir_tool_call_to_p(
+            OpenResponsesToolOps.p_tool_call_to_ir(item)
+        )
+
+        assert restored["status"] == "in_progress"
+
+    def test_status_defaults_to_completed_without_a_read_status(self):
+        restored = OpenResponsesToolOps.ir_tool_call_to_p(
+            {
+                "type": "tool_call",
+                "tool_call_id": "ws_1",
+                "tool_name": "web_search",
+                "tool_input": {"query": "q"},
+                "tool_type": "intrinsic",
+                "provider_metadata": {"intrinsic_kind": "web_search"},
+            }
+        )
+
+        assert restored["status"] == "completed"
