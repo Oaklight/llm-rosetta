@@ -274,14 +274,19 @@ def _flatten_namespace_tool(
 
         items = converted if isinstance(converted, list) else [converted]
         for item in items:
-            meta = dict(item.get("metadata", {}))
-            meta["namespace"] = namespace_name
-            if namespace_desc:
-                meta["namespace_description"] = namespace_desc
-            if child.get("defer_loading"):
-                meta["defer_loading"] = True
             item_copy = dict(item)
-            item_copy["metadata"] = meta
+            # The group is IR-level, not provider detail: the client addressed
+            # this tool by ``(name, group)``, and the value has to survive until
+            # the target leg can decide whether it is able to carry a container.
+            item_copy["tool_group"] = namespace_name
+            if namespace_desc:
+                item_copy["tool_group_description"] = namespace_desc
+            # ``metadata`` is left exactly as the child conversion produced it;
+            # only the group is added here.
+            if child.get("defer_loading"):
+                meta = dict(item.get("metadata") or {})
+                meta["defer_loading"] = True
+                item_copy["metadata"] = meta
             results.append(cast(ToolDefinition, item_copy))
 
     return results

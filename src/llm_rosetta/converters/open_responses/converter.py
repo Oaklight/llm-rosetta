@@ -132,20 +132,20 @@ _MAX_TOOL_NAME_LEN = 64
 
 
 def _qualify_tool_name(
-    namespace: str, name: str, used_names: set[str], warnings: list[str]
+    tool_group: str, name: str, used_names: set[str], warnings: list[str]
 ) -> str:
-    """Build a name for a namespaced tool that no other tool upstream has.
+    """Build a name for a grouped tool that no other tool upstream has.
 
     Always succeeds.  The upstream spelling is ours to choose — the client
-    never sees it, addressing its tools by ``(name, namespace)`` and having
+    never sees it, addressing its tools by ``(name, tool_group)`` and having
     them restored through :class:`~llm_rosetta.capabilities.ToolNameMap` —
     so rather than give up and let two tools share one name, which silently
     misroutes every call naming it, we keep going until the name is unique.
 
     Preferences, best first:
 
-    1. ``{namespace}_{name}`` — readable, and what nearly every caller gets.
-    2. The namespace truncated to fit.  Still readable.
+    1. ``{group}_{name}`` — readable, and what nearly every caller gets.
+    2. The group truncated to fit.  Still readable.
     3. A digest suffix, which is not.  The model reads a tool's name as a
        hint about what it does, so this one costs prompting quality and
        earns a warning, but a degraded hint beats a misrouted call.
@@ -153,11 +153,11 @@ def _qualify_tool_name(
     Steps 1 and 2 can also be taken by an unrelated tool, so each candidate
     is checked against *used_names* before it is accepted.
     """
-    qualified = f"{namespace}_{name}"
+    qualified = f"{tool_group}_{name}"
     if len(qualified) > _MAX_TOOL_NAME_LEN:
         max_ns = _MAX_TOOL_NAME_LEN - len(name) - 1
         if max_ns > 0:
-            qualified = f"{namespace[:max_ns]}_{name}"
+            qualified = f"{tool_group[:max_ns]}_{name}"
     if len(qualified) <= _MAX_TOOL_NAME_LEN and qualified not in used_names:
         return qualified
 
@@ -168,7 +168,9 @@ def _qualify_tool_name(
     _MAX_QUALIFY_ATTEMPTS = 1000
     attempt = 0
     while attempt < _MAX_QUALIFY_ATTEMPTS:
-        seed = f"{namespace}\0{name}\0{attempt}" if attempt else f"{namespace}\0{name}"
+        seed = (
+            f"{tool_group}\0{name}\0{attempt}" if attempt else f"{tool_group}\0{name}"
+        )
         generated = truncate_with_digest(
             qualified, _MAX_TOOL_NAME_LEN, seed=seed, force=True
         )
@@ -178,11 +180,11 @@ def _qualify_tool_name(
     else:
         raise RuntimeError(
             f"Tool name qualification exhausted {_MAX_QUALIFY_ATTEMPTS} attempts "
-            f"for {name!r} in namespace {namespace!r}"
+            f"for {name!r} in namespace {tool_group!r}"
         )
 
     warnings.append(
-        f"Tool {name!r} in namespace {namespace!r} cannot be qualified within "
+        f"Tool {name!r} in namespace {tool_group!r} cannot be qualified within "
         f"{_MAX_TOOL_NAME_LEN} characters without colliding with another tool, "
         f"so it goes upstream under the generated name {generated!r}; calls "
         "still route correctly, but the model sees a less meaningful name"
@@ -686,18 +688,18 @@ class OpenResponsesConverter(BaseConverter):
 
     @staticmethod
     def _dedup_ir_tool_names(ir_tools: list[Any], warnings: list[str]) -> list[Any]:
-        """Rename namespaced IR tools whose names collide.
+        """Qualify colliding IR tools that arrived inside a tool group.
 
-        Tools originating from a namespace container may share names with
-        top-level tools or with tools from a different namespace.  This
-        method qualifies colliding names as ``{namespace}_{name}`` while
-        leaving non-namespaced (top-level) tools unchanged.
+        Tools flattened out of a group may share names with top-level tools
+        or with tools from another group.  This method qualifies colliding
+        names as ``{group}_{name}`` while leaving top-level tools, which
+        came from no group at all, unchanged.
 
-        A tool whose namespace has a name always ends up with one no other
-        tool has; where that took a generated name rather than a readable
-        one, ``_qualify_tool_name`` says so in ``warnings``.  The exception
-        is a container carrying no name at all, which has nothing to
-        qualify with and is reported here.
+        A tool whose group has a name always ends up with one no other tool
+        has; where that took a generated name rather than a readable one,
+        ``_qualify_tool_name`` says so in ``warnings``.  The exception is a
+        container carrying no name at all, which has nothing to qualify
+        with and is reported here.
 
         Returns a new list; renamed entries are shallow-copied to avoid
         mutating cached references.
@@ -716,11 +718,7 @@ class OpenResponsesConverter(BaseConverter):
             # top-level tools, never renamed, plus ones from a nameless
             # container. Everything else moves aside, so a count of one means
             # no collision is left.
-            bare_keepers = sum(
-                1
-                for i in indices
-                if not (ir_tools[i].get("metadata") or {}).get("namespace")
-            )
+            bare_keepers = sum(1 for i in indices if not ir_tools[i].get("tool_group"))
             # A container with no name of its own is the one collision nothing
             # can resolve: there is nothing to qualify its children with.  Every
             # other qualification failure is reported inside `_qualify_tool_name`,
@@ -734,21 +732,20 @@ class OpenResponsesConverter(BaseConverter):
             # so claiming the collision reaches the upstream would be a story
             # the collapse then contradicts.
             if bare_keepers > 1 and any(
-                (ir_tools[i].get("metadata") or {}).get("namespace") == ""
-                for i in indices
+                ir_tools[i].get("tool_group") == "" for i in indices
             ):
                 warnings.append(
                     f"A namespace container declaring {name!r} has no name of "
                     "its own, so that tool cannot be qualified"
                 )
             for i in indices:
-                ns = (ir_tools[i].get("metadata") or {}).get("namespace")
-                if not ns:
+                group = ir_tools[i].get("tool_group")
+                if not group:
                     # Top-level (`None`) keeps the name as its own; a nameless
                     # container (`""`) has nothing to qualify with.  Either way
                     # this tool does not move — the warning above covers it.
                     continue
-                qualified = _qualify_tool_name(ns, name, used_names, warnings)
+                qualified = _qualify_tool_name(group, name, used_names, warnings)
                 copy = dict(ir_tools[i])
                 copy["name"] = qualified
                 copy["metadata"] = dict(copy.get("metadata", {}))

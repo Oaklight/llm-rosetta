@@ -61,7 +61,7 @@ def _nameless_container(name: str, description: str | None = None) -> dict[str, 
     Codex always names its containers, and every upstream that implements
     ``namespace`` rejects one without a name (OpenAI, DeepSeek and Volcengine
     all 400 or 422), so this is malformed input.  Its children are flattened
-    with ``metadata.namespace == ""``, which qualifies nothing: two tools
+    with ``tool_group == ""``, which qualifies nothing: two tools
     sharing a name here cannot be told apart at all, not even by the client
     that declared them.
 
@@ -180,14 +180,14 @@ def _chat_chunks(tool_name: str) -> list[dict[str, Any]]:
 
 
 def _name_map(*entries: tuple[str, ...]) -> ToolNameMap:
-    """Build a map from ``(upstream, namespace[, client name])`` triples."""
+    """Build a map from ``(upstream, group[, client name])`` triples."""
     ir_tools = []
     for entry in entries:
-        upstream, namespace = entry[0], entry[1]
-        metadata: dict[str, Any] = {"namespace": namespace}
+        upstream, group = entry[0], entry[1]
+        tool: dict[str, Any] = {"name": upstream, "tool_group": group}
         if len(entry) > 2:
-            metadata["_original_name"] = entry[2]
-        ir_tools.append({"name": upstream, "metadata": metadata})
+            tool["metadata"] = {"_original_name": entry[2]}
+        ir_tools.append(tool)
     return build_tool_name_map({"tools": ir_tools})
 
 
@@ -227,7 +227,7 @@ def _custom_tool_calls(
 
 class TestBuildToolNameMap:
     def test_maps_both_directions(self):
-        ir = {"tools": [{"name": "spawn_agent", "metadata": {"namespace": "agents"}}]}
+        ir = {"tools": [{"name": "spawn_agent", "tool_group": "agents"}]}
         name_map = build_tool_name_map(ir)
         assert name_map.to_upstream("spawn_agent", "agents") == "spawn_agent"
         assert name_map.to_client("spawn_agent") == ("spawn_agent", "agents")
@@ -237,7 +237,8 @@ class TestBuildToolNameMap:
             "tools": [
                 {
                     "name": "agents_wait",
-                    "metadata": {"namespace": "agents", "_original_name": "wait"},
+                    "tool_group": "agents",
+                    "metadata": {"_original_name": "wait"},
                 }
             ]
         }
@@ -251,11 +252,13 @@ class TestBuildToolNameMap:
             "tools": [
                 {
                     "name": "functions_wait",
-                    "metadata": {"namespace": "functions", "_original_name": "wait"},
+                    "tool_group": "functions",
+                    "metadata": {"_original_name": "wait"},
                 },
                 {
                     "name": "agents_wait",
-                    "metadata": {"namespace": "agents", "_original_name": "wait"},
+                    "tool_group": "agents",
+                    "metadata": {"_original_name": "wait"},
                 },
             ]
         }
@@ -277,7 +280,7 @@ class TestBuildToolNameMap:
         ir = {
             "tools": [
                 {"name": "exec", "metadata": {}},  # top-level, kept its name
-                {"name": "exec", "metadata": {"namespace": "ns"}},  # unqualifiable
+                {"name": "exec", "tool_group": "ns"},  # unqualifiable
             ]
         }
         name_map = build_tool_name_map(ir)
@@ -289,7 +292,8 @@ class TestBuildToolNameMap:
             "tools": [
                 {
                     "name": "agents_wait",
-                    "metadata": {"namespace": "agents", "_original_name": "wait"},
+                    "tool_group": "agents",
+                    "metadata": {"_original_name": "wait"},
                 }
             ]
         }
@@ -300,11 +304,13 @@ class TestBuildToolNameMap:
             "tools": [
                 {
                     "name": "functions_wait",
-                    "metadata": {"namespace": "functions", "_original_name": "wait"},
+                    "tool_group": "functions",
+                    "metadata": {"_original_name": "wait"},
                 },
                 {
                     "name": "agents_wait",
-                    "metadata": {"namespace": "agents", "_original_name": "wait"},
+                    "tool_group": "agents",
+                    "metadata": {"_original_name": "wait"},
                 },
             ]
         }
@@ -317,7 +323,8 @@ class TestBuildToolNameMap:
                 {"name": "wait", "metadata": {}},
                 {
                     "name": "agents_wait",
-                    "metadata": {"namespace": "agents", "_original_name": "wait"},
+                    "tool_group": "agents",
+                    "metadata": {"_original_name": "wait"},
                 },
             ]
         }
@@ -343,7 +350,8 @@ class TestApplyUpstreamSelectors:
     IR_TOOLS = [
         {
             "name": "agents_wait",
-            "metadata": {"namespace": "agents", "_original_name": "wait"},
+            "tool_group": "agents",
+            "metadata": {"_original_name": "wait"},
         }
     ]
 
@@ -352,7 +360,8 @@ class TestApplyUpstreamSelectors:
     AMBIGUOUS_TOOLS = IR_TOOLS + [
         {
             "name": "functions_wait",
-            "metadata": {"namespace": "functions", "_original_name": "wait"},
+            "tool_group": "functions",
+            "metadata": {"_original_name": "wait"},
         }
     ]
 

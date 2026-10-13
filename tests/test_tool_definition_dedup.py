@@ -92,7 +92,7 @@ class TestDedupeToolDefinitions:
             "name": "wait",
             "description": "d",
             "parameters": {},
-            "metadata": {"namespace": "tasks"},
+            "tool_group": "tasks",
         }
         ir = {"tools": [dict(tool), dict(tool)]}
         assert dedupe_tool_definitions(ir) is ir
@@ -110,7 +110,7 @@ class TestDedupeToolDefinitions:
             "name": "wait",
             "description": "d",
             "parameters": {},
-            "metadata": {"namespace": ""},
+            "tool_group": "",
         }
         ir = {"tools": [dict(tool), dict(tool)]}
         out = dedupe_tool_definitions(ir, warnings=warnings)
@@ -123,8 +123,8 @@ class TestDedupeToolDefinitions:
         warnings = []
         ir = {
             "tools": [
-                {"name": "wait", "description": "one", "metadata": {"namespace": ""}},
-                {"name": "wait", "description": "two", "metadata": {"namespace": ""}},
+                {"name": "wait", "description": "one", "tool_group": ""},
+                {"name": "wait", "description": "two", "tool_group": ""},
             ]
         }
         out = dedupe_tool_definitions(ir, warnings=warnings)
@@ -138,7 +138,7 @@ class TestDedupeToolDefinitions:
             "name": "wait",
             "description": "d",
             "parameters": {},
-            "metadata": {"namespace": "tasks"},
+            "tool_group": "tasks",
         }
         out = dedupe_tool_definitions({"tools": [top1, ns, top2]})
         assert out["tools"] == [top1, ns]

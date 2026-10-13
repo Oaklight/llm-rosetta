@@ -153,7 +153,7 @@ class TestRequestFromProviderAdditionalTools:
         tools = list(result["tools"])
         assert [t["name"] for t in tools] == ["exec", "wait", "spawn_agent"]
         assert tools[0]["type"] == "custom"
-        assert tools[0]["metadata"]["namespace"] == "functions"
+        assert tools[0]["tool_group"] == "functions"
         assert tools[0]["metadata"]["format"]["type"] == "grammar"
         assert tools[1]["type"] == "function"
 

@@ -75,8 +75,8 @@ class TestFlattenNamespaceTool:
         assert len(result) == 2
         assert result[0]["name"] == "exec"
         assert result[1]["name"] == "wait"
-        assert result[0]["metadata"]["namespace"] == "functions"
-        assert result[1]["metadata"]["namespace"] == "functions"
+        assert result[0]["tool_group"] == "functions"
+        assert result[1]["tool_group"] == "functions"
 
     def test_namespace_description_preserved(self):
         ns = _ns_tool(
@@ -88,16 +88,13 @@ class TestFlattenNamespaceTool:
         )
         result = _flatten_namespace_tool(ns)
         assert len(result) == 1
-        assert result[0]["metadata"]["namespace"] == "crm"
-        assert (
-            result[0]["metadata"]["namespace_description"]
-            == "CRM tools for customer lookup"
-        )
+        assert result[0]["tool_group"] == "crm"
+        assert result[0]["tool_group_description"] == "CRM tools for customer lookup"
 
-    def test_no_namespace_description_omitted(self):
+    def test_no_group_description_omitted(self):
         ns = _ns_tool("tools", children=[_func_tool("ping")])
         result = _flatten_namespace_tool(ns)
-        assert "namespace_description" not in result[0]["metadata"]
+        assert "tool_group_description" not in result[0]
 
     def test_mixed_function_and_custom(self):
         ns = _ns_tool(
@@ -171,6 +168,30 @@ class TestFlattenNamespaceTool:
         assert result[0]["metadata"].get("defer_loading") is True
         assert "defer_loading" not in result[1]["metadata"]
 
+    def test_child_keeps_its_own_metadata_beside_defer_loading(self):
+        """The flag joins what the child carried rather than replacing it.
+
+        A custom child keeps its ``format`` in the child-owned metadata, and a
+        container may also ask for ``defer_loading`` on that same child.
+        Writing the flag over the metadata instead of into it would drop the
+        format, which changes how the tool is invoked.
+        """
+        ns = _ns_tool(
+            "crm",
+            children=[
+                {
+                    "type": "custom",
+                    "name": "apply_patch",
+                    "format": {"type": "text"},
+                    "defer_loading": True,
+                },
+            ],
+        )
+        result = _flatten_namespace_tool(ns)
+
+        assert result[0]["metadata"].get("defer_loading") is True
+        assert result[0]["metadata"].get("format") == {"type": "text"}
+
     def test_intrinsic_child_type(self):
         """A server-tool child is recognized as an intrinsic definition."""
         ns = _ns_tool(
@@ -181,7 +202,7 @@ class TestFlattenNamespaceTool:
         )
         result = _flatten_namespace_tool(ns)
         assert len(result) == 1
-        assert result[0]["metadata"]["namespace"] == "ns"
+        assert result[0]["tool_group"] == "ns"
         assert result[0]["type"] == "intrinsic"
         assert result[0]["metadata"].get("intrinsic_kind") == "web_search"
 
@@ -195,7 +216,7 @@ class TestFlattenNamespaceTool:
         )
         result = _flatten_namespace_tool(ns)
         assert len(result) == 1
-        assert result[0]["metadata"]["namespace"] == "ns"
+        assert result[0]["tool_group"] == "ns"
         assert result[0]["metadata"].get("provider_type") == "totally_unknown_type"
 
     def test_nested_format_child(self):
@@ -216,7 +237,7 @@ class TestFlattenNamespaceTool:
         result = _flatten_namespace_tool(ns)
         assert len(result) == 1
         assert result[0]["name"] == "nested_func"
-        assert result[0]["metadata"]["namespace"] == "ns"
+        assert result[0]["tool_group"] == "ns"
 
     def test_metadata_does_not_mutate_original(self):
         child = _func_tool("tool1")
@@ -282,16 +303,15 @@ class TestDedupIrToolNames:
         name of its own writes it empty.  Collapsing the two would make the
         nameless case untestable.
         """
-        meta: dict[str, Any] = {}
-        if ns is not None:
-            meta["namespace"] = ns
-        return {
+        tool: dict[str, Any] = {
             "type": "function",
             "name": name,
             "description": "",
             "parameters": {},
-            "metadata": meta,
         }
+        if ns is not None:
+            tool["tool_group"] = ns
+        return tool
 
     def test_no_collision_unchanged(self, warnings):
         tools = [self._ir_tool("a"), self._ir_tool("b", "ns")]

@@ -638,13 +638,12 @@ class ToolNameMap:
 def build_tool_name_map(ir_request: dict[str, Any]) -> ToolNameMap:
     """Derive a :class:`ToolNameMap` from the IR request's tool definitions.
 
-    Tools harvested from a ``namespace`` container carry
-    ``metadata.namespace`` (set during flattening).  Colliding names are
-    additionally rewritten to ``{namespace}_{name}`` by
-    ``_dedup_ir_tool_names``, which records the pre-rename name in
-    ``metadata._original_name``.
+    Tools harvested from a container carry ``tool_group`` (set during
+    flattening).  Colliding names are additionally rewritten to
+    ``{group}_{name}`` by ``_dedup_ir_tool_names``, which records the
+    pre-rename name in ``metadata._original_name``.
 
-    Tools whose name survived unchanged and that carry no namespace are
+    Tools whose name survived unchanged and that carry no group are
     skipped — there is nothing to translate, and leaving them out keeps the
     map falsy for the common case.
     """
@@ -660,29 +659,27 @@ def build_tool_name_map(ir_request: dict[str, Any]) -> ToolNameMap:
     upstream: dict[tuple[str, str | None], str] = {}
     client: dict[str, tuple[str, str | None]] = {}
     sole: dict[str, str | None] = {}
-    # Only names a namespace was meant to distinguish: two top-level tools
+    # Only names a group was meant to distinguish: two top-level tools
     # sharing a name lose nothing on the way back, having none to drop.
     #
     # `is None`, not truthiness: a nameless container gives "", which is the
-    # worst case rather than an absent one. Only the harvest writes this key,
-    # so its presence is what marks a tool as having come from a container.
+    # worst case rather than an absent one. Only the harvest writes
+    # ``tool_group``, so its presence marks a tool as having come from a
+    # container.
     contested = {
         t["name"]
         for t in tools
-        if claimants[t["name"]] > 1
-        and (t.get("metadata") or {}).get("namespace") is not None
+        if claimants[t["name"]] > 1 and t.get("tool_group") is not None
     }
     # `is None` again, and with more at stake: reading "" as top-level would
     # claim a bare call meant that tool, when the client has no name to point
     # at it with and the call is in fact ambiguous.
-    top_level = {
-        t["name"] for t in tools if (t.get("metadata") or {}).get("namespace") is None
-    }
+    top_level = {t["name"] for t in tools if t.get("tool_group") is None}
 
     for tool in tools:
         upstream_name = tool["name"]
         meta = tool.get("metadata") or {}
-        namespace = meta.get("namespace")
+        tool_group = tool.get("tool_group")
         client_name = meta.get("_original_name") or upstream_name
 
         # Tracked for every tool, including untranslated ones: an untouched
@@ -690,11 +687,11 @@ def build_tool_name_map(ir_request: dict[str, Any]) -> ToolNameMap:
         if sole.setdefault(client_name, upstream_name) != upstream_name:
             sole[client_name] = None
 
-        if namespace is None and client_name == upstream_name:
+        if tool_group is None and client_name == upstream_name:
             continue
-        upstream[(client_name, namespace)] = upstream_name
+        upstream[(client_name, tool_group)] = upstream_name
         if claimants[upstream_name] == 1:
-            client[upstream_name] = (client_name, namespace)
+            client[upstream_name] = (client_name, tool_group)
 
     return ToolNameMap(
         upstream,
@@ -725,6 +722,10 @@ def _to_client_identity(target: dict[str, Any], name_map: ToolNameMap) -> None:
     if not isinstance(pm, dict):
         pm = {}
         target["provider_metadata"] = pm
+    # The call side still carries the group under the wire name, unlike the
+    # definition side where it is the first-class ``tool_group`` field.
+    # Both say the same thing; unifying them means giving a tool call a
+    # ``tool_group`` of its own, which is the next step on #953.
     pm["namespace"] = namespace
 
 
@@ -1145,12 +1146,12 @@ def dedupe_tool_definitions(
       different tools, so silently keeping one would drop a legitimate tool
       and hide a client-side mistake no converter can repair.
 
-    Tools harvested from a *named* namespace container are exempt: the
-    namespace is part of their identity, so two byte-identical definitions
-    there are still two distinct tools, left to ``_dedup_ir_tool_names`` /
-    ``ToolNameMap``.  A container with no name of its own is not exempt, and
-    its children collapse like any other duplicate — see the comment at the
-    exemption below.
+    Tools harvested from a *named* container are exempt: the group is part
+    of their identity, so two byte-identical definitions there are still two
+    distinct tools, left to ``_dedup_ir_tool_names`` / ``ToolNameMap``.  A
+    container with no name of its own is not exempt, and its children
+    collapse like any other duplicate — see the comment at the exemption
+    below.
 
     Equality is on the whole definition dict, so this is not semantic dedup:
     any incidental per-copy difference (``metadata``, an optional field set on
@@ -1187,10 +1188,10 @@ def dedupe_tool_definitions(
         if not isinstance(name, str) or not name:
             kept.append(tool)
             continue
-        # A tool harvested from a namespace container carries its identity in
-        # ``metadata.namespace``, so two byte-identical definitions there are
-        # still two tools the client addresses separately.  Left to the
-        # namespace machinery (``_dedup_ir_tool_names`` / ``ToolNameMap``).
+        # A tool harvested from a container carries its identity in
+        # ``tool_group``, so two byte-identical definitions there are still
+        # two tools the client addresses separately.  Left to the group
+        # machinery (``_dedup_ir_tool_names`` / ``ToolNameMap``).
         #
         # Only a *named* container qualifies — the check is truthiness, not
         # ``is not None``.  A container with no name of its own yields "", and
@@ -1208,8 +1209,7 @@ def dedupe_tool_definitions(
         # top-level.  The questions differ — could a bare call be ambiguous /
         # is there an identity here worth preserving — so both answers are
         # correct and neither is a stale copy of the other.
-        meta = tool.get("metadata")
-        if isinstance(meta, dict) and meta.get("namespace"):
+        if tool.get("tool_group"):
             kept.append(tool)
             continue
         seen = definitions.setdefault(name, [])
