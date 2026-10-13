@@ -13,6 +13,8 @@ import asyncio
 from typing import Any
 from unittest.mock import MagicMock
 
+import pytest
+
 import llm_rosetta.gateway.app as app_module
 from llm_rosetta._vendor.httpserver import JSONResponse
 from llm_rosetta.gateway.deferred_dumps import DeferredDumpStore
@@ -213,3 +215,56 @@ def test_dump_is_written_once_the_request_log_row_exists(tmp_path, monkeypatch):
     assert total == 1
     assert entries[0]["request_log_id"] == entry_id
     assert entries[0]["error_phase"] == "upstream"
+
+
+def test_flush_runs_even_if_the_log_write_fails(monkeypatch):
+    """A failing ``_record_proxy_op`` must not swallow the queued dumps.
+
+    The queued dumps are flushed in a ``finally`` around the log write, so a log
+    write that raises still replays them — they fail their FK and log at
+    ``WARNING``, which is the point — instead of going out of scope in silence,
+    which is the defect this module exists to fix (#964).
+    """
+    store = _RecordingStore()
+
+    async def _boom(*args: Any, **kwargs: Any) -> None:
+        raise RuntimeError("log write failed")
+
+    async def _fake_handle_non_streaming(
+        route, provider_info, body, *, persistence=None, entry_id=None, **kwargs
+    ):
+        await dump_error(
+            persistence,
+            request_body=body,
+            response_text='{"error": "boom"}',
+            status_code=400,
+            error_phase="upstream",
+            request_log_id=entry_id,
+        )
+        return JSONResponse({"error": {"message": "boom"}}, status_code=400), {}
+
+    monkeypatch.setattr(app_module, "_config", _config())
+    monkeypatch.setattr(app_module, "handle_non_streaming", _fake_handle_non_streaming)
+    monkeypatch.setattr(app_module, "_record_proxy_op", _boom)
+
+    request = MagicMock()
+    request.headers = {}
+    request.json.return_value = {
+        "model": "test-model",
+        "messages": [{"role": "user", "content": "hi"}],
+    }
+    request.app.gateway_config = app_module._config
+    request.app.metadata_store = MagicMock()
+    request.app.metrics = None
+    request.app.request_log = None
+    request.app.persistence = store
+    request.app.ops_ctx = None
+    request.app.transport = MagicMock()
+    request.app.profiler_state = None
+    request.app.capture_state = None
+
+    with pytest.raises(RuntimeError, match="log write failed"):
+        asyncio.run(app_module._proxy_handler(request, "chat_completions"))
+
+    # The queued writes were replayed despite the log write raising.
+    assert [c[0] for c in store.calls] == ["insert_dump_body", "insert_error_dump"]

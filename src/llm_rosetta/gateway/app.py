@@ -490,25 +490,28 @@ async def _proxy_handler(
             duration_ms=duration_ms,
         )
 
-        await _record_proxy_op(
-            request.app,
-            model=model,
-            source_provider=source_provider,
-            target_provider=route.target_provider,
-            provider_name=route.provider_name,
-            is_stream=is_stream,
-            status_code=status_code,
-            duration_ms=duration_ms,
-            error_detail=error_detail,
-            profile=profile,
-            entry_id_override=pre_entry_id,
-        )
-
-        # The request-log row exists now, so the dumps queued during handling
-        # can be written with their request_log_id intact (#964).  Anything
-        # still to come — mid-stream dumps — goes straight through, since
-        # flush() stops deferring.
-        await _flush_deferred_dumps(deferred_dumps)
+        try:
+            await _record_proxy_op(
+                request.app,
+                model=model,
+                source_provider=source_provider,
+                target_provider=route.target_provider,
+                provider_name=route.provider_name,
+                is_stream=is_stream,
+                status_code=status_code,
+                duration_ms=duration_ms,
+                error_detail=error_detail,
+                profile=profile,
+                entry_id_override=pre_entry_id,
+            )
+        finally:
+            # The request-log row exists now, so the dumps queued during
+            # handling can be written with their request_log_id intact (#964).
+            # In a finally so a failing log write cannot swallow them — a dump
+            # that cannot be written is logged, never dropped in silence.
+            # Anything still to come — mid-stream dumps — goes straight
+            # through, since flush() stops deferring.
+            await _flush_deferred_dumps(deferred_dumps)
 
 
 # --- Endpoint handlers ---
