@@ -25,7 +25,8 @@ from __future__ import annotations
 import copy
 
 import logging
-from collections import Counter
+from collections import Counter, defaultdict
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -36,6 +37,10 @@ from llm_rosetta.converters.base.tools.intrinsic import (
 )
 
 from llm_rosetta.converters.base.context import ConversionContext
+from llm_rosetta.converters.base.helpers.tool_group import (
+    GENERATED_GROUP_MARKER,
+)
+from llm_rosetta.converters.base.helpers.truncate import truncate_with_digest
 from llm_rosetta.shims.provider_shim import (
     ProviderShim,
     ReasoningCapability,
@@ -579,6 +584,11 @@ class ToolNameMap:
     # of the map leaves out: a top-level tool is never renamed, so it earns
     # no entry elsewhere, yet it is exactly what gets asked about.
     _top_level: frozenset[str] = frozenset()
+    # Client names where every tool answering to one sits in a *generated*
+    # group — one we named because the container had none. A client has no
+    # namespace to echo back for those, so a warning that advises exactly that
+    # would be describing an action it cannot take.
+    _no_client_group: frozenset[str] = frozenset()
 
     def has_top_level(self, name: str) -> bool:
         """Whether some tool declares this name outside any namespace.
@@ -600,6 +610,15 @@ class ToolNameMap:
         tools a spelling nobody else has.
         """
         return upstream_name in self._contested
+
+    def has_client_group(self, name: str) -> bool:
+        """Whether some tool answering to this client name sits in a group the
+        client named — and so carries a namespace a call could echo back.
+
+        False when the only groups involved are ones we generated, which is
+        what makes the ambiguity advice actionable or not.
+        """
+        return name not in self._no_client_group
 
     def is_ambiguous(self, name: str) -> bool:
         """Whether this bare client name leads to several upstream spellings.
@@ -635,12 +654,241 @@ class ToolNameMap:
         return bool(self._client or self._upstream)
 
 
+#: Longest tool name the strictest targets accept.  OpenAI and Anthropic both
+#: publish ``^[a-zA-Z0-9_-]+$`` with a cap of this length; every other target is
+#: more permissive, so one budget covers them all.
+MAX_TOOL_NAME_LEN = 64
+
+
+def _is_generated_group(tool: Mapping[str, Any]) -> bool:
+    """Whether the tool's group name was chosen by us rather than by the client."""
+    metadata = tool.get("metadata")
+    return isinstance(metadata, dict) and bool(metadata.get(GENERATED_GROUP_MARKER))
+
+
+def _qualify_tool_name(
+    tool_group: str, name: str, used_names: set[str], warnings: list[str]
+) -> str:
+    """Build a name for a grouped tool that no other tool upstream has.
+
+    Always succeeds.  The upstream spelling is ours to choose — the client
+    never sees it, addressing its tools by ``(name, tool_group)`` and having
+    them restored through :class:`ToolNameMap` — so rather than give up and let
+    two tools share one name, which silently misroutes every call naming it, we
+    keep going until the name is unique.
+
+    Preferences, best first:
+
+    1. ``{group}_{name}`` — readable, and what nearly every caller gets.
+    2. The group truncated to fit.  Still readable.
+    3. A digest suffix, which is not.  The model reads a tool's name as a hint
+       about what it does, so this one costs prompting quality and earns a
+       warning, but a degraded hint beats a misrouted call.
+
+    Steps 1 and 2 can also be taken by an unrelated tool, so each candidate is
+    checked against *used_names* before it is accepted.
+    """
+    qualified = f"{tool_group}_{name}"
+    if len(qualified) > MAX_TOOL_NAME_LEN:
+        max_group = MAX_TOOL_NAME_LEN - len(name) - 1
+        if max_group > 0:
+            qualified = f"{tool_group[:max_group]}_{name}"
+    if len(qualified) <= MAX_TOOL_NAME_LEN and qualified not in used_names:
+        return qualified
+
+    # Seed from the pair that must stay distinct, never from list position:
+    # identical requests have to produce identical names or every one is a
+    # prompt-cache miss. The counter only widens the search when a digest is
+    # itself taken, and terminates because the tool list is finite.
+    max_attempts = 1000
+    attempt = 0
+    while attempt < max_attempts:
+        seed = (
+            f"{tool_group}\0{name}\0{attempt}" if attempt else f"{tool_group}\0{name}"
+        )
+        generated = truncate_with_digest(
+            qualified, MAX_TOOL_NAME_LEN, seed=seed, force=True
+        )
+        if generated not in used_names:
+            break
+        attempt += 1
+    else:
+        raise RuntimeError(
+            f"Tool name qualification exhausted {max_attempts} attempts "
+            f"for {name!r} in namespace {tool_group!r}"
+        )
+
+    warnings.append(
+        f"Tool {name!r} in namespace {tool_group!r} cannot be qualified within "
+        f"{MAX_TOOL_NAME_LEN} characters without colliding with another tool, "
+        f"so it goes upstream under the generated name {generated!r}; calls "
+        "still route correctly, but the model sees a less meaningful name"
+    )
+    return generated
+
+
+def _fold_generated_duplicates(
+    tools: list[Any], dropped: list[int], dropped_names: Counter[str]
+) -> None:
+    """Record, in *dropped*, the byte-identical children of one generated group.
+
+    A generated group name is ours — it exists only because that container had
+    no name for the client to address its tools by — so nothing client-side
+    keeps an identical pair apart, and a strict upstream answers 400 to the
+    second of them (#913).  Run before any renaming, which is what would
+    otherwise make the copies differ.
+    """
+    identical: dict[str, list[Any]] = defaultdict(list)
+    for index, tool in enumerate(tools):
+        if not isinstance(tool, dict) or not _is_generated_group(tool):
+            continue
+        name = tool.get("name")
+        if not isinstance(name, str) or not name:
+            continue
+        if tool in identical[name]:
+            dropped.append(index)
+            dropped_names[name] += 1
+            continue
+        identical[name].append(tool)
+
+
+def _qualify_collisions(
+    tools: list[Any],
+    gone: set[int],
+    result: list[Any],
+    used_names: set[str],
+    warnings: list[str],
+) -> bool:
+    """Qualify every grouped tool whose name still collides.
+
+    Top-level tools keep their name — nothing to prefix them with — and the
+    grouped ones move aside.  A group whose duplicates were all folded away
+    has nothing left to tell apart, so its survivor keeps the bare name too,
+    which is why the collisions are counted from what survived rather than
+    from what came in.
+
+    Returns whether anything was renamed.
+    """
+    by_name: dict[str, list[int]] = defaultdict(list)
+    for index, tool in enumerate(tools):
+        if index in gone or not isinstance(tool, dict):
+            continue
+        name = tool.get("name")
+        if isinstance(name, str) and name:
+            by_name[name].append(index)
+
+    renamed_any = False
+    for name, indices in by_name.items():
+        if len(indices) <= 1:
+            continue
+        for index in indices:
+            tool = tools[index]
+            group = tool.get("tool_group")
+            if not group:
+                continue
+            qualified = _qualify_tool_name(group, name, used_names, warnings)
+            renamed = dict(tool)
+            renamed["name"] = qualified
+            # The response leg undoes the qualification with this.
+            metadata = renamed.get("metadata")
+            renamed["metadata"] = {
+                **(metadata if isinstance(metadata, dict) else {}),
+                "_original_name": name,
+            }
+            result[index] = renamed
+            used_names.add(qualified)
+            renamed_any = True
+    return renamed_any
+
+
+def qualify_tool_names(
+    ir_request: dict[str, Any],
+    *,
+    warnings: list[str] | None = None,
+) -> dict[str, Any]:
+    """Give every grouped tool an upstream name no other tool has.
+
+    A group exists only inside the IR.  Of the wire formats this library
+    speaks, only the Responses family's container carries one; every other
+    target has a flat list where a name is the only thing telling two tools
+    apart.  So a target that cannot carry a container gets names that carry the
+    group instead — ``{group}_{name}`` — and the client's ``(name, group)``
+    identity is restored on the way back by :class:`ToolNameMap`.
+
+    This runs against the *target*, which is why it is here and not in the
+    source converter that flattened the container: whether the prefix is needed
+    at all depends on what the target can express, and the source side is not
+    what knows that.  Every target is flat today, so every collision is
+    qualified.
+
+    Tools sharing a name are treated by where they came from:
+
+    - **Top-level tools keep the name.**  They came from no group, so there is
+      nothing to prefix, and the grouped tool moves aside instead.
+    - **Grouped tools are qualified.**  A group name the client chose always
+      gets its children a spelling nobody else has, however long that name or
+      however crowded the request.
+    - **A generated group's byte-identical children collapse instead.**  That
+      group is ours — it exists only because the container had no name for the
+      client to address it by — so there is no client-side identity to keep
+      apart, and the pair is one duplicate that a strict upstream would answer
+      400 to, twice over (#913).
+
+    Renamed tools record the pre-rename name in ``metadata._original_name``,
+    which is what the response leg undoes the qualification with.
+
+    Args:
+        ir_request: The IR request dict — **always use the return value**.
+        warnings: Optional list to append qualification reports to.
+
+    Returns:
+        The IR request with colliding grouped tools qualified and generated
+        duplicates dropped, or the original request unchanged when nothing
+        collided.
+    """
+    tools = ir_request.get("tools")
+    if not tools:
+        return ir_request
+
+    dropped: list[int] = []
+    dropped_names: Counter[str] = Counter()
+    _fold_generated_duplicates(tools, dropped, dropped_names)
+    gone = set(dropped)
+
+    result: list[Any] = list(tools)
+    used_names: set[str] = {
+        tool["name"]
+        for index, tool in enumerate(tools)
+        if index not in gone
+        and isinstance(tool, dict)
+        and isinstance(tool.get("name"), str)
+    }
+    renamed_any = _qualify_collisions(
+        tools, gone, result, used_names, warnings if warnings is not None else []
+    )
+
+    if dropped and warnings is not None:
+        for name in sorted(dropped_names):
+            warnings.append(
+                f"Tool {name!r} was declared {dropped_names[name] + 1} times with "
+                "an identical definition inside the same tool group; "
+                f"{dropped_names[name]} duplicate(s) were dropped"
+            )
+
+    if not renamed_any and not dropped:
+        return ir_request
+    return {
+        **ir_request,
+        "tools": [t for i, t in enumerate(result) if i not in gone],
+    }
+
+
 def build_tool_name_map(ir_request: dict[str, Any]) -> ToolNameMap:
     """Derive a :class:`ToolNameMap` from the IR request's tool definitions.
 
     Tools harvested from a container carry ``tool_group`` (set during
     flattening).  Colliding names are additionally rewritten to
-    ``{group}_{name}`` by ``_dedup_ir_tool_names``, which records the
+    ``{group}_{name}`` by ``qualify_tool_names``, which records the
     pre-rename name in ``metadata._original_name``.
 
     Tools whose name survived unchanged and that carry no group are
@@ -676,6 +924,9 @@ def build_tool_name_map(ir_request: dict[str, Any]) -> ToolNameMap:
     # at it with and the call is in fact ambiguous.
     top_level = {t["name"] for t in tools if t.get("tool_group") is None}
 
+    named_claim: set[str] = set()
+    generated_claim: set[str] = set()
+
     for tool in tools:
         upstream_name = tool["name"]
         meta = tool.get("metadata") or {}
@@ -687,11 +938,27 @@ def build_tool_name_map(ir_request: dict[str, Any]) -> ToolNameMap:
         if sole.setdefault(client_name, upstream_name) != upstream_name:
             sole[client_name] = None
 
+        if tool_group is not None and not _is_generated_group(tool):
+            named_claim.add(client_name)
+        else:
+            generated_claim.add(client_name)
+
         if tool_group is None and client_name == upstream_name:
             continue
+        # Forward, the key keeps the real group — including a generated one.
+        # A client call cannot name a generated group, so it never matches:
+        # the lookup falls through to the bare name, which is ambiguous and
+        # reported, rather than silently resolving to a tool the client had
+        # no way to ask for.
         upstream[(client_name, tool_group)] = upstream_name
         if claimants[upstream_name] == 1:
-            client[upstream_name] = (client_name, tool_group)
+            # Backward, a generated group is dropped.  It is ours, not the
+            # client's — it exists only because that container had no name —
+            # so handing it back would return a name the client never wrote.
+            client[upstream_name] = (
+                client_name,
+                None if _is_generated_group(tool) else tool_group,
+            )
 
     return ToolNameMap(
         upstream,
@@ -701,6 +968,7 @@ def build_tool_name_map(ir_request: dict[str, Any]) -> ToolNameMap:
         {k: v for k, v in sole.items() if v is None or v != k},
         frozenset(contested),
         frozenset(top_level),
+        frozenset(generated_claim - named_claim),
     )
 
 
@@ -843,7 +1111,14 @@ def _respell_history_tool_calls(
                 # a namespaced one share a bare name, omitting the namespace
                 # is how the client says it meant the top-level one, and the
                 # fallback lands on exactly that tool.
-                unresolved.add(client_name)
+                if name_map.has_client_group(client_name):
+                    unresolved.add(client_name)
+                else:
+                    # Every group involved is one we generated, so telling the
+                    # client to echo a namespace back describes something it
+                    # cannot do — it never wrote one. Nothing it sends can
+                    # separate these, which is the other arm's answer.
+                    unattributable.add(client_name)
     return unresolved, unattributable
 
 
@@ -1148,7 +1423,7 @@ def dedupe_tool_definitions(
 
     Tools harvested from a *named* container are exempt: the group is part
     of their identity, so two byte-identical definitions there are still two
-    distinct tools, left to ``_dedup_ir_tool_names`` / ``ToolNameMap``.  A
+    distinct tools, left to ``qualify_tool_names`` / ``ToolNameMap``.  A
     container with no name of its own is not exempt, and its children
     collapse like any other duplicate — see the comment at the exemption
     below.
@@ -1191,11 +1466,11 @@ def dedupe_tool_definitions(
         # A tool harvested from a container carries its identity in
         # ``tool_group``, so two byte-identical definitions there are still
         # two tools the client addresses separately.  Left to the group
-        # machinery (``_dedup_ir_tool_names`` / ``ToolNameMap``).
+        # machinery (``qualify_tool_names`` / ``ToolNameMap``).
         #
         # Only a *named* container qualifies — the check is truthiness, not
         # ``is not None``.  A container with no name of its own yields "", and
-        # "" qualifies nothing: ``_dedup_ir_tool_names`` has nothing to build a
+        # "" qualifies nothing: ``qualify_tool_names`` has nothing to build a
         # unique name from, so its children keep one bare upstream name and
         # cannot be told apart, by the upstream or by the client that would
         # have to address them.  No provider implementing ``namespace``

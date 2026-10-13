@@ -10,7 +10,6 @@ nested messages. The converter handles this structural difference.
 """
 
 import time
-from collections import defaultdict
 from collections.abc import Mapping
 from typing import Any, ClassVar, cast
 
@@ -46,7 +45,7 @@ from ..base.helpers.opaque import (
     is_own_origin,
     set_opaque_origin,
 )
-from ..base.helpers.truncate import truncate_with_digest
+from ..base.helpers.tool_group import GENERATED_GROUP_MARKER
 from ..base.tools import (
     assign_tool_batch_ids,
     fix_orphaned_tool_calls_ir,
@@ -126,70 +125,6 @@ def _forward_passthrough_request_fields(
         ir_request.setdefault("provider_extensions", {})["_text_verbosity"] = text_obj[
             "verbosity"
         ]
-
-
-_MAX_TOOL_NAME_LEN = 64
-
-
-def _qualify_tool_name(
-    tool_group: str, name: str, used_names: set[str], warnings: list[str]
-) -> str:
-    """Build a name for a grouped tool that no other tool upstream has.
-
-    Always succeeds.  The upstream spelling is ours to choose — the client
-    never sees it, addressing its tools by ``(name, tool_group)`` and having
-    them restored through :class:`~llm_rosetta.capabilities.ToolNameMap` —
-    so rather than give up and let two tools share one name, which silently
-    misroutes every call naming it, we keep going until the name is unique.
-
-    Preferences, best first:
-
-    1. ``{group}_{name}`` — readable, and what nearly every caller gets.
-    2. The group truncated to fit.  Still readable.
-    3. A digest suffix, which is not.  The model reads a tool's name as a
-       hint about what it does, so this one costs prompting quality and
-       earns a warning, but a degraded hint beats a misrouted call.
-
-    Steps 1 and 2 can also be taken by an unrelated tool, so each candidate
-    is checked against *used_names* before it is accepted.
-    """
-    qualified = f"{tool_group}_{name}"
-    if len(qualified) > _MAX_TOOL_NAME_LEN:
-        max_ns = _MAX_TOOL_NAME_LEN - len(name) - 1
-        if max_ns > 0:
-            qualified = f"{tool_group[:max_ns]}_{name}"
-    if len(qualified) <= _MAX_TOOL_NAME_LEN and qualified not in used_names:
-        return qualified
-
-    # Seed from the pair that must stay distinct, never from list position:
-    # identical requests have to produce identical names or every one is a
-    # prompt-cache miss. The counter only widens the search when a digest is
-    # itself taken, and terminates because the tool list is finite.
-    _MAX_QUALIFY_ATTEMPTS = 1000
-    attempt = 0
-    while attempt < _MAX_QUALIFY_ATTEMPTS:
-        seed = (
-            f"{tool_group}\0{name}\0{attempt}" if attempt else f"{tool_group}\0{name}"
-        )
-        generated = truncate_with_digest(
-            qualified, _MAX_TOOL_NAME_LEN, seed=seed, force=True
-        )
-        if generated not in used_names:
-            break
-        attempt += 1
-    else:
-        raise RuntimeError(
-            f"Tool name qualification exhausted {_MAX_QUALIFY_ATTEMPTS} attempts "
-            f"for {name!r} in namespace {tool_group!r}"
-        )
-
-    warnings.append(
-        f"Tool {name!r} in namespace {tool_group!r} cannot be qualified within "
-        f"{_MAX_TOOL_NAME_LEN} characters without colliding with another tool, "
-        f"so it goes upstream under the generated name {generated!r}; calls "
-        "still route correctly, but the model sees a less meaningful name"
-    )
-    return generated
 
 
 class OpenResponsesConverter(BaseConverter):
@@ -436,7 +371,9 @@ class OpenResponsesConverter(BaseConverter):
             if active_tools:
                 ir_tools = self._get_cached_p_tools_to_ir(active_tools)
                 if ir_tools:
-                    ir_tools = self._dedup_ir_tool_names(ir_tools, context.warnings)
+                    # Naming is the target's call and happens there; this
+                    # leg only reports the containers that arrived unnamed.
+                    self._report_generated_groups(ir_tools, context.warnings)
                     ir_request["tools"] = ir_tools
 
         # 4-5. Tool choice + tool config
@@ -687,74 +624,36 @@ class OpenResponsesConverter(BaseConverter):
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _dedup_ir_tool_names(ir_tools: list[Any], warnings: list[str]) -> list[Any]:
-        """Qualify colliding IR tools that arrived inside a tool group.
+    def _report_generated_groups(ir_tools: list[Any], warnings: list[str]) -> None:
+        """Report each group whose name had to be invented.
 
-        Tools flattened out of a group may share names with top-level tools
-        or with tools from another group.  This method qualifies colliding
-        names as ``{group}_{name}`` while leaving top-level tools, which
-        came from no group at all, unchanged.
+        A container the client left unnamed is malformed input at every
+        upstream that implements containers — OpenAI, DeepSeek and Volcengine
+        all reject a missing or empty name — so the client should hear that
+        their tools are now addressed under a name we chose.
 
-        A tool whose group has a name always ends up with one no other tool
-        has; where that took a generated name rather than a readable one,
-        ``_qualify_tool_name`` says so in ``warnings``.  The exception is a
-        container carrying no name at all, which has nothing to qualify
-        with and is reported here.
-
-        Returns a new list; renamed entries are shallow-copied to avoid
-        mutating cached references.
+        Emitted here rather than where the id is generated, because the
+        flatten is process-cached: the first request carrying a given
+        container would hear about it and every later one would not.  Once
+        per group, not once per child: the children of one container share the
+        name and the cause.
         """
-        name_indices: dict[str, list[int]] = defaultdict(list)
-        for i, tool in enumerate(ir_tools):
-            name_indices[tool["name"]].append(i)
-
-        result = list(ir_tools)
-        used_names: set[str] = {t["name"] for t in ir_tools}
-
-        for name, indices in name_indices.items():
-            if len(indices) <= 1:
+        reported: set[str] = set()
+        for tool in ir_tools:
+            meta = tool.get("metadata")
+            if not isinstance(meta, dict) or not meta.get(GENERATED_GROUP_MARKER):
                 continue
-            # What will still answer to `name` once this group is done:
-            # top-level tools, never renamed, plus ones from a nameless
-            # container. Everything else moves aside, so a count of one means
-            # no collision is left.
-            bare_keepers = sum(1 for i in indices if not ir_tools[i].get("tool_group"))
-            # A container with no name of its own is the one collision nothing
-            # can resolve: there is nothing to qualify its children with.  Every
-            # other qualification failure is reported inside `_qualify_tool_name`,
-            # which this path never reaches, so the malformed container is said
-            # here.
-            #
-            # Once per group: the children of one nameless container share the
-            # name and the cause.  This says only that the container is
-            # malformed and the tool went unqualified — what became of it is
-            # `dedupe_tool_definitions`' to report, and this pass runs before it,
-            # so claiming the collision reaches the upstream would be a story
-            # the collapse then contradicts.
-            if bare_keepers > 1 and any(
-                ir_tools[i].get("tool_group") == "" for i in indices
-            ):
-                warnings.append(
-                    f"A namespace container declaring {name!r} has no name of "
-                    "its own, so that tool cannot be qualified"
-                )
-            for i in indices:
-                group = ir_tools[i].get("tool_group")
-                if not group:
-                    # Top-level (`None`) keeps the name as its own; a nameless
-                    # container (`""`) has nothing to qualify with.  Either way
-                    # this tool does not move — the warning above covers it.
-                    continue
-                qualified = _qualify_tool_name(group, name, used_names, warnings)
-                copy = dict(ir_tools[i])
-                copy["name"] = qualified
-                copy["metadata"] = dict(copy.get("metadata", {}))
-                # The response leg undoes the qualification with this.
-                copy["metadata"]["_original_name"] = name
-                result[i] = copy
-                used_names.add(qualified)
-
-        return result
+            group = tool.get("tool_group")
+            if not isinstance(group, str) or group in reported:
+                continue
+            reported.add(group)
+            warnings.append(
+                "A tool container arrived with no name of its own, so its "
+                f"tools are addressed under the generated group {group!r}.  "
+                "Calls route correctly, but the model reads a less meaningful "
+                "group than a named container would have given it; name the "
+                "container to fix that"
+            )
 
     @staticmethod
     def _build_p_usage_to_ir(p_usage: dict[str, Any]) -> UsageInfo:

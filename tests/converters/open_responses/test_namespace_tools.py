@@ -1,9 +1,6 @@
 """Tests for namespace tool flattening in OpenAI Responses converter."""
 
-import re
 from typing import Any
-
-import pytest
 
 from llm_rosetta.converters.base.context import ConversionContext
 from llm_rosetta.converters.open_responses.converter import (
@@ -282,72 +279,12 @@ class TestNamespaceDispatch:
 
 
 # ===========================================================================
-# _dedup_ir_tool_names tests
+# Full request conversion integration tests
 # ===========================================================================
 
 
-class TestDedupIrToolNames:
-    """Tests for the converter-level name dedup method."""
-
-    @pytest.fixture
-    def warnings(self) -> list[str]:
-        """Sink for unresolvable-collision warnings; asserted empty by default."""
-        return []
-
-    @staticmethod
-    def _ir_tool(name: str, ns: str | None = None) -> dict[str, Any]:
-        """An IR tool.  ``ns=None`` is top-level, ``ns=""`` a nameless container.
-
-        Presence of the key, not its truth: the harvest writes ``namespace``
-        for every tool that came from a container, and a container with no
-        name of its own writes it empty.  Collapsing the two would make the
-        nameless case untestable.
-        """
-        tool: dict[str, Any] = {
-            "type": "function",
-            "name": name,
-            "description": "",
-            "parameters": {},
-        }
-        if ns is not None:
-            tool["tool_group"] = ns
-        return tool
-
-    def test_no_collision_unchanged(self, warnings):
-        tools = [self._ir_tool("a"), self._ir_tool("b", "ns")]
-        result = OpenAIResponsesConverter._dedup_ir_tool_names(tools, warnings)
-        assert [t["name"] for t in result] == ["a", "b"]
-
-    def test_namespaced_vs_toplevel_collision(self, warnings):
-        tools = [
-            self._ir_tool("exec"),  # top-level, no namespace
-            self._ir_tool("exec", "functions"),  # from namespace
-        ]
-        result = OpenAIResponsesConverter._dedup_ir_tool_names(tools, warnings)
-        assert result[0]["name"] == "exec"
-        assert result[1]["name"] == "functions_exec"
-        assert warnings == []
-
-    def test_cross_namespace_collision(self, warnings):
-        tools = [
-            self._ir_tool("exec", "ns_a"),
-            self._ir_tool("exec", "ns_b"),
-        ]
-        result = OpenAIResponsesConverter._dedup_ir_tool_names(tools, warnings)
-        names = {t["name"] for t in result}
-        assert "ns_a_exec" in names
-        assert "ns_b_exec" in names
-        assert warnings == []
-
-    def test_no_mutation_of_originals(self, warnings):
-        original = self._ir_tool("exec", "ns")
-        tools = [self._ir_tool("exec"), original]
-        result = OpenAIResponsesConverter._dedup_ir_tool_names(tools, warnings)
-        # Original dict should be unchanged
-        assert original["name"] == "exec"
-        # Result entry is a copy
-        assert result[1]["name"] == "ns_exec"
-        assert result[1] is not original
+class TestNamespaceRequestConversion:
+    """Integration tests for namespace tools through the full converter."""
 
     def test_passthrough_tool_carries_its_rename_upstream(self):
         """A hosted tool keeps the name dedup gave it, not the one it came with.
@@ -399,184 +336,6 @@ class TestDedupIrToolNames:
 
         assert "name" not in upstream["tools"][0], upstream["tools"][0]
 
-    def test_long_qualified_name_truncated(self, warnings):
-        long_ns = "a" * 60
-        tools = [
-            self._ir_tool("tool"),
-            self._ir_tool("tool", long_ns),
-        ]
-        result = OpenAIResponsesConverter._dedup_ir_tool_names(tools, warnings)
-        assert len(result[1]["name"]) <= 64
-        assert result[0]["name"] != result[1]["name"]
-        # Truncating the namespace still produced a distinct name — no warning
-        assert warnings == []
-
-    def test_very_long_name_still_gets_a_distinct_name(self, warnings):
-        """A name filling the budget leaves no room to prefix — generate one.
-
-        Letting the tool keep the bare name would put two different tools
-        upstream spelled the same way, and every call naming it would be a
-        coin flip.  A generated name is a worse hint for the model and a
-        correct address for the provider; the warning covers the former.
-        """
-        long_name = "x" * 64
-        tools = [
-            self._ir_tool(long_name),
-            self._ir_tool(long_name, "ns"),
-        ]
-        result = OpenAIResponsesConverter._dedup_ir_tool_names(tools, warnings)
-
-        assert result[0]["name"] == long_name, "the top-level tool is never renamed"
-        generated = result[1]["name"]
-        assert generated != long_name
-        assert len(generated) <= 64
-        assert re.fullmatch(r"[a-zA-Z0-9_-]+", generated), generated
-        assert result[1]["metadata"]["_original_name"] == long_name
-        assert len(warnings) == 1
-        assert "generated name" in warnings[0]
-
-    def test_qualified_name_collides_falls_back_to_a_generated_name(self, warnings):
-        """The qualified spelling can itself be taken by a top-level tool."""
-        tools = [
-            self._ir_tool("exec"),
-            self._ir_tool("exec", "ns"),
-            self._ir_tool("ns_exec"),  # squats on the qualified spelling
-        ]
-        result = OpenAIResponsesConverter._dedup_ir_tool_names(tools, warnings)
-
-        names = [t["name"] for t in result]
-        assert names[0] == "exec" and names[2] == "ns_exec", "neither is renamed"
-        assert len(set(names)) == 3, f"every tool needs its own name; got {names}"
-        assert names[1].startswith("ns_exec_")
-        assert len(names[1]) <= 64
-        assert result[1]["metadata"]["_original_name"] == "exec"
-        assert len(warnings) == 1
-        assert "generated name" in warnings[0]
-
-    def test_generated_names_are_deterministic(self, warnings):
-        """Same tools in, same names out — or every request is a cache miss."""
-
-        def build() -> list[str]:
-            sink: list[str] = []
-            tools = [
-                self._ir_tool("exec"),
-                self._ir_tool("exec", "ns"),
-                self._ir_tool("ns_exec"),
-            ]
-            return [
-                t["name"]
-                for t in OpenAIResponsesConverter._dedup_ir_tool_names(tools, sink)
-            ]
-
-        assert build() == build()
-
-    def test_two_unqualifiable_tools_get_different_names(self, warnings):
-        """The digest must separate namespaces, not just mark a failure."""
-        long_name = "x" * 64
-        tools = [
-            self._ir_tool(long_name, "ns_a"),
-            self._ir_tool(long_name, "ns_b"),
-        ]
-        result = OpenAIResponsesConverter._dedup_ir_tool_names(tools, warnings)
-
-        first, second = (t["name"] for t in result)
-        assert first != second, "two tools sharing one upstream name is the bug"
-        assert len(first) <= 64 and len(second) <= 64
-
-    def test_generated_name_can_itself_be_squatted(self, warnings):
-        """The digest is a guess at a free name, so it has to be checked too.
-
-        Take the name the qualifier would generate, hand it to an unrelated
-        top-level tool, and ask again: the answer has to move, not collide.
-        """
-        # "ns_exec" is taken, so this run is the one that reaches the digest.
-        squatted = [
-            self._ir_tool("exec"),
-            self._ir_tool("exec", "ns"),
-            self._ir_tool("ns_exec"),
-        ]
-        generated = OpenAIResponsesConverter._dedup_ir_tool_names(squatted, [])[1][
-            "name"
-        ]
-        assert generated.startswith("ns_exec_"), generated
-
-        # Now squat that too, leaving the first digest no longer available.
-        tools = squatted + [self._ir_tool(generated)]
-        result = OpenAIResponsesConverter._dedup_ir_tool_names(tools, warnings)
-
-        names = [t["name"] for t in result]
-        assert names[2] == "ns_exec" and names[3] == generated, "squatters stay put"
-        assert names[1] != generated, f"collided with the squatter: {names}"
-        assert len(set(names)) == 4, names
-        assert len(names[1]) <= 64
-
-    def test_nameless_container_is_quiet_once_its_namesake_moves_away(self, warnings):
-        """Nothing to qualify with is only a problem if something stays put.
-
-        The named container's tool qualifies away to ``ns_exec``, leaving the
-        nameless one the sole owner of ``exec``.  Warning here would tell the
-        reader their tool is unreachable when it is perfectly reachable.
-        """
-        tools = [
-            self._ir_tool("exec", ""),  # container with no name of its own
-            self._ir_tool("exec", "ns"),
-        ]
-        result = OpenAIResponsesConverter._dedup_ir_tool_names(tools, warnings)
-
-        assert [t["name"] for t in result] == ["exec", "ns_exec"]
-        assert warnings == []
-
-    def test_nameless_container_warns_when_a_namesake_stays(self, warnings):
-        """A top-level tool does not move, so the clash is real and reported."""
-        tools = [
-            self._ir_tool("exec"),  # top-level, never renamed
-            self._ir_tool("exec", ""),  # nothing to qualify it with
-        ]
-        result = OpenAIResponsesConverter._dedup_ir_tool_names(tools, warnings)
-
-        assert [t["name"] for t in result] == ["exec", "exec"]
-        assert len(warnings) == 1
-        assert "has no name of its own" in warnings[0]
-
-    def test_single_tool_no_dedup(self, warnings):
-        tools = [self._ir_tool("only_one", "ns")]
-        result = OpenAIResponsesConverter._dedup_ir_tool_names(tools, warnings)
-        assert result[0]["name"] == "only_one"
-        assert warnings == []
-
-    def test_lone_nameless_child_is_quiet(self, warnings):
-        """Nothing else answers to the name, so nothing is shadowed.
-
-        The container is still malformed, but that warning exists to explain a
-        collision; on its own there is none to explain.
-        """
-        tools = [self._ir_tool("exec", "")]
-
-        result = OpenAIResponsesConverter._dedup_ir_tool_names(tools, warnings)
-
-        assert [t["name"] for t in result] == ["exec"]
-        assert warnings == []
-
-    def test_all_top_level_collision_is_not_blamed_on_a_container(self, warnings):
-        """None of these tools came from a container, so none can be told to
-        go name one.  The message names a cause that is not present here.
-        """
-        tools = [self._ir_tool("exec"), self._ir_tool("exec")]
-
-        result = OpenAIResponsesConverter._dedup_ir_tool_names(tools, warnings)
-
-        assert [t["name"] for t in result] == ["exec", "exec"]
-        assert warnings == []
-
-
-# ===========================================================================
-# Full request conversion integration tests
-# ===========================================================================
-
-
-class TestNamespaceRequestConversion:
-    """Integration tests for namespace tools through the full converter."""
-
     def setup_method(self):
         self.converter = OpenAIResponsesConverter()
 
@@ -616,12 +375,14 @@ class TestNamespaceRequestConversion:
         assert "wait" in tool_names
         assert len(ir["tools"]) == 3
 
-    def test_generated_name_surfaces_in_context_warnings(self):
-        """A generated name must reach the caller, not just the log.
+    def test_long_grouped_name_is_left_to_the_target_leg(self):
+        """Naming is the target's call, so this leg leaves the collision.
 
-        The call still routes, so nothing breaks — but the model is now
-        reading a digest where a tool name should be, and the client cannot
-        see that from the request it sent.  The warning is its only signal.
+        Whether a group name has to be folded into the tool's own name at all
+        depends on what the target can express, which the source side is not
+        what knows.  Both tools keep their name here and keep their group; the
+        pipeline's `qualify_tool_names` is what makes them unique, and it is
+        where the generated-name warning comes from.
         """
         long_name = "x" * 64
         context = ConversionContext()
@@ -642,13 +403,10 @@ class TestNamespaceRequestConversion:
         ir = self.converter.request_from_provider(request, context=context)
 
         names = [t["name"] for t in ir["tools"]]
-        assert names[0] == long_name
-        assert names[1] != long_name and len(names[1]) <= 64
-        assert any("generated name" in w for w in context.warnings), (
-            f"expected a generated-name warning; got {context.warnings}"
-        )
+        assert names == [long_name, long_name]
+        assert [t.get("tool_group") for t in ir["tools"]] == [None, "functions"]
 
-    def test_namespace_collision_with_toplevel(self):
+    def test_namespace_collision_with_toplevel_is_left_to_the_target_leg(self):
         request = {
             "model": "gpt-5",
             "tools": [
@@ -669,9 +427,13 @@ class TestNamespaceRequestConversion:
             ],
         }
         ir = self.converter.request_from_provider(request)
+
         tool_names = [t["name"] for t in ir["tools"]]
-        assert "exec" in tool_names
-        assert "functions_exec" in tool_names
+        assert tool_names == ["exec", "exec"], (
+            "the source leg flattens and records the group; naming is the "
+            "target leg's, so the collision survives to here"
+        )
+        assert [t.get("tool_group") for t in ir["tools"]] == [None, "functions"]
         assert len(ir["tools"]) == 2
 
     def test_namespace_tools_params_preserved(self):

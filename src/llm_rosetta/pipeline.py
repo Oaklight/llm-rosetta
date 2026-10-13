@@ -29,6 +29,7 @@ from typing import Any, Literal, Protocol, runtime_checkable
 
 from llm_rosetta.capabilities import (
     dedupe_tool_definitions,
+    qualify_tool_names,
     enforce_custom_tools,
     resolve_intrinsic_tools,
     relocate_oversized_tool_descriptions,
@@ -678,6 +679,17 @@ class ConversionPipeline:
             ir_request,
             shim=self._target_shim,
             config_override=self._supports_custom_tools,
+        )
+
+        # Tool names: qualify the ones that collide.  This runs against the
+        # target, which is why it is here rather than where the container
+        # was flattened — whether a group name has to be folded into the
+        # tool's own name depends on what the target can express, and only
+        # this side knows that.  Before the dedupe below, so that pass
+        # judges the names that will actually go upstream.
+        ir_request = qualify_tool_names(
+            ir_request,
+            warnings=ctx.warnings,
         )
 
         # Capability enforcement: duplicate tool definitions (post-custom-tools).

@@ -29,6 +29,7 @@ from ...types.ir import (
 from ...types.ir.tools import ToolCallConfig
 from ..base import BaseToolOps
 from ..base.helpers.opaque import CARRIER_KEY
+from ..base.helpers.tool_group import GENERATED_GROUP_MARKER, generated_group_id
 from ..base.tools import (
     extract_part_ids,
     get_definition_kind,
@@ -207,87 +208,138 @@ def _synthesize_passthrough_tool(
     )
 
 
+def _declared_child_name(child: Any) -> str | None:
+    """The name a container child declares, in either wire spelling."""
+    if not isinstance(child, dict):
+        return None
+    name = child.get("name") or (
+        child.get("function", {}).get("name")
+        if isinstance(child.get("function"), dict)
+        else None
+    )
+    return name if isinstance(name, str) and name else None
+
+
+def _declared_child_names(children: Any) -> list[str]:
+    """Every name the container's children declare, in declaration order."""
+    return [name for name in (_declared_child_name(c) for c in children) if name]
+
+
+def _flattened_child(
+    child: Any, index: int, group_name: str
+) -> list[ToolDefinition] | None:
+    """Convert one container child, or skip it with a log line.
+
+    Returns ``None`` for anything that cannot become a tool: a non-dict entry,
+    a nested container, an unnamed child, or a child whose own conversion
+    declined.  Nested namespaces are one level only — no real-world use case
+    exists, and the OpenAI function-name constraint ``^[a-zA-Z0-9_-]+$``
+    prohibits hierarchical separators.
+    """
+    if not isinstance(child, dict):
+        logger.warning(
+            "Skipping non-dict child at index %d in group %r", index, group_name
+        )
+        return None
+    if child.get("type", "function") == "namespace":
+        logger.warning(
+            "Skipping nested namespace %r inside %r — only one level of "
+            "nesting is supported",
+            child.get("name", ""),
+            group_name,
+        )
+        return None
+    if not _declared_child_name(child):
+        logger.warning(
+            "Skipping unnamed child at index %d in group %r", index, group_name
+        )
+        return None
+    converted = OpenResponsesToolOps.p_tool_definition_to_ir(child)
+    if converted is None:
+        return None
+    return converted if isinstance(converted, list) else [converted]
+
+
+def _tag_child_group(
+    item: ToolDefinition,
+    *,
+    group_name: str,
+    group_desc: str,
+    generated: bool,
+    defer_loading: bool,
+) -> ToolDefinition:
+    """Write the group onto one converted child, and mark it when generated."""
+    tagged = dict(item)
+    # The group is IR-level, not provider detail: the client addressed this
+    # tool by ``(name, group)``, and the value has to survive until the target
+    # leg can decide whether it is able to carry a container.
+    tagged["tool_group"] = group_name
+    if group_desc:
+        tagged["tool_group_description"] = group_desc
+    if not (generated or defer_loading):
+        return cast(ToolDefinition, tagged)
+    # ``metadata`` is otherwise left exactly as the child conversion produced
+    # it; only what this pass adds is written here.
+    meta = dict(item.get("metadata") or {})
+    if generated:
+        # Marks the name as ours, so the passes that must treat a nameless
+        # container differently from a named one can tell — and so a
+        # per-request warning can report it, which the flatten cannot: this
+        # conversion is process-cached.
+        meta[GENERATED_GROUP_MARKER] = True
+    if defer_loading:
+        meta["defer_loading"] = True
+    tagged["metadata"] = meta
+    return cast(ToolDefinition, tagged)
+
+
 def _flatten_namespace_tool(
     provider_tool: dict[str, Any],
 ) -> list[ToolDefinition]:
     """Expand a ``type: "namespace"`` container into individual IR tools.
 
-    Iterates child tools, converts each via ``p_tool_definition_to_ir``,
-    and tags every result with namespace metadata for future round-trip.
+    Iterates the children, converts each via ``p_tool_definition_to_ir``, and
+    tags every result with the group it came from, for future round-trip.
 
-    Nested namespaces (namespace inside namespace) are skipped with a
-    warning — no real-world use case exists, and the OpenAI function-name
-    constraint ``^[a-zA-Z0-9_-]+$`` prohibits hierarchical separators.
+    A container carrying no name of its own is given a generated one rather
+    than the empty string: ``""`` qualifies nothing, so its children would
+    keep one bare upstream name and could not be told apart — by the upstream,
+    or by the client that would have to address them.  See
+    :func:`~llm_rosetta.converters.base.helpers.tool_group.generated_group_id`.
     """
-    namespace_name = provider_tool.get("name", "")
-    # A blank name is treated as no name: `_dedup_ir_tool_names` builds
-    # ``{namespace}_{name}`` from it, providers match tool names against
-    # ``^[a-zA-Z0-9_-]+$``, and a container called ``" "`` otherwise ships
-    # ``" _wait"`` and a 400.  Blank becomes ``""``, the spelling the rest of
-    # the pipeline already reads as "no name of its own" — which is what a
-    # blank one is.  A non-string name reads as absent for the same reason.
+    declared = provider_tool.get("name", "")
+    # Blank reads as no name.  The qualification ladder joins the two with an
+    # underscore and providers match tool names against ``^[a-zA-Z0-9_-]+$``,
+    # so a container called ``" "`` would otherwise ship ``" _wait"`` and a
+    # 400.  A non-string name reads as absent for the same reason.
     #
     # An inner space (``"ta sks"``) survives this and still builds an illegal
     # name; that wider case is not this pass's to fix.
-    namespace_name = namespace_name.strip() if isinstance(namespace_name, str) else ""
-    namespace_desc = provider_tool.get("description", "")
+    group_name = declared.strip() if isinstance(declared, str) else ""
+    group_desc = provider_tool.get("description", "")
     children = provider_tool.get("tools", [])
     if not children:
         return []
 
+    generated = not group_name
+    if generated:
+        group_name = generated_group_id(group_desc, _declared_child_names(children))
+
     results: list[ToolDefinition] = []
-    for i, child in enumerate(children):
-        if not isinstance(child, dict):
-            logger.warning(
-                "Skipping non-dict child at index %d in namespace %r",
-                i,
-                namespace_name,
-            )
-            continue
-
-        child_type = child.get("type", "function")
-        if child_type == "namespace":
-            logger.warning(
-                "Skipping nested namespace %r inside %r — "
-                "only one level of nesting is supported",
-                child.get("name", ""),
-                namespace_name,
-            )
-            continue
-
-        child_name = child.get("name") or (
-            child.get("function", {}).get("name")
-            if isinstance(child.get("function"), dict)
-            else None
-        )
-        if not child_name:
-            logger.warning(
-                "Skipping unnamed child at index %d in namespace %r",
-                i,
-                namespace_name,
-            )
-            continue
-
-        converted = OpenResponsesToolOps.p_tool_definition_to_ir(child)
+    for index, child in enumerate(children):
+        converted = _flattened_child(child, index, group_name)
         if converted is None:
             continue
-
-        items = converted if isinstance(converted, list) else [converted]
-        for item in items:
-            item_copy = dict(item)
-            # The group is IR-level, not provider detail: the client addressed
-            # this tool by ``(name, group)``, and the value has to survive until
-            # the target leg can decide whether it is able to carry a container.
-            item_copy["tool_group"] = namespace_name
-            if namespace_desc:
-                item_copy["tool_group_description"] = namespace_desc
-            # ``metadata`` is left exactly as the child conversion produced it;
-            # only the group is added here.
-            if child.get("defer_loading"):
-                meta = dict(item.get("metadata") or {})
-                meta["defer_loading"] = True
-                item_copy["metadata"] = meta
-            results.append(cast(ToolDefinition, item_copy))
+        results.extend(
+            _tag_child_group(
+                item,
+                group_name=group_name,
+                group_desc=group_desc,
+                generated=generated,
+                defer_loading=bool(child.get("defer_loading")),
+            )
+            for item in converted
+        )
 
     return results
 
@@ -451,7 +503,7 @@ def _collect_additional_tools(
     Returns provider-format tool dicts exactly as declared.  Namespace
     containers and name collisions are handled downstream by
     ``p_tool_definition_to_ir`` (namespace flattening) and
-    ``_dedup_ir_tool_names`` (collision resolution).
+    :func:`~llm_rosetta.capabilities.qualify_tool_names` (collision resolution).
     """
     tools: list[dict[str, Any]] = []
     warnings: list[str] = []

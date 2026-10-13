@@ -15,6 +15,7 @@ from llm_rosetta.capabilities import (
     build_tool_name_map,
     restore_client_tool_names,
 )
+from llm_rosetta.converters.base.helpers.tool_group import generated_group_id
 from llm_rosetta.pipeline import ConversionPipeline
 
 
@@ -872,35 +873,6 @@ class TestNamespaceRoundTrip:
             f"expected silence for a top-level call; got {pipe.warnings}"
         )
 
-    def test_history_call_for_a_contested_name_warns(self):
-        """Reaching the provider is not the same as being attributable.
-
-        Both tools kept their bare spelling, so the replayed call resolves to
-        a name we really are sending.  Reaching the provider is not the same
-        as being attributable, which is why ``is_contested`` is its own
-        trigger rather than a refinement of the ambiguity test.
-        """
-        pipe = ConversionPipeline("openai_responses", "openai_chat")
-        request, name = self._contested_request()
-        request["input"] += [
-            {"type": "function_call", "call_id": "c0", "name": name, "arguments": "{}"},
-            {"type": "function_call_output", "call_id": "c0", "output": "ok"},
-        ]
-
-        upstream = pipe.convert_request(request)
-
-        replayed = [
-            call for msg in upstream["messages"] for call in msg.get("tool_calls") or []
-        ]
-        assert [c["function"]["name"] for c in replayed] == [name]
-        # The name is one we really do send: the failure is attribution, not
-        # a call the provider will fail to match.
-        assert name in {t["function"]["name"] for t in upstream["tools"]}
-        history = [w for w in pipe.warnings if "A history tool call" in w]
-        assert len(history) == 1 and "cannot tell which one" in history[0], (
-            f"expected an unattributable-history warning; got {pipe.warnings}"
-        )
-
     def test_history_call_warns_when_the_bare_name_belongs_to_a_namespace(self):
         """Being a name we send is not the same as being the tool meant.
 
@@ -925,9 +897,10 @@ class TestNamespaceRoundTrip:
         upstream = pipe.convert_request(request)
 
         declared = {t["function"]["name"] for t in upstream["tools"]}
-        # No top-level tool anywhere, yet the bare name is declared — the shape
-        # the old "is it a name we send" test could not see past.
-        assert declared == {"a", "other_a"}
+        # No top-level tool anywhere, yet the bare name is answered for by a
+        # container's tool — the shape the old "is it a name we send" test
+        # could not see past.
+        assert declared == {f"{generated_group_id('', ['a'])}_a", "other_a"}
         replayed = [
             call for msg in upstream["messages"] for call in msg.get("tool_calls") or []
         ]
@@ -937,92 +910,17 @@ class TestNamespaceRoundTrip:
             f"expected an unresolved-history warning; got {pipe.warnings}"
         )
 
-    def test_contested_beats_unresolved_when_both_trigger(self):
-        """The two history triggers overlap, and the order decides the advice.
-
-        Two containers with no name of their own both declare ``a``, so both
-        keep the bare spelling and the name is contested.  ``z/a`` qualifies
-        to ``z_a``, which makes the same client name reach several upstream
-        spellings and so makes it ambiguous too.  No top-level ``a`` exists,
-        so neither arm is suppressed.
-
-        Contested has to win.  The other arm tells the client to echo the
-        namespace back, and that cannot help here — the namespaces are exactly
-        what could not be folded in.
-        """
-        pipe = ConversionPipeline("openai_responses", "openai_chat")
-        request = _request(
-            _nameless_container("a"),
-            _nameless_container("a", description="The other a tool."),
-            _namespace_container("z", "a"),
-        )
-        request["input"] += [
-            {"type": "function_call", "call_id": "c0", "name": "a", "arguments": "{}"},
-            {"type": "function_call_output", "call_id": "c0", "output": "ok"},
-        ]
-
-        upstream = pipe.convert_request(request)
-
-        # Both arms are genuinely live: without this the test could pass while
-        # only one of them can ever fire, and the ordering would be untested.
-        name_map = pipe._name_map
-        assert name_map.is_contested("a")
-        assert name_map.is_ambiguous("a")
-        assert not name_map.has_top_level("a")
-        assert [t["function"]["name"] for t in upstream["tools"]].count("a") == 2
-
-        history = [w for w in pipe.warnings if "A history tool call" in w]
-        assert len(history) == 1, f"expected one history warning; got {pipe.warnings}"
-        assert "cannot tell which one" in history[0]
-        assert "echo back" not in history[0], (
-            f"contested must win: echoing the namespace cannot help; got {history[0]}"
-        )
-
-    def test_contested_history_warning_does_not_invent_a_cause(self):
-        """The message defers to a cause, and must not guess at it.
-
-        Here the two tools share a name because their containers have none,
-        not because anything ran out of room — every name in the request is a
-        single character.  A message blaming the length limit would send the
-        reader off to shorten them.
-        """
-        pipe = ConversionPipeline("openai_responses", "openai_chat")
-        request = _request(
-            _nameless_container("a"),
-            _nameless_container("a", description="The other a tool."),
-        )
-        request["input"] += [
-            {"type": "function_call", "call_id": "c0", "name": "a", "arguments": "{}"},
-            {"type": "function_call_output", "call_id": "c0", "output": "ok"},
-        ]
-
-        upstream = pipe.convert_request(request)
-
-        longest = max(len(t["function"]["name"]) for t in upstream["tools"])
-        assert longest < 10, "no name here is anywhere near the length budget"
-        history = [w for w in pipe.warnings if "A history tool call" in w]
-        assert len(history) == 1 and "length" not in history[0], (
-            f"the cause is a nameless container, not the length cap; got {history}"
-        )
-        # The accurate cause is carried by the qualification warnings, which
-        # the message defers to, so they have to actually be there.
-        assert [w for w in pipe.warnings if "has no name of its own" in w]
-
     def test_nameless_container_does_not_count_as_top_level(self):
         """An empty namespace is still a namespace, and must not suppress.
 
-        A container with no name of its own yields ``namespace == ""``, which
-        is falsy but not absent.  Reading it as top-level would say a bare
-        call meant that tool — and it never does, since the tool came from a
-        container.  Here the nameless container's ``a`` keeps its spelling
-        while ``x/a`` qualifies away, so the bare call is ambiguous and only
-        the second history arm can report it: exactly the arm
+        A container with no name of its own gets one generated from its
+        content, which is not a name the client ever wrote — the response leg
+        hands back a bare name for it.  But on the way *up* the tool did come
+        from a container, so a bare call cannot be meant for it, and reading
+        its group as absent would say otherwise.  Here that tool keeps a name
+        of its own while ``x/a`` qualifies away, so the bare call is ambiguous
+        and only the second history arm can report it: exactly the arm
         ``has_top_level`` guards.
-
-        Relaxing the population to ``not ns`` loses this warning while every
-        other test in the suite still passes, which is why it is worth its own
-        case.  ``S4`` does not cover it — there the name is contested, so the
-        first arm fires and ``has_top_level`` is never consulted.
         """
         for label, container in (
             ("empty name", {"type": "namespace", "name": "", "tools": []}),
@@ -1045,15 +943,43 @@ class TestNamespaceRoundTrip:
 
             name_map = pipe._name_map
             assert not name_map.has_top_level("a"), (
-                f"{label}: a nameless container is not a top-level declaration"
+                f"{label}: a container's tool is not a top-level declaration"
             )
             # The arm under test is reachable only in this combination.
             assert name_map.is_ambiguous("a") and not name_map.is_contested("a"), label
-            assert {t["function"]["name"] for t in upstream["tools"]} == {"a", "x_a"}
+            assert {t["function"]["name"] for t in upstream["tools"]} == {
+                f"{generated_group_id('', ['a'])}_a",
+                "x_a",
+            }
             history = [w for w in pipe.warnings if "A history tool call" in w]
             assert len(history) == 1 and "matching none of them" in history[0], (
                 f"{label}: expected the unresolved warning; got {pipe.warnings}"
             )
+
+    def test_history_call_into_a_generated_group_is_not_asked_to_echo(self):
+        """The advice has to be something the client can carry out.
+
+        Two tools in one generated group share a bare name and cannot be told
+        apart upstream.  The other ambiguity arm would tell the client to echo
+        the namespace back — but a generated group never reaches the client,
+        so there is nothing for it to echo and the call simply cannot be
+        attributed.  Saying so is the honest answer.
+        """
+        pipe = ConversionPipeline("openai_responses", "openai_chat")
+        other = _nameless_container("a")
+        other["tools"][0]["description"] = "The other a tool."
+        request = _request(_nameless_container("a"), other)
+        request["input"] += [
+            {"type": "function_call", "call_id": "c0", "name": "a", "arguments": "{}"},
+            {"type": "function_call_output", "call_id": "c0", "output": "ok"},
+        ]
+
+        pipe.convert_request(request)
+
+        history = [w for w in pipe.warnings if "A history tool call" in w]
+        assert len(history) == 1, pipe.warnings
+        assert "cannot tell which one" in history[0], history[0]
+        assert "echo back" not in history[0], history[0]
 
     def test_history_call_for_an_undeclared_tool_is_silent(self):
         """The client's own stale history is not ours to complain about."""
@@ -1062,125 +988,15 @@ class TestNamespaceRoundTrip:
 
         assert not [w for w in pipe.warnings if "A history tool call" in w]
 
-    @staticmethod
-    def _contested_request(*, stream: bool = False) -> tuple[dict[str, Any], str]:
-        """A request where two tools really do share one upstream name.
-
-        Two containers with no name of their own declare the same tool under
-        differing definitions.  A container that *has* a name always gets its
-        tools a spelling nobody else has, however long the name or however
-        crowded the request, so this is the only way left for one upstream
-        name to mean two tools: there is nothing to qualify these with, and no
-        length that would help.  Both go upstream spelled the same way.
-
-        The definitions have to differ.  Byte-identical children of a nameless
-        container are collapsed by ``dedupe_tool_definitions`` — left alone
-        they are one duplicate reaching a strict upstream (#913) — and a
-        collapsed pair leaves nothing to be ambiguous about.
-        """
-        name = "wait"
-        return _request(
-            _nameless_container(name),
-            _nameless_container(name, description="The other wait tool."),
-            stream=stream,
-        ), name
-
-    def test_contested_call_warns_on_the_response_leg(self):
-        """The namespace is dropped on the way back, and the caller hears why.
-
-        Goes through the pipeline rather than ``restore_client_tool_names``:
-        the warnings list has to actually be threaded from the response leg,
-        which a direct call to the helper cannot show.
-        """
-        pipe = ConversionPipeline("openai_responses", "openai_chat")
-        request, name = self._contested_request()
-        pipe.convert_request(request)
-        before = len(pipe.warnings)
-
-        out = pipe.convert_response(_chat_completion(name))
-
-        calls = [i for i in out["output"] if i.get("type") == "function_call"]
-        assert len(calls) == 1
-        # Refusing to guess is the right answer; it is also a broken call, so
-        # it cannot pass silently.
-        assert "namespace" not in calls[0]
-        added = pipe.warnings[before:]
-        assert any("more than one declared tool" in w for w in added), (
-            f"expected a contested-call warning from the response leg; got {added}"
-        )
-
-    def test_contested_call_warns_on_the_streaming_leg(self):
-        pipe = ConversionPipeline("openai_responses", "openai_chat")
-        request, name = self._contested_request(stream=True)
-        pipe.convert_request(request)
-        before = len(pipe.warnings)
-        proc = pipe.create_stream_processor()
-
-        events: list[dict[str, Any]] = []
-        for chunk in _chat_chunks(name):
-            events.extend(proc.process_chunk(chunk))
-
-        for event_type, item in _function_calls(events):
-            assert "namespace" not in item, event_type
-        added = pipe.warnings[before:]
-        assert any("more than one declared tool" in w for w in added), (
-            f"expected a contested-call warning from the stream; got {added}"
-        )
-
-    def test_contested_stream_warns_once_however_it_is_chunked(self):
-        """Two calls, two chunks, still one warning — as non-streaming gives.
-
-        The restore runs per chunk, so a set scoped to the chunk would report
-        the same name once per frame.  Whether a provider packs its tool calls
-        into one chunk or sends each in its own — the anthropic wire format
-        does the latter — is not something the reader should hear about.
-        """
-        pipe = ConversionPipeline("openai_responses", "openai_chat")
-        request, name = self._contested_request(stream=True)
-        pipe.convert_request(request)
-        before = len(pipe.warnings)
-        proc = pipe.create_stream_processor()
-
-        def start(index: int) -> dict[str, Any]:
-            return {
-                "id": "chatcmpl-test",
-                "object": "chat.completion.chunk",
-                "created": 1,
-                "model": "test-model",
-                "choices": [
-                    {
-                        "index": 0,
-                        "delta": {
-                            "role": "assistant",
-                            "tool_calls": [
-                                {
-                                    "index": index,
-                                    "id": f"call_{index}",
-                                    "type": "function",
-                                    "function": {"name": name, "arguments": "{}"},
-                                }
-                            ],
-                        },
-                        "finish_reason": None,
-                    }
-                ],
-            }
-
-        for chunk in (start(0), start(1)):
-            proc.process_chunk(chunk)
-
-        added = [w for w in pipe.warnings[before:] if "more than one declared" in w]
-        assert len(added) == 1, f"expected one warning for the stream; got {added}"
-
     def test_nameless_namespace_container_is_reported_on_both_legs(self):
         """A container with no name cannot do the one job a namespace has.
 
-        Both safety nets used to be off at once.  ``_dedup_ir_tool_names``
-        skipped qualification without ever reaching ``_qualify_tool_name``,
-        which is where every *other* qualification failure is reported, and
-        the contested set tested the namespace for truth rather than presence,
-        so an empty one looked like a top-level tool and the response leg said
-        nothing either.  Two tools shadowed each other in complete silence.
+        The container is malformed — every upstream that implements containers
+        rejects a missing or empty name — and the client is the only one who
+        can fix it, so both legs have to say so.  Giving the container a
+        generated name is what makes the two tools addressable rather than
+        shadowing each other, and the response leg no longer has anything
+        ambiguous to warn about.
         """
         for label, container in (
             ("empty name", {"type": "namespace", "name": "", "tools": None}),
@@ -1194,12 +1010,14 @@ class TestNamespaceRoundTrip:
 
             upstream = pipe.convert_request(request)
 
-            # The shadowing itself is unchanged — this is about reporting it.
+            # The generated group is what buys the second tool a name of its
+            # own; without it the pair shadows each other upstream.
+            group = generated_group_id("", ["wait"])
             assert [t["function"]["name"] for t in upstream["tools"]] == [
                 "wait",
-                "wait",
+                f"{group}_wait",
             ], label
-            assert any("has no name of its own" in w for w in pipe.warnings), (
+            assert any("arrived with no name of its own" in w for w in pipe.warnings), (
                 f"{label}: expected a request-leg warning; got {pipe.warnings}"
             )
 
@@ -1208,9 +1026,9 @@ class TestNamespaceRoundTrip:
 
             calls = [i for i in out["output"] if i.get("type") == "function_call"]
             assert len(calls) == 1 and "namespace" not in calls[0], label
-            assert any(
-                "more than one declared tool" in w for w in pipe.warnings[before:]
-            ), f"{label}: expected a response-leg warning; got {pipe.warnings[before:]}"
+            assert not [
+                w for w in pipe.warnings[before:] if "more than one declared" in w
+            ], f"{label}: nothing is ambiguous now; got {pipe.warnings[before:]}"
 
     def test_byte_identical_nameless_children_lose_a_copy(self):
         """The duplicate a nameless container produced must not reach the wire.
