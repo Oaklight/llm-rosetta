@@ -525,6 +525,32 @@ class TestStreamRoundTrip:
         )
         assert restored["choices"][0]["delta"]["reasoning_content"] == "step 1"
 
+    def test_empty_reasoning_delta_round_trip(self):
+        """An empty reasoning delta is relayed, not swallowed.
+
+        Upstreams send ``reasoning_content: ""`` placeholder chunks inside a
+        same-format stream, so the writer keeps the field rather than dropping
+        the event.  The Anthropic writer makes the opposite choice for its own
+        reason, see ``MessagesConverter._ir_reasoning_deltas``.
+        """
+        chunk = {
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {"reasoning_content": ""},
+                    "finish_reason": None,
+                }
+            ]
+        }
+        events = cast(list[Any], self.converter.stream_response_from_provider(chunk))
+        assert [e["type"] for e in events] == ["reasoning_delta"]
+        restored = cast(
+            dict[str, Any], self.converter.stream_response_to_provider(events[0])
+        )
+        delta = restored["choices"][0]["delta"]
+        assert "reasoning_content" in delta
+        assert delta["reasoning_content"] == ""
+
     def test_finish_round_trip(self):
         """Finish event round-trip preserves reason."""
         chunk = {"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]}
