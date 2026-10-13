@@ -1,7 +1,8 @@
 """Tests for llm_rosetta.pipeline and llm_rosetta.capabilities.
 
 Note: This file imports private helpers (resolve_shim, _apply_config_reasoning_override)
-directly from llm_rosetta.capabilities for unit-testing internal logic.
+directly for unit-testing internal logic.  The private one comes from its own module
+rather than the package, so the package's public surface stays the public surface.
 """
 
 import copy
@@ -10,10 +11,10 @@ from typing import Any, get_args, get_type_hints
 import pytest
 
 from llm_rosetta.capabilities import (
-    _apply_config_reasoning_override,
     enforce_reasoning,
     strip_reasoning_for_non_reasoning,
 )
+from llm_rosetta.capabilities.enforcement import _apply_config_reasoning_override
 from llm_rosetta.converters.base.context import ConversionContext
 from llm_rosetta.pipeline import apply_ir_transforms
 from llm_rosetta.shims.provider_shim import (
