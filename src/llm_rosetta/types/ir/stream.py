@@ -14,6 +14,7 @@ IR stream event type definitions for supporting SSE chunk-level real-time conver
 - RefusalDeltaEvent: 拒绝内容增量事件
 - ToolCallStartEvent: 工具调用开始事件
 - ToolCallDeltaEvent: 工具调用增量事件
+- ToolResultEvent: 工具结果事件（服务端工具结果，整块到达）
 - FinishEvent: 完成事件
 - UsageEvent: 使用统计事件
 
@@ -27,6 +28,7 @@ Contains the following event types:
 - RefusalDeltaEvent: Refusal content delta event
 - ToolCallStartEvent: Tool call start event
 - ToolCallDeltaEvent: Tool call delta event
+- ToolResultEvent: Tool result event (server-tool result, delivered whole)
 - FinishEvent: Finish event
 - UsageEvent: Usage statistics event
 """
@@ -167,6 +169,33 @@ class ToolCallDeltaEvent(TypedDict):
     choice_index: NotRequired[int]
 
 
+class ToolResultEvent(TypedDict):
+    """Tool result event.
+
+    A tool result the provider executed and returned inside the turn.  Anthropic
+    delivers server-tool results (``web_search_tool_result``,
+    ``code_execution_tool_result``, …) whole in a single ``content_block_start``,
+    with no deltas to follow, so like :class:`ToolCallStartEvent` this event
+    carries everything at once and has no delta counterpart.
+
+    Fields mirror :class:`~llm_rosetta.types.ir.parts.ToolResultPart`, so the
+    streaming and non-streaming halves describe the same thing.  In particular
+    ``result`` is ``Any``, not a list: a web-search result is a list of result
+    blocks, but a code-execution result can be a string (or an object).
+    """
+
+    type: Required[Literal["tool_result"]]
+    tool_call_id: Required[str]  # Provider's tool_use_id
+    result: Required[Any]  # Can be a string, list, object, etc.
+    cache_hint: NotRequired[dict[str, Any]]  # Block-level cache breakpoint
+    tool_type: NotRequired[
+        Literal["function", "mcp", "custom", "intrinsic"]
+    ]  # absent means "infer", as on ToolResultPart
+    is_error: NotRequired[bool]
+    block_index: NotRequired[int]  # Provider content block index (e.g. Anthropic)
+    provider_metadata: NotRequired[dict[str, Any]]
+
+
 class FinishEvent(TypedDict):
     """Finish event.
 
@@ -202,6 +231,7 @@ IRStreamEvent = Union[
     RefusalDeltaEvent,
     ToolCallStartEvent,
     ToolCallDeltaEvent,
+    ToolResultEvent,
     FinishEvent,
     UsageEvent,
     ProviderPassthroughEvent,
@@ -221,6 +251,7 @@ __all__ = [
     "RefusalDeltaEvent",
     "ToolCallStartEvent",
     "ToolCallDeltaEvent",
+    "ToolResultEvent",
     "FinishEvent",
     "UsageEvent",
     "ProviderPassthroughEvent",

@@ -595,6 +595,16 @@ class MessagesToolOps(BaseToolOps):
         )
         set_intrinsic_kind(part, kind)
 
+        # Keep the provider's whole block so a same-dialect writer can restore
+        # it verbatim, including fields the IR does not model (Anthropic's
+        # web-search ``caller``, for one).  This mirrors the ``_native``
+        # payload the definition path stores; the base key namespaces it to
+        # the dialect that produced it.
+        part["provider_metadata"]["_native"] = {
+            "base": "messages",
+            "block": dict(provider_block),
+        }
+
         pm = provider_block.get(CARRIER_KEY)
         if pm:
             part["provider_metadata"].update(pm)

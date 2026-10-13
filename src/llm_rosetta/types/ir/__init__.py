@@ -172,6 +172,7 @@ from .stream import (
     TextDeltaEvent,
     ToolCallDeltaEvent,
     ToolCallStartEvent,
+    ToolResultEvent,
     UsageEvent,
 )
 
@@ -288,6 +289,7 @@ __all__ = [
     "RefusalDeltaEvent",
     "ToolCallStartEvent",
     "ToolCallDeltaEvent",
+    "ToolResultEvent",
     "FinishEvent",
     "UsageEvent",
     # ========== Embedding 类型 Embedding types ==========

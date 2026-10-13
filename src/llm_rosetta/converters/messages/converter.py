@@ -39,6 +39,7 @@ from ...types.ir.stream import (
     TextDeltaEvent,
     ToolCallDeltaEvent,
     ToolCallStartEvent,
+    ToolResultEvent,
     UsageEvent,
 )
 from ..base import BaseConverter
@@ -780,6 +781,28 @@ class MessagesConverter(BaseConverter):
                 start_evt["tool_call_index"] = context.tool_call_count - 1
             events.append(start_evt)
 
+        elif isinstance(block_type, str) and block_type.endswith("_tool_result"):
+            # Anthropic executes server tools and returns their results whole
+            # in a single ``content_block_start`` (no deltas follow).  Build the
+            # IR part with the same reader the non-streaming path uses so the
+            # payload shape matches, then carry it as a one-shot ToolResultEvent.
+            part = MessagesToolOps.p_server_tool_result_to_ir(content_block)
+            result_evt = ToolResultEvent(
+                type="tool_result",
+                tool_call_id=part["tool_call_id"],
+                result=part["result"],
+                is_error=part.get("is_error", False),
+            )
+            tool_type = part.get("tool_type")
+            if tool_type is not None:
+                result_evt["tool_type"] = tool_type
+            if "cache_hint" in part:
+                result_evt["cache_hint"] = part["cache_hint"]
+            if "provider_metadata" in part:
+                result_evt["provider_metadata"] = part["provider_metadata"]
+            result_evt["block_index"] = block_index
+            events.append(result_evt)
+
     def _handle_p_content_block_delta_to_ir(
         self,
         chunk: dict[str, Any],
@@ -922,6 +945,11 @@ class MessagesConverter(BaseConverter):
         AnthropicEventType.CONTENT_BLOCK_STOP: "_handle_p_content_block_stop_to_ir",
         AnthropicEventType.MESSAGE_DELTA: "_handle_p_message_delta_to_ir",
         AnthropicEventType.MESSAGE_STOP: "_handle_p_message_stop_to_ir",
+    }
+
+    _IR_TO_P_DISPATCH: dict[str, str] = {
+        **BaseConverter._IR_TO_P_DISPATCH,
+        "tool_result": "_handle_ir_tool_result_to_p",
     }
 
     # --- to_provider ---
@@ -1228,6 +1256,61 @@ class MessagesConverter(BaseConverter):
         elif explicit_idx is not None:
             result["index"] = explicit_idx
         return result
+
+    def _handle_ir_tool_result_to_p(
+        self, event: ToolResultEvent, context: StreamContext | None
+    ) -> dict[str, Any]:
+        """Handle ToolResultEvent → content_block_start for a server-tool result.
+
+        A server-tool result arrives whole, so the writer emits the matching
+        ``*_tool_result`` content block in a single ``content_block_start``.
+        When the block was read from this same dialect, the stored ``_native``
+        payload is replayed verbatim, preserving fields the IR does not model
+        (the original ``content`` shape and ``caller``).  Otherwise the block is
+        rebuilt from the IR fields.
+        """
+        content_block = self._ir_tool_result_block(event)
+
+        result: dict[str, Any] = {
+            "type": AnthropicEventType.CONTENT_BLOCK_START,
+            "content_block": content_block,
+        }
+        index = event.get("block_index")
+        if context is not None:
+            state = _stream_blocks(context)
+            index = state.open(context, index)
+            context.current_block_type = content_block.get("type")
+            result["index"] = index
+        elif index is not None:
+            result["index"] = index
+        return result
+
+    def _ir_tool_result_block(self, event: ToolResultEvent) -> dict[str, Any]:
+        """Build the Anthropic ``*_tool_result`` block for a ToolResultEvent."""
+        pm = event.get("provider_metadata") or {}
+        native = pm.get("_native")
+        if isinstance(native, dict) and native.get("base") == self._CONVERTER_TAG:
+            block = native.get("block")
+            if isinstance(block, dict):
+                return dict(block)
+
+        kind = pm.get("intrinsic_kind", "")
+        content_block: dict[str, Any] = {
+            "type": f"{kind}_tool_result" if kind else "tool_result",
+            "tool_use_id": sanitize_tool_call_id(event["tool_call_id"]),
+            "content": event.get("result", []),
+        }
+        # Only the generic ``tool_result`` block defines ``is_error``; Anthropic
+        # refuses it on a ``*_tool_result`` one ("Extra inputs are not
+        # permitted", verified live 2026-10-13), so a rebuilt server result must
+        # not carry it.  The ``caller`` of a server result is not re-derivable
+        # from the IR at all — only the ``_native`` branch above has it.
+        if not kind and event.get("is_error") is not None:
+            content_block["is_error"] = event["is_error"]
+        cache_hint = event.get("cache_hint")
+        if cache_hint is not None:
+            content_block["cache_control"] = cache_hint
+        return content_block
 
     def _handle_ir_finish_to_p(
         self, event: FinishEvent, context: StreamContext | None
