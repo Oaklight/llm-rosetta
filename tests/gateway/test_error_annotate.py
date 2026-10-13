@@ -20,6 +20,25 @@ class TestCollisionHint:
     def test_has_marker(self):
         assert collision_hint({"a": 2}).startswith("[llm-rosetta]")
 
+    def test_names_capped_with_remainder_summary(self):
+        collisions = {f"tool{i:03d}": 2 for i in range(25)}
+        hint = collision_hint(collisions)
+        # Only the first 10 names are listed, in sorted order.
+        assert hint.count("declared tool name") == 10
+        assert "'tool000'" in hint
+        assert "'tool009'" in hint
+        assert "'tool010'" not in hint
+        assert "and 15 more" in hint
+
+    def test_no_remainder_summary_at_the_cap(self):
+        collisions = {f"tool{i:03d}": 2 for i in range(10)}
+        assert "more" not in collision_hint(collisions)
+
+    def test_large_map_stays_small(self):
+        # 200 names must not produce a multi-kilobyte message.
+        collisions = {f"tool{i:03d}": 2 for i in range(200)}
+        assert len(collision_hint(collisions)) < 1000
+
 
 class TestAnnotateToolCollisions:
     def _body(self, message="Tool names must be unique."):
@@ -100,3 +119,10 @@ class TestAnnotateToolCollisions:
         message = out["error"]["message"]
         assert message.startswith("[llm-rosetta]")
         assert not message.startswith("\n")
+
+    def test_non_ascii_message_stays_readable(self):
+        # ensure_ascii=False: non-ASCII text is not escaped on the way out.
+        out = annotate_tool_collisions(self._body(message="重复的工具名"), {"exec": 2})
+        assert isinstance(out, str)
+        assert "重复的工具名" in out
+        assert "\\u" not in out

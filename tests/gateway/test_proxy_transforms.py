@@ -323,3 +323,164 @@ class TestToolCollisionHint:
         assert response.status_code == 500
         message = json.loads(response.body)["error"]["message"]
         assert "[llm-rosetta]" not in message
+
+    @pytest.mark.parametrize("status_code", [401, 403, 404, 429])
+    def test_non_request_body_4xx_no_hint(self, status_code):
+        """Auth / not-found / rate-limit statuses carry no tool-name hint.
+
+        The collision is incidental there, and a tool-name sentence would
+        misdirect the client away from the actual cause.
+        """
+        info = _make_provider_info()
+        info.token_command = None  # keep _handle_401 out of the 401 path
+        transport = _make_mock_transport(
+            {"error": {"message": "nope"}}, status_code=status_code
+        )
+
+        async def run():
+            response, _ = await handle_non_streaming(
+                _make_route(),
+                info,
+                {
+                    "model": "test-model",
+                    "messages": [{"role": "user", "content": "hi"}],
+                    "tools": _conflicting_tools(),
+                },
+                transport=transport,
+                metadata_store=ProviderMetadataStore(),
+            )
+            return response
+
+        response = asyncio.run(run())
+        assert response.status_code == status_code
+        assert "[llm-rosetta]" not in json.loads(response.body)["error"]["message"]
+
+
+class _ErrorStream:
+    """Minimal error ``UpstreamStream`` for the pre-stream 4xx path."""
+
+    def __init__(self, status_code: int, text: str) -> None:
+        self.status_code = status_code
+        self._text = text
+
+    @property
+    def is_error(self) -> bool:
+        return self.status_code >= 400
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+    async def read_error(self) -> str:
+        return self._text
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        raise StopAsyncIteration
+
+    async def close(self) -> None:
+        pass
+
+
+def _make_stream_error_transport(status_code: int, text: str) -> MagicMock:
+    transport = MagicMock()
+    transport.send_streaming = AsyncMock(return_value=_ErrorStream(status_code, text))
+    return transport
+
+
+def _stream_body() -> dict[str, Any]:
+    return {
+        "model": "test-model",
+        "stream": True,
+        "messages": [{"role": "user", "content": "hi"}],
+        "tools": _conflicting_tools(),
+    }
+
+
+class TestToolCollisionHintStreaming:
+    """The pre-stream 4xx path returns a plain response, hint included (#907)."""
+
+    def test_stream_400_with_collisions_appends_hint(self):
+        from llm_rosetta.gateway.proxy import handle_streaming
+
+        transport = _make_stream_error_transport(
+            400, '{"error": {"message": "Tool names must be unique."}}'
+        )
+
+        async def run():
+            response, _ = await handle_streaming(
+                _make_route(),
+                _make_provider_info(),
+                _stream_body(),
+                transport=transport,
+                metadata_store=ProviderMetadataStore(),
+            )
+            return response
+
+        response = asyncio.run(run())
+        assert response.status_code == 400
+        message = json.loads(response.body)["error"]["message"]
+        assert "[llm-rosetta]" in message
+        assert "'exec'" in message
+
+
+class TestToolCollisionDump:
+    """The collision map is persisted through the upstream-error path (#907).
+
+    The proxy passes the request-log id into ``dump_error``, so the dump insert
+    needs the ``request_log`` parent row to already exist — it is written when
+    the request finishes, after the error path.  That ordering is a
+    pre-existing defect; this test pins the wiring by providing the parent row
+    the way a corrected lifecycle would.
+    """
+
+    def test_collisions_recorded_in_error_dump(self, tmp_path):
+        from llm_rosetta.observability.persistence import PersistenceManager
+
+        async def run():
+            pm = await PersistenceManager.create(str(tmp_path))
+            entry_id = "entry-907"
+            await pm._conn.execute(
+                "INSERT INTO request_log "
+                "(id, timestamp, model, source_provider, target_provider, "
+                "is_stream, status_code, duration_ms) "
+                "VALUES (?, ?, ?, ?, ?, 0, 400, 1.0)",
+                (
+                    entry_id,
+                    "2026-01-01T00:00:00+00:00",
+                    "test-model",
+                    "chat_completions",
+                    "chat_completions",
+                ),
+            )
+            await pm._conn.commit()
+
+            transport = _make_mock_transport(
+                {"error": {"message": "Tool names must be unique."}},
+                status_code=400,
+            )
+            await handle_non_streaming(
+                _make_route(),
+                _make_provider_info(),
+                {
+                    "model": "test-model",
+                    "messages": [{"role": "user", "content": "hi"}],
+                    "tools": _conflicting_tools(),
+                },
+                transport=transport,
+                metadata_store=ProviderMetadataStore(),
+                persistence=pm,
+                entry_id=entry_id,
+            )
+            entries, _ = await pm.query_error_dumps()
+            await pm.close()
+            return entries
+
+        entries = asyncio.run(run())
+        assert len(entries) == 1
+        assert entries[0]["request_log_id"] == "entry-907"
+        assert entries[0]["tool_name_collisions"] == '{"exec": 2}'

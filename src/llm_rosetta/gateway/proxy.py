@@ -71,6 +71,15 @@ from .transport.sse_format import (
 logger = get_logger()
 
 
+# Upstream statuses that indict the *request body*, where a tool-list collision
+# is a plausible cause.  Every provider that rejects a repeated tool name uses
+# 400 (Anthropic, DeepSeek, xAI, Google); 422 is the OpenAI validation code.
+# A 401/403 (credentials), 404 (unknown model) or 429 (rate limit) arriving
+# alongside a colliding tool list is a coincidence, and a tool-name sentence
+# there would misdirect the client.
+_COLLISION_HINT_STATUSES = frozenset({400, 422})
+
+
 # ---------------------------------------------------------------------------
 # Reactive 401 retry helper
 # ---------------------------------------------------------------------------
@@ -100,7 +109,9 @@ async def _upstream_error_passthrough(
         tool_name_collisions: Conflicting tool names from the request leg, when
             the client's own tool list is a plausible cause of the rejection.
             Recorded in the error dump, and appended to the client's error
-            message on a 4xx (a 5xx is not the client's request to fix).
+            message on a request-body rejection (see
+            :data:`_COLLISION_HINT_STATUSES`) — not on an auth, not-found or
+            rate-limit status, where the collision is incidental.
     """
     log_upstream_error(
         resp_status,
@@ -142,7 +153,7 @@ async def _upstream_error_passthrough(
     return Response(
         body=annotate_tool_collisions(
             sanitize_upstream_error(resp_raw_content),
-            tool_name_collisions if 400 <= resp_status < 500 else None,
+            tool_name_collisions if resp_status in _COLLISION_HINT_STATUSES else None,
         ),
         status_code=resp_status,
         content_type="application/json",
