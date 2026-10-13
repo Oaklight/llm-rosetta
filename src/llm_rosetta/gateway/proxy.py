@@ -34,6 +34,7 @@ from llm_rosetta.shims.provider_shim import SoftErrorPattern
 from llm_rosetta.observability.capture import CapturedRequest, CaptureState
 from llm_rosetta.observability.error_dump import dump_error
 
+from .middleware.error_annotate import annotate_tool_collisions
 from .middleware.error_format import (
     detect_api_format_from_provider,
     format_error_response,
@@ -91,8 +92,16 @@ async def _upstream_error_passthrough(
     capture_state: CaptureState | None,
     error_phase: str = "upstream",
     is_streaming: bool = False,
+    tool_name_collisions: dict[str, int] | None = None,
 ) -> Response:
-    """Log, dump, capture, and return a sanitized upstream error response."""
+    """Log, dump, capture, and return a sanitized upstream error response.
+
+    Args:
+        tool_name_collisions: Conflicting tool names from the request leg, when
+            the client's own tool list is a plausible cause of the rejection.
+            Recorded in the error dump, and appended to the client's error
+            message on a 4xx (a 5xx is not the client's request to fix).
+    """
     log_upstream_error(
         resp_status,
         resp_error_text,
@@ -112,6 +121,7 @@ async def _upstream_error_passthrough(
         error_phase=error_phase,
         upstream_url=str(provider_info.base_url),
         request_log_id=entry_id,
+        tool_name_collisions=tool_name_collisions,
     )
     if capture_state is not None:
         capture_state.record(
@@ -130,7 +140,10 @@ async def _upstream_error_passthrough(
             )
         )
     return Response(
-        body=sanitize_upstream_error(resp_raw_content),
+        body=annotate_tool_collisions(
+            sanitize_upstream_error(resp_raw_content),
+            tool_name_collisions if 400 <= resp_status < 500 else None,
+        ),
         status_code=resp_status,
         content_type="application/json",
     )
@@ -246,6 +259,7 @@ async def _soft_error_response(
     entry_id: str | None,
     extra_headers: dict[str, str] | None = None,
     capture_state: Any | None = None,
+    tool_name_collisions: dict[str, int] | None = None,
 ) -> Response | None:
     """Return an error response if *resp_body* matches a soft-error pattern."""
     matched = _check_soft_errors(route.soft_error_patterns, resp_body)
@@ -266,6 +280,7 @@ async def _soft_error_response(
         extra_headers=extra_headers,
         capture_state=capture_state,
         error_phase="soft_error",
+        tool_name_collisions=tool_name_collisions,
     )
 
 
@@ -315,6 +330,7 @@ async def _detect_stream_chunk_error(
         error_phase=error_phase,
         upstream_url=_dc.upstream_url,
         request_log_id=entry_id,
+        tool_name_collisions=_dc.tool_name_collisions,
     )
     return error_msg
 
@@ -330,6 +346,7 @@ class DumpContext:
     target_provider: str | None = None
     provider_name: str | None = None
     upstream_url: str | None = None
+    tool_name_collisions: dict[str, int] | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -831,6 +848,7 @@ async def handle_non_streaming(
             entry_id=entry_id,
             extra_headers=extra_headers,
             capture_state=capture_state,
+            tool_name_collisions=pipeline.tool_name_collisions,
         )
         if resp.is_error
         else await _soft_error_response(
@@ -843,6 +861,7 @@ async def handle_non_streaming(
             entry_id=entry_id,
             extra_headers=extra_headers,
             capture_state=capture_state,
+            tool_name_collisions=pipeline.tool_name_collisions,
         )
     )
     if _err is not None:
@@ -1443,6 +1462,7 @@ async def handle_streaming(
                 capture_state=capture_state,
                 error_phase="stream_header",
                 is_streaming=True,
+                tool_name_collisions=pipeline.tool_name_collisions,
             ),
             profile,
         )
@@ -1497,6 +1517,7 @@ async def handle_streaming(
                     target_provider=route.target_provider,
                     provider_name=route.provider_name,
                     upstream_url=str(provider_info.base_url),
+                    tool_name_collisions=pipeline.tool_name_collisions,
                 ),
                 pipeline=pipeline,
                 warnings_before=len(pipeline.warnings),

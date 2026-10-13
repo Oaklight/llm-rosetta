@@ -254,7 +254,8 @@ class PersistenceManager:
                 body_hash           TEXT,
                 response_text       TEXT,
                 upstream_url        TEXT,
-                converted_body_hash TEXT
+                converted_body_hash TEXT,
+                tool_name_collisions TEXT
             );
             CREATE INDEX IF NOT EXISTS idx_ed_timestamp
                 ON error_dumps(timestamp DESC);
@@ -311,6 +312,13 @@ class PersistenceManager:
             [
                 "CREATE INDEX IF NOT EXISTS idx_ed_model ON error_dumps(model)",
                 "CREATE INDEX IF NOT EXISTS idx_ed_error_phase ON error_dumps(error_phase)",
+            ],
+        ),
+        (
+            3,
+            "add error_dumps.tool_name_collisions",
+            [
+                "ALTER TABLE error_dumps ADD COLUMN tool_name_collisions TEXT",
             ],
         ),
     ]
@@ -1013,14 +1021,16 @@ class PersistenceManager:
         response_text: str | None,
         upstream_url: str | None,
         converted_body_hash: str | None = None,
+        tool_name_collisions: str | None = None,
     ) -> None:
         """Insert an error dump record and prune if over capacity."""
         await self._conn.execute(
             "INSERT OR IGNORE INTO error_dumps "
             "(id, request_log_id, timestamp, model, source_provider, "
             "target_provider, provider_name, status_code, error_phase, "
-            "body_hash, response_text, upstream_url, converted_body_hash) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "body_hash, response_text, upstream_url, converted_body_hash, "
+            "tool_name_collisions) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 dump_id,
                 request_log_id,
@@ -1035,6 +1045,7 @@ class PersistenceManager:
                 response_text,
                 upstream_url,
                 converted_body_hash,
+                tool_name_collisions,
             ),
         )
         await self._conn.commit()
@@ -1079,7 +1090,8 @@ class PersistenceManager:
         cols = (
             "id, request_log_id, timestamp, model, source_provider, "
             "target_provider, provider_name, status_code, error_phase, "
-            "body_hash, response_text, upstream_url, converted_body_hash"
+            "body_hash, response_text, upstream_url, converted_body_hash, "
+            "tool_name_collisions"
         )
         rows = await self._conn.execute_fetchall(
             f"SELECT {cols} FROM error_dumps {where_sql} "
@@ -1101,6 +1113,7 @@ class PersistenceManager:
             "response_text",
             "upstream_url",
             "converted_body_hash",
+            "tool_name_collisions",
         ]
         entries = [
             {k: v for k, v in zip(col_names, row) if v is not None} for row in rows
@@ -1112,7 +1125,8 @@ class PersistenceManager:
         cols = (
             "id, request_log_id, timestamp, model, source_provider, "
             "target_provider, provider_name, status_code, error_phase, "
-            "body_hash, response_text, upstream_url, converted_body_hash"
+            "body_hash, response_text, upstream_url, converted_body_hash, "
+            "tool_name_collisions"
         )
         row = await self._conn.execute_fetchone(
             f"SELECT {cols} FROM error_dumps WHERE id = ?", (dump_id,)
@@ -1133,6 +1147,7 @@ class PersistenceManager:
             "response_text",
             "upstream_url",
             "converted_body_hash",
+            "tool_name_collisions",
         ]
         return {k: v for k, v in zip(col_names, row) if v is not None}
 
@@ -1470,7 +1485,8 @@ class PersistenceManager:
         cols = (
             "id, request_log_id, timestamp, model, source_provider, "
             "target_provider, provider_name, status_code, error_phase, "
-            "body_hash, response_text, upstream_url, converted_body_hash"
+            "body_hash, response_text, upstream_url, converted_body_hash, "
+            "tool_name_collisions"
         )
         col_names = [
             "id",
@@ -1486,6 +1502,7 @@ class PersistenceManager:
             "response_text",
             "upstream_url",
             "converted_body_hash",
+            "tool_name_collisions",
         ]
         rows = await self._conn.execute_fetchall(
             f"SELECT {cols} FROM error_dumps {where_sql} ORDER BY timestamp DESC",

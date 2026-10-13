@@ -1132,6 +1132,7 @@ def dedupe_tool_definitions(
     ir_request: dict[str, Any],
     *,
     warnings: list[str] | None = None,
+    collisions: dict[str, int] | None = None,
 ) -> dict[str, Any]:
     """Collapse duplicate tool definitions and report name collisions.
 
@@ -1170,11 +1171,19 @@ def dedupe_tool_definitions(
     Args:
         ir_request: The IR request dict — **always use the return value**.
         warnings: Optional list to append collision reports to.
+        collisions: Optional mapping to fill with the conflicting names and
+            their distinct-definition counts (``{name: count}``).  Cleared
+            first, so a reused dict never keeps stale entries.  Empty when
+            nothing conflicts — the exact duplicates that were collapsed do
+            not appear here, only the ones left in place.
 
     Returns:
         The IR request with exact duplicates collapsed, or the original
         request unchanged when nothing was duplicated.
     """
+    if collisions is not None:
+        collisions.clear()
+
     tools = ir_request.get("tools")
     if not tools or len(tools) < 2:
         return ir_request
@@ -1226,6 +1235,8 @@ def dedupe_tool_definitions(
     conflicted = {
         name: len(defs) for name, defs in definitions.items() if len(defs) > 1
     }
+    if collisions is not None:
+        collisions.update(conflicted)
     if not dropped and not conflicted:
         return ir_request
 

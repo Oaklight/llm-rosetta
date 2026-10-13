@@ -52,6 +52,35 @@ class TestDedupeToolDefinitions:
         assert len(warnings) == 1
         assert "'a'" in warnings[0]
 
+    def test_collisions_out_param_populated(self):
+        collisions = {}
+        ir = {"tools": [_tool("a", desc="one"), _tool("a", desc="two")]}
+        dedupe_tool_definitions(ir, collisions=collisions)
+        assert collisions == {"a": 2}
+
+    def test_collisions_empty_when_only_exact_duplicates(self):
+        collisions = {}
+        ir = {"tools": [_tool("a"), _tool("a")]}
+        dedupe_tool_definitions(ir, collisions=collisions)
+        assert collisions == {}
+
+    def test_collisions_cleared_on_reuse(self):
+        collisions = {"stale": 9}
+        dedupe_tool_definitions({"tools": []}, collisions=collisions)
+        assert collisions == {}
+
+    def test_collisions_excludes_group_exempt_tools(self):
+        # A named container is exempt from the pass, so it never conflicts.
+        collisions = {}
+        ir = {
+            "tools": [
+                {"name": "wait", "description": "d", "tool_group": "tasks"},
+                {"name": "wait", "description": "e", "tool_group": "tasks"},
+            ]
+        }
+        dedupe_tool_definitions(ir, collisions=collisions)
+        assert collisions == {}
+
     def test_conflicting_plus_exact_duplicate(self):
         warnings = []
         ir = {
@@ -186,3 +215,26 @@ class TestDedupeInPipeline:
             self._anthropic_req([self._tool("dup", "one"), self._tool("dup", "two")])
         )
         assert [t["function"]["name"] for t in body["tools"]] == ["dup", "dup"]
+
+    def test_pipeline_exposes_tool_name_collisions(self):
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        pipe = ConversionPipeline("messages", "openai_chat")
+        pipe.convert_request(
+            self._anthropic_req([self._tool("dup", "one"), self._tool("dup", "two")])
+        )
+        assert pipe.tool_name_collisions == {"dup": 2}
+
+    def test_pipeline_collisions_empty_when_only_exact_duplicates(self):
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        dup = self._tool("dup", "x")
+        pipe = ConversionPipeline("messages", "openai_chat")
+        pipe.convert_request(self._anthropic_req([dup, dict(dup)]))
+        assert pipe.tool_name_collisions == {}
+
+    def test_pipeline_collisions_empty_before_convert(self):
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        pipe = ConversionPipeline("messages", "openai_chat")
+        assert pipe.tool_name_collisions == {}

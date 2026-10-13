@@ -284,6 +284,39 @@ class TestDumpError:
         assert entry["body_hash"] != entry["converted_body_hash"]
 
     @pytest.mark.asyncio
+    async def test_tool_name_collisions_stored(
+        self, persistence: PersistenceManager
+    ) -> None:
+        dump_id = await dump_error(
+            persistence,
+            request_body={"model": "gpt-4", "messages": []},
+            status_code=400,
+            error_phase="upstream",
+            tool_name_collisions={"exec": 2, "wait": 3},
+        )
+        assert dump_id is not None
+        entry = await persistence.get_error_dump(dump_id)
+        assert entry is not None
+        # Stored as JSON with sorted keys.
+        assert entry["tool_name_collisions"] == '{"exec": 2, "wait": 3}'
+
+    @pytest.mark.asyncio
+    async def test_tool_name_collisions_absent_is_null(
+        self, persistence: PersistenceManager
+    ) -> None:
+        dump_id = await dump_error(
+            persistence,
+            request_body={"model": "gpt-4", "messages": []},
+            status_code=400,
+            error_phase="upstream",
+        )
+        assert dump_id is not None
+        entry = await persistence.get_error_dump(dump_id)
+        assert entry is not None
+        # Empty map and None both store NULL, which the query drops.
+        assert "tool_name_collisions" not in entry
+
+    @pytest.mark.asyncio
     async def test_fire_and_forget_safety(
         self, persistence: PersistenceManager
     ) -> None:

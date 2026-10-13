@@ -519,6 +519,24 @@ class ConversionPipeline:
         return self._ctx.warnings
 
     @property
+    def tool_name_collisions(self) -> dict[str, int]:
+        """Tool names declared more than once with differing definitions.
+
+        Maps each conflicting name to the number of distinct definitions seen
+        for it.  ``dedupe_tool_definitions`` leaves these tools in place (only
+        the client can disambiguate them), so an upstream that requires unique
+        tool names may reject the request — this map is what lets the gateway
+        attribute that rejection to the client's own tool list.  The
+        byte-identical duplicates the pass collapses are not listed.
+
+        Returns an empty dict if :meth:`convert_request` hasn't been called or
+        no name conflicts.  A copy, so callers cannot mutate pipeline state.
+        """
+        if self._ctx is None:
+            return {}
+        return dict(self._ctx.metadata.get("_tool_name_collisions", {}))
+
+    @property
     def profile(self) -> dict[str, float]:
         """Per-phase timing data collected during conversion.
 
@@ -723,10 +741,17 @@ class ConversionPipeline:
         # Exact duplicates are collapsed because several upstreams reject a
         # repeated name outright; differing definitions under one name are
         # reported but left alone — only the client can disambiguate them.
+        # The conflicting names are also kept structured (name -> distinct
+        # definition count) so the gateway can attribute an upstream
+        # "tool names must be unique" rejection to the client's own tool list
+        # and record it in the error dump.  See #907.
+        _tool_name_collisions: dict[str, int] = {}
         ir_request = dedupe_tool_definitions(
             ir_request,
             warnings=ctx.warnings,
+            collisions=_tool_name_collisions,
         )
+        ctx.metadata["_tool_name_collisions"] = _tool_name_collisions
 
         # Capability enforcement: oversized tool descriptions
         ir_request = relocate_oversized_tool_descriptions(

@@ -240,3 +240,86 @@ class TestNonStreamingTransforms:
         # Profile should contain timing data
         assert "request_conversion_ms" in profile
         assert "upstream_ms" in profile
+
+
+# ---------------------------------------------------------------------------
+# handle_non_streaming — tool-name collision attribution (#907)
+# ---------------------------------------------------------------------------
+
+
+def _conflicting_tools() -> list[dict[str, Any]]:
+    """Two chat-format tools sharing a name with different definitions."""
+    return [
+        {"type": "function", "function": {"name": "exec", "description": "one"}},
+        {"type": "function", "function": {"name": "exec", "description": "two"}},
+    ]
+
+
+class TestToolCollisionHint:
+    def _run(self, body: dict[str, Any], status_code: int):
+        transport = _make_mock_transport(
+            {
+                "error": {
+                    "type": "invalid_request_error",
+                    "message": "Tool names must be unique.",
+                }
+            },
+            status_code=status_code,
+        )
+
+        async def run():
+            response, _ = await handle_non_streaming(
+                _make_route(),
+                _make_provider_info(),
+                body,
+                transport=transport,
+                metadata_store=ProviderMetadataStore(),
+            )
+            return response
+
+        return asyncio.run(run())
+
+    def test_400_with_collisions_appends_hint(self):
+        response = self._run(
+            {
+                "model": "test-model",
+                "messages": [{"role": "user", "content": "hi"}],
+                "tools": _conflicting_tools(),
+            },
+            400,
+        )
+        assert response.status_code == 400
+        message = json.loads(response.body)["error"]["message"]
+        assert "[llm-rosetta]" in message
+        assert "'exec'" in message
+
+    def test_400_without_collisions_body_untouched(self):
+        response = self._run(
+            {
+                "model": "test-model",
+                "messages": [{"role": "user", "content": "hi"}],
+                "tools": [
+                    {
+                        "type": "function",
+                        "function": {"name": "exec", "description": "one"},
+                    }
+                ],
+            },
+            400,
+        )
+        assert response.status_code == 400
+        message = json.loads(response.body)["error"]["message"]
+        assert message == "Tool names must be unique."
+
+    def test_5xx_with_collisions_no_hint(self):
+        response = self._run(
+            {
+                "model": "test-model",
+                "messages": [{"role": "user", "content": "hi"}],
+                "tools": _conflicting_tools(),
+            },
+            500,
+        )
+        assert response.status_code == 500
+        message = json.loads(response.body)["error"]["message"]
+        assert "[llm-rosetta]" not in message

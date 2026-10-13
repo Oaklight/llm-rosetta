@@ -19,6 +19,7 @@ import uuid
 import zlib
 from copy import deepcopy
 from llm_rosetta._compat import sync_compat
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
@@ -136,6 +137,7 @@ async def dump_error(
     error_phase: str | None = None,
     upstream_url: str | None = None,
     request_log_id: str | None = None,
+    tool_name_collisions: Mapping[str, int] | None = None,
 ) -> str | None:
     """Offload images, hash, compress, and store an error dump.
 
@@ -158,6 +160,10 @@ async def dump_error(
             ``"stream_chunk"``, ``"conversion"``.
         upstream_url: The upstream URL that was called.
         request_log_id: FK to the request log entry, if available.
+        tool_name_collisions: Conflicting tool names from the request leg
+            (name -> distinct definition count), when the client's own tool
+            list is a plausible cause of the failure.  Stored as JSON, or
+            ``NULL`` when there was no conflict.
 
     Returns:
         The dump ID on success, or ``None`` on failure / no-op.
@@ -179,6 +185,7 @@ async def dump_error(
             error_phase=error_phase,
             upstream_url=upstream_url,
             request_log_id=request_log_id,
+            tool_name_collisions=tool_name_collisions,
         )
     except Exception:
         logger.info("Failed to dump error", exc_info=True)
@@ -199,6 +206,7 @@ async def _dump_error_impl(
     error_phase: str | None,
     upstream_url: str | None,
     request_log_id: str | None,
+    tool_name_collisions: Mapping[str, int] | None,
 ) -> str | None:
     """Inner implementation — may raise."""
     dump_id = uuid.uuid4().hex
@@ -240,6 +248,11 @@ async def _dump_error_impl(
         if len(response_text) > 64 * 1024:
             response_text = response_text[: 64 * 1024] + "\n…[truncated]"
 
+    # --- Serialize the tool-name collision map (NULL when empty) ---
+    collisions_json: str | None = None
+    if tool_name_collisions:
+        collisions_json = json.dumps(dict(tool_name_collisions), sort_keys=True)
+
     # --- Insert the error dump record ---
     await persistence.insert_error_dump(
         dump_id=dump_id,
@@ -255,6 +268,7 @@ async def _dump_error_impl(
         response_text=response_text,
         upstream_url=upstream_url,
         converted_body_hash=converted_body_hash,
+        tool_name_collisions=collisions_json,
     )
 
     logger.debug(

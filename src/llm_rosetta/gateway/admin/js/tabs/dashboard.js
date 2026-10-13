@@ -426,6 +426,7 @@ pre.error{color:#ef4444}</style></head><body>
 <div><div class="label">Status</div><div class="value error">${e.status_code||'-'}</div></div>
 <div><div class="label">Time</div><div class="value">${esc(e.timestamp||'-')}</div></div>
 <div><div class="label">Upstream URL</div><div class="value">${esc(e.upstream_url||'-')}</div></div>
+<div><div class="label">Tool Collisions</div><div class="value">${esc(e.tool_name_collisions||'-')}</div></div>
 <div><div class="label">Dump ID</div><div class="value">${esc(e.dump_id||e.id||'-')}</div></div>
 </div>${sections.map(s => `<div class="section"><div class="section-header" onclick="this.parentElement.classList.toggle('collapsed')">${s.title}</div><pre${s.cls?` class="${s.cls}"`:''}>` + (function(t){const d=document.createElement('div');d.textContent=t;return d.innerHTML;})(s.body) + `</pre></div>`).join('')}
 </div><`+`script>function downloadThis(){const b=new Blob([${JSON.stringify(JSON.stringify(e,null,2)).replace(/</g,'\\u003c')}],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='error-dump-${esc(e.model||'error')}-${esc(e.dump_id||e.id||'')}.json';a.click();URL.revokeObjectURL(a.href);}<`+`/script></body></html>`;
