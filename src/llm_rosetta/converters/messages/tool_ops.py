@@ -56,6 +56,38 @@ _ANTHROPIC_INTRINSIC_TOOLS: dict[str, dict[str, Any]] = {
     "code_execution": {"type": "code_execution_20250522", "name": "code_execution"},
 }
 
+# Anthropic names a server tool's *runtime* call/result after the tool version.
+# The newer code-execution versions (20250825, 20260120, 20260521) run bash
+# under the hood and report it under a different runtime name: the call is a
+# ``server_tool_use`` named ``bash_code_execution`` and the result block type is
+# ``bash_code_execution_tool_result``.  The shim declares the canonical kind
+# ``code_execution``, so the read path folds the alias back onto it; otherwise
+# a response from a newer version would carry a kind no shim declares.
+#
+# This is a map of *runtime renames of a capability we already have a canonical
+# kind for*, not the table of every Anthropic server tool.  ``web_fetch`` and
+# ``text_editor_code_execution`` are capabilities of their own with no canonical
+# kind yet; folding them would mean adding kinds and shim declarations, so they
+# pass through unchanged rather than being silently rewritten onto something
+# they are not.
+_ANTHROPIC_SERVER_TOOL_KIND_ALIASES: dict[str, str] = {
+    "bash_code_execution": "code_execution",
+}
+
+
+def canonical_server_tool_kind(name: str) -> str:
+    """Fold an Anthropic server-tool runtime name onto its canonical kind.
+
+    Args:
+        name: ``server_tool_use`` block ``name``, or a server-tool result block
+            type with the ``_tool_result`` suffix already removed.
+
+    Returns:
+        The canonical intrinsic kind, or ``name`` unchanged when it is not a
+        known version alias.
+    """
+    return _ANTHROPIC_SERVER_TOOL_KIND_ALIASES.get(name, name)
+
 
 # ==================== Orphaned Tool Call Fix ====================
 
@@ -428,7 +460,12 @@ class MessagesToolOps(BaseToolOps):
             part["provider_metadata"] = pm
 
         if block_type == "server_tool_use":
-            set_intrinsic_kind(part, tool_name)
+            # A newer-version runtime name (e.g. ``bash_code_execution``) folds
+            # onto the canonical kind the shim declares; keep ``tool_name`` in
+            # step so the IR does not carry two identities for one call.
+            kind = canonical_server_tool_kind(tool_name)
+            part["tool_name"] = kind
+            set_intrinsic_kind(part, kind)
 
         # Preserve non-default caller for Anthropic round-trip
         caller = provider_tool_call.get("caller")
@@ -539,7 +576,7 @@ class MessagesToolOps(BaseToolOps):
         ``intrinsic_kind``.
         """
         block_type = provider_block.get("type", "")
-        kind = block_type.removesuffix("_tool_result")
+        kind = canonical_server_tool_kind(block_type.removesuffix("_tool_result"))
 
         content = provider_block.get("content", "")
         if isinstance(content, list):

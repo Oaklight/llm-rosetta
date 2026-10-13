@@ -348,6 +348,68 @@ _ITEM_TO_INTRINSIC_KIND: dict[str, str] = {
     "file_search_call": "file_search",
 }
 
+#: Keys on a native server item that describe its identity, not its payload.
+#: Read by the fallback below, which is reachable only for the recognised
+#: kinds that have no entry in ``_SERVER_ITEM_INPUT_KEYS`` (``shell_call``,
+#: ``computer_call``, ``file_search_call``); an item type this converter does
+#: not recognise raises before reaching it.
+_SERVER_ITEM_STRUCTURAL_KEYS = frozenset({"type", "id", "call_id", "status"})
+
+#: Payload keys lifted into ``tool_input`` for server items whose write path
+#: reads them by name (``code_interpreter_call``).  ``web_search_call`` is
+#: handled separately because its payload is nested under ``action``.
+_SERVER_ITEM_INPUT_KEYS: dict[str, tuple[str, ...]] = {
+    "code_interpreter_call": ("code", "outputs", "container_id"),
+}
+
+#: The ``web_search_call.action.type`` the writer emits when it has nothing
+#: better to go on.  Any other type is carried on ``tool_input["action_type"]``
+#: so the writer rebuilds the same discriminator.
+_DEFAULT_WEB_SEARCH_ACTION = "search"
+
+
+def _server_item_tool_input(item: dict[str, Any], item_type: str) -> dict[str, Any]:
+    """Build an IR ``tool_input`` dict from a native server item's payload.
+
+    A native server item (``web_search_call``, ``code_interpreter_call``, …)
+    carries its payload under type-specific keys, unlike the ``arguments``
+    JSON string a ``function_call`` uses.  Reading ``arguments`` alone loses
+    the query / the code.  ``web_search_call`` nests its payload under
+    ``action``; that action's own fields are lifted, with its discriminator
+    moved to ``action_type`` when it is not the default, so the writer can
+    rebuild whichever action shape came in (``search``, ``open_page``,
+    ``find`` — see the ``Action*`` types on the OpenAI side).
+
+    Args:
+        item: Native OpenAI Responses server item dict.
+        item_type: The item's wire ``type`` (e.g. ``"web_search_call"``).
+
+    Returns:
+        A JSON-serializable ``tool_input`` dict; empty when the item carries
+        no payload.
+    """
+    if item_type == "web_search_call":
+        action = item.get("action")
+        if not isinstance(action, dict):
+            return {}
+        lifted = {key: value for key, value in action.items() if key != "type"}
+        action_type = action.get("type")
+        if action_type and action_type != _DEFAULT_WEB_SEARCH_ACTION:
+            lifted["action_type"] = action_type
+        return lifted
+
+    keys = _SERVER_ITEM_INPUT_KEYS.get(item_type)
+    if keys is not None:
+        return {key: item[key] for key in keys if item.get(key) is not None}
+
+    # Any other recognised server item: use its own payload fields rather
+    # than the (absent) ``arguments`` string.
+    return {
+        key: value
+        for key, value in item.items()
+        if key not in _SERVER_ITEM_STRUCTURAL_KEYS
+    }
+
 
 def _ir_intrinsic_to_responses(
     ir_tool_call: ToolCallPart,
@@ -368,10 +430,19 @@ def _ir_intrinsic_to_responses(
     # A `web_search_call` has a valid replay shape for history (an `action`,
     # no `call_id`/`arguments`) and no separate output item.
     if item_type == "web_search_call":
-        query = tool_input.get("query", "") if isinstance(tool_input, dict) else ""
+        fields = tool_input if isinstance(tool_input, dict) else {}
+        action: dict[str, Any] = {
+            "type": fields.get("action_type") or _DEFAULT_WEB_SEARCH_ACTION
+        }
+        # Whatever the read side lifted goes back verbatim, so a multi-query
+        # search or an `open_page`/`find` action survives the round trip
+        # instead of being flattened to `{"type": "search", "query": …}`.
+        action.update(
+            {key: value for key, value in fields.items() if key != "action_type"}
+        )
         item: dict[str, Any] = {"type": "web_search_call"}
-        if query:
-            item["action"] = {"type": "search", "query": query, "queries": [query]}
+        if len(action) > 1:
+            item["action"] = action
         return item
 
     # Other server items need provider config we cannot synthesise from a
@@ -396,9 +467,12 @@ def _ir_intrinsic_to_responses(
             tool_input.get("code", "") if isinstance(tool_input, dict) else ""
         )
     elif item_type == "file_search_call":
-        result_item["query"] = (
-            tool_input.get("query", "") if isinstance(tool_input, dict) else ""
-        )
+        # The wire item carries `queries`, but this branch has always emitted
+        # `query`; read whichever the IR has so the payload the read side now
+        # preserves is not discarded here.
+        fields = tool_input if isinstance(tool_input, dict) else {}
+        queries = fields.get("queries") or []
+        result_item["query"] = fields.get("query") or (queries[0] if queries else "")
     elif item_type == "function_call":
         result_item["name"] = intrinsic_kind
     return result_item
@@ -1005,8 +1079,12 @@ class OpenResponsesToolOps(BaseToolOps):
                     tool_call_id=provider_tool_call.get(
                         "call_id", provider_tool_call.get("id", "")
                     ),
-                    tool_name=provider_tool_call.get("name", item_type),
-                    tool_input=tool_input,
+                    # Canonical kind, not the raw wire type: the definition
+                    # side and ``intrinsic_kind`` already speak the canonical
+                    # name, so a raw ``web_search_call`` here disagrees with
+                    # both.
+                    tool_name=intrinsic_kind,
+                    tool_input=_server_item_tool_input(provider_tool_call, item_type),
                     intrinsic_kind=intrinsic_kind,
                 ),
             )

@@ -65,7 +65,7 @@ from ._constants import (
 from .config_ops import MessagesConfigOps
 from .content_ops import MessagesContentOps
 from .message_ops import MessagesMessageOps
-from .tool_ops import MessagesToolOps
+from .tool_ops import MessagesToolOps, canonical_server_tool_kind
 
 
 @dataclass
@@ -760,6 +760,12 @@ class MessagesConverter(BaseConverter):
         if block_type in ("tool_use", "server_tool_use"):
             tool_call_id = content_block.get("id", "")
             tool_name = content_block.get("name", "")
+            if block_type == "server_tool_use":
+                # Same fold as the block reader: a newer code-execution version
+                # reports itself as ``bash_code_execution``, a kind no shim
+                # declares.  Folding only on the non-streaming path left the
+                # two disagreeing for the same response.
+                tool_name = canonical_server_tool_kind(tool_name)
 
             if context is not None:
                 context.register_tool_call(tool_call_id, tool_name)
