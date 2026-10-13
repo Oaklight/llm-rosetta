@@ -84,7 +84,14 @@ def log_orphan_warnings(
 def _collect_ir_tool_ids(
     messages: Sequence[IRInputItem],
 ) -> tuple[set[str], set[str]]:
-    """Collect all tool_call IDs and answered (tool_result) IDs from IR messages."""
+    """Collect all tool_call IDs and answered (tool_result) IDs from IR messages.
+
+    A ``tool_result`` inside an assistant message counts as an answer, just
+    like one in a ``role: "tool"`` message.  That inline shape is how a server
+    tool's result rides in the assistant turn that ran it (#965); without
+    counting it, the orphan fixer sees the call as unanswered and injects a
+    synthetic placeholder beside the real result.
+    """
     known_call_ids: set[str] = set()
     answered_ids: set[str] = set()
     for msg in messages:
@@ -94,6 +101,7 @@ def _collect_ir_tool_ids(
         role = msg.get("role")
         if role == "assistant":
             known_call_ids |= extract_part_ids(content, "tool_call", "tool_call_id")
+            answered_ids |= extract_part_ids(content, "tool_result", "tool_call_id")
         elif role == "tool":
             answered_ids |= extract_part_ids(content, "tool_result", "tool_call_id")
     return known_call_ids, answered_ids

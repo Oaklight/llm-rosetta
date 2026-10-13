@@ -615,6 +615,50 @@ class MessagesToolOps(BaseToolOps):
 
         return part
 
+    @staticmethod
+    def ir_server_tool_result_to_p(
+        ir_tool_result: ToolResultPart, **kwargs: Any
+    ) -> dict[str, Any] | None:
+        """IR ToolResultPart → Anthropic ``*_tool_result`` block, or ``None``.
+
+        Renders a server-executed result (``tool_type == "intrinsic"``) for the
+        assistant turn that ran the tool.  When the part was read from this same
+        dialect the provider's whole block is restored from
+        ``provider_metadata._native``; otherwise the block is rebuilt from the
+        IR fields.
+
+        Returns ``None`` for a client (function) result: Anthropic accepts a
+        plain ``tool_result`` only in a ``user`` message, so it cannot be
+        rendered inline in an assistant turn.  The caller drops it, as the
+        streaming write path does.
+        """
+        kind = get_intrinsic_kind(ir_tool_result)
+        if not kind and ir_tool_result.get("tool_type") != "intrinsic":
+            return None
+
+        pm = ir_tool_result.get("provider_metadata") or {}
+        native = pm.get("_native")
+        if isinstance(native, dict) and native.get("base") == "messages":
+            block = native.get("block")
+            if isinstance(block, dict):
+                return dict(block)
+
+        content_block: dict[str, Any] = {
+            "type": f"{kind}_tool_result" if kind else "tool_result",
+            "tool_use_id": sanitize_tool_call_id(ir_tool_result["tool_call_id"]),
+            "content": ir_tool_result.get("result", []),
+        }
+        # Only the generic ``tool_result`` block defines ``is_error``; Anthropic
+        # refuses it on a ``*_tool_result`` one ("Extra inputs are not
+        # permitted", verified live 2026-10-13), so a rebuilt server result must
+        # not carry it.
+        if not kind and ir_tool_result.get("is_error") is not None:
+            content_block["is_error"] = ir_tool_result["is_error"]
+        cache_hint = ir_tool_result.get("cache_hint")
+        if cache_hint is not None:
+            content_block["cache_control"] = cache_hint
+        return content_block
+
     # ==================== Tool Config ====================
 
     @staticmethod

@@ -35,6 +35,7 @@ from ...types.ir import (
     is_tool_result_part,
 )
 from ..base import BaseMessageOps
+from ..base.tools import is_intrinsic_part
 from ..base.tools.batch import assign_tool_batch_ids, merge_tool_messages
 from .content_ops import MessagesContentOps
 from .tool_ops import MessagesToolOps
@@ -231,6 +232,19 @@ class MessagesMessageOps(BaseMessageOps):
                 warnings.append(
                     "Citation content is part of TextBlock in Anthropic, ignored"
                 )
+            elif is_tool_result_part(part):
+                # A server result the assistant turn produced (web search, code
+                # execution).  Render it inline; a client result cannot appear
+                # in an Anthropic assistant turn, so it is dropped with a
+                # warning rather than raising.
+                result_block = self.tool_ops.ir_server_tool_result_to_p(part)
+                if result_block is not None:
+                    anthropic_content.append(result_block)
+                else:
+                    warnings.append(
+                        "Client tool result in assistant message not supported "
+                        "by Anthropic, ignored"
+                    )
             else:
                 warnings.append(
                     f"Unsupported content part type in assistant message: {part.get('type')}"
@@ -335,12 +349,19 @@ class MessagesMessageOps(BaseMessageOps):
     def _p_message_to_ir(self, provider_message: Any) -> Message | list[Message] | None:
         """Convert a single Anthropic message to IR format.
 
-        Anthropic places ``tool_result`` blocks inside ``role: "user"``
-        messages, but IR normalizes them to ``role: "tool"`` (like OpenAI).
-        When a user message contains **only** ``tool_result`` parts, its role
-        is changed to ``"tool"``.  When it mixes ``tool_result`` with other
-        parts (e.g. text), the message is **split** into a ``"tool"`` message
-        followed by a ``"user"`` message.
+        Anthropic inlines a *client's* ``tool_result`` blocks, but IR
+        normalizes them to ``role: "tool"`` (like OpenAI).  The split keys on
+        whether the result is a client result, not on the role:
+
+        - A ``user`` message with **only** ``tool_result`` parts becomes a
+          ``"tool"`` message; mixed with other parts it is **split** into a
+          ``"tool"`` message followed by a ``"user"`` message.
+        - An ``assistant`` message is split the same way for a client result:
+          ``[assistant(other parts), tool(results)]``.
+        - A **server** result (``tool_type == "intrinsic"``) is the exception.
+          The provider produced it inside the assistant turn that ran the tool
+          (web search, code execution), so it stays inline and the turn keeps
+          every part it owns, in order.
 
         Args:
             provider_message: Anthropic message dict.
@@ -353,40 +374,70 @@ class MessagesMessageOps(BaseMessageOps):
             return None
 
         role = provider_message.get("role")
-        content = provider_message.get("content")
+        ir_content = self._p_message_content_to_ir(provider_message.get("content"))
 
+        split = self._split_client_tool_results(role, ir_content)
+        if split is not None:
+            return split
+
+        return cast(Message, {"role": role, "content": ir_content})
+
+    def _p_message_content_to_ir(self, content: Any) -> list[ContentPart]:
+        """Convert an Anthropic message's content to IR content parts."""
         ir_content: list[ContentPart] = []
-
         if isinstance(content, str):
             ir_content.append(TextPart(type="text", text=content))
         elif isinstance(content, list):
             for part in content:
-                converted_parts = self._p_content_part_to_ir(part)
-                ir_content.extend(converted_parts)
+                ir_content.extend(self._p_content_part_to_ir(part))
+        return ir_content
 
-        # Normalize: Anthropic messages with tool_result parts.
-        # IR requires tool results in role="tool" messages; Anthropic places
-        # them inline in user or assistant content.
-        if role in ("user", "assistant") and ir_content:
-            tool_result_parts = [p for p in ir_content if is_tool_result_part(p)]
-            if tool_result_parts:
-                other_parts = [p for p in ir_content if not is_tool_result_part(p)]
-                if not other_parts:
-                    return cast(Message, {"role": "tool", "content": ir_content})
-                # Mixed: keep non-result parts in original role, results in tool msg.
-                # assistant: [calls + text, ...] then tool: [results]
-                # user: tool: [results] then user: [text, ...]
-                if role == "assistant":
-                    return [
-                        cast(Message, {"role": "assistant", "content": other_parts}),
-                        cast(Message, {"role": "tool", "content": tool_result_parts}),
-                    ]
-                return [
-                    cast(Message, {"role": "tool", "content": tool_result_parts}),
-                    cast(Message, {"role": "user", "content": other_parts}),
-                ]
+    @staticmethod
+    def _split_client_tool_results(
+        role: Any, ir_content: list[ContentPart]
+    ) -> Message | list[Message] | None:
+        """Split a *client's* tool_result parts out of ``ir_content``.
 
-        return cast(Message, {"role": role, "content": ir_content})
+        IR requires a client result in a ``role: "tool"`` message; Anthropic
+        inlines it.  A *server* result (``tool_type == "intrinsic"``) is the
+        exception and stays inline in the assistant turn, so it is not
+        displaced.  Returns ``None`` when nothing needs splitting.
+        """
+        if role not in ("user", "assistant") or not ir_content:
+            return None
+
+        if role == "assistant":
+            displaced = [
+                p
+                for p in ir_content
+                if is_tool_result_part(p) and not is_intrinsic_part(p)
+            ]
+            if not displaced:
+                return None
+            other_parts = [
+                p
+                for p in ir_content
+                if not is_tool_result_part(p) or is_intrinsic_part(p)
+            ]
+            if not other_parts:
+                return cast(Message, {"role": "tool", "content": ir_content})
+            # Client results into a tool message, the rest stays in assistant.
+            return [
+                cast(Message, {"role": "assistant", "content": other_parts}),
+                cast(Message, {"role": "tool", "content": displaced}),
+            ]
+
+        tool_result_parts = [p for p in ir_content if is_tool_result_part(p)]
+        if not tool_result_parts:
+            return None
+        other_parts = [p for p in ir_content if not is_tool_result_part(p)]
+        if not other_parts:
+            return cast(Message, {"role": "tool", "content": ir_content})
+        # Mixed: results into a tool message, the rest stays in user.
+        return [
+            cast(Message, {"role": "tool", "content": tool_result_parts}),
+            cast(Message, {"role": "user", "content": other_parts}),
+        ]
 
     def _p_content_part_to_ir(self, provider_part: Any) -> list[ContentPart]:
         """Convert a single Anthropic content block to IR content part(s).

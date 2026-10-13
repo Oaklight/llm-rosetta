@@ -311,15 +311,20 @@ UserContentPart = Union[
     # AudioPart,
 ]
 
-# 助手消息内容类型 - 文本、工具调用、推理、拒绝、引用，未来支持音频、图像
+# 助手消息内容类型 - 文本、工具调用、推理、拒绝、引用、服务端工具结果，
+# 未来支持音频、图像
 # Assistant message content types - text, tool calls, reasoning, refusal,
-# citations, future support for audio and images.
+# citations, and server-executed tool results, future support for audio and
+# images.  A ``*_tool_result`` that a server tool (web search, code execution)
+# ran inside the assistant turn belongs to that turn; the client-result shape
+# stays in the separate ``role: "tool"`` message.
 AssistantContentPart = Union[
     TextPart,
     ToolCallPart,
     ReasoningPart,
     RefusalPart,
     CitationPart,
+    ToolResultPart,
     # 未来支持 Future support:
     # AudioPart,
     # ImagePart,

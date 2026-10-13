@@ -23,6 +23,7 @@ from ...types.ir import (
     TextPart,
     is_text_part,
     is_tool_call_part,
+    is_tool_result_part,
     is_reasoning_part,
     is_refusal_part,
 )
@@ -380,6 +381,10 @@ class MessagesConverter(BaseConverter):
             return self.content_ops.ir_text_to_p(part)
         if is_tool_call_part(part):
             return self.tool_ops.ir_tool_call_to_p(part)
+        if is_tool_result_part(part):
+            # A server result the assistant turn produced stays inline; a
+            # client result returns None and is dropped from the response.
+            return self.tool_ops.ir_server_tool_result_to_p(part)
         if is_reasoning_part(part):
             return self.content_ops.ir_reasoning_to_p(part)
         return None
@@ -1330,31 +1335,31 @@ class MessagesConverter(BaseConverter):
         return result
 
     def _ir_tool_result_block(self, event: ToolResultEvent) -> dict[str, Any]:
-        """Build the Anthropic ``*_tool_result`` block for a ToolResultEvent."""
-        pm = event.get("provider_metadata") or {}
-        native = pm.get("_native")
-        if isinstance(native, dict) and native.get("base") == self._CONVERTER_TAG:
-            block = native.get("block")
-            if isinstance(block, dict):
-                return dict(block)
+        """Build the Anthropic ``*_tool_result`` block for a ToolResultEvent.
 
-        kind = pm.get("intrinsic_kind", "")
-        content_block: dict[str, Any] = {
-            "type": f"{kind}_tool_result" if kind else "tool_result",
-            "tool_use_id": sanitize_tool_call_id(event["tool_call_id"]),
-            "content": event.get("result", []),
-        }
-        # Only the generic ``tool_result`` block defines ``is_error``; Anthropic
-        # refuses it on a ``*_tool_result`` one ("Extra inputs are not
-        # permitted", verified live 2026-10-13), so a rebuilt server result must
-        # not carry it.  The ``caller`` of a server result is not re-derivable
-        # from the IR at all — only the ``_native`` branch above has it.
-        if not kind and event.get("is_error") is not None:
-            content_block["is_error"] = event["is_error"]
-        cache_hint = event.get("cache_hint")
-        if cache_hint is not None:
-            content_block["cache_control"] = cache_hint
-        return content_block
+        Shares the writer with the non-streaming assistant turn
+        (``MessagesToolOps.ir_server_tool_result_to_p``), so a same-dialect read
+        restores the stored ``_native`` block and a foreign one is rebuilt from
+        the IR fields.  A ``ToolResultEvent`` is always a server result, so the
+        writer never returns ``None`` here.
+        """
+        block = MessagesToolOps.ir_server_tool_result_to_p(event)
+        if block is None:  # pragma: no cover - defensive; events are intrinsic
+            # Generic ``tool_result`` shape: the reader only emits this event for
+            # ``*_tool_result`` blocks, but if one ever arrives without an
+            # intrinsic kind keep the full block — both fields are valid on the
+            # generic block, unlike on a ``*_tool_result`` one (#973).
+            block = {
+                "type": "tool_result",
+                "tool_use_id": sanitize_tool_call_id(event["tool_call_id"]),
+                "content": event.get("result", []),
+            }
+            if event.get("is_error") is not None:
+                block["is_error"] = event["is_error"]
+            cache_hint = event.get("cache_hint")
+            if cache_hint is not None:
+                block["cache_control"] = cache_hint
+        return block
 
     def _handle_ir_finish_to_p(
         self, event: FinishEvent, context: StreamContext | None
