@@ -346,7 +346,14 @@ class ChatCompletionsMessageOps(BaseMessageOps):
 
         openai_message: dict[str, Any] = {"role": "assistant"}
 
-        # Set reasoning content (DeepSeek / extended OpenAI Chat providers)
+        # Set reasoning content (DeepSeek / extended OpenAI Chat providers).
+        # The guard is ``is not None`` on purpose: an empty value is still a
+        # value.  DeepSeek's thinking mode rejects a tool-bearing history whose
+        # assistant messages omit the field — ``deepseek-flash`` answers ``400
+        # The reasoning_content in the thinking mode must be passed back to the
+        # API`` — while ``reasoning_content: ""`` is accepted.  So this is not a
+        # place to "clean up" empty reasoning; the matching drop lives in the
+        # Anthropic writer for the opposite reason (#357, #393, #948).
         if reasoning_text is not None:
             openai_message["reasoning_content"] = reasoning_text
             # Restore reasoning_details from provider_metadata, encrypted_content from redacted_data

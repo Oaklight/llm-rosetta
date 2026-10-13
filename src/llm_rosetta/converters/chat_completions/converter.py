@@ -1023,7 +1023,14 @@ class ChatCompletionsConverter(BaseConverter):
     def _handle_ir_reasoning_delta_to_p(
         self, event: ReasoningDeltaEvent, context: StreamContext | None
     ) -> dict[str, Any]:
-        """Handle ReasoningDeltaEvent → reasoning_content delta chunk."""
+        """Handle ReasoningDeltaEvent → reasoning_content delta chunk.
+
+        An empty ``reasoning`` is relayed as ``{"reasoning_content": ""}``
+        rather than skipped: upstreams send those placeholder chunks inside a
+        same-format stream, and relaying them keeps the round-trip lossless
+        (#247).  The Anthropic writer drops the same event for its own reason —
+        see ``MessagesConverter._ir_reasoning_deltas``.
+        """
         choice_index = event.get("choice_index", 0)
         return {
             "choices": [

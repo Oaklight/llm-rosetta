@@ -181,6 +181,13 @@ class ChatCompletionsContentOps(BaseContentOps):
         Returns the reasoning text string. The caller (message_ops) is responsible
         for placing it in the ``reasoning_content`` field of the assistant message.
 
+        An empty ``reasoning`` still yields ``{"reasoning_content": ""}`` on
+        purpose.  DeepSeek's thinking mode needs the field present on a
+        tool-bearing history even when there is no reasoning text, so an empty
+        value must survive the writer; filtering it here would turn a working
+        replay into ``400 The reasoning_content in the thinking mode must be
+        passed back to the API`` (#357, #948).
+
         Args:
             ir_reasoning: IR reasoning part.
 

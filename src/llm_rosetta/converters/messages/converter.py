@@ -1126,6 +1126,22 @@ class MessagesConverter(BaseConverter):
         would be a delta with no content.  The Interactions writer drops empty
         signatures the same way.
 
+        Dropping an all-empty event keeps the client from ever seeing an empty
+        thinking block.  That matters because an Anthropic client replays what
+        it receives, and a thinking block cannot be sent back without a
+        signature — the API answers ``400
+        messages.N.content.0.thinking.signature: Field required`` — so the
+        response side must not hand one out.  The request side drops the same
+        shape in ``MessagesContentOps.ir_reasoning_to_p``.
+
+        Two things this does not cover.  A non-empty reasoning part with no
+        signature still leaves the request path unsigned and is rejected the
+        same way; suppressing that is the shim's ``unsigned_blocks: preserve``
+        policy, which ``anthropic--messages`` does not declare yet (#954).  And
+        the Chat Completions writer keeps the opposite rule on purpose —
+        DeepSeek's thinking mode needs ``reasoning_content`` present even when
+        it is empty (#948) — so the two are not a divergence to unify.
+
         Args:
             event: IR reasoning delta event.
 

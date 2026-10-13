@@ -288,6 +288,15 @@ class MessagesContentOps(BaseContentOps):
 
         if not text and "signature" not in result:
             # Nothing Anthropic can consume (only a foreign opaque value).
+            # This is the *only* case dropped here: a part with text but no
+            # signature still goes out unsigned, and the API rejects any
+            # thinking block without one (``400 messages.N.content.0.thinking
+            # .signature: Field required``).  Suppressing that shape is the
+            # shim's ``unsigned_blocks: preserve`` policy, applied by the
+            # caller in ``message_ops`` — ``anthropic--messages`` does not
+            # declare it yet, so the unsigned-non-empty case is a known
+            # reachable 400 (#954).  Widening this guard to drop it too would
+            # lose reasoning for every target that accepts it.
             return None
 
         # Preserve provider_metadata for cross-provider round-trip
