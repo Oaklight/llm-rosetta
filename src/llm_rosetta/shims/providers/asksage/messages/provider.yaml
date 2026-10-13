@@ -4,3 +4,32 @@ base: messages
 connection:
   base_url: https://api.asksage.ai/server/anthropic
   api_key_env: ASKSAGE_API_KEY
+
+# Host note, same split as the sibling `asksage--open_responses` shim: `/models`
+# answers on this host, but inference needs an access token, and for an ANL
+# account that token is only accepted by
+# `https://api.asksage.anl.gov/server/anthropic` — this host answers
+# `Token is invalid [2]`.  Point `base_url` at the ANL host for an ANL account;
+# the probe below ran against that one.
+
+# Fields spelled out rather than left to the loader default: a provider with no
+# `reasoning:` section falls back to the Messages base cap
+# (`converters/base/helpers/reasoning.py::_DEFAULT_ANTHROPIC`), but as soon as a
+# section exists every field it omits comes from the loader's hard-coded
+# defaults instead — `effort_field` would become the flat `reasoning_effort`,
+# which is not an Anthropic Messages field.  Keep these equal to that base cap.
+reasoning:
+  thinking_modes:
+    auto: adaptive
+    enabled: enabled
+    disabled: disabled
+  effort_field: output_config.effort
+  effort_range: [low, max]
+  # Probed live 2026-10-13 against
+  # `https://api.asksage.anl.gov/server/anthropic/v1/messages` with a token
+  # minted by `scripts/asksage-token.py` — the account API key is refused by the
+  # inference lanes as a direct credential (`Token is invalid [2]`).
+  # The lane is Vertex-backed Claude (`msg_vrtx_...`) and validates signatures
+  # like the API it fronts: `400 messages.1.content.0.thinking.signature: Field
+  # required`.  See #954.
+  unsigned_blocks: preserve

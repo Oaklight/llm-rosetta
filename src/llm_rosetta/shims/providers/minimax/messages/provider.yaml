@@ -11,3 +11,22 @@ reasoning:
     auto: adaptive
     enabled: adaptive
     disabled: disabled
+  # Spelled out, like the opencode and asksage lanes: this section existed but
+  # was partial, so `effort_field` came from the loader default and the effort
+  # went out as a flat `reasoning_effort` — not a Messages field, and one this
+  # lane silently drops.  A 200 from this endpoint is not evidence that a field
+  # was read: it answers 200 for a deliberately unknown one too, which is what
+  # let the stray field look fine.
+  #
+  # What the declaration does buy: the effort is now sent as a field the
+  # Messages schema defines, and `effort_range` restores clamping.  Whether
+  # MiniMax *honours* the value is NOT established — paired runs with adaptive
+  # thinking at `unset` vs `max` gave 719/1348/620/1146 against
+  # 1028/865/740/540 thinking characters, which is overlap, not a signal.
+  # Values otherwise match `_DEFAULT_ANTHROPIC`.
+  effort_field: output_config.effort
+  effort_range: [low, max]
+  # No `unsigned_blocks: preserve` here on purpose.  Probed live 2026-10-13:
+  # MiniMax's Anthropic lane accepts an unsigned thinking block in history
+  # (HTTP 200), so there is nothing to withhold; the default `as_is` keeps the
+  # block on the wire for round-trip fidelity.  See #954.

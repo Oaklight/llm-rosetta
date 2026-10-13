@@ -12,3 +12,23 @@ connection:
   api_key_env: OPENCODE_API_KEY
   models_path: https://opencode.ai/zen/go/v1/models
   session_header: x-opencode-session
+
+# The Messages lane fronts Claude and rejects an unsigned thinking block the
+# same way Anthropic does; the Go lane's credential is sent as `x-api-key`
+# (see `anthropic_auth`), not as a bearer token.
+# Probed live 2026-10-13: `messages.1.content.0.thinking.signature: Field
+# required`.  See #954.
+# Fields spelled out rather than left to the loader default: a provider with no
+# `reasoning:` section falls back to the Messages base cap
+# (`converters/base/helpers/reasoning.py::_DEFAULT_ANTHROPIC`), but as soon as a
+# section exists every field it omits comes from the loader's hard-coded
+# defaults instead — `effort_field` would become the flat `reasoning_effort`,
+# which is not an Anthropic Messages field.  Keep these equal to that base cap.
+reasoning:
+  thinking_modes:
+    auto: adaptive
+    enabled: enabled
+    disabled: disabled
+  effort_field: output_config.effort
+  effort_range: [low, max]
+  unsigned_blocks: preserve

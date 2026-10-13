@@ -13,6 +13,13 @@ reasoning:
     disabled: disabled
   effort_field: output_config.effort
   effort_range: [low, max]
+
+  # Anthropic requires a signature on every thinking block in history, so
+  # reasoning that arrived from a signature-less format (chat_completions,
+  # google_generate, open_responses) cannot be replayed as-is.  Probed live
+  # 2026-10-13: `400 messages.N.content.0.thinking.signature: Field required`.
+  # The block is kept in metadata instead of being sent.  See #954.
+  unsigned_blocks: preserve
   visibility_modes:
     auto: summarized
     concise: summarized

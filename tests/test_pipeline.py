@@ -1470,3 +1470,128 @@ class TestDeepSeekReasoningContentBackfill:
         callers = self._callers(out)
         assert callers[0]["reasoning_content"] == "I should read the file."
         assert "reasoning_content" not in callers[1]
+
+
+class TestUnsignedBlocksPolicy:
+    """Signature-requiring Messages targets withhold unsigned reasoning (#954).
+
+    A history whose reasoning arrived from a signature-less format cannot be
+    replayed to Anthropic: the API rejects any thinking block without a
+    signature.  The shim's ``unsigned_blocks: preserve`` policy drops the block
+    from the wire and keeps it in metadata; the default ``as_is`` sends it.
+
+    Which targets need the policy is per provider, probed live 2026-10-13
+    (anthropic, openrouter, the opencode Messages lane and AskSage reject;
+    MiniMax's lane accepts).
+    """
+
+    @pytest.fixture(autouse=True)
+    def _load_shims(self):
+        from llm_rosetta.shims.providers import load_providers
+
+        load_providers()
+
+    @staticmethod
+    def _source_body():
+        """A Chat history whose assistant turn carries reasoning, no signature."""
+        return {
+            "model": "gpt-4",
+            "messages": [
+                {"role": "user", "content": "hi"},
+                {
+                    "role": "assistant",
+                    "reasoning_content": "think hard",
+                    "content": "Hello",
+                },
+                {"role": "user", "content": "bye"},
+            ],
+        }
+
+    @staticmethod
+    def _thinking_blocks(out):
+        return [
+            block
+            for message in out["messages"]
+            if message.get("role") == "assistant"
+            for block in message.get("content", [])
+            if block.get("type") == "thinking"
+        ]
+
+    @pytest.mark.parametrize(
+        "shim_name",
+        [
+            "anthropic--messages",
+            "openrouter--messages",
+            "opencode--messages",
+            "asksage--messages",
+        ],
+    )
+    def test_signature_requiring_shim_withholds_unsigned_reasoning(self, shim_name):
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        out = ConversionPipeline(
+            "chat_completions", "messages", target_shim=shim_name
+        ).convert_request(self._source_body())
+
+        assert self._thinking_blocks(out) == []
+        assert out["messages"][1]["content"] == [{"type": "text", "text": "Hello"}]
+
+    def test_minimax_shim_keeps_it_on_the_wire(self):
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        out = ConversionPipeline(
+            "chat_completions", "messages", target_shim="minimax--messages"
+        ).convert_request(self._source_body())
+
+        assert len(self._thinking_blocks(out)) == 1
+
+    def test_bare_conversion_sends_it_unsigned(self):
+        """Without a shim the default policy is ``as_is``."""
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        out = ConversionPipeline("chat_completions", "messages").convert_request(
+            self._source_body()
+        )
+
+        blocks = self._thinking_blocks(out)
+        assert len(blocks) == 1
+        assert "signature" not in blocks[0]
+
+
+class TestMessagesShimReasoningDefaults:
+    """Adding a shim ``reasoning:`` section must not reset the cap (#954).
+
+    ``opencode--messages`` and ``asksage--messages`` had no section before, so
+    they inherited the Messages base cap.  Adding one to carry the unsigned
+    policy made the omitted fields fall back to the loader defaults, which sent
+    the effort out as a flat ``reasoning_effort`` on an Anthropic payload.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _load_shims(self):
+        from llm_rosetta.shims.providers import load_providers
+
+        load_providers()
+
+    @staticmethod
+    def _body():
+        return {
+            "model": "m",
+            "reasoning_effort": "high",
+            "messages": [{"role": "user", "content": "hi"}],
+        }
+
+    @pytest.mark.parametrize(
+        "shim_name",
+        ["opencode--messages", "asksage--messages", "minimax--messages"],
+    )
+    def test_effort_still_goes_out_as_output_config(self, shim_name):
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        out = ConversionPipeline(
+            "chat_completions", "messages", target_shim=shim_name
+        ).convert_request(self._body())
+
+        assert out["thinking"] == {"type": "adaptive"}
+        assert out["output_config"] == {"effort": "high"}
+        assert "reasoning_effort" not in out

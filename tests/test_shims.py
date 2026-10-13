@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from pathlib import Path
 
 from llm_rosetta.shims.provider_shim import (
     ProviderShim,
@@ -360,6 +361,120 @@ class TestBuiltinShims:
         assert shim.reasoning.unsigned_blocks == "preserve"
         assert shim.model_reasoning is not None
         assert shim.model_reasoning["claudeopus47"].unsigned_blocks == "preserve"
+
+    def test_signature_requiring_messages_shims_preserve_unsigned_blocks(self):
+        """Anthropic rejects a thinking block without a signature (#954).
+
+        Probed live 2026-10-13: anthropic, openrouter, the opencode Messages
+        lane and AskSage all answer 400 for a history carrying an unsigned
+        thinking block, so all four withhold it (AskSage needed a token minted
+        by ``scripts/asksage-token.py``; its API key is not accepted directly).
+        MiniMax's lane accepts one, which is why it keeps the default and the
+        block stays on the wire.
+        """
+        for name in (
+            "anthropic--messages",
+            "openrouter--messages",
+            "opencode--messages",
+            "asksage--messages",
+        ):
+            shim = get_shim(name)
+            assert shim is not None, name
+            assert shim.reasoning is not None, name
+            assert shim.reasoning.unsigned_blocks == "preserve", name
+
+        minimax = get_shim("minimax--messages")
+        assert minimax is not None
+        assert minimax.reasoning is not None
+        assert minimax.reasoning.unsigned_blocks == "as_is"
+
+    def test_messages_shims_keep_the_base_reasoning_cap_fields(self):
+        """A partial ``reasoning:`` section resets the fields it omits (#954).
+
+        A provider with no section falls back to the Messages base cap, but once
+        a section exists the omitted fields come from the loader's hard-coded
+        defaults instead — ``effort_field`` becomes the flat
+        ``reasoning_effort``, which is not an Anthropic Messages field, and the
+        effort value stops being clamped.  These lanes only mean to add the
+        unsigned policy, so they spell the base fields out; this pins them to
+        the cap they would otherwise have inherited.
+        """
+        from llm_rosetta.converters.base.helpers.reasoning import _DEFAULT_ANTHROPIC
+
+        # Lanes that gained a section where there was none: every field must
+        # land back on the base cap.
+        for name, unsigned in {
+            "opencode--messages": "preserve",
+            "asksage--messages": "preserve",
+        }.items():
+            shim = get_shim(name)
+            assert shim is not None, name
+            cap = shim.reasoning
+            assert cap is not None, name
+            assert cap.thinking_modes == _DEFAULT_ANTHROPIC.thinking_modes, name
+            assert cap.effort_field == _DEFAULT_ANTHROPIC.effort_field, name
+            assert cap.effort_range == _DEFAULT_ANTHROPIC.effort_range, name
+            assert cap.visibility_modes is None, name
+            assert cap.unsigned_blocks == unsigned, name
+
+        # MiniMax already had a section with its own thinking modes, which are
+        # deliberate; what leaked in were the fields it left out.
+        minimax = get_shim("minimax--messages")
+        assert minimax is not None
+        cap = minimax.reasoning
+        assert cap is not None
+        assert cap.thinking_modes == {
+            "auto": "adaptive",
+            "enabled": "adaptive",
+            "disabled": "disabled",
+        }
+        assert cap.effort_field == _DEFAULT_ANTHROPIC.effort_field
+        assert cap.effort_range == _DEFAULT_ANTHROPIC.effort_range
+        assert cap.unsigned_blocks == "as_is"
+
+    def test_partial_reasoning_sections_do_not_lose_the_effort_field(self):
+        """An omitted ``effort_field`` must fall back to the base cap (#954).
+
+        A ``reasoning:`` section that leaves ``effort_field`` out gets the
+        loader's hard-coded default rather than the base cap for that format,
+        which silently produced a flat ``reasoning_effort`` on Anthropic
+        Messages lanes — a field those endpoints ignore instead of rejecting, so
+        nothing failed loudly.  Naming the lanes we know about would miss the
+        next one, so this walks every shim YAML that carries a section.
+
+        The walk deliberately stops at ``effort_field``: the same sections also
+        lose ``effort_range`` in four places (``alcf--sophia``,
+        ``argo--chat_completions``, ``argo--open_responses``,
+        ``minimax--chat_completions``), which is pre-existing and needs its own
+        probe per endpoint rather than a blanket assertion here.
+        """
+        from llm_rosetta._vendor.yaml import load as yaml_load
+        from llm_rosetta.converters.base.helpers.reasoning import (
+            DEFAULT_REASONING_CAPS,
+        )
+
+        root = (
+            Path(__file__).resolve().parents[1]
+            / "src"
+            / "llm_rosetta"
+            / "shims"
+            / "providers"
+        )
+        checked = 0
+        for path in sorted(root.glob("*/*/provider.yaml")):
+            data = yaml_load(path.read_text())
+            section = data.get("reasoning")
+            if not section or "effort_field" in section:
+                continue
+            base_cap = DEFAULT_REASONING_CAPS.get(data.get("base"))
+            if base_cap is None:
+                continue  # a base type with no default cap to inherit
+            shim = get_shim(data["name"])
+            assert shim is not None, path
+            assert shim.reasoning is not None, path
+            assert shim.reasoning.effort_field == base_cap.effort_field, path
+            checked += 1
+        assert checked >= 1, "walk found no inheriting section — glob or layout changed"
 
     def test_google_base_type(self):
         shim = get_shim("google--google_generate")

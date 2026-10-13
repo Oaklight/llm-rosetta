@@ -12,3 +12,10 @@ reasoning:
     disabled: disabled
   effort_field: output_config.effort
   effort_range: [low, max]
+
+  # OpenRouter validates the Messages schema itself and rejects a thinking
+  # block with no signature: probed live 2026-10-13, it answers `400 Invalid
+  # Anthropic Messages API request` with `invalid_union` at path
+  # `[messages, 0, "signature"]`.  The block is kept in metadata instead of
+  # being sent.  See #954.
+  unsigned_blocks: preserve
