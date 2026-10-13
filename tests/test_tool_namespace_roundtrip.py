@@ -7,7 +7,9 @@ tools, for instance — need the namespace back on the returned
 ``function_call`` item, or the call cannot be routed to its handler.
 """
 
-from typing import Any
+from typing import Any, cast
+
+import pytest
 
 from llm_rosetta.capabilities import (
     ToolNameMap,
@@ -17,6 +19,13 @@ from llm_rosetta.capabilities import (
 )
 from llm_rosetta.converters.base.helpers.tool_group import generated_group_id
 from llm_rosetta.pipeline import ConversionPipeline
+from llm_rosetta.types.ir.request import IRRequest
+from llm_rosetta.shims.provider_shim import (
+    ProviderShim,
+    ToolsConfig,
+    register_shim,
+    unregister_shim,
+)
 
 
 def _namespace_container(namespace: str, *names: str) -> dict[str, Any]:
@@ -945,8 +954,7 @@ class TestNamespaceRoundTrip:
             assert not name_map.has_top_level("a"), (
                 f"{label}: a container's tool is not a top-level declaration"
             )
-            # The arm under test is reachable only in this combination.
-            assert name_map.is_ambiguous("a") and not name_map.is_contested("a"), label
+            assert name_map.is_ambiguous("a"), label
             assert {t["function"]["name"] for t in upstream["tools"]} == {
                 f"{generated_group_id('', ['a'])}_a",
                 "x_a",
@@ -1144,3 +1152,215 @@ class TestNamespaceRoundTrip:
         calls = [i for i in out["output"] if i.get("type") == "function_call"]
         assert len(calls) == 1
         assert "namespace" not in calls[0]
+
+
+# ---------------------------------------------------------------------------
+# A target that can carry a group
+# ---------------------------------------------------------------------------
+
+
+class TestGroupsToACapableTarget:
+    """A shim declaring ``tools.tool_groups`` gets the client's grouping back.
+
+    Every other target keeps the flat list, which is what the rest of this
+    module tests.  The flag is a per-provider declaration and not derivable
+    from ``base``: OpenRouter's Chat Completions lane accepts the container
+    while OpenAI's does not.
+    """
+
+    NAME = "test-tool-groups"
+
+    @pytest.fixture(autouse=True)
+    def _shim(self):
+        register_shim(
+            ProviderShim(
+                name=self.NAME,
+                base="open_responses",
+                tools=ToolsConfig(tool_groups=True),
+            )
+        )
+        yield
+        unregister_shim(self.NAME)
+
+    @staticmethod
+    def _request(tools: list[dict[str, Any]]) -> dict[str, Any]:
+        return {
+            "model": "test-model",
+            "tool_choice": "auto",
+            "tools": tools,
+            "input": [
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": "hi"}],
+                }
+            ],
+        }
+
+    def test_the_container_comes_back_at_its_first_member(self):
+        pipe = ConversionPipeline("open_responses", self.NAME)
+
+        body = pipe.convert_request(
+            self._request(
+                [
+                    {"type": "function", "name": "plain", "parameters": {}},
+                    _namespace_container("tasks", "wait", "edit"),
+                ]
+            )
+        )
+
+        tools = body["tools"]
+        assert [t["name"] for t in tools if t["type"] != "namespace"] == ["plain"]
+        container = tools[1]
+        assert container["type"] == "namespace"
+        assert container["name"] == "tasks"
+        assert [c["name"] for c in container["tools"]] == ["wait", "edit"]
+        # ``_namespace_container`` declares no description of its own, and an
+        # absent one must not be invented.
+        assert "description" not in container
+
+    def test_a_flat_target_still_gets_the_flat_list(self):
+        pipe = ConversionPipeline("open_responses", "chat_completions")
+
+        body = pipe.convert_request(
+            self._request(
+                [
+                    {"type": "function", "name": "plain", "parameters": {}},
+                    _namespace_container("tasks", "wait"),
+                ]
+            )
+        )
+
+        names = [t["function"]["name"] for t in body["tools"]]
+        assert names == ["plain", "wait"], "no container, and no group in the name"
+
+    def test_a_qualified_child_is_sent_under_that_spelling(self):
+        """The container carries the names the naming pass settled on.
+
+        A top-level tool and a grouped one share ``wait``, so the grouped one
+        was qualified to ``tasks_wait`` for a flat target.  Inside a container
+        the group is already there and the prefix is redundant, but shortening
+        it here would leave ``ToolNameMap`` — which is built from the IR —
+        translating a history call to a spelling this function discarded.
+        """
+        pipe = ConversionPipeline("open_responses", self.NAME)
+
+        body = pipe.convert_request(
+            self._request(
+                [
+                    {"type": "function", "name": "wait", "parameters": {}},
+                    _namespace_container("tasks", "wait"),
+                ]
+            )
+        )
+
+        container = next(t for t in body["tools"] if t["type"] == "namespace")
+        assert [c["name"] for c in container["tools"]] == ["tasks_wait"]
+
+    def test_the_flag_is_off_unless_a_provider_says_otherwise(self):
+        """The default is half of this feature's contract.
+
+        A provider that says nothing keeps the flat list it has always had, so
+        the field is load-bearing in its default and worth naming here rather
+        than leaving to whatever else notices.
+        """
+        assert ToolsConfig().tool_groups is False
+
+    def test_a_group_all_of_whose_members_decline_is_dropped(self):
+        """The writer's guard, on the one path that reaches it.
+
+        Nothing the pipeline produces gets here — a tool the target cannot
+        express is dropped from the IR and its group never forms — but the IR
+        is a public ``TypedDict`` and the converter is public API, so a caller
+        can hand ``request_to_provider`` an IR whose group holds only a tool
+        this target declines.  Without the guard a childless container goes
+        out, which every upstream that accepts one rejects.
+        """
+        from llm_rosetta.converters.base.context import ConversionContext
+        from llm_rosetta.converters.open_responses.converter import (
+            OpenResponsesConverter,
+        )
+
+        ctx = ConversionContext()
+        ctx.options["tool_groups"] = True
+
+        def _ir(kind: str) -> IRRequest:
+            return cast(
+                IRRequest,
+                {
+                    "model": "test-model",
+                    "tools": [
+                        {
+                            "type": "function",
+                            "name": "plain",
+                            "description": "",
+                            "parameters": {},
+                        },
+                        {
+                            "type": "intrinsic",
+                            "name": "web_search",
+                            "description": "",
+                            "parameters": {},
+                            "tool_group": "g1",
+                            "metadata": {"intrinsic_kind": kind},
+                        },
+                    ],
+                },
+            )
+
+        declined, _ = OpenResponsesConverter().request_to_provider(
+            _ir("no_such_kind"), context=ctx
+        )
+        assert [t.get("name") for t in declined["tools"]] == ["plain"], declined[
+            "tools"
+        ]
+
+        # And the guard is targeted, not a blanket skip: an expressible member
+        # leaves the container standing.
+        kept, _ = OpenResponsesConverter().request_to_provider(
+            _ir("web_search"), context=ctx
+        )
+        assert [t["type"] for t in kept["tools"]] == ["function", "namespace"]
+        assert kept["tools"][1]["tools"], "the expressible member keeps the group"
+
+    def test_a_group_the_target_cannot_express_is_dropped(self):
+        """A container with nothing renderable in it never reaches the wire.
+
+        The only member is an intrinsic tool this shim declares no server tool
+        for, so it survives the reader and is then dropped from the IR, and the
+        group never forms — which is *why* this asserts on the body rather than
+        on the writer's empty-group guard: that guard sits behind the drop and
+        cannot be reached from here.
+
+        The child is **named** on purpose.  Left unnamed
+        (``{"type": "web_search"}``) it never reaches the IR at all — the
+        reader skips an unnamed child in a container, a pre-existing rule and a
+        different reason — so that shape would pin something other than the
+        one this docstring gives.
+        """
+        pipe = ConversionPipeline("open_responses", self.NAME)
+
+        body = pipe.convert_request(
+            self._request(
+                [
+                    {"type": "function", "name": "plain", "parameters": {}},
+                    {
+                        "type": "namespace",
+                        "name": "g1",
+                        "tools": [{"type": "web_search", "name": "web_search"}],
+                    },
+                ]
+            )
+        )
+
+        assert [t.get("name") for t in body["tools"]] == ["plain"], body["tools"]
+
+    def test_the_generated_group_is_carried_too(self):
+        """A group we named still goes out; only the client leg drops it."""
+        pipe = ConversionPipeline("open_responses", self.NAME)
+
+        body = pipe.convert_request(self._request([_namespace_container("", "wait")]))
+
+        container = body["tools"][0]
+        assert container["type"] == "namespace"
+        assert container["name"] == generated_group_id("", ["wait"])

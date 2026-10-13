@@ -403,6 +403,11 @@ class ConversionPipeline:
             if resolved_target_for_prefix
             else None
         )
+        self._target_tool_groups = (
+            resolved_target_for_prefix.tools.tool_groups
+            if resolved_target_for_prefix
+            else False
+        )
         resolved_source_for_prefix = resolved_source or resolve_shim(source_provider)
         self._source_id_prefix = (
             resolved_source_for_prefix.response_id_prefix
@@ -652,6 +657,11 @@ class ConversionPipeline:
 
         if self._multimodal_tool_result is not None:
             ctx.options["multimodal_tool_result"] = self._multimodal_tool_result
+
+        # Whether the target can carry a tool group decides how the tool list is
+        # rendered, so the writer has to be told.  The decision comes from the
+        # shim, which the converter cannot see.
+        ctx.options["tool_groups"] = self._target_tool_groups
 
         # Capability enforcement: reasoning (pre-IR)
         enforce_reasoning(
@@ -934,9 +944,7 @@ class ConversionPipeline:
         # empty map, and a guard here would be a second place deciding when
         # the restore runs — which is how the tool_choice check ended up
         # unreachable.
-        restore_client_tool_names(
-            ir_response, name_map=self._name_map, warnings=ctx.warnings
-        )
+        restore_client_tool_names(ir_response, name_map=self._name_map)
 
         # Phase 4c: IR → Source response
         t0 = time.perf_counter()
@@ -1032,9 +1040,6 @@ class ConversionPipeline:
             post_ir_transforms=self._source_post_ir_transforms,
             custom_tool_names=custom_names,
             name_map=self._name_map,
-            # The request context's list, not the stream context's — those
-            # are created fresh here and nobody reads their warnings.
-            warnings=ctx.warnings,
             on_ir_event=on_ir_event,
         )
 
@@ -1241,8 +1246,6 @@ class StreamProcessor:
             function by :func:.
         name_map: Bidirectional map for tools renamed on the request leg
             (namespace flattening, collision qualification).
-        warnings: The pipeline's warnings list, appended to when the stream
-            cannot be translated faithfully.  Owned by the request context.
         on_ir_event: Optional callback for each IR event.
     """
 
@@ -1258,7 +1261,6 @@ class StreamProcessor:
         post_ir_transforms: tuple[Transform, ...] = (),
         custom_tool_names: frozenset[str] = frozenset(),
         name_map: ToolNameMap | None = None,
-        warnings: list[str] | None = None,
         on_ir_event: Callable[[dict[str, Any]], None] | None = None,
     ) -> None:
         self._target_converter = target_converter
@@ -1270,12 +1272,7 @@ class StreamProcessor:
         self._post_ir_transforms = post_ir_transforms
         self._custom_tool_names = custom_tool_names
         self._name_map = name_map or ToolNameMap()
-        self._warnings = warnings
         self._custom_arg_buffers: dict[str, str] = {}
-        # Per stream, not per chunk: the restore below runs once a chunk, so
-        # a provider that splits tool calls across chunks would otherwise warn
-        # repeatedly where the non-streaming leg warns once.
-        self._warned_contested: set[str] = set()
         self._on_ir_event = on_ir_event
         self._usage: dict[str, int] | None = None
 
@@ -1389,8 +1386,6 @@ class StreamProcessor:
         restore_client_tool_name_events(
             ir_events,
             name_map=self._name_map,
-            warnings=self._warnings,
-            already_warned=self._warned_contested,
         )
 
         # IR → Source events

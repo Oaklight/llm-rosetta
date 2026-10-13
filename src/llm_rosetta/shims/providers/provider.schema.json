@@ -136,8 +136,13 @@
           "items": {
             "type": "string"
           },
-          "description": "Provider-hosted server tools this provider supports natively (e.g. web_search, code_execution, google_search). Empty means no intrinsic tool support — the provider must opt in. Declaring a kind lets clients request it and lets cross-format conversion map it to this provider's native server tool.",
+          "description": "Provider-hosted server tools this provider supports natively (e.g. web_search, code_execution, google_search). Empty means no intrinsic tool support \u2014 the provider must opt in. Declaring a kind lets clients request it and lets cross-format conversion map it to this provider's native server tool.",
           "default": []
+        },
+        "tool_groups": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether the provider carries a named group of client-declared tools ({'type': 'namespace', ...} on the Responses family). False means the converter folds group names into the flat tool names instead."
         }
       }
     },

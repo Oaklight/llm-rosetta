@@ -156,6 +156,21 @@ class ToolsConfig:
     max_description_length: int | None = None
     search_mode: ToolSearchMode = "disabled"
     multimodal_result: bool | None = None
+    tool_groups: bool = False
+    """Whether the provider carries a named group of client-declared tools.
+
+    A client may declare tools inside a named container and address them by
+    ``(name, group)``.  The Responses family spells that
+    ``{"type": "namespace", …}`` and returns ``namespace`` on the call; other
+    formats have no grouping concept at all, and Anthropic and Google group
+    only the tools *their own* MCP servers bring, not ones the client sent.
+
+    ``False`` (the default) means the converter emits the flat list it always
+    has, with group names folded into the tool names.  This is a per-provider
+    declaration rather than something derivable from ``base``: OpenRouter's
+    Chat Completions lane accepts the container while OpenAI's does not.
+    """
+
     intrinsic_tools: tuple[str, ...] = ()
     """Intrinsic (provider-hosted) server tools this provider supports.
 

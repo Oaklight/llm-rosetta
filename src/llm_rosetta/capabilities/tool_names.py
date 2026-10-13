@@ -44,7 +44,6 @@ class ToolNameMap:
     # Bare client name -> its single upstream spelling, or None when it
     # resolves to several. Names needing no translation are left out.
     _bare: dict[str, str | None] = field(default_factory=dict)
-    _contested: frozenset[str] = frozenset()
     # Names declared outside any namespace. Recorded even for tools the rest
     # of the map leaves out: a top-level tool is never renamed, so it earns
     # no entry elsewhere, yet it is exactly what gets asked about.
@@ -64,18 +63,6 @@ class ToolNameMap:
         """
         return name in self._top_level
 
-    def is_contested(self, upstream_name: str) -> bool:
-        """Whether this upstream name was declared by more than one tool.
-
-        :meth:`to_client` cannot attribute such a name, so it falls back and
-        drops the namespace — indistinguishable from a tool that was never
-        renamed, which is why these are recorded rather than inferred.
-
-        Only a nameless container reaches this: a named one always gets its
-        tools a spelling nobody else has.
-        """
-        return upstream_name in self._contested
-
     def has_client_group(self, name: str) -> bool:
         """Whether some tool answering to this client name sits in a group the
         client named — and so carries a namespace a call could echo back.
@@ -88,11 +75,8 @@ class ToolNameMap:
     def is_ambiguous(self, name: str) -> bool:
         """Whether this bare client name leads to several upstream spellings.
 
-        Not the same question as :meth:`is_contested`, and neither implies
-        the other. Tools that collide but were qualified reach the wire under
-        different names, so the bare name is ambiguous; tools that could not
-        be qualified share one upstream name, so the bare name resolves and
-        it is the way *back* that is lost.
+        Tools that collide are qualified apart, so they reach the wire under
+        different names and the bare name stops resolving to any one of them.
         """
         return name in self._bare and self._bare[name] is None
 
@@ -372,21 +356,10 @@ def build_tool_name_map(ir_request: dict[str, Any]) -> ToolNameMap:
     upstream: dict[tuple[str, str | None], str] = {}
     client: dict[str, tuple[str, str | None]] = {}
     sole: dict[str, str | None] = {}
-    # Only names a group was meant to distinguish: two top-level tools
-    # sharing a name lose nothing on the way back, having none to drop.
-    #
-    # `is None`, not truthiness: a nameless container gives "", which is the
-    # worst case rather than an absent one. Only the harvest writes
-    # ``tool_group``, so its presence marks a tool as having come from a
-    # container.
-    contested = {
-        t["name"]
-        for t in tools
-        if claimants[t["name"]] > 1 and t.get("tool_group") is not None
-    }
-    # `is None` again, and with more at stake: reading "" as top-level would
-    # claim a bare call meant that tool, when the client has no name to point
-    # at it with and the call is in fact ambiguous.
+    # `is None`, not truthiness: only the harvest writes ``tool_group``, so its
+    # presence is what marks a tool as having come from a container — and a
+    # container the client left nameless gives "", which is the worst case
+    # rather than an absent one.
     top_level = {t["name"] for t in tools if t.get("tool_group") is None}
 
     named_claim: set[str] = set()
@@ -431,7 +404,6 @@ def build_tool_name_map(ir_request: dict[str, Any]) -> ToolNameMap:
         # Ambiguous entries are kept; resolvable ones only when they say
         # something ``to_upstream``'s own fallback would not.
         {k: v for k, v in sole.items() if v is None or v != k},
-        frozenset(contested),
         frozenset(top_level),
         frozenset(generated_claim - named_claim),
     )
@@ -561,15 +533,7 @@ def _respell_history_tool_calls(
             part["tool_name"] = upstream_name
             if namespace is not None:
                 continue
-            if name_map.is_contested(upstream_name):
-                # Tested against the *upstream* name, and first: a third tool
-                # sharing the name makes both branches true, and this is the
-                # more specific answer. The other would then advise echoing
-                # the namespace back, which cannot help when the namespaces
-                # are precisely what could not be folded in.
-                # Do not reorder these.
-                unattributable.add(client_name)
-            elif name_map.is_ambiguous(client_name) and not name_map.has_top_level(
+            if name_map.is_ambiguous(client_name) and not name_map.has_top_level(
                 client_name
             ):
                 # `is_ambiguous` alone over-reports: when a top-level tool and
@@ -663,39 +627,10 @@ def apply_upstream_tool_names(
         )
 
 
-def _warn_contested(
-    seen: set[str],
-    name_map: ToolNameMap,
-    warnings: list[str] | None,
-    already_warned: set[str] | None = None,
-) -> None:
-    """Report provider calls the map had to hand back without a namespace.
-
-    This is the leg where the failure becomes visible — the client receives
-    a call it cannot route — and the one leg that cannot repair it.
-
-    *already_warned*, when given, spans more than one call and suppresses
-    names reported before; *seen* covers only the current chunk.
-    """
-    if warnings is None:
-        return
-    for name in sorted(n for n in seen if name_map.is_contested(n)):
-        if already_warned is not None:
-            if name in already_warned:
-                continue
-            already_warned.add(name)
-        warnings.append(
-            f"The provider called {name!r}, but more than one declared tool "
-            "went upstream under that name, so the namespace it belongs to "
-            "cannot be determined and is omitted from the returned call"
-        )
-
-
 def restore_client_tool_names(
     ir_response: dict[str, Any],
     *,
     name_map: ToolNameMap,
-    warnings: list[str] | None = None,
 ) -> None:
     """Restore client-facing tool names on an IR response.
 
@@ -711,14 +646,11 @@ def restore_client_tool_names(
     if not name_map:
         return
 
-    seen: set[str] = set()
-
     def _restore_parts(msg: Any) -> None:
         if not isinstance(msg, dict):
             return
         for part in msg.get("content") or []:
             if isinstance(part, dict) and part.get("type") == "tool_call":
-                seen.add(part.get("tool_name", ""))
                 _to_client_identity(part, name_map)
 
     for choice in ir_response.get("choices") or []:
@@ -728,15 +660,11 @@ def restore_client_tool_names(
     for msg in ir_response.get("messages") or []:
         _restore_parts(msg)
 
-    _warn_contested(seen, name_map, warnings)
-
 
 def restore_client_tool_name_events(
     ir_events: list[dict[str, Any]],
     *,
     name_map: ToolNameMap,
-    warnings: list[str] | None = None,
-    already_warned: set[str] | None = None,
 ) -> None:
     """Restore client-facing tool names on streamed tool calls.
 
@@ -745,21 +673,15 @@ def restore_client_tool_name_events(
     carries it onto the later done/completed items.  The streaming
     counterpart of :func:`restore_client_tool_names`.
 
-    *already_warned* is the caller's whole-stream set of reported names.
-    Pass one: this runs per chunk, and a provider that puts each tool call in
-    its own chunk — the anthropic wire format's normal shape — would otherwise
-    warn once per chunk where the non-streaming leg warns once in total.
+    The streaming counterpart of :func:`restore_client_tool_names`, and unlike
+    it this runs per chunk.
     """
     if not name_map:
         return
 
-    seen: set[str] = set()
     for event in ir_events:
         if isinstance(event, dict) and event.get("type") == "tool_call_start":
-            seen.add(event.get("tool_name", ""))
             _to_client_identity(event, name_map)
-
-    _warn_contested(seen, name_map, warnings, already_warned)
 
 
 def dedupe_tool_definitions(

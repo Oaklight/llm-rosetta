@@ -45,7 +45,11 @@ from ..base.helpers.opaque import (
     is_own_origin,
     set_opaque_origin,
 )
-from ..base.helpers.tool_group import GENERATED_GROUP_MARKER
+from ..base.helpers.tool_group import (
+    GENERATED_GROUP_MARKER,
+    ToolGroup,
+    group_tools,
+)
 from ..base.tools import (
     assign_tool_batch_ids,
     fix_orphaned_tool_calls_ir,
@@ -697,7 +701,7 @@ class OpenResponsesConverter(BaseConverter):
         """Apply tools, tool_choice, and tool_config to provider request."""
         tools = ir_request.get("tools")
         if tools:
-            result["tools"] = self._get_cached_ir_tools_to_p(tools)
+            result["tools"] = self._tools_to_p(tools, ctx)
         tool_choice = ir_request.get("tool_choice")
         if tool_choice:
             allowed_tools = (ir_request.get("provider_extensions") or {}).get(
@@ -710,6 +714,59 @@ class OpenResponsesConverter(BaseConverter):
         if tool_config:
             tc_fields = self.tool_ops.ir_tool_config_to_p(tool_config)
             result.update(tc_fields)
+
+    def _tools_to_p(self, tools: list[Any], ctx: ConversionContext) -> list[Any]:
+        """Render the tool list, groups and all.
+
+        A target that carries tool groups gets the client's grouping back, as a
+        container per group; every other target gets the flat list it has
+        always had, with the group folded into the tool names.  Whether this
+        target is one of the former is the shim's ``tools.tool_groups``,
+        passed down on the context, because the converter cannot see a shim.
+
+        The grouping is decided here rather than in the IR: the IR keeps every
+        tool flat, with ``tool_group`` recording where it came from, and only a
+        writer knows whether its wire format can say that.  Which is also why
+        ``group_tools`` is a helper and not a pipeline pass — the ordering and
+        the entry shape are the writer's business.
+
+        Children keep the names the naming pass gave them.  Inside a container
+        the group name is redundant there, and Volcengine — which flattens a
+        container to ``{group}__{name}`` internally — turns that into a double
+        prefix.  Shortening them is a naming decision that has to be taken
+        together with ``ToolNameMap``: the map is built from the IR, so
+        rewriting a child here would leave a replayed history call
+        transliterated to a spelling this function had just discarded.
+        """
+        if not ctx.options.get("tool_groups"):
+            return self._get_cached_ir_tools_to_p(tools)
+
+        rendered: list[Any] = []
+        for entry in group_tools(tools, carries_groups=True):
+            if not isinstance(entry, ToolGroup):
+                rendered.extend(self._get_cached_ir_tools_to_p([entry]))
+                continue
+            children = self._get_cached_ir_tools_to_p(list(entry.tools))
+            # A group whose every member this target declined is not a group: a
+            # childless container is what every upstream that accepts one
+            # rejects.  The list conversion drops each declined entry on its
+            # own, so this covers only a writer that declines all of them.
+            # Nothing the pipeline produces reaches it — a tool the target
+            # cannot express is dropped from the IR and its group never forms —
+            # but the IR is a public TypedDict and the converter is public API,
+            # so a caller can hand one to ``request_to_provider`` directly, and
+            # that is the path the test covers.
+            if not children:
+                continue
+            container: dict[str, Any] = {
+                "type": "namespace",
+                "name": entry.name,
+                "tools": children,
+            }
+            if entry.description:
+                container["description"] = entry.description
+            rendered.append(container)
+        return rendered
 
     def _convert_p_tool_config_to_ir(
         self,
