@@ -162,11 +162,20 @@
 <button class="btn btn-primary btn-sm" onclick="openKeyModal()" data-i18n="btn.generateKey">+ Generate Key</button>
       </div>
       <p style="font-size:13px;color:var(--text-dim);margin-bottom:16px"><span data-i18n="keys.description">Manage gateway API keys used to authenticate requests to /v1/* endpoints.</span> <button onclick="backfillKeysLastUsed()" data-i18n-title="hint.refreshLastUsed" title="Refresh last-used timestamps from request log" style="background:none;border:none;cursor:pointer;color:var(--text-dim);padding:2px;vertical-align:middle;transition:color 0.15s" onmouseenter="this.style.color='var(--accent)'" onmouseleave="this.style.color='var(--text-dim)'"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15"/></svg></button></p>
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+        <span style="font-size:13px;color:var(--text-dim)" data-i18n="keys.usageRange">Token usage</span>
+        <!-- Tiers are rendered from the window list the usage endpoint returns. -->
+        <div class="seg-control" id="keyUsageRange"></div>
+      </div>
       <div class="table-scroll"><table>
         <thead><tr>
-          <th style="width:30%" data-i18n="col.label">Label</th>
-          <th style="width:15%" data-i18n="col.created">Created</th>
-          <th style="width:15%" data-i18n="col.lastUsed">Last Used</th>
+          <th style="width:24%" data-i18n="col.label">Label</th>
+          <th style="width:12%" data-i18n="col.created">Created</th>
+          <th style="width:12%" data-i18n="col.lastUsed">Last Used</th>
+          <th style="width:9%;text-align:right" data-i18n="col.requests">Requests</th>
+          <th style="width:9%;text-align:right" data-i18n="tokenUsage.col.input">Input</th>
+          <th style="width:9%;text-align:right" data-i18n="tokenUsage.col.output">Output</th>
+          <th style="width:9%;text-align:right" data-i18n="tokenUsage.col.total">Total</th>
           <th style="text-align:right"></th>
         </tr></thead>
         <tbody id="keysTable"></tbody>

@@ -32,6 +32,8 @@ class KeyContext:
     label: str
     allowed_shims: frozenset[str]
     key_hash: str = ""
+    # None means "not attributed to a credential" (internal token, anonymous).
+    usage_bucket: str | None = None
 
 
 def _hash_key(raw_key: str) -> str:
@@ -44,6 +46,34 @@ def _generate_key() -> str:
 
 def _generate_id() -> str:
     return uuid.uuid4().hex[:8]
+
+
+# Fixed namespace for the deterministic per-credential usage bucket.  The
+# bucket derives from the key hash, so the same upstream key imported into a
+# fresh database lands in the same bucket.
+_KEY_ID_NAMESPACE = uuid.UUID("8b9c1a2e-5d3f-4a6b-9c0d-1e2f3a4b5c6d")
+
+
+def key_bucket(key_hash: str) -> str:
+    """Derive the stable per-credential usage bucket id from a key hash.
+
+    The bucket identifies the credential (the secret value), not the
+    ``api_keys`` row: rotating a key yields a new secret and therefore a new
+    bucket.  It is computed once at key creation and stored on the row, so
+    the request log can attribute usage without keeping the secret around.
+
+    The full ``uuid5`` hex is used, not a prefix: the bucket is a grouping
+    key for ``request_log``, never a display value, so shortening it would
+    only buy a silent failure mode (two secrets colliding on one bucket and
+    their usage merging).
+
+    Args:
+        key_hash: SHA-256 hex digest of the raw API key.
+
+    Returns:
+        A 32-character hex bucket id.
+    """
+    return uuid.uuid5(_KEY_ID_NAMESPACE, key_hash).hex
 
 
 class KeyStore:
@@ -79,11 +109,13 @@ class KeyStore:
                 label       TEXT NOT NULL DEFAULT '',
                 allowed_shims TEXT NOT NULL DEFAULT '["*"]',
                 created     TEXT NOT NULL,
-                rotated     TEXT
+                rotated     TEXT,
+                usage_bucket TEXT
             )"""
         )
         await instance._conn.commit()
         await instance._migrate_last_used()
+        await instance._migrate_usage_bucket()
         await instance._refresh_cache()
         return instance
 
@@ -94,21 +126,46 @@ class KeyStore:
             await self._conn.execute("ALTER TABLE api_keys ADD COLUMN last_used TEXT")
             await self._conn.commit()
 
+    async def _migrate_usage_bucket(self) -> None:
+        """Add the usage_bucket column and backfill it from existing key hashes."""
+        cursor = await self._conn.execute("PRAGMA table_info(api_keys)")
+        cols = {r[1] for r in await cursor.fetchall()}
+        if "usage_bucket" not in cols:
+            await self._conn.execute(
+                "ALTER TABLE api_keys ADD COLUMN usage_bucket TEXT"
+            )
+            await self._conn.commit()
+        cursor = await self._conn.execute(
+            "SELECT id, key_hash FROM api_keys WHERE usage_bucket IS NULL"
+        )
+        rows = await cursor.fetchall()
+        for row_id, key_hash in rows:
+            await self._conn.execute(
+                "UPDATE api_keys SET usage_bucket = ? WHERE id = ?",
+                (key_bucket(key_hash), row_id),
+            )
+        if rows:
+            await self._conn.commit()
+
     async def _refresh_cache(self) -> None:
         """Rebuild the in-memory hash → (id, KeyContext) lookup."""
         cursor = await self._conn.execute(
-            "SELECT id, key_hash, label, allowed_shims FROM api_keys"
+            "SELECT id, key_hash, label, allowed_shims, usage_bucket FROM api_keys"
         )
         rows = await cursor.fetchall()
         cache: dict[str, tuple[str, KeyContext]] = {}
-        for row_id, key_hash, label, shims_json in rows:
+        for row_id, key_hash, label, shims_json, usage_bucket in rows:
             try:
                 shims = frozenset(json.loads(shims_json))
             except (json.JSONDecodeError, TypeError):
                 shims = frozenset({"*"})
             cache[key_hash] = (
                 row_id,
-                KeyContext(label=label, allowed_shims=shims),
+                KeyContext(
+                    label=label,
+                    allowed_shims=shims,
+                    usage_bucket=usage_bucket or key_bucket(key_hash),
+                ),
             )
         self._cache = cache
 
@@ -202,9 +259,10 @@ class KeyStore:
         shims = json.dumps(allowed_shims or ["*"])
         created = datetime.now(timezone.utc).isoformat()
         await self._conn.execute(
-            "INSERT INTO api_keys (id, key_hash, label, allowed_shims, created) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (key_id, key_hash, label, shims, created),
+            "INSERT INTO api_keys "
+            "(id, key_hash, label, allowed_shims, created, usage_bucket) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (key_id, key_hash, label, shims, created, key_bucket(key_hash)),
         )
         await self._conn.commit()
         await self._refresh_cache()
@@ -234,6 +292,21 @@ class KeyStore:
                 entry["last_used"] = last_used
             result.append(entry)
         return result
+
+    async def usage_keys(self) -> list[dict[str, Any]]:
+        """Return id, label, and usage bucket for every key.
+
+        Server-side only — the bucket is what the request log records, so the
+        admin usage route joins on it instead of exposing key hashes.
+        """
+        cursor = await self._conn.execute(
+            "SELECT id, label, usage_bucket FROM api_keys"
+        )
+        rows = await cursor.fetchall()
+        return [
+            {"id": row_id, "label": label, "usage_bucket": bucket}
+            for row_id, label, bucket in rows
+        ]
 
     async def update(
         self,
@@ -272,7 +345,11 @@ class KeyStore:
         return True
 
     async def rotate(self, key_id: str) -> str | None:
-        """Rotate a key: generate new raw key, update hash.  Returns new raw key."""
+        """Rotate a key: generate new raw key, update hash.  Returns new raw key.
+
+        The credential changes, so the usage bucket is recomputed — a rotated
+        key starts a fresh usage bucket.
+        """
         row = await self._conn.execute_fetchone(
             "SELECT id FROM api_keys WHERE id = ?", (key_id,)
         )
@@ -282,8 +359,9 @@ class KeyStore:
         new_hash = _hash_key(new_key)
         rotated = datetime.now(timezone.utc).isoformat()
         await self._conn.execute(
-            "UPDATE api_keys SET key_hash = ?, rotated = ? WHERE id = ?",
-            (new_hash, rotated, key_id),
+            "UPDATE api_keys SET key_hash = ?, rotated = ?, usage_bucket = ? "
+            "WHERE id = ?",
+            (new_hash, rotated, key_bucket(new_hash), key_id),
         )
         await self._conn.commit()
         await self._refresh_cache()
@@ -299,14 +377,15 @@ class KeyStore:
             key_hash = _hash_key(raw_key)
             await self._conn.execute(
                 "INSERT OR IGNORE INTO api_keys "
-                "(id, key_hash, label, allowed_shims, created) "
-                "VALUES (?, ?, ?, ?, ?)",
+                "(id, key_hash, label, allowed_shims, created, usage_bucket) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
                 (
                     entry.get("id", _generate_id()),
                     key_hash,
                     entry.get("label", ""),
                     '["*"]',
                     entry.get("created", ""),
+                    key_bucket(key_hash),
                 ),
             )
             cursor = await self._conn.execute("SELECT changes()")

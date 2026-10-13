@@ -42,6 +42,7 @@ class RequestLogEntry:
     cache_read_tokens: int | None = None
     cache_creation_tokens: int | None = None
     reasoning_tokens: int | None = None
+    api_key_bucket: str | None = None
 
     @classmethod
     def create(
@@ -64,6 +65,7 @@ class RequestLogEntry:
         cache_read_tokens: int | None = None,
         cache_creation_tokens: int | None = None,
         reasoning_tokens: int | None = None,
+        api_key_bucket: str | None = None,
     ) -> RequestLogEntry:
         """Factory with auto-generated id and timestamp."""
         return cls(
@@ -86,6 +88,7 @@ class RequestLogEntry:
             cache_read_tokens=cache_read_tokens,
             cache_creation_tokens=cache_creation_tokens,
             reasoning_tokens=reasoning_tokens,
+            api_key_bucket=api_key_bucket,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -122,6 +125,8 @@ class RequestLogEntry:
             d["cache_creation_tokens"] = self.cache_creation_tokens
         if self.reasoning_tokens is not None:
             d["reasoning_tokens"] = self.reasoning_tokens
+        if self.api_key_bucket is not None:
+            d["api_key_bucket"] = self.api_key_bucket
         return d
 
 

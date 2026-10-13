@@ -63,6 +63,7 @@ from .keys import (
     delete_api_key,
     get_api_keys,
     get_internal_token,
+    get_key_usage,
     rotate_api_key,
     update_api_key,
 )
@@ -272,6 +273,7 @@ def register_admin_routes(app: Any) -> None:
     # API key management (keys tab)
     app.route("/admin/api/keys", methods=["GET"])(_guard("keys", get_api_keys))
     app.route("/admin/api/keys", methods=["POST"])(_guard("keys", create_api_key))
+    app.route("/admin/api/keys/usage", methods=["GET"])(_guard("keys", get_key_usage))
     app.route("/admin/api/keys/backfill-last-used", methods=["POST"])(
         _guard("keys", backfill_keys_last_used)
     )

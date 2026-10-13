@@ -54,6 +54,28 @@ _BACKUP_MAX_KEEP = 3
 DEFAULT_WAL_MAX_BYTES = 64 * 1024 * 1024  # 64 MB
 _WAL_CHECKPOINT_INTERVAL = 300  # 5 minutes
 
+# Rolling windows for per-key usage reporting, as (label, hours) pairs.
+# Ordered narrowest to widest — the widest sets the SQL range scan.
+_USAGE_WINDOWS: tuple[tuple[str, int], ...] = (
+    ("5h", 5),
+    ("24h", 24),
+    ("7d", 24 * 7),
+    ("30d", 24 * 30),
+)
+
+# Token columns summed per window.
+_USAGE_TOKEN_COLUMNS: tuple[str, ...] = (
+    "input_tokens",
+    "output_tokens",
+    "total_tokens",
+    "cache_read_tokens",
+    "cache_creation_tokens",
+    "reasoning_tokens",
+)
+
+# Window labels for per-key usage reporting, in display order.
+USAGE_WINDOW_LABELS: tuple[str, ...] = tuple(name for name, _h in _USAGE_WINDOWS)
+
 
 class PersistenceManager:
     """SQLite-backed persistence for request logs and metrics.
@@ -321,6 +343,15 @@ class PersistenceManager:
                 "ALTER TABLE error_dumps ADD COLUMN tool_name_collisions TEXT",
             ],
         ),
+        (
+            4,
+            "add request_log.api_key_bucket for per-key usage attribution",
+            [
+                "ALTER TABLE request_log ADD COLUMN api_key_bucket TEXT",
+                "CREATE INDEX IF NOT EXISTS idx_rl_api_key_bucket "
+                "ON request_log(api_key_bucket, timestamp)",
+            ],
+        ),
     ]
 
     async def _run_migrations(self) -> None:
@@ -455,6 +486,7 @@ class PersistenceManager:
         "cache_read_tokens",
         "cache_creation_tokens",
         "reasoning_tokens",
+        "api_key_bucket",
     ]
 
     async def insert_log_entries(self, entries: list[dict[str, Any]]) -> None:
@@ -467,8 +499,9 @@ class PersistenceManager:
             "is_stream, status_code, duration_ms, error_detail, api_key_label, "
             "target_provider_name, client_ip, profile, "
             "input_tokens, output_tokens, total_tokens, "
-            "cache_read_tokens, cache_creation_tokens, reasoning_tokens) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "cache_read_tokens, cache_creation_tokens, reasoning_tokens, "
+            "api_key_bucket) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 (
                     e["id"],
@@ -490,6 +523,7 @@ class PersistenceManager:
                     e.get("cache_read_tokens"),
                     e.get("cache_creation_tokens"),
                     e.get("reasoning_tokens"),
+                    e.get("api_key_bucket"),
                 )
                 for e in entries
             ],
@@ -569,7 +603,7 @@ class PersistenceManager:
         total = count_row[0] if count_row else 0
 
         rows = await self._conn.execute_fetchall(
-            f"SELECT * FROM request_log {where_sql} "
+            f"SELECT {', '.join(self._LOG_COLUMNS)} FROM request_log {where_sql} "
             f"ORDER BY timestamp DESC LIMIT ? OFFSET ?",
             [*params, limit, offset],
         )
@@ -586,7 +620,8 @@ class PersistenceManager:
         lookups (not called in hot paths).
         """
         row = await self._conn.execute_fetchone(
-            "SELECT * FROM request_log WHERE id = ?", (entry_id,)
+            f"SELECT {', '.join(self._LOG_COLUMNS)} FROM request_log WHERE id = ?",
+            (entry_id,),
         )
         if row is None:
             return None
@@ -1899,6 +1934,60 @@ class PersistenceManager:
             "reasoning_tokens_24h": row[4],
         }
 
+    async def query_token_usage_by_key(self) -> dict[str, Any]:
+        """Aggregate token usage per API key bucket over rolling windows.
+
+        Every window is relative to now (``now - hours``).  A single indexed
+        range scan over the widest window feeds one ``GROUP BY api_key_bucket``;
+        the per-window totals come from conditional aggregation, so the whole
+        report costs one pass over the log.
+
+        Returns:
+            ``{"windows": [label, ...], "keys": {bucket: {window: {...}}}}``.
+            Each per-window dict holds ``request_count`` plus the token
+            totals.  Buckets absent from the log are not present.
+        """
+        from datetime import datetime, timedelta, timezone
+
+        now = datetime.now(timezone.utc)
+        cutoffs = {
+            name: (now - timedelta(hours=hours)).isoformat()
+            for name, hours in _USAGE_WINDOWS
+        }
+
+        select_parts = ["api_key_bucket"]
+        params: list[Any] = []
+        for name, _hours in _USAGE_WINDOWS:
+            select_parts.append("COUNT(CASE WHEN timestamp >= ? THEN 1 END)")
+            params.append(cutoffs[name])
+            for col in _USAGE_TOKEN_COLUMNS:
+                select_parts.append(
+                    f"COALESCE(SUM(CASE WHEN timestamp >= ? THEN {col} ELSE 0 END), 0)"
+                )
+                params.append(cutoffs[name])
+        params.append(cutoffs[_USAGE_WINDOWS[-1][0]])
+
+        rows = await self._conn.execute_fetchall(
+            f"SELECT {', '.join(select_parts)} FROM request_log "
+            "WHERE timestamp >= ? AND api_key_bucket IS NOT NULL "
+            "GROUP BY api_key_bucket",
+            params,
+        )
+
+        keys: dict[str, dict[str, dict[str, int]]] = {}
+        stride = 1 + len(_USAGE_TOKEN_COLUMNS)
+        for row in rows:
+            windows: dict[str, dict[str, int]] = {}
+            idx = 1
+            for name, _hours in _USAGE_WINDOWS:
+                window: dict[str, int] = {"request_count": row[idx]}
+                for offset, col in enumerate(_USAGE_TOKEN_COLUMNS, start=1):
+                    window[col] = row[idx + offset]
+                windows[name] = window
+                idx += stride
+            keys[row[0]] = windows
+        return {"windows": [name for name, _hours in _USAGE_WINDOWS], "keys": keys}
+
     async def update_entry_usage(
         self,
         entry_id: str,
@@ -1956,6 +2045,7 @@ class PersistenceManager:
                     "cache_read_tokens",
                     "cache_creation_tokens",
                     "reasoning_tokens",
+                    "api_key_bucket",
                 )
                 and val is None
             ):

@@ -1,12 +1,24 @@
 import { S } from '../core/state.js';
 import { t } from '../core/i18n.js';
-import { api, showToast, closeModal, esc, inlineConfirm } from '../core/utils.js';
+import { api, showToast, closeModal, esc, fmtTokens, inlineConfirm } from '../core/utils.js';
 
 // ===================== API Keys Tab =====================
 
 async function loadKeys() {
   try {
-    S.keysData = await api.get('/admin/api/keys');
+    // Usage is auxiliary — a failure there must not blank the key list.
+    const [keysData, usageData] = await Promise.all([
+      api.get('/admin/api/keys'),
+      api.get('/admin/api/keys/usage').catch(e => {
+        console.error('Failed to load key usage:', e);
+        return null;
+      }),
+    ]);
+    S.keysData = keysData;
+    S.keyUsage = usageData;
+    // Keep the selected tier valid if the server's window list changed.
+    const windows = usageWindows();
+    if (!windows.includes(S.keyUsageWindow)) S.keyUsageWindow = windows[0];
     renderKeys();
     window.updateKeyFilterOptions();
   } catch(e) {
@@ -24,23 +36,68 @@ async function loadLogKeyLabels() {
   }
 }
 
+// Tiers come from the endpoint's window list, so adding a window server-side
+// needs no edit here.
+function usageWindows() {
+  const w = S.keyUsage && S.keyUsage.windows;
+  return (w && w.length) ? w : ['5h', '24h', '7d', '30d'];
+}
+
+function windowLabel(w) {
+  const key = 'keys.range' + w;
+  const label = t(key);
+  return label === key ? w : label;  // unknown window → show the raw name
+}
+
+function renderKeyUsageControl() {
+  const ctrl = document.getElementById('keyUsageRange');
+  if (!ctrl) return;
+  const win = S.keyUsageWindow || usageWindows()[0];
+  ctrl.innerHTML = usageWindows().map(w =>
+    `<label class="${w === win ? 'active' : ''}" onclick="setKeyUsageWindow('${esc(w)}')">` +
+    `<input type="radio" name="kuRange"${w === win ? ' checked' : ''}>` +
+    `<span>${esc(windowLabel(w))}</span></label>`
+  ).join('');
+}
+
+// Switch the usage tier without a refetch — the endpoint returns every
+// window, so this is a pure client-side re-render.
+function setKeyUsageWindow(win) {
+  if (!usageWindows().includes(win)) return;
+  S.keyUsageWindow = win;
+  renderKeyUsageControl();
+  renderKeys();
+}
+
 function renderKeys() {
+  // Re-rendered here too so a language switch relabels the tier control.
+  renderKeyUsageControl();
   const tbody = document.getElementById('keysTable');
   const keys = (S.keysData && S.keysData.keys) || [];
   if (keys.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="4" style="color:var(--text-dim)">${t('keys.noKeys')}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" style="color:var(--text-dim)">${t('keys.noKeys')}</td></tr>`;
     return;
   }
+  const win = S.keyUsageWindow || usageWindows()[0];
+  const usageKeys = (S.keyUsage && S.keyUsage.keys) || {};
+  const usageTip = esc(t('keys.rotateBucketHint'));
   tbody.innerHTML = keys.map(k => {
     const created = k.created ? new Date(k.created).toLocaleDateString() : '—';
     const createdFull = k.created ? new Date(k.created).toLocaleString(undefined, {year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',timeZoneName:'shortOffset'}) : '';
     const lastUsed = k.last_used ? new Date(k.last_used).toLocaleDateString() : '—';
     const lastUsedFull = k.last_used ? new Date(k.last_used).toLocaleString(undefined, {year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',timeZoneName:'shortOffset'}) : '';
+    const entry = usageKeys[k.id];
+    const w = (entry && entry.windows && entry.windows[win]) || {};
+    const reqs = (w.request_count || 0).toLocaleString();
     return `<tr>
       <td><span class="key-label-text" id="label-${k.id}">${esc(k.label || '—')}</span>
         <button class="key-btn" style="margin-left:4px" onclick="editKeyLabel('${k.id}','${esc(k.label || '')}')" title="Edit"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button></td>
       <td title="${createdFull}">${created}</td>
       <td title="${lastUsedFull}">${lastUsed}</td>
+      <td style="text-align:right" title="${usageTip}">${reqs}</td>
+      <td style="text-align:right" title="${usageTip}">${fmtTokens(w.input_tokens || 0)}</td>
+      <td style="text-align:right" title="${usageTip}">${fmtTokens(w.output_tokens || 0)}</td>
+      <td style="text-align:right" title="${usageTip}"><strong>${fmtTokens(w.total_tokens || 0)}</strong></td>
       <td style="white-space:nowrap;text-align:right"><button class="btn btn-sm" onclick="rotateKey('${k.id}','${esc(k.label || k.id)}', this)">${t('btn.rotate')}</button> <button class="btn btn-sm btn-danger" onclick="deleteKey('${k.id}','${esc(k.label || k.id)}', this)">${t('btn.delete')}</button></td>
     </tr>`;
   }).join('');
@@ -126,7 +183,7 @@ async function backfillKeysLastUsed() {
 Object.assign(window, {
   loadKeys, loadLogKeyLabels, renderKeys, openKeyModal,
   generateKey, copyCreatedKey, deleteKey, rotateKey, editKeyLabel,
-  backfillKeysLastUsed,
+  backfillKeysLastUsed, setKeyUsageWindow,
 });
 
-export { loadKeys, loadLogKeyLabels, renderKeys };
+export { loadKeys, loadLogKeyLabels, renderKeys, setKeyUsageWindow };

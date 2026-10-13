@@ -112,6 +112,7 @@ class OpsProxyRequest(OpsBase):
 
         request_log = self._ctx.request_log
         if request_log is not None:
+            _kctx = api_key_context_var.get()
             entry = RequestLogEntry.create(
                 model=self.model,
                 source_provider=self.source_provider,
@@ -121,9 +122,8 @@ class OpsProxyRequest(OpsBase):
                 status_code=self.status_code,
                 duration_ms=self.duration_ms,
                 error_detail=self.error_detail,
-                api_key_label=(
-                    _kctx.label if (_kctx := api_key_context_var.get()) else None
-                ),
+                api_key_label=_kctx.label if _kctx else None,
+                api_key_bucket=_kctx.usage_bucket if _kctx else None,
                 client_ip=(
                     _rctx.client_ip if (_rctx := request_context_var.get()) else None
                 ),

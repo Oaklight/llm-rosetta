@@ -37,6 +37,8 @@ export const S = {
   _providerFilter: 'all',
   _modelDomain: 'all',
   keysData: null,
+  keyUsage: null,
+  keyUsageWindow: '5h',
   logKeyLabels: [],
   internalToken: null,
   logOffset: 0,

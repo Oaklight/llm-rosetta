@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from llm_rosetta._vendor.httpserver import JSONResponse, Response
+from llm_rosetta.observability.persistence import USAGE_WINDOW_LABELS
 
 from ...keystore import KeyStore
 from ._shared import parse_json_body
@@ -24,6 +25,45 @@ async def get_api_keys(request: Any) -> Response:
     """List all gateway API keys (no secrets returned)."""
     keystore = _get_keystore(request)
     return JSONResponse({"keys": await keystore.list_keys()})
+
+
+async def get_key_usage(request: Any) -> Response:
+    """Return per-key token usage over the rolling usage windows.
+
+    Keys are attributed by credential bucket, so a renamed key keeps its
+    usage and a rotated key starts fresh.  Every live key is present,
+    zero-filled when it has no traffic; buckets with no live key (deleted or
+    rotated-away secrets) are dropped.
+    """
+    keystore = _get_keystore(request)
+    persistence = getattr(request.app, "persistence", None)
+
+    usage_by_bucket: dict[str, Any] = {}
+    if persistence is not None:
+        report = await persistence.query_token_usage_by_key()
+        usage_by_bucket = report["keys"]
+
+    empty_window = {
+        "request_count": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+        "cache_read_tokens": 0,
+        "cache_creation_tokens": 0,
+        "reasoning_tokens": 0,
+    }
+    result: dict[str, Any] = {}
+    for key in await keystore.usage_keys():
+        bucket = key["usage_bucket"]
+        usage = usage_by_bucket.get(bucket) if bucket else None
+        result[key["id"]] = {
+            "label": key["label"],
+            "windows": {
+                name: (usage or {}).get(name, empty_window)
+                for name in USAGE_WINDOW_LABELS
+            },
+        }
+    return JSONResponse({"windows": list(USAGE_WINDOW_LABELS), "keys": result})
 
 
 async def create_api_key(request: Any) -> Response:

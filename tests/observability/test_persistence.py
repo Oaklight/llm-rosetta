@@ -116,7 +116,7 @@ class TestSchemaVersioning:
     async def test_new_db_has_latest_version(self, tmp_path):
         pm = await PersistenceManager.create(str(tmp_path))
         version = await pm.schema_version()
-        assert version == 3  # latest migration version
+        assert version == 4  # latest migration version
 
     async def test_schema_version_table_exists(self, pm):
         row = await pm._conn.execute_fetchone(
@@ -129,10 +129,11 @@ class TestSchemaVersioning:
             "SELECT version, applied_at FROM schema_version ORDER BY version"
         )
         rows = await cursor.fetchall()
-        assert len(rows) == 3
+        assert len(rows) == 4
         assert rows[0][0] == 1
         assert rows[1][0] == 2
         assert rows[2][0] == 3
+        assert rows[3][0] == 4
         # applied_at should be ISO timestamps
         assert "T" in rows[0][1]
 
@@ -150,6 +151,12 @@ class TestSchemaVersioning:
         cursor = await pm._conn.execute("PRAGMA table_info(error_dumps)")
         columns = {r[1] for r in await cursor.fetchall()}
         assert "tool_name_collisions" in columns
+
+    async def test_request_log_has_api_key_bucket_column(self, pm):
+        """Migration v4 adds the per-key usage attribution column."""
+        cursor = await pm._conn.execute("PRAGMA table_info(request_log)")
+        columns = {r[1] for r in await cursor.fetchall()}
+        assert "api_key_bucket" in columns
 
     async def test_foreign_keys_enabled(self, pm):
         row = await pm._conn.execute_fetchone("PRAGMA foreign_keys")
@@ -219,9 +226,9 @@ class TestSchemaVersioning:
         """)
         await conn.close()
 
-        # Now open with PersistenceManager — should bootstrap v1 and apply v2, v3
+        # Now open with PersistenceManager — should bootstrap v1, apply v2-v4
         pm = await PersistenceManager.create(str(tmp_path))
-        assert await pm.schema_version() == 3
+        assert await pm.schema_version() == 4
 
 
 class TestWALCheckpoint:
