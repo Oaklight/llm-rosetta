@@ -188,7 +188,9 @@ async def dump_error(
             tool_name_collisions=tool_name_collisions,
         )
     except Exception:
-        logger.info("Failed to dump error", exc_info=True)
+        # WARNING, not INFO: a swallowed dump failure is what kept #964
+        # invisible until three reviewers hit it on a live gateway.
+        logger.warning("Failed to dump error", exc_info=True)
         return None
 
 

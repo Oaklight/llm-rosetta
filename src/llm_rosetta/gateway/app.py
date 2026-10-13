@@ -36,6 +36,7 @@ from .middleware.error_format import (
     is_admin_path as _is_admin_path,
 )
 from .keystore import KeyStore
+from .deferred_dumps import DeferredDumpStore
 from .middleware.circuit_breaker import CircuitBreaker
 from .middleware.request_context import request_context_var, setup_request_context
 from .transport import ProviderInfo
@@ -240,6 +241,23 @@ def _check_circuit_breaker(
     return resp
 
 
+def _deferred_dumps_for(persistence: Any | None) -> DeferredDumpStore | None:
+    """Wrap *persistence* so dump writes wait for the request-log row (#964).
+
+    Returns ``None`` when dumps are disabled, matching the ``persistence=None``
+    convention that turns ``dump_error`` into a no-op.
+    """
+    if persistence is None:
+        return None
+    return DeferredDumpStore(persistence)
+
+
+async def _flush_deferred_dumps(deferred: DeferredDumpStore | None) -> None:
+    """Replay queued dumps once the request-log row exists; no-op if unused."""
+    if deferred is not None:
+        await deferred.flush()
+
+
 async def _proxy_handler(
     request: Any,
     source_provider: ProviderType,
@@ -339,9 +357,16 @@ async def _proxy_handler(
     profile: dict[str, Any] | None = None
     request_log = getattr(request.app, "request_log", None)
 
-    # Error dump persistence — pass None to disable dump_error in handlers
+    # Error dump persistence — pass None to disable dump_error in handlers.
+    # Dumps name this request's log entry, but that row is written in the
+    # finally below, after the error paths have run, so the FK on
+    # error_dumps.request_log_id would reject them.  Hand the handlers a store
+    # that queues the writes until the row exists (#964).
     _raw_persistence = getattr(request.app, "persistence", None)
-    persistence = _raw_persistence if _config.error_dumps_enabled else None
+    deferred_dumps = _deferred_dumps_for(
+        _raw_persistence if _config.error_dumps_enabled else None
+    )
+    persistence = deferred_dumps
     capture_state = getattr(request.app, "capture_state", None)
     deep_profiler = _try_start_profiler(request.app)
 
@@ -478,6 +503,12 @@ async def _proxy_handler(
             profile=profile,
             entry_id_override=pre_entry_id,
         )
+
+        # The request-log row exists now, so the dumps queued during handling
+        # can be written with their request_log_id intact (#964).  Anything
+        # still to come — mid-stream dumps — goes straight through, since
+        # flush() stops deferring.
+        await _flush_deferred_dumps(deferred_dumps)
 
 
 # --- Endpoint handlers ---
