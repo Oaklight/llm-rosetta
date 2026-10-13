@@ -9,6 +9,7 @@ Note: Responses API uses a flat list of items (input/output) instead of
 nested messages. The converter handles this structural difference.
 """
 
+import json
 import time
 from collections.abc import Mapping
 from typing import Any, ClassVar, cast
@@ -35,6 +36,7 @@ from ...types.ir.stream import (
     TextDeltaEvent,
     ToolCallDeltaEvent,
     ToolCallStartEvent,
+    ToolResultEvent,
     UsageEvent,
 )
 from ..base import BaseConverter
@@ -49,7 +51,9 @@ from ..base.helpers.tool_group import GENERATED_GROUP_MARKER
 from ..base.tools import (
     assign_tool_batch_ids,
     fix_orphaned_tool_calls_ir,
+    get_intrinsic_kind,
     sanitize_tool_call_id,
+    set_intrinsic_kind,
     strip_orphaned_tool_config,
 )
 from .stream_context import OpenResponsesStreamContext
@@ -69,8 +73,25 @@ from ._constants import (
 from .config_ops import OpenResponsesConfigOps
 from .content_ops import OpenResponsesContentOps
 from .message_ops import OpenResponsesMessageOps
-from .tool_ops import OpenResponsesToolOps, harvest_additional_tools
+from .tool_ops import (
+    _INTRINSIC_RESULT_TYPES,
+    _ITEM_TO_INTRINSIC_KIND,
+    _server_item_tool_input,
+    OpenResponsesToolOps,
+    harvest_additional_tools,
+)
 from .utils import build_message_preamble_events, resolve_call_id
+
+
+#: Server-tool output item types this format reads (``web_search_call``,
+#: ``code_interpreter_call``, …).  A streamed item of one of these types is a
+#: provider-executed call; the value is its canonical intrinsic kind.
+_SERVER_ITEM_INTRINSIC_KINDS: frozenset[str] = frozenset(_ITEM_TO_INTRINSIC_KIND)
+
+#: Server *result* item types (``code_interpreter_call_output``, …).  A
+#: streamed item of one of these types is a provider-executed result, carried
+#: as a one-shot ``ToolResultEvent``.
+_SERVER_RESULT_ITEM_TYPES: frozenset[str] = frozenset(_INTRINSIC_RESULT_TYPES)
 
 
 def _capture_item_metadata(item: dict[str, Any]) -> dict[str, Any]:
@@ -996,6 +1017,12 @@ class OpenResponsesConverter(BaseConverter):
                     start_event_tc["tool_call_index"] = output_index
                 events.append(start_event_tc)
 
+            elif item_type in _SERVER_ITEM_INTRINSIC_KINDS:
+                self._emit_server_call_start_ir(item, chunk, context, events)
+
+            elif item_type in _SERVER_RESULT_ITEM_TYPES:
+                self._emit_server_result_ir(item, chunk, events)
+
             elif item_type == "reasoning" and isinstance(
                 context, OpenResponsesStreamContext
             ):
@@ -1026,6 +1053,70 @@ class OpenResponsesConverter(BaseConverter):
                         payload=dict(chunk),
                     )
                 )
+
+    @staticmethod
+    def _emit_server_call_start_ir(
+        item: dict[str, Any],
+        chunk: dict[str, Any],
+        context: StreamContext | None,
+        events: list[IRStreamEvent],
+    ) -> None:
+        """Emit an intrinsic ToolCallStartEvent for a provider-executed call.
+
+        The kind comes from the item's own type, never the name, so a server
+        call never reads as a client ``function_call``.
+        """
+        intrinsic_kind = _ITEM_TO_INTRINSIC_KIND[item["type"]]
+        call_id = item.get("call_id") or item.get("id", "")
+        item_id = item.get("id", "")
+        if context is not None:
+            context.register_tool_call(call_id, intrinsic_kind, "intrinsic")
+            context.register_tool_call_item(call_id, item_id)
+        start_event = ToolCallStartEvent(
+            type="tool_call_start",
+            tool_call_id=call_id,
+            tool_name=intrinsic_kind,
+            tool_type="intrinsic",
+        )
+        set_intrinsic_kind(start_event, intrinsic_kind)
+        if item_id and item_id != call_id:
+            start_event.setdefault("provider_metadata", {})["responses_item_id"] = (
+                item_id
+            )
+        output_index = chunk.get("output_index")
+        if output_index is not None:
+            start_event["tool_call_index"] = output_index
+        events.append(start_event)
+
+    def _emit_server_result_ir(
+        self,
+        item: dict[str, Any],
+        chunk: dict[str, Any],
+        events: list[IRStreamEvent],
+    ) -> None:
+        """Emit a one-shot ToolResultEvent for a provider-executed result.
+
+        The item is built with the same reader the non-streaming path uses, so
+        the payload shape matches; the provider's whole item is kept on the
+        event so a same-dialect writer can replay it verbatim.
+        """
+        part = OpenResponsesToolOps.p_tool_result_to_ir(item)
+        result_event = ToolResultEvent(
+            type="tool_result",
+            tool_call_id=part["tool_call_id"],
+            result=part["result"],
+        )
+        if part.get("tool_type") is not None:
+            result_event["tool_type"] = part["tool_type"]
+        if "is_error" in part:
+            result_event["is_error"] = part["is_error"]
+        pm = dict(part.get("provider_metadata") or {})
+        pm["_native"] = {"base": self._CONVERTER_TAG, "item": dict(item)}
+        result_event["provider_metadata"] = pm
+        output_index = chunk.get("output_index")
+        if output_index is not None:
+            result_event["block_index"] = output_index
+        events.append(result_event)
 
     def _handle_p_content_part_added_to_ir(
         self,
@@ -1089,6 +1180,19 @@ class OpenResponsesConverter(BaseConverter):
                 call_id = item.get("call_id", "")
                 if call_id:
                     context.set_tool_call_args(call_id, item.get("input", ""))
+        elif item_type in _SERVER_ITEM_INTRINSIC_KINDS:
+            # The full server item only arrives on `done` (its `action` / `code`
+            # is absent at `added` time).  Move the payload into the IR as a
+            # single residual delta so the write leg rebuilds the same item.
+            call_id = item.get("call_id") or item.get("id", "")
+            if context is not None and call_id and not context.get_tool_name(call_id):
+                context.register_tool_call(
+                    call_id, _ITEM_TO_INTRINSIC_KIND[item_type], "intrinsic"
+                )
+            tool_input = _server_item_tool_input(item, item_type)
+            self._emit_residual_tool_call_delta(
+                json.dumps(tool_input), call_id, chunk, context, events
+            )
         elif item_type == "reasoning" and isinstance(
             context, OpenResponsesStreamContext
         ):
@@ -1322,6 +1426,7 @@ class OpenResponsesConverter(BaseConverter):
     _IR_TO_P_DISPATCH: dict[str, str] = {
         **BaseConverter._IR_TO_P_DISPATCH,
         "refusal_delta": "_handle_ir_refusal_delta_to_p",
+        "tool_result": "_handle_ir_tool_result_to_p",
     }
 
     def stream_response_to_provider(
@@ -1689,9 +1794,25 @@ class OpenResponsesConverter(BaseConverter):
         pm = event.get("provider_metadata") or {}
         item_id = pm.get("responses_item_id") or call_id
 
-        # Register in context for later done events
+        # A provider-executed call re-emits the provider's own server item
+        # type, never a client ``function_call``.  The kind comes from the
+        # event's ``intrinsic_kind`` carrier, never from the tool name; a kind
+        # this dialect cannot render is dropped rather than downgraded.
+        intrinsic_item: dict[str, Any] | None = None
+        if tool_type == "intrinsic":
+            intrinsic_item = self.tool_ops.stream_intrinsic_item(
+                get_intrinsic_kind(event, tool_name), item_id, status="in_progress"
+            )
+            if intrinsic_item is None:
+                return {}
+
+        # Register in context for later done events, carrying the intrinsic
+        # kind through so the done/completed items restore it without
+        # re-deriving it from the name.
         if context is not None and call_id:
-            context.register_tool_call(call_id, tool_name, tool_type)
+            context.register_tool_call(
+                call_id, tool_name, tool_type, provider_metadata=pm or None
+            )
             context.register_tool_call_item(call_id, item_id)
 
         stream_ctx = (
@@ -1710,8 +1831,12 @@ class OpenResponsesConverter(BaseConverter):
             tc_index = event.get("tool_call_index")
             output_index = tc_index if tc_index is not None else 0
 
-        if tool_type == "custom":
-            item: dict[str, Any] = self._build_stream_custom_tool_call_item(
+        item: dict[str, Any]
+        if tool_type == "intrinsic":
+            assert intrinsic_item is not None
+            item = intrinsic_item
+        elif tool_type == "custom":
+            item = self._build_stream_custom_tool_call_item(
                 stream_ctx,
                 item_id=item_id,
                 call_id=call_id,
@@ -1774,6 +1899,12 @@ class OpenResponsesConverter(BaseConverter):
             if context is not None and call_id
             else "function"
         )
+        if tool_type == "intrinsic":
+            # A server item carries its payload whole (``action`` / ``code``),
+            # not as an arguments delta the way a ``function_call`` does, so
+            # the accumulated bytes are kept for the done/completed item and
+            # no provider delta event is emitted.
+            return {}
         event_type = (
             ResponsesEventType.CUSTOM_TOOL_CALL_INPUT_DELTA
             if tool_type == "custom"
@@ -1786,6 +1917,57 @@ class OpenResponsesConverter(BaseConverter):
             "output_index": output_index,
             "delta": delta,
         }
+        return result
+
+    def _handle_ir_tool_result_to_p(
+        self,
+        event: ToolResultEvent,
+        context: StreamContext | None,
+    ) -> dict[str, Any]:
+        """Handle ToolResultEvent → a provider server result item.
+
+        A result read from this same dialect is replayed verbatim from the
+        ``_native`` item the reader stored.  Otherwise the item is rebuilt from
+        the IR fields for a kind that has its own ``*_call_output`` item; a
+        ``web_search`` result (which rides on the call item) and any kind this
+        dialect cannot render are dropped silently, matching the non-streaming
+        writer.  A server result is never re-encoded as a client
+        ``function_call_output``.
+        """
+        pm = event.get("provider_metadata") or {}
+        native = pm.get("_native")
+        if isinstance(native, dict) and native.get("base") == self._CONVERTER_TAG:
+            native_item = native.get("item")
+            if isinstance(native_item, dict):
+                return self._stream_result_chunk(dict(native_item), event, context)
+
+        item = self.tool_ops.stream_result_item(
+            get_intrinsic_kind(event, ""),
+            sanitize_tool_call_id(event["tool_call_id"]),
+            event.get("result", ""),
+        )
+        if item is None:
+            return {}
+        return self._stream_result_chunk(item, event, context)
+
+    @staticmethod
+    def _stream_result_chunk(
+        item: dict[str, Any],
+        event: ToolResultEvent,
+        context: StreamContext | None,
+    ) -> dict[str, Any]:
+        """Wrap a server result item in an ``output_item.added`` chunk."""
+        result: dict[str, Any] = {
+            "type": ResponsesEventType.OUTPUT_ITEM_ADDED,
+            "item": item,
+        }
+        output_index = event.get("block_index")
+        if isinstance(context, OpenResponsesStreamContext):
+            if output_index is None:
+                output_index = context.next_output_index()
+            result["output_index"] = output_index
+        elif output_index is not None:
+            result["output_index"] = output_index
         return result
 
     def _handle_ir_finish_to_p(
@@ -1921,7 +2103,18 @@ class OpenResponsesConverter(BaseConverter):
             tool_type = context.get_tool_type(call_id)
             tc_index = context._tool_call_output_indices.get(call_id, -1)
 
-            if tool_type == "custom":
+            if tool_type == "intrinsic":
+                intrinsic_item = self._build_stream_intrinsic_item(
+                    context,
+                    call_id=call_id,
+                    item_id=tc_item_id,
+                    kind=self._stream_intrinsic_kind(context, call_id, tool_name),
+                    arguments=arguments,
+                    status="completed",
+                )
+                if intrinsic_item is not None:
+                    entries.append((tc_index, intrinsic_item))
+            elif tool_type == "custom":
                 entries.append(
                     (
                         tc_index,
@@ -2018,6 +2211,50 @@ class OpenResponsesConverter(BaseConverter):
             if namespace:
                 item["namespace"] = namespace
         return item
+
+    def _build_stream_intrinsic_item(
+        self,
+        context: OpenResponsesStreamContext | None,
+        *,
+        call_id: str,
+        item_id: str,
+        kind: str,
+        arguments: str,
+        status: str,
+    ) -> dict[str, Any] | None:
+        """Rebuild a streamed server item from the accumulated payload.
+
+        The counterpart of :meth:`_build_stream_function_call_item` for a
+        provider-executed call: it restores the provider's own item type
+        (``web_search_call`` / ``code_interpreter_call``, …) with the payload
+        the reader moved through a ``ToolCallDeltaEvent``.  ``None`` when the
+        kind cannot be rendered as a server item.
+        """
+        fields: dict[str, Any] = {}
+        if arguments:
+            try:
+                parsed = json.loads(arguments)
+            except json.JSONDecodeError:
+                parsed = None
+            if isinstance(parsed, dict):
+                fields = parsed
+        return self.tool_ops.stream_intrinsic_item(kind, item_id, fields, status=status)
+
+    @staticmethod
+    def _stream_intrinsic_kind(
+        context: StreamContext | None, call_id: str, tool_name: str
+    ) -> str:
+        """Read the intrinsic kind the start event registered, if any.
+
+        The kind is carried in the call's ``provider_metadata`` so the done
+        and completed items restore it without re-deriving it from the name;
+        the registered name (already the canonical kind for a server call) is
+        only a last-resort fallback when no metadata was carried.
+        """
+        if context is None:
+            return tool_name
+        pm = context.get_tool_call_provider_metadata(call_id) or {}
+        return pm.get("intrinsic_kind") or tool_name
 
     @staticmethod
     def _build_finish_usage(pending_usage: dict[str, Any]) -> dict[str, Any]:
@@ -2174,7 +2411,28 @@ class OpenResponsesConverter(BaseConverter):
             output_index = context._tool_call_output_indices.get(call_id, tc_idx)
             tool_type = context.get_tool_type(call_id)
 
-            if tool_type == "custom":
+            if tool_type == "intrinsic":
+                # A server item has no ``*_arguments.done`` event; the item
+                # itself carries the payload, so only the output_item.done is
+                # emitted.
+                intrinsic_item = self._build_stream_intrinsic_item(
+                    context,
+                    call_id=call_id,
+                    item_id=item_id,
+                    kind=self._stream_intrinsic_kind(context, call_id, tool_name),
+                    arguments=arguments,
+                    status="completed",
+                )
+                if intrinsic_item is None:
+                    continue
+                results.append(
+                    {
+                        "type": ResponsesEventType.OUTPUT_ITEM_DONE,
+                        "output_index": output_index,
+                        "item": intrinsic_item,
+                    }
+                )
+            elif tool_type == "custom":
                 # response.custom_tool_call_input.done
                 results.append(
                     {
