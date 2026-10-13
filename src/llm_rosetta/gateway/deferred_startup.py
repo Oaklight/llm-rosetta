@@ -70,6 +70,14 @@ class DeferredStartup:
         self._app = app
         self._tasks: list[asyncio.Task] = []
 
+        # The seeding pass, held in its own slot so the reload path can
+        # supersede it without touching the other deferred tasks.  The
+        # generation lets a pass that is already running notice it has been
+        # replaced and stop before it registers refresh loops or clears the
+        # readiness flag its replacement owns.
+        self._seed_task: asyncio.Task[None] | None = None
+        self._seed_generation = 0
+
         # Provider readiness: only providers with token_command need tracking
         self._provider_states: dict[str, ProviderInitState] = {}
         for name, pinfo in config.providers.items():
@@ -111,9 +119,10 @@ class DeferredStartup:
         # Token seeding
         if self._provider_states:
             self._pending_tasks.add("token_seed")
-            self._tasks.append(
-                asyncio.create_task(self._seed_tokens(), name="deferred-token-seed")
+            self._seed_task = asyncio.create_task(
+                self._seed_tokens(), name="deferred-token-seed"
             )
+            self._tasks.append(self._seed_task)
 
         # Counter rebuild
         if getattr(self._app, "_counter_rebuild_needed", False):
@@ -142,6 +151,76 @@ class DeferredStartup:
             except asyncio.CancelledError:
                 pass
         self._tasks.clear()
+
+    # -- Config reload ------------------------------------------------------
+
+    async def apply_config_reload(self, new_config: Any) -> None:
+        """Re-attach to a reloaded config and re-seed ``token_command`` providers.
+
+        A hot config reload rebuilds :class:`GatewayConfig` and every
+        :class:`ProviderInfo`, so each ``token_command`` provider comes back
+        holding the pending sentinel with no refresh loop.  Seeding otherwise
+        runs once, at process start, so without this the provider never
+        obtains a token and every request to it is rejected until the process
+        restarts.
+
+        Refresh tasks bound to the superseded ``ProviderInfo`` objects are
+        cancelled first: they would otherwise keep refreshing objects that the
+        new config no longer references.
+        """
+        old_tasks = list(getattr(self._app, "_token_refresh_tasks", []))
+        for task in old_tasks:
+            task.cancel()
+        for task in old_tasks:
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            except Exception as exc:  # noqa: BLE001 - refreshers must not break reload
+                logger.warning("Token refresh task failed during reload: %s", exc)
+        setattr(self._app, "_token_refresh_tasks", [])
+
+        # A seeding pass started before this reload would otherwise finish
+        # against the config it is about to be replaced by: it reads
+        # ``self._config`` and ``self._provider_states`` after the swap and
+        # would register a second set of refresh loops over the same
+        # providers.  Supersede it — the bump makes a pass that is already
+        # running bail out at its next checkpoint — and wait for the old one
+        # to stop before scheduling its replacement.
+        self._seed_generation += 1
+        stale_seed = self._seed_task
+        self._seed_task = None
+        if stale_seed is not None and not stale_seed.done():
+            stale_seed.cancel()
+            try:
+                await stale_seed
+            except asyncio.CancelledError:
+                pass
+            except Exception as exc:  # noqa: BLE001 - must not break the reload
+                logger.warning("Token seeding failed during reload: %s", exc)
+
+        self._config = new_config
+        # ``resolve()`` reads provider states off the config it routes through,
+        # so the replacement config needs the same back-reference.
+        setattr(new_config, "_deferred_startup", self)
+
+        self._provider_states = {
+            name: ProviderInitState.PENDING
+            for name, pinfo in new_config.providers.items()
+            if pinfo.token_command is not None
+        }
+        self._pending_tasks.discard("token_seed")
+        if not self._provider_states:
+            return
+
+        # Deliberately not awaited: ``_seed_tokens`` sleeps up to
+        # ``_RETRY_DELAY`` when a provider fails, and the reload handler must
+        # not block on that.
+        self._pending_tasks.add("token_seed")
+        self._seed_task = asyncio.create_task(
+            self._seed_tokens(), name="deferred-token-seed"
+        )
+        self._tasks.append(self._seed_task)
 
     # -- Token seeding (parallel async) -------------------------------------
 
@@ -179,9 +258,15 @@ class DeferredStartup:
         Failed providers get a single delayed retry before being marked
         permanently FAILED — this handles transient failures (network
         blips, slow auth services) without blocking startup.
+
+        The generation captured here is re-checked at each checkpoint: a
+        reload that supersedes this pass bumps it, and the stale pass then
+        returns without registering refresh loops or clearing the readiness
+        flag that now belongs to its replacement.
         """
         from .transport.token_refresh import start_token_refreshers
 
+        generation = self._seed_generation
         pending = [
             name
             for name, state in self._provider_states.items()
@@ -192,6 +277,8 @@ class DeferredStartup:
         await asyncio.gather(
             *(self._seed_one_provider(name) for name in pending),
         )
+        if generation != self._seed_generation:
+            return
 
         # Retry failed providers once after a delay
         failed = [
@@ -207,11 +294,15 @@ class DeferredStartup:
                 ", ".join(failed),
             )
             await asyncio.sleep(self._RETRY_DELAY)
+            if generation != self._seed_generation:
+                return
             for name in failed:
                 self._provider_states[name] = ProviderInitState.PENDING
             await asyncio.gather(
                 *(self._seed_one_provider(name) for name in failed),
             )
+            if generation != self._seed_generation:
+                return
 
         # Start background refresh loops only for providers that succeeded
         ready_providers = {
@@ -224,6 +315,12 @@ class DeferredStartup:
         }
         if ready_providers:
             refresh_tasks = await start_token_refreshers(ready_providers)
+            if generation != self._seed_generation:
+                # Superseded while registering: stop the loops just started —
+                # the superseding pass owns its own set.
+                for task in refresh_tasks:
+                    task.cancel()
+                return
             # Store on app so run_gateway's finally block can cancel them
             existing = getattr(self._app, "_token_refresh_tasks", [])
             existing.extend(refresh_tasks)

@@ -52,6 +52,11 @@ async def test_provider_connectivity(request: Any, name: str) -> Response:
     async with AsyncClient(timeout=min(timeout, 10), proxy=proxy) as client:
         # Build auth headers from provider config (same as fetch-models)
         pinfo = config.providers.get(name) if hasattr(config, "providers") else None
+        # A token_command provider still holding the pending sentinel would
+        # send that placeholder as its bearer and get a 401 that says nothing
+        # about reachability, so the authenticated probes are skipped until it
+        # has been seeded.
+        auth_ready = pinfo is None or pinfo.ready
         auth_headers = pinfo.auth_headers() if pinfo else {}
 
         results: dict[str, Any] = {
@@ -60,6 +65,11 @@ async def test_provider_connectivity(request: Any, name: str) -> Response:
             "endpoints": {},
             "warnings": [],
         }
+        if not auth_ready:
+            results["warnings"].append(
+                "Provider is still starting up — its API key has not been "
+                "fetched yet; authenticated endpoint checks were skipped."
+            )
 
         # 1. Probe base URL — deliberately unauthenticated. This only answers
         # "can we reach the host at all", so an auth rejection would be noise;
@@ -91,19 +101,27 @@ async def test_provider_connectivity(request: Any, name: str) -> Response:
             models_url = f"{base_url}/v1/models"
         else:
             models_url = f"{base_url}/models"
-        try:
-            resp = await client.get(models_url, headers=auth_headers)
-            results["endpoints"]["models"] = {
-                "url": models_url,
-                "status": resp.status_code,
-                "ok": resp.status_code < 400,
-            }
-        except Exception as exc:
+        if auth_ready:
+            try:
+                resp = await client.get(models_url, headers=auth_headers)
+                results["endpoints"]["models"] = {
+                    "url": models_url,
+                    "status": resp.status_code,
+                    "ok": resp.status_code < 400,
+                }
+            except Exception as exc:
+                results["endpoints"]["models"] = {
+                    "url": models_url,
+                    "status": None,
+                    "ok": False,
+                    "error": str(exc),
+                }
+        else:
             results["endpoints"]["models"] = {
                 "url": models_url,
                 "status": None,
                 "ok": False,
-                "error": str(exc),
+                "skipped": "provider not ready",
             }
 
         # 3–5. Check optional POST endpoints (embedding, rerank, decision)
@@ -114,14 +132,22 @@ async def test_provider_connectivity(request: Any, name: str) -> Response:
         ):
             if not provider_cfg.get(fmt_key):
                 continue
-            await _check_post_endpoint(
-                client,
-                base_url,
-                auth_headers,
-                provider_cfg.get(path_key, default_path),
-                ep_name,
-                results,
-            )
+            if auth_ready:
+                await _check_post_endpoint(
+                    client,
+                    base_url,
+                    auth_headers,
+                    provider_cfg.get(path_key, default_path),
+                    ep_name,
+                    results,
+                )
+            else:
+                results["endpoints"][ep_name] = {
+                    "url": f"{base_url}{provider_cfg.get(path_key, default_path)}",
+                    "status": None,
+                    "ok": False,
+                    "skipped": "provider not ready",
+                }
 
     return JSONResponse(results)
 

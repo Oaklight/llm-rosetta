@@ -289,6 +289,15 @@ async def _reload_gateway_config(
             )
         )
 
+    # Re-seed token_command providers.  The rebuild above replaced every
+    # ProviderInfo, so each token_command provider is back on the pending
+    # sentinel with no refresh loop.  Seeding otherwise runs only at process
+    # start, so without this the provider never obtains a token and every
+    # request to it is rejected until the process restarts.
+    deferred = getattr(request.app, "deferred_startup", None)
+    if deferred is not None:
+        await deferred.apply_config_reload(new_config)
+
     return new_config
 
 

@@ -1377,6 +1377,20 @@ async def fetch_upstream_models(request: Any, **kwargs: Any) -> Response:
     pinfo = config.providers[provider_name]
     ptype = config.provider_types.get(provider_name, "unknown")
 
+    # A token_command provider whose initial fetch has not completed still
+    # holds the pending sentinel.  Sending it would come back as an upstream
+    # 401 that reads as "this provider may not support model listing", so
+    # report the real state instead.
+    if not pinfo.ready:
+        return JSONResponse(
+            {
+                "error": (
+                    "Provider is still starting up — its API key has not been "
+                    "fetched yet. Retry in a moment."
+                )
+            }
+        )
+
     # Build the models listing URL.  Explicit ``models_path`` in the
     # provider config takes precedence (e.g. ``/v1/models`` for Jina).
     raw_cfg = getattr(config, "_raw_providers", {}).get(provider_name, {})
