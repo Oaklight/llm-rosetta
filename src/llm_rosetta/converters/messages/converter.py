@@ -47,7 +47,9 @@ from ..base.context import ConversionContext, StreamContext
 from ..base.tools import (
     assign_tool_batch_ids,
     fix_orphaned_tool_calls_ir,
+    get_intrinsic_kind,
     sanitize_tool_call_id,
+    set_intrinsic_kind,
     strip_orphaned_tool_config,
 )
 from ..base.helpers.extensions import wire_extensions
@@ -777,6 +779,26 @@ class MessagesConverter(BaseConverter):
                 tool_call_id=tool_call_id,
                 tool_name=tool_name,
             )
+            if block_type == "server_tool_use":
+                # The event has to say which it was, exactly as
+                # ``p_tool_call_to_ir`` does for the non-streaming part: mark
+                # it intrinsic and carry the canonical kind, so the writer
+                # restores ``server_tool_use`` without inferring it from the
+                # name.  ``tool_name`` is already folded above.
+                start_evt["tool_type"] = "intrinsic"
+                set_intrinsic_kind(start_evt, tool_name)
+            # The same two fields ``p_tool_call_to_ir`` keeps on the
+            # non-streaming part, so a streamed call does not lose what the
+            # block carries: a cache breakpoint, and a non-``direct`` caller
+            # (the default caller is not re-emitted, as on the other path).
+            cache_control = content_block.get("cache_control")
+            if cache_control is not None:
+                start_evt["cache_hint"] = cache_control
+            caller = content_block.get("caller")
+            if isinstance(caller, dict) and caller.get("type") != "direct":
+                start_evt.setdefault("provider_metadata", {})["anthropic_caller"] = (
+                    caller
+                )
             if context is not None:
                 start_evt["tool_call_index"] = context.tool_call_count - 1
             events.append(start_evt)
@@ -1198,16 +1220,38 @@ class MessagesConverter(BaseConverter):
     def _handle_ir_tool_call_start_to_p(
         self, event: ToolCallStartEvent, context: StreamContext | None
     ) -> dict[str, Any] | list[dict[str, Any]]:
-        """Handle ToolCallStartEvent → content_block_start for tool_use."""
+        """Handle ToolCallStartEvent → content_block_start for a tool call.
+
+        Mirrors ``MessagesToolOps.ir_tool_call_to_p``: a call the server
+        executed (``tool_type == "intrinsic"``) is re-emitted as
+        ``server_tool_use`` with its canonical kind as the block name, and
+        everything else as ``tool_use``.  The kind comes from the event's
+        ``intrinsic_kind`` metadata, never from the tool name.
+        """
+        block_type = "tool_use"
+        tool_name = event["tool_name"]
+        if event.get("tool_type", "function") == "intrinsic":
+            block_type = "server_tool_use"
+            tool_name = get_intrinsic_kind(event, event["tool_name"])
         result: dict[str, Any] = {
             "type": AnthropicEventType.CONTENT_BLOCK_START,
             "content_block": {
-                "type": "tool_use",
+                "type": block_type,
                 "id": sanitize_tool_call_id(event["tool_call_id"]),
-                "name": event["tool_name"],
+                "name": tool_name,
                 "input": {},
             },
         }
+        # Mirrors ``ir_tool_call_to_p``'s tail: the cache breakpoint always, and
+        # a non-default ``caller`` only on a client ``tool_use`` — the
+        # non-streaming writer makes the same restriction.
+        block = result["content_block"]
+        cache_hint = event.get("cache_hint")
+        if cache_hint is not None:
+            block["cache_control"] = cache_hint
+        caller = (event.get("provider_metadata") or {}).get("anthropic_caller")
+        if caller is not None and block_type == "tool_use":
+            block["caller"] = caller
         if context is not None:
             state = _stream_blocks(context)
             tool_id = event["tool_call_id"]
@@ -1224,7 +1268,7 @@ class MessagesConverter(BaseConverter):
                     index = context.current_block_index
             index = state.open(context, index)
             state.tool_indices[tool_id] = index
-            context.current_block_type = "tool_use"
+            context.current_block_type = block_type
             result["index"] = index
             if preamble:
                 preamble.append(result)

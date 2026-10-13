@@ -290,7 +290,7 @@ class TestSameFormatRoundTrip:
             if c.get("type") == "content_block_start"
         }
 
-        assert starts[0] == "tool_use"  # the server-tool call
+        assert starts[0] == "server_tool_use"  # the server-tool call (#974)
         assert starts[1] == "web_search_tool_result"
         assert starts[2] == "text"
 
@@ -303,7 +303,7 @@ class TestSameFormatRoundTrip:
         ]
 
         assert types.index("web_search_tool_result") < types.index("text")
-        assert types.index("web_search_tool_result") > types.index("tool_use")
+        assert types.index("web_search_tool_result") > types.index("server_tool_use")
 
 
 class TestCrossFormatDegrade:

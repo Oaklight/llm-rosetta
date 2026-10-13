@@ -150,6 +150,7 @@ class ToolCallStartEvent(TypedDict):
     tool_call_id: Required[str]
     tool_name: Required[str]
     tool_type: NotRequired[str]  # "function" (default), "custom", etc.
+    cache_hint: NotRequired[dict[str, Any]]  # Block-level cache breakpoint
     tool_call_index: NotRequired[int]  # Index for multiple parallel tool calls
     choice_index: NotRequired[int]
     provider_metadata: NotRequired[dict[str, Any]]
