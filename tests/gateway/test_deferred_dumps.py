@@ -46,6 +46,10 @@ class _RecordingStore:
         if self._fail == "insert_error_dump":
             raise RuntimeError("boom")
 
+    def count_error_dumps(self) -> str:
+        """Stand-in for any method this wrapper does not override."""
+        return "ok"
+
 
 class TestDeferredDumpStore:
     def test_queues_until_flush(self):
@@ -113,6 +117,16 @@ class TestDeferredDumpStore:
             "insert_dump_body",
             "insert_error_dump",
         ]
+
+    def test_unknown_attributes_delegate_to_the_store(self):
+        """A method this wrapper does not know about still reaches the store.
+
+        Otherwise a future ``dump_error`` change would raise ``AttributeError``
+        here, which ``dump_error`` catches — losing the dump quietly.
+        """
+        store = _RecordingStore()
+        deferred = DeferredDumpStore(store)
+        assert deferred.count_error_dumps() == "ok"
 
 
 # ---------------------------------------------------------------------------

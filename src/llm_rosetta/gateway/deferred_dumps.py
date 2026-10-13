@@ -29,9 +29,11 @@ _Pending = list[tuple[str, tuple[Any, ...], dict[str, Any]]]
 class DeferredDumpStore:
     """Queue dump writes, then replay them once the log row exists.
 
-    Forwards only the two methods ``dump_error`` uses on a persistence manager
+    Defers the two methods ``dump_error`` uses on a persistence manager
     (``insert_dump_body`` and ``insert_error_dump``) — that is the whole surface
-    the gateway's error paths touch, so nothing else needs to be proxied.
+    the gateway's error paths touch today.  Anything else delegates to the
+    wrapped store, so a caller reaching for a method this wrapper does not know
+    about still reaches the real one rather than failing.
 
     Replay is fire-and-forget, like ``dump_error`` itself: a failing write is
     logged and the rest still run, so a bad dump can never break the response
@@ -61,6 +63,20 @@ class DeferredDumpStore:
     def pending(self) -> int:
         """Number of writes still queued."""
         return len(self._pending)
+
+    def __getattr__(self, name: str) -> Any:
+        """Delegate anything not deferred to the wrapped store.
+
+        Only the two writes above have to wait for the log row; everything else
+        goes straight through.  Without this, a future ``dump_error`` reaching
+        for a third method would hit an ``AttributeError`` here — which
+        ``dump_error`` catches, losing the dump with a warning rather than
+        failing loudly.  The guard on ``_store`` keeps the delegation from
+        recursing if the attribute is read before ``__init__`` sets it.
+        """
+        if name == "_store":
+            raise AttributeError(name)
+        return getattr(self._store, name)
 
     async def flush(self) -> None:
         """Replay queued writes in order, then stop deferring.
