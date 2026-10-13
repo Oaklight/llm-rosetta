@@ -11,3 +11,12 @@ reasoning:
     auto: adaptive
     enabled: adaptive
     disabled: disabled
+  # MiniMax documents `reasoning_effort` as accepting low/medium/high/xhigh/max,
+  # defaulting to max, and this lane validates the value rather than ignoring it:
+  # `reasoning_effort="banana"` answers `400 invalid params, invalid rea...` while
+  # the documented set (and `minimal`, which it tolerates) returns 200.  Probed
+  # live 2026-10-13.  The range keeps `minimal` — which the docs do not list —
+  # from being sent as-is.  8937deb34f removed `[low, high]` as unsupported;
+  # `max`/`xhigh` are supported per the current docs, so the narrower range was
+  # the wrong shape rather than the field being wrong.
+  effort_range: [low, max]

@@ -1701,9 +1701,10 @@ class TestMessagesShimReasoningDefaults:
 
     @pytest.mark.parametrize(
         "shim_name",
-        ["opencode--messages", "asksage--messages", "minimax--messages"],
+        ["opencode--messages", "asksage--messages"],
     )
     def test_effort_still_goes_out_as_output_config(self, shim_name):
+        """MiniMax is not in this list: it has no effort parameter (#961)."""
         from llm_rosetta.pipeline import ConversionPipeline
 
         out = ConversionPipeline(
@@ -1713,3 +1714,172 @@ class TestMessagesShimReasoningDefaults:
         assert out["thinking"] == {"type": "adaptive"}
         assert out["output_config"] == {"effort": "high"}
         assert "reasoning_effort" not in out
+
+
+class TestShimEffortLadders:
+    """Each lane clamps or drops the effort its server requires (#961).
+
+    ALCF answers 500 for anything outside vLLM's low/medium/high, MiniMax's
+    Messages lane has no effort parameter at all, and MiniMax's Chat lane
+    documents low…max.  The shim declarations have to land on exactly those.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _load_shims(self):
+        from llm_rosetta.shims.providers import load_providers
+
+        load_providers()
+
+    @staticmethod
+    def _body(effort):
+        return {
+            "model": "m",
+            "reasoning_effort": effort,
+            "messages": [{"role": "user", "content": "hi"}],
+        }
+
+    @pytest.mark.parametrize(
+        ("effort", "sent"),
+        [
+            ("minimal", "low"),
+            ("low", "low"),
+            ("high", "high"),
+            ("xhigh", "high"),
+            ("max", "high"),
+        ],
+    )
+    def test_alcf_clamps_to_the_vllm_ladder(self, effort, sent):
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        out = ConversionPipeline(
+            "chat_completions", "chat_completions", target_shim="alcf--sophia"
+        ).convert_request(self._body(effort))
+
+        assert out["reasoning_effort"] == sent
+
+    def test_minimax_messages_sends_no_effort_at_all(self):
+        """Thinking is supported there; effort is not — not even as a stray field."""
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        out = ConversionPipeline(
+            "chat_completions", "messages", target_shim="minimax--messages"
+        ).convert_request(self._body("max"))
+
+        assert "reasoning_effort" not in out
+        assert "output_config" not in out
+        assert out["thinking"] == {"type": "adaptive"}
+
+    @pytest.mark.parametrize(("effort", "sent"), [("minimal", "low"), ("max", "max")])
+    def test_minimax_chat_clamps_to_the_documented_ladder(self, effort, sent):
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        out = ConversionPipeline(
+            "chat_completions",
+            "chat_completions",
+            target_shim="minimax--chat_completions",
+        ).convert_request(self._body(effort))
+
+        assert out["reasoning_effort"] == sent
+
+
+class TestReasoningRenameWiring:
+    """The rename only helps if it is wired, and if it covers both holders.
+
+    The unit tests call ``_rename_reasoning_field`` directly, so emptying a
+    shim's ``pre_ir_transforms`` used to leave the suite green while the lane
+    lost its reasoning again — both the ``alcf--sophia`` and the
+    ``openrouter--chat_completions`` shim carry this rename, so both are driven
+    through the response leg here (#969 review).
+    """
+
+    @pytest.fixture(autouse=True)
+    def _load_shims(self):
+        from llm_rosetta.shims.providers import load_providers
+
+        load_providers()
+
+    @staticmethod
+    def _pipeline(shim_name):
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        pipeline = ConversionPipeline(
+            "messages", "chat_completions", target_shim=shim_name
+        )
+        pipeline.convert_request(
+            {
+                "model": "openai/gpt-oss-120b",
+                "max_tokens": 64,
+                "messages": [{"role": "user", "content": "hi"}],
+            }
+        )
+        return pipeline
+
+    @staticmethod
+    def _chunk(delta, finish_reason=None):
+        return {
+            "id": "chatcmpl-alcf",
+            "object": "chat.completion.chunk",
+            "created": 1,
+            "model": "openai/gpt-oss-120b",
+            "choices": [{"index": 0, "delta": delta, "finish_reason": finish_reason}],
+        }
+
+    @pytest.mark.parametrize(
+        "shim_name", ["alcf--sophia", "openrouter--chat_completions"]
+    )
+    def test_non_streaming_response_keeps_the_lane_reasoning(self, shim_name):
+        out = self._pipeline(shim_name).convert_response(
+            {
+                "id": "c",
+                "object": "chat.completion",
+                "created": 1,
+                "model": "openai/gpt-oss-120b",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": "555",
+                            "reasoning": "15*37 = 555",
+                        },
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 1,
+                    "completion_tokens": 1,
+                    "total_tokens": 2,
+                },
+            }
+        )
+
+        assert [b["type"] for b in out["content"]] == ["thinking", "text"]
+        assert out["content"][0]["thinking"] == "15*37 = 555"
+
+    @pytest.mark.parametrize(
+        "shim_name", ["alcf--sophia", "openrouter--chat_completions"]
+    )
+    def test_streaming_delta_keeps_the_lane_reasoning(self, shim_name):
+        processor = self._pipeline(shim_name).create_stream_processor()
+
+        events = []
+        for chunk in (
+            self._chunk({"role": "assistant", "reasoning": "let me think"}),
+            self._chunk({"content": "555"}),
+            self._chunk({}, finish_reason="stop"),
+        ):
+            events.extend(processor.process_chunk(chunk))
+
+        starts = [
+            e["content_block"]["type"]
+            for e in events
+            if e.get("type") == "content_block_start"
+        ]
+        assert starts == ["thinking", "text"], starts
+        thinking = "".join(
+            e["delta"]["thinking"]
+            for e in events
+            if e.get("type") == "content_block_delta"
+            and e["delta"]["type"] == "thinking_delta"
+        )
+        assert thinking == "let me think"

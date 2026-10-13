@@ -11,21 +11,20 @@ reasoning:
     auto: adaptive
     enabled: adaptive
     disabled: disabled
-  # Spelled out, like the opencode and asksage lanes: this section existed but
-  # was partial, so `effort_field` came from the loader default and the effort
-  # went out as a flat `reasoning_effort` — not a Messages field, and one this
-  # lane silently drops.  A 200 from this endpoint is not evidence that a field
-  # was read: it answers 200 for a deliberately unknown one too, which is what
-  # let the stray field look fine.
+  # `none`, not a field name: this lane has no effort control.  The compatibility
+  # layer documents its supported parameters (model, max_tokens, stream, system,
+  # temperature, top_p, tools, tool_choice, metadata, thinking, service_tier) and
+  # effort is not among them — "M3 thinking control is not a depth slider", only
+  # thinking on/off/omitted.  Probed live 2026-10-13: everything is accepted and
+  # ignored (`output_config={nonsense:1}` -> 200, `thinking.type="banana"` -> 200
+  # returning a thinking block), and paired runs at unset vs max effort gave
+  # overlapping thinking lengths.  A 200 here is not evidence a field was read.
   #
-  # What the declaration does buy: the effort is now sent as a field the
-  # Messages schema defines, and `effort_range` restores clamping.  Whether
-  # MiniMax *honours* the value is NOT established — paired runs with adaptive
-  # thinking at `unset` vs `max` gave 719/1348/620/1146 against
-  # 1028/865/740/540 thinking characters, which is overlap, not a signal.
-  # Values otherwise match `_DEFAULT_ANTHROPIC`.
-  effort_field: output_config.effort
-  effort_range: [low, max]
+  # `none` rather than omitting the key: an omitted `effort_field` falls back to
+  # the loader default (`reasoning_effort`) and the stray flat field goes out on a
+  # Messages payload, which is what #757 / 8937deb34f removed and what
+  # `effort_field: none` actually prevents.
+  effort_field: none
   # No `unsigned_blocks: preserve` here on purpose.  Probed live 2026-10-13:
   # MiniMax's Anthropic lane accepts an unsigned thinking block in history
   # (HTTP 200), so there is nothing to withhold; the default `as_is` keeps the

@@ -417,8 +417,10 @@ class TestBuiltinShims:
             assert cap.visibility_modes is None, name
             assert cap.unsigned_blocks == unsigned, name
 
-        # MiniMax already had a section with its own thinking modes, which are
-        # deliberate; what leaked in were the fields it left out.
+        # MiniMax's Messages lane has no effort control at all — its
+        # compatibility layer documents no effort parameter and `none` is what
+        # keeps the field off the wire (#757, #961).  Its own thinking modes are
+        # deliberate.
         minimax = get_shim("minimax--messages")
         assert minimax is not None
         cap = minimax.reasoning
@@ -428,8 +430,8 @@ class TestBuiltinShims:
             "enabled": "adaptive",
             "disabled": "disabled",
         }
-        assert cap.effort_field == _DEFAULT_ANTHROPIC.effort_field
-        assert cap.effort_range == _DEFAULT_ANTHROPIC.effort_range
+        assert cap.effort_field == "none"
+        assert cap.effort_range is None
         assert cap.unsigned_blocks == "as_is"
 
     def test_partial_reasoning_sections_do_not_lose_the_effort_field(self):
@@ -442,11 +444,13 @@ class TestBuiltinShims:
         nothing failed loudly.  Naming the lanes we know about would miss the
         next one, so this walks every shim YAML that carries a section.
 
-        The walk deliberately stops at ``effort_field``: the same sections also
-        lose ``effort_range`` in four places (``alcf--sophia``,
-        ``argo--chat_completions``, ``argo--open_responses``,
-        ``minimax--chat_completions``), which is pre-existing and needs its own
-        probe per endpoint rather than a blanket assertion here.
+        The walk deliberately stops at ``effort_field``, the field whose loss is
+        silent.  ``effort_range`` is per lane instead: ``argo--chat_completions``
+        documents its omission in place ("effort_range not set = full IR
+        ladder") and the two MiniMax lanes carry their own notes, while
+        ``argo--open_responses`` has the same shape as the chat lane with no
+        note at all — so a blanket assertion over that field would encode an
+        opinion rather than a rule.
         """
         from llm_rosetta._vendor.yaml import load as yaml_load
         from llm_rosetta.converters.base.helpers.reasoning import (
@@ -475,6 +479,29 @@ class TestBuiltinShims:
             assert shim.reasoning.effort_field == base_cap.effort_field, path
             checked += 1
         assert checked >= 1, "walk found no inheriting section — glob or layout changed"
+
+    def test_effort_ranges_match_the_documented_ladders(self):
+        """Each lane declares the ladder its own server accepts (#961).
+
+        Both lanes were sending values their endpoint does not accept, in
+        opposite ways: ALCF answered 500 for anything outside low/medium/high,
+        MiniMax's Chat lane answers 400 for an unlisted value while accepting
+        the documented low…max set.
+        """
+
+        def cap(name):
+            shim = get_shim(name)
+            assert shim is not None, name
+            assert shim.reasoning is not None, name
+            return shim.reasoning
+
+        sophia = cap("alcf--sophia")
+        assert sophia.effort_field == "reasoning_effort"
+        assert sophia.effort_range == ("low", "high")
+
+        minimax_chat = cap("minimax--chat_completions")
+        assert minimax_chat.effort_field == "reasoning_effort"
+        assert minimax_chat.effort_range == ("low", "max")
 
     def test_google_base_type(self):
         shim = get_shim("google--google_generate")

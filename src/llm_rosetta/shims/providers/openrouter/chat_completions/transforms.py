@@ -16,14 +16,19 @@ from llm_rosetta.transforms import _NamedTransform, hoist_late_system_messages
 
 
 def _rename_reasoning_field(body: dict[str, Any]) -> dict[str, Any]:
-    """Rename ``message.reasoning`` → ``message.reasoning_content``.
+    """Rename ``reasoning`` → ``reasoning_content`` on messages and deltas.
 
     OpenRouter uses ``reasoning`` (not ``reasoning_content``) for the
-    reasoning text field on chat completion response messages.  The
-    OpenAI Chat converter expects ``reasoning_content``.
+    reasoning text field.  The OpenAI Chat converter expects
+    ``reasoning_content``.
 
-    Also copies ``reasoning_details`` as-is (the converter ignores it,
-    but preserving it avoids silent data loss for downstream consumers).
+    Both holders matter: the streaming path routes chunks through this
+    helper, and a chunk carries the text on ``delta`` rather than on
+    ``message`` — renaming only the message half dropped streamed reasoning
+    silently (found in review of #969; ``alcf--sophia`` has the same shape).
+
+    ``reasoning_details`` is untouched here: the converter preserves it
+    through ``provider_metadata`` (see ``chat_completions/message_ops.py``).
     """
     choices = body.get("choices")
     if not isinstance(choices, list):
@@ -31,12 +36,13 @@ def _rename_reasoning_field(body: dict[str, Any]) -> dict[str, Any]:
     for choice in choices:
         if not isinstance(choice, dict):
             continue
-        message = choice.get("message")
-        if not isinstance(message, dict):
-            continue
-        # Rename reasoning → reasoning_content
-        if "reasoning" in message and "reasoning_content" not in message:
-            message["reasoning_content"] = message.pop("reasoning")
+        for holder_key in ("message", "delta"):
+            holder = choice.get(holder_key)
+            if not isinstance(holder, dict):
+                continue
+            # Rename reasoning → reasoning_content
+            if "reasoning" in holder and "reasoning_content" not in holder:
+                holder["reasoning_content"] = holder.pop("reasoning")
     return body
 
 
