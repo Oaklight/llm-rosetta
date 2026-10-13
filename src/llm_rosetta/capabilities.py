@@ -1145,9 +1145,12 @@ def dedupe_tool_definitions(
       different tools, so silently keeping one would drop a legitimate tool
       and hide a client-side mistake no converter can repair.
 
-    Tools harvested from a namespace container are exempt: the namespace is
-    part of their identity, so two byte-identical definitions there are still
-    two distinct tools, left to ``_dedup_ir_tool_names`` / ``ToolNameMap``.
+    Tools harvested from a *named* namespace container are exempt: the
+    namespace is part of their identity, so two byte-identical definitions
+    there are still two distinct tools, left to ``_dedup_ir_tool_names`` /
+    ``ToolNameMap``.  A container with no name of its own is not exempt, and
+    its children collapse like any other duplicate — see the comment at the
+    exemption below.
 
     Equality is on the whole definition dict, so this is not semantic dedup:
     any incidental per-copy difference (``metadata``, an optional field set on
@@ -1188,12 +1191,25 @@ def dedupe_tool_definitions(
         # ``metadata.namespace``, so two byte-identical definitions there are
         # still two tools the client addresses separately.  Left to the
         # namespace machinery (``_dedup_ir_tool_names`` / ``ToolNameMap``).
-        # The exemption is ``is not None``, not truthiness: a container with
-        # no name of its own yields "", and its children are exactly the
-        # contested case that machinery keeps and warns about — collapsing
-        # them here would silence that warning instead of resolving it.
+        #
+        # Only a *named* container qualifies — the check is truthiness, not
+        # ``is not None``.  A container with no name of its own yields "", and
+        # "" qualifies nothing: ``_dedup_ir_tool_names`` has nothing to build a
+        # unique name from, so its children keep one bare upstream name and
+        # cannot be told apart, by the upstream or by the client that would
+        # have to address them.  No provider implementing ``namespace``
+        # accepts an empty name either — OpenAI, DeepSeek and Volcengine all
+        # reject the container outright — so there is no identity to preserve
+        # here and the byte-identical ones collapse like any other duplicate
+        # (#913).  Conflicting definitions still survive, as everywhere else.
+        #
+        # Deliberately the opposite reading to `build_tool_name_map` above,
+        # which tests the same ``""`` with ``is None`` and calls it *not*
+        # top-level.  The questions differ — could a bare call be ambiguous /
+        # is there an identity here worth preserving — so both answers are
+        # correct and neither is a stale copy of the other.
         meta = tool.get("metadata")
-        if isinstance(meta, dict) and meta.get("namespace") is not None:
+        if isinstance(meta, dict) and meta.get("namespace"):
             kept.append(tool)
             continue
         seen = definitions.setdefault(name, [])

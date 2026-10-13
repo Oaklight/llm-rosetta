@@ -721,23 +721,32 @@ class OpenResponsesConverter(BaseConverter):
                 for i in indices
                 if not (ir_tools[i].get("metadata") or {}).get("namespace")
             )
+            # A container with no name of its own is the one collision nothing
+            # can resolve: there is nothing to qualify its children with.  Every
+            # other qualification failure is reported inside `_qualify_tool_name`,
+            # which this path never reaches, so the malformed container is said
+            # here.
+            #
+            # Once per group: the children of one nameless container share the
+            # name and the cause.  This says only that the container is
+            # malformed and the tool went unqualified — what became of it is
+            # `dedupe_tool_definitions`' to report, and this pass runs before it,
+            # so claiming the collision reaches the upstream would be a story
+            # the collapse then contradicts.
+            if bare_keepers > 1 and any(
+                (ir_tools[i].get("metadata") or {}).get("namespace") == ""
+                for i in indices
+            ):
+                warnings.append(
+                    f"A namespace container declaring {name!r} has no name of "
+                    "its own, so that tool cannot be qualified"
+                )
             for i in indices:
                 ns = (ir_tools[i].get("metadata") or {}).get("namespace")
-                if ns is None:
-                    # Top-level: nothing to qualify it with, and the name is
-                    # its own — the namespaced tool moves instead.
-                    continue
                 if not ns:
-                    # Nameless container. Every other qualification failure
-                    # is reported inside `_qualify_tool_name`, which this path
-                    # never reaches, so it must be said here.
-                    if bare_keepers > 1:
-                        warnings.append(
-                            f"A namespace container declaring {name!r} has no "
-                            "name of its own, so that tool cannot be told apart "
-                            "from the others declaring the same name and they "
-                            f"all go upstream as {name!r}"
-                        )
+                    # Top-level (`None`) keeps the name as its own; a nameless
+                    # container (`""`) has nothing to qualify with.  Either way
+                    # this tool does not move — the warning above covers it.
                     continue
                 qualified = _qualify_tool_name(ns, name, used_names, warnings)
                 copy = dict(ir_tools[i])

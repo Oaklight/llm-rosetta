@@ -55,6 +55,26 @@ def _custom_namespace_container(namespace: str, *names: str) -> dict[str, Any]:
     }
 
 
+def _nameless_container(name: str, description: str | None = None) -> dict[str, Any]:
+    """A namespace container with no name of its own.
+
+    Codex always names its containers, and every upstream that implements
+    ``namespace`` rejects one without a name (OpenAI, DeepSeek and Volcengine
+    all 400 or 422), so this is malformed input.  Its children are flattened
+    with ``metadata.namespace == ""``, which qualifies nothing: two tools
+    sharing a name here cannot be told apart at all, not even by the client
+    that declared them.
+
+    *description* overrides the child's own, so two of these can declare a
+    genuinely conflicting pair — byte-identical children are collapsed by
+    ``dedupe_tool_definitions`` (#913) and never reach the ambiguous case.
+    """
+    container = _namespace_container("", name)
+    if description is not None:
+        container["tools"][0]["description"] = description
+    return container
+
+
 def _request(*containers: dict[str, Any], stream: bool = False) -> dict[str, Any]:
     """A Responses request carrying tools the Codex way: in ``input``."""
     return {
@@ -923,8 +943,8 @@ class TestNamespaceRoundTrip:
         """
         pipe = ConversionPipeline("openai_responses", "openai_chat")
         request = _request(
-            _namespace_container("", "a"),
-            _namespace_container("", "a"),
+            _nameless_container("a"),
+            _nameless_container("a", description="The other a tool."),
             _namespace_container("z", "a"),
         )
         request["input"] += [
@@ -959,8 +979,8 @@ class TestNamespaceRoundTrip:
         """
         pipe = ConversionPipeline("openai_responses", "openai_chat")
         request = _request(
-            _namespace_container("", "a"),
-            _namespace_container("", "a"),
+            _nameless_container("a"),
+            _nameless_container("a", description="The other a tool."),
         )
         request["input"] += [
             {"type": "function_call", "call_id": "c0", "name": "a", "arguments": "{}"},
@@ -1037,17 +1057,22 @@ class TestNamespaceRoundTrip:
     def _contested_request(*, stream: bool = False) -> tuple[dict[str, Any], str]:
         """A request where two tools really do share one upstream name.
 
-        Two containers with no name of their own declare the same tool.  A
-        container that *has* a name always gets its tools a spelling nobody
-        else has, however long the name or however crowded the request, so
-        this is the only way left for one upstream name to mean two tools:
-        there is nothing to qualify these with, and no length that would
-        help.  Both go upstream spelled the same way.
+        Two containers with no name of their own declare the same tool under
+        differing definitions.  A container that *has* a name always gets its
+        tools a spelling nobody else has, however long the name or however
+        crowded the request, so this is the only way left for one upstream
+        name to mean two tools: there is nothing to qualify these with, and no
+        length that would help.  Both go upstream spelled the same way.
+
+        The definitions have to differ.  Byte-identical children of a nameless
+        container are collapsed by ``dedupe_tool_definitions`` — left alone
+        they are one duplicate reaching a strict upstream (#913) — and a
+        collapsed pair leaves nothing to be ambiguous about.
         """
         name = "wait"
         return _request(
-            _namespace_container("", name),
-            _namespace_container("", name),
+            _nameless_container(name),
+            _nameless_container(name, description="The other wait tool."),
             stream=stream,
         ), name
 
@@ -1177,6 +1202,60 @@ class TestNamespaceRoundTrip:
             assert any(
                 "more than one declared tool" in w for w in pipe.warnings[before:]
             ), f"{label}: expected a response-leg warning; got {pipe.warnings[before:]}"
+
+    def test_byte_identical_nameless_children_lose_a_copy(self):
+        """The duplicate a nameless container produced must not reach the wire.
+
+        Two containers with no name of their own declare the same tool
+        identically.  Nothing distinguishes the two — not the upstream, which
+        would answer 400 to the repeated name, and not the client, which
+        addresses its tools by a namespace it never gave.  So they are one
+        duplicate, and only one goes upstream (#913).
+
+        The malformed container is still reported, and the response leg has
+        nothing left to be contested about: one tool answers to ``wait``.
+        """
+        pipe = ConversionPipeline("openai_responses", "openai_chat")
+        request = _request(_nameless_container("wait"), _nameless_container("wait"))
+
+        upstream = pipe.convert_request(request)
+
+        assert [t["function"]["name"] for t in upstream["tools"]] == ["wait"]
+        malformed = [w for w in pipe.warnings if "no name of its own" in w]
+        assert len(malformed) == 1, (
+            "one container, one cause, so one report however many children it "
+            f"declares; got {pipe.warnings}"
+        )
+
+        before = len(pipe.warnings)
+        out = pipe.convert_response(_chat_completion("wait"))
+
+        calls = [i for i in out["output"] if i.get("type") == "function_call"]
+        assert len(calls) == 1 and "namespace" not in calls[0]
+        assert not [
+            w for w in pipe.warnings[before:] if "more than one declared" in w
+        ], f"one tool is left, so nothing is contested; got {pipe.warnings[before:]}"
+
+    def test_blank_container_name_is_no_name(self):
+        """A blank name qualifies nothing, and the name it builds is illegal.
+
+        ``_qualify_tool_name`` joins the two with an underscore, and providers
+        match tool names against ``^[a-zA-Z0-9_-]+$`` — a space has no room in
+        there, so a container named ``" "`` shipped ``" _wait"`` and a 400.
+        Blank is read as no name at all, the same as a missing one, so these
+        two spellings name the same thing and their identical children are one
+        duplicate.
+        """
+        pipe = ConversionPipeline("openai_responses", "openai_chat")
+        request = _request(
+            _namespace_container(" ", "wait"), _namespace_container("", "wait")
+        )
+
+        upstream = pipe.convert_request(request)
+
+        names = [t["function"]["name"] for t in upstream["tools"]]
+        assert names == ["wait"], names
+        assert [w for w in pipe.warnings if "no name of its own" in w]
 
     def test_unrenamed_call_is_quiet_on_the_response_leg(self):
         """A plain tool takes the same fallback path, and must stay silent.

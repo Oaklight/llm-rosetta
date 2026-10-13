@@ -86,8 +86,26 @@ class TestDedupeToolDefinitions:
         out = dedupe_tool_definitions(ir)
         assert out is ir
 
-    def test_namespaced_tools_never_collapsed(self):
-        """A namespace is part of a tool's identity, even when identical."""
+    def test_named_namespace_tools_never_collapsed(self):
+        """A name is what makes a namespace part of a tool's identity."""
+        tool = {
+            "name": "wait",
+            "description": "d",
+            "parameters": {},
+            "metadata": {"namespace": "tasks"},
+        }
+        ir = {"tools": [dict(tool), dict(tool)]}
+        assert dedupe_tool_definitions(ir) is ir
+
+    def test_nameless_container_duplicates_collapsed(self):
+        """A container with no name of its own qualifies nothing.
+
+        Its children keep one bare upstream name and cannot be told apart, by
+        the upstream or by the client, so byte-identical ones are the same
+        duplicate that a top-level pair would be — and reach a strict upstream
+        as one name instead of two.
+        """
+        warnings = []
         tool = {
             "name": "wait",
             "description": "d",
@@ -95,7 +113,23 @@ class TestDedupeToolDefinitions:
             "metadata": {"namespace": ""},
         }
         ir = {"tools": [dict(tool), dict(tool)]}
-        assert dedupe_tool_definitions(ir) is ir
+        out = dedupe_tool_definitions(ir, warnings=warnings)
+        assert [t["name"] for t in out["tools"]] == ["wait"]
+        assert len(warnings) == 1 and "'wait'" in warnings[0]
+
+    def test_nameless_container_conflicting_definitions_kept(self):
+        """A nameless container has nothing to qualify with, but still two
+        genuinely different tools — dropping one would lose a real tool."""
+        warnings = []
+        ir = {
+            "tools": [
+                {"name": "wait", "description": "one", "metadata": {"namespace": ""}},
+                {"name": "wait", "description": "two", "metadata": {"namespace": ""}},
+            ]
+        }
+        out = dedupe_tool_definitions(ir, warnings=warnings)
+        assert out is ir
+        assert len(warnings) == 1 and "distinct definitions" in warnings[0]
 
     def test_top_level_dup_collapsed_beside_namespaced_same_name(self):
         top1 = {"name": "wait", "description": "d", "parameters": {}}
@@ -104,7 +138,7 @@ class TestDedupeToolDefinitions:
             "name": "wait",
             "description": "d",
             "parameters": {},
-            "metadata": {"namespace": ""},
+            "metadata": {"namespace": "tasks"},
         }
         out = dedupe_tool_definitions({"tools": [top1, ns, top2]})
         assert out["tools"] == [top1, ns]

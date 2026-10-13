@@ -524,6 +524,30 @@ class TestDedupIrToolNames:
         assert result[0]["name"] == "only_one"
         assert warnings == []
 
+    def test_lone_nameless_child_is_quiet(self, warnings):
+        """Nothing else answers to the name, so nothing is shadowed.
+
+        The container is still malformed, but that warning exists to explain a
+        collision; on its own there is none to explain.
+        """
+        tools = [self._ir_tool("exec", "")]
+
+        result = OpenAIResponsesConverter._dedup_ir_tool_names(tools, warnings)
+
+        assert [t["name"] for t in result] == ["exec"]
+        assert warnings == []
+
+    def test_all_top_level_collision_is_not_blamed_on_a_container(self, warnings):
+        """None of these tools came from a container, so none can be told to
+        go name one.  The message names a cause that is not present here.
+        """
+        tools = [self._ir_tool("exec"), self._ir_tool("exec")]
+
+        result = OpenAIResponsesConverter._dedup_ir_tool_names(tools, warnings)
+
+        assert [t["name"] for t in result] == ["exec", "exec"]
+        assert warnings == []
+
 
 # ===========================================================================
 # Full request conversion integration tests

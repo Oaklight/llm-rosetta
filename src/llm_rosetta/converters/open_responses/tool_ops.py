@@ -220,6 +220,16 @@ def _flatten_namespace_tool(
     constraint ``^[a-zA-Z0-9_-]+$`` prohibits hierarchical separators.
     """
     namespace_name = provider_tool.get("name", "")
+    # A blank name is treated as no name: `_dedup_ir_tool_names` builds
+    # ``{namespace}_{name}`` from it, providers match tool names against
+    # ``^[a-zA-Z0-9_-]+$``, and a container called ``" "`` otherwise ships
+    # ``" _wait"`` and a 400.  Blank becomes ``""``, the spelling the rest of
+    # the pipeline already reads as "no name of its own" — which is what a
+    # blank one is.  A non-string name reads as absent for the same reason.
+    #
+    # An inner space (``"ta sks"``) survives this and still builds an illegal
+    # name; that wider case is not this pass's to fix.
+    namespace_name = namespace_name.strip() if isinstance(namespace_name, str) else ""
     namespace_desc = provider_tool.get("description", "")
     children = provider_tool.get("tools", [])
     if not children:
