@@ -884,16 +884,21 @@ class GoogleInteractionsConverter(BaseConverter):
             step_type = context.metadata.get("_interactions_intrinsic_steps", {}).get(
                 index
             )
-        if step_type:
+        if step_type and context is not None:
             # A server call's arguments ride whole, as a dict, under the step's
-            # own type name.  The IR carries them as a JSON string, so parse
-            # them back; a partial fragment (a cross-format source) is passed
-            # through unchanged rather than dropped.
-            raw = event["arguments_delta"]
+            # own type name.  The IR carries them as a JSON string, but a
+            # cross-format source (e.g. Anthropic ``input_json_delta``) delivers
+            # them in fragments, so accumulate until the buffer parses and emit
+            # a single delta with an object.  A buffer that never parses is
+            # dropped rather than written as a string, so every emitted
+            # ``arguments`` is an object.
+            buffers = context.metadata.setdefault("_interactions_intrinsic_args", {})
+            buffer = buffers.pop(index, "") + (event["arguments_delta"] or "")
             try:
-                arguments: Any = json.loads(raw) if raw else {}
+                arguments: Any = json.loads(buffer) if buffer else {}
             except (ValueError, TypeError):
-                arguments = raw
+                buffers[index] = buffer
+                return {}
             return {
                 "event_type": "step.delta",
                 "index": index,

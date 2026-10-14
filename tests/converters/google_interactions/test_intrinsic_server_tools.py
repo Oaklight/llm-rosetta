@@ -22,7 +22,11 @@ from llm_rosetta.converters.base.context import StreamContext
 from llm_rosetta.converters.base.tools.intrinsic import get_intrinsic_kind
 from llm_rosetta.converters.google_interactions import GoogleInteractionsConverter
 from llm_rosetta.converters.messages import MessagesConverter
-from llm_rosetta.types.ir.stream import ToolCallStartEvent, ToolResultEvent
+from llm_rosetta.types.ir.stream import (
+    ToolCallDeltaEvent,
+    ToolCallStartEvent,
+    ToolResultEvent,
+)
 from llm_rosetta.types.ir.validation import validate_ir_response
 
 # ---------------------------------------------------------------------------
@@ -451,6 +455,39 @@ class TestStreamingWrite:
 
         assert out["delta"]["type"] == "google_search_call"
         assert out["delta"]["arguments"] == {"queries": ["mars rover"]}
+
+    def _delta(self, raw: str) -> dict[str, Any]:
+        return {
+            "type": "tool_call_delta",
+            "tool_call_id": "c1",
+            "arguments_delta": raw,
+            "block_index": 0,
+        }
+
+    def test_intrinsic_delta_accumulates_fragments_into_one_object(self):
+        context = StreamContext()
+        _write(self._call_event(), context)
+
+        first = _converter().stream_response_to_provider(
+            cast(ToolCallDeltaEvent, self._delta('{"queries": ["mars')), context
+        )
+        assert not [c for c in (first if isinstance(first, list) else [first]) if c]
+
+        out = _write(self._delta(' rover"]}'), context)
+
+        assert out["delta"]["type"] == "google_search_call"
+        assert out["delta"]["arguments"] == {"queries": ["mars rover"]}
+
+    def test_intrinsic_delta_drops_an_unparseable_buffer(self):
+        context = StreamContext()
+        _write(self._call_event(), context)
+
+        out = _converter().stream_response_to_provider(
+            cast(ToolCallDeltaEvent, self._delta("not json")), context
+        )
+        chunks = out if isinstance(out, list) else [out]
+
+        assert not [chunk for chunk in chunks if chunk]
 
     def test_tool_result_emits_the_native_result_step(self):
         out = _write(
