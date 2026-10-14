@@ -253,10 +253,9 @@ def _qualify_collisions(
         if index in gone or not isinstance(tool, dict):
             continue
         name = tool.get("name")
-        if not isinstance(name, str) or not name:
-            continue
-        key = (name, tool.get("tool_group")) if same_group_only else name
-        by_key[key].append(index)
+        if isinstance(name, str) and name:
+            key = (name, tool.get("tool_group")) if same_group_only else name
+            by_key[key].append(index)
 
     renamed_any = False
     for indices in by_key.values():
@@ -480,8 +479,8 @@ def _to_client_identity(target: dict[str, Any], name_map: ToolNameMap) -> None:
     """Rewrite one IR tool call from its upstream name to the client's.
 
     Works on any dict carrying ``tool_name`` — both a ToolCallPart and a
-    ``tool_call_start`` stream event qualify.  No-op when the name was never
-    rewritten.
+    ``tool_call_start`` stream event qualify.  Idempotent: a name that was
+    never rewritten is written back unchanged, so the effect is nothing.
     """
     upstream_name = target.get("tool_name", "")
     pm = target.get("provider_metadata")
@@ -490,8 +489,6 @@ def _to_client_identity(target: dict[str, Any], name_map: ToolNameMap) -> None:
     # identity, and this is absent.
     wire_group = pm.get("namespace") if isinstance(pm, dict) else None
     client_name, namespace = name_map.to_client(upstream_name, group=wire_group)
-    if client_name == upstream_name and namespace == wire_group:
-        return
     target["tool_name"] = client_name
     if namespace is None:
         if wire_group is not None and isinstance(pm, dict):
