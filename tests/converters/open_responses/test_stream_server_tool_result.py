@@ -115,6 +115,22 @@ class TestWriter:
         assert out["item"] == _CI_RESULT_ITEM
         assert out["output_index"] == 2
 
+    def test_same_dialect_replay_keeps_a_field_the_rebuild_would_drop(self):
+        """Discriminates the ``_native`` replay from the fallback rebuild.
+
+        The rebuild emits only ``type`` / ``call_id`` / ``output``, so an item
+        carrying any other field (here ``status``) proves the stored native
+        item was replayed rather than reconstructed — a fixture the rebuild
+        cannot reproduce byte for byte.
+        """
+        item = {**_CI_RESULT_ITEM, "status": "completed"}
+        (event,) = _result_events(item)
+
+        out = self._write(event)
+
+        assert out["item"] == item
+        assert out["item"]["status"] == "completed"
+
     def test_fallback_rebuilds_from_ir_fields(self):
         event = ToolResultEvent(
             type="tool_result",
