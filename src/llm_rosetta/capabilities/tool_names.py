@@ -18,6 +18,7 @@ from typing import Any
 
 from llm_rosetta.converters.base.helpers.tool_group import (
     GENERATED_GROUP_MARKER,
+    tool_call_group,
 )
 from llm_rosetta.converters.base.helpers.truncate import truncate_with_digest
 
@@ -475,36 +476,45 @@ def build_tool_name_map(ir_request: dict[str, Any]) -> ToolNameMap:
     )
 
 
+def _drop_legacy_namespace(target: dict[str, Any]) -> None:
+    """Remove the pre-``tool_group`` metadata spelling, if present.
+
+    The call side writes and clears its group through the first-class
+    ``tool_group`` field; a legacy ``provider_metadata["namespace"]`` left
+    beside it would be a second copy able to disagree.
+    """
+    pm = target.get("provider_metadata")
+    if isinstance(pm, dict):
+        pm.pop("namespace", None)
+
+
 def _to_client_identity(target: dict[str, Any], name_map: ToolNameMap) -> None:
     """Rewrite one IR tool call from its upstream name to the client's.
 
     Works on any dict carrying ``tool_name`` — both a ToolCallPart and a
     ``tool_call_start`` stream event qualify.  Idempotent: a name that was
     never rewritten is written back unchanged, so the effect is nothing.
+
+    The group travels in the first-class ``tool_group`` field, matching the
+    definition side.  The legacy ``provider_metadata["namespace"]`` spelling
+    is read (through :func:`tool_call_group`) and cleared, so the two can never
+    disagree.
     """
     upstream_name = target.get("tool_name", "")
-    pm = target.get("provider_metadata")
     # The group the upstream echoed beside the name.  Only a target that
     # carries a container produces one; on a flat target the name is the whole
     # identity, and this is absent.
-    wire_group = pm.get("namespace") if isinstance(pm, dict) else None
+    wire_group = tool_call_group(target)
     client_name, namespace = name_map.to_client(upstream_name, group=wire_group)
     target["tool_name"] = client_name
-    if namespace is None:
-        if wire_group is not None and isinstance(pm, dict):
-            # A group the client never wrote — one we generated for a
-            # nameless container — is not the client's to see, so the field
-            # goes rather than being handed back.
-            pm.pop("namespace", None)
-        return
-    if not isinstance(pm, dict):
-        pm = {}
-        target["provider_metadata"] = pm
-    # The call side still carries the group under the wire name, unlike the
-    # definition side where it is the first-class ``tool_group`` field.
-    # Both say the same thing; unifying them means giving a tool call a
-    # ``tool_group`` of its own, which is the next step on #953.
-    pm["namespace"] = namespace
+    if namespace is not None:
+        target["tool_group"] = namespace
+    elif wire_group is not None:
+        # A group the client never wrote — one we generated for a nameless
+        # container — is not the client's to see, so the field goes rather
+        # than being handed back.
+        target.pop("tool_group", None)
+    _drop_legacy_namespace(target)
 
 
 def _select_upstream_name(
@@ -599,8 +609,7 @@ def _respell_history_tool_calls(
         for part in msg.get("content") or []:
             if not isinstance(part, dict) or part.get("type") != "tool_call":
                 continue
-            pm = part.get("provider_metadata")
-            namespace = pm.get("namespace") if isinstance(pm, dict) else None
+            namespace = tool_call_group(part)
             client_name = part.get("tool_name", "")
             upstream_name = name_map.to_upstream(client_name, namespace)
             part["tool_name"] = upstream_name

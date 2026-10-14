@@ -14,6 +14,7 @@ format with type/name/description/parameters at the top level.
 
 import json
 import logging
+from collections.abc import Mapping
 from typing import Any, Literal, cast
 
 from ..base.tools.content import (
@@ -29,7 +30,11 @@ from ...types.ir import (
 from ...types.ir.tools import ToolCallConfig
 from ..base import BaseToolOps
 from ..base.helpers.opaque import CARRIER_KEY
-from ..base.helpers.tool_group import GENERATED_GROUP_MARKER, generated_group_id
+from ..base.helpers.tool_group import (
+    GENERATED_GROUP_MARKER,
+    generated_group_id,
+    tool_call_group,
+)
 from ..base.tools import (
     extract_part_ids,
     get_definition_kind,
@@ -373,8 +378,10 @@ def _build_function_call_item(
         "arguments": arguments,
         "status": "completed",
     }
-    # Flattened upstream; the client dispatches on (name, namespace).
-    namespace = metadata.get("namespace")
+    # Flattened upstream; the client dispatches on (name, group).  The
+    # first-class call field is read first, with the legacy metadata spelling
+    # as a fallback.
+    namespace = tool_call_group(ir_tool_call)
     if namespace:
         item["namespace"] = namespace
     # Ferry the full provider_metadata so a foreign-converter carrier
@@ -767,6 +774,22 @@ def _build_intrinsic_result_item(
     }
 
 
+def _wire_tool_call_group(
+    provider_tool_call: Mapping[str, Any], carried: Mapping[str, Any]
+) -> str | None:
+    """Read the group a Responses tool call carries, wire field first.
+
+    The group is spelled ``namespace`` on the wire; *carried* is the ferried
+    provider metadata, which may still hold that spelling from a foreign hop.
+    The wire value wins when both are present.  A missing, empty, or non-string
+    value reads as no group.
+    """
+    for candidate in (provider_tool_call.get("namespace"), carried.get("namespace")):
+        if isinstance(candidate, str) and candidate:
+            return candidate
+    return None
+
+
 def _custom_tool_call_to_ir(provider_tool_call: dict[str, Any]) -> ToolCallPart:
     """Parse a ``custom_tool_call`` item into an IR tool call part.
 
@@ -792,12 +815,15 @@ def _custom_tool_call_to_ir(provider_tool_call: dict[str, Any]) -> ToolCallPart:
         tool_input=parsed_input,
         tool_type="custom",
     )
-    # Keep it: (name, namespace) is what the request leg maps back.
+    # Keep it: (name, group) is what the request leg maps back.  The group is
+    # first-class on the call; the legacy metadata spelling, if a foreign
+    # carrier brought one in, is folded into that field rather than duplicated.
     restored = provider_tool_call.get(CARRIER_KEY)
     pm: dict[str, Any] = dict(restored) if isinstance(restored, dict) else {}
-    namespace = provider_tool_call.get("namespace")
-    if namespace:
-        pm["namespace"] = namespace
+    group = _wire_tool_call_group(provider_tool_call, pm)
+    pm.pop("namespace", None)
+    if group:
+        part["tool_group"] = group
     if pm:
         part["provider_metadata"] = pm
     return part
@@ -1349,7 +1375,7 @@ class OpenResponsesToolOps(BaseToolOps):
             }
             # Same round-trip as a function_call above.
             metadata = ir_tool_call.get("provider_metadata") or {}
-            namespace = metadata.get("namespace")
+            namespace = tool_call_group(ir_tool_call)
             if namespace:
                 item["namespace"] = namespace
             if metadata:
@@ -1421,14 +1447,18 @@ class OpenResponsesToolOps(BaseToolOps):
                 tool_input=tool_input,
                 tool_type="function",
             )
+            # Keep it: (name, group) is what the request leg maps back.  The
+            # group is first-class on the call now; a legacy metadata spelling
+            # (a carrier from a foreign hop) folds into it rather than staying
+            # a second copy.
             restored = provider_tool_call.get(CARRIER_KEY)
             pm: dict[str, Any] = dict(restored) if isinstance(restored, dict) else {}
             if item_id and item_id != call_id:
                 pm["responses_item_id"] = item_id
-            # Keep it: (name, namespace) is what the request leg maps back.
-            namespace = provider_tool_call.get("namespace")
-            if namespace:
-                pm["namespace"] = namespace
+            group = _wire_tool_call_group(provider_tool_call, pm)
+            pm.pop("namespace", None)
+            if group:
+                part["tool_group"] = group
             if pm:
                 part["provider_metadata"] = pm
             return part

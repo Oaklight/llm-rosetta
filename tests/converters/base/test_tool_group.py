@@ -2,11 +2,14 @@
 
 from typing import Any
 
+import pytest
+
 from llm_rosetta.converters.base.helpers.tool_group import (
     GENERATED_GROUP_ID_LENGTH,
     ToolGroup,
     generated_group_id,
     group_tools,
+    tool_call_group,
 )
 
 
@@ -134,3 +137,53 @@ class TestGroupTools:
         """`""` is what a nameless container used to flatten to; it groups nothing."""
         tools = [_tool("a", ""), _tool("a", "")]
         assert _shape(group_tools(tools, carries_groups=True)) == ["a", "a"]
+
+
+class TestToolCallGroup:
+    """Reading the group off a call, first-class field first."""
+
+    def test_reads_the_first_class_field(self):
+        assert tool_call_group({"tool_name": "wait", "tool_group": "tasks"}) == "tasks"
+
+    def test_reads_a_tool_call_start_event(self):
+        """The same reader serves the streaming event, which is a dict too."""
+        event = {"type": "tool_call_start", "tool_name": "wait", "tool_group": "tasks"}
+        assert tool_call_group(event) == "tasks"
+
+    def test_falls_back_to_the_legacy_metadata_spelling(self):
+        """IR built before ``tool_group`` existed keeps working."""
+        part = {"tool_name": "wait", "provider_metadata": {"namespace": "tasks"}}
+        assert tool_call_group(part) == "tasks"
+
+    def test_the_first_class_field_wins_over_the_legacy_key(self):
+        """When both are present they must not be able to disagree."""
+        part = {
+            "tool_name": "wait",
+            "tool_group": "tasks",
+            "provider_metadata": {"namespace": "agents"},
+        }
+        assert tool_call_group(part) == "tasks"
+
+    @pytest.mark.parametrize(
+        "part",
+        [
+            pytest.param({"tool_name": "wait"}, id="neither-field"),
+            pytest.param({"tool_name": "wait", "tool_group": ""}, id="empty-field"),
+            pytest.param({"tool_name": "wait", "tool_group": 7}, id="non-string-field"),
+            pytest.param(
+                {"tool_name": "wait", "provider_metadata": {"namespace": ""}},
+                id="empty-legacy",
+            ),
+            pytest.param(
+                {"tool_name": "wait", "provider_metadata": {"namespace": 7}},
+                id="non-string-legacy",
+            ),
+            pytest.param(
+                {"tool_name": "wait", "provider_metadata": "not-a-dict"},
+                id="non-dict-metadata",
+            ),
+        ],
+    )
+    def test_absent_reads_as_none(self, part):
+        """A missing, empty, or non-string group is no group at all."""
+        assert tool_call_group(part) is None

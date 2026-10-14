@@ -60,10 +60,10 @@ class OpenResponsesStreamContext(StreamContext):
     # Tool call output_index storage (call_id → assigned index)
     _tool_call_output_indices: dict[str, int] = field(default_factory=dict, repr=False)
 
-    # Namespace of each tool call (call_id → namespace), for tools that were
+    # Group of each tool call (call_id → group), for tools that were
     # flattened out of a `namespace` container on the request leg.  Recorded
     # at tool_call_start so the later completed/done items can restore it.
-    _tool_call_namespaces: dict[str, str] = field(default_factory=dict, repr=False)
+    _tool_call_groups: dict[str, str] = field(default_factory=dict, repr=False)
 
     # Reasoning items being assembled outbound (IR → Responses), in
     # arrival order.  A turn can hold several — one per stretch of
@@ -151,7 +151,7 @@ class OpenResponsesStreamContext(StreamContext):
         # streaming, so they are not copied from `base` (which is a plain
         # StreamContext).  Listed here so a new field is not silently lost.
         # _tool_call_output_indices: allocated during streaming
-        # _tool_call_namespaces: populated at tool_call_start events
+        # _tool_call_groups: populated at tool_call_start events
         # _reasoning_items: appended as reasoning items start
         # _inbound_reasoning_item_id: set at reasoning output_item events
         return ctx

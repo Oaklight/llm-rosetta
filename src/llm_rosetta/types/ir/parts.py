@@ -118,6 +118,16 @@ class ToolCallPart(TypedDict):
     - Google's thought_signature (required for Gemini 3, recommended for Gemini 2.5)
     - intrinsic_kind for intrinsic tools (e.g. "web_search", "code_execution")
     - Other provider's special fields
+
+    ``tool_group`` 是本次调用所属工具组的名字，与工具定义上的
+    ``ToolDefinition.tool_group`` 是同一身份的两端：客户端按 ``(name, group)``
+    发起调用，就把 group 一并带回来；扁平目标上的调用不带该字段。
+    ``tool_group`` names the group the called tool belongs to, the call-side
+    counterpart of ``ToolDefinition.tool_group``.  A client that addresses a
+    tool by ``(name, group)`` gets the group back beside the name; a call on a
+    flat target carries none.  Read it directly; converters still accept the
+    legacy ``provider_metadata["namespace"]`` spelling on input for
+    backward compatibility.
     """
 
     type: Required[Literal["tool_call"]]
@@ -132,6 +142,15 @@ class ToolCallPart(TypedDict):
             "intrinsic",
         ]
     ]  # 默认为 "function" Default is "function"
+    tool_group: NotRequired[str]
+    """本次调用所属的工具组 The group this call's tool belongs to.
+
+    Present when the client addressed the tool by ``(name, group)``; absent on
+    a target that carries no grouping and on any tool declared on its own.
+    A converter that writes this field removes a legacy
+    ``provider_metadata["namespace"]`` from the same call, so a group is never
+    stored twice with the two copies able to disagree.
+    """
     provider_metadata: NotRequired[
         dict[str, Any]
     ]  # Provider特定的元数据 Provider-specific metadata

@@ -492,12 +492,18 @@ class TestRestoreClientToolNames:
             ]
         }
 
-    def test_sets_namespace_in_provider_metadata(self):
+    def test_sets_the_call_group(self):
+        """The restored group lands in the first-class ``tool_group`` field.
+
+        Not in ``provider_metadata``: the call side now carries its group the
+        same way the definition side does.
+        """
         ir = self._response("spawn_agent")
         restore_client_tool_names(ir, name_map=_name_map(("spawn_agent", "agents")))
         part = ir["choices"][0]["message"]["content"][0]
-        assert part["provider_metadata"]["namespace"] == "agents"
+        assert part["tool_group"] == "agents"
         assert part["tool_name"] == "spawn_agent"
+        assert "provider_metadata" not in part
 
     def test_restores_pre_rename_name(self):
         ir = self._response("agents_wait")
@@ -506,7 +512,7 @@ class TestRestoreClientToolNames:
         )
         part = ir["choices"][0]["message"]["content"][0]
         assert part["tool_name"] == "wait"
-        assert part["provider_metadata"]["namespace"] == "agents"
+        assert part["tool_group"] == "agents"
 
     def test_preserves_existing_provider_metadata(self):
         ir = self._response("spawn_agent")
@@ -514,9 +520,11 @@ class TestRestoreClientToolNames:
             "responses_item_id": "fc_keep"
         }
         restore_client_tool_names(ir, name_map=_name_map(("spawn_agent", "agents")))
-        pm = ir["choices"][0]["message"]["content"][0]["provider_metadata"]
+        part = ir["choices"][0]["message"]["content"][0]
+        assert part["tool_group"] == "agents"
+        pm = part["provider_metadata"]
         assert pm["responses_item_id"] == "fc_keep"
-        assert pm["namespace"] == "agents"
+        assert "namespace" not in pm
 
     def test_noop_when_empty_map(self):
         ir = self._response("spawn_agent")
@@ -565,11 +573,19 @@ class TestRestoreAgainstAGroupedTarget:
         )
 
     def test_the_echoed_namespace_routes_to_the_container_child(self):
+        """A legacy metadata namespace on the wire still routes the call.
+
+        The fixture puts the group where the pre-``tool_group`` IR kept it —
+        ``provider_metadata["namespace"]`` — so this also pins the backward
+        compatible read: a call carrying only the old spelling still resolves,
+        and comes back out through the first-class field.
+        """
         ir = self._call("wait", "tasks")
         restore_client_tool_names(ir, name_map=self._shared_name_map())
         part = ir["choices"][0]["message"]["content"][0]
         assert part["tool_name"] == "wait"
-        assert part["provider_metadata"]["namespace"] == "tasks"
+        assert part["tool_group"] == "tasks"
+        assert "namespace" not in part.get("provider_metadata", {})
 
     def test_a_bare_call_does_not_acquire_a_namespace(self):
         """The top-level tool of the shared name comes back with none."""
@@ -604,6 +620,7 @@ class TestRestoreAgainstAGroupedTarget:
         restore_client_tool_names(ir, name_map=name_map)
         part = ir["choices"][0]["message"]["content"][0]
         assert part["tool_name"] == "wait"
+        assert "tool_group" not in part
         assert "namespace" not in part.get("provider_metadata", {})
 
 

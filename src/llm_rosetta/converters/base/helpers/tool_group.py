@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -64,6 +64,37 @@ def generated_group_id(description: str, child_names: Iterable[str]) -> str:
     seed = "\0".join([description, *child_names])
     digest = hashlib.sha256(seed.encode("utf-8")).digest()[:_DIGEST_BYTES]
     return _STEM + base64.b32encode(digest).decode("ascii").rstrip("=").lower()
+
+
+def tool_call_group(part: Mapping[str, Any]) -> str | None:
+    """Read the group a tool call was made in, first-class field first.
+
+    The definition side records membership in ``ToolDefinition.tool_group``;
+    the call side records it in ``ToolCallPart.tool_group`` and
+    ``ToolCallStartEvent.tool_group``.  The legacy
+    ``provider_metadata["namespace"]`` spelling is still read, so IR built
+    before that field existed keeps working, and a group that only ever lived
+    under the metadata key is still found.
+
+    A missing, non-string, or empty value reads as "no group" — the same falsy
+    test the converters apply when writing it, so a group cleared on the way
+    through never comes back as ``""``.
+
+    Works on anything carrying these fields: an IR ``ToolCallPart``, a
+    ``tool_call_start`` stream event, or a dict about to become either.
+
+    Args:
+        part: The IR tool call or tool-call event to read.
+
+    Returns:
+        The group name, or ``None`` when the call carries none.
+    """
+    group = part.get("tool_group")
+    if isinstance(group, str) and group:
+        return group
+    metadata = part.get("provider_metadata")
+    legacy = metadata.get("namespace") if isinstance(metadata, Mapping) else None
+    return legacy if isinstance(legacy, str) and legacy else None
 
 
 @dataclass(frozen=True)

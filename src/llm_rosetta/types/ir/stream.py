@@ -144,12 +144,19 @@ class ToolCallStartEvent(TypedDict):
     """Tool call start event.
 
     Emitted when a new tool call begins, providing the tool call ID and name.
+
+    ``tool_group`` names the group the called tool belongs to, the streaming
+    counterpart of :attr:`~llm_rosetta.types.ir.parts.ToolCallPart.tool_group`.
+    Present when the client addressed the tool by ``(name, group)``; absent on
+    a flat target.  The source converter reads it here and carries it onto the
+    later done/completed items.
     """
 
     type: Required[Literal["tool_call_start"]]
     tool_call_id: Required[str]
     tool_name: Required[str]
     tool_type: NotRequired[str]  # "function" (default), "custom", etc.
+    tool_group: NotRequired[str]  # Group the called tool belongs to
     cache_hint: NotRequired[dict[str, Any]]  # Block-level cache breakpoint
     tool_call_index: NotRequired[int]  # Index for multiple parallel tool calls
     choice_index: NotRequired[int]

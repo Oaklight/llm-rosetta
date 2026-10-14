@@ -4,6 +4,8 @@ OpenAI Responses API stream converter unit tests.
 
 from typing import Any, cast
 
+import pytest
+
 from llm_rosetta.converters.base.context import StreamContext
 from llm_rosetta.converters.open_responses import OpenAIResponsesConverter
 from llm_rosetta.converters.open_responses.stream_context import (
@@ -105,6 +107,54 @@ class TestStreamResponseFromProvider:
         assert events[0]["tool_call_id"] == "call_abc"
         assert events[0]["tool_name"] == "get_weather"
         assert events[0]["tool_call_index"] == 1
+
+    def test_tool_call_start_carries_the_group(self):
+        """A ``namespace`` the upstream echoed becomes the IR ``tool_group``."""
+        event = {
+            "type": "response.output_item.added",
+            "output_index": 2,
+            "item": {
+                "type": "function_call",
+                "call_id": "call_abc",
+                "name": "wait",
+                "namespace": "agents",
+                "arguments": "",
+            },
+        }
+        events = cast(list[Any], self.converter.stream_response_from_provider(event))
+        assert len(events) == 1
+        assert events[0]["type"] == "tool_call_start"
+        assert events[0]["tool_group"] == "agents"
+        # The group lives in its own field, not in provider_metadata.
+        assert "namespace" not in events[0].get("provider_metadata", {})
+
+    def test_tool_call_start_without_a_namespace_has_no_group(self):
+        event = {
+            "type": "response.output_item.added",
+            "item": {
+                "type": "function_call",
+                "call_id": "call_abc",
+                "name": "get_weather",
+                "arguments": "",
+            },
+        }
+        events = cast(list[Any], self.converter.stream_response_from_provider(event))
+        assert "tool_group" not in events[0]
+
+    def test_custom_tool_call_start_carries_the_group(self):
+        event = {
+            "type": "response.output_item.added",
+            "item": {
+                "type": "custom_tool_call",
+                "call_id": "call_x",
+                "name": "edit",
+                "namespace": "b",
+                "input": "",
+            },
+        }
+        events = cast(list[Any], self.converter.stream_response_from_provider(event))
+        assert events[0]["type"] == "tool_call_start"
+        assert events[0]["tool_group"] == "b"
 
     def test_output_item_added_non_function_call(self):
         """response.output_item.added with non-function_call type produces no events."""
@@ -1935,6 +1985,51 @@ class TestCustomToolCallStreaming:
         assert result["item"]["status"] == "in_progress"
         # Context should have registered the custom type
         assert ctx.get_tool_type("call_custom_1") == "custom"
+
+    @pytest.mark.parametrize(
+        ("tool_type", "item_type"),
+        [("function", "function_call"), ("custom", "custom_tool_call")],
+    )
+    def test_tool_call_start_group_reaches_the_wire(self, tool_type, item_type):
+        """An IR ``tool_group`` is written back as the Responses ``namespace``."""
+        ctx = OpenAIResponsesStreamContext()
+        event = cast(
+            ToolCallStartEvent,
+            {
+                "type": "tool_call_start",
+                "tool_call_id": "call_1",
+                "tool_name": "wait",
+                "tool_type": tool_type,
+                "tool_group": "agents",
+                "tool_call_index": 0,
+            },
+        )
+        result = cast(
+            dict[str, Any],
+            self.converter.stream_response_to_provider(event, context=ctx),
+        )
+        assert result["item"]["type"] == item_type
+        assert result["item"]["namespace"] == "agents"
+
+    def test_tool_call_start_legacy_metadata_group_reaches_the_wire(self):
+        """A call carrying only the old metadata spelling still emits it."""
+        ctx = OpenAIResponsesStreamContext()
+        event = cast(
+            ToolCallStartEvent,
+            {
+                "type": "tool_call_start",
+                "tool_call_id": "call_1",
+                "tool_name": "wait",
+                "tool_type": "function",
+                "provider_metadata": {"namespace": "agents"},
+                "tool_call_index": 0,
+            },
+        )
+        result = cast(
+            dict[str, Any],
+            self.converter.stream_response_to_provider(event, context=ctx),
+        )
+        assert result["item"]["namespace"] == "agents"
 
     def test_tool_call_delta_custom_to_p(self):
         """ToolCallDeltaEvent for custom tool → custom_tool_call_input.delta."""

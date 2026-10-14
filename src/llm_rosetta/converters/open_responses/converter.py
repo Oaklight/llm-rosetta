@@ -51,6 +51,7 @@ from ..base.helpers.tool_group import (
     GENERATED_GROUP_MARKER,
     ToolGroup,
     group_tools,
+    tool_call_group,
 )
 from ..base.tools import (
     assign_tool_batch_ids,
@@ -1070,29 +1071,7 @@ class OpenResponsesConverter(BaseConverter):
             item_type = item.get("type", "")
 
             if item_type in ("function_call", "custom_tool_call"):
-                call_id = item.get("call_id", "")
-                item_id = item.get("id", "")
-                tool_type = "custom" if item_type == "custom_tool_call" else "function"
-
-                # Register tool call in context
-                if context is not None:
-                    context.register_tool_call(call_id, item.get("name", ""), tool_type)
-                    context.register_tool_call_item(call_id, item_id)
-
-                start_event_tc = ToolCallStartEvent(
-                    type="tool_call_start",
-                    tool_call_id=call_id,
-                    tool_name=item.get("name", ""),
-                    tool_type=tool_type,
-                )
-                if item_id and item_id != call_id:
-                    start_event_tc["provider_metadata"] = {
-                        "responses_item_id": item_id,
-                    }
-                output_index = chunk.get("output_index")
-                if output_index is not None:
-                    start_event_tc["tool_call_index"] = output_index
-                events.append(start_event_tc)
+                self._emit_client_call_start_ir(item, chunk, context, events)
 
             elif item_type in _SERVER_ITEM_INTRINSIC_KINDS:
                 self._emit_server_call_start_ir(item, chunk, context, events)
@@ -1130,6 +1109,46 @@ class OpenResponsesConverter(BaseConverter):
                         payload=dict(chunk),
                     )
                 )
+
+    @staticmethod
+    def _emit_client_call_start_ir(
+        item: dict[str, Any],
+        chunk: dict[str, Any],
+        context: StreamContext | None,
+        events: list[IRStreamEvent],
+    ) -> None:
+        """Emit the IR ``tool_call_start`` for a client tool call item.
+
+        Covers the upstream's own render of a client call — a
+        ``function_call`` or a ``custom_tool_call``.  The ``namespace`` the
+        item echoes beside the name is carried onto the event as the
+        first-class ``tool_group``, so the source leg can hand it back to a
+        client that grouped the tool.
+        """
+        call_id = item.get("call_id", "")
+        item_id = item.get("id", "")
+        tool_type = "custom" if item.get("type") == "custom_tool_call" else "function"
+
+        # Register tool call in context
+        if context is not None:
+            context.register_tool_call(call_id, item.get("name", ""), tool_type)
+            context.register_tool_call_item(call_id, item_id)
+
+        start_event = ToolCallStartEvent(
+            type="tool_call_start",
+            tool_call_id=call_id,
+            tool_name=item.get("name", ""),
+            tool_type=tool_type,
+        )
+        namespace = item.get("namespace")
+        if isinstance(namespace, str) and namespace:
+            start_event["tool_group"] = namespace
+        if item_id and item_id != call_id:
+            start_event["provider_metadata"] = {"responses_item_id": item_id}
+        output_index = chunk.get("output_index")
+        if output_index is not None:
+            start_event["tool_call_index"] = output_index
+        events.append(start_event)
 
     @staticmethod
     def _emit_server_call_start_ir(
@@ -1899,11 +1918,11 @@ class OpenResponsesConverter(BaseConverter):
         if stream_ctx is not None:
             output_index = stream_ctx.next_output_index()
             stream_ctx._tool_call_output_indices[call_id] = output_index
-            # Record the namespace once, so the later done/completed items
-            # can be rebuilt with it straight from the context.
-            namespace = pm.get("namespace")
+            # Record the group once, so the later done/completed items can be
+            # rebuilt with it straight from the context.
+            namespace = tool_call_group(event)
             if namespace and call_id:
-                stream_ctx._tool_call_namespaces[call_id] = namespace
+                stream_ctx._tool_call_groups[call_id] = namespace
         else:
             tc_index = event.get("tool_call_index")
             output_index = tc_index if tc_index is not None else 0
@@ -2254,7 +2273,7 @@ class OpenResponsesConverter(BaseConverter):
             "status": status,
         }
         if context is not None:
-            namespace = context._tool_call_namespaces.get(call_id)
+            namespace = context._tool_call_groups.get(call_id)
             if namespace:
                 item["namespace"] = namespace
         return item
@@ -2284,7 +2303,7 @@ class OpenResponsesConverter(BaseConverter):
             "status": status,
         }
         if context is not None:
-            namespace = context._tool_call_namespaces.get(call_id)
+            namespace = context._tool_call_groups.get(call_id)
             if namespace:
                 item["namespace"] = namespace
         return item
