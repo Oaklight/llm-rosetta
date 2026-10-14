@@ -609,10 +609,11 @@ def _server_item_renderable(item_type: str, fields: dict[str, Any]) -> bool:
                 for result in results
             )
         )
-    # shell_call / computer_call: the published schema also requires ``call_id``
-    # and ``status``, and the read side lifts neither, so a native replay would
-    # write an item the API rejects.  Degrade to a ``function_call`` as before
-    # rather than emit a shape no one has replayed live.
+    # shell_call / computer_call: no live replay of either shape exists and the
+    # published item schema is unverified here, so keep the ``function_call``
+    # degradation rather than emit a native item on the schema's word alone.
+    # The IR carries what a replay would need (``tool_call_id`` and
+    # ``responses_status``); the caution is about the wire shape, not a field.
     return False
 
 
