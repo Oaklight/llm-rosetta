@@ -291,6 +291,24 @@ class TestNonStreamingWrite:
 
         assert _write_response([part]) == []
 
+    def test_unknown_result_kind_is_dropped(self):
+        """A server result this dialect cannot render yields no step.
+
+        ``web_search`` has no native result step type here, so the result is
+        dropped rather than fabricated as ``web_search_result`` — the call
+        side's rule, on the non-streaming writer (the streaming counterpart is
+        ``TestStreamingWrite.test_unknown_result_kind_is_dropped``).
+        """
+        result = {
+            "type": "tool_result",
+            "tool_call_id": "c1",
+            "result": [{"x": 1}],
+            "tool_type": "intrinsic",
+            "provider_metadata": {"intrinsic_kind": "web_search"},
+        }
+
+        assert _write_response([result]) == []
+
     def test_client_call_still_gets_its_name(self):
         part = {
             "type": "tool_call",
