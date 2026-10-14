@@ -609,8 +609,11 @@ def _server_item_renderable(item_type: str, fields: dict[str, Any]) -> bool:
                 for result in results
             )
         )
-    # shell_call / computer_call / …: the payload is the item's own fields.
-    return bool(fields)
+    # shell_call / computer_call: the published schema also requires ``call_id``
+    # and ``status``, and the read side lifts neither, so a native replay would
+    # write an item the API rejects.  Degrade to a ``function_call`` as before
+    # rather than emit a shape no one has replayed live.
+    return False
 
 
 def _ir_intrinsic_to_responses(

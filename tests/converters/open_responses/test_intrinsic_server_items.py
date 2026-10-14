@@ -295,6 +295,25 @@ class TestServerItemHistoryLeg:
 
         assert written["type"] == "function_call"
 
+    def test_shell_call_degrades_because_the_ir_cannot_supply_its_fields(self):
+        # `shell_call` / `computer_call` need `call_id` and `status` (published
+        # schema), which the read side does not lift, so replaying them natively
+        # would write an item the API rejects.  Keep the function_call
+        # degradation the history leg used before the gate was added.
+        ir = OpenResponsesToolOps.p_tool_call_to_ir(
+            {
+                "type": "shell_call",
+                "id": "sc1",
+                "call_id": "c1",
+                "action": {"commands": ["ls"]},
+                "status": "completed",
+            }
+        )
+
+        written = OpenResponsesToolOps.ir_tool_call_to_p(ir, for_history=True)
+
+        assert written["type"] == "function_call"
+
 
 class TestIntrinsicResultInputLeg:
     """A server result is dropped from the input leg, never client-shaped.
