@@ -407,6 +407,34 @@ class TestStreamingWrite:
 
         assert _emitted_parts(chunks) == []
 
+    def test_flush_drops_a_server_call_whose_input_is_truncated(self):
+        """A cut-mid-call fragment parses to nothing, so no part is written."""
+        converter = GoogleGenerateConverter()
+        context = StreamContext()
+        events: list[Any] = [
+            ToolCallStartEvent(
+                type="tool_call_start",
+                tool_call_id="c1",
+                tool_name="code_execution",
+                tool_call_index=0,
+                tool_type="intrinsic",
+                provider_metadata={"intrinsic_kind": "code_execution"},
+            ),
+            ToolCallDeltaEvent(
+                type="tool_call_delta",
+                tool_call_id="c1",
+                arguments_delta='{"code": "print(1',
+            ),
+            FinishEvent(type="finish", finish_reason={"reason": "stop"}),
+        ]
+        chunks: list[dict[str, Any]] = []
+        for event in events:
+            chunks.extend(
+                _chunks(converter.stream_response_to_provider(event, context))
+            )
+
+        assert _emitted_parts(chunks) == []
+
 
 class TestCrossFormat:
     """A server call never becomes a client call on a cross-format hop."""

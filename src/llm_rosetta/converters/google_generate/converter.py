@@ -1483,17 +1483,21 @@ class GoogleGenerateConverter(BaseConverter):
             return None
         if not args_str.strip():
             # No input ever arrived (a cross-format source that emitted the
-            # result without an argument delta, or a stream truncated mid-call):
-            # ``executableCode`` with an empty ``code`` is a part no API
-            # accepts, so drop it the way an unrenderable kind is dropped.
+            # result without an argument delta): there is nothing to render.
             return None
         try:
             args = json.loads(args_str)
         except (json.JSONDecodeError, TypeError):
+            # A truncated fragment (a stream cut mid-call) parses to nothing,
+            # which the guard below then drops.
             args = {}
+        if not args.get("code"):
+            # ``executableCode`` with an empty ``code`` is a part no API
+            # accepts, so drop it the way an unrenderable kind is dropped.
+            return None
         return {
             "executableCode": {
-                "code": args.get("code", ""),
+                "code": args["code"],
                 "language": args.get("language", "PYTHON"),
             }
         }
