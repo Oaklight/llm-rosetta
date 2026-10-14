@@ -148,19 +148,24 @@ class GoogleInteractionsToolOps(BaseToolOps):
         """IR ToolCallPart → Interactions FunctionCallStep."""
         preserve_metadata = kwargs.get("preserve_metadata", True)
         if ir_part.get("tool_type") == "intrinsic":
-            # Native server-call steps (google_search_call, ...) do not
-            # carry a thought signature and are replayable without one, so
-            # only the plain ``function_call`` branch below preserves it.
+            # Native server-call steps (``google_search_call``, ...) take no
+            # ``name``: the API rejects a body carrying one with ``400 Unknown
+            # parameter 'name' at 'input[0]'``.  They do carry a ``signature``
+            # on the wire, so restore the one the read path kept.
             intrinsic_kind = get_intrinsic_kind(ir_part, ir_part["tool_name"])
             step_type = INTRINSIC_KIND_TO_CALL_TYPE.get(
                 intrinsic_kind, f"{intrinsic_kind}_call"
             )
-            return {
+            step: dict[str, Any] = {
                 "type": step_type,
                 "id": ir_part["tool_call_id"],
-                "name": ir_part["tool_name"],
                 "arguments": ir_part["tool_input"],
             }
+            pm = ir_part.get("provider_metadata") or {}
+            sig = pm.get("google", {}).get("thought_signature")
+            if preserve_metadata and sig:
+                step["signature"] = sig
+            return step
         step: dict[str, Any] = {
             "type": "function_call",
             "id": ir_part["tool_call_id"],
@@ -178,19 +183,32 @@ class GoogleInteractionsToolOps(BaseToolOps):
     # ── Server step calls ─────────────────────────────────────────
 
     @staticmethod
-    def p_server_call_to_ir(step: dict) -> ToolCallPart:
-        """Interactions server call step (google_search_call, etc.) → IR ToolCallPart."""
+    def p_server_call_to_ir(step: dict, **kwargs: Any) -> ToolCallPart:
+        """Interactions server call step (google_search_call, etc.) → IR ToolCallPart.
+
+        The native step carries no ``name``; its identity is the canonical
+        intrinsic kind derived from the step type.  It does carry a
+        ``signature``, which a replay needs, so it is kept on the part's
+        ``provider_metadata`` and restored by ``ir_function_call_to_p``.
+        """
         step_type = step.get("type", "")
         intrinsic_kind = SERVER_CALL_TYPES.get(step_type, step_type)
-        return cast(
+        part = cast(
             ToolCallPart,
             make_intrinsic_tool_call(
                 tool_call_id=step.get("id", ""),
-                tool_name=step.get("name", step_type),
+                tool_name=intrinsic_kind,
                 tool_input=step.get("arguments", {}),
                 intrinsic_kind=intrinsic_kind,
             ),
         )
+        preserve_metadata = kwargs.get("preserve_metadata", True)
+        signature = step.get("signature")
+        if preserve_metadata and signature:
+            part.setdefault("provider_metadata", {}).setdefault("google", {})[
+                "thought_signature"
+            ] = signature
+        return part
 
     # ── Tool results (FunctionResultStep) ──────────────────────────
 
@@ -289,22 +307,21 @@ class GoogleInteractionsToolOps(BaseToolOps):
 
     @staticmethod
     def p_server_result_to_ir(step: dict) -> ToolResultPart:
-        """Interactions server result step (google_search_result, etc.) → IR ToolResultPart."""
+        """Interactions server result step (google_search_result, etc.) → IR ToolResultPart.
+
+        The result payload is kept exactly as the wire carries it.  A
+        ``google_search_result`` is an array of result blocks and a
+        ``code_execution_result`` is a string; the API rejects a replayed step
+        whose ``result`` does not match that shape (``Expected an array, got
+        string``), so the two must not be flattened to a common string.
+        """
         step_type = step.get("type", "")
         intrinsic_kind = SERVER_RESULT_TYPES.get(step_type, step_type)
-        result_val = step.get("result", "")
-        if isinstance(result_val, list):
-            texts = [
-                item.get("text", "") for item in result_val if isinstance(item, dict)
-            ]
-            result_val = "\n".join(texts) if texts else ""
-        elif isinstance(result_val, dict):
-            result_val = json.dumps(result_val)
         return cast(
             ToolResultPart,
             make_intrinsic_tool_result(
                 tool_call_id=step.get("call_id", step.get("id", "")),
-                result=result_val,
+                result=step.get("result", ""),
                 intrinsic_kind=intrinsic_kind,
                 is_error=bool(step.get("is_error")),
             ),

@@ -5,6 +5,7 @@ Top-level converter implementing bidirectional conversion between IR
 and Google Interactions API format via BaseConverter hooks.
 """
 
+import json
 import logging
 import time
 from collections.abc import Mapping
@@ -28,6 +29,7 @@ from ...types.ir.stream import (
     TextDeltaEvent,
     ToolCallDeltaEvent,
     ToolCallStartEvent,
+    ToolResultEvent,
     UsageEvent,
 )
 from ..base import BaseConverter
@@ -37,12 +39,20 @@ from ..base.helpers.opaque import (
     set_opaque_origin,
 )
 from ..base.helpers.system_message_hoist import hoist_system_in_converter
+from ..base.tools import is_intrinsic_part
+from ..base.tools.intrinsic import get_intrinsic_kind, set_intrinsic_kind
 from ...transforms.ir import hoist_late_system_messages
 from ..base.context import ConversionContext, StreamContext
 from .config_ops import GoogleInteractionsConfigOps
 from .content_ops import GoogleInteractionsContentOps
 from .message_ops import GoogleInteractionsMessageOps
-from .tool_ops import GoogleInteractionsToolOps
+from .tool_ops import (
+    INTRINSIC_KIND_TO_CALL_TYPE,
+    INTRINSIC_KIND_TO_RESULT_TYPE,
+    SERVER_CALL_TYPES,
+    SERVER_RESULT_TYPES,
+    GoogleInteractionsToolOps,
+)
 
 _STATUS_TO_FINISH_REASON: dict[str, str] = {
     "completed": "stop",
@@ -311,8 +321,18 @@ class GoogleInteractionsConverter(BaseConverter):
 
         combined_parts: list = []
         for msg in ir_messages:
-            if msg.get("role") == "assistant":
+            role = msg.get("role")
+            if role == "assistant":
                 combined_parts.extend(msg.get("content", []))
+            elif role == "tool":
+                # ``p_steps_to_ir_messages`` emits a ``role: "tool"`` message
+                # for a server result step.  A response is a single assistant
+                # turn, so its server results ride inline in that turn, in the
+                # order the steps arrived (#992).  A client result cannot occur
+                # in a response turn, so only the intrinsic ones are kept.
+                combined_parts.extend(
+                    part for part in msg.get("content", []) if is_intrinsic_part(part)
+                )
 
         assistant_msg: Any = {
             "role": "assistant",
@@ -449,9 +469,11 @@ class GoogleInteractionsConverter(BaseConverter):
             "step.stop": self._stream_step_stop,
             "interaction.completed": self._stream_interaction_completed,
         }.get(data.get("event_type", ""))
-        return handler(data) if handler else []
+        return handler(data, context) if handler else []
 
-    def _stream_interaction_created(self, data: dict) -> list[IRStreamEvent]:
+    def _stream_interaction_created(
+        self, data: dict, context: StreamContext | None = None
+    ) -> list[IRStreamEvent]:
         interaction = data.get("interaction", {})
         return [
             StreamStartEvent(
@@ -461,11 +483,20 @@ class GoogleInteractionsConverter(BaseConverter):
             )
         ]
 
-    def _stream_step_start(self, data: dict) -> list[IRStreamEvent]:
+    def _stream_step_start(
+        self, data: dict, context: StreamContext | None = None
+    ) -> list[IRStreamEvent]:
         index = data.get("index", 0)
         step = data.get("step", {})
         step_type = step.get("type", "")
         block_type = _STEP_TYPE_TO_BLOCK_TYPE.get(step_type, step_type)
+        if step_type in SERVER_CALL_TYPES:
+            # A server call is a tool block, not a bare step: name it
+            # ``server_tool_use`` so the writer defers to the paired
+            # ``ToolCallStartEvent`` (which carries the id, kind and
+            # signature).  The kind is folded from the step type, never from
+            # the step name.
+            block_type = "server_tool_use"
         events: list[IRStreamEvent] = [
             ContentBlockStartEvent(
                 type="content_block_start",
@@ -474,9 +505,12 @@ class GoogleInteractionsConverter(BaseConverter):
             )
         ]
         if step_type == "function_call":
+            tool_call_id = step.get("id", "")
+            if context is not None:
+                context.block_index_to_tool_call_id[index] = tool_call_id
             tc_event = ToolCallStartEvent(
                 type="tool_call_start",
-                tool_call_id=step.get("id", ""),
+                tool_call_id=tool_call_id,
                 tool_name=step.get("name", ""),
                 tool_call_index=index,
             )
@@ -484,9 +518,36 @@ class GoogleInteractionsConverter(BaseConverter):
             if sig:
                 tc_event["provider_metadata"] = {"google": {"thought_signature": sig}}
             events.append(tc_event)
+        elif step_type in SERVER_CALL_TYPES:
+            kind = SERVER_CALL_TYPES[step_type]
+            tool_call_id = step.get("id", "")
+            if context is not None:
+                context.block_index_to_tool_call_id[index] = tool_call_id
+            tc_event = ToolCallStartEvent(
+                type="tool_call_start",
+                tool_call_id=tool_call_id,
+                tool_name=kind,
+                tool_call_index=index,
+            )
+            tc_event["tool_type"] = "intrinsic"
+            set_intrinsic_kind(tc_event, kind)
+            sig = step.get("signature")
+            if sig:
+                tc_event["provider_metadata"] = {"google": {"thought_signature": sig}}
+            events.append(tc_event)
+        elif step_type in SERVER_RESULT_TYPES:
+            # The result step's id lives on its ``step.start``; remember it so
+            # the payload delta, which may omit it, can still name the call.
+            if context is not None:
+                context.block_index_to_tool_call_id[index] = step.get("call_id", "")
+        # A server result step carries no payload in ``step.start`` — the
+        # result rides the following ``step.delta`` — so only the block is
+        # opened here; ``_stream_step_delta`` emits the ToolResultEvent.
         return events
 
-    def _stream_step_delta(self, data: dict) -> list[IRStreamEvent]:
+    def _stream_step_delta(
+        self, data: dict, context: StreamContext | None = None
+    ) -> list[IRStreamEvent]:
         index = data.get("index", 0)
         delta = data.get("delta", {})
         delta_type = delta.get("type", "")
@@ -524,9 +585,47 @@ class GoogleInteractionsConverter(BaseConverter):
                     block_index=index,
                 )
             ]
+        if delta_type in SERVER_CALL_TYPES:
+            # A server call's arguments arrive whole (as a dict) under the
+            # step's own type name; serialize them so the IR delta matches the
+            # JSON-string shape a client tool call uses.  The step delta
+            # carries no call id, so it is read from the id registered for this
+            # block at ``step.start``.
+            tool_call_id = ""
+            if context is not None:
+                tool_call_id = context.block_index_to_tool_call_id.get(index, "")
+            return [
+                ToolCallDeltaEvent(
+                    type="tool_call_delta",
+                    tool_call_id=tool_call_id,
+                    arguments_delta=json.dumps(delta.get("arguments", {})),
+                    block_index=index,
+                )
+            ]
+        if delta_type in SERVER_RESULT_TYPES:
+            # A server result's payload also rides the step delta.  Emit the
+            # one-shot ToolResultEvent here, mirroring the non-streaming
+            # reader's payload shape.  The delta may omit the call id, which
+            # was registered for this block at ``step.start``.
+            tool_call_id = delta.get("call_id", "")
+            if not tool_call_id and context is not None:
+                tool_call_id = context.block_index_to_tool_call_id.get(index, "")
+            result_evt = ToolResultEvent(
+                type="tool_result",
+                tool_call_id=tool_call_id,
+                result=delta.get("result", ""),
+                tool_type="intrinsic",
+                block_index=index,
+            )
+            set_intrinsic_kind(result_evt, SERVER_RESULT_TYPES[delta_type])
+            if delta.get("is_error"):
+                result_evt["is_error"] = True
+            return [result_evt]
         return []
 
-    def _stream_step_stop(self, data: dict) -> list[IRStreamEvent]:
+    def _stream_step_stop(
+        self, data: dict, context: StreamContext | None = None
+    ) -> list[IRStreamEvent]:
         index = data.get("index", 0)
         events: list[IRStreamEvent] = [
             ContentBlockEndEvent(type="content_block_end", block_index=index)
@@ -538,7 +637,9 @@ class GoogleInteractionsConverter(BaseConverter):
             )
         return events
 
-    def _stream_interaction_completed(self, data: dict) -> list[IRStreamEvent]:
+    def _stream_interaction_completed(
+        self, data: dict, context: StreamContext | None = None
+    ) -> list[IRStreamEvent]:
         interaction = data.get("interaction", {})
         status = interaction.get("status", "completed")
         reason_str = _STATUS_TO_FINISH_REASON.get(status, "stop")
@@ -599,6 +700,11 @@ class GoogleInteractionsConverter(BaseConverter):
 
     # ── IR → Provider stream handlers (for response conversion) ────
 
+    _IR_TO_P_DISPATCH: dict[str, str] = {
+        **BaseConverter._IR_TO_P_DISPATCH,
+        "tool_result": "_handle_ir_tool_result_to_p",
+    }
+
     def _handle_ir_stream_start_to_p(
         self, event: StreamStartEvent, context: StreamContext | None
     ) -> dict[str, Any]:
@@ -656,6 +762,10 @@ class GoogleInteractionsConverter(BaseConverter):
                 context.metadata["_interactions_pending_tool_index"] = event[
                     "block_index"
                 ]
+            return {}
+        if block_type in SERVER_RESULT_TYPES:
+            # The paired ToolResultEvent emits the result step; a bare
+            # ``step.start`` here would duplicate it at the same index.
             return {}
         step_type = {v: k for k, v in _STEP_TYPE_TO_BLOCK_TYPE.items()}.get(
             block_type, block_type
@@ -716,11 +826,22 @@ class GoogleInteractionsConverter(BaseConverter):
     def _handle_ir_tool_call_start_to_p(
         self, event: ToolCallStartEvent, context: StreamContext | None
     ) -> dict[str, Any]:
-        step: dict[str, Any] = {
-            "type": "function_call",
-            "id": event["tool_call_id"],
-            "name": event["tool_name"],
-        }
+        step: dict[str, Any]
+        if event.get("tool_type", "function") == "intrinsic":
+            # Mirror ``ir_function_call_to_p``: a server call re-emits the
+            # provider's own step type and carries no ``name`` (the API rejects
+            # one).  The kind comes from the event metadata, never the name.
+            kind = get_intrinsic_kind(event, event["tool_name"])
+            step = {
+                "type": INTRINSIC_KIND_TO_CALL_TYPE.get(kind, f"{kind}_call"),
+                "id": event["tool_call_id"],
+            }
+        else:
+            step = {
+                "type": "function_call",
+                "id": event["tool_call_id"],
+                "name": event["tool_name"],
+            }
         pm = event.get("provider_metadata") or {}
         sig = pm.get("google", {}).get("thought_signature")
         if sig:
@@ -736,6 +857,12 @@ class GoogleInteractionsConverter(BaseConverter):
             pending = context.metadata.pop("_interactions_pending_tool_index", None)
             if pending is not None:
                 index = pending
+            if event.get("tool_type", "function") == "intrinsic":
+                # The step delta of a server call needs the provider step type,
+                # which the IR delta event does not carry.
+                context.metadata.setdefault("_interactions_intrinsic_steps", {})[
+                    index
+                ] = step["type"]
         return {
             "event_type": "step.start",
             "index": index,
@@ -745,14 +872,63 @@ class GoogleInteractionsConverter(BaseConverter):
     def _handle_ir_tool_call_delta_to_p(
         self, event: ToolCallDeltaEvent, context: StreamContext | None
     ) -> dict[str, Any]:
+        index = event.get("block_index", 0)
+        step_type = None
+        if context is not None:
+            step_type = context.metadata.get("_interactions_intrinsic_steps", {}).get(
+                index
+            )
+        if step_type:
+            # A server call's arguments ride whole, as a dict, under the step's
+            # own type name.  The IR carries them as a JSON string, so parse
+            # them back; a partial fragment (a cross-format source) is passed
+            # through unchanged rather than dropped.
+            raw = event["arguments_delta"]
+            try:
+                arguments: Any = json.loads(raw) if raw else {}
+            except (ValueError, TypeError):
+                arguments = raw
+            return {
+                "event_type": "step.delta",
+                "index": index,
+                "delta": {"type": step_type, "arguments": arguments},
+            }
         return {
             "event_type": "step.delta",
-            "index": event.get("block_index", 0),
+            "index": index,
             "delta": {
                 "type": "arguments",
                 "call_id": event["tool_call_id"],
                 "arguments": event["arguments_delta"],
             },
+        }
+
+    def _handle_ir_tool_result_to_p(
+        self, event: ToolResultEvent, context: StreamContext | None
+    ) -> dict[str, Any]:
+        """Handle ToolResultEvent → step.start for a server-tool result.
+
+        A server result is emitted as the provider's own result step, with the
+        whole payload on it.  On the wire the provider splits the payload
+        across a ``step.start``/``step.delta`` pair, but a consumer accepts the
+        completed step in one message, and the paired block-start is dropped by
+        ``_handle_ir_content_block_start_to_p`` so nothing is duplicated.
+        """
+        kind = get_intrinsic_kind(event)
+        step_type = INTRINSIC_KIND_TO_RESULT_TYPE.get(kind, f"{kind}_result")
+        step: dict[str, Any] = {
+            "type": step_type,
+            "call_id": event["tool_call_id"],
+            "result": event["result"],
+        }
+        if event.get("is_error"):
+            step["is_error"] = True
+        if context is not None:
+            context.metadata["_interactions_step_started"] = True
+        return {
+            "event_type": "step.start",
+            "index": event.get("block_index", 0),
+            "step": step,
         }
 
     def _handle_ir_finish_to_p(

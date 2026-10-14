@@ -182,9 +182,12 @@ class TestFunctionCallConversion:
         )
         assert "provider_metadata" not in result
 
-    def test_intrinsic_call_does_not_emit_signature(self):
-        """Intrinsic server-call steps replay without a thought signature, so
-        a stored signature is intentionally not surfaced for them."""
+    def test_intrinsic_call_restores_signature_and_drops_name(self):
+        """A server call carries the signature, never a ``name`` (#992).
+
+        The API rejects ``name`` on a ``google_search_call`` with ``400 Unknown
+        parameter 'name'`` and needs the thought signature back on replay.
+        """
         ir = {
             "type": "tool_call",
             "tool_call_id": "call_intr",
@@ -193,8 +196,23 @@ class TestFunctionCallConversion:
             "tool_type": "intrinsic",
             "provider_metadata": {
                 "intrinsic_kind": "google_search",
-                "google": {"thought_signature": "should_be_ignored"},
+                "google": {"thought_signature": "sig_kept"},
             },
+        }
+        result = GoogleInteractionsToolOps.ir_tool_call_to_p(ir)  # ty: ignore
+        assert result["type"] == "google_search_call"
+        assert "name" not in result
+        assert result["signature"] == "sig_kept"
+
+    def test_intrinsic_call_without_signature_emits_none(self):
+        """No stored signature — the step simply carries no ``signature``."""
+        ir = {
+            "type": "tool_call",
+            "tool_call_id": "call_intr",
+            "tool_name": "google_search",
+            "tool_input": {},
+            "tool_type": "intrinsic",
+            "provider_metadata": {"intrinsic_kind": "google_search"},
         }
         result = GoogleInteractionsToolOps.ir_tool_call_to_p(ir)  # ty: ignore
         assert result["type"] == "google_search_call"

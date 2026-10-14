@@ -17,6 +17,7 @@ from ...types.ir.parts import AssistantContentPart, ContentPart
 from ...types.ir.request import IRInputItem
 from ..base import BaseMessageOps
 from ..base.helpers.opaque import inject_interactions_function_call_signature
+from ..base.tools import is_intrinsic_part
 from ..base.tools.batch import assign_tool_batch_ids
 from .content_ops import GoogleInteractionsContentOps
 from .tool_ops import (
@@ -180,6 +181,12 @@ class GoogleInteractionsMessageOps(BaseMessageOps):
                 steps.append(self.content_ops.ir_reasoning_to_p(part))
             elif ptype == "tool_call":
                 steps.append(self.tool_ops.ir_tool_call_to_p(part))
+            elif ptype == "tool_result" and is_intrinsic_part(part):
+                # A server result the assistant turn produced rides inline in
+                # this converter's response model (#992).  A client result
+                # cannot appear in a response turn, so it stays out rather than
+                # being downgraded.
+                steps.append(self.tool_ops.ir_tool_result_to_p(part))
         # Replayed function-call history needs a signature (Google dummy when
         # the real one is foreign or absent).
         inject_interactions_function_call_signature(steps)
