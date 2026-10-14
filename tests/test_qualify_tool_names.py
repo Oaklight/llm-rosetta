@@ -217,3 +217,29 @@ class TestQualifyToolNames:
         result = _qualify(tools, warnings)
         assert result[0]["name"] == "only_one"
         assert warnings == []
+
+    def test_a_tool_with_no_name_is_left_alone(self, warnings):
+        """The pass renames only tools it can name.
+
+        A tool with no name has nothing to prefix, so it must not be handed
+        one.  Two of them in the same group is the shape that would otherwise
+        reach the rename loop and be read as ``tool["name"]`` — a missing key
+        raises, and a ``None`` builds a name out of ``None``.
+        """
+        nameless: dict[str, Any] = {
+            "type": "function",
+            "parameters": {},
+            "tool_group": "tasks",
+        }
+        null_named: dict[str, Any] = {
+            "type": "function",
+            "name": None,
+            "parameters": {},
+            "tool_group": "tasks",
+        }
+        tools = [nameless, null_named]
+
+        result = _qualify(tools, warnings)
+
+        assert result == tools
+        assert warnings == []
