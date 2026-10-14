@@ -412,6 +412,12 @@ _ITEM_TO_INTRINSIC_KIND: dict[str, str] = {
     "file_search_call": "file_search",
 }
 
+#: Intrinsic kinds whose *call* is degraded to a client ``function_call`` on the
+#: history leg (see ``_server_item_renderable``).  Their result is written as a
+#: ``function_call_output`` for the same reason: it pairs with the degraded call,
+#: where a ``function_call_output`` under a call that stays native does not.
+_DEGRADED_INTRINSIC_KINDS = frozenset({"shell", "computer_use"})
+
 #: Keys on a native server item that describe its identity, not its payload.
 #: Read by the fallback below, which is reachable only for the recognised
 #: kinds that have no entry in ``_SERVER_ITEM_INPUT_KEYS`` (``shell_call``,
@@ -574,9 +580,13 @@ def _build_server_item(
         if fields.get("results") is not None:
             item["results"] = fields["results"]
     else:
-        # shell_call / computer_call / …: the read side already lifted the
-        # payload keys, so carry them back verbatim.
+        # shell_call / computer_call: the read side lifted the payload keys, so
+        # carry them back verbatim, and re-add ``call_id`` — the published item
+        # schema requires it, and the read side keeps the wire ``call_id`` as
+        # the IR's ``tool_call_id``.  The item's own ``id`` is not lifted, so
+        # ``id`` mirrors the call id here.
         item.update(fields)
+        item["call_id"] = item_id
     return item
 
 
@@ -1342,17 +1352,22 @@ class OpenResponsesToolOps(BaseToolOps):
         re-encoded as a trailing ``input_text`` block (see
         ``base.tools.error_marker``).
 
-        Returns ``{}`` for any intrinsic (server-tool) result: its payload
-        rides on the call item and the input schema has no item for it, so an
-        ``is_error`` flag on one is reported as a warning rather than encoded
-        as a marker.
+        Returns ``{}`` for an intrinsic (server-tool) result whose call stays
+        native: its payload rides on the call item and the input schema has no
+        item for it, so an ``is_error`` flag on one is reported as a warning
+        rather than encoded as a marker.  A shell / computer result is written
+        as a ``function_call_output`` instead, pairing with the client
+        ``function_call`` its call degrades to on the history leg.
 
         Args:
             ir_tool_result: IR tool result part.
             **kwargs: ``warnings`` (list[str]) receives a note when the error
                 flag had to be re-encoded or dropped.
         """
-        if ir_tool_result.get("tool_type") == "intrinsic":
+        if (
+            ir_tool_result.get("tool_type") == "intrinsic"
+            and get_intrinsic_kind(ir_tool_result) not in _DEGRADED_INTRINSIC_KINDS
+        ):
             # A server result rides on its call item (``outputs`` / ``results``
             # / ``action``); the input schema has no item for a code
             # interpreter, file search or web search result — its

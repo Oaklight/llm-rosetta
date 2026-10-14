@@ -253,6 +253,34 @@ class TestIntrinsicServerItemWriteShape:
 
         assert restored["status"] == "completed"
 
+    def test_shell_and_computer_items_carry_call_id(self):
+        # The published schema requires ``call_id`` on both, and the read side
+        # keeps the wire ``call_id`` as the IR's ``tool_call_id``, so the write
+        # leg can supply it.
+        for item in (
+            {
+                "type": "shell_call",
+                "id": "sc1",
+                "call_id": "c1",
+                "action": {"commands": ["ls"]},
+                "status": "completed",
+            },
+            {
+                "type": "computer_call",
+                "id": "cc1",
+                "call_id": "c2",
+                "action": {"type": "screenshot"},
+                "pending_safety_checks": [],
+                "status": "completed",
+            },
+        ):
+            restored = OpenResponsesToolOps.ir_tool_call_to_p(
+                OpenResponsesToolOps.p_tool_call_to_ir(item)
+            )
+
+            assert restored["type"] == item["type"]
+            assert restored["call_id"] == item["call_id"]
+
 
 class TestServerItemHistoryLeg:
     """A replayed turn keeps the native server item when the IR has its payload.
@@ -349,3 +377,34 @@ class TestIntrinsicResultInputLeg:
 
         assert OpenResponsesToolOps.ir_tool_result_to_p(ir, warnings=warnings) == {}
         assert warnings
+
+    def test_shell_result_pairs_with_its_degraded_call(self):
+        # The shell call degrades to a client ``function_call`` on the history
+        # leg, so its output is written as a ``function_call_output`` that pairs
+        # with it — the blanket drop would leave the call unpaired.
+        ir = OpenResponsesToolOps.p_tool_result_to_ir(
+            {
+                "type": "shell_call_output",
+                "call_id": "c1",
+                "output": [{"stdout": "a"}],
+            }
+        )
+
+        written = OpenResponsesToolOps.ir_tool_result_to_p(ir)
+
+        assert written["type"] == "function_call_output"
+        assert written["call_id"] == "c1"
+
+    def test_computer_result_pairs_with_its_degraded_call(self):
+        ir = OpenResponsesToolOps.p_tool_result_to_ir(
+            {
+                "type": "computer_call_output",
+                "call_id": "c2",
+                "output": [{"type": "computer_screenshot", "image_url": "x"}],
+            }
+        )
+
+        written = OpenResponsesToolOps.ir_tool_result_to_p(ir)
+
+        assert written["type"] == "function_call_output"
+        assert written["call_id"] == "c2"
