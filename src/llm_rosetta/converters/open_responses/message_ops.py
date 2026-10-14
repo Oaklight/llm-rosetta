@@ -32,9 +32,37 @@ from ...types.ir import (
 from ...types.ir.messages import MessageMetadata
 from ...types.ir.passthrough import ProviderPassthroughItem
 from ..base import BaseMessageOps
+from ..base.tools import sanitize_tool_call_id
 from ..base.tools.batch import assign_tool_batch_ids
 from .content_ops import OpenResponsesContentOps
 from .tool_ops import OpenResponsesToolOps
+
+
+def _degraded_intrinsic_calls(ir_messages: Sequence[IRInputItem]) -> dict[str, bool]:
+    """Map intrinsic tool-call id → whether the history-leg writer degrades it.
+
+    The call writer decides the shape from ``(kind, fields, leg)``; the result
+    writer must pair with the call that is actually written.  Calls and results
+    live in different messages, so the decision is collected over the whole list
+    before any message is converted.
+
+    Args:
+        ir_messages: IR message list about to be converted.
+
+    Returns:
+        ``tool_call_id`` (sanitized, as written) → ``True`` when the call is
+        written as a client ``function_call``.
+    """
+    degraded: dict[str, bool] = {}
+    for item in ir_messages:
+        if not is_message(item):
+            continue
+        for part in item.get("content") or []:
+            if is_tool_call_part(part) and part.get("tool_type") == "intrinsic":
+                degraded[sanitize_tool_call_id(part.get("tool_call_id", ""))] = (
+                    OpenResponsesToolOps.intrinsic_call_degrades_on_history(part)
+                )
+    return degraded
 
 
 class OpenResponsesMessageOps(BaseMessageOps):
@@ -73,6 +101,10 @@ class OpenResponsesMessageOps(BaseMessageOps):
         """
         items: list[dict[str, Any]] = []
         warnings: list[str] = []
+        # Pair each intrinsic result with the call the writer emits: the
+        # decision is made once here, over the whole list, because a call and
+        # its result live in different messages.
+        degraded_intrinsic_calls = _degraded_intrinsic_calls(ir_messages)
 
         for item in ir_messages:
             passthrough_warnings = self._restore_provider_passthrough_item(
@@ -84,7 +116,10 @@ class OpenResponsesMessageOps(BaseMessageOps):
                 warnings.extend(passthrough_warnings)
                 continue
             if is_message(item):
-                converted, msg_warnings = self._ir_message_to_p(cast(Message, item))
+                converted, msg_warnings = self._ir_message_to_p(
+                    cast(Message, item),
+                    degraded_intrinsic_calls=degraded_intrinsic_calls,
+                )
                 warnings.extend(msg_warnings)
                 if isinstance(converted, list):
                     items.extend(converted)
@@ -98,11 +133,19 @@ class OpenResponsesMessageOps(BaseMessageOps):
 
         return items, warnings
 
-    def _ir_message_to_p(self, message: Message) -> tuple[Any, list[str]]:
+    def _ir_message_to_p(
+        self,
+        message: Message,
+        *,
+        degraded_intrinsic_calls: dict[str, bool],
+    ) -> tuple[Any, list[str]]:
         """Convert a single IR message to Responses API items.
 
         Args:
             message: IR message dict.
+            degraded_intrinsic_calls: Intrinsic call id → whether the history
+                leg writes the call as a client ``function_call``, so a result
+                can pair with it.
 
         Returns:
             Tuple of (converted items list, warnings).
@@ -115,7 +158,11 @@ class OpenResponsesMessageOps(BaseMessageOps):
         provider_metadata = message.get("provider_metadata")
         if role in ("system", "user", "developer"):
             return self._ir_input_message_to_p(
-                role, content, warnings, provider_metadata=provider_metadata
+                role,
+                content,
+                warnings,
+                provider_metadata=provider_metadata,
+                degraded_intrinsic_calls=degraded_intrinsic_calls,
             )
         elif role == "assistant":
             return self._ir_assistant_to_p(
@@ -125,7 +172,9 @@ class OpenResponsesMessageOps(BaseMessageOps):
                 provider_metadata=message.get("provider_metadata"),
             )
         elif role == "tool":
-            return self._ir_tool_messages_to_p(content, warnings)
+            return self._ir_tool_messages_to_p(
+                content, warnings, degraded_intrinsic_calls=degraded_intrinsic_calls
+            )
 
         return [], warnings
 
@@ -136,6 +185,7 @@ class OpenResponsesMessageOps(BaseMessageOps):
         warnings: list[str],
         *,
         provider_metadata: dict | None = None,
+        degraded_intrinsic_calls: dict[str, bool],
     ) -> tuple[list[dict[str, Any]], list[str]]:
         """Convert IR system/user/developer message to Responses API items.
 
@@ -161,9 +211,14 @@ class OpenResponsesMessageOps(BaseMessageOps):
                 )
             elif is_tool_result_part(part):
                 # Tool results become separate function_call_output items.
-                # An intrinsic result whose call is a native server item
-                # (web_search_call) yields {} — it has no output item.
-                item = self.tool_ops.ir_tool_result_to_p(part, warnings=warnings)
+                # An intrinsic result is paired with the call the writer emits:
+                # a native server call yields {} — no input item pairs with it.
+                item = self.tool_ops.ir_tool_result_to_p(
+                    part,
+                    warnings=warnings,
+                    for_history=True,
+                    degraded_intrinsic_calls=degraded_intrinsic_calls,
+                )
                 if item:
                     extra_items.append(item)
             elif is_reasoning_part(part):
@@ -273,17 +328,27 @@ class OpenResponsesMessageOps(BaseMessageOps):
         return result_items, warnings
 
     def _ir_tool_messages_to_p(
-        self, content: list, warnings: list[str]
+        self,
+        content: list,
+        warnings: list[str],
+        *,
+        degraded_intrinsic_calls: dict[str, bool],
     ) -> tuple[list[dict[str, Any]], list[str]]:
         """Convert IR tool message content to Responses API function_call_output items.
 
-        Each ToolResultPart becomes a separate function_call_output item.
+        Each ToolResultPart becomes a separate function_call_output item, paired
+        with the call the history-leg writer emits.
         """
         tool_result_items: list[dict[str, Any]] = []
 
         for part in content:
             if is_tool_result_part(part):
-                item = self.tool_ops.ir_tool_result_to_p(part, warnings=warnings)
+                item = self.tool_ops.ir_tool_result_to_p(
+                    part,
+                    warnings=warnings,
+                    for_history=True,
+                    degraded_intrinsic_calls=degraded_intrinsic_calls,
+                )
                 if item:
                     tool_result_items.append(item)
 
