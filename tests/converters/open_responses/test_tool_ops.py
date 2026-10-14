@@ -309,6 +309,28 @@ class TestOpenAIResponsesToolOps:
         restored = OpenAIResponsesToolOps.p_tool_choice_to_ir(provider)
         assert restored["mode"] == "any"
 
+    def test_p_tool_choice_namespace_warns_and_falls_back(self):
+        """A namespace container has no IR slot; the drop is reported."""
+        warnings: list[str] = []
+        result = OpenAIResponsesToolOps.p_tool_choice_to_ir(
+            {
+                "type": "namespace",
+                "name": "tasks",
+                "tools": [{"type": "function", "name": "wait"}],
+            },
+            warnings=warnings,
+        )
+        assert result["mode"] == "auto"
+        assert len(warnings) == 1
+        assert "namespace" in warnings[0]
+
+    def test_p_tool_choice_namespace_without_a_sink_stays_silent(self):
+        """The ops dispatcher calls this with no sink; it must not raise."""
+        result = OpenAIResponsesToolOps.p_tool_choice_to_ir(
+            {"type": "namespace", "name": "tasks", "tools": []}
+        )
+        assert result["mode"] == "auto"
+
     # ==================== Tool Call ====================
 
     def test_ir_tool_call_to_p_function(self):

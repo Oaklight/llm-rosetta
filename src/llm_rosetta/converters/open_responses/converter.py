@@ -402,7 +402,9 @@ class OpenResponsesConverter(BaseConverter):
                     ir_request["tools"] = ir_tools
 
         # 4-5. Tool choice + tool config
-        self._convert_p_tool_config_to_ir(provider_request, ir_request)
+        self._convert_p_tool_config_to_ir(
+            provider_request, ir_request, warnings=context.warnings
+        )
 
         # 6. Generation config
         gen_config = self.config_ops.p_generation_config_to_ir(provider_request)
@@ -802,15 +804,24 @@ class OpenResponsesConverter(BaseConverter):
         self,
         provider_request: dict[str, Any],
         ir_request: dict[str, Any],
+        *,
+        warnings: list[str] | None = None,
     ) -> None:
-        """Extract tool_choice and tool_config from provider request into IR."""
+        """Extract tool_choice and tool_config from provider request into IR.
+
+        Args:
+            provider_request: Responses request body.
+            ir_request: IR request under construction.
+            warnings: Optional warning sink for lossy conversions.  A namespace
+                ``tool_choice`` has no IR equivalent and is reported there.
+        """
         tool_choice = provider_request.get("tool_choice")
         if tool_choice is not None:
             # Collect into a scratch dict so an empty ``provider_extensions`` is
             # not created when the tool choice carries no provider-bound object.
             extensions: dict[str, Any] = {}
             ir_request["tool_choice"] = self.tool_ops.p_tool_choice_to_ir(
-                tool_choice, extensions=extensions
+                tool_choice, extensions=extensions, warnings=warnings
             )
             if extensions:
                 ir_request.setdefault("provider_extensions", {}).update(extensions)

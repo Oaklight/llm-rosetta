@@ -1133,6 +1133,7 @@ class OpenResponsesToolOps(BaseToolOps):
         provider_tool_choice: Any,
         *,
         extensions: dict[str, Any] | None = None,
+        warnings: list[str] | None = None,
         **kwargs: Any,
     ) -> ToolChoice:
         """OpenAI Responses tool_choice → IR ToolChoice.
@@ -1146,12 +1147,18 @@ class OpenResponsesToolOps(BaseToolOps):
           object is stashed in *extensions* under
           ``"_open_responses_allowed_tools"`` (the IR has
           no equivalent), and the IR ``mode`` mirrors the inner ``mode``.
+        - ``{"type":"namespace","name":...,"tools":[...]}`` → ``mode:"auto"``,
+          reported on *warnings*.  The IR ``ToolChoice`` has no group slot, so
+          a forced container child cannot be carried and the call is no longer
+          forced (parent issue #953).
 
         Args:
             provider_tool_choice: OpenAI tool_choice value.
             extensions: Optional ``provider_extensions`` dict that receives the
                 Open Responses ``allowed_tools`` object for lossless
                 round-trip.
+            warnings: Optional warning sink.  Receives one entry when a
+                namespace container form is dropped.
 
         Returns:
             IR ToolChoice.
@@ -1195,6 +1202,14 @@ class OpenResponsesToolOps(BaseToolOps):
                     func = provider_tool_choice.get("function", {})
                     tool_name = func.get("name", "")
                 return cast(ToolChoice, {"mode": "tool", "tool_name": tool_name})
+            if provider_tool_choice.get("type") == "namespace":
+                if warnings is not None:
+                    warnings.append(
+                        "Dropped a namespace tool_choice the IR cannot "
+                        "represent; fell back to 'auto', so the call is no "
+                        "longer forced."
+                    )
+                return cast(ToolChoice, {"mode": "auto", "tool_name": ""})
 
         return cast(ToolChoice, {"mode": "auto", "tool_name": ""})
 

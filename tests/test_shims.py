@@ -1213,3 +1213,48 @@ class TestToolGroupsShimDeclarations:
         assert tools[1]["name"] == "tasks"
         assert tools[1]["description"] == "Task management tools."
         assert [c["name"] for c in tools[1]["tools"]] == ["wait", "edit"]
+
+    @pytest.mark.parametrize(
+        "shim_name", ["deepseek--open_responses", "volcengine--open_responses"]
+    )
+    def test_a_namespace_tool_choice_is_reported_not_silently_dropped(
+        self, shim_name: str
+    ):
+        """Serving containers makes a container-addressed tool_choice visible.
+
+        The IR ``ToolChoice`` has no group slot, so a forced container child
+        cannot be carried.  The read leg falls back to ``auto`` and reports it
+        rather than dropping the force without a word.
+        """
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        pipe = ConversionPipeline("open_responses", shim_name)
+        body = pipe.convert_request(
+            {
+                "model": "test-model",
+                "tool_choice": {
+                    "type": "namespace",
+                    "name": "tasks",
+                    "tools": [{"type": "function", "name": "wait"}],
+                },
+                "tools": [
+                    {
+                        "type": "namespace",
+                        "name": "tasks",
+                        "description": "Task management tools.",
+                        "tools": [
+                            {"type": "function", "name": "wait", "parameters": {}}
+                        ],
+                    }
+                ],
+                "input": [
+                    {
+                        "type": "message",
+                        "role": "user",
+                        "content": [{"type": "input_text", "text": "hi"}],
+                    }
+                ],
+            }
+        )
+        assert body["tool_choice"] == "auto"
+        assert any("namespace tool_choice" in w for w in pipe.warnings)
