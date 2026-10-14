@@ -1491,9 +1491,10 @@ class GoogleGenerateConverter(BaseConverter):
             # A truncated fragment (a stream cut mid-call) parses to nothing,
             # which the guard below then drops.
             args = {}
-        if not args.get("code"):
+        if not isinstance(args, dict) or not args.get("code"):
             # ``executableCode`` with an empty ``code`` is a part no API
-            # accepts, so drop it the way an unrenderable kind is dropped.
+            # accepts, so drop it the way an unrenderable kind is dropped.  A
+            # fragment that parses to a list or a string has no ``code`` either.
             return None
         return {
             "executableCode": {

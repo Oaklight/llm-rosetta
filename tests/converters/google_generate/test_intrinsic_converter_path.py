@@ -435,6 +435,34 @@ class TestStreamingWrite:
 
         assert _emitted_parts(chunks) == []
 
+    def test_flush_drops_a_server_call_whose_input_is_not_an_object(self):
+        """A fragment parsing to a list is dropped, not raised on."""
+        converter = GoogleGenerateConverter()
+        context = StreamContext()
+        events: list[Any] = [
+            ToolCallStartEvent(
+                type="tool_call_start",
+                tool_call_id="c1",
+                tool_name="code_execution",
+                tool_call_index=0,
+                tool_type="intrinsic",
+                provider_metadata={"intrinsic_kind": "code_execution"},
+            ),
+            ToolCallDeltaEvent(
+                type="tool_call_delta",
+                tool_call_id="c1",
+                arguments_delta="[1, 2]",
+            ),
+            FinishEvent(type="finish", finish_reason={"reason": "stop"}),
+        ]
+        chunks: list[dict[str, Any]] = []
+        for event in events:
+            chunks.extend(
+                _chunks(converter.stream_response_to_provider(event, context))
+            )
+
+        assert _emitted_parts(chunks) == []
+
 
 class TestCrossFormat:
     """A server call never becomes a client call on a cross-format hop."""
