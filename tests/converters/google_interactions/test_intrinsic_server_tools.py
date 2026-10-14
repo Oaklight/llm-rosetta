@@ -272,17 +272,20 @@ class TestNonStreamingWrite:
         assert step["result"] == [{"rendered_content": "<div>x</div>"}]
         assert "name" not in step
 
-    def test_unknown_intrinsic_kind_stays_a_server_call(self):
-        """Never downgrade a server call to a client ``function_call``."""
+    def test_unknown_intrinsic_kind_is_dropped(self):
+        """Never downgrade a server call to a client ``function_call``.
+
+        A kind this dialect cannot render has no native step type
+        (``special_search_call`` is not one the API defines), so the call is
+        dropped rather than fabricated or downgraded — matching the streaming
+        writer and the sibling converters.
+        """
         part = self._call_part(
             tool_name="special_search",
             provider_metadata={"intrinsic_kind": "special_search"},
         )
 
-        (call,) = _write_response([part])
-
-        assert call["type"] == "special_search_call"
-        assert call["type"] != "function_call"
+        assert _write_response([part]) == []
 
     def test_client_call_still_gets_its_name(self):
         part = {
@@ -421,16 +424,17 @@ class TestStreamingWrite:
         assert out["step"]["type"] == "function_call"
         assert out["step"]["name"] == "get_weather"
 
-    def test_unknown_kind_stays_a_server_call(self):
-        out = _write(
+    def test_unknown_kind_is_dropped(self):
+        out = _converter().stream_response_to_provider(
             self._call_event(
                 tool_name="special_search",
                 provider_metadata={"intrinsic_kind": "special_search"},
-            )
+            ),
+            StreamContext(),
         )
+        chunks = out if isinstance(out, list) else [out]
 
-        assert out["step"]["type"] == "special_search_call"
-        assert out["step"]["type"] != "function_call"
+        assert not [chunk for chunk in chunks if chunk]
 
     def test_intrinsic_delta_reemits_arguments_as_a_dict(self):
         context = StreamContext()
@@ -467,6 +471,25 @@ class TestStreamingWrite:
         assert out["step"]["type"] == "google_search_result"
         assert out["step"]["call_id"] == "c1"
         assert out["step"]["result"] == [{"rendered_content": "<div>x</div>"}]
+
+    def test_unknown_result_kind_is_dropped(self):
+        out = _converter().stream_response_to_provider(
+            cast(
+                ToolResultEvent,
+                {
+                    "type": "tool_result",
+                    "tool_call_id": "c1",
+                    "result": "x",
+                    "tool_type": "intrinsic",
+                    "block_index": 1,
+                    "provider_metadata": {"intrinsic_kind": "special_search"},
+                },
+            ),
+            StreamContext(),
+        )
+        chunks = out if isinstance(out, list) else [out]
+
+        assert not [chunk for chunk in chunks if chunk]
 
     def test_tool_result_handler_is_registered(self):
         assert GoogleInteractionsConverter._IR_TO_P_DISPATCH["tool_result"] == (

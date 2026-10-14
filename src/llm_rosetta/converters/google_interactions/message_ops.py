@@ -180,13 +180,17 @@ class GoogleInteractionsMessageOps(BaseMessageOps):
             elif ptype == "reasoning":
                 steps.append(self.content_ops.ir_reasoning_to_p(part))
             elif ptype == "tool_call":
-                steps.append(self.tool_ops.ir_tool_call_to_p(part))
+                step = self.tool_ops.ir_tool_call_to_p(part)
+                if step:
+                    steps.append(step)
             elif ptype == "tool_result" and is_intrinsic_part(part):
                 # A server result the assistant turn produced rides inline in
                 # this converter's response model (#992).  A client result
                 # cannot appear in a response turn, so it stays out rather than
                 # being downgraded.
-                steps.append(self.tool_ops.ir_tool_result_to_p(part))
+                step = self.tool_ops.ir_tool_result_to_p(part)
+                if step:
+                    steps.append(step)
         # Replayed function-call history needs a signature (Google dummy when
         # the real one is foreign or absent).
         inject_interactions_function_call_signature(steps)
@@ -195,11 +199,16 @@ class GoogleInteractionsMessageOps(BaseMessageOps):
     def _ir_tool_to_steps(
         self, content: list, tool_call_index: dict[str, str] | None = None
     ) -> list[dict]:
-        return [
-            self.tool_ops.ir_tool_result_to_p(part, tool_call_index=tool_call_index)
-            for part in content
-            if part.get("type") == "tool_result"
-        ]
+        steps: list[dict] = []
+        for part in content:
+            if part.get("type") != "tool_result":
+                continue
+            step = self.tool_ops.ir_tool_result_to_p(
+                part, tool_call_index=tool_call_index
+            )
+            if step:
+                steps.append(step)
+        return steps
 
     # ── Base class abstract method stubs ───────────────────────────
 

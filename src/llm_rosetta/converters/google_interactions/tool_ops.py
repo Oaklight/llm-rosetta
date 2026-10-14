@@ -153,9 +153,15 @@ class GoogleInteractionsToolOps(BaseToolOps):
             # parameter 'name' at 'input[0]'``.  They do carry a ``signature``
             # on the wire, so restore the one the read path kept.
             intrinsic_kind = get_intrinsic_kind(ir_part, ir_part["tool_name"])
-            step_type = INTRINSIC_KIND_TO_CALL_TYPE.get(
-                intrinsic_kind, f"{intrinsic_kind}_call"
-            )
+            step_type = INTRINSIC_KIND_TO_CALL_TYPE.get(intrinsic_kind)
+            if step_type is None:
+                # A kind this dialect cannot render (``web_search`` arriving
+                # from another lane, …) has no native step type; drop the call
+                # rather than fabricate ``{kind}_call`` — a step type the API
+                # does not define — or downgrade it to a client
+                # ``function_call``.  Matches the streaming writer and the
+                # sibling converters.
+                return {}
             step: dict[str, Any] = {
                 "type": step_type,
                 "id": ir_part["tool_call_id"],
@@ -252,9 +258,11 @@ class GoogleInteractionsToolOps(BaseToolOps):
         """
         if ir_part.get("tool_type") == "intrinsic":
             intrinsic_kind = get_intrinsic_kind(ir_part)
-            step_type = INTRINSIC_KIND_TO_RESULT_TYPE.get(
-                intrinsic_kind, f"{intrinsic_kind}_result"
-            )
+            step_type = INTRINSIC_KIND_TO_RESULT_TYPE.get(intrinsic_kind)
+            if step_type is None:
+                # Unrenderable kind: drop the result rather than fabricate
+                # ``{kind}_result`` (see ``ir_function_call_to_p``).
+                return {}
             result: dict[str, Any] = {
                 "type": step_type,
                 "call_id": ir_part["tool_call_id"],

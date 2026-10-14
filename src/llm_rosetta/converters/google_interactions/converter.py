@@ -832,8 +832,14 @@ class GoogleInteractionsConverter(BaseConverter):
             # provider's own step type and carries no ``name`` (the API rejects
             # one).  The kind comes from the event metadata, never the name.
             kind = get_intrinsic_kind(event, event["tool_name"])
+            step_type = INTRINSIC_KIND_TO_CALL_TYPE.get(kind)
+            if step_type is None:
+                # Unrenderable kind: drop the call rather than fabricate a
+                # step type the API does not define (see
+                # ``ir_function_call_to_p``).
+                return {}
             step = {
-                "type": INTRINSIC_KIND_TO_CALL_TYPE.get(kind, f"{kind}_call"),
+                "type": step_type,
                 "id": event["tool_call_id"],
             }
         else:
@@ -915,7 +921,11 @@ class GoogleInteractionsConverter(BaseConverter):
         ``_handle_ir_content_block_start_to_p`` so nothing is duplicated.
         """
         kind = get_intrinsic_kind(event)
-        step_type = INTRINSIC_KIND_TO_RESULT_TYPE.get(kind, f"{kind}_result")
+        step_type = INTRINSIC_KIND_TO_RESULT_TYPE.get(kind)
+        if step_type is None:
+            # Unrenderable kind: drop the result rather than fabricate a step
+            # type the API does not define (see ``ir_function_result_to_p``).
+            return {}
         step: dict[str, Any] = {
             "type": step_type,
             "call_id": event["tool_call_id"],
