@@ -1258,3 +1258,42 @@ class TestToolGroupsShimDeclarations:
         )
         assert body["tool_choice"] == "auto"
         assert any("namespace tool_choice" in w for w in pipe.warnings)
+
+    @pytest.mark.parametrize(
+        "tool_choice",
+        [
+            "auto",
+            "required",
+            {"type": "function", "name": "wait"},
+            {"type": "unknown_form", "name": "wait"},
+        ],
+    )
+    def test_an_ordinary_tool_choice_reports_nothing(self, tool_choice: object):
+        """Silence on the ordinary path is what makes the report worth reading.
+
+        A warning on every request is the noise that teaches an operator to
+        skip the line, so the shapes that carry no container must stay quiet.
+        The last case is a dict the mapping does not know: it reaches the same
+        fallback as the container form and still must not warn.
+        """
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        pipe = ConversionPipeline("open_responses", "deepseek--open_responses")
+        body = pipe.convert_request(
+            {
+                "model": "test-model",
+                "tool_choice": tool_choice,
+                "tools": [
+                    {"type": "function", "name": "wait", "parameters": {}},
+                ],
+                "input": [
+                    {
+                        "type": "message",
+                        "role": "user",
+                        "content": [{"type": "input_text", "text": "hi"}],
+                    }
+                ],
+            }
+        )
+        assert body["tool_choice"] is not None
+        assert pipe.warnings == []
