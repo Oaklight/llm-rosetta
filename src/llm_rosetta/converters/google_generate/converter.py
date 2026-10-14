@@ -23,6 +23,7 @@ from ...types.ir import (
     TextPart,
     is_message,
     is_text_part,
+    is_tool_result_part,
 )
 from ...types.ir.request import IRRequest
 from ...types.ir.response import IRResponse, UsageInfo
@@ -48,7 +49,11 @@ from ..base.tools import (
     sanitize_tool_call_id,
     strip_orphaned_tool_config,
 )
-from ..base.tools.intrinsic import get_intrinsic_kind, set_intrinsic_kind
+from ..base.tools.intrinsic import (
+    get_intrinsic_kind,
+    is_intrinsic_part,
+    set_intrinsic_kind,
+)
 from ..base.helpers.extensions import wire_extensions
 from ..base.helpers.opaque import (
     get_opaque_origin,
@@ -632,6 +637,14 @@ class GoogleGenerateConverter(BaseConverter):
             parts: list[dict[str, Any]] = []
 
             for part in message.get("content", []):
+                # A client ``tool_result`` belongs to a separate tool turn,
+                # which the message path normalizes to a ``role: "tool"``
+                # message; a response is a single model turn, so it is dropped
+                # here as it was before the intrinsic writer was reused.  An
+                # intrinsic (server) result does belong inline next to its
+                # call, so only the client shape is skipped.  (#986)
+                if is_tool_result_part(part) and not is_intrinsic_part(part):
+                    continue
                 # Route through the intrinsic-aware part writer: an intrinsic
                 # call becomes ``executableCode`` and a server result
                 # ``codeExecutionResult`` (or is dropped when Google cannot
@@ -1468,8 +1481,14 @@ class GoogleGenerateConverter(BaseConverter):
             != "code_execution"
         ):
             return None
+        if not args_str.strip():
+            # No input ever arrived (a cross-format source that emitted the
+            # result without an argument delta, or a stream truncated mid-call):
+            # ``executableCode`` with an empty ``code`` is a part no API
+            # accepts, so drop it the way an unrenderable kind is dropped.
+            return None
         try:
-            args = json.loads(args_str) if args_str else {}
+            args = json.loads(args_str)
         except (json.JSONDecodeError, TypeError):
             args = {}
         return {

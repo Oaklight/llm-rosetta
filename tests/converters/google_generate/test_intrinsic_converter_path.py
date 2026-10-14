@@ -258,6 +258,29 @@ class TestNonStreamingWrite:
         parts = out["candidates"][0]["content"]["parts"]
         assert parts == [{"text": "Paris"}]
 
+    def test_client_result_is_not_written_into_a_model_turn(self):
+        """A client result belongs to a tool turn, not the model turn (#986)."""
+        parts: list[dict[str, Any]] = [
+            {
+                "type": "tool_call",
+                "tool_call_id": "fc_1",
+                "tool_name": "get_weather",
+                "tool_input": {"city": "Paris"},
+            },
+            {
+                "type": "tool_result",
+                "tool_call_id": "fc_1",
+                "result": "sunny",
+            },
+            {"type": "text", "text": "It is sunny."},
+        ]
+
+        out = GoogleGenerateConverter().response_to_provider(_ir_message(parts))
+
+        written = out["candidates"][0]["content"]["parts"]
+        assert [next(iter(p)) for p in written] == ["functionCall", "text"]
+        assert "functionResponse" not in json.dumps(out)
+
 
 class TestStreamingRead:
     """``executableCode`` / ``codeExecutionResult`` reach the IR."""
@@ -360,6 +383,29 @@ class TestStreamingWrite:
         out = converter.stream_response_to_provider(event, StreamContext())
 
         assert out == {}
+
+    def test_flush_drops_a_server_call_that_never_received_input(self):
+        """No input arrived, so the finish flush writes no empty part (#986)."""
+        converter = GoogleGenerateConverter()
+        context = StreamContext()
+        events: list[Any] = [
+            ToolCallStartEvent(
+                type="tool_call_start",
+                tool_call_id="c1",
+                tool_name="code_execution",
+                tool_call_index=0,
+                tool_type="intrinsic",
+                provider_metadata={"intrinsic_kind": "code_execution"},
+            ),
+            FinishEvent(type="finish", finish_reason={"reason": "stop"}),
+        ]
+        chunks: list[dict[str, Any]] = []
+        for event in events:
+            chunks.extend(
+                _chunks(converter.stream_response_to_provider(event, context))
+            )
+
+        assert _emitted_parts(chunks) == []
 
 
 class TestCrossFormat:
