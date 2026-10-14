@@ -531,6 +531,82 @@ class TestRestoreClientToolNames:
         assert "provider_metadata" not in part
 
 
+class TestRestoreAgainstAGroupedTarget:
+    """A container-carrying target hands a name back beside its namespace.
+
+    There a child keeps the client's own name, so a top-level tool and a
+    container child may share one, and the namespace the wire echoes is the
+    only thing that says which the model meant.  The map has to be read as a
+    ``(name, namespace)`` pair for those, not by name alone.
+    """
+
+    @staticmethod
+    def _call(name: str, namespace: str | None = None) -> dict[str, Any]:
+        part: dict[str, Any] = {
+            "type": "tool_call",
+            "tool_call_id": "call_1",
+            "tool_name": name,
+            "tool_input": {},
+        }
+        if namespace is not None:
+            part["provider_metadata"] = {"namespace": namespace}
+        return {"choices": [{"message": {"role": "assistant", "content": [part]}}]}
+
+    @staticmethod
+    def _shared_name_map() -> ToolNameMap:
+        """A top-level ``wait`` beside one inside ``tasks``, both bare."""
+        return build_tool_name_map(
+            {
+                "tools": [
+                    {"name": "wait", "tool_group": None},
+                    {"name": "wait", "tool_group": "tasks"},
+                ]
+            }
+        )
+
+    def test_the_echoed_namespace_routes_to_the_container_child(self):
+        ir = self._call("wait", "tasks")
+        restore_client_tool_names(ir, name_map=self._shared_name_map())
+        part = ir["choices"][0]["message"]["content"][0]
+        assert part["tool_name"] == "wait"
+        assert part["provider_metadata"]["namespace"] == "tasks"
+
+    def test_a_bare_call_does_not_acquire_a_namespace(self):
+        """The top-level tool of the shared name comes back with none."""
+        ir = self._call("wait")
+        restore_client_tool_names(ir, name_map=self._shared_name_map())
+        part = ir["choices"][0]["message"]["content"][0]
+        assert part["tool_name"] == "wait"
+        assert "provider_metadata" not in part
+
+    def test_a_generated_group_is_dropped_from_the_call(self):
+        """A group we named is not the client's to receive.
+
+        The container had no name, so its identifier is ours; the client has
+        no namespace to route on and must not be handed one — the child comes
+        back bare, like the top-level tool beside it.
+        """
+        generated = generated_group_id("", ["wait"])
+        name_map = build_tool_name_map(
+            {
+                "tools": [
+                    {"name": "wait", "tool_group": None},
+                    {
+                        "name": "wait",
+                        "tool_group": generated,
+                        "metadata": {"_generated_group": True},
+                    },
+                ]
+            }
+        )
+
+        ir = self._call("wait", generated)
+        restore_client_tool_names(ir, name_map=name_map)
+        part = ir["choices"][0]["message"]["content"][0]
+        assert part["tool_name"] == "wait"
+        assert "namespace" not in part.get("provider_metadata", {})
+
+
 # ---------------------------------------------------------------------------
 # End-to-end through the pipeline
 # ---------------------------------------------------------------------------
@@ -1215,9 +1291,11 @@ class TestGroupsToACapableTarget:
         assert container["type"] == "namespace"
         assert container["name"] == "tasks"
         assert [c["name"] for c in container["tools"]] == ["wait", "edit"]
-        # ``_namespace_container`` declares no description of its own, and an
-        # absent one must not be invented.
-        assert "description" not in container
+        # ``_namespace_container`` declares no description of its own, but a
+        # container has to carry one — OpenAI and OpenRouter answer 400
+        # without it — so an empty string stands in rather than text the
+        # client never wrote.
+        assert container["description"] == ""
 
     def test_a_flat_target_still_gets_the_flat_list(self):
         pipe = ConversionPipeline("open_responses", "chat_completions")
@@ -1234,14 +1312,14 @@ class TestGroupsToACapableTarget:
         names = [t["function"]["name"] for t in body["tools"]]
         assert names == ["plain", "wait"], "no container, and no group in the name"
 
-    def test_a_qualified_child_is_sent_under_that_spelling(self):
-        """The container carries the names the naming pass settled on.
+    def test_a_child_sharing_a_top_level_name_keeps_its_bare_name(self):
+        """A container-carrying target disambiguates by position, not by name.
 
-        A top-level tool and a grouped one share ``wait``, so the grouped one
-        was qualified to ``tasks_wait`` for a flat target.  Inside a container
-        the group is already there and the prefix is redundant, but shortening
-        it here would leave ``ToolNameMap`` — which is built from the IR —
-        translating a history call to a spelling this function discarded.
+        A top-level ``wait`` and one inside ``tasks`` share the bare name.  A
+        flat target qualifies the grouped one to ``tasks_wait``; here the
+        group travels beside it on the wire, so the naming pass — told this
+        target carries groups — leaves the child alone and the model reads the
+        name the client wrote.
         """
         pipe = ConversionPipeline("open_responses", self.NAME)
 
@@ -1254,8 +1332,11 @@ class TestGroupsToACapableTarget:
             )
         )
 
+        assert [t["name"] for t in body["tools"] if t["type"] != "namespace"] == [
+            "wait"
+        ]
         container = next(t for t in body["tools"] if t["type"] == "namespace")
-        assert [c["name"] for c in container["tools"]] == ["tasks_wait"]
+        assert [c["name"] for c in container["tools"]] == ["wait"]
 
     def test_the_flag_is_off_unless_a_provider_says_otherwise(self):
         """The default is half of this feature's contract.
@@ -1364,3 +1445,46 @@ class TestGroupsToACapableTarget:
         container = body["tools"][0]
         assert container["type"] == "namespace"
         assert container["name"] == generated_group_id("", ["wait"])
+
+    def test_children_of_different_containers_keep_the_shared_name(self):
+        """Two containers may each hold a ``wait``; both keep it.
+
+        The names never meet — each sits in its own container — so a naming
+        pass counting collisions per group has nothing to separate, while a
+        flat target would qualify them apart (see
+        ``test_collision_rename_is_reversed``).
+        """
+        pipe = ConversionPipeline("open_responses", self.NAME)
+
+        body = pipe.convert_request(
+            self._request(
+                [
+                    _namespace_container("functions", "wait"),
+                    _namespace_container("agents", "wait"),
+                ]
+            )
+        )
+
+        containers = [t for t in body["tools"] if t["type"] == "namespace"]
+        assert [[c["name"] for c in t["tools"]] for t in containers] == [
+            ["wait"],
+            ["wait"],
+        ]
+
+    def test_a_container_carries_the_description_the_client_gave(self):
+        """The description is the client's, passed through untouched."""
+        pipe = ConversionPipeline("open_responses", self.NAME)
+
+        declared = _namespace_container("tasks", "wait")
+        declared["description"] = "Task tools."
+        body = pipe.convert_request(
+            self._request(
+                [
+                    {"type": "function", "name": "plain", "parameters": {}},
+                    declared,
+                ]
+            )
+        )
+
+        container = next(t for t in body["tools"] if t["type"] == "namespace")
+        assert container["description"] == "Task tools."

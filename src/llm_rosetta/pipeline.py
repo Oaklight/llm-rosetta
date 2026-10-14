@@ -750,11 +750,15 @@ class ConversionPipeline:
         # target, which is why it is here rather than where the container
         # was flattened — whether a group name has to be folded into the
         # tool's own name depends on what the target can express, and only
-        # this side knows that.  Before the dedupe below, so that pass
-        # judges the names that will actually go upstream.
+        # this side knows that.  A target that carries the group on the wire
+        # needs a child unique only among its own container's members, so the
+        # pass is told; every other target gets the name made unique against
+        # the whole list.  Before the dedupe below, so that pass judges the
+        # names that will actually go upstream.
         ir_request = qualify_tool_names(
             ir_request,
             warnings=ctx.warnings,
+            carries_groups=self._target_tool_groups,
         )
 
         # Capability enforcement: duplicate tool definitions (post-custom-tools).

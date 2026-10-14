@@ -53,6 +53,14 @@ class ToolNameMap:
     # namespace to echo back for those, so a warning that advises exactly that
     # would be describing an action it cannot take.
     _no_client_group: frozenset[str] = frozenset()
+    # Reverse index keyed by ``(upstream name, group)``, filled for the targets
+    # that carry a container.  There the upstream name is the client's own
+    # child name, so a name alone stops identifying a tool — a top-level
+    # ``wait`` and one inside ``tasks`` share it — and only the group the wire
+    # echoes beside the name tells them apart.
+    _client_grouped: dict[tuple[str, str | None], tuple[str, str | None]] = field(
+        default_factory=dict
+    )
 
     def has_top_level(self, name: str) -> bool:
         """Whether some tool declares this name outside any namespace.
@@ -95,8 +103,22 @@ class ToolNameMap:
             return self._bare.get(name) or name
         return name
 
-    def to_client(self, upstream_name: str) -> tuple[str, str | None]:
-        """Map a provider name back to the client's ``(name, namespace)``."""
+    def to_client(
+        self, upstream_name: str, group: str | None = None
+    ) -> tuple[str, str | None]:
+        """Map a provider name back to the client's ``(name, namespace)``.
+
+        *group* is the namespace the upstream echoed beside the name.  A
+        target that carries a container produces one, and there the upstream
+        name is the client's own child name — so a top-level ``wait`` and one
+        inside ``tasks`` reach the wire under the same name, and this is what
+        separates them.  A flat target echoes none, and the name is the whole
+        identity.
+        """
+        if group is not None:
+            grouped = self._client_grouped.get((upstream_name, group))
+            if grouped is not None:
+                return grouped
         return self._client.get(upstream_name, (upstream_name, None))
 
     def __bool__(self) -> bool:
@@ -207,6 +229,8 @@ def _qualify_collisions(
     result: list[Any],
     used_names: set[str],
     warnings: list[str],
+    *,
+    same_group_only: bool = False,
 ) -> bool:
     """Qualify every grouped tool whose name still collides.
 
@@ -216,18 +240,26 @@ def _qualify_collisions(
     which is why the collisions are counted from what survived rather than
     from what came in.
 
+    *same_group_only* is for a target that carries a container.  There the
+    group travels on the wire, so only the members of one container have to be
+    told apart — measured, a container child may share its name with a
+    top-level tool and with a child of another container.  Collisions are then
+    counted per ``(name, group)``, and only a group's own members move aside.
+
     Returns whether anything was renamed.
     """
-    by_name: dict[str, list[int]] = defaultdict(list)
+    by_key: dict[Any, list[int]] = defaultdict(list)
     for index, tool in enumerate(tools):
         if index in gone or not isinstance(tool, dict):
             continue
         name = tool.get("name")
-        if isinstance(name, str) and name:
-            by_name[name].append(index)
+        if not isinstance(name, str) or not name:
+            continue
+        key = (name, tool.get("tool_group")) if same_group_only else name
+        by_key[key].append(index)
 
     renamed_any = False
-    for name, indices in by_name.items():
+    for indices in by_key.values():
         if len(indices) <= 1:
             continue
         for index in indices:
@@ -235,6 +267,7 @@ def _qualify_collisions(
             group = tool.get("tool_group")
             if not group:
                 continue
+            name = tool["name"]
             qualified = _qualify_tool_name(group, name, used_names, warnings)
             renamed = dict(tool)
             renamed["name"] = qualified
@@ -254,6 +287,7 @@ def qualify_tool_names(
     ir_request: dict[str, Any],
     *,
     warnings: list[str] | None = None,
+    carries_groups: bool = False,
 ) -> dict[str, Any]:
     """Give every grouped tool an upstream name no other tool has.
 
@@ -267,8 +301,7 @@ def qualify_tool_names(
     This runs against the *target*, which is why it is here and not in the
     source converter that flattened the container: whether the prefix is needed
     at all depends on what the target can express, and the source side is not
-    what knows that.  Every target is flat today, so every collision is
-    qualified.
+    what knows that.
 
     Tools sharing a name are treated by where they came from:
 
@@ -283,12 +316,24 @@ def qualify_tool_names(
       apart, and the pair is one duplicate that a strict upstream would answer
       400 to, twice over (#913).
 
+    *carries_groups* narrows the second rule to what the target needs.  A
+    target that puts the group back on the wire carries it there, so a child
+    only has to be unique among its own container's members: measured, every
+    container-capable upstream accepts a child named like a top-level tool and
+    like a child of another container.  Qualifying against the whole list would
+    rename for a collision that cannot happen and hand the model a longer name
+    than the client wrote.  The third rule is unaffected — a strict upstream
+    rejects a repeated name *inside* one container either way.
+
     Renamed tools record the pre-rename name in ``metadata._original_name``,
     which is what the response leg undoes the qualification with.
 
     Args:
         ir_request: The IR request dict — **always use the return value**.
         warnings: Optional list to append qualification reports to.
+        carries_groups: Whether the target puts each group back on the wire as
+            a container, so a child's name only has to be unique within its
+            own group.
 
     Returns:
         The IR request with colliding grouped tools qualified and generated
@@ -313,7 +358,12 @@ def qualify_tool_names(
         and isinstance(tool.get("name"), str)
     }
     renamed_any = _qualify_collisions(
-        tools, gone, result, used_names, warnings if warnings is not None else []
+        tools,
+        gone,
+        result,
+        used_names,
+        warnings if warnings is not None else [],
+        same_group_only=carries_groups,
     )
 
     if dropped and warnings is not None:
@@ -343,6 +393,12 @@ def build_tool_name_map(ir_request: dict[str, Any]) -> ToolNameMap:
     Tools whose name survived unchanged and that carry no group are
     skipped — there is nothing to translate, and leaving them out keeps the
     map falsy for the common case.
+
+    Every grouped tool is also entered under ``(upstream name, group)``.
+    Against a target that carries a container a child goes out under the
+    client's own name, so the name alone stops identifying it: a top-level
+    ``wait`` and one inside ``tasks`` are both ``wait`` on that wire, and the
+    group the upstream echoes beside the name is what separates them.
     """
     tools = [
         t
@@ -355,6 +411,7 @@ def build_tool_name_map(ir_request: dict[str, Any]) -> ToolNameMap:
 
     upstream: dict[tuple[str, str | None], str] = {}
     client: dict[str, tuple[str, str | None]] = {}
+    client_grouped: dict[tuple[str, str | None], tuple[str, str | None]] = {}
     sole: dict[str, str | None] = {}
     # `is None`, not truthiness: only the harvest writes ``tool_group``, so its
     # presence is what marks a tool as having come from a container — and a
@@ -389,6 +446,15 @@ def build_tool_name_map(ir_request: dict[str, Any]) -> ToolNameMap:
         # reported, rather than silently resolving to a tool the client had
         # no way to ask for.
         upstream[(client_name, tool_group)] = upstream_name
+        # Keyed on both halves of what a container-carrying target hands back.
+        # There the upstream name is the client's own child name, so this is
+        # the only entry that tells two tools sharing that name apart.  A
+        # generated group is dropped, as in the name-keyed map beside it: it is
+        # ours, not the client's.
+        client_grouped[(upstream_name, tool_group)] = (
+            client_name,
+            None if _is_generated_group(tool) else tool_group,
+        )
         if claimants[upstream_name] == 1:
             # Backward, a generated group is dropped.  It is ours, not the
             # client's — it exists only because that container had no name —
@@ -406,6 +472,7 @@ def build_tool_name_map(ir_request: dict[str, Any]) -> ToolNameMap:
         {k: v for k, v in sole.items() if v is None or v != k},
         frozenset(top_level),
         frozenset(generated_claim - named_claim),
+        client_grouped,
     )
 
 
@@ -417,13 +484,22 @@ def _to_client_identity(target: dict[str, Any], name_map: ToolNameMap) -> None:
     rewritten.
     """
     upstream_name = target.get("tool_name", "")
-    client_name, namespace = name_map.to_client(upstream_name)
-    if client_name == upstream_name and namespace is None:
+    pm = target.get("provider_metadata")
+    # The group the upstream echoed beside the name.  Only a target that
+    # carries a container produces one; on a flat target the name is the whole
+    # identity, and this is absent.
+    wire_group = pm.get("namespace") if isinstance(pm, dict) else None
+    client_name, namespace = name_map.to_client(upstream_name, group=wire_group)
+    if client_name == upstream_name and namespace == wire_group:
         return
     target["tool_name"] = client_name
     if namespace is None:
+        if wire_group is not None and isinstance(pm, dict):
+            # A group the client never wrote — one we generated for a
+            # nameless container — is not the client's to see, so the field
+            # goes rather than being handed back.
+            pm.pop("namespace", None)
         return
-    pm = target.get("provider_metadata")
     if not isinstance(pm, dict):
         pm = {}
         target["provider_metadata"] = pm

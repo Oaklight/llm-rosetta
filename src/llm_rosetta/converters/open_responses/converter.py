@@ -730,13 +730,15 @@ class OpenResponsesConverter(BaseConverter):
         ``group_tools`` is a helper and not a pipeline pass — the ordering and
         the entry shape are the writer's business.
 
-        Children keep the names the naming pass gave them.  Inside a container
-        the group name is redundant there, and Volcengine — which flattens a
-        container to ``{group}__{name}`` internally — turns that into a double
-        prefix.  Shortening them is a naming decision that has to be taken
-        together with ``ToolNameMap``: the map is built from the IR, so
-        rewriting a child here would leave a replayed history call
-        transliterated to a spelling this function had just discarded.
+        Children go out under the names the naming pass settled on.  For a
+        target that carries groups those are the client's own child names:
+        that pass is told this target carries groups, so it qualifies a child
+        only against the members of its own container — measured, an upstream
+        accepts a child named like a top-level tool and like a child of another
+        container.  Nothing is shortened here, because the name map is built
+        from the IR, and rewriting a child at this layer would leave a replayed
+        history call transliterated to a spelling this function had just
+        discarded.
         """
         if not ctx.options.get("tool_groups"):
             return self._get_cached_ir_tools_to_p(tools)
@@ -758,13 +760,20 @@ class OpenResponsesConverter(BaseConverter):
             # that is the path the test covers.
             if not children:
                 continue
+            # ``description`` is required on a container by OpenAI and
+            # OpenRouter: probed, an absent one is `400 Missing required
+            # parameter: 'tools[0].description'` and `400 Invalid Responses API
+            # request` respectively, while an empty string is accepted by both.
+            # A container the client gave no description to therefore goes out
+            # with "", rather than with text the client never wrote — a longer
+            # placeholder is accepted everywhere but costs input tokens on
+            # DeepSeek and says nothing the children do not already say.
             container: dict[str, Any] = {
                 "type": "namespace",
                 "name": entry.name,
+                "description": entry.description,
                 "tools": children,
             }
-            if entry.description:
-                container["description"] = entry.description
             rendered.append(container)
         return rendered
 
