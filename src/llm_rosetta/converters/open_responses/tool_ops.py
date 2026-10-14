@@ -563,16 +563,54 @@ def _build_server_item(
             if fields.get(key) is not None:
                 item[key] = fields[key]
     elif item_type == "file_search_call":
-        # The wire item carries `queries`, but this branch has always emitted
-        # `query`; read whichever the IR has so the payload the read side now
-        # preserves is not discarded here.
-        queries = fields.get("queries") or []
-        item["query"] = fields.get("query") or (queries[0] if queries else "")
+        # The wire item carries ``queries`` (a list) and ``results``; the
+        # singular ``query`` this branch used to emit is rejected live
+        # (``400 Missing required parameter: 'input[1].queries'``), so emit the
+        # payload the read side lifted, and only when it is present — a
+        # streamed item has none at ``added`` time, matching the web-search
+        # branch's "no action until there is one".
+        if fields.get("queries"):
+            item["queries"] = fields["queries"]
+        if fields.get("results") is not None:
+            item["results"] = fields["results"]
     else:
         # shell_call / computer_call / …: the read side already lifted the
         # payload keys, so carry them back verbatim.
         item.update(fields)
     return item
+
+
+def _server_item_renderable(item_type: str, fields: dict[str, Any]) -> bool:
+    """Whether the IR carries the payload the API requires for this server item.
+
+    Used on the history leg: a replayed turn carries the item's own payload, so
+    the native item can be re-emitted; a foreign request that lacks it is
+    degraded to a plain function call so the request stays valid.  Required
+    fields verified live 2026-10-13 (a ``code_interpreter_call`` without
+    ``container_id`` and a ``file_search_call`` without complete ``results``
+    are both rejected).
+
+    Args:
+        item_type: Native server item type.
+        fields: IR tool input for the call.
+
+    Returns:
+        True when the item can be emitted natively on the history leg.
+    """
+    if item_type == "code_interpreter_call":
+        return fields.get("container_id") is not None
+    if item_type == "file_search_call":
+        results = fields.get("results")
+        return (
+            bool(fields.get("queries"))
+            and isinstance(results, list)
+            and all(
+                isinstance(result, dict) and result.get("filename")
+                for result in results
+            )
+        )
+    # shell_call / computer_call / …: the payload is the item's own fields.
+    return bool(fields)
 
 
 def _ir_intrinsic_to_responses(
@@ -609,11 +647,17 @@ def _ir_intrinsic_to_responses(
             status=status,
         )
 
-    # Other server items need provider config we cannot synthesise from a
-    # foreign request (code_interpreter: container_id; file_search:
-    # vector_store_ids; …).  In history, degrade them to a plain function call
-    # so the request stays valid; on the response leg keep the native type.
-    if for_history and item_type != "function_call":
+    # A replayed turn carries the item's own payload (the read side lifted it),
+    # so the native item is re-emitted; a foreign request that lacks a field
+    # the API requires (code_interpreter: container_id; file_search: queries
+    # with complete results) is degraded to a plain function call so the
+    # request stays valid.  On the response leg the native type is kept either
+    # way.
+    if (
+        for_history
+        and item_type != "function_call"
+        and not _server_item_renderable(item_type, fields)
+    ):
         return {
             "type": "function_call",
             "call_id": tool_call_id,
@@ -1294,10 +1338,10 @@ class OpenResponsesToolOps(BaseToolOps):
         re-encoded as a trailing ``input_text`` block (see
         ``base.tools.error_marker``).
 
-        Returns ``{}`` for an intrinsic result whose call we emit as a native
-        server item (``web_search_call``) — those have no separate output item,
-        so an ``is_error`` flag on one is reported as a warning rather than
-        encoded as a marker.
+        Returns ``{}`` for any intrinsic (server-tool) result: its payload
+        rides on the call item and the input schema has no item for it, so an
+        ``is_error`` flag on one is reported as a warning rather than encoded
+        as a marker.
 
         Args:
             ir_tool_result: IR tool result part.
@@ -1305,21 +1349,23 @@ class OpenResponsesToolOps(BaseToolOps):
                 flag had to be re-encoded or dropped.
         """
         if ir_tool_result.get("tool_type") == "intrinsic":
-            kind = get_intrinsic_kind(ir_tool_result, "")
-            if _INTRINSIC_KIND_TO_ITEM.get(kind) == "web_search_call":
-                # The call ships as a native server item with no separate
-                # output item, so the flag has no payload to ride on.  Warn
-                # rather than let it vanish — the Chat target, which has no
-                # native server items, does emit a marker for the same IR.
-                if ir_tool_result.get("is_error"):
-                    warn_tool_error_dropped(
-                        kwargs.get("warnings"),
-                        format_name="OpenAI Responses",
-                        tool_call_id=sanitize_tool_call_id(
-                            ir_tool_result.get("tool_call_id", "")
-                        ),
-                    )
-                return {}
+            # A server result rides on its call item (``outputs`` / ``results``
+            # / ``action``); the input schema has no item for a code
+            # interpreter, file search or web search result — its
+            # ``*_call_output`` type is rejected, and a ``function_call_output``
+            # with a server call's id pairs with no client call (measured live
+            # 2026-10-13).  Drop it, warning rather than letting an error flag
+            # vanish — the Chat target, which has no native server items, does
+            # emit a marker for the same IR.
+            if ir_tool_result.get("is_error"):
+                warn_tool_error_dropped(
+                    kwargs.get("warnings"),
+                    format_name="OpenAI Responses",
+                    tool_call_id=sanitize_tool_call_id(
+                        ir_tool_result.get("tool_call_id", "")
+                    ),
+                )
+            return {}
 
         result_content = ir_tool_result.get("result") or ir_tool_result.get(
             "content", ""

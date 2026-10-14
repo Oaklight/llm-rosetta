@@ -166,16 +166,20 @@ class TestIntrinsicServerItemRoundTrip:
         assert restored["action"]["queries"] == ["finance: NVDA", "NVDA stock"]
 
     def test_file_search_query_reaches_the_writer(self):
-        """The read side lifts `queries`; the writer used to read `query`.
+        """The read side lifts `queries`/`results`; the writer used to read
+        `query`.
 
-        With the fallback producing `queries`/`results`, the writer emitted an
-        empty `query` and discarded what the read side had just preserved.
+        The singular ``query`` the writer emitted is rejected live
+        (``400 Missing required parameter: 'input[1].queries'``), so the native
+        ``queries``/``results`` now reach the wire instead.
         """
         ir = OpenResponsesToolOps.p_tool_call_to_ir(FILE_SEARCH_ITEM)
 
         assert ir["tool_input"]["queries"] == ["q1", "q2"]
         restored = OpenResponsesToolOps.ir_tool_call_to_p(ir)
-        assert restored["query"] == "q1"
+        assert restored["queries"] == ["q1", "q2"]
+        assert restored["results"] == [{"file_id": "f1", "text": "hit"}]
+        assert "query" not in restored
 
 
 class TestIntrinsicServerItemWriteShape:
@@ -248,3 +252,81 @@ class TestIntrinsicServerItemWriteShape:
         )
 
         assert restored["status"] == "completed"
+
+
+class TestServerItemHistoryLeg:
+    """A replayed turn keeps the native server item when the IR has its payload.
+
+    ``for_history=True`` is the request leg (an assistant turn fed back as
+    input).  It used to degrade every non-web-search server item to a client
+    ``function_call``, dropping ``code`` / ``container_id`` / ``outputs`` — the
+    path issue #985 measured.  It now re-emits the native item whenever the IR
+    carries the fields the API requires, and degrades only when it does not.
+    """
+
+    def test_code_interpreter_replays_natively(self):
+        ir = OpenResponsesToolOps.p_tool_call_to_ir(CODE_INTERPRETER_ITEM)
+
+        written = OpenResponsesToolOps.ir_tool_call_to_p(ir, for_history=True)
+
+        assert written["type"] == "code_interpreter_call"
+        assert written["id"] == "ci_abc"
+        assert written["container_id"] == "cntr_1"
+        assert written["outputs"] == [{"type": "logs", "logs": "2"}]
+        assert "call_id" not in written
+        assert "arguments" not in written
+
+    def test_code_interpreter_without_container_degrades(self):
+        # A foreign request that never had a container_id cannot be replayed
+        # natively (live: 400 missing 'input[1].container_id').
+        item = {k: v for k, v in CODE_INTERPRETER_ITEM.items() if k != "container_id"}
+        ir = OpenResponsesToolOps.p_tool_call_to_ir(item)
+
+        written = OpenResponsesToolOps.ir_tool_call_to_p(ir, for_history=True)
+
+        assert written["type"] == "function_call"
+        assert written["call_id"] == "ci_abc"
+
+    def test_file_search_without_complete_results_degrades(self):
+        # The live API rejects a file-search result without `filename`.
+        ir = OpenResponsesToolOps.p_tool_call_to_ir(FILE_SEARCH_ITEM)
+
+        written = OpenResponsesToolOps.ir_tool_call_to_p(ir, for_history=True)
+
+        assert written["type"] == "function_call"
+
+
+class TestIntrinsicResultInputLeg:
+    """A server result is dropped from the input leg, never client-shaped.
+
+    The payload rides on the call item, the input schema has no
+    ``*_call_output`` item for a code interpreter / file search / web search,
+    and a ``function_call_output`` with a server call's id pairs with no client
+    call (measured live 2026-10-13).
+    """
+
+    def test_code_interpreter_result_is_dropped(self):
+        ir = OpenResponsesToolOps.p_tool_result_to_ir(
+            {
+                "type": "code_interpreter_call_output",
+                "call_id": "ci_abc",
+                "output": [{"type": "logs", "logs": "2"}],
+            }
+        )
+
+        assert ir["tool_type"] == "intrinsic"
+        assert OpenResponsesToolOps.ir_tool_result_to_p(ir) == {}
+
+    def test_dropped_result_reports_an_error_flag(self):
+        ir = OpenResponsesToolOps.p_tool_result_to_ir(
+            {
+                "type": "code_interpreter_call_output",
+                "call_id": "ci_abc",
+                "output": [{"type": "logs", "logs": "2"}],
+            }
+        )
+        ir["is_error"] = True
+        warnings: list[str] = []
+
+        assert OpenResponsesToolOps.ir_tool_result_to_p(ir, warnings=warnings) == {}
+        assert warnings
