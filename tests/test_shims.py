@@ -1149,3 +1149,67 @@ class TestFreeSourceShim:
         assert shim.free_source is False
         assert shim.connection.keyless is False
         assert shim.display_name is None
+
+
+class TestToolGroupsShimDeclarations:
+    """DeepSeek and Volcengine open_responses shims declare tool_groups: true."""
+
+    @pytest.fixture(autouse=True)
+    def _load_builtins(self):
+        from llm_rosetta.shims.providers import load_providers
+
+        load_providers()
+
+    def test_deepseek_open_responses_enables_tool_groups(self):
+        shim = get_shim("deepseek--open_responses")
+        assert shim is not None
+        assert shim.tools.tool_groups is True
+
+    def test_volcengine_open_responses_enables_tool_groups(self):
+        shim = get_shim("volcengine--open_responses")
+        assert shim is not None
+        assert shim.tools.tool_groups is True
+
+    def test_default_shim_leaves_tool_groups_off(self):
+        shim = get_shim("openai--open_responses")
+        assert shim is not None
+        assert shim.tools.tool_groups is False
+
+    @pytest.mark.parametrize(
+        "shim_name", ["deepseek--open_responses", "volcengine--open_responses"]
+    )
+    def test_shipping_shims_preserve_containers_in_conversion(self, shim_name: str):
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        pipe = ConversionPipeline("open_responses", shim_name)
+        req = {
+            "model": "test-model",
+            "tool_choice": "auto",
+            "tools": [
+                {"type": "function", "name": "plain", "parameters": {}},
+                {
+                    "type": "namespace",
+                    "name": "tasks",
+                    "description": "Task management tools.",
+                    "tools": [
+                        {"type": "function", "name": "wait", "parameters": {}},
+                        {"type": "function", "name": "edit", "parameters": {}},
+                    ],
+                },
+            ],
+            "input": [
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": "hi"}],
+                }
+            ],
+        }
+        body = pipe.convert_request(req)
+        tools = body["tools"]
+        assert len(tools) == 2
+        assert tools[0]["name"] == "plain"
+        assert tools[1]["type"] == "namespace"
+        assert tools[1]["name"] == "tasks"
+        assert tools[1]["description"] == "Task management tools."
+        assert [c["name"] for c in tools[1]["tools"]] == ["wait", "edit"]

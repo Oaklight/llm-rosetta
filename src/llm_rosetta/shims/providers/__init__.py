@@ -429,6 +429,7 @@ def _load_single_provider(
             max_description_length=tools_raw.get("max_description_length"),
             search_mode=tools_raw.get("search_mode", "disabled"),
             multimodal_result=tools_raw.get("multimodal_result"),
+            tool_groups=tools_raw.get("tool_groups", False),
             intrinsic_tools=tuple(tools_raw.get("intrinsic_tools") or ()),
         )
     else:
@@ -437,6 +438,7 @@ def _load_single_provider(
             max_description_length=cfg.get("max_tool_description_length"),
             search_mode=cfg.get("tool_search_mode", "disabled"),
             multimodal_result=cfg.get("multimodal_tool_result"),
+            tool_groups=cfg.get("tool_groups", False),
             intrinsic_tools=tuple(cfg.get("intrinsic_tools") or ()),
         )
 

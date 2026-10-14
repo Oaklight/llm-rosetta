@@ -13,6 +13,8 @@ reasoning:
     disabled: disabled
   effort_field: reasoning.effort
   effort_range: [minimal, max]
+tools:
+  tool_groups: true
 # Volcengine returns "resp_"-prefixed response ids, so the prefix is stripped
 # on the way in and re-added on the way out.  Verified live 2026-10-12 (#899).
 response_id_prefix: "resp_"
