@@ -1,9 +1,9 @@
 """Reusable observability layer for LLM proxy servers.
 
 This package provides framework-agnostic building blocks for metrics
-collection, request logging, SQLite persistence, and on-demand
-profiling.  Any HTTP proxy built on top of ``llm-rosetta`` can import
-from here — no dependency on the gateway's config system or HTTP
+collection, request logging, SQLite persistence, usage metering, and
+on-demand profiling.  Any HTTP proxy built on top of ``llm-rosetta`` can
+import from here — no dependency on the gateway's config system or HTTP
 server.
 
 Typical usage::
@@ -20,6 +20,11 @@ Typical usage::
     persistence = PersistenceManager("/var/data/myproxy")
     request_log = RequestLog(persistence=persistence)
     profiler = ProfilerState()
+
+Usage — what the tokens add up to, and for whom — is a subpackage of its
+own, :mod:`llm_rosetta.observability.usage`, and needs none of the above::
+
+    from llm_rosetta.observability import UsageReport, token_total
 """
 
 from __future__ import annotations
@@ -77,6 +82,15 @@ from .persistence import (
 from .profiling import ProfilerState
 from .request_log import RequestLog, RequestLogEntry
 from .retention import RetentionPolicy, RetentionTracker
+from .usage import (
+    LEDGER_COLUMNS,
+    USAGE_WINDOW_LABELS,
+    USAGE_WINDOWS,
+    UsageReport,
+    cache_is_additive,
+    token_total,
+    usage_columns,
+)
 
 __all__ = [
     "ALL_EVENT_TYPES",
@@ -120,10 +134,17 @@ __all__ = [
     "OpsLogEntry",
     "PersistenceManager",
     "ProfilerState",
+    "LEDGER_COLUMNS",
     "RequestLog",
     "RequestLogEntry",
     "RetentionPolicy",
     "RetentionTracker",
+    "USAGE_WINDOW_LABELS",
+    "USAGE_WINDOWS",
+    "UsageReport",
+    "cache_is_additive",
+    "token_total",
+    "usage_columns",
     "compress_body",
     "compute_body_hash",
     "decompress_body",

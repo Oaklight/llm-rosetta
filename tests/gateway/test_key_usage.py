@@ -21,7 +21,6 @@ from llm_rosetta.gateway.middleware.auth import api_key_context_var
 from llm_rosetta.gateway.ops.base import OpsContext
 from llm_rosetta.gateway.ops.proxy import OpsProxyRequest
 from llm_rosetta.observability import PersistenceManager, RequestLog
-from llm_rosetta.observability.request_log import token_total
 
 
 def bucket_of(raw_key: str) -> str:
@@ -161,7 +160,7 @@ class TestQueryTokenUsageByKey:
                 _log_row("b1", _ago(days=40)),  # outside every window
             ]
         )
-        report = await pm.query_token_usage_by_key()
+        report = await pm.query_usage_groups()
 
         assert report["windows"] == ["5h", "24h", "7d", "30d"]
         windows = _group(report, "b1")
@@ -180,7 +179,7 @@ class TestQueryTokenUsageByKey:
         the dashboard sums every row, the panel only the attributed ones.
         """
         await pm.insert_log_entries([_log_row(None, _ago(minutes=1), total=42)])
-        report = await pm.query_token_usage_by_key()
+        report = await pm.query_usage_groups()
         assert _group(report, None)["5h"]["total_tokens"] == 42
 
     async def test_groups_split_by_label(self, pm):
@@ -195,7 +194,7 @@ class TestQueryTokenUsageByKey:
                 {**_log_row("b1", _ago(minutes=2), total=5), "api_key_label": "new"},
             ]
         )
-        report = await pm.query_token_usage_by_key()
+        report = await pm.query_usage_groups()
         assert _group(report, "b1", None)["5h"]["total_tokens"] == 100
         assert _group(report, "b1", "new")["5h"]["total_tokens"] == 5
 
@@ -206,7 +205,7 @@ class TestQueryTokenUsageByKey:
                 _log_row("b2", _ago(minutes=1), total=7),
             ]
         )
-        report = await pm.query_token_usage_by_key()
+        report = await pm.query_usage_groups()
         assert _group(report, "b1")["5h"]["total_tokens"] == 100
         assert _group(report, "b2")["5h"]["total_tokens"] == 7
 
@@ -214,7 +213,7 @@ class TestQueryTokenUsageByKey:
 class TestProxyWiring:
     """The one line that carries the credential bucket into the log row.
 
-    Without it the column stays NULL, `query_token_usage_by_key` returns no
+    Without it the column stays NULL, `query_usage_groups` returns no
     buckets, and every panel figure silently reads zero.
     """
 
@@ -250,7 +249,7 @@ class TestProxyWiring:
         assert entries[0]["is_stream"] is is_stream
 
         # And the report groups on it.
-        report = await pm.query_token_usage_by_key()
+        report = await pm.query_usage_groups()
         assert _group(report, ctx.usage_bucket) is not None
 
     async def test_request_without_a_credential_records_no_bucket(self, pm):
@@ -262,7 +261,7 @@ class TestProxyWiring:
         assert "api_key_bucket" not in entries[0]
         # Reported under the None bucket rather than dropped, so the panel can
         # still account for it.
-        assert _group(await pm.query_token_usage_by_key(), None) is not None
+        assert _group(await pm.query_usage_groups(), None) is not None
 
     async def test_internal_token_records_the_sentinel_bucket(self, pm):
         ctx = KeyContext(
@@ -281,7 +280,7 @@ class TestProxyWiring:
 
         entries, _ = await log.get_entries(limit=10)
         assert entries[0]["api_key_bucket"] == INTERNAL_USAGE_BUCKET
-        report = await pm.query_token_usage_by_key()
+        report = await pm.query_usage_groups()
         assert _group(report, INTERNAL_USAGE_BUCKET, INTERNAL_LABEL) is not None
 
 
@@ -404,49 +403,6 @@ class TestGetKeyUsageRoute:
         assert sum(r["windows"]["5h"]["total_tokens"] for r in rows) == 110
 
 
-class TestTokenTotal:
-    """The one rule that fills `total_tokens`, wherever usage comes from."""
-
-    def test_provider_total_wins(self):
-        assert (
-            token_total(
-                {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 99}
-            )
-            == 99
-        )
-
-    def test_falls_back_to_the_additive_sum(self):
-        """Anthropic sends no total, and its cache tokens are additive."""
-        assert (
-            token_total(
-                {
-                    "prompt_tokens": 10,
-                    "completion_tokens": 5,
-                    "cache_read_tokens": 100,
-                    "cache_creation_tokens": 7,
-                }
-            )
-            == 122
-        )
-
-    def test_reasoning_is_never_added(self):
-        """It rides inside the output tokens."""
-        assert (
-            token_total(
-                {"prompt_tokens": 10, "completion_tokens": 50, "reasoning_tokens": 40}
-            )
-            == 60
-        )
-
-    def test_no_usage_at_all(self):
-        assert token_total(None) is None
-        assert token_total({}) is None
-        assert token_total({"model": "gpt-4o"}) is None
-
-    def test_partial_usage_still_totals(self):
-        assert token_total({"completion_tokens": 5}) == 5
-
-
 class TestBackfillUsageBuckets:
     async def test_attributes_rows_by_label(self, pm):
         await pm.insert_log_entries(
@@ -460,7 +416,7 @@ class TestBackfillUsageBuckets:
         updated = await pm.backfill_usage_buckets({"prod": "b-prod"})
 
         assert updated == 2
-        report = await pm.query_token_usage_by_key()
+        report = await pm.query_usage_groups()
         assert _group(report, "b-prod", "prod")["5h"]["total_tokens"] == 30
         # The label nobody claimed is left alone.
         assert _group(report, None, "other")["5h"]["total_tokens"] == 30
@@ -477,7 +433,7 @@ class TestBackfillUsageBuckets:
         )
 
         assert await pm.backfill_usage_buckets({"prod": "b-prod"}) == 1
-        report = await pm.query_token_usage_by_key()
+        report = await pm.query_usage_groups()
         assert _group(report, "b-owned", "prod")["5h"]["total_tokens"] == 10
 
     async def test_idempotent(self, pm):

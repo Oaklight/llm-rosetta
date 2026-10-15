@@ -11,7 +11,8 @@ from __future__ import annotations
 from dataclasses import replace as _dc_replace
 from typing import Any, ClassVar
 
-from llm_rosetta.observability.request_log import RequestLogEntry, token_total
+from llm_rosetta.observability.request_log import RequestLogEntry
+from llm_rosetta.observability.usage import usage_columns
 
 from ..middleware.auth import api_key_context_var
 from ..middleware.request_context import request_context_var
@@ -86,15 +87,12 @@ class OpsProxyRequest(OpsBase):
             metrics.active_streams -= 1
 
         _usage = (self.profile or {}).get("usage") if not self.is_stream else None
-        _input_tokens = _usage.get("prompt_tokens") if _usage else None
-        _output_tokens = _usage.get("completion_tokens") if _usage else None
-        # Never NULL when any token count is known: the dashboard headline and
-        # the per-key panel both read this column, and a NULL row counts in
-        # neither.
-        _total_tokens = token_total(_usage)
-        _cache_read_tokens = _usage.get("cache_read_tokens") if _usage else None
-        _cache_creation_tokens = _usage.get("cache_creation_tokens") if _usage else None
-        _reasoning_tokens = _usage.get("reasoning_tokens") if _usage else None
+        # The ledger columns, total included — a row that reports any token
+        # count is never NULL in that column: every view sums it, and a NULL row
+        # counts in none of them.
+        _columns = usage_columns(_usage)
+        _input_tokens = _columns.get("input_tokens")
+        _output_tokens = _columns.get("output_tokens")
 
         if metrics:
             metrics.record_request(
@@ -106,12 +104,7 @@ class OpsProxyRequest(OpsBase):
                 is_stream=self.is_stream,
                 provider_name=self.provider_name,
                 error_detail=self.error_detail,
-                input_tokens=_input_tokens,
-                output_tokens=_output_tokens,
-                cache_read_tokens=_cache_read_tokens,
-                cache_creation_tokens=_cache_creation_tokens,
-                reasoning_tokens=_reasoning_tokens,
-                total_tokens=_total_tokens,
+                **_columns,
             )
 
         request_log = self._ctx.request_log
@@ -132,12 +125,7 @@ class OpsProxyRequest(OpsBase):
                     _rctx.client_ip if (_rctx := request_context_var.get()) else None
                 ),
                 profile=self.profile,
-                input_tokens=_input_tokens,
-                output_tokens=_output_tokens,
-                total_tokens=_total_tokens,
-                cache_read_tokens=_cache_read_tokens,
-                cache_creation_tokens=_cache_creation_tokens,
-                reasoning_tokens=_reasoning_tokens,
+                **_columns,
             )
             if self.entry_id_override:
                 entry = _dc_replace(entry, id=self.entry_id_override)

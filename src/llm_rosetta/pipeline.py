@@ -47,6 +47,7 @@ from llm_rosetta.capabilities import (
     unwrap_custom_tool_input,
 )
 from llm_rosetta.converters.base.context import ConversionContext
+from llm_rosetta.observability.usage.semantics import GOOGLE_METADATA, USAGE_SHAPES
 from llm_rosetta.provider_names import (
     canonical_provider_name,
     warn_legacy_provider_names,
@@ -1126,27 +1127,17 @@ class BaselineStreamProcessor:
     def _extract_extended_usage(
         cls, usage: dict[str, Any], result: dict[str, int]
     ) -> None:
-        """Extract cache/reasoning tokens from provider-specific nested fields."""
-        # OpenAI nested details
-        v = cls._extract_nested_int(usage, "prompt_tokens_details", "cached_tokens")
-        if v is not None:
-            result["cache_read_tokens"] = v
-        v = cls._extract_nested_int(
-            usage, "completion_tokens_details", "reasoning_tokens"
-        )
-        if v is not None:
-            result["reasoning_tokens"] = v
-        # Anthropic top-level fields
-        v = cls._extract_int(usage, "cache_read_input_tokens")
-        if v is not None:
-            result["cache_read_tokens"] = v
-        v = cls._extract_int(usage, "cache_creation_input_tokens")
-        if v is not None:
-            result["cache_creation_tokens"] = v
-        # Anthropic nested thinking tokens
-        v = cls._extract_nested_int(usage, "output_tokens_details", "thinking_tokens")
-        if v is not None:
-            result["reasoning_tokens"] = v
+        """Extract cache/reasoning tokens from a usage payload.
+
+        Which fields carry them, and whether the cache ones add to the input or
+        sit inside it, is declared in
+        :mod:`llm_rosetta.observability.usage.semantics` — the same declaration
+        the total's derivation and the historical repair read, so the three
+        cannot disagree.  Every shape is tried because a payload does not say
+        which dialect produced it.
+        """
+        for shape in USAGE_SHAPES:
+            result.update(shape.extended(usage))
 
     @classmethod
     def _extract_usage(cls, chunk: dict[str, Any]) -> dict[str, int] | None:
@@ -1181,14 +1172,11 @@ class BaselineStreamProcessor:
                 ("candidates_token_count", "completion_tokens"),
                 ("totalTokenCount", "total_tokens"),
                 ("total_token_count", "total_tokens"),
-                ("cachedContentTokenCount", "cache_read_tokens"),
-                ("cached_content_token_count", "cache_read_tokens"),
-                ("thoughtsTokenCount", "reasoning_tokens"),
-                ("thoughts_token_count", "reasoning_tokens"),
             ):
                 v = um.get(src)
                 if isinstance(v, int) and v >= 0:
                     result[dst] = v
+            result.update(GOOGLE_METADATA.extended(um))
             return result if result else None
         return None
 

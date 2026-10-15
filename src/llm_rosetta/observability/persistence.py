@@ -28,6 +28,9 @@ from typing import Any
 from llm_rosetta._vendor import aiosqlite
 
 from .retention import RetentionPolicy, RetentionTracker
+from .usage.normalize import LEDGER_COLUMNS
+from .usage.report import USAGE_WINDOWS
+from .usage.semantics import ADDITIVE_CACHE_STANDARDS
 
 logger = logging.getLogger("llm-rosetta.observability")
 
@@ -54,36 +57,10 @@ _BACKUP_MAX_KEEP = 3
 DEFAULT_WAL_MAX_BYTES = 64 * 1024 * 1024  # 64 MB
 _WAL_CHECKPOINT_INTERVAL = 300  # 5 minutes
 
-# Rolling windows for per-key usage reporting, as (label, hours) pairs.
-# Ordered narrowest to widest — the widest sets the SQL range scan.
-_USAGE_WINDOWS: tuple[tuple[str, int], ...] = (
-    ("5h", 5),
-    ("24h", 24),
-    ("7d", 24 * 7),
-    ("30d", 24 * 30),
-)
-
-# Upstream API standards whose prompt-cache counters are *additive* to the
-# input tokens — Anthropic's Messages API.  OpenAI-shaped and Google-shaped
-# upstreams report their cached tokens *inside* the prompt count instead, so a
-# total below input + output + cache is their own answer, not a derived one.
-# The legacy "anthropic" spelling is here because rows written before the
-# rename (#923) carry it.
-_CACHE_ADDITIVE_TARGETS: tuple[str, ...] = ("messages", "anthropic")
-
-# Token columns summed per window.  Public: the per-key usage route sums
-# the same columns when it folds the report into panel rows.
-USAGE_TOKEN_COLUMNS: tuple[str, ...] = (
-    "input_tokens",
-    "output_tokens",
-    "total_tokens",
-    "cache_read_tokens",
-    "cache_creation_tokens",
-    "reasoning_tokens",
-)
-
-# Window labels for per-key usage reporting, in display order.
-USAGE_WINDOW_LABELS: tuple[str, ...] = tuple(name for name, _h in _USAGE_WINDOWS)
+# Standards whose cache counters add to the input, derived from the declared
+# semantics in observability.usage rather than restated — sorted so the SQL is
+# deterministic.
+_CACHE_ADDITIVE_TARGETS: tuple[str, ...] = tuple(sorted(ADDITIVE_CACHE_STANDARDS))
 
 
 class PersistenceManager:
@@ -454,7 +431,7 @@ class PersistenceManager:
     async def backfill_total_tokens(self) -> int:
         """Fill totals the writer could not, and repair derived Anthropic ones.
 
-        The writer stores :func:`~llm_rosetta.observability.request_log.token_total`
+        The writer stores :func:`~llm_rosetta.observability.usage.token_total`
         — the provider's own total when it sends one, otherwise the additive
         sum.  Two kinds of historical row are missing that value, and only
         those two are touched here:
@@ -1988,7 +1965,7 @@ class PersistenceManager:
             "total_tokens_24h": row[5],
         }
 
-    async def query_token_usage_by_key(self) -> dict[str, Any]:
+    async def query_usage_groups(self) -> dict[str, Any]:
         """Aggregate token usage per credential bucket and label.
 
         Every window is relative to now (``now - hours``).  A single indexed
@@ -2014,20 +1991,20 @@ class PersistenceManager:
         now = datetime.now(timezone.utc)
         cutoffs = {
             name: (now - timedelta(hours=hours)).isoformat()
-            for name, hours in _USAGE_WINDOWS
+            for name, hours in USAGE_WINDOWS
         }
 
         select_parts = ["api_key_bucket", "api_key_label"]
         params: list[Any] = []
-        for name, _hours in _USAGE_WINDOWS:
+        for name, _hours in USAGE_WINDOWS:
             select_parts.append("COUNT(CASE WHEN timestamp >= ? THEN 1 END)")
             params.append(cutoffs[name])
-            for col in USAGE_TOKEN_COLUMNS:
+            for col in LEDGER_COLUMNS:
                 select_parts.append(
                     f"COALESCE(SUM(CASE WHEN timestamp >= ? THEN {col} ELSE 0 END), 0)"
                 )
                 params.append(cutoffs[name])
-        params.append(cutoffs[_USAGE_WINDOWS[-1][0]])
+        params.append(cutoffs[USAGE_WINDOWS[-1][0]])
 
         rows = await self._conn.execute_fetchall(
             f"SELECT {', '.join(select_parts)} FROM request_log "
@@ -2039,19 +2016,19 @@ class PersistenceManager:
         groups: list[dict[str, Any]] = []
         # One COUNT plus the token columns per window; the two leading columns
         # are the bucket and the label.
-        stride = 1 + len(USAGE_TOKEN_COLUMNS)
+        stride = 1 + len(LEDGER_COLUMNS)
         for row in rows:
             windows: dict[str, dict[str, int]] = {}
             idx = 2
-            for name, _hours in _USAGE_WINDOWS:
+            for name, _hours in USAGE_WINDOWS:
                 window: dict[str, int] = {"request_count": row[idx]}
-                for offset, col in enumerate(USAGE_TOKEN_COLUMNS, start=1):
+                for offset, col in enumerate(LEDGER_COLUMNS, start=1):
                     window[col] = row[idx + offset]
                 windows[name] = window
                 idx += stride
             groups.append({"bucket": row[0], "label": row[1], "windows": windows})
         return {
-            "windows": [name for name, _hours in _USAGE_WINDOWS],
+            "windows": [name for name, _hours in USAGE_WINDOWS],
             "groups": groups,
         }
 

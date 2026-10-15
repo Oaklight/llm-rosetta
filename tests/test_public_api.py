@@ -99,6 +99,31 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
         ],
         "max_count": 9,
     },
+    "llm_rosetta.observability.usage": {
+        "items": [
+            "ADDITIVE_CACHE_STANDARDS",
+            "GOOGLE_METADATA",
+            "IR_FIELDS",
+            "LEDGER_COLUMNS",
+            "MESSAGES_FIELDS",
+            "NO_SUBJECT_LABEL",
+            "OPENAI_DETAILS",
+            "STANDARD_SHAPES",
+            "USAGE_SHAPES",
+            "USAGE_WINDOW_LABELS",
+            "USAGE_WINDOWS",
+            "SubjectUsage",
+            "UsageReport",
+            "UsageShape",
+            "add_windows",
+            "cache_is_additive",
+            "shape_for",
+            "token_total",
+            "usage_columns",
+            "zero_windows",
+        ],
+        "max_count": 20,
+    },
 }
 
 

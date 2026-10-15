@@ -33,7 +33,7 @@ from llm_rosetta.shims.provider_shim import SoftErrorPattern
 
 from llm_rosetta.observability.capture import CapturedRequest, CaptureState
 from llm_rosetta.observability.error_dump import dump_error
-from llm_rosetta.observability.request_log import token_total
+from llm_rosetta.observability.usage import usage_columns
 
 from .middleware.error_annotate import annotate_tool_collisions
 from .middleware.error_format import (
@@ -1017,36 +1017,20 @@ async def _write_back_stream_usage(
     usage = getattr(processor, "get_accumulated_usage", lambda: None)()
     if not usage or not entry_id or request_log is None:
         return
-    inp = usage.get("prompt_tokens")
-    outp = usage.get("completion_tokens")
-    total = token_total(usage)
-    cache_read = usage.get("cache_read_tokens")
-    cache_creation = usage.get("cache_creation_tokens")
-    reasoning = usage.get("reasoning_tokens")
-    if inp is None and outp is None:
+    # The same normalization the non-streaming leg writes, so both legs fill a
+    # row identically — the total included.
+    columns = usage_columns(usage)
+    if "input_tokens" not in columns and "output_tokens" not in columns:
         return
     try:
-        await request_log.update_usage(
-            entry_id,
-            inp,
-            outp,
-            total,
-            cache_read_tokens=cache_read,
-            cache_creation_tokens=cache_creation,
-            reasoning_tokens=reasoning,
-        )
+        await request_log.update_usage(entry_id, **columns)
     except Exception:
         logger.debug("Failed to write usage for %s", entry_id)
     if metrics is not None:
         metrics.record_usage(
             model=model,
-            input_tokens=inp,
-            output_tokens=outp,
-            cache_read_tokens=cache_read,
-            cache_creation_tokens=cache_creation,
-            reasoning_tokens=reasoning,
-            total_tokens=total,
             provider_name=provider_name,
+            **columns,
         )
 
 
