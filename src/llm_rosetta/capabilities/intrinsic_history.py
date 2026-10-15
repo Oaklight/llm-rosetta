@@ -36,6 +36,7 @@ definition, and on the target's renderability rather than a shim flag.
 from __future__ import annotations
 
 import copy
+import json
 import logging
 import re
 from collections.abc import Mapping
@@ -102,6 +103,31 @@ def _claimed_names(ir_request: dict[str, Any]) -> set[str]:
     return names
 
 
+_CONTENT_BLOCK_TYPES = frozenset({"text", "image", "input_text", "output_text"})
+
+
+def _plain_result(result: Any) -> Any:
+    """Make a degraded result safe for an ordinary tool result.
+
+    A server result is provider-shaped (search result blocks with no ``type``,
+    a structured code-execution object).  An ordinary tool result accepts a
+    string or typed content blocks, and live targets reject anything else
+    (``tool_result.content.0.type: Field required``), so an untyped payload is
+    carried as JSON text.
+    """
+    if isinstance(result, str):
+        return result
+    if isinstance(result, list) and result:
+        if all(
+            isinstance(b, dict) and b.get("type") in _CONTENT_BLOCK_TYPES
+            for b in result
+        ):
+            return result
+    if result is None:
+        return ""
+    return json.dumps(result, ensure_ascii=False)
+
+
 def _downgrade_part(
     part: dict[str, Any], kind: str, name: str | None
 ) -> dict[str, Any]:
@@ -119,6 +145,8 @@ def _downgrade_part(
     """
     degraded = copy.deepcopy(part)
     degraded["tool_type"] = "function"
+    if part.get("type") == "tool_result":
+        degraded["result"] = _plain_result(degraded.get("result"))
     degraded.pop("intrinsic_kind", None)
     if name is not None:
         degraded["tool_name"] = name
