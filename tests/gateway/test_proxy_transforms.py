@@ -484,3 +484,101 @@ class TestToolCollisionDump:
         assert len(entries) == 1
         assert entries[0]["request_log_id"] == "entry-907"
         assert entries[0]["tool_name_collisions"] == '{"exec": 2}'
+
+
+class TestStreamUsageModelName:
+    """Streamed usage is grouped under the model the client asked for.
+
+    app.py rewrites ``body["model"]`` to the upstream id before the streaming
+    handler runs, so reading the model back out of the body names the usage
+    after the upstream.  The same request's log row carries the client-facing
+    name, and the two then disagree — one model, two rows in every per-model
+    token view.
+    """
+
+    class _Stream:
+        status_code = 200
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            raise StopAsyncIteration
+
+    def test_usage_lands_under_the_reported_model(self):
+        from llm_rosetta.gateway.proxy import _stream_event_generator
+        from llm_rosetta.observability.metrics import MetricsCollector
+
+        metrics = MetricsCollector()
+        processor = MagicMock()
+        processor.process_chunk.return_value = []
+        processor.get_accumulated_usage.return_value = {
+            "prompt_tokens": 10,
+            "completion_tokens": 5,
+            "total_tokens": 15,
+        }
+        log = MagicMock()
+        log.update_profile = AsyncMock()
+        log.update_usage = AsyncMock()
+
+        async def run():
+            generator = _stream_event_generator(
+                source_provider="chat_completions",
+                stream=self._Stream(),
+                processor=processor,
+                model="upstream-id",
+                reported_model="client-alias",
+                format_sse=lambda event: "",
+                entry_id="entry-1",
+                request_log=log,
+                metrics=metrics,
+            )
+            async for _ in generator:
+                pass
+
+        asyncio.run(run())
+
+        assert metrics.total_tokens == 15
+        assert "client-alias" in metrics.by_model_tokens
+        assert "upstream-id" not in metrics.by_model_tokens
+
+    def test_reported_model_defaults_to_the_body_model(self):
+        """A caller with no client name still reports the model it has, and
+        the total is filled in from the parts when the upstream omits one."""
+        from llm_rosetta.gateway.proxy import _stream_event_generator
+        from llm_rosetta.observability.metrics import MetricsCollector
+
+        metrics = MetricsCollector()
+        processor = MagicMock()
+        processor.process_chunk.return_value = []
+        processor.get_accumulated_usage.return_value = {
+            "prompt_tokens": 4,
+            "completion_tokens": 3,
+        }
+        log = MagicMock()
+        log.update_profile = AsyncMock()
+        log.update_usage = AsyncMock()
+
+        async def run():
+            generator = _stream_event_generator(
+                source_provider="chat_completions",
+                stream=self._Stream(),
+                processor=processor,
+                model="only-name",
+                format_sse=lambda event: "",
+                entry_id="entry-1",
+                request_log=log,
+                metrics=metrics,
+            )
+            async for _ in generator:
+                pass
+
+        asyncio.run(run())
+
+        assert metrics.by_model_tokens["only-name"]["total_tokens"] == 7

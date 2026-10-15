@@ -69,16 +69,57 @@ function setKeyUsageWindow(win) {
   renderKeys();
 }
 
+// A read-only row for usage no live key owns.  It has to be visible, or the
+// panel's figures would silently exclude traffic the dashboard counts.
+function attributedUsageRow(label, win, tip, counts) {
+  const w = counts || {};
+  const title = esc(tip);
+  return `<tr style="color:var(--text-dim)">
+    <td title="${title}">${esc(label)}</td>
+    <td>—</td>
+    <td>—</td>
+    <td style="text-align:right" title="${title}">${(w.request_count || 0).toLocaleString()}</td>
+    <td style="text-align:right" title="${title}">${fmtTokens(w.input_tokens || 0)}</td>
+    <td style="text-align:right" title="${title}">${fmtTokens(w.output_tokens || 0)}</td>
+    <td style="text-align:right" title="${title}"><strong>${fmtTokens(w.total_tokens || 0)}</strong></td>
+    <td></td>
+  </tr>`;
+}
+
+// The rows that account for everything the live keys do not.
+function renderUnattributedRows(win) {
+  const usage = S.keyUsage || {};
+  const rows = [];
+  if (usage.internal) {
+    rows.push(attributedUsageRow(
+      t('keys.internalRow'), win, t('keys.internalHint'),
+      usage.internal.windows && usage.internal.windows[win]
+    ));
+  }
+  if (usage.unattributed) {
+    const detail = Object.entries(usage.unattributed.by_label || {})
+      .map(([label, w]) => `${label}: ${fmtTokens(((w || {})[win] || {}).total_tokens || 0)}`)
+      .join('\n');
+    rows.push(attributedUsageRow(
+      t('keys.unattributedRow'), win,
+      t('keys.unattributedHint') + (detail ? '\n\n' + detail : ''),
+      usage.unattributed.windows && usage.unattributed.windows[win]
+    ));
+  }
+  return rows;
+}
+
 function renderKeys() {
   // Re-rendered here too so a language switch relabels the tier control.
   renderKeyUsageControl();
   const tbody = document.getElementById('keysTable');
   const keys = (S.keysData && S.keysData.keys) || [];
-  if (keys.length === 0) {
+  const win = S.keyUsageWindow || usageWindows()[0];
+  const extraRows = renderUnattributedRows(win);
+  if (keys.length === 0 && extraRows.length === 0) {
     tbody.innerHTML = `<tr><td colspan="8" style="color:var(--text-dim)">${t('keys.noKeys')}</td></tr>`;
     return;
   }
-  const win = S.keyUsageWindow || usageWindows()[0];
   const usageKeys = (S.keyUsage && S.keyUsage.keys) || {};
   const usageTip = esc(t('keys.rotateBucketHint'));
   tbody.innerHTML = keys.map(k => {
@@ -89,9 +130,14 @@ function renderKeys() {
     const entry = usageKeys[k.id];
     const w = (entry && entry.windows && entry.windows[win]) || {};
     const reqs = (w.request_count || 0).toLocaleString();
+    // Two keys behind one label cannot be told apart in the log, so this row
+    // reads zero while its traffic shows up under Unattributed.
+    const sharedMark = (entry && entry.shared_label)
+      ? `<span title="${esc(t('keys.sharedLabelHint'))}" style="color:var(--orange);margin-left:4px;cursor:help">⚠</span>`
+      : '';
     return `<tr>
       <td><span class="key-label-text" id="label-${k.id}">${esc(k.label || '—')}</span>
-        <button class="key-btn" style="margin-left:4px" onclick="editKeyLabel('${k.id}','${esc(k.label || '')}')" title="Edit"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button></td>
+        <button class="key-btn" style="margin-left:4px" onclick="editKeyLabel('${k.id}','${esc(k.label || '')}')" title="Edit"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button>${sharedMark}</td>
       <td title="${createdFull}">${created}</td>
       <td title="${lastUsedFull}">${lastUsed}</td>
       <td style="text-align:right" title="${usageTip}">${reqs}</td>
@@ -100,7 +146,7 @@ function renderKeys() {
       <td style="text-align:right" title="${usageTip}"><strong>${fmtTokens(w.total_tokens || 0)}</strong></td>
       <td style="white-space:nowrap;text-align:right"><button class="btn btn-sm" onclick="rotateKey('${k.id}','${esc(k.label || k.id)}', this)">${t('btn.rotate')}</button> <button class="btn btn-sm btn-danger" onclick="deleteKey('${k.id}','${esc(k.label || k.id)}', this)">${t('btn.delete')}</button></td>
     </tr>`;
-  }).join('');
+  }).join('') + extraRows.join('');
 }
 
 function openKeyModal() {

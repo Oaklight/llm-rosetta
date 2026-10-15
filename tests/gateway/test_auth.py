@@ -14,7 +14,11 @@ from llm_rosetta.gateway.middleware.auth import (
     create_auth_hook,
 )
 from llm_rosetta.gateway.middleware.error_format import detect_api_format, is_admin_path
-from llm_rosetta.gateway.keystore import KeyContext, KeyStore
+from llm_rosetta.gateway.keystore import (
+    INTERNAL_USAGE_BUCKET,
+    KeyContext,
+    KeyStore,
+)
 from llm_rosetta.gateway.middleware.request_context import (
     RequestContext,
     request_context_var,
@@ -408,6 +412,10 @@ class TestKeyContextTracking:
         assert ctx is not None
         assert ctx.label == "internal"
         assert ctx.allowed_shims == frozenset({"*"})
+        # The admin panel's test traffic is usage like any other, so it is
+        # attributed — otherwise the dashboard counts it and the key panel
+        # silently does not.
+        assert ctx.usage_bucket == INTERNAL_USAGE_BUCKET
 
     async def test_anthropic_context(self, hook: Any):
         req = _make_request(

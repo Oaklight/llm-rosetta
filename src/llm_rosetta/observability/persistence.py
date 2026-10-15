@@ -63,8 +63,17 @@ _USAGE_WINDOWS: tuple[tuple[str, int], ...] = (
     ("30d", 24 * 30),
 )
 
-# Token columns summed per window.
-_USAGE_TOKEN_COLUMNS: tuple[str, ...] = (
+# Upstream API standards whose prompt-cache counters are *additive* to the
+# input tokens — Anthropic's Messages API.  OpenAI-shaped and Google-shaped
+# upstreams report their cached tokens *inside* the prompt count instead, so a
+# total below input + output + cache is their own answer, not a derived one.
+# The legacy "anthropic" spelling is here because rows written before the
+# rename (#923) carry it.
+_CACHE_ADDITIVE_TARGETS: tuple[str, ...] = ("messages", "anthropic")
+
+# Token columns summed per window.  Public: the per-key usage route sums
+# the same columns when it folds the report into panel rows.
+USAGE_TOKEN_COLUMNS: tuple[str, ...] = (
     "input_tokens",
     "output_tokens",
     "total_tokens",
@@ -352,6 +361,14 @@ class PersistenceManager:
                 "ON request_log(api_key_bucket, timestamp)",
             ],
         ),
+        (
+            5,
+            "index request_log.api_key_label",
+            [
+                "CREATE INDEX IF NOT EXISTS idx_rl_api_key_label "
+                "ON request_log(api_key_label)",
+            ],
+        ),
     ]
 
     async def _run_migrations(self) -> None:
@@ -435,28 +452,57 @@ class PersistenceManager:
         return total
 
     async def backfill_total_tokens(self) -> int:
-        """Recalculate total_tokens for rows where cache tokens were excluded.
+        """Fill totals the writer could not, and repair derived Anthropic ones.
 
-        Anthropic's cache_read/cache_creation tokens are additive to
-        input_tokens, but earlier code computed total = input + output
-        only.  This backfill corrects historical rows.
+        The writer stores :func:`~llm_rosetta.observability.request_log.token_total`
+        — the provider's own total when it sends one, otherwise the additive
+        sum.  Two kinds of historical row are missing that value, and only
+        those two are touched here:
+
+        - a row with no total at all, which no view can count; it is filled
+          additively, the same fallback the writer applies.
+        - a row from a Messages-API upstream that reports cache tokens, where
+          the old writer stored input + output and left the cache out.
+
+        A total a provider *did* report is never rewritten.  For the
+        OpenAI-shaped standards that number is legitimately below the additive
+        sum — their cached counters sit inside the prompt count — so adding the
+        cache columns to it would inflate it.  Rewriting by that rule is what
+        made the column mean one thing for the rows a restart had touched and
+        another for the rest; the rule now matches the writer's, so a row's
+        total survives any number of restarts unchanged.
 
         Returns:
             Number of rows updated.
         """
-        cursor = await self._conn.execute(
-            "UPDATE request_log "
-            "SET total_tokens = COALESCE(input_tokens, 0) "
-            "    + COALESCE(output_tokens, 0) "
-            "    + COALESCE(cache_read_tokens, 0) "
-            "    + COALESCE(cache_creation_tokens, 0) "
-            "WHERE (cache_read_tokens > 0 OR cache_creation_tokens > 0) "
-            "  AND total_tokens < COALESCE(input_tokens, 0) "
-            "    + COALESCE(output_tokens, 0) "
-            "    + COALESCE(cache_read_tokens, 0) "
-            "    + COALESCE(cache_creation_tokens, 0)"
+        additive = (
+            "COALESCE(input_tokens, 0) + COALESCE(output_tokens, 0) "
+            "+ COALESCE(cache_read_tokens, 0) + COALESCE(cache_creation_tokens, 0)"
         )
-        updated = cursor.rowcount
+        updated = 0
+
+        # 1. Nothing was recorded at all.  Runs first so that step 2 sees the
+        #    rows it filled rather than a NULL it would have to special-case.
+        cursor = await self._conn.execute(
+            f"UPDATE request_log SET total_tokens = {additive} "
+            "WHERE total_tokens IS NULL "
+            f"  AND ({additive}) > 0"
+        )
+        updated += cursor.rowcount or 0
+
+        # 2. A derived total that left the cache out.  Restricted to the
+        #    standards whose cache counters are additive; for the others a
+        #    total below this sum is the provider's own answer, not a mistake.
+        placeholders = ", ".join("?" * len(_CACHE_ADDITIVE_TARGETS))
+        cursor = await self._conn.execute(
+            f"UPDATE request_log SET total_tokens = {additive} "
+            f"WHERE total_tokens < {additive} "
+            "  AND (cache_read_tokens > 0 OR cache_creation_tokens > 0) "
+            f"  AND target_provider IN ({placeholders})",
+            _CACHE_ADDITIVE_TARGETS,
+        )
+        updated += cursor.rowcount or 0
+
         if updated:
             await self._conn.commit()
             logger.info("Backfilled total_tokens for %d rows", updated)
@@ -1913,7 +1959,13 @@ class PersistenceManager:
         return {"days": day_list, "totals": totals}
 
     async def query_rolling_24h_tokens(self) -> dict[str, int]:
-        """Sum token usage over the last 24 hours."""
+        """Sum token usage over the last 24 hours.
+
+        ``total_tokens_24h`` is the canonical figure every view displays; the
+        subset columns ride along as the breakdown behind it.  They do not add
+        up to it — reasoning is part of the output, and cache tokens are a
+        subset of the input for some providers and additive for others.
+        """
         from datetime import datetime, timedelta, timezone
 
         cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
@@ -1922,7 +1974,8 @@ class PersistenceManager:
             "COALESCE(SUM(output_tokens), 0), "
             "COALESCE(SUM(cache_read_tokens), 0), "
             "COALESCE(SUM(cache_creation_tokens), 0), "
-            "COALESCE(SUM(reasoning_tokens), 0) "
+            "COALESCE(SUM(reasoning_tokens), 0), "
+            "COALESCE(SUM(total_tokens), 0) "
             "FROM request_log WHERE timestamp >= ?",
             (cutoff,),
         )
@@ -1932,20 +1985,29 @@ class PersistenceManager:
             "cache_read_tokens_24h": row[2],
             "cache_creation_tokens_24h": row[3],
             "reasoning_tokens_24h": row[4],
+            "total_tokens_24h": row[5],
         }
 
     async def query_token_usage_by_key(self) -> dict[str, Any]:
-        """Aggregate token usage per API key bucket over rolling windows.
+        """Aggregate token usage per credential bucket and label.
 
         Every window is relative to now (``now - hours``).  A single indexed
-        range scan over the widest window feeds one ``GROUP BY api_key_bucket``;
-        the per-window totals come from conditional aggregation, so the whole
-        report costs one pass over the log.
+        range scan over the widest window feeds the conditional-aggregation
+        sums, so the whole report costs one pass over the log.
+
+        Rows are grouped by ``(bucket, label)`` rather than by bucket alone.
+        The caller knows which buckets belong to a live credential and needs
+        the label split to account for the rest, so the split is done here
+        once and the classification is left to it.  Rows carrying no bucket —
+        anonymous requests, and everything logged before the column existed —
+        are reported under the ``None`` bucket instead of being dropped, so
+        the report covers every request the dashboard counts.
 
         Returns:
-            ``{"windows": [label, ...], "keys": {bucket: {window: {...}}}}``.
-            Each per-window dict holds ``request_count`` plus the token
-            totals.  Buckets absent from the log are not present.
+            ``{"windows": [label, ...], "groups": [...]}``, each group being
+            ``{"bucket": str | None, "label": str | None, "windows": {...}}``
+            with each per-window dict holding ``request_count`` plus the token
+            totals.  Buckets with no traffic in the widest window are absent.
         """
         from datetime import datetime, timedelta, timezone
 
@@ -1955,12 +2017,12 @@ class PersistenceManager:
             for name, hours in _USAGE_WINDOWS
         }
 
-        select_parts = ["api_key_bucket"]
+        select_parts = ["api_key_bucket", "api_key_label"]
         params: list[Any] = []
         for name, _hours in _USAGE_WINDOWS:
             select_parts.append("COUNT(CASE WHEN timestamp >= ? THEN 1 END)")
             params.append(cutoffs[name])
-            for col in _USAGE_TOKEN_COLUMNS:
+            for col in USAGE_TOKEN_COLUMNS:
                 select_parts.append(
                     f"COALESCE(SUM(CASE WHEN timestamp >= ? THEN {col} ELSE 0 END), 0)"
                 )
@@ -1969,24 +2031,57 @@ class PersistenceManager:
 
         rows = await self._conn.execute_fetchall(
             f"SELECT {', '.join(select_parts)} FROM request_log "
-            "WHERE timestamp >= ? AND api_key_bucket IS NOT NULL "
-            "GROUP BY api_key_bucket",
+            "WHERE timestamp >= ? "
+            "GROUP BY api_key_bucket, api_key_label",
             params,
         )
 
-        keys: dict[str, dict[str, dict[str, int]]] = {}
-        stride = 1 + len(_USAGE_TOKEN_COLUMNS)
+        groups: list[dict[str, Any]] = []
+        # One COUNT plus the token columns per window; the two leading columns
+        # are the bucket and the label.
+        stride = 1 + len(USAGE_TOKEN_COLUMNS)
         for row in rows:
             windows: dict[str, dict[str, int]] = {}
-            idx = 1
+            idx = 2
             for name, _hours in _USAGE_WINDOWS:
                 window: dict[str, int] = {"request_count": row[idx]}
-                for offset, col in enumerate(_USAGE_TOKEN_COLUMNS, start=1):
+                for offset, col in enumerate(USAGE_TOKEN_COLUMNS, start=1):
                     window[col] = row[idx + offset]
                 windows[name] = window
                 idx += stride
-            keys[row[0]] = windows
-        return {"windows": [name for name, _hours in _USAGE_WINDOWS], "keys": keys}
+            groups.append({"bucket": row[0], "label": row[1], "windows": windows})
+        return {
+            "windows": [name for name, _hours in _USAGE_WINDOWS],
+            "groups": groups,
+        }
+
+    async def backfill_usage_buckets(self, label_to_bucket: Mapping[str, str]) -> int:
+        """Attribute logged requests that carry no credential bucket.
+
+        Runs at startup.  A request logged before the bucket column existed —
+        or by a credential that never had one — is matched to its bucket
+        through the label on the row.  Callers pass only unambiguous labels:
+        a label shared by several live keys, or claimed by none, is left NULL
+        and stays in the panel's unattributed remainder.
+
+        Args:
+            label_to_bucket: Label to bucket, already disambiguated.
+
+        Returns:
+            Number of rows updated.
+        """
+        updated = 0
+        for label, bucket in label_to_bucket.items():
+            cursor = await self._conn.execute(
+                "UPDATE request_log SET api_key_bucket = ? "
+                "WHERE api_key_bucket IS NULL AND api_key_label = ?",
+                (bucket, label),
+            )
+            updated += cursor.rowcount or 0
+        if updated:
+            await self._conn.commit()
+            logger.info("Backfilled the usage bucket of %d log rows", updated)
+        return updated
 
     async def update_entry_usage(
         self,

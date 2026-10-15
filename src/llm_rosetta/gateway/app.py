@@ -391,6 +391,7 @@ async def _proxy_handler(
                 route,
                 provider_info,
                 body,
+                reported_model=model,
                 transport=request.app.transport,
                 metadata_store=store,
                 extra_headers=extra_headers,

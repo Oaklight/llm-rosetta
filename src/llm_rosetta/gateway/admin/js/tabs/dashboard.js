@@ -608,7 +608,13 @@ function renderPersistence(p, totalReq) {
 function renderStats(d) {
   const uptime = formatDuration(d.uptime_seconds);
   const errRate = (d.error_rate * 100).toFixed(1) + '%';
-  const has24h = d.input_tokens_24h != null;
+  // The headline is the canonical total — the same number the API Keys panel
+  // and the usage modal show, so the three can be reconciled.  The breakdown
+  // below it is exactly that: reasoning rides inside the output, and cache
+  // tokens are additive for some providers and a subset of the input for
+  // others, so neither is added to the headline.
+  const has24h = d.total_tokens_24h != null;
+  const tokTotal = has24h ? (d.total_tokens_24h||0) : (d.total_tokens||0);
   const tokIn = has24h ? (d.input_tokens_24h||0) : (d.total_input_tokens||0);
   const tokOut = has24h ? (d.output_tokens_24h||0) : (d.total_output_tokens||0);
   const tokCacheR = has24h ? (d.cache_read_tokens_24h||0) : (d.total_cache_read_tokens||0);
@@ -620,7 +626,7 @@ function renderStats(d) {
     <div class="stat-card"><div class="label">${t('stat.errorRate')}</div><div class="value ${d.error_rate > 0.05 ? 'red' : 'green'}">${errRate}</div></div>
     <div class="stat-card"><div class="label">${t('stat.activeStreams')}</div><div class="value blue">${d.active_streams}</div></div>
     <div class="stat-card"><div class="label">${t('stat.uptime')}</div><div class="value">${uptime}</div></div>
-    <div class="stat-card"><div class="label">${tokLabel}</div><div class="value">${fmtTokens(tokIn+tokOut)}</div><div class="sub">↑${fmtTokens(tokIn)} ↓${fmtTokens(tokOut)}${tokCacheR>0?` · ${t('stat.cacheRead')} ${fmtTokens(tokCacheR)}`:''}${tokCacheW>0?` · ${t('stat.cacheWrite')} ${fmtTokens(tokCacheW)}`:''}${tokReason>0?` · ${t('stat.reasoning')} ${fmtTokens(tokReason)}`:''}</div><div class="sub" style="margin-top:4px"><a href="#" onclick="event.preventDefault();openTokenUsageModal()" style="color:var(--accent);font-size:11px;text-decoration:none">${t('tokenUsage.details')}</a></div></div>
+    <div class="stat-card"><div class="label">${tokLabel}</div><div class="value">${fmtTokens(tokTotal)}</div><div class="sub">↑${fmtTokens(tokIn)} ↓${fmtTokens(tokOut)}${tokCacheR>0?` · ${t('stat.cacheRead')} ${fmtTokens(tokCacheR)}`:''}${tokCacheW>0?` · ${t('stat.cacheWrite')} ${fmtTokens(tokCacheW)}`:''}${tokReason>0?` · ${t('stat.reasoning')} ${fmtTokens(tokReason)}`:''}</div><div class="sub" style="margin-top:4px"><a href="#" onclick="event.preventDefault();openTokenUsageModal()" style="color:var(--accent);font-size:11px;text-decoration:none">${t('tokenUsage.details')}</a></div></div>
   `;
 }
 

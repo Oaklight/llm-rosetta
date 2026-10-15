@@ -48,6 +48,16 @@ def _generate_id() -> str:
     return uuid.uuid4().hex[:8]
 
 
+# The admin panel's own token authenticates its test traffic.  That traffic
+# is real usage the dashboard counts, so it is attributed like any credential
+# — through a bucket of its own.  The value is deliberately not a uuid5 hex,
+# which no credential bucket can ever collide with.
+INTERNAL_USAGE_BUCKET = "internal"
+
+# Label that token's rows carry, and the label a key gets when none is given.
+INTERNAL_LABEL = "internal"
+
+
 # Fixed namespace for the deterministic per-credential usage bucket.  The
 # bucket derives from the key hash, so the same upstream key imported into a
 # fresh database lands in the same bucket.
@@ -292,6 +302,26 @@ class KeyStore:
                 entry["last_used"] = last_used
             result.append(entry)
         return result
+
+    async def label_bucket_map(self) -> dict[str, str]:
+        """Map a label to its usage bucket, dropping ambiguous labels.
+
+        Used to attribute log rows written before the bucket column existed.
+        A label two live keys share cannot say which of them produced a row,
+        so it is dropped rather than guessed at.  Rows labelled with the
+        admin panel's own token are attributed to it unless a real key has
+        claimed that label.
+        """
+        seen: dict[str, set[str]] = {}
+        for key in await self.usage_keys():
+            bucket = key["usage_bucket"]
+            label = key["label"]
+            if bucket and label:
+                seen.setdefault(label, set()).add(bucket)
+        mapping = {label: next(iter(b)) for label, b in seen.items() if len(b) == 1}
+        if INTERNAL_LABEL not in mapping:
+            mapping[INTERNAL_LABEL] = INTERNAL_USAGE_BUCKET
+        return mapping
 
     async def usage_keys(self) -> list[dict[str, Any]]:
         """Return id, label, and usage bucket for every key.

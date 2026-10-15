@@ -19,6 +19,42 @@ if TYPE_CHECKING:
     from llm_rosetta.observability.persistence import PersistenceManager
 
 
+def token_total(usage: dict[str, Any] | None) -> int | None:
+    """The canonical token total of an IR usage dict.
+
+    The provider-reported ``total_tokens`` wins whenever the provider sends
+    one; a total the provider stands behind is not ours to recompute, and for
+    the OpenAI-shaped standards it sits below the additive sum on purpose
+    (their cached counters are part of the prompt count).  Only when no total
+    is sent — Anthropic never sends one — is it computed additively: input +
+    output + cache read + cache write.
+
+    :meth:`PersistenceManager.backfill_total_tokens` applies the same rule to
+    rows an older writer left blank or derived too low, which is why a stored
+    total survives a restart unchanged.
+
+    ``reasoning_tokens`` is deliberately never added: it is a subset of the
+    output tokens for every provider that reports it.
+
+    Returns:
+        The total, or ``None`` when *usage* names no token count at all.
+    """
+    if not usage:
+        return None
+    total = usage.get("total_tokens")
+    if total is None:
+        parts = (
+            usage.get("prompt_tokens"),
+            usage.get("completion_tokens"),
+            usage.get("cache_read_tokens"),
+            usage.get("cache_creation_tokens"),
+        )
+        if all(part is None for part in parts):
+            return None
+        total = sum(part or 0 for part in parts)
+    return int(total)
+
+
 @dataclass(frozen=True)
 class RequestLogEntry:
     """A single logged proxy request."""

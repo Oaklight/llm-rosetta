@@ -116,7 +116,9 @@ class TestSchemaVersioning:
     async def test_new_db_has_latest_version(self, tmp_path):
         pm = await PersistenceManager.create(str(tmp_path))
         version = await pm.schema_version()
-        assert version == 4  # latest migration version
+        # Read off the table rather than restating the number, so adding a
+        # migration does not need this test edited.
+        assert version == PersistenceManager._MIGRATIONS[-1][0]
 
     async def test_schema_version_table_exists(self, pm):
         row = await pm._conn.execute_fetchone(
@@ -129,11 +131,9 @@ class TestSchemaVersioning:
             "SELECT version, applied_at FROM schema_version ORDER BY version"
         )
         rows = await cursor.fetchall()
-        assert len(rows) == 4
-        assert rows[0][0] == 1
-        assert rows[1][0] == 2
-        assert rows[2][0] == 3
-        assert rows[3][0] == 4
+        assert [r[0] for r in rows] == [
+            v for v, _d, _s in PersistenceManager._MIGRATIONS
+        ]
         # applied_at should be ISO timestamps
         assert "T" in rows[0][1]
 
@@ -226,9 +226,10 @@ class TestSchemaVersioning:
         """)
         await conn.close()
 
-        # Now open with PersistenceManager — should bootstrap v1, apply v2-v4
+        # Now open with PersistenceManager — should bootstrap v1 and apply
+        # every migration after it.
         pm = await PersistenceManager.create(str(tmp_path))
-        assert await pm.schema_version() == 4
+        assert await pm.schema_version() == PersistenceManager._MIGRATIONS[-1][0]
 
 
 class TestWALCheckpoint:
@@ -310,3 +311,120 @@ class TestBackupAndIntegrity:
         backup_dir = tmp_path / "backups"
         assert not backup_dir.exists()
         await pm.close()
+
+
+class TestBackfillTotalTokens:
+    """The backfill and the writer have to apply one rule (review on #1014).
+
+    The old backfill rewrote *any* stored total below input + output + cache,
+    which for the OpenAI-shaped standards is the provider's own answer — their
+    cached counters sit inside the prompt count.  Every restart then moved
+    those rows, and a row's meaning depended on whether a restart had touched
+    it.
+    """
+
+    @staticmethod
+    def _row(row_id, *, target="chat_completions", total=None, inp=40, out=5, **extra):
+        entry = RequestLogEntry.create(
+            model="m",
+            source_provider="chat_completions",
+            target_provider=target,
+            is_stream=False,
+            status_code=200,
+            duration_ms=1.0,
+            input_tokens=inp,
+            output_tokens=out,
+            total_tokens=total,
+        )
+        row = entry.to_dict() | {"id": row_id}
+        row.update(extra)
+        return row
+
+    @pytest.mark.asyncio
+    async def test_a_provider_total_below_the_additive_sum_survives(self, pm):
+        """OpenAI reports cached tokens inside the prompt: 50 is the answer."""
+        await pm.insert_log_entries(
+            [self._row("openai", total=50, inp=40, out=5, cache_read_tokens=20)]
+        )
+
+        assert await pm.backfill_total_tokens() == 0
+
+        entries, _ = await pm.query_log_entries(limit=10)
+        assert entries[0]["total_tokens"] == 50
+
+    @pytest.mark.asyncio
+    async def test_a_derived_anthropic_total_is_corrected(self, pm):
+        """Messages reports no total, and its cache tokens are additive."""
+        await pm.insert_log_entries(
+            [
+                self._row(
+                    "anthropic", target="messages", total=45, cache_read_tokens=20
+                ),
+            ]
+        )
+
+        assert await pm.backfill_total_tokens() == 1
+
+        entries, _ = await pm.query_log_entries(limit=10)
+        assert entries[0]["total_tokens"] == 65
+
+    @pytest.mark.asyncio
+    async def test_the_legacy_anthropic_spelling_is_corrected_too(self, pm):
+        await pm.insert_log_entries(
+            [
+                self._row("legacy", target="anthropic", total=45, cache_read_tokens=20),
+            ]
+        )
+        assert await pm.backfill_total_tokens() == 1
+
+    @pytest.mark.asyncio
+    async def test_a_missing_total_is_filled(self, pm):
+        """A NULL counts as nothing in every view that sums the column."""
+        await pm.insert_log_entries([self._row("gap", total=None)])
+
+        assert await pm.backfill_total_tokens() == 1
+
+        entries, _ = await pm.query_log_entries(limit=10)
+        assert entries[0]["total_tokens"] == 45
+
+    @pytest.mark.asyncio
+    async def test_a_row_with_no_usage_at_all_is_left_alone(self, pm):
+        """An error entry has nothing to total; it must not become 0."""
+        entry = RequestLogEntry.create(
+            model="m",
+            source_provider="chat_completions",
+            target_provider="chat_completions",
+            is_stream=False,
+            status_code=502,
+            duration_ms=1.0,
+        )
+        await pm.insert_log_entries([entry.to_dict()])
+
+        assert await pm.backfill_total_tokens() == 0
+
+    @pytest.mark.asyncio
+    async def test_second_run_is_a_noop(self, pm):
+        await pm.insert_log_entries(
+            [
+                self._row(
+                    "anthropic", target="messages", total=45, cache_read_tokens=20
+                ),
+                self._row("openai", total=50, cache_read_tokens=20),
+                self._row("gap", total=None),
+            ]
+        )
+
+        first = await pm.backfill_total_tokens()
+        after_first = {
+            e["id"]: e["total_tokens"]
+            for e in (await pm.query_log_entries(limit=10))[0]
+        }
+        assert await pm.backfill_total_tokens() == 0
+
+        after_second = {
+            e["id"]: e["total_tokens"]
+            for e in (await pm.query_log_entries(limit=10))[0]
+        }
+        assert after_first == after_second
+        # 1 derived Messages row + 1 blank row; the OpenAI row keeps its own.
+        assert first == 2

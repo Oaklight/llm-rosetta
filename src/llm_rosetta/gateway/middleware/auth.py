@@ -31,7 +31,7 @@ from .error_format import (
     format_error_response,
     is_admin_path as _is_admin_path,
 )
-from ..keystore import KeyContext, KeyStore
+from ..keystore import INTERNAL_LABEL, INTERNAL_USAGE_BUCKET, KeyContext, KeyStore
 from .request_context import request_context_var
 
 ADMIN_COOKIE_NAME = "rosetta_admin_session"
@@ -260,9 +260,10 @@ def create_auth_hook(auth_state: AuthState) -> Any:
         if key and auth_state.internal_token and key == auth_state.internal_token:
             api_key_context_var.set(
                 KeyContext(
-                    label="internal",
+                    label=INTERNAL_LABEL,
                     allowed_shims=frozenset({"*"}),
                     key_hash=hashlib.sha256(key.encode()).hexdigest(),
+                    usage_bucket=INTERNAL_USAGE_BUCKET,
                 )
             )
             return None

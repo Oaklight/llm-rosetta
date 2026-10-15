@@ -33,6 +33,7 @@ from llm_rosetta.shims.provider_shim import SoftErrorPattern
 
 from llm_rosetta.observability.capture import CapturedRequest, CaptureState
 from llm_rosetta.observability.error_dump import dump_error
+from llm_rosetta.observability.request_log import token_total
 
 from .middleware.error_annotate import annotate_tool_collisions
 from .middleware.error_format import (
@@ -1018,14 +1019,12 @@ async def _write_back_stream_usage(
         return
     inp = usage.get("prompt_tokens")
     outp = usage.get("completion_tokens")
-    total = usage.get("total_tokens")
+    total = token_total(usage)
     cache_read = usage.get("cache_read_tokens")
     cache_creation = usage.get("cache_creation_tokens")
     reasoning = usage.get("reasoning_tokens")
     if inp is None and outp is None:
         return
-    if total is None and inp is not None:
-        total = (inp or 0) + (outp or 0) + (cache_read or 0) + (cache_creation or 0)
     try:
         await request_log.update_usage(
             entry_id,
@@ -1046,6 +1045,7 @@ async def _write_back_stream_usage(
             cache_read_tokens=cache_read,
             cache_creation_tokens=cache_creation,
             reasoning_tokens=reasoning,
+            total_tokens=total,
             provider_name=provider_name,
         )
 
@@ -1070,6 +1070,7 @@ async def _stream_event_generator(
     processor: Any,
     model: str,
     format_sse: Any,
+    reported_model: str | None = None,
     entry_id: str | None = None,
     request_log: Any | None = None,
     metrics: Any | None = None,
@@ -1088,6 +1089,7 @@ async def _stream_event_generator(
     client reflects the upstream status (e.g. 400 for token-limit errors)
     rather than always being 200.
     """
+    reported_model = reported_model or model
     chunk_count = 0
     t0 = time.monotonic()
     stream_error: str | None = None
@@ -1170,7 +1172,7 @@ async def _stream_event_generator(
                 entry_id,
                 request_log,
                 metrics,
-                model,
+                reported_model,
                 provider_name=dump_ctx.provider_name if dump_ctx else None,
             )
 
@@ -1289,6 +1291,7 @@ async def handle_streaming(
     provider_info: ProviderInfo,
     body: dict[str, Any],
     *,
+    reported_model: str | None = None,
     transport: UpstreamTransport,
     metadata_store: ProviderMetadataStore | None = None,
     extra_headers: dict[str, str] | None = None,
@@ -1316,8 +1319,12 @@ async def handle_streaming(
     """
     store = metadata_store or _default_metadata_store
     profile: dict[str, Any] = {}
-    # model was already injected into body by app.py
+    # model was already injected into body by app.py, and app.py rewrites it to
+    # the upstream id before calling us.  ``reported_model`` carries the name
+    # the client asked for, so usage is grouped under the model the user named
+    # rather than under whatever the upstream calls it.
     model = body.get("model", "")
+    reported_model = reported_model or model
 
     pipeline = ConversionPipeline(
         route.source_provider,
@@ -1514,6 +1521,7 @@ async def handle_streaming(
                 stream=stream,
                 processor=processor,
                 model=model,
+                reported_model=reported_model,
                 format_sse=format_sse,
                 entry_id=entry_id,
                 request_log=request_log,

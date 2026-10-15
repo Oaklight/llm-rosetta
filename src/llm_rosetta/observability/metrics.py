@@ -193,6 +193,11 @@ class MetricsCollector:
     total_cache_read_tokens: int = 0
     total_cache_creation_tokens: int = 0
     total_reasoning_tokens: int = 0
+    # The canonical total (`total_tokens` on the log row), summed.  The
+    # subset columns above never add up to it: reasoning is part of the
+    # output, and the cache columns are additive for some providers and a
+    # subset of the input for others.
+    total_tokens: int = 0
     by_model_tokens: dict[str, dict[str, int]] = field(default_factory=dict)
     by_provider_tokens: dict[str, dict[str, int]] = field(default_factory=dict)
 
@@ -225,6 +230,7 @@ class MetricsCollector:
         "cache_read_tokens",
         "cache_creation_tokens",
         "reasoning_tokens",
+        "total_tokens",
     )
 
     def _accumulate_tokens(
@@ -237,6 +243,7 @@ class MetricsCollector:
         cache_read_tokens: int | None = None,
         cache_creation_tokens: int | None = None,
         reasoning_tokens: int | None = None,
+        total_tokens: int | None = None,
     ) -> None:
         """Add token counts to totals and per-model/per-provider breakdowns."""
         vals = {
@@ -245,11 +252,14 @@ class MetricsCollector:
             "cache_read_tokens": cache_read_tokens,
             "cache_creation_tokens": cache_creation_tokens,
             "reasoning_tokens": reasoning_tokens,
+            "total_tokens": total_tokens,
         }
         any_set = False
         for key, val in vals.items():
             if val is not None:
-                attr = f"total_{key}"
+                # The canonical total already reads as a total, so it is the
+                # one column that does not take the ``total_`` prefix.
+                attr = "total_tokens" if key == "total_tokens" else f"total_{key}"
                 setattr(self, attr, getattr(self, attr) + val)
                 any_set = True
 
@@ -287,6 +297,7 @@ class MetricsCollector:
         cache_read_tokens: int | None = None,
         cache_creation_tokens: int | None = None,
         reasoning_tokens: int | None = None,
+        total_tokens: int | None = None,
     ) -> None:
         """Record a completed proxy request."""
         self.total_requests += 1
@@ -316,6 +327,7 @@ class MetricsCollector:
             cache_read_tokens=cache_read_tokens,
             cache_creation_tokens=cache_creation_tokens,
             reasoning_tokens=reasoning_tokens,
+            total_tokens=total_tokens,
         )
 
         self._window.record(duration_ms, is_error=is_error)
@@ -340,6 +352,7 @@ class MetricsCollector:
         cache_creation_tokens: int | None = None,
         reasoning_tokens: int | None = None,
         provider_name: str | None = None,
+        total_tokens: int | None = None,
     ) -> None:
         """Record token usage separately (for streaming write-back)."""
         self._accumulate_tokens(
@@ -350,6 +363,7 @@ class MetricsCollector:
             cache_read_tokens=cache_read_tokens,
             cache_creation_tokens=cache_creation_tokens,
             reasoning_tokens=reasoning_tokens,
+            total_tokens=total_tokens,
         )
 
     def provider_health_snapshot(self) -> dict[str, dict]:
@@ -387,6 +401,7 @@ class MetricsCollector:
             "total_cache_read_tokens": self.total_cache_read_tokens,
             "total_cache_creation_tokens": self.total_cache_creation_tokens,
             "total_reasoning_tokens": self.total_reasoning_tokens,
+            "total_tokens": self.total_tokens,
             "by_model_tokens": {k: dict(v) for k, v in self.by_model_tokens.items()},
             "by_provider_tokens": {
                 k: dict(v) for k, v in self.by_provider_tokens.items()
@@ -416,6 +431,7 @@ class MetricsCollector:
         self.total_cache_read_tokens = data.get("total_cache_read_tokens", 0)
         self.total_cache_creation_tokens = data.get("total_cache_creation_tokens", 0)
         self.total_reasoning_tokens = data.get("total_reasoning_tokens", 0)
+        self.total_tokens = data.get("total_tokens", 0)
         self.by_model_tokens = {
             k: dict(v) for k, v in data.get("by_model_tokens", {}).items()
         }
@@ -501,6 +517,7 @@ class MetricsCollector:
         self.total_cache_read_tokens = tmp.total_cache_read_tokens
         self.total_cache_creation_tokens = tmp.total_cache_creation_tokens
         self.total_reasoning_tokens = tmp.total_reasoning_tokens
+        self.total_tokens = tmp.total_tokens
         self.by_model_tokens = tmp.by_model_tokens
         self.by_provider_tokens = tmp.by_provider_tokens
 
@@ -567,6 +584,7 @@ class MetricsCollector:
         total_cache_read = _merge_int("total_cache_read_tokens")
         total_cache_creation = _merge_int("total_cache_creation_tokens")
         total_reasoning = _merge_int("total_reasoning_tokens")
+        total_tokens = _merge_int("total_tokens")
         by_model_tokens = _merge_token_dict("by_model_tokens")
         by_provider_tokens = _merge_token_dict("by_provider_tokens")
 
@@ -595,6 +613,7 @@ class MetricsCollector:
         self.total_cache_read_tokens = total_cache_read
         self.total_cache_creation_tokens = total_cache_creation
         self.total_reasoning_tokens = total_reasoning
+        self.total_tokens = total_tokens
         self.by_model_tokens = by_model_tokens
         self.by_provider_tokens = by_provider_tokens
 
@@ -636,6 +655,7 @@ class MetricsCollector:
             "total_cache_read_tokens": self.total_cache_read_tokens,
             "total_cache_creation_tokens": self.total_cache_creation_tokens,
             "total_reasoning_tokens": self.total_reasoning_tokens,
+            "total_tokens": self.total_tokens,
             "by_model_tokens": {k: dict(v) for k, v in self.by_model_tokens.items()},
             "by_provider_tokens": {
                 k: dict(v) for k, v in self.by_provider_tokens.items()

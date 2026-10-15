@@ -122,6 +122,41 @@ class TestMetricsCollectorTokenTracking:
         assert m.by_model_tokens["gpt-4o"]["output_tokens"] == 50
 
     @pytest.mark.asyncio
+    async def test_record_request_counts_the_canonical_total(self):
+        """The headline counter is the stored total, not a re-sum.
+
+        Cache tokens are additive for some providers and a subset of the input
+        for others, so the subset counters can never be added up into it.
+        """
+        m = MetricsCollector()
+        m.record_request(
+            model="claude-opus-4-6",
+            source="anthropic",
+            target="anthropic",
+            status_code=200,
+            duration_ms=150.0,
+            is_stream=False,
+            input_tokens=10,
+            output_tokens=5,
+            cache_read_tokens=100,
+            cache_creation_tokens=7,
+            reasoning_tokens=3,
+            total_tokens=122,
+        )
+        assert m.total_tokens == 122
+        assert m.total_input_tokens == 10
+        assert m.snapshot()["total_tokens"] == 122
+        assert m.by_model_tokens["claude-opus-4-6"]["total_tokens"] == 122
+
+    @pytest.mark.asyncio
+    async def test_record_usage_counts_the_canonical_total(self):
+        m = MetricsCollector()
+        m.record_usage(
+            model="gpt-4o", input_tokens=500, output_tokens=200, total_tokens=700
+        )
+        assert m.total_tokens == 700
+
+    @pytest.mark.asyncio
     async def test_record_request_without_tokens(self):
         m = MetricsCollector()
         m.record_request(

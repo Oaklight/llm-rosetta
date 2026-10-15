@@ -406,7 +406,16 @@ class DeferredStartup:
             # 3. Backfill total_tokens (cache tokens were excluded)
             results["total_tokens"] = await persistence.backfill_total_tokens() or 0
 
-            # 4. Backfill error dump log IDs
+            # 4. Attribute log rows written before the bucket column existed
+            if keystore is not None:
+                results["usage_buckets"] = (
+                    await persistence.backfill_usage_buckets(
+                        await keystore.label_bucket_map()
+                    )
+                    or 0
+                )
+
+            # 5. Backfill error dump log IDs
             aliases = config.model_upstream_names if config else {}
             results["error_dump_log_ids"] = (
                 await persistence.backfill_error_dump_log_ids(model_aliases=aliases)

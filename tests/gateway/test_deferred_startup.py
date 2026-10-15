@@ -544,17 +544,19 @@ class TestDeferredCounterRebuild:
 
 class TestDeferredBackfills:
     def test_backfills_run_sequentially(self):
-        """All three backfills are called in sequence."""
+        """Every backfill is called, in sequence."""
         from llm_rosetta.gateway.routing_strategy import ModelRoute, ProviderEntry
 
         persistence = MagicMock()
         persistence.backfill_provider_names = AsyncMock(return_value=3)
         persistence.backfill_error_dump_log_ids = AsyncMock(return_value=1)
         persistence.backfill_total_tokens = AsyncMock(return_value=0)
+        persistence.backfill_usage_buckets = AsyncMock(return_value=4)
         persistence.db_path = "/tmp/test.db"
 
         keystore = MagicMock()
         keystore.backfill_last_used = AsyncMock(return_value=2)
+        keystore.label_bucket_map = AsyncMock(return_value={"wired": "b1"})
 
         config = _FakeConfig({})
         config.models = {
@@ -572,6 +574,7 @@ class TestDeferredBackfills:
 
         persistence.backfill_provider_names.assert_called_once()
         keystore.backfill_last_used.assert_called_once_with("/tmp/test.db")
+        persistence.backfill_usage_buckets.assert_called_once_with({"wired": "b1"})
         persistence.backfill_error_dump_log_ids.assert_called_once()
         assert "backfills" not in ds._pending_tasks
 
