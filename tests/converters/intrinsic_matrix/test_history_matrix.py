@@ -19,12 +19,14 @@ warning, a restored native payload, a dropped half-write).
 
 from __future__ import annotations
 
+import copy
 import json
 import logging
 from typing import Any, cast
 
 import pytest
 
+from llm_rosetta.capabilities import degrade_intrinsic_history
 from llm_rosetta.converters.base.context import ConversionContext
 from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
 from llm_rosetta.converters.google_generate import GoogleGenerateConverter
@@ -407,3 +409,76 @@ def test_google_generate_response_drops_foreign_kind_with_warning():
     )
     assert "_RESULT_" not in json.dumps(out)
     assert any("Unsupported intrinsic kind" in w for w in ctx.warnings)
+
+
+def test_open_responses_response_leg_writes_no_empty_item():
+    """A dropped server call leaves nothing behind in the output list.
+
+    ``dropped_intrinsic_call`` answers ``{}``, and this writer appends whatever
+    the template returns — an item with no ``type``, which a client switching
+    on ``type`` (or validating against the spec) reads as malformed rather than
+    as the drop the rule intends.
+    """
+    out = OpenAIResponsesConverter().response_to_provider(
+        cast(Any, ir_response("google_search"))
+    )
+    types = [item.get("type") for item in out["output"]]
+    assert None not in types
+    assert "" not in types
+
+
+def test_a_degraded_pair_is_answered_once():
+    """The orphan fixer must credit a result that sits outside a tool message.
+
+    An IR whose result rides in a ``role:"user"`` turn (as a cross-format hop
+    or a hand-built request can produce) used to look unanswered once the pair
+    was degraded, and the fixer injected ``[No output available yet]`` *beside*
+    the real result, under the same call id.
+    """
+    request: dict[str, Any] = {
+        "model": "m",
+        "messages": [
+            {"role": "user", "content": [{"type": "text", "text": "hi"}]},
+            {
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "tool_call",
+                        "tool_call_id": "s1",
+                        "tool_name": "google_search",
+                        "tool_input": {"queries": ["m"]},
+                        "tool_type": "intrinsic",
+                        "intrinsic_kind": "google_search",
+                    }
+                ],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_call_id": "s1",
+                        "result": "RESULT",
+                        "tool_type": "intrinsic",
+                        "intrinsic_kind": "google_search",
+                    }
+                ],
+            },
+        ],
+    }
+    # The pass first: an intrinsic pair answers itself, so the fixer only has
+    # to credit the result once the pair is an ordinary client call and result.
+    degraded = degrade_intrinsic_history(
+        copy.deepcopy(request), MessagesConverter().tool_ops
+    )
+    out = MessagesConverter().request_to_provider(cast(IRRequest, degraded))
+    body = out[0] if isinstance(out, tuple) else out
+    results = [
+        block
+        for message in body["messages"]
+        for block in message.get("content", [])
+        if isinstance(block, dict) and block.get("type") == "tool_result"
+    ]
+    assert len(results) == 1
+    assert results[0]["content"] == "RESULT"
+    assert "No output available yet" not in json.dumps(body)

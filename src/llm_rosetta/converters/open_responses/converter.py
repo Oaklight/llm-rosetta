@@ -592,8 +592,8 @@ class OpenResponsesConverter(BaseConverter):
                         }
                     )
                 elif is_tool_call_part(part):
-                    provider_response["output"].append(
-                        self.tool_ops.ir_tool_call_to_p(part)
+                    self._append_intrinsic_call_item(
+                        part, context, provider_response["output"]
                     )
                 elif is_tool_result_part(part):
                     self._append_intrinsic_result_item(
@@ -704,6 +704,31 @@ class OpenResponsesConverter(BaseConverter):
             if "reasoning_tokens" in p_output_details:
                 usage_info["reasoning_tokens"] = p_output_details["reasoning_tokens"]
         return cast(UsageInfo, usage_info)
+
+    def _append_intrinsic_call_item(
+        self,
+        part: Any,
+        context: ConversionContext,
+        output: list[dict[str, Any]],
+    ) -> None:
+        """Append a server call's native item, or drop it with a warning.
+
+        A response is a call the *client* did not run, so a server call this
+        dialect cannot render natively is dropped rather than handed over as a
+        client ``function_call``.  ``dropped_intrinsic_call`` answers ``{}``, so
+        a result that is falsy is not appended — an item with no ``type`` would
+        reach the client instead of the drop the rule intends.
+
+        Args:
+            part: IR tool call part.
+            context: Conversion context (its warnings list takes the report).
+            output: The response's ``output`` list, extended in place.
+        """
+        item = self.tool_ops.ir_tool_call_to_p(
+            part, leg="response", warnings=context.warnings
+        )
+        if item:
+            output.append(item)
 
     def _append_intrinsic_result_item(
         self,

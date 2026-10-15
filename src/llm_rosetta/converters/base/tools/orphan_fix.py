@@ -87,11 +87,12 @@ def _collect_ir_tool_ids(
 ) -> tuple[set[str], set[str]]:
     """Collect all tool_call IDs and answered (tool_result) IDs from IR messages.
 
-    A ``tool_result`` inside an assistant message counts as an answer, just
-    like one in a ``role: "tool"`` message.  That inline shape is how a server
-    tool's result rides in the assistant turn that ran it (#965); without
-    counting it, the orphan fixer sees the call as unanswered and injects a
-    synthetic placeholder beside the real result.
+    A ``tool_result`` answers its call whatever message carries it.  A client
+    result usually sits in a ``role: "tool"`` message, a server tool's result
+    rides inline in the assistant turn that ran it (#965), and IR assembled by
+    hand — or degraded from one of those shapes — may hold it in a user turn.
+    Missing any of them makes the fixer see the call as unanswered and inject a
+    synthetic placeholder *beside* the real result.
 
     A *server* call (``tool_type == "intrinsic"``) counts as answered by
     itself: the provider ran it, so no client ever owes it a result and no
@@ -104,18 +105,16 @@ def _collect_ir_tool_ids(
         if not is_message(msg):
             continue
         content = msg.get("content", [])
-        role = msg.get("role")
-        if role == "assistant":
-            known_call_ids |= extract_part_ids(content, "tool_call", "tool_call_id")
-            answered_ids |= extract_part_ids(content, "tool_result", "tool_call_id")
-            for part in content:
-                if not is_intrinsic_part(part):
-                    continue
-                intrinsic_call = cast(dict[str, Any], part)
-                if intrinsic_call.get("tool_call_id"):
-                    answered_ids.add(intrinsic_call["tool_call_id"])
-        elif role == "tool":
-            answered_ids |= extract_part_ids(content, "tool_result", "tool_call_id")
+        answered_ids |= extract_part_ids(content, "tool_result", "tool_call_id")
+        if msg.get("role") != "assistant":
+            continue
+        known_call_ids |= extract_part_ids(content, "tool_call", "tool_call_id")
+        for part in content:
+            if not is_intrinsic_part(part):
+                continue
+            intrinsic_call = cast(dict[str, Any], part)
+            if intrinsic_call.get("tool_call_id"):
+                answered_ids.add(intrinsic_call["tool_call_id"])
     return known_call_ids, answered_ids
 
 

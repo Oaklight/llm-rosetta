@@ -238,3 +238,20 @@ def test_the_leg_resolution_takes_the_flag_then_the_default():
         )
         == "history"
     )
+
+
+def test_a_library_caller_still_sees_the_drop(caplog: Any):
+    """No warnings sink must not mean no report.
+
+    The pipeline hands the converter a ``warnings`` list; a library caller does
+    not.  The per-converter code the base replaced logged unconditionally, so a
+    response-leg drop has to keep reaching that caller through the log.
+    """
+    with caplog.at_level("WARNING"):
+        out = _PlainToolOps.ir_tool_call_to_p(_call("web_search"), leg="response")
+
+    assert out == {}
+    assert any(
+        "web_search" in record.message and "dropped" in record.message
+        for record in caplog.records
+    )

@@ -12,6 +12,7 @@ native rendering in the ``ir_intrinsic_*_to_p`` hooks and its kind↔native
 tables, and nothing else.
 """
 
+import logging
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from typing import Any, Literal, cast
@@ -24,6 +25,8 @@ from ....types.ir import (
 )
 from ....types.ir.tools import ToolCallConfig
 from .intrinsic import intrinsic_kind_of, is_intrinsic_part
+
+logger = logging.getLogger(__name__)
 
 #: Which leg of a conversion an intrinsic part is being written on.
 #:
@@ -39,16 +42,23 @@ _INTRINSIC_LEGS: tuple[str, ...] = ("history", "response")
 
 
 def _report_dropped_intrinsic(part: Any, kwargs: dict[str, Any]) -> None:
-    """Report a response-leg intrinsic drop on the caller's warnings sink."""
-    warnings = kwargs.get("warnings")
-    if not isinstance(warnings, list):
-        return
+    """Report a response-leg intrinsic drop.
+
+    A library caller has no conversion ``warnings`` sink, and the per-converter
+    code this replaced logged unconditionally, so silence here would make a
+    drop invisible to anyone not going through the pipeline.  The sink is
+    preferred when there is one; the log line is always written.
+    """
     kind = intrinsic_kind_of(part)
-    warnings.append(
+    message = (
         f"Server tool {'result' if part.get('type') == 'tool_result' else 'call'} "
-        f"of kind {kind!r} has no {kwargs.get('target', 'target')} form; dropped "
-        f"from the response"
+        f"of kind {kind!r} has no form in this target; dropped from the response"
     )
+    warnings = kwargs.get("warnings")
+    if isinstance(warnings, list):
+        warnings.append(message)
+    else:
+        logger.warning("%s", message)
 
 
 class BaseToolOps(ABC):
