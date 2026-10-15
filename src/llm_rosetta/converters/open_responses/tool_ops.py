@@ -28,7 +28,7 @@ from ...types.ir import (
     ToolResultPart,
 )
 from ...types.ir.tools import ToolCallConfig
-from ..base import BaseToolOps
+from ..base import BaseToolOps, IntrinsicLeg
 from ..base.helpers.opaque import CARRIER_KEY
 from ..base.helpers.tool_group import (
     GENERATED_GROUP_MARKER,
@@ -589,7 +589,7 @@ def _build_server_item(
     return item
 
 
-def _server_item_renderable(item_type: str, fields: dict[str, Any]) -> bool:
+def _server_item_renderable(item_type: str, fields: Mapping[str, Any]) -> bool:
     """Whether the IR carries the payload the API requires for this server item.
 
     Used on the history leg: a replayed turn carries the item's own payload, so
@@ -624,88 +624,6 @@ def _server_item_renderable(item_type: str, fields: dict[str, Any]) -> bool:
     # The IR carries what a replay would need (``tool_call_id`` and
     # ``responses_status``); the caution is about the wire shape, not a field.
     return False
-
-
-def _intrinsic_call_degrades_on_history(kind: str, fields: dict[str, Any]) -> bool:
-    """Whether the history-leg writer degrades this intrinsic call.
-
-    One predicate for both writers: ``_ir_intrinsic_to_responses`` decides the
-    call's shape with it, and ``ir_tool_result_to_p`` decides the matching
-    result's shape with it (through the call-id map ``message_ops`` builds), so
-    the pair cannot drift.  A kind with no native item type, and a native item
-    the IR cannot complete, are both written as a client ``function_call``.
-
-    Args:
-        kind: Canonical intrinsic kind (``intrinsic_kind_of``).
-        fields: IR ``tool_input`` for the call.
-
-    Returns:
-        True when the call is written as a client ``function_call``.
-    """
-    item_type = _INTRINSIC_KIND_TO_ITEM.get(kind, "function_call")
-    if item_type == "function_call":
-        return True
-    if item_type == "web_search_call":
-        return False
-    return not _server_item_renderable(item_type, fields)
-
-
-def _ir_intrinsic_to_responses(
-    ir_tool_call: ToolCallPart,
-    tool_call_id: str,
-    tool_input: Any,
-    arguments: str,
-    *,
-    for_history: bool = False,
-) -> dict[str, Any]:
-    # History mapping keys off the kind only.  It is deliberately not gated
-    # by the target shim (which gates *definitions*): a history part is
-    # context, and its shape here is independent of whether the same kind is
-    # currently declared.  See the note in pipeline.py / #839.
-    intrinsic_kind = intrinsic_kind_of(ir_tool_call)
-    item_type = _INTRINSIC_KIND_TO_ITEM.get(intrinsic_kind, "function_call")
-    fields = tool_input if isinstance(tool_input, dict) else {}
-
-    # A `web_search_call` has a valid replay shape for history (an `action`,
-    # no `call_id`/`arguments`) and no separate output item, so it is emitted
-    # on both legs.  Its `status` is restored from the read side; a server
-    # call known to the IR is complete.
-    if item_type == "web_search_call":
-        status = (ir_tool_call.get("provider_metadata") or {}).get(
-            "responses_status"
-        ) or "completed"
-        return _build_server_item(
-            item_type,
-            item_id=tool_call_id,
-            intrinsic_kind=intrinsic_kind,
-            fields=fields,
-            arguments=arguments,
-            status=status,
-        )
-
-    # A replayed turn carries the item's own payload (the read side lifted it),
-    # so the native item is re-emitted; a foreign request that lacks a field
-    # the API requires (code_interpreter: container_id; file_search: queries
-    # with complete results) is degraded to a plain function call so the
-    # request stays valid.  On the response leg the native type is kept either
-    # way.  ``_intrinsic_call_degrades_on_history`` is the shared predicate the
-    # result writer also consults, so a result pairs with the call written here.
-    if for_history and _intrinsic_call_degrades_on_history(intrinsic_kind, fields):
-        return {
-            "type": "function_call",
-            "call_id": tool_call_id,
-            "name": intrinsic_kind,
-            "arguments": arguments,
-        }
-
-    return _build_server_item(
-        item_type,
-        item_id=tool_call_id,
-        intrinsic_kind=intrinsic_kind,
-        fields=fields,
-        arguments=arguments,
-        status="completed",
-    )
 
 
 def _warn_dropped_intrinsic_result(
@@ -1294,13 +1212,68 @@ class OpenResponsesToolOps(BaseToolOps):
             output = ""
         return {"type": item_type, "call_id": call_id, "output": output}
 
-    @staticmethod
-    def intrinsic_call_degrades_on_history(ir_tool_call: ToolCallPart) -> bool:
+    @classmethod
+    def intrinsic_leg_from_flags(
+        cls, kwargs: Any, *, default: IntrinsicLeg
+    ) -> IntrinsicLeg:
+        """Map this writer's ``for_history`` flag onto :data:`IntrinsicLeg`.
+
+        The Responses write path says which leg it is on — ``message_ops``
+        passes ``for_history=True``, the response writer says nothing — so the
+        same hook pair answers differently per leg without a second predicate.
+        A caller that says nothing takes the template's default, which is what
+        this writer answered before the hooks existed.
+
+        Args:
+            kwargs: The keyword arguments the write template was called with.
+            default: The leg when ``for_history`` is absent.
+
+        Returns:
+            ``"history"`` for a history write, else ``"response"``.
+        """
+        if "for_history" in kwargs:
+            return "history" if kwargs["for_history"] else "response"
+        return default
+
+    @classmethod
+    def intrinsic_renderable(
+        cls, kind: str, fields: Mapping[str, Any], *, leg: IntrinsicLeg
+    ) -> bool:
+        """Whether a server item can be written for *kind* on this leg.
+
+        A kind with no native item type (``google_search`` arriving from
+        another lane, …) has one: it is written as a client ``function_call``
+        on both legs.  A native item the IR cannot complete — the API requires
+        a ``container_id`` on a code interpreter and queries with complete
+        results on a file search, verified live 2026-10-13 — is still written
+        natively on the response leg (the turn the provider just returned) and
+        degraded on the history leg, where replaying it would be rejected.
+
+        Args:
+            kind: Canonical intrinsic kind (``intrinsic_kind_of``).
+            fields: The IR ``tool_input`` for the call.
+            leg: Which leg the part is written on.
+
+        Returns:
+            True when the call is written natively (see
+            :meth:`ir_intrinsic_call_to_p`).
+        """
+        item_type = _INTRINSIC_KIND_TO_ITEM.get(kind)
+        if item_type is None:
+            return False
+        # A `web_search_call` has a valid replay shape for history (an
+        # `action`, no `call_id`/`arguments`), so it is the one kind whose
+        # payload the API does not require on a replay.
+        if item_type == "web_search_call" or leg == "response":
+            return True
+        return _server_item_renderable(item_type, fields if fields else {})
+
+    @classmethod
+    def intrinsic_call_degrades_on_history(cls, ir_tool_call: ToolCallPart) -> bool:
         """Whether the history-leg writer degrades this call to a client call.
 
         The result writer pairs with the call that is actually written, so it
-        must consult the same decision.  See
-        ``_intrinsic_call_degrades_on_history``.
+        must consult the same decision.  See :meth:`intrinsic_renderable`.
 
         Args:
             ir_tool_call: IR tool call part with ``tool_type == "intrinsic"``.
@@ -1309,14 +1282,180 @@ class OpenResponsesToolOps(BaseToolOps):
             True when the call is written as a client ``function_call``.
         """
         fields = ir_tool_call.get("tool_input")
-        return _intrinsic_call_degrades_on_history(
+        return not cls.intrinsic_renderable(
             intrinsic_kind_of(ir_tool_call),
             fields if isinstance(fields, dict) else {},
+            leg="history",
         )
 
     @classmethod
-    def ir_tool_call_to_p(cls, ir_tool_call: ToolCallPart, **kwargs: Any) -> dict:
-        """IR ToolCallPart → OpenAI Responses tool call item.
+    def ir_intrinsic_call_to_p(
+        cls,
+        ir_tool_call: ToolCallPart,
+        *,
+        leg: IntrinsicLeg = "history",
+        **kwargs: Any,
+    ) -> dict[str, Any] | None:
+        """IR intrinsic ToolCallPart → Responses native server item.
+
+        The shape is a client ``function_call`` on neither leg for an
+        unrenderable kind: :meth:`intrinsic_renderable` decides, and the
+        template's ``non_native_intrinsic_call_to_p`` writes the degradation,
+        so the call and its result cannot disagree about which shape was
+        written.
+
+        Args:
+            ir_tool_call: IR tool call part with ``tool_type == "intrinsic"``.
+            leg: Which leg the part is written on.
+            **kwargs: Extra arguments.
+
+        Returns:
+            Native server item, or ``None`` when the call is degraded.
+        """
+        kind = intrinsic_kind_of(ir_tool_call)
+        tool_input = ir_tool_call.get("tool_input")
+        fields = tool_input if isinstance(tool_input, dict) else {}
+        if not cls.intrinsic_renderable(kind, fields, leg=leg):
+            return None
+        # A history part keys off the kind only.  It is deliberately not gated
+        # by the target shim (which gates *definitions*): a history part is
+        # context, and its shape here is independent of whether the same kind
+        # is currently declared.  See the note in pipeline.py / #839.
+        item_type = _INTRINSIC_KIND_TO_ITEM[kind]
+        arguments = (
+            json.dumps(tool_input) if isinstance(tool_input, dict) else str(tool_input)
+        )
+        tool_call_id = sanitize_tool_call_id(
+            ir_tool_call.get("tool_call_id", ir_tool_call.get("id", ""))
+        )
+        # A web search restores the status the read side lifted; every other
+        # server call the IR knows is complete.
+        status = (ir_tool_call.get("provider_metadata") or {}).get(
+            "responses_status"
+        ) or "completed"
+        return _build_server_item(
+            item_type,
+            item_id=tool_call_id,
+            intrinsic_kind=kind,
+            fields=fields,
+            arguments=arguments,
+            status=status,
+        )
+
+    @classmethod
+    def non_native_intrinsic_call_to_p(
+        cls,
+        ir_tool_call: ToolCallPart,
+        *,
+        leg: IntrinsicLeg,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """Write an intrinsic call as the client ``function_call`` it degrades to.
+
+        A Responses ``function_call`` is the only shape left for a server call
+        this dialect cannot replay (see :meth:`intrinsic_renderable`), and it
+        is the shape the matching result pairs with, so it carries the
+        canonical kind as its name and the IR input as its arguments.
+
+        Args:
+            ir_tool_call: IR tool call part with ``tool_type == "intrinsic"``.
+            leg: Which leg the part is written on.
+            **kwargs: Extra arguments.
+
+        Returns:
+            A client ``function_call`` item.
+        """
+        tool_input = ir_tool_call.get("tool_input")
+        return {
+            "type": "function_call",
+            "call_id": sanitize_tool_call_id(
+                ir_tool_call.get("tool_call_id", ir_tool_call.get("id", ""))
+            ),
+            "name": intrinsic_kind_of(ir_tool_call),
+            "arguments": (
+                json.dumps(tool_input)
+                if isinstance(tool_input, dict)
+                else str(tool_input)
+            ),
+        }
+
+    @classmethod
+    def ir_intrinsic_result_to_p(
+        cls,
+        ir_tool_result: ToolResultPart,
+        *,
+        leg: IntrinsicLeg = "history",
+        **kwargs: Any,
+    ) -> dict[str, Any] | None:
+        """IR intrinsic ToolResultPart → Responses native server result item.
+
+        Only the response leg has a native result item: on the history leg a
+        native server call accepts no output item (its ``*_call_output`` type
+        is rejected for a replayed call, and a ``function_call_output`` with a
+        server call's id pairs with no client call), so the hook declines and
+        the template's ``non_native_intrinsic_result_to_p`` decides between
+        dropping the result and pairing it with a degraded call.
+
+        Args:
+            ir_tool_result: IR tool result part with ``tool_type == "intrinsic"``.
+            leg: Which leg the part is written on.
+            **kwargs: Extra arguments.
+
+        Returns:
+            Native ``*_call_output`` item on the response leg, ``None``
+            otherwise.
+        """
+        if leg != "response":
+            return None
+        result_item_type = _INTRINSIC_KIND_TO_RESULT_ITEM.get(
+            intrinsic_kind_of(ir_tool_result)
+        )
+        if result_item_type is None:
+            return None
+        return _build_intrinsic_result_item(ir_tool_result, result_item_type, kwargs)
+
+    @classmethod
+    def non_native_intrinsic_result_to_p(
+        cls,
+        ir_tool_result: ToolResultPart,
+        *,
+        leg: IntrinsicLeg,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """Write (or drop) an intrinsic result with no native item.
+
+        A result is written only for a call that was degraded to a client
+        ``function_call``: every other case answers ``{}`` — a ``web_search``
+        result rides on its call item, and a native server call pairs with no
+        output item on either leg.
+
+        Args:
+            ir_tool_result: IR tool result part with ``tool_type == "intrinsic"``.
+            leg: Which leg the part is written on.
+            **kwargs: ``degraded_intrinsic_calls`` (dict[str, bool]) — intrinsic
+                call id → whether the call writer degrades it, so a result
+                pairs with the call that is actually written.
+
+        Returns:
+            A client ``function_call_output`` for a degraded call, else ``{}``.
+        """
+        kind = intrinsic_kind_of(ir_tool_result)
+        if _INTRINSIC_KIND_TO_ITEM.get(kind) == "web_search_call":
+            # Its payload rides on the call item; no separate output item on
+            # either leg.
+            _warn_dropped_intrinsic_result(ir_tool_result, kwargs)
+            return {}
+        if leg == "history":
+            degraded = kwargs.get("degraded_intrinsic_calls")
+            call_id = sanitize_tool_call_id(ir_tool_result.get("tool_call_id", ""))
+            if degraded is not None and not degraded.get(call_id, True):
+                _warn_dropped_intrinsic_result(ir_tool_result, kwargs)
+                return {}
+        return cast(dict[str, Any], cls.ir_client_result_to_p(ir_tool_result, **kwargs))
+
+    @classmethod
+    def ir_client_call_to_p(cls, ir_tool_call: ToolCallPart, **kwargs: Any) -> dict:
+        """IR ToolCallPart → OpenAI Responses client tool call item.
 
         Converts to function_call or mcp_call depending on tool_type/tool_name.
 
@@ -1378,14 +1517,6 @@ class OpenResponsesToolOps(BaseToolOps):
             if metadata:
                 item[CARRIER_KEY] = metadata
             return item
-        elif tool_type == "intrinsic":
-            return _ir_intrinsic_to_responses(
-                ir_tool_call,
-                tool_call_id,
-                tool_input,
-                arguments,
-                for_history=bool(kwargs.get("for_history")),
-            )
         else:
             # Default to function_call
             return {
@@ -1481,7 +1612,9 @@ class OpenResponsesToolOps(BaseToolOps):
     # ==================== Tool Result ====================
 
     @classmethod
-    def ir_tool_result_to_p(cls, ir_tool_result: ToolResultPart, **kwargs: Any) -> dict:
+    def ir_client_result_to_p(
+        cls, ir_tool_result: ToolResultPart, **kwargs: Any
+    ) -> dict:
         """IR ToolResultPart → OpenAI Responses tool call output item.
 
         Emits ``custom_tool_call_output`` when the context indicates the
@@ -1491,62 +1624,14 @@ class OpenResponsesToolOps(BaseToolOps):
         re-encoded as a trailing ``input_text`` block (see
         ``base.tools.error_marker``).
 
-        Intrinsic (server-tool) results are paired with the call the writer
-        actually emits, from the same predicate as the call writer
-        (``_intrinsic_call_degrades_on_history``, via ``for_history`` and the
-        ``degraded_intrinsic_calls`` map ``message_ops`` builds):
-
-        * A ``web_search`` result is always ``{}`` — its call stays native and
-          carries the output inline, and the input schema has no
-          ``web_search_call_output`` item.
-        * On the history leg a call written as a native server item accepts no
-          output item (its ``*_call_output`` type is rejected, and a
-          ``function_call_output`` with a server call's id pairs with no client
-          call), so its result is dropped.  A call the writer degrades to a
-          client ``function_call`` pairs with a ``function_call_output``.
-        * On the response leg the call stays native, so the result is emitted
-          as its native output type (e.g. ``shell_call_output``).
+        An intrinsic result reaches this path only when its call was written as
+        a client ``function_call``; the hook pair below decides that.
 
         Args:
             ir_tool_result: IR tool result part.
-            **kwargs: ``for_history`` (bool, default True) — whether the result
-                is on the history leg; ``degraded_intrinsic_calls``
-                (dict[str, bool]) — intrinsic call id → whether the call writer
-                degrades it, so a result pairs with the call that is actually
-                written (an absent map assumes a degraded call);
-                ``warnings`` (list[str]) receives a note when the error flag
-                had to be re-encoded or dropped.
+            **kwargs: ``warnings`` (list[str]) receives a note when the error
+                flag had to be re-encoded or dropped.
         """
-        if ir_tool_result.get("tool_type") == "intrinsic":
-            kind = intrinsic_kind_of(ir_tool_result)
-            result_item_type = _INTRINSIC_KIND_TO_RESULT_ITEM.get(kind)
-            for_history = kwargs.get("for_history", True)
-
-            if _INTRINSIC_KIND_TO_ITEM.get(kind) == "web_search_call":
-                # Its payload rides on the call item; no separate output item
-                # on either leg.
-                _warn_dropped_intrinsic_result(ir_tool_result, kwargs)
-                return {}
-
-            if for_history:
-                # Pair with the call the history-leg writer emits: only a call
-                # it degrades to a client ``function_call`` takes an output
-                # item, a native server item takes none.
-                degraded = kwargs.get("degraded_intrinsic_calls")
-                call_id = sanitize_tool_call_id(ir_tool_result.get("tool_call_id", ""))
-                if degraded is not None and not degraded.get(call_id, True):
-                    _warn_dropped_intrinsic_result(ir_tool_result, kwargs)
-                    return {}
-            elif result_item_type is not None:
-                # Response leg: the call stays native, so emit the native
-                # result type to pair with it.
-                return _build_intrinsic_result_item(
-                    ir_tool_result, result_item_type, kwargs
-                )
-            # A kind with no native item type is written as a client
-            # ``function_call`` on both legs, so it falls through to
-            # ``function_call_output``.
-
         result_content = ir_tool_result.get("result") or ir_tool_result.get(
             "content", ""
         )

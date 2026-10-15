@@ -551,8 +551,8 @@ WRITE_DELTA_MATRIX: dict[str, dict[str, str]] = {
     "open_responses": {
         "web_search": "held",
         "code_interpreter": "held",
-        "code_execution": "leaked",
-        UNKNOWN_KIND: "leaked",
+        "code_execution": "held",
+        UNKNOWN_KIND: "held",
     },
     "google_generate": {
         "code_execution": "deferred",
@@ -680,8 +680,13 @@ def test_google_generate_stream_result_drop_should_warn():
         )
 
 
-def test_open_responses_drops_foreign_call_start_but_leaks_its_delta():
-    """CURRENT: the start is dropped, yet the arguments delta is still emitted."""
+def test_open_responses_drops_foreign_call_start_with_its_delta():
+    """A dropped start takes its arguments delta with it.
+
+    A kind this dialect cannot render as a server item opens no item, so the
+    fragments that follow belong to nothing: writing them would emit a
+    ``function_call_arguments.delta`` for a call no item was announced for.
+    """
     converter = OpenResponsesConverter()
     ctx = converter.create_stream_context()
     start = converter.stream_response_to_provider(_start_event("code_execution"), ctx)
@@ -697,13 +702,9 @@ def test_open_responses_drops_foreign_call_start_but_leaks_its_delta():
         ctx,
     )
     assert start == {}
-    assert "function_call_arguments.delta" in json.dumps(delta)
+    assert delta == {}
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="intrinsic refactor phase 3: stream delta leaked past a dropped start",
-)
 def test_open_responses_foreign_delta_should_not_leak():
     converter = OpenResponsesConverter()
     ctx = converter.create_stream_context()
@@ -722,8 +723,13 @@ def test_open_responses_foreign_delta_should_not_leak():
     assert delta == {}
 
 
-def test_open_responses_finish_writes_an_empty_name_function_call():
-    """CURRENT: a dropped intrinsic start flushes as a nameless function_call."""
+def test_open_responses_finish_writes_no_item_for_a_dropped_call():
+    """A dropped intrinsic start leaves nothing for the flush to rebuild.
+
+    The arguments were never accumulated, so the finish flush has no call to
+    write — rather than the nameless ``function_call`` a leaked delta used to
+    leave it with.
+    """
     converter = OpenResponsesConverter()
     ctx = converter.create_stream_context()
     converter.stream_response_to_provider(_start_event("code_execution"), ctx)
@@ -746,8 +752,7 @@ def test_open_responses_finish_writes_an_empty_name_function_call():
         for e in out
         if isinstance(e, dict) and e.get("type") == "response.output_item.done"
     ]
-    assert items and items[0]["type"] == "function_call"
-    assert items[0]["name"] == ""
+    assert not [item for item in items if item.get("type") == "function_call"]
 
 
 def test_messages_stream_writes_server_tool_use_for_any_kind():

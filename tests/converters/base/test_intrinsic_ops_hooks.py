@@ -74,8 +74,8 @@ class _HookedToolOps(_PlainToolOps):
     """A dialect that renders one kind natively and drops the rest."""
 
     @classmethod
-    def intrinsic_leg_from_flags(cls, kwargs: Any) -> Any:
-        return "response" if kwargs.get("for_response") else "history"
+    def intrinsic_leg_from_flags(cls, kwargs: Any, *, default: Any) -> Any:
+        return "response" if kwargs.get("for_response") else default
 
     @classmethod
     def intrinsic_renderable(cls, kind: str, fields: Any, *, leg: str) -> bool:
@@ -162,14 +162,13 @@ def test_plain_client_parts_never_reach_the_hooks():
 
 
 def test_a_native_kind_is_rendered_by_the_hook():
-    assert _HookedToolOps.ir_tool_call_to_p(_call("native_kind")) == {
-        "shape": "native_call",
-        "leg": "history",
-    }
-    assert _HookedToolOps.ir_tool_result_to_p(_result("native_kind")) == {
-        "shape": "native_result",
-        "leg": "history",
-    }
+    assert (
+        _HookedToolOps.ir_tool_call_to_p(_call("native_kind"))["shape"] == "native_call"
+    )
+    assert (
+        _HookedToolOps.ir_tool_result_to_p(_result("native_kind"))["shape"]
+        == "native_result"
+    )
 
 
 def test_a_foreign_kind_takes_the_non_native_outcome():
@@ -206,19 +205,36 @@ def test_a_hook_that_declines_falls_back_to_the_client_path():
 def test_the_leg_comes_from_the_converter_flag():
     assert _HookedToolOps.ir_tool_call_to_p(
         _call("native_kind"), for_response=True
-    ) == {
-        "shape": "native_call",
-        "leg": "response",
-    }
+    ) == {"shape": "native_call", "leg": "response"}
 
 
 def test_a_caller_may_state_the_leg_outright():
     """``leg=`` wins over the flag, and is not forwarded to the hook twice."""
     assert _HookedToolOps.ir_tool_result_to_p(
-        _result("native_kind"), for_response=False, leg="response"
-    ) == {"shape": "native_result", "leg": "response"}
+        _result("native_kind"), for_response=True, leg="history"
+    ) == {"shape": "native_result", "leg": "history"}
 
 
-def test_the_default_leg_is_history():
-    assert _HookedToolOps.intrinsic_leg({}) == "history"
-    assert _HookedToolOps.intrinsic_leg({"for_response": True}) == "response"
+def test_each_template_passes_its_own_default_leg():
+    """A dialect may answer per writer; each template keeps that answer.
+
+    open_responses answered "response" for a call that says nothing and
+    "history" for a result that says nothing, so the two templates pass those
+    defaults rather than one for both.
+    """
+    assert _HookedToolOps.ir_tool_call_to_p(_call("native_kind"))["leg"] == "response"
+    assert (
+        _HookedToolOps.ir_tool_result_to_p(_result("native_kind"))["leg"] == "history"
+    )
+
+
+def test_the_leg_resolution_takes_the_flag_then_the_default():
+    assert _HookedToolOps.intrinsic_leg({}, "history") == "history"
+    assert _HookedToolOps.intrinsic_leg({}, "response") == "response"
+    assert _HookedToolOps.intrinsic_leg({"for_response": True}, "history") == "response"
+    assert (
+        _HookedToolOps.intrinsic_leg(
+            {"for_response": True, "leg": "history"}, "history"
+        )
+        == "history"
+    )

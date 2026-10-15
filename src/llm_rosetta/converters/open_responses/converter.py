@@ -1904,6 +1904,13 @@ class OpenResponsesConverter(BaseConverter):
                 intrinsic_kind, item_id, status="in_progress"
             )
             if intrinsic_item is None:
+                # A kind this dialect cannot render as a server item: nothing
+                # opens the item, so nothing may follow it either.  Record the
+                # drop so the argument deltas — and the completed item the
+                # finish flush would otherwise build from them — are dropped
+                # with it instead of leaking a nameless ``function_call``.
+                if context is not None and call_id:
+                    context.drop_intrinsic_call(call_id)
                 return {}
 
         # Register in context for later done events, carrying the intrinsic
@@ -1973,6 +1980,16 @@ class OpenResponsesConverter(BaseConverter):
         call_id = sanitize_tool_call_id(event["tool_call_id"])
         delta = event["arguments_delta"]
         tc_index = event.get("tool_call_index")
+
+        if (
+            context is not None
+            and call_id
+            and context.is_intrinsic_call_dropped(call_id)
+        ):
+            # The call's ``output_item.added`` was dropped, so its arguments
+            # belong to no item: they are not accumulated either, which is what
+            # keeps the finish flush from rebuilding the call without a name.
+            return {}
 
         # Defense-in-depth: resolve empty tool_call_id by index.
         # Some upstream providers (e.g. certain Chat Completions

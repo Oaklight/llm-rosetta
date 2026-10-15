@@ -53,15 +53,20 @@ class BaseToolOps(ABC):
     # the ordinary client path.
 
     @classmethod
-    def intrinsic_leg(cls, kwargs: Mapping[str, Any]) -> IntrinsicLeg:
+    def intrinsic_leg(
+        cls, kwargs: Mapping[str, Any], default: IntrinsicLeg
+    ) -> IntrinsicLeg:
         """Which leg an intrinsic part is being written on.
 
         A caller may state it outright with ``leg=``; otherwise the converter
-        maps its own write-path flag through
-        :meth:`intrinsic_leg_from_flags`.
+        maps its own write-path flag through :meth:`intrinsic_leg_from_flags`.
+        The templates pass the writer's own historical default, because a
+        dialect may have answered differently for a call and for a result;
+        phase 4 is where one default can take over.
 
         Args:
             kwargs: The keyword arguments the write template was called with.
+            default: The leg when neither the caller nor a converter flag says.
 
         Returns:
             ``"history"`` or ``"response"``.
@@ -69,23 +74,26 @@ class BaseToolOps(ABC):
         leg = kwargs.get("leg")
         if leg in _INTRINSIC_LEGS:
             return cast(IntrinsicLeg, leg)
-        return cls.intrinsic_leg_from_flags(kwargs)
+        return cls.intrinsic_leg_from_flags(kwargs, default=default)
 
     @classmethod
-    def intrinsic_leg_from_flags(cls, kwargs: Mapping[str, Any]) -> IntrinsicLeg:
+    def intrinsic_leg_from_flags(
+        cls, kwargs: Mapping[str, Any], *, default: IntrinsicLeg
+    ) -> IntrinsicLeg:
         """Map this converter's own leg flag onto :data:`IntrinsicLeg`.
 
-        The default is the history leg: a body is written from IR most often
-        to replay a turn.  A converter whose write path already distinguishes
-        the two maps its flag here (open_responses: ``for_history``).
+        A converter whose write path already distinguishes the two legs maps
+        its flag here (open_responses: ``for_history``); a dialect that does
+        not answer per leg takes the default its template passed.
 
         Args:
             kwargs: The keyword arguments the write template was called with.
+            default: The leg when no flag is present.
 
         Returns:
             ``"history"`` or ``"response"``.
         """
-        return "history"
+        return default
 
     @classmethod
     def intrinsic_renderable(
@@ -254,7 +262,10 @@ class BaseToolOps(ABC):
         if not is_intrinsic_part(ir_tool_call):
             return cls.ir_client_call_to_p(ir_tool_call, **kwargs)
 
-        leg = cls.intrinsic_leg(kwargs)
+        # A dialect's two writers have historically defaulted to different
+        # legs (open_responses: a call without ``for_history`` answered for the
+        # response, a result for the replay), so each template passes its own.
+        leg = cls.intrinsic_leg(kwargs, "response")
         forwarded = {key: value for key, value in kwargs.items() if key != "leg"}
         native = cls.ir_intrinsic_call_to_p(ir_tool_call, leg=leg, **forwarded)
         if native is not None:
@@ -277,7 +288,7 @@ class BaseToolOps(ABC):
         if not is_intrinsic_part(ir_tool_result):
             return cls.ir_client_result_to_p(ir_tool_result, **kwargs)
 
-        leg = cls.intrinsic_leg(kwargs)
+        leg = cls.intrinsic_leg(kwargs, "history")
         forwarded = {key: value for key, value in kwargs.items() if key != "leg"}
         native = cls.ir_intrinsic_result_to_p(ir_tool_result, leg=leg, **forwarded)
         if native is not None:
