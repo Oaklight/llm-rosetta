@@ -636,16 +636,19 @@ class TestIntrinsicResultResponseLeg:
         assert written["type"] == "file_search_call_output"
         assert written["call_id"] == "fs_abc"
 
-    def test_unknown_kind_result_stays_a_client_output(self):
-        # The response leg keeps a native call native, but a kind with no
-        # native item type is still written as a client ``function_call``
-        # there, so its result stays a ``function_call_output``.
+    def test_unknown_kind_result_is_dropped_on_the_response_leg(self):
+        # The response leg never hands a server result to the client as a
+        # client output: the client did not run the call.  A kind with no
+        # native item type is dropped there (phase 4), with a warning.
         ir = _intrinsic_result("code_execution", "ce1", "ok")
+        warnings: list[str] = []
 
-        written = OpenResponsesToolOps.ir_tool_result_to_p(ir, for_history=False)
+        written = OpenResponsesToolOps.ir_tool_result_to_p(
+            ir, for_history=False, warnings=warnings
+        )
 
-        assert written["type"] == "function_call_output"
-        assert written["call_id"] == "ce1"
+        assert written == {}
+        assert any("code_execution" in w for w in warnings)
 
 
 class TestIntrinsicPairingThroughMessages:

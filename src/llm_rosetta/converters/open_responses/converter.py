@@ -18,6 +18,7 @@ from ...types.ir import (
     TextPart,
     is_text_part,
     is_tool_call_part,
+    is_tool_result_part,
     is_reasoning_part,
     is_refusal_part,
 )
@@ -594,6 +595,10 @@ class OpenResponsesConverter(BaseConverter):
                     provider_response["output"].append(
                         self.tool_ops.ir_tool_call_to_p(part)
                     )
+                elif is_tool_result_part(part):
+                    self._append_intrinsic_result_item(
+                        part, context, provider_response["output"]
+                    )
                 elif is_reasoning_part(part):
                     provider_response["output"].append(
                         self.content_ops.ir_reasoning_to_p(
@@ -699,6 +704,29 @@ class OpenResponsesConverter(BaseConverter):
             if "reasoning_tokens" in p_output_details:
                 usage_info["reasoning_tokens"] = p_output_details["reasoning_tokens"]
         return cast(UsageInfo, usage_info)
+
+    def _append_intrinsic_result_item(
+        self,
+        part: Any,
+        context: ConversionContext,
+        output: list[dict[str, Any]],
+    ) -> None:
+        """Append a server result's native output item, or drop it with a warning.
+
+        Responses has a native ``*_call_output`` item for some intrinsic kinds;
+        one it has none for is dropped — the client did not run the call, so a
+        client ``function_call_output`` is not a pair it could answer.
+
+        Args:
+            part: IR tool result part.
+            context: Conversion context (its warnings list takes the report).
+            output: The response's ``output`` list, extended in place.
+        """
+        item = self.tool_ops.ir_tool_result_to_p(
+            part, leg="response", warnings=context.warnings
+        )
+        if item:
+            output.append(item)
 
     @staticmethod
     def _build_ir_usage_to_p(ir_usage: Mapping[str, Any]) -> dict[str, Any]:

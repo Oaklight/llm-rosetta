@@ -171,7 +171,7 @@ class GoogleGenerateMessageOps(BaseMessageOps):
                         tc_name = part.get("tool_name")
                         if tc_id and tc_name:
                             tool_call_index[tc_id] = tc_name
-                converted = self._ir_message_to_p(msg, tool_call_index)
+                converted = self._ir_message_to_p(msg, tool_call_index, warnings_list)
                 if converted:
                     contents.append(converted)
             elif is_extension_item(item):
@@ -190,6 +190,7 @@ class GoogleGenerateMessageOps(BaseMessageOps):
         self,
         message: Message,
         tool_call_index: dict[str, str] | None = None,
+        warnings_list: list[str] | None = None,
     ) -> dict[str, Any]:
         """Convert a single IR message to Google Content format.
 
@@ -197,6 +198,8 @@ class GoogleGenerateMessageOps(BaseMessageOps):
             message: IR message dict.
             tool_call_index: Accumulated ``{tool_call_id: tool_name}``
                 mapping for O(1) tool result name resolution.
+            warnings_list: Sink for a server part Google has no inline form
+                for; the drop is reported here rather than only logged.
 
         Returns:
             Google Content dict with role and parts.
@@ -205,7 +208,9 @@ class GoogleGenerateMessageOps(BaseMessageOps):
         parts: list[dict[str, Any]] = []
 
         for content_part in message.get("content", []):
-            part = self._ir_content_part_to_p(content_part, tool_call_index)
+            part = self._ir_content_part_to_p(
+                content_part, tool_call_index, warnings_list
+            )
             if part is not None:
                 parts.append(part)
 
@@ -221,6 +226,7 @@ class GoogleGenerateMessageOps(BaseMessageOps):
         self,
         content_part: ContentPart,
         tool_call_index: dict[str, str] | None = None,
+        warnings_list: list[str] | None = None,
     ) -> Any:
         """Convert a single IR content part to Google Part format.
 
@@ -248,7 +254,7 @@ class GoogleGenerateMessageOps(BaseMessageOps):
             # The tool_ops template owns the intrinsic dispatch: a
             # provider-executed call renders as Google's own server part (or is
             # dropped when Google has none), never as a client function_call.
-            return self.tool_ops.ir_tool_call_to_p(content_part)
+            return self.tool_ops.ir_tool_call_to_p(content_part, warnings=warnings_list)
         elif is_tool_result_part(content_part):
             tool_call_id = content_part.get("tool_call_id")
             tool_name = (
@@ -257,8 +263,12 @@ class GoogleGenerateMessageOps(BaseMessageOps):
                 else None
             )
             if tool_name is not None:
-                return self.tool_ops.ir_tool_result_to_p_named(content_part, tool_name)
-            return self.tool_ops.ir_tool_result_to_p(content_part)
+                return self.tool_ops.ir_tool_result_to_p_named(
+                    content_part, tool_name, warnings=warnings_list
+                )
+            return self.tool_ops.ir_tool_result_to_p(
+                content_part, warnings=warnings_list
+            )
         else:
             warnings.warn(f"不支持的内容类型: {content_part.get('type')}")
             return None

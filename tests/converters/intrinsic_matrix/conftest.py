@@ -184,7 +184,7 @@ def definition_outcome(converter_name: str, kind: str) -> str:
 
 _NATIVE_CALL_MARKERS: dict[str, tuple[str, ...]] = {
     "chat_completions": (),
-    "messages": ('"server_tool_use"',),
+    "messages": ('"type": "server_tool_use"',),
     "open_responses": (
         '"web_search_call"',
         '"code_interpreter_call"',
@@ -205,7 +205,9 @@ _NATIVE_CALL_MARKERS: dict[str, tuple[str, ...]] = {
 
 _DEGRADED_CALL_MARKERS: dict[str, tuple[str, ...]] = {
     "chat_completions": ('"tool_calls"',),
-    "messages": (),
+    # A plain ``tool_use`` block: the shape an intrinsic call Anthropic has no
+    # server tool for degrades to on the history leg.
+    "messages": ('"type": "tool_use"',),
     "open_responses": ('"function_call"',),
     "google_generate": ('"functionCall"',),
     "google_interactions": ('"function_call"',),
@@ -236,15 +238,19 @@ def history_result_outcome(converter_name: str, kind: str) -> str:
     """Classify the history-leg write of one intrinsic result.
 
     ``degraded`` marks the dialects whose history result is an ordinary client
-    result (chat's ``role:"tool"`` message, messages' plain ``tool_result``),
-    where the kind is lost.
+    result (chat's ``role:"tool"`` message, messages' plain ``tool_result`` for
+    a kind it has no server tool for), where the kind is lost.  ``native``
+    keeps the kind in the block/item the dialect names it with.
     """
     body, _ = CONVERTERS[converter_name]().request_to_provider(ir_history(kind))
     text = json.dumps(body, default=str)
     if not _result_written(body):
         return "dropped"
-    if converter_name in ("chat_completions", "messages"):
+    if converter_name == "chat_completions":
         return "degraded"
+    if converter_name == "messages":
+        # A kind Anthropic has a server tool for keeps it in the block type.
+        return "native" if f'"{kind}_tool_result"' in text else "degraded"
     if converter_name == "open_responses":
         # A degraded call pairs with a client function_call_output; a native
         # server call accepts no output item, so its result is dropped.

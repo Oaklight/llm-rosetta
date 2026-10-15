@@ -403,11 +403,13 @@ WRITE_CALL_MATRIX: dict[str, dict[str, str]] = {
         "code_execution": "degraded",
         UNKNOWN_KIND: "degraded",
     },
+    # This is the response leg, so a kind Anthropic has no server tool for is
+    # dropped rather than fabricated as a ``server_tool_use``.
     "messages": {
         "web_search": "native",
         "code_execution": "native",
-        "google_search": "native",
-        UNKNOWN_KIND: "native",
+        "google_search": "dropped",
+        UNKNOWN_KIND: "dropped",
     },
     "open_responses": {
         "web_search": "native",
@@ -439,7 +441,7 @@ WRITE_RESULT_MATRIX: dict[str, dict[str, str]] = {
     "messages": {
         "web_search": "native",
         "code_execution": "native",
-        UNKNOWN_KIND: "native",
+        UNKNOWN_KIND: "dropped",
     },
     "open_responses": {
         "web_search": "dropped",
@@ -461,7 +463,7 @@ WRITE_RESULT_MATRIX: dict[str, dict[str, str]] = {
 }
 
 _NATIVE_CALL_MARKERS: dict[str, tuple[str, ...]] = {
-    "messages": ('"server_tool_use"',),
+    "messages": ('"type": "server_tool_use"',),
     "open_responses": ('"web_search_call"', '"code_interpreter_call"'),
     "google_interactions": ('"google_search_call"', '"code_execution_call"'),
 }
@@ -543,7 +545,7 @@ WRITE_DELTA_MATRIX: dict[str, dict[str, str]] = {
     "messages": {
         "web_search": "native",
         "code_execution": "native",
-        UNKNOWN_KIND: "native",
+        UNKNOWN_KIND: "dropped",
     },
     # A native server item holds its payload for the done event, and a call
     # whose start was dropped takes its deltas with it: nothing is written for
@@ -641,30 +643,9 @@ def test_google_generate_drops_foreign_streamed_call_at_finish():
     assert "executableCode" not in json.dumps(out, default=str)
 
 
-def test_google_generate_stream_result_drop_is_silent(recwarn):
-    """CURRENT: a non-code_execution intrinsic result is dropped with no warning."""
-    converter = GoogleGenerateConverter()
-    converter.stream_response_to_provider(
-        cast(
-            ToolResultEvent,
-            {
-                "type": "tool_result",
-                "tool_call_id": "c1",
-                "result": "R",
-                "tool_type": "intrinsic",
-                "provider_metadata": {"intrinsic_kind": "web_search"},
-            },
-        ),
-        converter.create_stream_context(),
-    )
-    assert not [w for w in recwarn.list if issubclass(w.category, UserWarning)]
-
-
-@pytest.mark.xfail(
-    strict=True, reason="intrinsic refactor phase 4: google_generate silent stream drop"
-)
-def test_google_generate_stream_result_drop_should_warn():
-    with pytest.warns(UserWarning):
+def test_google_generate_stream_result_drop_warns():
+    """A dropped server result is reported, not silent."""
+    with pytest.warns(UserWarning, match="Unsupported intrinsic kind"):
         GoogleGenerateConverter().stream_response_to_provider(
             cast(
                 ToolResultEvent,
@@ -755,16 +736,31 @@ def test_open_responses_finish_writes_no_item_for_a_dropped_call():
     assert not [item for item in items if item.get("type") == "function_call"]
 
 
-def test_messages_stream_writes_server_tool_use_for_any_kind():
+@pytest.mark.parametrize("kind", ["google_search", UNKNOWN_KIND])
+def test_messages_stream_drops_a_kind_it_has_no_server_tool_for(kind: str):
+    """The response leg never fabricates a ``server_tool_use``.
+
+    A kind Anthropic has no server tool for cannot be handed to the client as
+    a server call — the client could not run it — so the call is dropped.
+    """
+    converter = MessagesConverter()
+    out = converter.stream_response_to_provider(
+        _start_event(kind), converter.create_stream_context()
+    )
+
+    assert out == {}
+
+
+def test_messages_stream_writes_server_tool_use_for_its_own_kind():
     converter = MessagesConverter()
     out = cast(
         dict[str, Any],
         converter.stream_response_to_provider(
-            _start_event(UNKNOWN_KIND), converter.create_stream_context()
+            _start_event("web_search"), converter.create_stream_context()
         ),
     )
     assert out["content_block"]["type"] == "server_tool_use"
-    assert out["content_block"]["name"] == UNKNOWN_KIND
+    assert out["content_block"]["name"] == "web_search"
 
 
 # ---------------------------------------------------------------------------
@@ -785,17 +781,19 @@ def _kindless_start(kind_name: str) -> ToolCallStartEvent:
     )
 
 
-def test_messages_stream_kind_missing_renders_an_empty_name():
-    """Phase 2: a kindless start is a server call with no name, not the name."""
+def test_messages_stream_kind_missing_is_dropped_not_named():
+    """A kindless start is unknown, and unknown is not renderable.
+
+    Phase 2 made the name come from ``intrinsic_kind`` alone, never the tool
+    name; with the kind table the empty kind is one Anthropic has no server
+    tool for, so the call is dropped rather than written under the tool name.
+    """
     converter = MessagesConverter()
-    out = cast(
-        dict[str, Any],
-        converter.stream_response_to_provider(
-            _kindless_start("web_search"), converter.create_stream_context()
-        ),
+    out = converter.stream_response_to_provider(
+        _kindless_start("web_search"), converter.create_stream_context()
     )
-    assert out["content_block"]["type"] == "server_tool_use"
-    assert out["content_block"]["name"] == ""
+
+    assert out == {}
 
 
 def test_open_responses_stream_kind_should_not_fall_back_to_the_tool_name():

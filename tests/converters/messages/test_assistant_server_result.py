@@ -329,13 +329,25 @@ class TestRequestLegDoesNotFabricateAResult:
         assert blocks[1] == _WEB_RESULT
 
     def test_a_genuine_orphan_still_gets_a_placeholder(self):
-        """The fix must not disarm the orphan injection entirely."""
+        """The fix must not disarm the orphan injection entirely.
+
+        A *client* call still owes the client a result; only a server call is
+        answered by the provider that ran it.
+        """
         messages = cast(
             list[IRInputItem],
             [
                 {
                     "role": "assistant",
-                    "content": [MessagesToolOps.p_tool_call_to_ir(_SERVER_CALL)],
+                    "content": [
+                        {
+                            "type": "tool_call",
+                            "tool_call_id": "toolu_1",
+                            "tool_name": "get_weather",
+                            "tool_input": {"city": "tokyo"},
+                            "tool_type": "function",
+                        }
+                    ],
                 }
             ],
         )

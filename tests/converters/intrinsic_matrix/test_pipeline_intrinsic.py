@@ -91,7 +91,14 @@ _OR_CI_CHUNKS: list[dict[str, Any]] = [
 ]
 
 
-def test_stream_messages_from_open_responses_server_call_and_result():
+def test_stream_messages_from_open_responses_drops_a_server_call_it_lacks():
+    """Phase 4: the Anthropic client gets neither a fabricated server call nor
+    a fabricated ``*_tool_result`` block for a kind Anthropic has no server
+    tool for (``code_interpreter``).
+
+    The upstream ran the tool; the client dialect cannot name it, and the
+    response leg never hands a server call to the client as one it must run.
+    """
     pipe = ConversionPipeline("messages", "open_responses")
     pipe.convert_request(_messages_request())
     chunks = _stream(pipe, _OR_CI_CHUNKS)
@@ -101,16 +108,27 @@ def test_stream_messages_from_open_responses_server_call_and_result():
         for c in chunks
         if isinstance(c, dict) and c.get("type") == "content_block_start"
     ]
-    assert "server_tool_use" in blocks
-    assert "code_interpreter_tool_result" in blocks
+    assert "server_tool_use" not in blocks
+    assert not [b for b in blocks if b.endswith("_tool_result")]
 
-    call = next(
-        c["content_block"]
+
+def test_stream_messages_from_google_generate_keeps_a_call_it_has():
+    """A kind Anthropic *does* have a server tool for still passes through.
+
+    Google's ``executableCode`` is canonical kind ``code_execution``, which is
+    one of the two server tools Anthropic has.
+    """
+    pipe = ConversionPipeline("messages", "google_generate")
+    pipe.convert_request(_messages_request())
+    chunks = _stream(pipe, _GG_CODE_CHUNKS)
+
+    blocks = [
+        c["content_block"]["type"]
         for c in chunks
         if isinstance(c, dict) and c.get("type") == "content_block_start"
-    )
-    assert call["name"] == "code_interpreter"
-    assert call["id"] == "ci_1"
+    ]
+    assert "server_tool_use" in blocks
+    assert "code_execution_tool_result" in blocks
 
 
 # ---------------------------------------------------------------------------

@@ -14,6 +14,7 @@ Key Anthropic differences from OpenAI:
 - Thinking/reasoning with ``signature`` field
 """
 
+import logging
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -73,6 +74,8 @@ from .config_ops import MessagesConfigOps
 from .content_ops import MessagesContentOps
 from .message_ops import MessagesMessageOps
 from .tool_ops import MessagesToolOps, canonical_server_tool_kind
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -373,6 +376,10 @@ class MessagesConverter(BaseConverter):
         Reasoning parts return ``None`` when the block was dropped (nothing
         Anthropic could consume, e.g. only a foreign opaque value — #881).
 
+        A server call with no Anthropic server tool for its kind returns no
+        block either: this is the response leg, so it is dropped rather than
+        handed to the client as a call it would have to run.
+
         Args:
             part: IR content part.
 
@@ -383,7 +390,7 @@ class MessagesConverter(BaseConverter):
         if is_text_part(part):
             return self.content_ops.ir_text_to_p(part)
         if is_tool_call_part(part):
-            return self.tool_ops.ir_tool_call_to_p(part)
+            return self.tool_ops.ir_tool_call_to_p(part, leg="response") or None
         if is_tool_result_part(part):
             # A server result the assistant turn produced stays inline; a
             # client result returns None and is dropped from the response.
@@ -1247,12 +1254,30 @@ class MessagesConverter(BaseConverter):
         everything else as ``tool_use``.  The kind comes from the event's
         first-class ``intrinsic_kind`` field (legacy metadata still accepted),
         never from the tool name.
+
+        A server call Anthropic has no server tool for is dropped — never
+        downgraded to a ``tool_use`` the client would be asked to run — and
+        the call id is remembered so the fragments that follow it are dropped
+        with it rather than attached to whatever block is open.
         """
         block_type = "tool_use"
         tool_name = event["tool_name"]
         if event.get("tool_type", "function") == "intrinsic":
+            kind = intrinsic_kind_of(event)
+            if not self.tool_ops.intrinsic_renderable(kind, {}, leg="response"):
+                logger.warning(
+                    "Server tool call of kind %r has no Anthropic server tool; "
+                    "dropped from the streamed response",
+                    kind,
+                )
+                if context is not None:
+                    dropped = context.metadata.setdefault(
+                        "_dropped_intrinsic_calls", set()
+                    )
+                    dropped.add(event["tool_call_id"])
+                return {}
             block_type = "server_tool_use"
-            tool_name = intrinsic_kind_of(event)
+            tool_name = kind
         result: dict[str, Any] = {
             "type": AnthropicEventType.CONTENT_BLOCK_START,
             "content_block": {
@@ -1298,7 +1323,16 @@ class MessagesConverter(BaseConverter):
     def _handle_ir_tool_call_delta_to_p(
         self, event: ToolCallDeltaEvent, context: StreamContext | None
     ) -> dict[str, Any]:
-        """Handle ToolCallDeltaEvent → content_block_delta with input_json_delta."""
+        """Handle ToolCallDeltaEvent → content_block_delta with input_json_delta.
+
+        A fragment whose call was dropped at its start belongs to no block:
+        writing it would open one for a server call the client was never told
+        about, so it is dropped too.
+        """
+        if context is not None:
+            dropped = context.metadata.get("_dropped_intrinsic_calls")
+            if dropped and event["tool_call_id"] in dropped:
+                return {}
         result: dict[str, Any] = {
             "type": AnthropicEventType.CONTENT_BLOCK_DELTA,
             "delta": {
@@ -1332,7 +1366,22 @@ class MessagesConverter(BaseConverter):
         payload is replayed verbatim, preserving fields the IR does not model
         (the original ``content`` shape and ``caller``).  Otherwise the block is
         rebuilt from the IR fields.
+
+        A server result for a kind Anthropic has no server tool for is dropped
+        with a warning, the same way its call is: the client can neither run
+        the tool nor recognize its result.
         """
+        if event.get("tool_type") == "intrinsic" and not (
+            self.tool_ops.intrinsic_renderable(
+                intrinsic_kind_of(event), None, leg="response"
+            )
+        ):
+            logger.warning(
+                "Server tool result of kind %r has no Anthropic server tool; "
+                "dropped from the streamed response",
+                intrinsic_kind_of(event),
+            )
+            return {}
         content_block = self._ir_tool_result_block(event)
 
         result: dict[str, Any] = {

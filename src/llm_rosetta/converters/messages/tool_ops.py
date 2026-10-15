@@ -72,6 +72,24 @@ _ANTHROPIC_SERVER_TOOL_KIND_ALIASES: dict[str, str] = {
     "bash_code_execution": "code_execution",
 }
 
+#: The intrinsic kinds Anthropic renders natively: the server tools the IR
+#: gives a canonical kind (``_ANTHROPIC_INTRINSIC_TOOLS``), the runtime aliases
+#: the read path folds onto them, and the capabilities Anthropic reports under
+#: their own name — ``web_fetch`` and ``text_editor_code_execution`` are
+#: capabilities of their own with no canonical kind yet, so the reader passes
+#: them through unchanged (see the note above) and a same-dialect replay must
+#: keep them.  A kind outside this set belongs to a sibling dialect: Anthropic
+#: has no server tool for it, so a ``server_tool_use`` naming one would name a
+#: tool the API does not have.
+_ANTHROPIC_SERVER_TOOL_KINDS: frozenset[str] = frozenset(
+    {
+        *_ANTHROPIC_INTRINSIC_TOOLS,
+        *_ANTHROPIC_SERVER_TOOL_KIND_ALIASES,
+        "web_fetch",
+        "text_editor_code_execution",
+    }
+)
+
 
 def canonical_server_tool_kind(name: str) -> str:
     """Fold an Anthropic server-tool runtime name onto its canonical kind.
@@ -398,37 +416,100 @@ class MessagesToolOps(BaseToolOps):
         )
 
     @classmethod
+    def intrinsic_renderable(cls, kind: str, fields: Any, *, leg: IntrinsicLeg) -> bool:
+        """Whether Anthropic has a server tool for *kind*.
+
+        Anthropic renders a server tool in one shape — ``server_tool_use``
+        named with the kind — but only for a kind it actually has a tool for
+        (see ``_ANTHROPIC_SERVER_TOOL_KINDS``).  The payload plays no part: the
+        block's ``input`` is free-form, so there is no field a kind needs and
+        the IR might be missing, and both legs answer the same.
+
+        Args:
+            kind: Canonical intrinsic kind (``intrinsic_kind_of``).
+            fields: The IR ``tool_input`` (unused: the block shape does not
+                depend on the payload).
+            leg: Which leg the part is written on; both are the same here.
+
+        Returns:
+            True when the kind is one Anthropic has a server tool for.
+        """
+        return kind in _ANTHROPIC_SERVER_TOOL_KINDS
+
+    @classmethod
     def ir_intrinsic_call_to_p(
         cls,
         ir_tool_call: ToolCallPart,
         *,
         leg: IntrinsicLeg = "history",
         **kwargs: Any,
-    ) -> dict:
+    ) -> dict[str, Any] | None:
         """IR intrinsic ToolCallPart → Anthropic ``server_tool_use`` block.
 
-        Anthropic renders every intrinsic kind in one shape — the server
-        tool's canonical kind as the ``name`` of a ``server_tool_use`` block —
-        so there is no kind↔type table to consult and no kind it cannot
-        render.  The kind is the block's ``name``, exactly as
-        :meth:`p_tool_call_to_ir` reads it back.
+        The kind is the block's ``name``, exactly as :meth:`p_tool_call_to_ir`
+        reads it back — but only for a kind Anthropic has a server tool for
+        (:meth:`intrinsic_renderable`).  A sibling dialect's kind, or a part
+        with no kind at all, declines here; the template then decides per leg
+        (see :meth:`non_native_intrinsic_call_to_p`).
 
         Args:
             ir_tool_call: IR tool call part with ``tool_type == "intrinsic"``.
-            leg: Which leg the part is written on; both take this shape.
+            leg: Which leg the part is written on.
             **kwargs: Extra arguments.
 
         Returns:
-            Anthropic ``server_tool_use`` content block dict.
+            Anthropic ``server_tool_use`` content block dict, or ``None``.
         """
+        kind = intrinsic_kind_of(ir_tool_call)
+        if not cls.intrinsic_renderable(kind, ir_tool_call.get("tool_input"), leg=leg):
+            return None
         return cls._finish_call_block(
             {
                 "type": "server_tool_use",
                 "id": sanitize_tool_call_id(ir_tool_call["tool_call_id"]),
-                "name": intrinsic_kind_of(ir_tool_call),
+                "name": kind,
                 "input": ir_tool_call.get("tool_input", {}),
             },
             ir_tool_call,
+        )
+
+    @classmethod
+    def non_native_intrinsic_call_to_p(
+        cls, ir_tool_call: ToolCallPart, *, leg: IntrinsicLeg, **kwargs: Any
+    ) -> dict[str, Any]:
+        """Write a server call Anthropic has no tool for, per leg.
+
+        On the **history** leg it takes the parent path — an ordinary client
+        ``tool_use`` — which is the shape a caller reaches for when this
+        converter is used as a library, without the pipeline pass that owns the
+        history decision.  On the **response** leg a server call is never handed
+        to the client as a call it must run: the client cannot execute a server
+        tool, so the call is dropped with a warning instead.
+
+        Args:
+            ir_tool_call: IR tool call part with ``tool_type == "intrinsic"``.
+            leg: Which leg the part is written on.
+            **kwargs: Extra arguments (``warnings`` sink, when the caller has
+                one).
+
+        Returns:
+            A client ``tool_use`` block on the history leg, ``{}`` on the
+            response leg.
+        """
+        if leg == "response":
+            kind = intrinsic_kind_of(ir_tool_call)
+            warnings = kwargs.get("warnings")
+            message = (
+                f"Server tool call of kind {kind!r} has no Anthropic server "
+                "tool; dropped from the response"
+            )
+            if isinstance(warnings, list):
+                warnings.append(message)
+            logger.warning(message)
+            return {}
+        return cast(
+            dict[str, Any],
+            super().non_native_intrinsic_call_to_p(ir_tool_call, leg=leg, **kwargs),
         )
 
     @staticmethod
@@ -670,15 +751,18 @@ class MessagesToolOps(BaseToolOps):
     ) -> dict[str, Any] | None:
         """IR intrinsic ToolResultPart → Anthropic ``*_tool_result`` block.
 
-        The response leg is the assistant turn that ran the server tool, where
-        the result rides inline next to its call, so the kind is written into
-        the block type.  On the history leg a server result is posed the way a
-        client one is — an ordinary ``tool_result`` on a ``role:"tool"``
-        message — so the hook declines and the template takes the parent path.
+        The kind is written into the block type (``web_search_tool_result``,
+        ``code_execution_tool_result``) whenever Anthropic has a server tool
+        for it (:meth:`intrinsic_renderable`), on either leg: a replayed
+        conversation keeps the server result the provider produced.  A kind
+        Anthropic has no tool for declines here, and the template takes the
+        parent path — a client result on the history leg, and a drop (a client
+        result cannot ride in an assistant turn) on the response leg.
 
         A server result never takes the client path on the response leg: the
         caller renders that turn with :meth:`ir_server_tool_result_to_p`, which
-        answers ``None`` for a client result rather than emitting one inline.
+        answers ``None`` for a result it cannot render rather than emitting one
+        inline.
 
         Args:
             ir_tool_result: IR tool result part with ``tool_type == "intrinsic"``.
@@ -686,10 +770,11 @@ class MessagesToolOps(BaseToolOps):
             **kwargs: Extra arguments.
 
         Returns:
-            Anthropic ``*_tool_result`` block on the response leg, ``None`` on
-            the history leg.
+            Anthropic ``*_tool_result`` block, or ``None`` when Anthropic has
+            no server tool for the kind.
         """
-        if leg != "response":
+        kind = intrinsic_kind_of(ir_tool_result)
+        if not cls.intrinsic_renderable(kind, None, leg=leg):
             return None
         return cls._server_tool_result_block(ir_tool_result)
 

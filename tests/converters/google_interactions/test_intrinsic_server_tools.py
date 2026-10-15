@@ -705,21 +705,23 @@ class TestSameFormatRoundTrip:
 
 
 class TestCrossFormatToMessages:
-    """A server call reaches Anthropic as ``server_tool_use``, never a client one."""
+    """An Anthropic client gets a server call only for a kind it has one for.
 
-    def test_non_streaming_keeps_the_server_shapes(self):
+    ``google_search`` is Google's server tool; Anthropic has no such tool, and
+    phase 4 stops the response leg from fabricating a ``server_tool_use`` (or a
+    ``*_tool_result`` block) for it — and from handing the client a ``tool_use``
+    it would have to run.  The call and its result are dropped instead.  The
+    ``code_execution`` case below is the kind Anthropic *does* have.
+    """
+
+    def test_non_streaming_drops_the_foreign_server_shapes(self):
         ir = _read_response([_SEARCH_CALL, _SEARCH_RESULT, _text_step("hi")])
 
         out = MessagesConverter().response_to_provider(ir)
-        blocks = out["content"]
 
-        assert blocks[0]["type"] == "server_tool_use"
-        assert blocks[0]["name"] == "google_search"
-        assert blocks[1]["type"] == "google_search_tool_result"
-        assert blocks[1]["tool_use_id"] == "c1"
-        assert "tool_use" not in [b["type"] for b in blocks]
+        assert [b["type"] for b in out["content"]] == ["text"]
 
-    def test_streaming_keeps_the_server_shapes(self):
+    def test_streaming_drops_the_foreign_server_shapes(self):
         source = _converter()
         target = MessagesConverter()
         from_ctx = StreamContext()
@@ -738,8 +740,8 @@ class TestCrossFormatToMessages:
             for e in emitted
             if e.get("type") == "content_block_start"
         ]
-        assert "server_tool_use" in starts
-        assert "google_search_tool_result" in starts
+        assert "server_tool_use" not in starts
+        assert not [t for t in starts if t.endswith("_tool_result")]
         assert "tool_use" not in starts
 
     def test_code_execution_also_crosses_as_a_server_result(self):

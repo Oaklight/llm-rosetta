@@ -212,15 +212,18 @@ class TestCrossFormatDegrade:
             provider_metadata={"intrinsic_kind": "code_interpreter"},
         )
 
-    def test_messages_renders_a_server_result(self):
+    def test_messages_drops_a_result_it_has_no_server_tool_for(self):
+        """Phase 4: ``code_interpreter`` is not an Anthropic server tool.
+
+        The response leg never fabricates a ``*_tool_result`` block for a kind
+        the client dialect has no server tool for; it drops the result instead.
+        """
         target = MessagesConverter()
         out = target.stream_response_to_provider(
             self._event(), target.create_stream_context()
         )
-        block = cast(dict[str, Any], out)["content_block"]
 
-        assert block["type"].endswith("_tool_result")
-        assert block["type"] != "function_call_output"
+        assert out == {}
 
     def test_google_generate_drops_without_raising(self):
         target = GoogleGenerateConverter()

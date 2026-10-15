@@ -134,12 +134,14 @@ HISTORY_CALL_MATRIX: dict[str, dict[str, str]] = {
         "code_execution": "degraded",
         UNKNOWN_KIND: "degraded",
     },
-    # Writes server_tool_use for ANY kind, foreign or unknown included.
+    # Native for a kind Anthropic has a server tool for; a foreign or unknown
+    # kind falls back to a client ``tool_use``, never to a fabricated
+    # ``server_tool_use`` name.
     "messages": {
         "web_search": "native",
         "code_execution": "native",
-        "google_search": "native",
-        UNKNOWN_KIND: "native",
+        "google_search": "degraded",
+        UNKNOWN_KIND: "degraded",
     },
     # Native only for a renderable server item; everything else degrades.
     "open_responses": {
@@ -182,10 +184,11 @@ def test_open_responses_degrades_unrenderable_code_interpreter():
 
 
 def test_google_generate_drops_foreign_call_with_warning():
-    with pytest.warns(UserWarning, match="Unsupported intrinsic kind"):
-        GoogleGenerateConverter().request_to_provider(
-            cast(IRRequest, ir_history("web_search"))
-        )
+    """The drop is reported on the conversion's own warnings channel."""
+    _, warnings = GoogleGenerateConverter().request_to_provider(
+        cast(IRRequest, ir_history("web_search"))
+    )
+    assert any("Unsupported intrinsic kind" in w for w in warnings)
 
 
 def test_google_interactions_drops_foreign_call_silently(recwarn):
@@ -220,9 +223,12 @@ HISTORY_RESULT_MATRIX: dict[str, dict[str, str]] = {
         "code_execution": "degraded",
         UNKNOWN_KIND: "degraded",
     },
+    # A server result Anthropic has a server tool for keeps it in the block
+    # type (``web_search_tool_result``); a kind it has none for stays an
+    # ordinary ``tool_result``.
     "messages": {
-        "web_search": "degraded",
-        "code_execution": "degraded",
+        "web_search": "native",
+        "code_execution": "native",
         UNKNOWN_KIND: "degraded",
     },
     # A native server call takes no output item on the history leg, so its
@@ -254,27 +260,32 @@ def test_history_result_write(converter: str, kind: str, expected: str):
     assert history_result_outcome(converter, kind) == expected
 
 
-def test_messages_history_result_loses_the_kind():
-    """A role:"tool" intrinsic result is written as a plain tool_result."""
+def test_messages_history_result_keeps_the_kind():
+    """A role:"tool" result Anthropic has a server tool for keeps its kind.
+
+    Phase 4 put the kind back: the writer routes a server result through the
+    intrinsic writer on the history leg too, instead of flattening it to a
+    kind-less ``tool_result``.  The IR carries it in a ``role:"tool"`` message,
+    so the block lands in the user turn that message becomes — where a
+    same-dialect *read* never puts it (Anthropic inlines server results in the
+    assistant turn, and the reader keeps them there).
+    """
     body, _ = MessagesConverter().request_to_provider(
         cast(IRRequest, ir_history("web_search"))
+    )
+    result_block = body["messages"][2]["content"][0]
+    assert result_block["type"] == "web_search_tool_result"
+    assert result_block["tool_use_id"] == "s1"
+
+
+def test_messages_history_result_of_a_foreign_kind_is_a_plain_tool_result():
+    """A kind Anthropic has no server tool for stays a client result."""
+    body, _ = MessagesConverter().request_to_provider(
+        cast(IRRequest, ir_history(UNKNOWN_KIND))
     )
     result_block = body["messages"][2]["content"][0]
     assert result_block["type"] == "tool_result"
-    assert result_block["tool_use_id"] == "s1"
-    assert "web_search" not in json.dumps(result_block)
-
-
-@pytest.mark.xfail(
-    strict=True, reason="intrinsic refactor phase 4: messages role:'tool' kind loss"
-)
-def test_messages_history_result_should_keep_the_kind():
-    """Desired: a server result in a role:"tool" message keeps its kind."""
-    body, _ = MessagesConverter().request_to_provider(
-        cast(IRRequest, ir_history("web_search"))
-    )
-    result_block = body["messages"][2]["content"][0]
-    assert result_block["type"].endswith("_tool_result")
+    assert UNKNOWN_KIND not in json.dumps(result_block)
 
 
 # ---------------------------------------------------------------------------
@@ -287,11 +298,13 @@ RESPONSE_CALL_MATRIX: dict[str, dict[str, str]] = {
         "code_execution": "degraded",
         UNKNOWN_KIND: "degraded",
     },
+    # A server call is never handed to the client as a client call on the
+    # response leg, so a kind Anthropic has no server tool for is dropped.
     "messages": {
         "web_search": "native",
         "code_execution": "native",
-        "google_search": "native",
-        UNKNOWN_KIND: "native",
+        "google_search": "dropped",
+        UNKNOWN_KIND: "dropped",
     },
     "open_responses": {
         "web_search": "native",
@@ -321,16 +334,17 @@ RESPONSE_RESULT_MATRIX: dict[str, dict[str, str]] = {
         "code_execution": "dropped",
         UNKNOWN_KIND: "dropped",
     },
-    # messages writes {kind}_tool_result for any kind.
+    # messages writes {kind}_tool_result for a kind it has a server tool for.
     "messages": {
         "web_search": "native",
         "code_execution": "native",
-        UNKNOWN_KIND: "native",
+        UNKNOWN_KIND: "dropped",
     },
-    # The response writer ignores tool_result parts entirely.
+    # The response writer emits the native output item for a kind that has
+    # one, and drops the rest with a warning.
     "open_responses": {
         "web_search": "dropped",
-        "code_interpreter": "dropped",
+        "code_interpreter": "native",
         "code_execution": "dropped",
         UNKNOWN_KIND: "dropped",
     },
@@ -361,27 +375,15 @@ def test_response_result_write(converter: str, kind: str, expected: str):
     assert response_result_outcome(converter, kind) == expected
 
 
-def test_open_responses_response_drops_the_result_part():
-    """Only the call and the text survive the response writer."""
+def test_open_responses_response_writes_the_result_part():
+    """The response writer pairs a server call with its native output item."""
     out = OpenAIResponsesConverter().response_to_provider(
         cast(Any, ir_response("code_interpreter"))
     )
     types = [item["type"] for item in out["output"]]
     assert "code_interpreter_call" in types
-    assert not any(t.endswith("_call_output") for t in types)
-    assert '"RESULT"' not in json.dumps(out, default=str)
-
-
-@pytest.mark.xfail(
-    strict=True,
-    reason="intrinsic refactor phase 4: open_responses response tool_result drop",
-)
-def test_open_responses_response_should_write_the_result_part():
-    out = OpenAIResponsesConverter().response_to_provider(
-        cast(Any, ir_response("code_interpreter"))
-    )
-    types = [item["type"] for item in out["output"]]
     assert any(t.endswith("_call_output") for t in types)
+    assert '"RESULT"' in json.dumps(out, default=str)
 
 
 def test_messages_response_result_is_kind_named():

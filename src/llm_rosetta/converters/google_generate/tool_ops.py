@@ -16,6 +16,7 @@ Google-specific:
 
 import logging
 import warnings
+from collections.abc import Mapping
 from typing import Any, cast
 
 from ...types.ir import (
@@ -44,7 +45,7 @@ logger = logging.getLogger(__name__)
 #: ``executableCode`` call and its ``codeExecutionResult`` answer).
 _GOOGLE_INLINE_INTRINSIC_KIND = "code_execution"
 
-# Google generateContent intrinsic tool kinds and their provider-format keys.
+#: Google generateContent intrinsic tool kinds and their provider-format keys.
 _INTRINSIC_TOOL_KEYS: dict[str, str] = {
     "google_search": "google_search",
     "googleSearch": "google_search",
@@ -140,6 +141,25 @@ def _get_result_content(ir_tool_result: ToolResultPart) -> Any:
 
         return json.dumps(result_content)
     return result_content
+
+
+def _warn_intrinsic_dropped(kwargs: Mapping[str, Any], message: str) -> None:
+    """Report a server part Google has no inline form for.
+
+    The conversion paths that own a warnings list (the request converter) hand
+    it down in ``warnings``; a caller with no sink (the streaming writer, which
+    builds its part on the spot) gets the stdlib warning instead, so the drop
+    is still visible rather than silent.
+
+    Args:
+        kwargs: The keyword arguments the write template was called with.
+        message: The warning text.
+    """
+    sink = kwargs.get("warnings")
+    if isinstance(sink, list):
+        sink.append(message)
+    else:
+        warnings.warn(message)
 
 
 class GoogleGenerateToolOps(BaseToolOps):
@@ -522,7 +542,7 @@ class GoogleGenerateToolOps(BaseToolOps):
 
     @classmethod
     def ir_tool_result_to_p_named(
-        cls, ir_tool_result: ToolResultPart, tool_name: str
+        cls, ir_tool_result: ToolResultPart, tool_name: str, **kwargs: Any
     ) -> dict:
         """IR ToolResultPart → Google function_response Part with known name.
 
@@ -544,7 +564,9 @@ class GoogleGenerateToolOps(BaseToolOps):
             part for an intrinsic result.
         """
         if is_intrinsic_part(ir_tool_result):
-            return cast(dict[str, Any], cls.ir_tool_result_to_p(ir_tool_result))
+            return cast(
+                dict[str, Any], cls.ir_tool_result_to_p(ir_tool_result, **kwargs)
+            )
         result_content = _get_result_content(ir_tool_result)
 
         response_data: dict[str, Any] = {"output": result_content}
@@ -660,9 +682,10 @@ class GoogleGenerateToolOps(BaseToolOps):
                 }
             }
         if kind:
-            warnings.warn(
+            _warn_intrinsic_dropped(
+                kwargs,
                 f"Unsupported intrinsic kind {kind!r} for Google Generate "
-                f"call part — dropping silently"
+                f"call part — dropping",
             )
         return None
 
@@ -698,9 +721,10 @@ class GoogleGenerateToolOps(BaseToolOps):
                 }
             }
         if kind:
-            warnings.warn(
+            _warn_intrinsic_dropped(
+                kwargs,
                 f"Unsupported intrinsic kind {kind!r} for Google Generate "
-                f"result part — dropping silently"
+                f"result part — dropping",
             )
         return None
 

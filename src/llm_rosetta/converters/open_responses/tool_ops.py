@@ -1424,10 +1424,13 @@ class OpenResponsesToolOps(BaseToolOps):
     ) -> dict[str, Any]:
         """Write (or drop) an intrinsic result with no native item.
 
-        A result is written only for a call that was degraded to a client
+        A result is written as a client ``function_call_output`` only on the
+        **history** leg, and only for a call that was degraded to a client
         ``function_call``: every other case answers ``{}`` — a ``web_search``
         result rides on its call item, and a native server call pairs with no
-        output item on either leg.
+        output item on either leg.  On the **response** leg a server result is
+        never handed to the client as a client output — the client did not run
+        the call — so it is dropped with a warning.
 
         Args:
             ir_tool_result: IR tool result part with ``tool_type == "intrinsic"``.
@@ -1445,12 +1448,21 @@ class OpenResponsesToolOps(BaseToolOps):
             # either leg.
             _warn_dropped_intrinsic_result(ir_tool_result, kwargs)
             return {}
-        if leg == "history":
-            degraded = kwargs.get("degraded_intrinsic_calls")
-            call_id = sanitize_tool_call_id(ir_tool_result.get("tool_call_id", ""))
-            if degraded is not None and not degraded.get(call_id, True):
-                _warn_dropped_intrinsic_result(ir_tool_result, kwargs)
-                return {}
+        if leg != "history":
+            _warn_dropped_intrinsic_result(ir_tool_result, kwargs)
+            warnings = kwargs.get("warnings")
+            if isinstance(warnings, list):
+                warnings.append(
+                    f"OpenAI Responses has no server result item for kind "
+                    f"{kind!r}; dropped the result of tool_call_id "
+                    f"{ir_tool_result.get('tool_call_id')!r}"
+                )
+            return {}
+        degraded = kwargs.get("degraded_intrinsic_calls")
+        call_id = sanitize_tool_call_id(ir_tool_result.get("tool_call_id", ""))
+        if degraded is not None and not degraded.get(call_id, True):
+            _warn_dropped_intrinsic_result(ir_tool_result, kwargs)
+            return {}
         return cast(dict[str, Any], cls.ir_client_result_to_p(ir_tool_result, **kwargs))
 
     @classmethod

@@ -172,7 +172,9 @@ class MessagesMessageOps(BaseMessageOps):
             elif is_file_part(part):
                 anthropic_content.append(self.content_ops.ir_file_to_p(part))
             elif is_tool_result_part(part):
-                anthropic_content.append(self.tool_ops.ir_tool_result_to_p(part))
+                anthropic_content.append(
+                    self.tool_ops.ir_tool_result_to_p(part, leg="history")
+                )
             elif is_audio_part(part):
                 warnings.append(
                     "Audio content not supported in Anthropic Messages API, ignored"
@@ -206,7 +208,15 @@ class MessagesMessageOps(BaseMessageOps):
             if is_text_part(part):
                 anthropic_content.append(self.content_ops.ir_text_to_p(part))
             elif is_tool_call_part(part):
-                anthropic_content.append(self.tool_ops.ir_tool_call_to_p(part))
+                # A server call Anthropic has no server tool for is dropped
+                # (never handed to the client as a call it must run), so the
+                # writer may answer with nothing; say so rather than append an
+                # empty block.
+                block = self.tool_ops.ir_tool_call_to_p(
+                    part, leg="history", warnings=warnings
+                )
+                if block:
+                    anthropic_content.append(block)
             elif is_reasoning_part(part):
                 unsigned_policy = (
                     reasoning_cap.unsigned_blocks
@@ -233,18 +243,7 @@ class MessagesMessageOps(BaseMessageOps):
                     "Citation content is part of TextBlock in Anthropic, ignored"
                 )
             elif is_tool_result_part(part):
-                # A server result the assistant turn produced (web search, code
-                # execution).  Render it inline; a client result cannot appear
-                # in an Anthropic assistant turn, so it is dropped with a
-                # warning rather than raising.
-                result_block = self.tool_ops.ir_server_tool_result_to_p(part)
-                if result_block is not None:
-                    anthropic_content.append(result_block)
-                else:
-                    warnings.append(
-                        "Client tool result in assistant message not supported "
-                        "by Anthropic, ignored"
-                    )
+                self._append_assistant_server_result(part, anthropic_content, warnings)
             else:
                 warnings.append(
                     f"Unsupported content part type in assistant message: {part.get('type')}"
@@ -257,6 +256,37 @@ class MessagesMessageOps(BaseMessageOps):
             return None, warnings
 
         return {"role": "assistant", "content": anthropic_content}, warnings
+
+    @staticmethod
+    def _append_assistant_server_result(
+        part: Any, content: list[dict[str, Any]], warnings: list[str]
+    ) -> None:
+        """Render a server result inline in the assistant turn, or report it.
+
+        A server result the assistant turn produced (web search, code
+        execution) rides inline next to its call.  A result Anthropic cannot
+        render here — a client result, or a server result for a kind Anthropic
+        has no server tool for — is dropped with a warning rather than raising.
+
+        Args:
+            part: IR tool result part.
+            content: The Anthropic assistant content list, extended in place.
+            warnings: Conversion warnings, appended to in place.
+        """
+        result_block = MessagesToolOps.ir_server_tool_result_to_p(part)
+        if result_block is not None:
+            content.append(result_block)
+        elif is_intrinsic_part(part):
+            warnings.append(
+                "Server tool result of kind "
+                f"{part.get('intrinsic_kind')!r} has no Anthropic server tool; "
+                "dropped from the assistant message"
+            )
+        else:
+            warnings.append(
+                "Client tool result in assistant message not supported by "
+                "Anthropic, ignored"
+            )
 
     @staticmethod
     def _preserve_unsigned_reasoning(part: ReasoningPart) -> None:

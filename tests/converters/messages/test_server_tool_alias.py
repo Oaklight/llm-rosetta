@@ -104,17 +104,19 @@ class TestRoundTrip:
         restored = MessagesToolOps.p_tool_call_to_ir(provider)
         assert get_intrinsic_kind(restored) == "code_execution"
 
-    def test_new_result_write_is_generic_tool_result(self):
-        """Pins the current write behaviour for server tool results.
+    def test_new_result_write_keeps_the_canonical_kind(self):
+        """Phase 4: the writer re-emits the server-tool result block.
 
-        The messages write path emits a generic ``tool_result`` block, not a
-        version-specific ``*_tool_result`` block.  Nothing here restores the
-        native result shape; the reader normalizes the kind but the writer does
-        not re-emit the server-tool result block.
+        The read path folds the runtime name onto the canonical kind; the
+        history-leg write now keeps that kind in the block type instead of
+        flattening it to a generic ``tool_result``.
         """
         part = MessagesToolOps.p_server_tool_result_to_ir(_NEW_RESULT)
         provider = MessagesToolOps.ir_tool_result_to_p(part)
-        assert provider["type"] == "tool_result"
+        # The block read from this dialect is restored verbatim (runtime name
+        # and all); the point is that it is a server-tool result block again.
+        assert provider == _NEW_RESULT
+        assert provider["type"].endswith("_tool_result")
 
     def test_new_definition_preserves_native_version(self):
         """A newer code-execution definition round-trips verbatim via ``_native``.

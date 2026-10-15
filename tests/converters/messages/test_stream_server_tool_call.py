@@ -233,20 +233,20 @@ class TestWriter:
         assert out["content_block"]["type"] == "server_tool_use"
         assert out["content_block"]["name"] == "web_search"
 
-    def test_unknown_intrinsic_name_stays_a_server_call(self):
-        """A server tool with no canonical kind must not downgrade to tool_use.
+    def test_unknown_intrinsic_name_is_dropped_not_downgraded(self):
+        """A server tool with no canonical kind is neither named nor degraded.
 
         The kind is read from ``intrinsic_kind`` only, never inferred from the
-        tool name (phase 2 removed that fallback, #974), so a missing kind
-        renders an empty ``name`` — still a ``server_tool_use``, never a client
-        ``tool_use``.
+        tool name (phase 2 removed that fallback, #974), so a missing kind is
+        unknown — and unknown is a kind Anthropic has no server tool for.  The
+        response leg drops it rather than fabricating a ``server_tool_use`` or
+        handing the client a ``tool_use`` it must run (phase 4).
         """
         out = self._write(
             self._event(tool_name="special_search", tool_type="intrinsic")
         )
 
-        assert out["content_block"]["type"] == "server_tool_use"
-        assert out["content_block"]["name"] == ""
+        assert out == {}
 
     def test_internal_metadata_does_not_leak(self):
         out = self._write(

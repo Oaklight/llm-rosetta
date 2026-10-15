@@ -15,6 +15,7 @@ Google-specific:
 
 import json
 import time
+import warnings
 from collections.abc import Mapping
 from typing import Any, cast
 
@@ -1089,9 +1090,12 @@ class GoogleGenerateConverter(BaseConverter):
         """Emit a one-shot ``ToolResultEvent`` for a server result.
 
         The result arrives whole with no deltas to follow, so everything
-        rides on the event.  Google's ``codeExecutionResult`` carries no id;
-        pair it with the intrinsic call it answers, by kind, so the streaming
-        and non-streaming halves agree.
+        rides on the event.  A result event that carries an id — a
+        cross-format hop, where the source dialect knew which call it answered
+        — pairs by that id.  Google's own ``codeExecutionResult`` carries no
+        id, so for Google wire the pairing falls back to position: the most
+        recent intrinsic call the same stream registered.  See
+        :meth:`_last_intrinsic_id`.
         """
         tool_call_id = ir_result.get("tool_call_id") or self._last_intrinsic_id(context)
         event = ToolResultEvent(
@@ -1346,8 +1350,8 @@ class GoogleGenerateConverter(BaseConverter):
         Google sent it, when the event carries the native part from a
         same-dialect read.  Without a native part (a cross-format hop) it is
         deferred to the finish flush, which rebuilds it from the accumulated
-        input.  An intrinsic kind Google cannot render is dropped silently, but
-        never as a client call.  (#986)
+        input.  An intrinsic kind Google cannot render is dropped at the flush
+        with a warning, but never as a client call.  (#986)
         """
         tool_type = event.get("tool_type", "function")
         if context is not None:
@@ -1372,16 +1376,22 @@ class GoogleGenerateConverter(BaseConverter):
     ) -> dict[str, Any]:
         """Handle ToolResultEvent → a Google server-result part.
 
-        Only an intrinsic result Google can render becomes a
-        ``codeExecutionResult`` part; a native part from a same-dialect read is
-        replayed verbatim so its ``outcome`` survives.  Anything else is
-        dropped — a server result is never downgraded to a client
-        ``functionResponse``.  (#986)
+        Only an intrinsic result Google can render
+        (``intrinsic_renderable``) becomes a ``codeExecutionResult`` part; a
+        native part from a same-dialect read is replayed verbatim so its
+        ``outcome`` survives.  Anything else is dropped with a warning — a
+        server result is never downgraded to a client ``functionResponse``.
+        (#986)
         """
         if event.get("tool_type") != "intrinsic":
             return {}
         kind = intrinsic_kind_of(event)
-        if kind != "code_execution":
+        if not self.tool_ops.intrinsic_renderable(kind, None, leg="response"):
+            warnings.warn(
+                f"Unsupported intrinsic kind {kind!r} for Google Generate "
+                f"stream result — dropping",
+                stacklevel=2,
+            )
             return {}
         native = self._native_code_execution_result(event.get("provider_metadata"))
         result_part: dict[str, Any]
@@ -1487,7 +1497,13 @@ class GoogleGenerateConverter(BaseConverter):
         """
         if self._native_executable_code(provider_metadata) is not None:
             return None
-        if kind != "code_execution":
+        if not self.tool_ops.intrinsic_renderable(kind, None, leg="response"):
+            if kind:
+                warnings.warn(
+                    f"Unsupported intrinsic kind {kind!r} for Google Generate "
+                    f"stream call — dropping",
+                    stacklevel=2,
+                )
             return None
         if not args_str.strip():
             # No input ever arrived (a cross-format source that emitted the
