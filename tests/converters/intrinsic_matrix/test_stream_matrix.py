@@ -353,8 +353,12 @@ def test_google_generate_pairs_streamed_result_positionally():
     assert results[0]["tool_call_id"] == calls[0]["tool_call_id"]
 
 
-def test_read_delta_carries_no_provider_metadata_messages():
-    """CURRENT: the messages tool_call_delta event drops provider_metadata."""
+def test_read_delta_carries_no_metadata_where_the_block_carried_none():
+    """CURRENT: a caller-less server block leaves its delta nothing to carry.
+
+    A ``server_tool_use`` short of a non-``direct`` caller registers no
+    metadata, so its arguments delta has exactly what the start had: nothing.
+    """
     delta = next(
         e
         for e in _read("messages", _CALL_CHUNKS[("messages", "web_search")])
@@ -363,7 +367,8 @@ def test_read_delta_carries_no_provider_metadata_messages():
     assert "provider_metadata" not in delta
 
 
-def test_read_delta_carries_no_provider_metadata_google_generate():
+def test_read_delta_carries_the_metadata_the_block_registered():
+    """A server call's delta repeats the native part its start carried."""
     delta = next(
         e
         for e in _read(
@@ -371,7 +376,7 @@ def test_read_delta_carries_no_provider_metadata_google_generate():
         )
         if e["type"] == "tool_call_delta"
     )
-    assert "provider_metadata" not in delta
+    assert delta["provider_metadata"]["_native"]["base"] == "google_generate"
 
 
 def test_read_delta_carries_the_intrinsic_kind():

@@ -245,12 +245,11 @@ class GoogleGenerateMessageOps(BaseMessageOps):
         elif is_refusal_part(content_part):
             return self.content_ops.ir_refusal_to_p(content_part)
         elif is_tool_call_part(content_part):
-            if content_part.get("tool_type") == "intrinsic":
-                return self.tool_ops.ir_intrinsic_call_to_p(content_part)
+            # The tool_ops template owns the intrinsic dispatch: a
+            # provider-executed call renders as Google's own server part (or is
+            # dropped when Google has none), never as a client function_call.
             return self.tool_ops.ir_tool_call_to_p(content_part)
         elif is_tool_result_part(content_part):
-            if content_part.get("tool_type") == "intrinsic":
-                return self.tool_ops.ir_intrinsic_result_to_p(content_part)
             tool_call_id = content_part.get("tool_call_id")
             tool_name = (
                 tool_call_index.get(tool_call_id)

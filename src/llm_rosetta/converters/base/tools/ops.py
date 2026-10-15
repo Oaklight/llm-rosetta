@@ -155,6 +155,46 @@ class BaseToolOps(ABC):
         return None
 
     @classmethod
+    def p_intrinsic_call_to_ir(
+        cls, provider_part: Any, **kwargs: Any
+    ) -> ToolCallPart | None:
+        """Provider native server call → IR intrinsic ToolCallPart.
+
+        The read counterpart of :meth:`ir_intrinsic_call_to_p`: a reader asks
+        this *first*, before the client shapes, so a provider-executed call is
+        never read as a client call that merely shares its name.  A dialect
+        whose wire has no server call parts of its own leaves it at ``None``.
+
+        Args:
+            provider_part: The provider's content part or item.
+            **kwargs: Extra arguments.
+
+        Returns:
+            IR ToolCallPart, or ``None`` when the part is not a native server
+            call — the reader then takes its ordinary path.
+        """
+        return None
+
+    @classmethod
+    def p_intrinsic_result_to_ir(
+        cls, provider_part: Any, **kwargs: Any
+    ) -> ToolResultPart | None:
+        """Provider native server result → IR intrinsic ToolResultPart.
+
+        The read counterpart of :meth:`ir_intrinsic_result_to_p`, asked the way
+        :meth:`p_intrinsic_call_to_ir` is.
+
+        Args:
+            provider_part: The provider's content part or item.
+            **kwargs: Extra arguments.
+
+        Returns:
+            IR ToolResultPart, or ``None`` when the part is not a native server
+            result.
+        """
+        return None
+
+    @classmethod
     def non_native_intrinsic_call_to_p(
         cls, ir_tool_call: ToolCallPart, *, leg: IntrinsicLeg, **kwargs: Any
     ) -> Any:

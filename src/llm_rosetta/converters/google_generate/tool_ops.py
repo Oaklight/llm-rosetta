@@ -31,6 +31,7 @@ from ..base.tools import sanitize_schema, sanitize_tool_call_id
 from ..base.tools.intrinsic import (
     get_native_definition,
     intrinsic_kind_of,
+    is_intrinsic_part,
     make_intrinsic_tool_call,
     make_intrinsic_tool_definition,
     make_intrinsic_tool_result,
@@ -38,6 +39,10 @@ from ..base.tools.intrinsic import (
 from ._constants import generate_tool_call_id
 
 logger = logging.getLogger(__name__)
+
+#: The one intrinsic kind Google has inline content parts for (an
+#: ``executableCode`` call and its ``codeExecutionResult`` answer).
+_GOOGLE_INLINE_INTRINSIC_KIND = "code_execution"
 
 # Google generateContent intrinsic tool kinds and their provider-format keys.
 _INTRINSIC_TOOL_KEYS: dict[str, str] = {
@@ -354,7 +359,7 @@ class GoogleGenerateToolOps(BaseToolOps):
     # ==================== Tool Call ====================
 
     @classmethod
-    def ir_tool_call_to_p(cls, ir_tool_call: ToolCallPart, **kwargs: Any) -> dict:
+    def ir_client_call_to_p(cls, ir_tool_call: ToolCallPart, **kwargs: Any) -> dict:
         """IR ToolCallPart → Google GenAI function_call Part.
 
         Google uses ``function_call`` with ``name`` and ``args`` (dict, not JSON string).
@@ -436,7 +441,9 @@ class GoogleGenerateToolOps(BaseToolOps):
     # ==================== Tool Result ====================
 
     @classmethod
-    def ir_tool_result_to_p(cls, ir_tool_result: ToolResultPart, **kwargs: Any) -> dict:
+    def ir_client_result_to_p(
+        cls, ir_tool_result: ToolResultPart, **kwargs: Any
+    ) -> dict:
         """IR ToolResultPart → Google GenAI function_response Part.
 
         Note: Google's function_response.name should be the function name,
@@ -513,9 +520,9 @@ class GoogleGenerateToolOps(BaseToolOps):
             ir_tool_result, tool_name
         )
 
-    @staticmethod
+    @classmethod
     def ir_tool_result_to_p_named(
-        ir_tool_result: ToolResultPart, tool_name: str
+        cls, ir_tool_result: ToolResultPart, tool_name: str
     ) -> dict:
         """IR ToolResultPart → Google function_response Part with known name.
 
@@ -523,13 +530,21 @@ class GoogleGenerateToolOps(BaseToolOps):
         caller has already resolved ``tool_call_id → tool_name`` via an
         accumulator dict built during message iteration.
 
+        A resolved name says nothing about a *server* result (the accumulator
+        holds intrinsic calls too), so an intrinsic part goes back through the
+        template, which writes Google's own result part or drops it; the name
+        it carries is the intrinsic kind, not a function the client declared.
+
         Args:
             ir_tool_result: IR tool result part.
             tool_name: Resolved function name.
 
         Returns:
-            Google function_response Part dict.
+            Google function_response Part dict, or a Google intrinsic result
+            part for an intrinsic result.
         """
+        if is_intrinsic_part(ir_tool_result):
+            return cast(dict[str, Any], cls.ir_tool_result_to_p(ir_tool_result))
         result_content = _get_result_content(ir_tool_result)
 
         response_data: dict[str, Any] = {"output": result_content}
@@ -594,6 +609,27 @@ class GoogleGenerateToolOps(BaseToolOps):
     # ==================== Intrinsic Tool Parts ====================
 
     @classmethod
+    def intrinsic_renderable(cls, kind: str, fields: Any, *, leg: IntrinsicLeg) -> bool:
+        """Whether Google has an inline content part for *kind*.
+
+        Google's ``code_execution`` is the only server tool with one — an
+        ``executableCode`` call part and its ``codeExecutionResult`` answer.
+        ``google_search`` is definition-only (Google surfaces what it found in
+        ``groundingMetadata``, never as a content part), and any other kind
+        belongs to a sibling dialect, so neither can be written here at all.
+
+        Args:
+            kind: Canonical intrinsic kind.
+            fields: The IR ``tool_input`` (unused: the part's shape does not
+                depend on the payload).
+            leg: Which leg the part is written on; both are the same here.
+
+        Returns:
+            True only for ``code_execution``.
+        """
+        return kind == _GOOGLE_INLINE_INTRINSIC_KIND
+
+    @classmethod
     def ir_intrinsic_call_to_p(
         cls,
         ir_tool_call: ToolCallPart,
@@ -601,15 +637,21 @@ class GoogleGenerateToolOps(BaseToolOps):
         leg: IntrinsicLeg = "history",
         **kwargs: Any,
     ) -> dict[str, Any] | None:
-        """IR intrinsic ToolCallPart → Google intrinsic part.
+        """IR intrinsic ToolCallPart → Google ``executableCode`` part.
 
-        Only ``code_execution`` has inline content parts
-        (``executableCode``).  ``google_search`` is definition-only —
-        Google surfaces search results via ``groundingMetadata``, not
-        as content parts.
+        Args:
+            ir_tool_call: IR tool call part with ``tool_type == "intrinsic"``.
+            leg: Which leg the part is written on.
+            **kwargs: Extra arguments.
+
+        Returns:
+            Google intrinsic call part, or ``None`` for a kind Google cannot
+            write inline (the template then drops it; see
+            :meth:`non_native_intrinsic_call_to_p`).  An unrenderable kind
+            warns: it is a server call on its way out, not a client call.
         """
         kind = intrinsic_kind_of(ir_tool_call)
-        if kind == "code_execution":
+        if cls.intrinsic_renderable(kind, ir_tool_call.get("tool_input"), leg=leg):
             tool_input = ir_tool_call.get("tool_input", {})
             return {
                 "executableCode": {
@@ -632,14 +674,19 @@ class GoogleGenerateToolOps(BaseToolOps):
         leg: IntrinsicLeg = "history",
         **kwargs: Any,
     ) -> dict[str, Any] | None:
-        """IR intrinsic ToolResultPart → Google intrinsic result part.
+        """IR intrinsic ToolResultPart → Google ``codeExecutionResult`` part.
 
-        Only ``code_execution`` has inline result parts.
-        See :meth:`ir_intrinsic_call_to_p` for why ``google_search``
-        is definition-only.
+        Args:
+            ir_tool_result: IR tool result part with ``tool_type == "intrinsic"``.
+            leg: Which leg the part is written on.
+            **kwargs: Extra arguments.
+
+        Returns:
+            Google intrinsic result part, or ``None`` for a kind with no inline
+            part (see :meth:`intrinsic_renderable`).
         """
         kind = intrinsic_kind_of(ir_tool_result)
-        if kind == "code_execution":
+        if cls.intrinsic_renderable(kind, None, leg=leg):
             outcome = (
                 "OUTCOME_FAILED" if ir_tool_result.get("is_error") else "OUTCOME_OK"
             )
@@ -657,14 +704,68 @@ class GoogleGenerateToolOps(BaseToolOps):
             )
         return None
 
-    @staticmethod
-    def p_intrinsic_call_to_ir(part: dict[str, Any]) -> ToolCallPart | None:
+    @classmethod
+    def non_native_intrinsic_call_to_p(
+        cls, ir_tool_call: ToolCallPart, *, leg: IntrinsicLeg, **kwargs: Any
+    ) -> dict[str, Any] | None:
+        """Drop an intrinsic call Google cannot write inline.
+
+        Google has no client-call fallback for a server tool: a ``functionCall``
+        named after the kind would ask the *client* to run a search it cannot
+        run, so the parent path is not a degradation here but a fabrication.
+        The part is dropped (the reader warned; see
+        :meth:`ir_intrinsic_call_to_p`).
+
+        Args:
+            ir_tool_call: IR tool call part with ``tool_type == "intrinsic"``.
+            leg: Which leg the part is written on.
+            **kwargs: Extra arguments.
+
+        Returns:
+            ``None`` — no part is written.
+        """
+        return None
+
+    @classmethod
+    def non_native_intrinsic_result_to_p(
+        cls, ir_tool_result: ToolResultPart, *, leg: IntrinsicLeg, **kwargs: Any
+    ) -> dict[str, Any] | None:
+        """Drop an intrinsic result Google cannot write inline.
+
+        Mirror of :meth:`non_native_intrinsic_call_to_p`: a ``functionResponse``
+        would report a result for a call Google never made.
+
+        Args:
+            ir_tool_result: IR tool result part with ``tool_type == "intrinsic"``.
+            leg: Which leg the part is written on.
+            **kwargs: Extra arguments.
+
+        Returns:
+            ``None`` — no part is written.
+        """
+        return None
+
+    @classmethod
+    def p_intrinsic_call_to_ir(
+        cls, provider_part: dict[str, Any], **kwargs: Any
+    ) -> ToolCallPart | None:
         """Google intrinsic part (executableCode) → IR intrinsic ToolCallPart.
 
-        Returns ``None`` if the part does not contain a recognized
-        intrinsic call key.
+        The read counterpart of :meth:`ir_intrinsic_call_to_p`: a reader asks
+        this first and falls back to the client shapes (and then the content
+        ops) when it answers ``None``.
+
+        Args:
+            provider_part: Google content part.
+            **kwargs: Extra arguments.
+
+        Returns:
+            IR ToolCallPart, or ``None`` when the part carries no recognized
+            intrinsic call key.
         """
-        exec_code = part.get("executableCode") or part.get("executable_code")
+        exec_code = provider_part.get("executableCode") or provider_part.get(
+            "executable_code"
+        )
         if exec_code is not None:
             return cast(
                 ToolCallPart,
@@ -680,14 +781,21 @@ class GoogleGenerateToolOps(BaseToolOps):
             )
         return None
 
-    @staticmethod
-    def p_intrinsic_result_to_ir(part: dict[str, Any]) -> ToolResultPart | None:
+    @classmethod
+    def p_intrinsic_result_to_ir(
+        cls, provider_part: dict[str, Any], **kwargs: Any
+    ) -> ToolResultPart | None:
         """Google intrinsic part (codeExecutionResult) → IR intrinsic ToolResultPart.
 
-        Returns ``None`` if the part does not contain a recognized
-        intrinsic result key.
+        Args:
+            provider_part: Google content part.
+            **kwargs: Extra arguments.
+
+        Returns:
+            IR ToolResultPart, or ``None`` when the part carries no recognized
+            intrinsic result key.
         """
-        code_result = part.get("codeExecutionResult") or part.get(
+        code_result = provider_part.get("codeExecutionResult") or provider_part.get(
             "code_execution_result"
         )
         if code_result is not None:

@@ -42,7 +42,11 @@ from ...types.ir.stream import (
     UsageEvent,
 )
 from ..base import BaseConverter
-from ..base.context import ConversionContext, StreamContext
+from ..base.context import (
+    ConversionContext,
+    StreamContext,
+    carry_registered_call_identity,
+)
 from ..base.tools import (
     assign_tool_batch_ids,
     fix_orphaned_tool_calls_ir,
@@ -1064,6 +1068,12 @@ class GoogleGenerateConverter(BaseConverter):
             choice_index=choice_index,
         )
         delta_evt["tool_call_index"] = tc_index
+        if context is not None:
+            # The fragment repeats the call's identity — its canonical kind
+            # and the native part the start carried — so a reader that sees
+            # only the delta is not left guessing from the tool name, and a
+            # same-dialect writer can still restore what Google sent.
+            carry_registered_call_identity(delta_evt, context, tool_call_id)
         events.append(delta_evt)
         if context is not None:
             context.append_tool_call_args(tool_call_id, args_json)
