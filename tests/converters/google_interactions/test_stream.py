@@ -2,6 +2,8 @@
 
 from llm_rosetta.converters.google_interactions import GoogleInteractionsConverter
 from llm_rosetta.converters.base.context import StreamContext
+from typing import cast
+
 from llm_rosetta.types.ir.stream import (
     ContentBlockEndEvent,
     ContentBlockStartEvent,
@@ -154,6 +156,38 @@ class TestStreamChunkToIR:
         assert len(events) == 1
         assert events[0]["type"] == "reasoning_delta"
         assert events[0]["signature"] == "sig_abc"
+
+    def test_step_delta_server_call_signature(self):
+        context = StreamContext()
+        self.converter.stream_response_from_provider(
+            {
+                "event_type": "step.start",
+                "index": 1,
+                "step": {"type": "google_search_call", "id": "call_sig"},
+            },
+            context,
+        )
+        events = self.converter.stream_response_from_provider(
+            {
+                "event_type": "step.delta",
+                "index": 1,
+                "delta": {
+                    "type": "google_search_call",
+                    "signature": "sig_delta",
+                    "arguments": {"queries": ["mars"]},
+                },
+            },
+            context,
+        )
+        # The delta carries the signature; step.start's empty signature must
+        # not be required for replay.
+        delta = cast(ToolCallDeltaEvent, events[0])
+        assert delta["signature"] == "sig_delta"
+        assert delta["provider_metadata"]["google"]["thought_signature"] == "sig_delta"
+        assert (
+            delta["provider_metadata"]["_opaque_origin"]["signature"]
+            == "google_interactions"
+        )
 
     def test_step_delta_arguments(self):
         chunk = {

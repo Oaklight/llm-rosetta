@@ -35,7 +35,9 @@ from ...types.ir.stream import (
 from ..base import BaseConverter
 from ..base.helpers.opaque import (
     get_opaque_origin,
+    google_thought_signature,
     is_own_origin,
+    set_google_thought_signature,
     set_opaque_origin,
 )
 from ..base.helpers.system_message_hoist import hoist_system_in_converter
@@ -594,14 +596,18 @@ class GoogleInteractionsConverter(BaseConverter):
             tool_call_id = ""
             if context is not None:
                 tool_call_id = context.block_index_to_tool_call_id.get(index, "")
-            return [
-                ToolCallDeltaEvent(
-                    type="tool_call_delta",
-                    tool_call_id=tool_call_id,
-                    arguments_delta=json.dumps(delta.get("arguments", {})),
-                    block_index=index,
-                )
-            ]
+            event = ToolCallDeltaEvent(
+                type="tool_call_delta",
+                tool_call_id=tool_call_id,
+                arguments_delta=json.dumps(delta.get("arguments", {})),
+                block_index=index,
+            )
+            sig = delta.get("signature")
+            if sig:
+                event["signature"] = sig
+                set_google_thought_signature(event, sig)
+                set_opaque_origin(event, signature=self._CONVERTER_TAG)
+            return [event]
         if delta_type in SERVER_RESULT_TYPES:
             # A server result's payload also rides the step delta.  Emit the
             # one-shot ToolResultEvent here, mirroring the non-streaming
@@ -893,17 +899,31 @@ class GoogleInteractionsConverter(BaseConverter):
             # dropped rather than written as a string, so every emitted
             # ``arguments`` is an object.
             buffers = context.metadata.setdefault("_interactions_intrinsic_args", {})
+            signatures = context.metadata.setdefault(
+                "_interactions_intrinsic_signatures", {}
+            )
+            signature = event.get("signature") or google_thought_signature(event)
+            if signature and not is_own_origin(
+                get_opaque_origin(event, "signature"), self._CONVERTER_TAG
+            ):
+                signature = None
+            if signature:
+                signatures[index] = signature
             buffer = buffers.pop(index, "") + (event["arguments_delta"] or "")
             try:
                 arguments: Any = json.loads(buffer) if buffer else {}
             except (ValueError, TypeError):
                 buffers[index] = buffer
                 return {}
-            return {
+            result: dict[str, Any] = {
                 "event_type": "step.delta",
                 "index": index,
                 "delta": {"type": step_type, "arguments": arguments},
             }
+            signature = signatures.pop(index, None)
+            if signature:
+                result["delta"]["signature"] = signature
+            return result
         return {
             "event_type": "step.delta",
             "index": index,

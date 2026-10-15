@@ -352,6 +352,8 @@ class TestStreamingRead:
 
         assert delta["tool_call_id"] == "c1"
         assert json.loads(delta["arguments_delta"]) == {"queries": ["mars rover"]}
+        assert delta["signature"] == "SIG-CALL"
+        assert delta["provider_metadata"]["google"]["thought_signature"] == "SIG-CALL"
 
     def test_result_delta_emits_the_result_event(self):
         events = _read_events(_SEARCH_STREAM)
@@ -473,6 +475,43 @@ class TestStreamingWrite:
 
         assert out["delta"]["type"] == "google_search_call"
         assert out["delta"]["arguments"] == {"queries": ["mars rover"]}
+        assert "signature" not in out["delta"]
+
+    def _signed_delta(self, origin: str | None = None) -> ToolCallDeltaEvent:
+        delta: dict[str, Any] = {
+            "type": "tool_call_delta",
+            "tool_call_id": "c1",
+            "arguments_delta": json.dumps({"queries": ["mars rover"]}),
+            "block_index": 0,
+            "signature": "SIG-CALL",
+        }
+        if origin is not None:
+            delta["provider_metadata"] = {"_opaque_origin": {"signature": origin}}
+        return cast(ToolCallDeltaEvent, delta)
+
+    def test_intrinsic_delta_reemits_a_signature_from_its_own_origin(self):
+        context = StreamContext()
+        _write(self._call_event(), context)
+
+        out = _write(self._signed_delta("google_interactions"), context)
+
+        assert out["delta"]["signature"] == "SIG-CALL"
+
+    def test_intrinsic_delta_reemits_a_signature_when_no_origin_is_tagged(self):
+        context = StreamContext()
+        _write(self._call_event(), context)
+
+        out = _write(self._signed_delta(), context)
+
+        assert out["delta"]["signature"] == "SIG-CALL"
+
+    def test_intrinsic_delta_drops_a_signature_from_a_foreign_origin(self):
+        context = StreamContext()
+        _write(self._call_event(), context)
+
+        out = _write(self._signed_delta("messages"), context)
+
+        assert "signature" not in out["delta"]
 
     def _delta(self, raw: str) -> dict[str, Any]:
         return {
@@ -495,6 +534,34 @@ class TestStreamingWrite:
 
         assert out["delta"]["type"] == "google_search_call"
         assert out["delta"]["arguments"] == {"queries": ["mars rover"]}
+
+    def test_intrinsic_delta_buffers_a_signature_across_fragments(self):
+        context = StreamContext()
+        _write(self._call_event(), context)
+
+        first = _converter().stream_response_to_provider(
+            cast(
+                ToolCallDeltaEvent,
+                {
+                    "type": "tool_call_delta",
+                    "tool_call_id": "c1",
+                    "arguments_delta": '{"queries": ["mars rover',
+                    "block_index": 0,
+                    "signature": "SIG-CALL",
+                    "provider_metadata": {
+                        "_opaque_origin": {"signature": "google_interactions"}
+                    },
+                },
+            ),
+            context,
+        )
+        assert not [c for c in (first if isinstance(first, list) else [first]) if c]
+
+        out = _write(self._delta('"]}'), context)
+
+        assert out["delta"]["type"] == "google_search_call"
+        assert out["delta"]["arguments"] == {"queries": ["mars rover"]}
+        assert out["delta"]["signature"] == "SIG-CALL"
 
     def test_intrinsic_delta_drops_an_unparseable_buffer(self):
         context = StreamContext()
@@ -612,6 +679,7 @@ class TestSameFormatRoundTrip:
 
         assert call_delta["delta"]["type"] == "google_search_call"
         assert call_delta["delta"]["arguments"] == {"queries": ["mars rover"]}
+        assert call_delta["delta"]["signature"] == "SIG-CALL"
 
     def test_streamed_result_survives(self):
         steps = [

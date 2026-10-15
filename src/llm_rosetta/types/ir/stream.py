@@ -175,6 +175,8 @@ class ToolCallDeltaEvent(TypedDict):
     block_index: NotRequired[int]  # Provider content block index (e.g. Anthropic)
     tool_call_index: NotRequired[int]  # Index for multiple parallel tool calls
     choice_index: NotRequired[int]
+    signature: NotRequired[str]  # Provider signature on a tool-call delta
+    provider_metadata: NotRequired[dict[str, Any]]
 
 
 class ToolResultEvent(TypedDict):
