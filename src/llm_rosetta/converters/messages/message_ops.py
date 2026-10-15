@@ -35,10 +35,70 @@ from ...types.ir import (
     is_tool_result_part,
 )
 from ..base import BaseMessageOps
-from ..base.tools import is_intrinsic_part
+from ..base.tools import intrinsic_kind_of, is_intrinsic_part
 from ..base.tools.batch import assign_tool_batch_ids, merge_tool_messages
 from .content_ops import MessagesContentOps
 from .tool_ops import MessagesToolOps
+
+
+def _server_call_owners(messages: list[Any]) -> dict[str, int]:
+    """Map each renderable server call id to the assistant message holding it."""
+    owner: dict[str, int] = {}
+    for i, message in enumerate(messages):
+        if not (isinstance(message, dict) and message.get("role") == "assistant"):
+            continue
+        for part in message.get("content") or []:
+            if (
+                isinstance(part, dict)
+                and part.get("type") == "tool_call"
+                and is_intrinsic_part(part)
+                and MessagesToolOps.intrinsic_renderable(
+                    intrinsic_kind_of(part), {}, leg="history"
+                )
+            ):
+                owner[part.get("tool_call_id", "")] = i
+    return owner
+
+
+def _is_movable_server_result(part: Any, owner: dict[str, int], at: int) -> int | None:
+    """Index of the assistant message *part* belongs to, if it can move back."""
+    if not (
+        isinstance(part, dict)
+        and part.get("type") == "tool_result"
+        and is_intrinsic_part(part)
+    ):
+        return None
+    idx = owner.get(part.get("tool_call_id", ""))
+    return idx if idx is not None and idx < at else None
+
+
+def _inline_server_results(ir_messages: Any) -> list[Any]:
+    """Move server results in tool messages back into the assistant turn.
+
+    Anthropic requires a ``server_tool_use`` and its result block in the same
+    assistant message; other dialects keep the result in a ``role: "tool"``
+    message, which would otherwise be written as a later user turn (400:
+    tool use found without a corresponding result).
+    """
+    messages = [dict(m) if isinstance(m, dict) else m for m in ir_messages]
+    owner = _server_call_owners(messages)
+    if not owner:
+        return messages
+    out: list[Any] = []
+    for i, message in enumerate(messages):
+        if not (isinstance(message, dict) and message.get("role") == "tool"):
+            out.append(message)
+            continue
+        keep: list[Any] = []
+        for part in message.get("content") or []:
+            target = _is_movable_server_result(part, owner, i)
+            if target is None:
+                keep.append(part)
+            else:
+                messages[target]["content"] = [*messages[target]["content"], part]
+        if keep:
+            out.append({**message, "content": keep})
+    return out
 
 
 class MessagesMessageOps(BaseMessageOps):
@@ -80,7 +140,7 @@ class MessagesMessageOps(BaseMessageOps):
         if not isinstance(reasoning_cap, ReasoningCapability):
             reasoning_cap = None
 
-        ir_messages = merge_tool_messages(ir_messages)
+        ir_messages = _inline_server_results(merge_tool_messages(ir_messages))
 
         for item in ir_messages:
             passthrough_warnings = self._restore_provider_passthrough_item(

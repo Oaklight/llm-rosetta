@@ -215,6 +215,24 @@ def fix_orphaned_tool_calls(
     return patched
 
 
+def _server_result_content(kind: str, result: Any) -> Any:
+    """Give a foreign code-execution result the object Anthropic expects.
+
+    ``code_execution_tool_result.content`` must be a result object (live:
+    ``Input does not match the expected shape``); another dialect hands over a
+    plain output string, which becomes ``stdout``.
+    """
+    if kind != "code_execution" or isinstance(result, dict):
+        return result
+    return {
+        "type": "code_execution_result",
+        "stdout": result if isinstance(result, str) else json.dumps(result),
+        "stderr": "",
+        "return_code": 0,
+        "content": [],
+    }
+
+
 class MessagesToolOps(BaseToolOps):
     """Anthropic Messages API tool conversion operations.
 
@@ -837,7 +855,7 @@ class MessagesToolOps(BaseToolOps):
             "tool_use_id": prefixed_tool_call_id(
                 ir_tool_result["tool_call_id"], "srvtoolu_"
             ),
-            "content": ir_tool_result.get("result", []),
+            "content": _server_result_content(kind, ir_tool_result.get("result", [])),
         }
         # Only the generic ``tool_result`` block defines ``is_error``; Anthropic
         # refuses it on a ``*_tool_result`` one ("Extra inputs are not

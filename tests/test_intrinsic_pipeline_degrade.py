@@ -173,11 +173,13 @@ def test_messages_web_search_round_trip_is_untouched():
     pipe = ConversionPipeline("messages", "messages")
     out = pipe.convert_request(cast(Any, _messages_body()))
 
+    # The result is written back into the assistant turn that ran the tool,
+    # where Anthropic requires it, even when the client sent it in a later turn.
     blocks = out["messages"][1]["content"]
-    assert [b["type"] for b in blocks] == ["server_tool_use"]
+    assert [b["type"] for b in blocks] == ["server_tool_use", "web_search_tool_result"]
     assert blocks[0]["name"] == "web_search"
     assert blocks[0]["id"] == "srvtoolu_1"
-    assert "web_search_tool_result" in json.dumps(out)
+    assert blocks[1]["tool_use_id"] == "srvtoolu_1"
     assert _degradation_warnings(pipe) == []
 
 

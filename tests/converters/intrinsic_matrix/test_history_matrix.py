@@ -266,15 +266,16 @@ def test_messages_history_result_keeps_the_kind():
 
     Phase 4 put the kind back: the writer routes a server result through the
     intrinsic writer on the history leg too, instead of flattening it to a
-    kind-less ``tool_result``.  The IR carries it in a ``role:"tool"`` message,
-    so the block lands in the user turn that message becomes — where a
-    same-dialect *read* never puts it (Anthropic inlines server results in the
-    assistant turn, and the reader keeps them there).
+    kind-less ``tool_result``.  The IR carries it in a ``role:"tool"`` message;
+    the writer moves it back into the assistant turn that holds its call,
+    which is where Anthropic requires a server result (and where a same-dialect
+    *read* keeps it).
     """
     body, _ = MessagesConverter().request_to_provider(
         cast(IRRequest, ir_history("web_search"))
     )
-    result_block = body["messages"][2]["content"][0]
+    assert len(body["messages"]) == 2
+    result_block = body["messages"][1]["content"][1]
     assert result_block["type"] == "web_search_tool_result"
     assert result_block["tool_use_id"] == "srvtoolu_s1"
 

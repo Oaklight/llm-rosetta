@@ -61,6 +61,29 @@ _GI_NATIVE_TYPE_TO_KIND: dict[str, str] = {
 }
 
 
+def _native_arguments(kind: str, fields: Any) -> Any:
+    """Shape a foreign server-call payload into what the step accepts.
+
+    A ``code_execution_call`` takes ``{code, language}`` only (live: ``Unknown
+    parameter 'command'``), while Anthropic's code tools carry ``command`` or
+    ``code``.  The text is kept verbatim as ``code``; it is history context.
+    """
+    if kind != "code_execution" or not isinstance(fields, dict):
+        return fields
+    if set(fields) <= {"code", "language"}:
+        return fields
+    # The API accepts lowercase ``python`` / ``bash`` only (verified live).
+    # Anthropic's bash tool carries ``command``; a ``code`` payload is Python.
+    if fields.get("code"):
+        code, default = fields["code"], "python"
+    else:
+        code, default = fields.get("command") or "", "bash"
+    language = str(fields.get("language") or default).lower()
+    if language not in ("python", "bash"):
+        language = default
+    return {"code": code, "language": language}
+
+
 class GoogleInteractionsToolOps(BaseToolOps):
     """Google Interactions API tool conversion operations."""
 
@@ -209,7 +232,7 @@ class GoogleInteractionsToolOps(BaseToolOps):
         step: dict[str, Any] = {
             "type": INTRINSIC_KIND_TO_CALL_TYPE[kind],
             "id": ir_tool_call["tool_call_id"],
-            "arguments": ir_tool_call["tool_input"],
+            "arguments": _native_arguments(kind, ir_tool_call["tool_input"]),
         }
         pm = ir_tool_call.get("provider_metadata") or {}
         sig = pm.get("google", {}).get("thought_signature")
