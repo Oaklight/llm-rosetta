@@ -380,10 +380,16 @@ class ChatCompletionsToolOps(BaseToolOps):
     # ==================== Tool Call ====================
 
     @classmethod
-    def ir_tool_call_to_p(cls, ir_tool_call: ToolCallPart, **kwargs: Any) -> dict:
+    def ir_client_call_to_p(cls, ir_tool_call: ToolCallPart, **kwargs: Any) -> dict:
         """IR ToolCallPart → OpenAI Chat tool call.
 
         Converts ``tool_input`` dict to JSON string ``arguments``.
+
+        An intrinsic (provider-executed) call reaches this path as well: Chat
+        Completions has no server tools, so it overrides none of the intrinsic
+        hooks and the template's default non-native outcome writes the server
+        call as the ordinary client call it degrades to — the canonical kind is
+        its ``name``.
 
         Args:
             ir_tool_call: IR tool call part.
@@ -484,8 +490,15 @@ class ChatCompletionsToolOps(BaseToolOps):
     # ==================== Tool Result ====================
 
     @classmethod
-    def ir_tool_result_to_p(cls, ir_tool_result: ToolResultPart, **kwargs: Any) -> dict:
+    def ir_client_result_to_p(
+        cls, ir_tool_result: ToolResultPart, **kwargs: Any
+    ) -> dict:
         """IR ToolResultPart → OpenAI Chat tool role message.
+
+        The counterpart of :meth:`ir_client_call_to_p`: an intrinsic result is
+        a ``role:"tool"`` message like any other, since this dialect has no
+        server-tool result block to write.
+
 
         Chat Completions has no tool error field, so an ``is_error`` flag is
         re-encoded as a trailing text block (see ``base.tools.error_marker``).
