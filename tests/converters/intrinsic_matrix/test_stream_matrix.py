@@ -374,11 +374,12 @@ def test_read_delta_carries_no_provider_metadata_google_generate():
     assert "provider_metadata" not in delta
 
 
-@pytest.mark.xfail(
-    strict=True, reason="intrinsic refactor phase 3: delta event metadata loss"
-)
-def test_read_delta_should_carry_the_intrinsic_kind():
-    """Desired: the delta carries the kind so a foreign writer can render it."""
+def test_read_delta_carries_the_intrinsic_kind():
+    """The delta carries the kind so a foreign writer can render it.
+
+    It is read back from what the call registered at its start: a fragment of
+    arguments has no identity of its own.
+    """
     delta = next(
         e
         for e in _read("messages", _CALL_CHUNKS[("messages", "web_search")])

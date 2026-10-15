@@ -175,11 +175,21 @@ class ToolCallDeltaEvent(TypedDict):
     """Tool call arguments delta event.
 
     Emitted when a new fragment of tool call arguments JSON string is received.
+
+    ``intrinsic_kind`` is the streaming counterpart of
+    :attr:`~llm_rosetta.types.ir.parts.ToolCallPart.intrinsic_kind`, carried on
+    *every* event of a provider-executed call and not only on the
+    :class:`ToolCallStartEvent` that opened it: a reader that sees a fragment
+    without the start (a start this dialect dropped, a delta replayed on its
+    own) still knows which server tool it belongs to.  It is read from the
+    field first, with the legacy ``provider_metadata["intrinsic_kind"]``
+    spelling as a fallback, exactly as on a start event.
     """
 
     type: Required[Literal["tool_call_delta"]]
     tool_call_id: Required[str]
     arguments_delta: Required[str]  # JSON string fragment
+    intrinsic_kind: NotRequired[str]  # Canonical kind for an intrinsic call
     block_index: NotRequired[int]  # Provider content block index (e.g. Anthropic)
     tool_call_index: NotRequired[int]  # Index for multiple parallel tool calls
     choice_index: NotRequired[int]

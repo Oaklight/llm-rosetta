@@ -27,7 +27,7 @@ from ...types.ir import (
     ToolResultPart,
 )
 from ...types.ir.tools import ToolCallConfig
-from ..base import BaseToolOps
+from ..base import BaseToolOps, IntrinsicLeg
 from ..base.helpers.opaque import CARRIER_KEY
 from ..base.tools import (
     convert_nullable_to_type_array,
@@ -376,7 +376,7 @@ class MessagesToolOps(BaseToolOps):
     # ==================== Tool Call ====================
 
     @classmethod
-    def ir_tool_call_to_p(cls, ir_tool_call: ToolCallPart, **kwargs: Any) -> dict:
+    def ir_client_call_to_p(cls, ir_tool_call: ToolCallPart, **kwargs: Any) -> dict:
         """IR ToolCallPart → Anthropic tool_use content block.
 
         Anthropic tool call arguments are Dict (not JSON string).
@@ -387,42 +387,81 @@ class MessagesToolOps(BaseToolOps):
         Returns:
             Anthropic tool_use content block dict.
         """
-        tool_type = ir_tool_call.get("tool_type", "function")
-        tool_input = ir_tool_call.get("tool_input", {})
-        pm = ir_tool_call.get("provider_metadata") or {}
-
-        if tool_type == "intrinsic":
-            intrinsic_kind = intrinsic_kind_of(ir_tool_call)
-            result = {
-                "type": "server_tool_use",
-                "id": sanitize_tool_call_id(ir_tool_call["tool_call_id"]),
-                "name": intrinsic_kind,
-                "input": tool_input,
-            }
-        else:
-            result = {
+        return cls._finish_call_block(
+            {
                 "type": "tool_use",
                 "id": sanitize_tool_call_id(ir_tool_call["tool_call_id"]),
                 "name": ir_tool_call["tool_name"],
-                "input": tool_input,
-            }
+                "input": ir_tool_call.get("tool_input", {}),
+            },
+            ir_tool_call,
+        )
 
+    @classmethod
+    def ir_intrinsic_call_to_p(
+        cls,
+        ir_tool_call: ToolCallPart,
+        *,
+        leg: IntrinsicLeg = "history",
+        **kwargs: Any,
+    ) -> dict:
+        """IR intrinsic ToolCallPart → Anthropic ``server_tool_use`` block.
+
+        Anthropic renders every intrinsic kind in one shape — the server
+        tool's canonical kind as the ``name`` of a ``server_tool_use`` block —
+        so there is no kind↔type table to consult and no kind it cannot
+        render.  The kind is the block's ``name``, exactly as
+        :meth:`p_tool_call_to_ir` reads it back.
+
+        Args:
+            ir_tool_call: IR tool call part with ``tool_type == "intrinsic"``.
+            leg: Which leg the part is written on; both take this shape.
+            **kwargs: Extra arguments.
+
+        Returns:
+            Anthropic ``server_tool_use`` content block dict.
+        """
+        return cls._finish_call_block(
+            {
+                "type": "server_tool_use",
+                "id": sanitize_tool_call_id(ir_tool_call["tool_call_id"]),
+                "name": intrinsic_kind_of(ir_tool_call),
+                "input": ir_tool_call.get("tool_input", {}),
+            },
+            ir_tool_call,
+        )
+
+    @staticmethod
+    def _finish_call_block(
+        block: dict[str, Any], ir_tool_call: ToolCallPart
+    ) -> dict[str, Any]:
+        """Attach the fields both call shapes carry, in the same order.
+
+        Args:
+            block: The block built so far (``tool_use`` or ``server_tool_use``).
+            ir_tool_call: IR tool call part.
+
+        Returns:
+            The same block, with the shared fields attached.
+        """
         # Preserve provider_metadata for cross-provider round-trip
         # (e.g. Google thought_signature)
         if "provider_metadata" in ir_tool_call:
-            result[CARRIER_KEY] = ir_tool_call["provider_metadata"]
+            block[CARRIER_KEY] = ir_tool_call["provider_metadata"]
 
-        # Restore caller from provider_metadata (only if originally present)
-        caller = pm.get("anthropic_caller")
-        if caller is not None and result["type"] == "tool_use":
-            result["caller"] = caller
+        # Restore caller from provider_metadata (only if originally present).
+        # Anthropic defines ``caller`` on a client ``tool_use`` only; the
+        # non-streaming and streaming writers make the same restriction.
+        caller = (ir_tool_call.get("provider_metadata") or {}).get("anthropic_caller")
+        if caller is not None and block["type"] == "tool_use":
+            block["caller"] = caller
 
         # Preserve cache_hint → cache_control
         cache_hint = ir_tool_call.get("cache_hint")
         if cache_hint is not None:
-            result["cache_control"] = cache_hint
+            block["cache_control"] = cache_hint
 
-        return result
+        return block
 
     @staticmethod
     def p_tool_call_to_ir(provider_tool_call: Any, **kwargs: Any) -> ToolCallPart:
@@ -480,8 +519,16 @@ class MessagesToolOps(BaseToolOps):
     # ==================== Tool Result ====================
 
     @classmethod
-    def ir_tool_result_to_p(cls, ir_tool_result: ToolResultPart, **kwargs: Any) -> dict:
+    def ir_client_result_to_p(
+        cls, ir_tool_result: ToolResultPart, **kwargs: Any
+    ) -> dict:
         """IR ToolResultPart → Anthropic tool_result content block.
+
+        A server result reaches this path on the history leg only: Anthropic
+        accepts a ``*_tool_result`` block in the assistant turn that ran the
+        tool (see :meth:`ir_intrinsic_result_to_p`), but a replayed
+        conversation poses a server result as an ordinary result on a
+        ``role:"tool"`` message, where the kind does not survive.
 
         Args:
             ir_tool_result: IR tool result part.
@@ -613,27 +660,80 @@ class MessagesToolOps(BaseToolOps):
 
         return part
 
-    @staticmethod
+    @classmethod
+    def ir_intrinsic_result_to_p(
+        cls,
+        ir_tool_result: ToolResultPart,
+        *,
+        leg: IntrinsicLeg = "history",
+        **kwargs: Any,
+    ) -> dict[str, Any] | None:
+        """IR intrinsic ToolResultPart → Anthropic ``*_tool_result`` block.
+
+        The response leg is the assistant turn that ran the server tool, where
+        the result rides inline next to its call, so the kind is written into
+        the block type.  On the history leg a server result is posed the way a
+        client one is — an ordinary ``tool_result`` on a ``role:"tool"``
+        message — so the hook declines and the template takes the parent path.
+
+        A server result never takes the client path on the response leg: the
+        caller renders that turn with :meth:`ir_server_tool_result_to_p`, which
+        answers ``None`` for a client result rather than emitting one inline.
+
+        Args:
+            ir_tool_result: IR tool result part with ``tool_type == "intrinsic"``.
+            leg: Which leg the part is written on.
+            **kwargs: Extra arguments.
+
+        Returns:
+            Anthropic ``*_tool_result`` block on the response leg, ``None`` on
+            the history leg.
+        """
+        if leg != "response":
+            return None
+        return cls._server_tool_result_block(ir_tool_result)
+
+    @classmethod
     def ir_server_tool_result_to_p(
-        ir_tool_result: ToolResultPart, **kwargs: Any
+        cls, ir_tool_result: ToolResultPart, **kwargs: Any
     ) -> dict[str, Any] | None:
         """IR ToolResultPart → Anthropic ``*_tool_result`` block, or ``None``.
 
-        Renders a server-executed result (``tool_type == "intrinsic"``) for the
-        assistant turn that ran the tool.  When the part was read from this same
-        dialect the provider's whole block is restored from
-        ``provider_metadata._native``; otherwise the block is rebuilt from the
-        IR fields.
+        The assistant-turn entry point: renders a server-executed result
+        (``tool_type == "intrinsic"``) inline next to its call, restoring the
+        provider's whole block from ``provider_metadata._native`` when the part
+        was read from this same dialect and rebuilding it from the IR fields
+        otherwise (see :meth:`ir_intrinsic_result_to_p`).
 
-        Returns ``None`` for a client (function) result: Anthropic accepts a
-        plain ``tool_result`` only in a ``user`` message, so it cannot be
-        rendered inline in an assistant turn.  The caller drops it, as the
-        streaming write path does.
+        Returns ``None`` for a client (function) result, which the caller drops
+        with a warning: Anthropic accepts a plain ``tool_result`` only in a
+        ``user`` message, so it cannot be rendered inline in an assistant turn,
+        as the streaming write path does too.
+
+        Args:
+            ir_tool_result: IR tool result part.
+
+        Returns:
+            Anthropic ``*_tool_result`` block, or ``None`` for a client result.
+        """
+        if (
+            not intrinsic_kind_of(ir_tool_result)
+            and ir_tool_result.get("tool_type") != "intrinsic"
+        ):
+            return None
+        return cls.ir_intrinsic_result_to_p(ir_tool_result, leg="response")
+
+    @staticmethod
+    def _server_tool_result_block(ir_tool_result: ToolResultPart) -> dict[str, Any]:
+        """Build or restore the ``*_tool_result`` block for a server result.
+
+        Args:
+            ir_tool_result: IR tool result part with an intrinsic kind.
+
+        Returns:
+            Anthropic ``*_tool_result`` content block dict.
         """
         kind = intrinsic_kind_of(ir_tool_result)
-        if not kind and ir_tool_result.get("tool_type") != "intrinsic":
-            return None
-
         pm = ir_tool_result.get("provider_metadata") or {}
         native = pm.get("_native")
         if isinstance(native, dict) and native.get("base") == "messages":

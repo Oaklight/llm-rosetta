@@ -448,3 +448,30 @@ class StreamContext(ConversionContext):
         finish = self.pending_finish
         self.pending_finish = None
         return finish
+
+
+def carry_registered_call_identity(
+    event: Any, context: StreamContext, tool_call_id: str
+) -> None:
+    """Copy a registered tool call's identity onto one of its later events.
+
+    A provider delivers a call's opening block with everything on it — the
+    canonical intrinsic kind, and metadata such as a Google thought signature —
+    and its arguments in later fragments that name nothing but the call id.  A
+    reader that hands each fragment on carries the call's identity onto it from
+    here, so a fragment of a provider-executed call is not a nameless delta.
+
+    Args:
+        event: The IR event to carry the identity on (mutated in place).
+        context: The stream context the call registered in.
+        tool_call_id: The call the event belongs to.
+    """
+    intrinsic_kind = context.get_tool_call_intrinsic_kind(tool_call_id)
+    if intrinsic_kind:
+        event["intrinsic_kind"] = intrinsic_kind
+    provider_metadata = context.get_tool_call_provider_metadata(tool_call_id)
+    if provider_metadata:
+        event["provider_metadata"] = dict(provider_metadata)
+    tool_call_index = context.get_tool_call_index(tool_call_id)
+    if tool_call_index is not None:
+        event["tool_call_index"] = tool_call_index

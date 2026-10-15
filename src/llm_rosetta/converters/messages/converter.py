@@ -44,7 +44,11 @@ from ...types.ir.stream import (
     UsageEvent,
 )
 from ..base import BaseConverter
-from ..base.context import ConversionContext, StreamContext
+from ..base.context import (
+    ConversionContext,
+    StreamContext,
+    carry_registered_call_identity,
+)
 from ..base.tools import (
     assign_tool_batch_ids,
     fix_orphaned_tool_calls_ir,
@@ -774,10 +778,6 @@ class MessagesConverter(BaseConverter):
                 # two disagreeing for the same response.
                 tool_name = canonical_server_tool_kind(tool_name)
 
-            if context is not None:
-                context.register_tool_call(tool_call_id, tool_name)
-                context.block_index_to_tool_call_id[block_index] = tool_call_id
-
             start_evt = ToolCallStartEvent(
                 type="tool_call_start",
                 tool_call_id=tool_call_id,
@@ -804,6 +804,18 @@ class MessagesConverter(BaseConverter):
                     caller
                 )
             if context is not None:
+                # Register what the block said, not only its name: the deltas
+                # that follow are keyed on the call id alone, so the kind (a
+                # provider-executed call's whole identity) and the metadata the
+                # block carried are read back from here onto each delta.
+                context.register_tool_call(
+                    tool_call_id,
+                    tool_name,
+                    tool_type=start_evt.get("tool_type", "function"),
+                    provider_metadata=start_evt.get("provider_metadata"),
+                    intrinsic_kind=start_evt.get("intrinsic_kind", ""),
+                )
+                context.block_index_to_tool_call_id[block_index] = tool_call_id
                 start_evt["tool_call_index"] = context.tool_call_count - 1
             events.append(start_evt)
 
@@ -870,12 +882,11 @@ class MessagesConverter(BaseConverter):
             )
             if chunk_block_index is not None:
                 delta_evt["block_index"] = chunk_block_index
-            if (
-                context is not None
-                and tool_call_id
-                and (tc_idx := context.get_tool_call_index(tool_call_id)) is not None
-            ):
-                delta_evt["tool_call_index"] = tc_idx
+            if context is not None and tool_call_id:
+                # The arguments arrive as fragments that carry no identity of
+                # their own, so each repeats what the call registered (kind and
+                # metadata), as a start event would have carried it.
+                carry_registered_call_identity(delta_evt, context, tool_call_id)
             events.append(delta_evt)
 
             if context is not None and tool_call_id:
