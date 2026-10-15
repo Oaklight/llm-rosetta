@@ -21,11 +21,13 @@ from typing import Any, cast
 
 
 from ...types.ir import (
+    CitationPart,
     TextPart,
     is_message,
     is_text_part,
     is_tool_result_part,
 )
+from ...types.ir.parts import UrlCitation
 from ...types.ir.request import IRRequest
 from ...types.ir.response import IRResponse, UsageInfo
 from ...types.ir.stream import (
@@ -184,6 +186,154 @@ def _hoist_and_extract_system(
                 cast(list, system_instruction["parts"]).extend(msg_parts)
 
     return ir_messages, system_instruction
+
+
+def _grounding_provider_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
+    """Extract Google search metadata that has no common IR field."""
+    queries = metadata.get("web_search_queries") or metadata.get("webSearchQueries")
+    entry_point = metadata.get("search_entry_point") or metadata.get("searchEntryPoint")
+    rendered = None
+    if isinstance(entry_point, dict):
+        rendered = entry_point.get("rendered_content") or entry_point.get(
+            "renderedContent"
+        )
+    result: dict[str, Any] = {}
+    if queries:
+        result["web_search_queries"] = queries
+    if rendered:
+        result["search_entry_point"] = {"rendered_content": rendered}
+    return result
+
+
+def _grounding_sources(metadata: dict[str, Any]) -> list[dict[str, Any]]:
+    """Extract web sources from Gemini grounding chunks."""
+    chunks = metadata.get("grounding_chunks") or metadata.get("groundingChunks") or []
+    sources: list[dict[str, Any]] = []
+    for chunk in chunks:
+        if not isinstance(chunk, dict):
+            sources.append({})
+            continue
+        source = (
+            chunk.get("web")
+            or chunk.get("retrieved_context")
+            or chunk.get("retrievedContext")
+            or chunk.get("maps")
+        )
+        sources.append(source if isinstance(source, dict) else {})
+    return sources
+
+
+def _grounding_citation(
+    source: dict[str, Any],
+    segment: dict[str, Any] | None,
+    provider_metadata: dict[str, Any],
+) -> CitationPart | None:
+    """Build one IR citation from a grounding source and optional segment."""
+    url = source.get("uri")
+    if not url:
+        return None
+    citation: UrlCitation = {"url": url}
+    if source.get("title"):
+        citation["title"] = source["title"]
+    if segment:
+        start = segment.get("start_index", segment.get("startIndex"))
+        end = segment.get("end_index", segment.get("endIndex"))
+        if start is not None:
+            citation["start_index"] = start
+        if end is not None:
+            citation["end_index"] = end
+    result: CitationPart = {"type": "citation", "url_citation": citation}
+    if provider_metadata:
+        result["provider_metadata"] = {"google": provider_metadata}
+    return result
+
+
+_GROUNDING_CITATIONS_KEY = "_google_grounding_citations"
+
+#: Citation fields that identify one citation, so the same source attached to
+#: different segments is kept and a repeat of one is not.
+_GROUNDING_CITATION_KEY_FIELDS = ("url", "start_index", "end_index")
+
+
+def _citation_key(citation: CitationPart) -> tuple[Any, ...]:
+    """Identify a citation, so an accumulated repeat is not added twice."""
+    location = citation.get("url_citation") or citation.get("text_citation") or {}
+    return (
+        citation.get("type"),
+        *(location.get(f) for f in _GROUNDING_CITATION_KEY_FIELDS),
+    )
+
+
+def _stash_grounding_citations(
+    context: StreamContext, citations: list[CitationPart]
+) -> None:
+    """Accumulate the citations seen so far in this stream.
+
+    Grounding metadata may arrive on any candidate, not only the one carrying
+    the finish reason, so the citations are collected until the finish event
+    that will carry them.
+    """
+    stashed = context.metadata.setdefault(_GROUNDING_CITATIONS_KEY, [])
+    seen = context.metadata.setdefault(f"{_GROUNDING_CITATIONS_KEY}_keys", set())
+    for citation in citations:
+        key = _citation_key(citation)
+        if key in seen:
+            continue
+        seen.add(key)
+        stashed.append(citation)
+
+
+def _take_grounding_citations(context: StreamContext | None) -> list[CitationPart]:
+    """The accumulated citations, cleared so a second finish cannot repeat them."""
+    if context is None:
+        return []
+    stashed = context.metadata.pop(_GROUNDING_CITATIONS_KEY, [])
+    context.metadata.pop(f"{_GROUNDING_CITATIONS_KEY}_keys", None)
+    return list(stashed)
+
+
+def _grounding_citations(metadata: dict[str, Any]) -> list[CitationPart]:
+    """Convert Gemini grounding metadata into IR URL citations."""
+    sources = _grounding_sources(metadata)
+    provider_metadata = _grounding_provider_metadata(metadata)
+    supports = (
+        metadata.get("grounding_supports") or metadata.get("groundingSupports") or []
+    )
+    citations: list[CitationPart] = []
+    seen: set[tuple[Any, ...]] = set()
+    for support in supports:
+        if not isinstance(support, dict):
+            continue
+        segment = support.get("segment")
+        segment = segment if isinstance(segment, dict) else None
+        indices = (
+            support.get("grounding_chunk_indices")
+            or support.get("groundingChunkIndices")
+            or []
+        )
+        for index in indices:
+            if not isinstance(index, int) or not 0 <= index < len(sources):
+                continue
+            citation = _grounding_citation(sources[index], segment, provider_metadata)
+            if citation is None:
+                continue
+            location = citation["url_citation"]
+            key = (
+                location.get("url"),
+                location.get("start_index"),
+                location.get("end_index"),
+            )
+            if key not in seen:
+                seen.add(key)
+                citations.append(citation)
+    if citations:
+        return citations
+    return [
+        citation
+        for source in sources
+        if (citation := _grounding_citation(source, None, provider_metadata))
+        is not None
+    ]
 
 
 class GoogleGenerateConverter(BaseConverter):
@@ -556,6 +706,16 @@ class GoogleGenerateConverter(BaseConverter):
             # Fallback for empty candidates (e.g. thinking consumed all tokens)
             if message is None:
                 message = {"role": "assistant", "content": []}
+            grounding = p_candidate.get("grounding_metadata") or p_candidate.get(
+                "groundingMetadata"
+            )
+            if isinstance(grounding, dict):
+                citations = _grounding_citations(grounding)
+                content = message.get("content")
+                if isinstance(content, list):
+                    content.extend(citations)
+                else:
+                    message["content"] = citations
 
             finish_reason_val = p_candidate.get("finish_reason") or p_candidate.get(
                 "finishReason"
@@ -900,13 +1060,16 @@ class GoogleGenerateConverter(BaseConverter):
         choice_index = candidate.get("index", 0)
         cand_content = candidate.get("content", {})
         finish_reason = candidate.get("finish_reason") or candidate.get("finishReason")
+        grounding = candidate.get("grounding_metadata") or candidate.get(
+            "groundingMetadata"
+        )
 
         pre_parts_len = len(events)
         for part in cand_content.get("parts", []):
             self._handle_p_part_to_ir(part, choice_index, context, events)
 
         if finish_reason and context is not None:
-            new_events = events[pre_parts_len:]
+            new_events: list[IRStreamEvent] = events[pre_parts_len:]
             deferred_texts: list[str] = []
             kept_new: list[IRStreamEvent] = []
             for ev in new_events:
@@ -918,14 +1081,31 @@ class GoogleGenerateConverter(BaseConverter):
                 context.pending_text = "".join(deferred_texts)
                 events[pre_parts_len:] = kept_new
 
+        citations = (
+            _grounding_citations(grounding) if isinstance(grounding, dict) else []
+        )
+        if citations and context is not None:
+            _stash_grounding_citations(context, citations)
+
         if finish_reason:
-            return FinishEvent(
+            finish_event = FinishEvent(
                 type="finish",
                 finish_reason={
                     "reason": GOOGLE_REASON_FROM_PROVIDER.get(finish_reason, "stop")  # ty: ignore[invalid-argument-type]
                 },
                 choice_index=choice_index,
             )
+            # Grounding rides the finish event, which every reader already
+            # receives, and not a delta: a citation has no content of its own,
+            # and hanging it on a text delta invents one when the candidate
+            # produced no text (a search followed by a client function call),
+            # which reaches the client as an empty text block.  Citations that
+            # arrived on an earlier chunk are carried forward here rather than
+            # lost.
+            carried = _take_grounding_citations(context)
+            if carried:
+                finish_event["provider_metadata"] = {"google": {"citations": carried}}
+            return finish_event
         return None
 
     def _handle_p_stream_start_to_ir(

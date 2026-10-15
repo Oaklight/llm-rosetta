@@ -111,6 +111,7 @@ class TextDeltaEvent(TypedDict):
     text: Required[str]
     block_index: NotRequired[int]  # Provider content block index (e.g. Anthropic)
     choice_index: NotRequired[int]
+    provider_metadata: NotRequired[dict[str, Any]]
 
 
 class ReasoningDeltaEvent(TypedDict):
@@ -240,6 +241,7 @@ class FinishEvent(TypedDict):
     type: Required[Literal["finish"]]
     finish_reason: Required[FinishReason]
     choice_index: NotRequired[int]
+    provider_metadata: NotRequired[dict[str, Any]]
 
 
 class UsageEvent(TypedDict):

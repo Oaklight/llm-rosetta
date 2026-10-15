@@ -488,6 +488,40 @@ class TestGoogleGenerateConverter:
 
     # ==================== response_from_provider ====================
 
+    def test_response_from_provider_grounding_metadata(self):
+        """Candidate grounding metadata becomes IR URL citations."""
+        provider_response = {
+            "candidates": [
+                {
+                    "content": {
+                        "role": "model",
+                        "parts": [{"text": "According to the source."}],
+                    },
+                    "groundingMetadata": {
+                        "groundingChunks": [
+                            {"web": {"uri": "https://example.com", "title": "Example"}}
+                        ],
+                        "groundingSupports": [
+                            {
+                                "segment": {"startIndex": 0, "endIndex": 23},
+                                "groundingChunkIndices": [0],
+                            }
+                        ],
+                    },
+                }
+            ]
+        }
+        result = self.converter.response_from_provider(provider_response)
+        assert result["choices"][0]["message"]["content"][1] == {
+            "type": "citation",
+            "url_citation": {
+                "url": "https://example.com",
+                "title": "Example",
+                "start_index": 0,
+                "end_index": 23,
+            },
+        }
+
     def test_response_from_provider_basic(self):
         """Test basic response from provider."""
         provider_response = {

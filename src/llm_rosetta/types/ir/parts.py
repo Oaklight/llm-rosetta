@@ -308,6 +308,7 @@ class CitationPart(TypedDict):
     url_citation: NotRequired[UrlCitation]
     # Anthropic-style text citation
     text_citation: NotRequired[TextCitation]
+    provider_metadata: NotRequired[dict[str, Any]]
 
 
 class AudioData(TypedDict):
