@@ -47,6 +47,7 @@ gateway = []
 dev = [
     "python-dotenv",
     "pytest",
+    "pytest-asyncio",
     "llm-comply>=0.2.0",
     "pytest-cov",
     "pre-commit>=4.0.0",

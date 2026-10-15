@@ -32,6 +32,25 @@ jobs:
       - name: Run type compatibility tests
         run: python -m pytest tests/test_types/ -v
 
+  dev-extras-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install dev extras alone in a fresh venv
+        run: |
+          python -m venv /tmp/dev-extras-venv
+          /tmp/dev-extras-venv/bin/pip install --upgrade pip
+          /tmp/dev-extras-venv/bin/pip install -e ".[dev]"
+
+      - name: Run test suite
+        run: /tmp/dev-extras-venv/bin/python -m pytest tests/ --ignore=tests/integration
+
   install-smoke-test:
     runs-on: ubuntu-latest
     strategy:
