@@ -20,6 +20,7 @@ from llm_rosetta.converters.base.helpers.tool_group import (
     GENERATED_GROUP_MARKER,
     tool_call_group,
 )
+from llm_rosetta.converters.base.tools.intrinsic import is_intrinsic_part
 from llm_rosetta.converters.base.helpers.truncate import truncate_with_digest
 
 logger = logging.getLogger(__name__)
@@ -608,6 +609,16 @@ def _respell_history_tool_calls(
             continue
         for part in msg.get("content") or []:
             if not isinstance(part, dict) or part.get("type") != "tool_call":
+                continue
+            if is_intrinsic_part(part):
+                # A server call is named by its kind, not by a tool
+                # definition: re-spelling it against the client's tool list
+                # would ask the target to replay a server tool under a name
+                # the client made up.  History intrinsics the target cannot
+                # render have already been degraded to ordinary function
+                # calls (``tool_type == "function"``) by
+                # :func:`degrade_intrinsic_history`, so they are re-spelled
+                # here like any other client call.
                 continue
             namespace = tool_call_group(part)
             client_name = part.get("tool_name", "")

@@ -15,6 +15,7 @@ from typing import Any, cast
 
 from ....types.ir import IRInputItem, is_message
 from ....types.ir.request import IRRequest
+from .intrinsic import is_intrinsic_part
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +92,11 @@ def _collect_ir_tool_ids(
     tool's result rides in the assistant turn that ran it (#965); without
     counting it, the orphan fixer sees the call as unanswered and injects a
     synthetic placeholder beside the real result.
+
+    A *server* call (``tool_type == "intrinsic"``) counts as answered by
+    itself: the provider ran it, so no client ever owes it a result and no
+    placeholder belongs beside it.  Its id stays a known call id, though, so a
+    ``tool_result`` that does answer it is not mistaken for an orphan.
     """
     known_call_ids: set[str] = set()
     answered_ids: set[str] = set()
@@ -102,6 +108,12 @@ def _collect_ir_tool_ids(
         if role == "assistant":
             known_call_ids |= extract_part_ids(content, "tool_call", "tool_call_id")
             answered_ids |= extract_part_ids(content, "tool_result", "tool_call_id")
+            for part in content:
+                if not is_intrinsic_part(part):
+                    continue
+                intrinsic_call = cast(dict[str, Any], part)
+                if intrinsic_call.get("tool_call_id"):
+                    answered_ids.add(intrinsic_call["tool_call_id"])
         elif role == "tool":
             answered_ids |= extract_part_ids(content, "tool_result", "tool_call_id")
     return known_call_ids, answered_ids

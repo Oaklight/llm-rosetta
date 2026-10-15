@@ -399,33 +399,50 @@ def _orphan_ir():
     }
 
 
-def test_orphan_fix_injects_a_placeholder_for_a_server_call():
-    """CURRENT: a server call with no separate result gets a client placeholder."""
+def test_orphan_fix_does_not_placeholder_a_server_call():
+    """Phase 4: a server call owes no client result, so no placeholder."""
     from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
 
     out, _ = ChatCompletionsConverter().request_to_provider(cast(Any, _orphan_ir()))
     roles = [m["role"] for m in out["messages"]]
-    assert roles[-1] == "tool"
-    assert out["messages"][-1]["content"] == "[No output available yet]"
+    assert "tool" not in roles
+    assert "[No output available yet]" not in json.dumps(out)
 
 
-def test_orphan_fix_placeholder_reaches_google_generate_as_function_response():
+def test_orphan_fix_placeholder_does_not_reach_google_generate():
     from llm_rosetta.converters.google_generate import GoogleGenerateConverter
 
     out, _ = GoogleGenerateConverter().request_to_provider(cast(Any, _orphan_ir()))
-    assert "functionResponse" in json.dumps(out)
-    assert "[No output available yet]" in json.dumps(out)
+    assert "[No output available yet]" not in json.dumps(out)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="intrinsic refactor phase 4: orphan fixer placeholders server calls",
-)
-def test_orphan_fix_should_not_placeholder_a_server_call():
+def test_orphan_fix_still_placeholders_an_unanswered_client_call():
+    """A client call *does* owe the client a result, placeholder and all."""
     from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
 
-    out, _ = ChatCompletionsConverter().request_to_provider(cast(Any, _orphan_ir()))
-    assert "[No output available yet]" not in json.dumps(out)
+    ir: dict[str, Any] = {
+        "model": "m",
+        "messages": [
+            {"role": "user", "content": [{"type": "text", "text": "hi"}]},
+            {
+                "role": "assistant",
+                "content": [
+                    make_intrinsic_tool_call(
+                        tool_call_id="c1",
+                        tool_name="get_weather",
+                        tool_input={"city": "x"},
+                        intrinsic_kind="",
+                    )
+                ],
+            },
+        ],
+    }
+    # An intrinsic part with no kind going to a client dialect is degraded by
+    # the pass before the writer sees it, so build the client call directly.
+    ir["messages"][1]["content"][0]["tool_type"] = "function"
+    ir["messages"][1]["content"][0]["intrinsic_kind"] = ""
+    out, _ = ChatCompletionsConverter().request_to_provider(cast(Any, ir))
+    assert "[No output available yet]" in json.dumps(out)
 
 
 def test_orphan_fix_leaves_an_answered_intrinsic_call_alone():
@@ -441,40 +458,8 @@ def test_orphan_fix_leaves_an_answered_intrinsic_call_alone():
 # ---------------------------------------------------------------------------
 
 
-def test_respell_renames_an_intrinsic_history_call():
-    """CURRENT: ``_respell_history_tool_calls`` renames intrinsic calls too."""
-    ir = {
-        "tools": [
-            {
-                "name": "agents_wait",
-                "tool_group": "agents",
-                "metadata": {"_original_name": "wait"},
-            }
-        ],
-        "messages": [
-            {
-                "role": "assistant",
-                "content": [
-                    make_intrinsic_tool_call(
-                        tool_call_id="s1",
-                        tool_name="wait",
-                        tool_input={},
-                        intrinsic_kind="wait",
-                    )
-                ],
-            }
-        ],
-    }
-    apply_upstream_tool_names(ir, name_map=build_tool_name_map(ir), warnings=[])
-    part = ir["messages"][0]["content"][0]
-    assert part["tool_name"] == "agents_wait"
-    assert part["intrinsic_kind"] == "wait"
-
-
-@pytest.mark.xfail(
-    strict=True, reason="intrinsic refactor phase 4: respell renames intrinsic calls"
-)
-def test_respell_should_leave_an_intrinsic_call_alone():
+def test_respell_leaves_an_intrinsic_history_call_alone():
+    """Phase 4: a server call is named by its kind, not by a tool definition."""
     ir = {
         "tools": [
             {
@@ -500,3 +485,46 @@ def test_respell_should_leave_an_intrinsic_call_alone():
     apply_upstream_tool_names(ir, name_map=build_tool_name_map(ir), warnings=[])
     part = ir["messages"][0]["content"][0]
     assert part["tool_name"] == "wait"
+    assert part["intrinsic_kind"] == "wait"
+
+
+def test_respell_still_renames_a_degraded_history_call():
+    """A history pair the pass degraded is an ordinary function call by then.
+
+    ``degrade_intrinsic_history`` rewrites an intrinsic call the target cannot
+    replay to ``tool_type == "function"``, so the respell pass sees a client
+    call and renames it like any other.
+    """
+    from llm_rosetta.capabilities import degrade_intrinsic_history
+    from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
+
+    ir = {
+        "tools": [
+            {
+                "name": "agents_wait",
+                "tool_group": "agents",
+                "metadata": {"_original_name": "wait"},
+            }
+        ],
+        "messages": [
+            {
+                "role": "assistant",
+                "content": [
+                    make_intrinsic_tool_call(
+                        tool_call_id="s1",
+                        tool_name="wait",
+                        tool_input={},
+                        intrinsic_kind="wait",
+                    )
+                ],
+            }
+        ],
+    }
+    degraded = degrade_intrinsic_history(
+        ir, ChatCompletionsConverter().tool_ops, warnings=[]
+    )
+    apply_upstream_tool_names(
+        degraded, name_map=build_tool_name_map(degraded), warnings=[]
+    )
+    part = degraded["messages"][0]["content"][0]
+    assert part["tool_name"] == "agents_wait"
