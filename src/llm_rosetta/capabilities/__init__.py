@@ -6,6 +6,7 @@ Functions follow the ``enforce_*`` naming convention for the enforcement passes:
 - :func:`strip_reasoning_for_non_reasoning` — strip reasoning for non-reasoning models
 - :func:`enforce_vision` — strip images for non-vision models
 - :func:`enforce_custom_tools` — downgrade custom tools for non-supporting providers
+- :func:`degrade_intrinsic_history` — degrade intrinsic history the target cannot replay
 - :func:`dedupe_tool_definitions` — collapse duplicate tool definitions (post-IR)
 
 Split by concern: :mod:`.enforcement` for the capability passes, :mod:`.tool_names`
@@ -17,13 +18,13 @@ from .enforcement import (
     enforce_reasoning,
     strip_reasoning_for_non_reasoning,
     enforce_vision,
-    strip_intrinsic_tools,
     resolve_intrinsic_tools,
     enforce_custom_tools,
     get_custom_tool_names,
     restore_custom_tool_calls,
     unwrap_custom_tool_input,
 )
+from .intrinsic_history import degrade_intrinsic_history
 from .tool_names import (
     MAX_TOOL_NAME_LEN,
     qualify_tool_names,
@@ -40,8 +41,8 @@ __all__ = [
     "enforce_reasoning",
     "strip_reasoning_for_non_reasoning",
     "enforce_vision",
-    "strip_intrinsic_tools",
     "resolve_intrinsic_tools",
+    "degrade_intrinsic_history",
     "enforce_custom_tools",
     "get_custom_tool_names",
     "restore_custom_tool_calls",

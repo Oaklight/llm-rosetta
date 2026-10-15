@@ -30,6 +30,7 @@ from typing import Any, Literal, Protocol, runtime_checkable
 from llm_rosetta.capabilities import (
     dedupe_tool_definitions,
     qualify_tool_names,
+    degrade_intrinsic_history,
     enforce_custom_tools,
     resolve_intrinsic_tools,
     relocate_oversized_tool_descriptions,
@@ -713,21 +714,6 @@ class ConversionPipeline:
         # Capability enforcement: intrinsic tool *definitions*, reconciled
         # against the target provider's shim (unsupported kinds dropped,
         # bare-name functions promoted).
-        #
-        # Intrinsic *history* is intentionally NOT touched here.  Each target
-        # converter maps those parts its own way:
-        #   - natively where the kind is in its vocabulary (anthropic
-        #     `server_tool_use`; openai_responses `web_search_call`;
-        #     google_generate `code_execution`; google_interactions
-        #     `google_search_call` / `code_execution_call` / …);
-        #   - as a plain function call otherwise (chat_completions by natural
-        #     name; openai_responses `function_call` for kinds needing
-        #     provider config; google_interactions `{kind}_call` for a kind
-        #     outside its vocabulary, e.g. `web_search` -> `web_search_call`);
-        #   - or dropped (google_generate for a kind it has no form for).
-        # History is context, not a capability declaration, so it is
-        # deliberately not gated by the target shim (definitions are).  See
-        # #839.
         ir_request = resolve_intrinsic_tools(
             ir_request,
             shim=self._resolved_target_shim,
@@ -736,6 +722,25 @@ class ConversionPipeline:
             # tool natively, so it is a property of the source converter's
             # format, not of the literal provider name.
             allow_name_promotion=not self._source_converter._SUPPORTS_NATIVE_SERVER_TOOLS,
+            request_id=request_id,
+        )
+
+        # Capability enforcement: intrinsic *history*.  A history part is
+        # context, not a capability declaration, so it is not gated by the
+        # target shim (the definitions above are).  What it *must* be is a
+        # shape the target can replay: each converter asks its target
+        # counterpart's own vocabulary
+        # (``intrinsic_renderable(kind, input, leg="history")``), and a call it
+        # cannot render — a sibling dialect's kind, a kind whose native part
+        # needs a field the IR does not carry, a part with no kind at all —
+        # is degraded here, together with the results answering it, into an
+        # ordinary function pair.  This is the one place the native/degrade
+        # decision for history is made; a converter used without a pipeline
+        # still falls back to the parent client shape for itself.  See #839.
+        ir_request = degrade_intrinsic_history(
+            ir_request,
+            self._target_converter.tool_ops,
+            warnings=ctx.warnings,
             request_id=request_id,
         )
 
