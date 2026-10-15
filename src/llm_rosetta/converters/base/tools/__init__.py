@@ -30,7 +30,7 @@ from .ops import BaseToolOps, IntrinsicLeg
 from .schema import convert_nullable_to_type_array, sanitize_schema
 
 # -- Call ID --
-from .call_id import sanitize_tool_call_id
+from .call_id import prefixed_tool_call_id, sanitize_tool_call_id
 
 # -- Orphan fix --
 from .orphan_fix import (
@@ -89,6 +89,7 @@ __all__ = [
     "convert_nullable_to_type_array",
     "sanitize_schema",
     # call_id
+    "prefixed_tool_call_id",
     "sanitize_tool_call_id",
     # orphan_fix
     "extract_part_ids",

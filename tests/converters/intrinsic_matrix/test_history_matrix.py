@@ -276,7 +276,7 @@ def test_messages_history_result_keeps_the_kind():
     )
     result_block = body["messages"][2]["content"][0]
     assert result_block["type"] == "web_search_tool_result"
-    assert result_block["tool_use_id"] == "s1"
+    assert result_block["tool_use_id"] == "srvtoolu_s1"
 
 
 def test_messages_history_result_of_a_foreign_kind_is_a_plain_tool_result():
@@ -391,7 +391,7 @@ def test_messages_response_result_is_kind_named():
     out = MessagesConverter().response_to_provider(cast(Any, ir_response("web_search")))
     block = out["content"][1]
     assert block["type"] == "web_search_tool_result"
-    assert block["tool_use_id"] == "c1"
+    assert block["tool_use_id"] == "srvtoolu_c1"
 
 
 def test_google_generate_response_drops_foreign_kind_with_warning():

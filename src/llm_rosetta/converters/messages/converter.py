@@ -54,6 +54,7 @@ from ..base.tools import (
     assign_tool_batch_ids,
     fix_orphaned_tool_calls_ir,
     intrinsic_kind_of,
+    prefixed_tool_call_id,
     sanitize_tool_call_id,
     strip_orphaned_tool_config,
 )
@@ -1282,7 +1283,11 @@ class MessagesConverter(BaseConverter):
             "type": AnthropicEventType.CONTENT_BLOCK_START,
             "content_block": {
                 "type": block_type,
-                "id": sanitize_tool_call_id(event["tool_call_id"]),
+                "id": (
+                    prefixed_tool_call_id(event["tool_call_id"], "srvtoolu_")
+                    if block_type == "server_tool_use"
+                    else sanitize_tool_call_id(event["tool_call_id"])
+                ),
                 "name": tool_name,
                 "input": {},
             },

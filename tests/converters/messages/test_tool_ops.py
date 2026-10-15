@@ -214,7 +214,7 @@ class TestMessagesToolOps:
         restored = MessagesToolOps.p_tool_call_to_ir(provider)
         assert restored["tool_type"] == "intrinsic"
         assert restored["intrinsic_kind"] == "web_search"
-        assert restored["tool_call_id"] == original["tool_call_id"]
+        assert restored["tool_call_id"] == "srvtoolu_" + original["tool_call_id"]
         assert restored["tool_input"] == original["tool_input"]
 
     def test_intrinsic_code_execution_round_trip(self):

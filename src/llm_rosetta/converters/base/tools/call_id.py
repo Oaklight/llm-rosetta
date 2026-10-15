@@ -53,3 +53,18 @@ def sanitize_tool_call_id(
     # Hash the sanitized form (not raw) — two raw IDs differing only in
     # which invalid chars they use will collide, but this is acceptable.
     return truncate_with_digest(_INVALID_CHARS.sub("_", raw_id), max_length)
+
+
+def prefixed_tool_call_id(raw_id: str, prefix: str) -> str:
+    """Sanitize an id and make it start with ``prefix``.
+
+    Some providers require a server-tool id to carry their own prefix
+    (Anthropic ``srvtoolu_``, OpenAI ``ws_`` / ``ci_``).  An id that already has
+    it is returned unchanged, so a same-dialect replay keeps its original id;
+    any other id gets the prefix.  Pure and deterministic, so a call and the
+    result that answers it stay paired without a lookup table.
+    """
+    sanitized = sanitize_tool_call_id(raw_id)
+    if sanitized.startswith(prefix):
+        return sanitized
+    return sanitize_tool_call_id(prefix + sanitized)

@@ -514,7 +514,7 @@ class TestOpenAIResponsesToolOps:
         assert restored["type"] == "code_interpreter_call"
         # A native server item identifies itself with `id`, not `call_id`, and
         # the API rejects `call_id`/`arguments` on this item type (#981).
-        assert restored["id"] == provider_tc["call_id"]
+        assert restored["id"] == "ci_" + provider_tc["call_id"]
         assert "call_id" not in restored
         assert "arguments" not in restored
 

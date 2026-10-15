@@ -36,6 +36,7 @@ from ..base.tools import (
     intrinsic_kind_of,
     make_intrinsic_tool_definition,
     log_orphan_warnings,
+    prefixed_tool_call_id,
     sanitize_schema,
     sanitize_tool_call_id,
 )
@@ -466,7 +467,7 @@ class MessagesToolOps(BaseToolOps):
         return cls._finish_call_block(
             {
                 "type": "server_tool_use",
-                "id": sanitize_tool_call_id(ir_tool_call["tool_call_id"]),
+                "id": prefixed_tool_call_id(ir_tool_call["tool_call_id"], "srvtoolu_"),
                 "name": kind,
                 "input": ir_tool_call.get("tool_input", {}),
             },
@@ -828,7 +829,9 @@ class MessagesToolOps(BaseToolOps):
 
         content_block: dict[str, Any] = {
             "type": f"{kind}_tool_result" if kind else "tool_result",
-            "tool_use_id": sanitize_tool_call_id(ir_tool_result["tool_call_id"]),
+            "tool_use_id": prefixed_tool_call_id(
+                ir_tool_result["tool_call_id"], "srvtoolu_"
+            ),
             "content": ir_tool_result.get("result", []),
         }
         # Only the generic ``tool_result`` block defines ``is_error``; Anthropic

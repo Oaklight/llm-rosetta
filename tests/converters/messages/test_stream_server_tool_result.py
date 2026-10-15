@@ -206,7 +206,7 @@ class TestWriter:
         )
 
         assert out["content_block"]["type"] == "web_search_tool_result"
-        assert out["content_block"]["tool_use_id"] == "s1"
+        assert out["content_block"]["tool_use_id"] == "srvtoolu_s1"
         # Neither field belongs on a rebuilt server result: Anthropic answers
         # ``400 ... .web_search_tool_result.is_error: Extra inputs are not
         # permitted`` (verified live 2026-10-13), and nothing populates

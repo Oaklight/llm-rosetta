@@ -44,6 +44,7 @@ from ..base.tools import (
     make_intrinsic_tool_call,
     mark_tool_error,
     sanitize_schema,
+    prefixed_tool_call_id,
     sanitize_tool_call_id,
     warn_tool_error,
     warn_tool_error_dropped,
@@ -515,6 +516,13 @@ def _p_server_item_to_ir(
     )
 
 
+_SERVER_ITEM_ID_PREFIX: dict[str, str] = {
+    "web_search_call": "ws_",
+    "code_interpreter_call": "ci_",
+    "file_search_call": "fs_",
+}
+
+
 def _build_server_item(
     item_type: str,
     *,
@@ -535,6 +543,11 @@ def _build_server_item(
     ``code_interpreter_call`` without ``id`` answers
     ``400 Missing required parameter: 'input[2].id'``).
     """
+    # The API requires a server item's id to carry its own prefix (verified
+    # live: ``Expected an ID that begins with 'ws'``); a foreign id is prefixed.
+    id_prefix = _SERVER_ITEM_ID_PREFIX.get(item_type)
+    if id_prefix:
+        item_id = prefixed_tool_call_id(item_id, id_prefix)
     if item_type == "web_search_call":
         action: dict[str, Any] = {
             "type": fields.get("action_type") or _DEFAULT_WEB_SEARCH_ACTION
