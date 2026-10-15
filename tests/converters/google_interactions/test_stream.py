@@ -8,6 +8,7 @@ from llm_rosetta.types.ir.stream import (
     ContentBlockEndEvent,
     ContentBlockStartEvent,
     FinishEvent,
+    ReasoningDeltaEvent,
     TextDeltaEvent,
     ToolCallDeltaEvent,
     ToolCallStartEvent,
@@ -573,3 +574,49 @@ class TestStreamIRToProvider:
         )
         stops = [c for c in out if c.get("event_type") == "step.stop"]
         assert len(stops) == 1
+
+
+class TestReasoningSignatureOrigin:
+    """The reasoning-signature arm keeps its own origin and drops a foreign one."""
+
+    def setup_method(self):
+        self.converter = GoogleInteractionsConverter()
+
+    def _signed(self, origin: str | None) -> ReasoningDeltaEvent:
+        event = ReasoningDeltaEvent(
+            type="reasoning_delta", reasoning="", signature="SIG-REASON", block_index=0
+        )
+        if origin is not None:
+            event["provider_metadata"] = {"_opaque_origin": {"signature": origin}}
+        return event
+
+    def _deltas(self, event: ReasoningDeltaEvent) -> list:
+        out = self.converter.stream_response_to_provider(event, StreamContext())
+        out = out if isinstance(out, list) else ([out] if out else [])
+        return [o["delta"] for o in out if o.get("event_type") == "step.delta"]
+
+    def test_reader_stamps_the_converter_tag(self):
+        chunk = {
+            "data": {
+                "event_type": "step.delta",
+                "index": 0,
+                "delta": {"type": "thought_signature", "signature": "SIG-REASON"},
+            }
+        }
+        (event,) = self.converter.stream_response_from_provider(chunk)
+        reasoning = cast(ReasoningDeltaEvent, event)
+        origin = reasoning["provider_metadata"]["_opaque_origin"]["signature"]
+        assert origin == self.converter._CONVERTER_TAG
+
+    def test_own_origin_signature_is_written(self):
+        assert self._deltas(self._signed("google_interactions")) == [
+            {"type": "thought_signature", "signature": "SIG-REASON"}
+        ]
+
+    def test_untagged_signature_is_written(self):
+        assert self._deltas(self._signed(None)) == [
+            {"type": "thought_signature", "signature": "SIG-REASON"}
+        ]
+
+    def test_foreign_origin_signature_is_dropped(self):
+        assert self._deltas(self._signed("messages")) == []

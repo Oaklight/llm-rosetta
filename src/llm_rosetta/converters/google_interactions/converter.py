@@ -576,7 +576,7 @@ class GoogleInteractionsConverter(BaseConverter):
                 block_index=index,
             )
             if sig:
-                set_opaque_origin(signature_event, signature="google_interactions")
+                set_opaque_origin(signature_event, signature=self._CONVERTER_TAG)
             return [signature_event]
         if delta_type == "arguments":
             return [
