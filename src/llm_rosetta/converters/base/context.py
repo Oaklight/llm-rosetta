@@ -481,7 +481,11 @@ class StreamContext(ConversionContext):
 
 
 def carry_registered_call_identity(
-    event: Any, context: StreamContext, tool_call_id: str
+    event: Any,
+    context: StreamContext,
+    tool_call_id: str,
+    *,
+    include_metadata: bool = True,
 ) -> None:
     """Copy a registered tool call's identity onto one of its later events.
 
@@ -495,11 +499,18 @@ def carry_registered_call_identity(
         event: The IR event to carry the identity on (mutated in place).
         context: The stream context the call registered in.
         tool_call_id: The call the event belongs to.
+        include_metadata: Whether to repeat the registered provider metadata.
+            A dialect that sends the call whole (Google Generate) keeps its
+            signature on the start event alone: one signature, one carrier.
     """
     intrinsic_kind = context.get_tool_call_intrinsic_kind(tool_call_id)
     if intrinsic_kind:
         event["intrinsic_kind"] = intrinsic_kind
-    provider_metadata = context.get_tool_call_provider_metadata(tool_call_id)
+    provider_metadata = (
+        context.get_tool_call_provider_metadata(tool_call_id)
+        if include_metadata
+        else None
+    )
     if provider_metadata:
         event["provider_metadata"] = dict(provider_metadata)
     tool_call_index = context.get_tool_call_index(tool_call_id)

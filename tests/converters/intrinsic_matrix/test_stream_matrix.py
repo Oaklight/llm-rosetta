@@ -367,16 +367,20 @@ def test_read_delta_carries_no_metadata_where_the_block_carried_none():
     assert "provider_metadata" not in delta
 
 
-def test_read_delta_carries_the_metadata_the_block_registered():
-    """A server call's delta repeats the native part its start carried."""
-    delta = next(
-        e
-        for e in _read(
-            "google_generate", _CALL_CHUNKS[("google_generate", "code_execution")]
-        )
-        if e["type"] == "tool_call_delta"
+def test_read_delta_leaves_the_native_part_on_the_start_google_generate():
+    """Google sends the call whole (signature included, verified live).
+
+    The synthesized delta carries the kind but not a second copy of the native
+    part: the start event is the one carrier.
+    """
+    events = _read(
+        "google_generate", _CALL_CHUNKS[("google_generate", "code_execution")]
     )
-    assert delta["provider_metadata"]["_native"]["base"] == "google_generate"
+    start = next(e for e in events if e["type"] == "tool_call_start")
+    delta = next(e for e in events if e["type"] == "tool_call_delta")
+    assert start["provider_metadata"]["_native"]["base"] == "google_generate"
+    assert "provider_metadata" not in delta
+    assert get_intrinsic_kind(delta) == "code_execution"
 
 
 def test_read_delta_carries_the_intrinsic_kind():

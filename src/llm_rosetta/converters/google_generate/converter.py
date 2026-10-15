@@ -1074,11 +1074,13 @@ class GoogleGenerateConverter(BaseConverter):
         )
         delta_evt["tool_call_index"] = tc_index
         if context is not None:
-            # The fragment repeats the call's identity — its canonical kind
-            # and the native part the start carried — so a reader that sees
-            # only the delta is not left guessing from the tool name, and a
-            # same-dialect writer can still restore what Google sent.
-            carry_registered_call_identity(delta_evt, context, tool_call_id)
+            # The fragment repeats the call's canonical kind so a reader that
+            # sees only the delta is not left guessing from the tool name.
+            # The native part (and its thoughtSignature) stays on the start
+            # event: Google sends the call whole, one signature, one carrier.
+            carry_registered_call_identity(
+                delta_evt, context, tool_call_id, include_metadata=False
+            )
         events.append(delta_evt)
         if context is not None:
             context.append_tool_call_args(tool_call_id, args_json)
