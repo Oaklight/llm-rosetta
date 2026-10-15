@@ -52,7 +52,6 @@ _MOVED_TO_TOOLS: set[str] = {
     "convert_ir_content_blocks_to_p",
     "is_intrinsic_part",
     "get_intrinsic_kind",
-    "set_intrinsic_kind",
     "make_intrinsic_tool_call",
     "make_intrinsic_tool_result",
 }

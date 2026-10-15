@@ -42,10 +42,12 @@ class ToolDefinition(TypedDict):
     Custom tool format info (text/grammar) is stored in ``metadata``.
 
     ``"intrinsic"`` represents provider-hosted built-in tools (web search,
-    code execution, file search, etc.).  The specific kind is stored in
-    ``metadata["intrinsic_kind"]`` (e.g. ``"web_search"``,
-    ``"code_execution"``).  Intrinsic tools pass through in same-format
-    conversions and are stripped in cross-format conversions.
+    code execution, file search, etc.).  The specific kind is recorded in the
+    first-class ``intrinsic_kind`` field (e.g. ``"web_search"``,
+    ``"code_execution"``), not under ``metadata``; ``intrinsic_kind_of`` still
+    reads the legacy ``metadata["intrinsic_kind"]`` spelling as a fallback.
+    Intrinsic tools pass through in same-format conversions and are stripped
+    in cross-format conversions.
 
     ``tool_group`` names the group a tool belongs to, when the source
     addressed it that way.  A client may declare tools inside a named
@@ -81,6 +83,19 @@ class ToolDefinition(TypedDict):
     Handing that case a generated id instead is tracked on #953."""
     tool_group_description: NotRequired[str]
     """Description carried by the group itself, when it had one."""
+    intrinsic_kind: NotRequired[str]
+    """本定义的 intrinsic 工具种类 The intrinsic kind this definition declares.
+
+    仅在 ``type == "intrinsic"`` 的定义上有意义（如 ``"web_search"``、
+    ``"code_execution"``）。与调用/结果侧的 ``intrinsic_kind`` 是同一身份：
+    定义侧声明、调用与结果侧回应。读取方在字段缺失时才会回退到旧的
+    ``metadata["intrinsic_kind"]``；写入方只写这个一等字段。
+    Meaningful only when ``type == "intrinsic"``.  It is the definition-side
+    half of the same identity the call and result sides carry: the definition
+    declares it, a call and its result name it back.  A reader falls back to
+    the legacy ``metadata["intrinsic_kind"]`` only when this field is absent,
+    and a writer records only this field.
+    """
     metadata: NotRequired[dict[str, Any]]
     cache_hint: NotRequired[dict[str, Any]]
 

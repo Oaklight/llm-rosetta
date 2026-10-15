@@ -56,9 +56,8 @@ from ..base.helpers.tool_group import (
 from ..base.tools import (
     assign_tool_batch_ids,
     fix_orphaned_tool_calls_ir,
-    get_intrinsic_kind,
+    intrinsic_kind_of,
     sanitize_tool_call_id,
-    set_intrinsic_kind,
     strip_orphaned_tool_config,
 )
 from .stream_context import OpenResponsesStreamContext
@@ -1174,7 +1173,7 @@ class OpenResponsesConverter(BaseConverter):
             tool_name=intrinsic_kind,
             tool_type="intrinsic",
         )
-        set_intrinsic_kind(start_event, intrinsic_kind)
+        start_event["intrinsic_kind"] = intrinsic_kind
         if item_id and item_id != call_id:
             start_event.setdefault("provider_metadata", {})["responses_item_id"] = (
                 item_id
@@ -1204,6 +1203,10 @@ class OpenResponsesConverter(BaseConverter):
         )
         if part.get("tool_type") is not None:
             result_event["tool_type"] = part["tool_type"]
+        # Carry the canonical kind on the event's first-class field, the same
+        # carrier ``p_tool_result_to_ir`` puts it on.
+        if "intrinsic_kind" in part:
+            result_event["intrinsic_kind"] = part["intrinsic_kind"]
         if "is_error" in part:
             result_event["is_error"] = part["is_error"]
         pm = dict(part.get("provider_metadata") or {})
@@ -1895,9 +1898,10 @@ class OpenResponsesConverter(BaseConverter):
         # event's ``intrinsic_kind`` carrier, never from the tool name; a kind
         # this dialect cannot render is dropped rather than downgraded.
         intrinsic_item: dict[str, Any] | None = None
+        intrinsic_kind = intrinsic_kind_of(event)
         if tool_type == "intrinsic":
             intrinsic_item = self.tool_ops.stream_intrinsic_item(
-                get_intrinsic_kind(event, tool_name), item_id, status="in_progress"
+                intrinsic_kind, item_id, status="in_progress"
             )
             if intrinsic_item is None:
                 return {}
@@ -1907,7 +1911,11 @@ class OpenResponsesConverter(BaseConverter):
         # re-deriving it from the name.
         if context is not None and call_id:
             context.register_tool_call(
-                call_id, tool_name, tool_type, provider_metadata=pm or None
+                call_id,
+                tool_name,
+                tool_type,
+                provider_metadata=pm or None,
+                intrinsic_kind=intrinsic_kind,
             )
             context.register_tool_call_item(call_id, item_id)
 
@@ -2038,7 +2046,7 @@ class OpenResponsesConverter(BaseConverter):
                 return self._stream_result_chunk(dict(native_item), event, context)
 
         item = self.tool_ops.stream_result_item(
-            get_intrinsic_kind(event, ""),
+            intrinsic_kind_of(event),
             sanitize_tool_call_id(event["tool_call_id"]),
             event.get("result", ""),
         )
@@ -2204,7 +2212,7 @@ class OpenResponsesConverter(BaseConverter):
                     context,
                     call_id=call_id,
                     item_id=tc_item_id,
-                    kind=self._stream_intrinsic_kind(context, call_id, tool_name),
+                    kind=self._stream_intrinsic_kind(context, call_id),
                     arguments=arguments,
                     status="completed",
                 )
@@ -2337,20 +2345,17 @@ class OpenResponsesConverter(BaseConverter):
         return self.tool_ops.stream_intrinsic_item(kind, item_id, fields, status=status)
 
     @staticmethod
-    def _stream_intrinsic_kind(
-        context: StreamContext | None, call_id: str, tool_name: str
-    ) -> str:
+    def _stream_intrinsic_kind(context: StreamContext | None, call_id: str) -> str:
         """Read the intrinsic kind the start event registered, if any.
 
-        The kind is carried in the call's ``provider_metadata`` so the done
-        and completed items restore it without re-deriving it from the name;
-        the registered name (already the canonical kind for a server call) is
-        only a last-resort fallback when no metadata was carried.
+        The kind is recorded on the context when the start event registers the
+        call, so the done and completed items restore it without re-deriving
+        it from the tool name.  ``""`` means the kind was never registered,
+        which those writers treat as an unrenderable kind.
         """
         if context is None:
-            return tool_name
-        pm = context.get_tool_call_provider_metadata(call_id) or {}
-        return pm.get("intrinsic_kind") or tool_name
+            return ""
+        return context.get_tool_call_intrinsic_kind(call_id)
 
     @staticmethod
     def _build_finish_usage(pending_usage: dict[str, Any]) -> dict[str, Any]:
@@ -2515,7 +2520,7 @@ class OpenResponsesConverter(BaseConverter):
                     context,
                     call_id=call_id,
                     item_id=item_id,
-                    kind=self._stream_intrinsic_kind(context, call_id, tool_name),
+                    kind=self._stream_intrinsic_kind(context, call_id),
                     arguments=arguments,
                     status="completed",
                 )

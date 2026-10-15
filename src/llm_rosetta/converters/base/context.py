@@ -149,6 +149,10 @@ class StreamContext(ConversionContext):
     _tool_call_provider_metadata: dict[str, dict] = field(
         default_factory=dict, repr=False
     )
+    # Canonical intrinsic kind of each tool call (call_id → kind), recorded
+    # when a call registers so a later event (a finish flush, a done item) can
+    # restore it without re-deriving it from the tool name.
+    _tool_call_intrinsic_kinds: dict[str, str] = field(default_factory=dict, repr=False)
 
     def next_block_index(self) -> int:
         """Increment and return the next block index.
@@ -165,6 +169,7 @@ class StreamContext(ConversionContext):
         tool_name: str,
         tool_type: str = "function",
         provider_metadata: dict | None = None,
+        intrinsic_kind: str = "",
     ) -> None:
         """Register a tool call ID to name mapping.
 
@@ -174,12 +179,17 @@ class StreamContext(ConversionContext):
             tool_type: The type of tool call ("function" or "custom").
             provider_metadata: Provider-specific metadata to carry through the
                 stream (e.g. a Google ``thought_signature``).
+            intrinsic_kind: The canonical kind of an intrinsic (server) call,
+                kept so a later flush or done item restores it without falling
+                back to the tool name.
         """
         self.tool_call_id_map[tool_call_id] = tool_name
         self._tool_call_args[tool_call_id] = ""
         self._tool_call_types[tool_call_id] = tool_type
         if provider_metadata:
             self._tool_call_provider_metadata[tool_call_id] = provider_metadata
+        if intrinsic_kind:
+            self._tool_call_intrinsic_kinds[tool_call_id] = intrinsic_kind
         if tool_call_id not in self._tool_call_index:
             self._tool_call_index[tool_call_id] = len(self._tool_call_order)
             self._tool_call_order.append(tool_call_id)
@@ -205,6 +215,18 @@ class StreamContext(ConversionContext):
             The tool type ("function" or "custom"), defaults to "function".
         """
         return self._tool_call_types.get(tool_call_id, "function")
+
+    def get_tool_call_intrinsic_kind(self, tool_call_id: str) -> str:
+        """Get the canonical intrinsic kind registered for a tool call.
+
+        Args:
+            tool_call_id: The tool call identifier.
+
+        Returns:
+            The intrinsic kind, or ``""`` when the call is not an intrinsic
+            one (or was registered without a kind).
+        """
+        return self._tool_call_intrinsic_kinds.get(tool_call_id, "")
 
     def set_tool_call_type(self, tool_call_id: str, tool_type: str) -> None:
         """Update the tool type for an already-registered call.

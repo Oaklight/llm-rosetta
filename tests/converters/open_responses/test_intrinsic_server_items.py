@@ -121,7 +121,7 @@ class TestIntrinsicServerItemReadPath:
         assert ir["tool_call_id"] == "ws_abc"
         # Canonical kind, not the raw wire type.
         assert ir["tool_name"] == "web_search"
-        assert ir["provider_metadata"]["intrinsic_kind"] == "web_search"
+        assert ir["intrinsic_kind"] == "web_search"
         # The query survives; it used to read as an empty ``arguments``.
         assert ir["tool_input"]["query"] == "finance: NVDA"
         assert ir["tool_input"]["queries"] == ["finance: NVDA"]
@@ -133,7 +133,7 @@ class TestIntrinsicServerItemReadPath:
         assert ir["tool_type"] == "intrinsic"
         assert ir["tool_call_id"] == "ci_abc"
         assert ir["tool_name"] == "code_interpreter"
-        assert ir["provider_metadata"]["intrinsic_kind"] == "code_interpreter"
+        assert ir["intrinsic_kind"] == "code_interpreter"
         assert ir["tool_input"]["code"] == "print(1+1)"
         assert ir["tool_input"]["container_id"] == "cntr_1"
         assert ir["tool_input"]["outputs"] == [{"type": "logs", "logs": "2"}]

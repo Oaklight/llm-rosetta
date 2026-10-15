@@ -42,7 +42,7 @@ from ..base.helpers.opaque import (
 )
 from ..base.helpers.system_message_hoist import hoist_system_in_converter
 from ..base.tools import is_intrinsic_part
-from ..base.tools.intrinsic import get_intrinsic_kind, set_intrinsic_kind
+from ..base.tools.intrinsic import intrinsic_kind_of
 from ...transforms.ir import hoist_late_system_messages
 from ..base.context import ConversionContext, StreamContext
 from .config_ops import GoogleInteractionsConfigOps
@@ -532,7 +532,7 @@ class GoogleInteractionsConverter(BaseConverter):
                 tool_call_index=index,
             )
             tc_event["tool_type"] = "intrinsic"
-            set_intrinsic_kind(tc_event, kind)
+            tc_event["intrinsic_kind"] = kind
             sig = step.get("signature")
             if sig:
                 tc_event["provider_metadata"] = {"google": {"thought_signature": sig}}
@@ -623,7 +623,7 @@ class GoogleInteractionsConverter(BaseConverter):
                 tool_type="intrinsic",
                 block_index=index,
             )
-            set_intrinsic_kind(result_evt, SERVER_RESULT_TYPES[delta_type])
+            result_evt["intrinsic_kind"] = SERVER_RESULT_TYPES[delta_type]
             if delta.get("is_error"):
                 result_evt["is_error"] = True
             return [result_evt]
@@ -836,8 +836,9 @@ class GoogleInteractionsConverter(BaseConverter):
         if event.get("tool_type", "function") == "intrinsic":
             # Mirror ``ir_function_call_to_p``: a server call re-emits the
             # provider's own step type and carries no ``name`` (the API rejects
-            # one).  The kind comes from the event metadata, never the name.
-            kind = get_intrinsic_kind(event, event["tool_name"])
+            # one).  The kind comes from the event's first-class
+            # ``intrinsic_kind`` field, never the name.
+            kind = intrinsic_kind_of(event)
             step_type = INTRINSIC_KIND_TO_CALL_TYPE.get(kind)
             if step_type is None:
                 # Unrenderable kind: drop the call rather than fabricate a
@@ -945,7 +946,7 @@ class GoogleInteractionsConverter(BaseConverter):
         completed step in one message, and the paired block-start is dropped by
         ``_handle_ir_content_block_start_to_p`` so nothing is duplicated.
         """
-        kind = get_intrinsic_kind(event)
+        kind = intrinsic_kind_of(event)
         step_type = INTRINSIC_KIND_TO_RESULT_TYPE.get(kind)
         if step_type is None:
             # Unrenderable kind: drop the result rather than fabricate a step

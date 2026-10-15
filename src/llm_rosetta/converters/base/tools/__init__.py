@@ -54,11 +54,12 @@ from .intrinsic import (
     get_definition_kind,
     get_intrinsic_kind,
     get_native_definition,
+    intrinsic_kind_of,
+    is_intrinsic,
     is_intrinsic_part,
     make_intrinsic_tool_call,
     make_intrinsic_tool_definition,
     make_intrinsic_tool_result,
-    set_intrinsic_kind,
 )
 
 # -- Error marker --
@@ -104,10 +105,11 @@ __all__ = [
     # intrinsic
     "get_definition_kind",
     "get_native_definition",
+    "intrinsic_kind_of",
+    "is_intrinsic",
     "make_intrinsic_tool_definition",
     "is_intrinsic_part",
     "get_intrinsic_kind",
-    "set_intrinsic_kind",
     "make_intrinsic_tool_call",
     "make_intrinsic_tool_result",
     # error_marker

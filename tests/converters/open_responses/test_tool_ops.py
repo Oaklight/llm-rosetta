@@ -442,7 +442,7 @@ class TestOpenAIResponsesToolOps:
         result = OpenAIResponsesToolOps.p_tool_call_to_ir(provider_tc)
         assert result["type"] == "tool_call"
         assert result["tool_type"] == "intrinsic"
-        assert result["provider_metadata"]["intrinsic_kind"] == "shell"
+        assert result["intrinsic_kind"] == "shell"
 
     def test_p_tool_call_to_ir_invalid_json(self):
         """Test p_tool_call_to_ir handles invalid JSON arguments."""
@@ -508,7 +508,7 @@ class TestOpenAIResponsesToolOps:
         }
         ir = OpenAIResponsesToolOps.p_tool_call_to_ir(provider_tc)
         assert ir["tool_type"] == "intrinsic"
-        assert ir["provider_metadata"]["intrinsic_kind"] == "code_interpreter"
+        assert ir["intrinsic_kind"] == "code_interpreter"
 
         restored = OpenAIResponsesToolOps.ir_tool_call_to_p(ir)
         assert restored["type"] == "code_interpreter_call"
@@ -528,7 +528,7 @@ class TestOpenAIResponsesToolOps:
         }
         ir = OpenAIResponsesToolOps.p_tool_call_to_ir(provider_tc)
         assert ir["tool_type"] == "intrinsic"
-        assert ir["provider_metadata"]["intrinsic_kind"] == "shell"
+        assert ir["intrinsic_kind"] == "shell"
 
         restored = OpenAIResponsesToolOps.ir_tool_call_to_p(ir)
         assert restored["type"] == "shell_call"

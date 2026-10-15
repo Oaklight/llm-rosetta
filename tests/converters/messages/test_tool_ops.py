@@ -179,7 +179,7 @@ class TestMessagesToolOps:
         result = MessagesToolOps.p_tool_call_to_ir(provider)
         assert result["type"] == "tool_call"
         assert result["tool_type"] == "intrinsic"
-        assert result["provider_metadata"]["intrinsic_kind"] == "web_search"
+        assert result["intrinsic_kind"] == "web_search"
         assert result["tool_call_id"] == "server_456"
 
     def test_tool_call_round_trip(self):
@@ -213,7 +213,7 @@ class TestMessagesToolOps:
 
         restored = MessagesToolOps.p_tool_call_to_ir(provider)
         assert restored["tool_type"] == "intrinsic"
-        assert restored["provider_metadata"]["intrinsic_kind"] == "web_search"
+        assert restored["intrinsic_kind"] == "web_search"
         assert restored["tool_call_id"] == original["tool_call_id"]
         assert restored["tool_input"] == original["tool_input"]
 
@@ -233,7 +233,41 @@ class TestMessagesToolOps:
 
         restored = MessagesToolOps.p_tool_call_to_ir(provider)
         assert restored["tool_type"] == "intrinsic"
-        assert restored["provider_metadata"]["intrinsic_kind"] == "code_execution"
+        assert restored["intrinsic_kind"] == "code_execution"
+
+    def test_legacy_metadata_kind_still_writes_a_server_call(self):
+        """An IR part carrying only the legacy key still writes natively."""
+        legacy = cast(
+            ToolCallPart,
+            {
+                "type": "tool_call",
+                "tool_call_id": "call_legacy",
+                "tool_name": "web_search",
+                "tool_input": {"query": "x"},
+                "tool_type": "intrinsic",
+                "provider_metadata": {"intrinsic_kind": "web_search"},
+            },
+        )
+        result = MessagesToolOps.ir_tool_call_to_p(legacy)
+        assert result["type"] == "server_tool_use"
+        assert result["name"] == "web_search"
+
+    def test_first_class_kind_writes_a_server_call(self):
+        """The first-class ``intrinsic_kind`` field alone writes natively."""
+        modern = cast(
+            ToolCallPart,
+            {
+                "type": "tool_call",
+                "tool_call_id": "call_new",
+                "tool_name": "web_search",
+                "tool_input": {"query": "x"},
+                "tool_type": "intrinsic",
+                "intrinsic_kind": "web_search",
+            },
+        )
+        result = MessagesToolOps.ir_tool_call_to_p(modern)
+        assert result["type"] == "server_tool_use"
+        assert result["name"] == "web_search"
 
     # ==================== Tool Result ====================
 

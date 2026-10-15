@@ -126,7 +126,7 @@ class TestRoundTrip:
         """
         native = {"type": "code_execution_20250825", "name": "code_execution"}
         ir = MessagesToolOps.p_tool_definition_to_ir(dict(native))
-        assert ir["metadata"]["intrinsic_kind"] == "code_execution"
+        assert ir["intrinsic_kind"] == "code_execution"
         assert MessagesToolOps.ir_tool_definition_to_p(ir) == native
 
     def test_history_round_trip_end_to_end(self):

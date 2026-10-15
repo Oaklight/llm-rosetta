@@ -37,15 +37,13 @@ from ..base.helpers.tool_group import (
 )
 from ..base.tools import (
     extract_part_ids,
-    get_definition_kind,
-    get_intrinsic_kind,
     get_native_definition,
+    intrinsic_kind_of,
     make_intrinsic_tool_definition,
     log_orphan_warnings,
     make_intrinsic_tool_call,
     mark_tool_error,
     sanitize_schema,
-    set_intrinsic_kind,
     sanitize_tool_call_id,
     warn_tool_error,
     warn_tool_error_dropped,
@@ -638,7 +636,7 @@ def _intrinsic_call_degrades_on_history(kind: str, fields: dict[str, Any]) -> bo
     the IR cannot complete, are both written as a client ``function_call``.
 
     Args:
-        kind: Canonical intrinsic kind (``get_intrinsic_kind``).
+        kind: Canonical intrinsic kind (``intrinsic_kind_of``).
         fields: IR ``tool_input`` for the call.
 
     Returns:
@@ -655,7 +653,6 @@ def _intrinsic_call_degrades_on_history(kind: str, fields: dict[str, Any]) -> bo
 def _ir_intrinsic_to_responses(
     ir_tool_call: ToolCallPart,
     tool_call_id: str,
-    tool_name: str,
     tool_input: Any,
     arguments: str,
     *,
@@ -665,7 +662,7 @@ def _ir_intrinsic_to_responses(
     # by the target shim (which gates *definitions*): a history part is
     # context, and its shape here is independent of whether the same kind is
     # currently declared.  See the note in pipeline.py / #839.
-    intrinsic_kind = get_intrinsic_kind(ir_tool_call, tool_name)
+    intrinsic_kind = intrinsic_kind_of(ir_tool_call)
     item_type = _INTRINSIC_KIND_TO_ITEM.get(intrinsic_kind, "function_call")
     fields = tool_input if isinstance(tool_input, dict) else {}
 
@@ -933,7 +930,7 @@ class OpenResponsesToolOps(BaseToolOps):
             stored = get_native_definition(ir_tool, "openai_responses")
             if stored is not None:
                 return dict(stored)
-            kind = get_definition_kind(ir_tool)
+            kind = intrinsic_kind_of(ir_tool)
             native = _RESPONSES_INTRINSIC_TOOLS.get(kind)
             if native is None:
                 logger.warning(
@@ -1313,7 +1310,7 @@ class OpenResponsesToolOps(BaseToolOps):
         """
         fields = ir_tool_call.get("tool_input")
         return _intrinsic_call_degrades_on_history(
-            get_intrinsic_kind(ir_tool_call, ""),
+            intrinsic_kind_of(ir_tool_call),
             fields if isinstance(fields, dict) else {},
         )
 
@@ -1385,7 +1382,6 @@ class OpenResponsesToolOps(BaseToolOps):
             return _ir_intrinsic_to_responses(
                 ir_tool_call,
                 tool_call_id,
-                tool_name,
                 tool_input,
                 arguments,
                 for_history=bool(kwargs.get("for_history")),
@@ -1522,7 +1518,7 @@ class OpenResponsesToolOps(BaseToolOps):
                 had to be re-encoded or dropped.
         """
         if ir_tool_result.get("tool_type") == "intrinsic":
-            kind = get_intrinsic_kind(ir_tool_result, "")
+            kind = intrinsic_kind_of(ir_tool_result)
             result_item_type = _INTRINSIC_KIND_TO_RESULT_ITEM.get(kind)
             for_history = kwargs.get("for_history", True)
 
@@ -1643,7 +1639,7 @@ class OpenResponsesToolOps(BaseToolOps):
         intrinsic_kind = _INTRINSIC_RESULT_TYPES.get(item_type)
         if intrinsic_kind is not None:
             part["tool_type"] = "intrinsic"
-            set_intrinsic_kind(part, intrinsic_kind)
+            part["intrinsic_kind"] = intrinsic_kind
         return part
 
     # ==================== Tool Config ====================

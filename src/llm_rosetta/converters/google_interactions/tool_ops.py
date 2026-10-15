@@ -13,9 +13,8 @@ from ...types.ir import ToolCallPart, ToolResultPart
 from ...types.ir.tools import ToolChoice, ToolDefinition
 from ..base import BaseToolOps
 from ..base.tools.intrinsic import (
-    get_definition_kind,
-    get_intrinsic_kind,
     get_native_definition,
+    intrinsic_kind_of,
     make_intrinsic_tool_definition,
     make_intrinsic_tool_call,
     make_intrinsic_tool_result,
@@ -74,7 +73,7 @@ class GoogleInteractionsToolOps(BaseToolOps):
             stored = get_native_definition(ir_tool, "google_interactions")
             if stored is not None:
                 return dict(stored)
-            kind = get_definition_kind(ir_tool)
+            kind = intrinsic_kind_of(ir_tool)
             native = _GI_INTRINSIC_TOOLS.get(kind)
             if native is None:
                 logger.warning(
@@ -152,7 +151,7 @@ class GoogleInteractionsToolOps(BaseToolOps):
             # ``name``: the API rejects a body carrying one with ``400 Unknown
             # parameter 'name' at 'input[0]'``.  They do carry a ``signature``
             # on the wire, so restore the one the read path kept.
-            intrinsic_kind = get_intrinsic_kind(ir_part, ir_part["tool_name"])
+            intrinsic_kind = intrinsic_kind_of(ir_part)
             step_type = INTRINSIC_KIND_TO_CALL_TYPE.get(intrinsic_kind)
             if step_type is None:
                 # A kind this dialect cannot render (``web_search`` arriving
@@ -257,7 +256,7 @@ class GoogleInteractionsToolOps(BaseToolOps):
         ``function_response.name: Name cannot be empty``.
         """
         if ir_part.get("tool_type") == "intrinsic":
-            intrinsic_kind = get_intrinsic_kind(ir_part)
+            intrinsic_kind = intrinsic_kind_of(ir_part)
             step_type = INTRINSIC_KIND_TO_RESULT_TYPE.get(intrinsic_kind)
             if step_type is None:
                 # Unrenderable kind: drop the result rather than fabricate

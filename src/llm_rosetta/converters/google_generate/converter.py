@@ -50,9 +50,8 @@ from ..base.tools import (
     strip_orphaned_tool_config,
 )
 from ..base.tools.intrinsic import (
-    get_intrinsic_kind,
+    intrinsic_kind_of,
     is_intrinsic_part,
-    set_intrinsic_kind,
 )
 from ..base.helpers.extensions import wire_extensions
 from ..base.helpers.opaque import (
@@ -1042,6 +1041,7 @@ class GoogleGenerateConverter(BaseConverter):
                 tool_name,
                 tool_type="intrinsic",
                 provider_metadata=native_meta,
+                intrinsic_kind=intrinsic_kind_of(ir_call),
             )
         tc_index = context.tool_call_count - 1 if context is not None else 0
         start_event: dict[str, Any] = {
@@ -1053,7 +1053,7 @@ class GoogleGenerateConverter(BaseConverter):
             "tool_call_index": tc_index,
             "provider_metadata": dict(native_meta),
         }
-        set_intrinsic_kind(start_event, get_intrinsic_kind(ir_call))
+        start_event["intrinsic_kind"] = intrinsic_kind_of(ir_call)
         events.append(cast(ToolCallStartEvent, start_event))
 
         args_json = json.dumps(ir_call.get("tool_input", {}))
@@ -1091,8 +1091,8 @@ class GoogleGenerateConverter(BaseConverter):
             is_error=ir_result.get("is_error", False),
             tool_type="intrinsic",
         )
-        set_intrinsic_kind(event, get_intrinsic_kind(ir_result))
-        event["provider_metadata"]["_native"] = {
+        event["intrinsic_kind"] = intrinsic_kind_of(ir_result)
+        event.setdefault("provider_metadata", {})["_native"] = {
             "base": self._CONVERTER_TAG,
             "part": dict(native_part),
         }
@@ -1346,6 +1346,7 @@ class GoogleGenerateConverter(BaseConverter):
                 event["tool_name"],
                 tool_type=tool_type,
                 provider_metadata=event.get("provider_metadata"),
+                intrinsic_kind=intrinsic_kind_of(event),
             )
         if tool_type != "intrinsic":
             return {}
@@ -1369,7 +1370,7 @@ class GoogleGenerateConverter(BaseConverter):
         """
         if event.get("tool_type") != "intrinsic":
             return {}
-        kind = get_intrinsic_kind(event, "")
+        kind = intrinsic_kind_of(event)
         if kind != "code_execution":
             return {}
         native = self._native_code_execution_result(event.get("provider_metadata"))
@@ -1385,7 +1386,7 @@ class GoogleGenerateConverter(BaseConverter):
             }
             if event.get("is_error"):
                 ir_part["is_error"] = True
-            set_intrinsic_kind(ir_part, kind)
+            ir_part["intrinsic_kind"] = kind
             converted = self.tool_ops.ir_intrinsic_result_to_p(ir_part)
             if converted is None:
                 return {}
@@ -1463,8 +1464,8 @@ class GoogleGenerateConverter(BaseConverter):
 
     def _flushed_intrinsic_part(
         self,
+        kind: str,
         provider_metadata: Mapping[str, Any],
-        tool_name: str,
         args_str: str,
     ) -> dict[str, Any] | None:
         """Build the finish part for a pending intrinsic call, or ``None``.
@@ -1476,10 +1477,7 @@ class GoogleGenerateConverter(BaseConverter):
         """
         if self._native_executable_code(provider_metadata) is not None:
             return None
-        if (
-            get_intrinsic_kind({"provider_metadata": provider_metadata}, tool_name)
-            != "code_execution"
-        ):
+        if kind != "code_execution":
             return None
         if not args_str.strip():
             # No input ever arrived (a cross-format source that emitted the
@@ -1527,7 +1525,9 @@ class GoogleGenerateConverter(BaseConverter):
                         context.get_tool_call_provider_metadata(call_id) or {}
                     )
                     intrinsic_part = self._flushed_intrinsic_part(
-                        provider_metadata, tool_name, args_str
+                        context.get_tool_call_intrinsic_kind(call_id),
+                        provider_metadata,
+                        args_str,
                     )
                     if intrinsic_part is not None:
                         parts.append(intrinsic_part)

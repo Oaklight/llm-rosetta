@@ -409,7 +409,7 @@ class TestMessagesMessageOps:
         tc = result[0]["content"][0]
         assert tc["type"] == "tool_call"
         assert tc["tool_type"] == "intrinsic"
-        assert tc["provider_metadata"]["intrinsic_kind"] == "web_search"
+        assert tc["intrinsic_kind"] == "web_search"
 
     def test_p_tool_result_to_ir(self):
         """Test Anthropic tool_result block → IR ToolResultPart.

@@ -146,6 +146,7 @@ class OpenResponsesStreamContext(StreamContext):
         ctx._tool_call_args = base._tool_call_args
         ctx._tool_call_order = base._tool_call_order
         ctx._tool_call_types = base._tool_call_types
+        ctx._tool_call_intrinsic_kinds = base._tool_call_intrinsic_kinds
         ctx._tool_call_index = base._tool_call_index
         # Subclass-only fields below start empty and are populated during
         # streaming, so they are not copied from `base` (which is a plain

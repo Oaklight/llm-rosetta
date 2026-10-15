@@ -201,7 +201,7 @@ class TestFlattenNamespaceTool:
         assert len(result) == 1
         assert result[0]["tool_group"] == "ns"
         assert result[0]["type"] == "intrinsic"
-        assert result[0]["metadata"].get("intrinsic_kind") == "web_search"
+        assert result[0].get("intrinsic_kind") == "web_search"
 
     def test_passthrough_child_type(self):
         """An unknown child type goes through _synthesize_passthrough_tool."""

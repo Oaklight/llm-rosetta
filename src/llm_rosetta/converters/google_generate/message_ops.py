@@ -35,7 +35,7 @@ from ...types.ir import (
 from ..base import BaseMessageOps
 from ..base.helpers.opaque import inject_google_function_call_signature
 from ..base.tools.batch import assign_tool_batch_ids, merge_tool_messages
-from ..base.tools.intrinsic import get_intrinsic_kind, is_intrinsic_part
+from ..base.tools.intrinsic import intrinsic_kind_of, is_intrinsic_part
 from .content_ops import GoogleGenerateContentOps
 from .tool_ops import GoogleGenerateToolOps
 
@@ -84,9 +84,9 @@ def _pair_intrinsic_ids(parts: list[Any]) -> None:
             or result_part.get("tool_call_id")
         ):
             continue
-        r_kind = get_intrinsic_kind(result_part)
+        r_kind = intrinsic_kind_of(result_part)
         for call_part in calls:
-            if get_intrinsic_kind(call_part) == r_kind:
+            if intrinsic_kind_of(call_part) == r_kind:
                 result_part["tool_call_id"] = call_part["tool_call_id"]
                 calls.remove(call_part)
                 break

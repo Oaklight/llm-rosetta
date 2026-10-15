@@ -150,6 +150,13 @@ class ToolCallStartEvent(TypedDict):
     Present when the client addressed the tool by ``(name, group)``; absent on
     a flat target.  The source converter reads it here and carries it onto the
     later done/completed items.
+
+    ``intrinsic_kind`` is the streaming counterpart of
+    :attr:`~llm_rosetta.types.ir.parts.ToolCallPart.intrinsic_kind`: present
+    when ``tool_type == "intrinsic"``, holding the canonical kind (e.g.
+    ``"web_search"``).  A reader falls back to the legacy
+    ``provider_metadata["intrinsic_kind"]`` only when this field is absent; the
+    tool name is never used as a fallback.
     """
 
     type: Required[Literal["tool_call_start"]]
@@ -157,6 +164,7 @@ class ToolCallStartEvent(TypedDict):
     tool_name: Required[str]
     tool_type: NotRequired[str]  # "function" (default), "custom", etc.
     tool_group: NotRequired[str]  # Group the called tool belongs to
+    intrinsic_kind: NotRequired[str]  # Canonical kind for an intrinsic call
     cache_hint: NotRequired[dict[str, Any]]  # Block-level cache breakpoint
     tool_call_index: NotRequired[int]  # Index for multiple parallel tool calls
     choice_index: NotRequired[int]
@@ -192,12 +200,19 @@ class ToolResultEvent(TypedDict):
     streaming and non-streaming halves describe the same thing.  In particular
     ``result`` is ``Any``, not a list: a web-search result is a list of result
     blocks, but a code-execution result can be a string (or an object).
+
+    ``intrinsic_kind`` is the streaming counterpart of
+    :attr:`~llm_rosetta.types.ir.parts.ToolResultPart.intrinsic_kind`: present
+    when ``tool_type == "intrinsic"``, holding the canonical kind.  A reader
+    falls back to the legacy ``provider_metadata["intrinsic_kind"]`` only when
+    this field is absent; the tool name is never used as a fallback.
     """
 
     type: Required[Literal["tool_result"]]
     tool_call_id: Required[str]  # Provider's tool_use_id
     result: Required[Any]  # Can be a string, list, object, etc.
     cache_hint: NotRequired[dict[str, Any]]  # Block-level cache breakpoint
+    intrinsic_kind: NotRequired[str]  # Canonical kind for an intrinsic result
     tool_type: NotRequired[
         Literal["function", "mcp", "custom", "intrinsic"]
     ]  # absent means "infer", as on ToolResultPart

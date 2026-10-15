@@ -48,9 +48,8 @@ from ..base.context import ConversionContext, StreamContext
 from ..base.tools import (
     assign_tool_batch_ids,
     fix_orphaned_tool_calls_ir,
-    get_intrinsic_kind,
+    intrinsic_kind_of,
     sanitize_tool_call_id,
-    set_intrinsic_kind,
     strip_orphaned_tool_config,
 )
 from ..base.helpers.extensions import wire_extensions
@@ -791,7 +790,7 @@ class MessagesConverter(BaseConverter):
                 # restores ``server_tool_use`` without inferring it from the
                 # name.  ``tool_name`` is already folded above.
                 start_evt["tool_type"] = "intrinsic"
-                set_intrinsic_kind(start_evt, tool_name)
+                start_evt["intrinsic_kind"] = tool_name
             # The same two fields ``p_tool_call_to_ir`` keeps on the
             # non-streaming part, so a streamed call does not lose what the
             # block carries: a cache breakpoint, and a non-``direct`` caller
@@ -823,6 +822,10 @@ class MessagesConverter(BaseConverter):
             tool_type = part.get("tool_type")
             if tool_type is not None:
                 result_evt["tool_type"] = tool_type
+            # Carry the canonical kind on the event's first-class field, the
+            # same carrier ``p_server_tool_result_to_ir`` puts it on.
+            if "intrinsic_kind" in part:
+                result_evt["intrinsic_kind"] = part["intrinsic_kind"]
             if "cache_hint" in part:
                 result_evt["cache_hint"] = part["cache_hint"]
             if "provider_metadata" in part:
@@ -1231,13 +1234,14 @@ class MessagesConverter(BaseConverter):
         executed (``tool_type == "intrinsic"``) is re-emitted as
         ``server_tool_use`` with its canonical kind as the block name, and
         everything else as ``tool_use``.  The kind comes from the event's
-        ``intrinsic_kind`` metadata, never from the tool name.
+        first-class ``intrinsic_kind`` field (legacy metadata still accepted),
+        never from the tool name.
         """
         block_type = "tool_use"
         tool_name = event["tool_name"]
         if event.get("tool_type", "function") == "intrinsic":
             block_type = "server_tool_use"
-            tool_name = get_intrinsic_kind(event, event["tool_name"])
+            tool_name = intrinsic_kind_of(event)
         result: dict[str, Any] = {
             "type": AnthropicEventType.CONTENT_BLOCK_START,
             "content_block": {

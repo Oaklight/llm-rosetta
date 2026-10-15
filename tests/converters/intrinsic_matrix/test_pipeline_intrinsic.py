@@ -450,7 +450,7 @@ def test_respell_renames_an_intrinsic_history_call():
     apply_upstream_tool_names(ir, name_map=build_tool_name_map(ir), warnings=[])
     part = ir["messages"][0]["content"][0]
     assert part["tool_name"] == "agents_wait"
-    assert part["provider_metadata"]["intrinsic_kind"] == "wait"
+    assert part["intrinsic_kind"] == "wait"
 
 
 @pytest.mark.xfail(

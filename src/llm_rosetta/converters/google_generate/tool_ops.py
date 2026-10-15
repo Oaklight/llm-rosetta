@@ -29,9 +29,8 @@ from ..base import BaseToolOps
 from ..base.helpers.opaque import CARRIER_KEY
 from ..base.tools import sanitize_schema, sanitize_tool_call_id
 from ..base.tools.intrinsic import (
-    get_definition_kind,
-    get_intrinsic_kind,
     get_native_definition,
+    intrinsic_kind_of,
     make_intrinsic_tool_call,
     make_intrinsic_tool_definition,
     make_intrinsic_tool_result,
@@ -164,7 +163,7 @@ class GoogleGenerateToolOps(BaseToolOps):
             stored = get_native_definition(ir_tool, "google_generate")
             if stored is not None:
                 return dict(stored)
-            kind = get_definition_kind(ir_tool)
+            kind = intrinsic_kind_of(ir_tool)
             key = _INTRINSIC_TOOL_KEYS.get(kind)
             if key is None:
                 logger.warning(
@@ -603,7 +602,7 @@ class GoogleGenerateToolOps(BaseToolOps):
         Google surfaces search results via ``groundingMetadata``, not
         as content parts.
         """
-        kind = get_intrinsic_kind(ir_part)
+        kind = intrinsic_kind_of(ir_part)
         if kind == "code_execution":
             return {
                 "executableCode": {
@@ -626,7 +625,7 @@ class GoogleGenerateToolOps(BaseToolOps):
         See :meth:`ir_intrinsic_call_to_p` for why ``google_search``
         is definition-only.
         """
-        kind = get_intrinsic_kind(ir_part)
+        kind = intrinsic_kind_of(ir_part)
         if kind == "code_execution":
             outcome = "OUTCOME_FAILED" if ir_part.get("is_error") else "OUTCOME_OK"
             result = ir_part.get("result", "")

@@ -105,18 +105,20 @@ class ToolCallPart(TypedDict):
     This design avoids type explosion while maintaining extensibility.
 
     ``intrinsic`` 表示 provider 托管的内置工具（web search、code execution 等），
-    具体种类通过 ``provider_metadata["intrinsic_kind"]`` 区分。
+    具体种类记录在一等字段 ``intrinsic_kind`` 上（如 ``"web_search"``、
+    ``"code_execution"``），不再藏在 ``provider_metadata`` 里；读取时
+    ``intrinsic_kind_of`` 仍兼容旧的 ``provider_metadata["intrinsic_kind"]`` 写法。
     ``intrinsic`` represents provider-hosted built-in tools (web search, code
-    execution, etc.); the specific kind is stored in
-    ``provider_metadata["intrinsic_kind"]``.
+    execution, etc.); the specific kind is recorded in the first-class
+    ``intrinsic_kind`` field (e.g. ``"web_search"``, ``"code_execution"``)
+    rather than under ``provider_metadata``.  Readers still accept the legacy
+    ``provider_metadata["intrinsic_kind"]`` spelling, via ``intrinsic_kind_of``.
 
     provider_metadata字段用于存储provider特定的元数据，例如：
     - Google的thought_signature（Gemini 3必需，Gemini 2.5推荐）
-    - intrinsic工具的intrinsic_kind（如 "web_search", "code_execution"）
     - 其他provider的特殊字段
     The provider_metadata field is used to store provider-specific metadata, e.g.:
     - Google's thought_signature (required for Gemini 3, recommended for Gemini 2.5)
-    - intrinsic_kind for intrinsic tools (e.g. "web_search", "code_execution")
     - Other provider's special fields
 
     ``tool_group`` 是本次调用所属工具组的名字，与工具定义上的
@@ -155,6 +157,18 @@ class ToolCallPart(TypedDict):
         dict[str, Any]
     ]  # Provider特定的元数据 Provider-specific metadata
     cache_hint: NotRequired[dict[str, Any]]
+    intrinsic_kind: NotRequired[str]
+    """本调用的 intrinsic 工具种类 The intrinsic kind this call names.
+
+    仅在 ``tool_type == "intrinsic"`` 的调用上有意义（如 ``"web_search"``、
+    ``"code_execution"``），与工具定义上的 ``ToolDefinition.intrinsic_kind``
+    对应。读取方在字段缺失时才会回退到旧的
+    ``provider_metadata["intrinsic_kind"]``；写入方只写这个一等字段。
+    Meaningful only when ``tool_type == "intrinsic"``.  It mirrors
+    ``ToolDefinition.intrinsic_kind``; a reader falls back to the legacy
+    ``provider_metadata["intrinsic_kind"]`` only when this field is absent, and
+    a writer records only this field.
+    """
 
 
 class ToolResultPart(TypedDict):
@@ -184,6 +198,18 @@ class ToolResultPart(TypedDict):
         dict[str, Any]
     ]  # Provider特定的元数据 Provider-specific metadata
     cache_hint: NotRequired[dict[str, Any]]
+    intrinsic_kind: NotRequired[str]
+    """本结果的 intrinsic 工具种类 The intrinsic kind this result answers.
+
+    仅在 ``tool_type == "intrinsic"`` 的结果上有意义，与调用侧
+    ``ToolCallPart.intrinsic_kind`` 及定义侧
+    ``ToolDefinition.intrinsic_kind`` 对应。读取方在字段缺失时才会回退到旧的
+    ``provider_metadata["intrinsic_kind"]``；写入方只写这个一等字段。
+    Meaningful only when ``tool_type == "intrinsic"``.  It mirrors
+    ``ToolCallPart.intrinsic_kind`` and ``ToolDefinition.intrinsic_kind``; a
+    reader falls back to the legacy ``provider_metadata["intrinsic_kind"]``
+    only when this field is absent, and a writer records only this field.
+    """
 
 
 # ============================================================================

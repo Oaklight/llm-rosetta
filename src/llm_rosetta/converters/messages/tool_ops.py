@@ -32,14 +32,12 @@ from ..base.helpers.opaque import CARRIER_KEY
 from ..base.tools import (
     convert_nullable_to_type_array,
     extract_part_ids,
-    get_definition_kind,
-    get_intrinsic_kind,
     get_native_definition,
+    intrinsic_kind_of,
     make_intrinsic_tool_definition,
     log_orphan_warnings,
     sanitize_schema,
     sanitize_tool_call_id,
-    set_intrinsic_kind,
 )
 
 logger = logging.getLogger(__name__)
@@ -229,7 +227,7 @@ class MessagesToolOps(BaseToolOps):
             stored = get_native_definition(ir_tool, "messages")
             if stored is not None:
                 return dict(stored)
-            kind = get_definition_kind(ir_tool)
+            kind = intrinsic_kind_of(ir_tool)
             native = _ANTHROPIC_INTRINSIC_TOOLS.get(kind)
             if native is None:
                 logger.warning(
@@ -394,7 +392,7 @@ class MessagesToolOps(BaseToolOps):
         pm = ir_tool_call.get("provider_metadata") or {}
 
         if tool_type == "intrinsic":
-            intrinsic_kind = get_intrinsic_kind(ir_tool_call, ir_tool_call["tool_name"])
+            intrinsic_kind = intrinsic_kind_of(ir_tool_call)
             result = {
                 "type": "server_tool_use",
                 "id": sanitize_tool_call_id(ir_tool_call["tool_call_id"]),
@@ -465,7 +463,7 @@ class MessagesToolOps(BaseToolOps):
             # step so the IR does not carry two identities for one call.
             kind = canonical_server_tool_kind(tool_name)
             part["tool_name"] = kind
-            set_intrinsic_kind(part, kind)
+            part["intrinsic_kind"] = kind
 
         # Preserve non-default caller for Anthropic round-trip
         caller = provider_tool_call.get("caller")
@@ -593,14 +591,14 @@ class MessagesToolOps(BaseToolOps):
             tool_type="intrinsic",
             is_error=provider_block.get("is_error", False),
         )
-        set_intrinsic_kind(part, kind)
+        part["intrinsic_kind"] = kind
 
         # Keep the provider's whole block so a same-dialect writer can restore
         # it verbatim, including fields the IR does not model (Anthropic's
         # web-search ``caller``, for one).  This mirrors the ``_native``
         # payload the definition path stores; the base key namespaces it to
         # the dialect that produced it.
-        part["provider_metadata"]["_native"] = {
+        part.setdefault("provider_metadata", {})["_native"] = {
             "base": "messages",
             "block": dict(provider_block),
         }
@@ -632,7 +630,7 @@ class MessagesToolOps(BaseToolOps):
         rendered inline in an assistant turn.  The caller drops it, as the
         streaming write path does.
         """
-        kind = get_intrinsic_kind(ir_tool_result)
+        kind = intrinsic_kind_of(ir_tool_result)
         if not kind and ir_tool_result.get("tool_type") != "intrinsic":
             return None
 

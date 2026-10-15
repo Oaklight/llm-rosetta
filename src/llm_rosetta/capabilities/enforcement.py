@@ -13,7 +13,7 @@ import logging
 from typing import Any
 
 from llm_rosetta.converters.base.tools.intrinsic import (
-    get_definition_kind as _get_definition_kind,
+    intrinsic_kind_of as _intrinsic_kind_of,
     is_intrinsic_part as _is_intrinsic_part,
     make_intrinsic_tool_definition as _make_intrinsic_tool_definition,
 )
@@ -353,7 +353,7 @@ def resolve_intrinsic_tools(
             continue
         ttype = t.get("type")
         if ttype == "intrinsic":
-            kind = _get_definition_kind(t)
+            kind = _intrinsic_kind_of(t)
             if kind in supported:
                 new_tools.append(t)
             else:

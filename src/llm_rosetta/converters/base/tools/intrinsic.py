@@ -2,10 +2,19 @@
 
 Intrinsic tools are provider-native server-side capabilities (web search,
 code execution, file search, etc.) represented in the IR with
-``tool_type="intrinsic"`` and a ``provider_metadata["intrinsic_kind"]``
-string identifying the specific capability.
+``tool_type="intrinsic"`` (parts/events) or ``type="intrinsic"``
+(definitions) and a first-class ``intrinsic_kind`` field identifying the
+specific capability.
+
+``intrinsic_kind`` follows the same promotion as ``tool_group`` (#999): the
+kind used to live under ``provider_metadata["intrinsic_kind"]`` on a part or
+``metadata["intrinsic_kind"]`` on a definition, and now has a top-level field
+on every carrier.  :func:`intrinsic_kind_of` reads the first-class field
+first and still accepts the legacy metadata spelling, so IR serialized before
+the field existed keeps working.
 """
 
+from collections.abc import Mapping
 from typing import Any
 
 
@@ -18,15 +27,72 @@ def is_intrinsic_part(part: Any) -> bool:
     )
 
 
-def get_intrinsic_kind(part: Any, fallback: str = "") -> str:
-    """Read ``intrinsic_kind`` from a part's provider_metadata."""
-    pm = part.get("provider_metadata") or {}
-    return pm.get("intrinsic_kind", fallback)
+def is_intrinsic(x: Any) -> bool:
+    """Check whether an IR object is an intrinsic tool call, result or definition.
+
+    Covers the part/event carriers (``tool_type == "intrinsic"``) as well as
+    the definition carrier (``type == "intrinsic"``), so callers that handle
+    either side of the tool identity can ask once.
+    """
+    if not isinstance(x, dict):
+        return False
+    if x.get("type") == "intrinsic":
+        return True
+    return (
+        x.get("type")
+        in (
+            "tool_call",
+            "tool_result",
+            "tool_call_start",
+        )
+        and x.get("tool_type") == "intrinsic"
+    )
 
 
-def set_intrinsic_kind(part: Any, kind: str) -> None:
-    """Write ``intrinsic_kind`` into a part's provider_metadata (in place)."""
-    part.setdefault("provider_metadata", {})["intrinsic_kind"] = kind
+def intrinsic_kind_of(x: Any) -> str:
+    """Read the canonical intrinsic kind from an IR part, event or definition.
+
+    The kind lives in the first-class ``intrinsic_kind`` field.  IR built
+    before that field existed stored it under ``provider_metadata`` (a part or
+    event) or ``metadata`` (a definition); those legacy spellings are still
+    read as a fallback so an old serialized payload keeps working.  A missing,
+    non-string, or empty value reads as ``""``.
+
+    The tool name is deliberately never consulted: an intrinsic kind comes
+    from the provider's own wire type or from this field, not by inferring one
+    from a client tool name.
+
+    Works on anything carrying these fields: an IR ``ToolCallPart`` /
+    ``ToolResultPart``, a ``tool_call_start`` / ``tool_result`` stream event,
+    a ``ToolDefinition``, or a dict about to become one.
+
+    Args:
+        x: The IR object to read.
+
+    Returns:
+        The canonical kind, or ``""`` when the object carries none.
+    """
+    if not isinstance(x, Mapping):
+        return ""
+    kind = x.get("intrinsic_kind")
+    if isinstance(kind, str) and kind:
+        return kind
+    for key in ("provider_metadata", "metadata"):
+        holder = x.get(key)
+        if isinstance(holder, Mapping):
+            legacy = holder.get("intrinsic_kind")
+            if isinstance(legacy, str) and legacy:
+                return legacy
+    return ""
+
+
+def get_intrinsic_kind(part: Any) -> str:
+    """Deprecated alias of :func:`intrinsic_kind_of`.
+
+    Kept for one release so existing importers keep working.  New code should
+    call :func:`intrinsic_kind_of`.
+    """
+    return intrinsic_kind_of(part)
 
 
 def make_intrinsic_tool_call(
@@ -37,18 +103,22 @@ def make_intrinsic_tool_call(
     intrinsic_kind: str,
     extra_metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Build an IR ToolCallPart with intrinsic tool_type."""
-    pm: dict[str, Any] = {"intrinsic_kind": intrinsic_kind}
-    if extra_metadata:
-        pm.update(extra_metadata)
-    return {
+    """Build an IR ToolCallPart with intrinsic tool_type.
+
+    The kind is written to the first-class ``intrinsic_kind`` field; the
+    legacy ``provider_metadata["intrinsic_kind"]`` spelling is not written.
+    """
+    part: dict[str, Any] = {
         "type": "tool_call",
         "tool_call_id": tool_call_id,
         "tool_name": tool_name,
         "tool_input": tool_input,
         "tool_type": "intrinsic",
-        "provider_metadata": pm,
+        "intrinsic_kind": intrinsic_kind,
     }
+    if extra_metadata:
+        part["provider_metadata"] = extra_metadata
+    return part
 
 
 def make_intrinsic_tool_result(
@@ -59,19 +129,22 @@ def make_intrinsic_tool_result(
     is_error: bool = False,
     extra_metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Build an IR ToolResultPart with intrinsic tool_type."""
-    pm: dict[str, Any] = {"intrinsic_kind": intrinsic_kind}
-    if extra_metadata:
-        pm.update(extra_metadata)
+    """Build an IR ToolResultPart with intrinsic tool_type.
+
+    The kind is written to the first-class ``intrinsic_kind`` field; the
+    legacy ``provider_metadata["intrinsic_kind"]`` spelling is not written.
+    """
     part: dict[str, Any] = {
         "type": "tool_result",
         "tool_call_id": tool_call_id,
         "result": result,
         "tool_type": "intrinsic",
-        "provider_metadata": pm,
+        "intrinsic_kind": intrinsic_kind,
     }
     if is_error:
         part["is_error"] = True
+    if extra_metadata:
+        part["provider_metadata"] = extra_metadata
     return part
 
 
@@ -80,9 +153,9 @@ def make_intrinsic_tool_result(
 # ---------------------------------------------------------------------------
 #
 # An IR ToolDefinition may be ``type="intrinsic"`` for a provider-hosted
-# server tool (web search, code execution, …).  The kind is stored in
-# ``metadata["intrinsic_kind"]``.  Whether a provider enables it is declared
-# by that provider's shim (``ToolsConfig.intrinsic_tools``).
+# server tool (web search, code execution, …).  The kind lives in the
+# first-class ``intrinsic_kind`` field.  Whether a provider enables it is
+# declared by that provider's shim (``ToolsConfig.intrinsic_tools``).
 
 
 def make_intrinsic_tool_definition(
@@ -95,27 +168,33 @@ def make_intrinsic_tool_definition(
 ) -> dict[str, Any]:
     """Build an IR ToolDefinition of ``type="intrinsic"`` from a kind.
 
+    The kind is written to the first-class ``intrinsic_kind`` field; the
+    legacy ``metadata["intrinsic_kind"]`` spelling is not written.
+
     ``native`` (with ``native_base``) stores the provider's original tool
     payload so a same-provider round-trip can restore it verbatim (extra
     config such as search filters is otherwise lost when the def is
     reduced to a canonical kind).
     """
-    meta: dict[str, Any] = {"intrinsic_kind": kind}
-    if native is not None:
-        meta["_native"] = {"base": native_base, "tool": native}
-    return {
+    definition: dict[str, Any] = {
         "type": "intrinsic",
         "name": kind,
         "description": description,
         "parameters": parameters or {},
-        "metadata": meta,
+        "intrinsic_kind": kind,
     }
+    if native is not None:
+        definition["metadata"] = {"_native": {"base": native_base, "tool": native}}
+    return definition
 
 
 def get_definition_kind(ir_tool: Any) -> str:
-    """Read the intrinsic kind from an IR ToolDefinition's metadata."""
-    meta = ir_tool.get("metadata") or {}
-    return meta.get("intrinsic_kind") or ""
+    """Deprecated alias of :func:`intrinsic_kind_of`.
+
+    Kept for one release so existing importers keep working.  New code should
+    call :func:`intrinsic_kind_of`.
+    """
+    return intrinsic_kind_of(ir_tool)
 
 
 def get_native_definition(ir_tool: Any, base: str) -> dict[str, Any] | None:

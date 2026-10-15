@@ -49,7 +49,7 @@ class TestGoogleExecutableCodeToIR:
         tc = result["content"][0]
         assert tc["type"] == "tool_call"
         assert tc["tool_type"] == "intrinsic"
-        assert tc["provider_metadata"]["intrinsic_kind"] == "code_execution"
+        assert tc["intrinsic_kind"] == "code_execution"
         assert tc["tool_input"]["code"] == "print('hello')"
         assert tc["tool_input"]["language"] == "PYTHON"
         assert tc["tool_call_id"].startswith("google_exec_")
@@ -97,7 +97,7 @@ class TestGoogleCodeExecutionResultToIR:
         tr = result["content"][0]
         assert tr["type"] == "tool_result"
         assert tr["tool_type"] == "intrinsic"
-        assert tr["provider_metadata"]["intrinsic_kind"] == "code_execution"
+        assert tr["intrinsic_kind"] == "code_execution"
         assert tr["result"] == "hello\n"
         assert not tr.get("is_error")
 
@@ -213,7 +213,7 @@ class TestProviderIntrinsicPartToIR:
         result = GoogleGenerateToolOps.p_intrinsic_call_to_ir(part)
         assert result is not None
         assert result["tool_type"] == "intrinsic"
-        assert result["provider_metadata"]["intrinsic_kind"] == "code_execution"
+        assert result["intrinsic_kind"] == "code_execution"
         assert result["tool_input"]["code"] == "1+1"
 
     def test_code_execution_result_part_to_ir(self):
@@ -317,7 +317,7 @@ class TestIntrinsicToolDefinitionRoundTrip:
         assert ir is not None
         assert ir["type"] == "intrinsic"
         assert ir["name"] == "google_search"
-        assert ir["metadata"]["intrinsic_kind"] == "google_search"
+        assert ir["intrinsic_kind"] == "google_search"
 
     def test_google_search_definition_round_trip(self):
         original = {"google_search": {}}
@@ -334,7 +334,7 @@ class TestIntrinsicToolDefinitionRoundTrip:
             ToolDefinition, GoogleGenerateToolOps.p_tool_definition_to_ir(provider_tool)
         )
         assert ir is not None
-        assert ir["metadata"]["intrinsic_kind"] == "google_search"
+        assert ir["intrinsic_kind"] == "google_search"
 
     def test_code_execution_definition_to_ir(self):
         provider_tool = {"code_execution": {}}
@@ -344,7 +344,7 @@ class TestIntrinsicToolDefinitionRoundTrip:
         assert ir is not None
         assert ir["type"] == "intrinsic"
         assert ir["name"] == "code_execution"
-        assert ir["metadata"]["intrinsic_kind"] == "code_execution"
+        assert ir["intrinsic_kind"] == "code_execution"
 
     def test_code_execution_definition_round_trip(self):
         original = {"code_execution": {}}
@@ -361,7 +361,7 @@ class TestIntrinsicToolDefinitionRoundTrip:
             ToolDefinition, GoogleGenerateToolOps.p_tool_definition_to_ir(provider_tool)
         )
         assert ir is not None
-        assert ir["metadata"]["intrinsic_kind"] == "code_execution"
+        assert ir["intrinsic_kind"] == "code_execution"
 
     def test_ir_intrinsic_definition_to_provider(self):
         ir_tool: dict[str, Any] = {

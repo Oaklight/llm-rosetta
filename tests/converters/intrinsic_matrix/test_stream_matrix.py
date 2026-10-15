@@ -769,16 +769,8 @@ def _kindless_start(kind_name: str) -> ToolCallStartEvent:
     )
 
 
-def test_open_responses_stream_kind_falls_back_to_the_tool_name():
-    """CURRENT: with no intrinsic_kind the writer reads the kind off the name."""
-    converter = OpenResponsesConverter()
-    out = converter.stream_response_to_provider(
-        _kindless_start("web_search"), converter.create_stream_context()
-    )
-    assert "web_search_call" in json.dumps(out, default=str)
-
-
-def test_messages_stream_kind_falls_back_to_the_tool_name():
+def test_messages_stream_kind_missing_renders_an_empty_name():
+    """Phase 2: a kindless start is a server call with no name, not the name."""
     converter = MessagesConverter()
     out = cast(
         dict[str, Any],
@@ -786,15 +778,12 @@ def test_messages_stream_kind_falls_back_to_the_tool_name():
             _kindless_start("web_search"), converter.create_stream_context()
         ),
     )
-    assert out["content_block"]["name"] == "web_search"
+    assert out["content_block"]["type"] == "server_tool_use"
+    assert out["content_block"]["name"] == ""
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="intrinsic refactor phase 2: stream kind falls back to tool_name",
-)
 def test_open_responses_stream_kind_should_not_fall_back_to_the_tool_name():
-    """Desired: an intrinsic kind comes only from provider_metadata."""
+    """An intrinsic kind comes only from ``intrinsic_kind``, never the name."""
     converter = OpenResponsesConverter()
     out = converter.stream_response_to_provider(
         _kindless_start("web_search"), converter.create_stream_context()

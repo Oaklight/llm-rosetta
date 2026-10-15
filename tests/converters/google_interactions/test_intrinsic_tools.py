@@ -24,7 +24,7 @@ class TestServerCallToIR:
         result = GoogleInteractionsToolOps.p_server_call_to_ir(step)
         assert result["type"] == "tool_call"
         assert result["tool_type"] == "intrinsic"
-        assert result["provider_metadata"]["intrinsic_kind"] == "google_search"
+        assert result["intrinsic_kind"] == "google_search"
         assert result["tool_call_id"] == "gs_1"
 
     def test_code_execution_call(self):
@@ -36,7 +36,7 @@ class TestServerCallToIR:
         }
         result = GoogleInteractionsToolOps.p_server_call_to_ir(step)
         assert result["tool_type"] == "intrinsic"
-        assert result["provider_metadata"]["intrinsic_kind"] == "code_execution"
+        assert result["intrinsic_kind"] == "code_execution"
 
     def test_url_context_call(self):
         step = {
@@ -47,7 +47,7 @@ class TestServerCallToIR:
         }
         result = GoogleInteractionsToolOps.p_server_call_to_ir(step)
         assert result["tool_type"] == "intrinsic"
-        assert result["provider_metadata"]["intrinsic_kind"] == "url_context"
+        assert result["intrinsic_kind"] == "url_context"
 
 
 class TestServerResultToIR:
@@ -62,7 +62,7 @@ class TestServerResultToIR:
         result = GoogleInteractionsToolOps.p_server_result_to_ir(step)
         assert result["type"] == "tool_result"
         assert result["tool_type"] == "intrinsic"
-        assert result["provider_metadata"]["intrinsic_kind"] == "google_search"
+        assert result["intrinsic_kind"] == "google_search"
         assert result["result"] == "Search results here"
 
     def test_code_execution_result_with_error(self):
@@ -74,7 +74,7 @@ class TestServerResultToIR:
         }
         result = GoogleInteractionsToolOps.p_server_result_to_ir(step)
         assert result["tool_type"] == "intrinsic"
-        assert result["provider_metadata"]["intrinsic_kind"] == "code_execution"
+        assert result["intrinsic_kind"] == "code_execution"
         assert result["is_error"] is True
 
 
@@ -96,6 +96,23 @@ class TestIRIntrinsicToProvider:
         result = GoogleInteractionsToolOps.ir_function_call_to_p(ir_part)
         assert result["type"] == "google_search_call"
         assert result["id"] == "gs_1"
+
+    def test_first_class_kind_writes_the_native_step(self):
+        """The first-class ``intrinsic_kind`` field alone writes natively."""
+        ir_part = cast(
+            ToolCallPart,
+            {
+                "type": "tool_call",
+                "tool_call_id": "gs_new",
+                "tool_name": "google_search",
+                "tool_input": {"query": "test"},
+                "tool_type": "intrinsic",
+                "intrinsic_kind": "google_search",
+            },
+        )
+        result = GoogleInteractionsToolOps.ir_function_call_to_p(ir_part)
+        assert result["type"] == "google_search_call"
+        assert result["id"] == "gs_new"
 
     def test_ir_intrinsic_result_to_google_search_result(self):
         ir_part = cast(
@@ -172,7 +189,7 @@ class TestMessageOpsServerStepDispatch:
         assert messages[0]["role"] == "assistant"
         tc = cast(dict[str, Any], messages[0]["content"][0])
         assert tc["tool_type"] == "intrinsic"
-        assert tc["provider_metadata"]["intrinsic_kind"] == "google_search"
+        assert tc["intrinsic_kind"] == "google_search"
 
     def test_server_result_in_steps(self):
         ops = GoogleInteractionsMessageOps()
@@ -188,4 +205,4 @@ class TestMessageOpsServerStepDispatch:
         assert messages[0]["role"] == "tool"
         tr = cast(dict[str, Any], messages[0]["content"][0])
         assert tr["tool_type"] == "intrinsic"
-        assert tr["provider_metadata"]["intrinsic_kind"] == "google_search"
+        assert tr["intrinsic_kind"] == "google_search"

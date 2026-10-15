@@ -236,15 +236,17 @@ class TestWriter:
     def test_unknown_intrinsic_name_stays_a_server_call(self):
         """A server tool with no canonical kind must not downgrade to tool_use.
 
-        Falling back to the name — rather than the reverse — keeps an
-        unrecognized spelling a server call (#974: never infer from the name).
+        The kind is read from ``intrinsic_kind`` only, never inferred from the
+        tool name (phase 2 removed that fallback, #974), so a missing kind
+        renders an empty ``name`` — still a ``server_tool_use``, never a client
+        ``tool_use``.
         """
         out = self._write(
             self._event(tool_name="special_search", tool_type="intrinsic")
         )
 
         assert out["content_block"]["type"] == "server_tool_use"
-        assert out["content_block"]["name"] == "special_search"
+        assert out["content_block"]["name"] == ""
 
     def test_internal_metadata_does_not_leak(self):
         out = self._write(
