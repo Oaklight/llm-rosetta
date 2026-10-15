@@ -528,3 +528,47 @@ def test_respell_still_renames_a_degraded_history_call():
     )
     part = degraded["messages"][0]["content"][0]
     assert part["tool_name"] == "agents_wait"
+
+
+def test_degraded_inline_result_pairs_with_its_call_on_open_responses():
+    """A server result degraded with its call must be written as an output.
+
+    Regression: the assistant writer ignored inline tool_result parts, so the
+    degraded call reached the upstream with no output and was rejected.
+    """
+    body = {
+        "model": "m",
+        "max_tokens": 100,
+        "messages": [
+            {"role": "user", "content": "compute"},
+            {
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "server_tool_use",
+                        "id": "srvtoolu_01A",
+                        "name": "bash_code_execution",
+                        "input": {"command": "print(1)"},
+                    },
+                    {
+                        "type": "bash_code_execution_tool_result",
+                        "tool_use_id": "srvtoolu_01A",
+                        "content": {
+                            "type": "bash_code_execution_result",
+                            "stdout": "1\n",
+                            "stderr": "",
+                            "return_code": 0,
+                        },
+                    },
+                    {"type": "text", "text": "done"},
+                ],
+            },
+            {"role": "user", "content": "thanks"},
+        ],
+    }
+    out = ConversionPipeline("messages", "open_responses").convert_request(body)
+    items = out["input"]
+    calls = [i for i in items if i.get("type") == "function_call"]
+    outputs = [i for i in items if i.get("type") == "function_call_output"]
+    assert [c["call_id"] for c in calls] == ["srvtoolu_01A"]
+    assert [o["call_id"] for o in outputs] == ["srvtoolu_01A"]

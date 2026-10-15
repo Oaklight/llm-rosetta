@@ -156,6 +156,7 @@ class OpenResponsesMessageOps(BaseMessageOps):
                 warnings,
                 metadata=metadata,
                 provider_metadata=message.get("provider_metadata"),
+                degraded_intrinsic_calls=degraded_intrinsic_calls,
             )
         elif role == "tool":
             return self._ir_tool_messages_to_p(
@@ -242,6 +243,7 @@ class OpenResponsesMessageOps(BaseMessageOps):
         *,
         metadata: MessageMetadata | None = None,
         provider_metadata: dict | None = None,
+        degraded_intrinsic_calls: dict[str, bool],
     ) -> tuple[list[dict[str, Any]], list[str]]:
         """Convert IR assistant message to Responses API items.
 
@@ -274,6 +276,18 @@ class OpenResponsesMessageOps(BaseMessageOps):
                 tool_items.append(
                     self.tool_ops.ir_tool_call_to_p(part, for_history=True)
                 )
+            elif is_tool_result_part(part):
+                # A result carried inline in the assistant turn (a server
+                # tool's result, or one a history pass degraded) pairs with
+                # the call written above; a native server call yields {}.
+                item = self.tool_ops.ir_tool_result_to_p(
+                    part,
+                    warnings=warnings,
+                    for_history=True,
+                    degraded_intrinsic_calls=degraded_intrinsic_calls,
+                )
+                if item:
+                    tool_items.append(item)
             elif is_reasoning_part(part):
                 reasoning_item = self.content_ops.ir_reasoning_to_p(part)
                 if reasoning_item is not None:
