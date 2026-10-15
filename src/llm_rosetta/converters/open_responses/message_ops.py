@@ -34,35 +34,21 @@ from ...types.ir.passthrough import ProviderPassthroughItem
 from ..base import BaseMessageOps
 from ..base.tools import sanitize_tool_call_id
 from ..base.tools.batch import assign_tool_batch_ids
+from ..base.tools.intrinsic import history_native_calls
 from .content_ops import OpenResponsesContentOps
 from .tool_ops import OpenResponsesToolOps
 
 
 def _degraded_intrinsic_calls(ir_messages: Sequence[IRInputItem]) -> dict[str, bool]:
-    """Map intrinsic tool-call id → whether the history-leg writer degrades it.
+    """Map intrinsic call id → whether the history writer degrades it.
 
-    The call writer decides the shape from ``(kind, fields, leg)``; the result
-    writer must pair with the call that is actually written.  Calls and results
-    live in different messages, so the decision is collected over the whole list
-    before any message is converted.
-
-    Args:
-        ir_messages: IR message list about to be converted.
-
-    Returns:
-        ``tool_call_id`` (sanitized, as written) → ``True`` when the call is
-        written as a client ``function_call``.
+    Thin inversion of the shared ``history_native_calls`` decision, keyed by the
+    sanitized id the writer emits.
     """
-    degraded: dict[str, bool] = {}
-    for item in ir_messages:
-        if not is_message(item):
-            continue
-        for part in item.get("content") or []:
-            if is_tool_call_part(part) and part.get("tool_type") == "intrinsic":
-                degraded[sanitize_tool_call_id(part.get("tool_call_id", ""))] = (
-                    OpenResponsesToolOps.intrinsic_call_degrades_on_history(part)
-                )
-    return degraded
+    native = history_native_calls(
+        ir_messages, OpenResponsesToolOps, id_key=sanitize_tool_call_id
+    )
+    return {cid: not ok for cid, ok in native.items()}
 
 
 class OpenResponsesMessageOps(BaseMessageOps):

@@ -205,3 +205,46 @@ def get_native_definition(ir_tool: Any, base: str) -> dict[str, Any] | None:
         tool = native.get("tool")
         return tool if isinstance(tool, dict) else None
     return None
+
+
+def history_native_calls(
+    messages: Any,
+    tool_ops: Any,
+    *,
+    id_key: Any = None,
+) -> dict[str, bool]:
+    """Map each intrinsic call id to whether the target writes it natively.
+
+    A call and its result live in different messages, so the decision is made
+    once over the whole history and every result writer consults the same map:
+    a result pairs with the call that is actually written.  The judge is the
+    target's ``intrinsic_renderable`` on the history leg, the same predicate
+    the pipeline's history pass uses.
+
+    Args:
+        messages: IR message list.
+        tool_ops: Target ``BaseToolOps`` subclass.
+        id_key: Optional transform applied to ids (e.g. a dialect's id
+            sanitizer), so the map is keyed as the writer emits them.
+
+    Returns:
+        ``tool_call_id`` → ``True`` when the call is written natively.
+    """
+    native: dict[str, bool] = {}
+    for item in messages:
+        if not isinstance(item, dict):
+            continue
+        content = item.get("content")
+        if not isinstance(content, list):
+            continue
+        for part in content:
+            if not is_intrinsic_part(part) or part.get("type") != "tool_call":
+                continue
+            fields = part.get("tool_input")
+            cid = part.get("tool_call_id", "")
+            native[id_key(cid) if id_key else cid] = tool_ops.intrinsic_renderable(
+                intrinsic_kind_of(part),
+                fields if isinstance(fields, dict) else {},
+                leg="history",
+            )
+    return native
