@@ -1,7 +1,7 @@
 // Side-effect-only module: exposes functions via window.* for inline HTML handlers.
 import { S, _TEST_TIMEOUT_MS } from '../core/state.js';
 import { t } from '../core/i18n.js';
-import { api, showToast, esc } from '../core/utils.js';
+import { api, showToast, esc, openMenu, closeMenus } from '../core/utils.js';
 
 // ===================== Test Type Registry =====================
 // Extensible registry for non-LLM test types.  Each entry declares:
@@ -83,18 +83,13 @@ function buildTestPayload(model, type, extraParam) {
 }
 
 function toggleTestMenu(btn) {
-  // Close any other open menus first
-  document.querySelectorAll('.test-menu.open').forEach(m => { m.classList.remove('open'); m.style.top = ''; m.style.right = ''; });
+  // Same shape as models.js::toggleMoreMenu — closing first is what makes a
+  // second click on the trigger close the menu instead of re-opening it.
+  // Outside clicks are handled globally, next to the "⋯" menu's.
   const menu = btn.parentElement.querySelector('.test-menu');
-  const isOpen = menu.classList.toggle('open');
-  if (isOpen) {
-    const rect = btn.getBoundingClientRect();
-    menu.style.top = (rect.bottom + 4) + 'px';
-    menu.style.right = (window.innerWidth - rect.right) + 'px';
-  }
-  // Close on outside click
-  const close = (e) => { if (!menu.contains(e.target) && e.target !== btn) { menu.classList.remove('open'); menu.style.top = ''; menu.style.right = ''; document.removeEventListener('click', close); }};
-  setTimeout(() => document.addEventListener('click', close), 0);
+  const wasOpen = menu.classList.contains('open');
+  closeMenus();
+  if (!wasOpen) openMenu(menu, btn);
 }
 
 function truncatePayloadForDisplay(payload) {
@@ -149,7 +144,7 @@ function confirmMatryoshka() {
 
 async function runTest(model, type, extraParam) {
   // Close any open dropdown
-  document.querySelectorAll('.test-menu.open').forEach(m => m.classList.remove('open'));
+  closeMenus();
 
   const output = document.getElementById('testOutput');
   const meta = document.getElementById('testMeta');

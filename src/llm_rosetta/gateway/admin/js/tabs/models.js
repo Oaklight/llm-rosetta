@@ -1,7 +1,7 @@
 // models.js — Model management: modal, CRUD, rendering, filtering, bulk ops
 import { S, _CAP_ICONS } from '../core/state.js';
 import { t } from '../core/i18n.js';
-import { api, showToast, closeModal, esc, inlineConfirm, isFreeEntry, freeEntryLabel } from '../core/utils.js';
+import { api, showToast, closeModal, esc, inlineConfirm, closeMenus, openMenu, isFreeEntry, freeEntryLabel } from '../core/utils.js';
 
 // ── helpers (module-private) ──
 
@@ -592,17 +592,17 @@ function renderModels() {
         <div class="pill-toggle ${effectiveEnabled ? 'is-on' : 'is-off'}" role="switch" tabindex="0" aria-checked="${effectiveEnabled}" aria-label="${esc(name)}" onclick="toggleModel('${esc(name)}')" onkeydown="if(event.key===' '||event.key==='Enter'){event.preventDefault();toggleModel('${esc(name)}')}" title="${allProvsDisabled ? t('provider.disabled') : modelEnabled ? t('model.enabled') : t('model.disabled')}" style="vertical-align:middle;margin-right:4px"><span class="pill-on">${t('label.on')}</span><span class="pill-off">${t('label.off')}</span></div>
         <div class="test-group" style="display:inline-block">
           <button class="btn btn-sm btn-test${modelType !== 'llm' ? ' btn-test-embed' : ''}" onclick="runTest('${esc(name)}','${_defaultTestKind(modelType)}')">${t('btn.test')}</button>
-          <button class="btn btn-sm btn-caret" onclick="toggleTestMenu(this)">&#9662;</button>
+          <button class="btn btn-sm btn-caret" aria-haspopup="true" aria-expanded="false" aria-label="${t('btn.test')} ${esc(name)}" onclick="toggleTestMenu(this)">&#9662;</button>
           <div class="test-menu">
             ${_testMenuItems(modelType, name, {hasTools, hasVision, hasReasoning})}
           </div>
         </div>
         <button class="btn btn-sm" aria-label="${t('btn.edit')} ${esc(name)}" onclick="editModel('${esc(name)}','${esc(prov)}')">${t('btn.edit')}</button>
-        <button class="btn btn-sm more-menu-toggle" onclick="toggleMoreMenu(this)" style="padding:3px 6px">⋯</button>
-        <div class="more-menu" role="menu" style="display:none;position:absolute;right:0;top:calc(100% + 4px);min-width:110px;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.12);z-index:10;overflow:hidden">
-          <div role="menuitem" style="padding:7px 14px;font-size:13px;cursor:pointer" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''" aria-label="${t('btn.clone')} ${esc(name)}" onclick="this.closest('.more-menu').style.display='none';cloneModel('${esc(name)}')">${t('btn.clone')}</div>
-          <div role="separator" style="border-top:1px solid var(--border);margin:2px 0"></div>
-          <div role="menuitem" style="padding:7px 14px;font-size:13px;cursor:pointer;color:var(--danger, #cf222e)" onmouseenter="this.style.background='#fff1f0'" onmouseleave="this.style.background=''" aria-label="${t('btn.delete')} ${esc(name)}" onclick="this.closest('.more-menu').style.display='none';deleteModel('${esc(name)}', this)">${t('btn.delete')}</div>
+        <button class="btn btn-sm more-menu-toggle" aria-haspopup="true" aria-expanded="false" aria-label="${t('btn.more')} ${esc(name)}" onclick="toggleMoreMenu(this)" style="padding:3px 6px">⋯</button>
+        <div class="more-menu" role="menu">
+          <div class="more-menu-item" role="menuitem" aria-label="${t('btn.clone')} ${esc(name)}" onclick="closeMenus();cloneModel('${esc(name)}')">${t('btn.clone')}</div>
+          <div class="more-menu-sep" role="separator"></div>
+          <div class="more-menu-item danger" role="menuitem" aria-label="${t('btn.delete')} ${esc(name)}" onclick="deleteModel('${esc(name)}', this)">${t('btn.delete')}</div>
         </div>
       </td>
     </tr>`;
@@ -681,6 +681,12 @@ async function _doDeleteModel(name) {
   else { showToast(res.error || 'Failed', 'error'); }
 }
 
+/** Delete a model after an inline confirmation.
+ *
+ * `btn` is the "⋯" menu item.  The menu stays open while confirming — the
+ * confirmation replaces the item's own label, so hiding the menu here would
+ * hide the confirmation with it.
+ */
 function deleteModel(name, btn) {
   if (!btn) { _doDeleteModel(name); return; }
   inlineConfirm(btn, () => _doDeleteModel(name));
@@ -749,8 +755,9 @@ async function bulkModels(action) {
 
 function toggleMoreMenu(btn) {
   const menu = btn.nextElementSibling;
-  document.querySelectorAll('.more-menu').forEach(m => { if (m !== menu) m.style.display = 'none'; });
-  menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+  const wasOpen = menu.classList.contains('open');
+  closeMenus();
+  if (!wasOpen) openMenu(menu, btn);
 }
 
 // ── Register on window for cross-module and inline-handler access ──

@@ -1,7 +1,7 @@
 import { S } from './state.js';
 import { t, setLang, applyI18n } from './i18n.js';
 import {
-  setScheme, setMode, setTheme, api, showToast, closeModal, esc,
+  setScheme, setMode, setTheme, api, showToast, closeModal, esc, closeMenus,
   _startInactivityTracking, _stopInactivityTracking,
 } from './utils.js';
 import { checkAuthAndInit, showLoginOverlay, openSettings } from './auth.js';
@@ -212,12 +212,19 @@ document.addEventListener('keydown', e => {
   }
 })();
 
-// Global click handler for model more-menus — close on outside click
+// Global click handler for the row dropdowns — close on outside click.  The
+// toggles and the menus themselves are excluded so the click that opens a
+// menu, or lands inside it, does not immediately close it again.
 document.addEventListener('click', function(e) {
-  if (!e.target.closest('.more-menu') && !e.target.closest('.more-menu-toggle')) {
-    document.querySelectorAll('.more-menu').forEach(m => m.style.display = 'none');
-  }
+  if (e.target.closest('.more-menu') || e.target.closest('.test-menu')
+      || e.target.closest('.more-menu-toggle') || e.target.closest('.btn-caret')) return;
+  closeMenus();
 });
+
+// The menus are position:fixed, so close them on scroll rather than let them
+// drift away from the row they belong to.  Capture phase: the table has its
+// own scroll container, whose scroll events do not bubble.
+window.addEventListener('scroll', closeMenus, true);
 
 // ===================== Seg-control keyboard navigation =====================
 document.querySelectorAll('.seg-control[role="radiogroup"]').forEach(group => {

@@ -177,6 +177,67 @@ function inlineConfirm(btn, action) {
   btn.onclick = (e) => { e.stopPropagation(); clearTimeout(timer); revert(); };
 }
 
+// ===================== Dropdown menus =====================
+// The row actions "⋯" menu and the Test "▾" menu.  Both are `position:fixed`
+// so they escape scrolling ancestors that would clip them — the models table
+// sits in a `.table-scroll` box whose `overflow-x:auto` clips vertically too —
+// and therefore need positioning by hand (positionMenu) and closing on
+// scroll, not only on an outside click.
+const MENU_SELECTOR = '.more-menu.open, .test-menu.open';
+
+// How many menus are open, so the window-level scroll handler can return
+// without touching the DOM — the usual answer is none.
+let _menusOpen = 0;
+
+/**
+ * Close every open dropdown menu, clearing the geometry positionMenu() wrote
+ * and the `aria-expanded` openMenu() set.
+ *
+ * Clearing matters because the menus stay in the DOM: a stale `top`/`right`
+ * would place the next open before positionMenu() recomputes it.
+ */
+function closeMenus() {
+  if (!_menusOpen) return;
+  _menusOpen = 0;
+  document.querySelectorAll(MENU_SELECTOR).forEach(m => {
+    m.classList.remove('open');
+    m.style.top = '';
+    m.style.right = '';
+    // Both menus are the trigger's next sibling, so this is that trigger.
+    m.previousElementSibling?.setAttribute('aria-expanded', 'false');
+  });
+}
+
+/** Open *menu* against the trigger that owns it, and flag the trigger as expanded. */
+function openMenu(menu, trigger) {
+  if (!menu.classList.contains('open')) _menusOpen++;
+  menu.classList.add('open');
+  trigger.setAttribute('aria-expanded', 'true');
+  positionMenu(menu, trigger);
+}
+
+/**
+ * Place a dropdown menu against the element that opened it: right-aligned with
+ * its trigger, flipped above the trigger when the layout viewport has no room
+ * left below it, and clamped to an EDGE-px margin on both axes.
+ *
+ * The fixed containing block is the layout viewport, which excludes the
+ * scrollbars — window.innerWidth/Height include them, so this reads
+ * documentElement instead.
+ */
+function positionMenu(menu, trigger) {
+  const GAP = 4, EDGE = 8;
+  const r = trigger.getBoundingClientRect();
+  const vw = document.documentElement.clientWidth;
+  const vh = document.documentElement.clientHeight;
+  const mh = menu.offsetHeight, mw = menu.offsetWidth;
+  const below = vh - r.bottom - GAP;
+  const above = r.top - GAP;
+  const top = (below < mh && above > below) ? r.top - mh - GAP : r.bottom + GAP;
+  menu.style.top = Math.max(EDGE, Math.min(top, vh - mh - EDGE)) + 'px';
+  menu.style.right = Math.max(EDGE, Math.min(vw - r.right, vw - mw - EDGE)) + 'px';
+}
+
 // ===================== Helpers =====================
 // esc() escapes HTML special chars AND single quotes so the result is
 // safe in both HTML text nodes and single-quoted JS-string attributes
@@ -249,7 +310,7 @@ export function freeEntryLabel(providers, shims, name, suffix) {
 Object.assign(window, {
   setScheme, setMode, setTheme, api, doLogout, copyText, copyProviderEntry,
   showToast, showToastHtml, openModal, closeModal, inlineConfirm, esc, formatDuration,
-  fmtBytesShort, fmtBytesLong, fmtTokens,
+  fmtBytesShort, fmtBytesLong, fmtTokens, closeMenus,
   _startInactivityTracking, _stopInactivityTracking,
 });
 
@@ -257,6 +318,6 @@ export {
   setScheme, setMode, setTheme, _adminHeaders, api, showToast, showToastHtml, openModal, closeModal,
   copyText, copyProviderEntry, esc, formatDuration,
   fmtBytesShort, fmtBytesLong, fmtTokens,
-  inlineConfirm, doLogout,
+  inlineConfirm, closeMenus, openMenu, positionMenu, doLogout,
   _startInactivityTracking, _stopInactivityTracking,
 };
