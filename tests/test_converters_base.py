@@ -252,8 +252,10 @@ class MockToolOps(BaseToolOps):
             return {"mode": "tool", "tool_name": provider_tool_choice["name"]}
         return {"mode": "auto", "tool_name": ""}
 
-    @staticmethod
-    def ir_tool_call_to_p(ir_tool_call: ToolCallPart, **kwargs: Any) -> dict[str, Any]:
+    @classmethod
+    def ir_client_call_to_p(
+        cls, ir_tool_call: ToolCallPart, **kwargs: Any
+    ) -> dict[str, Any]:
         return {
             "id": ir_tool_call["tool_call_id"],
             "name": ir_tool_call["tool_name"],
@@ -269,9 +271,9 @@ class MockToolOps(BaseToolOps):
             "tool_input": provider_tool_call["arguments"],
         }
 
-    @staticmethod
-    def ir_tool_result_to_p(
-        ir_tool_result: ToolResultPart, **kwargs: Any
+    @classmethod
+    def ir_client_result_to_p(
+        cls, ir_tool_result: ToolResultPart, **kwargs: Any
     ) -> dict[str, Any]:
         return {
             "call_id": ir_tool_result["tool_call_id"],

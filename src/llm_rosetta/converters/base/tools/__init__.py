@@ -24,7 +24,7 @@ Submodules:
 """
 
 # -- Abstract base class --
-from .ops import BaseToolOps
+from .ops import BaseToolOps, IntrinsicLeg
 
 # -- Schema --
 from .schema import convert_nullable_to_type_array, sanitize_schema
@@ -84,6 +84,7 @@ from .multimodal_patch import (
 __all__ = [
     # ops
     "BaseToolOps",
+    "IntrinsicLeg",
     # schema
     "convert_nullable_to_type_array",
     "sanitize_schema",

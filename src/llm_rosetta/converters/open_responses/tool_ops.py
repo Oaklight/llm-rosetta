@@ -1314,8 +1314,8 @@ class OpenResponsesToolOps(BaseToolOps):
             fields if isinstance(fields, dict) else {},
         )
 
-    @staticmethod
-    def ir_tool_call_to_p(ir_tool_call: ToolCallPart, **kwargs: Any) -> dict:
+    @classmethod
+    def ir_tool_call_to_p(cls, ir_tool_call: ToolCallPart, **kwargs: Any) -> dict:
         """IR ToolCallPart → OpenAI Responses tool call item.
 
         Converts to function_call or mcp_call depending on tool_type/tool_name.
@@ -1480,8 +1480,8 @@ class OpenResponsesToolOps(BaseToolOps):
 
     # ==================== Tool Result ====================
 
-    @staticmethod
-    def ir_tool_result_to_p(ir_tool_result: ToolResultPart, **kwargs: Any) -> dict:
+    @classmethod
+    def ir_tool_result_to_p(cls, ir_tool_result: ToolResultPart, **kwargs: Any) -> dict:
         """IR ToolResultPart → OpenAI Responses tool call output item.
 
         Emits ``custom_tool_call_output`` when the context indicates the

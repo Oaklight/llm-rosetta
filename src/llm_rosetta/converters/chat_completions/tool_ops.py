@@ -379,8 +379,8 @@ class ChatCompletionsToolOps(BaseToolOps):
 
     # ==================== Tool Call ====================
 
-    @staticmethod
-    def ir_tool_call_to_p(ir_tool_call: ToolCallPart, **kwargs: Any) -> dict:
+    @classmethod
+    def ir_tool_call_to_p(cls, ir_tool_call: ToolCallPart, **kwargs: Any) -> dict:
         """IR ToolCallPart → OpenAI Chat tool call.
 
         Converts ``tool_input`` dict to JSON string ``arguments``.
@@ -483,8 +483,8 @@ class ChatCompletionsToolOps(BaseToolOps):
 
     # ==================== Tool Result ====================
 
-    @staticmethod
-    def ir_tool_result_to_p(ir_tool_result: ToolResultPart, **kwargs: Any) -> dict:
+    @classmethod
+    def ir_tool_result_to_p(cls, ir_tool_result: ToolResultPart, **kwargs: Any) -> dict:
         """IR ToolResultPart → OpenAI Chat tool role message.
 
         Chat Completions has no tool error field, so an ``is_error`` flag is

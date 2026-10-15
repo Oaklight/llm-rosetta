@@ -375,8 +375,8 @@ class MessagesToolOps(BaseToolOps):
 
     # ==================== Tool Call ====================
 
-    @staticmethod
-    def ir_tool_call_to_p(ir_tool_call: ToolCallPart, **kwargs: Any) -> dict:
+    @classmethod
+    def ir_tool_call_to_p(cls, ir_tool_call: ToolCallPart, **kwargs: Any) -> dict:
         """IR ToolCallPart → Anthropic tool_use content block.
 
         Anthropic tool call arguments are Dict (not JSON string).
@@ -479,8 +479,8 @@ class MessagesToolOps(BaseToolOps):
 
     # ==================== Tool Result ====================
 
-    @staticmethod
-    def ir_tool_result_to_p(ir_tool_result: ToolResultPart, **kwargs: Any) -> dict:
+    @classmethod
+    def ir_tool_result_to_p(cls, ir_tool_result: ToolResultPart, **kwargs: Any) -> dict:
         """IR ToolResultPart → Anthropic tool_result content block.
 
         Args:

@@ -31,6 +31,7 @@ from .tools import convert_content_blocks_to_ir  # noqa: F401
 from .tools import convert_ir_content_blocks_to_p  # noqa: F401
 from .tools import sanitize_schema  # noqa: F401
 from .tools import BaseToolOps  # noqa: F401
+from .tools import IntrinsicLeg  # noqa: F401
 
 __all__ = [
     # 主转换器 Main converter

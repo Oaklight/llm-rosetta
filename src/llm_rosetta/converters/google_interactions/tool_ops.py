@@ -383,8 +383,8 @@ class GoogleInteractionsToolOps(BaseToolOps):
     ) -> ToolDefinition | list[ToolDefinition] | None:
         return GoogleInteractionsToolOps.p_tool_to_ir(provider_tool, **kwargs)
 
-    @staticmethod
-    def ir_tool_call_to_p(ir_tool_call: ToolCallPart, **kwargs: Any) -> Any:
+    @classmethod
+    def ir_tool_call_to_p(cls, ir_tool_call: ToolCallPart, **kwargs: Any) -> Any:
         return GoogleInteractionsToolOps.ir_function_call_to_p(ir_tool_call, **kwargs)
 
     @staticmethod
@@ -393,8 +393,8 @@ class GoogleInteractionsToolOps(BaseToolOps):
             provider_tool_call, **kwargs
         )
 
-    @staticmethod
-    def ir_tool_result_to_p(ir_tool_result: ToolResultPart, **kwargs: Any) -> Any:
+    @classmethod
+    def ir_tool_result_to_p(cls, ir_tool_result: ToolResultPart, **kwargs: Any) -> Any:
         return GoogleInteractionsToolOps.ir_function_result_to_p(
             ir_tool_result, **kwargs
         )
