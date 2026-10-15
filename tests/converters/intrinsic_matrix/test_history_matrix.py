@@ -12,9 +12,9 @@ streaming:
 * **non-streaming response write** — an intrinsic call and result in an IR
   response, written back into a provider response body.
 
-The tables below are the matrix; each cell is one parametrized case.  Cells
-that the planned refactor will change carry a companion ``xfail(strict=True)``
-test asserting the desired behaviour.
+The tables below are the matrix; each cell is one parametrized case, and the
+tests next to them pin the behaviour a cell's classification cannot show (a
+warning, a restored native payload, a dropped half-write).
 """
 
 from __future__ import annotations

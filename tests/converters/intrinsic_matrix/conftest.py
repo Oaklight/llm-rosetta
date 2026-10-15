@@ -1,7 +1,10 @@
 """Shared fixtures and tables for the intrinsic-handling characterization matrix.
 
-Phase 1 of the intrinsic refactor: these tests pin *current* behaviour per
-converter × kind × path.  Nothing here changes production code.
+These tests pin the behaviour of every converter × kind × path: the history,
+response and stream writers, and the pipeline passes that act on intrinsic
+parts before a converter sees them.  A cell's outcome is the decision the
+dialect makes for that kind, so the tables document the per-dialect vocabulary
+as much as the tests pin it.
 
 Two axes describe the matrix:
 

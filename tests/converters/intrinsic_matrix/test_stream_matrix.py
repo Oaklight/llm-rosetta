@@ -9,8 +9,8 @@ Pins the CURRENT per-converter × kind behaviour of the streaming paths:
 
 The write tables classify each cell as ``native``, ``degraded``, ``dropped`` or
 ``deferred`` (google_generate flushes an intrinsic call at the finish event, not
-at its start).  Cells the refactor will change carry ``xfail(strict=True)``
-companions.
+at its start).  The response leg never degrades a server call into a client
+call, so a kind the dialect has no server tool for is ``dropped`` here.
 """
 
 from __future__ import annotations

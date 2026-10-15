@@ -1,8 +1,8 @@
 """Intrinsic handling through ``ConversionPipeline`` (request, response, stream).
 
-A few end-to-end pins for the three pairs the refactor touches directly, plus
-the two cross-cutting behaviours that act on intrinsic parts before any
-converter sees them: the orphaned-tool-call fixer and history-name respelling.
+End-to-end pins for the pairs the intrinsic passes touch: the target
+converter's history renderability (``degrade_intrinsic_history``), the
+orphaned-tool-call fixer, and history-name respelling.
 
 ``ConversionPipeline(source, target)`` converts a *client* (source) body to an
 *upstream* (target) body on the request leg, and upstream chunks back to client
