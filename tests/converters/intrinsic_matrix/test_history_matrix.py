@@ -295,10 +295,14 @@ def test_messages_history_result_of_a_foreign_kind_is_a_plain_tool_result():
 # ---------------------------------------------------------------------------
 
 RESPONSE_CALL_MATRIX: dict[str, dict[str, str]] = {
+    # A dialect with no server-tool vocabulary has no response-leg shape for a
+    # server call either: the client did not run it, so it is dropped rather
+    # than handed over as a client call (#985).  History is the leg that
+    # degrades.
     "chat_completions": {
-        "web_search": "degraded",
-        "code_execution": "degraded",
-        UNKNOWN_KIND: "degraded",
+        "web_search": "dropped",
+        "code_execution": "dropped",
+        UNKNOWN_KIND: "dropped",
     },
     # A server call is never handed to the client as a client call on the
     # response leg, so a kind Anthropic has no server tool for is dropped.
@@ -311,9 +315,9 @@ RESPONSE_CALL_MATRIX: dict[str, dict[str, str]] = {
     "open_responses": {
         "web_search": "native",
         "code_interpreter": "native",
-        "code_execution": "degraded",
-        "google_search": "degraded",
-        UNKNOWN_KIND: "degraded",
+        "code_execution": "dropped",
+        "google_search": "dropped",
+        UNKNOWN_KIND: "dropped",
     },
     "google_generate": {
         "code_execution": "native",

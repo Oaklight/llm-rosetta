@@ -50,6 +50,27 @@ from .tool_ops import ChatCompletionsToolOps
 logger = logging.getLogger(__name__)
 
 
+def restore_reasoning_details(
+    openai_message: dict[str, Any], content_parts: list[Any]
+) -> None:
+    """Put a ``reasoning_details`` / ``encrypted_content`` echo back.
+
+    Both are the provider's own opaque payloads, kept on the IR part's
+    ``provider_metadata``; the first reasoning part carrying them is the one
+    they came from.
+    """
+    for part in content_parts:
+        if not is_reasoning_part(part):
+            continue
+        pm = part.get("provider_metadata", {}).get("openai_chat", {})
+        if "reasoning_details" in pm:
+            openai_message["reasoning_details"] = pm["reasoning_details"]
+        redacted = ChatCompletionsContentOps.own_encrypted_content(part)
+        if redacted:
+            openai_message["encrypted_content"] = redacted
+        return
+
+
 class ChatCompletionsMessageOps(BaseMessageOps):
     """OpenAI Chat Completions message conversion operations.
 
@@ -331,7 +352,12 @@ class ChatCompletionsMessageOps(BaseMessageOps):
             if is_text_part(part):
                 text_parts.append(part["text"])
             elif is_tool_call_part(part):
-                tool_calls.append(self.tool_ops.ir_tool_call_to_p(part))
+                # Request leg: a server call this dialect cannot express becomes
+                # a plain function so the model still sees the context.  A drop
+                # is falsy and is not appended.
+                call = self.tool_ops.ir_tool_call_to_p(part, leg="history")
+                if call:
+                    tool_calls.append(call)
             elif is_reasoning_part(part):
                 reasoning_text = part.get("reasoning", "")
             elif is_refusal_part(part):
@@ -356,16 +382,7 @@ class ChatCompletionsMessageOps(BaseMessageOps):
         # Anthropic writer for the opposite reason (#357, #393, #948).
         if reasoning_text is not None:
             openai_message["reasoning_content"] = reasoning_text
-            # Restore reasoning_details from provider_metadata, encrypted_content from redacted_data
-            for part in content:
-                if is_reasoning_part(part):
-                    pm = part.get("provider_metadata", {}).get("openai_chat", {})
-                    if "reasoning_details" in pm:
-                        openai_message["reasoning_details"] = pm["reasoning_details"]
-                    redacted = self.content_ops.own_encrypted_content(part)
-                    if redacted:
-                        openai_message["encrypted_content"] = redacted
-                    break
+            restore_reasoning_details(openai_message, content)
 
         # Set text content
         if text_parts:
@@ -434,12 +451,9 @@ class ChatCompletionsMessageOps(BaseMessageOps):
             warnings.append("Tool chain converted to sequential calls")
             tool_call = item.get("tool_call")
             if tool_call:
-                messages.append(
-                    {
-                        "role": "assistant",
-                        "tool_calls": [self.tool_ops.ir_tool_call_to_p(tool_call)],
-                    }
-                )
+                call = self.tool_ops.ir_tool_call_to_p(tool_call, leg="history")
+                if call:
+                    messages.append({"role": "assistant", "tool_calls": [call]})
         elif extension_type in ("batch_marker", "session_control"):
             warnings.append(f"Extension item ignored: {extension_type}")
 

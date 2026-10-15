@@ -40,7 +40,7 @@ import json
 import logging
 import re
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, cast
 
 from ..converters.base.tools.intrinsic import intrinsic_kind_of, is_intrinsic_part
 
@@ -164,7 +164,7 @@ def _decide(
     messages: list[Any],
     target_tool_ops: Any,
     taken: set[str],
-) -> tuple[dict[str, str], dict[str, str]]:
+) -> tuple[dict[str, str], dict[str, str], dict[str, str]]:
     """Decide which calls to degrade, and the name each takes.
 
     Args:
@@ -173,13 +173,15 @@ def _decide(
         taken: Names already claimed; extended in place.
 
     Returns:
-        ``(degraded, names)``: ``tool_call_id`` → kind for every call the
-        target cannot render on the history leg, and ``tool_call_id`` → the
-        client function name its call is rewritten to.
+        ``(degraded, names, reasons)``: pairing key → kind for every call the
+        target cannot render on the history leg, pairing key → the client
+        function name its call is rewritten to, and pairing key → why it could
+        not stay native.
     """
     by_kind: dict[str, str] = {}
     degraded: dict[str, str] = {}
     names: dict[str, str] = {}
+    reasons: dict[str, str] = {}
     answered = {
         part.get("tool_call_id")
         for message in messages
@@ -187,36 +189,118 @@ def _decide(
         for part in message.get("content") or []
         if isinstance(part, dict) and part.get("type") == "tool_result"
     }
-    for message in messages:
+    keys = _pair_keys(messages)
+    for (message_index, part_index), key in keys.items():
+        part = messages[message_index]["content"][part_index]
+        if part.get("type") != "tool_call" or not is_intrinsic_part(part):
+            continue
+        kind = intrinsic_kind_of(part)
+        fields = part.get("tool_input")
+        reason = _degrade_reason(
+            part,
+            kind,
+            fields,
+            target_tool_ops,
+            answered,
+            is_anonymous=key != (part.get("tool_call_id") or ""),
+        )
+        if reason is None:
+            continue
+        name = by_kind.get(kind)
+        if name is None:
+            name = _degraded_name(kind, taken=taken)
+            by_kind[kind] = name
+            taken.add(name)
+        degraded[key] = kind
+        names[key] = name
+        reasons[key] = reason
+    return degraded, names, reasons
+
+
+def _degrade_reason(
+    part: Any,
+    kind: str,
+    fields: Any,
+    target_tool_ops: Any,
+    answered: set[Any],
+    *,
+    is_anonymous: bool,
+) -> str | None:
+    """Why this call cannot stay native on the history leg, or ``None``.
+
+    The three reasons read very differently to whoever sees the warning, and
+    only the first is about the target's vocabulary: a kind the target simply
+    does not have, a kind whose native form needs a field the IR part does not
+    carry (the same kind is written natively when it arrives in a dialect that
+    fills that field), and a turn this target requires a paired result in.
+
+    Args:
+        part: The IR intrinsic tool call part.
+        kind: Its canonical kind (``""`` when the part carries none).
+        fields: Its ``tool_input``.
+        target_tool_ops: The target converter's tool operations.
+        answered: Every ``tool_call_id`` a result in this history answers.
+        is_anonymous: Whether the part has no ``tool_call_id``.
+
+    Returns:
+        A short reason, or ``None`` when the call stays native.
+    """
+    if not kind:
+        return "the part carries no intrinsic kind"
+    if target_tool_ops.intrinsic_requires_result(kind) and (
+        is_anonymous or part.get("tool_call_id") not in answered
+    ):
+        return f"the target needs a result for its {kind!r} call and this turn has none"
+    if target_tool_ops.intrinsic_renderable(
+        kind, fields if isinstance(fields, Mapping) else {}, leg="history"
+    ):
+        return None
+    # Two different situations land here and a reader has to know which to
+    # look at: a kind the target has no form for at all, and a kind it does
+    # have whose form needs a field this part does not carry (the same kind is
+    # written natively when it arrives in a dialect that fills that field).
+    return (
+        f"the target cannot write the {kind!r} call as it stands: either it has "
+        f"no {kind!r} form, or the payload lacks a field that form needs"
+    )
+
+
+def _pair_keys(messages: list[Any]) -> dict[tuple[int, int], str]:
+    """Map each intrinsic call/result position to the key that pairs them.
+
+    The key is the ``tool_call_id`` when the part has one.  Ids are optional on
+    :class:`~llm_rosetta.types.ir.parts.ToolCallPart`, and two id-less calls of
+    different kinds share the empty string, so an anonymous call is keyed by its
+    own position instead — each keeps its own kind and name.  An anonymous
+    result pairs with the most recent anonymous call before it, which is the
+    order a provider writes them in.
+
+    Args:
+        messages: The IR message list.
+
+    Returns:
+        ``(message index, part index)`` → pairing key.
+    """
+    keys: dict[tuple[int, int], str] = {}
+    pending: str | None = None
+    for message_index, message in enumerate(messages):
         if not isinstance(message, dict):
             continue
-        for part in message.get("content") or []:
-            if not isinstance(part, dict) or part.get("type") != "tool_call":
+        for part_index, part in enumerate(message.get("content") or []):
+            if not isinstance(part, dict) or not is_intrinsic_part(part):
                 continue
-            if not is_intrinsic_part(part):
-                continue
-            kind = intrinsic_kind_of(part)
-            fields = part.get("tool_input")
-            if (
-                kind
-                and target_tool_ops.intrinsic_renderable(
-                    kind, fields if isinstance(fields, Mapping) else {}, leg="history"
-                )
-                and not (
-                    target_tool_ops.intrinsic_requires_result(kind)
-                    and part.get("tool_call_id") not in answered
-                )
-            ):
+            if part.get("type") not in ("tool_call", "tool_result"):
                 continue
             call_id = part.get("tool_call_id") or ""
-            name = by_kind.get(kind)
-            if name is None:
-                name = _degraded_name(kind, taken=taken)
-                by_kind[kind] = name
-                taken.add(name)
-            degraded[call_id] = kind
-            names[call_id] = name
-    return degraded, names
+            if call_id:
+                keys[(message_index, part_index)] = call_id
+                continue
+            if part.get("type") == "tool_call":
+                pending = f"\x00anonymous:{message_index}:{part_index}"
+                keys[(message_index, part_index)] = pending
+            elif pending is not None:
+                keys[(message_index, part_index)] = pending
+    return keys
 
 
 def _rewrite(
@@ -224,24 +308,27 @@ def _rewrite(
 ) -> list[Any]:
     """Rewrite every degraded call and result, keeping the other parts as they are."""
     new_messages: list[Any] = []
-    for message in messages:
+    pair_keys = _pair_keys(messages)
+    for message_index, message in enumerate(messages):
         content = message.get("content") if isinstance(message, dict) else None
         if not isinstance(content, list):
             new_messages.append(message)
             continue
         new_content: list[Any] = []
         changed = False
-        for part in content:
-            call_id = part.get("tool_call_id", "") if isinstance(part, dict) else ""
+        for part_index, part in enumerate(content):
             if not isinstance(part, dict) or not is_intrinsic_part(part):
                 new_content.append(part)
                 continue
-            if call_id not in degraded:
+            key = pair_keys.get((message_index, part_index))
+            if key is None or key not in degraded:
                 new_content.append(part)
                 continue
             # Only a call carries the function name; a result pairs by id.
-            name = names.get(call_id) if part.get("type") == "tool_call" else None
-            new_content.append(_downgrade_part(part, degraded[call_id], name))
+            name = names.get(key) if part.get("type") == "tool_call" else None
+            new_content.append(
+                _downgrade_part(cast(dict[str, Any], part), degraded[key], name)
+            )
             changed = True
         new_messages.append({**message, "content": new_content} if changed else message)
     return new_messages
@@ -288,15 +375,20 @@ def degrade_intrinsic_history(
     if not isinstance(messages, list) or not messages:
         return ir_request
 
-    degraded, names = _decide(messages, target_tool_ops, _claimed_names(ir_request))
+    degraded, names, reasons = _decide(
+        messages, target_tool_ops, _claimed_names(ir_request)
+    )
     if not degraded:
         return ir_request
 
     if warnings is not None:
-        for call_id, kind in degraded.items():
+        for key, kind in degraded.items():
+            where = (
+                "(no tool_call_id)" if key.startswith("\x00anonymous") else repr(key)
+            )
             warnings.append(
-                f"Intrinsic {kind!r} tool call {call_id!r} cannot be replayed by "
-                f"the target; degraded to the client function {names[call_id]!r}"
+                f"Intrinsic {kind!r} tool call {where}: {reasons[key]}; degraded "
+                f"to the client function {names[key]!r}"
             )
 
     logger.info(

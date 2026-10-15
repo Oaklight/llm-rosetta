@@ -353,22 +353,41 @@ class TestSameFormatRoundTrip:
 
 
 class TestCrossFormat:
-    """A target that cannot render the intrinsic distinction still emits a call."""
+    """A response-leg server call is dropped, never fabricated as a client call."""
 
-    def test_chat_completions_still_emits_a_tool_call(self):
+    def _emit(self, capture: list[dict[str, Any]]) -> list[dict[str, Any]]:
         source = MessagesConverter()
         target = ChatCompletionsConverter()
         from_ctx = StreamContext()
         to_ctx = StreamContext()
 
         emitted: list[dict[str, Any]] = []
-        for chunk in TestSameFormatRoundTrip.CAPTURE:
+        for chunk in capture:
             for event in source.stream_response_from_provider(chunk, from_ctx):
                 chunks = target.stream_response_to_provider(event, to_ctx)
                 if isinstance(chunks, list):
                     emitted.extend(c for c in chunks if c)
                 elif chunks:
                     emitted.append(chunks)
+        return emitted
 
-        # The call is not dropped; chat_completions has its own tool-call shape.
-        assert emitted
+    def test_chat_completions_drops_a_server_call(self):
+        """Chat Completions has no server-tool vocabulary.
+
+        A streamed response is a call the *client* did not run, so writing it as
+        a ``function`` would ask the client to execute a search it never
+        declared.  It is dropped — and its fragments with it.
+        """
+        assert self._emit(TestSameFormatRoundTrip.CAPTURE) == []
+
+    def test_chat_completions_still_emits_a_client_call(self):
+        emitted = self._emit(TestSameFormatRoundTrip.CLIENT_CAPTURE)
+        # The start chunk names the call; the delta chunk only carries arguments.
+        names = [
+            tc["function"]["name"]
+            for c in emitted
+            for choice in c.get("choices", [])
+            for tc in (choice.get("delta") or {}).get("tool_calls", [])
+            if "name" in tc.get("function", {})
+        ]
+        assert names == ["get_weather"]

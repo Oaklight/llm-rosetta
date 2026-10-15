@@ -23,7 +23,7 @@ from ....types.ir import (
     ToolResultPart,
 )
 from ....types.ir.tools import ToolCallConfig
-from .intrinsic import is_intrinsic_part
+from .intrinsic import intrinsic_kind_of, is_intrinsic_part
 
 #: Which leg of a conversion an intrinsic part is being written on.
 #:
@@ -36,6 +36,19 @@ IntrinsicLeg = Literal["history", "response"]
 
 #: The values :data:`IntrinsicLeg` accepts, for validating a caller's own word.
 _INTRINSIC_LEGS: tuple[str, ...] = ("history", "response")
+
+
+def _report_dropped_intrinsic(part: Any, kwargs: dict[str, Any]) -> None:
+    """Report a response-leg intrinsic drop on the caller's warnings sink."""
+    warnings = kwargs.get("warnings")
+    if not isinstance(warnings, list):
+        return
+    kind = intrinsic_kind_of(part)
+    warnings.append(
+        f"Server tool {'result' if part.get('type') == 'tool_result' else 'call'} "
+        f"of kind {kind!r} has no {kwargs.get('target', 'target')} form; dropped "
+        f"from the response"
+    )
 
 
 class BaseToolOps(ABC):
@@ -219,14 +232,60 @@ class BaseToolOps(ABC):
         return None
 
     @classmethod
+    def dropped_intrinsic_call(
+        cls, ir_tool_call: ToolCallPart, *, leg: IntrinsicLeg, **kwargs: Any
+    ) -> Any:
+        """Drop an intrinsic call the target cannot render on the response leg.
+
+        A response is a call the *client* did not run.  Handing it to the client
+        as an ordinary client call would tell the client to execute something it
+        never asked for, so the response and stream legs never degrade — what
+        they cannot render is dropped and reported.  (History is the opposite:
+        it is context the client already saw, so there the call degrades to a
+        plain function pair.  See :meth:`non_native_intrinsic_call_to_p`.)
+
+        Args:
+            ir_tool_call: IR tool call part with ``tool_type == "intrinsic"``.
+            leg: Which leg the part is written on (always ``"response"`` here).
+            **kwargs: The caller's keyword arguments; a ``warnings`` list is
+                appended a message naming the drop.
+
+        Returns:
+            ``{}`` — nothing is written.
+        """
+        _report_dropped_intrinsic(ir_tool_call, kwargs)
+        return {}
+
+    @classmethod
+    def dropped_intrinsic_result(
+        cls, ir_tool_result: ToolResultPart, *, leg: IntrinsicLeg, **kwargs: Any
+    ) -> Any:
+        """Drop an intrinsic result the target cannot render on the response leg.
+
+        The result half of :meth:`dropped_intrinsic_call`, with the same reason.
+
+        Args:
+            ir_tool_result: IR tool result part with ``tool_type == "intrinsic"``.
+            leg: Which leg the part is written on (always ``"response"`` here).
+            **kwargs: The caller's keyword arguments.
+
+        Returns:
+            ``{}`` — nothing is written.
+        """
+        _report_dropped_intrinsic(ir_tool_result, kwargs)
+        return {}
+
+    @classmethod
     def non_native_intrinsic_call_to_p(
         cls, ir_tool_call: ToolCallPart, *, leg: IntrinsicLeg, **kwargs: Any
     ) -> Any:
         """Write an intrinsic call this dialect does not render natively.
 
-        The default is the parent path: treat it as an ordinary client call,
-        which is what a dialect with no intrinsic vocabulary does.  A dialect
-        that drops such a call instead (google_generate, google_interactions)
+        Reached on the **history** leg only: the template routes a
+        response-leg part to :meth:`dropped_intrinsic_call`.  The default is the
+        parent path — treat it as an ordinary client call — which is what a
+        dialect with no intrinsic vocabulary does.  A dialect that drops such a
+        call instead (messages, google_generate, google_interactions)
         overrides this to return its own empty outcome.
 
         Args:
@@ -286,6 +345,8 @@ class BaseToolOps(ABC):
         native = cls.ir_intrinsic_call_to_p(ir_tool_call, leg=leg, **forwarded)
         if native is not None:
             return native
+        if leg == "response":
+            return cls.dropped_intrinsic_call(ir_tool_call, leg=leg, **forwarded)
         return cls.non_native_intrinsic_call_to_p(ir_tool_call, leg=leg, **forwarded)
 
     @classmethod
@@ -309,6 +370,8 @@ class BaseToolOps(ABC):
         native = cls.ir_intrinsic_result_to_p(ir_tool_result, leg=leg, **forwarded)
         if native is not None:
             return native
+        if leg == "response":
+            return cls.dropped_intrinsic_result(ir_tool_result, leg=leg, **forwarded)
         return cls.non_native_intrinsic_result_to_p(
             ir_tool_result, leg=leg, **forwarded
         )

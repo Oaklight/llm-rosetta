@@ -221,9 +221,25 @@ def _classify_call(converter_name: str, payload: dict[str, Any]) -> str:
     text = json.dumps(payload, default=str)
     if any(m in text for m in _NATIVE_CALL_MARKERS[converter_name]):
         return "native"
-    if any(m in text for m in _DEGRADED_CALL_MARKERS[converter_name]):
+    if _has_degraded_call(converter_name, payload, text):
         return "degraded"
     return "dropped"
+
+
+def _has_degraded_call(converter_name: str, payload: dict[str, Any], text: str) -> bool:
+    """Whether a degraded client call is actually present.
+
+    Chat Completions needs the parsed form: ``"tool_calls": []`` is on every
+    assistant message, so the raw marker would call an empty list a
+    degradation and hide a drop.
+    """
+    if converter_name == "chat_completions":
+        return any(
+            m.get("tool_calls")
+            for m in (payload.get("messages") or [])
+            if isinstance(m, dict)
+        )
+    return any(m in text for m in _DEGRADED_CALL_MARKERS[converter_name])
 
 
 def history_call_outcome(converter_name: str, kind: str) -> str:

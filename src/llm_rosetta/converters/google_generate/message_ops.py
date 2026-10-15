@@ -211,7 +211,7 @@ class GoogleGenerateMessageOps(BaseMessageOps):
             part = self._ir_content_part_to_p(
                 content_part, tool_call_index, warnings_list
             )
-            if part is not None:
+            if part:
                 parts.append(part)
 
         if google_role == "model":

@@ -139,7 +139,7 @@ def _result(kind: str) -> ToolResultPart:
 
 
 def test_plain_dialect_writes_an_intrinsic_call_as_a_client_call():
-    out = _PlainToolOps.ir_tool_call_to_p(_call("web_search"))
+    out = _PlainToolOps.ir_tool_call_to_p(_call("web_search"), leg="history")
     assert out == {"shape": "client_call", "name": "web_search"}
 
 
@@ -191,7 +191,7 @@ def test_a_hook_that_declines_falls_back_to_the_client_path():
         ) -> Any:
             return cls.ir_client_result_to_p(ir_tool_result, **kwargs)
 
-    assert _DegradingToolOps.ir_tool_call_to_p(_call("web_search")) == {
+    assert _DegradingToolOps.ir_tool_call_to_p(_call("web_search"), leg="history") == {
         "shape": "client_call",
         "name": "web_search",
     }

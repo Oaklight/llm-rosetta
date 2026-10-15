@@ -659,7 +659,7 @@ class GoogleGenerateConverter(BaseConverter):
                 converted = self.message_ops._ir_content_part_to_p(
                     part, warnings_list=context.warnings
                 )
-                if converted is not None:
+                if converted:
                     parts.append(converted)
 
             if google_role == "model":

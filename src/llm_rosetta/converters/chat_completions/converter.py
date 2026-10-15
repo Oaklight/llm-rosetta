@@ -45,7 +45,7 @@ from ..base.tools import (
 from ._constants import OPENAI_CHAT_REASON_FROM_PROVIDER, OPENAI_CHAT_REASON_TO_PROVIDER
 from .config_ops import ChatCompletionsConfigOps
 from .content_ops import ChatCompletionsContentOps
-from .message_ops import ChatCompletionsMessageOps
+from .message_ops import ChatCompletionsMessageOps, restore_reasoning_details
 from .tool_ops import ChatCompletionsToolOps
 
 logger = logging.getLogger(__name__)
@@ -303,7 +303,11 @@ class ChatCompletionsConverter(BaseConverter):
             elif is_reasoning_part(part):
                 reasoning_parts.append(part.get("reasoning", ""))
             elif is_tool_call_part(part):
-                tool_calls.append(self.tool_ops.ir_tool_call_to_p(part))
+                # Response leg: a server call the client did not run is never
+                # handed over as a client call, so a drop is simply omitted.
+                call = self.tool_ops.ir_tool_call_to_p(part, leg="response")
+                if call:
+                    tool_calls.append(call)
             elif is_refusal_part(part):
                 refusal_text = part.get("refusal", "")
             elif is_citation_part(part):
@@ -327,16 +331,7 @@ class ChatCompletionsConverter(BaseConverter):
 
         if reasoning_parts:
             openai_message["reasoning_content"] = "\n".join(reasoning_parts)
-            # Restore reasoning_details from provider_metadata, encrypted_content from redacted_data
-            for part in content_parts:
-                if is_reasoning_part(part):
-                    pm = part.get("provider_metadata", {}).get("openai_chat", {})
-                    if "reasoning_details" in pm:
-                        openai_message["reasoning_details"] = pm["reasoning_details"]
-                    redacted = ChatCompletionsContentOps.own_encrypted_content(part)
-                    if redacted:
-                        openai_message["encrypted_content"] = redacted
-                    break
+            restore_reasoning_details(openai_message, content_parts)
 
         reason = choice.get("finish_reason", {}).get("reason", "stop")
         openai_choice: dict[str, Any] = {
@@ -1048,11 +1043,27 @@ class ChatCompletionsConverter(BaseConverter):
     def _handle_ir_tool_call_start_to_p(
         self, event: ToolCallStartEvent, context: StreamContext | None
     ) -> dict[str, Any]:
-        """Handle ToolCallStartEvent → tool_calls delta with id and name."""
+        """Handle ToolCallStartEvent → tool_calls delta with id and name.
+
+        A provider-executed (intrinsic) call has no client shape here: writing
+        it as a ``function`` would ask the client to run a tool it never
+        declared, so the stream leg drops it — and everything that follows for
+        the same call id, which is why the drop is recorded on the context.
+        """
         choice_index = event.get("choice_index", 0)
         tc_index = event.get("tool_call_index", 0)
         tool_type = event.get("tool_type", "function")
         call_id = sanitize_tool_call_id(event["tool_call_id"])
+
+        if tool_type == "intrinsic":
+            if context is not None:
+                context.drop_intrinsic_call(call_id)
+            logger.debug(
+                "Intrinsic tool call %s has no Chat Completions form; dropped "
+                "from the streamed response",
+                call_id,
+            )
+            return {}
 
         if tool_type == "custom":
             tc_entry: dict[str, Any] = {
@@ -1095,6 +1106,11 @@ class ChatCompletionsConverter(BaseConverter):
         """Handle ToolCallDeltaEvent → tool_calls delta with arguments."""
         choice_index = event.get("choice_index", 0)
         tc_index = event.get("tool_call_index", 0)
+
+        if context is not None and context.is_intrinsic_call_dropped(
+            sanitize_tool_call_id(event["tool_call_id"])
+        ):
+            return {}
 
         if context is None:
             logger.debug(

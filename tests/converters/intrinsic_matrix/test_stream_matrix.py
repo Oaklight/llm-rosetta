@@ -402,10 +402,13 @@ def test_read_delta_carries_the_intrinsic_kind():
 # ---------------------------------------------------------------------------
 
 WRITE_CALL_MATRIX: dict[str, dict[str, str]] = {
+    # A streamed response is a call the client did not run, so a dialect with no
+    # server-tool vocabulary drops it rather than inventing a client call.  Only
+    # the history leg degrades (see the history matrix).
     "chat_completions": {
-        "web_search": "degraded",
-        "code_execution": "degraded",
-        UNKNOWN_KIND: "degraded",
+        "web_search": "dropped",
+        "code_execution": "dropped",
+        UNKNOWN_KIND: "dropped",
     },
     # This is the response leg, so a kind Anthropic has no server tool for is
     # dropped rather than fabricated as a ``server_tool_use``.
@@ -541,10 +544,12 @@ def test_stream_write_result(converter: str, kind: str, expected: str):
 
 
 WRITE_DELTA_MATRIX: dict[str, dict[str, str]] = {
+    # The start was dropped, so its fragments go with it: "dropped" here means
+    # nothing was written for the call at all.
     "chat_completions": {
-        "web_search": "degraded",
-        "code_execution": "degraded",
-        UNKNOWN_KIND: "degraded",
+        "web_search": "dropped",
+        "code_execution": "dropped",
+        UNKNOWN_KIND: "dropped",
     },
     "messages": {
         "web_search": "native",

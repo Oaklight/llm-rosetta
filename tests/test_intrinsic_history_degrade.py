@@ -354,3 +354,118 @@ def test_open_responses_degrades_a_code_interpreter_without_a_container():
     request = _request(_intrinsic_call("code_interpreter", tool_input={"code": "x"}))
     out = degrade_intrinsic_history(request, tool_ops)
     assert out["messages"][1]["content"][0]["tool_type"] == "function"
+
+
+# ---------------------------------------------------------------------------
+# Anonymous calls, the result requirement, and the reasons reported
+# ---------------------------------------------------------------------------
+
+
+def test_two_anonymous_calls_keep_their_own_kind():
+    """Ids are optional, so two id-less calls must not collapse into one.
+
+    Keyed on the id alone, both would take the last kind seen — the first
+    call's kind and name would be lost, and the client would see two different
+    server calls as the same function.
+    """
+    request: dict[str, Any] = {
+        "model": "m",
+        "messages": [
+            {
+                "role": "assistant",
+                "content": [
+                    _intrinsic_call("google_search", ""),
+                    _intrinsic_call("url_context", ""),
+                ],
+            }
+        ],
+    }
+    warnings: list[str] = []
+    out = degrade_intrinsic_history(request, _messages(), warnings=warnings)
+
+    first, second = out["messages"][0]["content"]
+    assert first["tool_name"] == "google_search"
+    assert second["tool_name"] == "url_context"
+    assert first["provider_metadata"]["_downgraded_from"]["kind"] == "google_search"
+    assert second["provider_metadata"]["_downgraded_from"]["kind"] == "url_context"
+    assert len(warnings) == 2
+
+
+def test_an_anonymous_result_pairs_with_the_call_before_it():
+    request: dict[str, Any] = {
+        "model": "m",
+        "messages": [
+            {
+                "role": "assistant",
+                "content": [
+                    _intrinsic_call("google_search", ""),
+                    _intrinsic_result("google_search", ""),
+                ],
+            }
+        ],
+    }
+    out = degrade_intrinsic_history(request, _messages())
+
+    call, result = out["messages"][0]["content"]
+    assert call["tool_type"] == result["tool_type"] == "function"
+    assert result["result"] == "R"
+
+
+def test_a_call_the_target_needs_a_result_for_is_degraded():
+    """Anthropic rejects a ``server_tool_use`` nothing answers."""
+    tool_ops = _messages()
+    answered = _request(_intrinsic_call("web_search", tool_input={"query": "q"}))
+    assert degrade_intrinsic_history(answered, tool_ops) is answered
+
+    unanswered = copy.deepcopy(answered)
+    unanswered["messages"] = unanswered["messages"][:2]  # drop the result turn
+    warnings: list[str] = []
+    out = degrade_intrinsic_history(unanswered, tool_ops, warnings=warnings)
+
+    assert out["messages"][1]["content"][0]["tool_type"] == "function"
+    assert "needs a result" in warnings[0]
+
+
+def test_the_warning_names_the_reason():
+    """A reader must be able to tell the two failure modes apart."""
+    unknown = _request(_intrinsic_call("special_search"))
+    warnings: list[str] = []
+    degrade_intrinsic_history(unknown, _messages(), warnings=warnings)
+    assert "cannot write the 'special_search' call as it stands" in warnings[0]
+
+    no_kind = _request(_intrinsic_call("web_search"))
+    no_kind["messages"][1]["content"][0].pop("intrinsic_kind")
+    warnings = []
+    degrade_intrinsic_history(no_kind, _messages(), warnings=warnings)
+    assert "carries no intrinsic kind" in warnings[0]
+
+
+def test_an_untyped_degraded_result_becomes_json_text():
+    """An ordinary tool result accepts a string or typed blocks, nothing else.
+
+    A search result is a list of provider blocks with no ``type``; Anthropic
+    and OpenAI reject those once the pair is degraded
+    (``tool_result.content.0.type: Field required``), so the payload is carried
+    as JSON text.
+    """
+    call = _intrinsic_call("google_search")
+    request = _request(call)
+    request["messages"][2]["content"][0]["result"] = [
+        {"search_suggestions": "<div>x</div>"},
+        "plain",
+    ]
+    out = degrade_intrinsic_history(request, _messages())
+
+    result = out["messages"][2]["content"][0]["result"]
+    assert result == json.dumps(
+        [{"search_suggestions": "<div>x</div>"}, "plain"], ensure_ascii=False
+    )
+
+
+def test_a_typed_degraded_result_keeps_its_blocks():
+    call = _intrinsic_call("google_search")
+    request = _request(call)
+    request["messages"][2]["content"][0]["result"] = [{"type": "text", "text": "t"}]
+    out = degrade_intrinsic_history(request, _messages())
+
+    assert out["messages"][2]["content"][0]["result"] == [{"type": "text", "text": "t"}]

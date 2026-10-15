@@ -372,7 +372,10 @@ class MessagesMessageOps(BaseMessageOps):
 
         for part in content:
             if is_tool_result_part(part):
-                anthropic_content.append(self.tool_ops.ir_tool_result_to_p(part))
+                # A server result the target cannot render is dropped (falsy).
+                block = self.tool_ops.ir_tool_result_to_p(part)
+                if block:
+                    anthropic_content.append(block)
 
         return {"role": "user", "content": anthropic_content}, warnings
 

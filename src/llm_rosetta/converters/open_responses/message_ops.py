@@ -193,9 +193,9 @@ class OpenResponsesMessageOps(BaseMessageOps):
                 content_parts.append(self.content_ops.ir_file_to_p(part))
             elif is_tool_call_part(part):
                 # Tool calls become separate function_call items
-                extra_items.append(
-                    self.tool_ops.ir_tool_call_to_p(part, for_history=True)
-                )
+                call_item = self.tool_ops.ir_tool_call_to_p(part, for_history=True)
+                if call_item:
+                    extra_items.append(call_item)
             elif is_tool_result_part(part):
                 # Tool results become separate function_call_output items.
                 # An intrinsic result is paired with the call the writer emits:
