@@ -11,7 +11,7 @@ from typing import Any, cast
 
 from ...types.ir import ToolCallPart, ToolResultPart
 from ...types.ir.tools import ToolChoice, ToolDefinition
-from ..base import BaseToolOps
+from ..base import BaseToolOps, IntrinsicLeg
 from ..base.tools.intrinsic import (
     get_native_definition,
     intrinsic_kind_of,
@@ -142,48 +142,117 @@ class GoogleInteractionsToolOps(BaseToolOps):
             ] = signature
         return cast(ToolCallPart, result)
 
-    @staticmethod
-    def ir_function_call_to_p(ir_part: ToolCallPart, **kwargs: Any) -> dict:
+    @classmethod
+    def ir_client_call_to_p(cls, ir_tool_call: ToolCallPart, **kwargs: Any) -> dict:
         """IR ToolCallPart → Interactions FunctionCallStep."""
         preserve_metadata = kwargs.get("preserve_metadata", True)
-        if ir_part.get("tool_type") == "intrinsic":
-            # Native server-call steps (``google_search_call``, ...) take no
-            # ``name``: the API rejects a body carrying one with ``400 Unknown
-            # parameter 'name' at 'input[0]'``.  They do carry a ``signature``
-            # on the wire, so restore the one the read path kept.
-            intrinsic_kind = intrinsic_kind_of(ir_part)
-            step_type = INTRINSIC_KIND_TO_CALL_TYPE.get(intrinsic_kind)
-            if step_type is None:
-                # A kind this dialect cannot render (``web_search`` arriving
-                # from another lane, …) has no native step type; drop the call
-                # rather than fabricate ``{kind}_call`` — a step type the API
-                # does not define — or downgrade it to a client
-                # ``function_call``.  Matches the streaming writer and the
-                # sibling converters.
-                return {}
-            step: dict[str, Any] = {
-                "type": step_type,
-                "id": ir_part["tool_call_id"],
-                "arguments": ir_part["tool_input"],
-            }
-            pm = ir_part.get("provider_metadata") or {}
-            sig = pm.get("google", {}).get("thought_signature")
-            if preserve_metadata and sig:
-                step["signature"] = sig
-            return step
         step: dict[str, Any] = {
             "type": "function_call",
-            "id": ir_part["tool_call_id"],
-            "name": ir_part["tool_name"],
-            "arguments": ir_part["tool_input"],
+            "id": ir_tool_call["tool_call_id"],
+            "name": ir_tool_call["tool_name"],
+            "arguments": ir_tool_call["tool_input"],
         }
         # ``provider_metadata`` may be present-but-None (optional IR field),
         # so guard with ``or {}`` rather than a default.
-        pm = ir_part.get("provider_metadata") or {}
+        pm = ir_tool_call.get("provider_metadata") or {}
         sig = pm.get("google", {}).get("thought_signature")
         if preserve_metadata and sig:
             step["signature"] = sig
         return step
+
+    @classmethod
+    def intrinsic_renderable(cls, kind: str, fields: Any, *, leg: IntrinsicLeg) -> bool:
+        """Whether this dialect defines a server step for *kind*.
+
+        The step types are the API's own vocabulary; a kind from a sibling
+        dialect (``web_search``) has none, and fabricating ``{kind}_call``
+        would emit a step type the API does not define.
+
+        Args:
+            kind: Canonical intrinsic kind.
+            fields: The IR ``tool_input`` (unused: a step's shape does not
+                depend on the payload).
+            leg: Which leg the part is written on; both are the same here.
+
+        Returns:
+            True when a native server-call step exists for the kind.
+        """
+        return kind in INTRINSIC_KIND_TO_CALL_TYPE
+
+    @classmethod
+    def ir_intrinsic_call_to_p(
+        cls,
+        ir_tool_call: ToolCallPart,
+        *,
+        leg: IntrinsicLeg = "history",
+        **kwargs: Any,
+    ) -> dict | None:
+        """IR intrinsic ToolCallPart → Interactions server-call step.
+
+        A native server-call step (``google_search_call``, …) takes no
+        ``name``: the API rejects a body carrying one with ``400 Unknown
+        parameter 'name' at 'input[0]'``.  It does carry a ``signature`` on the
+        wire, so the one the read path kept is restored.
+
+        Args:
+            ir_tool_call: IR tool call part with ``tool_type == "intrinsic"``.
+            leg: Which leg the part is written on; both are the same here.
+            **kwargs: ``preserve_metadata`` (bool, default True).
+
+        Returns:
+            Native server-call step, or ``None`` for a kind this dialect does
+            not define (the template then drops the call).
+        """
+        kind = intrinsic_kind_of(ir_tool_call)
+        if not cls.intrinsic_renderable(kind, ir_tool_call.get("tool_input"), leg=leg):
+            return None
+        step: dict[str, Any] = {
+            "type": INTRINSIC_KIND_TO_CALL_TYPE[kind],
+            "id": ir_tool_call["tool_call_id"],
+            "arguments": ir_tool_call["tool_input"],
+        }
+        pm = ir_tool_call.get("provider_metadata") or {}
+        sig = pm.get("google", {}).get("thought_signature")
+        if kwargs.get("preserve_metadata", True) and sig:
+            step["signature"] = sig
+        return step
+
+    @classmethod
+    def non_native_intrinsic_call_to_p(
+        cls, ir_tool_call: ToolCallPart, *, leg: IntrinsicLeg, **kwargs: Any
+    ) -> dict:
+        """Drop an intrinsic call this dialect has no server step for.
+
+        A client ``function_call`` would name the kind as though the client had
+        declared it, and a fabricated ``{kind}_call`` is a step type the API
+        does not define, so neither is written — the call is dropped.
+
+        Args:
+            ir_tool_call: IR tool call part with ``tool_type == "intrinsic"``.
+            leg: Which leg the part is written on.
+            **kwargs: Extra arguments.
+
+        Returns:
+            ``{}`` — no step is written.
+        """
+        return {}
+
+    @classmethod
+    def ir_function_call_to_p(cls, ir_part: ToolCallPart, **kwargs: Any) -> Any:
+        """Deprecated alias of :meth:`ir_tool_call_to_p`.
+
+        The dialect's client call is a ``function_call`` step, so this name
+        predates the base template that owns the dispatch.  Kept so existing
+        callers keep working; new code should call :meth:`ir_tool_call_to_p`.
+
+        Args:
+            ir_part: IR tool call part.
+            **kwargs: Extra arguments.
+
+        Returns:
+            The step for the part, native or client.
+        """
+        return cls.ir_tool_call_to_p(ir_part, **kwargs)
 
     # ── Server step calls ─────────────────────────────────────────
 
@@ -245,8 +314,77 @@ class GoogleInteractionsToolOps(BaseToolOps):
             part["is_error"] = True
         return part
 
-    @staticmethod
-    def ir_function_result_to_p(ir_part: ToolResultPart, **kwargs: Any) -> dict:
+    @classmethod
+    def ir_intrinsic_result_to_p(
+        cls,
+        ir_tool_result: ToolResultPart,
+        *,
+        leg: IntrinsicLeg = "history",
+        **kwargs: Any,
+    ) -> dict | None:
+        """IR intrinsic ToolResultPart → Interactions server-result step.
+
+        Args:
+            ir_tool_result: IR tool result part with ``tool_type == "intrinsic"``.
+            leg: Which leg the part is written on; both are the same here.
+            **kwargs: Extra arguments.
+
+        Returns:
+            Native server-result step, or ``None`` for a kind this dialect has
+            no result step for (the template then drops the result).
+        """
+        kind = intrinsic_kind_of(ir_tool_result)
+        if kind not in INTRINSIC_KIND_TO_RESULT_TYPE:
+            return None
+        result: dict[str, Any] = {
+            "type": INTRINSIC_KIND_TO_RESULT_TYPE[kind],
+            "call_id": ir_tool_result["tool_call_id"],
+            "result": ir_tool_result["result"],
+        }
+        if ir_tool_result.get("is_error"):
+            result["is_error"] = True
+        return result
+
+    @classmethod
+    def non_native_intrinsic_result_to_p(
+        cls, ir_tool_result: ToolResultPart, *, leg: IntrinsicLeg, **kwargs: Any
+    ) -> dict:
+        """Drop an intrinsic result this dialect has no server step for.
+
+        Mirror of :meth:`non_native_intrinsic_call_to_p`: a fabricated
+        ``{kind}_result`` is a step type the API does not define, and a
+        ``function_result`` would report an answer to a call the client never
+        made.
+
+        Args:
+            ir_tool_result: IR tool result part with ``tool_type == "intrinsic"``.
+            leg: Which leg the part is written on.
+            **kwargs: Extra arguments.
+
+        Returns:
+            ``{}`` — no step is written.
+        """
+        return {}
+
+    @classmethod
+    def ir_function_result_to_p(cls, ir_part: ToolResultPart, **kwargs: Any) -> Any:
+        """Deprecated alias of :meth:`ir_tool_result_to_p`.
+
+        See :meth:`ir_function_call_to_p`.
+
+        Args:
+            ir_part: IR tool result part.
+            **kwargs: Extra arguments.
+
+        Returns:
+            The step for the part, native or client.
+        """
+        return cls.ir_tool_result_to_p(ir_part, **kwargs)
+
+    @classmethod
+    def ir_client_result_to_p(
+        cls, ir_tool_result: ToolResultPart, **kwargs: Any
+    ) -> dict:
         """IR ToolResultPart → Interactions FunctionResultStep.
 
         A ``function_result`` step requires the function ``name``; the IR part
@@ -255,22 +393,7 @@ class GoogleInteractionsToolOps(BaseToolOps):
         message history. Without it the API rejects the step with
         ``function_response.name: Name cannot be empty``.
         """
-        if ir_part.get("tool_type") == "intrinsic":
-            intrinsic_kind = intrinsic_kind_of(ir_part)
-            step_type = INTRINSIC_KIND_TO_RESULT_TYPE.get(intrinsic_kind)
-            if step_type is None:
-                # Unrenderable kind: drop the result rather than fabricate
-                # ``{kind}_result`` (see ``ir_function_call_to_p``).
-                return {}
-            result: dict[str, Any] = {
-                "type": step_type,
-                "call_id": ir_part["tool_call_id"],
-                "result": ir_part["result"],
-            }
-            if ir_part.get("is_error"):
-                result["is_error"] = True
-            return result
-
+        ir_part = ir_tool_result
         call_id = ir_part["tool_call_id"]
         result = {
             "type": "function_result",
@@ -383,20 +506,10 @@ class GoogleInteractionsToolOps(BaseToolOps):
     ) -> ToolDefinition | list[ToolDefinition] | None:
         return GoogleInteractionsToolOps.p_tool_to_ir(provider_tool, **kwargs)
 
-    @classmethod
-    def ir_tool_call_to_p(cls, ir_tool_call: ToolCallPart, **kwargs: Any) -> Any:
-        return GoogleInteractionsToolOps.ir_function_call_to_p(ir_tool_call, **kwargs)
-
     @staticmethod
     def p_tool_call_to_ir(provider_tool_call: Any, **kwargs: Any) -> ToolCallPart:
         return GoogleInteractionsToolOps.p_function_call_to_ir(
             provider_tool_call, **kwargs
-        )
-
-    @classmethod
-    def ir_tool_result_to_p(cls, ir_tool_result: ToolResultPart, **kwargs: Any) -> Any:
-        return GoogleInteractionsToolOps.ir_function_result_to_p(
-            ir_tool_result, **kwargs
         )
 
     @staticmethod

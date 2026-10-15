@@ -12,6 +12,7 @@ from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import Any, cast
 
+from ...types.ir import ToolResultPart
 from ...types.ir.request import IRRequest
 from ...types.ir.response import (
     FinishReason,
@@ -50,7 +51,6 @@ from .content_ops import GoogleInteractionsContentOps
 from .message_ops import GoogleInteractionsMessageOps
 from .tool_ops import (
     INTRINSIC_KIND_TO_CALL_TYPE,
-    INTRINSIC_KIND_TO_RESULT_TYPE,
     SERVER_CALL_TYPES,
     SERVER_RESULT_TYPES,
     GoogleInteractionsToolOps,
@@ -676,6 +676,13 @@ class GoogleInteractionsConverter(BaseConverter):
         # ContentBlockStartEvent (common for OpenAI Chat upstreams)
         event_type = event.get("type", "")  # type: ignore[union-attr]
         if event_type in ("text_delta", "reasoning_delta", "tool_call_delta"):
+            if event_type == "tool_call_delta" and ctx.is_intrinsic_call_dropped(
+                event.get("tool_call_id", "")  # type: ignore[union-attr]
+            ):
+                # The call's step was dropped with its start, so this fragment
+                # belongs to nothing: opening a generic ``model_output`` step
+                # for it would emit the half-write the drop avoided.
+                return result
             if not ctx.metadata.get("_interactions_step_started"):
                 ctx.metadata["_interactions_step_started"] = True
                 step_start = {
@@ -839,14 +846,17 @@ class GoogleInteractionsConverter(BaseConverter):
             # one).  The kind comes from the event's first-class
             # ``intrinsic_kind`` field, never the name.
             kind = intrinsic_kind_of(event)
-            step_type = INTRINSIC_KIND_TO_CALL_TYPE.get(kind)
-            if step_type is None:
+            if not self.tool_ops.intrinsic_renderable(kind, {}, leg="response"):
                 # Unrenderable kind: drop the call rather than fabricate a
                 # step type the API does not define (see
-                # ``ir_function_call_to_p``).
+                # ``ir_intrinsic_call_to_p``).  The fragments and the result
+                # that follow for this call are dropped too — a delta with no
+                # step to attach to is a half-write — so the drop is recorded.
+                if context is not None:
+                    context.drop_intrinsic_call(event["tool_call_id"])
                 return {}
             step = {
-                "type": step_type,
+                "type": INTRINSIC_KIND_TO_CALL_TYPE[kind],
                 "id": event["tool_call_id"],
             }
         else:
@@ -885,6 +895,13 @@ class GoogleInteractionsConverter(BaseConverter):
     def _handle_ir_tool_call_delta_to_p(
         self, event: ToolCallDeltaEvent, context: StreamContext | None
     ) -> dict[str, Any]:
+        if context is not None and context.is_intrinsic_call_dropped(
+            event["tool_call_id"]
+        ):
+            # The call's step was dropped (an unrenderable kind), so its
+            # arguments go the same way instead of leaking as a bare
+            # ``arguments`` step that names a step type the API never opened.
+            return {}
         index = event.get("block_index", 0)
         step_type = None
         if context is not None:
@@ -946,19 +963,15 @@ class GoogleInteractionsConverter(BaseConverter):
         completed step in one message, and the paired block-start is dropped by
         ``_handle_ir_content_block_start_to_p`` so nothing is duplicated.
         """
-        kind = intrinsic_kind_of(event)
-        step_type = INTRINSIC_KIND_TO_RESULT_TYPE.get(kind)
-        if step_type is None:
-            # Unrenderable kind: drop the result rather than fabricate a step
-            # type the API does not define (see ``ir_function_result_to_p``).
+        # The same writer the non-streaming path uses decides native vs drop
+        # (see ``ir_intrinsic_result_to_p``): a server result is emitted as the
+        # provider's own result step, and an unrenderable kind is dropped
+        # rather than written as a step type the API does not define.
+        step = self.tool_ops.ir_intrinsic_result_to_p(
+            cast(ToolResultPart, event), leg="response"
+        )
+        if step is None:
             return {}
-        step: dict[str, Any] = {
-            "type": step_type,
-            "call_id": event["tool_call_id"],
-            "result": event["result"],
-        }
-        if event.get("is_error"):
-            step["is_error"] = True
         if context is not None:
             context.metadata["_interactions_step_started"] = True
         return {

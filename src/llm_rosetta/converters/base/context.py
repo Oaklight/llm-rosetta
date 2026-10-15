@@ -153,6 +153,11 @@ class StreamContext(ConversionContext):
     # when a call registers so a later event (a finish flush, a done item) can
     # restore it without re-deriving it from the tool name.
     _tool_call_intrinsic_kinds: dict[str, str] = field(default_factory=dict, repr=False)
+    # Provider-executed calls whose opening event a writer dropped because the
+    # dialect has no native form for them.  The fragments and the finish flush
+    # that follow must go the same way, or the stream ends up half-written: a
+    # delta with no item to attach to, a completed item with no name.
+    _dropped_intrinsic_calls: set[str] = field(default_factory=set, repr=False)
 
     def next_block_index(self) -> int:
         """Increment and return the next block index.
@@ -227,6 +232,31 @@ class StreamContext(ConversionContext):
             one (or was registered without a kind).
         """
         return self._tool_call_intrinsic_kinds.get(tool_call_id, "")
+
+    def drop_intrinsic_call(self, tool_call_id: str) -> None:
+        """Record that a writer dropped this call's opening event.
+
+        A dialect that cannot render a provider-executed call natively emits
+        nothing for its start; everything that follows for the same call id —
+        argument fragments, a finish flush — has to be dropped as well, so this
+        is the mark the later writers consult.
+
+        Args:
+            tool_call_id: The tool call identifier.
+        """
+        self._dropped_intrinsic_calls.add(tool_call_id)
+
+    def is_intrinsic_call_dropped(self, tool_call_id: str) -> bool:
+        """Whether an opening event for this call was dropped.
+
+        Args:
+            tool_call_id: The tool call identifier.
+
+        Returns:
+            True when the call's start was dropped, so later events for it
+            must not be written.
+        """
+        return tool_call_id in self._dropped_intrinsic_calls
 
     def set_tool_call_type(self, tool_call_id: str, tool_type: str) -> None:
         """Update the tool type for an already-registered call.

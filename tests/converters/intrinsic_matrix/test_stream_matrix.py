@@ -545,8 +545,9 @@ WRITE_DELTA_MATRIX: dict[str, dict[str, str]] = {
         "code_execution": "native",
         UNKNOWN_KIND: "native",
     },
-    # A native server item holds its payload for the done event; a kind that
-    # never opened an item still leaks a bare arguments delta.
+    # A native server item holds its payload for the done event, and a call
+    # whose start was dropped takes its deltas with it: nothing is written for
+    # either, so both are "held" rather than a leaked half-write.
     "open_responses": {
         "web_search": "held",
         "code_interpreter": "held",
@@ -560,8 +561,8 @@ WRITE_DELTA_MATRIX: dict[str, dict[str, str]] = {
     "google_interactions": {
         "google_search": "native",
         "code_execution": "native",
-        "web_search": "leaked",
-        UNKNOWN_KIND: "leaked",
+        "web_search": "held",
+        UNKNOWN_KIND: "held",
     },
 }
 
@@ -592,8 +593,12 @@ def write_delta_outcome(converter_name: str, kind: str) -> str:
     if converter_name == "open_responses":
         return "held" if text == "{}" else "leaked"
     if converter_name == "google_interactions":
-        # A native delta carries the call's own step type; a leaked one is a
-        # bare ``arguments`` step the converter should not have produced.
+        # A native delta carries the call's own step type; an empty one is a
+        # delta whose call was dropped with its start (nothing to attach to).
+        # Anything else is a bare ``arguments`` step the converter should not
+        # have produced.
+        if text in ("{}", "[]"):
+            return "held"
         return "native" if "_call" in text else "leaked"
     raise AssertionError(converter_name)
 
