@@ -653,8 +653,12 @@ class GoogleGenerateConverter(BaseConverter):
                 # call becomes ``executableCode`` and a server result
                 # ``codeExecutionResult`` (or is dropped when Google cannot
                 # render it), never a client ``functionCall``.  This is the
-                # same writer the message path uses.  (#986)
-                converted = self.message_ops._ir_content_part_to_p(part)
+                # same writer the message path uses, and it is handed the same
+                # warnings sink, so a drop is reported on the conversion rather
+                # than only warned about.  (#986)
+                converted = self.message_ops._ir_content_part_to_p(
+                    part, warnings_list=context.warnings
+                )
                 if converted is not None:
                     parts.append(converted)
 

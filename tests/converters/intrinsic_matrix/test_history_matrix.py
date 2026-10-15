@@ -25,6 +25,7 @@ from typing import Any, cast
 
 import pytest
 
+from llm_rosetta.converters.base.context import ConversionContext
 from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
 from llm_rosetta.converters.google_generate import GoogleGenerateConverter
 from llm_rosetta.converters.google_interactions import GoogleInteractionsConverter
@@ -394,8 +395,10 @@ def test_messages_response_result_is_kind_named():
 
 
 def test_google_generate_response_drops_foreign_kind_with_warning():
-    with pytest.warns(UserWarning, match="Unsupported intrinsic kind"):
-        out = GoogleGenerateConverter().response_to_provider(
-            cast(Any, ir_response("web_search"))
-        )
+    """The drop is reported on the source converter's own warnings list."""
+    ctx = ConversionContext()
+    out = GoogleGenerateConverter().response_to_provider(
+        cast(Any, ir_response("web_search")), context=ctx
+    )
     assert "_RESULT_" not in json.dumps(out)
+    assert any("Unsupported intrinsic kind" in w for w in ctx.warnings)
