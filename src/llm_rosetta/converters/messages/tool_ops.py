@@ -438,6 +438,11 @@ class MessagesToolOps(BaseToolOps):
         return kind in _ANTHROPIC_SERVER_TOOL_KINDS
 
     @classmethod
+    def intrinsic_requires_result(cls, kind: str) -> bool:
+        """Anthropic rejects a ``server_tool_use`` with no paired result block."""
+        return True
+
+    @classmethod
     def ir_intrinsic_call_to_p(
         cls,
         ir_tool_call: ToolCallPart,

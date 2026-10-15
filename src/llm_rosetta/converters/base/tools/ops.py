@@ -119,6 +119,22 @@ class BaseToolOps(ABC):
         return False
 
     @classmethod
+    def intrinsic_requires_result(cls, kind: str) -> bool:
+        """Whether a replayed server call of *kind* must be followed by its result.
+
+        Anthropic rejects a ``server_tool_use`` with no matching result block,
+        while other dialects carry the result on the call item or omit it.  A
+        call the target cannot replay alone is degraded by the history pass.
+
+        Args:
+            kind: Canonical intrinsic kind.
+
+        Returns:
+            True when the dialect needs the paired result in history.
+        """
+        return False
+
+    @classmethod
     def ir_intrinsic_call_to_p(
         cls,
         ir_tool_call: ToolCallPart,

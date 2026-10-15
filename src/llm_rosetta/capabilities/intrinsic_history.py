@@ -180,6 +180,13 @@ def _decide(
     by_kind: dict[str, str] = {}
     degraded: dict[str, str] = {}
     names: dict[str, str] = {}
+    answered = {
+        part.get("tool_call_id")
+        for message in messages
+        if isinstance(message, dict)
+        for part in message.get("content") or []
+        if isinstance(part, dict) and part.get("type") == "tool_result"
+    }
     for message in messages:
         if not isinstance(message, dict):
             continue
@@ -190,8 +197,15 @@ def _decide(
                 continue
             kind = intrinsic_kind_of(part)
             fields = part.get("tool_input")
-            if kind and target_tool_ops.intrinsic_renderable(
-                kind, fields if isinstance(fields, Mapping) else {}, leg="history"
+            if (
+                kind
+                and target_tool_ops.intrinsic_renderable(
+                    kind, fields if isinstance(fields, Mapping) else {}, leg="history"
+                )
+                and not (
+                    target_tool_ops.intrinsic_requires_result(kind)
+                    and part.get("tool_call_id") not in answered
+                )
             ):
                 continue
             call_id = part.get("tool_call_id") or ""

@@ -209,15 +209,22 @@ def test_only_the_unrenderable_pair_is_touched():
     request: dict[str, Any] = {
         "model": "m",
         "messages": [
-            {"role": "assistant", "content": [renderable, unrenderable]},
+            {
+                "role": "assistant",
+                "content": [
+                    renderable,
+                    _intrinsic_result("web_search", "keep"),
+                    unrenderable,
+                ],
+            },
         ],
     }
     out = degrade_intrinsic_history(request, _messages())
     content = out["messages"][0]["content"]
     assert content[0]["tool_type"] == "intrinsic"
     assert content[0]["tool_name"] == "web_search"
-    assert content[1]["tool_type"] == "function"
-    assert content[1]["tool_name"] == "google_search"
+    assert content[2]["tool_type"] == "function"
+    assert content[2]["tool_name"] == "google_search"
 
 
 def test_does_not_mutate_the_original():
