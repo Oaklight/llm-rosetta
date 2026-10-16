@@ -216,7 +216,14 @@ Google 按自己的方式对校验它。
 
 实测：Anthropic 接受 `strict: true`，但除 schema 设了 `additionalProperties: false`
 之外一律返回 `400`——也就是说走这条路要开 strict 的客户端必须自己发封闭 schema。
-替客户端补上会改变工具的语义，所以库不代劳。
+替客户端补上会改变工具的语义，所以库不代劳：标志按客户端所要求写出，schema 保持
+客户端所写的样子。
+
+**Google 那边的丢弃是有意为之，而且不告警。** 与下面的白名单不同——限制消失会告警
+——被丢弃的 `strict` 不产生任何告警，这是决定而非疏漏。两者的差别在于客户端失去了
+什么：白名单会**放宽**模型能做的事，调用方必须知道；而 `strict` 是目标从来就没有的
+校验承诺，schema 照常传递、Google 也按自己的方式校验它，而且对每个带 OpenAI 风格
+strict 工具的请求都告警，会变成一条无从处理的常驻抱怨。
 
 #### 5d. tool_choice 白名单
 
@@ -235,6 +242,16 @@ IR 用 `ToolChoice.allowed_tools` 只表述一次，因此它在 Responses、Goo
 写有这一变体，但线上 Chat API 会拒绝它（`400 Missing required parameter:
 'tool_choice.function.'`），所以 Chat 形状的白名单会被读取（以便路由到确实支持它的
 格式），但永远不会被写出。
+
+手工构造限制前，还有两个实测细节值得知道：
+
+- **条目的 `type` 必须与声明一致。** custom 工具需要 `{"type": "custom", "name": …}`
+  形状的条目；用 `function` 形状指名它会得到
+  `400 Tool choice 'function' not found in 'tools' parameter`，反之亦然。库会从工具
+  声明推导该类型；对请求里没有声明的名字则写 `function`——同时告警，因为上游会直接
+  拒绝这种请求体。
+- **条目没有 namespace 槽位。** `tool_choice.tools[0].namespace` 是
+  `400 Unknown parameter`，所以 IR 身份里的分组由命名处理解析进名字，不带上 wire。
 
 ### 6. 流式传输问题
 
