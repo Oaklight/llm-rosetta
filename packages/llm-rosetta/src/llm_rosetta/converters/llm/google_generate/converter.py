@@ -680,7 +680,7 @@ class GoogleGenerateConverter(BaseConverter):
             config.update(cache_fields)
 
         # Provider extensions
-        config.update(wire_extensions(ir_request))
+        config.update(wire_extensions(ir_request, self._CONVERTER_TAG))
 
         # System instruction belongs inside ``config``: that is where
         # ``google.genai``'s ``GenerateContentConfig`` declares it, and it makes

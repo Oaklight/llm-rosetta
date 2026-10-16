@@ -39,6 +39,7 @@ from ...base.helpers.citations import (
     citation_warning_sink,
     report_dropped_citation,
 )
+from ...base.helpers.extensions import wire_extensions
 from ...base.helpers.opaque import (
     get_opaque_origin,
     google_thought_signature,
@@ -105,8 +106,16 @@ _PROVIDER_EXT_KEYS = (
 )
 
 
-def _copy_provider_extensions(ir_request: IRRequest, result: dict[str, Any]) -> None:
-    exts = ir_request.get("provider_extensions", {})
+def _copy_provider_extensions(
+    ir_request: IRRequest, result: dict[str, Any], dialect: str
+) -> None:
+    """Copy the extensions this format owns into the request body.
+
+    ``store`` and ``background`` are key names this format shares with
+    Responses, so the set's owner decides: only a set read from this format is
+    merged (an Interactions ``store`` is not the Responses ``store``).
+    """
+    exts = wire_extensions(ir_request, dialect)
     for key in _PROVIDER_EXT_KEYS:
         if key in exts:
             result[key] = exts[key]
@@ -175,7 +184,7 @@ class GoogleInteractionsConverter(BaseConverter):
         if stream and stream.get("enabled"):
             result["stream"] = True
 
-        _copy_provider_extensions(ir_request, result)
+        _copy_provider_extensions(ir_request, result, self._CONVERTER_TAG)
         return result
 
     def _extract_system_instruction(
