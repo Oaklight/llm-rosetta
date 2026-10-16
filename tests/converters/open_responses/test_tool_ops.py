@@ -766,7 +766,7 @@ class TestOpenAIResponsesToolOps:
         assert result["is_error"] is True
 
     @pytest.mark.parametrize("status", ["completed", "in_progress", "unexpected"])
-    def test_p_tool_result_to_ir_other_statuses_are_not_errors(self, status):
+    def test_p_tool_result_to_ir_does_not_infer_error_from_other_statuses(self, status):
         provider_tr = {
             "type": "function_call_output",
             "call_id": "call_status",
