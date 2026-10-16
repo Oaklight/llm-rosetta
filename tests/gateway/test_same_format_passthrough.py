@@ -205,6 +205,47 @@ class TestFormatAffinity:
         assert set(picked) == {"resp_a", "resp_b"}
         assert picked.count("resp_a") == picked.count("resp_b") == 50
 
+    def test_pick_sequence_is_stable(self):
+        """The exact sequence, not just the split — equal counts hide an order.
+
+        A tier's counter is what decides which same-format provider takes which
+        request, and two counters that agree on a total can disagree on the
+        order.  This pins the order so a change to how counters are keyed has
+        to be a deliberate one.
+        """
+        config = _make_config(
+            {"m": {"providers": ["chat_a", "resp_a", "resp_b"]}},
+            prefer_same_format=True,
+        )
+        picked = [
+            config.resolve(config.selection_context("m", "open_responses"))[
+                0
+            ].provider_name
+            for _ in range(20)
+        ]
+        assert picked == [
+            "resp_a",
+            "resp_a",
+            "resp_b",
+            "resp_b",
+            "resp_a",
+            "resp_b",
+            "resp_a",
+            "resp_a",
+            "resp_b",
+            "resp_b",
+            "resp_a",
+            "resp_b",
+            "resp_a",
+            "resp_a",
+            "resp_b",
+            "resp_b",
+            "resp_a",
+            "resp_b",
+            "resp_a",
+            "resp_a",
+        ]
+
     def test_tier_balances_exactly_with_pinned_anchor(self):
         """With the anchor held fixed, the tier's own WRR splits the subset evenly."""
         config = _make_config(
