@@ -59,12 +59,19 @@ class RoutingChain:
 
     __slots__ = ("_stages",)
 
-    #: Fields the context carries before any stage runs.
+    #: Fields the context carries before any stage runs: the request's inputs
+    #: and the config's tables.  The second group of stages is fed the
+    #: converted request by its caller rather than by a stage, so what it needs
+    #: is seeded too — the chain cannot tell the difference, and a stage that
+    #: reads one of these is only ever placed in that group.
     SEEDED: ClassVar[frozenset[str]] = frozenset(
         {
             "model",
             "source_format",
             "identity",
+            "key_affinity",
+            "ir_request",
+            "provider_info",
             "model_route",
             "providers",
             "provider_types",

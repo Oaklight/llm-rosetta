@@ -1,8 +1,8 @@
-"""API key affinity — deterministic key selection for prompt cache locality.
+"""Stable fingerprints taken from a converted request.
 
-Instead of round-robin, builds a stable identity string from
-``client_token + message_prefix`` so the same conversation from the
-same client always hits the same upstream key via rendezvous hashing.
+Both of the stages that run once the request has been converted need a value
+that is stable across the turns of one conversation and different between
+conversations; they differ only in how much of the request they look at.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from typing import Any
 
 
 def extract_prefix_from_ir(
-    ir_request: dict[str, Any],
+    ir_request: dict[str, Any] | None,
     max_messages: int = 2,
 ) -> str:
     """Extract a stable string prefix from an IR request.
@@ -21,6 +21,12 @@ def extract_prefix_from_ir(
     *max_messages* entries in ``messages``.  Returns ``""`` when the
     IR is empty or extraction fails (e.g. passthrough mode produces
     ``{}``).
+
+    Args:
+        ir_request: The converted request, or ``None`` before one exists.
+        max_messages: How many leading messages to include.  The caller picks
+            the precision: key selection wants more entropy and takes two, the
+            session identity wants stability across turns and takes one.
     """
     if not ir_request:
         return ""

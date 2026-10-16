@@ -17,7 +17,10 @@ Anything not listed in ``__all__`` is internal.
 from __future__ import annotations
 
 from .context import Identity, SelectionContext
+from .key import ProviderKeyAffinity
+from .prefix import compute_affinity_identity, extract_prefix_from_ir
 from .same_format import SameFormatStage, shim_group_key
+from .session import SessionHeaderAffinity
 from .select import AnchorStage, select_ready_entry
 from .stage import RoutingChain, RoutingStage, StageOrderError
 from .strategy import (
@@ -37,14 +40,18 @@ __all__ = [
     "Identity",
     "ModelRoute",
     "ProviderEntry",
+    "ProviderKeyAffinity",
     "RoutingChain",
     "RoutingStage",
     "RoutingStrategy",
     "SameFormatStage",
     "SelectionContext",
+    "SessionHeaderAffinity",
     "StageOrderError",
     "WeightedRoundRobinStrategy",
+    "compute_affinity_identity",
     "create_strategy",
+    "extract_prefix_from_ir",
     "select_ready_entry",
     "shim_group_key",
 ]

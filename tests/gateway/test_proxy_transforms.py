@@ -23,6 +23,7 @@ from llm_rosetta.shims.provider_shim import (
     register_shim,
 )
 from llm_rosetta.transforms import rename_field, strip_fields
+from llm_rosetta.gateway.routing import SelectionContext
 
 
 # ---------------------------------------------------------------------------
@@ -65,6 +66,16 @@ def shim_with_transforms():
 # ---------------------------------------------------------------------------
 # Pipeline transform resolution (replaces _resolve_target_transforms tests)
 # ---------------------------------------------------------------------------
+
+
+def _sel_ctx(source_format: str = "chat_completions") -> SelectionContext:
+    """A selection context for a handler call that bypasses routing.
+
+    The handlers read the client identity and the converted request off the
+    context; a test that calls one directly has neither, and the stages
+    decline on both.
+    """
+    return SelectionContext("test-model", source_format)
 
 
 class TestPipelineTransformResolution:
@@ -170,6 +181,7 @@ class TestNonStreamingTransforms:
                     "logprobs": True,
                     "top_logprobs": 5,
                 },
+                selection=_sel_ctx(),
                 transport=transport,
                 metadata_store=ProviderMetadataStore(),
             )
@@ -202,6 +214,7 @@ class TestNonStreamingTransforms:
                     "logprobs": True,
                     "top_logprobs": 5,
                 },
+                selection=_sel_ctx(),
                 transport=transport,
                 metadata_store=ProviderMetadataStore(),
             )
@@ -229,6 +242,7 @@ class TestNonStreamingTransforms:
                     "model": "regular-model",
                     "messages": [{"role": "user", "content": "hello"}],
                 },
+                selection=_sel_ctx(),
                 transport=transport,
                 metadata_store=ProviderMetadataStore(),
             )
@@ -272,6 +286,7 @@ class TestToolCollisionHint:
                 _make_route(),
                 _make_provider_info(),
                 body,
+                selection=_sel_ctx(),
                 transport=transport,
                 metadata_store=ProviderMetadataStore(),
             )
@@ -346,6 +361,7 @@ class TestToolCollisionHint:
                     "messages": [{"role": "user", "content": "hi"}],
                     "tools": _conflicting_tools(),
                 },
+                selection=_sel_ctx(),
                 transport=transport,
                 metadata_store=ProviderMetadataStore(),
             )
@@ -416,6 +432,7 @@ class TestToolCollisionHintStreaming:
                 _make_route(),
                 _make_provider_info(),
                 _stream_body(),
+                selection=_sel_ctx(),
                 transport=transport,
                 metadata_store=ProviderMetadataStore(),
             )
@@ -471,6 +488,7 @@ class TestToolCollisionDump:
                     "messages": [{"role": "user", "content": "hi"}],
                     "tools": _conflicting_tools(),
                 },
+                selection=_sel_ctx(),
                 transport=transport,
                 metadata_store=ProviderMetadataStore(),
                 persistence=pm,
