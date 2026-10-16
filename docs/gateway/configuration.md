@@ -378,7 +378,7 @@ Gateway API keys are managed through the **admin panel** — there is no
 config-file setting for API keys.
 
 Generate, rotate, and delete keys at `/admin` → **Keys** tab, or via the
-[Admin API](../api/admin.md#api-keys). All keys are stored in a SQLite
+[Admin API](../api/admin.md#api-key-management). All keys are stored in a SQLite
 keystore (`keys.db`).
 
 When keys exist, all `/v1/*` endpoints require authentication using the

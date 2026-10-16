@@ -6,7 +6,7 @@ title: IR Reasoning Types
 
 The IR reasoning vocabulary defines the fixed value sets used internally by LLM-Rosetta. Provider-side values are free strings defined in each provider's shim config.
 
-These types live in [`llm_rosetta.types.ir.reasoning`][llm_rosetta.types.ir.reasoning].
+These types live in `llm_rosetta.types.ir.reasoning`.
 
 ## IRMode
 

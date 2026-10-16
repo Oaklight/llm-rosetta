@@ -62,7 +62,7 @@ API keys are managed exclusively through the **admin panel** (SQLite keystore).
 Generate keys in the admin UI at `/admin`, then provide them in the format
 native to each API standard (Bearer token, `x-api-key` header, etc.).
 
-See [Admin Panel — API Keys](admin-panel.md#api-keys) for details.
+See [Gateway API Keys](configuration.md#gateway-api-keys) for details.
 
 ## How It Works
 
