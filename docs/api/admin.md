@@ -347,7 +347,7 @@ GET /admin/api/config/providers/<name>/key
 
 ---
 
-## API Key 管理
+## API Key 管理 { #api-key-management }
 
 ### 列出所有 Key
 

@@ -343,7 +343,7 @@ IR 支持 `minimal`、`low`、`medium`、`high`、`xhigh` 和 `max`，使其成�
 3. 各转换器的 `ir_reasoning_config_to_p` 委托给 `apply_reasoning_config()`，传入 shim 配置
 4. `apply_reasoning_config()` 先调用 `normalize_reasoning_input()` 归一化输入，然后按 `effort_map` 和 `max_effort` 映射
 
-详细的 `ReasoningCapability` 字段和 YAML 配置请参见 [提供方 Shim · 推理配置](shims.md#推理配置)。
+详细的 `ReasoningCapability` 字段和 YAML 配置请参见 [提供方 Shim · 推理配置](shims.md#reasoning-configuration)。
 
 ### 预算 token：仅 Anthropic 和 Google 支持
 

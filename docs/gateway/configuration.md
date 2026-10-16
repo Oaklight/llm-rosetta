@@ -346,12 +346,12 @@ llm-rosetta-gateway --socket /run/user/$(id -u)/rosetta.sock
 
 该开关只改变*由哪个*上游来服务请求。转换依然始终经过 IR——包括第 1 层的情况。参见[架构指南](../contributing/architecture.md)。
 
-## 网关 API Key
+## 网关 API Key { #gateway-api-keys }
 
 网关 API Key 通过**管理面板**管理——配置文件中不再设置 API Key。
 
 在 `/admin` → **Keys** 标签页中生成、轮换和删除 Key，或通过
-[Admin API](../api/admin.md#api-keys) 操作。所有 Key 存储在 SQLite
+[Admin API](../api/admin.md#api-key-management) 操作。所有 Key 存储在 SQLite
 keystore（`keys.db`）中。
 
 配置了 Key 后，所有 `/v1/*` 端点需要使用对应 API 标准的原生格式进行认证：
@@ -367,7 +367,7 @@ keystore（`keys.db`）中。
 
 未配置任何 Key 时，行为取决于 `open_on_no_keys`（默认：`false`——所有 `/v1/*` 请求被阻止）。
 
-## 管理面板安全
+## 管理面板安全 { #admin-panel-security }
 
 ### `admin_password`
 

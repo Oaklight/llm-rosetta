@@ -156,7 +156,7 @@ tool: ToolDefinition = {
 `tool_group`，它正是把两个其他方面完全相同的工具区分开的东西。
 
 `ToolChoice.allowed_tools` 把选择限定到具名工具，见
-[工具操作——把选择限定到具名工具](../api/tool-ops.md#把选择限定到具名工具)。
+[工具操作——把选择限定到具名工具](../api/tool-ops.md#restricting-the-choice-to-named-tools)。
 
 ## 多模态工具结果
 

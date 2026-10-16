@@ -45,7 +45,7 @@ ir_tool: ToolDefinition = {
 }
 ```
 
-### 把选择限定到具名工具
+### 把选择限定到具名工具 { #restricting-the-choice-to-named-tools }
 
 `ToolChoice.allowed_tools` 把"任意工具"收窄到指定的一组。各家的 wire 写法并不一致，
 所以 IR 只表述一次这个概念——用工具身份：

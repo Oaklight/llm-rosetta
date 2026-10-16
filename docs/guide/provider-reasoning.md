@@ -9,7 +9,7 @@ title: 提供方推理行为
 
 [推理 / 思考参数](reasoning.md)讲的是 LLM-Rosetta 怎么在 IR 层统一推理参数。这页记录的是**各家提供方实际怎么表现**——接受哪些 effort 值、禁用推理时会怎样、`thinking_type` 的具体含义，以及推理元数据在跨提供方往返中能不能保留。
 
-以下所有数据均来自对线上提供方 API 的实际探测，而非仅依赖文档。详见[探测方法](#探测方法)。
+以下所有数据均来自对线上提供方 API 的实际探测，而非仅依赖文档。详见[探测方法](#probing-methodology)。
 
 !!! tip "Shim 配置参考"
     每个提供方的 shim YAML 编码了本页记录的行为。shim 架构和 `provider.yaml` 格式详见[提供方 Shim](shims.md)。
@@ -210,7 +210,7 @@ reasoning:
 | **argo**（Anthropic） | `thinking_disabled` | `output_config.effort` | `enabled` | — | `preserve` |
 | **argo**（OpenAI Chat） | `omit` | `reasoning_effort` | — | — | `as_is` |
 
-## 探测方法
+## 探测方法 { #probing-methodology }
 
 本页面所有行为数据均通过向线上提供方端点发送真实 API 请求并观察接受/拒绝响应获得。这种方法能发现提供方文档可能未覆盖的未记录约束。
 

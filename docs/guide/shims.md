@@ -311,7 +311,7 @@ gateway 还会在启动时对每个受影响的提供方记录一条告警，指
 示例、Docker 文件、文档或源码引用，同样会失败 —— `provider_names.py` 中遗留的别名条目会被
 算作引用，该 shim 自身的 `provider.yaml` 也一样。边界是版本，不是日期 —— 无需任何人去记住。
 
-## 推理配置
+## 推理配置 { #reasoning-configuration }
 
 从 v0.6.8 起，shim 可以通过 `provider.yaml` 中的 `reasoning` 段声明推理能力配置。运行时由 `apply_reasoning_config()` 读取该配置，替代了之前硬编码在各转换器中的 effort 降级逻辑。
 

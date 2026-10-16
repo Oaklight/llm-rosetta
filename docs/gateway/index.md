@@ -62,7 +62,7 @@ API Key 通过**管理面板**（SQLite keystore）统一管理。
 在 `/admin` 管理界面中生成 Key，然后按各 API 标准的原生方式传入
 （Bearer token、`x-api-key` 头等）。
 
-详见[管理面板 — API Keys](admin-panel.md#api-keys)。
+详见[网关 API Key](configuration.md#gateway-api-keys)。
 
 ## 工作原理
 

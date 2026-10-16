@@ -52,7 +52,7 @@ graph LR
 - **`options`** — 转换选项（如 `output_format`、`metadata_mode`）
 - **`metadata`** — 提供方特有状态的存放处
 
-`metadata_mode`（`"strip"` 或 `"preserve"`）决定提供方特有字段在往返转换中是否保留。详见[使用转换器 — 元数据保留](converters.md#元数据保留无损往返)。
+`metadata_mode`（`"strip"` 或 `"preserve"`）决定提供方特有字段在往返转换中是否保留。详见[使用转换器 — 元数据保留](converters.md#metadata-preservation-lossless-round-trip)。
 
 `StreamContext` 在 `ConversionContext` 基础上增加了会话元数据、工具调用追踪和生命周期标志，用于流式转换。详见[流式处理](streaming.md)。
 

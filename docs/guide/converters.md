@@ -143,7 +143,7 @@ rest_body, warnings = google_conv.request_to_provider(ir_request, output_format=
 
 两种形态其实是同一个请求的两种写法，区别只在字段的位置和拼写：`config` 对 `generationConfig`，蛇形命名对驼峰命名。特别需要注意的是，system instruction 在 SDK 形态中位于 **`config` 内部**，在 REST 形态中位于**顶层**——它本来就属于 SDK 的 `GenerateContentConfig`，而 `models.generate_content()` 本身并不接受 `system_instruction` 这个关键字参数。
 
-## 元数据保留（无损往返）
+## 元数据保留（无损往返） { #metadata-preservation-lossless-round-trip }
 
 默认情况下，LLM-Rosetta 执行**仅语义**转换——没有 IR 等价物的提供方特有字段会被剥离。这对大多数跨提供方工作流来说足够了，但当你需要**无损往返**（同一提供方 A → IR → A）时，可以启用元数据保留模式。
 

@@ -6,7 +6,7 @@ title: IR 推理类型
 
 IR 推理词汇表定义了 LLM-Rosetta 内部使用的固定值集合。Provider 侧的值是自由字符串，在各 provider 的 shim 配置中定义。
 
-这些类型位于 [`llm_rosetta.types.ir.reasoning`][llm_rosetta.types.ir.reasoning]。
+这些类型位于 `llm_rosetta.types.ir.reasoning`。
 
 ## IRMode
 

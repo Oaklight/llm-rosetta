@@ -277,7 +277,7 @@ Embedding 模型显示单一的 Test 按钮（无下拉菜单），因为只有�
 { "server": { "admin_password": "${ADMIN_PASSWORD}" } }
 ```
 
-详见[配置 — 管理面板安全](configuration.md#管理面板安全)。
+详见[配置 — 管理面板安全](configuration.md#admin-panel-security)。
 
 启用密码保护后：
 
@@ -296,7 +296,7 @@ Embedding 模型显示单一的 Test 按钮（无下拉菜单），因为只有�
 - **Nginx**：使用 `auth_basic` 指令
 - **Traefik**：使用 BasicAuth 中间件
 
-网关 API Key（通过管理面板管理）保护 AI 请求端点（`/v1/*`）。详见[配置 — 网关 API Key](configuration.md#网关-api-key)。
+网关 API Key（通过管理面板管理）保护 AI 请求端点（`/v1/*`）。详见[配置 — 网关 API Key](configuration.md#gateway-api-keys)。
 
 ## 国际化
 
