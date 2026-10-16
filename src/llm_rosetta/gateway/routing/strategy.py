@@ -3,6 +3,15 @@
 Provides the :class:`RoutingStrategy` protocol, concrete strategy
 implementations, and the :class:`ModelRoute` container that pairs a
 list of provider entries with a strategy for selection.
+
+A strategy keeps its counters **per route**, keyed by :attr:`ModelRoute.route_id`
+rather than by the candidate list's identity.  One strategy instance can then
+serve a model and every subset of that model's providers that tier selection
+builds, each of them advancing a counter of its own — which is what the
+candidates' *names* cannot express, and what object identity used to stand in
+for.  The id belongs to the caller: it must be stable for exactly as long as
+the counter should survive.  A config reload builds new route objects and a new
+strategy with them, so counters start over either way.
 """
 
 from __future__ import annotations
@@ -25,12 +34,19 @@ class RoutingStrategy(Protocol):
     """Interface for selecting a provider from a weighted list."""
 
     def select(
-        self, providers: list[ProviderEntry], *, identity: str | None = None
+        self,
+        providers: list[ProviderEntry],
+        *,
+        route_id: str,
+        identity: str | None = None,
     ) -> str:
         """Return the name of the chosen provider.
 
         Args:
             providers: Candidate providers with weights.
+            route_id: Names the route these candidates belong to.  Strategies
+                that hold state key it on this, so two routes sharing a
+                strategy instance keep separate state.
             identity: Optional client identity string for affinity-based
                 routing.  Strategies that don't use affinity ignore it.
         """
@@ -38,21 +54,27 @@ class RoutingStrategy(Protocol):
 
 
 class WeightedRoundRobinStrategy:
-    """Smooth weighted round-robin (nginx-style).
+    """Smooth weighted round-robin (nginx-style), counted per route.
 
-    Each provider tracks a ``current_weight``.  On every call the
-    effective weight is added, the highest-weight provider is chosen,
-    and the total weight is subtracted from the winner.  This produces
-    an even interleaving — e.g. weights [5, 1] yield the sequence
-    A A A A A B rather than bursting all A's then all B's.
+    Each route tracks a ``current_weight`` per candidate.  On every call the
+    effective weight is added, the highest-weight candidate is chosen, and the
+    total weight is subtracted from the winner.  This produces an even
+    interleaving — e.g. weights [5, 1] yield the sequence A A A A A B rather
+    than bursting all A's then all B's.
+
+    A route whose candidate count changes starts its counters over: the
+    positions the counters are indexed by no longer mean the same candidates.
     """
 
     def __init__(self) -> None:
-        self._current_weights: list[int] = []
-        self._initialized_for: list[ProviderEntry] | None = None
+        self._current_weights: dict[str, list[int]] = {}
 
     def select(
-        self, providers: list[ProviderEntry], *, identity: str | None = None
+        self,
+        providers: list[ProviderEntry],
+        *,
+        route_id: str,
+        identity: str | None = None,
     ) -> str:
         n = len(providers)
         if n == 0:
@@ -60,20 +82,21 @@ class WeightedRoundRobinStrategy:
         if n == 1:
             return providers[0].name
 
-        if self._initialized_for is not providers:
-            self._current_weights = [0] * n
-            self._initialized_for = providers
+        weights = self._current_weights.get(route_id)
+        if weights is None or len(weights) != n:
+            weights = [0] * n
+            self._current_weights[route_id] = weights
 
         total = sum(p.weight for p in providers)
         best_idx = 0
         best_weight = -1
         for i, p in enumerate(providers):
-            self._current_weights[i] += p.weight
-            if self._current_weights[i] > best_weight:
-                best_weight = self._current_weights[i]
+            weights[i] += p.weight
+            if weights[i] > best_weight:
+                best_weight = weights[i]
                 best_idx = i
 
-        self._current_weights[best_idx] -= total
+        weights[best_idx] -= total
         return providers[best_idx].name
 
 
@@ -92,14 +115,18 @@ class AffinityRoundRobinStrategy:
         self._fallback = WeightedRoundRobinStrategy()
 
     def select(
-        self, providers: list[ProviderEntry], *, identity: str | None = None
+        self,
+        providers: list[ProviderEntry],
+        *,
+        route_id: str,
+        identity: str | None = None,
     ) -> str:
         if not providers:
             raise ValueError("No providers configured")
         if len(providers) == 1:
             return providers[0].name
         if identity is None:
-            return self._fallback.select(providers)
+            return self._fallback.select(providers, route_id=route_id)
         idx = int.from_bytes(
             hashlib.sha256(identity.encode()).digest()[:8], "big"
         ) % len(providers)
@@ -136,9 +163,18 @@ class ModelRoute:
 
     Wraps the provider selection so that callers simply call
     :meth:`select` without knowing the strategy details.
+
+    Attributes:
+        providers: The candidates, in configuration order.
+        route_id: Names this route to its strategy, which keys its per-route
+            state on it.  A model and a subset of that model's providers are
+            different routes and need different ids, or they would take turns
+            out of one counter.
+        strategy: The selection strategy.
     """
 
     providers: list[ProviderEntry]
+    route_id: str
     strategy: RoutingStrategy = field(default_factory=WeightedRoundRobinStrategy)
 
     def __post_init__(self) -> None:
@@ -150,7 +186,9 @@ class ModelRoute:
         Args:
             identity: Optional client identity for affinity routing.
         """
-        return self.strategy.select(self.providers, identity=identity)
+        return self.strategy.select(
+            self.providers, route_id=self.route_id, identity=identity
+        )
 
     def select_entry(self, *, identity: str | None = None) -> ProviderEntry:
         """Pick the next provider and return the full entry.
@@ -159,7 +197,9 @@ class ModelRoute:
             identity: Optional client identity for affinity routing.
         """
         return self._entry_by_name[
-            self.strategy.select(self.providers, identity=identity)
+            self.strategy.select(
+                self.providers, route_id=self.route_id, identity=identity
+            )
         ]
 
     @property
