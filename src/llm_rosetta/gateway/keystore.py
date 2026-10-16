@@ -19,11 +19,29 @@ from pathlib import Path
 from typing import Any
 
 from llm_rosetta._vendor import aiosqlite
+from llm_rosetta.observability.maintenance import Registry, StepContext
 from llm_rosetta.observability.usage import INTERNAL_LABEL, INTERNAL_SUBJECT
+
+from .keystore_maintenance import build_registry
 
 logger = logging.getLogger("llm-rosetta.keystore")
 
 _DB_FILENAME = "keys.db"
+
+#: This store's versioned migrations, in version order.  ``(version,
+#: description, statements)`` — the same table shape the request log keeps, so
+#: there is one way to read a store's history in this codebase.  The statements
+#: are applied by the steps in
+#: :mod:`~llm_rosetta.gateway.keystore_maintenance`, which also records them in
+#: this store's ``schema_version`` ledger.
+VERSIONS: list[tuple[int, str, list[str]]] = [
+    (1, "add api_keys.last_used", ["ALTER TABLE api_keys ADD COLUMN last_used TEXT"]),
+    (
+        2,
+        "add api_keys.usage_bucket",
+        ["ALTER TABLE api_keys ADD COLUMN usage_bucket TEXT"],
+    ),
+]
 
 
 @dataclass(frozen=True)
@@ -105,10 +123,33 @@ class KeyStore:
         self._db_path: Path = Path()
         self._cache: dict[str, tuple[str, KeyContext]] = {}
         self._last_touch: dict[str, float] = {}
+        # The registry that brought this store up to the current schema, kept so
+        # that what the open did — per step, with its result — is readable
+        # afterwards instead of only logged.
+        self.maintenance: Registry | None = None
 
     @classmethod
     async def create(cls, db_path: str | Path) -> KeyStore:
-        """Async factory: create a KeyStore with an open connection."""
+        """Async factory: create a KeyStore with an open connection.
+
+        The table is created with the columns a store started with, and the
+        versioned migrations that follow are steps in this store's own registry
+        (:mod:`~llm_rosetta.gateway.keystore_maintenance`):
+
+        - ``api_keys.last_used`` and ``api_keys.usage_bucket`` are added by
+          migrations rather than by the ``CREATE TABLE``, so a fresh store and a
+          store from any earlier release arrive at the same schema by the same
+          route, and the ledger records which versions a given file has;
+        - the bucket backfill is a step of its own rather than a tail on the DDL
+          helper it used to hide in, so it reports what it repaired;
+        - a ``keys.db`` written before there was a ledger is adopted — the
+          columns it already has say which versions it already has — and that
+          inference is one named step instead of a tacit ``PRAGMA`` check.
+
+        A failing step still raises out of here: this registry is
+        ``Policy.MANDATORY``, because a store whose schema is not what this code
+        expects is one the gateway must not serve from.
+        """
         instance = cls()
         instance._db_path = Path(db_path)
         instance._db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -122,43 +163,14 @@ class KeyStore:
                 label       TEXT NOT NULL DEFAULT '',
                 allowed_shims TEXT NOT NULL DEFAULT '["*"]',
                 created     TEXT NOT NULL,
-                rotated     TEXT,
-                usage_bucket TEXT
+                rotated     TEXT
             )"""
         )
         await instance._conn.commit()
-        await instance._migrate_last_used()
-        await instance._migrate_usage_bucket()
+        instance.maintenance = build_registry()
+        await instance.maintenance.run(StepContext(keystore=instance))
         await instance._refresh_cache()
         return instance
-
-    async def _migrate_last_used(self) -> None:
-        cursor = await self._conn.execute("PRAGMA table_info(api_keys)")
-        cols = {r[1] for r in await cursor.fetchall()}
-        if "last_used" not in cols:
-            await self._conn.execute("ALTER TABLE api_keys ADD COLUMN last_used TEXT")
-            await self._conn.commit()
-
-    async def _migrate_usage_bucket(self) -> None:
-        """Add the usage_bucket column and backfill it from existing key hashes."""
-        cursor = await self._conn.execute("PRAGMA table_info(api_keys)")
-        cols = {r[1] for r in await cursor.fetchall()}
-        if "usage_bucket" not in cols:
-            await self._conn.execute(
-                "ALTER TABLE api_keys ADD COLUMN usage_bucket TEXT"
-            )
-            await self._conn.commit()
-        cursor = await self._conn.execute(
-            "SELECT id, key_hash FROM api_keys WHERE usage_bucket IS NULL"
-        )
-        rows = await cursor.fetchall()
-        for row_id, key_hash in rows:
-            await self._conn.execute(
-                "UPDATE api_keys SET usage_bucket = ? WHERE id = ?",
-                (key_bucket(key_hash), row_id),
-            )
-        if rows:
-            await self._conn.commit()
 
     async def _refresh_cache(self) -> None:
         """Rebuild the in-memory hash → (id, KeyContext) lookup."""

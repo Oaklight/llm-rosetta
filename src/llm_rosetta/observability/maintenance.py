@@ -45,9 +45,10 @@ no-gateway-import guard requires.
 
 from __future__ import annotations
 
+import inspect
 import logging
 import time
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
@@ -116,7 +117,15 @@ class StepResult:
 
 #: A step's work: given the context, make its change and say how much it
 #: changed.  Returning 0 is how a step says "already applied".
-StepRun = Callable[[StepContext], Awaitable[int]]
+#:
+#: A step may be a plain function rather than a coroutine function: the
+#: load-time set runs on a synchronous path (a config is read without a loop
+#: running), and requiring it to be async would be ceremony around a pure
+#: computation over a document.  A registry drives whichever it is —
+#: :meth:`Registry.run` awaits an awaitable result and takes a plain one, and
+#: :meth:`Registry.run_sync` refuses an asynchronous step rather than silently
+#: skipping it.
+StepRun = Callable[[StepContext], Any]
 
 
 @dataclass(frozen=True)
@@ -175,6 +184,34 @@ class Registry:
         self.results = results
         return results
 
+    def run_sync(self, context: StepContext) -> list[StepResult]:
+        """Run every step in order, for a registry whose steps are synchronous.
+
+        A config is read on a synchronous path — the loader is called by readers
+        that have no loop running — so the load-time registry cannot be driven
+        by :meth:`run`.  Rather than make the config path asynchronous, or reach
+        for a loop that may not exist, the runner takes the steps' own answer: a
+        step that returns without awaiting runs here.
+
+        What a failure means is the policy's, exactly as in :meth:`run`.
+
+        Raises:
+            TypeError: When a step's body is asynchronous.  A synchronous run
+                that quietly dropped one would report the document as repaired
+                by a step that never ran.
+            Exception: The failing step's own exception, for
+                :attr:`Policy.MANDATORY` and :attr:`Policy.LOAD_TIME`.
+        """
+        results: list[StepResult] = []
+        for step in self.steps:
+            result, failure = self._run_one_sync(step, context)
+            results.append(result)
+            if failure is not None and self.policy is not Policy.DEFERRED:
+                self.results = results
+                raise failure
+        self.results = results
+        return results
+
     async def run_step(self, name: str, context: StepContext) -> StepResult:
         """Run one step by name, for an operator who asked for it.
 
@@ -213,26 +250,24 @@ class Registry:
         """Run one step, turning whatever it does into a result and a failure."""
         started = time.monotonic()
         try:
-            changed = await step.run(context)
+            changed = await _outcome(step, context)
         except Exception as exc:
-            seconds = time.monotonic() - started
-            logger.warning(
-                "maintenance step %s (%s) failed after %.3fs: %s",
-                step.name,
-                self.name,
-                seconds,
-                exc,
-            )
-            result = StepResult(
-                name=step.name,
-                store=step.store,
-                changed=0,
-                seconds=seconds,
-                ok=False,
-                error=f"{type(exc).__name__}: {exc}",
-            )
-            return result, exc
-        seconds = time.monotonic() - started
+            return self._failed(step, exc, time.monotonic() - started), exc
+        return self._succeeded(step, changed, time.monotonic() - started), None
+
+    def _run_one_sync(
+        self, step: Step, context: StepContext
+    ) -> tuple[StepResult, Exception | None]:
+        """One step of a registry whose steps are synchronous."""
+        started = time.monotonic()
+        try:
+            changed = _outcome_sync(step, context)
+        except Exception as exc:
+            return self._failed(step, exc, time.monotonic() - started), exc
+        return self._succeeded(step, changed, time.monotonic() - started), None
+
+    def _succeeded(self, step: Step, changed: int, seconds: float) -> StepResult:
+        """Record a step that ran, logging it where the policy calls for it."""
         # A deferred registry is the one whose steps have no voice of their own,
         # so it reports each of them; a mandatory registry's steps already log
         # what they did, and a line per step here would change the output of a
@@ -257,4 +292,49 @@ class Registry:
             changed=changed,
             seconds=seconds,
             ok=True,
-        ), None
+        )
+
+    def _failed(self, step: Step, exc: Exception, seconds: float) -> StepResult:
+        """Record a step that failed, naming it in the log before it travels."""
+        logger.warning(
+            "maintenance step %s (%s) failed after %.3fs: %s",
+            step.name,
+            self.name,
+            seconds,
+            exc,
+        )
+        return StepResult(
+            name=step.name,
+            store=step.store,
+            changed=0,
+            seconds=seconds,
+            ok=False,
+            error=f"{type(exc).__name__}: {exc}",
+        )
+
+
+async def _outcome(step: Step, context: StepContext) -> int:
+    """What a step produced, awaited when it is awaitable and taken when not."""
+    outcome = step.run(context)
+    if inspect.isawaitable(outcome):
+        return await outcome
+    return outcome
+
+
+def _outcome_sync(step: Step, context: StepContext) -> int:
+    """The same, for a run that has no loop to offer a coroutine to.
+
+    Raises:
+        TypeError: When the step is asynchronous.  A synchronous run that
+            dropped such a step would report a store as repaired by a step that
+            never ran, which is worse than refusing to run at all.
+    """
+    outcome = step.run(context)
+    if inspect.isawaitable(outcome):
+        if inspect.iscoroutine(outcome):
+            outcome.close()  # would otherwise warn that it was never awaited
+        raise TypeError(
+            f"maintenance step {step.name!r} is asynchronous and cannot run in "
+            f"a synchronous registry ({context!r})"
+        )
+    return outcome

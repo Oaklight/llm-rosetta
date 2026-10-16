@@ -14,6 +14,7 @@ from typing import Any, NamedTuple, Protocol, runtime_checkable
 
 from llm_rosetta._vendor import jsonx
 from llm_rosetta.auto_detect import ProviderType
+from llm_rosetta.observability.maintenance import Registry
 from llm_rosetta.routing import ResolvedRoute
 
 from .providers import BASE_FORMATS, build_provider_info
@@ -215,6 +216,12 @@ class ConfigIO(Protocol):
     The default :class:`JsoncConfigIO` handles JSONC files.  Downstream
     projects (e.g. argo-proxy) can supply an alternative implementation
     for other formats (YAML, TOML, etc.) via ``setup_admin(..., config_io=...)``.
+
+    A reader that runs load-time maintenance steps records the registry it ran
+    as ``last_load_registry``, and the caller that builds a
+    :class:`GatewayConfig` from the document it returned passes that on.  A
+    reader without that attribute runs no such steps, which reads the same as a
+    config built programmatically: nothing ran.
     """
 
     def load(self, path: str) -> dict[str, Any]:
@@ -237,6 +244,17 @@ class JsoncConfigIO:
     migrated config if changes were made.
     """
 
+    def __init__(self) -> None:
+        #: The registry the most recent read ran, for the config object built
+        #: from the document that read returned.  A load-time step runs while a
+        #: document is read, so the reader is what knows the answer — it is not
+        #: left in a process-wide slot, where the *next* :class:`GatewayConfig`
+        #: construction would take it whether or not it came from a document that
+        #: ran anything.  The caller that reads and then builds the config hands
+        #: it over explicitly, so a config built from a literal reports nothing —
+        #: the same answer as "no load ran".
+        self.last_load_registry: Registry | None = None
+
     def load(self, path: str) -> dict[str, Any]:
         raw = load_config(path)
         return self._apply_migrations(raw, path, is_raw=False)
@@ -248,25 +266,29 @@ class JsoncConfigIO:
     def save(self, path: str, data: dict[str, Any]) -> None:
         write_config(path, data)
 
-    @staticmethod
     def _apply_migrations(
-        raw: dict[str, Any], path: str, *, is_raw: bool = False
+        self, raw: dict[str, Any], path: str, *, is_raw: bool = False
     ) -> dict[str, Any]:
-        from .migrations import migrate
-        from .name_migration import correct_legacy_names
+        """Bring one config document up to date, through the load-time registry.
 
-        raw, changed = migrate(raw)
-        # Name correction is scoped and idempotent, not a ``config_version``
-        # schema bump; it runs on top of the versioned migrations.
-        if correct_legacy_names(raw):
-            changed = True
+        The steps are the versioned structure migrations and the name
+        correction, in that order, under
+        :attr:`Policy.LOAD_TIME <llm_rosetta.observability.maintenance.Policy>`;
+        the registry that ran is kept on this reader, which is what read the
+        document, and is handed to the config built from it.
+        """
+        from .config_maintenance import apply
+
+        raw, changed, registry = apply(raw)
+        self.last_load_registry = registry
         if changed:
             if is_raw:
                 disk_data = raw
             else:
                 disk_data = load_config_raw(path)
-                migrate(disk_data)
-                correct_legacy_names(disk_data)
+                # The same steps over the on-disk copy, so a substituted env var
+                # is not written back in place of its placeholder.
+                disk_data, _changed, _registry = apply(disk_data)
             import shutil
 
             bak = path + ".pre-migration.bak"
@@ -414,7 +436,15 @@ class GatewayConfig:
         """Return supported rerank formats from the model type registry."""
         return GatewayConfig._formats_for_type("rerank")
 
-    def __init__(self, raw: dict[str, Any]) -> None:
+    def __init__(
+        self, raw: dict[str, Any], *, maintenance: Registry | None = None
+    ) -> None:
+        # What the load of *this* document ran, when a reader ran it: the
+        # load-time steps' results, for the surface that reports them.  Passed
+        # in by the caller that read the document rather than claimed from a
+        # slot, so a config built from a literal reports nothing.
+        self.maintenance: Registry | None = maintenance
+
         # Declarative external shim sources (see gateway/shim_sources.py).
         # Kept verbatim so create_app can apply them for programmatic callers
         # and get_config can expose the section to the admin UI.

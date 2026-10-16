@@ -10,6 +10,7 @@ of by someone remembering to test it.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import sqlite3
 from pathlib import Path
@@ -177,6 +178,121 @@ class TestThePolicies:
         )
         result = await registry.run_step("one", StepContext())
         assert result.store == "only.db"
+
+
+class TestTheSynchronousRun:
+    """A load-time registry runs without a loop, and refuses what it cannot run."""
+
+    def test_a_plain_function_step_runs(self):
+        ran: list[str] = []
+
+        def _plain(context):
+            ran.append("plain")
+            return 2
+
+        registry = Registry(
+            name="config", steps=[_step("plain", _plain)], policy=Policy.LOAD_TIME
+        )
+        results = registry.run_sync(StepContext(config={"a": 1}))
+
+        assert ran == ["plain"]
+        assert results[0].changed == 2
+        assert results[0].ok is True
+        assert registry.results == results, "the run is kept, as in the async one"
+
+    def test_an_asynchronous_step_is_refused_rather_than_skipped(self):
+        """Silently dropping it would report a document as repaired by nothing."""
+
+        async def _async(context):
+            return 1  # pragma: no cover - never awaited
+
+        registry = Registry(
+            name="config", steps=[_step("async", _async)], policy=Policy.LOAD_TIME
+        )
+        with pytest.raises(TypeError) as caught:
+            registry.run_sync(StepContext())
+        assert "asynchronous" in str(caught.value)
+        assert "async" in str(caught.value), "the refusal names the step"
+
+    def test_a_load_time_failure_fails_the_load(self):
+        """LOAD_TIME means the load fails — it is not a 'record and continue'."""
+
+        def _boom(context):
+            raise ValueError("the config is not what this code expects")
+
+        registry = Registry(
+            name="config", steps=[_step("boom", _boom)], policy=Policy.LOAD_TIME
+        )
+        with pytest.raises(ValueError):
+            registry.run_sync(StepContext())
+        assert registry.results[0].ok is False
+
+    def test_the_async_runner_takes_a_plain_step_too(self):
+        """So a registry can hold both, and the runner is the one that decides."""
+
+        def _plain(context):
+            return 3
+
+        async def _async(context):
+            return 4
+
+        registry = Registry(
+            name="mixed",
+            steps=[_step("plain", _plain), _step("async", _async)],
+            policy=Policy.DEFERRED,
+        )
+        results = asyncio.run(registry.run(StepContext()))
+
+        assert [result.changed for result in results] == [3, 4]
+
+    def test_a_sync_run_still_obeys_the_deferred_policy(self):
+        def _boom(context):
+            raise RuntimeError("database is locked")
+
+        def _after(context):
+            return 5
+
+        registry = Registry(
+            name="mixed",
+            steps=[_step("boom", _boom), _step("after", _after)],
+            policy=Policy.DEFERRED,
+        )
+        results = registry.run_sync(StepContext())
+
+        assert [result.ok for result in results] == [False, True]
+        assert results[1].changed == 5
+
+    def test_a_sync_run_still_obeys_the_mandatory_policy(self):
+        """The store's own error travels, and the step after it never runs.
+
+        The keystore is the synchronous caller: one of its migrations fails, the
+        store is not opened, and the failure is on the registry for the surface
+        that reports it.
+        """
+        ran: list[str] = []
+
+        def _boom(context):
+            raise sqlite3.OperationalError("no such column: usage_bucket")
+
+        def _after(context):  # pragma: no cover - the abort above is the point
+            ran.append("after")
+            return 1
+
+        registry = Registry(
+            name="api_keys",
+            steps=[_step("boom", _boom), _step("after", _after)],
+            policy=Policy.MANDATORY,
+        )
+        with pytest.raises(sqlite3.OperationalError) as caught:
+            registry.run_sync(StepContext())
+
+        assert "usage_bucket" in str(caught.value), (
+            "the caller that aborts gets the store's error, not a wrapped one"
+        )
+        assert ran == []
+        assert [result.ok for result in registry.results] == [False], (
+            "the failure is recorded before it is raised"
+        )
 
 
 class TestRunningOneStep:

@@ -205,6 +205,12 @@ async def _reload_gateway_config(
 
     config_io = _get_config_io(request)
     raw = config_io.load(config_path)
+    # Taken in the same turn as the read, before anything can await: the reader
+    # records the registry for the document it just read, and this is the config
+    # object built from that document, so it is the one that reports it.  A
+    # reader that runs no load-time steps has no such attribute, and reports
+    # nothing — the same answer as a config built from a literal.
+    maintenance = getattr(config_io, "last_load_registry", None)
 
     signature = shims_signature(raw)
     if force_shims or signature != getattr(request.app, "shim_source_signature", None):
@@ -213,7 +219,7 @@ async def _reload_gateway_config(
         request.app.shim_source_report = report
         request.app.shim_source_signature = signature
 
-    new_config = GatewayConfig(raw)
+    new_config = GatewayConfig(raw, maintenance=maintenance)
     _app_mod._config = new_config
     request.app.gateway_config = new_config
 

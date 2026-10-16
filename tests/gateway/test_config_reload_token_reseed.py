@@ -288,6 +288,54 @@ def test_reload_config_reseeds_providers():
         app_mod._config = original
 
     assert app.deferred_startup.reloaded_with == [new_config]
+    assert new_config.maintenance is None, (
+        "a reader that runs no load-time steps reports nothing, rather than "
+        "inheriting someone else's registry"
+    )
+
+
+def test_reload_config_carries_the_registry_the_reader_ran(tmp_path):
+    """The reloaded config reports the steps, which is what the surface lists.
+
+    Taken in the same turn as the read, so the config built from the document is
+    the one that carries it — not whichever config happens to be built next.
+    """
+    import llm_rosetta.gateway.app as app_mod
+
+    from llm_rosetta.gateway.config import JsoncConfigIO
+    from llm_rosetta.gateway.config_maintenance import STEPS
+
+    document: dict[str, Any] = {
+        "config_version": 1,
+        "providers": {
+            "alcf": {
+                "type": "chat_completions",
+                "api_key": "k",
+                "base_url": "https://api.example.com",
+            }
+        },
+        "models": {},
+    }
+    path = tmp_path / "gateway.jsonc"
+    path.write_text(json.dumps(document))
+
+    app = _App()
+    app.config_path = str(path)
+    app.config_io = JsoncConfigIO()
+    # Match what the reader will build, so the reload does not refetch sources.
+    app.shim_source_signature = shims_signature(document)
+    app.gateway_config = None
+    app.deferred_startup = _RecordingDeferred()
+
+    original = getattr(app_mod, "_config", None)
+    try:
+        new_config = asyncio.run(_reload_gateway_config(_Request(app), str(path)))
+    finally:
+        app_mod._config = original
+
+    assert new_config.maintenance is not None
+    assert new_config.maintenance.name == "config"
+    assert [result.name for result in new_config.maintenance.results] == STEPS
 
 
 # ---------------------------------------------------------------------------

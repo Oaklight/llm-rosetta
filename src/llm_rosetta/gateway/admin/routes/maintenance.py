@@ -18,9 +18,26 @@ from __future__ import annotations
 from typing import Any
 
 from llm_rosetta._vendor.httpserver import JSONResponse, Response
-from llm_rosetta.observability.maintenance import Registry, StepContext, StepResult
+from llm_rosetta.observability.maintenance import (
+    Policy,
+    Registry,
+    StepContext,
+    StepResult,
+)
 
-from ...deferred_backfills import build_registry
+from ...deferred_backfills import build_registry as build_deferred_registry
+from ...keystore_maintenance import build_registry as build_keystore_registry
+
+
+def _as_registry(candidate: Any) -> Registry | None:
+    """A registry, or nothing — never a stand-in that merely has the attribute.
+
+    The stores on an app are not always the real objects (a test holds a mock, a
+    deployment mid-startup holds none), and ``hasattr(store, "maintenance")``
+    would happily return a mock's attribute and report a registry that does not
+    exist.
+    """
+    return candidate if isinstance(candidate, Registry) else None
 
 
 def registry_for(app: Any) -> Registry:
@@ -33,18 +50,66 @@ def registry_for(app: Any) -> Registry:
     thrown away with the object that produced it.
     """
     deferred = getattr(app, "deferred_startup", None)
-    registry = getattr(deferred, "maintenance", None)
+    registry = _as_registry(getattr(deferred, "maintenance", None))
     if registry is not None:
         return registry
 
-    cached = getattr(app, "_maintenance_registry", None)
+    cached = _as_registry(getattr(app, "_maintenance_registry", None))
     if cached is None:
-        cached = build_registry(app)
+        cached = build_deferred_registry(app)
         try:
             setattr(app, "_maintenance_registry", cached)
         except AttributeError:  # pragma: no cover - a frozen app is still servable
             pass
     return cached
+
+
+def _keystore_registry(app: Any) -> Registry | None:
+    """The key store's own registry, if this app has a key store.
+
+    Built and kept here when the store did not open through it (a test, or a
+    ``KeyStore`` handed to the app already open): the store is where its
+    registry belongs, so a re-run's result is not thrown away with the object
+    that produced it.
+    """
+    keystore = getattr(app, "keystore", None)
+    if keystore is None:
+        return None
+    registry = _as_registry(getattr(keystore, "maintenance", None))
+    if registry is None:
+        registry = build_keystore_registry()
+        try:
+            keystore.maintenance = registry
+        except AttributeError:  # pragma: no cover - an immutable store still serves
+            pass
+    return registry
+
+
+def registries_for(app: Any) -> list[Registry]:
+    """Every registry this app can report on, in the order an operator reads it.
+
+    The deferred set first — what runs after startup, and the one whose failures
+    an operator is looking for — then each store's own schema registry, then the
+    load-time set the config carries.  A store whose registry never ran, and a
+    config that was never loaded through one, contribute nothing: "no registry"
+    and "a registry that did nothing" are different answers, and reporting the
+    second for the first would be a lie at the exact moment it matters.
+    """
+    found: list[Registry] = []
+    seen: set[str] = set()
+    candidates = [
+        registry_for(app),
+        _as_registry(getattr(getattr(app, "persistence", None), "maintenance", None)),
+        _keystore_registry(app),
+        _as_registry(
+            getattr(getattr(app, "gateway_config", None), "maintenance", None)
+        ),
+    ]
+    for registry in candidates:
+        if registry is not None and registry.name not in seen:
+            seen.add(registry.name)
+            found.append(registry)
+    return found
 
 
 def context_for(app: Any) -> StepContext:
@@ -84,6 +149,25 @@ def _step_payload(registry: Registry, name: str) -> dict[str, Any]:
     return payload
 
 
+class LoadTimeStep(Exception):
+    """A step that runs when a document is loaded, not on demand.
+
+    Its context is the document a *previous* load read, so re-running it here
+    would correct a stale copy and, for the caller that writes the result back,
+    rewrite the config from it.  The surface refuses rather than pretending the
+    answer is current.
+    """
+
+
+def _find(app: Any, name: str) -> tuple[Registry, Any] | None:
+    """The registry that owns a step name, and the step."""
+    for registry in registries_for(app):
+        for step in registry.steps:
+            if step.name == name:
+                return registry, step
+    return None
+
+
 async def run_step(app: Any, name: str) -> StepResult | None:
     """Run one step, returning its result, or ``None`` when it is not here.
 
@@ -91,10 +175,17 @@ async def run_step(app: Any, name: str) -> StepResult | None:
     (and re-raises, for a policy that raises), so the caller gets the recorded
     result rather than a failed response.  The operator asked a question; "it
     failed, here is the error" is the answer to it.
+
+    Raises:
+        LoadTimeStep: For a step of the load-time registry, which is not
+            re-runnable from a request.
     """
-    registry = registry_for(app)
-    if name not in {step.name for step in registry.steps}:
+    found = _find(app, name)
+    if found is None:
         return None
+    registry, _step = found
+    if registry.policy is Policy.LOAD_TIME:
+        raise LoadTimeStep(name)
     try:
         return await registry.run_step(name, context_for(app))
     except Exception:  # noqa: BLE001 - the result is the answer, not the raise
@@ -105,8 +196,12 @@ async def run_step(app: Any, name: str) -> StepResult | None:
 
 
 async def get_maintenance(request: Any, **kwargs: Any) -> Response:
-    """What every deferred step did, with the ones that never ran marked so."""
-    registry = registry_for(request.app)
+    """What every step of every registry did, with the ones that never ran marked.
+
+    One surface for all of them — the schema of each store, the repairs that run
+    after startup, and the steps that correct a config as it loads — which is
+    what the epic meant by not having to know which mechanism lives where.
+    """
     return JSONResponse(
         {
             "registries": [
@@ -117,6 +212,7 @@ async def get_maintenance(request: Any, **kwargs: Any) -> Response:
                         _step_payload(registry, step.name) for step in registry.steps
                     ],
                 }
+                for registry in registries_for(request.app)
             ],
         }
     )
@@ -130,7 +226,18 @@ async def post_maintenance_run(request: Any, **kwargs: Any) -> Response:
     idempotence property assertable — so re-running one is always allowed.
     """
     name = kwargs.get("name") or request.path_params["name"]
-    result = await run_step(request.app, name)
+    try:
+        result = await run_step(request.app, name)
+    except LoadTimeStep:
+        return JSONResponse(
+            {
+                "error": (
+                    f"'{name}' runs when a config is loaded, not on demand: "
+                    f"its result belongs to the document that was read"
+                )
+            },
+            status_code=409,
+        )
     if result is None:
         return JSONResponse(
             {"error": f"No maintenance step named '{name}'"}, status_code=404

@@ -58,8 +58,14 @@ class TestTheSurface:
 
         body = _body(await routes.get_maintenance(request))
 
-        assert [entry["name"] for entry in body["registries"]] == ["deferred"]
+        # Every registry this app has, the deferred set first: one surface for
+        # the schema of each store, the startup repairs, and the load-time steps.
+        assert [entry["name"] for entry in body["registries"]] == [
+            "deferred",
+            "api_keys",
+        ]
         assert body["registries"][0]["policy"] == "deferred"
+        assert body["registries"][1]["policy"] == "mandatory"
         steps = body["registries"][0]["steps"]
         assert all(step["ran"] is False for step in steps)
         assert all(step["description"] for step in steps)
@@ -233,6 +239,133 @@ class TestTheTwoOlderRoutes:
 
         assert response.status_code == 200
         assert _body(response) == {"updated": 1}
+
+
+class TestTheLoadTimeSteps:
+    """They are listed, and they are not re-runnable: their document is stale."""
+
+    #: A document with both kinds of work in it, old names and all.
+    _DOCUMENT = {
+        "config_version": 1,
+        "providers": {"alcf": {"type": "openai_chat", "shim": "deepseek--openai_chat"}},
+    }
+
+    def _app_with_a_loaded_config(self) -> _App:
+        from llm_rosetta.gateway.config_maintenance import build_registry
+
+        persistence, key_store = _stores()
+        app = _App(persistence=persistence, keystore=key_store)
+        app.gateway_config = MagicMock(maintenance=build_registry())
+        return app
+
+    def _app_with_a_real_load(self, tmp_path) -> _App:
+        """The same surface, over the load a real reader ran rather than a stand-in."""
+        from llm_rosetta.gateway.config import GatewayConfig, JsoncConfigIO
+
+        path = tmp_path / "gateway.jsonc"
+        path.write_text(json.dumps(self._DOCUMENT))
+        reader = JsoncConfigIO()
+        raw = reader.load(str(path))
+
+        persistence, key_store = _stores()
+        app = _App(persistence=persistence, keystore=key_store)
+        app.gateway_config = GatewayConfig(raw, maintenance=reader.last_load_registry)
+        return app
+
+    async def test_the_config_registry_is_listed_beside_the_stores(self):
+        app = self._app_with_a_loaded_config()
+
+        body = _body(await routes.get_maintenance(_Request(app)))
+
+        names = [entry["name"] for entry in body["registries"]]
+        assert names == ["deferred", "api_keys", "config"]
+        config = body["registries"][-1]
+        assert config["policy"] == "load_time"
+        assert [step["store"] for step in config["steps"]] == ["config", "config"]
+
+    async def test_the_config_entry_reports_the_load_a_reader_ran(self, tmp_path):
+        """End to end, without a substitute: the results are that load's own."""
+        app = self._app_with_a_real_load(tmp_path)
+
+        body = _body(await routes.get_maintenance(_Request(app)))
+
+        config = body["registries"][-1]
+        assert config["name"] == "config"
+        assert config["policy"] == "load_time"
+        steps = {step["name"]: step for step in config["steps"]}
+        names_step = steps["config.correct_legacy_names"]
+        assert names_step.pop("seconds") >= 0
+        assert names_step == {
+            "name": "config.correct_legacy_names",
+            "description": "rewrite provider and shim names that have been renamed",
+            "store": "config",
+            "ran": True,
+            "ok": True,
+            "changed": 1,
+            "error": None,
+        }, "the surface reports what that load did to the document it read"
+        assert steps["config.migrate_structure"]["ran"] is True
+
+    async def test_all_four_registries_are_listed(self, tmp_path):
+        """One surface for every store and the load, each with its own policy."""
+        from llm_rosetta.gateway.config_maintenance import (
+            build_registry as config_steps,
+        )
+        from llm_rosetta.gateway.keystore_maintenance import (
+            build_registry as keystore_steps,
+        )
+        from llm_rosetta.observability.persistence import PersistenceManager
+
+        app = self._app_with_a_real_load(tmp_path)
+        app.persistence.maintenance = PersistenceManager.migration_registry()
+        app.keystore.maintenance = keystore_steps()
+
+        body = _body(await routes.get_maintenance(_Request(app)))
+
+        assert [entry["name"] for entry in body["registries"]] == [
+            "deferred",
+            "request_log",
+            "api_keys",
+            "config",
+        ]
+        assert [entry["policy"] for entry in body["registries"]] == [
+            "deferred",
+            "mandatory",
+            "mandatory",
+            "load_time",
+        ]
+        # Each entry lists its own registry's steps, in the registry's order —
+        # derived from the builders, so a step added later cannot go unlisted.
+        expected = [
+            [step.name for step in build_registry(app).steps],
+            [step.name for step in PersistenceManager.migration_registry().steps],
+            [step.name for step in keystore_steps().steps],
+            [step.name for step in config_steps().steps],
+        ]
+        assert [
+            [step["name"] for step in entry["steps"]] for entry in body["registries"]
+        ] == expected
+
+    async def test_re_running_a_load_time_step_is_refused(self):
+        """Its context is the document a previous load read, not the one on disk."""
+        app = self._app_with_a_loaded_config()
+
+        response = await routes.post_maintenance_run(
+            _Request(app, name="config.correct_legacy_names")
+        )
+
+        assert response.status_code == 409
+        assert "loaded" in _body(response)["error"]
+
+    async def test_a_stores_step_is_still_re_runnable_with_the_config_listed(self):
+        app = self._app_with_a_loaded_config()
+
+        response = await routes.post_maintenance_run(
+            _Request(app, name="api_keys.backfill_usage_bucket")
+        )
+
+        assert response.status_code == 200
+        assert _body(response)["store"] == "keys.db"
 
 
 class TestWhichRegistryIsUsed:
