@@ -87,6 +87,60 @@ def test_actual_multimodal_array_still_preserves_image_blocks():
     assert images[0]["image_url"]["url"] == image
 
 
+def test_incomplete_tool_output_becomes_anthropic_error():
+    request = {
+        "model": "gpt-4o",
+        "tools": [
+            {
+                "type": "function",
+                "name": "get_weather",
+                "description": "Get weather for a city",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"city": {"type": "string"}},
+                    "required": ["city"],
+                },
+            }
+        ],
+        "input": [
+            {
+                "type": "message",
+                "role": "user",
+                "content": "Weather in Atlantis?",
+            },
+            {
+                "type": "function_call",
+                "call_id": "call_err1",
+                "name": "get_weather",
+                "arguments": '{"city":"Atlantis"}',
+            },
+            {
+                "type": "function_call_output",
+                "call_id": "call_err1",
+                "status": "incomplete",
+                "output": "City not found",
+            },
+            {
+                "type": "message",
+                "role": "user",
+                "content": "Did it fail?",
+            },
+        ],
+        "max_output_tokens": 128,
+    }
+
+    converted = ConversionPipeline("openai_responses", "anthropic").convert_request(
+        request
+    )
+
+    assert converted["messages"][2]["content"][0] == {
+        "type": "tool_result",
+        "tool_use_id": "call_err1",
+        "content": "City not found",
+        "is_error": True,
+    }
+
+
 def test_responses_same_format_ir_roundtrip_keeps_json_text():
     output = '[{"type":"input_image","image_url":"ordinary tool data"}]'
     request = _request(output)

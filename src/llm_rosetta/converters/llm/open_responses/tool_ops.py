@@ -1777,7 +1777,13 @@ class OpenResponsesToolOps(BaseToolOps):
         # Only a boolean is copied: the IR field is typed ``bool``, so a
         # malformed value would fail IR validation and take the request down.
         is_error = provider_tool_result.get("is_error")
-        if isinstance(is_error, bool):
+        # An incomplete function output is authoritative over a conflicting flag.
+        if (
+            provider_tool_result.get("type") == "function_call_output"
+            and provider_tool_result.get("status") == "incomplete"
+        ):
+            part["is_error"] = True
+        elif isinstance(is_error, bool):
             part["is_error"] = is_error
         # Record the non-default types so the outbound leg can emit the
         # same item kind.  The context it would otherwise consult is only
