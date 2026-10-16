@@ -422,6 +422,13 @@ class GatewayConfig:
 
         all_providers: dict[str, dict[str, str]] = raw.get("providers", {})
 
+        # The unfiltered view, for consumers that have to see a *disabled*
+        # provider too: the shim-removal advisory warns about a config that would
+        # break the moment it is switched back on.  It is the caller's mapping,
+        # so `_resolve_provider_types` correcting legacy names in place is
+        # visible here as well.
+        self.raw_providers: dict[str, dict[str, str]] = all_providers
+
         # Filter out disabled providers (enabled defaults to True)
         self._raw_providers: dict[str, dict[str, str]] = {
             name: cfg

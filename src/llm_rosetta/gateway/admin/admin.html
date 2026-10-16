@@ -708,7 +708,12 @@
         </div>
         <div>
           <label style="display:block;font-size:12px;margin-bottom:3px" data-i18n="label.shimRemotes">Remotes (JSON array)</label>
+          <div style="display:flex;gap:6px;align-items:center;margin-bottom:4px">
+            <select id="shimPresetSelect" style="flex:1;font-size:12px"></select>
+            <button type="button" class="btn btn-sm" id="shimPresetAdd" onclick="addShimPresetFromSelect()" data-i18n="shim.preset.add">Add source</button>
+          </div>
           <textarea id="shimRemotesInput" rows="5" spellcheck="false" style="width:100%;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;resize:vertical" placeholder='[{"url": "https://github.com/owner/repo", "ref": "v1.0.0", "path": "shims"}]'></textarea>
+          <div style="font-size:11px;color:var(--text-dim)" data-i18n="shim.preset.hint"></div>
         </div>
         <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
           <div style="flex:1;min-width:200px">
@@ -732,6 +737,7 @@
         <span id="shimSourcesError" style="font-size:11px;color:var(--red)"></span>
       </div>
       <div id="shimSourceStatus" style="margin-top:8px;font-size:12px"></div>
+      <div id="shimRemovalAdvisories" style="margin-top:8px;font-size:12px"></div>
     </div>
     <!-- Version & Links -->
     <div style="text-align:center;padding:4px 0 2px">

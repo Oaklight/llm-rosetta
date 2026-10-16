@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Any
 
 from llm_rosetta.shims import ShimLoadReport, rebuild_shims
+from llm_rosetta.shims.removals import ShimRemovalAdvisory, detect_shim_removals
 from llm_rosetta.shims.sources import (
     DEFAULT_CACHE_DIRNAME,
     REMOTE_TTL_SECONDS,
@@ -219,9 +220,67 @@ def _int_setting(section: Mapping[str, Any], key: str, default: int) -> int:
         return default
 
 
+def shim_removal_advisories(
+    providers: Mapping[str, Any] | None,
+    report: ShimLoadReport | None = None,
+) -> list[ShimRemovalAdvisory]:
+    """Advisories for providers still on a built-in shim that is going away.
+
+    A shim name supplied by a successfully loaded extra source is *not* reported:
+    a declared source of the same name overrides the built-in at rebuild time, so
+    that provider is already on the shim that is staying.  A source that failed
+    overrode nothing, so it does not suppress anything either.
+
+    Args:
+        providers: The raw ``providers`` section.  Pass the **unfiltered** one —
+            a disabled provider is still worth a warning, because its config
+            breaks the moment it is switched back on.
+        report: The shim-source load report, when the section was applied.
+
+    Returns:
+        One advisory per provider, sorted by provider name.
+    """
+    supplied = {
+        name
+        for status in (report.sources if report else ())
+        if status.ok
+        for name in status.shim_names
+    }
+    return detect_shim_removals(providers, external_shims=supplied)
+
+
+def report_shim_removals(
+    providers: Mapping[str, Any] | None,
+    report: ShimLoadReport | None = None,
+) -> list[ShimRemovalAdvisory]:
+    """Log one warning per provider on a built-in shim that is going away.
+
+    Args:
+        providers: The raw ``providers`` section (see
+            :func:`shim_removal_advisories`).
+        report: The shim-source load report, when the section was applied.
+
+    Returns:
+        The advisories that were logged.
+    """
+    advisories = shim_removal_advisories(providers, report)
+    for advisory in advisories:
+        logger.warning(
+            "Provider %r uses built-in shim %r, removed in %s; declare the "
+            "source instead: shims.remotes += [%s]",
+            advisory.provider,
+            advisory.shim,
+            advisory.removed_in,
+            json.dumps(dict(advisory.remote)),
+        )
+    return advisories
+
+
 __all__ = [
     "apply_shim_section",
     "apply_shim_sources",
+    "report_shim_removals",
     "resolve_source_config",
+    "shim_removal_advisories",
     "shims_signature",
 ]

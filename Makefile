@@ -12,7 +12,7 @@ PYPI_MIRROR ?=
 REGISTRY_MIRROR ?=
 
 # Default target
-all: lint test test-js build
+all: lint test test-js check-shim-removals build
 
 # ──────────────────────────────────────────────
 # Linting & Formatting
@@ -53,6 +53,18 @@ test-js:
 	else \
 		echo "WARNING: node not found - skipping JS tests"; \
 	fi
+
+
+# ──────────────────────────────────────────────
+# Scheduled shim removals
+# ──────────────────────────────────────────────
+
+# Fail when this repo -- examples, docs, the built-in registry -- still names a
+# shim whose removal version has been reached.  Passes until then, on purpose.
+check-shim-removals:
+	@echo "Checking scheduled shim removals..."
+	python scripts/check_shim_removals.py
+	@echo "Shim removals check complete."
 
 
 # Run conversion pipeline benchmarks
@@ -418,4 +430,4 @@ help:
 	@echo ""
 	@echo "Detected version: $(VERSION)"
 
-.PHONY: all lint bench lint-fix test test-js test-integration test-gateway build-package build-wheel push-package clean-package build push clean build-binary build-binary-musl clean-binary clean-binary-all build-docker-alpine build-docker-glibc build-docker-python build-docker push-docker clean-docker deploy-dev help
+.PHONY: all lint bench lint-fix test test-js test-integration test-gateway check-shim-removals build-package build-wheel push-package clean-package build push clean build-binary build-binary-musl clean-binary clean-binary-all build-docker-alpine build-docker-glibc build-docker-python build-docker push-docker clean-docker deploy-dev help

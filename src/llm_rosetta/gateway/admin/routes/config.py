@@ -8,7 +8,7 @@ from typing import Any
 
 from llm_rosetta._vendor.httpclient import AsyncClient, Response as HttpResponse
 from llm_rosetta._vendor.httpserver import JSONResponse, Response
-from llm_rosetta.shims import get_shim, list_shims
+from llm_rosetta.shims import SHIM_REMOVALS, get_shim, list_shims
 
 from ...config import GatewayConfig
 from ...providers import (
@@ -276,6 +276,8 @@ async def get_config(request: Any) -> Response:
             "server": server,
             "shims": raw.get("shims", {}),
             "shim_sources": _shim_status_payload(request),
+            "shim_removals": _shim_removal_advisories(request, raw),
+            "shim_removal_presets": [entry.to_dict() for entry in SHIM_REMOVALS],
             "debug": raw.get("debug", {}),
             "credential_visible": config.credential_visible,
             "has_admin_password": bool(request.app.auth_state.admin_password),
@@ -1110,6 +1112,22 @@ async def put_server_settings(request: Any) -> Response:  # noqa: C901
     return JSONResponse(
         {"ok": True, "server": _sanitize_server_section(ctx.data.get("server", {}))}
     )
+
+
+def _shim_removal_advisories(request: Any, raw: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return the removal advisories for the config as it stands right now.
+
+    Derived per request from the freshly loaded ``raw`` rather than cached on the
+    app, so a saved shim source clears the advisory on the very next read
+    instead of lingering until a restart.
+    """
+    from llm_rosetta.gateway.shim_sources import shim_removal_advisories
+
+    report = getattr(request.app, "shim_source_report", None)
+    return [
+        advisory.to_dict()
+        for advisory in shim_removal_advisories(raw.get("providers"), report)
+    ]
 
 
 def _shim_status_payload(request: Any) -> dict[str, Any]:

@@ -56,6 +56,18 @@ from .sources import (  # noqa: E402
     resolve_remote,
 )
 
+# Shims with a removal scheduled, and who still uses them.
+from .removals import (  # noqa: E402
+    SHIM_REMOVALS,
+    RemovalReference,
+    ShimRemoval,
+    ShimRemovalAdvisory,
+    detect_shim_removals,
+    parse_version,
+    removals_due,
+    scan_removal_references,
+)
+
 __all__ = [
     "ConnectionConfig",
     "ToolsConfig",
@@ -74,6 +86,15 @@ __all__ = [
     "ShimSourceStatus",
     "ShimSourceError",
     "ShimArchiveMismatch",
+    # Scheduled removals
+    "SHIM_REMOVALS",
+    "ShimRemoval",
+    "ShimRemovalAdvisory",
+    "RemovalReference",
+    "detect_shim_removals",
+    "parse_version",
+    "removals_due",
+    "scan_removal_references",
     # Transforms
     "Transform",
     "apply_transforms",

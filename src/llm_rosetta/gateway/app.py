@@ -1278,6 +1278,18 @@ def _install_lifecycle_hooks(app: App) -> None:
         )
 
 
+def _report_shim_removals(config: GatewayConfig, report: ShimLoadReport | None) -> None:
+    """Warn about providers still on a built-in shim that is going away.
+
+    Logged here, once, because both the CLI and a programmatic caller pass
+    through ``create_app``.  The report is only an input: a shim a declared
+    source supplies is not going anywhere, so it is not reported.
+    """
+    from .shim_sources import report_shim_removals
+
+    report_shim_removals(config.raw_providers, report)
+
+
 @_sync_compat
 async def create_app(
     config: GatewayConfig,
@@ -1311,6 +1323,8 @@ async def create_app(
         shim_source_report = apply_shim_section(
             config.shims, config_path, proxy=config.proxy
         )
+
+    _report_shim_removals(config, shim_source_report)
 
     # Expose global proxy as env vars so downstream code (e.g. image
     # downloads in converters) can use it without threading config through.

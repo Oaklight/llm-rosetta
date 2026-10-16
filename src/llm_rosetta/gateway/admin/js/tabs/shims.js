@@ -16,6 +16,16 @@ function _status() {
   return (S.configData && S.configData.shim_sources) || { sources: [] };
 }
 
+/** Providers still on a built-in shim with a removal scheduled. */
+function _removals() {
+  return (S.configData && S.configData.shim_removals) || [];
+}
+
+/** The catalogue of replacement sources, one per scheduled removal. */
+function _presets() {
+  return (S.configData && S.configData.shim_removal_presets) || [];
+}
+
 /** Fill the form from the loaded config and render the status table. */
 function renderShimSources() {
   const pathsEl = document.getElementById('shimPathsInput');
@@ -37,6 +47,8 @@ function renderShimSources() {
   const err = document.getElementById('shimSourcesError');
   if (err) err.textContent = '';
   _renderStatus();
+  _renderPresets();
+  _renderAdvisories();
 }
 
 function _renderStatus() {
@@ -127,6 +139,100 @@ async function reloadShimSources(forceRefresh) {
   }
 }
 
-Object.assign(window, { renderShimSources, saveShimSources, reloadShimSources });
+/** Offer the replacement sources for the shims that are going away. */
+function _renderPresets() {
+  const sel = document.getElementById('shimPresetSelect');
+  if (!sel) return;
+  const presets = _presets();
+  if (!presets.length) {
+    sel.innerHTML = `<option value="">${esc(t('shim.preset.select'))}</option>`;
+    sel.disabled = true;
+    return;
+  }
+  sel.disabled = false;
+  sel.innerHTML = presets.map((p, i) => {
+    const label = t('shim.preset.option', { shim: p.shim, version: p.removed_in });
+    return `<option value="${i}">${esc(label)}</option>`;
+  }).join('');
+}
 
-export { renderShimSources, saveShimSources, reloadShimSources };
+/** List the providers that are still on a shim with a removal scheduled. */
+function _renderAdvisories() {
+  const host = document.getElementById('shimRemovalAdvisories');
+  if (!host) return;
+  const removals = _removals();
+  if (!removals.length) {
+    host.innerHTML = '';
+    return;
+  }
+  const title = `<div style="color:var(--orange,#e67e22);margin-bottom:4px">${esc(t('shim.removal.title'))}</div>`;
+  host.innerHTML = title + removals.map(a => `<div style="display:flex;gap:8px;align-items:center;padding:3px 0;border-top:1px solid var(--border)">
+      <span style="flex:1">${esc(t('shim.removal.line', { provider: a.provider, shim: a.shim, version: a.removed_in }))}</span>
+      <button class="btn btn-sm" data-url="${esc(a.remote.url)}" onclick="addShimPresetFromRow(this)">${esc(t('shim.removal.fix'))}</button>
+    </div>`).join('');
+}
+
+/**
+ * Append a catalogue source to the remotes textarea.
+ *
+ * Deliberately only edits the textarea: the operator sees exactly what would be
+ * written, and the existing Save stays the one thing that persists (and
+ * validates) anything.
+ */
+function appendShimPreset(entry) {
+  const remEl = document.getElementById('shimRemotesInput');
+  if (!remEl || !entry || !entry.remote) return;
+  const err = document.getElementById('shimSourcesError');
+  let remotes = [];
+  const raw = (remEl.value || '').trim();
+  if (raw) {
+    try {
+      remotes = JSON.parse(raw);
+      if (!Array.isArray(remotes)) throw new Error('not an array');
+    } catch {
+      if (err) err.textContent = t('shim.error.remotesJson');
+      return;
+    }
+  }
+  if (remotes.some(r => r && r.url === entry.remote.url)) {
+    showToast(t('shim.preset.duplicate'));
+    return;
+  }
+  remotes.push({ ...entry.remote });
+  remEl.value = JSON.stringify(remotes, null, 2);
+  if (err) err.textContent = '';
+  showToast(t('shim.preset.added', { name: entry.shim }));
+}
+
+/** "Add source" on the preset picker. */
+function addShimPresetFromSelect() {
+  const sel = document.getElementById('shimPresetSelect');
+  const entry = _presets()[Number(sel && sel.value)];
+  if (entry) appendShimPreset(entry);
+}
+
+/** "Add the replacement source" on one advisory row. */
+function addShimPresetByUrl(url) {
+  const entry = _presets().find(p => p.remote && p.remote.url === url);
+  if (entry) appendShimPreset(entry);
+}
+
+/**
+ * The same, for a button that carries its URL in a `data-url` attribute.
+ *
+ * Reading the attribute keeps the URL out of the `onclick` string, so `esc()`
+ * only has to satisfy the HTML parser: a value containing a quote cannot escape
+ * into the JavaScript that runs.  The picker passes an index for the same
+ * reason, and this is the one place a config-derived string reaches a handler.
+ */
+function addShimPresetFromRow(button) {
+  const url = button && button.dataset ? button.dataset.url : null;
+  if (url) addShimPresetByUrl(url);
+}
+
+Object.assign(window, {
+  renderShimSources, saveShimSources, reloadShimSources,
+  addShimPresetFromSelect, addShimPresetFromRow, appendShimPreset,
+});
+
+export { renderShimSources, saveShimSources, reloadShimSources, appendShimPreset };
