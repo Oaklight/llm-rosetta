@@ -409,6 +409,15 @@ class _FormatGroups(NamedTuple):
     """Keyed by the account token — same upstream account (tier 2)."""
 
 
+def _subset_route_id(model: str, kind: str, key: object) -> str:
+    """Name one tier subset's route, so it keeps counters of its own.
+
+    The model is part of the id because two models may list the same providers
+    and must still take turns independently of each other.
+    """
+    return f"{model}\x1f{kind}\x1f{key}"
+
+
 class GatewayConfig:
     """Parsed and validated gateway configuration."""
 
@@ -1094,7 +1103,7 @@ class GatewayConfig:
         if isinstance(value, str):
             if value not in raw_providers:
                 return None
-            return ModelRoute([ProviderEntry(value)])
+            return ModelRoute([ProviderEntry(value)], name)
         if not isinstance(value, dict):
             raise ValueError(f"config: invalid model entry for '{name}'")
         if value.get("enabled") is False:
@@ -1109,7 +1118,7 @@ class GatewayConfig:
         provider_name = value["provider"]
         if provider_name not in raw_providers:
             return None
-        return ModelRoute([ProviderEntry(provider_name)])
+        return ModelRoute([ProviderEntry(provider_name)], name)
 
     @classmethod
     def _extract_model_metadata(cls, value: Any) -> tuple[list[str], str | None]:
@@ -1172,7 +1181,7 @@ class GatewayConfig:
 
         strategy_name = value.get("strategy", DEFAULT_STRATEGY)
         strategy = create_strategy(strategy_name)
-        return ModelRoute(entries, strategy)
+        return ModelRoute(entries, model_name, strategy)
 
     def _shim_group_key(self, provider_name: str) -> tuple[str | None, str]:
         """Return the tier-1 key for *provider_name*: same shim, same endpoint.
@@ -1212,10 +1221,17 @@ class GatewayConfig:
         if not matching:
             groups = None
         else:
-            # Each subset gets its own strategy instance: weight counters are
-            # indexed by position, so a subset cannot share the parent's.
-            def _sub(members: list[ProviderEntry]) -> ModelRoute:
-                return ModelRoute(members, type(model_route.strategy)())
+            # Every subset shares the model's strategy instance and names its
+            # own route, so each keeps a counter of its own while the strategy
+            # itself stays one object per model.
+            def _sub(
+                members: list[ProviderEntry], kind: str, key: object
+            ) -> ModelRoute:
+                return ModelRoute(
+                    members,
+                    _subset_route_id(model, kind, key),
+                    model_route.strategy,
+                )
 
             by_shim: dict[tuple[str | None, str], list[ProviderEntry]] = {}
             by_account: dict[str, list[ProviderEntry]] = {}
@@ -1229,9 +1245,9 @@ class GatewayConfig:
 
             groups = _FormatGroups(
                 covers_all=len(matching) == len(model_route.providers),
-                all_group=_sub(matching),
-                by_shim={k: _sub(v) for k, v in by_shim.items()},
-                by_account={k: _sub(v) for k, v in by_account.items()},
+                all_group=_sub(matching, "format", source_provider),
+                by_shim={k: _sub(v, "shim", k) for k, v in by_shim.items()},
+                by_account={k: _sub(v, "account", k) for k, v in by_account.items()},
             )
         self._format_groups_cache[key] = groups
         return groups

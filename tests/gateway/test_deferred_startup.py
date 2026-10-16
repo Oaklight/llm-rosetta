@@ -560,7 +560,9 @@ class TestDeferredBackfills:
 
         config = _FakeConfig({})
         config.models = {
-            "gpt-4o": ModelRoute(providers=[ProviderEntry(name="openai")]),
+            "gpt-4o": ModelRoute(
+                providers=[ProviderEntry(name="openai")], route_id="gpt-4o"
+            ),
         }
         config.model_upstream_names = {}
 
@@ -646,7 +648,9 @@ class TestResolveSkipsUnready:
         # Override with our ProviderInfo objects and a multi-provider route
         cfg.providers = providers
         entries = [ProviderEntry(name=n) for n in providers]
-        cfg.models = {"test-model": ModelRoute(providers=entries)}
+        cfg.models = {
+            "test-model": ModelRoute(providers=entries, route_id="test-model")
+        }
         cfg.provider_types = {n: "openai_chat" for n in providers}
         return cfg
 

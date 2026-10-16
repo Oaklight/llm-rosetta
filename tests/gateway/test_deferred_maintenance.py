@@ -50,7 +50,11 @@ class _Config:
 
 def _config_with_model() -> _Config:
     return _Config(
-        models={"gpt-4o": ModelRoute(providers=[ProviderEntry(name="openai")])}
+        models={
+            "gpt-4o": ModelRoute(
+                providers=[ProviderEntry(name="openai")], route_id="gpt-4o"
+            )
+        }
     )
 
 
