@@ -54,8 +54,39 @@ Each provider subdirectory contains:
 provider sends no auth header while no `api_key` is configured, and falls back to the
 base type's auth when one is supplied. `free_source: true` marks a shim whose gateway
 serves a free model pool — the admin UI groups its keyless entry under a "Free
-Resource" section and titles it `<display_name> (Free)`. `display_name` is the brand
-label shown in the admin UI; it defaults to the shim name.
+Resource" section and titles it `<display_name> (Free)`.
+
+**How the admin panel groups shims.** The provider-type picker has two levels: a
+top level (the *group*) and one row per shim under it. Both strings can be
+declared, because they are not always derivable from the name:
+
+| Field | Meaning | Default |
+|-------|---------|---------|
+| `display_name` | This shim's own label, shown in the second column — for a shim that also declares `group` or `group_label` | the name segment after `--` |
+| `group` | The top-level key this shim is filed under | the name segment before `--` |
+| `group_label` | Title of that top level | the group key |
+
+The defaults are the old behaviour — the shim name split on its first `--` — so a
+shim that declares none of these renders exactly as it always has, and neither
+third-party nor external shims need to change. Declaring `group` is what lets one
+vendor own several clusters × several formats: ALCF's three clusters each declare
+`group: alcf` and `display_name: metis` / `minerva` / `sophia`, and the picker shows
+one `alcf` top level whose rows read `metis · chat_completions`.
+
+A row that shows `label · base` is the picker saying the shim's label is not its
+base format — an affordance any shim can use, not a special case for one family.
+
+`display_name` did not always mean this. Before `group` existed it named the
+shim's **top level** — the vendor — and a shim written against that older schema
+still says so. Which reading applies is decided by whether the shim declares a
+grouping field: declaring neither `group` nor `group_label` keeps the older
+meaning, so such a shim renders exactly as it did before (`display_name` titles
+the group, and the row label still comes from the name). Declaring either makes
+`display_name` this shim's own row label. Without that split, an older shim's
+vendor name would be printed twice — once as the group title and again on its
+only row. The related consequence: the group title is also the brand shown on
+free-source buttons (`<Brand> (Free)`), so a grouped vendor that wants more than
+its capitalized group key there declares `group_label`.
 
 Example `provider.yaml`:
 
@@ -189,32 +220,128 @@ config file needed) or `llm_rosetta.gateway.apply_shim_sources(raw, config_path)
 
 ## Built-in Shims
 
-LLM-Rosetta ships with 16 built-in provider shims:
+LLM-Rosetta ships with 34 built-in provider shims, one directory per shim under
+`src/llm_rosetta/shims/providers/`. `list_shims()` prints the live set; this is
+that set. A name marked **†** is scheduled for removal — see
+[Shims scheduled for removal](#shims-scheduled-for-removal).
 
 | Name | Base | Default Base URL | API Key Env | Transforms |
 |------|------|-----------------|-------------|------------|
+| † `alcf_metis--chat_completions` | `chat_completions` | `https://inference-api.alcf.anl.gov/resource_server/metis/api/v1` | `ALCF_API_KEY` | strips `logprobs`, `top_logprobs`, `parallel_tool_calls`; developer → system; null content/description defaults |
+| † `alcf_minerva--chat_completions` | `chat_completions` | `https://inference-api.alcf.anl.gov/resource_server/minerva/api/v1` | `ALCF_API_KEY` | strips `logprobs`, `top_logprobs`; developer → system; null content/description defaults |
+| † `alcf_sophia--chat_completions` | `chat_completions` | `https://inference-api.alcf.anl.gov/resource_server/sophia/vllm/v1` | `ALCF_API_KEY` | strips `logprobs`, `top_logprobs`; developer → system; null content/description defaults; renames `reasoning_content` → `reasoning` |
+| `anthropic--messages` | `messages` | `https://api.anthropic.com` | `ANTHROPIC_API_KEY` | — |
+| † `argo--chat_completions` | `chat_completions` | `https://apps.inside.anl.gov/argoapi/v1` | `ARGO_API_KEY` | `max_tokens` → `max_completion_tokens` (gemini); developer → system; per-model temperature stripping; gemini system flattening; image truncation; parallel-tool-call unwinding |
+| † `argo--messages` | `messages` | `https://apps.inside.anl.gov/argoapi` | `ARGO_API_KEY` | OpenAI → Anthropic response normalization; per-model temperature stripping |
+| † `argo--open_responses` | `open_responses` | `https://apps.inside.anl.gov/argoapi/v1` | `ARGO_API_KEY` | per-model temperature stripping |
+| † `asksage--chat_completions` | `chat_completions` | `https://api.asksage.ai/server/openai/v1` | `ASKSAGE_API_KEY` | `max_tokens` → `max_completion_tokens` |
+| † `asksage--google_generate` | `google_generate` | `https://api.asksage.ai/server/google/v1beta` | `ASKSAGE_API_KEY` | — |
+| † `asksage--messages` | `messages` | `https://api.asksage.ai/server/anthropic` | `ASKSAGE_API_KEY` | — |
+| † `asksage--open_responses` | `open_responses` | `https://api.asksage.ai/server/openai/v1` | `ASKSAGE_API_KEY` | `max_tokens` → `max_completion_tokens` |
+| `deepseek--chat_completions` | `chat_completions` | `https://api.deepseek.com` | `DEEPSEEK_API_KEY` | strips `n`, `logit_bias`, `seed`, penalties; backfills `reasoning_content` |
+| `deepseek--open_responses` | `open_responses` | `https://api.deepseek.com` | `DEEPSEEK_API_KEY` | strips `n`, `logit_bias`, `seed` |
+| `google--google_generate` | `google_generate` | `https://generativelanguage.googleapis.com` | `GOOGLE_API_KEY` | — |
+| `google--google_interactions` | `google_interactions` | `https://generativelanguage.googleapis.com` | `GOOGLE_API_KEY` | — |
+| `kilo--chat_completions` | `chat_completions` | `https://api.kilo.ai/api/gateway` | *(keyless)* | — |
+| `minimax--chat_completions` | `chat_completions` | `https://api.minimaxi.com/v1` | `MINIMAX_API_KEY` | strips `logprobs`, `top_logprobs`, `seed`, `stop`; injects `reasoning_split`; parses `think` tags |
+| `minimax--messages` | `messages` | `https://api.minimaxi.com/anthropic` | `MINIMAX_API_KEY` | — |
+| `moonshot` | `chat_completions` | `https://api.moonshot.cn/v1` | `MOONSHOT_API_KEY` | strips `logprobs`, `top_logprobs`, `logit_bias`, `seed` |
 | `openai--chat_completions` | `chat_completions` | `https://api.openai.com/v1` | `OPENAI_API_KEY` | — |
 | `openai--open_responses` | `open_responses` | `https://api.openai.com/v1` | `OPENAI_API_KEY` | — |
-| `anthropic--messages` | `messages` | `https://api.anthropic.com` | `ANTHROPIC_API_KEY` | — |
-| `google--google_generate` | `google_generate` | `https://generativelanguage.googleapis.com` | `GOOGLE_API_KEY` | — |
-| `deepseek--chat_completions` | `chat_completions` | `https://api.deepseek.com` | `DEEPSEEK_API_KEY` | strips `n`, `logit_bias`, `seed` |
-| `volcengine--chat_completions` | `chat_completions` | `https://ark.cn-beijing.volces.com/api/v3` | `VOLCENGINE_API_KEY` | strips `logprobs`, `top_logprobs` |
-| `volcengine--open_responses` | `open_responses` | `https://ark.cn-beijing.volces.com/api/v3` | `VOLCENGINE_API_KEY` | — |
-| `xai` | `chat_completions` | `https://api.x.ai/v1` | `XAI_API_KEY` | strips `logit_bias` |
-| `qwen` | `chat_completions` | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `DASHSCOPE_API_KEY` | strips `frequency_penalty`, `logit_bias` |
-| `moonshot` | `chat_completions` | `https://api.moonshot.cn/v1` | `MOONSHOT_API_KEY` | strips `logprobs`, `top_logprobs`, `logit_bias`, `seed` |
-| `minimax--chat_completions` | `chat_completions` | `https://api.minimaxi.com/v1` | `MINIMAX_API_KEY` | strips + reasoning_split injection |
-| `minimax--messages` | `messages` | `https://api.minimaxi.com/v1` | `MINIMAX_API_KEY` | — |
-| `zhipu` | `chat_completions` | `https://open.bigmodel.cn/api/paas/v4` | `ZHIPU_API_KEY` | strips `n`, penalties, `logprobs`, `logit_bias`, `seed` |
+| `openai_decisions` | `decision` | `https://api.openai.com` | `OPENAI_API_KEY` | — |
+| `opencode--chat_completions` | `chat_completions` | `https://opencode.ai/zen/go/v1` | `OPENCODE_API_KEY` | — |
+| `opencode--messages` | `messages` | `https://opencode.ai/zen/go/v1` | `OPENCODE_API_KEY` | — |
+| `opencode--open_responses` | `open_responses` | `https://opencode.ai/zen/go/v1` | `OPENCODE_API_KEY` | — |
 | `openrouter--chat_completions` | `chat_completions` | `https://openrouter.ai/api/v1` | `OPENROUTER_API_KEY` | renames `reasoning` → `reasoning_content` |
-| `argo--chat_completions` | `chat_completions` | `https://apps.inside.anl.gov/argoapi/v1` | `ARGO_API_KEY` | `max_tokens` → `max_completion_tokens` |
-| `argo--messages` | `messages` | `https://apps.inside.anl.gov/argoapi` | `ARGO_API_KEY` | OpenAI response normalization |
+| `openrouter--messages` | `messages` | `https://openrouter.ai/api` | `OPENROUTER_API_KEY` | — |
+| `openrouter--open_responses` | `open_responses` | `https://openrouter.ai/api/v1` | `OPENROUTER_API_KEY` | — |
+| `qwen` | `chat_completions` | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `DASHSCOPE_API_KEY` | strips `frequency_penalty`, `logit_bias` |
+| `typesafe` | `decision` | `https://api.typesafe.ai` | `TYPESAFE_API_KEY` | — |
+| `volcengine--chat_completions` | `chat_completions` | `https://ark.cn-beijing.volces.com/api/v3` | `ARK_API_KEY` | strips `logprobs`, `top_logprobs` |
+| `volcengine--open_responses` | `open_responses` | `https://ark.cn-beijing.volces.com/api/v3` | `ARK_API_KEY` | — |
+| `xai` | `chat_completions` | `https://api.x.ai/v1` | `XAI_API_KEY` | strips `logit_bias` |
+| `zhipu` | `chat_completions` | `https://open.bigmodel.cn/api/paas/v4` | `ZHIPU_API_KEY` | strips `n`, penalties, `logprobs`, `logit_bias`, `seed` |
+
+The column lists field-level transforms. `hoist_late_system_messages()`, which
+rewrites mid-conversation system/developer messages so the prompt-cache prefix
+stays stable, is declared by most `chat_completions` shims and is not repeated
+here; every shim's full declaration is in its own `transforms.py`.
+
+### Shims scheduled for removal
+
+Ten of the built-ins are moving into their own repositories. The ALCF, Argo and
+AskSage shims are tied to deployments whose upstreams change on their own
+schedule, so they are maintained as standalone shim packages that a gateway
+declares as an [external source](../gateway/configuration.md#external-shim-sources)
+— and consumed without a new core release.
+
+They **still ship, and still work**: nothing is removed in 0.14 or 0.15. What is
+new is that the removal is declared, both to you and to the code.
+
+| Shim | Removed in | Replacement source |
+|------|-----------|--------------------|
+| † `alcf_metis--chat_completions` | 0.16.0 | [llm-rosetta-shim-alcf](https://github.com/Oaklight/llm-rosetta-shim-alcf) |
+| † `alcf_minerva--chat_completions` | 0.16.0 | [llm-rosetta-shim-alcf](https://github.com/Oaklight/llm-rosetta-shim-alcf) |
+| † `alcf_sophia--chat_completions` | 0.16.0 | [llm-rosetta-shim-alcf](https://github.com/Oaklight/llm-rosetta-shim-alcf) |
+| † `argo--chat_completions` | 0.16.0 | [llm-rosetta-shim-argo](https://github.com/Oaklight/llm-rosetta-shim-argo) |
+| † `argo--messages` | 0.16.0 | [llm-rosetta-shim-argo](https://github.com/Oaklight/llm-rosetta-shim-argo) |
+| † `argo--open_responses` | 0.16.0 | [llm-rosetta-shim-argo](https://github.com/Oaklight/llm-rosetta-shim-argo) |
+| † `asksage--chat_completions` | 0.16.0 | [llm-rosetta-shim-asksage](https://github.com/Oaklight/llm-rosetta-shim-asksage) |
+| † `asksage--google_generate` | 0.16.0 | [llm-rosetta-shim-asksage](https://github.com/Oaklight/llm-rosetta-shim-asksage) |
+| † `asksage--messages` | 0.16.0 | [llm-rosetta-shim-asksage](https://github.com/Oaklight/llm-rosetta-shim-asksage) |
+| † `asksage--open_responses` | 0.16.0 | [llm-rosetta-shim-asksage](https://github.com/Oaklight/llm-rosetta-shim-asksage) |
+
+**What to do about it.** Add the source; the provider's `shim` value does not
+change, because the replacement shims keep the names.
+
+```jsonc
+"shims": {
+  "remotes": [
+    {
+      "url": "https://github.com/Oaklight/llm-rosetta-shim-alcf",
+      "path": "src/llm_rosetta_shim_alcf/providers",
+      "token_env": "GITHUB_TOKEN"          // the three repositories are private
+    }
+  ]
+}
+```
+
+The three replacement repositories are private, so `token_env` is required; the
+per-repository `path` is the one thing that differs between the three. No `ref`
+is pinned in the preset, because none of the repositories is tagged yet: a remote
+without a `ref` resolves `HEAD` to a commit once and records it in the cache
+stamp, so the same commit is reused on later runs. Once they are tagged, pin the
+tag — see [Ref resolution](../gateway/configuration.md#external-shim-sources).
+
+The admin panel does this for you: **Settings → Shim Sources** lists the
+advisories for the shims your config actually uses, and adding a source from the
+preset catalog appends exactly the entry above to the remotes list, for you to
+review before saving. The gateway also logs one warning per affected provider at
+startup, naming the shim, the release that removes it and the source that
+replaces it — and it stops warning as soon as a declared source supplies that
+shim, so a quiet log is the confirmation that the migration is done.
+
+Aliases keep older configs working in the meantime: `alcf--metis`,
+`alcf--minerva`, `alcf--sophia`, `argo--openai_chat`, `argo--anthropic`,
+`argo--openai_responses`, `asksage--openai_chat`, `asksage--anthropic` and
+`asksage--openai_responses` resolve to their new names and are rewritten in the
+config file at startup, with a `.pre-migration.bak` backup. Those aliases go away
+with the shims they stand for, in 0.16.0.
+
+A CI check holds the schedule to the code, so the removal cannot happen early or
+late: `scripts/check_shim_removals.py` (`make check-shim-removals`) reads the same
+manifest and fails if a shim disappears before its `removed_in` release, and once
+the version reaches that release it fails while the shim is still registered, or
+still referenced by an example, a Docker file, the docs, or the source — a
+leftover alias entry in `provider_names.py` counts, and so does the shim's own
+`provider.yaml`. The boundary is the version, not a date — nothing has to be
+remembered.
 
 ## Argo Shims
 
-`argo--chat_completions` and `argo--messages` target the **Argo gateway** — a proxy layer used at certain institutions (such as Argonne National Laboratory) that fronts multiple upstream LLM providers behind a single endpoint.
+`argo--chat_completions`, `argo--messages` and `argo--open_responses` target the **Argo gateway** — a proxy layer used at certain institutions (such as Argonne National Laboratory) that fronts multiple upstream LLM providers behind a single endpoint.
 
-Both shims use `model_id_field: internal_id` — the model identifier is sent as `internal_id` instead of `model`.
+All three shims use `model_id_field: internal_id` — the model identifier is sent as `internal_id` instead of `model`.
 
 ### `argo--chat_completions`
 
@@ -225,6 +352,10 @@ OpenAI-compatible shim with one transform: `max_tokens` → `max_completion_toke
 - **Model-level `thinking_type` override**: `thinking_type: enabled` by default, with `model_overrides` for `claudeopus47: thinking_type: adaptive` (Vertex AI backend). Handled declaratively via reasoning config.
 - **`unsigned_reasoning_blocks: preserve`**: Prior thinking blocks without valid signatures are preserved in metadata instead of being forwarded (avoids Argo 400 errors).
 - **`pre_ir_transforms` — OpenAI response normalization**: Argo may return OpenAI Chat format from `/v1/messages`. The transform converts it to Anthropic format before the converter sees it.
+
+### `argo--open_responses`
+
+The Responses-format lane, with per-model temperature stripping for the GPT/o-series models that reject it.
 
 ### Configuration
 
@@ -243,7 +374,7 @@ Override the `default_base_url` in your gateway config:
 ```
 
 !!! note
-    The default URL (`https://apps.inside.anl.gov/argoapi/`) is only reachable from within the ANL network. Argo shims will be moved to the [argo-proxy](https://github.com/Oaklight/argo-proxy) package as a plugin in a future release.
+    The default URL (`https://apps.inside.anl.gov/argoapi/`) is only reachable from within the ANL network. All three Argo shims are [scheduled for removal](#shims-scheduled-for-removal) in 0.16.0, when they move to the standalone `llm-rosetta-shim-argo` package — declare it as an external source and the names in your config keep working.
 
 ## Reasoning Configuration
 

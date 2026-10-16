@@ -112,6 +112,17 @@ startup instead.
 remotes directly (no config file needed); `llm_rosetta.gateway.apply_shim_sources(raw, config_path)`
 applies a config dict. `create_app` also applies the section automatically.
 
+**Replacing a built-in that is on its way out.** Ten built-ins — the ALCF, Argo
+and AskSage shims — are
+[scheduled for removal](../guide/shims.md#shims-scheduled-for-removal) in 0.16.0
+and will then be available only from their own repositories. A config that uses
+one of them gets a warning at startup naming the shim, the release that removes
+it, and the source that replaces it; the admin panel shows the same advisories
+and can add that source from a preset catalog (see
+[Admin Panel → Shim Sources](admin-panel.md#shim-sources)). The warning clears as
+soon as a declared source supplies the shim, so the log says whether the
+migration is done — and the shim's name in your provider config never changes.
+
 !!! warning "Declared sources run code"
     A shim directory may ship a `transforms.py`, which is executed when the shim
     loads — the same trust level as `pip install`ing a plugin package. Prefer
@@ -176,11 +187,15 @@ For providers that use short-lived tokens (e.g. ALCF Inference Service with Glob
 
 ```jsonc
 "my-alcf": {
-  "provider": "alcf--sophia",
+  "shim": "alcf_sophia--chat_completions",
   "token_command": ["python3", "/scripts/alcf-token.py"],
   "token_refresh_interval": 3600
 }
 ```
+
+The provider type comes from `shim` — `type`, and then the provider's own key, are the
+fallbacks. (`provider` is not a config key; a provider entry spelled that way never
+resolved its shim.)
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|

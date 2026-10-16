@@ -1,16 +1,24 @@
 # Argo
 
-Argo is Argonne National Laboratory's internal API gateway, providing access to various LLM models through a unified endpoint. It is supported through two shim endpoints.
+Argo is Argonne National Laboratory's internal API gateway, providing access to various LLM models through a unified endpoint. It is supported through three shim endpoints.
+
+!!! warning "Scheduled for removal in 0.16.0"
+    All three Argo shims move to the standalone
+    [llm-rosetta-shim-argo](https://github.com/Oaklight/llm-rosetta-shim-argo)
+    package in 0.16.0. They work unchanged until then — and the names below do not
+    change, so migrating is one `shims.remotes` entry. See
+    [Shims scheduled for removal](../shims.md#shims-scheduled-for-removal).
 
 ## Endpoints
 
 | Shim Name | Base Type | Default Base URL | API Key Env |
 |:---|:---|:---|:---|
 | `argo--chat_completions` | `chat_completions` | `https://apps.inside.anl.gov/argoapi/v1` | `ARGO_API_KEY` |
+| `argo--open_responses` | `open_responses` | `https://apps.inside.anl.gov/argoapi/v1` | `ARGO_API_KEY` |
 | `argo--messages` | `messages` | `https://apps.inside.anl.gov/argoapi` | `ARGO_API_KEY` |
 
 !!! info "Model ID Field"
-    Both Argo shims use `model_id_field: internal_id`, meaning the model identifier is sent as `internal_id` in the request body rather than the standard `model` field.
+    All three Argo shims use `model_id_field: internal_id`, meaning the model identifier is sent as `internal_id` in the request body rather than the standard `model` field.
 
 ## Reasoning Support
 
@@ -51,10 +59,10 @@ Argo is Argonne National Laboratory's internal API gateway, providing access to 
 
 ## Capability Flags
 
-| Flag | `argo--chat_completions` | `argo--messages` |
-|:---|:---:|:---:|
-| Custom tools | ✅ | — |
-| Max tool description | 1024 chars | — |
+| Flag | `argo--chat_completions` | `argo--open_responses` | `argo--messages` |
+|:---|:---:|:---:|:---:|
+| Custom tools | ✅ | ✅ | — |
+| Max tool description | 1024 chars | 1024 chars | — |
 
 ## Transforms
 
@@ -78,6 +86,12 @@ Argo is Argonne National Laboratory's internal API gateway, providing access to 
 | Pre-IR | `normalize_openai_response()` | Converts OpenAI-shaped responses to Anthropic format (handles Argo's inconsistent response shapes) |
 | IR | `hoist_late_system_messages()` | Moves late system messages to conversation start |
 | IR | `auto_cache_breakpoints()` | Inserts cache breakpoints for prompt caching |
+
+**`argo--open_responses`:**
+
+| Type | Transform | Purpose |
+|:---|:---|:---|
+| Post-IR | `strip temperature` (gpto\*, gpt5\*) | Removes temperature for the GPT/o-series models that reject it |
 
 ## Gateway Configuration
 
@@ -107,8 +121,21 @@ Argo is Argonne National Laboratory's internal API gateway, providing access to 
     }
     ```
 
+=== "Responses"
+
+    ```jsonc
+    {
+      "providers": {
+        "argo-responses": {
+          "shim": "argo--open_responses",
+          "api_key": "${ARGO_API_KEY}"
+        }
+      }
+    }
+    ```
+
 ## Notes
 
 - Argo acts as a proxy to multiple upstream providers (OpenAI, Anthropic, Google). The shim handles provider-specific quirks transparently, including response format normalization and model-specific field adjustments.
 - The `unsigned_blocks: preserve` setting on the Anthropic endpoint preserves unsigned reasoning blocks in the response, which is needed because Argo's proxy layer does not sign thinking blocks.
-- Both shims export a `model_list_transform` that normalizes the model listing response format.
+- All three shims export a `model_list_transform` that normalizes the model listing response format.

@@ -2,6 +2,13 @@
 
 [AskSage](https://asksage.ai) is a government-focused AI platform that provides standard-format API endpoints for OpenAI, Anthropic, and Google Gemini models. LLM-Rosetta supports AskSage through four shims — one per API format — using a single API key.
 
+!!! warning "Scheduled for removal in 0.16.0"
+    All four AskSage shims move to the standalone
+    [llm-rosetta-shim-asksage](https://github.com/Oaklight/llm-rosetta-shim-asksage)
+    package in 0.16.0. They work unchanged until then — and the names below do not
+    change, so migrating is one `shims.remotes` entry. See
+    [Shims scheduled for removal](../shims.md#shims-scheduled-for-removal).
+
 ## Endpoints
 
 | Shim Name | Base Type | Default Base URL | API Key Env |

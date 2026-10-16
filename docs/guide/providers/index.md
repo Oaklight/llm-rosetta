@@ -19,10 +19,12 @@ Per-provider guides covering shim configuration, transforms, authentication, and
 | [Volcengine](volcengine.md) | `volcengine--chat_completions` | `chat_completions` | Field transforms |
 | [OpenRouter](openrouter.md) | `openrouter--chat_completions` | `chat_completions` | Multi-model router |
 | [MiniMax](minimax.md) | `minimax--chat_completions` | `chat_completions` | OpenAI-compatible |
-| [Argo](argo.md) | `argo--*` | `chat_completions` | Argonne internal gateway |
-| [AskSage](asksage.md) | `asksage--*` | multiple | Multi-format aggregator |
-| [ALCF](alcf.md) | `alcf--*` | `chat_completions` | Globus OAuth, token_command |
+| [Argo](argo.md) | † `argo--*` | `chat_completions` | Argonne internal gateway |
+| [AskSage](asksage.md) | † `asksage--*` | multiple | Multi-format aggregator |
+| [ALCF](alcf.md) | † `alcf_<cluster>--chat_completions` | `chat_completions` | Globus OAuth, token_command |
 | [Kilo](kilo.md) | `kilo--chat_completions` | `chat_completions` | Free pool, keyless |
 | [OpenCode](opencode.md) | `opencode--*` | multiple | Go subscription / Zen balance |
+
+† The Argo, AskSage and ALCF shims are [scheduled for removal](../shims.md#shims-scheduled-for-removal) in 0.16.0, when they move to standalone shim packages. They keep working, and keep their names, until then.
 
 For general shim concepts and custom shim registration, see [Provider Shims](../shims.md).

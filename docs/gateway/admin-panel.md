@@ -34,6 +34,20 @@ current config; **Refetch** forces every remote to be downloaded again, bypassin
 its cache and `refresh` mode. A source that fails is reported here without
 stopping the gateway.
 
+**Preset catalog.** Above the remotes list, a catalog offers the shim packages
+that replace the built-ins
+[scheduled for removal](../guide/shims.md#shims-scheduled-for-removal). Choosing
+one and pressing **Add source** appends its `shims.remotes` entry to the JSON list
+below — it does **not** save, so the entry goes through the same review and the
+same **Save** as one typed by hand. An entry whose `url` is already in the list is
+not added a second time, and the button says so.
+
+**Removal advisories.** Below the status table, the advisories name each provider
+in the config whose shim is going away, the release that removes it, and the
+source that replaces it — with the same **Add source** action. The list is derived
+per request from the config and the load report, so it is current without a
+restart: once a declared source supplies the shim, the advisory is gone.
+
 !!! warning
     A declared shim directory or archive runs third-party Python
     (`transforms.py`) at load time. Only add sources you trust, and prefer

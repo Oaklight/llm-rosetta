@@ -2,13 +2,26 @@
 
 ALCF (Argonne Leadership Computing Facility) Inference Service is supported through three shim endpoints, one per compute cluster. All use the OpenAI Chat Completions compatible API.
 
+!!! warning "Scheduled for removal in 0.16.0"
+    All three ALCF shims move to the standalone
+    [llm-rosetta-shim-alcf](https://github.com/Oaklight/llm-rosetta-shim-alcf)
+    package in 0.16.0. They work unchanged until then — and the names below do not
+    change, so migrating is one `shims.remotes` entry. See
+    [Shims scheduled for removal](../shims.md#shims-scheduled-for-removal).
+
 ## Endpoints
 
 | Shim Name | Base Type | Default Base URL | API Key Env | Hardware |
 |:---|:---|:---|:---|:---|
-| `alcf--metis` | `chat_completions` | `https://inference-api.alcf.anl.gov/resource_server/metis/api/v1` | `ALCF_API_KEY` | SambaNova SN40L |
-| `alcf--minerva` | `chat_completions` | `https://inference-api.alcf.anl.gov/resource_server/minerva/api/v1` | `ALCF_API_KEY` | NVIDIA B200 |
-| `alcf--sophia` | `chat_completions` | `https://inference-api.alcf.anl.gov/resource_server/sophia/vllm/v1` | `ALCF_API_KEY` | vLLM on A100 |
+| `alcf_metis--chat_completions` | `chat_completions` | `https://inference-api.alcf.anl.gov/resource_server/metis/api/v1` | `ALCF_API_KEY` | SambaNova SN40L |
+| `alcf_minerva--chat_completions` | `chat_completions` | `https://inference-api.alcf.anl.gov/resource_server/minerva/api/v1` | `ALCF_API_KEY` | NVIDIA B200 |
+| `alcf_sophia--chat_completions` | `chat_completions` | `https://inference-api.alcf.anl.gov/resource_server/sophia/vllm/v1` | `ALCF_API_KEY` | vLLM on A100 |
+
+The three share one admin-panel top level: each declares `group: alcf`, so the
+provider-type picker shows a single `alcf` group whose rows read
+`metis · chat_completions`, `minerva · chat_completions` and
+`sophia · chat_completions`. The older names `alcf--metis`, `alcf--minerva` and
+`alcf--sophia` still resolve and are rewritten in your config file at startup.
 
 ## Reasoning Support
 
@@ -23,7 +36,7 @@ Metis and Minerva do not currently have reasoning-capable models.
 
 ## Capability Flags
 
-| Flag | `alcf--sophia` | `alcf--minerva` | `alcf--metis` |
+| Flag | `alcf_sophia--chat_completions` | `alcf_minerva--chat_completions` | `alcf_metis--chat_completions` |
 |:---|:---:|:---:|:---:|
 | Custom tools | ✅ | ✅ | — |
 
@@ -125,7 +138,7 @@ python3 scripts/alcf-token.py --tokens-dir /shared/alcf-tokens/
     {
       "providers": {
         "alcf-sophia": {
-          "shim": "alcf--sophia",
+          "shim": "alcf_sophia--chat_completions",
           "api_key": "${ALCF_API_KEY}"
         }
       }
@@ -142,7 +155,7 @@ python3 scripts/alcf-token.py --tokens-dir /shared/alcf-tokens/
     {
       "providers": {
         "alcf-sophia": {
-          "shim": "alcf--sophia",
+          "shim": "alcf_sophia--chat_completions",
           "token_command": ["python3", "scripts/alcf-token.py"],
           "token_refresh_interval": 1800
         }
