@@ -102,6 +102,17 @@ class _AnthropicBlockState:
         context.current_block_index = index
         return index
 
+    def close(self, index: int) -> None:
+        """Close a block and discard tool identities registered to its index."""
+        self.open_indices.discard(index)
+        stale_ids = [
+            tool_id
+            for tool_id, tool_index in self.tool_indices.items()
+            if tool_index == index
+        ]
+        for tool_id in stale_ids:
+            del self.tool_indices[tool_id]
+
 
 def _stream_blocks(context: StreamContext) -> _AnthropicBlockState:
     """Keep provider-private state on the stream, including generic contexts."""
@@ -117,11 +128,13 @@ def _close_content_blocks(context: StreamContext) -> list[dict[str, Any]]:
     state = _stream_blocks(context)
     if context.current_block_index >= 0:
         state.open(context, context.current_block_index)
+    closing_indices = sorted(state.open_indices)
     events = [
         {"type": AnthropicEventType.CONTENT_BLOCK_STOP, "index": index}
-        for index in sorted(state.open_indices)
+        for index in closing_indices
     ]
-    state.open_indices.clear()
+    for index in closing_indices:
+        state.close(index)
     state.pending_tool_index = None
     context.current_block_index = -1
     context.current_block_type = None
@@ -1160,7 +1173,7 @@ class MessagesConverter(BaseConverter):
         if context is not None:
             index = event["block_index"]
             state = _stream_blocks(context)
-            state.open_indices.discard(index)
+            state.close(index)
             state.next_index = max(state.next_index, index + 1)
             if state.pending_tool_index == index:
                 state.pending_tool_index = None
@@ -1421,10 +1434,34 @@ class MessagesConverter(BaseConverter):
         writing it would open one for a server call the client was never told
         about, so it is dropped too.
         """
-        if context is not None:
-            dropped = context.metadata.get("_dropped_intrinsic_calls")
-            if dropped and event["tool_call_id"] in dropped:
-                return {}
+        tool_call_id = event.get("tool_call_id", "")
+        if context is None or not tool_call_id:
+            logger.warning(
+                "Dropping Messages tool-call delta with unresolved tool_call_id"
+            )
+            return {}
+
+        dropped = context.metadata.get("_dropped_intrinsic_calls")
+        if dropped and tool_call_id in dropped:
+            return {}
+
+        state = _stream_blocks(context)
+        registered_index = state.tool_indices.get(tool_call_id)
+        explicit_idx: int | None = event.get("block_index")
+        index = explicit_idx if explicit_idx is not None else registered_index
+        if (
+            registered_index is None
+            or registered_index not in state.open_indices
+            or index != registered_index
+        ):
+            logger.warning(
+                "Dropping Messages tool-call delta for unregistered, closed, "
+                "or mismatched tool block (tool_call_id=%s, block_index=%s)",
+                tool_call_id,
+                explicit_idx,
+            )
+            return {}
+
         result: dict[str, Any] = {
             "type": AnthropicEventType.CONTENT_BLOCK_DELTA,
             "delta": {
@@ -1432,19 +1469,9 @@ class MessagesConverter(BaseConverter):
                 "partial_json": event["arguments_delta"],
             },
         }
-        # Prefer explicit block_index from the IR event (#246)
-        explicit_idx: int | None = event.get("block_index")
-        if context is not None:
-            state = _stream_blocks(context)
-            index = explicit_idx
-            if index is None:
-                index = state.tool_indices.get(event["tool_call_id"])
-            if index is None and context.current_block_index >= 0:
-                index = context.current_block_index
-            result["index"] = state.open(context, index)
-            context.current_block_type = "tool_use"
-        elif explicit_idx is not None:
-            result["index"] = explicit_idx
+        result["index"] = index
+        context.current_block_index = index
+        context.current_block_type = "tool_use"
         return result
 
     def _handle_ir_tool_result_to_p(

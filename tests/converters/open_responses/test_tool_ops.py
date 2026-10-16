@@ -703,6 +703,7 @@ class TestOpenAIResponsesToolOps:
         assert result["type"] == "tool_result"
         assert result["tool_call_id"] == "call_456"
         assert result["result"] == "Result data"
+        assert "is_error" not in result
 
     def test_p_tool_result_to_ir_json_output(self):
         """Keep JSON-looking text opaque rather than coercing its type."""
@@ -724,6 +725,58 @@ class TestOpenAIResponsesToolOps:
         }
         result = OpenAIResponsesToolOps.p_tool_result_to_ir(provider_tr)
         assert result["is_error"] is True
+
+    def test_p_tool_result_to_ir_preserves_false_is_error(self):
+        provider_tr = {
+            "type": "function_call_output",
+            "call_id": "call_ok",
+            "output": "Result data",
+            "status": "completed",
+            "is_error": False,
+        }
+
+        result = OpenAIResponsesToolOps.p_tool_result_to_ir(provider_tr)
+
+        assert result["is_error"] is False
+
+    def test_p_tool_result_to_ir_incomplete_status_is_error(self):
+        """An incomplete Responses tool output represents a failed result."""
+        provider_tr = {
+            "type": "function_call_output",
+            "call_id": "call_incomplete",
+            "output": "City not found",
+            "status": "incomplete",
+        }
+
+        result = OpenAIResponsesToolOps.p_tool_result_to_ir(provider_tr)
+
+        assert result["is_error"] is True
+
+    def test_p_tool_result_to_ir_incomplete_status_overrides_false_is_error(self):
+        provider_tr = {
+            "type": "function_call_output",
+            "call_id": "call_incomplete",
+            "output": "City not found",
+            "status": "incomplete",
+            "is_error": False,
+        }
+
+        result = OpenAIResponsesToolOps.p_tool_result_to_ir(provider_tr)
+
+        assert result["is_error"] is True
+
+    @pytest.mark.parametrize("status", ["completed", "in_progress", "unexpected"])
+    def test_p_tool_result_to_ir_does_not_infer_error_from_other_statuses(self, status):
+        provider_tr = {
+            "type": "function_call_output",
+            "call_id": "call_status",
+            "output": "Result data",
+            "status": status,
+        }
+
+        result = OpenAIResponsesToolOps.p_tool_result_to_ir(provider_tr)
+
+        assert "is_error" not in result
 
     @pytest.mark.parametrize("malformed", ["true", 1, 0, {}, [], "False"])
     def test_p_tool_result_to_ir_ignores_non_bool_is_error(self, malformed):

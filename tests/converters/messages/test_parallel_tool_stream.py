@@ -101,6 +101,13 @@ def test_chat_parallel_tool_stream_keeps_ids_arguments_and_block_lifecycles(
     assert collect_tools(events) == {
         f"call_{i}": {"path": f"{i}.txt"} for i in range(count)
     }
+    terminal_reasons = [
+        event["delta"]["stop_reason"]
+        for event in events
+        if event["type"] == "message_delta"
+        and event.get("delta", {}).get("stop_reason")
+    ]
+    assert terminal_reasons == ["tool_use"]
 
 
 def test_native_parallel_tool_stream_preserves_explicit_block_indices():
@@ -179,3 +186,45 @@ def test_synthetic_tool_block_does_not_reuse_a_completed_explicit_index():
         output.extend(converted if isinstance(converted, list) else [converted])
     starts = [event for event in output if event.get("type") == "content_block_start"]
     assert [event["index"] for event in starts] == [0, 1]
+
+
+def test_dropped_unresolved_tool_delta_does_not_report_tool_use_finish():
+    """The pipeline's terminal reason reflects identified tool starts only."""
+    pipeline = ConversionPipeline("messages", "openai_chat")
+    pipeline.convert_request(
+        {
+            "model": "demo",
+            "max_tokens": 64,
+            "stream": True,
+            "messages": [{"role": "user", "content": "Search"}],
+        }
+    )
+    processor = pipeline.create_stream_processor()
+    chunks = [
+        chat_chunk({"role": "assistant"}),
+        chat_chunk({"content": "Searching."}),
+        chat_chunk(
+            {"tool_calls": [{"index": 0, "function": {"arguments": '{"query":"bad"}'}}]}
+        ),
+        chat_chunk({}, "tool_calls"),
+        {"choices": []},
+    ]
+    events = [event for chunk in chunks for event in processor.process_chunk(chunk)]
+    content_blocks = [
+        event["content_block"]
+        for event in events
+        if event["type"] == "content_block_start"
+    ]
+    assert [block["type"] for block in content_blocks] == ["text"]
+    assert any(
+        event.get("delta", {}).get("text") == "Searching."
+        for event in events
+        if event["type"] == "content_block_delta"
+    )
+    terminal_reasons = [
+        event["delta"]["stop_reason"]
+        for event in events
+        if event["type"] == "message_delta"
+        and event.get("delta", {}).get("stop_reason")
+    ]
+    assert terminal_reasons == ["end_turn"]

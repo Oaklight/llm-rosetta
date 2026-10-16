@@ -9,6 +9,7 @@ from typing import Any, cast
 import pytest
 
 from llm_rosetta.converters.messages import MessagesConverter
+from llm_rosetta.converters.base.context import StreamContext
 from llm_rosetta.types.ir import (
     FinishEvent,
     IRRequest,
@@ -690,6 +691,18 @@ class TestMessagesConverter:
 
     def test_stream_to_provider_tool_call_delta(self):
         """Test IR tool call delta -> Anthropic SSE event."""
+        context = StreamContext()
+        self.converter.stream_response_to_provider(
+            cast(
+                ToolCallStartEvent,
+                {
+                    "type": "tool_call_start",
+                    "tool_call_id": "tc_123",
+                    "tool_name": "search",
+                },
+            ),
+            context=context,
+        )
         ir_event = cast(
             ToolCallDeltaEvent,
             {
@@ -699,7 +712,8 @@ class TestMessagesConverter:
             },
         )
         result = cast(
-            dict[str, Any], self.converter.stream_response_to_provider(ir_event)
+            dict[str, Any],
+            self.converter.stream_response_to_provider(ir_event, context=context),
         )
         assert result["type"] == "content_block_delta"
         assert result["delta"]["type"] == "input_json_delta"

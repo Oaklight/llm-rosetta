@@ -328,19 +328,186 @@ class TestStreamResponseToProvider:
         assert result["content_block"]["input"] == {}
 
     def test_tool_call_delta(self):
-        """ToolCallDeltaEvent → Anthropic content_block_delta."""
+        """A delta is emitted only for its registered open tool block."""
+        ctx = StreamContext()
+        self.converter.stream_response_to_provider(
+            cast(
+                ToolCallStartEvent,
+                {
+                    "type": "tool_call_start",
+                    "tool_call_id": "toolu_abc",
+                    "tool_name": "get_weather",
+                },
+            ),
+            context=ctx,
+        )
+        event = cast(
+            ToolCallDeltaEvent,
+            {
+                "type": "tool_call_delta",
+                "tool_call_id": "toolu_abc",
+                "arguments_delta": '{"city": "NYC"}',
+            },
+        )
+        result = cast(
+            dict[str, Any],
+            self.converter.stream_response_to_provider(event, context=ctx),
+        )
+        assert result["type"] == "content_block_delta"
+        assert result["delta"]["type"] == "input_json_delta"
+        assert result["delta"]["partial_json"] == '{"city": "NYC"}'
+
+    def test_unresolved_delta_does_not_mutate_open_text_block(self):
+        """An unresolved delta is dropped without changing text-block state."""
+        ctx = StreamContext()
+        self.converter.stream_response_to_provider(
+            cast(
+                ContentBlockStartEvent,
+                {"type": "content_block_start", "block_index": 4, "block_type": "text"},
+            ),
+            context=ctx,
+        )
+        state = ctx.metadata["_anthropic_blocks"]
+        before = (
+            ctx.current_block_index,
+            ctx.current_block_type,
+            set(state.open_indices),
+        )
         event = cast(
             ToolCallDeltaEvent,
             {
                 "type": "tool_call_delta",
                 "tool_call_id": "",
-                "arguments_delta": '{"city": "NYC"}',
+                "arguments_delta": '{"unsafe":true}',
             },
         )
-        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
-        assert result["type"] == "content_block_delta"
-        assert result["delta"]["type"] == "input_json_delta"
-        assert result["delta"]["partial_json"] == '{"city": "NYC"}'
+        result = self.converter.stream_response_to_provider(event, context=ctx)
+        assert result == {}
+        assert (
+            ctx.current_block_index,
+            ctx.current_block_type,
+            state.open_indices,
+        ) == before
+
+    def test_explicit_index_must_match_same_open_tool_call(self):
+        """An explicit index cannot target text, closed, or another call's block."""
+        ctx = StreamContext()
+        text_start = cast(
+            ContentBlockStartEvent,
+            {"type": "content_block_start", "block_index": 0, "block_type": "text"},
+        )
+        self.converter.stream_response_to_provider(text_start, context=ctx)
+        first_start = cast(
+            ToolCallStartEvent,
+            {
+                "type": "tool_call_start",
+                "tool_call_id": "toolu_one",
+                "tool_name": "one",
+            },
+        )
+        first_result = self.converter.stream_response_to_provider(
+            first_start, context=ctx
+        )
+        second_start = cast(
+            ToolCallStartEvent,
+            {
+                "type": "tool_call_start",
+                "tool_call_id": "toolu_two",
+                "tool_name": "two",
+            },
+        )
+        second_result = self.converter.stream_response_to_provider(
+            second_start, context=ctx
+        )
+        first = first_result[-1] if isinstance(first_result, list) else first_result
+        second = second_result[-1] if isinstance(second_result, list) else second_result
+        first_index = first["index"]
+        second_index = second["index"]
+
+        def delta(tool_call_id: str, block_index: int) -> dict[str, Any]:
+            return cast(
+                dict[str, Any],
+                self.converter.stream_response_to_provider(
+                    cast(
+                        ToolCallDeltaEvent,
+                        {
+                            "type": "tool_call_delta",
+                            "tool_call_id": tool_call_id,
+                            "block_index": block_index,
+                            "arguments_delta": "{}",
+                        },
+                    ),
+                    context=ctx,
+                ),
+            )
+
+        assert delta("toolu_one", 0) == {}
+        assert delta("toolu_one", second_index) == {}
+        assert delta("toolu_one", first_index)["index"] == first_index
+        self.converter.stream_response_to_provider(
+            cast(
+                ContentBlockEndEvent,
+                {"type": "content_block_end", "block_index": first_index},
+            ),
+            context=ctx,
+        )
+        assert delta("toolu_one", first_index) == {}
+
+    def test_closed_tool_registration_cannot_authorize_reused_text_index(self):
+        """Closing a tool removes its ID mapping before an index is reused."""
+        ctx = StreamContext()
+        self.converter.stream_response_to_provider(
+            cast(
+                ToolCallStartEvent,
+                {
+                    "type": "tool_call_start",
+                    "tool_call_id": "toolu_old",
+                    "tool_name": "old_tool",
+                    "block_index": 0,
+                },
+            ),
+            context=ctx,
+        )
+        self.converter.stream_response_to_provider(
+            cast(
+                ContentBlockEndEvent,
+                {"type": "content_block_end", "block_index": 0},
+            ),
+            context=ctx,
+        )
+        self.converter.stream_response_to_provider(
+            cast(
+                ContentBlockStartEvent,
+                {"type": "content_block_start", "block_index": 0, "block_type": "text"},
+            ),
+            context=ctx,
+        )
+        state = ctx.metadata["_anthropic_blocks"]
+        assert "toolu_old" not in state.tool_indices
+        before = (
+            ctx.current_block_index,
+            ctx.current_block_type,
+            set(state.open_indices),
+            dict(state.tool_indices),
+        )
+        result = self.converter.stream_response_to_provider(
+            cast(
+                ToolCallDeltaEvent,
+                {
+                    "type": "tool_call_delta",
+                    "tool_call_id": "toolu_old",
+                    "arguments_delta": '{"stale":true}',
+                },
+            ),
+            context=ctx,
+        )
+        assert result == {}
+        assert (
+            ctx.current_block_index,
+            ctx.current_block_type,
+            state.open_indices,
+            state.tool_indices,
+        ) == before
 
     def test_finish_event_stop(self):
         """FinishEvent with 'stop' → message_delta with 'end_turn'."""
@@ -1369,15 +1536,25 @@ class TestStreamResponseToProviderWithContext:
         assert result["index"] == 0
 
     def test_tool_call_delta_with_context_has_index(self):
-        """ToolCallDeltaEvent includes index when context has block index."""
+        """ToolCallDeltaEvent uses the registered tool block's index."""
         ctx = StreamContext()
         ctx.mark_started()
-        ctx.next_block_index()  # block_index = 0
+        self.converter.stream_response_to_provider(
+            cast(
+                ToolCallStartEvent,
+                {
+                    "type": "tool_call_start",
+                    "tool_call_id": "toolu_abc",
+                    "tool_name": "get_weather",
+                },
+            ),
+            context=ctx,
+        )
         event = cast(
             ToolCallDeltaEvent,
             {
                 "type": "tool_call_delta",
-                "tool_call_id": "",
+                "tool_call_id": "toolu_abc",
                 "arguments_delta": '{"city":',
             },
         )

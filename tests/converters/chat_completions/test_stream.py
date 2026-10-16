@@ -114,8 +114,8 @@ class TestStreamResponseFromProvider:
 
     # --- Tool call arguments delta ---
 
-    def test_tool_call_arguments_delta(self):
-        """Tool call arguments delta produces ToolCallDeltaEvent."""
+    def test_unresolved_tool_call_arguments_delta_is_dropped(self):
+        """An initial tool delta without an ID cannot be safely associated."""
         chunk = {
             "choices": [
                 {
@@ -133,9 +133,295 @@ class TestStreamResponseFromProvider:
         }
         events = cast(list[Any], self.converter.stream_response_from_provider(chunk))
         delta_events = [e for e in events if e["type"] == "tool_call_delta"]
+        assert delta_events == []
+
+    def test_tool_call_arguments_delta_resolves_by_provider_index(self):
+        """An ID-less continuation resolves through its observed provider index."""
+        context = StreamContext()
+        start = {
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {
+                        "tool_calls": [
+                            {
+                                "id": "call_abc",
+                                "index": 3,
+                                "function": {"name": "get_weather", "arguments": ""},
+                            }
+                        ]
+                    },
+                }
+            ]
+        }
+        self.converter.stream_response_from_provider(start, context=context)
+        continuation = {
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {
+                        "tool_calls": [
+                            {
+                                "index": 3,
+                                "function": {"arguments": '{"city":'},
+                            }
+                        ]
+                    },
+                }
+            ]
+        }
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(continuation, context=context),
+        )
+        delta_events = [e for e in events if e["type"] == "tool_call_delta"]
         assert len(delta_events) == 1
+        assert delta_events[0]["tool_call_id"] == "call_abc"
         assert delta_events[0]["arguments_delta"] == '{"city":'
-        assert delta_events[0]["tool_call_index"] == 1
+
+    def test_repeated_provider_id_keeps_index_mapping_stable(self):
+        """Repeated IDs for the same choice/index retain the same identity."""
+        context = StreamContext()
+        first_chunk = {
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {
+                        "tool_calls": [
+                            {
+                                "id": "call_abc",
+                                "index": 2,
+                                "function": {"name": "search", "arguments": ""},
+                            }
+                        ]
+                    },
+                }
+            ]
+        }
+        repeated_chunk = {
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {
+                        "tool_calls": [
+                            {
+                                "id": "call_abc",
+                                "index": 2,
+                                "function": {"arguments": "{}"},
+                            }
+                        ]
+                    },
+                }
+            ]
+        }
+        self.converter.stream_response_from_provider(first_chunk, context=context)
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(
+                repeated_chunk, context=context
+            ),
+        )
+        deltas = [event for event in events if event["type"] == "tool_call_delta"]
+        assert len(deltas) == 1
+        assert deltas[0]["tool_call_id"] == "call_abc"
+
+    def test_conflicting_provider_id_invalidates_tool_index(self):
+        """A conflicting ID cannot redirect later deltas for the same index."""
+        context = StreamContext()
+
+        def tool_chunk(tool_id: str | None, arguments: str) -> dict[str, Any]:
+            tool_call: dict[str, Any] = {
+                "index": 2,
+                "function": {"arguments": arguments},
+            }
+            if tool_id is not None:
+                tool_call["id"] = tool_id
+                tool_call["function"]["name"] = "search"
+            return {"choices": [{"index": 0, "delta": {"tool_calls": [tool_call]}}]}
+
+        self.converter.stream_response_from_provider(
+            tool_chunk("call_first", ""), context=context
+        )
+        conflicting = self.converter.stream_response_from_provider(
+            tool_chunk("call_second", '{"wrong":true}'), context=context
+        )
+        assert not [
+            event
+            for event in conflicting
+            if event["type"] in ("tool_call_start", "tool_call_delta")
+        ]
+        continuation = self.converter.stream_response_from_provider(
+            tool_chunk(None, '{"also_wrong":true}'), context=context
+        )
+        assert not [
+            event for event in continuation if event["type"] == "tool_call_delta"
+        ]
+        assert (0, 2) not in context.metadata["_chat_completions_tool_ids_by_index"]
+        assert (0, 2) in context.metadata["_chat_completions_conflicted_tool_indices"]
+
+    def test_tool_call_delta_without_id_or_index_is_dropped(self):
+        """A fragment without either correlation field is never guessed."""
+        context = StreamContext()
+        start = {
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {
+                        "tool_calls": [
+                            {
+                                "id": "call_abc",
+                                "index": 0,
+                                "function": {"name": "get_weather", "arguments": ""},
+                            }
+                        ]
+                    },
+                }
+            ]
+        }
+        self.converter.stream_response_from_provider(start, context=context)
+        continuation = {
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {
+                        "tool_calls": [
+                            {
+                                "function": {"arguments": '{"city":'},
+                            }
+                        ]
+                    },
+                }
+            ]
+        }
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(continuation, context=context),
+        )
+        assert not [e for e in events if e["type"] == "tool_call_delta"]
+
+    def test_provider_index_mapping_is_choice_scoped(self):
+        """Identical tool indices in separate choices resolve independently."""
+        context = StreamContext()
+        starts = {
+            "choices": [
+                {
+                    "index": choice_index,
+                    "delta": {
+                        "tool_calls": [
+                            {
+                                "id": f"call_{choice_index}",
+                                "index": 0,
+                                "function": {"name": "search", "arguments": ""},
+                            }
+                        ]
+                    },
+                }
+                for choice_index in (0, 1)
+            ]
+        }
+        self.converter.stream_response_from_provider(starts, context=context)
+        continuations = {
+            "choices": [
+                {
+                    "index": choice_index,
+                    "delta": {
+                        "tool_calls": [{"index": 0, "function": {"arguments": "{}"}}]
+                    },
+                }
+                for choice_index in (0, 1)
+            ]
+        }
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(
+                continuations, context=context
+            ),
+        )
+        deltas = [e for e in events if e["type"] == "tool_call_delta"]
+        assert [(event["choice_index"], event["tool_call_id"]) for event in deltas] == [
+            (0, "call_0"),
+            (1, "call_1"),
+        ]
+
+    def test_provider_index_mapping_clears_at_stream_end(self):
+        """Provider-index associations do not outlive their response stream."""
+        context = StreamContext()
+        start = {
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {
+                        "tool_calls": [
+                            {
+                                "id": "call_abc",
+                                "index": 0,
+                                "function": {"name": "search", "arguments": ""},
+                            }
+                        ]
+                    },
+                }
+            ]
+        }
+        self.converter.stream_response_from_provider(start, context=context)
+        assert "_chat_completions_tool_ids_by_index" in context.metadata
+        finish = {
+            "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 1, "completion_tokens": 0, "total_tokens": 1},
+        }
+        self.converter.stream_response_from_provider(finish, context=context)
+        assert "_chat_completions_tool_ids_by_index" not in context.metadata
+        assert "_chat_completions_conflicted_tool_indices" not in context.metadata
+
+    def test_provider_index_mapping_clears_at_eof_without_deferred_finish(self):
+        """Bare EOF clears both identity maps without adding stream events."""
+        context = StreamContext()
+        self.converter.stream_response_from_provider(
+            {
+                "choices": [
+                    {
+                        "index": 0,
+                        "delta": {
+                            "tool_calls": [
+                                {
+                                    "id": "call_first",
+                                    "index": 2,
+                                    "function": {"name": "search", "arguments": ""},
+                                }
+                            ]
+                        },
+                    }
+                ]
+            },
+            context=context,
+        )
+        self.converter.stream_response_from_provider(
+            {
+                "choices": [
+                    {
+                        "index": 0,
+                        "delta": {
+                            "tool_calls": [
+                                {
+                                    "id": "call_conflict",
+                                    "index": 2,
+                                    "function": {"name": "search", "arguments": ""},
+                                }
+                            ]
+                        },
+                    }
+                ]
+            },
+            context=context,
+        )
+        assert context._stream_end_deferred is False
+        assert "_chat_completions_tool_ids_by_index" in context.metadata
+        assert "_chat_completions_conflicted_tool_indices" in context.metadata
+
+        events = self.converter.stream_response_from_provider(None, context=context)
+
+        assert events == []
+        assert "_chat_completions_tool_ids_by_index" not in context.metadata
+        assert "_chat_completions_conflicted_tool_indices" not in context.metadata
 
     def test_tool_call_start_and_delta_combined(self):
         """Tool call with id and arguments produces both start and delta events."""
