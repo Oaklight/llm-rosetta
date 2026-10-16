@@ -4,10 +4,12 @@ from llm_rosetta.converters.embedding.pipeline import (  # noqa: F401
     EMBEDDING_FORMATS,
     EmbeddingConversionPipeline,
     get_embedding_converter,
+    response_usage,
 )
 
 __all__ = [
     "EMBEDDING_FORMATS",
     "EmbeddingConversionPipeline",
     "get_embedding_converter",
+    "response_usage",
 ]

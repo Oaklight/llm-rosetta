@@ -11,13 +11,14 @@ Three pieces, in the order a figure travels:
   payload means: where its counters sit, and whether its cache counters add to
   the input or sit inside it.  Declared once, read by both the streaming
   extractor and the repair.
-- :mod:`~llm_rosetta.observability.usage.normalize` — the ledger columns, and
+- :mod:`~llm_rosetta.observability.usage.normalize` — the ledger columns, the
+  per-model-type field map that fills them, and
   :func:`~llm_rosetta.observability.usage.normalize.token_total`, the canonical
   total every view sums.
 - :mod:`~llm_rosetta.observability.usage.report` —
   :class:`~llm_rosetta.observability.usage.report.UsageReport`: windowed totals
-  per subject, plus the traffic that no subject owns, kept so the parts add up
-  to the whole.
+  per subject and per model type, plus the traffic that no subject owns, kept
+  so the parts add up to the whole.
 - :mod:`~llm_rosetta.observability.usage.ledger` —
   :class:`~llm_rosetta.observability.usage.ledger.UsageLedger`: the same ledger
   with no store behind it, for a process that has no database.

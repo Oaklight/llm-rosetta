@@ -22,6 +22,7 @@ from llm_rosetta.observability.usage import (
     UsageReport,
     usage_columns,
 )
+from llm_rosetta.observability.usage.normalize import MODEL_TYPES
 from llm_rosetta.observability.usage.report import NO_SUBJECT_LABEL
 
 
@@ -275,8 +276,8 @@ class TestTheInMemoryLedgerIsTheStoredLedger:
     @staticmethod
     def _rows(
         rng: random.Random,
-    ) -> list[tuple[str, float, dict, str | None, str | None]]:
-        """Rows: written-at (both spellings), usage, subject, label."""
+    ) -> list[tuple[str, float, dict, str | None, str | None, str]]:
+        """Rows: written-at (both spellings), usage, subject, label, type."""
         rows = []
         for i in range(rng.randint(1, 14)):
             kind = rng.choice(["key", "key", "internal", "orphan", "none"])
@@ -292,6 +293,10 @@ class TestTheInMemoryLedgerIsTheStoredLedger:
                 "orphan": "gone",
                 "none": None,
             }[kind]
+            # Every family, because the two readers have to agree about the
+            # dimension as well as about the sums, and a family normalizes its
+            # usage from its own field names.
+            one_type = rng.choice(MODEL_TYPES)
             usage: dict = {
                 "prompt_tokens": rng.randint(0, 200),
                 "completion_tokens": rng.randint(0, 100),
@@ -299,11 +304,18 @@ class TestTheInMemoryLedgerIsTheStoredLedger:
             if rng.random() < 0.5:
                 usage["cache_read_tokens"] = rng.randint(0, 50)
                 usage["reasoning_tokens"] = rng.randint(0, 20)
+            if one_type == "decision":
+                usage = {
+                    "input_tokens": usage.pop("prompt_tokens"),
+                    "output_tokens": usage.pop("completion_tokens"),
+                }
+            if one_type == "rerank" and "cache_read_tokens" in usage:
+                usage["cached_tokens"] = usage.pop("cache_read_tokens")
             if rng.random() < 0.3:
                 # A provider total, which the canonical total must prefer.
                 usage["total_tokens"] = sum(usage.values())
             when = _stamp(minutes=rng.choice([1, 30, 240, 4000, 20000]))
-            rows.append((*when, usage, subject, label))
+            rows.append((*when, usage, subject, label, one_type))
         return rows
 
     @pytest.mark.parametrize("seed", range(25))
@@ -327,13 +339,20 @@ class TestTheInMemoryLedgerIsTheStoredLedger:
                         "duration_ms": 1.0,
                         "api_key_bucket": subject,
                         "api_key_label": label,
-                        **usage_columns(usage),
+                        "model_type": one_type,
+                        **usage_columns(usage, one_type),
                     }
-                    for i, (stamp, _at, usage, subject, label) in enumerate(rows)
+                    for i, (stamp, _at, usage, subject, label, one_type) in enumerate(
+                        rows
+                    )
                 ]
             )
-            for _stamp_text, at, usage, subject, label in rows:
-                ledger.record(usage, subject=subject, label=label, at=at)
+            for _stamp_text, at, usage, subject, label, one_type in rows:
+                ledger.record(
+                    usage, subject=subject, label=label, model_type=one_type, at=at
+                )
+
+            stored_groups = (await stored.query_usage_groups())["groups"]
 
             subjects = [
                 ("key-0", "label-0"),
@@ -341,7 +360,7 @@ class TestTheInMemoryLedgerIsTheStoredLedger:
                 ("key-2", "label-2"),
             ]
             from_stored = UsageReport.build(
-                groups=(await stored.query_usage_groups())["groups"],
+                groups=stored_groups,
                 subjects=subjects,
                 internal_subject="internal",
                 internal_label="internal",
@@ -358,6 +377,56 @@ class TestTheInMemoryLedgerIsTheStoredLedger:
         for window in USAGE_WINDOW_LABELS:
             assert from_memory.total(window) == from_stored.total(window), window
         assert from_memory.to_payload() == from_stored.to_payload()
+        # The model-type cut is part of the same claim: the two readers split
+        # the same rows the same way, so a consumer can ask a ledger and a
+        # database the same question and get the same answer.
+        assert from_memory.by_model_type == from_stored.by_model_type
+        assert from_memory.by_model_type, "the fixture must place some traffic"
+        assert set(from_memory.by_model_type) <= set(MODEL_TYPES)
+
+    async def test_the_two_readers_report_the_same_keys(self, tmp_path):
+        """The key sets themselves, not the values inside them.
+
+        The groups are the seam between the two ledgers, so a field added to
+        one reader and not the other is a silent divergence: every value
+        comparison keeps passing while a consumer reading that field gets
+        nothing.  Pinning the key sets is what makes the seam a contract.
+        """
+        ledger = UsageLedger()
+        ledger.record({"total_tokens": 5}, subject="key-0", label="label-0")
+        (memory_group,) = ledger.groups()
+
+        stored = await PersistenceManager.create(str(tmp_path))
+        try:
+            await stored.insert_log_entries(
+                [
+                    {
+                        "id": "row-0",
+                        "timestamp": _stamp(minutes=1)[0],
+                        "model": "m",
+                        "source_provider": "chat_completions",
+                        "target_provider": "chat_completions",
+                        "is_stream": False,
+                        "status_code": 200,
+                        "duration_ms": 1.0,
+                        "api_key_bucket": "key-0",
+                        "api_key_label": "label-0",
+                        "total_tokens": 5,
+                    }
+                ]
+            )
+            (stored_group,) = (await stored.query_usage_groups())["groups"]
+        finally:
+            await stored.close()
+
+        assert set(memory_group) == set(stored_group)
+
+    def test_the_fixture_produces_every_model_type(self):
+        """All four families are present, so the property exercises them."""
+        seen: set[str] = set()
+        for seed in range(25):
+            seen |= {row[5] for row in self._rows(random.Random(seed))}
+        assert seen == set(MODEL_TYPES)
 
     @pytest.mark.parametrize("seed", range(10))
     async def test_the_total_equals_the_rows_summed(self, tmp_path, seed):
@@ -366,9 +435,11 @@ class TestTheInMemoryLedgerIsTheStoredLedger:
         rows = self._rows(rng)
         ledger = UsageLedger()
         expected = {name: 0 for name in LEDGER_COLUMNS}
-        for _stamp_text, at, usage, subject, label in rows:
-            ledger.record(usage, subject=subject, label=label, at=at)
-            for name, value in usage_columns(usage).items():
+        for _stamp_text, at, usage, subject, label, one_type in rows:
+            ledger.record(
+                usage, subject=subject, label=label, model_type=one_type, at=at
+            )
+            for name, value in usage_columns(usage, one_type).items():
                 expected[name] += value
 
         total = ledger.report().total("30d")

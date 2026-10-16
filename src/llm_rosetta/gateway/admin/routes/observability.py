@@ -135,16 +135,17 @@ async def rebuild_metrics(request: Any) -> Response:
 
 
 async def get_token_usage(request: Any) -> Response:
-    """Return daily-aggregated token usage, optionally filtered by API key."""
+    """Daily token usage, optionally filtered by key label and model type."""
     persistence = getattr(request.app, "persistence", None)
     if persistence is None:
         return JSONResponse({"days": [], "totals": {}})
     days = int(_qp(request, "days", "7"))
     days = max(1, min(days, 365))
     api_key_label = _qp(request, "api_key_label")
+    model_type = _qp(request, "model_type")
     return JSONResponse(
         await persistence.query_token_usage_by_day(
-            days=days, api_key_label=api_key_label
+            days=days, api_key_label=api_key_label, model_type=model_type
         )
     )
 

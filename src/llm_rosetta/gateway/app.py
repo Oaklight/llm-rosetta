@@ -81,13 +81,10 @@ async def _record_proxy_op(
     Thin wrapper that fetches ``ops_ctx`` from ``app`` and delegates to
     :class:`~llm_rosetta.gateway.ops.proxy.OpsProxyRequest`.
     """
-    from .ops.proxy import OpsProxyRequest
+    from .ops.proxy import record_proxy_request
 
-    ctx = getattr(app, "ops_ctx", None)
-    if ctx is None:
-        return
-    op = OpsProxyRequest(
-        ctx,
+    await record_proxy_request(
+        app,
         model=model,
         source_provider=source_provider,
         target_provider=target_provider,
@@ -99,7 +96,6 @@ async def _record_proxy_op(
         profile=profile,
         entry_id_override=entry_id_override,
     )
-    await op.execute()
 
 
 # ---------------------------------------------------------------------------

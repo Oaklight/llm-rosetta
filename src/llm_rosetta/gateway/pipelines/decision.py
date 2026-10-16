@@ -10,6 +10,12 @@ IR-based conversion via
 :class:`~llm_rosetta.converters.decision.pipeline.DecisionConversionPipeline`.
 
 Registered via the model type registry in ``model_types.py``.
+
+Every request that reaches an upstream is recorded in the usage ledger with
+``model_type="decision"``, through the same
+:class:`~llm_rosetta.gateway.ops.proxy.OpsProxyRequest` the chat routes use.
+Requests rejected before the upstream call — bad JSON, an unknown model, a
+failed request conversion — are not recorded: nothing was billed.
 """
 
 from __future__ import annotations
@@ -22,7 +28,8 @@ from llm_rosetta._vendor.httpserver import JSONResponse, Response
 from ..config import GatewayConfig
 from ..middleware.headers import build_upstream_extra_headers, get_request_id
 from ..logging import get_logger
-from .decision_pipeline import DecisionConversionPipeline
+from ..ops.proxy import record_proxy_request
+from .decision_pipeline import DecisionConversionPipeline, response_usage
 from ..transport import UpstreamConnectionError, UpstreamTimeoutError, UpstreamTransport
 
 logger = get_logger()
@@ -148,6 +155,8 @@ async def handle_decision(
 
     t0 = time.monotonic()
     status_code = 500
+    error_detail: str | None = None
+    usage: dict[str, Any] = {}
 
     try:
         resp = await transport.send(
@@ -157,8 +166,12 @@ async def handle_decision(
             extra_headers=extra_headers,
         )
         status_code = resp.status_code
+        # Read even on an error status: a 4xx can still carry the tokens the
+        # upstream counted before it refused.
+        usage = response_usage(target_format, resp.body)
 
         if resp.is_error:
+            error_detail = resp.error_text
             return with_request_id(
                 Response(
                     body=resp.raw_content,
@@ -196,6 +209,7 @@ async def handle_decision(
 
     except UpstreamTimeoutError as exc:
         status_code = 504
+        error_detail = f"Upstream timeout: {exc}"
         return with_request_id(
             JSONResponse(
                 {
@@ -209,6 +223,7 @@ async def handle_decision(
         )
     except UpstreamConnectionError as exc:
         status_code = 502
+        error_detail = f"Upstream connection failed: {exc}"
         return with_request_id(
             JSONResponse(
                 {
@@ -238,4 +253,17 @@ async def handle_decision(
             target_format,
             duration_ms,
             status_code,
+        )
+        await record_proxy_request(
+            request.app,
+            model=model,
+            source_provider=source_format,
+            target_provider=target_format,
+            provider_name=route.provider_name,
+            is_stream=False,
+            status_code=status_code,
+            duration_ms=duration_ms,
+            error_detail=error_detail,
+            model_type="decision",
+            usage=usage,
         )

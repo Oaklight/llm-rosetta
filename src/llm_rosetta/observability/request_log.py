@@ -15,6 +15,8 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
+from .usage.normalize import DEFAULT_MODEL_TYPE
+
 if TYPE_CHECKING:
     from llm_rosetta.observability.persistence import PersistenceManager
 
@@ -43,6 +45,10 @@ class RequestLogEntry:
     cache_creation_tokens: int | None = None
     reasoning_tokens: int | None = None
     api_key_bucket: str | None = None
+    #: What the request was for — ``llm``, ``embedding``, ``rerank`` or
+    #: ``decision``, the names ``gateway.model_types`` registers.  Defaults to
+    #: chat, which is what a row written before the column existed means.
+    model_type: str = DEFAULT_MODEL_TYPE
 
     @classmethod
     def create(
@@ -66,6 +72,7 @@ class RequestLogEntry:
         cache_creation_tokens: int | None = None,
         reasoning_tokens: int | None = None,
         api_key_bucket: str | None = None,
+        model_type: str = DEFAULT_MODEL_TYPE,
     ) -> RequestLogEntry:
         """Factory with auto-generated id and timestamp."""
         return cls(
@@ -89,6 +96,7 @@ class RequestLogEntry:
             cache_creation_tokens=cache_creation_tokens,
             reasoning_tokens=reasoning_tokens,
             api_key_bucket=api_key_bucket,
+            model_type=model_type,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -102,6 +110,9 @@ class RequestLogEntry:
             "is_stream": self.is_stream,
             "status_code": self.status_code,
             "duration_ms": self.duration_ms,
+            # Always present, unlike the optional counters: the column has a
+            # value on every row, so a dict without it would not be the row.
+            "model_type": self.model_type,
         }
         if self.error_detail is not None:
             d["error_detail"] = self.error_detail

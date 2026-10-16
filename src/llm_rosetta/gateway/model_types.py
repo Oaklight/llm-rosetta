@@ -120,10 +120,13 @@ def _reset_registry() -> None:
     """Reset the registry to built-in types only.
 
     Intended for tests that register custom types and need a clean slate
-    without leaking state into other tests.
+    without leaking state into other tests.  Both built-in registrations run
+    again — ``decision`` is registered from its own function, so restoring only
+    the first batch left every later test in the process without it.
     """
     MODEL_TYPE_REGISTRY.clear()
     _register_builtins()
+    _register_decision()
 
 
 # ---------------------------------------------------------------------------

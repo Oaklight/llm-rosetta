@@ -7,6 +7,7 @@ Mirrors :class:`~llm_rosetta.converters.rerank.pipeline.RerankConversionPipeline
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 # Import converter submodules directly (not through __init__) to avoid
@@ -22,6 +23,7 @@ __all__ = [
     "EMBEDDING_FORMATS",
     "EmbeddingConversionPipeline",
     "get_embedding_converter",
+    "response_usage",
 ]
 
 _EMBEDDING_CONVERTERS: dict[str, type[BaseEmbeddingConverter]] = {
@@ -47,6 +49,31 @@ def get_embedding_converter(format_name: str) -> BaseEmbeddingConverter:
             f"Available: {', '.join(sorted(EMBEDDING_FORMATS))}"
         )
     return cls()
+
+
+def response_usage(
+    format_name: str, response_body: Mapping[str, Any] | None
+) -> dict[str, Any]:
+    """The IR usage of an upstream response, read by *format_name*'s converter.
+
+    The gateway's embedding handler never holds the IR — the conversion
+    pipeline goes from the provider's format back to the source format in one
+    step, and a same-format request skips conversion altogether — so the
+    ledger's figures are read here, by the converter that would have produced
+    them.
+
+    A body the converter cannot read, or none at all, reports no usage rather
+    than raising: a metering gap is not worth failing a response the caller has
+    already been given.
+    """
+    if not response_body:
+        return {}
+    try:
+        converter = get_embedding_converter(format_name)
+        ir = converter.response_from_provider(dict(response_body))
+    except Exception:
+        return {}
+    return dict(ir.get("usage") or {})
 
 
 class EmbeddingConversionPipeline:

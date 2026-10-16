@@ -19,6 +19,12 @@ has to know that rule.
 
 A caller with no credentials at all — a library user — passes no subjects and
 gets every row in the remainder, which is still a correct answer.
+
+The same rows are also cut by **model type** — chat, embedding, rerank,
+decision — so a consumer can ask what an embedding call cost without running a
+second query.  That cut is orthogonal to the classes above: a row belongs to
+one class and to one model type, and :meth:`UsageReport.total` sums every class
+whichever type it came from.
 """
 
 from __future__ import annotations
@@ -27,7 +33,7 @@ from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-from .normalize import LEDGER_COLUMNS
+from .normalize import DEFAULT_MODEL_TYPE, LEDGER_COLUMNS
 
 __all__ = [
     "USAGE_WINDOW_LABELS",
@@ -133,6 +139,10 @@ class UsageReport:
     internal: Windows | None = None
     unattributed: Windows | None = None
     unattributed_by_label: Mapping[str, Windows] = field(default_factory=dict)
+    #: Model type -> its windows.  Only the types that saw traffic appear, as
+    #: for the classes above, so "no embeddings at all" reads as an absent key
+    #: rather than as a zero that looks measured.
+    by_model_type: Mapping[str, Windows] = field(default_factory=dict)
 
     @classmethod
     def build(
@@ -149,6 +159,8 @@ class UsageReport:
         Args:
             groups: Ledger rows already summed per ``(subject, label)``, each
                 ``{"bucket": str | None, "label": str | None, "windows": {...}}``.
+                A group may also carry ``"model_type"``; one without it was
+                written before the column existed and counts as chat.
             subjects: What the caller wants attributed, each either a
                 ``(subject, label)`` pair or a subject name on its own — a
                 name is its own label.  The gateway passes pairs, since a
@@ -178,11 +190,19 @@ class UsageReport:
         internal_seen = False
         unattributed = zero_windows(windows)
         by_label: dict[str, Windows] = {}
+        by_model_type: dict[str, Windows] = {}
 
         for group in groups:
             bucket = group.get("bucket")
             label = group.get("label")
             counts = group.get("windows") or {}
+            add_windows(
+                by_model_type.setdefault(
+                    str(group.get("model_type") or DEFAULT_MODEL_TYPE),
+                    zero_windows(windows),
+                ),
+                counts,
+            )
             if bucket is not None and bucket in live:
                 add_windows(by_bucket.setdefault(bucket, zero_windows(windows)), counts)
             elif internal_subject is not None and (
@@ -230,12 +250,18 @@ class UsageReport:
                 else None
             ),
             unattributed_by_label=by_label,
+            by_model_type=by_model_type,
         )
 
     def attributed(self, subject: str, window: str) -> dict[str, int]:
         """One subject's counters for one window."""
         usage = self.by_subject.get(subject)
         return usage.window(window) if usage is not None else zero_windows()[window]
+
+    def for_model_type(self, model_type: str, window: str) -> dict[str, int]:
+        """One model type's counters for one window, zero-filled when it saw none."""
+        windows = self.by_model_type.get(model_type)
+        return (windows or zero_windows())[window]
 
     def window_parts(self, window: str) -> Iterator[Mapping[str, int]]:
         """Every class's counters for one window, one dict per class."""

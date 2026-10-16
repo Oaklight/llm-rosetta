@@ -14,10 +14,13 @@ rather than two spellings of one.
     ledger.report().total("24h")
 
 A record carries a **subject** when the caller wants to account by one and
-carries none when it does not; a ledger with no subjects still produces a
-correct report, with every recorded token in the remainder.  Windows are
-measured against the clock as the report is built, so a record ages out of the
-narrow ones on its own.
+carries none when it does not, and a **model type** — ``llm`` unless the caller
+says otherwise — which picks the family's field names when the usage is
+normalized (a rerank payload's ``cached_tokens`` is the cache-read column, the
+decision IR's ``input_tokens`` is the input column).  A ledger with no subjects
+still produces a correct report, with every recorded token in the remainder.
+Windows are measured against the clock as the report is built, so a record ages
+out of the narrow ones on its own.
 
 Two defaults are worth knowing before relying on them.
 :meth:`UsageLedger.report` attributes **every subject this ledger has
@@ -104,7 +107,7 @@ class UsageLedger:
         Returns:
             The record, or ``None`` when *usage* named no token count.
         """
-        columns = usage_columns(usage)
+        columns = usage_columns(usage, model_type)
         if not columns:
             if warnings is not None and usage:
                 keys = ", ".join(sorted(str(key) for key in usage)) or "none"
@@ -152,21 +155,24 @@ class UsageLedger:
         return list(seen.items())
 
     def groups(self) -> list[dict[str, Any]]:
-        """The records summed per ``(subject, label)`` and window.
+        """The records summed per ``(subject, label, model type)`` and window.
 
         This is the seam a report is built on: the shape the stored ledger's
         reader returns, so one report serves both.  The key names are the
-        stored ledger's, not this class's.
+        stored ledger's, not this class's, and the model type is one of the
+        aggregation keys for the same reason it is there — a caller that wants
+        "how much was embedding" should not have to re-aggregate.
         """
         now = self._clock()
         widest = now - USAGE_WINDOWS[-1][1] * 3600
-        aggregated: dict[tuple[str | None, str | None], dict[str, dict[str, int]]] = {}
+        key_type = tuple[str | None, str | None, str]
+        aggregated: dict[key_type, dict[str, dict[str, int]]] = {}
         for record in self._records:
             # A subject with no traffic in the widest window is absent, the way
             # the stored reader leaves it out.
             if record.timestamp < widest:
                 continue
-            key = (record.subject, record.label)
+            key = (record.subject, record.label, record.model_type)
             windows = aggregated.get(key)
             if windows is None:
                 windows = zero_windows()
@@ -182,8 +188,13 @@ class UsageLedger:
                         slot[column] += value
 
         return [
-            {"bucket": subject, "label": label, "windows": windows}
-            for (subject, label), windows in aggregated.items()
+            {
+                "bucket": subject,
+                "label": label,
+                "model_type": model_type,
+                "windows": windows,
+            }
+            for (subject, label, model_type), windows in aggregated.items()
         ]
 
     def report(

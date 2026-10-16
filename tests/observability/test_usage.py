@@ -31,6 +31,11 @@ from llm_rosetta.observability.usage import (
     token_total,
     usage_columns,
 )
+from llm_rosetta.observability.usage.normalize import (
+    DEFAULT_MODEL_TYPE,
+    MODEL_TYPES,
+    MODEL_TYPE_FIELDS,
+)
 from llm_rosetta.observability.usage.report import NO_SUBJECT_LABEL
 
 LEDGER = ("input_tokens", "output_tokens", "total_tokens")
@@ -49,8 +54,13 @@ def _windows(**counters) -> dict[str, dict[str, int]]:
     return dict.fromkeys(USAGE_WINDOW_LABELS, dict(window))
 
 
-def _group(bucket, label, **counters) -> dict:
-    return {"bucket": bucket, "label": label, "windows": _windows(**counters)}
+def _group(bucket, label, model_type=DEFAULT_MODEL_TYPE, **counters) -> dict:
+    return {
+        "bucket": bucket,
+        "label": label,
+        "model_type": model_type,
+        "windows": _windows(**counters),
+    }
 
 
 class TestTokenTotal:
@@ -157,6 +167,107 @@ class TestUsageColumns:
     def test_no_usage_is_no_columns(self):
         assert usage_columns(None) == {}
         assert usage_columns({}) == {}
+
+
+class TestEachModelTypeNormalizesFromItsOwnIR:
+    """One field map per family, read from the IR type that family declares.
+
+    Chat asks the provider for ``prompt_tokens`` and ``completion_tokens``; the
+    decision IR already reports ``input_tokens``; embedding and rerank have no
+    output side at all.  A map that used chat's names for every family would
+    read zero out of three of them, and do it silently.
+    """
+
+    def test_chat_is_unchanged(self):
+        assert usage_columns(
+            {"prompt_tokens": 40, "completion_tokens": 5, "total_tokens": 45}
+        ) == {"input_tokens": 40, "output_tokens": 5, "total_tokens": 45}
+
+    def test_embedding(self):
+        """``EmbeddingUsageInfo``: ``total_tokens``, ``prompt_tokens``."""
+        assert usage_columns({"prompt_tokens": 5, "total_tokens": 5}, "embedding") == {
+            "input_tokens": 5,
+            "total_tokens": 5,
+        }
+        # Voyage reports only the total; the input column stays absent.
+        assert usage_columns({"total_tokens": 32}, "embedding") == {"total_tokens": 32}
+
+    def test_rerank(self):
+        """``RerankUsageInfo``: ``total_tokens``, ``prompt_tokens``, ``cached_tokens``."""
+        assert usage_columns(
+            {"prompt_tokens": 12, "total_tokens": 12, "cached_tokens": 4}, "rerank"
+        ) == {"input_tokens": 12, "total_tokens": 12, "cache_read_tokens": 4}
+
+    def test_decision(self):
+        """``DecisionUsageInfo``: ``input_tokens`` and ``output_tokens`` only."""
+        assert usage_columns({"input_tokens": 10, "output_tokens": 5}, "decision") == {
+            "input_tokens": 10,
+            "output_tokens": 5,
+            "total_tokens": 15,
+        }
+
+    def test_token_total_reads_the_familys_own_fields(self):
+        assert token_total({"prompt_tokens": 10, "completion_tokens": 5}) == 15
+        assert token_total({"prompt_tokens": 10}, "embedding") == 10
+        assert token_total({"prompt_tokens": 7}, "rerank") == 7
+        assert token_total({"input_tokens": 10, "output_tokens": 5}, "decision") == 15
+
+    def test_the_canonical_rule_is_the_same_for_every_family(self):
+        """The provider's own total wins wherever the family declares one."""
+        assert token_total({"prompt_tokens": 4, "total_tokens": 9}, "embedding") == 9
+        assert (
+            token_total(
+                {"prompt_tokens": 4, "cached_tokens": 2, "total_tokens": 9}, "rerank"
+            )
+            == 9
+        )
+        # The decision IR declares no total, so the additive rule always runs.
+        assert token_total({"input_tokens": 4, "output_tokens": 1}, "decision") == 5
+
+    def test_a_family_that_reports_nothing_totals_nothing(self):
+        assert token_total({"model": "text-embedding-3"}, "embedding") is None
+        assert usage_columns({"model": "text-embedding-3"}, "embedding") == {}
+
+    def test_an_unknown_model_type_is_refused_not_guessed(self):
+        """A writer's typo must not quietly record chat's field names."""
+        with pytest.raises(KeyError):
+            usage_columns({"prompt_tokens": 1}, "familly")
+        with pytest.raises(KeyError):
+            token_total({"prompt_tokens": 1}, "familly")
+
+
+class TestTheModelTypesAreTheRegistrys:
+    """The column's values are the gateway registry's canonical names.
+
+    ``gateway/model_types.py`` owns the vocabulary and this package may not
+    import it, so the names are restated in ``normalize`` and pinned here —
+    both as literals, which say what the vocabulary is, and against the live
+    registry, which fails on a rename on either side.
+    """
+
+    def test_the_canonical_names(self):
+        assert MODEL_TYPES == ("llm", "embedding", "rerank", "decision")
+        assert DEFAULT_MODEL_TYPE == "llm"
+
+    def test_the_registry_registers_exactly_these(self):
+        """A rename on either side must break a test, not a report."""
+        from llm_rosetta.gateway.model_types import MODEL_TYPE_REGISTRY
+
+        assert set(MODEL_TYPE_REGISTRY) == set(MODEL_TYPES)
+        # The default is a registered name too, or every row without one would
+        # be written with a type no descriptor answers to.
+        assert DEFAULT_MODEL_TYPE in MODEL_TYPE_REGISTRY
+
+    def test_every_type_declares_a_field_map(self):
+        assert set(MODEL_TYPE_FIELDS) == set(MODEL_TYPES)
+        for model_type, fields in MODEL_TYPE_FIELDS.items():
+            # A family with no input side could not report usage at all.
+            assert "input_tokens" in fields, model_type
+
+    def test_a_maps_columns_are_ledger_columns(self):
+        for fields in MODEL_TYPE_FIELDS.values():
+            assert set(fields) <= set(observability.LEDGER_COLUMNS)
+            assert all(field for field in fields.values())
 
 
 class TestSemantics:
@@ -364,12 +475,50 @@ class TestUsageReport:
         assert report.total("30d")["total_tokens"] == 10
 
 
+class TestTheReportBreaksDownByModelType:
+    """The second cut over the same rows: what kind of call spent the tokens."""
+
+    def test_each_type_is_reported_on_its_own(self):
+        report = UsageReport.build(
+            groups=[
+                _group("b1", "k", model_type="llm", total_tokens=100),
+                _group("b1", "k", model_type="embedding", total_tokens=10),
+                _group("b1", "k", model_type="rerank", total_tokens=5),
+                _group("b1", "k", model_type="decision", total_tokens=1),
+            ],
+            subjects=[("b1", "k")],
+        )
+        assert set(report.by_model_type) == set(MODEL_TYPES)
+        assert report.for_model_type("embedding", "24h")["total_tokens"] == 10
+        # The cut is orthogonal to the classes: the subject's own total is every
+        # type summed, and so is the report's.
+        assert report.attributed("b1", "24h")["total_tokens"] == 116
+        assert report.total("24h")["total_tokens"] == 116
+        assert report.total("24h")["request_count"] == 4
+
+    def test_a_type_with_no_traffic_is_absent_not_a_measured_zero(self):
+        report = UsageReport.build(groups=[_group(None, None, total_tokens=5)])
+        assert set(report.by_model_type) == {"llm"}
+        assert report.for_model_type("embedding", "24h")["total_tokens"] == 0
+
+    def test_a_group_that_names_no_type_counts_as_chat(self):
+        """A library user's groups predate the column, or never had one."""
+        report = UsageReport.build(
+            groups=[
+                {"bucket": None, "label": None, "windows": _windows(total_tokens=3)}
+            ]
+        )
+        assert set(report.by_model_type) == {DEFAULT_MODEL_TYPE}
+        assert report.total("24h")["total_tokens"] == 3
+
+
 class TestTheReportReconcilesWithTheLedger:
     """The invariant, over generated ledgers rather than picked fixtures.
 
     The dashboard sums the ledger's own column; the panel sums the report's
     classes.  They agree only if the report accounts for *every* row, which is
-    what the remainder class is for.
+    what the remainder class is for — and that has to hold with every model
+    type in the ledger, not just chat.
     """
 
     @staticmethod
@@ -395,12 +544,21 @@ class TestTheReportReconcilesWithTheLedger:
                 _group(
                     bucket,
                     label,
+                    model_type=rng.choice(MODEL_TYPES),
                     input_tokens=total // 2,
                     output_tokens=total - total // 2,
                     total_tokens=total,
                 )
             )
         return groups, subjects
+
+    def test_the_generator_produces_every_model_type(self):
+        """All four families are present, so the property actually exercises them."""
+        seen: set[str] = set()
+        for seed in range(25):
+            groups, _subjects = self._random_ledger(random.Random(seed))
+            seen |= {group["model_type"] for group in groups}
+        assert seen == set(MODEL_TYPES)
 
     @pytest.mark.parametrize("seed", range(25))
     async def test_report_total_equals_the_ledger_sum(self, tmp_path, seed):
@@ -422,6 +580,7 @@ class TestTheReportReconcilesWithTheLedger:
                         "duration_ms": 1.0,
                         "api_key_bucket": group["bucket"],
                         "api_key_label": group["label"],
+                        "model_type": group["model_type"],
                         "input_tokens": group["windows"]["24h"]["input_tokens"],
                         "output_tokens": group["windows"]["24h"]["output_tokens"],
                         "total_tokens": group["windows"]["24h"]["total_tokens"],
@@ -429,8 +588,9 @@ class TestTheReportReconcilesWithTheLedger:
                     for i, group in enumerate(groups)
                 ]
             )
+            read_back = (await pm.query_usage_groups())["groups"]
             report = UsageReport.build(
-                groups=(await pm.query_usage_groups())["groups"],
+                groups=read_back,
                 subjects=subjects,
                 internal_subject="internal",
                 internal_label="internal",
@@ -442,6 +602,9 @@ class TestTheReportReconcilesWithTheLedger:
         assert report.total("24h")["total_tokens"] == ledger["total_tokens_24h"]
         assert report.total("24h")["input_tokens"] == ledger["input_tokens_24h"]
         assert report.total("24h")["output_tokens"] == ledger["output_tokens_24h"]
+        # And the read-back rows kept their type, so the breakdown is the
+        # ledger's own split rather than a merge that happens to sum right.
+        assert set(report.by_model_type) == {g["model_type"] for g in read_back}
 
     @pytest.mark.parametrize("seed", range(25))
     def test_every_row_lands_in_exactly_one_class(self, seed):

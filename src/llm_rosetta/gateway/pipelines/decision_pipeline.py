@@ -4,10 +4,12 @@ from llm_rosetta.converters.decision.pipeline import (  # noqa: F401
     DECISION_FORMATS,
     DecisionConversionPipeline,
     get_decision_converter,
+    response_usage,
 )
 
 __all__ = [
     "DECISION_FORMATS",
     "DecisionConversionPipeline",
     "get_decision_converter",
+    "response_usage",
 ]

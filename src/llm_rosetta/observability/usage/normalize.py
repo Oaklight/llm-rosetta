@@ -3,6 +3,16 @@
 Every usage figure the project stores or shows is one of six columns.  This
 module is the only place that says what they are, which IR field each one comes
 from, and which single value counts as "the total".
+
+A column does not carry the same IR field name for every model type.  Chat asks
+the provider for ``prompt_tokens``; the decision IR reports ``input_tokens``
+already.  So the field map is declared per model type, and the four types are
+the registry's own vocabulary (``gateway/model_types.py``); this package cannot
+import the registry, so the names are restated here and a test pins them
+together.
+
+A count is an integer, or a string that spells one.  Anything else refuses the
+usage whole rather than yielding a total that is quietly short.
 """
 
 from __future__ import annotations
@@ -10,7 +20,15 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-__all__ = ["IR_FIELDS", "LEDGER_COLUMNS", "token_total", "usage_columns"]
+__all__ = [
+    "DEFAULT_MODEL_TYPE",
+    "IR_FIELDS",
+    "LEDGER_COLUMNS",
+    "MODEL_TYPES",
+    "MODEL_TYPE_FIELDS",
+    "token_total",
+    "usage_columns",
+]
 
 #: The token columns of a ledger row, in display order.  ``total_tokens`` is the
 #: canonical total; the rest are a breakdown of it, not parts that add up to it
@@ -26,15 +44,48 @@ LEDGER_COLUMNS: tuple[str, ...] = (
     "reasoning_tokens",
 )
 
-#: Ledger column -> the IR usage field behind it.
-IR_FIELDS: Mapping[str, str] = {
-    "input_tokens": "prompt_tokens",
-    "output_tokens": "completion_tokens",
-    "total_tokens": "total_tokens",
-    "cache_read_tokens": "cache_read_tokens",
-    "cache_creation_tokens": "cache_creation_tokens",
-    "reasoning_tokens": "reasoning_tokens",
+#: What a ledger row is about when it does not say.  Rows written before the
+#: column existed were chat, and the column's own default is the same value.
+DEFAULT_MODEL_TYPE = "llm"
+
+#: The model types whose usage this module can normalize, matching the names
+#: ``gateway.model_types`` registers — ``llm``, ``embedding``, ``rerank``,
+#: ``decision``.  A column value outside this set is a writer's bug, not a
+#: usage shape to guess at.
+MODEL_TYPES: tuple[str, ...] = ("llm", "embedding", "rerank", "decision")
+
+#: Ledger column -> the IR usage field behind it, per model type.
+#:
+#: Only the fields a family's IR type actually declares are listed: the
+#: embedding and rerank IR types have no output side, and the decision IR type
+#: has neither cache counters nor a total.  A family that reports no total
+#: falls back to the additive rule below.
+MODEL_TYPE_FIELDS: Mapping[str, Mapping[str, str]] = {
+    "llm": {
+        "input_tokens": "prompt_tokens",
+        "output_tokens": "completion_tokens",
+        "total_tokens": "total_tokens",
+        "cache_read_tokens": "cache_read_tokens",
+        "cache_creation_tokens": "cache_creation_tokens",
+        "reasoning_tokens": "reasoning_tokens",
+    },
+    "embedding": {
+        "input_tokens": "prompt_tokens",
+        "total_tokens": "total_tokens",
+    },
+    "rerank": {
+        "input_tokens": "prompt_tokens",
+        "total_tokens": "total_tokens",
+        "cache_read_tokens": "cached_tokens",
+    },
+    "decision": {
+        "input_tokens": "input_tokens",
+        "output_tokens": "output_tokens",
+    },
 }
+
+#: The chat mapping, under the name it had when chat was the only family.
+IR_FIELDS: Mapping[str, str] = MODEL_TYPE_FIELDS[DEFAULT_MODEL_TYPE]
 
 #: The columns the additive rule sums, in this order.  Reasoning is absent on
 #: purpose: it rides inside the output for every provider that reports it.
@@ -106,17 +157,20 @@ def _refused(usage: Mapping[str, Any], fields: Mapping[str, str]) -> bool:
     return False
 
 
-def token_total(usage: Mapping[str, Any] | None) -> int | None:
-    """The canonical token total of an IR usage dict.
+def token_total(
+    usage: Mapping[str, Any] | None, model_type: str = DEFAULT_MODEL_TYPE
+) -> int | None:
+    """The canonical token total of one model type's IR usage dict.
 
-    The provider-reported ``total_tokens`` wins whenever the provider sends
-    one — including one it sent as a string, which is the shape that would
+    The provider-reported ``total_tokens`` wins whenever the provider sends one
+    — including one it sent as a string, which is the shape that would
     otherwise be recomputed *with* the cache counters on top of a figure the
     provider had already counted them into.  A total the provider stands behind
     is not ours to recompute, and for the OpenAI-shaped standards it sits below
     the additive sum on purpose (their cached counters are part of the prompt
     count).  Only when no total is sent — the Messages API never sends one — is
-    it computed additively: input + output + cache read + cache write.
+    it computed additively: input + output + cache read + cache write, each read
+    through the field the model type declares for that role.
 
     :meth:`~llm_rosetta.observability.persistence.PersistenceManager.backfill_total_tokens`
     applies the same rule to rows an older writer left blank or derived too low,
@@ -130,22 +184,35 @@ def token_total(usage: Mapping[str, Any] | None) -> int | None:
     summing the countable fields of a payload that also carries an uncountable
     one would report a total that is quietly short.
 
+    Args:
+        usage: The IR usage dict of one response.
+        model_type: The family that produced *usage*; picks the field names.
+            Defaults to chat, which is what a row written before the column
+            existed means.
+
     Returns:
         The total, or ``None`` when *usage* names no usable token count.
+
+    Raises:
+        KeyError: If *model_type* is not one of :data:`MODEL_TYPES`.
     """
-    if not usage or _refused(usage, IR_FIELDS):
+    fields = MODEL_TYPE_FIELDS[model_type]
+    if not usage or _refused(usage, fields):
         return None
-    total = usage.get("total_tokens")
+    total_field = fields.get("total_tokens")
+    total = usage.get(total_field) if total_field else None
     if total is not None:
         return _count(total)
-    counts = _additive_counts(usage, IR_FIELDS)
+    counts = _additive_counts(usage, fields)
     if not counts:
         return None
     return sum(counts)
 
 
-def usage_columns(usage: Mapping[str, Any] | None) -> dict[str, int]:
-    """The ledger columns of an IR usage dict, the canonical total included.
+def usage_columns(
+    usage: Mapping[str, Any] | None, model_type: str = DEFAULT_MODEL_TYPE
+) -> dict[str, int]:
+    """The ledger columns of one model type's IR usage dict.
 
     A column the provider did not report is left out rather than zeroed, so a
     caller can tell "no cache in play" from "cache reported as zero".  A
@@ -153,17 +220,25 @@ def usage_columns(usage: Mapping[str, Any] | None) -> dict[str, int]:
     a row cannot record a breakdown its own total was not computed from; a
     usage the total refuses is refused entirely, and reports no columns.
 
+    Args:
+        usage: The IR usage dict of one response.
+        model_type: The family that produced *usage*; picks the field names.
+
     Returns:
         A subset of :data:`LEDGER_COLUMNS`, suitable for splatting into
         ``RequestLogEntry.create`` or ``MetricsCollector.record_request``.
+
+    Raises:
+        KeyError: If *model_type* is not one of :data:`MODEL_TYPES`.
     """
+    fields = MODEL_TYPE_FIELDS[model_type]
     if not usage:
         return {}
-    total = token_total(usage)
-    if total is None and _refused(usage, IR_FIELDS):
+    total = token_total(usage, model_type)
+    if total is None and _refused(usage, fields):
         return {}
     columns: dict[str, int] = {}
-    for column, field in IR_FIELDS.items():
+    for column, field in fields.items():
         count = _count(usage.get(field))
         if count is not None:
             columns[column] = count

@@ -28,7 +28,7 @@ from typing import Any
 from llm_rosetta._vendor import aiosqlite
 
 from .retention import RetentionPolicy, RetentionTracker
-from .usage.normalize import LEDGER_COLUMNS
+from .usage.normalize import DEFAULT_MODEL_TYPE, LEDGER_COLUMNS
 from .usage.report import USAGE_WINDOWS
 from .usage.semantics import ADDITIVE_CACHE_STANDARDS
 
@@ -346,6 +346,16 @@ class PersistenceManager:
                 "ON request_log(api_key_label)",
             ],
         ),
+        (
+            6,
+            "add request_log.model_type for the non-chat model types",
+            [
+                # The default is what keeps every row that predates the column
+                # meaning chat, and SQLite fills existing rows from it on read,
+                # so the hottest table is not rewritten to add it.
+                "ALTER TABLE request_log ADD COLUMN model_type TEXT DEFAULT 'llm'",
+            ],
+        ),
     ]
 
     async def _run_migrations(self) -> None:
@@ -510,6 +520,7 @@ class PersistenceManager:
         "cache_creation_tokens",
         "reasoning_tokens",
         "api_key_bucket",
+        "model_type",
     ]
 
     async def insert_log_entries(self, entries: list[dict[str, Any]]) -> None:
@@ -523,8 +534,8 @@ class PersistenceManager:
             "target_provider_name, client_ip, profile, "
             "input_tokens, output_tokens, total_tokens, "
             "cache_read_tokens, cache_creation_tokens, reasoning_tokens, "
-            "api_key_bucket) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "api_key_bucket, model_type) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 (
                     e["id"],
@@ -547,6 +558,11 @@ class PersistenceManager:
                     e.get("cache_creation_tokens"),
                     e.get("reasoning_tokens"),
                     e.get("api_key_bucket"),
+                    # Coerced rather than left to the column default: a NULL
+                    # would fall out of every model-type breakdown, and a row
+                    # that no breakdown counts is a row the report cannot
+                    # reconcile.
+                    e.get("model_type") or DEFAULT_MODEL_TYPE,
                 )
                 for e in entries
             ],
@@ -1878,62 +1894,87 @@ class PersistenceManager:
         *,
         days: int = 7,
         api_key_label: str | None = None,
+        model_type: str | None = None,
     ) -> dict[str, Any]:
-        """Aggregate token usage grouped by day.
+        """Aggregate token usage grouped by day, split by model type.
+
+        A day carries the counters over every type it saw plus the same
+        counters for each type, so the panel shows the breakdown without a
+        second query.  Rows are grouped by ``(date, model_type)`` and folded
+        once each: a day's scalars are summed from the raw rows rather than
+        from its own split, so the two readings are independently right.
 
         Args:
             days: Number of days to look back.
             api_key_label: Optional filter by API key label.
+            model_type: Optional filter by model type.
 
         Returns:
-            Dict with ``days`` (list of per-day dicts) and ``totals``.
+            ``{"days": [...], "totals": {...}}``.  A day holds ``day``,
+            ``request_count``, the token columns and ``by_model_type`` — the
+            split holding only the types that day saw.  ``totals`` holds the
+            counters summed over every day and that same split summed over
+            every day.  Without a filter the counters cover every type, and
+            with one they cover the filtered type.
         """
         from datetime import datetime, timedelta, timezone
 
         cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+        sums = ", ".join(f"COALESCE(SUM({col}), 0)" for col in LEDGER_COLUMNS)
         sql = (
             "SELECT date(timestamp) as day, "
+            "model_type, "
             "COUNT(*) as request_count, "
-            "COALESCE(SUM(input_tokens), 0), "
-            "COALESCE(SUM(output_tokens), 0), "
-            "COALESCE(SUM(total_tokens), 0), "
-            "COALESCE(SUM(cache_read_tokens), 0), "
-            "COALESCE(SUM(cache_creation_tokens), 0), "
-            "COALESCE(SUM(reasoning_tokens), 0) "
+            f"{sums} "
             "FROM request_log WHERE timestamp >= ?"
         )
         params: list[Any] = [cutoff]
         if api_key_label:
             sql += " AND api_key_label = ?"
             params.append(api_key_label)
-        sql += " GROUP BY date(timestamp) ORDER BY day DESC"
+        if model_type:
+            sql += " AND model_type = ?"
+            params.append(model_type)
+        sql += " GROUP BY date(timestamp), model_type ORDER BY day DESC"
 
         rows = await self._conn.execute_fetchall(sql, params)
-        day_list = []
-        totals = {
-            "request_count": 0,
-            "input_tokens": 0,
-            "output_tokens": 0,
-            "total_tokens": 0,
-            "cache_read_tokens": 0,
-            "cache_creation_tokens": 0,
-            "reasoning_tokens": 0,
+        # ``request_count`` first, then the token columns in the order the
+        # select list was built from, which is the order they are read in.
+        counters = ("request_count", *LEDGER_COLUMNS)
+        # The per-type splits keep their own typed dicts: a day's entry mixes
+        # them with its scalar counters, and a reader that has to guess which
+        # is which is a reader that can be wrong.
+        type_totals: dict[str, dict[str, int]] = {}
+        totals: dict[str, Any] = {
+            "by_model_type": type_totals,
+            **dict.fromkeys(counters, 0),
         }
+        # Insertion order is the row order, and the rows arrive newest first,
+        # so the days stay newest first.
+        days_by_date: dict[str, dict[str, Any]] = {}
         for r in rows:
-            entry = {
-                "day": r[0],
-                "request_count": r[1],
-                "input_tokens": r[2],
-                "output_tokens": r[3],
-                "total_tokens": r[4],
-                "cache_read_tokens": r[5],
-                "cache_creation_tokens": r[6],
-                "reasoning_tokens": r[7],
-            }
-            day_list.append(entry)
-            for k in totals:
-                totals[k] += entry[k]
-        return {"days": day_list, "totals": totals}
+            day, row_type = r[0], r[1] or DEFAULT_MODEL_TYPE
+            split = dict(zip(counters, r[2:]))
+            entry: dict[str, Any] | None = days_by_date.get(day)
+            if entry is None:
+                entry = {
+                    "day": day,
+                    "by_model_type": {},
+                    **dict.fromkeys(counters, 0),
+                }
+                days_by_date[day] = entry
+            day_split: dict[str, dict[str, int]] = entry["by_model_type"]
+            for col in counters:
+                entry[col] += split[col]
+                totals[col] += split[col]
+            for bucket in (day_split, type_totals):
+                counters_of_type = bucket.get(row_type)
+                if counters_of_type is None:
+                    counters_of_type = dict.fromkeys(counters, 0)
+                    bucket[row_type] = counters_of_type
+                for col in counters:
+                    counters_of_type[col] += split[col]
+        return {"days": list(days_by_date.values()), "totals": totals}
 
     async def query_rolling_24h_tokens(self) -> dict[str, int]:
         """Sum token usage over the last 24 hours.
@@ -1966,25 +2007,28 @@ class PersistenceManager:
         }
 
     async def query_usage_groups(self) -> dict[str, Any]:
-        """Aggregate token usage per credential bucket and label.
+        """Aggregate token usage per credential bucket, label and model type.
 
         Every window is relative to now (``now - hours``).  A single indexed
         range scan over the widest window feeds the conditional-aggregation
         sums, so the whole report costs one pass over the log.
 
-        Rows are grouped by ``(bucket, label)`` rather than by bucket alone.
-        The caller knows which buckets belong to a live credential and needs
-        the label split to account for the rest, so the split is done here
-        once and the classification is left to it.  Rows carrying no bucket —
+        Rows are grouped by ``(bucket, label, model_type)`` rather than by
+        bucket alone.  The caller knows which buckets belong to a live
+        credential and needs the label split to account for the rest, so the
+        split is done here once and the classification is left to it; the model
+        type is split for the same reason — a caller that wants "how much was
+        embedding" should not have to re-query.  Rows carrying no bucket —
         anonymous requests, and everything logged before the column existed —
         are reported under the ``None`` bucket instead of being dropped, so
         the report covers every request the dashboard counts.
 
         Returns:
             ``{"windows": [label, ...], "groups": [...]}``, each group being
-            ``{"bucket": str | None, "label": str | None, "windows": {...}}``
-            with each per-window dict holding ``request_count`` plus the token
-            totals.  Buckets with no traffic in the widest window are absent.
+            ``{"bucket": str | None, "label": str | None, "model_type": str,
+            "windows": {...}}`` with each per-window dict holding
+            ``request_count`` plus the token totals.  Buckets with no traffic
+            in the widest window are absent.
         """
         from datetime import datetime, timedelta, timezone
 
@@ -1994,7 +2038,7 @@ class PersistenceManager:
             for name, hours in USAGE_WINDOWS
         }
 
-        select_parts = ["api_key_bucket", "api_key_label"]
+        select_parts = ["api_key_bucket", "api_key_label", "model_type"]
         params: list[Any] = []
         for name, _hours in USAGE_WINDOWS:
             select_parts.append("COUNT(CASE WHEN timestamp >= ? THEN 1 END)")
@@ -2009,24 +2053,31 @@ class PersistenceManager:
         rows = await self._conn.execute_fetchall(
             f"SELECT {', '.join(select_parts)} FROM request_log "
             "WHERE timestamp >= ? "
-            "GROUP BY api_key_bucket, api_key_label",
+            "GROUP BY api_key_bucket, api_key_label, model_type",
             params,
         )
 
         groups: list[dict[str, Any]] = []
-        # One COUNT plus the token columns per window; the two leading columns
-        # are the bucket and the label.
+        # One COUNT plus the token columns per window; the three leading columns
+        # are the bucket, the label and the model type.
         stride = 1 + len(LEDGER_COLUMNS)
         for row in rows:
             windows: dict[str, dict[str, int]] = {}
-            idx = 2
+            idx = 3
             for name, _hours in USAGE_WINDOWS:
                 window: dict[str, int] = {"request_count": row[idx]}
                 for offset, col in enumerate(LEDGER_COLUMNS, start=1):
                     window[col] = row[idx + offset]
                 windows[name] = window
                 idx += stride
-            groups.append({"bucket": row[0], "label": row[1], "windows": windows})
+            groups.append(
+                {
+                    "bucket": row[0],
+                    "label": row[1],
+                    "model_type": row[2] or DEFAULT_MODEL_TYPE,
+                    "windows": windows,
+                }
+            )
         return {
             "windows": [name for name, _hours in USAGE_WINDOWS],
             "groups": groups,

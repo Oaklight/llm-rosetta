@@ -560,6 +560,9 @@ class TestResetRegistry:
         assert get_model_type("llm") is not None
         assert get_model_type("embedding") is not None
         assert get_model_type("rerank") is not None
+        # Registered from its own function, so a reset that forgot it would
+        # strip the type from every later test in the process.
+        assert get_model_type("decision") is not None
 
 
 # ---------------------------------------------------------------------------
