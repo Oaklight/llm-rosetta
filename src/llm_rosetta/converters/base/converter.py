@@ -22,6 +22,11 @@ from ...types.ir.validation import (
 from .context import ConversionContext, StreamContext
 from .helpers import strip_internal_metadata
 from .helpers.citations import report_dropped_citation
+from .helpers.extensions import (
+    extension_loss_warning,
+    own_extensions,
+    unowned_extensions,
+)
 from .passthrough import merge_provider_output_items
 
 
@@ -146,12 +151,16 @@ class BaseConverter(ABC):
 
         Template method: creates a fallback ConversionContext, delegates to
         ``_do_request_to_provider``, strips the internal
-        ``_llm_rosetta_provider_metadata`` carrier so the body is wire-ready, and returns
-        ``(result, ctx.warnings)``.
+        ``_llm_rosetta_provider_metadata`` carrier so the body is wire-ready,
+        reports any provider-bound fields this format cannot express, and
+        returns ``(result, ctx.warnings)``.
         """
         ctx = context if context is not None else ConversionContext()
         result = self._do_request_to_provider(ir_request, context=ctx, **kwargs)
         strip_internal_metadata(result)
+        dropped = unowned_extensions(ir_request, self._CONVERTER_TAG)
+        if dropped:
+            ctx.warnings.append(extension_loss_warning(dropped, self._CONVERTER_TAG))
         return result, ctx.warnings
 
     def request_from_provider(
@@ -164,13 +173,15 @@ class BaseConverter(ABC):
         """Convert provider request to IRRequest.
 
         Template method: normalizes input, delegates to
-        ``_do_request_from_provider``, and validates the IR output.
+        ``_do_request_from_provider``, stamps the extensions it recorded as
+        this format's own, and validates the IR output.
         """
         provider_request = self._normalize(provider_request)
         ctx = context if context is not None else ConversionContext()
         ir_request = self._do_request_from_provider(
             provider_request, context=ctx, **kwargs
         )
+        own_extensions(ir_request, self._CONVERTER_TAG)
         return self._validate_ir_request(ir_request)
 
     def response_from_provider(

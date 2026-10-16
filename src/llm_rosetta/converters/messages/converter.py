@@ -229,7 +229,7 @@ class MessagesConverter(BaseConverter):
             result.update(cache_fields)
 
         # 11. Provider extensions (pass-through)
-        result.update(wire_extensions(ir_request))
+        result.update(wire_extensions(ir_request, self._CONVERTER_TAG))
 
         return result
 

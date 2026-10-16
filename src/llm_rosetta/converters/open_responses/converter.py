@@ -340,7 +340,7 @@ class OpenResponsesConverter(BaseConverter):
             # ``tool_choice`` by ``_apply_tool_config``) never leaks as a
             # top-level field.  A legacy top-level ``allowed_tools`` is a plain
             # key and still passes through.
-            result.update(wire_extensions(ir_request))
+            result.update(wire_extensions(ir_request, self._CONVERTER_TAG))
 
         return result
 
