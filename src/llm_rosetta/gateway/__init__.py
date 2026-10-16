@@ -9,10 +9,10 @@ Usage::
     python -m llm_rosetta.gateway --config config.jsonc
 
     # Programmatic usage
-    from llm_rosetta.gateway import create_app, GatewayConfig, GatewayExtensions, load_config
+    from llm_rosetta.gateway import create_app, GatewayExtensions, load_gateway_config
 
-    raw = load_config("config.jsonc")
-    app = create_app(GatewayConfig(raw))
+    config = load_gateway_config("config.jsonc")
+    app = create_app(config)
 
 Module map::
 
@@ -41,7 +41,14 @@ Module map::
 
 from .app import GatewayExtensions, create_app
 from .cli import main
-from .config import ConfigIO, GatewayConfig, JsoncConfigIO, discover_config, load_config
+from .config import (
+    ConfigIO,
+    GatewayConfig,
+    JsoncConfigIO,
+    discover_config,
+    load_config,
+    load_gateway_config,
+)
 from .proxy import ProviderMetadataStore
 from .shim_sources import (
     apply_shim_section,
@@ -61,6 +68,7 @@ __all__ = [
     "create_app",
     "discover_config",
     "load_config",
+    "load_gateway_config",
     "main",
     "resolve_source_config",
     "shims_signature",

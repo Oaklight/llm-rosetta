@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 
 
@@ -367,3 +368,81 @@ class TestConfigIOIntegration:
         with open(bak_path) as f:
             bak_data = json.load(f)
         assert "rerank_providers" in bak_data
+
+
+class TestTheVersionField:
+    """``config_version`` is this module's bookkeeping, not the operator's input.
+
+    The scaffold ``llm-rosetta-gateway init`` writes carries no such key, so a
+    document is never *asked* for one — which means a value we cannot read is
+    our problem to work around, never a reason to refuse the document.
+    """
+
+    def _catching(self, caplog):
+        """The gateway logger does not propagate, so it gets caplog's handler."""
+        gateway_logger = logging.getLogger("llm-rosetta-gateway")
+        gateway_logger.addHandler(caplog.handler)
+        return gateway_logger
+
+    def test_a_quoted_number_is_the_version_it_names(self):
+        """A template that renders ``"1"`` means v1, not "unreadable"."""
+        raw = {"config_version": "1", "providers": {}, "models": {}}
+        _raw, changed = migrate(raw)
+        assert changed is False
+        assert raw["config_version"] == "1", "and it is left as written"
+
+    def test_a_json_float_is_the_version_it_names(self):
+        raw = {"config_version": 1.0, "providers": {}, "models": {}}
+        assert migrate(raw)[1] is False
+
+    def test_an_unreadable_version_means_none_recorded(self, caplog):
+        """Refusing a document over our own field is nobody's business."""
+        raw = {"config_version": "one", "providers": {}, "models": {}}
+        gateway_logger = self._catching(caplog)
+        try:
+            _raw, changed = migrate(raw)
+        finally:
+            gateway_logger.removeHandler(caplog.handler)
+
+        assert changed is True, "the document is brought forward"
+        assert raw["config_version"] == CURRENT_VERSION
+        assert "not a version number" in caplog.text
+
+    def test_an_explicit_null_means_none_recorded(self):
+        raw = {"config_version": None, "providers": {}, "models": {}}
+        _raw, changed = migrate(raw)
+        assert changed is True
+        assert raw["config_version"] == CURRENT_VERSION
+
+    def test_a_boolean_is_not_a_version(self, caplog):
+        """``True`` is an ``int`` in Python, and it is not v1."""
+        raw = {"config_version": True, "providers": {}, "models": {}}
+        gateway_logger = self._catching(caplog)
+        try:
+            _raw, changed = migrate(raw)
+        finally:
+            gateway_logger.removeHandler(caplog.handler)
+
+        assert changed is True
+        assert raw["config_version"] == CURRENT_VERSION
+        assert "not a version number" in caplog.text
+
+    def test_a_newer_version_is_served_as_it_is(self, caplog):
+        """A document from a release ahead of this one is not ours to take apart."""
+        raw = {
+            "config_version": CURRENT_VERSION + 1,
+            "providers": {"x": {"api_key": "k", "base_url": "https://x"}},
+            "rerank_providers": {"jina": {"api_key": "k", "base_url": "https://j"}},
+        }
+        gateway_logger = self._catching(caplog)
+        try:
+            _raw, changed = migrate(raw)
+        finally:
+            gateway_logger.removeHandler(caplog.handler)
+
+        assert changed is False
+        assert raw["config_version"] == CURRENT_VERSION + 1, (
+            "stamping our own version on it would record work that did not happen"
+        )
+        assert "rerank_providers" in raw, "and its shape is left alone"
+        assert "newer than this release knows" in caplog.text
