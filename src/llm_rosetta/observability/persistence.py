@@ -22,11 +22,13 @@ import sqlite3
 import warnings
 from datetime import datetime, timedelta, timezone
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
+from functools import partial
 from pathlib import Path
 from typing import Any
 
 from llm_rosetta._vendor import aiosqlite
 
+from .maintenance import Policy, Registry, Step, StepContext
 from .retention import RetentionPolicy, RetentionTracker
 from .usage.normalize import DEFAULT_MODEL_TYPE, LEDGER_COLUMNS
 from .usage.report import USAGE_WINDOWS
@@ -137,6 +139,10 @@ class PersistenceManager:
         )
         self._wal_task: asyncio.Task[None] | None = None
         self.on_prune: Callable[[str, int], Awaitable[None]] | None = None
+        #: The migration registry that ran when this store was opened, and its
+        #: results — ``None`` until then, so a caller can tell "not opened yet"
+        #: from "opened and nothing needed doing".
+        self.maintenance: Registry | None = None
         self._data_dir.mkdir(parents=True, exist_ok=True)
 
         # Connection is opened by create() or _open(); asserted non-None
@@ -406,45 +412,33 @@ class PersistenceManager:
     ]
 
     async def _run_migrations(self) -> None:
-        """Apply pending versioned migrations."""
-        row = await self._conn.execute_fetchone(
-            "SELECT MAX(version) FROM schema_version"
+        """Apply pending versioned migrations, through the maintenance registry.
+
+        Every migration is a :class:`~llm_rosetta.observability.maintenance.Step`
+        under ``Policy.MANDATORY``: the SQL, the order and the
+        ``schema_version`` bookkeeping are what they were, and a step that fails
+        still raises out of :meth:`create`, which is what aborts a startup that
+        would otherwise serve from a store of unknown shape.
+
+        The registry stays on the manager (:attr:`maintenance`), so what the
+        open actually did is readable afterwards instead of only logged.
+        """
+        self.maintenance = self.migration_registry()
+        await self.maintenance.run(StepContext(persistence=self))
+
+    @classmethod
+    def migration_registry(cls) -> Registry:
+        """A fresh registry over this store's migration steps.
+
+        Fresh rather than shared: a registry keeps the results of its last run,
+        and those belong to one store — two managers, or a test and the app,
+        must not read each other's.
+        """
+        return Registry(
+            name="request_log",
+            steps=_migration_steps(),
+            policy=Policy.MANDATORY,
         )
-        current = row[0] if row and row[0] is not None else 0
-
-        # Bootstrap: detect columns already added by old _migrate_add_columns.
-        # Check for the last column added by v1 (reasoning_tokens) to confirm
-        # the old migration fully completed.
-        if current == 0:
-            cursor = await self._conn.execute("PRAGMA table_info(request_log)")
-            columns = {r[1] for r in await cursor.fetchall()}
-            if "reasoning_tokens" in columns:
-                await self._conn.execute(
-                    "INSERT OR IGNORE INTO schema_version (version, applied_at) "
-                    "VALUES (?, ?)",
-                    (1, datetime.now(timezone.utc).isoformat()),
-                )
-                await self._conn.commit()
-                current = 1
-
-        for version, description, statements in self._MIGRATIONS:
-            if version <= current:
-                continue
-            logger.info("Applying migration v%d: %s", version, description)
-            for sql in statements:
-                try:
-                    await self._conn.execute(sql)
-                except Exception as exc:
-                    if "duplicate column" in str(exc).lower():
-                        continue
-                    raise
-
-            await self._conn.execute(
-                "INSERT INTO schema_version (version, applied_at) VALUES (?, ?)",
-                (version, datetime.now(timezone.utc).isoformat()),
-            )
-            await self._conn.commit()
-            logger.info("Migration v%d applied", version)
 
     async def schema_version(self) -> int:
         """Return the current schema version number, 0 when it cannot be read."""
@@ -2343,6 +2337,119 @@ class PersistenceManager:
 # ------------------------------------------------------------------
 # JSONL readers (used for legacy migration only)
 # ------------------------------------------------------------------
+
+
+# ----------------------------------------------------------------------
+# The request-log migrations, as maintenance steps
+# ----------------------------------------------------------------------
+
+
+def _migration_steps() -> list[Step]:
+    """This store's versioned migrations, one step each, in version order.
+
+    The SQL is not restated here: ``PersistenceManager._MIGRATIONS`` stays the
+    table and a step is what wraps one of its rows, so the two cannot drift.
+    The first step is not in that table — a store written before the registry
+    existed carries v1's columns and no version row, and adopting it is a step
+    too (:func:`_adopt_pre_registry_schema`).
+    """
+    steps = [
+        Step(
+            name="request_log.adopt_pre_registry_schema",
+            description=(
+                "record v1 for a store whose columns predate the version table"
+            ),
+            run=_adopt_pre_registry_schema,
+        )
+    ]
+    steps.extend(
+        Step(
+            name=f"request_log.v{version}",
+            description=description,
+            run=partial(
+                _apply_migration,
+                version=version,
+                description=description,
+                statements=statements,
+            ),
+        )
+        for version, description, statements in PersistenceManager._MIGRATIONS
+    )
+    return steps
+
+
+async def _recorded_version(conn: Any) -> int:
+    """The version the store has recorded, 0 when it has recorded none."""
+    row = await conn.execute_fetchone("SELECT MAX(version) FROM schema_version")
+    return row[0] if row and row[0] is not None else 0
+
+
+async def _adopt_pre_registry_schema(context: StepContext) -> int:
+    """Record v1 for a database whose v1 columns were added before the registry.
+
+    The old ``_migrate_add_columns`` added the columns and recorded nothing, so
+    a database it touched looks like a store at version 0 with a version 1
+    schema — and every migration after it would then try to add columns that
+    are already there.  The presence of v1's last column is the evidence, and
+    this step is where that inference lives until a recorded step replaces it.
+
+    Returns 1 when the version was recorded, 0 when the store had already
+    recorded one or has no v1 columns to adopt.
+    """
+    conn = context.persistence._conn
+    if await _recorded_version(conn) != 0:
+        return 0
+    cursor = await conn.execute("PRAGMA table_info(request_log)")
+    columns = {row[1] for row in await cursor.fetchall()}
+    if "reasoning_tokens" not in columns:
+        return 0
+    await conn.execute(
+        "INSERT OR IGNORE INTO schema_version (version, applied_at) VALUES (?, ?)",
+        (1, datetime.now(timezone.utc).isoformat()),
+    )
+    await conn.commit()
+    logger.debug("Adopted a pre-registry store as schema version 1")
+    return 1
+
+
+async def _apply_migration(
+    context: StepContext,
+    *,
+    version: int,
+    description: str,
+    statements: Sequence[str],
+) -> int:
+    """Apply one versioned migration, and say what it took to do it.
+
+    ``changed`` counts the statements that ran and the version row that records
+    them; a statement skipped by the duplicate-column tolerance did not run and
+    is not counted, so a migration that only skips reports 1 — the row.  A
+    migration already recorded returns 0 without touching the store, which is
+    what makes the registry's second run a no-op.
+    """
+    conn = context.persistence._conn
+    if version <= await _recorded_version(conn):
+        return 0
+    logger.info("Applying migration v%d: %s", version, description)
+    executed = 0
+    for sql in statements:
+        try:
+            await conn.execute(sql)
+        except Exception as exc:
+            if "duplicate column" in str(exc).lower():
+                # A column a release added without recording the version: the
+                # schema is already what this migration wants, which is not the
+                # same as the migration having run.
+                continue
+            raise
+        executed += 1
+    await conn.execute(
+        "INSERT INTO schema_version (version, applied_at) VALUES (?, ?)",
+        (version, datetime.now(timezone.utc).isoformat()),
+    )
+    await conn.commit()
+    logger.info("Migration v%d applied", version)
+    return executed + 1
 
 
 def _read_jsonl(path: Path) -> list[dict[str, Any]]:

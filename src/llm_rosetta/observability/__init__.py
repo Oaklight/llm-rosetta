@@ -41,6 +41,7 @@ from .error_dump import (
     offload_images,
 )
 from .capture import CapturedRequest, CaptureState
+from .maintenance import Policy, Registry, Step, StepContext, StepResult
 from .metrics import MetricsCollector
 from .ops_log import (
     ALL_EVENT_TYPES,
@@ -138,12 +139,17 @@ __all__ = [
     "OpsLog",
     "OpsLogEntry",
     "PersistenceManager",
+    "Policy",
     "ProfilerState",
     "LEDGER_COLUMNS",
+    "Registry",
     "RequestLog",
     "RequestLogEntry",
     "RetentionPolicy",
     "RetentionTracker",
+    "Step",
+    "StepContext",
+    "StepResult",
     "USAGE_WINDOW_LABELS",
     "USAGE_WINDOWS",
     "UsageLedger",
