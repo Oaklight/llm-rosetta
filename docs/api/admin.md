@@ -692,6 +692,130 @@ POST /admin/api/metrics/rebuild
 
 ---
 
+## Maintenance
+
+The gateway repairs existing data at startup — after the socket is open, never
+before it — and these endpoints report what those repairs did and re-run one of
+them on demand.  Nothing here is needed for a normal deployment: the repairs run
+themselves at every start, and each one is idempotent, so running it again is
+always safe.
+
+### List the maintenance steps
+
+```
+GET /admin/api/maintenance
+```
+
+Every step this deployment runs, whether it has run, and what it did.
+
+**Response**
+
+```json
+{
+  "registries": [
+    {
+      "name": "deferred",
+      "policy": "deferred",
+      "steps": [
+        {
+          "name": "request_log.backfill_provider_names",
+          "description": "name the provider on rows written before the column existed",
+          "ran": true,
+          "ok": true,
+          "changed": 128,
+          "seconds": 0.041,
+          "error": null
+        },
+        {
+          "name": "request_log.backfill_total_tokens",
+          "description": "repair totals written while cache tokens were excluded",
+          "ran": true,
+          "ok": false,
+          "changed": 0,
+          "seconds": 0.002,
+          "error": "OperationalError: database is locked"
+        }
+      ]
+    }
+  ]
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `registries[].name` | `string` | The registry the steps belong to; `deferred` is the post-startup set. |
+| `registries[].policy` | `string` | `deferred` (a failure is recorded and survived), `mandatory` (a failure aborts startup) or `load_time`. |
+| `steps[].ran` | `bool` | Whether a result exists yet.  A step that has not run is listed with `ran: false` rather than omitted. |
+| `steps[].changed` | `int` | The step's own unit — rows repaired, usually.  `0` means "nothing left to do", which is also what a failed step reports: what it half-did is not a count. |
+| `steps[].error` | `string \| null` | Why it failed, when it did. |
+
+**Errors**: none beyond the usual auth.  A step that needs a store this
+deployment does not have (an API key backfill with no key store) is not listed.
+
+### Re-run one step
+
+```
+POST /admin/api/maintenance/<name>
+```
+
+Runs the named step and returns its result in the same shape as one entry of the
+list above.
+
+**Response**
+
+```json
+{
+  "name": "request_log.backfill_total_tokens",
+  "ok": true,
+  "changed": 42,
+  "seconds": 0.318,
+  "error": null
+}
+```
+
+A step that fails still answers `200`, with `ok: false` and the error: the
+request was to run the step, and "it failed, here is why" is the answer to it.
+The failure is also kept for the next reader of the list above.
+
+**Errors**: 404 (no maintenance step has that name).
+
+### The two older backfill routes
+
+These predate the surface above and are unchanged for callers — same method,
+same response — but they now run the same steps:
+
+| Route | Step it runs |
+|-------|--------------|
+| `POST /admin/api/keys/backfill-last-used` | `api_keys.backfill_last_used` |
+| `POST /admin/api/error-dumps/backfill-log-ids` | `error_dumps.backfill_log_ids` |
+
+Both answer `{"updated": <rows>}` and `400` when persistence is not configured.
+
+### In the readiness probe
+
+`GET /health/ready` carries a `maintenance` object beside its `status`, so a
+deployment can tell "the repairs are done" from "the startup task finished":
+
+```json
+{
+  "status": "ready",
+  "maintenance": {
+    "state": "partial",
+    "registry": "deferred",
+    "failed": ["request_log.backfill_total_tokens"],
+    "steps": [{"name": "request_log.backfill_provider_names", "ok": true, "changed": 128, "seconds": 0.041, "error": null}]
+  }
+}
+```
+
+`state` is `not_started` before the steps run, `running` while the task is in
+flight, `done` when every step succeeded, and `partial` when some failed.  A
+failed repair deliberately does **not** turn the probe into a `503`: these steps
+can be retried, and refusing traffic over one that failed is worse than the
+repair being late.
+
+---
+
 ## Profiling
 
 On-demand deep profiling powered by [pyinstrument](https://github.com/joerick/pyinstrument).

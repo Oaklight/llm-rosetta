@@ -585,7 +585,14 @@ The gateway exposes three health check endpoints:
 |----------|------------|-------------|
 | `/health` | Always 200 | Gateway status: uptime, request counts, errors in the last hour, and per-provider health |
 | `/health/live` | Always 200 | Kubernetes liveness probe — confirms the process is running |
-| `/health/ready` | 200 / 503 | Kubernetes readiness probe — 503 when any provider is degraded |
+| `/health/ready` | 200 / 503 | Kubernetes readiness probe — 503 while startup work is unfinished or any provider is degraded |
+
+`/health/ready` also reports what the gateway's post-startup repairs did, in a
+`maintenance` object: `state` is `not_started`, `running`, `done`, or `partial`
+with the failed step names.  A repair that failed does not make the probe answer
+503 — each one is safe to retry, and withholding traffic over it would turn a
+late repair into an outage.  See [the admin API
+reference](../api/admin.md#maintenance).
 
 Example `/health` response:
 
