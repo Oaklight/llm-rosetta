@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from llm_rosetta.gateway.proxy import _maybe_apply_affinity
+from llm_rosetta.gateway.proxy import _apply_request_stages
+from llm_rosetta.gateway.routing import SelectionContext
 from llm_rosetta.gateway.transport.http.transport import HttpTransport
 from llm_rosetta.gateway.transport.provider_info import ProviderInfo, openai_auth
 
@@ -20,6 +21,22 @@ def _pi(**kwargs) -> ProviderInfo:
 
 def _ir(text: str) -> dict:
     return {"messages": [{"role": "user", "content": text}]}
+
+
+def _apply(
+    pi: ProviderInfo,
+    ir: dict,
+    client_hash: str,
+    *,
+    key_affinity: bool = True,
+) -> ProviderInfo:
+    """Run the stage-2 decisions the way a proxy handler does."""
+    ctx = SelectionContext("m", "chat_completions")
+    ctx.with_client(client_hash or None)
+    ctx.with_key_affinity(key_affinity)
+    ctx.with_provider_info(pi)
+    ctx.with_ir_request(ir)
+    return _apply_request_stages(ctx)
 
 
 class TestSessionHeaders:
@@ -65,8 +82,8 @@ class TestSessionDerivation:
         pi = _pi(session_header="x-s")
         ir = _ir("hello")
 
-        first = _maybe_apply_affinity(pi, ir, "clienthash", True)
-        second = _maybe_apply_affinity(pi, ir, "clienthash", True)
+        first = _apply(pi, ir, "clienthash")
+        second = _apply(pi, ir, "clienthash")
 
         assert first.session_headers() == second.session_headers()
         assert first.session_headers()["x-s"]  # non-empty
@@ -75,8 +92,8 @@ class TestSessionDerivation:
         # History is append-only. The id must not change between turn 1 and
         # turn 2 — a naive 2-message prefix would (turn 2 appends a1 + u2).
         pi = _pi(session_header="x-s")
-        turn1 = _maybe_apply_affinity(pi, _ir("hello"), "clienthash", True)
-        turn2 = _maybe_apply_affinity(
+        turn1 = _apply(pi, _ir("hello"), "clienthash")
+        turn2 = _apply(
             pi,
             {
                 "messages": [
@@ -86,7 +103,6 @@ class TestSessionDerivation:
                 ]
             },
             "clienthash",
-            True,
         )
 
         assert turn1.session_headers()["x-s"] == turn2.session_headers()["x-s"]
@@ -94,8 +110,8 @@ class TestSessionDerivation:
     def test_differs_across_conversations(self):
         pi = _pi(session_header="x-s")
 
-        a = _maybe_apply_affinity(pi, _ir("hello"), "clienthash", True)
-        b = _maybe_apply_affinity(pi, _ir("different"), "clienthash", True)
+        a = _apply(pi, _ir("hello"), "clienthash")
+        b = _apply(pi, _ir("different"), "clienthash")
 
         assert a.session_headers()["x-s"] != b.session_headers()["x-s"]
 
@@ -104,13 +120,13 @@ class TestSessionDerivation:
         # present so the upstream never sees a missing session.
         pi = _pi(session_header="x-s")
 
-        out = _maybe_apply_affinity(pi, {}, "", False)
+        out = _apply(pi, {}, "", key_affinity=False)
 
         assert out.session_headers()["x-s"]
 
     def test_noop_without_session_header(self):
         pi = _pi()
 
-        out = _maybe_apply_affinity(pi, _ir("x"), "h", True)
+        out = _apply(pi, _ir("x"), "h")
 
         assert out is pi

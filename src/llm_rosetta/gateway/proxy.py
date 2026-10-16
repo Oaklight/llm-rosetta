@@ -15,10 +15,8 @@ Downstream SSE formatting lives in :mod:`transport.sse_format`.
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import json
 import time
-import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import Any, Literal
@@ -48,7 +46,12 @@ from .logging import (
     log_stream_summary,
     log_upstream_error,
 )
-from .middleware.affinity import compute_affinity_identity, extract_prefix_from_ir
+from .routing import (
+    ProviderKeyAffinity,
+    RoutingChain,
+    SelectionContext,
+    SessionHeaderAffinity,
+)
 from .middleware.sanitize import sanitize_upstream_error
 from .transport import (
     ProviderInfo,
@@ -566,59 +569,22 @@ def _strip_internal_metadata(obj: dict | list) -> None:
     strip_internal_metadata(obj)
 
 
-# Stable per-process fallback for the session header: used only when a
-# provider declares one but no per-conversation identity could be derived, so
-# the header is never absent (some upstreams reject a missing session with 400).
-# Every such request shares this one id — acceptable for the fallback, since a
-# request with neither a client key nor a message prefix carries nothing to key
-# a conversation on.
-_SESSION_FALLBACK = uuid.uuid4().hex
+# The decisions only the converted request can settle: which of the
+# provider's keys serves it, and what session identity the upstream is told.
+# They run on the same request object that chose the provider, so both halves
+# of selection read one identity.
+_REQUEST_STAGES = RoutingChain([ProviderKeyAffinity(), SessionHeaderAffinity()])
 
 
-def _maybe_apply_affinity(
-    provider_info: ProviderInfo,
-    ir_request: dict,
-    client_key_hash: str,
-    key_affinity: bool,
-) -> ProviderInfo:
-    """Apply key affinity and/or a per-conversation session id.
+def _apply_request_stages(ctx: SelectionContext) -> ProviderInfo:
+    """Fill in the stage-2 decisions and return the transport config to use.
 
-    Key affinity applies only when the provider has more than one key and a
-    client identity is available.  A shim-declared session header (see
-    :attr:`ConnectionConfig.session_header`) is set whenever the provider
-    declares one, using a per-conversation identity so the upstream sees one
-    stable session across every turn of a conversation — which is what its
-    routing and prompt-cache optimisation key on.
+    The caller sets ``ctx.provider_info`` and ``ctx.ir_request`` first; what
+    comes back is the transport config to send with.
     """
-    needs_affinity = (
-        key_affinity and client_key_hash and len(provider_info.key_ring) > 1
-    )
-    needs_session = bool(provider_info.session_header)
-    if not needs_affinity and not needs_session:
-        return provider_info
-
-    if needs_affinity:
-        # Key affinity keys on a 2-message prefix for more entropy.
-        identity = compute_affinity_identity(
-            client_key_hash, extract_prefix_from_ir(ir_request)
-        )
-        if identity is not None:
-            provider_info = provider_info.with_affinity(identity)
-
-    if needs_session:
-        # Derive from the first message only.  History is append-only, so the
-        # first message is identical on every turn — a 2-message prefix would
-        # change between turn 1 and turn 2 and hand the first request a
-        # different session than the rest of the conversation.
-        first_prefix = extract_prefix_from_ir(ir_request, max_messages=1)
-        seed = (
-            compute_affinity_identity(client_key_hash, first_prefix)
-            or first_prefix
-            or _SESSION_FALLBACK
-        )
-        session_id = hashlib.sha256(seed.encode("utf-8")).hexdigest()[:32]
-        provider_info = provider_info.with_session(session_id)
-
+    _REQUEST_STAGES.run(ctx)
+    provider_info = ctx.provider_info
+    assert provider_info is not None  # the caller sets it before running these
     return provider_info
 
 
@@ -722,8 +688,7 @@ async def handle_non_streaming(
     persistence: Any | None = None,
     capture_state: CaptureState | None = None,
     entry_id: str | None = None,
-    client_key_hash: str = "",
-    key_affinity: bool = True,
+    selection: SelectionContext,
 ) -> tuple[Response, dict[str, Any]]:
     """Non-streaming proxy: convert -> forward -> convert back -> respond.
 
@@ -789,10 +754,9 @@ async def handle_non_streaming(
     log_converted_request(target_body)
     _strip_internal_metadata(target_body)
 
-    # Key affinity: deterministic key selection for prompt cache locality
-    provider_info = _maybe_apply_affinity(
-        provider_info, pipeline.ir_request, client_key_hash, key_affinity
-    )
+    selection.with_provider_info(provider_info)
+    selection.with_ir_request(pipeline.ir_request)
+    provider_info = _apply_request_stages(selection)
 
     # Phase 3: Forward to upstream via transport
     # Wrapped in a retry loop: on 401 from a token_command provider,
@@ -1285,8 +1249,7 @@ async def handle_streaming(
     persistence: Any | None = None,
     capture_state: CaptureState | None = None,
     preflight_token_count: bool = False,
-    client_key_hash: str = "",
-    key_affinity: bool = True,
+    selection: SelectionContext,
 ) -> tuple[Response | StreamingResponse, dict[str, Any]]:
     """Streaming proxy: convert -> forward -> stream-convert back -> SSE.
 
@@ -1361,10 +1324,9 @@ async def handle_streaming(
     log_converted_request(target_body)
     _strip_internal_metadata(target_body)
 
-    # Key affinity: deterministic key selection for prompt cache locality
-    provider_info = _maybe_apply_affinity(
-        provider_info, pipeline.ir_request, client_key_hash, key_affinity
-    )
+    selection.with_provider_info(provider_info)
+    selection.with_ir_request(pipeline.ir_request)
+    provider_info = _apply_request_stages(selection)
 
     # Preflight: get exact input_tokens before streaming (opt-in)
     _preflight_input_tokens: int | None = None

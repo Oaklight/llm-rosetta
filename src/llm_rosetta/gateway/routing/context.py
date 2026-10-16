@@ -152,6 +152,23 @@ class SelectionContext:
         """Record the transport configuration the request will be sent with."""
         self.provider_info = provider_info
 
+    def with_ir_request(self, ir_request: dict[str, Any]) -> None:
+        """Record the converted request, once the pipeline has produced one.
+
+        The stages that run after this read it for the fingerprints they key
+        their decisions on; nothing before it can, which is why the two halves
+        of selection cannot be one call.
+        """
+        self.ir_request = ir_request
+
+    def with_key_affinity(self, enabled: bool) -> None:
+        """Record whether the selected provider wants its keys pinned per client.
+
+        A provider-level setting, so it is known only once a provider has been
+        chosen.
+        """
+        self.key_affinity = enabled
+
     def with_upstream_session_id(self, session_id: str | None) -> None:
         """Record the session identity the upstream will be told."""
         self.upstream_session_id = session_id
