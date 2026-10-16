@@ -113,6 +113,8 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "USAGE_WINDOW_LABELS",
             "USAGE_WINDOWS",
             "SubjectUsage",
+            "UsageLedger",
+            "UsageRecord",
             "UsageReport",
             "UsageShape",
             "add_windows",
@@ -122,7 +124,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "usage_columns",
             "zero_windows",
         ],
-        "max_count": 20,
+        "max_count": 22,
     },
 }
 

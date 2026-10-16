@@ -92,6 +92,44 @@ class TestTokenTotal:
     def test_partial_usage_still_totals(self):
         assert token_total({"completion_tokens": 5}) == 5
 
+    def test_a_count_that_arrived_as_a_string_is_the_count_it_spells(self):
+        """A provider that JSON-strings its numbers still sent counts."""
+        assert token_total({"prompt_tokens": "10", "completion_tokens": "5"}) == 15
+        assert token_total({"prompt_tokens": "10", "completion_tokens": 5}) == 15
+
+    def test_a_string_total_is_the_total_the_provider_sent(self):
+        """The canonical rule with the cache counters on both sides of it.
+
+        Read as "not a count" this total would be recomputed additively, and
+        the cached tokens — which this provider had already counted into its
+        total — would be added again: 1050 becomes 1850.  That is the shape
+        #1014 was about, so the provider's own total has to win however it
+        arrived.
+        """
+        usage = {
+            "prompt_tokens": 1000,
+            "completion_tokens": 50,
+            "cache_read_tokens": 800,
+            "total_tokens": "1050",
+        }
+        assert token_total(usage) == 1050
+        assert usage_columns(usage)["total_tokens"] == 1050
+        assert token_total({"total_tokens": "1050"}) == 1050
+
+    def test_a_counter_that_is_not_a_count_refuses_the_whole_usage(self):
+        """Skipping it would report a total that is quietly short."""
+        for usage in (
+            {"prompt_tokens": "ten", "completion_tokens": 5},
+            {"prompt_tokens": 10.5},
+            {"prompt_tokens": True, "completion_tokens": 5},
+            {"cache_read_tokens": {"nested": 1}, "prompt_tokens": 10},
+        ):
+            assert token_total(usage) is None, usage
+            assert usage_columns(usage) == {}, usage
+        # Nothing was declared, so there is nothing to refuse.
+        assert token_total({"reasoning_tokens": 5}) is None
+        assert usage_columns({"reasoning_tokens": 5}) == {"reasoning_tokens": 5}
+
 
 class TestUsageColumns:
     def test_columns_are_named_as_the_ledger_expects(self):

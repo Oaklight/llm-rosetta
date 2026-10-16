@@ -18,8 +18,19 @@ Three pieces, in the order a figure travels:
   :class:`~llm_rosetta.observability.usage.report.UsageReport`: windowed totals
   per subject, plus the traffic that no subject owns, kept so the parts add up
   to the whole.
+- :mod:`~llm_rosetta.observability.usage.ledger` —
+  :class:`~llm_rosetta.observability.usage.ledger.UsageLedger`: the same ledger
+  with no store behind it, for a process that has no database.
 
-A library user with no credentials to account by::
+A library user, with no gateway and no database::
+
+    from llm_rosetta.observability.usage import UsageLedger
+
+    ledger = UsageLedger()
+    ledger.record(response["usage"], model="gpt-5-nano", subject="batch-7")
+    ledger.report().total("24h")
+
+Building the report over rows someone else stored is the same call::
 
     from llm_rosetta.observability.usage import UsageReport
 
@@ -42,6 +53,7 @@ be attributed, and where the rows are stored::
 
 from __future__ import annotations
 
+from .ledger import UsageLedger, UsageRecord
 from .normalize import IR_FIELDS, LEDGER_COLUMNS, token_total, usage_columns
 from .report import (
     NO_SUBJECT_LABEL,
@@ -77,6 +89,8 @@ __all__ = [
     "USAGE_WINDOW_LABELS",
     "USAGE_WINDOWS",
     "SubjectUsage",
+    "UsageLedger",
+    "UsageRecord",
     "UsageReport",
     "UsageShape",
     "add_windows",

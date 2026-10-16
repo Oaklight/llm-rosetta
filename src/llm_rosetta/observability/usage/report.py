@@ -99,6 +99,31 @@ class SubjectUsage:
         return self.windows.get(name) or zero_windows()[name]
 
 
+def _subject_pairs(
+    subjects: Iterable[tuple[str, str] | str],
+) -> list[tuple[str, str]]:
+    """The ``(subject, label)`` pairs behind *subjects*, names included.
+
+    A name given on its own is its own label: a caller who says
+    ``subjects=["batch-7"]`` means that subject and has no second name to give
+    it.  Anything else is refused with the shape spelled out, rather than
+    unpacked into a message about too many values.
+    """
+    pairs: list[tuple[str, str]] = []
+    for entry in subjects:
+        if isinstance(entry, str):
+            pairs.append((entry, entry))
+            continue
+        try:
+            subject, label = entry
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"a subject is a name or a (subject, label) pair, not {entry!r}"
+            ) from exc
+        pairs.append((subject, label))
+    return pairs
+
+
 @dataclass(frozen=True)
 class UsageReport:
     """Every logged token, cut into windows and classified by subject."""
@@ -114,7 +139,7 @@ class UsageReport:
         cls,
         *,
         groups: Iterable[Mapping[str, Any]],
-        subjects: Sequence[tuple[str, str]] = (),
+        subjects: Sequence[tuple[str, str] | str] = (),
         windows: Sequence[str] = USAGE_WINDOW_LABELS,
         internal_subject: str | None = None,
         internal_label: str | None = None,
@@ -124,7 +149,10 @@ class UsageReport:
         Args:
             groups: Ledger rows already summed per ``(subject, label)``, each
                 ``{"bucket": str | None, "label": str | None, "windows": {...}}``.
-            subjects: ``(subject, label)`` pairs the caller wants attributed.
+            subjects: What the caller wants attributed, each either a
+                ``(subject, label)`` pair or a subject name on its own — a
+                name is its own label.  The gateway passes pairs, since a
+                credential's name is not its bucket.
             windows: The window labels present in *groups*.
             internal_subject: Subject to report as the caller's own traffic.
             internal_label: Label marking that traffic.  Rows labelled with it
@@ -133,9 +161,13 @@ class UsageReport:
 
         Returns:
             The report.  Only the classes that saw traffic are populated.
+
+        Raises:
+            ValueError: If an entry of *subjects* is neither a name nor a
+                ``(subject, label)`` pair.
         """
         windows = tuple(windows)
-        live = {subject: label for subject, label in subjects}
+        live = {subject: label for subject, label in _subject_pairs(subjects)}
         # A live subject labelled like the internal token owns that label.
         internal_claimed = (
             internal_label is not None and internal_label in live.values()

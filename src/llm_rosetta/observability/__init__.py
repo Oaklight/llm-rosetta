@@ -24,7 +24,11 @@ Typical usage::
 Usage — what the tokens add up to, and for whom — is a subpackage of its
 own, :mod:`llm_rosetta.observability.usage`, and needs none of the above::
 
-    from llm_rosetta.observability import UsageReport, token_total
+    from llm_rosetta.observability import UsageLedger, token_total
+
+    ledger = UsageLedger()
+    ledger.record(response["usage"], model="gpt-5-nano")
+    ledger.total("24h")
 """
 
 from __future__ import annotations
@@ -86,6 +90,7 @@ from .usage import (
     LEDGER_COLUMNS,
     USAGE_WINDOW_LABELS,
     USAGE_WINDOWS,
+    UsageLedger,
     UsageReport,
     cache_is_additive,
     token_total,
@@ -141,6 +146,7 @@ __all__ = [
     "RetentionTracker",
     "USAGE_WINDOW_LABELS",
     "USAGE_WINDOWS",
+    "UsageLedger",
     "UsageReport",
     "cache_is_additive",
     "token_total",
