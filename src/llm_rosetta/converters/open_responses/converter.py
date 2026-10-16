@@ -68,12 +68,14 @@ from .stream_context import MessageItemState, OpenResponsesStreamContext
 from ._constants import (
     OPEN_RESPONSES_PRESERVE_FIELDS,
     OPEN_RESPONSES_REQUIRED_DEFAULTS,
+    RESPONSES_FAILURE_ERROR,
     RESPONSES_INCOMPLETE_REASON_TO_IR,
     RESPONSES_PRESERVE_FIELDS,
     RESPONSES_REASON_TO_INCOMPLETE_REASON,
     RESPONSES_REASON_TO_STATUS,
     RESPONSES_REQUIRED_DEFAULTS,
     RESPONSES_STATUS_TO_REASON,
+    RESPONSES_TERMINAL_EVENT_BY_STATUS,
     ResponsesEventType,
     generate_message_id,
     generate_reasoning_id,
@@ -134,6 +136,14 @@ _PASSTHROUGH_REQUEST_FIELDS = (
     "previous_response_id",
     "safety_identifier",
     "prompt",
+    # The spec's ``include`` (which optional payloads the response may carry)
+    # and OpenAI's ``conversation`` / ``context_management`` had no reader at
+    # all, so a same-format round trip lost them.  They ride here like the rest
+    # of the set, which means the owner stamp also keeps them off a body of
+    # another format.
+    "include",
+    "conversation",
+    "context_management",
 )
 
 
@@ -347,7 +357,12 @@ class OpenResponsesConverter(BaseConverter):
             cache_fields = self.config_ops.ir_cache_config_to_p(cache)
             result.update(cache_fields)
 
-        # 11. Provider extensions (pass-through)
+        # 11. Service tier — the two OpenAI-family formats share a value space.
+        service_tier = ir_request.get("service_tier")
+        if service_tier:
+            result["service_tier"] = service_tier
+
+        # 12. Provider extensions (pass-through)
         extensions = ir_request.get("provider_extensions")
         if extensions:
             # Merge _text_verbosity back into the text object
@@ -359,7 +374,7 @@ class OpenResponsesConverter(BaseConverter):
             # ``tool_choice`` by ``_apply_tool_config``) never leaks as a
             # top-level field.  A legacy top-level ``allowed_tools`` is a plain
             # key and still passes through.
-            result.update(wire_extensions(ir_request))
+            result.update(wire_extensions(ir_request, self._CONVERTER_TAG))
 
         return result
 
@@ -459,14 +474,20 @@ class OpenResponsesConverter(BaseConverter):
         # 10. Cache config
         self._convert_p_cache_to_ir(provider_request, ir_request)
 
-        # 11. Provider extensions (passthrough fields like allowed_tools)
+        # 11. Service tier — Chat Completions and Responses share one value
+        # space, so the tier travels as the source wrote it.
+        service_tier = provider_request.get("service_tier")
+        if service_tier:
+            ir_request["service_tier"] = service_tier
+
+        # 12. Provider extensions (passthrough fields like allowed_tools)
         allowed_tools = provider_request.get("allowed_tools")
         if allowed_tools is not None:
             ir_request.setdefault("provider_extensions", {})["allowed_tools"] = (
                 allowed_tools
             )
 
-        # 12. Responses-specific request fields not modelled in IR.
+        # 13. Responses-specific request fields not modelled in IR.
         _forward_passthrough_request_fields(provider_request, ir_request)
 
         # Preserve mode: capture request fields for echo-back in response
@@ -1771,18 +1792,42 @@ class OpenResponsesConverter(BaseConverter):
             context.mark_ended()
             events.append(StreamEndEvent(type="stream_end"))
 
+    @staticmethod
+    def _p_failure_error(chunk: dict[str, Any]) -> dict[str, Any] | None:
+        """Return the ``{code, message}`` envelope of a failed turn, if any.
+
+        Upstreams that fail a turn usually ship an error object on it.  It is
+        carried through the IR so the target leg can put a real code and
+        message in its own error event and ``response.error`` rather than a
+        placeholder.
+        """
+        response = chunk.get("response", chunk)
+        error = response.get("error") if isinstance(response, dict) else None
+        if not isinstance(error, dict):
+            return None
+        code = error.get("code")
+        message = error.get("message")
+        if not isinstance(code, str) and not isinstance(message, str):
+            return None
+        return {
+            "code": code if isinstance(code, str) and code else "server_error",
+            "message": message if isinstance(message, str) else "",
+        }
+
     def _handle_p_response_failed_to_ir(
         self,
         chunk: dict[str, Any],
         context: StreamContext | None,
         events: list[IRStreamEvent],
     ) -> None:
-        events.append(
-            FinishEvent(
-                type="finish",
-                finish_reason={"reason": "error"},
-            )
+        finish: FinishEvent = FinishEvent(
+            type="finish",
+            finish_reason={"reason": "error"},
         )
+        error = self._p_failure_error(chunk)
+        if error is not None:
+            finish["provider_metadata"] = {"responses_error": error}
+        events.append(finish)
 
         # Emit StreamEndEvent after FinishEvent
         if context is not None:
@@ -1805,6 +1850,10 @@ class OpenResponsesConverter(BaseConverter):
         ResponsesEventType.CUSTOM_TOOL_CALL_INPUT_DELTA: "_handle_p_custom_tool_call_input_delta_to_ir",
         ResponsesEventType.CUSTOM_TOOL_CALL_INPUT_DONE: "_handle_p_custom_tool_call_input_done_to_ir",
         ResponsesEventType.RESPONSE_COMPLETED: "_handle_p_response_completed_to_ir",
+        # An incomplete turn may close with either terminal event, and both
+        # carry the same status/incomplete_details payload, so one handler
+        # serves them.
+        ResponsesEventType.RESPONSE_INCOMPLETE: "_handle_p_response_completed_to_ir",
         ResponsesEventType.RESPONSE_FAILED: "_handle_p_response_failed_to_ir",
         ResponsesEventType.REFUSAL_DELTA: "_handle_p_refusal_delta_to_ir",
     }
@@ -1922,10 +1971,10 @@ class OpenResponsesConverter(BaseConverter):
         self,
         event: StreamEndEvent,
         context: StreamContext | None,
-    ) -> dict[str, Any]:
+    ) -> dict[str, Any] | list[dict[str, Any]]:
         if context is not None:
             context.mark_ended()
-            # Emit the deferred response.completed if FinishEvent
+            # Emit the deferred terminal event if FinishEvent
             # stored one.  This ensures UsageEvents that arrive
             # between FinishEvent and StreamEndEvent (e.g. OpenAI
             # Chat sends usage in a separate chunk after
@@ -1936,11 +1985,37 @@ class OpenResponsesConverter(BaseConverter):
                 # Merge any usage that arrived after FinishEvent
                 if context.pending_usage is not None and "usage" not in resp:
                     resp["usage"] = self._build_finish_usage(context.pending_usage)
-                return {
-                    "type": ResponsesEventType.RESPONSE_COMPLETED,
-                    "response": resp,
-                }
+                terminal = self._terminal_events(resp)
+                # A completed turn is a single event, and this path has always
+                # answered with one dict; only a failure grows to two.
+                return terminal[0] if len(terminal) == 1 else terminal
         return {}
+
+    @staticmethod
+    def _terminal_events(response: dict[str, Any]) -> list[dict[str, Any]]:
+        """Build the events that close a stream, from the response it closes.
+
+        The spec allows three terminal events and the choice is not free: it
+        has to agree with the ``status`` the payload carries.  A failed
+        response is preceded by an ``error`` event carrying the same envelope,
+        so a client that only reads the error event still learns the code.
+        """
+        event_type = RESPONSES_TERMINAL_EVENT_BY_STATUS.get(
+            response.get("status", ""), ResponsesEventType.RESPONSE_COMPLETED
+        )
+        events: list[dict[str, Any]] = []
+        if event_type == ResponsesEventType.RESPONSE_FAILED:
+            error = response.get("error")
+            events.append(
+                {
+                    "type": ResponsesEventType.ERROR,
+                    "error": dict(
+                        error if isinstance(error, dict) else RESPONSES_FAILURE_ERROR
+                    ),
+                }
+            )
+        events.append({"type": event_type, "response": response})
+        return events
 
     def _handle_ir_content_block_start_to_p(
         self,
@@ -2494,7 +2569,16 @@ class OpenResponsesConverter(BaseConverter):
         reason = event["finish_reason"]["reason"]
         status = RESPONSES_REASON_TO_STATUS.get(reason, "completed")
 
-        response = self._build_finish_response(status, context, reason)
+        # A failed turn carries the error envelope it was given, so the
+        # failure leaves with a code and message rather than a placeholder.
+        provider_metadata = event.get("provider_metadata") or {}
+        carried_error = provider_metadata.get("responses_error")
+        response = self._build_finish_response(
+            status,
+            context,
+            reason,
+            error=carried_error if isinstance(carried_error, dict) else None,
+        )
 
         # Emit done events before response.completed
         results: list[dict[str, Any]] = []
@@ -2513,12 +2597,7 @@ class OpenResponsesConverter(BaseConverter):
             return results
 
         # Without context: emit immediately (backward compatible)
-        results.append(
-            {
-                "type": ResponsesEventType.RESPONSE_COMPLETED,
-                "response": response,
-            }
-        )
+        results.extend(self._terminal_events(response))
         return results
 
     def _build_finish_response(
@@ -2526,6 +2605,7 @@ class OpenResponsesConverter(BaseConverter):
         status: str,
         context: OpenResponsesStreamContext | None,
         finish_reason: str = "length",
+        error: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Build the response dict for a FinishEvent."""
         output = self._collect_finish_output(context)
@@ -2552,6 +2632,9 @@ class OpenResponsesConverter(BaseConverter):
                 finish_reason, "max_output_tokens"
             )
             response["incomplete_details"] = {"reason": incomplete_reason}
+
+        if status == "failed":
+            response["error"] = error or RESPONSES_FAILURE_ERROR
 
         # Merge pending usage from context if available
         if context is not None and context.pending_usage is not None:
@@ -3014,7 +3097,7 @@ class OpenResponsesConverter(BaseConverter):
         self,
         event: UsageEvent,
         context: StreamContext | None,
-    ) -> dict[str, Any]:
+    ) -> dict[str, Any] | list[dict[str, Any]]:
         usage = event["usage"]
 
         # With context: store usage for later merging, avoid duplicate
@@ -3033,10 +3116,8 @@ class OpenResponsesConverter(BaseConverter):
                 "total_tokens": usage.get("total_tokens") or 0,
             },
         }
-        return {
-            "type": ResponsesEventType.RESPONSE_COMPLETED,
-            "response": resp,
-        }
+        terminal = self._terminal_events(resp)
+        return terminal[0] if len(terminal) == 1 else terminal
 
 
 class OpenAIResponsesConverter(OpenResponsesConverter):

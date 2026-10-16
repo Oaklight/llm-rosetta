@@ -228,8 +228,20 @@ class MessagesConverter(BaseConverter):
             cache_fields = self.config_ops.ir_cache_config_to_p(cache)
             result.update(cache_fields)
 
-        # 11. Provider extensions (pass-through)
-        result.update(wire_extensions(ir_request))
+        # 11. Service tier.  The Messages API only takes ``auto``; any real
+        # tier (priority, flex, ...) is a scheduling preference this upstream
+        # does not offer, so it goes unset and is reported.
+        service_tier = ir_request.get("service_tier")
+        if service_tier == "auto":
+            result["service_tier"] = "auto"
+        elif service_tier:
+            ctx.warnings.append(
+                f"service_tier={service_tier!r} cannot be expressed by the "
+                "Messages API; the request is sent without a tier"
+            )
+
+        # 12. Provider extensions (pass-through)
+        result.update(wire_extensions(ir_request, self._CONVERTER_TAG))
 
         return result
 
@@ -295,6 +307,20 @@ class MessagesConverter(BaseConverter):
         if stream is not None:
             ir_request["stream"] = self.config_ops.p_stream_config_to_ir(
                 {"stream": stream}
+            )
+
+        # 8. Service tier.  Messages models the *capacity policy* (auto,
+        # standard_only), not a tier to schedule on, so only ``auto`` -- the
+        # absence of a preference -- carries into the IR.  ``standard_only``
+        # says which capacity may serve the request, and no other format can
+        # express that, so it is reported rather than silently reset.
+        service_tier = provider_request.get("service_tier")
+        if service_tier == "auto":
+            ir_request["service_tier"] = "auto"
+        elif service_tier:
+            context.warnings.append(
+                f"service_tier={service_tier!r} (Messages) has no equivalent in "
+                "the IR's tier vocabulary; it was not carried"
             )
 
         return ir_request

@@ -320,6 +320,42 @@ class TestStreamResponseFromProvider:
         assert events[0]["type"] == "finish"
         assert events[0]["finish_reason"]["reason"] == "error"
 
+    def test_response_failed_carries_the_error_envelope(self):
+        """The failure's own error object rides the IR to the target leg."""
+        event = {
+            "type": "response.failed",
+            "response": {
+                "status": "failed",
+                "error": {"code": "rate_limit_exceeded", "message": "slow down"},
+            },
+        }
+        events = cast(list[Any], self.converter.stream_response_from_provider(event))
+        assert events[0]["provider_metadata"]["responses_error"] == {
+            "code": "rate_limit_exceeded",
+            "message": "slow down",
+        }
+
+    def test_response_failed_without_an_error_object(self):
+        """A bare failure carries no envelope rather than an invented one."""
+        event = {"type": "response.failed", "response": {"status": "failed"}}
+        events = cast(list[Any], self.converter.stream_response_from_provider(event))
+        assert events[0]["type"] == "finish"
+        assert "provider_metadata" not in events[0]
+
+    def test_response_incomplete_is_a_terminal_event(self):
+        """The third terminal event closes the turn like response.completed."""
+        event = {
+            "type": "response.incomplete",
+            "response": {
+                "status": "incomplete",
+                "incomplete_details": {"reason": "max_output_tokens"},
+            },
+        }
+        events = cast(list[Any], self.converter.stream_response_from_provider(event))
+        finish = [e for e in events if e["type"] == "finish"]
+        assert len(finish) == 1
+        assert finish[0]["finish_reason"]["reason"] == "length"
+
     # --- Ignored events ---
 
     def test_response_created_ignored(self):
@@ -518,7 +554,7 @@ class TestStreamResponseToProvider:
         assert completed["response"]["status"] == "completed"
 
     def test_finish_event_length(self):
-        """FinishEvent with 'length' → response.completed with status 'incomplete'."""
+        """FinishEvent with 'length' → response.incomplete with status 'incomplete'."""
         event = cast(
             FinishEvent,
             {"type": "finish", "finish_reason": {"reason": "length"}},
@@ -526,14 +562,15 @@ class TestStreamResponseToProvider:
         results = cast(
             list[dict[str, Any]], self.converter.stream_response_to_provider(event)
         )
-        completed = next(r for r in results if r["type"] == "response.completed")
-        assert completed["response"]["status"] == "incomplete"
+        terminal = next(r for r in results if r["type"] == "response.incomplete")
+        assert terminal["response"]["status"] == "incomplete"
         assert (
-            completed["response"]["incomplete_details"]["reason"] == "max_output_tokens"
+            terminal["response"]["incomplete_details"]["reason"] == "max_output_tokens"
         )
+        assert [r for r in results if r["type"] == "response.completed"] == []
 
     def test_finish_event_error(self):
-        """FinishEvent with 'error' → response.completed with status 'failed'."""
+        """FinishEvent with 'error' → an error event, then response.failed."""
         event = cast(
             FinishEvent,
             {"type": "finish", "finish_reason": {"reason": "error"}},
@@ -541,11 +578,38 @@ class TestStreamResponseToProvider:
         results = cast(
             list[dict[str, Any]], self.converter.stream_response_to_provider(event)
         )
-        completed = next(r for r in results if r["type"] == "response.completed")
-        assert completed["response"]["status"] == "failed"
+        assert [r["type"] for r in results] == ["error", "response.failed"]
+        failed = results[-1]["response"]
+        assert failed["status"] == "failed"
+        # The error event and the response carry the same envelope.
+        assert results[0]["error"] == failed["error"]
+        assert failed["error"]["code"] == "server_error"
+
+    def test_finish_event_error_carries_the_source_envelope(self):
+        """A failure that knows its error ships that code and message."""
+        event = cast(
+            FinishEvent,
+            {
+                "type": "finish",
+                "finish_reason": {"reason": "error"},
+                "provider_metadata": {
+                    "responses_error": {
+                        "code": "rate_limit_exceeded",
+                        "message": "slow down",
+                    }
+                },
+            },
+        )
+        results = cast(
+            list[dict[str, Any]], self.converter.stream_response_to_provider(event)
+        )
+        assert [r["type"] for r in results] == ["error", "response.failed"]
+        assert results[0]["error"]["code"] == "rate_limit_exceeded"
+        assert results[0]["error"]["message"] == "slow down"
+        assert results[-1]["response"]["error"]["code"] == "rate_limit_exceeded"
 
     def test_finish_event_content_filter(self):
-        """FinishEvent with 'content_filter' → response.completed with status 'incomplete'."""
+        """FinishEvent with 'content_filter' → response.incomplete."""
         event = cast(
             FinishEvent,
             {"type": "finish", "finish_reason": {"reason": "content_filter"}},
@@ -553,9 +617,9 @@ class TestStreamResponseToProvider:
         results = cast(
             list[dict[str, Any]], self.converter.stream_response_to_provider(event)
         )
-        completed = next(r for r in results if r["type"] == "response.completed")
-        assert completed["response"]["status"] == "incomplete"
-        assert completed["response"]["incomplete_details"] == {
+        terminal = next(r for r in results if r["type"] == "response.incomplete")
+        assert terminal["response"]["status"] == "incomplete"
+        assert terminal["response"]["incomplete_details"] == {
             "reason": "content_filter"
         }
 
@@ -2619,7 +2683,7 @@ class TestReasoningStreamingLifecycle:
         )
         types = [e.get("type") for e in events]
         assert "response.output_item.added" in types
-        assert "response.reasoning_summary.part.added" in types
+        assert "response.reasoning_summary_part.added" in types
         assert "response.reasoning_summary_text.delta" in types
 
     def test_reasoning_item_added_has_id_and_status(self):
@@ -2670,7 +2734,7 @@ class TestReasoningStreamingLifecycle:
         )
         types = [e.get("type") for e in events]
         assert "response.reasoning_summary_text.done" in types
-        assert "response.reasoning_summary.part.done" in types
+        assert "response.reasoning_summary_part.done" in types
         # output_item.done should appear for both reasoning and message
         done_events = [
             e for e in events if e.get("type") == "response.output_item.done"

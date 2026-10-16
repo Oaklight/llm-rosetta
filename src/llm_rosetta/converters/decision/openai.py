@@ -24,6 +24,7 @@ from typing import Any
 
 from llm_rosetta.converters.base.context import ConversionContext
 from llm_rosetta.converters.base.decision_converter import BaseDecisionConverter
+from llm_rosetta.converters.base.helpers.extensions import wire_extensions
 from llm_rosetta.types.ir.decision import (
     DecisionUsageInfo,
     IRDecisionRequest,
@@ -67,7 +68,7 @@ class OpenAIDecisionsConverter(BaseDecisionConverter):
             ],
         }
         if "provider_extensions" in ir_request:
-            result.update(ir_request["provider_extensions"])
+            result.update(wire_extensions(ir_request, self._CONVERTER_TAG))
         return result
 
     def _do_request_from_provider(

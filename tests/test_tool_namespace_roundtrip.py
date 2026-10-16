@@ -888,9 +888,10 @@ class TestNamespaceRoundTrip:
 
         names = [t.get("function", t).get("name") for t in upstream["tools"]]
         assert names == ["functions_wait", "agents_wait"]
-        # The selector rides through as an extension, so it reaches the wire
-        # naming a tool the same request no longer declares.
-        assert upstream["allowed_tools"] == ["wait"]
+        # Open Responses owns the selector, and a Chat Completions body has no
+        # such parameter, so it stays behind rather than reaching the wire
+        # naming a tool this request no longer declares.
+        assert "allowed_tools" not in upstream
         assert any("allowed_tools names 'wait'" in w for w in pipe.warnings), (
             f"expected an ambiguous-allowed_tools warning; got {pipe.warnings}"
         )
