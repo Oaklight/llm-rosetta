@@ -182,6 +182,62 @@ class TestFormatAffinity:
         groups = _groups(config, "chat_completions")
         assert groups is not None and groups.covers_all
 
+    def test_homogeneous_route_never_runs_the_tier_scan(self, monkeypatch):
+        """All providers match: the plain route answers, no tier counter moves.
+
+        The short-circuit is observable only as the absence of a tier scan —
+        one would advance a second counter and could realign the anchor.
+        """
+        from llm_rosetta.gateway.routing import same_format
+
+        scans = []
+        original = same_format.select_ready_entry
+
+        def _spy(*args, **kwargs):
+            scans.append(args[0].route_id)
+            return original(*args, **kwargs)
+
+        monkeypatch.setattr(same_format, "select_ready_entry", _spy)
+
+        homogeneous = _make_config(
+            {"m": {"providers": ["chat_a", "chat_b"]}}, prefer_same_format=True
+        )
+        for _ in range(3):
+            homogeneous.resolve(homogeneous.selection_context("m", "openai_chat"))
+        assert scans == []
+
+        mixed = _make_config(
+            {"m": {"providers": ["chat_a", "resp_a"]}}, prefer_same_format=True
+        )
+        mixed.resolve(mixed.selection_context("m", "open_responses"))
+        assert scans
+
+    def test_two_models_get_distinct_subset_routes(self):
+        """The subset id carries the model, so its counter cannot be shared.
+
+        Each model builds its own strategy today, so interleaving requests
+        would not expose a clash; the id is what keeps the counters apart if
+        a strategy instance is ever shared between models.
+        """
+        config = _make_config(
+            {
+                "m1": {"providers": ["chat_a", "resp_a"]},
+                "m2": {"providers": ["chat_a", "resp_a"]},
+            },
+            prefer_same_format=True,
+        )
+        routes = [
+            config._same_format.groups_for(
+                config.selection_context(model, "open_responses")
+            )
+            for model in ("m1", "m2")
+        ]
+        one, two = routes
+        assert one is not None and two is not None
+        assert one.all_group.route_id != two.all_group.route_id
+        token = config.provider_account_tokens["resp_a"]
+        assert one.by_account[token].route_id != two.by_account[token].route_id
+
     def test_load_balances_within_matched_subset(self):
         """Two same-format providers share load, excluding the third.
 
@@ -204,6 +260,47 @@ class TestFormatAffinity:
         ]
         assert set(picked) == {"resp_a", "resp_b"}
         assert picked.count("resp_a") == picked.count("resp_b") == 50
+
+    def test_pick_sequence_is_stable(self):
+        """The exact sequence, not just the split — equal counts hide an order.
+
+        A tier's counter is what decides which same-format provider takes which
+        request, and two counters that agree on a total can disagree on the
+        order.  This pins the order so a change to how counters are keyed has
+        to be a deliberate one.
+        """
+        config = _make_config(
+            {"m": {"providers": ["chat_a", "resp_a", "resp_b"]}},
+            prefer_same_format=True,
+        )
+        picked = [
+            config.resolve(config.selection_context("m", "open_responses"))[
+                0
+            ].provider_name
+            for _ in range(20)
+        ]
+        assert picked == [
+            "resp_a",
+            "resp_a",
+            "resp_b",
+            "resp_b",
+            "resp_a",
+            "resp_b",
+            "resp_a",
+            "resp_a",
+            "resp_b",
+            "resp_b",
+            "resp_a",
+            "resp_b",
+            "resp_a",
+            "resp_a",
+            "resp_b",
+            "resp_b",
+            "resp_a",
+            "resp_b",
+            "resp_a",
+            "resp_a",
+        ]
 
     def test_tier_balances_exactly_with_pinned_anchor(self):
         """With the anchor held fixed, the tier's own WRR splits the subset evenly."""
