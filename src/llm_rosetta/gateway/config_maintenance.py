@@ -99,7 +99,28 @@ def build_registry() -> Registry:
     )
 
 
-def apply(raw: dict[str, Any]) -> tuple[dict[str, Any], bool, Registry]:
+class ConfigMigrationError(RuntimeError):
+    """A load-time step could not bring this document forward.
+
+    The step's own exception is the cause; this one says *which* step and *which
+    document*, because the exception that comes out of a migration body is about
+    the shape it found (``'str' object has no attribute 'items'``) and not about
+    where it found it.  A config that cannot be brought forward has no correct
+    answer to serve, so this is raised out of the load.
+    """
+
+    def __init__(self, path: str, step: str, cause: BaseException) -> None:
+        super().__init__(
+            f"config {path!r} could not be brought forward by step {step!r}: {cause}"
+        )
+        self.path = path
+        self.step = step
+        self.cause = cause
+
+
+def apply(
+    raw: dict[str, Any], *, path: str = "<document>"
+) -> tuple[dict[str, Any], bool, Registry]:
     """Run the load-time steps over one raw config document.
 
     What the loader calls, in place of the two calls it used to make: the steps
@@ -107,10 +128,25 @@ def apply(raw: dict[str, Any]) -> tuple[dict[str, Any], bool, Registry]:
     returned so the caller can keep it (the admin surface lists it; the config
     object holds it) instead of the load's work being visible only in the log.
 
+    Args:
+        raw: The document, corrected in place.
+        path: What to name it in :class:`ConfigMigrationError`, when a step
+            fails.  The document may not be a file at all.
+
     Returns:
         The document (the same object), whether anything changed, and the
         registry whose results say which step changed what.
+
+    Raises:
+        ConfigMigrationError: When a step fails.  ``Policy.LOAD_TIME`` means the
+            load fails; this is what the caller fails *with*.
     """
     registry = build_registry()
-    results = registry.run_sync(StepContext(config=raw))
+    try:
+        results = registry.run_sync(StepContext(config=raw))
+    except Exception as exc:
+        failed = next((r for r in registry.results if not r.ok), None)
+        raise ConfigMigrationError(
+            path, failed.name if failed else "unknown", exc
+        ) from exc
     return raw, any(result.changed for result in results), registry

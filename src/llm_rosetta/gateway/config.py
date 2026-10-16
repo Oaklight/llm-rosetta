@@ -87,12 +87,47 @@ def _substitute_env_vars(text: str) -> str:
     return _ENV_VAR_RE.sub(_replace, text)
 
 
-def load_config(path: str) -> dict[str, Any]:
-    """Load and parse a JSONC config file with env-var substitution."""
+def _parse_config(path: str) -> dict[str, Any]:
+    """Parse a JSONC config file with env-var substitution, and nothing else."""
     with open(path) as f:
         raw = f.read()
     substituted = _substitute_env_vars(raw)
     return jsonx.loads(substituted)
+
+
+def _parse_config_raw(path: str) -> dict[str, Any]:
+    """Parse a JSONC config file without env-var substitution, and nothing else."""
+    with open(path) as f:
+        return jsonx.load(f)
+
+
+def load_config(path: str) -> dict[str, Any]:
+    """Load a JSONC config file for use, with env-var substitution.
+
+    The document comes back through the load-time maintenance steps
+    (:class:`JsoncConfigIO`), so a caller gets the shape the current code
+    expects rather than whatever was written to disk, however long ago.  A step
+    that changed something writes the migrated document back and leaves a
+    ``.pre-migration.bak`` beside it; a step that cannot run raises, and there
+    is no config to serve.  Env-var placeholders are substituted *and* kept in
+    the written-back copy, so a round-trip does not bake a secret into the file.
+
+    The registry the steps ran belongs to the reader that ran them, which this
+    one-shot call drops.  A caller that serves an admin surface wants it —
+    :func:`load_gateway_config` is that caller's entry point.
+    """
+    return JsoncConfigIO().load(path)
+
+
+def load_config_raw(path: str) -> dict[str, Any]:
+    """Load a JSONC config file for editing, without env-var substitution.
+
+    The same steps as :func:`load_config` run, for the same reason: a document
+    that is about to be written back should be brought forward first.  Env-var
+    placeholders are left as they are, so editing a config does not replace them
+    with their values.
+    """
+    return JsoncConfigIO().load_raw(path)
 
 
 def write_config(path: str, data: dict[str, Any]) -> None:
@@ -200,15 +235,6 @@ async def async_config_lock(path: str) -> AsyncGenerator[None, None]:
             lf.close()
 
 
-def load_config_raw(path: str) -> dict[str, Any]:
-    """Load and parse a JSONC config file *without* env-var substitution.
-
-    Useful for reading config that will be written back (e.g. ``add`` CLI).
-    """
-    with open(path) as f:
-        return jsonx.load(f)
-
-
 @runtime_checkable
 class ConfigIO(Protocol):
     """Protocol for reading/writing gateway config files.
@@ -256,11 +282,11 @@ class JsoncConfigIO:
         self.last_load_registry: Registry | None = None
 
     def load(self, path: str) -> dict[str, Any]:
-        raw = load_config(path)
+        raw = _parse_config(path)
         return self._apply_migrations(raw, path, is_raw=False)
 
     def load_raw(self, path: str) -> dict[str, Any]:
-        raw = load_config_raw(path)
+        raw = _parse_config_raw(path)
         return self._apply_migrations(raw, path, is_raw=True)
 
     def save(self, path: str, data: dict[str, Any]) -> None:
@@ -279,16 +305,34 @@ class JsoncConfigIO:
         """
         from .config_maintenance import apply
 
-        raw, changed, registry = apply(raw)
+        raw, changed, registry = apply(raw, path=path)
         self.last_load_registry = registry
         if changed:
-            if is_raw:
-                disk_data = raw
-            else:
-                disk_data = load_config_raw(path)
-                # The same steps over the on-disk copy, so a substituted env var
-                # is not written back in place of its placeholder.
-                disk_data, _changed, _registry = apply(disk_data)
+            self._write_back(raw, path, is_raw=is_raw)
+        return raw
+
+    def _write_back(self, raw: dict[str, Any], path: str, *, is_raw: bool) -> None:
+        """Write the migrated document back, and keep the original beside it.
+
+        Best-effort on purpose.  The steps have already run and their result is
+        the document this load returns, so nothing here is needed to serve it —
+        and a config that is mounted read-only (a k8s ConfigMap, a container
+        layer) would otherwise turn a working deployment into a refused start
+        the first time a migration had something to do.  A directory that cannot
+        be written is logged, and the document is served from memory instead:
+        the process holds the migrated one either way, and the version on disk
+        simply does not advance.
+        """
+        from .config_maintenance import apply
+
+        if is_raw:
+            disk_data = raw
+        else:
+            disk_data = _parse_config_raw(path)
+            # The same steps over the on-disk copy, so a substituted env var
+            # is not written back in place of its placeholder.
+            disk_data, _changed, _registry = apply(disk_data, path=path)
+        try:
             import shutil
 
             bak = path + ".pre-migration.bak"
@@ -297,12 +341,20 @@ class JsoncConfigIO:
                 logger.info("config: backed up original to %s", bak)
             with config_lock(path):
                 write_config(path, disk_data)
-            logger.info(
-                "config: migrated %s to version %s",
+        except OSError as exc:
+            logger.warning(
+                "config: %s was brought forward in memory but could not be "
+                "written back (%s); serving the migrated document and leaving "
+                "the file as it is",
                 path,
-                disk_data.get("config_version"),
+                exc,
             )
-        return raw
+            return
+        logger.info(
+            "config: migrated %s to version %s",
+            path,
+            disk_data.get("config_version"),
+        )
 
 
 def discover_config(explicit_path: str | None = None) -> str | None:
@@ -407,6 +459,20 @@ class _FormatGroups(NamedTuple):
 
     by_account: dict[str, ModelRoute]
     """Keyed by the account token — same upstream account (tier 2)."""
+
+
+def load_gateway_config(path: str) -> GatewayConfig:
+    """Read a config document and build the config the gateway serves.
+
+    The load-time steps run as part of the read, and the config carries the
+    registry they ran — which is what the admin surface reports the config's
+    maintenance from.  That is the whole difference between this and
+    ``GatewayConfig(load_config(path))``, which has run the steps without
+    keeping any trace of them.
+    """
+    reader = JsoncConfigIO()
+    raw = reader.load(path)
+    return GatewayConfig(raw, maintenance=reader.last_load_registry)
 
 
 class GatewayConfig:
