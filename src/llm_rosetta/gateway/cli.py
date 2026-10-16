@@ -22,6 +22,7 @@ from .banner import print_banner
 from .config import (
     PATHS_TO_TRY,
     GatewayConfig,
+    JsoncConfigIO,
     discover_config,
     load_config,
     load_config_raw,
@@ -514,6 +515,36 @@ def _report_shim_sources(report: ShimLoadReport | None) -> None:
         )
 
 
+def _load_startup_config(
+    config_path: str, args: argparse.Namespace
+) -> tuple[GatewayConfig, ShimLoadReport | None]:
+    """Read the document this process is about to serve, with the CLI overrides.
+
+    Read through the load-time steps rather than the bare parser: the document
+    on disk may have been written by an older release, and serving it unmigrated
+    drops whatever a migration would have merged in — for a ``config_version: 0``
+    file that is the whole legacy rerank/embedding pool (#1046).  The config
+    carries the registry those steps ran, which is what the admin surface lists
+    the load-time set from.
+    """
+    reader = JsoncConfigIO()
+    raw_config = reader.load(config_path)
+
+    # CLI --proxy overrides config-level server.proxy
+    if args.proxy:
+        raw_config.setdefault("server", {})["proxy"] = args.proxy
+    if args.data_dir:
+        raw_config.setdefault("server", {})["data_dir"] = args.data_dir
+    if args.tls_cert:
+        raw_config.setdefault("server", {})["tls_cert"] = args.tls_cert
+    if args.tls_key:
+        raw_config.setdefault("server", {})["tls_key"] = args.tls_key
+
+    shim_source_report = _apply_shim_sources_or_exit(raw_config, config_path)
+    config = GatewayConfig(raw_config, maintenance=reader.last_load_registry)
+    return config, shim_source_report
+
+
 def main() -> None:  # noqa: C901
     """Parse CLI arguments and either run a subcommand or start the server."""
     from .app import create_app
@@ -694,21 +725,7 @@ def main() -> None:  # noqa: C901
         )
         sys.exit(1)
 
-    raw_config = load_config(config_path)
-
-    # CLI --proxy overrides config-level server.proxy
-    if args.proxy:
-        raw_config.setdefault("server", {})["proxy"] = args.proxy
-    if args.data_dir:
-        raw_config.setdefault("server", {})["data_dir"] = args.data_dir
-    if args.tls_cert:
-        raw_config.setdefault("server", {})["tls_cert"] = args.tls_cert
-    if args.tls_key:
-        raw_config.setdefault("server", {})["tls_key"] = args.tls_key
-
-    shim_source_report = _apply_shim_sources_or_exit(raw_config, config_path)
-
-    config = GatewayConfig(raw_config)
+    config, shim_source_report = _load_startup_config(config_path, args)
 
     # Resolve verbosity: CLI --verbose wins, then config/env, then --log-level
     verbose = args.verbose or config.verbose

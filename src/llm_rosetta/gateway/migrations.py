@@ -112,6 +112,38 @@ _MIGRATIONS: list[tuple[int, Any]] = [
 ]
 
 
+def _declared_version(raw: dict[str, Any]) -> int:
+    """The version this document declares, as an integer.
+
+    ``config_version`` is this module's bookkeeping, not something an operator
+    writes — the scaffold ``llm-rosetta-gateway init`` produces does not carry
+    the key at all — so a value we cannot read is not a reason to refuse the
+    document.  A quoted number (a template that renders ``"1"``) and a JSON
+    float are the same version; anything else is "no version recorded", which
+    means the migrations run.  Warning about the odd value is the operator's
+    business; failing the load over our own field is nobody's.
+    """
+    declared = raw.get("config_version")
+    if declared is None:
+        return 0
+    if not isinstance(declared, bool):
+        if isinstance(declared, int):
+            return declared
+        if isinstance(declared, float) and declared.is_integer():
+            return int(declared)
+        if isinstance(declared, str):
+            try:
+                return int(declared.strip())
+            except ValueError:
+                pass
+    logger.warning(
+        "config: config_version is %r, which is not a version number; treating "
+        "the document as having none recorded and bringing it forward",
+        declared,
+    )
+    return 0
+
+
 def migrate(raw: dict[str, Any]) -> tuple[dict[str, Any], bool]:
     """Apply all pending migrations to *raw* config dict.
 
@@ -119,8 +151,20 @@ def migrate(raw: dict[str, Any]) -> tuple[dict[str, Any], bool]:
         Tuple of (migrated_dict, changed) where *changed* is True if any
         migration was applied.
     """
-    initial_version = raw.get("config_version", 0)
-    if initial_version >= CURRENT_VERSION:
+    initial_version = _declared_version(raw)
+    if initial_version > CURRENT_VERSION:
+        # Written by a release that knows migrations this one does not.  Serve
+        # it as it is — running the migrations we do know could take apart a
+        # shape they were never written for, and stamping our own version on it
+        # would record work that did not happen.
+        logger.warning(
+            "config: this document declares config_version %d, newer than this "
+            "release knows (%d); serving it as it is",
+            initial_version,
+            CURRENT_VERSION,
+        )
+        return raw, False
+    if initial_version == CURRENT_VERSION:
         return raw, False
 
     changed = False
