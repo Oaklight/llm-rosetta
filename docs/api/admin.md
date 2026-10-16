@@ -710,6 +710,7 @@ GET /admin/api/maintenance
         {
           "name": "request_log.backfill_provider_names",
           "description": "name the provider on rows written before the column existed",
+          "store": "gateway.db",
           "ran": true,
           "ok": true,
           "changed": 128,
@@ -719,6 +720,7 @@ GET /admin/api/maintenance
         {
           "name": "request_log.backfill_total_tokens",
           "description": "repair totals written while cache tokens were excluded",
+          "store": "gateway.db",
           "ran": true,
           "ok": false,
           "changed": 0,
@@ -735,6 +737,7 @@ GET /admin/api/maintenance
 |------|------|------|
 | `registries[].name` | `string` | 这些步骤所属的 registry；`deferred` 是启动后那一组。 |
 | `registries[].policy` | `string` | `deferred`（失败被记录并继续）、`mandatory`（失败则中止启动）或 `load_time`。 |
+| `steps[].store` | `string` | 该步骤修复的存储，按它在磁盘上的名字（`gateway.db`、`keys.db`）——一次 `partial` 运行之后"哪个库修了一半"的答案，不必从步骤名里反推。 |
 | `steps[].ran` | `bool` | 是否已有结果。尚未跑过的步骤以 `ran: false` 列出，而不是被省略。 |
 | `steps[].changed` | `int` | 该步骤自己的计量单位——通常是修好的行数。`0` 表示"没有可做的了"，失败的步骤同样报 0：它做了一半的量不算数。 |
 | `steps[].error` | `string \| null` | 失败原因（若有）。 |
@@ -755,6 +758,7 @@ POST /admin/api/maintenance/<name>
 ```json
 {
   "name": "request_log.backfill_total_tokens",
+  "store": "gateway.db",
   "ok": true,
   "changed": 42,
   "seconds": 0.318,
@@ -792,7 +796,7 @@ POST /admin/api/maintenance/<name>
     "state": "partial",
     "registry": "deferred",
     "failed": ["request_log.backfill_total_tokens"],
-    "steps": [{"name": "request_log.backfill_provider_names", "ok": true, "changed": 128, "seconds": 0.041, "error": null}]
+    "steps": [{"name": "request_log.backfill_provider_names", "store": "gateway.db", "ok": true, "changed": 128, "seconds": 0.041, "error": null}]
   }
 }
 ```
