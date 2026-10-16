@@ -219,7 +219,17 @@ its own terms.
 Measured: Anthropic accepts `strict: true` but answers `400` unless the schema
 sets `additionalProperties: false`, so a client asking for strict mode on that
 route must send a closed schema. Closing it for the client would change the
-tool's meaning, so the library does not.
+tool's meaning, so the library does not — the flag is written as the client
+asked, and the schema is left as the client wrote it.
+
+**The Google drop is deliberate and silent.** Unlike the allow-list below,
+where a restriction going away is reported, no warning is raised for a dropped
+`strict` — and that is a decision rather than an oversight. The two differ in
+what the client loses: an allow-list *widens* what the model may do, so the
+caller has to know; `strict` is a validation guarantee the target never had,
+the schema still travels and is still enforced on Google's own terms, and a
+warning on every request carrying an OpenAI-style strict tool would be a
+standing complaint with no action behind it.
 
 #### 5d. Tool-Choice Allow-Lists
 
@@ -241,6 +251,18 @@ Completions is the sharper case — OpenAI's schema documents the variant, but
 the live Chat API rejects it (`400 Missing required parameter:
 'tool_choice.function.'`), so a Chat-shaped allow-list is read (so it can be
 routed to a format that does state it) and never written.
+
+Two more measured details worth knowing before hand-writing a restriction:
+
+- **An entry's `type` has to match the declaration.** A custom tool needs a
+  `{"type": "custom", "name": …}` entry; a `function`-shaped one naming it
+  answers `400 Tool choice 'function' not found in 'tools' parameter`, and the
+  reverse likewise. The library derives the type from the tool declaration, and
+  writes `function` for a name the request does not declare — along with a
+  warning, since the provider rejects that body outright.
+- **An entry has no namespace slot.** `tool_choice.tools[0].namespace` is
+  `400 Unknown parameter`, so an IR identity's group is resolved into the name
+  by the naming pass and not carried to the wire.
 
 
 ### 6. Streaming Issues
