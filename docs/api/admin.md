@@ -796,14 +796,19 @@ POST /admin/api/maintenance/<name>
     "state": "partial",
     "registry": "deferred",
     "failed": ["request_log.backfill_total_tokens"],
-    "steps": [{"name": "request_log.backfill_provider_names", "store": "gateway.db", "ok": true, "changed": 128, "seconds": 0.041, "error": null}]
+    "steps": [{"name": "request_log.backfill_provider_names", "store": "gateway.db", "ok": true, "changed": 128, "seconds": 0.041}]
   }
 }
 ```
 
 `state` 在步骤跑之前是 `not_started`，任务进行中是 `running`，全部成功是
-`done`，有失败则是 `partial`。失败的一次修复**故意**不会把探针变成 `503`：
-这些步骤可以重试，为一次失败的修复挡住流量，比修复晚一点更糟。
+`done`，有失败则是 `partial`——有步骤压根没跑也算 `partial`。失败的一次修复
+**故意**不会把探针变成 `503`：这些步骤可以重试，为一次失败的修复挡住流量，
+比修复晚一点更糟。
+
+探针的响应里**不含失败文本**：`/health/ready` 是不设防的路由，而异常字符串
+可能带出路径、文件名或一段 SQL。`failed` 给出步骤名；错误原文在步骤自己写的
+日志行里，以及上面那个需要鉴权的接口里。
 
 ---
 
