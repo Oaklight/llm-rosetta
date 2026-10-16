@@ -720,6 +720,7 @@ Every step this deployment runs, whether it has run, and what it did.
         {
           "name": "request_log.backfill_provider_names",
           "description": "name the provider on rows written before the column existed",
+          "store": "gateway.db",
           "ran": true,
           "ok": true,
           "changed": 128,
@@ -729,6 +730,7 @@ Every step this deployment runs, whether it has run, and what it did.
         {
           "name": "request_log.backfill_total_tokens",
           "description": "repair totals written while cache tokens were excluded",
+          "store": "gateway.db",
           "ran": true,
           "ok": false,
           "changed": 0,
@@ -745,6 +747,7 @@ Every step this deployment runs, whether it has run, and what it did.
 |-------|------|-------------|
 | `registries[].name` | `string` | The registry the steps belong to; `deferred` is the post-startup set. |
 | `registries[].policy` | `string` | `deferred` (a failure is recorded and survived), `mandatory` (a failure aborts startup) or `load_time`. |
+| `steps[].store` | `string` | The store the step repairs, as it is on disk (`gateway.db`, `keys.db`) — the answer to "which database is half-repaired" after a `partial` run, without reading it back out of the step name. |
 | `steps[].ran` | `bool` | Whether a result exists yet.  A step that has not run is listed with `ran: false` rather than omitted. |
 | `steps[].changed` | `int` | The step's own unit — rows repaired, usually.  `0` means "nothing left to do", which is also what a failed step reports: what it half-did is not a count. |
 | `steps[].error` | `string \| null` | Why it failed, when it did. |
@@ -766,6 +769,7 @@ list above.
 ```json
 {
   "name": "request_log.backfill_total_tokens",
+  "store": "gateway.db",
   "ok": true,
   "changed": 42,
   "seconds": 0.318,
@@ -803,7 +807,7 @@ deployment can tell "the repairs are done" from "the startup task finished":
     "state": "partial",
     "registry": "deferred",
     "failed": ["request_log.backfill_total_tokens"],
-    "steps": [{"name": "request_log.backfill_provider_names", "ok": true, "changed": 128, "seconds": 0.041, "error": null}]
+    "steps": [{"name": "request_log.backfill_provider_names", "store": "gateway.db", "ok": true, "changed": 128, "seconds": 0.041, "error": null}]
   }
 }
 ```
