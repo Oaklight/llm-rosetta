@@ -86,3 +86,17 @@ app = create_app(config)
 import uvicorn
 uvicorn.run(app, host="0.0.0.0", port=8765)
 ```
+
+## Reading usage from the shell
+
+`llm-rosetta-usage` is a separate command for the token ledger the gateway
+keeps — the same figures the admin panel's dashboard and API Keys tab show,
+without starting anything:
+
+```console
+$ llm-rosetta-usage --db /var/lib/llm-rosetta --window 24h --by subject,model
+```
+
+It reads the store and, when it is beside it, the keys database, so it reports
+against a running gateway's files.  See
+[Observability — The `llm-rosetta-usage` command](../api/observability.md#the-llm-rosetta-usage-command).

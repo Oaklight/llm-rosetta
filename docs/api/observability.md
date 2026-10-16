@@ -431,6 +431,221 @@ body = decompress_body(compressed)
 
 ---
 
+## Usage
+
+`llm_rosetta.observability.usage` owns what "how many tokens did we move, and
+for whom" means.  It has no HTTP, no configuration and no credentials: a
+library user records usage and reads a report without any of that, and the
+gateway is one consumer of it, supplying credential subjects and SQLite
+storage.
+
+### The ledger's columns
+
+| Column | Meaning |
+|--------|---------|
+| `input_tokens` | Prompt tokens, as the provider counted them |
+| `output_tokens` | Completion tokens |
+| `total_tokens` | The canonical total — see `token_total` below |
+| `cache_read_tokens` | Cache hits |
+| `cache_creation_tokens` | Cache writes |
+| `reasoning_tokens` | Thinking tokens; **inside** `output_tokens`, never added |
+
+`token_total(usage)` fills `total_tokens`.  A total the provider sent is taken
+as given; otherwise the counters are added up, under two rules that are not
+obvious:
+
+- **Reasoning is never added** — it rides inside the output tokens.
+- **Cache is added only where it is not already inside the prompt.**  The
+  Messages API reports its cache tokens *beside* the input (additive); OpenAI
+  and Google report theirs *inside* it (a subset).  Which is which is declared
+  once, in `llm_rosetta.observability.usage.semantics`, and a test fails if a
+  converter ever disagrees with the declaration.
+
+`usage_columns(usage)` turns an IR usage dict into those columns.  A counter
+the usage never named is left out rather than written as zero, so "no cache"
+and "cache not reported" stay distinguishable; a non-integer value is not a
+count either, and is treated as unreported — a payload whose counts arrived as
+strings measures as no usage rather than raising out of the arithmetic.
+
+### Model types
+
+Every row also carries a **model type** — `llm`, `embedding`, `rerank` or
+`decision`, the names `gateway/model_types.py` registers.  The column does not
+carry the same IR field name in every family: chat asks the provider for
+`prompt_tokens` and `completion_tokens`, the decision IR already reports
+`input_tokens`/`output_tokens`, the embedding and rerank IR types have no
+output side, and rerank's cache counter is `cached_tokens`.  So the
+column-to-field map is declared per model type, `usage_columns(usage,
+model_type)` and `token_total(usage, model_type)` read the right one, and a
+type that is not one of the four is refused rather than guessed at.  The
+canonical total rule is unchanged across families: a provider total wins,
+otherwise the parts are added, and a family with no total of its own always
+takes the additive path.
+
+`UsageReport.by_model_type` reports the same rows cut by type —
+`report.for_model_type("embedding", "24h")` — orthogonally to the classes
+above, and a group that names no type counts as chat, which is what a row
+written before the column existed means.  The gateway's daily table
+(`GET /admin/api/token-usage`) returns the same split per day and accepts a
+`model_type=` filter.
+
+### UsageLedger
+
+Record usage, then ask what it came to — no gateway, no database:
+
+```python
+from llm_rosetta.observability import UsageLedger
+
+ledger = UsageLedger()
+ledger.record(resp["usage"], model="gpt-5-nano", subject="batch-7")
+ledger.record(resp["usage"], model="gpt-5-nano", subject="batch-7")
+
+ledger.total("24h")
+# {'request_count': 2, 'input_tokens': 40, 'output_tokens': 10, ...}
+```
+
+| Method | Description |
+|--------|-------------|
+| `record(usage, *, model=None, subject=None, label=None, model_type="llm", at=None, warnings=None)` | Record one call; returns the record, or `None` when the usage named no token count |
+| `groups()` | The records summed per subject and window — the shape a stored ledger's reader returns |
+| `report(subjects=...)` | Build a `UsageReport`; defaults to attributing every subject the ledger has seen |
+| `total(window)` | Every recorded token in one window, however it is attributed |
+| `records()` / `len(ledger)` / `clear()` | Read the records back, count them, or drop them |
+
+Windows are rolling (`5h`, `24h`, `7d`, `30d`) and are measured against the
+clock as the report is built, so a record ages out of the narrow ones on its
+own.  `at=` dates a record at a past instant, which is what replaying a log
+needs.
+
+Two behaviours are worth knowing before relying on them:
+
+- **A usage dict that names no token count records nothing** and returns
+  `None`.  That is right for a response that carried no usage and wrong for a
+  misspelled key, and from the outside the two look identical — so pass
+  `warnings=[]` and the call says which keys it saw.  Explicit zeros are a
+  count: a call that reported none is a call that happened, and it is recorded
+  as a request with zero tokens.  A count that arrived as a string is not a
+  count either, and measures as no usage rather than raising out of the
+  arithmetic.
+- **`report()` attributes every subject the ledger has recorded**, because
+  there is no keystore here to say which of them are still live.  A ledger
+  shared between parties that do not answer for each other should pass
+  `subjects=` explicitly — names (`subjects=["batch-7"]`) or
+  `(subject, label)` pairs.  The gateway reads the same rows differently, and
+  deliberately: a subject whose credential is gone lands in the report's
+  remainder there, because the gateway *does* have a keystore to ask.
+
+### UsageReport
+
+```python
+from llm_rosetta.observability import UsageReport
+
+report = UsageReport.build(
+    groups=await persistence.query_usage_groups(),
+    subjects=[(bucket, label) for ...],       # what may be attributed
+    internal_subject=INTERNAL_SUBJECT,        # the gateway's own traffic
+    internal_label=INTERNAL_LABEL,
+)
+report.total("24h")
+```
+
+Every row lands in exactly one of three classes, and `total()` sums all three:
+
+| Class | What it is |
+|-------|------------|
+| attributed | The subject is one the caller named |
+| internal | The caller's own traffic — in the gateway, the admin panel's token |
+| unattributed | Everything else: a credential that is gone, a row written before subjects existed, a request that carried none.  Kept, with a per-label split |
+
+Keeping the third class is what makes the report add up.  The dashboard counts
+every row, so a report that quietly dropped the rows it could not attribute
+would disagree with the dashboard's total; instead the two are the same number
+by construction, and the API Keys panel shows the remainder as its own row.
+
+`to_payload(names)` renders it as the admin API's JSON, with `names` mapping
+each subject to the name to file it under — the gateway maps a credential
+bucket to the key's id, and renames the remainder.
+
+`INTERNAL_SUBJECT` and `INTERNAL_LABEL` (`"internal"`) are declared beside that
+classification rather than in the gateway, so the code that writes the admin
+token's rows and any reader that groups them name one thing once.
+
+### The `llm-rosetta-usage` command
+
+The gateway renders this report in its admin panel and a library gets it from
+`UsageReport.build`; the third reader is a shell:
+
+```console
+$ llm-rosetta-usage --db /var/lib/llm-rosetta --window 24h
+store: /var/lib/llm-rosetta
+window: 24h (rolling)
+
+subject             requests  input  output  cache read  cache write  reasoning  total
+------------------  --------  -----  ------  ----------  -----------  ---------  -----
+team-a                     2   1,200     800         400            0          0  2,000
+team-b                     2     600       0           0            0          0    600
+internal                   1      10       5           0            0          0     15
+(unattributed)             4     140      40           0            0          0    180
+TOTAL                     10   1,952     850         400            0          0  2,802
+```
+
+| Option | Meaning |
+|--------|---------|
+| `--db PATH` | Required. The data directory holding `gateway.db`, or that file |
+| `--window NAME` | Which rolling window the tables show: `5h`, `24h` (default), `7d`, `30d` |
+| `--by CUT[,CUT]` | What to cut by: `subject` (default), `type` (model type), `model` |
+| `--keys-db PATH` | The keys database, for attribution — default `keys.db` beside the store |
+| `--top N` | How many rows each table shows; `0` for all.  A table's total still sums every row of its cut, and `--json` is never truncated |
+| `--migrate` | Open the store as the gateway would: backup, then migrations.  Off by default |
+| `--json` | Print JSON instead of tables |
+
+Every table is ordered by the window it shows, the widest window breaking
+ties — so a row's position is explained by the numbers printed beside it, and a
+model whose traffic is all outside `--window` sorts below one that has some.  A
+table's last row is the total of *every* row of that cut, not only the ones
+shown, so `--top` cannot make the total disagree with the store.  `--top`
+bounds all three tables, including the subject table, which is the one that
+grows with every credential the gateway has ever seen.
+
+`--json` is the report itself rather than a second rendering of it: the subject
+cut adds exactly the keys the admin API returns (`windows`, `keys`, `internal`,
+`unattributed`), so a script reading the command and one reading the panel see
+one shape.  The other cuts add `model_types` and `models`, and `--top` never
+truncates them.
+
+It opens the store through `PersistenceManager` — the gateway's own reader —
+but **without writing to it**: no backup, no table creation, no migrations.  A
+lookup should not leave a copy of the database behind, and it should not take a
+write lock on a store another process is serving.  A store whose schema is
+older than the installed build is therefore *refused* rather than migrated, with
+the two ways out named: start the gateway once, or pass `--migrate`, which opens
+the store exactly as the gateway does (backup first, then the migrations).  A
+store that does not exist is refused too, rather than created — a mistyped path
+must not leave an empty database that reads as a store with no traffic.
+
+A store you cannot write — a mounted volume, a snapshot copy — reads fine as
+long as SQLite can attach what it needs (another process serving the store
+leaves the sidecars it attaches to).  Whether a given read-only store can be
+read at all is SQLite's rule about `-wal`/`-shm` and not about the store's age,
+so the command reports what it observed rather than guessing: a store whose
+write-ahead log cannot be attached *reads as empty*, and it is refused as
+exactly that, never as "schema version 0" — which would send the reader to
+migrate a store that is already current.
+
+Attribution needs the credentials that still exist, and they live in the
+gateway's keys database, which the command reads read-only — two columns of one
+table.  Without it every token is reported as unattributed and the command says
+so on stderr — distinguishing a missing database from an unreadable one — which
+is a true answer to a smaller question, since the totals are still the store's
+and only the names are missing.
+
+A row whose `total_tokens` is NULL — a store whose rows predate the gateway's
+startup repair — is reported as it is stored, so it can read as `input 4,000 /
+total 0`.  That is the same figure the admin panel shows; the repair runs when
+the gateway starts, and this command deliberately does not write.
+
+---
+
 ## Backward compatibility
 
 All classes remain importable from their original `gateway.admin` locations:

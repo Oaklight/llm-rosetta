@@ -85,3 +85,4 @@ converted = convert(some_request, target_provider="messages")
 - [Using Converters](../guide/converters.md) — detailed converter usage and metadata preservation
 - [Streaming](../guide/streaming.md) — convert streaming chunks between providers
 - [IR Types](../guide/ir-types.md) — the Intermediate Representation type system
+- [Usage](../api/observability.md#usage) — measure tokens and read a report with no gateway
