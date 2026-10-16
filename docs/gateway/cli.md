@@ -86,3 +86,16 @@ app = create_app(config)
 import uvicorn
 uvicorn.run(app, host="0.0.0.0", port=8765)
 ```
+
+## 从 shell 读取用量
+
+`llm-rosetta-usage` 是另一个命令，用于读取网关保存的 token 台账——与管理面板
+仪表盘和 API Keys 标签页展示的同一组数字，无需启动任何服务：
+
+```console
+$ llm-rosetta-usage --db /var/lib/llm-rosetta --window 24h --by subject,model
+```
+
+它读取存储，并在 keys 数据库就在旁边时一并读取，因此可以直接对运行中的网关
+文件出报告。参见
+[可观测性——`llm-rosetta-usage` 命令](../api/observability.md#llm-rosetta-usage-命令)。

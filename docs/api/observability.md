@@ -420,6 +420,191 @@ body = decompress_body(compressed)
 
 ---
 
+## 用量（Usage） {: #usage }
+
+`llm_rosetta.observability.usage` 负责界定"我们搬了多少 token、算在谁头上"。
+它不涉及 HTTP、配置和凭据：库的使用者不需要这些东西就能记录用量并读取报告；
+网关只是它的一个消费者，额外提供凭据主体（subject）和 SQLite 存储。
+
+### 台账的列
+
+| 列 | 含义 |
+|--------|------|
+| `input_tokens` | 输入（prompt）token，以厂商的计数为准 |
+| `output_tokens` | 输出（completion）token |
+| `total_tokens` | 规范总量——见下文的 `token_total` |
+| `cache_read_tokens` | 缓存命中 |
+| `cache_creation_tokens` | 缓存写入 |
+| `reasoning_tokens` | 思考 token；**包含在** `output_tokens` 之内，从不额外累加 |
+
+`token_total(usage)` 负责填充 `total_tokens`。厂商给了总量就直接采用；否则把
+各计数器相加，其中两条规则并不显然：
+
+- **思考 token 从不累加**——它已经包含在输出 token 里。
+- **缓存只在它未被计入输入时才累加。** Messages API 把缓存 token 记在输入
+  之*外*（可加），OpenAI 与 Google 记在输入之*内*（是其子集）。谁属于哪一种
+  只在 `llm_rosetta.observability.usage.semantics` 里声明一次；一旦某个转换器
+  与声明不一致，测试就会失败。
+
+`usage_columns(usage)` 把 IR 的 usage 字典转成上述各列。usage 里没有出现的
+计数器会被留空而不是写成 0，这样"没有缓存"和"未报告缓存"仍然可以区分；值不是
+整数的字段同样不算计数，会按"未报告"处理——计数以字符串形式到达的 payload
+按"没有用量"处理，而不是在算术里抛出异常。
+
+### 模型类型（Model types）
+
+每一行还带一个**模型类型**——`llm`、`embedding`、`rerank` 或 `decision`，
+即 `gateway/model_types.py` 注册的那套名字。同一列在不同家族里对应的 IR 字段
+并不相同：chat 向厂商要的是 `prompt_tokens` 与 `completion_tokens`，decision
+IR 本来就报 `input_tokens`/`output_tokens`，embedding 与 rerank 的 IR 类型
+没有输出侧，而 rerank 的缓存计数器叫 `cached_tokens`。因此"列 → 字段"的映射
+按模型类型声明，`usage_columns(usage, model_type)` 与
+`token_total(usage, model_type)` 读取对应的一份；不属于这四种的名字会被拒绝
+而不是被猜。规范总量的规则在各家族之间不变：厂商给了总量就采用，否则累加各
+部分；自身不提供总量的家族永远走累加路径。
+
+`UsageReport.by_model_type` 把同一批行再按类型切一次——
+`report.for_model_type("embedding", "24h")`——与上面的三类正交；没有给出类型的
+分组按 chat 计，因为在**该列出现之前**写入的行就是这个含义。网关的日表
+（`GET /admin/api/token-usage`）按天返回同样的拆分，并接受 `model_type=` 过滤。
+
+### UsageLedger
+
+记录用量，然后查询它累计成什么——不需要网关，也不需要数据库：
+
+```python
+from llm_rosetta.observability import UsageLedger
+
+ledger = UsageLedger()
+ledger.record(resp["usage"], model="gpt-5-nano", subject="batch-7")
+ledger.record(resp["usage"], model="gpt-5-nano", subject="batch-7")
+
+ledger.total("24h")
+# {'request_count': 2, 'input_tokens': 40, 'output_tokens': 10, ...}
+```
+
+| 方法 | 说明 |
+|--------|------|
+| `record(usage, *, model=None, subject=None, label=None, model_type="llm", at=None, warnings=None)` | 记录一次调用；当 usage 未给出任何 token 计数时返回 `None` |
+| `groups()` | 按主体与窗口汇总后的记录——与已存储台账的读取结果形状一致 |
+| `report(subjects=...)` | 构建 `UsageReport`；默认把台账见过的每个主体都计入归属 |
+| `total(window)` | 某个窗口内的全部 token，无论归属如何 |
+| `records()` / `len(ledger)` / `clear()` | 取回记录、计数或丢弃 |
+
+窗口是滚动的（`5h`、`24h`、`7d`、`30d`），并且在生成报告时以当前时钟为准，
+因此记录会自行滑出较窄的窗口。`at=` 可以把记录标注在过去某个时刻，这正是
+回放日志所需要的。
+
+有两处行为在使用前值得了解：
+
+- **没有给出任何 token 计数的 usage 不会留下记录**，并返回 `None`。响应本身
+  就没带 usage 时这是对的，键名拼错时则是错的——而从外部看两者无法区分，因此
+  传入 `warnings=[]` 就能知道它看到了哪些键。显式的 0 是计数：报告"没有消耗"
+  的调用仍是一次真实调用，会以零 token 记下请求数。值是字符串的计数同样不算
+  计数，会按"没有用量"处理，而不是在算术里抛出异常。
+- **`report()` 会把台账记录过的每个主体都计入归属**，因为这里没有 keystore
+  来判断谁仍然存活。若一本台账由彼此不互相负责的几方共用，应显式传入
+  `subjects=`——名字（`subjects=["batch-7"]`）或 `(subject, label)` 二元组。
+  网关读同一批行的方式不同，且是有意为之：凭据已被删除的主体在网关那边落入
+  余量，因为网关**确实**有 keystore 可以问。
+
+### UsageReport
+
+```python
+from llm_rosetta.observability import UsageReport
+
+report = UsageReport.build(
+    groups=await persistence.query_usage_groups(),
+    subjects=[(bucket, label) for ...],       # 可以归属的主体
+    internal_subject=INTERNAL_SUBJECT,        # 网关自身的流量
+    internal_label=INTERNAL_LABEL,
+)
+report.total("24h")
+```
+
+每一行都恰好落入三类之一，而 `total()` 会把三类全部相加：
+
+| 类别 | 含义 |
+|-------|------|
+| 已归属（attributed） | 主体是调用方指定过的主体 |
+| 内部（internal） | 调用方自身的流量——在网关中即管理面板所用的令牌 |
+| 未归属（unattributed） | 其余一切：凭据已被删除、在主体概念出现之前写入的行、以及未携带任何主体的请求。予以保留，并按标签拆分 |
+
+保留第三类正是报告能够对得上的原因。仪表盘统计每一行，因此一份悄悄丢掉
+无法归属行的报告，必然与仪表盘的总量不符；反之两者的数字在构造上就是同一个，
+而 API Keys 面板会把剩余部分单独列成一行。
+
+`to_payload(names)` 把报告渲染为管理 API 的 JSON，其中 `names` 把每个主体映射
+到它应归档的名称——网关借此把凭据 bucket 映射为 key 的 id，并为其余量改名。
+
+`INTERNAL_SUBJECT` 与 `INTERNAL_LABEL`（均为 `"internal"`）就声明在这套分类旁边，
+而不是声明在网关里：写入管理令牌那些行的代码，与任何对它们分组的读取方，从此
+只有一个名字。
+
+### `llm-rosetta-usage` 命令
+
+网关在管理面板里渲染这份报告，库通过 `UsageReport.build` 拿到它；第三个读取方
+是 shell：
+
+```console
+$ llm-rosetta-usage --db /var/lib/llm-rosetta --window 24h
+store: /var/lib/llm-rosetta
+window: 24h (rolling)
+
+subject             requests  input  output  cache read  cache write  reasoning  total
+------------------  --------  -----  ------  ----------  -----------  ---------  -----
+team-a                     2   1,200     800         400            0          0  2,000
+team-b                     2     600       0           0            0          0    600
+internal                   1      10       5           0            0          0     15
+(unattributed)             4     140      40           0            0          0    180
+TOTAL                     10   1,952     850         400            0          0  2,802
+```
+
+| 选项 | 含义 |
+|------|------|
+| `--db PATH` | 必填。包含 `gateway.db` 的数据目录，或该文件本身 |
+| `--window NAME` | 表格展示哪个滚动窗口：`5h`、`24h`（默认）、`7d`、`30d` |
+| `--by CUT[,CUT]` | 按什么切分：`subject`（默认）、`type`（模型类型）、`model` |
+| `--keys-db PATH` | 用于归属的 keys 数据库——默认取存储旁边的 `keys.db` |
+| `--top N` | 每张表展示多少行；`0` 表示全部。表的合计仍为该切分下全部行的合计，且 `--json` 永不截断 |
+| `--migrate` | 按网关的方式打开存储：先备份、再迁移。默认关闭 |
+| `--json` | 输出 JSON 而不是表格 |
+
+每张表都按**它所展示的那个窗口**排序，并列时由最宽的窗口决定——因此一行的位置
+总能由它旁边的数字解释，而流量全落在 `--window` 之外的模型会排在有流量的模型
+之后。每张表的最后一行是该切分下**全部**行的合计，而不只是显示出来的那些，所以
+`--top` 不会让合计与存储不符。`--top` 作用于三张表，包括主体表——那正是随网关
+见过的凭据数量增长的那张。
+
+`--json` 输出的就是这份报告本身，而不是它的第二种渲染：subject 这一路切分会
+原样带上管理 API 返回的那些键（`windows`、`keys`、`internal`、`unattributed`），
+因此读命令的脚本与读面板的脚本看到的是同一个形状。其余切分会追加
+`model_types` 与 `models`，且 `--top` 从不截断它们。
+
+它通过 `PersistenceManager` 打开存储——也就是网关自己的读取方——但**不写入**：
+不备份、不建表、不迁移。一次查询不该留下数据库副本，也不该对另一个进程正在
+服务的存储加写锁。因此，schema 比当前安装版本旧的存储会被**拒绝**而不是被迁移，
+并说明两条出路：先启动一次网关，或传 `--migrate`——后者完全按网关的方式打开存储
+（先备份，再迁移）。不存在的存储同样被拒绝而不是被创建：打错路径不能留下一个空
+数据库，读起来像是一个没有流量的存储。
+
+你无法写入的存储——挂载卷、快照副本——只要 SQLite 能挂接上它需要的东西就能读取
+（有进程正在服务该存储时，边车文件就在那里）。一个只读存储究竟能不能读，取决于
+SQLite 关于 `-wal`/`-shm` 的规则，而不取决于存储的新旧；因此命令报告它实际观察到
+的事实而不是猜测：写前日志挂接不上的存储**读起来像是空的**，就按这个如实拒绝，
+绝不报成"schema 版本 0"——那会让读者去迁移一个本来就已是最新版本的存储。
+
+归属需要仍然存在的凭据，它们位于网关的 keys 数据库，命令以只读方式读取它——
+一张表的两列。没有它时，所有 token 都会被报告为未归属，命令会在 stderr 上说明
+——并且区分"数据库不存在"与"数据库读不出来"——这是对一个小一点的问题给出的
+真实答案：总量仍是存储的总量，缺的只是名字。
+
+`total_tokens` 为 NULL 的行——存在于网关启动时那次修复之前写入的行——会按存储中
+的原样报告，因此可能读成 `input 4,000 / total 0`。这与管理面板显示的同一个数字；
+修复在网关启动时执行，而本命令刻意不写入。
+
+---
+
 ## 向后兼容性
 
 所有类仍可从原始 `gateway.admin` 路径导入：

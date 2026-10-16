@@ -85,3 +85,4 @@ converted = convert(some_request, target_provider="messages")
 - [使用转换器](../guide/converters.md) — 转换器详细用法和元数据保留
 - [流式处理](../guide/streaming.md) — 跨提供方转换流式数据块
 - [IR 类型](../guide/ir-types.md) — 中间表示类型系统
+- [用量](../api/observability.md#usage) — 无需网关即可计量 token 并读取报告
