@@ -18,7 +18,7 @@ from llm_rosetta.observability.maintenance import Registry
 from llm_rosetta.routing import ResolvedRoute
 
 from .providers import BASE_FORMATS, build_provider_info
-from .routing_strategy import (
+from .routing import (
     DEFAULT_STRATEGY,
     ModelRoute,
     ProviderEntry,

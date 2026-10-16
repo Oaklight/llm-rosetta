@@ -16,7 +16,7 @@ Usage::
 
 Module map::
 
-    Core proxy          app, proxy, config, providers, routing_strategy
+    Core proxy          app, proxy, config, providers, routing/
     Middleware           middleware/ subpackage:
                            auth, ratelimit, request_context, error_format,
                            circuit_breaker, headers, sanitize, affinity

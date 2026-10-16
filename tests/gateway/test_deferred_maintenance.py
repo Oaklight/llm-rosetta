@@ -17,7 +17,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 from llm_rosetta.gateway.deferred_backfills import build_registry
 from llm_rosetta.gateway.deferred_startup import DeferredStartup
-from llm_rosetta.gateway.routing_strategy import ModelRoute, ProviderEntry
+from llm_rosetta.gateway.routing import ModelRoute, ProviderEntry
 from llm_rosetta.observability.maintenance import Policy, StepContext
 
 _ALL_STEPS = [

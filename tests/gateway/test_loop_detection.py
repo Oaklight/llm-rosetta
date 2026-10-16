@@ -13,7 +13,7 @@ from llm_rosetta.gateway.middleware.headers import (
     get_hop_count,
 )
 from llm_rosetta.gateway.middleware.hop_limit import create_hop_limit_hook
-from llm_rosetta.gateway.routing_strategy import ModelRoute, ProviderEntry
+from llm_rosetta.gateway.routing import ModelRoute, ProviderEntry
 
 
 # ---------------------------------------------------------------------------
