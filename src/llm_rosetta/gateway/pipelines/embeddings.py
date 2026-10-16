@@ -96,7 +96,9 @@ def _resolve_embedding_provider(
 
     # Fall back to chat provider routing (backward compat)
     try:
-        chat_route, provider_info = config.resolve("chat_completions", model)
+        chat_route, provider_info = config.resolve(
+            config.selection_context(model, "chat_completions")
+        )
     except KeyError:
         return None
 

@@ -23,6 +23,7 @@ from llm_rosetta.gateway.transport.provider_info import (
     openai_auth,
 )
 from llm_rosetta.observability.metrics import MetricsCollector
+from llm_rosetta.gateway.routing import SelectionContext
 
 
 async def _async_iter(items):
@@ -661,7 +662,7 @@ class TestResolveSkipsUnready:
             "ready": _make_pinfo("ready"),
         }
         cfg = self._build_config(providers)
-        route, pinfo = cfg.resolve("openai_chat", "test-model")
+        route, pinfo = cfg.resolve(cfg.selection_context("test-model", "openai_chat"))
         assert route.provider_name == "ready"
         assert pinfo.ready is True
 
@@ -673,7 +674,7 @@ class TestResolveSkipsUnready:
         }
         cfg = self._build_config(providers)
         with pytest.raises(ProviderNotReady) as exc_info:
-            cfg.resolve("openai_chat", "test-model")
+            cfg.resolve(cfg.selection_context("test-model", "openai_chat"))
         assert exc_info.value.failed is False
 
     def test_all_failed_raises_failed(self):
@@ -690,14 +691,14 @@ class TestResolveSkipsUnready:
         setattr(cfg, "_deferred_startup", ds)
 
         with pytest.raises(ProviderNotReady) as exc_info:
-            cfg.resolve("openai_chat", "test-model")
+            cfg.resolve(cfg.selection_context("test-model", "openai_chat"))
         assert exc_info.value.failed is True
 
     def test_single_ready_provider_no_fallback_needed(self):
         """Single ready provider works without fallback."""
         providers = {"only": _make_pinfo("only")}
         cfg = self._build_config(providers)
-        route, pinfo = cfg.resolve("openai_chat", "test-model")
+        route, pinfo = cfg.resolve(cfg.selection_context("test-model", "openai_chat"))
         assert route.provider_name == "only"
 
 
@@ -713,7 +714,9 @@ class TestResolveOrError:
 
         with patch("llm_rosetta.gateway.app._config") as mock_config:
             mock_config.resolve.side_effect = ProviderNotReady("model-x")
-            result = _resolve_or_error("openai_chat", "model-x", "req-1")
+            result = _resolve_or_error(
+                SelectionContext("model-x", "openai_chat"), "req-1"
+            )
 
         assert isinstance(result, Response)
         assert result.status_code == 503
@@ -725,7 +728,9 @@ class TestResolveOrError:
 
         with patch("llm_rosetta.gateway.app._config") as mock_config:
             mock_config.resolve.side_effect = ProviderNotReady("model-x", failed=True)
-            result = _resolve_or_error("openai_chat", "model-x", "req-1")
+            result = _resolve_or_error(
+                SelectionContext("model-x", "openai_chat"), "req-1"
+            )
 
         assert isinstance(result, Response)
         assert result.status_code == 502
@@ -738,7 +743,9 @@ class TestResolveOrError:
         with patch("llm_rosetta.gateway.app._config") as mock_config:
             mock_config.resolve.side_effect = KeyError("no-model")
             mock_config.models.keys.return_value = ["gpt-4o"]
-            result = _resolve_or_error("openai_chat", "no-model", "req-1")
+            result = _resolve_or_error(
+                SelectionContext("no-model", "openai_chat"), "req-1"
+            )
 
         assert isinstance(result, Response)
         assert result.status_code == 404

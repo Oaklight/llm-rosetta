@@ -17,6 +17,8 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 
+from llm_rosetta.provider_names import canonical_provider_name
+
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
@@ -78,11 +80,13 @@ class SelectionContext:
 
         Args:
             model: The model name the client asked for.
-            source_format: The API standard the request arrived in, already
-                canonical (``chat_completions``, not ``openai_chat``).
+            source_format: The API standard the request arrived in.  Legacy
+                spellings are accepted and normalised here, so a request that
+                names its format the old way is compared against the config's
+                canonical names rather than against the string it sent.
         """
         self.model = model
-        self.source_format = source_format
+        self.source_format = canonical_provider_name(str(source_format))
 
         self.model_route: ModelRoute | None = None
         self.providers: Mapping[str, ProviderInfo] = {}

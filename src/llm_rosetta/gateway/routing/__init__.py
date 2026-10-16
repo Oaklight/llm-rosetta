@@ -17,6 +17,7 @@ Anything not listed in ``__all__`` is internal.
 from __future__ import annotations
 
 from .context import Identity, SelectionContext
+from .select import AnchorStage, select_ready_entry
 from .stage import RoutingChain, RoutingStage, StageOrderError
 from .strategy import (
     DEFAULT_STRATEGY,
@@ -31,6 +32,7 @@ from .strategy import (
 __all__ = [
     "DEFAULT_STRATEGY",
     "AffinityRoundRobinStrategy",
+    "AnchorStage",
     "Identity",
     "ModelRoute",
     "ProviderEntry",
@@ -41,4 +43,5 @@ __all__ = [
     "StageOrderError",
     "WeightedRoundRobinStrategy",
     "create_strategy",
+    "select_ready_entry",
 ]
