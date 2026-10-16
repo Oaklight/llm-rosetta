@@ -18,7 +18,7 @@ from typing import Any
 import pytest
 
 from llm_rosetta import ConversionPipeline
-from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
+from llm_rosetta.converters.llm.chat_completions import ChatCompletionsConverter
 from llm_rosetta.types.ir.request import IRRequest
 
 REQUEST: dict[str, Any] = {
@@ -43,9 +43,11 @@ FOREIGN_KEYS = (
 )
 
 
-def _body(target: str) -> tuple[dict[str, Any], list[str]]:
+def _body(
+    target: str, request: dict[str, Any] | None = None
+) -> tuple[dict[str, Any], list[str]]:
     pipe = ConversionPipeline("open_responses", target)
-    body = pipe.convert_request(dict(REQUEST))
+    body = pipe.convert_request(dict(REQUEST if request is None else request))
     return body, list(pipe.warnings)
 
 
@@ -110,3 +112,28 @@ def test_hand_built_ir_is_left_permissive() -> None:
     body, warnings = ChatCompletionsConverter().request_to_provider(ir)
     assert body["legacy_field"] == 1
     assert warnings == []
+
+
+NEVER_READ: dict[str, Any] = {
+    "model": "test-model",
+    "input": "hello",
+    "include": ["reasoning.encrypted_content"],
+    "conversation": "conv_1",
+    "context_management": [{"type": "compaction", "compact_threshold": 1000}],
+}
+
+
+def test_the_fields_no_reader_read_ride_same_format() -> None:
+    """``include``, ``conversation`` and ``context_management`` had no reader."""
+    body, warnings = _body("open_responses", NEVER_READ)
+    for key, value in NEVER_READ.items():
+        if key not in ("model", "input"):
+            assert body[key] == value, f"{key} was lost on the same-format trip"
+    assert warnings == []
+
+
+def test_the_fields_no_reader_read_are_contained_too() -> None:
+    body, warnings = _body("chat_completions", NEVER_READ)
+    for key in ("include", "conversation", "context_management"):
+        assert key not in body
+    assert any("dropped for chat_completions" in w for w in warnings)

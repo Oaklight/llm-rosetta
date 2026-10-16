@@ -136,6 +136,14 @@ _PASSTHROUGH_REQUEST_FIELDS = (
     "previous_response_id",
     "safety_identifier",
     "prompt",
+    # The spec's ``include`` (which optional payloads the response may carry)
+    # and OpenAI's ``conversation`` / ``context_management`` had no reader at
+    # all, so a same-format round trip lost them.  They ride here like the rest
+    # of the set, which means the owner stamp also keeps them off a body of
+    # another format.
+    "include",
+    "conversation",
+    "context_management",
 )
 
 
