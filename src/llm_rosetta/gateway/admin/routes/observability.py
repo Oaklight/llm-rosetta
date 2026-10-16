@@ -204,17 +204,6 @@ async def get_requests(request: Any) -> Response:
     return JSONResponse({"entries": entries, "total": total})
 
 
-async def backfill_dump_log_ids(request: Any, **kwargs: Any) -> Response:
-    """Backfill NULL request_log_id in error_dumps by matching timestamps."""
-    persistence = getattr(request.app, "persistence", None)
-    if persistence is None:
-        return JSONResponse({"error": "No persistence configured"}, status_code=400)
-    config = getattr(request.app, "gateway_config", None)
-    aliases = config.model_upstream_names if config else {}
-    updated = await persistence.backfill_error_dump_log_ids(model_aliases=aliases)
-    return JSONResponse({"updated": updated})
-
-
 async def get_request_by_id(request: Any, **kwargs: Any) -> Response:
     """Return a single request log entry by ID."""
     log = request.app.request_log

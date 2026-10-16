@@ -2359,6 +2359,7 @@ def _migration_steps() -> list[Step]:
             description=(
                 "record v1 for a store whose columns predate the version table"
             ),
+            store=_DB_FILENAME,
             run=_adopt_pre_registry_schema,
         )
     ]
@@ -2366,6 +2367,7 @@ def _migration_steps() -> list[Step]:
         Step(
             name=f"request_log.v{version}",
             description=description,
+            store=_DB_FILENAME,
             run=partial(
                 _apply_migration,
                 version=version,

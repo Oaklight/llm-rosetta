@@ -99,9 +99,15 @@ class StepResult:
     and 0 is the answer that matters most: it is what an idempotent step returns
     when there was nothing left to do.  A step that failed reports 0 there too,
     because what it half-did is not a count; the failure is the ``error``.
+
+    ``store`` is carried on the result rather than looked up from the step, so a
+    registry whose steps span more than one store still answers the question
+    that follows a ``partial`` run — *which* store is half-repaired — without
+    the reader joining two objects or parsing it back out of a step name.
     """
 
     name: str
+    store: str
     changed: int
     seconds: float
     ok: bool
@@ -119,11 +125,14 @@ class Step:
 
     ``description`` is why the step exists, in the terms a reader of the store
     needs — it ends up in a log line and in an admin surface, so it is written
-    for that reader rather than for the author.
+    for that reader rather than for the author.  ``store`` names the store the
+    step repairs (a file, in this repository's stores), and travels onto every
+    :class:`StepResult` the step produces.
     """
 
     name: str
     description: str
+    store: str
     run: StepRun
 
 
@@ -166,6 +175,38 @@ class Registry:
         self.results = results
         return results
 
+    async def run_step(self, name: str, context: StepContext) -> StepResult:
+        """Run one step by name, for an operator who asked for it.
+
+        The named step is the only one that runs, and its result replaces that
+        step's in :attr:`results` so the surface that asked still reads one
+        answer per step.  What a failure means is still the policy's — a
+        raising registry raises, after recording, exactly as :meth:`run` does —
+        which leaves the caller free to decide that an on-demand re-run reports
+        the failure rather than failing itself.
+
+        Raises:
+            KeyError: When no registered step has that name.
+        """
+        order = {step.name: index for index, step in enumerate(self.steps)}
+        for step in self.steps:
+            if step.name == name:
+                break
+        else:
+            raise KeyError(name)
+
+        result, failure = await self._run_one(step, context)
+        if any(existing.name == name for existing in self.results):
+            self.results = [
+                result if existing.name == name else existing
+                for existing in self.results
+            ]
+        else:
+            self.results = sorted([*self.results, result], key=lambda r: order[r.name])
+        if failure is not None and self.policy is not Policy.DEFERRED:
+            raise failure
+        return result
+
     async def _run_one(
         self, step: Step, context: StepContext
     ) -> tuple[StepResult, Exception | None]:
@@ -184,6 +225,7 @@ class Registry:
             )
             result = StepResult(
                 name=step.name,
+                store=step.store,
                 changed=0,
                 seconds=seconds,
                 ok=False,
@@ -210,5 +252,9 @@ class Registry:
                 "maintenance step %s (%s) had nothing to do", step.name, self.name
             )
         return StepResult(
-            name=step.name, changed=changed, seconds=seconds, ok=True
+            name=step.name,
+            store=step.store,
+            changed=changed,
+            seconds=seconds,
+            ok=True,
         ), None

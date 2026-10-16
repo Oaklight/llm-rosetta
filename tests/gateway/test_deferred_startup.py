@@ -579,11 +579,21 @@ class TestDeferredBackfills:
         assert "backfills" not in ds._pending_tasks
 
     def test_backfills_failure_clears_pending(self):
-        """Exception in backfills still clears pending_tasks."""
+        """A failing step still clears pending_tasks, and the rest still run.
+
+        The flag is about the task finishing; the repair failing is a different
+        question, answered by the step's own result (see
+        ``tests/gateway/test_deferred_maintenance.py`` for the isolation in
+        full).  This asserts both, because the first used to be all that was
+        asked and it hid the second.
+        """
         persistence = MagicMock()
         persistence.backfill_provider_names = AsyncMock(
             side_effect=RuntimeError("DB error")
         )
+        persistence.backfill_total_tokens = AsyncMock(return_value=0)
+        persistence.backfill_error_dump_log_ids = AsyncMock(return_value=0)
+        persistence.db_path = "/tmp/test.db"
 
         config = _FakeConfig({})
         config.models = {}
@@ -597,6 +607,10 @@ class TestDeferredBackfills:
         asyncio.run(ds._run_backfills())
 
         assert "backfills" not in ds._pending_tasks
+        persistence.backfill_total_tokens.assert_awaited_once()
+        persistence.backfill_error_dump_log_ids.assert_awaited_once()
+        assert ds.maintenance is not None
+        assert [result.ok for result in ds.maintenance.results] == [False, True, True]
 
 
 # ---------------------------------------------------------------------------

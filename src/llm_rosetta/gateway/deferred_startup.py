@@ -23,6 +23,10 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
+from llm_rosetta.observability.maintenance import Registry, StepContext
+
+from .deferred_backfills import build_registry
+
 logger = logging.getLogger(__name__)
 
 
@@ -87,6 +91,10 @@ class DeferredStartup:
         # Task-level completion tracking
         self._pending_tasks: set[str] = set()
 
+        # The deferred registry, once it has run: what the startup did, kept so
+        # that an operator can be told without a log search.
+        self.maintenance: Registry | None = None
+
     # -- Provider readiness -------------------------------------------------
 
     def provider_state(self, name: str) -> ProviderInitState:
@@ -110,6 +118,7 @@ class DeferredStartup:
             "ready": self.is_fully_ready(),
             "pending_tasks": sorted(self._pending_tasks),
             "providers": providers,
+            "maintenance": self.maintenance_summary(),
         }
 
     # -- Lifecycle ----------------------------------------------------------
@@ -376,54 +385,96 @@ class DeferredStartup:
     # -- Backfills (thread executor) ----------------------------------------
 
     async def _run_backfills(self) -> None:
-        """Run all database backfills sequentially via the async persistence layer."""
+        """Run the deferred registry: every step, and a failure survives.
+
+        The steps are the five repairs in
+        :mod:`~llm_rosetta.gateway.deferred_backfills`, under
+        :attr:`Policy.DEFERRED <llm_rosetta.observability.maintenance.Policy.DEFERRED>`:
+        one failing is logged, recorded against its own name, and the steps
+        behind it still run.  They used to share one ``try``, which meant a
+        failure in the first skipped the rest — including the two that repair
+        the numbers an operator looks at.
+
+        The registry stays on this manager (:attr:`maintenance`), so what the
+        startup actually did is readable afterwards, from the log line, from
+        ``/health/ready`` and from ``/admin/api/maintenance``.
+        """
         persistence = getattr(self._app, "persistence", None)
         if persistence is None:
             self._pending_tasks.discard("backfills")
             return
 
-        config = self._config
-        keystore = getattr(self._app, "keystore", None)
-
         try:
-            results: dict[str, int] = {}
-            logger.info("Starting deferred database backfills")
-
-            # 1. Backfill provider names
-            model_to_provider = {
-                model: route.provider_names[0] for model, route in config.models.items()
-            }
-            results["provider_names"] = (
-                await persistence.backfill_provider_names(model_to_provider) or 0
-            )
-
-            # 2. Backfill API key last_used
-            if keystore is not None:
-                results["key_last_used"] = (
-                    await keystore.backfill_last_used(persistence.db_path) or 0
+            registry = build_registry(self._app)
+            self.maintenance = registry
+            logger.info("Starting deferred maintenance: %s", registry.name)
+            results = await registry.run(
+                StepContext(
+                    config=self._config,
+                    persistence=persistence,
+                    keystore=getattr(self._app, "keystore", None),
+                    app=self._app,
                 )
-
-            # 3. Backfill total_tokens (cache tokens were excluded)
-            results["total_tokens"] = await persistence.backfill_total_tokens() or 0
-
-            # 4. Attribute log rows written before the bucket column existed
-            if keystore is not None:
-                results["usage_buckets"] = (
-                    await persistence.backfill_usage_buckets(
-                        await keystore.label_bucket_map()
-                    )
-                    or 0
-                )
-
-            # 5. Backfill error dump log IDs
-            aliases = config.model_upstream_names if config else {}
-            results["error_dump_log_ids"] = (
-                await persistence.backfill_error_dump_log_ids(model_aliases=aliases)
-                or 0
             )
-
-            logger.info("Deferred backfills complete: %s", results)
-        except Exception:
-            logger.exception("Deferred backfills failed")
+            failed = [result.name for result in results if not result.ok]
+            # One line an alerting rule can key on: a run that repaired
+            # everything is INFO, a run that did not is ERROR naming the steps,
+            # because ``partial`` on /health/ready is only visible to whoever
+            # curls it.  The per-step WARNINGs above are the detail.
+            logger.log(
+                logging.ERROR if failed else logging.INFO,
+                "Deferred maintenance complete: %d step(s), %d changed, %d failed%s",
+                len(results),
+                sum(result.changed for result in results),
+                len(failed),
+                f" ({', '.join(failed)})" if failed else "",
+            )
         finally:
             self._pending_tasks.discard("backfills")
+
+    def maintenance_summary(self) -> dict[str, Any]:
+        """What the deferred steps did, for a probe or an operator.
+
+        A deferred failure never means "not ready" — that is the policy, and
+        withholding traffic over a repair that can be retried is the outage the
+        policy exists to avoid — so this is how a caller tells "done" from
+        "done, with three of the five repairs failed" without reading the log.
+
+        Deliberately **without the failure text**: ``/health/ready`` is an
+        unguarded route, and an exception string can carry a path, a file name
+        or a fragment of SQL.  The probe needs the machine-readable answer
+        (which state, which steps), the log line carries the text for whoever
+        runs the process, and the authenticated admin surface carries it for
+        whoever is looking at the panel.
+        """
+        registry = self.maintenance
+        if registry is None:
+            return {"state": "not_started", "steps": []}
+        results = registry.results
+        failed = [result.name for result in results if not result.ok]
+        recorded = {result.name for result in results}
+        if "backfills" in self._pending_tasks:
+            state = "running"
+        elif not results:
+            # A registry holding steps but no results means nothing ran — it was
+            # cancelled or raised before its first step.  That is not success.
+            state = "not_started"
+        elif failed or recorded < {step.name for step in registry.steps}:
+            state = "partial"
+        else:
+            state = "done"
+        return {
+            "state": state,
+            "registry": registry.name,
+            "steps": [
+                {
+                    "name": result.name,
+                    "store": result.store,
+                    "ok": result.ok,
+                    "changed": result.changed,
+                    "seconds": round(result.seconds, 3),
+                }
+                for result in results
+            ],
+            "failed": failed,
+        }

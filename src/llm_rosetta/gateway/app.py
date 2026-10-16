@@ -753,6 +753,13 @@ async def handle_health_ready(request: Any) -> Response:
     Returns 503 when deferred startup tasks are still running (token
     seeding, counter rebuild, backfills) or when provider health has
     degraded critically.
+
+    A deferred step that *failed* does not make this a 503: those steps are
+    best-effort repairs, each one safe to retry, and refusing traffic over one
+    is the outage the policy exists to avoid.  The ready answer therefore
+    carries ``maintenance`` — ``done``, or ``partial`` with the steps that
+    failed — so that a probe, or whoever reads the probe, can tell the two
+    apart.
     """
     deferred = getattr(request.app, "deferred_startup", None)
     if deferred is not None and not deferred.is_fully_ready():
@@ -761,9 +768,13 @@ async def handle_health_ready(request: Any) -> Response:
             status_code=503,
         )
 
+    payload: dict[str, Any] = {}
+    if deferred is not None:
+        payload["maintenance"] = deferred.maintenance_summary()
+
     metrics = getattr(request.app, "metrics", None)
     if metrics is None:
-        return JSONResponse({"status": "ok"})
+        return JSONResponse({"status": "ok", **payload})
 
     health = metrics.provider_health_snapshot()
     critical_count = sum(1 for v in health.values() if v.get("status") == "critical")
@@ -772,7 +783,7 @@ async def handle_health_ready(request: Any) -> Response:
             {"status": "not_ready", "critical_providers": critical_count},
             status_code=503,
         )
-    return JSONResponse({"status": "ready"})
+    return JSONResponse({"status": "ready", **payload})
 
 
 # ---------------------------------------------------------------------------

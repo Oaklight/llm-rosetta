@@ -28,8 +28,8 @@ _MIGRATIONS = PersistenceManager._MIGRATIONS
 _CURRENT = max(version for version, _description, _sql in _MIGRATIONS)
 
 
-def _step(name: str, run) -> Step:
-    return Step(name=name, description=f"a step called {name}", run=run)
+def _step(name: str, run, store: str = "test.db") -> Step:
+    return Step(name=name, description=f"a step called {name}", store=store, run=run)
 
 
 async def _connection(store: Path):
@@ -137,6 +137,141 @@ class TestThePolicies:
         results = await registry.run(StepContext())
         assert results[0].seconds >= 0.0
         assert results[0].ok is True
+
+    async def test_a_result_says_which_store_the_step_touched(self):
+        """A partial run of a registry over two stores has to name the store.
+
+        The name carries it too, but a reader under pressure should not have to
+        parse it back out — and a step's name is allowed to be anything.
+        """
+
+        async def _nothing(context):
+            return 0
+
+        async def _fail(context):
+            raise RuntimeError("database is locked")
+
+        registry = Registry(
+            name="test",
+            steps=[
+                _step("one", _nothing, store="first.db"),
+                _step("two", _fail, store="second.db"),
+            ],
+            policy=Policy.DEFERRED,
+        )
+        results = await registry.run(StepContext())
+
+        assert [result.store for result in results] == ["first.db", "second.db"]
+        assert results[1].store == "second.db", (
+            "a failed result names the store it failed on"
+        )
+
+    async def test_a_re_run_keeps_the_store_on_the_result(self):
+        async def _nothing(context):
+            return 0
+
+        registry = Registry(
+            name="test",
+            steps=[_step("one", _nothing, store="only.db")],
+            policy=Policy.DEFERRED,
+        )
+        result = await registry.run_step("one", StepContext())
+        assert result.store == "only.db"
+
+
+class TestRunningOneStep:
+    """An operator re-runs a step by name; the vocabulary has to allow it."""
+
+    async def test_only_the_named_step_runs(self):
+        ran: list[str] = []
+
+        async def _one(context):
+            ran.append("one")
+            return 1
+
+        async def _two(context):
+            ran.append("two")
+            return 2
+
+        registry = Registry(
+            name="test",
+            steps=[_step("one", _one), _step("two", _two)],
+            policy=Policy.DEFERRED,
+        )
+        result = await registry.run_step("two", StepContext())
+
+        assert ran == ["two"], "a re-run is one step, not a registry run"
+        assert result.name == "two"
+        assert result.changed == 2
+
+    async def test_an_unknown_name_is_a_key_error(self):
+        async def _nothing(context):
+            return 0
+
+        registry = Registry(
+            name="test", steps=[_step("known", _nothing)], policy=Policy.DEFERRED
+        )
+        with pytest.raises(KeyError):
+            await registry.run_step("unknown", StepContext())
+
+    async def test_the_result_replaces_that_step_and_leaves_the_others(self):
+        """The surface that asked still reads one answer per step, in order."""
+
+        async def _nothing(context):
+            return 0
+
+        async def _later(context):
+            return 5
+
+        registry = Registry(
+            name="test",
+            steps=[_step("first", _nothing), _step("second", _nothing)],
+            policy=Policy.DEFERRED,
+        )
+        await registry.run(StepContext())
+        re_run = _step("second", _later)
+        rerun_registry = Registry(
+            name="test",
+            steps=[registry.steps[0], re_run],
+            policy=Policy.DEFERRED,
+            results=list(registry.results),
+        )
+        await rerun_registry.run_step("second", StepContext())
+
+        assert [result.name for result in rerun_registry.results] == [
+            "first",
+            "second",
+        ]
+        assert [result.changed for result in rerun_registry.results] == [0, 5]
+
+    async def test_a_step_that_was_never_run_is_added_in_step_order(self):
+        async def _nothing(context):
+            return 0
+
+        registry = Registry(
+            name="test",
+            steps=[_step("first", _nothing), _step("second", _nothing)],
+            policy=Policy.DEFERRED,
+        )
+        await registry.run_step("second", StepContext())
+
+        assert [result.name for result in registry.results] == ["second"]
+
+    async def test_a_raising_policy_still_raises_after_recording(self):
+        """A re-run is not a way to make a mandatory step quiet."""
+
+        async def _fail(context):
+            raise RuntimeError("the store is not what this code expects")
+
+        registry = Registry(
+            name="test", steps=[_step("fails", _fail)], policy=Policy.MANDATORY
+        )
+        with pytest.raises(RuntimeError):
+            await registry.run_step("fails", StepContext())
+        assert registry.results[0].ok is False
+        assert registry.results[0].error == (
+            "RuntimeError: the store is not what this code expects"
+        )
 
 
 class TestTheIdempotenceProperty:

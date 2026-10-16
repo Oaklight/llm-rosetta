@@ -58,7 +58,6 @@ from .config import (
     update_model_provider,
 )
 from .keys import (
-    backfill_keys_last_used,
     create_api_key,
     delete_api_key,
     get_api_keys,
@@ -66,6 +65,12 @@ from .keys import (
     get_key_usage,
     rotate_api_key,
     update_api_key,
+)
+from .maintenance import (
+    backfill_dump_log_ids,
+    backfill_keys_last_used,
+    get_maintenance,
+    post_maintenance_run,
 )
 from .observability import (
     cleanup_error_dumps_by_age,
@@ -94,7 +99,6 @@ from .observability import (
     get_rate_limit_status,
     get_request_key_labels,
     get_token_usage,
-    backfill_dump_log_ids,
     get_request_by_id,
     get_requests,
     network_diagnostics,
@@ -229,6 +233,13 @@ def register_admin_routes(app: Any) -> None:
     app.route("/admin/api/requests", methods=["GET"])(_guard("logs", get_requests))
     app.route("/admin/api/error-dumps/backfill-log-ids", methods=["POST"])(
         _guard("logs", backfill_dump_log_ids)
+    )
+    # Maintenance (dashboard tab): what the deferred steps did, and re-running one
+    app.route("/admin/api/maintenance", methods=["GET"])(
+        _guard("dashboard", get_maintenance)
+    )
+    app.route("/admin/api/maintenance/<name>", methods=["POST"])(
+        _guard("dashboard", post_maintenance_run)
     )
     app.route("/admin/api/requests/key-labels", methods=["GET"])(get_request_key_labels)
     app.route("/admin/api/requests/<entry_id>", methods=["GET"])(
