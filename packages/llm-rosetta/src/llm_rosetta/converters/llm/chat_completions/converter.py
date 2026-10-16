@@ -237,6 +237,11 @@ class ChatCompletionsConverter(BaseConverter):
             cache_fields = self.config_ops.ir_cache_config_to_p(cache)
             result.update(cache_fields)
 
+        # 10. Service tier
+        service_tier = ir_request.get("service_tier")
+        if service_tier:
+            result["service_tier"] = service_tier
+
         # 11. Provider extensions (pass-through)
         result.update(wire_extensions(ir_request, self._CONVERTER_TAG))
 
@@ -490,6 +495,11 @@ class ChatCompletionsConverter(BaseConverter):
             ]
         if cache_fields:
             ir_request["cache"] = self.config_ops.p_cache_config_to_ir(cache_fields)
+
+        # 10. Service tier
+        service_tier = provider_request.get("service_tier")
+        if service_tier:
+            ir_request["service_tier"] = service_tier
 
         return ir_request
 

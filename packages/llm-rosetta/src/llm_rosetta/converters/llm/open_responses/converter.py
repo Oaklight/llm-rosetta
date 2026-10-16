@@ -349,7 +349,12 @@ class OpenResponsesConverter(BaseConverter):
             cache_fields = self.config_ops.ir_cache_config_to_p(cache)
             result.update(cache_fields)
 
-        # 11. Provider extensions (pass-through)
+        # 11. Service tier — the two OpenAI-family formats share a value space.
+        service_tier = ir_request.get("service_tier")
+        if service_tier:
+            result["service_tier"] = service_tier
+
+        # 12. Provider extensions (pass-through)
         extensions = ir_request.get("provider_extensions")
         if extensions:
             # Merge _text_verbosity back into the text object
@@ -461,14 +466,20 @@ class OpenResponsesConverter(BaseConverter):
         # 10. Cache config
         self._convert_p_cache_to_ir(provider_request, ir_request)
 
-        # 11. Provider extensions (passthrough fields like allowed_tools)
+        # 11. Service tier — Chat Completions and Responses share one value
+        # space, so the tier travels as the source wrote it.
+        service_tier = provider_request.get("service_tier")
+        if service_tier:
+            ir_request["service_tier"] = service_tier
+
+        # 12. Provider extensions (passthrough fields like allowed_tools)
         allowed_tools = provider_request.get("allowed_tools")
         if allowed_tools is not None:
             ir_request.setdefault("provider_extensions", {})["allowed_tools"] = (
                 allowed_tools
             )
 
-        # 12. Responses-specific request fields not modelled in IR.
+        # 13. Responses-specific request fields not modelled in IR.
         _forward_passthrough_request_fields(provider_request, ir_request)
 
         # Preserve mode: capture request fields for echo-back in response

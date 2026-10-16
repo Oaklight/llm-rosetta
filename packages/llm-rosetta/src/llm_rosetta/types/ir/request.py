@@ -93,6 +93,17 @@ class IRRequest(TypedDict):
     # ========== 缓存配置 Cache ==========
     cache: NotRequired[CacheConfig]
 
+    # ========== 服务等级 Service tier ==========
+    # 映射关系 Mapping:
+    # - OpenAI Chat Completions / Responses: ``service_tier`` (auto, default,
+    #   flex, priority, ...).  The two share one value space, so the value
+    #   travels as the source wrote it.
+    # - Anthropic Messages: ``service_tier`` (auto, standard_only) is a
+    #   different axis -- which capacity may serve the request, not which tier
+    #   to schedule it on -- so only ``auto`` maps, and the other value is
+    #   reported rather than translated.
+    service_tier: NotRequired[str]
+
     # ========== Provider特定扩展 Provider-specific Extensions ==========
     # 用于存储少见或provider特定的参数:
     # - 元数据相关: metadata, user (少见)
