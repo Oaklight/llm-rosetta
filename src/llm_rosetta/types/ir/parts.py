@@ -276,8 +276,8 @@ class ReasoningPart(TypedDict):
 
 
 class UrlCitation(TypedDict, total=False):
-    """URL引用详情
-    URL citation details
+    """URL引用详情（旧拼法，只读）
+    URL citation details (legacy spelling, read-only)
     """
 
     start_index: int
@@ -287,8 +287,8 @@ class UrlCitation(TypedDict, total=False):
 
 
 class TextCitation(TypedDict, total=False):
-    """文本引用详情
-    Text citation details
+    """文本引用详情（旧拼法，只读）
+    Text citation details (legacy spelling, read-only)
     """
 
     cited_text: str
@@ -301,12 +301,38 @@ class CitationPart(TypedDict):
 
     用于标注信息来源，如网络搜索结果、文档引用等。
     Used to mark information sources, such as web search results, document citations, etc.
+
+    ``citation_type`` 是判别式：它说明这条引用属于哪一种（``url_citation``、
+    ``char_location``、``page_location``、``content_block_location``、
+    ``search_result_location``、``web_search_result_location``、``file_citation``
+    等）。读法一律走它，**不从字段形状推断**。各家共有的字段平铺在部件上，
+    provider 私有字段放在 ``provider_metadata`` 下（按 provider 名分键）。
+
+    ``citation_type`` is the discriminator naming which kind of citation this is
+    (``url_citation``, ``char_location``, ``page_location``,
+    ``content_block_location``, ``search_result_location``,
+    ``web_search_result_location``, ``file_citation``, …).  Readers branch on it
+    and **never** on the shape of the fields.  Fields every dialect shares sit
+    flat on the part; provider-private ones live under ``provider_metadata``,
+    keyed by provider.
+
+    ``url_citation`` / ``text_citation`` 是旧拼法：仍可读入（见
+    :mod:`llm_rosetta.converters.base.helpers.citations`），但不再写出。
+    ``url_citation`` / ``text_citation`` are the pre-2026 spelling: still read,
+    never written.
     """
 
     type: Required[Literal["citation"]]
-    # OpenAI-style URL citation
+    citation_type: NotRequired[str]
+    # 各格式共有 Common to every dialect
+    url: NotRequired[str]
+    title: NotRequired[str]
+    cited_text: NotRequired[str]
+    start_index: NotRequired[int]
+    end_index: NotRequired[int]
+    provider_metadata: NotRequired[dict[str, Any]]
+    # 旧拼法，只读 Legacy spelling, read-only
     url_citation: NotRequired[UrlCitation]
-    # Anthropic-style text citation
     text_citation: NotRequired[TextCitation]
     provider_metadata: NotRequired[dict[str, Any]]
 

@@ -41,6 +41,7 @@ if sys.version_info >= (3, 11):
 else:
     from typing_extensions import NotRequired, Required, TypedDict
 
+from .parts import CitationPart
 from .passthrough import ProviderPassthroughEvent
 from .response import FinishReason, UsageInfo
 
@@ -139,6 +140,26 @@ class RefusalDeltaEvent(TypedDict):
     refusal: Required[str]
     block_index: NotRequired[int]
     choice_index: NotRequired[int]
+
+
+class CitationDeltaEvent(TypedDict):
+    """Citation delta event.
+
+    Emitted when the provider streams a citation/annotation for the text it has
+    been sending — Anthropic's ``citations_delta``, the Responses API's
+    annotation events.  One event per citation, in the order the provider gave
+    them, mirroring the non-streaming ``citation`` content part so a streamed
+    answer and a whole one carry the same value.
+
+    ``block_index`` names the content block the citation annotates where the
+    dialect numbers its blocks.
+    """
+
+    type: Required[Literal["citation_delta"]]
+    citation: Required[CitationPart]
+    block_index: NotRequired[int]
+    choice_index: NotRequired[int]
+    provider_metadata: NotRequired[dict[str, Any]]
 
 
 class ToolCallStartEvent(TypedDict):
@@ -266,6 +287,7 @@ IRStreamEvent = Union[
     TextDeltaEvent,
     ReasoningDeltaEvent,
     RefusalDeltaEvent,
+    CitationDeltaEvent,
     ToolCallStartEvent,
     ToolCallDeltaEvent,
     ToolResultEvent,
@@ -286,6 +308,7 @@ __all__ = [
     "TextDeltaEvent",
     "ReasoningDeltaEvent",
     "RefusalDeltaEvent",
+    "CitationDeltaEvent",
     "ToolCallStartEvent",
     "ToolCallDeltaEvent",
     "ToolResultEvent",

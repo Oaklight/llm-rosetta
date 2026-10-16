@@ -60,6 +60,8 @@ class BaseMessage(TypedDict):
 
     content: Required[list[ContentPart]]
     metadata: NotRequired[MessageMetadata]
+    # Provider-private extras, keyed by provider (as on the content parts)
+    provider_metadata: NotRequired[dict[str, Any]]
 
 
 # ============================================================================
@@ -82,6 +84,8 @@ class SystemMessage(TypedDict):
     role: Required[Literal["system"]]
     content: Required[list[SystemContentPart]]
     metadata: NotRequired[MessageMetadata]
+    # Provider-private extras, keyed by provider (as on the content parts)
+    provider_metadata: NotRequired[dict[str, Any]]
 
 
 class UserMessage(TypedDict):
@@ -99,6 +103,8 @@ class UserMessage(TypedDict):
     role: Required[Literal["user"]]
     content: Required[list[UserContentPart]]
     metadata: NotRequired[MessageMetadata]
+    # Provider-private extras, keyed by provider (as on the content parts)
+    provider_metadata: NotRequired[dict[str, Any]]
 
 
 class AssistantMessage(TypedDict):
@@ -116,6 +122,8 @@ class AssistantMessage(TypedDict):
     role: Required[Literal["assistant"]]
     content: Required[list[AssistantContentPart]]
     metadata: NotRequired[MessageMetadata]
+    # Provider-private extras, keyed by provider (as on the content parts)
+    provider_metadata: NotRequired[dict[str, Any]]
 
 
 class ToolMessage(TypedDict):
@@ -137,6 +145,8 @@ class ToolMessage(TypedDict):
     content: Required[list[ToolContentPart]]
     batch_id: NotRequired[str]
     metadata: NotRequired[MessageMetadata]
+    # Provider-private extras, keyed by provider (as on the content parts)
+    provider_metadata: NotRequired[dict[str, Any]]
 
 
 # ============================================================================
@@ -163,6 +173,8 @@ class LegacyMessage(TypedDict):
     role: Required[Literal["system", "user", "assistant", "tool"]]
     content: Required[list[ContentPart]]
     metadata: NotRequired[MessageMetadata]
+    # Provider-private extras, keyed by provider (as on the content parts)
+    provider_metadata: NotRequired[dict[str, Any]]
 
 
 # ============================================================================

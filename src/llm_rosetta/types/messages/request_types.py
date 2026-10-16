@@ -45,11 +45,80 @@ class CacheControlEphemeralParam(TypedDict, total=False):
 
 
 # Text citation parameter
-class TextCitationParam(TypedDict, total=False):
-    """Text citation parameter."""
+class CharLocationCitationParam(TypedDict, total=False):
+    """A citation of a character range in a document the caller supplied."""
 
+    type: Required[Literal["char_location"]]
     cited_text: str
-    type: Literal["text_citation"]
+    document_index: int
+    document_title: str
+    start_char_index: int
+    end_char_index: int
+
+
+class PageLocationCitationParam(TypedDict, total=False):
+    """A citation of a page range in a PDF the caller supplied."""
+
+    type: Required[Literal["page_location"]]
+    cited_text: str
+    document_index: int
+    document_title: str
+    start_page_number: int
+    end_page_number: int
+
+
+class ContentBlockLocationCitationParam(TypedDict, total=False):
+    """A citation of content blocks in a document the caller supplied."""
+
+    type: Required[Literal["content_block_location"]]
+    cited_text: str
+    document_index: int
+    document_title: str
+    start_block_index: int
+    end_block_index: int
+
+
+class SearchResultLocationCitationParam(TypedDict, total=False):
+    """A citation of a ``search_result`` block the caller supplied."""
+
+    type: Required[Literal["search_result_location"]]
+    cited_text: str
+    source: str
+    title: str
+    search_result_index: int
+    start_block_index: int
+    end_block_index: int
+
+
+class WebSearchResultLocationCitationParam(TypedDict, total=False):
+    """A citation of a result this provider's own web search returned.
+
+    ``encrypted_index`` is opaque provider-issued material: a citation of this
+    kind cannot be constructed by anyone but the provider that issued it.
+    """
+
+    type: Required[Literal["web_search_result_location"]]
+    cited_text: str
+    url: str
+    title: str
+    encrypted_index: str
+
+
+#: Every citation this API accepts, measured against the live endpoint: these
+#: five ``type`` tags and no others.  (It rejects ``text_citation`` and
+#: ``url_citation`` outright.)  A citation also has to point at something the
+#: message itself carries — a document block, a ``search_result`` block — or at
+#: an ``encrypted_index`` this provider issued, which is why a citation minted
+#: by another dialect has no form here.
+
+
+TextCitationParam = (
+    CharLocationCitationParam
+    | PageLocationCitationParam
+    | ContentBlockLocationCitationParam
+    | SearchResultLocationCitationParam
+    | WebSearchResultLocationCitationParam
+)
 
 
 # Content block parameters

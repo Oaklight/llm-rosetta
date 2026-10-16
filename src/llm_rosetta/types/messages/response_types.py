@@ -6,10 +6,22 @@ These are used for type hints and validation in the LLM-Rosetta conversion layer
 
 from __future__ import annotations
 
+import sys
 from typing import Literal, TypedDict
+
+if sys.version_info >= (3, 11):
+    from typing import Required
+else:
+    from typing_extensions import Required
 
 __all__ = [
     "StopReason",
+    "CharLocationCitation",
+    "PageLocationCitation",
+    "ContentBlockLocationCitation",
+    "SearchResultLocationCitation",
+    "WebSearchResultLocationCitation",
+    "TextCitation",
     "TextBlock",
     "ThinkingBlock",
     "ToolUseBlock",
@@ -31,11 +43,80 @@ StopReason = Literal[
 
 
 # Content block types
-class TextCitation(TypedDict, total=False):
-    """Citation supporting the text block."""
+class CharLocationCitation(TypedDict, total=False):
+    """A citation of a character range in a document the caller supplied."""
 
+    type: Required[Literal["char_location"]]
     cited_text: str
-    type: Literal["text_citation"]
+    document_index: int
+    document_title: str
+    start_char_index: int
+    end_char_index: int
+
+
+class PageLocationCitation(TypedDict, total=False):
+    """A citation of a page range in a PDF the caller supplied."""
+
+    type: Required[Literal["page_location"]]
+    cited_text: str
+    document_index: int
+    document_title: str
+    start_page_number: int
+    end_page_number: int
+
+
+class ContentBlockLocationCitation(TypedDict, total=False):
+    """A citation of content blocks in a document the caller supplied."""
+
+    type: Required[Literal["content_block_location"]]
+    cited_text: str
+    document_index: int
+    document_title: str
+    start_block_index: int
+    end_block_index: int
+
+
+class SearchResultLocationCitation(TypedDict, total=False):
+    """A citation of a ``search_result`` block the caller supplied."""
+
+    type: Required[Literal["search_result_location"]]
+    cited_text: str
+    source: str
+    title: str
+    search_result_index: int
+    start_block_index: int
+    end_block_index: int
+
+
+class WebSearchResultLocationCitation(TypedDict, total=False):
+    """A citation of a result this provider's own web search returned.
+
+    ``encrypted_index`` is opaque provider-issued material: a citation of this
+    kind cannot be constructed by anyone but the provider that issued it.
+    """
+
+    type: Required[Literal["web_search_result_location"]]
+    cited_text: str
+    url: str
+    title: str
+    encrypted_index: str
+
+
+#: Every citation this API accepts, measured against the live endpoint: these
+#: five ``type`` tags and no others.  (It rejects ``text_citation`` and
+#: ``url_citation`` outright.)  A citation also has to point at something the
+#: message itself carries — a document block, a ``search_result`` block — or at
+#: an ``encrypted_index`` this provider issued, which is why a citation minted
+#: by another dialect has no form here.
+
+
+TextCitation = (
+    CharLocationCitation
+    | PageLocationCitation
+    | ContentBlockLocationCitation
+    | SearchResultLocationCitation
+    | WebSearchResultLocationCitation
+)
 
 
 class TextBlock(TypedDict, total=False):

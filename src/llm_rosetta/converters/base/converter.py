@@ -12,7 +12,7 @@ from typing import Any, cast
 from ...types.ir.passthrough import ProviderPassthroughEvent
 from ...types.ir.request import IRInputItem, IRRequest
 from ...types.ir.response import IRResponse, UsageInfo
-from ...types.ir.stream import IRStreamEvent
+from ...types.ir.stream import CitationDeltaEvent, IRStreamEvent
 from ...types.ir.validation import (
     validate_ir_request,
     validate_ir_response,
@@ -21,6 +21,7 @@ from ...types.ir.validation import (
 )
 from .context import ConversionContext, StreamContext
 from .helpers import strip_internal_metadata
+from .helpers.citations import report_dropped_citation
 from .passthrough import merge_provider_output_items
 
 
@@ -99,6 +100,7 @@ class BaseConverter(ABC):
         "content_block_end": "_handle_ir_content_block_end_to_p",
         "text_delta": "_handle_ir_text_delta_to_p",
         "reasoning_delta": "_handle_ir_reasoning_delta_to_p",
+        "citation_delta": "_handle_ir_citation_delta_to_p",
         "tool_call_start": "_handle_ir_tool_call_start_to_p",
         "tool_call_delta": "_handle_ir_tool_call_delta_to_p",
         "finish": "_handle_ir_finish_to_p",
@@ -472,6 +474,20 @@ class BaseConverter(ABC):
                 payload=dict(chunk),
             )
         )
+
+    def _handle_ir_citation_delta_to_p(
+        self, event: CitationDeltaEvent, context: StreamContext | None
+    ) -> dict[str, Any] | list[dict[str, Any]]:
+        """Drop a streamed citation a dialect has no event for.
+
+        This is the default, so a dialect that never streams citations reports
+        the loss instead of dropping it silently; each dialect with a native
+        carrier overrides it.
+        """
+        report_dropped_citation(
+            event.get("citation") or {}, warnings=getattr(context, "warnings", None)
+        )
+        return {}
 
     def _handle_ir_passthrough_to_p(
         self,
