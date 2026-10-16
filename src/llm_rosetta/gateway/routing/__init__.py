@@ -17,6 +17,7 @@ Anything not listed in ``__all__`` is internal.
 from __future__ import annotations
 
 from .context import Identity, SelectionContext
+from .same_format import SameFormatStage, shim_group_key
 from .select import AnchorStage, select_ready_entry
 from .stage import RoutingChain, RoutingStage, StageOrderError
 from .strategy import (
@@ -39,9 +40,11 @@ __all__ = [
     "RoutingChain",
     "RoutingStage",
     "RoutingStrategy",
+    "SameFormatStage",
     "SelectionContext",
     "StageOrderError",
     "WeightedRoundRobinStrategy",
     "create_strategy",
     "select_ready_entry",
+    "shim_group_key",
 ]
