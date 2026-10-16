@@ -1,5 +1,9 @@
-name: alcf--minerva
+name: alcf_minerva--chat_completions
 base: chat_completions
+# The three ALCF clusters share one admin top level (`group`); `display_name`
+# is this shim's own label inside it, rendered as "minerva · chat_completions".
+group: alcf
+display_name: minerva
 logo: https://docs.alcf.anl.gov/images/favicon.svg
 
 connection:

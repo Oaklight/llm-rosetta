@@ -25,7 +25,7 @@ def _rename_reasoning_field(body: dict[str, Any]) -> dict[str, Any]:
     Both holders matter: the streaming path routes chunks through this
     helper, and a chunk carries the text on ``delta`` rather than on
     ``message`` — renaming only the message half dropped streamed reasoning
-    silently (found in review of #969; ``alcf--sophia`` has the same shape).
+    silently (found in review of #969; ``alcf_sophia--chat_completions`` has the same shape).
 
     ``reasoning_details`` is untouched here: the converter preserves it
     through ``provider_metadata`` (see ``chat_completions/message_ops.py``).

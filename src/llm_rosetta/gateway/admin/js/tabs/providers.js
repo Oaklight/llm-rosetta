@@ -11,6 +11,7 @@ import { t } from '../core/i18n.js';
 import { api, showToast, showToastHtml, closeModal, esc, copyText, inlineConfirm, isFreeEntry, freeEntryLabel } from '../core/utils.js';
 import { initLogoPicker, setLogoPickerValue, getLogoPickerValue } from '../components/logo-picker.js';
 import { setTypeTree, getSelectedValue, selectValue, onTypeSelect } from '../components/type-picker.js';
+import { buildTypeModel, shimBrand } from '../core/shim-tree.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
@@ -23,67 +24,6 @@ function _capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
  *  name (see admin/routes/config.py), so `cfg.type` alone misses it. */
 function _providerTypeName(cfg, name) {
   return (cfg && (cfg.shim || cfg.type)) || name;
-}
-
-/** Preferred display order for base types within a top-level group. */
-const _BASE_TYPE_ORDER = [
-  'chat_completions', 'open_responses', 'messages',
-  'google_generate', 'google_interactions', 'decision',
-];
-
-/**
- * Build the top-level → base tree for the provider-type picker.
- *
- * A shim name is ``vendor--base`` (``openai--chat_completions``); a shim
- * without the separator (``moonshot``) is a group of its own whose single
- * child is its base type.  Vendor-neutral base formats (``chat_completions``,
- * …) become childless roots — they are their own top level.  Returns
- * ``{roots, rootOf(value)}``.
- */
-function buildTypeModel(registeredShims, baseFormats) {
-  const rootMap = new Map();
-  const valueRoot = new Map();
-  const _root = (rootName) => {
-    if (!rootMap.has(rootName))
-      rootMap.set(rootName, { name: rootName, label: rootName, logo: '', defaultValue: rootName, children: [] });
-    return rootMap.get(rootName);
-  };
-
-  for (const s of registeredShims) {
-    const sep = s.name.indexOf('--');
-    const root = _root(sep === -1 ? s.name : s.name.slice(0, sep));
-    // Without a separator the shim *is* the top level, so its child label is
-    // its base type; with one, the segment after `--` is the label (usually
-    // the base type, but e.g. `alcf--metis` names a deployment instead).
-    root.children.push({
-      value: s.name,
-      label: sep === -1 ? s.base : s.name.slice(sep + 2),
-      base: s.base,
-    });
-    if (s.logo) root.logo = s.logo;
-    if (s.display_name) root.label = s.display_name;
-    valueRoot.set(s.name, root);
-  }
-  for (const f of baseFormats) {
-    valueRoot.set(f.name, _root(f.name));
-  }
-
-  const roots = [...rootMap.values()];
-  for (const root of roots) {
-    // Unknown base types (a base added upstream, or a non-chat one like
-    // `decision`) rank last instead of first.
-    const rank = (b) => {
-      const i = _BASE_TYPE_ORDER.indexOf(b);
-      return i === -1 ? _BASE_TYPE_ORDER.length : i;
-    };
-    root.children.sort((a, b) => {
-      const d = rank(a.base) - rank(b.base);
-      return d !== 0 ? d : a.label.localeCompare(b.label);
-    });
-    if (root.children.length) root.defaultValue = root.children[0].value;
-  }
-  roots.sort((a, b) => a.name.localeCompare(b.name));
-  return { roots, rootOf: (v) => valueRoot.get(v) };
 }
 
 /** Render a provider type's vendor hints as input *placeholders*.
@@ -171,7 +111,7 @@ function renderFreeSourceButtons() {
   const host = document.getElementById('freeProviderButtons');
   if (!host) return;
   host.innerHTML = _freeShims().map(s => {
-    const brand = s.display_name || _capitalize(s.name.split('--')[0]);
+    const brand = shimBrand(s);
     const label = `+ ${brand} ${t('free.suffix')}`;
     return `<button class="btn btn-sm" data-free-shim="${esc(s.name)}" aria-label="${esc(label)}" onclick="openFreeProvider('${esc(s.name)}')">${esc(label)}</button>`;
   }).join('');
@@ -1103,7 +1043,7 @@ function openFreeProvider(shimName) {
   const shims = _freeShims();
   const shim = shims.find(s => s.name === shimName) || shims[0];
   if (!shim) { openProviderModal(); return; }
-  const brand = (shim.display_name || shim.name.split('--')[0]).toLowerCase();
+  const brand = shimBrand(shim).toLowerCase();
   // Prefill the name so a re-click never opens an anonymous Add dialog; if the
   // provider already exists the operator lands on that same (now prefilled) id.
   const id = `${brand}-free`;

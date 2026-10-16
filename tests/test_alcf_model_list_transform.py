@@ -71,14 +71,18 @@ class TestMakeAlcfModelListTransform:
 class TestAlcfTransformRegistration:
     @pytest.mark.parametrize(
         "shim_name",
-        ["alcf--sophia", "alcf--metis", "alcf--minerva"],
+        [
+            "alcf_sophia--chat_completions",
+            "alcf_metis--chat_completions",
+            "alcf_minerva--chat_completions",
+        ],
     )
     def test_registered(self, shim_name: str):
         t = get_model_list_transform(shim_name)
         assert t is not None
 
     def test_sophia_filters_vllm(self):
-        t = get_model_list_transform("alcf--sophia")
+        t = get_model_list_transform("alcf_sophia--chat_completions")
         assert t is not None
         raw = [
             {"id": "openai/gpt-oss-120b", "framework": "vllm"},
@@ -89,7 +93,7 @@ class TestAlcfTransformRegistration:
         assert "dinov3" not in ids
 
     def test_metis_filters_api(self):
-        t = get_model_list_transform("alcf--metis")
+        t = get_model_list_transform("alcf_metis--chat_completions")
         assert t is not None
         raw = [
             {"id": "gpt-oss-120b", "framework": "api"},
@@ -106,7 +110,7 @@ class TestAlcfModelsPath:
     def test_sophia_has_absolute_models_path(self):
         from llm_rosetta.shims import get_shim
 
-        shim = get_shim("alcf--sophia")
+        shim = get_shim("alcf_sophia--chat_completions")
         assert shim is not None
         assert shim.models_path is not None
         assert shim.models_path.startswith("https://")
@@ -115,7 +119,7 @@ class TestAlcfModelsPath:
     def test_metis_has_absolute_models_path(self):
         from llm_rosetta.shims import get_shim
 
-        shim = get_shim("alcf--metis")
+        shim = get_shim("alcf_metis--chat_completions")
         assert shim is not None
         assert shim.models_path is not None
         assert shim.models_path.startswith("https://")
@@ -123,7 +127,7 @@ class TestAlcfModelsPath:
     def test_minerva_has_absolute_models_path(self):
         from llm_rosetta.shims import get_shim
 
-        shim = get_shim("alcf--minerva")
+        shim = get_shim("alcf_minerva--chat_completions")
         assert shim is not None
         assert shim.models_path is not None
         assert shim.models_path.startswith("https://")
@@ -140,6 +144,8 @@ class TestExtractModelIdsBareArray:
             {"id": "openai/gpt-oss-120b", "framework": "vllm"},
             {"id": "dinov3", "framework": "dinoserver"},
         ]
-        ids, upstream = _extract_model_ids(body, "openai_chat", "alcf--sophia", None)
+        ids, upstream = _extract_model_ids(
+            body, "chat_completions", "alcf_sophia--chat_completions", None
+        )
         assert "openai/gpt-oss-120b" in ids
         assert "dinov3" not in ids

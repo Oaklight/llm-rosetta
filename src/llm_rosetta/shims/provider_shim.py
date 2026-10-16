@@ -247,9 +247,25 @@ class ProviderShim:
             ``"open_responses"``, ``"messages"``, ``"google_generate"``,
             ``"google_interactions"``).
         logo: URL to the provider's logo image (SVG preferred).
-        display_name: Human-readable brand label (e.g. ``"Kilo"``), used by the
-            admin UI for the provider title.  Falls back to the shim name when
-            unset.  The vendor's own casing, unlike ``name``.
+        display_name: This shim's own human-readable label (e.g. ``"metis"`` on
+            ``"alcf_metis--chat_completions"``).  The admin UI renders it as the
+            shim's row inside its group — for a shim that also declares ``group``
+            or ``group_label``: one declaring neither was written against the
+            older schema, where ``display_name`` titled the group instead, and
+            that reading is kept (its row label still comes from ``name``).
+            Falls back to the segment after ``--`` in ``name``.  The vendor's own
+            casing, unlike ``name``.
+        group: Top-level group this shim appears under in the admin UI's
+            provider-type picker.  Falls back to the segment before ``--`` in
+            ``name``, so a shim usually needs no declaration; declare it when
+            one vendor spans several name prefixes (``alcf_metis``,
+            ``alcf_minerva`` and ``alcf_sophia`` all declaring ``"alcf"``).
+            The group's title — which is also the brand on free-source
+            affordances — falls back to the capitalized group key, so a vendor
+            that wants more than that declares ``group_label``.
+        group_label: Title of the shim's top-level group.  Falls back to the
+            group key.  Keep it identical across the members of one group; the
+            last shim loaded wins, as with ``logo``.
         free_source: Marks the provider as a source with a free model pool.
             The admin UI groups its free (keyless) entry under a "Free
             Resource" section, adds a refresh action, and shows the
@@ -291,6 +307,8 @@ class ProviderShim:
     base: str
     logo: str | None = None
     display_name: str | None = None
+    group: str | None = None
+    group_label: str | None = None
     free_source: bool = False
     connection: ConnectionConfig = ConnectionConfig()
     tools: ToolsConfig = ToolsConfig()
@@ -379,6 +397,8 @@ class ProviderShim:
         _FIELD_DEFAULTS: dict[str, Any] = {
             "logo": None,
             "display_name": None,
+            "group": None,
+            "group_label": None,
             "free_source": False,
             "connection": ConnectionConfig(),
             "tools": ToolsConfig(),

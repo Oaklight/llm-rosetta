@@ -270,7 +270,7 @@ class TestTransformIntegration:
         from llm_rosetta.converters.messages import MessagesConverter
 
         result = apply_ir_transforms(
-            ir_request, "argo--anthropic", converter=MessagesConverter()
+            ir_request, "argo--messages", converter=MessagesConverter()
         )
         # No system messages in the messages array
         for msg in result["messages"]:
@@ -312,7 +312,7 @@ class TestTransformIntegration:
         from llm_rosetta.converters.messages import MessagesConverter
 
         hoisted = apply_ir_transforms(
-            ir_request, "argo--anthropic", converter=MessagesConverter()
+            ir_request, "argo--messages", converter=MessagesConverter()
         )
 
         # No system messages remain

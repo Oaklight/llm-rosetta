@@ -14,17 +14,17 @@
   // with: "api_key": "${ALCF_API_KEY}"
   "providers": {
     "alcf-sophia": {
-      "shim": "alcf--sophia",
+      "shim": "alcf_sophia--chat_completions",
       "token_command": ["python3", "scripts/alcf-token.py"],
       "token_refresh_interval": 3600
     },
     "alcf-metis": {
-      "shim": "alcf--metis",
+      "shim": "alcf_metis--chat_completions",
       "token_command": ["python3", "scripts/alcf-token.py"],
       "token_refresh_interval": 3600
     },
     "alcf-minerva": {
-      "shim": "alcf--minerva",
+      "shim": "alcf_minerva--chat_completions",
       "token_command": ["python3", "scripts/alcf-token.py"],
       "token_refresh_interval": 3600
     }

@@ -289,6 +289,8 @@ async def get_config(request: Any) -> Response:
                     "base": s.base,
                     "logo": s.logo,
                     "display_name": s.display_name,
+                    "group": s.group,
+                    "group_label": s.group_label,
                     "free_source": s.free_source,
                     "keyless": s.connection.keyless,
                     "default_base_url": s.connection.base_url,

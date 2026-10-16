@@ -239,6 +239,21 @@ class TestGatewayConfigBoundary:
             cfg = GatewayConfig(self._raw({"shim": "google-genai"}))
         assert cfg.provider_types["g"] == "google_generate"
 
+    def test_cluster_rename_migrates(self):
+        """#927: the ALCF cluster moved into the provider segment.
+
+        The correction is in place, so a config loaded through the gateway
+        ends up holding the canonical name rather than resolving it lazily.
+        """
+        from llm_rosetta.gateway.config import GatewayConfig
+
+        raw = self._raw({"shim": "alcf--sophia"})
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
+            cfg = GatewayConfig(raw)
+        assert cfg.provider_types["g"] == "chat_completions"
+        assert raw["providers"]["g"]["shim"] == "alcf_sophia--chat_completions"
+
     def test_provider_name_fallback_migrates(self):
         from llm_rosetta.gateway.config import GatewayConfig
 
@@ -693,6 +708,16 @@ class TestLegacyShimAliasStillResolves:
             ("argo--openai_chat", "argo--chat_completions"),
             ("openai", "openai--chat_completions"),
             ("anthropic", "anthropic--messages"),
+            # The `anthropic` base became `messages` (#917) without leaving a
+            # per-vendor alias; the bare glyph above never covered these.
+            ("argo--anthropic", "argo--messages"),
+            ("asksage--anthropic", "asksage--messages"),
+            ("minimax--anthropic", "minimax--messages"),
+            ("openrouter--anthropic", "openrouter--messages"),
+            # The ALCF cluster moved into the provider segment (epic #927).
+            ("alcf--sophia", "alcf_sophia--chat_completions"),
+            ("alcf--metis", "alcf_metis--chat_completions"),
+            ("alcf--minerva", "alcf_minerva--chat_completions"),
         ],
     )
     def test_get_shim_legacy_is_canonical(self, legacy: str, canonical: str):
@@ -704,3 +729,24 @@ class TestLegacyShimAliasStillResolves:
             canonical_shim = get_shim(canonical)
         assert legacy_shim is not None
         assert legacy_shim is canonical_shim
+
+    def test_every_shim_alias_target_is_registered(self):
+        """A shim alias has to point at a shim that exists.
+
+        The table is hand-maintained, so a rename that renames the shim but
+        forgets to leave the canonical name registered — or a typo on either
+        side — shows up here rather than as a silent ``get_shim(...) is None``
+        at runtime.
+        """
+        from llm_rosetta.provider_names import LEGACY_SHIM_ALIASES
+        from llm_rosetta.shims import list_shims
+        from llm_rosetta.shims.providers import load_providers
+
+        load_providers()
+        registered = {s.name for s in list_shims()}
+        unregistered = {
+            old: new
+            for old, new in LEGACY_SHIM_ALIASES.items()
+            if new not in registered
+        }
+        assert unregistered == {}

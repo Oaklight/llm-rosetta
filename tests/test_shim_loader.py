@@ -96,9 +96,9 @@ class TestLoadProviders:
         names = {s.name for s in shims}
         expected = {
             # Grouped vendor shims use the canonical ``<provider>--<base>`` form.
-            "alcf--metis",
-            "alcf--minerva",
-            "alcf--sophia",
+            "alcf_metis--chat_completions",
+            "alcf_minerva--chat_completions",
+            "alcf_sophia--chat_completions",
             "anthropic--messages",
             "argo--messages",
             "argo--chat_completions",
@@ -160,9 +160,9 @@ class TestLoadProviders:
             "minimax--messages",
             "zhipu",
             "google--google_interactions",
-            "alcf--sophia",
-            "alcf--metis",
-            "alcf--minerva",
+            "alcf_sophia--chat_completions",
+            "alcf_metis--chat_completions",
+            "alcf_minerva--chat_completions",
             "typesafe",
             "asksage--chat_completions",
             "asksage--open_responses",
@@ -373,9 +373,9 @@ class TestLoadProviders:
             "volcengine--open_responses": "open_responses",
             "xai": "chat_completions",
             "zhipu": "chat_completions",
-            "alcf--sophia": "chat_completions",
-            "alcf--metis": "chat_completions",
-            "alcf--minerva": "chat_completions",
+            "alcf_sophia--chat_completions": "chat_completions",
+            "alcf_metis--chat_completions": "chat_completions",
+            "alcf_minerva--chat_completions": "chat_completions",
             "typesafe": "decision",
             "asksage--chat_completions": "chat_completions",
             "asksage--open_responses": "open_responses",
@@ -705,3 +705,59 @@ class TestPluginEntryPoints:
         )
         result = _load_plugin_shims()
         assert result == []
+
+
+class TestDeclaredGrouping:
+    """How a shim declares its place in the admin picker (epic #927).
+
+    The picker builds its top level from ``group``, titles it with
+    ``group_label`` and labels each shim's own row with ``display_name``.  Each
+    falls back to the historical ``vendor--base`` name split, so a shim that
+    declares none of them renders exactly as it did before those fields
+    existed.
+    """
+
+    _ALCF = (
+        "alcf_metis--chat_completions",
+        "alcf_minerva--chat_completions",
+        "alcf_sophia--chat_completions",
+    )
+
+    def test_alcf_clusters_share_one_group(self):
+        """The cluster is the shim's label; the vendor is the group."""
+        load_providers()
+        clusters = [s for name in self._ALCF if (s := get_shim(name)) is not None]
+        assert len(clusters) == len(self._ALCF)
+        assert {s.group for s in clusters} == {"alcf"}
+        assert {s.display_name for s in clusters} == {
+            "metis",
+            "minerva",
+            "sophia",
+        }
+        # No declared title: the group renders as its key, "alcf".
+        assert all(s.group_label is None for s in clusters)
+        # Every cluster speaks the same format, so the picker reads
+        # "metis · chat_completions" inside the one ALCF group.
+        assert {s.base for s in clusters} == {"chat_completions"}
+
+    def test_only_alcf_declares_a_group(self):
+        shims = load_providers()
+        assert {s.name for s in shims if s.group} == set(self._ALCF)
+
+    def test_only_kilo_titles_its_group(self):
+        """A vendor may declare a title without declaring a key (Kilo)."""
+        shims = load_providers()
+        titled = {s.name: s for s in shims if s.group_label}
+        assert set(titled) == {"kilo--chat_completions"}
+        assert titled["kilo--chat_completions"].group_label == "Kilo"
+        # The shim keeps no label of its own, so its row reads as the base.
+        assert titled["kilo--chat_completions"].display_name is None
+        assert titled["kilo--chat_completions"].group is None
+
+    def test_undeclared_shims_leave_both_fields_none(self):
+        shims = load_providers()
+        assert all(
+            s.group is None and s.group_label is None
+            for s in shims
+            if s.name not in self._ALCF and s.name != "kilo--chat_completions"
+        )

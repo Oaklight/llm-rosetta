@@ -1229,7 +1229,7 @@ class TestConversionPipeline:
     def test_implied_target_applies_the_custom_tool_policy(self):
         """A custom tool survives a shim-spelled target that declares support.
 
-        Pins the custom-tools site on its own.  ``alcf--sophia`` declares
+        Pins the custom-tools site on its own.  ``alcf_sophia--chat_completions`` declares
         ``custom_tools: true``, so the implied form must keep the tool rather
         than downgrade it to a function with a synthesised ``input`` schema.
         """
@@ -1241,13 +1241,13 @@ class TestConversionPipeline:
             "messages": [{"role": "user", "content": "hi"}],
             "tools": [{"type": "custom", "name": "x", "format": {"type": "text"}}],
         }
-        out = ConversionPipeline("open_responses", "alcf--sophia").convert_request(
-            copy.deepcopy(body)
-        )
+        out = ConversionPipeline(
+            "open_responses", "alcf_sophia--chat_completions"
+        ).convert_request(copy.deepcopy(body))
         explicit = ConversionPipeline(
             "open_responses",
-            "alcf--sophia",
-            target_shim=resolve_shim("alcf--sophia"),
+            "alcf_sophia--chat_completions",
+            target_shim=resolve_shim("alcf_sophia--chat_completions"),
         ).convert_request(copy.deepcopy(body))
         assert out["tools"] == [
             {"type": "custom", "custom": {"name": "x", "format": {"type": "text"}}}
@@ -1753,7 +1753,9 @@ class TestShimEffortLadders:
         from llm_rosetta.pipeline import ConversionPipeline
 
         out = ConversionPipeline(
-            "chat_completions", "chat_completions", target_shim="alcf--sophia"
+            "chat_completions",
+            "chat_completions",
+            target_shim="alcf_sophia--chat_completions",
         ).convert_request(self._body(effort))
 
         assert out["reasoning_effort"] == sent
@@ -1788,7 +1790,7 @@ class TestReasoningRenameWiring:
 
     The unit tests call ``_rename_reasoning_field`` directly, so emptying a
     shim's ``pre_ir_transforms`` used to leave the suite green while the lane
-    lost its reasoning again — both the ``alcf--sophia`` and the
+    lost its reasoning again — both the ``alcf_sophia--chat_completions`` and the
     ``openrouter--chat_completions`` shim carry this rename, so both are driven
     through the response leg here (#969 review).
     """
@@ -1826,7 +1828,7 @@ class TestReasoningRenameWiring:
         }
 
     @pytest.mark.parametrize(
-        "shim_name", ["alcf--sophia", "openrouter--chat_completions"]
+        "shim_name", ["alcf_sophia--chat_completions", "openrouter--chat_completions"]
     )
     def test_non_streaming_response_keeps_the_lane_reasoning(self, shim_name):
         out = self._pipeline(shim_name).convert_response(
@@ -1858,7 +1860,7 @@ class TestReasoningRenameWiring:
         assert out["content"][0]["thinking"] == "15*37 = 555"
 
     @pytest.mark.parametrize(
-        "shim_name", ["alcf--sophia", "openrouter--chat_completions"]
+        "shim_name", ["alcf_sophia--chat_completions", "openrouter--chat_completions"]
     )
     def test_streaming_delta_keeps_the_lane_reasoning(self, shim_name):
         processor = self._pipeline(shim_name).create_stream_processor()

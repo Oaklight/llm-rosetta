@@ -20,6 +20,7 @@ cd llm-rosetta
 pip install -e ".[all]"
 pre-commit install
 make test
+make test-js   # admin UI: node --test over tests/js/ (skipped when node is absent)
 ```
 
 ## License

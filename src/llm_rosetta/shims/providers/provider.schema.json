@@ -36,7 +36,15 @@
     },
     "display_name": {
       "type": "string",
-      "description": "Human-readable brand label (e.g. 'Kilo') for the admin UI. Falls back to the shim name when unset."
+      "description": "This shim's own human-readable label (e.g. 'metis' on 'alcf_metis--chat_completions'). Shown as the shim's row inside its group, for a shim that also declares 'group' or 'group_label'. A shim declaring neither was written against the older schema, where 'display_name' titled the group instead; that reading is kept, so its row label still comes from the name. Falls back to the segment after '--' in the name."
+    },
+    "group": {
+      "type": "string",
+      "description": "Top-level group this shim appears under in the admin provider-type picker. Falls back to the segment before '--' in the name, so a shim usually needs no declaration; declare it when one vendor spans several name prefixes (e.g. 'alcf_metis', 'alcf_minerva' and 'alcf_sophia' all declaring 'alcf'). The group's title — which is also the brand on free-source affordances — falls back to the capitalized group key, so a vendor that wants more than that declares 'group_label'."
+    },
+    "group_label": {
+      "type": "string",
+      "description": "Title of the shim's top-level group. Falls back to the group key. Keep it identical across the members of one group; as with 'logo', the last shim loaded wins."
     },
     "free_source": {
       "type": "boolean",

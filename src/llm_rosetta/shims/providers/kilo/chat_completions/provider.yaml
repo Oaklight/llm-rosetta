@@ -7,7 +7,10 @@
 # Resource section.
 name: kilo--chat_completions
 base: chat_completions
-display_name: Kilo
+# `group_label` titles the vendor's top level in the admin picker; with no
+# `group` the key is still derived from the name (`kilo`).  The shim's own
+# label is left unset, so its row reads as the bare base format.
+group_label: Kilo
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/kilocode.svg
 free_source: true
 

@@ -12,7 +12,7 @@ PYPI_MIRROR ?=
 REGISTRY_MIRROR ?=
 
 # Default target
-all: lint test build
+all: lint test test-js build
 
 # ──────────────────────────────────────────────
 # Linting & Formatting
@@ -42,6 +42,17 @@ test:
 	@echo "Running tests..."
 	pytest tests/ --ignore=tests/integration -v --tb=short
 	@echo "Tests completed."
+
+# Run the admin UI's JavaScript tests.  The picker's tree builder is a pure ES
+# module, so node's own test runner covers it; node is not a build dependency,
+# so a machine without it skips rather than fails.
+test-js:
+	@if command -v node >/dev/null 2>&1; then \
+		echo "Running JS tests..."; \
+		node --test tests/js/*.test.mjs; \
+	else \
+		echo "WARNING: node not found - skipping JS tests"; \
+	fi
 
 
 # Run conversion pipeline benchmarks
@@ -407,4 +418,4 @@ help:
 	@echo ""
 	@echo "Detected version: $(VERSION)"
 
-.PHONY: all lint bench lint-fix test test-integration test-gateway build-package build-wheel push-package clean-package build push clean build-binary build-binary-musl clean-binary clean-binary-all build-docker-alpine build-docker-glibc build-docker-python build-docker push-docker clean-docker deploy-dev help
+.PHONY: all lint bench lint-fix test test-js test-integration test-gateway build-package build-wheel push-package clean-package build push clean build-binary build-binary-musl clean-binary clean-binary-all build-docker-alpine build-docker-glibc build-docker-python build-docker push-docker clean-docker deploy-dev help

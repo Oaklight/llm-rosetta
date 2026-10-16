@@ -495,7 +495,7 @@ class TestBuiltinShims:
             assert shim.reasoning is not None, name
             return shim.reasoning
 
-        sophia = cap("alcf--sophia")
+        sophia = cap("alcf_sophia--chat_completions")
         assert sophia.effort_field == "reasoning_effort"
         assert sophia.effort_range == ("low", "high")
 
@@ -1117,7 +1117,7 @@ class TestShimLoaderFieldCoverage:
 
 
 class TestFreeSourceShim:
-    """The Kilo shim declares keyless + free_source, a display name, and a logo."""
+    """The Kilo shim declares keyless + free_source, a group title, and a logo."""
 
     @pytest.fixture(autouse=True)
     def _load_builtins(self):
@@ -1139,7 +1139,11 @@ class TestFreeSourceShim:
         assert shim.free_source is True
         assert shim.connection.keyless is True
         assert shim.connection.models_path == "/models"
-        assert shim.display_name == "Kilo"
+        # The brand is the group title; the shim's own row label is unset, so
+        # the picker shows it as the bare base format under "Kilo".
+        assert shim.group_label == "Kilo"
+        assert shim.group is None
+        assert shim.display_name is None
         assert shim.logo is not None
 
     def test_default_shim_is_not_free_source(self):

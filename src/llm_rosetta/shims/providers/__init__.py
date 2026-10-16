@@ -463,6 +463,8 @@ def _load_single_provider(
         base=cfg["base"],
         logo=cfg.get("logo"),
         display_name=cfg.get("display_name"),
+        group=cfg.get("group"),
+        group_label=cfg.get("group_label"),
         free_source=cfg.get("free_source", False),
         connection=connection,
         tools=tools,

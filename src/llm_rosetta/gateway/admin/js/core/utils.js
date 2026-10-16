@@ -8,6 +8,7 @@
 
 import { S, INACTIVITY_TIMEOUT_MS } from './state.js';
 import { t } from './i18n.js';
+import { shimBrand } from './shim-tree.js';
 
 // ===================== Scheme + Mode =====================
 const VALID_SCHEMES = ['minimal', 'emerald'];
@@ -302,8 +303,7 @@ export function isFreeEntry(providers, shims, name) {
 /** Display label for a free entry — "<Brand> <suffix>" (e.g. "Kilo (Free)"). */
 export function freeEntryLabel(providers, shims, name, suffix) {
   const shim = shimOf(providers, shims, name);
-  const brand = (shim && shim.display_name)
-    || (shim ? shim.name.split('--')[0].replace(/^./, c => c.toUpperCase()) : name);
+  const brand = shim ? shimBrand(shim) : name;
   return `${brand} ${suffix}`;
 }
 
