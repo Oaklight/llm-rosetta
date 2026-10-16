@@ -26,12 +26,15 @@ from ...types.ir.tools import ToolCallConfig
 from ..base import BaseToolOps
 from ..base.helpers.opaque import CARRIER_KEY
 from ..base.tools import (
+    ir_strict,
     log_orphan_warnings,
     make_intrinsic_tool_definition,
     mark_tool_error,
+    provider_allowed_tools_to_ir,
     sanitize_schema,
     sanitize_tool_call_id,
     warn_tool_error,
+    write_ir_strict,
 )
 
 logger = logging.getLogger(__name__)
@@ -220,6 +223,9 @@ class ChatCompletionsToolOps(BaseToolOps):
                 func_def["parameters"] = sanitize_schema(parameters)
             elif parameters:
                 func_def["parameters"] = parameters
+            strict = ir_strict(ir_tool)
+            if strict is not None:
+                func_def["strict"] = strict
             return {"type": "function", "function": func_def}
 
         # Unknown tool types: wrap as Chat Completions function.
@@ -294,13 +300,19 @@ class ChatCompletionsToolOps(BaseToolOps):
         else:
             result["required_parameters"] = []
 
+        write_ir_strict(result, func.get("strict"))
         result["metadata"] = {}
         return cast(ToolDefinition, result)
 
     # ==================== Tool Choice ====================
 
     @staticmethod
-    def ir_tool_choice_to_p(ir_tool_choice: ToolChoice, **kwargs: Any) -> str | dict:
+    def ir_tool_choice_to_p(
+        ir_tool_choice: ToolChoice,
+        *,
+        warnings: list[str] | None = None,
+        **kwargs: Any,
+    ) -> str | dict:
         """IR ToolChoice → OpenAI Chat tool_choice parameter.
 
         Mapping:
@@ -311,11 +323,29 @@ class ChatCompletionsToolOps(BaseToolOps):
 
         Args:
             ir_tool_choice: IR tool choice.
+            warnings: Optional warning sink.  Receives one entry when an IR
+                ``allowed_tools`` restriction has to be widened away.
 
         Returns:
             OpenAI tool_choice value (string or dict).
         """
         mode = ir_tool_choice.get("mode", "auto")
+
+        if ir_tool_choice.get("allowed_tools"):
+            # The variant exists in OpenAI's schema but no Chat upstream we
+            # have measured accepts it (``api.openai.com`` answers 400,
+            # "Missing required parameter: 'tool_choice.function.'"), so the
+            # choice is widened to its bare mode: worth a warning, since a
+            # *restriction* going away is not the same as an optional field
+            # being dropped.
+            if warnings is not None:
+                warnings.append(
+                    "OpenAI Chat has no allowed_tools tool_choice (Chat "
+                    "upstreams reject the variant), so the choice was widened "
+                    f"past the restriction to {len(ir_tool_choice['allowed_tools'])} "
+                    "tool(s): the model may now call any declared tool, where "
+                    "the source allowed only the listed ones"
+                )
 
         if mode == "none":
             return "none"
@@ -342,9 +372,20 @@ class ChatCompletionsToolOps(BaseToolOps):
         - ``"auto"`` → ``mode:"auto"``
         - ``"required"`` → ``mode:"any"``
         - ``{"type":"function","function":{"name":"..."}}`` → ``mode:"tool"``
+        - ``{"type":"custom","custom":{"name":"..."}}`` → ``mode:"tool"`` with
+          ``tool_type:"custom"``
+        - ``{"type":"allowed_tools","mode":...,"tools":[...]}`` → the same
+          mode, plus ``allowed_tools`` identities
+
+        The allow-list variant is read even though Chat upstreams reject it:
+        a client may hand one to the library and route it to a format that
+        does support it, where the restriction is worth keeping.  A Chat
+        target warns and widens instead — see :meth:`ir_tool_choice_to_p`.
 
         Args:
             provider_tool_choice: OpenAI tool_choice value.
+            **kwargs: ``warnings`` (list[str] | None) — optional warning sink
+                for the entries and modes the reader cannot carry.
 
         Returns:
             IR ToolChoice.
@@ -359,6 +400,12 @@ class ChatCompletionsToolOps(BaseToolOps):
             return cast(ToolChoice, {"mode": "auto", "tool_name": ""})
 
         if isinstance(provider_tool_choice, dict):
+            if provider_tool_choice.get("type") == "allowed_tools":
+                return provider_allowed_tools_to_ir(
+                    provider_tool_choice,
+                    warnings=kwargs.get("warnings"),
+                    selector="tool_choice.allowed_tools",
+                )
             if provider_tool_choice.get("type") == "custom":
                 custom = provider_tool_choice.get("custom", {})
                 return cast(

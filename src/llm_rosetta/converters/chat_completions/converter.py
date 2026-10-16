@@ -265,7 +265,9 @@ class ChatCompletionsConverter(BaseConverter):
             result["tools"] = self._get_cached_ir_tools_to_p(tools)
         tool_choice = ir_request.get("tool_choice")
         if tool_choice:
-            result["tool_choice"] = self.tool_ops.ir_tool_choice_to_p(tool_choice)
+            result["tool_choice"] = self.tool_ops.ir_tool_choice_to_p(
+                tool_choice, warnings=ctx.warnings
+            )
         tool_config = ir_request.get("tool_config")
         if tool_config:
             tc_fields = self.tool_ops.ir_tool_config_to_p(tool_config)
@@ -426,7 +428,9 @@ class ChatCompletionsConverter(BaseConverter):
         # 3. Tool choice
         tool_choice = provider_request.get("tool_choice")
         if tool_choice is not None:
-            ir_request["tool_choice"] = self.tool_ops.p_tool_choice_to_ir(tool_choice)
+            ir_request["tool_choice"] = self.tool_ops.p_tool_choice_to_ir(
+                tool_choice, warnings=context.warnings
+            )
 
         # 4. Tool config (parallel_tool_calls)
         parallel_tool_calls = provider_request.get("parallel_tool_calls")

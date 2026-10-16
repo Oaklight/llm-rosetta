@@ -34,11 +34,13 @@ from ..base.tools import (
     extract_part_ids,
     get_native_definition,
     intrinsic_kind_of,
+    ir_strict,
     make_intrinsic_tool_definition,
     log_orphan_warnings,
     prefixed_tool_call_id,
     sanitize_schema,
     sanitize_tool_call_id,
+    write_ir_strict,
 )
 
 logger = logging.getLogger(__name__)
@@ -278,6 +280,12 @@ class MessagesToolOps(BaseToolOps):
             "name": ir_tool["name"],
             "description": ir_tool.get("description", ""),
         }
+        # Anthropic validates the schema under strict, so the flag only means
+        # something when the client also sent a closed schema; that is the
+        # client's to arrange, not ours to patch.
+        strict = ir_strict(ir_tool)
+        if strict is not None:
+            result["strict"] = strict
         raw_schema = ir_tool.get("parameters", {})
         schema = (
             sanitize_schema(raw_schema, extra_strip_keys={"title"})
@@ -338,6 +346,7 @@ class MessagesToolOps(BaseToolOps):
             result["required_parameters"] = []
 
         result["metadata"] = {}
+        write_ir_strict(result, provider_tool.get("strict"))
         # Read cache_control → cache_hint
         cache_control = provider_tool.get("cache_control")
         if cache_control is not None:
@@ -358,14 +367,31 @@ class MessagesToolOps(BaseToolOps):
         - ``mode:"any"`` → ``{"type": "any"}``
         - ``mode:"tool"`` → ``{"type": "tool", "name": "..."}``
 
+        Anthropic has no allow-list variant, so an IR ``allowed_tools``
+        restriction can only be widened back to its bare mode; *warnings*
+        receives a note when that happens, since a restriction going away is
+        not the same as an optional field being dropped.
+
         Args:
             ir_tool_choice: IR tool choice.
+            **kwargs: ``warnings`` (list[str] | None) — optional warning sink.
 
         Returns:
             Anthropic tool_choice dict.
         """
         mode = ir_tool_choice.get("mode", "auto")
         result: dict[str, Any] = {}
+
+        if ir_tool_choice.get("allowed_tools"):
+            warnings = kwargs.get("warnings")
+            if warnings is not None:
+                warnings.append(
+                    "Anthropic Messages has no allowed_tools tool_choice, so "
+                    "the choice was widened past the restriction to "
+                    f"{len(ir_tool_choice['allowed_tools'])} tool(s): the model "
+                    "may now call any declared tool, where the source allowed "
+                    "only the listed ones"
+                )
 
         if mode == "none":
             result["type"] = "none"

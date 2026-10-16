@@ -742,7 +742,9 @@ class GoogleGenerateConverter(BaseConverter):
             or provider_request.get("toolConfig")
         )
         if tool_config:
-            ir_request["tool_choice"] = self.tool_ops.p_tool_choice_to_ir(tool_config)
+            ir_request["tool_choice"] = self.tool_ops.p_tool_choice_to_ir(
+                tool_config, warnings=context.warnings
+            )
 
         # Generation config — check SDK config first, then REST generationConfig
         gen_source = config
@@ -980,7 +982,7 @@ class GoogleGenerateConverter(BaseConverter):
 
         tool_choice = ir_request.get("tool_choice")
         if tool_choice:
-            tc_p = self.tool_ops.ir_tool_choice_to_p(tool_choice)
+            tc_p = self.tool_ops.ir_tool_choice_to_p(tool_choice, warnings=ctx.warnings)
             if tc_p:
                 config["tool_config"] = tc_p
 

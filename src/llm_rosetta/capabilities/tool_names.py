@@ -525,19 +525,24 @@ def _select_upstream_name(
     name_map: ToolNameMap,
     declared: set[Any],
     warnings: list[str],
+    group: str | None = None,
 ) -> str:
     """Re-spell one name used by a tool selector, warning if it resolves to nothing.
 
-    Selectors carry no namespace, so the map can only answer while a single
-    tool claims the bare name. Otherwise the name goes upstream unchanged and
-    matches nothing, silently as far as the provider is concerned — hence
-    *selector* in the warning. The two causes are reported apart because a
-    shared name is ours to explain and an undeclared one is the client's typo.
+    *group* is the namespace the selector carried, when its shape has room for
+    one — an IR ``allowed_tools`` identity does.  Without it the map can only
+    answer while a single tool claims the bare name; with it the exact tool is
+    named and the ambiguity cannot arise.
+
+    Otherwise the name goes upstream unchanged and matches nothing, silently
+    as far as the provider is concerned — hence *selector* in the warning.
+    The two causes are reported apart because a shared name is ours to explain
+    and an undeclared one is the client's typo.
     """
-    chosen = name_map.to_upstream(name)
+    chosen = name_map.to_upstream(name, group)
     if chosen in declared:
         return chosen
-    if name_map.is_ambiguous(name):
+    if group is None and name_map.is_ambiguous(name):
         warnings.append(
             f"{selector} names {chosen!r}, which is not among the tools sent "
             "upstream — the name is shared by tools in more than one namespace "
@@ -579,13 +584,52 @@ def _apply_upstream_allowed_tools(
                 warnings=warnings,
             )
         elif isinstance(entry, dict) and isinstance(entry.get("name"), str):
+            group = entry.get("namespace")
             entry["name"] = _select_upstream_name(
                 entry["name"],
                 selector="allowed_tools",
                 name_map=name_map,
                 declared=declared,
                 warnings=warnings,
+                group=group if isinstance(group, str) else None,
             )
+
+
+def _respell_allowed_tools_ir(
+    choice: Any,
+    *,
+    name_map: ToolNameMap,
+    declared: set[Any],
+    warnings: list[str],
+) -> None:
+    """Re-spell the identities in an IR tool choice's allow-list.
+
+    The IR keeps the group the source stated, so a restriction naming a tool
+    whose bare name is shared still resolves; the group is dropped from the
+    ref once the name carries the qualification, so the two cannot disagree.
+    Mutates in place.
+    """
+    if not isinstance(choice, dict):
+        return
+    refs = choice.get("allowed_tools")
+    if not isinstance(refs, list):
+        return
+    for ref in refs:
+        if not isinstance(ref, dict):
+            continue
+        name = ref.get("name")
+        if not isinstance(name, str) or not name:
+            continue
+        group = ref.get("tool_group")
+        ref["name"] = _select_upstream_name(
+            name,
+            selector="allowed_tools",
+            name_map=name_map,
+            declared=declared,
+            warnings=warnings,
+            group=group if isinstance(group, str) and group else None,
+        )
+        ref.pop("tool_group", None)
 
 
 def _respell_history_tool_calls(
@@ -658,11 +702,14 @@ def apply_upstream_tool_names(
     alone, the assistant message would name a function the request does not
     declare.  The inverse of :func:`restore_client_tool_names`.
 
-    ``tool_choice`` and the ``allowed_tools`` extension are re-spelled here
-    too. Neither carries a namespace, so both resolve by name alone or not at
-    all, and either one left naming no declared tool is reported in
-    *warnings* — even when nothing was renamed, since such a selector is
-    broken on its own terms.
+    ``tool_choice`` and its ``allowed_tools`` restriction are re-spelled here
+    too, along with the legacy ``allowed_tools`` extension. A bare selector
+    carries no namespace, so it resolves by name alone or not at all; an IR
+    ``allowed_tools`` identity does carry the group the source stated, so it
+    resolves through it and the group is spent — no wire spelling in this
+    position has a slot for one. Either way, a selector left naming no
+    declared tool is reported in *warnings* — even when nothing was renamed,
+    since such a selector is broken on its own terms.
 
     A history call is reported only when it omits a namespace several tools
     need, the one failure this flattening causes. Naming a tool the request
@@ -681,6 +728,9 @@ def apply_upstream_tool_names(
             declared=declared,
             warnings=warnings,
         )
+    _respell_allowed_tools_ir(
+        choice, name_map=name_map, declared=declared, warnings=warnings
+    )
 
     extensions = ir_request.get("provider_extensions")
     if isinstance(extensions, dict):

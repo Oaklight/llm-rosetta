@@ -156,6 +156,27 @@ def _forward_passthrough_request_fields(
         ]
 
 
+def _declared_tool_types(tools: Any) -> dict[str, str]:
+    """Map each declared tool's name to its IR type.
+
+    Used to spell ``allowed_tools`` entries: the wire entry's ``type`` has to
+    agree with the declaration, or the API reports the tool as not found.
+
+    Args:
+        tools: The IR request's tool list, if it has one.
+
+    Returns:
+        Name → IR type, empty when there are no tools to read.
+    """
+    if not isinstance(tools, list):
+        return {}
+    types: dict[str, str] = {}
+    for tool in tools:
+        if isinstance(tool, dict) and isinstance(tool.get("name"), str):
+            types[tool["name"]] = str(tool.get("type") or "function")
+    return types
+
+
 class OpenResponsesConverter(BaseConverter):
     """Open Responses spec converter (vendor-neutral base).
 
@@ -821,7 +842,10 @@ class OpenResponsesConverter(BaseConverter):
                 "_open_responses_allowed_tools"
             )
             result["tool_choice"] = self.tool_ops.ir_tool_choice_to_p(
-                tool_choice, allowed_tools=allowed_tools
+                tool_choice,
+                allowed_tools=allowed_tools,
+                tool_types=_declared_tool_types(tools),
+                warnings=ctx.warnings,
             )
         tool_config = ir_request.get("tool_config")
         if tool_config:

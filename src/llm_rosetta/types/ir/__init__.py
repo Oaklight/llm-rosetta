@@ -177,7 +177,7 @@ from .stream import (
 )
 
 # 工具类型 Tool types
-from .tools import ToolCallConfig, ToolChoice, ToolDefinition
+from .tools import ToolCallConfig, ToolChoice, ToolDefinition, ToolRef
 
 # 类型守卫 Type guards (advanced/internal — import from .type_guards directly)
 from .type_guards import (  # noqa: F401
@@ -256,6 +256,7 @@ __all__ = [
     "StreamingMetadata",
     # ========== 工具类型 Tool types ==========
     "ToolDefinition",
+    "ToolRef",
     "ToolChoice",
     "ToolCallConfig",
     # ========== 生成配置类型 Generation configuration types ==========

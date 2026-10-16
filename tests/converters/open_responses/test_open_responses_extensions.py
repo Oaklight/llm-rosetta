@@ -79,20 +79,19 @@ class TestAllowedToolsToolChoice:
         )
         assert out["tool_choice"] == _ALLOWED_TOOLS
 
-    def test_ir_stashes_object_and_maps_required_to_any(self):
+    def test_ir_states_the_restriction_and_maps_required_to_any(self):
         body = self._body()
         body["tool_choice"] = dict(_ALLOWED_TOOLS, mode="required")
         conv = OpenResponsesConverter()
         ir = conv.request_from_provider(body, context=ConversionContext())
         assert ir["tool_choice"]["mode"] == "any"
-        assert (
-            ir["provider_extensions"]["_open_responses_allowed_tools"]
-            == (body["tool_choice"])
-        )
+        assert ir["tool_choice"]["allowed_tools"] == [{"name": "get_weather"}]
+        # The wire object is not also copied aside; the IR field is the home.
+        assert "provider_extensions" not in ir
 
     def test_degrades_across_format_keeping_mode(self):
-        # The restriction has no IR equivalent; the mode degrades to the
-        # selector and no tool_choice-shaped object leaks into the target.
+        # Anthropic has no allow-list; the mode survives as the selector and
+        # no tool_choice-shaped object leaks into the target.
         out = convert(
             self._body(),
             "messages",
@@ -116,7 +115,7 @@ class TestAllowedToolsToolChoice:
         pipe = ConversionPipeline("open_responses", "openai_chat", baseline=False)
         pipe.convert_request(self._body())
         assert any(
-            "allowed_tools" in w and "unrestricted" in w for w in pipe.warnings
+            "allowed_tools" in w and "any declared tool" in w for w in pipe.warnings
         ), pipe.warnings
 
     def test_no_leak_onto_openai_chat(self):
@@ -129,6 +128,78 @@ class TestAllowedToolsToolChoice:
         assert out["tool_choice"] == "auto"
         assert "allowed_tools" not in out
         assert "_open_responses_allowed_tools" not in out
+
+
+class TestAllowedToolsToGoogle:
+    """Formats with an allow-list of their own receive the restriction."""
+
+    def _body(self, mode: str = "required") -> dict:
+        """A restricted choice, mandatory by default.
+
+        ``required`` maps to IR ``any``, which is the only mode generateContent
+        can state a name list under; the ``auto`` case has its own test.
+        """
+        return {
+            "model": "m",
+            "input": [_user()],
+            "tools": _tools(),
+            "tool_choice": dict(
+                _ALLOWED_TOOLS,
+                mode=mode,
+                tools=[
+                    {"type": "function", "name": "get_weather"},
+                    {"type": "function", "name": "get_time"},
+                ],
+            ),
+        }
+
+    def test_reaches_google_interactions(self):
+        out = convert(
+            self._body(),
+            "google_interactions",
+            source_provider="open_responses",
+            baseline=False,
+        )
+        assert out["generation_config"]["tool_choice"] == {
+            "allowed_tools": {"mode": "any", "tools": ["get_weather", "get_time"]}
+        }
+
+    def test_interactions_keeps_the_mode_it_was_given(self):
+        """A permission, not a requirement, stays one."""
+        out = convert(
+            self._body(mode="auto"),
+            "google_interactions",
+            source_provider="open_responses",
+            baseline=False,
+        )
+        assert out["generation_config"]["tool_choice"] == {
+            "allowed_tools": {"mode": "auto", "tools": ["get_weather", "get_time"]}
+        }
+
+    def test_reaches_google_generate(self):
+        out = convert(
+            self._body(),
+            "google_generate",
+            source_provider="open_responses",
+            baseline=False,
+        )
+        assert out["config"]["tool_config"]["function_calling_config"] == {
+            "mode": "ANY",
+            "allowed_function_names": ["get_weather", "get_time"],
+        }
+
+    def test_google_generate_keeps_the_mode_and_warns(self):
+        """generateContent cannot state a restriction outside ANY."""
+        pipe = ConversionPipeline("open_responses", "google_generate", baseline=False)
+        out = pipe.convert_request(self._body(mode="auto"))
+        assert out["tool_config"]["function_calling_config"] == {"mode": "AUTO"}
+        assert any("allowed_tools" in w for w in pipe.warnings), pipe.warnings
+
+    def test_degrades_to_anthropic_with_a_warning(self):
+        pipe = ConversionPipeline("open_responses", "messages", baseline=False)
+        body = pipe.convert_request(self._body())
+        assert body["tool_choice"] == {"type": "any"}
+        assert any("allowed_tools" in w for w in pipe.warnings), pipe.warnings
 
 
 class TestCompaction:

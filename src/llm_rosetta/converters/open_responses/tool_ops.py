@@ -36,18 +36,22 @@ from ..base.helpers.tool_group import (
     tool_call_group,
 )
 from ..base.tools import (
+    allowed_tool_names,
     extract_part_ids,
     get_native_definition,
     intrinsic_kind_of,
+    ir_strict,
     make_intrinsic_tool_definition,
     log_orphan_warnings,
     make_intrinsic_tool_call,
     mark_tool_error,
+    provider_allowed_tools_to_ir,
     sanitize_schema,
     prefixed_tool_call_id,
     sanitize_tool_call_id,
     warn_tool_error,
     warn_tool_error_dropped,
+    write_ir_strict,
 )
 
 logger = logging.getLogger(__name__)
@@ -908,12 +912,15 @@ class OpenResponsesToolOps(BaseToolOps):
         if isinstance(parameters, dict):
             parameters = sanitize_schema(parameters)
         metadata = ir_tool.get("metadata") or {}
+        strict = ir_strict(ir_tool)
         result: dict[str, Any] = {
             "type": "function",
             "name": ir_tool["name"],
             "description": ir_tool.get("description", ""),
             "parameters": parameters,
-            "strict": metadata.get("strict", False),
+            # Responses defaults the flag, so a source that said nothing gets
+            # the wire default rather than an absent field.
+            "strict": False if strict is None else strict,
         }
         output_schema = metadata.get("output_schema")
         if output_schema is not None:
@@ -1006,13 +1013,13 @@ class OpenResponsesToolOps(BaseToolOps):
         fmt = provider_tool.get("format")
         if fmt:
             meta["format"] = fmt
-        strict = provider_tool.get("strict")
-        if strict is not None:
-            meta["strict"] = strict
         output_schema = provider_tool.get("output_schema")
         if output_schema is not None:
             meta["output_schema"] = output_schema
         result["metadata"] = meta
+        # The strict flag is a first-class IR field now; metadata["strict"] was
+        # where it used to live and is still read by ``ir_strict``.
+        write_ir_strict(result, provider_tool.get("strict"))
         return cast(ToolDefinition, result)
 
     # ==================== Tool Choice ====================
@@ -1022,6 +1029,7 @@ class OpenResponsesToolOps(BaseToolOps):
         ir_tool_choice: ToolChoice,
         *,
         allowed_tools: dict[str, Any] | None = None,
+        tool_types: dict[str, str] | None = None,
         **kwargs: Any,
     ) -> str | dict:
         """IR ToolChoice → OpenAI Responses tool_choice parameter.
@@ -1037,33 +1045,72 @@ class OpenResponsesToolOps(BaseToolOps):
 
         Args:
             ir_tool_choice: IR tool choice.
-            allowed_tools: Open Responses ``allowed_tools`` object retrieved
-                from ``provider_extensions``.  When present it is re-emitted
-                verbatim, with its ``mode`` refreshed from the IR mode, so the
-                tool restriction survives the round-trip.
+            allowed_tools: Legacy copy of the wire object, retrieved from
+                ``provider_extensions``.  Only used when the IR carries no
+                ``allowed_tools`` of its own, so IR built before that field
+                existed still round-trips.
+            **kwargs: ``warnings`` (list[str] | None) — optional warning sink
+                for a restriction naming a tool the request does not declare.
+            tool_types: Declared tool name → IR type, used to spell each
+                allow-list entry.  An entry's ``type`` must match how the tool
+                was declared — the API answers "Tool choice 'custom' not found
+                in 'tools' parameter" for a function-shaped entry naming a
+                custom tool, and the reverse — so it is derived from the
+                declaration rather than carried in the IR, where a downgraded
+                custom tool would leave it stale.  A name the map does not
+                know is written as ``function``.
 
         Returns:
             OpenAI tool_choice value (string or dict).
         """
-        # Open Responses ``allowed_tools`` has no IR equivalent: reconstruct the
-        # object around the IR mode so the restriction is preserved.
+        mode = ir_tool_choice.get("mode") or ir_tool_choice.get("type")
+        wire_mode = {
+            "any": "required",
+            "required": "required",
+            "none": "none",
+            "auto": "auto",
+        }.get(str(mode), "auto")
+
+        # The IR states the restriction as tool identities, so rebuild the
+        # wire object around the IR mode.
+        names = allowed_tool_names(ir_tool_choice)
+        if names:
+            declared_types = tool_types or {}
+            warnings = kwargs.get("warnings")
+            if warnings is not None and tool_types is not None:
+                # The upstream refuses a restriction naming a tool it was not
+                # sent ("Tool choice 'x' not found in 'tools' parameter"), so
+                # the client is told here as well as by the naming pass — a
+                # library caller driving the converter directly has no naming
+                # pass to hear it from.
+                undeclared = [n for n in names if n not in declared_types]
+                if undeclared:
+                    warnings.append(
+                        "tool_choice.allowed_tools names "
+                        f"{', '.join(repr(n) for n in undeclared)}, which the "
+                        "request does not declare; the provider rejects a "
+                        "restriction naming a tool it was not sent"
+                    )
+            return {
+                "type": "allowed_tools",
+                "tools": [
+                    {"type": declared_types.get(name, "function"), "name": name}
+                    for name in names
+                ],
+                "mode": wire_mode,
+            }
+
+        # Legacy ``provider_extensions`` passthrough, re-emitted verbatim with
+        # its ``mode`` refreshed from the IR mode.
         if (
             isinstance(allowed_tools, dict)
             and allowed_tools.get("type") == "allowed_tools"
         ):
             out = dict(allowed_tools)
-            mode = ir_tool_choice.get("mode") or ir_tool_choice.get("type")
-            out["mode"] = {
-                "any": "required",
-                "required": "required",
-                "none": "none",
-                "auto": "auto",
-            }.get(str(mode), "auto")
+            out["mode"] = wire_mode
             return out
 
         # Support both "mode" and legacy "type" field
-        mode = ir_tool_choice.get("mode") or ir_tool_choice.get("type")
-
         if mode == "none":
             return "none"
         elif mode == "auto":
@@ -1097,10 +1144,9 @@ class OpenResponsesToolOps(BaseToolOps):
         - ``"auto"`` → ``mode:"auto"``
         - ``"required"`` → ``mode:"any"``
         - ``{"type":"function","function":{"name":"..."}}`` → ``mode:"tool"``
-        - ``{"type":"allowed_tools","tools":[...],"mode":...}`` → the whole
-          object is stashed in *extensions* under
-          ``"_open_responses_allowed_tools"`` (the IR has
-          no equivalent), and the IR ``mode`` mirrors the inner ``mode``.
+        - ``{"type":"allowed_tools","tools":[...],"mode":...}`` → the same
+          mode, plus ``allowed_tools`` identities.  Entries carry a name, and
+          the ``namespace`` beside it when the source echoed a container.
         - ``{"type":"namespace","name":...,"tools":[...]}`` → ``mode:"auto"``,
           reported on *warnings*.  The IR ``ToolChoice`` has no group slot, so
           a forced container child cannot be carried and the call is no longer
@@ -1108,9 +1154,7 @@ class OpenResponsesToolOps(BaseToolOps):
 
         Args:
             provider_tool_choice: OpenAI tool_choice value.
-            extensions: Optional ``provider_extensions`` dict that receives the
-                Open Responses ``allowed_tools`` object for lossless
-                round-trip.
+            extensions: Unused; kept so older call sites still pass it.
             warnings: Optional warning sink.  Receives one entry when a
                 namespace container form is dropped.
 
@@ -1121,15 +1165,11 @@ class OpenResponsesToolOps(BaseToolOps):
             isinstance(provider_tool_choice, dict)
             and provider_tool_choice.get("type") == "allowed_tools"
         ):
-            if extensions is not None:
-                extensions["_open_responses_allowed_tools"] = dict(provider_tool_choice)
-            wire_mode = str(provider_tool_choice.get("mode") or "auto")
-            ir_mode = {
-                "required": "any",
-                "auto": "auto",
-                "none": "none",
-            }.get(wire_mode, "auto")
-            return cast(ToolChoice, {"mode": ir_mode, "tool_name": ""})
+            return provider_allowed_tools_to_ir(
+                provider_tool_choice,
+                warnings=warnings,
+                selector="tool_choice.allowed_tools",
+            )
 
         if isinstance(provider_tool_choice, str):
             if provider_tool_choice == "none":

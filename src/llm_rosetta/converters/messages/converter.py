@@ -547,7 +547,9 @@ class MessagesConverter(BaseConverter):
 
         tool_choice = ir_request.get("tool_choice")
         if tool_choice:
-            result["tool_choice"] = self.tool_ops.ir_tool_choice_to_p(tool_choice)
+            result["tool_choice"] = self.tool_ops.ir_tool_choice_to_p(
+                tool_choice, warnings=ctx.warnings
+            )
 
         tool_config = ir_request.get("tool_config")
         if tool_config:

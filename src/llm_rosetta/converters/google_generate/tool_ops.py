@@ -28,7 +28,12 @@ from ...types.ir import (
 from ...types.ir.tools import ToolCallConfig
 from ..base import BaseToolOps, IntrinsicLeg
 from ..base.helpers.opaque import CARRIER_KEY
-from ..base.tools import sanitize_schema, sanitize_tool_call_id
+from ..base.tools import (
+    allowed_tool_names,
+    allowed_tool_refs,
+    sanitize_schema,
+    sanitize_tool_call_id,
+)
 from ..base.tools.intrinsic import (
     get_native_definition,
     intrinsic_kind_of,
@@ -316,13 +321,50 @@ class GoogleGenerateToolOps(BaseToolOps):
         - ``mode:"any"`` → ``{"function_calling_config": {"mode": "ANY"}}``
         - ``mode:"tool"`` → ``{"function_calling_config": {"mode": "ANY", "allowed_function_names": [...]}}``
 
+        An IR ``allowed_tools`` restriction is stated as the name list beside
+        an ``ANY`` mode, which is the only mode it means anything under.  A
+        choice that restricts *and* says ``auto`` or ``none`` cannot be stated
+        here at all: the mode is kept and the names are dropped, reported on
+        ``warnings``.
+
         Args:
             ir_tool_choice: IR tool choice.
+            **kwargs: ``warnings`` (list[str] | None) — optional warning sink.
 
         Returns:
             Google ToolConfig dict, or None if mode is unrecognized.
         """
         mode = ir_tool_choice.get("mode")
+
+        # An allow-list narrows "any" to the listed tools.  Google states the
+        # list beside the mode, and ``allowed_function_names`` only means
+        # anything under ``ANY``: under ``AUTO`` or ``NONE`` the upstream
+        # ignores it, so writing ANY to keep the names would turn "may not
+        # call a tool" (or "the model decides") into "must call one of these".
+        # The client's mode is kept instead, and the names are reported lost.
+        names = allowed_tool_names(ir_tool_choice)
+        if names:
+            if mode in ("any", "tool"):
+                return {
+                    "function_calling_config": {
+                        "mode": "ANY",
+                        "allowed_function_names": names,
+                    }
+                }
+            warnings = kwargs.get("warnings")
+            if warnings is not None:
+                warnings.append(
+                    "Google generateContent states an allowed_tools restriction "
+                    "only with mode ANY, and this choice says "
+                    f"{mode!r}; the mode was kept and the restriction to "
+                    f"{len(names)} tool(s) was dropped, so the model may now "
+                    "call any declared tool"
+                )
+            return {
+                "function_calling_config": {
+                    "mode": {"none": "NONE"}.get(str(mode), "AUTO")
+                }
+            }
 
         if mode == "none":
             return {"function_calling_config": {"mode": "NONE"}}
@@ -367,12 +409,20 @@ class GoogleGenerateToolOps(BaseToolOps):
 
         ir_mode = mode_map.get(mode, "auto")
 
-        # Check for specific tool names
+        # Names beside the mode restrict the choice to those tools; without
+        # them "ANY" means any declared tool.  IR states the restriction as
+        # identities and keeps the mode, so a list of several names survives
+        # instead of collapsing to the first.
         allowed_names = fcc.get("allowed_function_names") or fcc.get(
             "allowedFunctionNames", []
         )
         if allowed_names and ir_mode == "any":
-            return cast(ToolChoice, {"mode": "tool", "tool_name": allowed_names[0]})
+            refs = allowed_tool_refs(allowed_names)
+            if refs:
+                return cast(
+                    ToolChoice,
+                    {"mode": "any", "tool_name": "", "allowed_tools": refs},
+                )
 
         return cast(ToolChoice, {"mode": ir_mode, "tool_name": ""})
 

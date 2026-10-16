@@ -412,5 +412,12 @@ class TestToolChoiceConversion:
     def test_provider_specific_tool_to_ir(self):
         p = {"allowed_tools": {"mode": "any", "tools": ["search"]}}
         result = GoogleInteractionsToolOps.p_tool_choice_to_ir(p)
-        assert result["mode"] == "tool"
-        assert result["tool_name"] == "search"
+        assert result["mode"] == "any"
+        assert result["allowed_tools"] == [{"name": "search"}]
+
+    def test_provider_specific_tool_to_ir_keeps_every_name(self):
+        """The restriction lists every named tool, not just the first."""
+        p = {"allowed_tools": {"mode": "any", "tools": ["search", "fetch"]}}
+        result = GoogleInteractionsToolOps.p_tool_choice_to_ir(p)
+        assert result["mode"] == "any"
+        assert result["allowed_tools"] == [{"name": "search"}, {"name": "fetch"}]

@@ -161,7 +161,9 @@ class GoogleInteractionsConverter(BaseConverter):
             converted = [self.tool_ops.ir_tool_to_p(t) for t in tools]
             result["tools"] = [t for t in converted if t]
 
-        self._build_generation_config(ir_request, result)
+        self._build_generation_config(
+            ir_request, result, warnings=kwargs.get("warnings")
+        )
 
         ir_rf = ir_request.get("response_format")
         if ir_rf:
@@ -230,7 +232,11 @@ class GoogleInteractionsConverter(BaseConverter):
             result["input"] = steps
 
     def _build_generation_config(
-        self, ir_request: IRRequest, result: dict[str, Any]
+        self,
+        ir_request: IRRequest,
+        result: dict[str, Any],
+        *,
+        warnings: list[str] | None = None,
     ) -> None:
         gen_config: dict[str, Any] = {}
         ir_gen = ir_request.get("generation")
@@ -241,7 +247,9 @@ class GoogleInteractionsConverter(BaseConverter):
             gen_config.update(self.config_ops.ir_reasoning_to_p(ir_reasoning))
         ir_tc = ir_request.get("tool_choice")
         if ir_tc:
-            gen_config["tool_choice"] = self.tool_ops.ir_tool_choice_to_p(ir_tc)
+            gen_config["tool_choice"] = self.tool_ops.ir_tool_choice_to_p(
+                ir_tc, warnings=warnings
+            )
         if gen_config:
             result["generation_config"] = gen_config
 
@@ -267,7 +275,7 @@ class GoogleInteractionsConverter(BaseConverter):
         if tools:
             ir["tools"] = [self.tool_ops.p_tool_to_ir(t) for t in tools]
 
-        self._parse_generation_config(req, ir)
+        self._parse_generation_config(req, ir, warnings=context.warnings)
 
         rf = req.get("response_format")
         if rf:
@@ -304,7 +312,13 @@ class GoogleInteractionsConverter(BaseConverter):
                 if parts:
                     ir["messages"] = [{"role": "user", "content": parts}]
 
-    def _parse_generation_config(self, req: dict[str, Any], ir: dict[str, Any]) -> None:
+    def _parse_generation_config(
+        self,
+        req: dict[str, Any],
+        ir: dict[str, Any],
+        *,
+        warnings: list[str] | None = None,
+    ) -> None:
         gen_cfg = req.get("generation_config", {})
         if not gen_cfg:
             return
@@ -316,7 +330,7 @@ class GoogleInteractionsConverter(BaseConverter):
             ir["reasoning"] = ir_reason
         tc = gen_cfg.get("tool_choice")
         if tc:
-            ir["tool_choice"] = self.tool_ops.p_tool_choice_to_ir(tc)
+            ir["tool_choice"] = self.tool_ops.p_tool_choice_to_ir(tc, warnings=warnings)
 
     # ── _do_response_from_provider ─────────────────────────────────
 

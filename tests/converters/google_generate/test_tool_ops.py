@@ -184,7 +184,7 @@ class TestGoogleGenerateToolOps:
         assert result["mode"] == "none"
 
     def test_p_tool_choice_any_with_names(self):
-        """Test Google ANY with allowed names → IR tool."""
+        """Test Google ANY with allowed names → IR restriction on those tools."""
         result = GoogleGenerateToolOps.p_tool_choice_to_ir(
             {
                 "function_calling_config": {
@@ -193,8 +193,40 @@ class TestGoogleGenerateToolOps:
                 }
             }
         )
-        assert result["mode"] == "tool"
-        assert result["tool_name"] == "get_weather"
+        assert result["mode"] == "any"
+        assert result["allowed_tools"] == [{"name": "get_weather"}]
+
+    def test_p_tool_choice_any_with_several_names_keeps_them_all(self):
+        """Every allowed name survives, not just the first."""
+        result = GoogleGenerateToolOps.p_tool_choice_to_ir(
+            {
+                "function_calling_config": {
+                    "mode": "ANY",
+                    "allowed_function_names": ["get_weather", "get_time"],
+                }
+            }
+        )
+        assert result["mode"] == "any"
+        assert result["allowed_tools"] == [
+            {"name": "get_weather"},
+            {"name": "get_time"},
+        ]
+
+    def test_ir_tool_choice_restriction_lists_every_name(self):
+        """An IR restriction reaches Google as a flat list of all its names."""
+        result = GoogleGenerateToolOps.ir_tool_choice_to_p(
+            cast(
+                ToolChoice,
+                {
+                    "mode": "any",
+                    "allowed_tools": [{"name": "get_weather"}, {"name": "get_time"}],
+                },
+            )
+        )
+        assert result is not None
+        config = result["function_calling_config"]
+        assert config["mode"] == "ANY"
+        assert config["allowed_function_names"] == ["get_weather", "get_time"]
 
     def test_tool_choice_round_trip(self):
         """Test tool choice round-trip."""

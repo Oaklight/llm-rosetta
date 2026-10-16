@@ -181,8 +181,25 @@ class TestOpenAIResponsesToolOps:
             ToolDefinition,
             OpenAIResponsesToolOps.p_tool_definition_to_ir(provider_tool),
         )
-        assert ir["metadata"]["strict"] is True
+        assert ir["strict"] is True
+        assert "strict" not in ir["metadata"]
         restored = OpenAIResponsesToolOps.ir_tool_definition_to_p(ir)
+        assert restored["strict"] is True
+
+    def test_tool_definition_reads_legacy_strict_metadata(self):
+        """IR built before the strict field existed still round-trips."""
+        ir_tool = cast(
+            ToolDefinition,
+            {
+                "type": "function",
+                "name": "get_weather",
+                "description": "",
+                "parameters": {},
+                "required_parameters": [],
+                "metadata": {"strict": True},
+            },
+        )
+        restored = OpenAIResponsesToolOps.ir_tool_definition_to_p(ir_tool)
         assert restored["strict"] is True
 
     def test_tool_definition_preserves_output_schema(self):

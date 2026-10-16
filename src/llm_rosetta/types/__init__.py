@@ -38,6 +38,7 @@ from .ir import (
     StreamingMetadata,
     # Tool types
     ToolDefinition,
+    ToolRef,
     ToolChoice,
     ToolCallConfig,
     # Generation configuration types
@@ -119,6 +120,7 @@ __all__ = [
     "StreamingMetadata",
     # Tool types
     "ToolDefinition",
+    "ToolRef",
     "ToolChoice",
     "ToolCallConfig",
     # Generation configuration types

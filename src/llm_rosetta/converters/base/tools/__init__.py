@@ -81,6 +81,19 @@ from .multimodal_patch import (
     unpack_tool_content,
 )
 
+# -- Strict mode --
+from .strict_mode import (
+    ir_strict,
+    write_ir_strict,
+)
+
+# -- Allow-list --
+from .allowed_tools import (
+    allowed_tool_names,
+    allowed_tool_refs,
+    provider_allowed_tools_to_ir,
+)
+
 __all__ = [
     # ops
     "BaseToolOps",
@@ -127,4 +140,11 @@ __all__ = [
     "is_synthetic_tool_content_msg",
     "pack_multimodal_tool_result",
     "unpack_tool_content",
+    # strict_mode
+    "ir_strict",
+    "write_ir_strict",
+    # allowed_tools
+    "allowed_tool_names",
+    "allowed_tool_refs",
+    "provider_allowed_tools_to_ir",
 ]

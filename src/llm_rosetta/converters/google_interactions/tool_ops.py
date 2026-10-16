@@ -12,6 +12,10 @@ from typing import Any, cast
 from ...types.ir import ToolCallPart, ToolResultPart
 from ...types.ir.tools import ToolChoice, ToolDefinition
 from ..base import BaseToolOps, IntrinsicLeg
+from ..base.tools import (
+    allowed_tool_names,
+    allowed_tool_refs,
+)
 from ..base.tools.intrinsic import (
     get_native_definition,
     intrinsic_kind_of,
@@ -486,6 +490,20 @@ class GoogleInteractionsToolOps(BaseToolOps):
     def ir_tool_choice_to_p(ir_tool_choice: ToolChoice, **kwargs: Any) -> Any:
         """IR ToolChoice → Interactions tool_choice."""
         mode = ir_tool_choice["mode"]
+
+        # An allow-list travels whole, and so does the mode beside it: this
+        # dialect states ``auto``/``any``/``none`` on ``allowed_tools`` itself,
+        # so "the model decides, and if it calls one it must be one of these"
+        # stays a fixed point instead of hardening into a mandatory call.
+        names = allowed_tool_names(ir_tool_choice)
+        if names:
+            return {
+                "allowed_tools": {
+                    "mode": mode if mode in ("auto", "any", "none") else "any",
+                    "tools": names,
+                }
+            }
+
         if mode in ("auto", "any", "none"):
             return mode
         if mode == "tool":
@@ -502,7 +520,16 @@ class GoogleInteractionsToolOps(BaseToolOps):
 
     @staticmethod
     def p_tool_choice_to_ir(provider_tool_choice: Any, **kwargs: Any) -> ToolChoice:
-        """Interactions tool_choice → IR ToolChoice."""
+        """Interactions tool_choice → IR ToolChoice.
+
+        Args:
+            provider_tool_choice: Interactions tool_choice value.
+            **kwargs: ``warnings`` (list[str] | None) — optional warning sink.
+
+        Returns:
+            IR ToolChoice.
+        """
+        warnings = kwargs.get("warnings")
         if isinstance(provider_tool_choice, str):
             if provider_tool_choice in ("auto", "any", "none"):
                 return {"mode": provider_tool_choice}
@@ -510,11 +537,24 @@ class GoogleInteractionsToolOps(BaseToolOps):
         if isinstance(provider_tool_choice, dict):
             allowed = provider_tool_choice.get("allowed_tools", {})
             tools = allowed.get("tools", [])
-            if tools:
-                # IR ToolChoice only supports a single tool name; extra tools are dropped
-                return {"mode": "tool", "tool_name": tools[0]}
             mode = allowed.get("mode", "auto")
-            return {"mode": mode if mode in ("auto", "any", "none") else "auto"}
+            ir_mode = mode if mode in ("auto", "any", "none") else "auto"
+            if mode not in ("auto", "any", "none") and warnings is not None:
+                warnings.append(
+                    f"tool_choice.allowed_tools carried an unrecognized mode "
+                    f"{mode!r}; it was read as 'auto', which lets the model "
+                    "call any declared tool"
+                )
+            refs = allowed_tool_refs(
+                tools, warnings=warnings, selector="tool_choice.allowed_tools"
+            )
+            if refs:
+                # Every listed tool travels; the restriction is the point.
+                return cast(
+                    ToolChoice,
+                    {"mode": ir_mode, "tool_name": "", "allowed_tools": refs},
+                )
+            return {"mode": ir_mode}
         return {"mode": "auto"}
 
     # ── Base class abstract method implementations ──────────────────

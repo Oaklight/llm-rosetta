@@ -96,6 +96,16 @@ class ToolDefinition(TypedDict):
     the legacy ``metadata["intrinsic_kind"]`` only when this field is absent,
     and a writer records only this field.
     """
+    strict: NotRequired[bool]
+    """Whether the provider must validate this tool's arguments against
+    ``parameters`` (OpenAI Chat ``function.strict``, OpenAI Responses
+    ``strict``, Anthropic ``strict``).  Absent means the source said nothing,
+    which is not the same as ``False``: a target that defaults the flag emits
+    its own default, and one with no strict mode at all (Google) drops it.
+
+    Three of the five formats carry the concept, so it is stated here rather
+    than in ``metadata``.  ``metadata["strict"]`` is still read as a legacy
+    spelling."""
     metadata: NotRequired[dict[str, Any]]
     cache_hint: NotRequired[dict[str, Any]]
 
@@ -103,6 +113,20 @@ class ToolDefinition(TypedDict):
 # ============================================================================
 # 工具选择配置 Tool choice configuration
 # ============================================================================
+
+
+class ToolRef(TypedDict):
+    """工具身份引用
+    Reference to one declared tool, by identity.
+
+    A tool's identity is ``(name, tool_group)`` — see ``ToolDefinition``.  A
+    format that has no grouping concept carries the name alone, so the group
+    is absent there and the name is the whole identity.
+    """
+
+    name: str
+    tool_group: NotRequired[str]
+    """Group the tool was declared in.  Absent means the name stands alone."""
 
 
 class ToolChoice(TypedDict):
@@ -114,11 +138,28 @@ class ToolChoice(TypedDict):
     - auto: 自动决定是否使用工具
     - any: 必须使用某个工具（Anthropic的"any"）
     - tool: 使用指定的工具（需要tool_name）
+
+    ``allowed_tools`` narrows "any" to a named subset.  The wire spellings do
+    not agree — OpenAI Chat and Responses put an object under
+    ``tool_choice["allowed_tools"]`` (Chat entries nest the name one level
+    deeper than Responses, and ChatGPT-family upstreams reject the variant
+    outright), Google generateContent keeps a flat list in
+    ``functionCallingConfig.allowedFunctionNames``, and Google Interactions
+    wraps a flat list like Responses does.  The concept is the same, so the
+    IR states it once, as identities rather than as the outermost wire
+    spelling.  A target with no allow-list of its own (Chat Completions,
+    Anthropic Messages) can only widen the choice back to the bare mode, and
+    warns when it does.
     """
 
     mode: Literal["none", "auto", "any", "tool"]
     tool_name: NotRequired[str]  # 当mode为"tool"时必需
     tool_type: NotRequired[str]  # "function" (default) or "custom"
+    allowed_tools: NotRequired[list[ToolRef]]
+    """Tools the choice is restricted to, by identity.  Present means the
+    provider may only pick from this list; the list itself is not empty (an
+    empty one restricts to nothing, so a source that had no entries has no
+    field here)."""
 
 
 # ============================================================================
@@ -146,6 +187,8 @@ class ToolCallConfig(TypedDict, total=False):
 __all__ = [
     # 工具定义类型 Tool definition types
     "ToolDefinition",
+    # 工具身份引用 Tool identity reference
+    "ToolRef",
     # 工具选择配置 Tool choice configuration
     "ToolChoice",
     # 工具调用配置 Tool call configuration

@@ -818,21 +818,9 @@ class ConversionPipeline:
 
         self._ir_request = ir_request
 
-        # The Open Responses ``allowed_tools`` restriction has no IR
-        # equivalent, so a non-Responses target silently loses it.  Warn, since
-        # silently widening a *restriction* is worse than dropping an optional
-        # parameter.
-        target_tag = getattr(self._target_converter, "_CONVERTER_TAG", "")
-        if target_tag not in ("open_responses", "openai_responses"):
-            extensions = ir_request.get("provider_extensions")
-            if isinstance(extensions, dict) and (
-                "_open_responses_allowed_tools" in extensions
-            ):
-                ctx.warnings.append(
-                    "Dropped the Open Responses 'allowed_tools' restriction when "
-                    f"converting to {self._target_provider!r}: the target format "
-                    "has no equivalent, so tool selection is unrestricted."
-                )
+        # A target that cannot state an ``allowed_tools`` restriction warns
+        # from its own tool-choice writer, where the widening happens, so the
+        # warning names the format and travels with the loss.
 
         # Phase 2b: IR → Target
         t0 = time.perf_counter()
