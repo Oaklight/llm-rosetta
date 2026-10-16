@@ -171,6 +171,8 @@ The gateway is a drop-in backend for popular AI coding CLI tools. Each tool spea
     export GOOGLE_GEMINI_BASE_URL="http://localhost:8765"
     ```
 
+    `model` must be a plain string. The `{"name": ...}` object form used by older agy versions is rejected on v1.3.x with `invalid settings: model`.
+
     Then just run `agy`.
 
     This path still works, but agy resolves `model` against its own built-in Gemini catalog first, so a non-Google id is replaced before the request is sent (`model alias "deepseek-v4-flash" resolved to "Gemini 3.1 Pro (Low)"`). Use gateway mode to address a specific non-Google model.
