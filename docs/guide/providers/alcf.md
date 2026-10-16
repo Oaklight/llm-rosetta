@@ -2,13 +2,24 @@
 
 ALCF（阿贡领先计算设施）推理服务通过三个 shim 端点提供支持，每个计算集群对应一个端点。所有端点均使用兼容 OpenAI Chat Completions 的 API。
 
+!!! warning "计划于 0.16.0 移除"
+    三个 ALCF shim 将在 0.16.0 迁移到独立的
+    [llm-rosetta-shim-alcf](https://github.com/Oaklight/llm-rosetta-shim-alcf)
+    包。在此之前其行为不变 —— 下面的名称也不会改变，迁移只需一条 `shims.remotes` 条目。
+    参见[计划移除清单](../shims.md#shims-scheduled-for-removal)。
+
 ## 端点
 
 | Shim 名称 | 基础类型 | 默认 Base URL | API Key 环境变量 | 硬件 |
 |:---|:---|:---|:---|:---|
-| `alcf--metis` | `chat_completions` | `https://inference-api.alcf.anl.gov/resource_server/metis/api/v1` | `ALCF_API_KEY` | SambaNova SN40L |
-| `alcf--minerva` | `chat_completions` | `https://inference-api.alcf.anl.gov/resource_server/minerva/api/v1` | `ALCF_API_KEY` | NVIDIA B200 |
-| `alcf--sophia` | `chat_completions` | `https://inference-api.alcf.anl.gov/resource_server/sophia/vllm/v1` | `ALCF_API_KEY` | vLLM on A100 |
+| `alcf_metis--chat_completions` | `chat_completions` | `https://inference-api.alcf.anl.gov/resource_server/metis/api/v1` | `ALCF_API_KEY` | SambaNova SN40L |
+| `alcf_minerva--chat_completions` | `chat_completions` | `https://inference-api.alcf.anl.gov/resource_server/minerva/api/v1` | `ALCF_API_KEY` | NVIDIA B200 |
+| `alcf_sophia--chat_completions` | `chat_completions` | `https://inference-api.alcf.anl.gov/resource_server/sophia/vllm/v1` | `ALCF_API_KEY` | vLLM on A100 |
+
+三个集群共用一个管理面板顶层：每个都声明 `group: alcf`，因此提供方类型选择器只显示一个
+`alcf` 分组，其条目读作 `metis · chat_completions`、`minerva · chat_completions` 和
+`sophia · chat_completions`。旧名称 `alcf--metis`、`alcf--minerva` 和 `alcf--sophia`
+仍然可以解析，并会在启动时于配置文件中被改写。
 
 ## 推理支持
 
@@ -23,7 +34,7 @@ Metis 和 Minerva 目前没有支持推理的模型。
 
 ## 能力标志
 
-| 标志 | `alcf--sophia` | `alcf--minerva` | `alcf--metis` |
+| 标志 | `alcf_sophia--chat_completions` | `alcf_minerva--chat_completions` | `alcf_metis--chat_completions` |
 |:---|:---:|:---:|:---:|
 | 自定义工具 | ✅ | ✅ | — |
 
@@ -125,7 +136,7 @@ python3 scripts/alcf-token.py --tokens-dir /shared/alcf-tokens/
     {
       "providers": {
         "alcf-sophia": {
-          "shim": "alcf--sophia",
+          "shim": "alcf_sophia--chat_completions",
           "api_key": "${ALCF_API_KEY}"
         }
       }
@@ -142,7 +153,7 @@ python3 scripts/alcf-token.py --tokens-dir /shared/alcf-tokens/
     {
       "providers": {
         "alcf-sophia": {
-          "shim": "alcf--sophia",
+          "shim": "alcf_sophia--chat_completions",
           "token_command": ["python3", "scripts/alcf-token.py"],
           "token_refresh_interval": 1800
         }

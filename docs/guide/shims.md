@@ -53,7 +53,33 @@ src/llm_rosetta/shims/providers/
 `connection.keyless` 表示该上游无需凭据即可访问：未配置 `api_key` 时不发送任何鉴权头，
 配置了则回退到基础类型的鉴权方式。`free_source: true` 表示该 shim 的网关提供免费模型池
 —— 管理台会把它的 keyless 条目归入 "Free Resource" 分区，并命名为
-`<display_name> (Free)`。`display_name` 是管理台中显示的品牌名，缺省为 shim 名称。
+`<display_name> (Free)`。
+
+**管理台如何分组 shim。** 提供方类型选择器分两级：顶层（*group*）以及其下每个 shim
+一行。两个字符串都可以声明，因为它们并非总能从名称推导出来：
+
+| 字段 | 含义 | 默认值 |
+|------|------|--------|
+| `display_name` | 该 shim 自身的标签，显示在第二列 —— 适用于同时声明了 `group` 或 `group_label` 的 shim | `--` 之后的那段名称 |
+| `group` | 该 shim 归入的顶层键 | `--` 之前的那段名称 |
+| `group_label` | 该顶层的标题 | group 键本身 |
+
+默认值就是旧行为 —— shim 名称按第一个 `--` 切分 —— 因此不声明这些字段的 shim，渲染结果
+与以往完全一致，第三方 shim 和外部 shim 都无需改动。声明 `group` 才让一个厂商能拥有多个
+集群 × 多种格式：ALCF 的三个集群各自声明 `group: alcf` 与 `display_name: metis` /
+`minerva` / `sophia`，选择器便显示一个 `alcf` 顶层，其条目读作 `metis · chat_completions`。
+
+一行显示 `label · base`，是选择器在说明该 shim 的标签并非它的基础格式 —— 这是任何 shim
+都可使用的呈现方式，而非针对某一族的特例。
+
+`display_name` 并非一直取此含义。在 `group` 出现之前，它命名的是 shim 的**顶层** ——
+也就是厂商 —— 按旧 schema 编写的 shim 至今如此。采用哪种解读，取决于该 shim 是否声明了
+分组字段：`group` 与 `group_label` 都未声明时沿用旧含义，因此这类 shim 的渲染与引入这些
+字段之前完全一致（`display_name` 作为顶层标题，行标签仍取自名称）。声明其中任一，则
+`display_name` 表示该 shim 自身的行标签。若不这样区分，按旧 schema 编写的 shim 会把厂商名
+打印两次 —— 一次作为顶层标题，一次出现在它唯一的那一行上。随之而来的一个推论：顶层标题
+同时也是免费资源按钮上的品牌（`<Brand> (Free)`），因此希望按钮上显示的不只是首字母大写的
+group 键的厂商，需要声明 `group_label`。
 
 `provider.yaml` 示例：
 
@@ -173,7 +199,7 @@ def register_shims():
 
 远程源的 `path` 是归档内存放提供方目录的路径（对 `llm-rosetta-shim-*` 包来说是
 `src/<package>/providers`）。完整字段、缓存与刷新行为、优先级和安全提示见
-[Gateway → 外部 Shim 源](../gateway/configuration.md#外部-shim-源)。
+[Gateway → 外部 Shim 源](../gateway/configuration.md#external-shim-sources)。
 编程方式可用 `llm_rosetta.shims.rebuild_shims()`（无需配置文件）或
 `llm_rosetta.gateway.apply_shim_sources(raw, config_path)`。
 
@@ -183,26 +209,107 @@ def register_shims():
 
 ## 内置 Shim
 
-LLM-Rosetta 内置 16 个提供方 shim：
+LLM-Rosetta 内置 34 个提供方 shim，每个 shim 对应 `src/llm_rosetta/shims/providers/`
+下的一个目录。`list_shims()` 会打印当前实际的集合；下表即是该集合。标有 **†** 的名称
+计划移除 —— 参见[计划移除清单](#shims-scheduled-for-removal)。
 
 | 名称 | 基础类型 | 默认 Base URL | API Key 环境变量 | 转换规则 |
 |------|---------|--------------|-----------------|---------|
+| † `alcf_metis--chat_completions` | `chat_completions` | `https://inference-api.alcf.anl.gov/resource_server/metis/api/v1` | `ALCF_API_KEY` | 剥离 `logprobs`、`top_logprobs`、`parallel_tool_calls`；developer → system；补空 content/description |
+| † `alcf_minerva--chat_completions` | `chat_completions` | `https://inference-api.alcf.anl.gov/resource_server/minerva/api/v1` | `ALCF_API_KEY` | 剥离 `logprobs`、`top_logprobs`；developer → system；补空 content/description |
+| † `alcf_sophia--chat_completions` | `chat_completions` | `https://inference-api.alcf.anl.gov/resource_server/sophia/vllm/v1` | `ALCF_API_KEY` | 剥离 `logprobs`、`top_logprobs`；developer → system；补空 content/description；重命名 `reasoning_content` → `reasoning` |
+| `anthropic--messages` | `messages` | `https://api.anthropic.com` | `ANTHROPIC_API_KEY` | — |
+| † `argo--chat_completions` | `chat_completions` | `https://apps.inside.anl.gov/argoapi/v1` | `ARGO_API_KEY` | `max_tokens` → `max_completion_tokens`（gemini）；developer → system；按模型剥离 temperature；gemini 系统内容展平；图片截断；并行工具调用解绕 |
+| † `argo--messages` | `messages` | `https://apps.inside.anl.gov/argoapi` | `ARGO_API_KEY` | OpenAI → Anthropic 响应归一化；按模型剥离 temperature |
+| † `argo--open_responses` | `open_responses` | `https://apps.inside.anl.gov/argoapi/v1` | `ARGO_API_KEY` | 按模型剥离 temperature |
+| † `asksage--chat_completions` | `chat_completions` | `https://api.asksage.ai/server/openai/v1` | `ASKSAGE_API_KEY` | `max_tokens` → `max_completion_tokens` |
+| † `asksage--google_generate` | `google_generate` | `https://api.asksage.ai/server/google/v1beta` | `ASKSAGE_API_KEY` | — |
+| † `asksage--messages` | `messages` | `https://api.asksage.ai/server/anthropic` | `ASKSAGE_API_KEY` | — |
+| † `asksage--open_responses` | `open_responses` | `https://api.asksage.ai/server/openai/v1` | `ASKSAGE_API_KEY` | `max_tokens` → `max_completion_tokens` |
+| `deepseek--chat_completions` | `chat_completions` | `https://api.deepseek.com` | `DEEPSEEK_API_KEY` | 剥离 `n`、`logit_bias`、`seed`、penalties；回填 `reasoning_content` |
+| `deepseek--open_responses` | `open_responses` | `https://api.deepseek.com` | `DEEPSEEK_API_KEY` | 剥离 `n`、`logit_bias`、`seed` |
+| `google--google_generate` | `google_generate` | `https://generativelanguage.googleapis.com` | `GOOGLE_API_KEY` | — |
+| `google--google_interactions` | `google_interactions` | `https://generativelanguage.googleapis.com` | `GOOGLE_API_KEY` | — |
+| `kilo--chat_completions` | `chat_completions` | `https://api.kilo.ai/api/gateway` | *（keyless）* | — |
+| `minimax--chat_completions` | `chat_completions` | `https://api.minimaxi.com/v1` | `MINIMAX_API_KEY` | 剥离 `logprobs`、`top_logprobs`、`seed`、`stop`；注入 `reasoning_split`；解析 `think` 标签 |
+| `minimax--messages` | `messages` | `https://api.minimaxi.com/anthropic` | `MINIMAX_API_KEY` | — |
+| `moonshot` | `chat_completions` | `https://api.moonshot.cn/v1` | `MOONSHOT_API_KEY` | 剥离 `logprobs`、`top_logprobs`、`logit_bias`、`seed` |
 | `openai--chat_completions` | `chat_completions` | `https://api.openai.com/v1` | `OPENAI_API_KEY` | — |
 | `openai--open_responses` | `open_responses` | `https://api.openai.com/v1` | `OPENAI_API_KEY` | — |
-| `anthropic--messages` | `messages` | `https://api.anthropic.com` | `ANTHROPIC_API_KEY` | — |
-| `google--google_generate` | `google_generate` | `https://generativelanguage.googleapis.com` | `GOOGLE_API_KEY` | — |
-| `deepseek--chat_completions` | `chat_completions` | `https://api.deepseek.com` | `DEEPSEEK_API_KEY` | 剥离 `n`、`logit_bias`、`seed` |
-| `volcengine--chat_completions` | `chat_completions` | `https://ark.cn-beijing.volces.com/api/v3` | `VOLCENGINE_API_KEY` | 剥离 `logprobs`、`top_logprobs` |
-| `volcengine--open_responses` | `open_responses` | `https://ark.cn-beijing.volces.com/api/v3` | `VOLCENGINE_API_KEY` | — |
-| `xai` | `chat_completions` | `https://api.x.ai/v1` | `XAI_API_KEY` | 剥离 `logit_bias` |
-| `qwen` | `chat_completions` | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `DASHSCOPE_API_KEY` | 剥离 `frequency_penalty`、`logit_bias` |
-| `moonshot` | `chat_completions` | `https://api.moonshot.cn/v1` | `MOONSHOT_API_KEY` | 剥离 `logprobs`、`top_logprobs`、`logit_bias`、`seed` |
-| `minimax--chat_completions` | `chat_completions` | `https://api.minimaxi.com/v1` | `MINIMAX_API_KEY` | 剥离 + reasoning_split 注入 |
-| `minimax--messages` | `messages` | `https://api.minimaxi.com/v1` | `MINIMAX_API_KEY` | — |
-| `zhipu` | `chat_completions` | `https://open.bigmodel.cn/api/paas/v4` | `ZHIPU_API_KEY` | 剥离 `n`、penalties、`logprobs`、`logit_bias`、`seed` |
+| `openai_decisions` | `decision` | `https://api.openai.com` | `OPENAI_API_KEY` | — |
+| `opencode--chat_completions` | `chat_completions` | `https://opencode.ai/zen/go/v1` | `OPENCODE_API_KEY` | — |
+| `opencode--messages` | `messages` | `https://opencode.ai/zen/go/v1` | `OPENCODE_API_KEY` | — |
+| `opencode--open_responses` | `open_responses` | `https://opencode.ai/zen/go/v1` | `OPENCODE_API_KEY` | — |
 | `openrouter--chat_completions` | `chat_completions` | `https://openrouter.ai/api/v1` | `OPENROUTER_API_KEY` | 重命名 `reasoning` → `reasoning_content` |
-| `argo--chat_completions` | `chat_completions` | `https://apps.inside.anl.gov/argoapi/v1` | `ARGO_API_KEY` | `max_tokens` → `max_completion_tokens` |
-| `argo--messages` | `messages` | `https://apps.inside.anl.gov/argoapi` | `ARGO_API_KEY` | OpenAI 响应格式归一化 |
+| `openrouter--messages` | `messages` | `https://openrouter.ai/api` | `OPENROUTER_API_KEY` | — |
+| `openrouter--open_responses` | `open_responses` | `https://openrouter.ai/api/v1` | `OPENROUTER_API_KEY` | — |
+| `qwen` | `chat_completions` | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `DASHSCOPE_API_KEY` | 剥离 `frequency_penalty`、`logit_bias` |
+| `typesafe` | `decision` | `https://api.typesafe.ai` | `TYPESAFE_API_KEY` | — |
+| `volcengine--chat_completions` | `chat_completions` | `https://ark.cn-beijing.volces.com/api/v3` | `ARK_API_KEY` | 剥离 `logprobs`、`top_logprobs` |
+| `volcengine--open_responses` | `open_responses` | `https://ark.cn-beijing.volces.com/api/v3` | `ARK_API_KEY` | — |
+| `xai` | `chat_completions` | `https://api.x.ai/v1` | `XAI_API_KEY` | 剥离 `logit_bias` |
+| `zhipu` | `chat_completions` | `https://open.bigmodel.cn/api/paas/v4` | `ZHIPU_API_KEY` | 剥离 `n`、penalties、`logprobs`、`logit_bias`、`seed` |
+
+本列给出字段级转换规则。`hoist_late_system_messages()` 会改写对话中途的 system/developer
+消息以保持 prompt cache 前缀稳定，多数 `chat_completions` shim 都声明了它，此处不再重复；
+每个 shim 的完整声明见其自身的 `transforms.py`。
+
+### 计划移除清单 { #shims-scheduled-for-removal }
+
+十个内置 shim 正在迁往各自的仓库。ALCF、Argo 和 AskSage 的 shim 绑定于上游按各自节奏
+变化的部署，因此它们作为独立的 shim 包维护 —— 由 gateway 声明为一个
+[外部源](../gateway/configuration.md#external-shim-sources)来消费 —— 无需新的核心版本即可使用。
+
+它们**仍随包发布，也仍然可用**：0.14 和 0.15 都不会移除任何东西。新的是「移除」这件事本身
+被声明了出来，既对你可见，也对代码可见。
+
+| Shim | 移除版本 | 替代源 |
+|------|---------|--------|
+| † `alcf_metis--chat_completions` | 0.16.0 | [llm-rosetta-shim-alcf](https://github.com/Oaklight/llm-rosetta-shim-alcf) |
+| † `alcf_minerva--chat_completions` | 0.16.0 | [llm-rosetta-shim-alcf](https://github.com/Oaklight/llm-rosetta-shim-alcf) |
+| † `alcf_sophia--chat_completions` | 0.16.0 | [llm-rosetta-shim-alcf](https://github.com/Oaklight/llm-rosetta-shim-alcf) |
+| † `argo--chat_completions` | 0.16.0 | [llm-rosetta-shim-argo](https://github.com/Oaklight/llm-rosetta-shim-argo) |
+| † `argo--messages` | 0.16.0 | [llm-rosetta-shim-argo](https://github.com/Oaklight/llm-rosetta-shim-argo) |
+| † `argo--open_responses` | 0.16.0 | [llm-rosetta-shim-argo](https://github.com/Oaklight/llm-rosetta-shim-argo) |
+| † `asksage--chat_completions` | 0.16.0 | [llm-rosetta-shim-asksage](https://github.com/Oaklight/llm-rosetta-shim-asksage) |
+| † `asksage--google_generate` | 0.16.0 | [llm-rosetta-shim-asksage](https://github.com/Oaklight/llm-rosetta-shim-asksage) |
+| † `asksage--messages` | 0.16.0 | [llm-rosetta-shim-asksage](https://github.com/Oaklight/llm-rosetta-shim-asksage) |
+| † `asksage--open_responses` | 0.16.0 | [llm-rosetta-shim-asksage](https://github.com/Oaklight/llm-rosetta-shim-asksage) |
+
+**该怎么办。** 添加该源即可；提供方的 `shim` 值不需要改动，因为替代 shim 沿用原来的名称。
+
+```jsonc
+"shims": {
+  "remotes": [
+    {
+      "url": "https://github.com/Oaklight/llm-rosetta-shim-alcf",
+      "path": "src/llm_rosetta_shim_alcf/providers",
+      "token_env": "GITHUB_TOKEN"          // 三个仓库都是私有的
+    }
+  ]
+}
+```
+
+三个替代仓库都是私有的，因此必须提供 `token_env`；三者的唯一区别是各自的 `path`。预设中
+不固定 `ref`，因为这些仓库都还没有打 tag：不带 `ref` 的远程源会先把 `HEAD` 解析为某个
+commit 并记录进缓存 stamp，后续运行便复用同一个 commit。等它们打上 tag 后再固定该 tag ——
+参见 [ref 解析](../gateway/configuration.md#external-shim-sources)。
+
+管理面板会替你完成这些：**Settings → Shim Sources** 列出你的配置实际用到的 shim 对应的
+提示，从预设目录添加一个源会把上面那条条目原样追加到 remotes 列表，供你在保存前审阅。
+gateway 还会在启动时对每个受影响的提供方记录一条告警，指明该 shim、移除它的版本以及替代
+它的源 —— 一旦有已声明的源提供该 shim，告警即停止，因此日志安静下来就说明迁移已经完成。
+
+在此期间，别名让旧配置继续可用：`alcf--metis`、`alcf--minerva`、`alcf--sophia`、
+`argo--openai_chat`、`argo--anthropic`、`argo--openai_responses`、`asksage--openai_chat`、
+`asksage--anthropic` 和 `asksage--openai_responses` 会解析到新名称，并在启动时于配置文件中
+改写，同时保存 `.pre-migration.bak` 备份。这些别名会随它们所代表的 shim 一起在 0.16.0 消失。
+
+一项 CI 检查把这份时间表约束到代码上，因此移除既不会提前也不会延后：
+`scripts/check_shim_removals.py`（`make check-shim-removals`）读取同一份清单，若某个 shim
+在其 `removed_in` 版本之前消失则失败；而当版本到达该版本时，只要该 shim 仍被注册，或仍被
+示例、Docker 文件、文档或源码引用，同样会失败 —— `provider_names.py` 中遗留的别名条目会被
+算作引用，该 shim 自身的 `provider.yaml` 也一样。边界是版本，不是日期 —— 无需任何人去记住。
 
 ## 推理配置
 
@@ -291,9 +398,9 @@ reasoning:
 
 ## Argo Shim
 
-`argo--chat_completions` 和 `argo--messages` 面向 **Argo 网关** —— 这是某些机构（如 Argonne 国家实验室）使用的代理层，将多个上游 LLM 提供方统一暴露在单一端点之后。
+`argo--chat_completions`、`argo--messages` 和 `argo--open_responses` 面向 **Argo 网关** —— 这是某些机构（如 Argonne 国家实验室）使用的代理层，将多个上游 LLM 提供方统一暴露在单一端点之后。
 
-两个 shim 都使用 `model_id_field: internal_id` —— 模型标识符通过 `internal_id` 而非 `model` 字段传递。
+三个 shim 都使用 `model_id_field: internal_id` —— 模型标识符通过 `internal_id` 而非 `model` 字段传递。
 
 ### `argo--chat_completions`
 
@@ -304,6 +411,10 @@ OpenAI 兼容 shim，附带一个 transform：`max_tokens` → `max_completion_t
 - **模型级 `thinking_type` 覆盖**：默认 `thinking_type: enabled`，通过 `model_overrides` 为 `claudeopus47` 设置 `thinking_type: adaptive`（Vertex AI 后端）。声明式处理。
 - **`unsigned_reasoning_blocks: preserve`**：历史消息中没有有效签名的 thinking block 保存在 metadata 中而非转发（避免 Argo 400 错误）。
 - **`pre_ir_transforms` —— OpenAI 响应格式归一化**：Argo 可能从 `/v1/messages` 返回 OpenAI Chat 格式响应，该 transform 在转换器处理前将其归一化为 Anthropic 格式。
+
+### `argo--open_responses`
+
+Responses 格式通道，为拒绝 temperature 的 GPT/o 系列模型按模型剥离 temperature。
 
 ### 配置
 
@@ -322,7 +433,7 @@ OpenAI 兼容 shim，附带一个 transform：`max_tokens` → `max_completion_t
 ```
 
 !!! note
-    默认 URL（`https://apps.inside.anl.gov/argoapi/`）仅在 ANL 内网可达。Argo shim 将在未来版本中作为插件移至 [argo-proxy](https://github.com/Oaklight/argo-proxy) 包。
+    默认 URL（`https://apps.inside.anl.gov/argoapi/`）仅在 ANL 内网可达。三个 Argo shim 都[计划于 0.16.0 移除](#shims-scheduled-for-removal)，届时迁移到独立的 `llm-rosetta-shim-argo` 包 —— 将其声明为外部源，配置中的名称即可继续使用。
 
 ## 能力标志
 

@@ -2,6 +2,12 @@
 
 [AskSage](https://asksage.ai) 是一个面向政府的 AI 平台，提供 OpenAI、Anthropic 和 Google Gemini 模型的标准格式 API 端点。LLM-Rosetta 通过四个 shim 支持 AskSage——每种 API 格式一个——使用单一 API key。
 
+!!! warning "计划于 0.16.0 移除"
+    四个 AskSage shim 将在 0.16.0 迁移到独立的
+    [llm-rosetta-shim-asksage](https://github.com/Oaklight/llm-rosetta-shim-asksage)
+    包。在此之前其行为不变 —— 下面的名称也不会改变，迁移只需一条 `shims.remotes` 条目。
+    参见[计划移除清单](../shims.md#shims-scheduled-for-removal)。
+
 ## 端点
 
 | Shim 名称 | 基础类型 | 默认 Base URL | API Key 环境变量 |

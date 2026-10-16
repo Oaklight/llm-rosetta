@@ -1,16 +1,23 @@
 # Argo
 
-Argo 是美国阿贡国家实验室的内部 API 网关，通过统一端点提供对多种 LLM 模型的访问。它通过两个 shim 端点提供支持。
+Argo 是美国阿贡国家实验室的内部 API 网关，通过统一端点提供对多种 LLM 模型的访问。它通过三个 shim 端点提供支持。
+
+!!! warning "计划于 0.16.0 移除"
+    三个 Argo shim 将在 0.16.0 迁移到独立的
+    [llm-rosetta-shim-argo](https://github.com/Oaklight/llm-rosetta-shim-argo)
+    包。在此之前其行为不变 —— 下面的名称也不会改变，迁移只需一条 `shims.remotes` 条目。
+    参见[计划移除清单](../shims.md#shims-scheduled-for-removal)。
 
 ## 端点
 
 | Shim 名称 | 基础类型 | 默认 Base URL | API Key 环境变量 |
 |:---|:---|:---|:---|
 | `argo--chat_completions` | `chat_completions` | `https://apps.inside.anl.gov/argoapi/v1` | `ARGO_API_KEY` |
+| `argo--open_responses` | `open_responses` | `https://apps.inside.anl.gov/argoapi/v1` | `ARGO_API_KEY` |
 | `argo--messages` | `messages` | `https://apps.inside.anl.gov/argoapi` | `ARGO_API_KEY` |
 
 !!! info "模型 ID 字段"
-    两个 Argo shim 均使用 `model_id_field: internal_id`，即模型标识符在请求体中以 `internal_id` 字段发送，而非标准的 `model` 字段。
+    三个 Argo shim 均使用 `model_id_field: internal_id`，即模型标识符在请求体中以 `internal_id` 字段发送，而非标准的 `model` 字段。
 
 ## 推理支持
 
@@ -51,10 +58,10 @@ Argo 是美国阿贡国家实验室的内部 API 网关，通过统一端点提�
 
 ## 能力标志
 
-| 标志 | `argo--chat_completions` | `argo--messages` |
-|:---|:---:|:---:|
-| 自定义工具 | ✅ | — |
-| 最大工具描述长度 | 1024 字符 | — |
+| 标志 | `argo--chat_completions` | `argo--open_responses` | `argo--messages` |
+|:---|:---:|:---:|:---:|
+| 自定义工具 | ✅ | ✅ | — |
+| 最大工具描述长度 | 1024 字符 | 1024 字符 | — |
 
 ## 转换规则
 
@@ -78,6 +85,12 @@ Argo 是美国阿贡国家实验室的内部 API 网关，通过统一端点提�
 | Pre-IR | `normalize_openai_response()` | 将 OpenAI 格式的响应转换为 Anthropic 格式（处理 Argo 不一致的响应格式） |
 | IR | `hoist_late_system_messages()` | 将靠后的系统消息移至对话开头 |
 | IR | `auto_cache_breakpoints()` | 插入缓存断点以支持 prompt 缓存 |
+
+**`argo--open_responses`：**
+
+| 类型 | 转换 | 用途 |
+|:---|:---|:---|
+| Post-IR | `strip temperature`（gpto\*、gpt5\*） | 为拒绝 temperature 的 GPT/o 系列模型移除 temperature |
 
 ## 网关配置
 
@@ -107,8 +120,21 @@ Argo 是美国阿贡国家实验室的内部 API 网关，通过统一端点提�
     }
     ```
 
+=== "Responses"
+
+    ```jsonc
+    {
+      "providers": {
+        "argo-responses": {
+          "shim": "argo--open_responses",
+          "api_key": "${ARGO_API_KEY}"
+        }
+      }
+    }
+    ```
+
 ## 备注
 
 - Argo 作为多个上游提供方（OpenAI、Anthropic、Google）的代理。Shim 透明地处理提供方特定的行为差异，包括响应格式标准化和模型特定的字段调整。
 - Anthropic 端点上的 `unsigned_blocks: preserve` 设置保留响应中未签名的推理块，这是因为 Argo 的代理层不会对思考块进行签名。
-- 两个 shim 均导出 `model_list_transform`，用于标准化模型列表的响应格式。
+- 三个 shim 均导出 `model_list_transform`，用于标准化模型列表的响应格式。

@@ -18,16 +18,26 @@ title: 管理面板
 
 设置全局代理 URL，适用于所有提供方（除非在提供方级别单独覆盖）。
 
-### 外部 Shim 源
+### 外部 Shim 源 { #shim-sources }
 
 **Settings** 标签页中有一个 **Shim Sources** 区块，对应顶层 `shims` 配置段（见
-[外部 Shim 源](configuration.md#外部-shim-源)）。它列出声明的 **Directories**
+[外部 Shim 源](configuration.md#external-shim-sources)）。它列出声明的 **Directories**
 （每行一个）、**Remotes**（JSON 数组）以及其余开关 —— **缓存目录**、**重新拉取间隔（秒）**、
 **源加载失败时拒绝启动** —— 并给出每个源的状态表：`已加载` / `失败`、是否使用了过期缓存、
 shim 数量（shim 名在 tooltip 中）、解析出的目录，以及远程源被固定到的 commit SHA。
 
 **Save** 保存该段并重新应用；**Reload** 重新应用当前配置；**Refetch** 强制重新下载所有
 远程源（绕过缓存与 `refresh` 设置）。失败的源会在这里报告，但不会阻止 gateway 启动。
+
+**预设目录。** 在 remotes 列表上方，一个目录提供那些替代
+[计划移除](../guide/shims.md#shims-scheduled-for-removal)的内置 shim 的 shim 包。选中一个并按下
+**Add source**，会把对应的 `shims.remotes` 条目追加到下方的 JSON 列表中 —— 它**不会**
+保存，因此该条目与手工输入的条目一样，要经过同样的审阅和同样的 **Save**。`url` 已在
+列表中的条目不会被重复添加，按钮也会说明这一点。
+
+**移除提示。** 在状态表下方，提示会列出配置中 shim 即将退场的每个提供方、移除它的版本，
+以及替代它的源 —— 并提供同样的 **Add source** 操作。该列表按请求从配置和加载报告推导
+得出，因此无需重启即是最新的：一旦有已声明的源提供该 shim，提示即消失。
 
 !!! warning
     声明的 shim 目录或归档会在加载时执行第三方 Python（`transforms.py`）。只添加你信任的

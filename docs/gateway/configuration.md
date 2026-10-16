@@ -46,7 +46,7 @@ title: 配置
 
 也可以通过 `register_shim()` 以编程方式注册自定义 shim。
 
-### 外部 Shim 源
+### 外部 Shim 源 { #external-shim-sources }
 
 shim 不必放在包内。顶层 `shims` 段可以让 gateway 额外扫描若干目录，以及从远程归档拉取
 并缓存到本地 —— 于是一套 shim 可以维护在独立仓库里，直接消费，无需往 gateway 镜像里
@@ -103,6 +103,13 @@ commit；配置文件本身不会被改写。要可复现部署请固定 tag 或
 **编程调用。** `llm_rosetta.shims.rebuild_shims()` 可直接加载目录与远程源（不需要配置文件）；
 `llm_rosetta.gateway.apply_shim_sources(raw, config_path)` 应用一个配置字典。
 `create_app` 也会自动应用该段。
+
+**替换即将退场的内置 shim。** 有十个内置 shim —— ALCF、Argo 和 AskSage 的 shim ——
+[计划于 0.16.0 移除](../guide/shims.md#shims-scheduled-for-removal)，届时只能从它们各自的仓库获取。
+使用其中之一的配置会在启动时收到一条告警，指明该 shim、移除它的版本以及替代它的源；
+管理面板会显示同样的提示，并能从预设目录中直接添加该源（见
+[管理面板 → Shim 源](admin-panel.md#shim-sources)）。一旦有已声明的源提供该 shim，告警
+立即消失，因此日志会告诉你迁移是否完成 —— 而提供方配置中的 shim 名称始终不变。
 
 !!! warning "声明的源会执行代码"
     shim 目录可以携带 `transforms.py`，它会在 shim 加载时被执行 —— 与 `pip install`
@@ -167,11 +174,14 @@ API 密钥支持 `${ENV_VAR}` 语法 — 启动时从环境变量读取：
 
 ```jsonc
 "my-alcf": {
-  "provider": "alcf--sophia",
+  "shim": "alcf_sophia--chat_completions",
   "token_command": ["python3", "/scripts/alcf-token.py"],
   "token_refresh_interval": 3600
 }
 ```
+
+提供方类型取自 `shim`；`type`，然后是提供方自身的键名，依次作为兜底。（`provider`
+并不是配置键 —— 以这种拼写写出的提供方条目从未能解析到它的 shim。）
 
 | 字段 | 类型 | 默认值 | 描述 |
 |------|------|--------|------|
