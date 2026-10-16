@@ -171,6 +171,8 @@ title: CLI 工具集成
     export GOOGLE_GEMINI_BASE_URL="http://localhost:8765"
     ```
 
+    `model` 必须是普通字符串。旧版 agy 使用的 `{"name": ...}` 对象写法在 v1.3.x 上会被拒绝，报错 `invalid settings: model`。
+
     然后直接运行 `agy`。
 
     该路径仍然可用，但 agy 会先用其内置的 Gemini 模型目录解析 `model`，因此非 Google 的 id 会在请求发出前被替换（`model alias "deepseek-v4-flash" resolved to "Gemini 3.1 Pro (Low)"`）。需要指定某个非 Google 模型时请使用 gateway 模式。
