@@ -13,7 +13,7 @@ from llm_rosetta.gateway.middleware.headers import (
     get_hop_count,
 )
 from llm_rosetta.gateway.middleware.hop_limit import create_hop_limit_hook
-from llm_rosetta.gateway.routing_strategy import ModelRoute, ProviderEntry
+from llm_rosetta.gateway.routing import ModelRoute, ProviderEntry
 
 
 # ---------------------------------------------------------------------------
@@ -65,7 +65,9 @@ def test_build_upstream_extra_headers_increments_existing_hop_count():
 
 
 def _route(provider: str, upstream: str | None = None) -> ModelRoute:
-    return ModelRoute([ProviderEntry(provider, upstream_model=upstream)])
+    return ModelRoute(
+        [ProviderEntry(provider, upstream_model=upstream)], f"route-{provider}"
+    )
 
 
 def test_no_loops():
@@ -112,7 +114,7 @@ def test_per_entry_upstream_collision():
     """Per-provider upstream_model collides with another model key."""
     models = {
         "display-name": ModelRoute(
-            [ProviderEntry("p1", upstream_model="internal-name")]
+            [ProviderEntry("p1", upstream_model="internal-name")], "display-name"
         ),
         "internal-name": _route("p1"),
     }

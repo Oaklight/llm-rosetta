@@ -57,19 +57,19 @@ def _config_with_provider(
 class TestChatUrlConstruction:
     def test_base_url_with_v1(self):
         cfg = _config_with_provider("https://api.openai.com/v1")
-        _, pinfo = cfg.resolve("openai_chat", "gpt-4")
+        _, pinfo = cfg.resolve(cfg.selection_context("gpt-4", "openai_chat"))
         url = pinfo.upstream_url("gpt-4")
         assert url == "https://api.openai.com/v1/chat/completions"
 
     def test_base_url_without_v1(self):
         cfg = _config_with_provider("https://api.deepseek.com")
-        _, pinfo = cfg.resolve("openai_chat", "gpt-4")
+        _, pinfo = cfg.resolve(cfg.selection_context("gpt-4", "openai_chat"))
         url = pinfo.upstream_url("gpt-4")
         assert url == "https://api.deepseek.com/chat/completions"
 
     def test_base_url_trailing_slash_stripped(self):
         cfg = _config_with_provider("https://api.openai.com/v1/")
-        _, pinfo = cfg.resolve("openai_chat", "gpt-4")
+        _, pinfo = cfg.resolve(cfg.selection_context("gpt-4", "openai_chat"))
         url = pinfo.upstream_url("gpt-4")
         assert url == "https://api.openai.com/v1/chat/completions"
 

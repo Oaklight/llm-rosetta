@@ -22,6 +22,7 @@ from llm_rosetta.gateway.transport.token_refresh import (
 )
 from llm_rosetta.auto_detect import ProviderType
 from llm_rosetta.routing import ResolvedRoute
+from llm_rosetta.gateway.routing import SelectionContext
 
 
 # ---------------------------------------------------------------------------
@@ -73,6 +74,16 @@ def _reset():
 # ---------------------------------------------------------------------------
 # force_refresh
 # ---------------------------------------------------------------------------
+
+
+def _sel_ctx(source_format: str = "chat_completions") -> SelectionContext:
+    """A selection context for a handler call that bypasses routing.
+
+    The handlers read the client identity and the converted request off the
+    context; a test that calls one directly has neither, and the stages
+    decline on both.
+    """
+    return SelectionContext("test-model", source_format)
 
 
 class TestForceRefresh:
@@ -232,6 +243,7 @@ class TestProxyRetryOn401:
                     _make_route(),
                     pinfo,
                     _SIMPLE_REQUEST,
+                    selection=_sel_ctx(),
                     transport=transport,
                     metadata_store=ProviderMetadataStore(),
                 )
@@ -260,6 +272,7 @@ class TestProxyRetryOn401:
                 _make_route(),
                 pinfo,
                 _SIMPLE_REQUEST,
+                selection=_sel_ctx(),
                 transport=transport,
                 metadata_store=ProviderMetadataStore(),
             )
@@ -290,6 +303,7 @@ class TestProxyRetryOn401:
                 _make_route(),
                 pinfo,
                 _SIMPLE_REQUEST,
+                selection=_sel_ctx(),
                 transport=transport,
                 metadata_store=ProviderMetadataStore(),
             )
@@ -322,6 +336,7 @@ class TestProxyRetryOn401:
                     _make_route(),
                     pinfo,
                     _SIMPLE_REQUEST,
+                    selection=_sel_ctx(),
                     transport=transport,
                     metadata_store=ProviderMetadataStore(),
                 )

@@ -194,7 +194,7 @@ class TestPerModelUrlTemplate:
                 },
             },
         )
-        route, pinfo = cfg.resolve("openai_chat", "custom-model")
+        route, pinfo = cfg.resolve(cfg.selection_context("custom-model", "openai_chat"))
         assert (
             pinfo.upstream_url("custom-model")
             == "https://api.example.com/v2/custom/completions"
@@ -209,7 +209,7 @@ class TestPerModelUrlTemplate:
                 },
             },
         )
-        route, pinfo = cfg.resolve("openai_chat", "custom-model")
+        route, pinfo = cfg.resolve(cfg.selection_context("custom-model", "openai_chat"))
         # Non-stream: uses provider default
         assert (
             pinfo.upstream_url("custom-model", stream=False)
@@ -231,8 +231,12 @@ class TestPerModelUrlTemplate:
                 },
             },
         )
-        _, pinfo_normal = cfg.resolve("openai_chat", "normal-model")
-        _, pinfo_custom = cfg.resolve("openai_chat", "custom-model")
+        _, pinfo_normal = cfg.resolve(
+            cfg.selection_context("normal-model", "openai_chat")
+        )
+        _, pinfo_custom = cfg.resolve(
+            cfg.selection_context("custom-model", "openai_chat")
+        )
 
         assert (
             pinfo_normal.upstream_url("normal-model")
@@ -255,9 +259,9 @@ class TestPerModelUrlTemplate:
             },
         )
         # Resolve model-b first (with override)
-        _, pinfo_b = cfg.resolve("openai_chat", "model-b")
+        _, pinfo_b = cfg.resolve(cfg.selection_context("model-b", "openai_chat"))
         # Then model-a (no override) — should use provider default
-        _, pinfo_a = cfg.resolve("openai_chat", "model-a")
+        _, pinfo_a = cfg.resolve(cfg.selection_context("model-a", "openai_chat"))
 
         assert pinfo_b.upstream_url("model-b") == "https://api.example.com/custom"
         assert (
@@ -284,8 +288,12 @@ class TestPerModelUrlTemplate:
                 },
             },
         )
-        _, pinfo_default = cfg.resolve("openai_chat", "model-default")
-        _, pinfo_override = cfg.resolve("openai_chat", "model-override")
+        _, pinfo_default = cfg.resolve(
+            cfg.selection_context("model-default", "openai_chat")
+        )
+        _, pinfo_override = cfg.resolve(
+            cfg.selection_context("model-override", "openai_chat")
+        )
 
         assert (
             pinfo_default.upstream_url("model-default")

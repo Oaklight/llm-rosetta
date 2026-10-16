@@ -10,6 +10,7 @@ from __future__ import annotations
 import pytest
 
 from llm_rosetta.gateway.config import GatewayConfig
+from llm_rosetta.gateway.routing import SelectionContext
 
 
 @pytest.fixture(autouse=True)
@@ -93,6 +94,16 @@ def _make_unready(config: GatewayConfig, *names: str) -> None:
         assert config.providers[name].ready is False
 
 
+def _tier_context(config: GatewayConfig, source_format: str) -> SelectionContext:
+    """A context for model ``m`` — enough to drive the same-format stage."""
+    return config.selection_context("m", source_format)
+
+
+def _groups(config: GatewayConfig, source_format: str):
+    """The tier partitions the same-format stage built for model ``m``."""
+    return config._same_format.groups_for(_tier_context(config, source_format))
+
+
 class TestDefaultsUnchanged:
     """With the flag absent or off, nothing about routing changes."""
 
@@ -104,7 +115,10 @@ class TestDefaultsUnchanged:
         """Without the flag, a responses client still lands on WRR's pick."""
         config = _make_config({"m": {"providers": ["chat_a", "resp_a"]}})
         picked = {
-            config.resolve("open_responses", "m")[0].provider_name for _ in range(10)
+            config.resolve(config.selection_context("m", "open_responses"))[
+                0
+            ].provider_name
+            for _ in range(10)
         }
         assert picked == {"chat_a", "resp_a"}
 
@@ -121,7 +135,7 @@ class TestFormatAffinity:
             {"m": {"providers": ["chat_a", "resp_a"]}}, prefer_same_format=True
         )
         for _ in range(10):
-            route, _ = config.resolve("open_responses", "m")
+            route, _ = config.resolve(config.selection_context("m", "open_responses"))
             assert route.provider_name == "resp_a"
 
     def test_affinity_is_per_source_format(self):
@@ -129,15 +143,28 @@ class TestFormatAffinity:
         config = _make_config(
             {"m": {"providers": ["chat_a", "resp_a"]}}, prefer_same_format=True
         )
-        assert config.resolve("open_responses", "m")[0].provider_name == "resp_a"
-        assert config.resolve("openai_chat", "m")[0].provider_name == "chat_a"
+        assert (
+            config.resolve(config.selection_context("m", "open_responses"))[
+                0
+            ].provider_name
+            == "resp_a"
+        )
+        assert (
+            config.resolve(config.selection_context("m", "openai_chat"))[
+                0
+            ].provider_name
+            == "chat_a"
+        )
 
     def test_no_match_falls_back_to_full_route(self):
         """An Anthropic client has no affine provider here."""
         config = _make_config(
             {"m": {"providers": ["chat_a", "resp_a"]}}, prefer_same_format=True
         )
-        picked = {config.resolve("messages", "m")[0].provider_name for _ in range(10)}
+        picked = {
+            config.resolve(config.selection_context("m", "messages"))[0].provider_name
+            for _ in range(10)
+        }
         assert picked == {"chat_a", "resp_a"}
 
     def test_homogeneous_route_needs_no_subroute(self):
@@ -146,10 +173,13 @@ class TestFormatAffinity:
             {"m": {"providers": ["chat_a", "chat_b"]}}, prefer_same_format=True
         )
         picked = [
-            config.resolve("openai_chat", "m")[0].provider_name for _ in range(10)
+            config.resolve(config.selection_context("m", "openai_chat"))[
+                0
+            ].provider_name
+            for _ in range(10)
         ]
         assert set(picked) == {"chat_a", "chat_b"}
-        groups = config._format_groups("m", "chat_completions")
+        groups = _groups(config, "chat_completions")
         assert groups is not None and groups.covers_all
 
     def test_load_balances_within_matched_subset(self):
@@ -167,10 +197,54 @@ class TestFormatAffinity:
             prefer_same_format=True,
         )
         picked = [
-            config.resolve("open_responses", "m")[0].provider_name for _ in range(100)
+            config.resolve(config.selection_context("m", "open_responses"))[
+                0
+            ].provider_name
+            for _ in range(100)
         ]
         assert set(picked) == {"resp_a", "resp_b"}
         assert picked.count("resp_a") == picked.count("resp_b") == 50
+
+    def test_pick_sequence_is_stable(self):
+        """The exact sequence, not just the split — equal counts hide an order.
+
+        A tier's counter is what decides which same-format provider takes which
+        request, and two counters that agree on a total can disagree on the
+        order.  This pins the order so a change to how counters are keyed has
+        to be a deliberate one.
+        """
+        config = _make_config(
+            {"m": {"providers": ["chat_a", "resp_a", "resp_b"]}},
+            prefer_same_format=True,
+        )
+        picked = [
+            config.resolve(config.selection_context("m", "open_responses"))[
+                0
+            ].provider_name
+            for _ in range(20)
+        ]
+        assert picked == [
+            "resp_a",
+            "resp_a",
+            "resp_b",
+            "resp_b",
+            "resp_a",
+            "resp_b",
+            "resp_a",
+            "resp_a",
+            "resp_b",
+            "resp_b",
+            "resp_a",
+            "resp_b",
+            "resp_a",
+            "resp_a",
+            "resp_b",
+            "resp_b",
+            "resp_a",
+            "resp_b",
+            "resp_a",
+            "resp_a",
+        ]
 
     def test_tier_balances_exactly_with_pinned_anchor(self):
         """With the anchor held fixed, the tier's own WRR splits the subset evenly."""
@@ -178,11 +252,16 @@ class TestFormatAffinity:
             {"m": {"providers": ["chat_a", "resp_a", "resp_b"]}},
             prefer_same_format=True,
         )
-        groups = config._format_groups("m", "open_responses")
+        groups = _groups(config, "open_responses")
         assert groups is not None
         anchor = next(p for p in config.models["m"].providers if p.name == "chat_a")
         picked = [
-            (config._select_tiered(groups, anchor, None) or anchor).name
+            (
+                config._same_format.select_tiered(
+                    groups, anchor, _tier_context(config, "open_responses")
+                )
+                or anchor
+            ).name
             for _ in range(20)
         ]
         assert picked.count("resp_a") == picked.count("resp_b") == 10
@@ -205,7 +284,10 @@ class TestFormatAffinity:
             prefer_same_format=True,
         )
         picked = [
-            config.resolve("open_responses", "m")[0].provider_name for _ in range(20)
+            config.resolve(config.selection_context("m", "open_responses"))[
+                0
+            ].provider_name
+            for _ in range(20)
         ]
         assert picked.count("resp_a") == 15
         assert picked.count("resp_b") == 5
@@ -214,9 +296,9 @@ class TestFormatAffinity:
         config = _make_config(
             {"m": {"providers": ["chat_a", "resp_a"]}}, prefer_same_format=True
         )
-        first = config._format_groups("m", "open_responses")
-        assert config._format_groups_cache[("m", "open_responses")] is first
-        assert config._format_groups("m", "open_responses") is first
+        first = _groups(config, "open_responses")
+        assert config._same_format.cache[("m", "open_responses")] is first
+        assert _groups(config, "open_responses") is first
 
     def test_upstream_model_comes_from_matched_entry(self):
         """Per-entry upstream_model follows the affine provider, not WRR."""
@@ -231,7 +313,7 @@ class TestFormatAffinity:
             },
             prefer_same_format=True,
         )
-        route, _ = config.resolve("open_responses", "m")
+        route, _ = config.resolve(config.selection_context("m", "open_responses"))
         assert route.upstream_model == "resp-id"
 
 
@@ -245,7 +327,7 @@ class TestReadinessInteraction:
             {"m": {"providers": ["chat_a", "resp_a"]}}, prefer_same_format=True
         )
         self._unready(config, "resp_a")
-        route, _ = config.resolve("open_responses", "m")
+        route, _ = config.resolve(config.selection_context("m", "open_responses"))
         assert route.provider_name == "chat_a"
 
     def test_unready_affine_prefers_ready_affine(self):
@@ -255,7 +337,7 @@ class TestReadinessInteraction:
         )
         self._unready(config, "resp_a")
         for _ in range(5):
-            route, _ = config.resolve("open_responses", "m")
+            route, _ = config.resolve(config.selection_context("m", "open_responses"))
             assert route.provider_name == "resp_b"
 
     def test_all_unready_still_raises(self):
@@ -266,7 +348,7 @@ class TestReadinessInteraction:
         )
         self._unready(config, "chat_a", "resp_a")
         with pytest.raises(ProviderNotReady):
-            config.resolve("open_responses", "m")
+            config.resolve(config.selection_context("m", "open_responses"))
 
 
 class TestAccountTiers:
@@ -326,9 +408,13 @@ class TestAccountTiers:
             prefer_same_format=True,
             providers=self.SHARED_KEY_PROVIDERS,
         )
-        groups = config._format_groups("m", "open_responses")
+        groups = _groups(config, "open_responses")
         assert groups is not None
-        chosen = config._select_tiered(groups, self._anchor(config, "ds_chat"), None)
+        chosen = config._same_format.select_tiered(
+            groups,
+            self._anchor(config, "ds_chat"),
+            _tier_context(config, "open_responses"),
+        )
         assert chosen is not None and chosen.name == "ds_resp"
 
     def test_tier1_key_separates_endpoints_of_one_format(self):
@@ -356,9 +442,13 @@ class TestAccountTiers:
             prefer_same_format=True,
             providers=providers,
         )
-        groups = config._format_groups("m", "open_responses")
+        groups = _groups(config, "open_responses")
         assert groups is not None
-        chosen = config._select_tiered(groups, self._anchor(config, "bare_b"), None)
+        chosen = config._same_format.select_tiered(
+            groups,
+            self._anchor(config, "bare_b"),
+            _tier_context(config, "open_responses"),
+        )
         assert chosen is not None and chosen.name == "bare_b"
 
     def test_flag_off_leaves_the_anchor_alone(self):
@@ -367,7 +457,10 @@ class TestAccountTiers:
             providers=self.SHARED_KEY_PROVIDERS,
         )
         picked = {
-            config.resolve("open_responses", "m")[0].provider_name for _ in range(30)
+            config.resolve(config.selection_context("m", "open_responses"))[
+                0
+            ].provider_name
+            for _ in range(30)
         }
         assert picked == {"ds_chat", "ds_resp", "other_resp"}
 
@@ -524,9 +617,13 @@ class TestAccountTiers:
             providers=self.SHARED_KEY_PROVIDERS,
         )
         _make_unready(config, "ds_resp")
-        groups = config._format_groups("m", "open_responses")
+        groups = _groups(config, "open_responses")
         assert groups is not None
-        chosen = config._select_tiered(groups, self._anchor(config, "ds_chat"), None)
+        chosen = config._same_format.select_tiered(
+            groups,
+            self._anchor(config, "ds_chat"),
+            _tier_context(config, "open_responses"),
+        )
         assert chosen is not None and chosen.name == "other_resp"
 
     def test_all_in_one_account_falls_back_cross_format(self):
@@ -538,4 +635,9 @@ class TestAccountTiers:
         )
         _make_unready(config, "ds_resp")
         for _ in range(5):
-            assert config.resolve("open_responses", "m")[0].provider_name == "ds_chat"
+            assert (
+                config.resolve(config.selection_context("m", "open_responses"))[
+                    0
+                ].provider_name
+                == "ds_chat"
+            )

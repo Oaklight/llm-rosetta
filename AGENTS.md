@@ -96,7 +96,7 @@ supported format and forwards them to any configured upstream provider.
 | `gateway/providers.py` | Provider info, auth headers, key rotation |
 | `gateway/admin/` | Admin UI, metrics, request logging, persistence |
 | `gateway/ops/` | Unified operations audit layer (OpsBase + typed operation subclasses) |
-| `gateway/routing_strategy.py` | Pluggable routing strategies (weighted round-robin, affinity) |
+| `gateway/routing/` | Candidate selection: the route container plus the pluggable strategies (weighted round-robin, affinity) |
 | `gateway/middleware/` | Auth, rate limiting, error format, hop limit, headers, etc. |
 
 ### IR type system
@@ -133,7 +133,7 @@ src/llm_rosetta/
 │   ├── app.py, proxy.py, config.py, providers.py
 │   ├── shim_sources.py      # Config `shims` section → shim registry
 │   ├── model_types.py, keystore.py, logging.py
-│   ├── routing_strategy.py, migrations.py, deferred_startup.py
+│   ├── routing/, migrations.py, deferred_startup.py
 │   ├── cli.py, banner.py, __main__.py
 │   ├── middleware/           # Auth, rate limiting, error format, headers, etc.
 │   ├── pipelines/            # Embeddings, rerank, decision handlers
