@@ -16,7 +16,10 @@ class ResponsesEventType:
     RESPONSE_IN_PROGRESS = "response.in_progress"
     RESPONSE_COMPLETED = "response.completed"
     RESPONSE_FAILED = "response.failed"
-    RESPONSE_DONE = "response.done"
+    RESPONSE_INCOMPLETE = "response.incomplete"
+    # The spec's error event is the one event type without a ``response.``
+    # prefix; it precedes ``response.failed`` on the stream.
+    ERROR = "error"
     OUTPUT_ITEM_ADDED = "response.output_item.added"
     OUTPUT_ITEM_DONE = "response.output_item.done"
     CONTENT_PART_ADDED = "response.content_part.added"
@@ -26,8 +29,11 @@ class ResponsesEventType:
     OUTPUT_TEXT_DONE = "response.output_text.done"
     REASONING_SUMMARY_TEXT_DELTA = "response.reasoning_summary_text.delta"
     REASONING_SUMMARY_TEXT_DONE = "response.reasoning_summary_text.done"
-    REASONING_SUMMARY_PART_ADDED = "response.reasoning_summary.part.added"
-    REASONING_SUMMARY_PART_DONE = "response.reasoning_summary.part.done"
+    # The spec spells the summary-part pair with an underscore before
+    # ``part``; earlier releases emitted ``response.reasoning_summary.part.*``,
+    # which neither the spec nor OpenAI's reference defines.
+    REASONING_SUMMARY_PART_ADDED = "response.reasoning_summary_part.added"
+    REASONING_SUMMARY_PART_DONE = "response.reasoning_summary_part.done"
     FUNCTION_CALL_ARGS_DELTA = "response.function_call_arguments.delta"
     FUNCTION_CALL_ARGS_DONE = "response.function_call_arguments.done"
     CUSTOM_TOOL_CALL_INPUT_DELTA = "response.custom_tool_call_input.delta"
@@ -66,6 +72,23 @@ RESPONSES_REASON_TO_STATUS: dict[str, str] = {
 RESPONSES_REASON_TO_INCOMPLETE_REASON: dict[str, str] = {
     "length": "max_output_tokens",
     "content_filter": "content_filter",
+}
+
+# to_provider: response status -> the terminal stream event that closes it.
+# The spec allows exactly three terminal events, and the choice is not free:
+# it has to agree with the ``status`` the response payload carries.  A
+# ``cancelled`` response has no terminal event in the spec (there is no
+# ``response.cancelled``); it falls back to ``response.completed``.
+RESPONSES_TERMINAL_EVENT_BY_STATUS: dict[str, str] = {
+    "failed": ResponsesEventType.RESPONSE_FAILED,
+    "incomplete": ResponsesEventType.RESPONSE_INCOMPLETE,
+}
+
+# Envelope for the error event that precedes ``response.failed`` when the
+# source turn carried no error object of its own.
+RESPONSES_FAILURE_ERROR: dict[str, str] = {
+    "code": "server_error",
+    "message": "The response failed before it could complete.",
 }
 
 

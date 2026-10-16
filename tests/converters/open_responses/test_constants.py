@@ -7,6 +7,7 @@ from llm_rosetta.converters.llm.open_responses._constants import (
     RESPONSES_REASON_TO_INCOMPLETE_REASON,
     RESPONSES_REASON_TO_STATUS,
     RESPONSES_STATUS_TO_REASON,
+    RESPONSES_TERMINAL_EVENT_BY_STATUS,
     ResponsesEventType,
     generate_message_id,
 )
@@ -89,13 +90,41 @@ class TestResponsesEventType:
         assert isinstance(value, str) and value
 
     def test_all_event_types_start_with_response_prefix(self):
+        # The spec's error event is the one exception: its type is the bare
+        # ``error``, with no ``response.`` prefix.
         for attr in dir(ResponsesEventType):
-            if attr.startswith("_"):
+            if attr.startswith("_") or attr == "ERROR":
                 continue
             value = getattr(ResponsesEventType, attr)
             assert value.startswith("response."), (
                 f"{attr} = '{value}' does not start with 'response.'"
             )
+
+    def test_error_event_is_the_bare_error_type(self):
+        assert ResponsesEventType.ERROR == "error"
+
+    def test_reasoning_summary_part_spells_part_without_a_dot(self):
+        """The spec and OpenAI both use ``reasoning_summary_part``."""
+        assert (
+            ResponsesEventType.REASONING_SUMMARY_PART_ADDED
+            == "response.reasoning_summary_part.added"
+        )
+        assert (
+            ResponsesEventType.REASONING_SUMMARY_PART_DONE
+            == "response.reasoning_summary_part.done"
+        )
+
+    def test_terminal_event_follows_status(self):
+        assert (
+            RESPONSES_TERMINAL_EVENT_BY_STATUS["failed"]
+            == ResponsesEventType.RESPONSE_FAILED
+        )
+        assert (
+            RESPONSES_TERMINAL_EVENT_BY_STATUS["incomplete"]
+            == ResponsesEventType.RESPONSE_INCOMPLETE
+        )
+        # ``completed`` is the default, so it needs no entry.
+        assert "completed" not in RESPONSES_TERMINAL_EVENT_BY_STATUS
 
 
 class TestGenerateMessageId:
