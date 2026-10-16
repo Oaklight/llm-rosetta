@@ -706,7 +706,19 @@ always safe.
 GET /admin/api/maintenance
 ```
 
-Every step this deployment runs, whether it has run, and what it did.
+Every registry this process has, every step in it, whether it has run, and what
+it did.  There are four kinds of registry, and the list says which is which:
+
+| registry | policy | what it is |
+| --- | --- | --- |
+| `deferred` | `deferred` | the repairs that run after the socket is open; a failure is recorded and survived |
+| `request_log` | `mandatory` | the request-log schema's versioned migrations; a failure aborts startup |
+| `api_keys` | `mandatory` | the key store's schema, and its usage-bucket backfill; a failure aborts startup |
+| `config` | `load_time` | the steps that correct a config document as it is loaded |
+
+A store whose registry has not run yet, and a config that was not loaded through
+one, are not listed at all: "no registry" and "a registry that did nothing" are
+different answers.
 
 **Response**
 
@@ -746,8 +758,8 @@ Every step this deployment runs, whether it has run, and what it did.
 | Field | Type | Description |
 |-------|------|-------------|
 | `registries[].name` | `string` | The registry the steps belong to; `deferred` is the post-startup set. |
-| `registries[].policy` | `string` | `deferred` (a failure is recorded and survived), `mandatory` (a failure aborts startup) or `load_time`. |
-| `steps[].store` | `string` | The store the step repairs, as it is on disk (`gateway.db`, `keys.db`) — the answer to "which database is half-repaired" after a `partial` run, without reading it back out of the step name. |
+| `registries[].policy` | `string` | `deferred` (a failure is recorded and survived), `mandatory` (a failure aborts startup) or `load_time` (a failure fails the load). |
+| `steps[].store` | `string` | The store the step repairs, as it is on disk (`gateway.db`, `keys.db`), or `config` for a load-time step, whose store is the document itself — the answer to "which one is half-repaired" after a `partial` run, without reading it back out of the step name. |
 | `steps[].ran` | `bool` | Whether a result exists yet.  A step that has not run is listed with `ran: false` rather than omitted. |
 | `steps[].changed` | `int` | The step's own unit — rows repaired, usually.  `0` means "nothing left to do", which is also what a failed step reports: what it half-did is not a count. |
 | `steps[].error` | `string \| null` | Why it failed, when it did. |
@@ -762,7 +774,9 @@ POST /admin/api/maintenance/<name>
 ```
 
 Runs the named step and returns its result in the same shape as one entry of the
-list above.
+list above.  Steps of the two `mandatory` registries and of `deferred` can be
+re-run whenever an operator wants: each is idempotent by its own ledger or its
+own `WHERE` clause.
 
 **Response**
 
@@ -781,7 +795,10 @@ A step that fails still answers `200`, with `ok: false` and the error: the
 request was to run the step, and "it failed, here is why" is the answer to it.
 The failure is also kept for the next reader of the list above.
 
-**Errors**: 404 (no maintenance step has that name).
+**Errors**: 404 (no maintenance step has that name), 409 (the step is a
+load-time one — `config.*` — which runs when a config is loaded and never on
+demand: the document it would correct is the one a previous load read, and a
+caller that wrote the result back would rewrite the config from a stale copy).
 
 ### The two older backfill routes
 
