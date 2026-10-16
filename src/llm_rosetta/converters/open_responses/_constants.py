@@ -22,6 +22,7 @@ class ResponsesEventType:
     CONTENT_PART_ADDED = "response.content_part.added"
     CONTENT_PART_DONE = "response.content_part.done"
     OUTPUT_TEXT_DELTA = "response.output_text.delta"
+    OUTPUT_TEXT_ANNOTATION_ADDED = "response.output_text.annotation.added"
     OUTPUT_TEXT_DONE = "response.output_text.done"
     REASONING_SUMMARY_TEXT_DELTA = "response.reasoning_summary_text.delta"
     REASONING_SUMMARY_TEXT_DONE = "response.reasoning_summary_text.done"

@@ -20,12 +20,14 @@ from ...types.ir import (
     is_tool_call_part,
     is_tool_result_part,
     is_reasoning_part,
+    is_citation_part,
     is_refusal_part,
 )
 from ...types.ir.passthrough import ProviderPassthroughEvent, ProviderPassthroughItem
 from ...types.ir.request import IRRequest
 from ...types.ir.response import IRResponse, UsageInfo
 from ...types.ir.stream import (
+    CitationDeltaEvent,
     ContentBlockEndEvent,
     ContentBlockStartEvent,
     FinishEvent,
@@ -42,6 +44,7 @@ from ...types.ir.stream import (
 )
 from ..base import BaseConverter
 from ..base.context import ConversionContext, StreamContext
+from ..base.helpers.citations import report_dropped_citation
 from ..base.helpers.extensions import wire_extensions
 from ..base.helpers.opaque import (
     get_opaque_origin,
@@ -591,14 +594,8 @@ class OpenResponsesConverter(BaseConverter):
                             "logprobs": [],
                         }
                     )
-                elif is_tool_call_part(part):
-                    self._append_intrinsic_call_item(
-                        part, context, provider_response["output"]
-                    )
-                elif is_tool_result_part(part):
-                    self._append_intrinsic_result_item(
-                        part, context, provider_response["output"]
-                    )
+                elif is_tool_call_part(part) or is_tool_result_part(part):
+                    self._append_tool_item(part, context, provider_response["output"])
                 elif is_reasoning_part(part):
                     provider_response["output"].append(
                         self.content_ops.ir_reasoning_to_p(
@@ -609,6 +606,10 @@ class OpenResponsesConverter(BaseConverter):
                         )
                     )
                     reasoning_index += 1
+                elif is_citation_part(part):
+                    self._attach_annotation_to_text(
+                        part, text_parts, self._citation_warnings(context, kwargs)
+                    )
                 elif is_refusal_part(part):
                     text_parts.append(self.content_ops.ir_refusal_to_p(part))
 
@@ -654,6 +655,42 @@ class OpenResponsesConverter(BaseConverter):
     # ------------------------------------------------------------------
     # Cross-provider consistency helpers
     # ------------------------------------------------------------------
+
+    def _append_tool_item(
+        self, part: Any, context: ConversionContext, output: list[dict[str, Any]]
+    ) -> None:
+        """A tool call or result becomes its own output item."""
+        if is_tool_call_part(part):
+            self._append_intrinsic_call_item(part, context, output)
+        else:
+            self._append_intrinsic_result_item(part, context, output)
+
+    def _attach_annotation_to_text(
+        self,
+        part: Any,
+        text_parts: list[dict[str, Any]],
+        warnings: list[str] | None,
+    ) -> None:
+        """Hang a citation on the ``output_text`` part it annotates."""
+        annotation = self.content_ops.ir_citation_to_p(part)
+        if annotation is None:
+            report_dropped_citation(part, warnings=warnings)
+        elif text_parts and text_parts[-1].get("type") == "output_text":
+            text_parts[-1]["annotations"].append(annotation)
+        else:
+            report_dropped_citation(
+                part, warnings=warnings, why="no text part to annotate"
+            )
+
+    @staticmethod
+    def _citation_warnings(
+        context: ConversionContext | None, kwargs: dict[str, Any]
+    ) -> list[str] | None:
+        """The sink a citation drop should be reported to, when there is one."""
+        sink = kwargs.get("warnings")
+        if isinstance(sink, list):
+            return sink
+        return getattr(context, "warnings", None)
 
     @staticmethod
     def _report_generated_groups(ir_tools: list[Any], warnings: list[str]) -> None:
@@ -1079,6 +1116,22 @@ class OpenResponsesConverter(BaseConverter):
                 text=chunk.get("delta", ""),
             )
         )
+
+    def _handle_p_output_text_annotation_added_to_ir(
+        self,
+        chunk: dict[str, Any],
+        context: StreamContext | None,
+        events: list[IRStreamEvent],
+    ) -> None:
+        """A streamed annotation is a citation of the text just sent."""
+        annotation = chunk.get("annotation")
+        if isinstance(annotation, dict):
+            events.append(
+                CitationDeltaEvent(
+                    type="citation_delta",
+                    citation=self.content_ops.p_citation_to_ir(annotation),
+                )
+            )
 
     def _handle_p_reasoning_delta_to_ir(
         self,
@@ -1561,6 +1614,9 @@ class OpenResponsesConverter(BaseConverter):
     _P_TO_IR_DISPATCH: dict[str, str] = {
         ResponsesEventType.RESPONSE_CREATED: "_handle_p_response_created_to_ir",
         ResponsesEventType.OUTPUT_TEXT_DELTA: "_handle_p_output_text_delta_to_ir",
+        ResponsesEventType.OUTPUT_TEXT_ANNOTATION_ADDED: (
+            "_handle_p_output_text_annotation_added_to_ir"
+        ),
         ResponsesEventType.REASONING_SUMMARY_TEXT_DELTA: "_handle_p_reasoning_delta_to_ir",
         ResponsesEventType.OUTPUT_ITEM_ADDED: "_handle_p_output_item_added_to_ir",
         ResponsesEventType.CONTENT_PART_ADDED: "_handle_p_content_part_added_to_ir",
@@ -1793,6 +1849,31 @@ class OpenResponsesConverter(BaseConverter):
             "part": {
                 "type": "output_text",
             },
+        }
+
+    def _handle_ir_citation_delta_to_p(
+        self, event: CitationDeltaEvent, context: StreamContext | None
+    ) -> dict[str, Any] | list[dict[str, Any]]:
+        """Handle CitationDeltaEvent → response.output_text.annotation.added."""
+        annotation = self.content_ops.ir_citation_to_p(event["citation"])
+        if annotation is None:
+            report_dropped_citation(
+                event["citation"], warnings=self._citation_warnings(context, {})
+            )
+            return {}
+        stream_context = (
+            context if isinstance(context, OpenResponsesStreamContext) else None
+        )
+        item_id = stream_context.item_id if stream_context is not None else ""
+        msg_idx = (
+            stream_context._message_output_index if stream_context is not None else 0
+        )
+        return {
+            "type": ResponsesEventType.OUTPUT_TEXT_ANNOTATION_ADDED,
+            "item_id": item_id,
+            "output_index": msg_idx,
+            "content_index": 0,
+            "annotation": annotation,
         }
 
     def _handle_ir_text_delta_to_p(

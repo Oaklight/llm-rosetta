@@ -21,6 +21,7 @@ from ...types.ir import (
 from ...types.ir.request import IRRequest
 from ...types.ir.response import IRResponse, UsageInfo
 from ...types.ir.stream import (
+    CitationDeltaEvent,
     ContentBlockEndEvent,
     ContentBlockStartEvent,
     FinishEvent,
@@ -34,6 +35,10 @@ from ...types.ir.stream import (
     UsageEvent,
 )
 from ..base import BaseConverter
+from ..base.helpers.citations import (
+    citation_warning_sink,
+    report_dropped_citation,
+)
 from ..base.helpers.extensions import wire_extensions
 from ..base.context import ConversionContext, StreamContext
 from ..base.tools import (
@@ -281,7 +286,10 @@ class ChatCompletionsConverter(BaseConverter):
         return self._RESPONSE_ID_PREFIX
 
     def _build_ir_choice_to_p(  # noqa: C901
-        self, choice: dict[str, Any]
+        self,
+        choice: dict[str, Any],
+        *,
+        warnings: list[str] | None = None,
     ) -> dict[str, Any] | None:
         """Build a single OpenAI Chat choice dict from an IR choice."""
         message = choice.get("message")
@@ -314,6 +322,11 @@ class ChatCompletionsConverter(BaseConverter):
                 ann = self.content_ops.ir_citation_to_p(part)
                 if ann:
                     annotations.append(ann)
+                else:
+                    # The writer's docstring promises the caller reports a loss
+                    # it cannot express (a third dialect's document citation);
+                    # without this the citation left no trace anywhere.
+                    report_dropped_citation(part, warnings=warnings)
 
         if text_parts:
             openai_message["content"] = " ".join(text_parts)
@@ -532,7 +545,10 @@ class ChatCompletionsConverter(BaseConverter):
         }
 
         for choice in ir_response.get("choices", []):
-            openai_choice = self._build_ir_choice_to_p(choice)  # ty: ignore[invalid-argument-type]
+            openai_choice = self._build_ir_choice_to_p(  # ty: ignore[invalid-argument-type]
+                choice,  # ty: ignore[invalid-argument-type]
+                warnings=citation_warning_sink(kwargs, context),
+            )
             if openai_choice is not None:
                 provider_response["choices"].append(openai_choice)
 
@@ -700,6 +716,21 @@ class ChatCompletionsConverter(BaseConverter):
                     choice_index=choice_index,
                 )
             )
+
+        # Annotations (citations) — measured live: a streamed chat response
+        # carries them in ``delta.annotations``, nesting the payload under
+        # ``url_citation`` exactly as the whole-message form does.
+        annotations = delta.get("annotations")
+        if annotations:
+            for annotation in annotations:
+                if isinstance(annotation, dict):
+                    events.append(
+                        CitationDeltaEvent(
+                            type="citation_delta",
+                            citation=self.content_ops.p_citation_to_ir(annotation),
+                            choice_index=choice_index,
+                        )
+                    )
 
         # Tool call deltas
         tool_calls = delta.get("tool_calls")
@@ -1017,6 +1048,32 @@ class ChatCompletionsConverter(BaseConverter):
             ]
         }
         return self._merge_pending_role(chunk, context)
+
+    def _handle_ir_citation_delta_to_p(
+        self, event: CitationDeltaEvent, context: StreamContext | None
+    ) -> dict[str, Any] | list[dict[str, Any]]:
+        """Handle CitationDeltaEvent → a delta carrying annotations.
+
+        Measured live: this surface streams citations in
+        ``choices[].delta.annotations``, the same nested payload the
+        whole-message form uses.
+        """
+        annotation = self.content_ops.ir_citation_to_p(event["citation"])
+        if not annotation:
+            report_dropped_citation(
+                event["citation"], warnings=getattr(context, "warnings", None)
+            )
+            return {}
+        choice_index = event.get("choice_index", 0)
+        return {
+            "choices": [
+                {
+                    "index": choice_index,
+                    "delta": {"annotations": [annotation]},
+                    "finish_reason": None,
+                }
+            ]
+        }
 
     def _handle_ir_reasoning_delta_to_p(
         self, event: ReasoningDeltaEvent, context: StreamContext | None

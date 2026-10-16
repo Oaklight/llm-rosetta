@@ -35,6 +35,7 @@ from ...types.ir import (
     is_tool_result_part,
 )
 from ..base import BaseMessageOps
+from ..base.helpers.citations import report_dropped_citation
 from ..base.tools import intrinsic_kind_of, is_intrinsic_part
 from ..base.tools.batch import assign_tool_batch_ids, merge_tool_messages
 from .content_ops import MessagesContentOps
@@ -298,10 +299,7 @@ class MessagesMessageOps(BaseMessageOps):
                 if refusal_block:
                     anthropic_content.append(refusal_block)
             elif is_citation_part(part):
-                # Citations are part of TextBlock in Anthropic, skip
-                warnings.append(
-                    "Citation content is part of TextBlock in Anthropic, ignored"
-                )
+                self._attach_citation(part, anthropic_content, warnings)
             elif is_tool_result_part(part):
                 self._append_assistant_server_result(part, anthropic_content, warnings)
             else:
@@ -316,6 +314,28 @@ class MessagesMessageOps(BaseMessageOps):
             return None, warnings
 
         return {"role": "assistant", "content": anthropic_content}, warnings
+
+    def _attach_citation(
+        self,
+        part: Any,
+        anthropic_content: list[dict[str, Any]],
+        warnings: list[str],
+    ) -> None:
+        """Hang a citation on the text block it annotates.
+
+        Anthropic has no standalone citation block, so a citation belongs to the
+        text before it; one that arrives with no text block to annotate is
+        reported rather than dropped in silence.
+        """
+        citation = self.content_ops.ir_citation_to_p(part)
+        if citation is None:
+            report_dropped_citation(part, warnings=warnings)
+        elif anthropic_content and anthropic_content[-1].get("type") == "text":
+            anthropic_content[-1].setdefault("citations", []).append(citation)
+        else:
+            report_dropped_citation(
+                part, warnings=warnings, why="no text block to annotate"
+            )
 
     @staticmethod
     def _append_assistant_server_result(
@@ -550,7 +570,15 @@ class MessagesMessageOps(BaseMessageOps):
         part_type = provider_part.get("type")
 
         if part_type == "text":
-            return [self.content_ops.p_text_to_ir(provider_part)]
+            parts: list[ContentPart] = [self.content_ops.p_text_to_ir(provider_part)]
+            # Anthropic embeds citations in the text block; the IR keeps them as
+            # their own parts, right after the text they annotate.
+            citations = provider_part.get("citations")
+            if isinstance(citations, list):
+                for citation in citations:
+                    if isinstance(citation, dict):
+                        parts.append(self.content_ops.p_citation_to_ir(citation))
+            return parts
         elif part_type == "image":
             return [self.content_ops.p_image_to_ir(provider_part)]
         elif part_type == "document":

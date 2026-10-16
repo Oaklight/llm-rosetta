@@ -17,6 +17,17 @@ from ...types.ir import (
 )
 from ...types.ir.parts import ContentPart
 from ..base import BaseContentOps
+from ..base.helpers.citations import (
+    CITATION_TYPE_URL,
+    citation_end_index,
+    citation_provider_fields,
+    citation_start_index,
+    citation_title,
+    citation_type_of,
+    citation_url,
+    extra_fields,
+    make_url_citation,
+)
 from ..base.helpers.opaque import (
     get_opaque_origin,
     google_thought_signature,
@@ -109,24 +120,19 @@ class GoogleInteractionsContentOps(BaseContentOps):
 
     # ── Annotations → Citations ────────────────────────────────────
 
+    #: The annotation fields this dialect defines, measured on the live API:
+    #: ``{"start_index", "end_index", "url", "title", "type": "url_citation"}``
+    #: — the same flat set the Responses surface uses, in snake_case.
+    _ANNOTATION_FIELDS = ("url", "title", "start_index", "end_index")
+
     @staticmethod
     def p_annotations_to_ir(annotations: list[dict]) -> list[CitationPart]:
         """Interactions TextContent.annotations → IR CitationParts."""
-        parts: list[CitationPart] = []
-        for ann in annotations:
-            part: CitationPart = {"type": "citation"}
-            if "url" in ann:
-                part["url_citation"] = {
-                    "url": ann["url"],
-                }
-                if "title" in ann:
-                    part["url_citation"]["title"] = ann["title"]
-                if "start_index" in ann:
-                    part["url_citation"]["start_index"] = ann["start_index"]
-                if "end_index" in ann:
-                    part["url_citation"]["end_index"] = ann["end_index"]
-            parts.append(part)
-        return parts
+        return [
+            GoogleInteractionsContentOps.p_citation_to_ir(annotation)
+            for annotation in annotations
+            if isinstance(annotation, dict)
+        ]
 
     # ── Generic content dispatch ───────────────────────────────────
 
@@ -193,8 +199,67 @@ class GoogleInteractionsContentOps(BaseContentOps):
 
     @staticmethod
     def ir_citation_to_p(ir_citation: Any, **kwargs: Any) -> Any:
-        return {}
+        """IR CitationPart → an Interactions text annotation.
+
+        Only the shared ``url_citation`` kind has a form here (the measured
+        field set is ``start_index``/``end_index``/``url``/``title``/``type``);
+        the caller reports the loss for anything else.  Returns ``{}`` rather
+        than ``None`` to match this class's convention.
+        """
+        kind = citation_type_of(ir_citation)
+        # The annotation vocabulary is the URL one, so any citation naming a
+        # source has a form here; a dialect-private kind with no URL does not.
+        if kind not in ("", CITATION_TYPE_URL) and not citation_url(ir_citation):
+            raw = citation_provider_fields(ir_citation, "google").get("_raw")
+            return dict(raw) if isinstance(raw, dict) else {}
+        url = citation_url(ir_citation)
+        if not url:
+            return {}
+        annotation: dict[str, Any] = {
+            "type": CITATION_TYPE_URL,
+            "url": url,
+            "title": citation_title(ir_citation) or "",
+        }
+        # Only a span that exists: a spanless citation (Anthropic's document
+        # kinds) must not claim 0/0 here.
+        start = citation_start_index(ir_citation)
+        end = citation_end_index(ir_citation)
+        if start is not None:
+            annotation["start_index"] = start
+        if end is not None:
+            annotation["end_index"] = end
+        annotation.update(
+            {
+                k: v
+                for k, v in citation_provider_fields(ir_citation, "google").items()
+                if not k.startswith("_")
+            }
+        )
+        return annotation
 
     @staticmethod
     def p_citation_to_ir(provider_citation: Any, **kwargs: Any) -> CitationPart:
-        return {"type": "citation"}
+        """An Interactions annotation → IR CitationPart."""
+        if not isinstance(provider_citation, dict):
+            return {"type": "citation"}
+        kind = provider_citation.get("type", "")
+        if kind in ("", CITATION_TYPE_URL):
+            url = provider_citation.get("url")
+            if not url:
+                return {"type": "citation"}
+            return make_url_citation(
+                url,
+                title=provider_citation.get("title"),
+                start_index=provider_citation.get("start_index"),
+                end_index=provider_citation.get("end_index"),
+                provider="google",
+                provider_fields=extra_fields(
+                    provider_citation,
+                    GoogleInteractionsContentOps._ANNOTATION_FIELDS,
+                ),
+            )
+        return {
+            "type": "citation",
+            "citation_type": kind,
+            "provider_metadata": {"google": {"_raw": dict(provider_citation)}},
+        }

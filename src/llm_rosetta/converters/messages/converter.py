@@ -26,11 +26,13 @@ from ...types.ir import (
     is_tool_call_part,
     is_tool_result_part,
     is_reasoning_part,
+    is_citation_part,
     is_refusal_part,
 )
 from ...types.ir.request import IRRequest
 from ...types.ir.response import IRResponse, UsageInfo
 from ...types.ir.stream import (
+    CitationDeltaEvent,
     ContentBlockEndEvent,
     ContentBlockStartEvent,
     FinishEvent,
@@ -57,6 +59,10 @@ from ..base.tools import (
     prefixed_tool_call_id,
     sanitize_tool_call_id,
     strip_orphaned_tool_config,
+)
+from ..base.helpers.citations import (
+    citation_warning_sink,
+    report_dropped_citation,
 )
 from ..base.helpers.extensions import wire_extensions
 from ..base.helpers.opaque import (
@@ -400,6 +406,34 @@ class MessagesConverter(BaseConverter):
             return self.content_ops.ir_reasoning_to_p(part)
         return None
 
+    @staticmethod
+    def _default_text_citations(anthropic_content: list[dict[str, Any]]) -> None:
+        """Every response text block carries the field, null when uncited.
+
+        The spec requires ``citations`` on ``ResponseTextBlock``, so a block that
+        has none gets an explicit null rather than the key being absent.
+        """
+        for block in anthropic_content:
+            if block.get("type") == "text":
+                block.setdefault("citations", None)
+
+    def _attach_response_citation(
+        self,
+        part: Any,
+        anthropic_content: list[dict[str, Any]],
+        warnings: list[str] | None,
+    ) -> None:
+        """Hang a response citation on the text block it annotates."""
+        citation = self.content_ops.ir_citation_to_p(part)
+        if citation is None:
+            report_dropped_citation(part, warnings=warnings)
+        elif anthropic_content and anthropic_content[-1].get("type") == "text":
+            anthropic_content[-1].setdefault("citations", []).append(citation)
+        else:
+            report_dropped_citation(
+                part, warnings=warnings, why="no text block to annotate"
+            )
+
     def _do_response_to_provider(
         self,
         ir_response: IRResponse,
@@ -427,18 +461,19 @@ class MessagesConverter(BaseConverter):
                 anthropic_content: list[dict[str, Any]] = []
 
                 refusal_part = None
+                sink = citation_warning_sink(kwargs, context)
                 for part in content_parts:
                     if is_refusal_part(part):
                         refusal_part = part
+                        continue
+                    if is_citation_part(part):
+                        self._attach_response_citation(part, anthropic_content, sink)
                         continue
                     block = self._ir_part_to_anthropic_block(part)
                     if block is not None:
                         anthropic_content.append(block)
 
-                # Add citations: null to text blocks (spec requires it on ResponseTextBlock)
-                for block in anthropic_content:
-                    if block.get("type") == "text":
-                        block.setdefault("citations", None)
+                self._default_text_citations(anthropic_content)
                 provider_response["content"] = anthropic_content
 
             # Map finish_reason back to stop_reason
@@ -907,6 +942,8 @@ class MessagesConverter(BaseConverter):
             if chunk_block_index is not None:
                 evt_r["block_index"] = chunk_block_index
             events.append(evt_r)
+        elif delta_type == "citations_delta":
+            self._citations_delta_to_ir(delta, chunk_block_index, events)
         elif delta_type == "signature_delta":
             sig_delta = delta.get("signature", "")
             evt_s = ReasoningDeltaEvent(
@@ -919,6 +956,28 @@ class MessagesConverter(BaseConverter):
             if chunk_block_index is not None:
                 evt_s["block_index"] = chunk_block_index
             events.append(evt_s)
+
+    def _citations_delta_to_ir(
+        self,
+        delta: dict[str, Any],
+        block_index: int | None,
+        events: list[IRStreamEvent],
+    ) -> None:
+        """Anthropic's own citation delta → one IR citation event.
+
+        The citation arrives before the text it supports, and the block it
+        annotates opened with an empty ``citations`` array.
+        """
+        citation = delta.get("citation")
+        if not isinstance(citation, dict):
+            return
+        event = CitationDeltaEvent(
+            type="citation_delta",
+            citation=self.content_ops.p_citation_to_ir(citation),
+        )
+        if block_index is not None:
+            event["block_index"] = block_index
+        events.append(event)
 
     def _handle_p_content_block_stop_to_ir(
         self,
@@ -1151,6 +1210,32 @@ class MessagesConverter(BaseConverter):
                 return preamble
             result["index"] = context.current_block_index
         return result
+
+    def _handle_ir_citation_delta_to_p(
+        self, event: CitationDeltaEvent, context: StreamContext | None
+    ) -> dict[str, Any] | list[dict[str, Any]]:
+        """Handle CitationDeltaEvent → content_block_delta (citations_delta).
+
+        Anthropic's own citations hang off a text block, so the delta is
+        addressed to the block the citation annotates: the one the event names,
+        or the block currently open.
+        """
+        citation = self.content_ops.ir_citation_to_p(event["citation"])
+        if citation is None:
+            report_dropped_citation(
+                event["citation"], warnings=getattr(context, "warnings", None)
+            )
+            return {}
+        index = event.get("block_index")
+        if index is None and context is not None:
+            index = context.current_block_index
+        if index is None:
+            return {}
+        return {
+            "type": AnthropicEventType.CONTENT_BLOCK_DELTA,
+            "index": index,
+            "delta": {"type": "citations_delta", "citation": citation},
+        }
 
     def _handle_ir_reasoning_delta_to_p(
         self, event: ReasoningDeltaEvent, context: StreamContext | None

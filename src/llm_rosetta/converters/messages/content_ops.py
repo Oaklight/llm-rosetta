@@ -21,6 +21,17 @@ from ...types.ir import (
     TextPart,
 )
 from ..base import BaseContentOps
+from ..base.helpers.citations import (
+    CITATION_TYPE_SEARCH_RESULT_LOCATION,
+    CITATION_TYPE_WEB_SEARCH_RESULT_LOCATION,
+    citation_cited_text,
+    citation_provider_fields,
+    citation_title,
+    citation_type_of,
+    citation_url,
+    extra_fields,
+    make_citation,
+)
 from ..base.helpers.opaque import (
     CARRIER_KEY,
     carrier_metadata,
@@ -406,63 +417,113 @@ class MessagesContentOps(BaseContentOps):
 
     # ==================== Citation ====================
 
+    #: The citation kinds this API defines.  Its request validator accepts
+    #: exactly these tags — ``text_citation`` and ``url_citation`` are rejected
+    #: outright, and each citation has to point at a block the request itself
+    #: carries (``document_index``, ``search_result_index``) or at an
+    #: ``encrypted_index`` this provider issued.  A citation another dialect
+    #: minted therefore has **no** Anthropic form; it is dropped, not invented.
+    _DOCUMENT_LOCATION_TYPES = (
+        "char_location",
+        "page_location",
+        "content_block_location",
+    )
+    _NATIVE_TYPES = (
+        *_DOCUMENT_LOCATION_TYPES,
+        CITATION_TYPE_SEARCH_RESULT_LOCATION,
+        CITATION_TYPE_WEB_SEARCH_RESULT_LOCATION,
+    )
+
+    #: Fields the IR keeps, so they are not repeated as provider-private ones.
+    _SHARED = ("type", "cited_text", "url", "title", "start_index", "end_index")
+
     @staticmethod
     def ir_citation_to_p(ir_citation: CitationPart, **kwargs: Any) -> dict | None:
-        """IR CitationPart → Anthropic citation content.
+        """IR CitationPart → the Anthropic citation object of a TextBlock.
 
-        Anthropic citations are part of TextBlock (as ``citations`` field).
-        This method returns None and emits a warning since citations
-        cannot be standalone content blocks in Anthropic.
-
-        Args:
-            ir_citation: IR citation part.
-
-        Returns:
-            None (citations are not standalone blocks in Anthropic).
+        Only this API's own kinds are written: the cited block has to exist in
+        the message being sent, so a citation read from another dialect cannot
+        be fabricated into one without inventing the block it points at.
+        Returns ``None`` for those, and the caller reports the loss.
         """
-        warnings.warn(
-            "Anthropic citations are part of TextBlock, "
-            "cannot be converted to standalone content block",
-            stacklevel=2,
-        )
-        return None
+        kind = citation_type_of(ir_citation)
+        if kind not in MessagesContentOps._NATIVE_TYPES:
+            return None
+        fields = {
+            k: v
+            for k, v in citation_provider_fields(ir_citation, "anthropic").items()
+            if not k.startswith("_")
+        }
+        citation: dict[str, Any] = dict(fields)
+        citation["type"] = kind
+        cited_text = citation_cited_text(ir_citation)
+        if cited_text is not None:
+            citation["cited_text"] = cited_text
+        if kind == CITATION_TYPE_SEARCH_RESULT_LOCATION:
+            url = citation_url(ir_citation)
+            if url:
+                citation["source"] = url
+            title = citation_title(ir_citation)
+            if title:
+                citation["title"] = title
+        elif kind == CITATION_TYPE_WEB_SEARCH_RESULT_LOCATION:
+            url = citation_url(ir_citation)
+            if url:
+                citation["url"] = url
+            title = citation_title(ir_citation)
+            if title:
+                citation["title"] = title
+        else:
+            title = citation_title(ir_citation)
+            if title:
+                citation["document_title"] = title
+        return citation
 
     @staticmethod
     def p_citation_to_ir(provider_citation: Any, **kwargs: Any) -> CitationPart:
         """Anthropic citation → IR CitationPart.
 
-        Handles Anthropic's text citation format.
-
-        Args:
-            provider_citation: Anthropic citation dict.
-
-        Returns:
-            IR CitationPart.
+        The kind is Anthropic's own name for it — readers branch on
+        ``citation_type``, never on which fields happen to be present.  The
+        locator fields (``document_index``, the type-specific indices,
+        ``encrypted_index``) are private to this API and ride
+        ``provider_metadata``; ``document_title`` and ``source`` are the
+        shared ``title`` and ``url``.
         """
-        citation_type = provider_citation.get("type", "")
+        if not isinstance(provider_citation, dict):
+            return CitationPart(type="citation")
+        kind = provider_citation.get("type", "")
+        if kind not in MessagesContentOps._NATIVE_TYPES:
+            if kind:
+                return CitationPart(
+                    type="citation",
+                    citation_type=kind,
+                    provider_metadata={"anthropic": {"_raw": dict(provider_citation)}},
+                )
+            return CitationPart(type="citation")
 
-        if citation_type == "char_location":
-            return CitationPart(
-                type="citation",
-                text_citation={
-                    "cited_text": provider_citation.get("cited_text", ""),
-                },
-            )
+        url = None
+        title = provider_citation.get("title") or provider_citation.get(
+            "document_title"
+        )
+        if kind == CITATION_TYPE_SEARCH_RESULT_LOCATION:
+            source = provider_citation.get("source")
+            url = source if isinstance(source, str) and source else None
+        elif kind == CITATION_TYPE_WEB_SEARCH_RESULT_LOCATION:
+            source = provider_citation.get("url")
+            url = source if isinstance(source, str) and source else None
 
-        # URL citation
-        if citation_type == "url_citation":
-            return CitationPart(
-                type="citation",
-                url_citation={
-                    "start_index": provider_citation.get("start_index", 0),
-                    "end_index": provider_citation.get("end_index", 0),
-                    "title": provider_citation.get("title", ""),
-                    "url": provider_citation.get("url", ""),
-                },
-            )
-
-        # Fallback
-        return CitationPart(type="citation")
+        return make_citation(
+            kind,
+            url=url,
+            title=title if isinstance(title, str) and title else None,
+            cited_text=provider_citation.get("cited_text"),
+            provider="anthropic",
+            provider_fields=extra_fields(
+                provider_citation,
+                (*MessagesContentOps._SHARED, "document_title", "source"),
+            ),
+        )
 
 
 # Backward-compatible alias (deprecated) — the base type was renamed

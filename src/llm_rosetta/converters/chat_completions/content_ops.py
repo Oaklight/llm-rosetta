@@ -18,6 +18,17 @@ from ...types.ir import (
     TextPart,
 )
 from ..base import BaseContentOps
+from ..base.helpers.citations import (
+    CITATION_TYPE_URL,
+    citation_provider_fields,
+    citation_type_of,
+    citation_end_index,
+    citation_start_index,
+    citation_title,
+    citation_url,
+    extra_fields,
+    make_url_citation,
+)
 from ..base.helpers.opaque import get_opaque_origin, is_own_origin
 
 
@@ -270,54 +281,82 @@ class ChatCompletionsContentOps(BaseContentOps):
 
     # ==================== Citation ====================
 
+    #: The annotation fields the OpenAI chat surface defines.  Anything else a
+    #: compatible endpoint adds rides ``provider_metadata``.
+    _CITATION_FIELDS = ("url", "title", "start_index", "end_index")
+
     @staticmethod
     def ir_citation_to_p(ir_citation: CitationPart, **kwargs: Any) -> dict | None:
-        """IR CitationPart → OpenAI annotation.
+        """IR CitationPart → OpenAI chat annotation.
 
-        Maps URL citations to OpenAI annotation format.
-
-        Args:
-            ir_citation: IR citation part.
+        Only the shared ``url_citation`` kind has a form here, and this dialect
+        nests its payload under a ``url_citation`` key (#451) rather than
+        flattening it the way the Responses surface does.
 
         Returns:
-            OpenAI annotation dict, or None if no URL citation data.
+            The annotation dict, or ``None`` when this dialect has no form for
+            the citation (the caller reports the loss).
         """
-        url_citation = ir_citation.get("url_citation")
-        if url_citation:
-            return {
-                "type": "url_citation",
-                "url_citation": {
-                    "start_index": url_citation.get("start_index", 0),
-                    "end_index": url_citation.get("end_index", 0),
-                    "title": url_citation.get("title", ""),
-                    "url": url_citation.get("url", ""),
-                },
+        kind = citation_type_of(ir_citation)
+        provider = citation_provider_fields(ir_citation, "openai")
+        # Any citation that names a source has a form here, whatever its kind:
+        # the annotation vocabulary is the URL one, so a search-result citation
+        # from another dialect converts (losing that dialect's own locator, which
+        # has no field here) rather than dropping.
+        if kind in ("", CITATION_TYPE_URL) or citation_url(ir_citation):
+            url = citation_url(ir_citation)
+            if not url:
+                return None
+            payload: dict[str, Any] = {
+                "title": citation_title(ir_citation) or "",
+                "url": url,
             }
-        return None
+            start = citation_start_index(ir_citation)
+            end = citation_end_index(ir_citation)
+            if start is not None:
+                payload["start_index"] = start
+            if end is not None:
+                payload["end_index"] = end
+            payload.update({k: v for k, v in provider.items() if not k.startswith("_")})
+            return {"type": "url_citation", "url_citation": payload}
+        # A kind read from this dialect is written back as it arrived.
+        raw = provider.get("_raw")
+        return dict(raw) if isinstance(raw, dict) else None
 
     @staticmethod
     def p_citation_to_ir(provider_citation: Any, **kwargs: Any) -> CitationPart:
-        """OpenAI annotation → IR CitationPart.
+        """OpenAI chat annotation → IR CitationPart.
 
-        Args:
-            provider_citation: OpenAI annotation dict.
-
-        Returns:
-            IR CitationPart.
+        The payload is nested under ``url_citation`` (#451); an endpoint that
+        flattens it anyway is read too.  An annotation kind this dialect has no
+        vocabulary for keeps its wire form under ``provider_metadata`` so a
+        write back to the same dialect can restore it.
         """
-        citation_type = provider_citation.get("type", "")
-        if citation_type == "url_citation":
-            nested = provider_citation.get("url_citation", {})
+        if not isinstance(provider_citation, dict):
+            return CitationPart(type="citation")
+        kind = provider_citation.get("type", "")
+        if kind == CITATION_TYPE_URL:
+            nested = provider_citation.get("url_citation")
+            payload = nested if isinstance(nested, dict) else provider_citation
+            url = payload.get("url")
+            if not url:
+                return CitationPart(type="citation")
+            return make_url_citation(
+                url,
+                title=payload.get("title"),
+                start_index=payload.get("start_index"),
+                end_index=payload.get("end_index"),
+                provider="openai",
+                provider_fields=extra_fields(
+                    payload, ChatCompletionsContentOps._CITATION_FIELDS
+                ),
+            )
+        if kind:
             return CitationPart(
                 type="citation",
-                url_citation={
-                    "start_index": nested.get("start_index", 0),
-                    "end_index": nested.get("end_index", 0),
-                    "title": nested.get("title", ""),
-                    "url": nested.get("url", ""),
-                },
+                citation_type=kind,
+                provider_metadata={"openai": {"_raw": dict(provider_citation)}},
             )
-        # Fallback: store raw data
         return CitationPart(type="citation")
 
 

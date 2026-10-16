@@ -17,6 +17,7 @@ from typing import Any, cast
 
 from ...types.ir import (
     ContentPart,
+    is_citation_part,
     IRInputItem,
     Message,
     TextPart,
@@ -32,6 +33,7 @@ from ...types.ir import (
 from ...types.ir.messages import MessageMetadata
 from ...types.ir.passthrough import ProviderPassthroughItem
 from ..base import BaseMessageOps
+from ..base.helpers.citations import report_dropped_citation
 from ..base.tools import sanitize_tool_call_id
 from ..base.tools.batch import assign_tool_batch_ids
 from ..base.tools.intrinsic import history_native_calls
@@ -272,6 +274,8 @@ class OpenResponsesMessageOps(BaseMessageOps):
                     content_parts.append(pt_meta)
                     continue
                 content_parts.append({"type": "output_text", "text": part["text"]})
+            elif is_citation_part(part):
+                self._attach_annotation(part, content_parts, warnings)
             elif is_tool_call_part(part):
                 tool_items.append(
                     self.tool_ops.ir_tool_call_to_p(part, for_history=True)
@@ -326,6 +330,24 @@ class OpenResponsesMessageOps(BaseMessageOps):
         result_items.extend(passthrough_items)
 
         return result_items, warnings
+
+    def _attach_annotation(
+        self, part: Any, content_parts: list[dict[str, Any]], warnings: list[str]
+    ) -> None:
+        """Hang a citation on the ``output_text`` part it annotates."""
+        annotation = self.content_ops.ir_citation_to_p(part)
+        if annotation is None:
+            report_dropped_citation(part, warnings=warnings)
+        elif (
+            content_parts
+            and content_parts[-1].get("type") == "output_text"
+            and "_passthrough_content_part" not in content_parts[-1]
+        ):
+            content_parts[-1].setdefault("annotations", []).append(annotation)
+        else:
+            report_dropped_citation(
+                part, warnings=warnings, why="no text part to annotate"
+            )
 
     def _ir_tool_messages_to_p(
         self,
@@ -686,7 +708,15 @@ class OpenResponsesMessageOps(BaseMessageOps):
 
         # Support input_text, output_text, and text
         if part_type in ("input_text", "output_text", "text"):
-            return [self.content_ops.p_text_to_ir(provider_part)]
+            parts: list[ContentPart] = [self.content_ops.p_text_to_ir(provider_part)]
+            # An annotation is a citation of this text, and IR keeps it as its
+            # own part right after the text it annotates.
+            annotations = provider_part.get("annotations")
+            if isinstance(annotations, list):
+                for annotation in annotations:
+                    if isinstance(annotation, dict):
+                        parts.append(self.content_ops.p_citation_to_ir(annotation))
+            return parts
         elif part_type == "input_image":
             return [self.content_ops.p_image_to_ir(provider_part)]
         elif part_type == "input_file":

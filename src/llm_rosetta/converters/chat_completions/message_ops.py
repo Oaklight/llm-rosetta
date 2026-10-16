@@ -33,6 +33,7 @@ from ...types.ir import (
     is_tool_result_part,
 )
 from ..base import BaseMessageOps
+from ..base.helpers.citations import report_dropped_citation
 from ..base.helpers.opaque import (
     set_opaque_origin,
 )
@@ -345,6 +346,7 @@ class ChatCompletionsMessageOps(BaseMessageOps):
         """
         text_parts: list[str] = []
         tool_calls: list[dict[str, Any]] = []
+        annotations: list[dict[str, Any]] = []
         refusal_text = None
         reasoning_text: str | None = None
 
@@ -363,8 +365,15 @@ class ChatCompletionsMessageOps(BaseMessageOps):
             elif is_refusal_part(part):
                 refusal_text = part.get("refusal", "")
             elif is_citation_part(part):
-                # Citations are annotations, handled at response level
-                pass
+                # A citation rides the assistant message's ``annotations``, the
+                # same field the response writer fills.  Measured live: this
+                # endpoint accepts annotations on an assistant message in a
+                # request (HTTP 200), so history keeps its sources.
+                annotation = self.content_ops.ir_citation_to_p(part)
+                if annotation is None:
+                    report_dropped_citation(part, warnings=warnings)
+                else:
+                    annotations.append(annotation)
             else:
                 warnings.append(
                     f"Unsupported content part type in assistant message: {part.get('type')}"
@@ -387,6 +396,10 @@ class ChatCompletionsMessageOps(BaseMessageOps):
         # Set text content
         if text_parts:
             openai_message["content"] = " ".join(text_parts)
+
+        # Set annotations (citations)
+        if annotations:
+            openai_message["annotations"] = annotations
 
         # Set tool calls
         if tool_calls:

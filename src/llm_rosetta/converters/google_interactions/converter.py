@@ -20,6 +20,7 @@ from ...types.ir.response import (
     UsageInfo,
 )
 from ...types.ir.stream import (
+    CitationDeltaEvent,
     ContentBlockEndEvent,
     ContentBlockStartEvent,
     FinishEvent,
@@ -34,6 +35,10 @@ from ...types.ir.stream import (
     UsageEvent,
 )
 from ..base import BaseConverter
+from ..base.helpers.citations import (
+    citation_warning_sink,
+    report_dropped_citation,
+)
 from ..base.helpers.opaque import (
     get_opaque_origin,
     google_thought_signature,
@@ -147,7 +152,9 @@ class GoogleInteractionsConverter(BaseConverter):
         result: dict[str, Any] = {"model": ir_request["model"]}
 
         self._extract_system_instruction(ir_request, result)
-        self._convert_messages_to_input(ir_request, result)
+        self._convert_messages_to_input(
+            ir_request, result, warnings=kwargs.get("warnings")
+        )
 
         tools = ir_request.get("tools")
         if tools:
@@ -179,7 +186,10 @@ class GoogleInteractionsConverter(BaseConverter):
                 result["system_instruction"] = " ".join(texts)
 
     def _convert_messages_to_input(
-        self, ir_request: IRRequest, result: dict[str, Any]
+        self,
+        ir_request: IRRequest,
+        result: dict[str, Any],
+        warnings: list[str] | None = None,
     ) -> None:
         messages = list(ir_request.get("messages", []))
 
@@ -208,7 +218,7 @@ class GoogleInteractionsConverter(BaseConverter):
             else:
                 non_system.append(msg)
 
-        steps = self.message_ops.ir_messages_to_p_steps(non_system)
+        steps = self.message_ops.ir_messages_to_p_steps(non_system, warnings=warnings)
         if (
             len(steps) == 1
             and steps[0].get("type") == "user_input"
@@ -388,7 +398,9 @@ class GoogleInteractionsConverter(BaseConverter):
 
         steps: list[dict] = []
         if assistant_msg:
-            steps = self.message_ops.ir_messages_to_p_steps([assistant_msg])
+            steps = self.message_ops.ir_messages_to_p_steps(
+                [assistant_msg], warnings=citation_warning_sink(kwargs, context)
+            )
 
         # Override status when steps contain function_call but finish_reason
         # was "stop" (Google generateContent returns STOP for tool calls)
@@ -558,6 +570,21 @@ class GoogleInteractionsConverter(BaseConverter):
                 TextDeltaEvent(
                     type="text_delta", text=delta.get("text", ""), block_index=index
                 )
+            ]
+        if delta_type == "text_annotation_delta":
+            # This dialect streams annotations in a delta of their own, one
+            # delta possibly carrying several.
+            annotations = delta.get("annotations")
+            if not isinstance(annotations, list):
+                return []
+            return [
+                CitationDeltaEvent(
+                    type="citation_delta",
+                    citation=self.content_ops.p_citation_to_ir(annotation),
+                    block_index=index,
+                )
+                for annotation in annotations
+                if isinstance(annotation, dict)
             ]
         if delta_type == "thought_summary":
             return [
@@ -808,6 +835,22 @@ class GoogleInteractionsConverter(BaseConverter):
             "event_type": "step.delta",
             "index": event.get("block_index", 0),
             "delta": {"type": "text", "text": event["text"]},
+        }
+
+    def _handle_ir_citation_delta_to_p(
+        self, event: CitationDeltaEvent, context: StreamContext | None
+    ) -> dict[str, Any] | list[dict[str, Any]]:
+        """Handle CitationDeltaEvent → a step.delta carrying annotations."""
+        annotation = self.content_ops.ir_citation_to_p(event["citation"])
+        if not annotation:
+            report_dropped_citation(
+                event["citation"], warnings=getattr(context, "warnings", None)
+            )
+            return {}
+        return {
+            "event_type": "step.delta",
+            "index": event.get("block_index", 0),
+            "delta": {"type": "text_annotation_delta", "annotations": [annotation]},
         }
 
     def _handle_ir_reasoning_delta_to_p(

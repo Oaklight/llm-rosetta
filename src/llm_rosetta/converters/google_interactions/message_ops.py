@@ -16,6 +16,7 @@ from ...types.ir import (
 from ...types.ir.parts import AssistantContentPart, ContentPart
 from ...types.ir.request import IRInputItem
 from ..base import BaseMessageOps
+from ..base.helpers.citations import report_dropped_citation
 from ..base.helpers.opaque import inject_interactions_function_call_signature
 from ..base.tools import is_intrinsic_part
 from ..base.tools.batch import assign_tool_batch_ids
@@ -120,7 +121,9 @@ class GoogleInteractionsMessageOps(BaseMessageOps):
 
     # ── IR Messages → Steps ────────────────────────────────────────
 
-    def ir_messages_to_p_steps(self, messages: list | Sequence) -> list[dict]:
+    def ir_messages_to_p_steps(
+        self, messages: list | Sequence, warnings: list[str] | None = None
+    ) -> list[dict]:
         """Convert IR messages to Interactions steps.
 
         The function ``name`` required on a ``function_result`` step is
@@ -150,7 +153,7 @@ class GoogleInteractionsMessageOps(BaseMessageOps):
                         tc_name = part.get("tool_name")
                         if tc_id and tc_name:
                             tool_call_index[tc_id] = tc_name
-                steps.extend(self._ir_assistant_to_steps(content))
+                steps.extend(self._ir_assistant_to_steps(content, warnings=warnings))
             elif role == "tool":
                 steps.extend(self._ir_tool_to_steps(content, tool_call_index))
 
@@ -166,7 +169,9 @@ class GoogleInteractionsMessageOps(BaseMessageOps):
                 p_content.append(self.content_ops.ir_image_to_p(part))
         return {"type": "user_input", "content": p_content}
 
-    def _ir_assistant_to_steps(self, content: list) -> list[dict]:
+    def _ir_assistant_to_steps(
+        self, content: list, warnings: list[str] | None = None
+    ) -> list[dict]:
         steps: list[dict] = []
         for part in content:
             ptype = part.get("type")
@@ -183,6 +188,25 @@ class GoogleInteractionsMessageOps(BaseMessageOps):
                 step = self.tool_ops.ir_tool_call_to_p(part)
                 if step:
                     steps.append(step)
+            elif ptype == "citation":
+                # An annotation is carried by the text content item of the step
+                # it annotates; there is no step type for a citation itself.
+                annotation = self.content_ops.ir_citation_to_p(part)
+                if not annotation:
+                    report_dropped_citation(part, warnings=warnings)
+                elif (
+                    steps
+                    and steps[-1].get("type") == "model_output"
+                    and steps[-1].get("content")
+                    and steps[-1]["content"][-1].get("type") == "text"
+                ):
+                    steps[-1]["content"][-1].setdefault("annotations", []).append(
+                        annotation
+                    )
+                else:
+                    report_dropped_citation(
+                        part, warnings=warnings, why="no text step to annotate"
+                    )
             elif ptype == "tool_result" and is_intrinsic_part(part):
                 # A server result the assistant turn produced rides inline in
                 # this converter's response model (#992).  A client result

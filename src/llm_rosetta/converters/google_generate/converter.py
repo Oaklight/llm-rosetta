@@ -23,14 +23,15 @@ from typing import Any, cast
 from ...types.ir import (
     CitationPart,
     TextPart,
+    is_citation_part,
     is_message,
     is_text_part,
     is_tool_result_part,
 )
-from ...types.ir.parts import UrlCitation
 from ...types.ir.request import IRRequest
 from ...types.ir.response import IRResponse, UsageInfo
 from ...types.ir.stream import (
+    CitationDeltaEvent,
     ContentBlockEndEvent,
     ContentBlockStartEvent,
     FinishEvent,
@@ -59,6 +60,17 @@ from ..base.tools import (
 from ..base.tools.intrinsic import (
     intrinsic_kind_of,
     is_intrinsic_part,
+)
+from ..base.helpers.citations import (
+    citation_end_index,
+    citation_provider_fields,
+    citation_start_index,
+    citation_title,
+    citation_type_of,
+    citation_url,
+    extra_fields,
+    make_url_citation,
+    report_dropped_citation,
 )
 from ..base.helpers.extensions import wire_extensions
 from ..base.helpers.opaque import (
@@ -188,8 +200,93 @@ def _hoist_and_extract_system(
     return ir_messages, system_instruction
 
 
-def _grounding_provider_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
-    """Extract Google search metadata that has no common IR field."""
+def _grounding_metadata_from_ir(
+    citations: list[CitationPart],
+    message_provider_metadata: dict[str, Any],
+    warnings: list[str] | None = None,
+) -> dict[str, Any]:
+    """Rebuild Gemini's ``groundingMetadata`` from IR citations.
+
+    The inverse of :func:`_grounding_citations`: sources become
+    ``groundingChunks`` (deduplicated, since supports point at them by index),
+    spans become ``groundingSupports``, and the search-level metadata on the
+    message rides the same object.  A citation with no URL — a document
+    citation from another dialect — has no chunk to point at and is reported
+    as dropped.
+    """
+    chunks: list[dict[str, Any]] = []
+    index_by_key: dict[tuple[Any, ...], int] = {}
+    supports: list[dict[str, Any]] = []
+    for citation in citations:
+        url = citation_url(citation)
+        if not url:
+            report_dropped_citation(
+                citation, warnings=warnings, why="Google grounds citations in a URL"
+            )
+            continue
+        title = citation_title(citation)
+        key = (url, title)
+        position = index_by_key.get(key)
+        if position is None:
+            position = len(chunks)
+            index_by_key[key] = position
+            fields = {
+                k: v
+                for k, v in citation_provider_fields(citation, "google").items()
+                if not k.startswith("_")
+            }
+            wrapper = (
+                "maps"
+                if citation_provider_fields(citation, "google").get("_chunk_type")
+                == "maps"
+                else "web"
+            )
+            source: dict[str, Any] = {"uri": url}
+            if title:
+                source["title"] = title
+            source.update(fields)
+            chunks.append({wrapper: source})
+        start = citation_start_index(citation)
+        end = citation_end_index(citation)
+        if start is not None or end is not None:
+            supports.append(
+                {
+                    "segment": {
+                        "startIndex": start or 0,
+                        "endIndex": end or 0,
+                    },
+                    "groundingChunkIndices": [position],
+                }
+            )
+    if not chunks:
+        return {}
+    metadata: dict[str, Any] = {"groundingChunks": chunks}
+    if supports:
+        metadata["groundingSupports"] = supports
+    google = message_provider_metadata.get("google")
+    if isinstance(google, dict):
+        # Back to the wire spelling: the IR holds them snake_case under
+        # ``provider_metadata``, the API spells them camelCase.
+        if google.get("web_search_queries"):
+            metadata["webSearchQueries"] = google["web_search_queries"]
+        entry_point = google.get("search_entry_point")
+        if isinstance(entry_point, dict) and entry_point.get("rendered_content"):
+            metadata["searchEntryPoint"] = {
+                "renderedContent": entry_point["rendered_content"]
+            }
+    return metadata
+
+
+def _search_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
+    """Google's search-level metadata: the queries and the rendered entry point.
+
+    Neither is a citation — they describe the search, not a source — and the
+    IR has no field for them, so they ride ``provider_metadata.google`` on the
+    event or message that closes the turn.  Measured on the live API: both keys
+    arrive together with the sources on the final chunk, and
+    ``searchEntryPoint`` is independently optional (absent when the tool is
+    ``google_maps``).
+    """
     queries = metadata.get("web_search_queries") or metadata.get("webSearchQueries")
     entry_point = metadata.get("search_entry_point") or metadata.get("searchEntryPoint")
     rendered = None
@@ -206,49 +303,61 @@ def _grounding_provider_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
 
 
 def _grounding_sources(metadata: dict[str, Any]) -> list[dict[str, Any]]:
-    """Extract web sources from Gemini grounding chunks."""
+    """Extract the sources of the grounding chunks, with their wrapper key.
+
+    A chunk wraps its source under ``web`` (the usual case), ``maps``, or
+    ``retrievedContext``; the key is kept on the source as ``_chunk_type`` so a
+    write back puts the source under the same wrapper instead of guessing.
+    """
     chunks = metadata.get("grounding_chunks") or metadata.get("groundingChunks") or []
     sources: list[dict[str, Any]] = []
     for chunk in chunks:
         if not isinstance(chunk, dict):
             sources.append({})
             continue
-        source = (
-            chunk.get("web")
-            or chunk.get("retrieved_context")
-            or chunk.get("retrievedContext")
-            or chunk.get("maps")
-        )
-        sources.append(source if isinstance(source, dict) else {})
+        for wrapper in ("web", "maps", "retrieved_context", "retrievedContext"):
+            source = chunk.get(wrapper)
+            if isinstance(source, dict):
+                source = dict(source)
+                source["_chunk_type"] = "maps" if wrapper == "maps" else "web"
+                sources.append(source)
+                break
+        else:
+            sources.append({})
     return sources
 
 
 def _grounding_citation(
     source: dict[str, Any],
     segment: dict[str, Any] | None,
-    provider_metadata: dict[str, Any],
 ) -> CitationPart | None:
-    """Build one IR citation from a grounding source and optional segment."""
+    """Build one IR citation from a grounding source and optional segment.
+
+    A ``maps`` chunk carries ``placeId``/``text`` that have no shared field, so
+    they ride ``provider_metadata.google`` — on the citation, where they belong,
+    not the search-level metadata.
+    """
     url = source.get("uri")
     if not url:
         return None
-    citation: UrlCitation = {"url": url}
-    if source.get("title"):
-        citation["title"] = source["title"]
+    start = end = None
     if segment:
         start = segment.get("start_index", segment.get("startIndex"))
         end = segment.get("end_index", segment.get("endIndex"))
-        if start is not None:
-            citation["start_index"] = start
-        if end is not None:
-            citation["end_index"] = end
-    result: CitationPart = {"type": "citation", "url_citation": citation}
-    if provider_metadata:
-        result["provider_metadata"] = {"google": provider_metadata}
-    return result
+    return make_url_citation(
+        url,
+        title=source.get("title"),
+        start_index=start if isinstance(start, int) else None,
+        end_index=end if isinstance(end, int) else None,
+        provider="google",
+        provider_fields=extra_fields(source, ("uri", "title")),
+    )
 
 
 _GROUNDING_CITATIONS_KEY = "_google_grounding_citations"
+
+#: Where the stream holds Google's search-level metadata until the finish.
+_GROUNDING_SEARCH_KEY = "_google_grounding_search"
 
 #: Citation fields that identify one citation, so the same source attached to
 #: different segments is kept and a repeat of one is not.
@@ -259,43 +368,51 @@ def _citation_key(citation: CitationPart) -> tuple[Any, ...]:
     """Identify a citation, so an accumulated repeat is not added twice."""
     location = citation.get("url_citation") or citation.get("text_citation") or {}
     return (
-        citation.get("type"),
-        *(location.get(f) for f in _GROUNDING_CITATION_KEY_FIELDS),
+        citation_type_of(citation),
+        citation.get("url") or location.get("url"),
+        citation.get("start_index")
+        if citation.get("start_index") is not None
+        else location.get("start_index"),
+        citation.get("end_index")
+        if citation.get("end_index") is not None
+        else location.get("end_index"),
     )
 
 
-def _stash_grounding_citations(
-    context: StreamContext, citations: list[CitationPart]
-) -> None:
-    """Accumulate the citations seen so far in this stream.
+def _citation_is_new(context: StreamContext, citation: CitationPart) -> bool:
+    """Whether this citation has not been emitted in this stream yet.
 
-    Grounding metadata may arrive on any candidate, not only the one carrying
-    the finish reason, so the citations are collected until the finish event
-    that will carry them.
+    Google may repeat a source across chunks, and a citation is emitted where
+    it is reported, so the dedupe lives on the stream context rather than on a
+    buffer.
     """
-    stashed = context.metadata.setdefault(_GROUNDING_CITATIONS_KEY, [])
     seen = context.metadata.setdefault(f"{_GROUNDING_CITATIONS_KEY}_keys", set())
-    for citation in citations:
-        key = _citation_key(citation)
-        if key in seen:
-            continue
-        seen.add(key)
-        stashed.append(citation)
+    key = _citation_key(citation)
+    if key in seen:
+        return False
+    seen.add(key)
+    return True
 
 
-def _take_grounding_citations(context: StreamContext | None) -> list[CitationPart]:
-    """The accumulated citations, cleared so a second finish cannot repeat them."""
+def _stash_search_metadata(context: StreamContext, search: dict[str, Any]) -> None:
+    """Hold the search-level metadata until the finish event carries it."""
+    if not search:
+        return
+    stashed = context.metadata.setdefault(_GROUNDING_SEARCH_KEY, {})
+    stashed.update(search)
+
+
+def _take_search_metadata(context: StreamContext | None) -> dict[str, Any]:
+    """The held search-level metadata, cleared so a second finish cannot repeat it."""
     if context is None:
-        return []
-    stashed = context.metadata.pop(_GROUNDING_CITATIONS_KEY, [])
-    context.metadata.pop(f"{_GROUNDING_CITATIONS_KEY}_keys", None)
-    return list(stashed)
+        return {}
+    stashed = context.metadata.pop(_GROUNDING_SEARCH_KEY, {})
+    return dict(stashed) if isinstance(stashed, dict) else {}
 
 
 def _grounding_citations(metadata: dict[str, Any]) -> list[CitationPart]:
     """Convert Gemini grounding metadata into IR URL citations."""
     sources = _grounding_sources(metadata)
-    provider_metadata = _grounding_provider_metadata(metadata)
     supports = (
         metadata.get("grounding_supports") or metadata.get("groundingSupports") or []
     )
@@ -314,15 +431,10 @@ def _grounding_citations(metadata: dict[str, Any]) -> list[CitationPart]:
         for index in indices:
             if not isinstance(index, int) or not 0 <= index < len(sources):
                 continue
-            citation = _grounding_citation(sources[index], segment, provider_metadata)
+            citation = _grounding_citation(sources[index], segment)
             if citation is None:
                 continue
-            location = citation["url_citation"]
-            key = (
-                location.get("url"),
-                location.get("start_index"),
-                location.get("end_index"),
-            )
+            key = _citation_key(citation)
             if key not in seen:
                 seen.add(key)
                 citations.append(citation)
@@ -331,8 +443,7 @@ def _grounding_citations(metadata: dict[str, Any]) -> list[CitationPart]:
     return [
         citation
         for source in sources
-        if (citation := _grounding_citation(source, None, provider_metadata))
-        is not None
+        if (citation := _grounding_citation(source, None)) is not None
     ]
 
 
@@ -710,12 +821,7 @@ class GoogleGenerateConverter(BaseConverter):
                 "groundingMetadata"
             )
             if isinstance(grounding, dict):
-                citations = _grounding_citations(grounding)
-                content = message.get("content")
-                if isinstance(content, list):
-                    content.extend(citations)
-                else:
-                    message["content"] = citations
+                self._apply_candidate_grounding(message, grounding)
 
             finish_reason_val = p_candidate.get("finish_reason") or p_candidate.get(
                 "finishReason"
@@ -800,7 +906,13 @@ class GoogleGenerateConverter(BaseConverter):
             google_role = "model" if message.get("role") == "assistant" else "user"
             parts: list[dict[str, Any]] = []
 
+            grounding_citations: list[CitationPart] = []
             for part in message.get("content", []):
+                if is_citation_part(part):
+                    # A citation is not a content part in Gemini; it is rebuilt
+                    # into the candidate's ``groundingMetadata`` below.
+                    grounding_citations.append(part)
+                    continue
                 # A client ``tool_result`` belongs to a separate tool turn,
                 # which the message path normalizes to a ``role: "tool"``
                 # message; a response is a single model turn, so it is dropped
@@ -833,6 +945,14 @@ class GoogleGenerateConverter(BaseConverter):
                 "content": {"role": google_role, "parts": parts},
                 "finishReason": GOOGLE_REASON_TO_PROVIDER.get(reason, "STOP"),
             }
+            if grounding_citations:
+                grounding = _grounding_metadata_from_ir(
+                    grounding_citations,
+                    message.get("provider_metadata") or {},
+                    warnings=context.warnings,
+                )
+                if grounding:
+                    candidate["groundingMetadata"] = grounding
             provider_response["candidates"].append(candidate)
 
         # Usage
@@ -1081,11 +1201,24 @@ class GoogleGenerateConverter(BaseConverter):
                 context.pending_text = "".join(deferred_texts)
                 events[pre_parts_len:] = kept_new
 
-        citations = (
-            _grounding_citations(grounding) if isinstance(grounding, dict) else []
-        )
-        if citations and context is not None:
-            _stash_grounding_citations(context, citations)
+        if isinstance(grounding, dict):
+            # Citations ride their own events (one per source, see the IR's
+            # ``citation_delta``), emitted where Google reports them rather than
+            # deferred to the finish: a reader that waits for a finish loses
+            # them when the candidate produced no text.  The search-level
+            # metadata is not a citation and has no event, so it is held for the
+            # finish event.
+            for citation in _grounding_citations(grounding):
+                if context is None or _citation_is_new(context, citation):
+                    events.append(
+                        CitationDeltaEvent(
+                            type="citation_delta",
+                            citation=citation,
+                            choice_index=choice_index,
+                        )
+                    )
+            if context is not None:
+                _stash_search_metadata(context, _search_metadata(grounding))
 
         if finish_reason:
             finish_event = FinishEvent(
@@ -1095,18 +1228,39 @@ class GoogleGenerateConverter(BaseConverter):
                 },
                 choice_index=choice_index,
             )
-            # Grounding rides the finish event, which every reader already
-            # receives, and not a delta: a citation has no content of its own,
-            # and hanging it on a text delta invents one when the candidate
-            # produced no text (a search followed by a client function call),
-            # which reaches the client as an empty text block.  Citations that
-            # arrived on an earlier chunk are carried forward here rather than
-            # lost.
-            carried = _take_grounding_citations(context)
-            if carried:
-                finish_event["provider_metadata"] = {"google": {"citations": carried}}
+            # Google's search-level metadata (the queries and the rendered
+            # entry point) is not a citation and has no event of its own; it
+            # rides the finish, which every reader receives.  The citations
+            # themselves were emitted as ``citation_delta`` where they arrived.
+            search = _take_search_metadata(context)
+            if search:
+                finish_event["provider_metadata"] = {"google": search}
             return finish_event
         return None
+
+    @staticmethod
+    def _apply_candidate_grounding(
+        message: dict[str, Any], grounding: dict[str, Any]
+    ) -> None:
+        """Put a candidate's grounding on the IR message.
+
+        The sources become citation parts after the text; the search-level
+        metadata (the queries and the rendered entry point) is not a citation
+        and describes the turn, so it rides ``provider_metadata.google`` once
+        instead of being repeated on every source.
+        """
+        citations = _grounding_citations(grounding)
+        content = message.get("content")
+        if isinstance(content, list):
+            content.extend(citations)
+        else:
+            message["content"] = citations
+        search = _search_metadata(grounding)
+        if search:
+            existing = cast(dict[str, Any], message.get("provider_metadata") or {})
+            google_metadata = dict(existing.get("google") or {})
+            google_metadata.update(search)
+            message["provider_metadata"] = {**existing, "google": google_metadata}
 
     def _handle_p_stream_start_to_ir(
         self,
@@ -1731,52 +1885,20 @@ class GoogleGenerateConverter(BaseConverter):
             context.pending_text = None
 
         if context is not None:
-            for call_id, tool_name, args_str in context.get_pending_tool_calls():
-                if context.get_tool_type(call_id) == "intrinsic":
-                    provider_metadata = (
-                        context.get_tool_call_provider_metadata(call_id) or {}
-                    )
-                    intrinsic_part = self._flushed_intrinsic_part(
-                        context.get_tool_call_intrinsic_kind(call_id),
-                        provider_metadata,
-                        args_str,
-                    )
-                    if intrinsic_part is not None:
-                        parts.append(intrinsic_part)
-                    continue
-                try:
-                    args = json.loads(args_str) if args_str else {}
-                except (json.JSONDecodeError, TypeError):
-                    args = {}
-                fc: dict[str, Any] = {"name": tool_name, "args": args}
-                if call_id:
-                    fc["id"] = sanitize_tool_call_id(call_id)
-                flushed_part: dict[str, Any] = {"functionCall": fc}
-                thought_sig = google_thought_signature(
-                    {
-                        "provider_metadata": context.get_tool_call_provider_metadata(
-                            call_id
-                        )
-                        or {}
-                    }
-                )
-                if thought_sig:
-                    flushed_part["thoughtSignature"] = thought_sig
-                parts.append(flushed_part)
+            parts.extend(self._flushed_tool_parts(context))
 
         # Gemini 3 requires a thought signature on replayed function-call
         # history; inject the documented dummy when the real one is absent.
         inject_google_function_call_signature(parts)
 
-        finish_chunk: dict[str, Any] = {
-            "candidates": [
-                {
-                    "index": choice_index,
-                    "content": {"role": "model", "parts": parts},
-                    "finishReason": GOOGLE_REASON_TO_PROVIDER.get(reason, "STOP"),
-                }
-            ]
+        candidate: dict[str, Any] = {
+            "index": choice_index,
+            "content": {"role": "model", "parts": parts},
+            "finishReason": GOOGLE_REASON_TO_PROVIDER.get(reason, "STOP"),
         }
+        if context is not None:
+            self._attach_stream_grounding(candidate, context)
+        finish_chunk: dict[str, Any] = {"candidates": [candidate]}
 
         # Merge buffered usage into the finish chunk so that
         # finishReason and usageMetadata stay in a single chunk,
@@ -1791,6 +1913,77 @@ class GoogleGenerateConverter(BaseConverter):
         chunks.append(self._inject_stream_metadata(finish_chunk, context))
 
         return chunks
+
+    def _handle_ir_citation_delta_to_p(
+        self, event: CitationDeltaEvent, context: StreamContext | None
+    ) -> dict[str, Any] | list[dict[str, Any]]:
+        """Hold a streamed citation until the finish chunk can carry it.
+
+        Gemini has no citation delta: the sources belong to the candidate's
+        ``groundingMetadata``, which is why the reader emits them where Google
+        reports them and the writer collects them back into the final chunk.
+        """
+        if context is None:
+            report_dropped_citation(
+                event.get("citation") or {}, why="no stream context to hold it"
+            )
+            return {}
+        held = context.metadata.setdefault("_google_grounding_citations_out", [])
+        held.append(event["citation"])
+        return {}
+
+    def _flushed_tool_parts(self, context: StreamContext) -> list[dict[str, Any]]:
+        """The tool calls held during the stream, as finish-chunk parts."""
+        parts: list[dict[str, Any]] = []
+        for call_id, tool_name, args_str in context.get_pending_tool_calls():
+            if context.get_tool_type(call_id) == "intrinsic":
+                provider_metadata = (
+                    context.get_tool_call_provider_metadata(call_id) or {}
+                )
+                intrinsic_part = self._flushed_intrinsic_part(
+                    context.get_tool_call_intrinsic_kind(call_id),
+                    provider_metadata,
+                    args_str,
+                )
+                if intrinsic_part is not None:
+                    parts.append(intrinsic_part)
+                continue
+            try:
+                args = json.loads(args_str) if args_str else {}
+            except (json.JSONDecodeError, TypeError):
+                args = {}
+            fc: dict[str, Any] = {"name": tool_name, "args": args}
+            if call_id:
+                fc["id"] = sanitize_tool_call_id(call_id)
+            flushed_part: dict[str, Any] = {"functionCall": fc}
+            thought_sig = google_thought_signature(
+                {
+                    "provider_metadata": context.get_tool_call_provider_metadata(
+                        call_id
+                    )
+                    or {}
+                }
+            )
+            if thought_sig:
+                flushed_part["thoughtSignature"] = thought_sig
+            parts.append(flushed_part)
+        return parts
+
+    @staticmethod
+    def _attach_stream_grounding(
+        candidate: dict[str, Any], context: StreamContext
+    ) -> None:
+        """Hang the citations held during the stream on the finish candidate.
+
+        Gemini has no citation delta, so the writer collects them and rebuilds
+        the candidate's ``groundingMetadata``, the inverse of the reader.
+        """
+        held = context.metadata.pop("_google_grounding_citations_out", [])
+        if not held:
+            return
+        grounding = _grounding_metadata_from_ir(held, {}, warnings=None)
+        if grounding:
+            candidate["groundingMetadata"] = grounding
 
     def _handle_ir_usage_to_p(
         self, event: UsageEvent, context: StreamContext | None

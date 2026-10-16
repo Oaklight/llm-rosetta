@@ -22,6 +22,19 @@ from ...types.ir import (
     TextPart,
 )
 from ..base import BaseContentOps
+from ..base.helpers.citations import (
+    CITATION_TYPE_FILE,
+    CITATION_TYPE_URL,
+    citation_end_index,
+    citation_provider_fields,
+    citation_start_index,
+    citation_title,
+    citation_type_of,
+    citation_url,
+    extra_fields,
+    make_citation,
+    make_url_citation,
+)
 from ..base.helpers.opaque import (
     get_opaque_origin,
     is_own_origin,
@@ -428,51 +441,165 @@ class OpenResponsesContentOps(BaseContentOps):
 
     # ==================== Citation ====================
 
+    #: The annotation fields this dialect defines.  Anything else an endpoint
+    #: adds rides ``provider_metadata``.
+    _URL_CITATION_FIELDS = ("url", "title", "start_index", "end_index")
+    _FILE_CITATION_FIELDS = ("file_id", "filename", "index")
+    _CONTAINER_CITATION_FIELDS = (
+        "container_id",
+        "file_id",
+        "filename",
+        "start_index",
+        "end_index",
+    )
+
     @staticmethod
     def ir_citation_to_p(ir_citation: CitationPart, **kwargs: Any) -> dict | None:
-        """IR CitationPart → OpenAI Responses annotation.
+        """IR CitationPart → Responses API annotation.
 
-        Maps URL citations to OpenAI annotation format.
-
-        Args:
-            ir_citation: IR citation part.
+        This surface **flattens** the annotation (the chat surface nests it
+        under a ``url_citation`` key — see the chat converter), and it is the
+        only one that spells OpenAI's file and container citations.
 
         Returns:
-            OpenAI annotation dict, or None if no URL citation data.
+            The annotation, or ``None`` when this dialect has no form for it.
         """
-        url_citation = ir_citation.get("url_citation")
-        if url_citation:
-            return {
-                "type": "url_citation",
-                "start_index": url_citation.get("start_index", 0),
-                "end_index": url_citation.get("end_index", 0),
-                "title": url_citation.get("title", ""),
-                "url": url_citation.get("url", ""),
-            }
-        return None
+        kind = citation_type_of(ir_citation)
+        # A citation that names a source fits the annotation vocabulary whatever
+        # kind it arrived as; one that does not (a document or file citation of
+        # another dialect) has no form here.
+        if kind in ("", CITATION_TYPE_URL) or citation_url(ir_citation):
+            url = citation_url(ir_citation)
+            if not url:
+                return None
+            annotation = OpenResponsesContentOps._url_annotation(ir_citation, url)
+            annotation.update(
+                {
+                    k: v
+                    for k, v in citation_provider_fields(ir_citation, "openai").items()
+                    if not k.startswith("_")
+                }
+            )
+            return annotation
+        if kind == CITATION_TYPE_FILE:
+            fields = citation_provider_fields(ir_citation, "openai")
+            if not fields.get("file_id"):
+                return None
+            file_annotation: dict[str, Any] = {"type": CITATION_TYPE_FILE}
+            start = citation_start_index(ir_citation)
+            if start is not None:
+                file_annotation["index"] = start
+            file_annotation.update(
+                {k: v for k, v in fields.items() if not k.startswith("_")}
+            )
+            return file_annotation
+        if kind == "container_file_citation":
+            fields = citation_provider_fields(ir_citation, "openai")
+            if not fields.get("container_id"):
+                return None
+            container_annotation: dict[str, Any] = {"type": "container_file_citation"}
+            container_annotation.update(
+                {k: v for k, v in fields.items() if not k.startswith("_")}
+            )
+            start = citation_start_index(ir_citation)
+            if start is not None:
+                container_annotation["start_index"] = start
+            end = citation_end_index(ir_citation)
+            if end is not None:
+                container_annotation["end_index"] = end
+            return container_annotation
+        raw = citation_provider_fields(ir_citation, "openai").get("_raw")
+        return dict(raw) if isinstance(raw, dict) else None
+
+    @staticmethod
+    def _url_annotation(ir_citation: CitationPart, url: str) -> dict[str, Any]:
+        """The flat annotation of a source, with the span only when it has one.
+
+        A citation read from a dialect whose citations carry no message-level
+        span (Anthropic's document kinds) gets none here, rather than a ``0/0``
+        that would read as "the first characters".
+        """
+        annotation: dict[str, Any] = {
+            "type": CITATION_TYPE_URL,
+            "title": citation_title(ir_citation) or "",
+            "url": url,
+        }
+        start = citation_start_index(ir_citation)
+        end = citation_end_index(ir_citation)
+        if start is not None:
+            annotation["start_index"] = start
+        if end is not None:
+            annotation["end_index"] = end
+        return annotation
 
     @staticmethod
     def p_citation_to_ir(provider_citation: Any, **kwargs: Any) -> CitationPart:
-        """OpenAI Responses annotation → IR CitationPart.
+        """Responses API annotation → IR CitationPart.
 
-        Args:
-            provider_citation: OpenAI annotation dict.
-
-        Returns:
-            IR CitationPart.
+        Annotations arrive flat on the content part.  ``file_citation``'s
+        ``index`` is the offset of the annotated text in the message, so it
+        becomes the shared ``start_index``; the file's identity stays
+        provider-private.
         """
-        citation_type = provider_citation.get("type", "")
-        if citation_type == "url_citation":
+        if not isinstance(provider_citation, dict):
+            return CitationPart(type="citation")
+        kind = provider_citation.get("type", "")
+        if kind == CITATION_TYPE_URL:
+            url = provider_citation.get("url")
+            if not url:
+                return CitationPart(type="citation")
+            return make_url_citation(
+                url,
+                title=provider_citation.get("title"),
+                start_index=provider_citation.get("start_index"),
+                end_index=provider_citation.get("end_index"),
+                provider="openai",
+                provider_fields=extra_fields(
+                    provider_citation, OpenResponsesContentOps._URL_CITATION_FIELDS
+                ),
+            )
+        if kind == CITATION_TYPE_FILE:
+            fields = {
+                k: provider_citation[k]
+                for k in ("file_id", "filename")
+                if provider_citation.get(k) is not None
+            }
+            fields.update(
+                extra_fields(
+                    provider_citation, OpenResponsesContentOps._FILE_CITATION_FIELDS
+                )
+            )
+            return make_citation(
+                CITATION_TYPE_FILE,
+                start_index=provider_citation.get("index"),
+                provider="openai",
+                provider_fields=fields,
+            )
+        if kind == "container_file_citation":
+            fields = {
+                k: provider_citation[k]
+                for k in ("container_id", "file_id", "filename")
+                if provider_citation.get(k) is not None
+            }
+            fields.update(
+                extra_fields(
+                    provider_citation,
+                    OpenResponsesContentOps._CONTAINER_CITATION_FIELDS,
+                )
+            )
+            return make_citation(
+                kind,
+                start_index=provider_citation.get("start_index"),
+                end_index=provider_citation.get("end_index"),
+                provider="openai",
+                provider_fields=fields,
+            )
+        if kind:
             return CitationPart(
                 type="citation",
-                url_citation={
-                    "start_index": provider_citation.get("start_index", 0),
-                    "end_index": provider_citation.get("end_index", 0),
-                    "title": provider_citation.get("title", ""),
-                    "url": provider_citation.get("url", ""),
-                },
+                citation_type=kind,
+                provider_metadata={"openai": {"_raw": dict(provider_citation)}},
             )
-        # Fallback: store raw data
         return CitationPart(type="citation")
 
 
