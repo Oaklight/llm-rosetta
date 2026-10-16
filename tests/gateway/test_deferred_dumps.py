@@ -23,6 +23,7 @@ from llm_rosetta.observability.error_dump import dump_error
 from llm_rosetta.observability.persistence import PersistenceManager
 from llm_rosetta.observability.request_log import RequestLog
 from llm_rosetta.routing import ResolvedRoute
+from llm_rosetta.gateway.routing import SelectionContext
 
 # ---------------------------------------------------------------------------
 # DeferredDumpStore
@@ -148,10 +149,13 @@ def _config():
             CircuitBreakerConfig(enabled=False)
         )
 
-        def resolve(self, source_provider, model, **kwargs):
+        def selection_context(self, model, source_format):
+            return SelectionContext(model, source_format)
+
+        def resolve(self, ctx):
             return (
                 ResolvedRoute(
-                    source_provider=source_provider,
+                    source_provider=ctx.source_format,
                     target_provider="chat_completions",
                     provider_name="test-provider",
                 ),

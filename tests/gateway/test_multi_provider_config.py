@@ -192,7 +192,7 @@ class TestMultiProviderResolve:
                 }
             }
         )
-        route, pinfo = config.resolve("openai_chat", "gpt-4o")
+        route, pinfo = config.resolve(config.selection_context("gpt-4o", "openai_chat"))
         assert route.provider_name in ("openai_a", "openai_b")
         assert pinfo.name in ("chat_completions", "chat_completions")
 
@@ -200,7 +200,7 @@ class TestMultiProviderResolve:
         config = _make_config({"gpt-4o": {"providers": ["openai_a", "openai_b"]}})
         providers_seen = set()
         for _ in range(10):
-            route, _ = config.resolve("openai_chat", "gpt-4o")
+            route, _ = config.resolve(config.selection_context("gpt-4o", "openai_chat"))
             providers_seen.add(route.provider_name)
         assert providers_seen == {"openai_a", "openai_b"}
 
@@ -217,7 +217,7 @@ class TestMultiProviderResolve:
         )
         results = []
         for _ in range(4):
-            route, _ = config.resolve("openai_chat", "gpt-4o")
+            route, _ = config.resolve(config.selection_context("gpt-4o", "openai_chat"))
             results.append(route.provider_name)
         assert results.count("openai_a") == 3
         assert results.count("openai_b") == 1
@@ -277,7 +277,7 @@ class TestPerProviderUpstreamModel:
                 }
             }
         )
-        route, _ = config.resolve("openai_chat", "gpt-4o")
+        route, _ = config.resolve(config.selection_context("gpt-4o", "openai_chat"))
         assert route.upstream_model == "gpt-4o-variant-a"
 
     def test_resolve_per_provider_overrides_model_level(self):
@@ -295,7 +295,7 @@ class TestPerProviderUpstreamModel:
                 }
             }
         )
-        route, _ = config.resolve("openai_chat", "gpt-4o")
+        route, _ = config.resolve(config.selection_context("gpt-4o", "openai_chat"))
         assert route.upstream_model == "per-provider-name"
 
     def test_resolve_falls_back_to_model_level(self):
@@ -307,7 +307,7 @@ class TestPerProviderUpstreamModel:
                 }
             }
         )
-        route, _ = config.resolve("openai_chat", "gpt-4o")
+        route, _ = config.resolve(config.selection_context("gpt-4o", "openai_chat"))
         assert route.upstream_model == "model-level-name"
 
     def test_select_entry_returns_provider_entry(self):

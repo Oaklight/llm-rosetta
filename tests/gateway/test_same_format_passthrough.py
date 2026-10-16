@@ -104,7 +104,10 @@ class TestDefaultsUnchanged:
         """Without the flag, a responses client still lands on WRR's pick."""
         config = _make_config({"m": {"providers": ["chat_a", "resp_a"]}})
         picked = {
-            config.resolve("open_responses", "m")[0].provider_name for _ in range(10)
+            config.resolve(config.selection_context("m", "open_responses"))[
+                0
+            ].provider_name
+            for _ in range(10)
         }
         assert picked == {"chat_a", "resp_a"}
 
@@ -121,7 +124,7 @@ class TestFormatAffinity:
             {"m": {"providers": ["chat_a", "resp_a"]}}, prefer_same_format=True
         )
         for _ in range(10):
-            route, _ = config.resolve("open_responses", "m")
+            route, _ = config.resolve(config.selection_context("m", "open_responses"))
             assert route.provider_name == "resp_a"
 
     def test_affinity_is_per_source_format(self):
@@ -129,15 +132,28 @@ class TestFormatAffinity:
         config = _make_config(
             {"m": {"providers": ["chat_a", "resp_a"]}}, prefer_same_format=True
         )
-        assert config.resolve("open_responses", "m")[0].provider_name == "resp_a"
-        assert config.resolve("openai_chat", "m")[0].provider_name == "chat_a"
+        assert (
+            config.resolve(config.selection_context("m", "open_responses"))[
+                0
+            ].provider_name
+            == "resp_a"
+        )
+        assert (
+            config.resolve(config.selection_context("m", "openai_chat"))[
+                0
+            ].provider_name
+            == "chat_a"
+        )
 
     def test_no_match_falls_back_to_full_route(self):
         """An Anthropic client has no affine provider here."""
         config = _make_config(
             {"m": {"providers": ["chat_a", "resp_a"]}}, prefer_same_format=True
         )
-        picked = {config.resolve("messages", "m")[0].provider_name for _ in range(10)}
+        picked = {
+            config.resolve(config.selection_context("m", "messages"))[0].provider_name
+            for _ in range(10)
+        }
         assert picked == {"chat_a", "resp_a"}
 
     def test_homogeneous_route_needs_no_subroute(self):
@@ -146,7 +162,10 @@ class TestFormatAffinity:
             {"m": {"providers": ["chat_a", "chat_b"]}}, prefer_same_format=True
         )
         picked = [
-            config.resolve("openai_chat", "m")[0].provider_name for _ in range(10)
+            config.resolve(config.selection_context("m", "openai_chat"))[
+                0
+            ].provider_name
+            for _ in range(10)
         ]
         assert set(picked) == {"chat_a", "chat_b"}
         groups = config._format_groups("m", "chat_completions")
@@ -167,7 +186,10 @@ class TestFormatAffinity:
             prefer_same_format=True,
         )
         picked = [
-            config.resolve("open_responses", "m")[0].provider_name for _ in range(100)
+            config.resolve(config.selection_context("m", "open_responses"))[
+                0
+            ].provider_name
+            for _ in range(100)
         ]
         assert set(picked) == {"resp_a", "resp_b"}
         assert picked.count("resp_a") == picked.count("resp_b") == 50
@@ -205,7 +227,10 @@ class TestFormatAffinity:
             prefer_same_format=True,
         )
         picked = [
-            config.resolve("open_responses", "m")[0].provider_name for _ in range(20)
+            config.resolve(config.selection_context("m", "open_responses"))[
+                0
+            ].provider_name
+            for _ in range(20)
         ]
         assert picked.count("resp_a") == 15
         assert picked.count("resp_b") == 5
@@ -231,7 +256,7 @@ class TestFormatAffinity:
             },
             prefer_same_format=True,
         )
-        route, _ = config.resolve("open_responses", "m")
+        route, _ = config.resolve(config.selection_context("m", "open_responses"))
         assert route.upstream_model == "resp-id"
 
 
@@ -245,7 +270,7 @@ class TestReadinessInteraction:
             {"m": {"providers": ["chat_a", "resp_a"]}}, prefer_same_format=True
         )
         self._unready(config, "resp_a")
-        route, _ = config.resolve("open_responses", "m")
+        route, _ = config.resolve(config.selection_context("m", "open_responses"))
         assert route.provider_name == "chat_a"
 
     def test_unready_affine_prefers_ready_affine(self):
@@ -255,7 +280,7 @@ class TestReadinessInteraction:
         )
         self._unready(config, "resp_a")
         for _ in range(5):
-            route, _ = config.resolve("open_responses", "m")
+            route, _ = config.resolve(config.selection_context("m", "open_responses"))
             assert route.provider_name == "resp_b"
 
     def test_all_unready_still_raises(self):
@@ -266,7 +291,7 @@ class TestReadinessInteraction:
         )
         self._unready(config, "chat_a", "resp_a")
         with pytest.raises(ProviderNotReady):
-            config.resolve("open_responses", "m")
+            config.resolve(config.selection_context("m", "open_responses"))
 
 
 class TestAccountTiers:
@@ -367,7 +392,10 @@ class TestAccountTiers:
             providers=self.SHARED_KEY_PROVIDERS,
         )
         picked = {
-            config.resolve("open_responses", "m")[0].provider_name for _ in range(30)
+            config.resolve(config.selection_context("m", "open_responses"))[
+                0
+            ].provider_name
+            for _ in range(30)
         }
         assert picked == {"ds_chat", "ds_resp", "other_resp"}
 
@@ -538,4 +566,9 @@ class TestAccountTiers:
         )
         _make_unready(config, "ds_resp")
         for _ in range(5):
-            assert config.resolve("open_responses", "m")[0].provider_name == "ds_chat"
+            assert (
+                config.resolve(config.selection_context("m", "open_responses"))[
+                    0
+                ].provider_name
+                == "ds_chat"
+            )

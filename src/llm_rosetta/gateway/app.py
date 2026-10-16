@@ -29,6 +29,7 @@ from .middleware.auth import (
     create_auth_hook,
 )
 from .config import GatewayConfig, ResolvedRoute
+from .routing import SelectionContext
 from .middleware.error_format import (
     apply_cors_headers,
     detect_api_format,
@@ -166,16 +167,15 @@ _config: GatewayConfig | None = None
 
 
 def _resolve_or_error(
-    source_provider: ProviderType,
-    model: str,
+    ctx: SelectionContext,
     request_id: str,
-    *,
-    client_identity: str | None = None,
 ) -> tuple[ResolvedRoute, ProviderInfo] | Response:
-    """Resolve model to route+provider, returning a Response on failure."""
+    """Resolve the context's model to route+provider, returning a Response on failure."""
     assert _config is not None
+    source_provider = cast(ProviderType, ctx.source_format)
+    model = ctx.model
     try:
-        return _config.resolve(source_provider, model, client_identity=client_identity)
+        return _config.resolve(ctx)
     except ProviderNotReady as exc:
         status = 502 if exc.failed else 503
         resp = error_response_for_source(source_provider, status, str(exc))
@@ -292,14 +292,15 @@ async def _proxy_handler(
     if model_override and "model" not in body:
         body["model"] = model_override
 
-    # Extract client identity early so affinity routing can use it.
-    _kctx_early = api_key_context_var.get()
-    _client_identity = _kctx_early.key_hash if _kctx_early else None
+    # Who the request is, read once and carried on the selection context:
+    # provider selection needs it now, and the upstream credential and session
+    # identity will need it again once the request has been converted.
+    _kctx = api_key_context_var.get()
+    ctx = _config.selection_context(model, source_provider)
+    ctx.with_client(_kctx.key_hash if _kctx else None)
 
     # Resolve target provider via unified routing
-    result = _resolve_or_error(
-        source_provider, model, request_id, client_identity=_client_identity
-    )
+    result = _resolve_or_error(ctx, request_id)
     if isinstance(result, Response):
         return result
     route, provider_info = result
@@ -370,8 +371,7 @@ async def _proxy_handler(
     # request.state so lifecycle hooks can write back to the log entry.
     pre_entry_id = uuid.uuid4().hex
     request.state.log_entry_id = pre_entry_id
-    _kctx = _kctx_early  # reuse early extraction
-    _client_key_hash = _kctx.key_hash if _kctx else ""
+    _client_key_hash = ctx.identity.client or ""
     _key_affinity = _config.provider_key_affinity.get(route.provider_name, True)
 
     try:

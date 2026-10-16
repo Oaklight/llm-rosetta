@@ -296,12 +296,12 @@ class TestPreflightConfig:
 
     def test_default_false(self):
         cfg = GatewayConfig(self._minimal_raw())
-        route, _ = cfg.resolve("openai_chat", "gpt-test")
+        route, _ = cfg.resolve(cfg.selection_context("gpt-test", "openai_chat"))
         assert route.preflight_token_count is False
 
     def test_enabled_in_config(self):
         cfg = GatewayConfig(self._minimal_raw(preflight_token_count=True))
-        route, _ = cfg.resolve("openai_chat", "gpt-test")
+        route, _ = cfg.resolve(cfg.selection_context("gpt-test", "openai_chat"))
         assert route.preflight_token_count is True
 
 

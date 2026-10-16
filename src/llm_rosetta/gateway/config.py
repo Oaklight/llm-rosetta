@@ -20,9 +20,13 @@ from llm_rosetta.routing import ResolvedRoute
 from .providers import BASE_FORMATS, build_provider_info
 from .routing import (
     DEFAULT_STRATEGY,
+    AnchorStage,
     ModelRoute,
     ProviderEntry,
+    RoutingChain,
+    SelectionContext,
     create_strategy,
+    select_ready_entry,
 )
 from .transport import ProviderInfo
 
@@ -623,6 +627,11 @@ class GatewayConfig:
         self.provider_account_tokens: dict[str, str] = {
             name: pinfo.account_token(name) for name, pinfo in self.providers.items()
         }
+
+        # Provider selection, as stages over one request's selection context.
+        # The order is checked when the chain is built, so a stage added later
+        # fails at construction rather than on the first request.
+        self._selection = RoutingChain([AnchorStage()])
 
         # --- Rerank routing ---
         # 1. Extract from unified providers (new format)
@@ -1351,6 +1360,7 @@ class GatewayConfig:
         orders failover between identical endpoints.  Tier 2 is the tier that
         realigns the format without moving to a different account.
         """
+        is_ready = self._is_ready
         for route in (
             groups.by_shim.get(self._shim_group_key(anchor.name)),
             groups.by_account.get(self.provider_account_tokens[anchor.name]),
@@ -1358,50 +1368,56 @@ class GatewayConfig:
         ):
             if route is None:
                 continue
-            entry = self._select_ready_entry(route, identity=identity)
+            entry = select_ready_entry(route, is_ready=is_ready, identity=identity)
             if entry is not None:
                 return entry
         return None
 
-    def _select_ready_entry(
-        self,
-        model_route: ModelRoute,
-        *,
-        identity: str | None = None,
-    ) -> ProviderEntry | None:
-        """Pick a ready provider from *model_route*, or ``None`` if none is.
+    def _is_ready(self, provider_name: str) -> bool:
+        """Whether *provider_name* can take traffic right now."""
+        return self.providers[provider_name].ready
 
-        Alternatives are scanned over the provider list directly rather
-        than via the strategy, leaving the round-robin counter alone and
-        checking every candidate whatever the strategy.
+    def selection_context(self, model: str, source_format: str) -> SelectionContext:
+        """Build one request's selection state, carrying this config's tables.
+
+        This is the one place the two halves of selection are assembled: the
+        context is created here, used to choose a provider before any pipeline
+        exists, and carried on to the proxy, which fills in what it learns from
+        the converted request.
+
+        Args:
+            model: Model name as specified by the client.
+            source_format: API standard the request arrived in.  Legacy
+                spellings normalise here.
+
+        Returns:
+            A context holding the model's route and this config's provider
+            tables.
+
+        Raises:
+            KeyError: If the model is not in the routing table.
         """
-        entry = model_route.select_entry(identity=identity)
-        if self.providers[entry.name].ready:
-            return entry
-        for alt in model_route.providers:
-            if alt.name != entry.name and self.providers[alt.name].ready:
-                return alt
-        return None
+        ctx = SelectionContext(model, source_format)
+        ctx.install_route(
+            model_route=self.models[model],
+            providers=self.providers,
+            provider_types=self.provider_types,
+            provider_shim_names=self.provider_shim_names,
+            provider_account_tokens=self.provider_account_tokens,
+        )
+        return ctx
 
-    def resolve(
-        self,
-        source_provider: ProviderType,
-        model: str,
-        *,
-        client_identity: str | None = None,
-    ) -> tuple[ResolvedRoute, ProviderInfo]:
-        """Resolve *model* to a :class:`ResolvedRoute` and :class:`ProviderInfo`.
+    def resolve(self, ctx: SelectionContext) -> tuple[ResolvedRoute, ProviderInfo]:
+        """Resolve *ctx* to a :class:`ResolvedRoute` and :class:`ProviderInfo`.
 
         Consolidates model lookup, provider type resolution, shim binding,
         capability detection, and reasoning overrides into a single typed
         result.
 
         Args:
-            source_provider: API standard of the incoming request.
-            model: Model name as specified by the client.
-            client_identity: Optional client identity string for
-                affinity-based routing.  Passed through to the routing
-                strategy's ``select()`` method.
+            ctx: The request's selection state, as built by
+                :meth:`selection_context`.  Its ``chosen`` provider is set —
+                or left unset, which is reported as not-ready.
 
         Returns:
             ``(route, provider_info)`` — the route contains all
@@ -1409,31 +1425,24 @@ class GatewayConfig:
             transport-level connection config.
 
         Raises:
-            KeyError: If the model is not in the routing table.
-            ProviderNotReady: If all providers for the model are still
-                initializing or have failed.
+            ProviderNotReady: If no provider for the model is ready.
         """
         from typing import cast
 
         from .deferred_startup import ProviderInitState, ProviderNotReady
 
-        from llm_rosetta.provider_names import canonical_provider_name
-
-        # Accept legacy provider spellings (e.g. ``openai_chat``) so a
-        # same-format route compares against canonical provider types.
-        source_provider = cast(
-            ProviderType, canonical_provider_name(str(source_provider))
-        )
-
-        model_route = self.models[model]
+        model = ctx.model
+        source_provider = cast(ProviderType, ctx.source_format)
 
         # The anchor is what routing would pick with the preference off, and the
         # full route's counter advances exactly as it would there.  Tier
         # selection can still move the served request onto another account
         # (tier 3), so what is preserved is the anchor selection, not the
         # per-account served share.
-        anchor = self._select_ready_entry(model_route, identity=client_identity)
-        if anchor is None:
+        self._selection.run(ctx)
+        model_route = ctx.model_route
+        assert model_route is not None  # install_route() put it there
+        if ctx.chosen is None:
             deferred = getattr(self, "_deferred_startup", None)
             all_failed = deferred is not None and all(
                 deferred.provider_state(p.name) == ProviderInitState.FAILED
@@ -1442,13 +1451,14 @@ class GatewayConfig:
             )
             raise ProviderNotReady(model, failed=all_failed)
 
-        entry = anchor
+        entry = ctx.chosen
         if self.prefer_same_format:
             groups = self._format_groups(model, source_provider)
             # A homogeneous route has nothing to realign — the anchor already
             # speaks the client's format — so it keeps the plain-route behavior.
             if groups is not None and not groups.covers_all:
-                entry = self._select_tiered(groups, anchor, client_identity) or anchor
+                entry = self._select_tiered(groups, entry, ctx.identity.client) or entry
+                ctx.choose(entry)
 
         provider_name = entry.name
         provider_type = self.provider_types[provider_name]

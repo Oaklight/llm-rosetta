@@ -64,6 +64,7 @@ class RoutingChain:
         {
             "model",
             "source_format",
+            "identity",
             "model_route",
             "providers",
             "provider_types",

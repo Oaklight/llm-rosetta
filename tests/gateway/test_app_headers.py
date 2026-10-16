@@ -10,6 +10,7 @@ import llm_rosetta.gateway.app as app_module
 from llm_rosetta._vendor.httpserver import JSONResponse
 from llm_rosetta.gateway.middleware.headers import build_upstream_extra_headers
 from llm_rosetta.routing import ResolvedRoute
+from llm_rosetta.gateway.routing import SelectionContext
 
 
 def test_build_upstream_extra_headers_preserves_user_agent_and_responses_version():
@@ -74,10 +75,13 @@ def test_proxy_handler_forwards_user_agent_to_non_streaming_proxy(monkeypatch):
                 CircuitBreakerConfig(enabled=False)
             )
 
-        def resolve(self, source_provider, model, **kwargs):
+        def selection_context(self, model, source_format):
+            return SelectionContext(model, source_format)
+
+        def resolve(self, ctx):
             return (
                 ResolvedRoute(
-                    source_provider=source_provider,
+                    source_provider=ctx.source_format,
                     target_provider="openai_chat",
                     provider_name="test-provider",
                 ),
