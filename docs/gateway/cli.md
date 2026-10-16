@@ -98,4 +98,4 @@ $ llm-rosetta-usage --db /var/lib/llm-rosetta --window 24h --by subject,model
 
 它读取存储，并在 keys 数据库就在旁边时一并读取，因此可以直接对运行中的网关
 文件出报告。参见
-[可观测性——`llm-rosetta-usage` 命令](../api/observability.md#llm-rosetta-usage-命令)。
+[可观测性——`llm-rosetta-usage` 命令](../api/observability.md#the-llm-rosetta-usage-command)。

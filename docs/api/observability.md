@@ -541,7 +541,7 @@ report.total("24h")
 而不是声明在网关里：写入管理令牌那些行的代码，与任何对它们分组的读取方，从此
 只有一个名字。
 
-### `llm-rosetta-usage` 命令
+### `llm-rosetta-usage` 命令 { #the-llm-rosetta-usage-command }
 
 网关在管理面板里渲染这份报告，库通过 `UsageReport.build` 拿到它；第三个读取方
 是 shell：
