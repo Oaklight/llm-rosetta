@@ -56,6 +56,11 @@ from .tool_ops import ChatCompletionsToolOps
 logger = logging.getLogger(__name__)
 
 
+def _synthetic_tool_call_id(choice_index: int, tool_call_index: int) -> str:
+    """Build a stable ID when a Chat Completions stream omits one."""
+    return f"call_{choice_index}_{tool_call_index}"
+
+
 def _resolve_tool_call_delta(
     tc: dict[str, Any],
     effective_tc_id: str | None,
@@ -754,6 +759,82 @@ class ChatCompletionsConverter(BaseConverter):
                 finish_reason, choice_index, context, events
             )
 
+    def _resolve_delta_tool_call_index(
+        self,
+        tool_calls: list[dict[str, Any]],
+        position: int,
+        tc_index: int | None,
+        context: StreamContext | None,
+    ) -> int | None:
+        """Recover a missing continuation index when it is unambiguous."""
+        if tc_index is not None or context is None or not context.tool_call_ids:
+            return tc_index
+        if context.tool_call_count > 1:
+            if len(tool_calls) == context.tool_call_count:
+                return position
+            return None
+        return context.get_tool_call_index(context.tool_call_ids[-1])
+
+    def _handle_p_tool_call_to_ir(
+        self,
+        tc: dict[str, Any],
+        tc_index: int | None,
+        choice_index: int,
+        context: StreamContext | None,
+        events: list[IRStreamEvent],
+    ) -> None:
+        """Convert one Chat Completions tool-call delta into IR events."""
+        tc_id = tc.get("id")
+        effective_tc_id = tc_id
+        if context is not None and tc_index is not None:
+            effective_tc_id = context.resolve_tool_call_id_by_index(tc_index) or tc_id
+
+        tc_type, tc_name, tc_input = _resolve_tool_call_delta(
+            tc, effective_tc_id, context
+        )
+        if (
+            not effective_tc_id
+            and context is not None
+            and tc_index is not None
+            and (tc_name or tc_input)
+        ):
+            effective_tc_id = _synthetic_tool_call_id(choice_index, tc_index)
+
+        is_new_call = bool(effective_tc_id) and (
+            context is None or context.get_tool_call_index(effective_tc_id) is None
+        )
+        if is_new_call and (tc_id or tc_name or tc_input):
+            start_event_tc = ToolCallStartEvent(
+                type="tool_call_start",
+                tool_call_id=effective_tc_id,
+                tool_name=tc_name,
+                choice_index=choice_index,
+            )
+            if tc_type == "custom":
+                start_event_tc["tool_type"] = "custom"
+            if tc_index is not None:
+                start_event_tc["tool_call_index"] = tc_index
+            events.append(start_event_tc)
+            if context is not None:
+                context.register_tool_call(
+                    effective_tc_id,
+                    tc_name,
+                    "custom" if tc_type == "custom" else "function",
+                )
+
+        if tc_input:
+            delta_event = ToolCallDeltaEvent(
+                type="tool_call_delta",
+                tool_call_id=effective_tc_id or "",
+                arguments_delta=tc_input,
+                choice_index=choice_index,
+            )
+            if tc_index is not None:
+                delta_event["tool_call_index"] = tc_index
+            events.append(delta_event)
+            if context is not None and effective_tc_id:
+                context.append_tool_call_args(effective_tc_id, tc_input)
+
     def _handle_p_tool_calls_to_ir(
         self,
         tool_calls: list[dict[str, Any]],
@@ -762,53 +843,11 @@ class ChatCompletionsConverter(BaseConverter):
         events: list[IRStreamEvent],
     ) -> None:
         """Process tool call deltas from a choice."""
-        for tc in tool_calls:
-            tc_id = tc.get("id")
-            tc_index = tc.get("index")
-
-            # Resolve effective call ID before dispatch — the helper
-            # uses it for context-based type recovery on null-type deltas.
-            effective_tc_id = tc_id
-            if not effective_tc_id and tc_index is not None and context is not None:
-                effective_tc_id = context.resolve_tool_call_id_by_index(tc_index)
-
-            tc_type, tc_name, tc_input = _resolve_tool_call_delta(
-                tc, effective_tc_id, context
+        for position, tc in enumerate(tool_calls):
+            tc_index = self._resolve_delta_tool_call_index(
+                tool_calls, position, tc.get("index"), context
             )
-
-            if tc_id:
-                start_event_tc = ToolCallStartEvent(
-                    type="tool_call_start",
-                    tool_call_id=tc_id,
-                    tool_name=tc_name,
-                    choice_index=choice_index,
-                )
-                if tc_type == "custom":
-                    start_event_tc["tool_type"] = "custom"
-                if tc_index is not None:
-                    start_event_tc["tool_call_index"] = tc_index
-                events.append(start_event_tc)
-
-                if context is not None:
-                    context.register_tool_call(
-                        tc_id,
-                        tc_name,
-                        "custom" if tc_type == "custom" else "function",
-                    )
-
-            if tc_input:
-                delta_event = ToolCallDeltaEvent(
-                    type="tool_call_delta",
-                    tool_call_id=effective_tc_id or "",
-                    arguments_delta=tc_input,
-                    choice_index=choice_index,
-                )
-                if tc_index is not None:
-                    delta_event["tool_call_index"] = tc_index
-                events.append(delta_event)
-
-                if context is not None and effective_tc_id:
-                    context.append_tool_call_args(effective_tc_id, tc_input)
+            self._handle_p_tool_call_to_ir(tc, tc_index, choice_index, context, events)
 
     def _handle_p_finish_reason_to_ir(
         self,

@@ -1065,6 +1065,91 @@ class TestStreamResponseFromProviderWithContext:
         assert len(delta_events) == 1
         assert delta_events[0]["tool_call_id"] == "toolu_abc"
 
+    def test_tool_call_delta_drops_ambiguous_unknown_id(self, caplog):
+        """An unknown delta never guesses between multiple open tool blocks."""
+        context = StreamContext()
+        context.mark_started()
+        for index, call_id in enumerate(("call_a", "call_b")):
+            self.converter.stream_response_to_provider(
+                cast(
+                    ToolCallStartEvent,
+                    {
+                        "type": "tool_call_start",
+                        "tool_call_id": call_id,
+                        "tool_name": "probe",
+                        "tool_call_index": index,
+                    },
+                ),
+                context,
+            )
+        caplog.clear()
+        with caplog.at_level("WARNING"):
+            result = self.converter.stream_response_to_provider(
+                cast(
+                    ToolCallDeltaEvent,
+                    {
+                        "type": "tool_call_delta",
+                        "tool_call_id": "",
+                        "arguments_delta": '{"x":1}',
+                    },
+                ),
+                context,
+            )
+        assert result == {}
+        assert "ambiguous tool-call argument delta" in caplog.text
+
+    def test_tool_call_delta_uses_tool_ordinal_mapping(self):
+        """An ordinal resolves a tool delta even while text is current."""
+        context = StreamContext()
+        context.mark_started()
+        start = cast(
+            ToolCallStartEvent,
+            {
+                "type": "tool_call_start",
+                "tool_call_id": "call_0_0",
+                "tool_name": "read",
+                "tool_call_index": 0,
+            },
+        )
+        self.converter.stream_response_to_provider(start, context)
+        text = cast(
+            TextDeltaEvent,
+            {"type": "text_delta", "text": "prefix", "block_index": 0},
+        )
+        self.converter.stream_response_to_provider(text, context)
+        delta = cast(
+            ToolCallDeltaEvent,
+            {
+                "type": "tool_call_delta",
+                "tool_call_id": "unknown",
+                "tool_call_index": 0,
+                "arguments_delta": '{"x":1}',
+            },
+        )
+        result = self.converter.stream_response_to_provider(delta, context)
+        result_dict = cast(dict[str, Any], result)
+        assert result_dict["index"] == 0
+        assert result_dict["delta"]["type"] == "input_json_delta"
+
+    def test_tool_call_delta_does_not_fall_into_text_block(self):
+        """Unresolved tool arguments never reuse an open text block."""
+        context = StreamContext()
+        context.mark_started()
+        text = cast(
+            TextDeltaEvent,
+            {"type": "text_delta", "text": "prefix", "block_index": 0},
+        )
+        self.converter.stream_response_to_provider(text, context)
+        delta = cast(
+            ToolCallDeltaEvent,
+            {
+                "type": "tool_call_delta",
+                "tool_call_id": "",
+                "arguments_delta": '{"x":1}',
+            },
+        )
+        assert self.converter.stream_response_to_provider(delta, context) == {}
+
     # --- Backward compatibility (no context) ---
 
     def test_no_context_no_stream_start(self):

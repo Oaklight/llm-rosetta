@@ -91,6 +91,7 @@ class _AnthropicBlockState:
 
     next_index: int = 0
     tool_indices: dict[str, int] = field(default_factory=dict)
+    tool_index_to_block: dict[int, int] = field(default_factory=dict)
     open_indices: set[int] = field(default_factory=set)
     pending_tool_index: int | None = None
 
@@ -1418,6 +1419,9 @@ class MessagesConverter(BaseConverter):
                     index = context.current_block_index
             index = state.open(context, index)
             state.tool_indices[tool_id] = index
+            tool_call_index = event.get("tool_call_index")
+            if tool_call_index is not None:
+                state.tool_index_to_block[tool_call_index] = index
             context.current_block_type = block_type
             result["index"] = index
             if preamble:
@@ -1452,8 +1456,32 @@ class MessagesConverter(BaseConverter):
             index = explicit_idx
             if index is None:
                 index = state.tool_indices.get(event["tool_call_id"])
-            if index is None and context.current_block_index >= 0:
+            if index is None:
+                tool_call_index = event.get("tool_call_index")
+                if tool_call_index is not None:
+                    index = state.tool_index_to_block.get(tool_call_index)
+            if index is None:
+                index = state.pending_tool_index
+            if (
+                index is None
+                and context.current_block_index >= 0
+                and (
+                    context.current_block_type in (None, "tool_use", "server_tool_use")
+                )
+            ):
+                if len(state.open_indices) > 1:
+                    logger.warning(
+                        "Dropping ambiguous tool-call argument delta for %s",
+                        event.get("tool_call_id") or "<unknown>",
+                    )
+                    return {}
                 index = context.current_block_index
+            if index is None:
+                logger.warning(
+                    "Dropping unresolvable tool-call argument delta for %s",
+                    event.get("tool_call_id") or "<unknown>",
+                )
+                return {}
             result["index"] = state.open(context, index)
             context.current_block_type = "tool_use"
         elif explicit_idx is not None:

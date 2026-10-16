@@ -112,6 +112,164 @@ class TestStreamResponseFromProvider:
         assert start_events[0]["tool_call_index"] == 0
         assert start_events[0]["choice_index"] == 0
 
+    def test_tool_call_missing_id_synthesizes_stable_start(self):
+        """An indexed tool call without an upstream ID still opens once."""
+        context = StreamContext()
+        chunk = {
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {
+                        "tool_calls": [
+                            {
+                                "index": 0,
+                                "function": {
+                                    "name": "read_file",
+                                    "arguments": '{"path":',
+                                },
+                            }
+                        ]
+                    },
+                }
+            ]
+        }
+        events = cast(
+            list[Any], self.converter.stream_response_from_provider(chunk, context)
+        )
+        starts = [e for e in events if e["type"] == "tool_call_start"]
+        deltas = [e for e in events if e["type"] == "tool_call_delta"]
+        assert starts[0]["tool_call_id"] == "call_0_0"
+        assert starts[0]["tool_name"] == "read_file"
+        assert deltas[0]["tool_call_id"] == "call_0_0"
+
+    def test_tool_call_parallel_missing_ids_use_distinct_ids(self):
+        """Parallel indexed calls without IDs stay distinct."""
+        context = StreamContext()
+        chunk = {
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {
+                        "tool_calls": [
+                            {
+                                "index": 0,
+                                "function": {"name": "read", "arguments": "{}"},
+                            },
+                            {
+                                "index": 1,
+                                "function": {"name": "write", "arguments": "{}"},
+                            },
+                        ]
+                    },
+                }
+            ]
+        }
+        events = cast(
+            list[Any], self.converter.stream_response_from_provider(chunk, context)
+        )
+        starts = [e for e in events if e["type"] == "tool_call_start"]
+        assert [e["tool_call_id"] for e in starts] == ["call_0_0", "call_0_1"]
+
+    def test_tool_call_synthetic_id_includes_choice_index(self):
+        """Synthetic IDs remain distinct across choices."""
+        context = StreamContext()
+        chunk = {
+            "choices": [
+                {
+                    "index": 1,
+                    "delta": {
+                        "tool_calls": [
+                            {
+                                "index": 0,
+                                "function": {"name": "read", "arguments": "{}"},
+                            }
+                        ]
+                    },
+                }
+            ]
+        }
+        events = cast(
+            list[Any], self.converter.stream_response_from_provider(chunk, context)
+        )
+        start = next(e for e in events if e["type"] == "tool_call_start")
+        assert start["tool_call_id"] == "call_1_0"
+
+    def test_tool_call_late_provider_id_does_not_open_second_block(self):
+        """A later provider ID cannot split an already recovered call."""
+        context = StreamContext()
+        first = {
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {
+                        "tool_calls": [
+                            {
+                                "index": 0,
+                                "function": {"name": "read", "arguments": "{}"},
+                            }
+                        ]
+                    },
+                }
+            ]
+        }
+        late = {
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {
+                        "tool_calls": [
+                            {
+                                "index": 0,
+                                "id": "provider_id",
+                                "function": {"arguments": "{}"},
+                            }
+                        ]
+                    },
+                }
+            ]
+        }
+        events = cast(
+            list[Any], self.converter.stream_response_from_provider(first, context)
+        )
+        events.extend(self.converter.stream_response_from_provider(late, context))
+        starts = [e for e in events if e["type"] == "tool_call_start"]
+        assert [e["tool_call_id"] for e in starts] == ["call_0_0"]
+
+    def test_tool_call_continuation_without_index_reuses_last_call(self):
+        """A continuation missing both ID and index keeps the call identity."""
+        context = StreamContext()
+        first = {
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {
+                        "tool_calls": [
+                            {
+                                "index": 0,
+                                "function": {"name": "read_file", "arguments": '{"p'},
+                            }
+                        ]
+                    },
+                }
+            ]
+        }
+        continuation = {
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {"tool_calls": [{"function": {"arguments": 'ath":1}'}}]},
+                }
+            ]
+        }
+        self.converter.stream_response_from_provider(first, context)
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(continuation, context),
+        )
+        delta = next(e for e in events if e["type"] == "tool_call_delta")
+        assert delta["tool_call_id"] == "call_0_0"
+        assert delta["tool_call_index"] == 0
+
     # --- Tool call arguments delta ---
 
     def test_tool_call_arguments_delta(self):
