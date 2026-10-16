@@ -807,16 +807,21 @@ deployment can tell "the repairs are done" from "the startup task finished":
     "state": "partial",
     "registry": "deferred",
     "failed": ["request_log.backfill_total_tokens"],
-    "steps": [{"name": "request_log.backfill_provider_names", "store": "gateway.db", "ok": true, "changed": 128, "seconds": 0.041, "error": null}]
+    "steps": [{"name": "request_log.backfill_provider_names", "store": "gateway.db", "ok": true, "changed": 128, "seconds": 0.041}]
   }
 }
 ```
 
 `state` is `not_started` before the steps run, `running` while the task is in
-flight, `done` when every step succeeded, and `partial` when some failed.  A
-failed repair deliberately does **not** turn the probe into a `503`: these steps
-can be retried, and refusing traffic over one that failed is worse than the
-repair being late.
+flight, `done` when every step succeeded, and `partial` when some failed or did
+not run at all.  A failed repair deliberately does **not** turn the probe into a
+`503`: these steps can be retried, and refusing traffic over one that failed is
+worse than the repair being late.
+
+The probe's payload carries no failure *text*: `/health/ready` is an unguarded
+route and an exception string can name a path, a file or a fragment of SQL.
+`failed` names the steps; the error text is in the log line the step wrote and
+on the authenticated surface above.
 
 ---
 
