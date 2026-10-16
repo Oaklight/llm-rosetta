@@ -696,7 +696,18 @@ POST /admin/api/metrics/rebuild
 GET /admin/api/maintenance
 ```
 
-列出本部署会跑的每一步、是否已跑过、以及跑了什么。
+列出本进程拥有的所有 registry、每个 registry 里的每一步、是否跑过、以及跑了什么。
+registry 有四种，列表会标明各自是哪一种：
+
+| registry | policy | 是什么 |
+| --- | --- | --- |
+| `deferred` | `deferred` | socket 打开后跑的修复；失败被记录并继续 |
+| `request_log` | `mandatory` | 请求日志 schema 的版本化迁移；失败则中止启动 |
+| `api_keys` | `mandatory` | key store 的 schema 及其 usage bucket 回填；失败则中止启动 |
+| `config` | `load_time` | 加载配置文档时纠正它的步骤 |
+
+尚未由 registry 打开过的存储、以及不是经由 registry 加载的配置，不会出现在列表里：
+"没有 registry"与"有一个什么都没做的 registry"是两个不同的答案。
 
 **响应**
 
@@ -736,8 +747,8 @@ GET /admin/api/maintenance
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `registries[].name` | `string` | 这些步骤所属的 registry；`deferred` 是启动后那一组。 |
-| `registries[].policy` | `string` | `deferred`（失败被记录并继续）、`mandatory`（失败则中止启动）或 `load_time`。 |
-| `steps[].store` | `string` | 该步骤修复的存储，按它在磁盘上的名字（`gateway.db`、`keys.db`）——一次 `partial` 运行之后"哪个库修了一半"的答案，不必从步骤名里反推。 |
+| `registries[].policy` | `string` | `deferred`（失败被记录并继续）、`mandatory`（失败则中止启动）或 `load_time`（失败则这次加载失败）。 |
+| `steps[].store` | `string` | 该步骤修复的存储，按它在磁盘上的名字（`gateway.db`、`keys.db`）；load-time 步骤则是 `config`，它的存储就是文档本身——一次 `partial` 运行之后"哪一个修了一半"的答案，不必从步骤名里反推。 |
 | `steps[].ran` | `bool` | 是否已有结果。尚未跑过的步骤以 `ran: false` 列出，而不是被省略。 |
 | `steps[].changed` | `int` | 该步骤自己的计量单位——通常是修好的行数。`0` 表示"没有可做的了"，失败的步骤同样报 0：它做了一半的量不算数。 |
 | `steps[].error` | `string \| null` | 失败原因（若有）。 |
@@ -751,7 +762,9 @@ API key 回填）不会出现在列表里。
 POST /admin/api/maintenance/<name>
 ```
 
-跑指定名字的步骤，返回与上面列表条目同形状的结果。
+跑指定名字的步骤，返回与上面列表条目同形状的结果。两个 `mandatory` registry
+与 `deferred` 的步骤都可以随时重跑：每一步要么有自己的账本，要么有自己的
+`WHERE` 子句，因此都是幂等的。
 
 **响应**
 
@@ -770,7 +783,9 @@ POST /admin/api/maintenance/<name>
 而"它失败了，原因是这个"就是对它的回答。该失败同样会留给之后查看上面列表的
 人。
 
-**错误**：404（没有这个维护步骤）。
+**错误**：404（没有这个维护步骤）；409（该步骤是 load-time 的——`config.*`——
+它只在加载配置时运行、绝不按需运行：它会去纠正的文档是上一次加载读到的那份，
+而把结果写回的调用方会据此重写配置）。
 
 ### 两个更早的回填路由
 
