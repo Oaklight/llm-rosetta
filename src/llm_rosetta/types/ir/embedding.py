@@ -7,7 +7,7 @@ Embedding intermediate representation type definitions
 Covers 5 major embedding API format families:
 - OpenAI: input + encoding_format + dimensions → data[].embedding
 - Google GenAI: embedContent / batchEmbedContents with Content/Parts + taskType
-- Cohere: texts + input_type + embedding_types (multi-format) → embeddings.{type}[][]
+- Cohere: texts + input_type + embedding_types (multi-format) → ``embeddings.{type}[][]``
 - Voyage: input + input_type + output_dtype + encoding_format → data[].embedding
 - Jina: input + task + embedding_type + dimensions → data[].embedding
 """
@@ -180,12 +180,12 @@ class IREmbeddingResponse(TypedDict):
     Unified IR embedding response type.
 
     遵循 OpenAI 约定使用 "list" 作为 object 字段值。
-    Google 的 embedding.values 和 Cohere 的 embeddings.{type}[][] 由
+    Google 的 embedding.values 和 Cohere 的 ``embeddings.{type}[][]`` 由
     converter 归一化为 data 列表。
     encoding_format 回显请求中指定的格式，帮助消费者解读 embedding 字段。
 
     Follows the OpenAI convention of using "list" as the object field value.
-    Google's embedding.values and Cohere's embeddings.{type}[][] are
+    Google's embedding.values and Cohere's ``embeddings.{type}[][]`` are
     normalized to the data list by converters.
     encoding_format echoes the requested format to help consumers
     interpret the embedding field.
