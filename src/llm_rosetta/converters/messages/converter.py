@@ -729,17 +729,30 @@ class MessagesConverter(BaseConverter):
 
     def stream_response_from_provider(
         self,
-        chunk: dict[str, Any],
+        chunk: dict[str, Any] | None,
         context: StreamContext | None = None,
     ) -> list[IRStreamEvent]:
         """Convert an Anthropic SSE event to IR stream events.
 
+        Pass ``None`` as the chunk to signal end-of-stream; nothing of this
+        dialect is held back across chunks, so it flushes nothing.
+
         Args:
-            chunk: Anthropic SSE event dict (or SDK object).
+            chunk: Anthropic SSE event dict (or SDK object), or ``None``
+                to signal end-of-stream.
 
         Returns:
             List of IR stream events extracted from the event.
         """
+        if chunk is None:
+            # The EOF sentinel: this dialect holds nothing back across chunks
+            # (the event that ends its stream carries the usage the Chat
+            # reader waits for), so there is nothing to flush.  Callers pass
+            # it — ``BaseConverter.iter_stream_from_provider`` and the
+            # gateway's per-chunk ``StreamProcessor`` both do — so it must not
+            # reach the normalizing below.
+            return []
+
         chunk = self._normalize(chunk)
         events: list[IRStreamEvent] = []
 

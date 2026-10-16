@@ -374,7 +374,7 @@ class BaseConverter(ABC):
     @abstractmethod
     def stream_response_from_provider(
         self,
-        chunk: dict[str, Any],
+        chunk: dict[str, Any] | None,
         context: StreamContext | None = None,
     ) -> list[IRStreamEvent]:
         """Convert a provider-native stream chunk to a list of IR stream events.
@@ -405,8 +405,10 @@ class BaseConverter(ABC):
 
         Equivalent to calling :meth:`stream_response_from_provider` for
         each chunk, then once more with ``None`` to flush any deferred
-        terminal events.  Converters that do not support the ``None``
-        sentinel (i.e. have no deferred state) safely ignore it.
+        terminal events.  Every converter in this package implements that
+        sentinel — a dialect with nothing deferred returns nothing for it —
+        so the guard below only covers converters defined outside the
+        package.
 
         Args:
             chunks: Iterable of provider-native stream chunks.
@@ -418,10 +420,7 @@ class BaseConverter(ABC):
         for chunk in chunks:
             yield from self.stream_response_from_provider(chunk, context=context)
         try:
-            yield from self.stream_response_from_provider(
-                None,  # ty: ignore[invalid-argument-type]
-                context=context,  # type: ignore[arg-type]
-            )
+            yield from self.stream_response_from_provider(None, context=context)
         except (TypeError, AttributeError):
             pass
 

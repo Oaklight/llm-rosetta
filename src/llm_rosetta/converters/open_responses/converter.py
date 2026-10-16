@@ -1171,7 +1171,7 @@ class OpenResponsesConverter(BaseConverter):
 
     def stream_response_from_provider(
         self,
-        chunk: dict[str, Any],
+        chunk: dict[str, Any] | None,
         context: StreamContext | None = None,
     ) -> list[IRStreamEvent]:
         """Convert an OpenAI Responses SSE event to IR stream events.
@@ -1190,13 +1190,26 @@ class OpenResponsesConverter(BaseConverter):
         Without a context the behaviour is identical to the previous
         implementation (backward compatible).
 
+        Pass ``None`` as the chunk to signal end-of-stream; nothing of this
+        dialect is held back across chunks, so it flushes nothing.
+
         Args:
-            chunk: OpenAI Responses SSE event dict (or SDK object).
+            chunk: OpenAI Responses SSE event dict (or SDK object), or
+                ``None`` to signal end-of-stream.
             context: Optional stream context for stateful conversions.
 
         Returns:
             List of IR stream events extracted from the event.
         """
+        if chunk is None:
+            # The EOF sentinel: this dialect holds nothing back across chunks
+            # (the event that ends its stream carries the usage the Chat
+            # reader waits for), so there is nothing to flush.  Callers pass
+            # it — ``BaseConverter.iter_stream_from_provider`` and the
+            # gateway's per-chunk ``StreamProcessor`` both do — so it must not
+            # reach the normalizing below.
+            return []
+
         chunk = self._normalize(chunk)
         events: list[IRStreamEvent] = []
         event_type = chunk.get("type", "")

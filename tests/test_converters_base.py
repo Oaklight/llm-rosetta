@@ -459,7 +459,7 @@ class MockConverter(BaseConverter):
 
     def stream_response_from_provider(
         self,
-        chunk: dict[str, Any],
+        chunk: dict[str, Any] | None,
         context: StreamContext | None = None,
     ) -> list[IRStreamEvent]:
         return []

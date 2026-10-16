@@ -484,9 +484,27 @@ class GoogleInteractionsConverter(BaseConverter):
 
     def stream_response_from_provider(
         self,
-        chunk: dict[str, Any],
+        chunk: dict[str, Any] | None,
         context: StreamContext | None = None,
     ) -> list[IRStreamEvent]:
+        """Convert one Interactions stream chunk to IR stream events.
+
+        Args:
+            chunk: Interactions stream chunk dict, or ``None`` to signal
+                end-of-stream.
+            context: Optional stream context for stateful conversions.
+
+        Returns:
+            List of IR stream events extracted from the chunk.
+        """
+        if chunk is None:
+            # The EOF sentinel: this dialect holds nothing back across chunks
+            # (the event that ends its stream carries the usage the Chat
+            # reader waits for), so there is nothing to flush.  Callers pass
+            # it — ``BaseConverter.iter_stream_from_provider`` and the
+            # gateway's per-chunk ``StreamProcessor`` both do.
+            return []
+
         data = chunk.get("data", chunk)
         if not isinstance(data, dict):
             return []
