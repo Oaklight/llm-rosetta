@@ -21,10 +21,29 @@ from llm_rosetta.shims.providers import (
 
 @pytest.fixture(autouse=True)
 def _clean_registry():
-    """Reset the shim registry before and after each test."""
+    """Give each test in this file a registry of its own.
+
+    The tests here register synthetic shims and assert on the whole registry,
+    so they need to start from nothing and leave nothing behind.  What they must
+    not leave behind is an *empty* registry — see the fixture below.
+    """
     _reset_registry()
     yield
     _reset_registry()
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _restore_builtins_when_done():
+    """Put the shipped shims back once this file is finished.
+
+    Every other test file resolves shims through ``get_shim``, so a file
+    collected after this one would otherwise see ``None`` for every name and
+    fail for a reason that has nothing to do with what it tests — collection
+    order is not a property a test should depend on.  Module scope so the
+    rebuild happens once, after the last test here rather than after each.
+    """
+    yield
+    load_providers()
 
 
 class TestLoadTransforms:
