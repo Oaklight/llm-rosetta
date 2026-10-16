@@ -684,6 +684,125 @@ POST /admin/api/metrics/rebuild
 
 ---
 
+## 维护 { #maintenance }
+
+网关在启动时修复既有数据——在 socket 打开**之后**、绝不阻塞启动——本组端点
+用来查看这些修复做了什么，并按需重跑其中一步。正常部署不需要它们：修复每次
+启动都会自己跑，且每一步都是幂等的，因此任何时候重跑都安全。
+
+### 列出维护步骤
+
+```
+GET /admin/api/maintenance
+```
+
+列出本部署会跑的每一步、是否已跑过、以及跑了什么。
+
+**响应**
+
+```json
+{
+  "registries": [
+    {
+      "name": "deferred",
+      "policy": "deferred",
+      "steps": [
+        {
+          "name": "request_log.backfill_provider_names",
+          "description": "name the provider on rows written before the column existed",
+          "ran": true,
+          "ok": true,
+          "changed": 128,
+          "seconds": 0.041,
+          "error": null
+        },
+        {
+          "name": "request_log.backfill_total_tokens",
+          "description": "repair totals written while cache tokens were excluded",
+          "ran": true,
+          "ok": false,
+          "changed": 0,
+          "seconds": 0.002,
+          "error": "OperationalError: database is locked"
+        }
+      ]
+    }
+  ]
+}
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `registries[].name` | `string` | 这些步骤所属的 registry；`deferred` 是启动后那一组。 |
+| `registries[].policy` | `string` | `deferred`（失败被记录并继续）、`mandatory`（失败则中止启动）或 `load_time`。 |
+| `steps[].ran` | `bool` | 是否已有结果。尚未跑过的步骤以 `ran: false` 列出，而不是被省略。 |
+| `steps[].changed` | `int` | 该步骤自己的计量单位——通常是修好的行数。`0` 表示"没有可做的了"，失败的步骤同样报 0：它做了一半的量不算数。 |
+| `steps[].error` | `string \| null` | 失败原因（若有）。 |
+
+**错误**：除常规鉴权外没有。本部署没有对应存储的步骤（例如没有 key store 时的
+API key 回填）不会出现在列表里。
+
+### 重跑单个步骤
+
+```
+POST /admin/api/maintenance/<name>
+```
+
+跑指定名字的步骤，返回与上面列表条目同形状的结果。
+
+**响应**
+
+```json
+{
+  "name": "request_log.backfill_total_tokens",
+  "ok": true,
+  "changed": 42,
+  "seconds": 0.318,
+  "error": null
+}
+```
+
+步骤失败时仍返回 `200`，`ok: false` 并带上错误：这次的请求是"跑这一步"，
+而"它失败了，原因是这个"就是对它的回答。该失败同样会留给之后查看上面列表的
+人。
+
+**错误**：404（没有这个维护步骤）。
+
+### 两个更早的回填路由
+
+它们早于上面这套界面，对调用方保持不变——同样的方法、同样的响应——但现在跑的
+是同一些步骤：
+
+| 路由 | 它跑的步骤 |
+|------|-----------|
+| `POST /admin/api/keys/backfill-last-used` | `api_keys.backfill_last_used` |
+| `POST /admin/api/error-dumps/backfill-log-ids` | `error_dumps.backfill_log_ids` |
+
+两者都返回 `{"updated": <行数>}`，未配置持久化时返回 `400`。
+
+### 在就绪探针里
+
+`GET /health/ready` 在 `status` 旁边带一个 `maintenance` 对象，使部署能区分
+"修复都完成了"与"启动任务结束了"：
+
+```json
+{
+  "status": "ready",
+  "maintenance": {
+    "state": "partial",
+    "registry": "deferred",
+    "failed": ["request_log.backfill_total_tokens"],
+    "steps": [{"name": "request_log.backfill_provider_names", "ok": true, "changed": 128, "seconds": 0.041, "error": null}]
+  }
+}
+```
+
+`state` 在步骤跑之前是 `not_started`，任务进行中是 `running`，全部成功是
+`done`，有失败则是 `partial`。失败的一次修复**故意**不会把探针变成 `503`：
+这些步骤可以重试，为一次失败的修复挡住流量，比修复晚一点更糟。
+
+---
+
 ## 性能分析
 
 基于 [pyinstrument](https://github.com/joerick/pyinstrument) 的按需深度性能分析。

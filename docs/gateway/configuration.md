@@ -551,7 +551,13 @@ soft_error_patterns:
 |------|-----------|------|
 | `/health` | 始终 200 | 网关状态：运行时长、请求总数、最近一小时错误数、各服务方健康状况 |
 | `/health/live` | 始终 200 | Kubernetes 存活探针——确认进程正在运行 |
-| `/health/ready` | 200 / 503 | Kubernetes 就绪探针——任意服务方降级时返回 503 |
+| `/health/ready` | 200 / 503 | Kubernetes 就绪探针——启动期工作尚未完成、或任意服务方降级时返回 503 |
+
+`/health/ready` 还会用一个 `maintenance` 对象报告启动后的数据修复做了什么：
+`state` 取 `not_started`、`running`、`done`，或带失败步骤名的 `partial`。
+某一步修复失败**不会**让探针返回 503——每一步都可以重试，为它挡掉流量只会把
+一次迟到的修复变成一次故障。详见[管理 API
+参考](../api/admin.md#maintenance)。
 
 `/health` 响应示例：
 
