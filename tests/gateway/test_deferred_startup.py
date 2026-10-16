@@ -545,7 +545,7 @@ class TestDeferredCounterRebuild:
 class TestDeferredBackfills:
     def test_backfills_run_sequentially(self):
         """Every backfill is called, in sequence."""
-        from llm_rosetta.gateway.routing_strategy import ModelRoute, ProviderEntry
+        from llm_rosetta.gateway.routing import ModelRoute, ProviderEntry
 
         persistence = MagicMock()
         persistence.backfill_provider_names = AsyncMock(return_value=3)
@@ -623,7 +623,7 @@ class TestResolveSkipsUnready:
 
     def _build_config(self, providers: dict[str, ProviderInfo]):
         """Build a minimal GatewayConfig with routing for 'test-model'."""
-        from llm_rosetta.gateway.routing_strategy import ModelRoute, ProviderEntry
+        from llm_rosetta.gateway.routing import ModelRoute, ProviderEntry
 
         # Use the first provider name as the single-provider model route
         first_name = next(iter(providers))

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from llm_rosetta.gateway.routing_strategy import (
+from llm_rosetta.gateway.routing import (
     DEFAULT_STRATEGY,
     AffinityRoundRobinStrategy,
     ModelRoute,

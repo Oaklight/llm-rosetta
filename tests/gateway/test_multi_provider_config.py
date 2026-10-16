@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from llm_rosetta.gateway.config import GatewayConfig
-from llm_rosetta.gateway.routing_strategy import ModelRoute
+from llm_rosetta.gateway.routing import ModelRoute
 
 
 def _make_config(models: dict, providers: dict | None = None) -> GatewayConfig:
