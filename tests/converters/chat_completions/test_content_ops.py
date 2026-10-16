@@ -224,4 +224,67 @@ class TestChatCompletionsContentOps:
         }
         result = ChatCompletionsContentOps.p_citation_to_ir(provider)
         assert result["type"] == "citation"
-        assert result["url_citation"]["url"] == "https://example.com/source"
+        assert result["citation_type"] == "url_citation"
+        assert result["url"] == "https://example.com/source"
+        assert (result["start_index"], result["end_index"]) == (5, 15)
+
+    def test_p_citation_to_ir_reads_a_flat_payload_too(self):
+        """A compatible endpoint that flattens the payload is read as well."""
+        result = ChatCompletionsContentOps.p_citation_to_ir(
+            {
+                "type": "url_citation",
+                "url": "https://example.com/flat",
+                "title": "Flat",
+                "start_index": 1,
+                "end_index": 9,
+            }
+        )
+        assert result["url"] == "https://example.com/flat"
+
+    def test_citation_keeps_private_annotation_fields(self):
+        """Fields this dialect does not define survive under provider_metadata."""
+        annotation = {
+            "type": "url_citation",
+            "url_citation": {
+                "url": "https://example.com/rich",
+                "title": "Rich",
+                "content": "scraped page text",
+            },
+        }
+        result = ChatCompletionsContentOps.p_citation_to_ir(annotation)
+        assert result["provider_metadata"]["openai"]["content"] == "scraped page text"
+        written = ChatCompletionsContentOps.ir_citation_to_p(result)
+        assert written is not None
+        assert written["url_citation"]["content"] == "scraped page text"
+
+    def test_citation_round_trips_through_both_spellings(self):
+        """The IR part reads back as the annotation it came from."""
+        annotation = {
+            "type": "url_citation",
+            "url_citation": {
+                "start_index": 5,
+                "end_index": 15,
+                "title": "Source",
+                "url": "https://example.com/source",
+            },
+        }
+        assert (
+            ChatCompletionsContentOps.ir_citation_to_p(
+                ChatCompletionsContentOps.p_citation_to_ir(annotation)
+            )
+            == annotation
+        )
+
+    def test_citation_of_another_dialect_is_not_written(self):
+        """A char_location has no chat form: the writer says so by returning None."""
+        assert (
+            ChatCompletionsContentOps.ir_citation_to_p(
+                {
+                    "type": "citation",
+                    "citation_type": "char_location",
+                    "cited_text": "quoted",
+                    "provider_metadata": {"anthropic": {"document_index": 0}},
+                }
+            )
+            is None
+        )

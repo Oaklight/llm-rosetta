@@ -48,43 +48,6 @@ class TestStreamResponseFromProvider:
         assert events[0]["text"] == "Hello"
         assert events[0]["choice_index"] == 0
 
-    def test_grounding_metadata_on_final_chunk_reaches_finish_event(self):
-        """Final-chunk grounding survives text deferral on the finish event."""
-        chunk = {
-            "candidates": [
-                {
-                    "index": 0,
-                    "content": {"role": "model", "parts": [{"text": "Answer"}]},
-                    "finishReason": "STOP",
-                    "groundingMetadata": {
-                        "groundingChunks": [
-                            {"web": {"uri": "https://example.com", "title": "Example"}}
-                        ],
-                        "groundingSupports": [
-                            {
-                                "segment": {"startIndex": 0, "endIndex": 6},
-                                "groundingChunkIndices": [0],
-                            }
-                        ],
-                    },
-                }
-            ]
-        }
-        context = StreamContext()
-        events = cast(
-            list[Any], self.converter.stream_response_from_provider(chunk, context)
-        )
-        finish = next(event for event in events if event["type"] == "finish")
-        assert (
-            finish["provider_metadata"]["google"]["citations"][0]["url_citation"]["url"]
-            == "https://example.com"
-        )
-        assert all(
-            event.get("text") != "Answer"
-            for event in events
-            if event["type"] == "text_delta"
-        )
-
     GROUNDING: dict[str, Any] = {
         "groundingChunks": [
             {"web": {"uri": "https://example.com", "title": "Example"}}
@@ -95,21 +58,78 @@ class TestStreamResponseFromProvider:
     }
 
     @staticmethod
-    def _citation_urls(event: Any) -> list[str]:
-        return [
-            citation["url_citation"]["url"]
-            for citation in (event.get("provider_metadata") or {})
-            .get("google", {})
-            .get("citations", [])
-        ]
+    def _citation_events(events: list[Any]) -> list[dict[str, Any]]:
+        return [e for e in events if e["type"] == "citation_delta"]
 
-    def test_grounding_from_an_earlier_chunk_rides_the_finish_event(self):
-        """Grounding has one carrier: the finish event.
+    @staticmethod
+    def _search_metadata(event: Any) -> dict[str, Any]:
+        return (event.get("provider_metadata") or {}).get("google", {})
 
-        A text delta carries text; hanging metadata on it would put the same
-        kind of value in two places depending on which chunk it arrived on, so
-        grounding seen before the finish is held on the context until then.
+    def test_grounding_metadata_on_final_chunk_becomes_a_citation_delta(self):
+        """A citation rides its own event, where Google reported it."""
+        chunk = {
+            "candidates": [
+                {
+                    "index": 0,
+                    "content": {"role": "model", "parts": [{"text": "Answer"}]},
+                    "finishReason": "STOP",
+                    "groundingMetadata": self.GROUNDING,
+                }
+            ]
+        }
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(chunk, StreamContext()),
+        )
+        deltas = self._citation_events(events)
+        assert len(deltas) == 1
+        citation = deltas[0]["citation"]
+        assert citation["citation_type"] == "url_citation"
+        assert citation["url"] == "https://example.com"
+        assert (citation["start_index"], citation["end_index"]) == (0, 6)
+        # The citation is its own event; nothing invents a text carrier for it.
+        assert all(
+            event.get("text") != "Answer"
+            for event in events
+            if event["type"] == "text_delta"
+        )
+
+    def test_search_metadata_rides_the_finish_event(self):
+        """Queries and the rendered entry point are not citations.
+
+        They describe the search the turn ran, so they are held until the finish
+        event rather than repeated on every source.
         """
+        chunk = {
+            "candidates": [
+                {
+                    "index": 0,
+                    "content": {"role": "model", "parts": []},
+                    "finishReason": "STOP",
+                    "groundingMetadata": {
+                        **self.GROUNDING,
+                        "webSearchQueries": ["population of Tokyo"],
+                        "searchEntryPoint": {"renderedContent": "<style>x</style>"},
+                    },
+                }
+            ]
+        }
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(chunk, StreamContext()),
+        )
+        finish = next(event for event in events if event["type"] == "finish")
+        search = self._search_metadata(finish)
+        assert search["web_search_queries"] == ["population of Tokyo"]
+        assert search["search_entry_point"] == {"rendered_content": "<style>x</style>"}
+        # And no citation carries it (they only record which chunk wrapper
+        # their source came from).
+        for delta in self._citation_events(events):
+            assert set(delta["citation"].get("provider_metadata", {})) <= {"google"}
+            assert "web_search_queries" not in str(delta["citation"])
+
+    def test_citation_arrives_before_the_finish(self):
+        """Grounding on an earlier chunk is emitted there, not deferred."""
         context = StreamContext()
         first = {
             "candidates": [
@@ -123,9 +143,8 @@ class TestStreamResponseFromProvider:
         events = cast(
             list[Any], self.converter.stream_response_from_provider(first, context)
         )
-        text = next(event for event in events if event["type"] == "text_delta")
-        assert text["text"] == "Answer"
-        assert "provider_metadata" not in text
+        assert len(self._citation_events(events)) == 1
+        assert not [e for e in events if e["type"] == "finish"]
 
         last = {
             "candidates": [
@@ -139,17 +158,10 @@ class TestStreamResponseFromProvider:
         events = cast(
             list[Any], self.converter.stream_response_from_provider(last, context)
         )
-        finish = next(event for event in events if event["type"] == "finish")
-        assert self._citation_urls(finish) == ["https://example.com"]
+        assert self._citation_events(events) == []
 
     def test_grounding_never_invents_a_text_delta(self):
-        """A search followed by a client tool call produces no text at all.
-
-        Attaching grounding to "the last text delta, or a new empty one" put an
-        empty ``text`` block on the client's wire for a candidate whose only
-        part was a ``functionCall`` — and the citation was not written by any
-        target writer anyway, so the invented event bought nothing.
-        """
+        """A search followed by a client tool call produces no text at all."""
         context = StreamContext()
         searched = {
             "candidates": [
@@ -174,30 +186,10 @@ class TestStreamResponseFromProvider:
             list[Any], self.converter.stream_response_from_provider(searched, context)
         )
         assert not [e for e in events if e["type"] == "text_delta"]
-
-        last = {
-            "candidates": [
-                {
-                    "index": 0,
-                    "content": {"role": "model", "parts": []},
-                    "finishReason": "STOP",
-                }
-            ]
-        }
-        events = cast(
-            list[Any], self.converter.stream_response_from_provider(last, context)
-        )
-        finish = next(event for event in events if event["type"] == "finish")
-        assert self._citation_urls(finish) == ["https://example.com"]
+        assert len(self._citation_events(events)) == 1
 
     def test_grounding_reported_on_two_chunks_is_not_duplicated(self):
-        """Google may repeat the same metadata; the carrier holds it once.
-
-        The same grounding arrives on two text chunks and again on the finish,
-        and the guard is the whole stream rather than the finish alone: a
-        reader that collected per-chunk would report the source three times,
-        and one that hung it on each text delta would report it twice.
-        """
+        """Google may repeat the same metadata; the source is emitted once."""
         context = StreamContext()
         events: list[Any] = []
         for text in ("A", "B"):
@@ -214,23 +206,39 @@ class TestStreamResponseFromProvider:
                 list[Any],
                 self.converter.stream_response_from_provider(repeated, context),
             )
-        last = {
+        deltas = self._citation_events(events)
+        assert [d["citation"]["url"] for d in deltas] == ["https://example.com"]
+
+    def test_two_different_sources_are_both_kept(self):
+        """Dedupe is by source and span, not by "we already saw grounding"."""
+        chunk = {
             "candidates": [
                 {
                     "index": 0,
-                    "content": {"role": "model", "parts": []},
-                    "finishReason": "STOP",
-                    "groundingMetadata": self.GROUNDING,
+                    "content": {"role": "model", "parts": [{"text": "Answer"}]},
+                    "groundingMetadata": {
+                        "groundingChunks": [
+                            {"web": {"uri": "https://a.example", "title": "A"}},
+                            {"web": {"uri": "https://b.example", "title": "B"}},
+                        ],
+                        "groundingSupports": [
+                            {
+                                "segment": {"startIndex": 0, "endIndex": 3},
+                                "groundingChunkIndices": [0, 1],
+                            }
+                        ],
+                    },
                 }
             ]
         }
-        events += cast(
-            list[Any], self.converter.stream_response_from_provider(last, context)
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(chunk, StreamContext()),
         )
-
-        carriers = [event for event in events if self._citation_urls(event)]
-        assert [event["type"] for event in carriers] == ["finish"]
-        assert self._citation_urls(carriers[0]) == ["https://example.com"]
+        assert [d["citation"]["url"] for d in self._citation_events(events)] == [
+            "https://a.example",
+            "https://b.example",
+        ]
 
     def test_text_delta_empty_string(self):
         """Empty text part still produces TextDeltaEvent."""

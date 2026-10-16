@@ -272,36 +272,80 @@ class TestMessagesContentOps:
 
     # ==================== Citation ====================
 
-    def test_ir_citation_to_p_returns_none(self):
-        """Test ir_citation_to_p returns None with warning."""
-        with pytest.warns(UserWarning, match="part of TextBlock"):
-            result = MessagesContentOps.ir_citation_to_p({"type": "citation"})
-        assert result is None
+    def test_ir_citation_to_p_returns_none_for_a_foreign_kind(self):
+        """A citation another dialect minted has no Anthropic form.
+
+        Measured against the live API: the request validator accepts exactly
+        ``char_location``, ``content_block_location``, ``page_location``,
+        ``search_result_location`` and ``web_search_result_location``, and each
+        has to point at a block the message itself carries.  A ``url_citation``
+        is rejected as an unknown tag, so the writer returns ``None`` and the
+        caller reports the drop rather than inventing a block.
+        """
+        assert (
+            MessagesContentOps.ir_citation_to_p(
+                {
+                    "type": "citation",
+                    "citation_type": "url_citation",
+                    "url": "https://example.com",
+                }
+            )
+            is None
+        )
+        assert MessagesContentOps.ir_citation_to_p({"type": "citation"}) is None
 
     def test_p_citation_to_ir_char_location(self):
         """Test Anthropic char_location citation → IR CitationPart."""
         provider = {
             "type": "char_location",
             "cited_text": "some cited text",
+            "document_index": 0,
+            "document_title": "notes",
+            "start_char_index": 271,
+            "end_char_index": 353,
         }
         result = MessagesContentOps.p_citation_to_ir(provider)
         assert result["type"] == "citation"
-        assert result["text_citation"]["cited_text"] == "some cited text"
+        assert result["citation_type"] == "char_location"
+        assert result["cited_text"] == "some cited text"
+        assert result["title"] == "notes"
+        assert result["provider_metadata"]["anthropic"]["document_index"] == 0
+        # The kind-specific locator survives, so the citation writes back whole.
+        assert MessagesContentOps.ir_citation_to_p(result) == provider
 
-    def test_p_citation_to_ir_url(self):
-        """Test Anthropic url_citation → IR CitationPart."""
+    def test_p_citation_to_ir_search_result_location(self):
+        """``source`` is the URL of a search result, so it is the shared url."""
         provider = {
-            "type": "url_citation",
-            "url": "https://example.com",
-            "title": "Example",
-            "start_index": 0,
-            "end_index": 10,
+            "type": "search_result_location",
+            "cited_text": "cited",
+            "source": "https://example.com/x",
+            "title": "Result",
+            "search_result_index": 0,
+            "start_block_index": 0,
+            "end_block_index": 1,
         }
         result = MessagesContentOps.p_citation_to_ir(provider)
-        assert result["type"] == "citation"
-        assert result["url_citation"]["url"] == "https://example.com"
+        assert result["citation_type"] == "search_result_location"
+        assert result["url"] == "https://example.com/x"
+        assert MessagesContentOps.ir_citation_to_p(result) == provider
+
+    def test_p_citation_to_ir_web_search_result_location(self):
+        """The web-search locator is opaque and stays provider-private."""
+        provider = {
+            "type": "web_search_result_location",
+            "cited_text": "cited",
+            "url": "https://example.com/y",
+            "title": "Found",
+            "encrypted_index": "Eo8B==",
+        }
+        result = MessagesContentOps.p_citation_to_ir(provider)
+        assert result["citation_type"] == "web_search_result_location"
+        assert result["url"] == "https://example.com/y"
+        assert result["provider_metadata"]["anthropic"]["encrypted_index"] == "Eo8B=="
+        assert MessagesContentOps.ir_citation_to_p(result) == provider
 
     def test_p_citation_to_ir_fallback(self):
         """Test unknown citation type → fallback CitationPart."""
         result = MessagesContentOps.p_citation_to_ir({"type": "unknown"})
         assert result["type"] == "citation"
+        assert result["citation_type"] == "unknown"

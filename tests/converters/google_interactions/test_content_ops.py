@@ -120,8 +120,31 @@ class TestAnnotations:
         result = GoogleInteractionsContentOps.p_annotations_to_ir(annotations)
         assert len(result) == 1
         assert result[0]["type"] == "citation"
-        assert result[0]["url_citation"]["url"] == "https://example.com"
-        assert result[0]["url_citation"]["title"] == "Example"
+        assert result[0]["citation_type"] == "url_citation"
+        assert result[0]["url"] == "https://example.com"
+        assert result[0]["title"] == "Example"
+        assert (result[0]["start_index"], result[0]["end_index"]) == (0, 10)
+
+    def test_annotation_round_trips_through_the_writer(self):
+        """The annotation the reader produced is the one the writer emits."""
+        annotation = {
+            "start_index": 136,
+            "end_index": 197,
+            "url": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/abc",
+            "title": "wikipedia.org",
+            "type": "url_citation",
+        }
+        part = GoogleInteractionsContentOps.p_citation_to_ir(annotation)
+        assert GoogleInteractionsContentOps.ir_citation_to_p(part) == annotation
+
+    def test_citation_of_another_dialect_is_not_written(self):
+        """A char_location has no Interactions form: the writer says so."""
+        assert (
+            GoogleInteractionsContentOps.ir_citation_to_p(
+                {"type": "citation", "citation_type": "char_location"}
+            )
+            == {}
+        )
 
     def test_empty_annotations(self):
         result = GoogleInteractionsContentOps.p_annotations_to_ir([])

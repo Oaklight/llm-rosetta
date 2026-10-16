@@ -525,7 +525,11 @@ class TestOpenAIResponsesContentOps:
         assert result is None
 
     def test_p_citation_to_ir_url(self):
-        """Test OpenAI url_citation annotation → IR CitationPart."""
+        """Test OpenAI url_citation annotation → IR CitationPart.
+
+        The Responses surface flattens the payload; the chat surface nests it
+        under ``url_citation`` and has its own tests.
+        """
         provider = {
             "type": "url_citation",
             "start_index": 5,
@@ -535,35 +539,74 @@ class TestOpenAIResponsesContentOps:
         }
         result = OpenAIResponsesContentOps.p_citation_to_ir(provider)
         assert result["type"] == "citation"
-        assert result["url_citation"]["url"] == "https://example.com/source"
-        assert result["url_citation"]["start_index"] == 5
-        assert result["url_citation"]["end_index"] == 15
+        assert result["citation_type"] == "url_citation"
+        assert result["url"] == "https://example.com/source"
+        assert result["start_index"] == 5
+        assert result["end_index"] == 15
 
-    def test_p_citation_to_ir_unknown_type(self):
-        """Test OpenAI unknown citation type → fallback CitationPart."""
-        provider = {"type": "file_citation", "file_id": "file-123"}
+    def test_file_citation_keeps_the_file_identity(self):
+        """file_citation's ``index`` is a span; the file itself is private."""
+        provider = {
+            "type": "file_citation",
+            "file_id": "file-123",
+            "filename": "notes.txt",
+            "index": 40,
+        }
         result = OpenAIResponsesContentOps.p_citation_to_ir(provider)
-        assert result["type"] == "citation"
+        assert result["citation_type"] == "file_citation"
+        assert result["start_index"] == 40
+        assert result["provider_metadata"]["openai"]["file_id"] == "file-123"
+        assert OpenAIResponsesContentOps.ir_citation_to_p(result) == provider
+
+    def test_container_file_citation_round_trips(self):
+        """A container citation is a kind only this dialect has."""
+        provider = {
+            "type": "container_file_citation",
+            "container_id": "cntr_1",
+            "file_id": "cfile_1",
+            "filename": "report.txt",
+            "start_index": 164,
+            "end_index": 192,
+        }
+        result = OpenAIResponsesContentOps.p_citation_to_ir(provider)
+        assert result["citation_type"] == "container_file_citation"
+        assert OpenAIResponsesContentOps.ir_citation_to_p(result) == provider
+
+    def test_unknown_annotation_kind_is_kept_verbatim(self):
+        """A kind this dialect does not know is preserved for a write back."""
+        provider = {"type": "future_citation", "whatever": 1}
+        result = OpenAIResponsesContentOps.p_citation_to_ir(provider)
+        assert result["citation_type"] == "future_citation"
+        assert OpenAIResponsesContentOps.ir_citation_to_p(result) == provider
+
+    def test_citation_a_foreign_dialect_owns_is_not_written(self):
+        """A char_location has no Responses form."""
+        assert (
+            OpenAIResponsesContentOps.ir_citation_to_p(
+                {
+                    "type": "citation",
+                    "citation_type": "char_location",
+                    "cited_text": "quoted",
+                }
+            )
+            is None
+        )
 
     def test_citation_round_trip(self):
         """Test citation round-trip: IR → Provider → IR."""
         original = CitationPart(
             type="citation",
-            url_citation={
-                "start_index": 10,
-                "end_index": 20,
-                "title": "Reference",
-                "url": "https://example.com/ref",
-            },
+            citation_type="url_citation",
+            url="https://example.com/ref",
+            title="Reference",
+            start_index=10,
+            end_index=20,
         )
         provider = OpenAIResponsesContentOps.ir_citation_to_p(original)
         assert provider is not None
         restored = OpenAIResponsesContentOps.p_citation_to_ir(provider)
-        assert restored["url_citation"]["url"] == original["url_citation"]["url"]
-        assert (
-            restored["url_citation"]["start_index"]
-            == original["url_citation"]["start_index"]
-        )
+        assert restored["url"] == original["url"]
+        assert restored["start_index"] == original["start_index"]
 
 
 class TestReasoningDirection:

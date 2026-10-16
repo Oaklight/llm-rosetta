@@ -4,6 +4,8 @@ OpenAI Chat MessageOps unit tests.
 
 from typing import Any, Union, cast
 
+from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
+
 from llm_rosetta._vendor.validate import validate
 from llm_rosetta.converters.base.tools.multimodal_patch import (
     has_multimodal_content,
@@ -1310,3 +1312,74 @@ class TestRefusalBuildResponseMessage:
         result = self.converter.response_to_provider(ir_response)  # ty: ignore[invalid-argument-type]
         msg = result["choices"][0]["message"]
         assert msg["refusal"] == "Cannot do that"
+
+
+class TestCitationHistory:
+    """A citation in history is an annotation on the assistant message."""
+
+    def test_annotations_are_written_on_the_assistant_message(self):
+        """Measured live: the endpoint accepts them (HTTP 200)."""
+        converter = ChatCompletionsConverter()
+        request, warnings = converter.request_to_provider(
+            cast(
+                Any,
+                {
+                    "model": "m",
+                    "messages": [
+                        {"role": "user", "content": [{"type": "text", "text": "q"}]},
+                        {
+                            "role": "assistant",
+                            "content": [
+                                {"type": "text", "text": "a"},
+                                {
+                                    "type": "citation",
+                                    "citation_type": "url_citation",
+                                    "url": "https://example.com",
+                                    "title": "Example",
+                                    "start_index": 0,
+                                    "end_index": 5,
+                                },
+                            ],
+                        },
+                    ],
+                },
+            )
+        )
+        assert request["messages"][1]["annotations"] == [
+            {
+                "type": "url_citation",
+                "url_citation": {
+                    "start_index": 0,
+                    "end_index": 5,
+                    "title": "Example",
+                    "url": "https://example.com",
+                },
+            }
+        ]
+        assert warnings == []
+
+    def test_a_citation_without_a_url_is_reported(self):
+        """A char_location has no annotation form; the drop is not silent."""
+        converter = ChatCompletionsConverter()
+        _, warnings = converter.request_to_provider(
+            cast(
+                Any,
+                {
+                    "model": "m",
+                    "messages": [
+                        {
+                            "role": "assistant",
+                            "content": [
+                                {"type": "text", "text": "a"},
+                                {
+                                    "type": "citation",
+                                    "citation_type": "char_location",
+                                    "cited_text": "quoted",
+                                },
+                            ],
+                        }
+                    ],
+                },
+            )
+        )
+        assert any("char_location" in w for w in warnings)

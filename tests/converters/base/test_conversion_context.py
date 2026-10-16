@@ -182,8 +182,8 @@ class TestStreamContextBufferMethods:
 class TestBaseConverterDispatch:
     """Test BaseConverter._IR_TO_P_DISPATCH and dispatch skeleton."""
 
-    def test_dispatch_table_has_11_entries(self):
-        assert len(BaseConverter._IR_TO_P_DISPATCH) == 11
+    def test_dispatch_table_has_12_entries(self):
+        assert len(BaseConverter._IR_TO_P_DISPATCH) == 12
 
     def test_dispatch_table_keys(self):
         expected = {
@@ -193,6 +193,7 @@ class TestBaseConverterDispatch:
             "content_block_end",
             "text_delta",
             "reasoning_delta",
+            "citation_delta",
             "tool_call_start",
             "tool_call_delta",
             "finish",

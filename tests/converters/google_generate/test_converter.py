@@ -8,6 +8,7 @@ from typing import Any, cast
 
 import pytest
 
+from llm_rosetta.converters.base.helpers.citations import citation_url
 from llm_rosetta.converters.google_generate import (
     GoogleConverter,
     GoogleGenerateConverter,
@@ -489,7 +490,12 @@ class TestGoogleGenerateConverter:
     # ==================== response_from_provider ====================
 
     def test_response_from_provider_grounding_metadata(self):
-        """Candidate grounding metadata becomes IR URL citations."""
+        """Candidate grounding metadata becomes IR URL citations.
+
+        The citation is a first-class part with its own flat fields; Google's
+        search-level metadata (queries, rendered entry point) is not a citation
+        and rides the message's ``provider_metadata``.
+        """
         provider_response = {
             "candidates": [
                 {
@@ -507,20 +513,66 @@ class TestGoogleGenerateConverter:
                                 "groundingChunkIndices": [0],
                             }
                         ],
+                        "webSearchQueries": ["population of Tokyo"],
+                        "searchEntryPoint": {"renderedContent": "<style>x</style>"},
                     },
                 }
             ]
         }
         result = self.converter.response_from_provider(provider_response)
-        assert result["choices"][0]["message"]["content"][1] == {
+        message = result["choices"][0]["message"]
+        assert message["content"][1] == {
             "type": "citation",
-            "url_citation": {
-                "url": "https://example.com",
-                "title": "Example",
-                "start_index": 0,
-                "end_index": 23,
-            },
+            "citation_type": "url_citation",
+            "url": "https://example.com",
+            "title": "Example",
+            "start_index": 0,
+            "end_index": 23,
+            # Which wrapper the source came from, so a write back is faithful.
+            "provider_metadata": {"google": {"_chunk_type": "web"}},
         }
+        assert message["provider_metadata"]["google"]["web_search_queries"] == [
+            "population of Tokyo"
+        ]
+        assert message["provider_metadata"]["google"]["search_entry_point"] == {
+            "rendered_content": "<style>x</style>"
+        }
+
+    def test_grounding_search_metadata_is_not_repeated_per_citation(self):
+        """The search metadata belongs to the turn, not to each source."""
+        provider_response = {
+            "candidates": [
+                {
+                    "content": {
+                        "role": "model",
+                        "parts": [{"text": "Answer"}],
+                    },
+                    "groundingMetadata": {
+                        "groundingChunks": [
+                            {"web": {"uri": "https://a.example", "title": "A"}},
+                            {"web": {"uri": "https://b.example", "title": "B"}},
+                        ],
+                        "webSearchQueries": ["q"],
+                    },
+                }
+            ]
+        }
+        result = self.converter.response_from_provider(provider_response)
+        message = result["choices"][0]["message"]
+        citations = [
+            part for part in message["content"] if part.get("type") == "citation"
+        ]
+        assert [citation_url(c) for c in citations] == [
+            "https://a.example",
+            "https://b.example",
+        ]
+        # The turn's search metadata is not repeated on the sources; only the
+        # chunk wrapper each source came from is kept.
+        assert all(
+            set(c.get("provider_metadata", {}).get("google", {})) == {"_chunk_type"}
+            for c in citations
+        )
+        assert message["provider_metadata"]["google"]["web_search_queries"] == ["q"]
 
     def test_response_from_provider_basic(self):
         """Test basic response from provider."""
