@@ -1,0 +1,104 @@
+# Label set for this repo — part of the shared taxonomy.
+# See dev-playbook/repo-setup/patterns/01-github-labels.md
+#
+# This file is the source of truth: change it here, then run
+#   sync-labels.sh Oaklight/llm-rosetta .github/labels.yml
+# Never rename a label by deleting and recreating it — that strips the
+# label from every issue. Use: gh label edit <old> --name <new>
+
+# === Primary type labels — at most one per issue ===
+- name: "bug"
+  color: "CF222E"
+  description: "Something isn't working"
+- name: "enhancement"
+  color: "1A7F37"
+  description: "New feature or request"
+- name: "documentation"
+  color: "0969DA"
+  description: "Improvements or additions to documentation"
+- name: "refactor"
+  color: "57606A"
+  description: "Code refactoring, no behavior change"
+- name: "discussion"
+  color: "BF3989"
+  description: "Design discussion, RFC"
+
+# === Epic — tracking parent; never combined with enhancement ===
+- name: "epic"
+  color: "6F42C1"
+  description: "Tracking epic: parent issue for a multi-issue workstream"
+
+# === Qualifier labels — optional; coexist with the primary type, may stand alone ===
+- name: "security"
+  color: "6E0B14"
+  description: "Security vulnerability"
+- name: "performance"
+  color: "BC4C00"
+  description: "Performance optimization"
+- name: "architecture"
+  color: "4C2889"
+  description: "Architectural improvements"
+- name: "research"
+  color: "0F766E"
+  description: "Investigation, specification research"
+
+# === Priority labels — at most one per issue ===
+- name: "priority:critical"
+  color: "7F1D1D"
+  description: "Security/data-loss, fix immediately"
+- name: "priority:high"
+  color: "B91C1C"
+  description: "Blocks other work"
+- name: "priority:medium"
+  color: "C2410C"
+  description: "Should fix soon"
+- name: "priority:low"
+  color: "A16207"
+  description: "Nice to have"
+
+# === Status labels — optional ===
+- name: "deferred"
+  color: "56606A"
+  description: "Intentionally postponed"
+
+# === Area labels — which component ===
+- name: "area:admin-ui"
+  color: "2F6B4F"
+  description: "Admin panel UI/UX"
+- name: "area:core"
+  color: "1F6B76"
+  description: "Core conversion infrastructure"
+- name: "area:gateway"
+  color: "2C4A9E"
+  description: "Gateway proxy"
+- name: "area:ir"
+  color: "6B4A8A"
+  description: "IR types, schema, validation, transforms and stream events"
+- name: "area:quota"
+  color: "1D5F8A"
+  description: "Upstream quota probing and quota-aware routing"
+- name: "area:shims"
+  color: "6B4A7A"
+  description: "Provider shim configs"
+
+# === Format labels — which wire format ===
+- name: "format:chat_completions"
+  color: "097A5E"
+  description: "OpenAI Chat Completions format (chat_completions)"
+- name: "format:google_generate"
+  color: "2F6FE0"
+  description: "Google GenAI generateContent format (google_generate)"
+- name: "format:google_interactions"
+  color: "7E52B0"
+  description: "Google Interactions API format (google_interactions)"
+- name: "format:messages"
+  color: "AD5230"
+  description: "Anthropic Messages format (messages)"
+- name: "format:open_responses"
+  color: "3A4A6B"
+  description: "Responses format (open_responses); OpenAI profile is the openai--open_responses shim"
+
+# === Project-specific labels — not part of the shared taxonomy ===
+- name: "ui/ux"
+  color: "1DE9B6"
+  description: "UI/UX design and interaction"
