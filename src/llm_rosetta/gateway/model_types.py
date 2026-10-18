@@ -68,6 +68,9 @@ class ModelTypeDescriptor:
         default_format: Source format used when detection cannot decide.
         default_path: Default upstream path for this type's endpoint
             (e.g. ``"/v1/embeddings"``).
+        default_paths: Per-format overrides of :attr:`default_path`, for a
+            format whose endpoint is not shaped like the type's usual one
+            (Google embeddings take the model in the path).
         detect_source_format: Inferred source format for a request, for
             types whose one route serves several dialects.  ``None`` for
             LLM (the route names it) and for decision (its own track).
@@ -91,10 +94,19 @@ class ModelTypeDescriptor:
     config_shim_key: str | None = None
     default_format: str = ""
     default_path: str | None = None
+    default_paths: dict[str, str] = field(default_factory=dict)
     detect_source_format: Callable[[Any, dict[str, Any], Any], str] | None = None
     icon_svg: str = ""
     color: str = ""
     is_llm: bool = False
+
+    def path_for(self, format_name: str) -> str | None:
+        """Return the default upstream path for *format_name*.
+
+        Falls back to :attr:`default_path` (and then ``None``) when the type
+        declares no override for that format.
+        """
+        return self.default_paths.get(format_name, self.default_path)
 
 
 # ---------------------------------------------------------------------------
@@ -230,6 +242,10 @@ def _register_builtins() -> None:
             config_shim_key="embedding_shim",
             default_format="openai",
             default_path="/v1/embeddings",
+            default_paths={
+                "cohere": "/v2/embed",
+                "google_generate": "/v1beta/models/{model}:embedContent",
+            },
             detect_source_format=detect_embedding_source,
             icon_svg=(
                 '<svg viewBox="0 0 16 16" fill="currentColor">'
@@ -262,6 +278,7 @@ def _register_builtins() -> None:
             config_shim_key="rerank_shim",
             default_format="jina",
             default_path="/v1/rerank",
+            default_paths={"cohere": "/v2/rerank"},
             detect_source_format=detect_rerank_source,
             icon_svg=(
                 '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor"'

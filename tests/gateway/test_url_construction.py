@@ -121,6 +121,17 @@ class TestEmbeddingUrlConstruction:
         assert resolved is not None
         assert resolved.upstream_url == "https://api.custom.com/v4/embed"
 
+    def test_cohere_format_uses_its_own_default_path(self):
+        """An explicit non-OpenAI format gets that format's path, not /v1."""
+        cfg = _config_with_provider(
+            "https://api.cohere.com",
+            embedding_format="cohere",
+        )
+        body: dict = {"model": "embed-model", "input": "test"}
+        resolved = _resolve_embedding_provider(cfg, "embed-model", body)
+        assert resolved is not None
+        assert resolved.upstream_url == "https://api.cohere.com/v2/embed"
+
     def test_chat_provider_is_not_an_embedding_fallback(self):
         """An LLM provider without an embedding format cannot serve embeddings."""
         cfg = _config_with_provider("https://api.openai.com/v1")
@@ -164,6 +175,17 @@ class TestRerankUrlConstruction:
             "https://api.cohere.com",
             rerank_format="cohere",
             rerank_path="/v2/rerank",
+            extra_models={
+                "rerank-model": {"provider": "test-provider", "type": "rerank"},
+            },
+        )
+        url = self._rerank_upstream_url(cfg, "rerank-model")
+        assert url == "https://api.cohere.com/v2/rerank"
+
+    def test_cohere_format_uses_its_own_default_path(self):
+        cfg = _config_with_provider(
+            "https://api.cohere.com",
+            rerank_format="cohere",
             extra_models={
                 "rerank-model": {"provider": "test-provider", "type": "rerank"},
             },

@@ -1657,9 +1657,11 @@ class GatewayConfig:
         """
         from llm_rosetta.provider_names import canonical_provider_name
 
+        from .model_types import get_model_type
         from .providers import _apply_shim_defaults
         from .transport.provider_info import google_auth, openai_auth
 
+        descriptor = get_model_type(type_name)
         providers: dict[str, dict[str, Any]] = {}
         provider_infos: dict[str, ProviderInfo] = {}
         for name, cfg in raw_providers.items():
@@ -1679,6 +1681,8 @@ class GatewayConfig:
             path = cfg.get(path_key) or ""
             if not path and shim is not None and wire_format == shim.format:
                 path = shim.default_path or ""
+            if not path and descriptor is not None:
+                path = descriptor.path_for(wire_format) or ""
             if not path:
                 path = default_path
 
@@ -1780,8 +1784,10 @@ class GatewayConfig:
         """Parse embedding_providers and embedding_models from config."""
         from llm_rosetta.provider_names import canonical_provider_name
 
+        from .model_types import get_model_type
         from .transport.provider_info import google_auth, openai_auth
 
+        descriptor = get_model_type("embedding")
         providers: dict[str, dict[str, Any]] = {}
         provider_infos: dict[str, ProviderInfo] = {}
         for name, cfg in raw_providers.items():
@@ -1789,11 +1795,15 @@ class GatewayConfig:
                 continue
             if cfg.get("enabled") is False:
                 continue
-            embedding_path = cfg.get("embedding_path", "/v1/embeddings")
             # Legacy sections put the dialect in ``format``; a unified entry
             # may still use ``type``.  Canonicalise either spelling.
             wire_format = canonical_provider_name(
                 cfg.get("format") or cfg.get("type") or "openai"
+            )
+            embedding_path = (
+                cfg.get("embedding_path")
+                or (descriptor.path_for(wire_format) if descriptor else None)
+                or "/v1/embeddings"
             )
             providers[name] = {
                 "format": wire_format,

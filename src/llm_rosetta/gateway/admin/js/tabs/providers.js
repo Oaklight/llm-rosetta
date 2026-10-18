@@ -272,13 +272,17 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
       const shimDef = shimMap[shimName] || {};
       const pathEl = document.getElementById(`provPath_${desc.name}`);
       if (pathEl) {
+        const fmt = provCfg[desc.config_format_key] || (fmtSel && fmtSel.value);
         pathEl.value =
-          provCfg[desc.config_path_key] || shimDef.default_path || desc.default_path;
+          provCfg[desc.config_path_key] || shimDef.default_path || _descPathFor(desc, fmt);
       }
     } else {
       const pathEl = document.getElementById(`provPath_${desc.name}`);
       if (pathEl) pathEl.value = '';
     }
+    // Remember which format the current path value belongs to, so a format
+    // change can replace a default path without touching an operator's own.
+    if (fmtSel) fmtSel.dataset.pathFormat = fmtSel.value;
   }
   toggleProvCapSection();
   // Reveal the key field for a free provider that already carries a key.
@@ -366,13 +370,33 @@ function _buildProvEndpointSections() {
         </div>
         <div class="form-group">
           <label>${esc(pathLabel)}</label>
-          <input type="text" id="provPath_${desc.name}" placeholder="${esc(desc.default_path || '')}">
+          <input type="text" id="provPath_${desc.name}" placeholder="${esc(_descPathFor(desc, (desc.formats || [])[0]))}">
         </div>
       </div>`;
     container.appendChild(section);
     section.querySelector(`#provShim_${desc.name}`)
       .addEventListener('change', () => _applyEndpointShim(desc));
+    section.querySelector(`#provFmt_${desc.name}`)
+      .addEventListener('change', () => {
+        const pathEl = section.querySelector(`#provPath_${desc.name}`);
+        const fmt = document.getElementById(`provFmt_${desc.name}`);
+        if (!pathEl || !fmt) return;
+        // Replace a path that was the previous format's default; keep
+        // anything the operator typed.
+        const previousDefault = _descPathFor(desc, fmt.dataset.pathFormat || '');
+        if (!pathEl.value.trim() || pathEl.value.trim() === previousDefault) {
+          pathEl.value = _descPathFor(desc, fmt.value);
+        }
+        fmt.dataset.pathFormat = fmt.value;
+      });
   }
+}
+
+/** The endpoint path a format defaults to, or the type's own default.
+ *  Google embeddings put the model in the path, so the format decides. */
+function _descPathFor(desc, format) {
+  const paths = desc?.default_paths || {};
+  return paths[format] || desc?.default_path || '';
 }
 
 /** Apply a non-LLM endpoint shim's defaults to its section and the shared
@@ -387,7 +411,10 @@ function _applyEndpointShim(desc) {
   const fmtSel = document.getElementById(`provFmt_${desc.name}`);
   if (fmtSel && shim.format) fmtSel.value = shim.format;
   const pathEl = document.getElementById(`provPath_${desc.name}`);
-  if (pathEl) pathEl.value = shim.default_path || desc.default_path || '';
+  if (pathEl) {
+    pathEl.value = shim.default_path || _descPathFor(desc, shim.format || fmtSel?.value);
+  }
+  if (fmtSel) fmtSel.dataset.pathFormat = fmtSel.value;
   const urlInput = document.getElementById('provBaseUrl');
   if (urlInput && !urlInput.value.trim()) urlInput.value = shim.default_base_url || '';
   const keyInput = document.getElementById('provApiKey');
@@ -866,7 +893,9 @@ async function saveProvider() {
         body[desc.config_shim_key] = document.getElementById(`provShim_${desc.name}`)?.value || '';
       }
       body[desc.config_format_key] = document.getElementById(`provFmt_${desc.name}`)?.value || desc.formats[0];
-      body[desc.config_path_key] = document.getElementById(`provPath_${desc.name}`)?.value?.trim() || desc.default_path;
+      body[desc.config_path_key] =
+        document.getElementById(`provPath_${desc.name}`)?.value?.trim()
+        || _descPathFor(desc, body[desc.config_format_key]);
     } else {
       if (desc.config_shim_key) body[desc.config_shim_key] = '';
       body[desc.config_format_key] = '';

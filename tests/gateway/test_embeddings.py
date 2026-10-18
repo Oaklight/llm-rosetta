@@ -291,6 +291,36 @@ class TestGoogleEmbeddingRouting:
         args, _ = request.app.transport.send.call_args
         assert args[1].endswith("/v1beta/models/text-embedding-004:embedContent")
 
+    def test_format_without_a_shim_uses_the_format_default_path(self) -> None:
+        """`embedding_format: google_generate` alone gets Google's path shape."""
+        config = GatewayConfig(
+            {
+                "providers": {
+                    "google-embed": {
+                        "api_key": "test-key",
+                        "base_url": "https://generativelanguage.googleapis.com",
+                        "embedding_format": "google_generate",
+                    }
+                },
+                "models": {
+                    "gemini-embedding": {
+                        "provider": "google-embed",
+                        "type": "embedding",
+                    }
+                },
+            }
+        )
+        request = _make_request({"model": "gemini-embedding", "input": "hello"})
+        request.app.transport = _google_transport({"embedding": {"values": [0.1]}})
+
+        asyncio.run(handle_embeddings(request, config))
+
+        args, _ = request.app.transport.send.call_args
+        assert args[1] == (
+            "https://generativelanguage.googleapis.com"
+            "/v1beta/models/gemini-embedding:embedContent"
+        )
+
 
 # ============================================================================
 # Auto-detection tests

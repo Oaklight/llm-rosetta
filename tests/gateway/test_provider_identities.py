@@ -189,9 +189,9 @@ class TestEndpointResolution:
             }
         )
         assert cfg.embedding_providers["acme"]["format"] == "cohere"
-        # The shim's path belongs to its own format, so the descriptor default
-        # applies instead.
-        assert cfg.embedding_providers["acme"]["embedding_path"] == "/v1/embeddings"
+        # The shim's path belongs to its own format, so the effective format's
+        # own default applies instead.
+        assert cfg.embedding_providers["acme"]["embedding_path"] == "/v2/embed"
 
     def test_explicit_format_is_canonicalised(self):
         cfg = GatewayConfig(
@@ -207,8 +207,32 @@ class TestEndpointResolution:
             }
         )
         assert cfg.embedding_providers["acme"]["format"] == "google_generate"
+        # Google's path shape is per-format, not the embedding default.
+        assert (
+            cfg.embedding_providers["acme"]["embedding_path"]
+            == "/v1beta/models/{model}:embedContent"
+        )
         info = cfg.embedding_provider_infos["acme"]
         assert info.auth_headers() == {"x-goog-api-key": "k"}
+
+    def test_legacy_google_embedding_uses_the_format_default_path(self):
+        cfg = GatewayConfig(
+            {
+                "providers": {},
+                "embedding_providers": {
+                    "g": {
+                        "base_url": "https://generativelanguage.googleapis.com",
+                        "api_key": "k",
+                        "format": "google_generate",
+                    }
+                },
+                "embedding_models": {"m": "g"},
+            }
+        )
+        assert (
+            cfg.embedding_providers["g"]["embedding_path"]
+            == "/v1beta/models/{model}:embedContent"
+        )
 
     def test_mismatched_endpoint_shim_is_rejected(self):
         from llm_rosetta.shims.providers import load_providers
@@ -357,6 +381,11 @@ class TestAdminMetadata:
         meta = {d["name"]: d for d in admin_config._get_model_type_metadata()}
         assert meta["embedding"]["config_shim_key"] == "embedding_shim"
         assert meta["embedding"]["default_format"] == "openai"
+        assert meta["embedding"]["default_paths"] == {
+            "cohere": "/v2/embed",
+            "google_generate": "/v1beta/models/{model}:embedContent",
+        }
+        assert meta["rerank"]["default_paths"] == {"cohere": "/v2/rerank"}
         assert meta["rerank"]["config_shim_key"] == "rerank_shim"
         assert meta["rerank"]["default_format"] == "jina"
         assert meta["decision"]["config_shim_key"] == "decision_shim"

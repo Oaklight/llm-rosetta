@@ -86,6 +86,7 @@ def _get_model_type_metadata() -> list[dict[str, Any]]:
             "config_shim_key": desc.config_shim_key,
             "default_format": desc.formats[0] if desc.formats else None,
             "default_path": desc.default_path,
+            "default_paths": dict(desc.default_paths),
             "icon_svg": desc.icon_svg,
             "color": desc.color,
             "is_llm": desc.is_llm,
