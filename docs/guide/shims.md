@@ -13,7 +13,8 @@ LLM-Rosetta 只有四个**转换器**——每种 API 标准一个（OpenAI Chat
 ```text
 ProviderShim ("deepseek--chat_completions")
 ├── name: "deepseek--chat_completions"
-├── base: "chat_completions"              → 选择转换器
+├── model_type: "llm"                     → 能力类别
+├── format: "chat_completions"            → 选择转换器
 ├── default_base_url: "https://api.deepseek.com"
 ├── default_api_key_env: "DEEPSEEK_API_KEY"
 ├── logo: "https://cdn.jsdelivr.net/..."
@@ -21,7 +22,7 @@ ProviderShim ("deepseek--chat_completions")
 └── pre_ir_transforms: ()
 ```
 
-- **ProviderShim** — 提供方身份信息：名称、基础转换器类型、默认 URL、API 密钥环境变量、Logo，以及转换规则。
+- **ProviderShim** — 提供方身份信息：名称、模型类型、wire format、默认 URL、API 密钥环境变量、Logo，以及转换规则。
 - **Transforms** — 纯 `dict → dict` 函数，在转换器前后执行。`post_ir_transforms` 把输出请求调整成提供方的方言；`pre_ir_transforms` 把输入响应归一化回标准格式。
 
 !!! note "向后兼容别名"
@@ -47,7 +48,7 @@ src/llm_rosetta/shims/providers/
 
 每个提供方子目录包含：
 
-- **`provider.yaml`**（必需）—— 声明 `name`、`base`、连接设置（`connection.base_url`、`connection.api_key_env`、`connection.auth_header`、`connection.keyless`、`connection.models_path`），以及可选的 `logo`、`display_name`、`free_source`
+- **`provider.yaml`**（必需）—— 声明 `name`、`model_type`、`format`、连接设置（`connection.base_url`、`connection.api_key_env`、`connection.auth_header`、`connection.keyless`、`connection.models_path`），以及可选的 `logo`、`display_name`、`free_source`。`base` 是 `format` 的弃用别名；loader 会校验 `(model_type, format)` 对。
 - **`transforms.py`**（可选）—— 导出 `post_ir_transforms` 和/或 `pre_ir_transforms` 元组（旧名 `to_transforms` / `from_transforms` 也可用）
 
 `connection.keyless` 表示该上游无需凭据即可访问：未配置 `api_key` 时不发送任何鉴权头，
@@ -85,7 +86,8 @@ group 键的厂商，需要声明 `group_label`。
 
 ```yaml
 name: deepseek
-base: chat_completions
+model_type: llm
+format: chat_completions
 default_base_url: https://api.deepseek.com
 default_api_key_env: DEEPSEEK_API_KEY
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/deepseek.svg
@@ -169,7 +171,7 @@ def register_shims():
     if os.getenv("MY_INTERNAL_PROVIDER"):
         register_shim(ProviderShim(
             name="my-internal",
-            base="chat_completions",
+            format="chat_completions",
             default_base_url="http://internal:8080/v1",
         ))
 ```
@@ -366,7 +368,8 @@ gateway 还会在启动时对每个受影响的提供方记录一条告警，指
 
 ```yaml
 name: argo--messages
-base: messages
+model_type: llm
+format: messages
 reasoning:
   thinking_type: enabled       # 大多数模型的默认值
   effort_map: { ... }
@@ -449,7 +452,8 @@ Responses 格式通道，为拒绝 temperature 的 GPT/o 系列模型按模型�
 
 ```yaml
 name: my-provider
-base: chat_completions
+model_type: llm
+format: chat_completions
 supports_custom_tools: true
 hoist_system_messages: true
 multimodal_tool_result: false
@@ -542,17 +546,24 @@ converter = get_converter_for_provider("chat_completions")
 converter = get_converter_for_provider("deepseek--chat_completions")
 ```
 
-### 解析基础类型
+### 解析格式与模型类型
 
-使用 `resolve_base()` 将 shim 名称映射到基础转换器类型：
+使用 `resolve_format()` 将 shim 名称映射到 wire format，使用
+`resolve_model_type()` 获取能力类别：
 
 ```python
-from llm_rosetta import resolve_base
+from llm_rosetta import resolve_format, resolve_model_type
 
-resolve_base("deepseek--chat_completions")       # → "chat_completions"
-resolve_base("chat_completions")    # → "chat_completions"（直接透传）
-resolve_base("unknown")        # → "unknown"（直接透传）
+resolve_format("deepseek--chat_completions")  # → "chat_completions"
+resolve_format("chat_completions")            # → "chat_completions"（直接透传）
+resolve_format("unknown")                     # → "unknown"（直接透传）
+
+resolve_model_type("deepseek--chat_completions")  # → "llm"
+resolve_model_type("typesafe")                    # → "decision"
+resolve_model_type("openai")                      # → None（歧义：既是厂商名也是 embedding format）
 ```
+
+`resolve_base()` 是 `resolve_format()` 的弃用别名。
 
 ## 注册自定义 Shim
 
@@ -566,7 +577,7 @@ from llm_rosetta.transforms import strip_fields
 
 my_shim = ProviderShim(
     name="my-provider",
-    base="chat_completions",
+    format="chat_completions",
     default_base_url="https://api.my-provider.com/v1",
     default_api_key_env="MY_PROVIDER_API_KEY",
     post_ir_transforms=(strip_fields("logprobs", "seed"),),
@@ -574,7 +585,7 @@ my_shim = ProviderShim(
 register_shim(my_shim)
 ```
 
-注册后，shim 名称可在所有地方使用 —— `get_converter_for_provider()`、`resolve_base()`、`convert()` 和网关配置。
+注册后，shim 名称可在所有地方使用 —— `get_converter_for_provider()`、`resolve_format()`、`convert()` 和网关配置。
 
 ### 添加 YAML 提供方
 
@@ -585,7 +596,8 @@ register_shim(my_shim)
 
     ```yaml
     name: my-provider
-    base: chat_completions
+    model_type: llm
+    format: chat_completions
     default_base_url: https://api.my-provider.com/v1
     default_api_key_env: MY_PROVIDER_API_KEY
     logo: https://example.com/logo.svg
@@ -609,7 +621,7 @@ from llm_rosetta import list_shims, unregister_shim
 
 # 列出所有已注册的 shim
 for shim in list_shims():
-    print(f"{shim.name} → {shim.base}")
+    print(f"{shim.name} → {shim.format}")
 
 # 移除 shim
 unregister_shim("my-provider")
