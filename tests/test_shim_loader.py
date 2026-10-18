@@ -832,8 +832,21 @@ class TestShimPair:
         with pytest.raises(ValueError, match="add a 'format'"):
             self._load(tmp_path, "name: x\nbase: decision\n")
 
-    def test_legacy_paradigm_base_with_format(self, tmp_path: Path):
-        shims = self._load(tmp_path, "name: x\nbase: decision\nformat: systemone\n")
+    def test_legacy_paradigm_base_with_format_needs_model_type(self, tmp_path: Path):
+        """``format`` makes the category mandatory even beside a legacy ``base``.
+
+        A shim mid-migration that keeps ``base`` for one release and forgets
+        ``model_type`` must not silently load as ``llm``; only a declaration
+        with ``base`` and no ``format`` may omit the category.
+        """
+        with pytest.raises(ValueError, match="model_type is required"):
+            self._load(tmp_path, "name: x\nbase: decision\nformat: systemone\n")
+
+    def test_legacy_paradigm_base_with_format_and_model_type(self, tmp_path: Path):
+        shims = self._load(
+            tmp_path,
+            "name: x\nmodel_type: decision\nbase: decision\nformat: systemone\n",
+        )
         assert shims[0].model_type == "decision"
         assert shims[0].format == "systemone"
 

@@ -379,9 +379,10 @@ def _resolve_shim_pair(cfg: dict[str, Any], yaml_path: Path) -> tuple[str, str]:
     # ``format`` is the new spelling and the schema requires the category with
     # it: without ``model_type`` the pair would silently default to ``llm``, so
     # a future embedding shim that forgot the field would load as a chat shim.
-    # The deprecated ``base`` path keeps its inference (the base name may name
-    # the category, else it defaults to ``llm``).
-    if declared_type is None and legacy_base is None and cfg.get("format") is not None:
+    # A shim that carries ``base`` as well is mid-migration, not a legacy
+    # shim: only a declaration with ``base`` and no ``format`` may omit the
+    # category (the base name then infers it, else defaults to ``llm``).
+    if declared_type is None and cfg.get("format") is not None:
         raise ValueError(
             f"{yaml_path}: model_type is required when 'format' is declared "
             f"(one of {', '.join(MODEL_TYPES)}); a legacy shim may use "
