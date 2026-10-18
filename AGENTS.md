@@ -70,6 +70,23 @@ with calibrated probabilities.
 IR question types: `assertion` (a proposition → P(true) ∈ [0,1]),
 `choice` (a categorical proposition), `score` (an ordinal proposition).
 
+### Embedding and rerank converters
+
+Embedding and rerank each have one converter per wire dialect, all under one
+module per family (their dialects differ in parameters, not in message
+structure):
+
+| Model type | Formats | Module |
+|-----------|---------|--------|
+| `embedding` | `openai`, `cohere`, `jina`, `voyage`, `google_generate` | `converters/embedding/` |
+| `rerank` | `jina`, `cohere`, `voyage` | `converters/rerank/` |
+
+They are reached through `EmbeddingConversionPipeline` /
+`RerankConversionPipeline` (or `get_embedding_converter(format)`), not through
+`auto_detect.detect_provider()`: the gateway's model-type descriptors own
+source detection for these routes (`gateway/source_formats.py`), and an
+embedding body cannot be attributed to a vendor from its model name.
+
 ### Shim layer
 
 A **ProviderShim** is a lightweight identity card that declares which base

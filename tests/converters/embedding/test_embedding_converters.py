@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from llm_rosetta.converters.embedding import (
     CohereEmbeddingConverter,
+    GoogleEmbeddingConverter,
     JinaEmbeddingConverter,
     OpenAIEmbeddingConverter,
     VoyageEmbeddingConverter,
@@ -65,6 +66,18 @@ VOYAGE_RESPONSE = {
     ],
     "model": "voyage-3-lite",
     "usage": {"total_tokens": 1},
+}
+
+GOOGLE_SINGLE_RESPONSE = {
+    "embedding": {"values": [0.12, -0.34, 0.56]},
+    "usageMetadata": {"promptTokenCount": 3, "totalTokenCount": 3},
+}
+
+GOOGLE_BATCH_RESPONSE = {
+    "embeddings": [
+        {"values": [0.12, -0.34]},
+        {"values": [0.56, 0.78]},
+    ],
 }
 
 SAMPLE_REQUEST = {
@@ -246,6 +259,110 @@ class TestCohereEmbeddingConverter:
         ir2 = IREmbeddingRequest(model="test", input=["hello"], truncation=False)
         result2, _ = self.converter.request_to_provider(ir2)
         assert result2["truncate"] == "NONE"
+
+
+# ============================================================================
+# Google GenAI converter tests
+# ============================================================================
+
+
+class TestGoogleEmbeddingConverter:
+    def setup_method(self) -> None:
+        self.converter = GoogleEmbeddingConverter()
+
+    def test_response_from_provider_single(self) -> None:
+        ir = self.converter.response_from_provider(GOOGLE_SINGLE_RESPONSE)
+        assert ir["object"] == "list"
+        assert len(ir["data"]) == 1
+        assert ir["data"][0]["embedding"] == [0.12, -0.34, 0.56]
+        assert ir["usage"]["prompt_tokens"] == 3
+        assert ir["usage"]["total_tokens"] == 3
+
+    def test_response_from_provider_batch(self) -> None:
+        ir = self.converter.response_from_provider(GOOGLE_BATCH_RESPONSE)
+        assert [item["embedding"] for item in ir["data"]] == [
+            [0.12, -0.34],
+            [0.56, 0.78],
+        ]
+        # batchEmbedContents returns no usageMetadata
+        assert "usage" not in ir
+
+    def test_request_to_provider_single(self) -> None:
+        ir = IREmbeddingRequest(
+            model="text-embedding-004",
+            input=["hello world"],
+            task_type="retrieval_query",
+            dimensions=256,
+            truncation=True,
+            provider_extensions={"title": "doc"},
+        )
+        result, _ = self.converter.request_to_provider(ir)
+        assert result == {
+            "content": {"parts": [{"text": "hello world"}]},
+            "taskType": "RETRIEVAL_QUERY",
+            "outputDimensionality": 256,
+            "autoTruncate": True,
+            "title": "doc",
+        }
+
+    def test_batch_response_keeps_input_order(self) -> None:
+        """Vector i must belong to input i — a transposition is silent."""
+        ir = self.converter.response_from_provider(
+            {
+                "embeddings": [
+                    {"values": [1.0]},
+                    {"values": [2.0]},
+                    {"values": [3.0]},
+                ]
+            }
+        )
+        assert [item["index"] for item in ir["data"]] == [0, 1, 2]
+        assert [item["embedding"] for item in ir["data"]] == [[1.0], [2.0], [3.0]]
+
+    def test_request_to_provider_batch(self) -> None:
+        ir = IREmbeddingRequest(model="text-embedding-004", input=["a", "b", "c"])
+        result, _ = self.converter.request_to_provider(ir)
+        assert "content" not in result
+        assert [request["model"] for request in result["requests"]] == [
+            "models/text-embedding-004",
+            "models/text-embedding-004",
+            "models/text-embedding-004",
+        ]
+        assert [
+            request["content"]["parts"][0]["text"] for request in result["requests"]
+        ] == ["a", "b", "c"]
+
+    def test_unsupported_task_type_warns(self) -> None:
+        ir = IREmbeddingRequest(
+            model="text-embedding-004",
+            input=["hello"],
+            task_type="code_retrieval_document",
+        )
+        result, warnings = self.converter.request_to_provider(ir)
+        assert "taskType" not in result
+        assert any("code_retrieval_document" in warning for warning in warnings)
+
+    def test_request_from_provider(self) -> None:
+        ir = self.converter.request_from_provider(
+            {
+                "model": "models/text-embedding-004",
+                "content": {"parts": [{"text": "hello"}]},
+                "taskType": "RETRIEVAL_DOCUMENT",
+                "outputDimensionality": 128,
+            }
+        )
+        assert ir["model"] == "text-embedding-004"
+        assert ir["input"] == ["hello"]
+        assert ir["task_type"] == "retrieval_document"
+        assert ir["dimensions"] == 128
+
+    def test_response_to_provider(self) -> None:
+        ir = self.converter.response_from_provider(GOOGLE_BATCH_RESPONSE)
+        provider = self.converter.response_to_provider(ir)
+        assert provider["embeddings"] == [
+            {"values": [0.12, -0.34]},
+            {"values": [0.56, 0.78]},
+        ]
 
 
 # ============================================================================

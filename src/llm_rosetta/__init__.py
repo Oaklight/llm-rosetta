@@ -21,14 +21,22 @@ from .converters import (
     AnthropicConverter,
     BaseConverter,
     ChatCompletionsConverter,
+    CohereEmbeddingConverter,
+    CohereRerankConverter,
     GoogleConverter,
+    GoogleEmbeddingConverter,
     GoogleGenerateConverter,
     GoogleGenAIConverter,  # deprecated alias
     GoogleInteractionsConverter,
+    JinaEmbeddingConverter,
+    JinaRerankConverter,
     MessagesConverter,
     OpenAIChatConverter,  # deprecated alias
+    OpenAIEmbeddingConverter,
     OpenAIResponsesConverter,
     OpenResponsesConverter,
+    VoyageEmbeddingConverter,
+    VoyageRerankConverter,
 )
 from .converters.base.simple_converter import BaseSimpleConverter
 from . import tool_ops
@@ -71,6 +79,16 @@ __all__ = [
     "GoogleInteractionsConverter",
     "OpenAIResponsesConverter",
     "OpenResponsesConverter",
+    # Embedding converters
+    "OpenAIEmbeddingConverter",
+    "JinaEmbeddingConverter",
+    "VoyageEmbeddingConverter",
+    "CohereEmbeddingConverter",
+    "GoogleEmbeddingConverter",
+    # Rerank converters
+    "JinaRerankConverter",
+    "CohereRerankConverter",
+    "VoyageRerankConverter",
     # Conversion context
     "ConversionContext",
     "StreamContext",

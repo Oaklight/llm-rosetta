@@ -27,7 +27,7 @@ FORMATS_BY_TYPE: dict[str, tuple[str, ...]] = {
         "google_generate",
         "google_interactions",
     ),
-    "embedding": ("openai", "cohere", "jina", "voyage"),
+    "embedding": ("openai", "cohere", "jina", "voyage", "google_generate"),
     "rerank": ("jina", "cohere", "voyage"),
     "decision": ("systemone", "openai_decisions"),
 }

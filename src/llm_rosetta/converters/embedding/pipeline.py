@@ -10,11 +10,14 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from llm_rosetta.provider_names import canonical_provider_name
+
 # Import converter submodules directly (not through __init__) to avoid
 # circular imports — __init__.py re-exports from this module.
 from llm_rosetta.converters.base.context import ConversionContext
 from llm_rosetta.converters.base.embedding_converter import BaseEmbeddingConverter
 from llm_rosetta.converters.embedding.cohere import CohereEmbeddingConverter
+from llm_rosetta.converters.embedding.google import GoogleEmbeddingConverter
 from llm_rosetta.converters.embedding.jina import JinaEmbeddingConverter
 from llm_rosetta.converters.embedding.openai import OpenAIEmbeddingConverter
 from llm_rosetta.converters.embedding.voyage import VoyageEmbeddingConverter
@@ -31,9 +34,19 @@ _EMBEDDING_CONVERTERS: dict[str, type[BaseEmbeddingConverter]] = {
     "cohere": CohereEmbeddingConverter,
     "jina": JinaEmbeddingConverter,
     "voyage": VoyageEmbeddingConverter,
+    "google_generate": GoogleEmbeddingConverter,
 }
 
 EMBEDDING_FORMATS = frozenset(_EMBEDDING_CONVERTERS.keys())
+
+
+def canonical_embedding_format(format_name: str) -> str:
+    """Resolve a legacy format spelling to its canonical registry key.
+
+    ``google`` and ``google-genai`` both name the ``google_generate``
+    embedding family; every other embedding format passes through unchanged.
+    """
+    return canonical_provider_name(format_name)
 
 
 def get_embedding_converter(format_name: str) -> BaseEmbeddingConverter:
@@ -42,7 +55,7 @@ def get_embedding_converter(format_name: str) -> BaseEmbeddingConverter:
     Raises:
         ValueError: If *format_name* is not a known embedding format.
     """
-    cls = _EMBEDDING_CONVERTERS.get(format_name)
+    cls = _EMBEDDING_CONVERTERS.get(canonical_embedding_format(format_name))
     if cls is None:
         raise ValueError(
             f"Unknown embedding format: '{format_name}'. "
@@ -79,15 +92,22 @@ def response_usage(
 class EmbeddingConversionPipeline:
     """Convert embedding requests/responses between two provider formats.
 
-    When *source_format* == *target_format*, conversion is skipped.
+    When *source_format* == *target_format*, conversion is skipped.  Both
+    spellings are canonicalised first, so ``google`` and ``google_generate``
+    are the same format rather than a cross-format conversion.
+
+    The pipeline keeps no per-request state beyond the shared warning
+    context: request and response conversion are independent, pure
+    conversions, so either leg may be called without the other (unlike a
+    chat pipeline, whose response leg can depend on request-side context).
     """
 
     def __init__(self, source_format: str, target_format: str) -> None:
-        self.source_format = source_format
-        self.target_format = target_format
-        self._needs_conversion = source_format != target_format
-        self._source_converter = get_embedding_converter(source_format)
-        self._target_converter = get_embedding_converter(target_format)
+        self.source_format = canonical_embedding_format(source_format)
+        self.target_format = canonical_embedding_format(target_format)
+        self._needs_conversion = self.source_format != self.target_format
+        self._source_converter = get_embedding_converter(self.source_format)
+        self._target_converter = get_embedding_converter(self.target_format)
         self._ctx = ConversionContext()
 
     @property
@@ -104,8 +124,17 @@ class EmbeddingConversionPipeline:
         )
         return target_body
 
-    def convert_response(self, body: dict[str, Any]) -> dict[str, Any]:
-        """Target format response → source format response."""
+    def convert_response(
+        self, body: dict[str, Any], *, model: str | None = None
+    ) -> dict[str, Any]:
+        """Target format response → source format response.
+
+        *model* is the request's model.  It is stored on the context because
+        some upstreams (Google) do not echo it in the response, while the IR
+        response requires it.
+        """
+        if model is not None:
+            self._ctx.metadata["model"] = model
         if not self._needs_conversion:
             return body
         ir = self._target_converter.response_from_provider(body, context=self._ctx)

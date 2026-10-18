@@ -9,6 +9,7 @@ from .messages import AnthropicConverter, MessagesConverter
 from .base import BaseConverter, BaseEmbeddingConverter, BaseRerankConverter
 from .embedding import (
     CohereEmbeddingConverter,
+    GoogleEmbeddingConverter,
     JinaEmbeddingConverter,
     OpenAIEmbeddingConverter,
     VoyageEmbeddingConverter,
@@ -46,6 +47,7 @@ __all__ = [
     "JinaEmbeddingConverter",
     "VoyageEmbeddingConverter",
     "CohereEmbeddingConverter",
+    "GoogleEmbeddingConverter",
     "ChatCompletionsConverter",
     "OpenAIChatConverter",  # deprecated alias
     "MessagesConverter",

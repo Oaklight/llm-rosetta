@@ -9,9 +9,11 @@ Provides converters for:
 - Jina: OpenAI-compatible with task mapping
 - Voyage: OpenAI-compatible with input_type mapping
 - Cohere: different structure (texts, embeddings.{type}, meta)
+- Google GenAI: content.parts + taskType, model in the URL
 """
 
 from .cohere import CohereEmbeddingConverter
+from .google import GoogleEmbeddingConverter
 from .jina import JinaEmbeddingConverter
 from .openai import OpenAIEmbeddingConverter
 from .pipeline import (
@@ -26,6 +28,7 @@ __all__ = [
     "JinaEmbeddingConverter",
     "VoyageEmbeddingConverter",
     "CohereEmbeddingConverter",
+    "GoogleEmbeddingConverter",
     "EmbeddingConversionPipeline",
     "EMBEDDING_FORMATS",
     "get_embedding_converter",

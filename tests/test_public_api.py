@@ -36,6 +36,16 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "GoogleInteractionsConverter",
             "OpenAIResponsesConverter",
             "OpenResponsesConverter",
+            # Embedding converters
+            "OpenAIEmbeddingConverter",
+            "JinaEmbeddingConverter",
+            "VoyageEmbeddingConverter",
+            "CohereEmbeddingConverter",
+            "GoogleEmbeddingConverter",
+            # Rerank converters
+            "JinaRerankConverter",
+            "CohereRerankConverter",
+            "VoyageRerankConverter",
             # Conversion context
             "ConversionContext",
             "StreamContext",
@@ -78,7 +88,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "rename_field",
             "set_defaults",
         ],
-        "max_count": 50,
+        "max_count": 60,
     },
     "llm_rosetta.types.ir": {
         "items": None,  # too many to enumerate; just check count

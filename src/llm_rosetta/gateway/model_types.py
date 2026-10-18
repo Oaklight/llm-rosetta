@@ -10,6 +10,11 @@ Built-in types registered at import time: ``llm``, ``embedding``, ``rerank``.
 LLM is special: it uses the full converter pipeline via ``_proxy_handler``
 in ``app.py``, so its ``pipeline`` is ``None``.  Non-LLM types (embedding,
 rerank) point to their dedicated pipeline-handler callables.
+
+The non-LLM descriptors take their format list from the converter registries
+(``EMBEDDING_FORMATS``, ``RERANK_FORMATS``, ``DECISION_FORMATS``) rather than
+restating it, so a new converter is offered everywhere — config validation,
+the admin payload and the provider card — without a second edit.
 """
 
 from __future__ import annotations
@@ -28,7 +33,7 @@ class RouteSpec:
         methods: HTTP methods (e.g. ``["POST"]``).
         source_format: Optional source format identifier for LLM routes
             (e.g. ``"chat_completions"``).  ``None`` for non-LLM types whose
-            handler does its own format detection.
+            descriptor carries a ``detect_source_format`` callable.
     """
 
     path: str
@@ -43,7 +48,8 @@ class ModelTypeDescriptor:
     Attributes:
         name: Canonical type name (``"llm"``, ``"embedding"``, ``"rerank"``).
         routes: HTTP routes this type responds on.
-        formats: Provider API format strings this type supports.
+        formats: Provider API format strings this type supports.  For the
+            non-LLM types this is the converter registry's own key set.
         pipeline: A zero-argument callable that returns the async handler
             ``(request, config) -> Response`` for non-LLM types.  The
             callable is invoked lazily at route registration time to
@@ -55,12 +61,16 @@ class ModelTypeDescriptor:
             (e.g. ``"embedding_format"``).  Used by config resolution.
         config_path_key: Provider config key for the type's endpoint path
             (e.g. ``"embedding_path"``).  Used by config resolution.
-        config_shim_key: Provider config key naming a shim for this type
-            (e.g. ``"embedding_shim"``).  A non-LLM endpoint may be configured
-            through a shim instead of a bare format, so the shim supplies the
-            format, path and connection defaults.
+        config_shim_key: Provider config key naming a shim of this type
+            (e.g. ``"embedding_shim"``), whose connection defaults and
+            format fill what the entry leaves out.  ``None`` for LLM, whose
+            identity is the ``shim``/``type`` key itself.
+        default_format: Source format used when detection cannot decide.
         default_path: Default upstream path for this type's endpoint
             (e.g. ``"/v1/embeddings"``).
+        detect_source_format: Inferred source format for a request, for
+            types whose one route serves several dialects.  ``None`` for
+            LLM (the route names it) and for decision (its own track).
         icon_svg: Inline SVG string for the capability icon.  Consumed
             by the admin UI for badges and filters.
         color: CSS color string (e.g. ``"var(--green)"``) for badges
@@ -79,7 +89,9 @@ class ModelTypeDescriptor:
     config_format_key: str | None = None
     config_path_key: str | None = None
     config_shim_key: str | None = None
+    default_format: str = ""
     default_path: str | None = None
+    detect_source_format: Callable[[Any, dict[str, Any], Any], str] | None = None
     icon_svg: str = ""
     color: str = ""
     is_llm: bool = False
@@ -165,8 +177,10 @@ def _rerank_pipeline() -> Callable[..., Any]:
 def _register_builtins() -> None:
     """Register the built-in model types: llm, embedding, rerank."""
 
-    # Converter registries are the single source of truth for formats.
+    # The converter registry is the single source of truth for formats.
     from llm_rosetta.converters.registry import CONVERTER_REGISTRY
+
+    from .source_formats import detect_embedding_source, detect_rerank_source
 
     # --- LLM ---
     # LLM uses the full converter pipeline via _proxy_handler in app.py,
@@ -214,7 +228,9 @@ def _register_builtins() -> None:
             config_format_key="embedding_format",
             config_path_key="embedding_path",
             config_shim_key="embedding_shim",
+            default_format="openai",
             default_path="/v1/embeddings",
+            detect_source_format=detect_embedding_source,
             icon_svg=(
                 '<svg viewBox="0 0 16 16" fill="currentColor">'
                 '<circle cx="4" cy="5" r="1.3"/>'
@@ -244,7 +260,9 @@ def _register_builtins() -> None:
             config_format_key="rerank_format",
             config_path_key="rerank_path",
             config_shim_key="rerank_shim",
+            default_format="jina",
             default_path="/v1/rerank",
+            detect_source_format=detect_rerank_source,
             icon_svg=(
                 '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor"'
                 ' stroke-width="1.5" stroke-linecap="round">'
@@ -290,6 +308,7 @@ def _register_decision() -> None:
             config_format_key="decision_format",
             config_path_key="decision_path",
             config_shim_key="decision_shim",
+            default_format="systemone",
             default_path="/v1/systemone",
             icon_svg=(
                 '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor"'
