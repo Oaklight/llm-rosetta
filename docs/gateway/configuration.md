@@ -139,7 +139,7 @@ commit；配置文件本身不会被改写。要可复现部署请固定 tag 或
 
 1. **shim**：`<type>_shim`；否则使用提供方级的 `shim` 或 `type`，但仅当该 shim 的 `model_type` 与端点一致；
 2. **格式**：显式的 `<type>_format` 优先于 shim 的格式；
-3. **路径**：显式的 `<type>_path` 优先于 shim 的 `connection.default_path`（仅当最终格式就是该 shim 的格式时才使用），其次是 descriptor 的默认路径；
+3. **路径**：显式的 `<type>_path` 优先于 shim 的 `connection.default_path`（仅当最终格式就是该 shim 的格式时才使用），其次是该格式自身的默认路径（Cohere 使用 `/v2/...`；Google 的 embedding 路径携带模型）；
 4. **连接**：条目中非空的 `base_url` / `api_key` 优先于 shim 默认值。
 
 `<type>_shim` 若不属于该能力，启动时会报错并指明该 shim 的类别。gateway 把每个提供方的身份记录为 `(model_type, format)` 对；LLM 模型若被路由到身份为 `embedding`、`rerank` 或 `decision` 的提供方，会被拒绝。
