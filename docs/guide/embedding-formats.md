@@ -59,8 +59,8 @@ Batch — `batchEmbedContents`:
 ```json
 {
   "requests": [
-    {"content": {"parts": [{"text": "text 1"}]}, "taskType": "RETRIEVAL_QUERY"},
-    {"content": {"parts": [{"text": "text 2"}]}, "taskType": "RETRIEVAL_QUERY"}
+    {"model": "models/text-embedding-004", "content": {"parts": [{"text": "text 1"}]}, "taskType": "RETRIEVAL_QUERY"},
+    {"model": "models/text-embedding-004", "content": {"parts": [{"text": "text 2"}]}, "taskType": "RETRIEVAL_QUERY"}
   ]
 }
 ```
@@ -139,7 +139,7 @@ Single text response:
 ```json
 {
   "embedding": {"values": [0.123, -0.456, ...]},
-  "metadata": {"promptTokenCount": 5}
+  "usageMetadata": {"promptTokenCount": 5, "totalTokenCount": 5}
 }
 ```
 
@@ -158,6 +158,7 @@ Batch response:
 
 - No `object`/`data`/`index` wrapper — vectors directly in `embedding.values`
 - Model name in URL path, not in response body
+- Usage lives in `usageMetadata` (`promptTokenCount`, `totalTokenCount`); a batch response has no `usageMetadata`
 - Only supports float output, no encoding format control
 
 ### Cohere Format
@@ -273,7 +274,7 @@ LLM-Rosetta normalizes all five formats into a unified IR:
 | Provider | `total_tokens` source | `prompt_tokens` source | Dropped |
 |----------|----------------------|----------------------|---------| 
 | OpenAI | `usage.total_tokens` | `usage.prompt_tokens` | — |
-| Google | `metadata.promptTokenCount` | `metadata.promptTokenCount` | — |
+| Google | `usageMetadata.totalTokenCount` | `usageMetadata.promptTokenCount` | batch responses carry no `usageMetadata` |
 | Cohere | `meta.tokens.input_tokens` (derived) | `meta.tokens.input_tokens` | `meta.billed_units.*` |
 | Voyage | `usage.total_tokens` | — | — |
 | Jina | `usage.total_tokens` | `usage.prompt_tokens` | `image_tokens`, `audio_tokens`, `video_tokens` |

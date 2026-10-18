@@ -144,6 +144,7 @@ dialect directly, or name a shim for that capability:
   },
   // Endpoint shim: format, path and connection defaults come from the shim
   "acme-embed":  { "embedding_shim": "acme--embedding" },
+  "google-embed": { "embedding_shim": "google--embedding" },
   "acme-rerank": { "rerank_shim": "acme--rerank", "rerank_path": "/v1/rerank" }
 }
 ```
@@ -653,7 +654,7 @@ The `status` field is `"ok"` when all providers are healthy, or `"degraded"` whe
 
 ## Embedding Providers
 
-The gateway can proxy `/v1/embeddings` requests with cross-format IR conversion (OpenAI ↔ Cohere ↔ Jina ↔ Voyage). A unified provider entry can declare the endpoint with `embedding_format` or `embedding_shim` (see [Non-LLM Endpoints](#non-llm-endpoints)); the legacy section below remains supported. Configure embedding providers and models separately from chat providers:
+The gateway can proxy `/v1/embeddings` requests with cross-format IR conversion (OpenAI ↔ Cohere ↔ Jina ↔ Voyage ↔ Google GenAI). A unified provider entry can declare the endpoint with `embedding_format` or `embedding_shim` (see [Non-LLM Endpoints](#non-llm-endpoints)); the legacy section below remains supported. Configure embedding providers and models separately from chat providers:
 
 ```jsonc
 {
@@ -673,9 +674,14 @@ The gateway can proxy `/v1/embeddings` requests with cross-format IR conversion 
 |-------|------|---------|-------------|
 | `embedding_providers` | `dict` | `{}` | Provider configs for embedding upstreams (same format as `providers`) |
 | `embedding_models` | `dict` | `{}` | Model → provider mapping for embedding requests |
-| `default_embedding_format` | `str` | `"openai"` | Source format fallback. Options: `openai`, `cohere`, `jina`, `voyage` |
+| `default_embedding_format` | `str` | `"openai"` | Source format fallback. Options: `openai`, `cohere`, `jina`, `voyage`, `google_generate` |
 
-When `embedding_providers` is not configured, `/v1/embeddings` falls back to passthrough mode (forwarded to the chat provider without IR conversion).
+Embedding traffic is routed **only** through embedding endpoints. A model that
+has no embedding route — either listed in `embedding_models` or tagged
+`"type": "embedding"` on a unified provider — returns `404`; the gateway does
+not forward it to a chat provider. A Google endpoint takes the model in the URL
+(`/v1beta/models/{model}:embedContent`) and switches to
+`:batchEmbedContents` when the converted request carries multiple inputs.
 
 ## Rerank Providers
 

@@ -222,13 +222,13 @@ config file needed) or `llm_rosetta.gateway.apply_shim_sources(raw, config_path)
 
 ## Built-in Shims
 
-LLM-Rosetta ships with 34 built-in provider shims, one directory per shim under
+LLM-Rosetta ships with 42 built-in provider shims, one directory per shim under
 `src/llm_rosetta/shims/providers/`. `list_shims()` prints the live set; this is
 that set. A name marked **†** is scheduled for removal — see
 [Shims scheduled for removal](#shims-scheduled-for-removal).
 
-| Name | Base | Default Base URL | API Key Env | Transforms |
-|------|------|-----------------|-------------|------------|
+| Name | Format | Default Base URL | API Key Env | Transforms |
+|------|--------|-----------------|-------------|------------|
 | † `alcf_metis--chat_completions` | `chat_completions` | `https://inference-api.alcf.anl.gov/resource_server/metis/api/v1` | `ALCF_API_KEY` | strips `logprobs`, `top_logprobs`, `parallel_tool_calls`; developer → system; null content/description defaults |
 | † `alcf_minerva--chat_completions` | `chat_completions` | `https://inference-api.alcf.anl.gov/resource_server/minerva/api/v1` | `ALCF_API_KEY` | strips `logprobs`, `top_logprobs`; developer → system; null content/description defaults |
 | † `alcf_sophia--chat_completions` | `chat_completions` | `https://inference-api.alcf.anl.gov/resource_server/sophia/vllm/v1` | `ALCF_API_KEY` | strips `logprobs`, `top_logprobs`; developer → system; null content/description defaults; renames `reasoning_content` → `reasoning` |
@@ -240,17 +240,23 @@ that set. A name marked **†** is scheduled for removal — see
 | † `asksage--google_generate` | `google_generate` | `https://api.asksage.ai/server/google/v1beta` | `ASKSAGE_API_KEY` | — |
 | † `asksage--messages` | `messages` | `https://api.asksage.ai/server/anthropic` | `ASKSAGE_API_KEY` | — |
 | † `asksage--open_responses` | `open_responses` | `https://api.asksage.ai/server/openai/v1` | `ASKSAGE_API_KEY` | `max_tokens` → `max_completion_tokens` |
+| `cohere--embedding` | `cohere` | `https://api.cohere.com` | `COHERE_API_KEY` | — |
+| `cohere--rerank` | `cohere` | `https://api.cohere.com` | `COHERE_API_KEY` | — |
 | `deepseek--chat_completions` | `chat_completions` | `https://api.deepseek.com` | `DEEPSEEK_API_KEY` | strips `n`, `logit_bias`, `seed`, penalties; backfills `reasoning_content` |
 | `deepseek--open_responses` | `open_responses` | `https://api.deepseek.com` | `DEEPSEEK_API_KEY` | strips `n`, `logit_bias`, `seed` |
+| `google--embedding` | `google_generate` | `https://generativelanguage.googleapis.com` | `GOOGLE_API_KEY` | — |
 | `google--google_generate` | `google_generate` | `https://generativelanguage.googleapis.com` | `GOOGLE_API_KEY` | — |
 | `google--google_interactions` | `google_interactions` | `https://generativelanguage.googleapis.com` | `GOOGLE_API_KEY` | — |
+| `jina--embedding` | `jina` | `https://api.jina.ai` | `JINA_API_KEY` | — |
+| `jina--rerank` | `jina` | `https://api.jina.ai` | `JINA_API_KEY` | — |
 | `kilo--chat_completions` | `chat_completions` | `https://api.kilo.ai/api/gateway` | *(keyless)* | — |
 | `minimax--chat_completions` | `chat_completions` | `https://api.minimaxi.com/v1` | `MINIMAX_API_KEY` | strips `logprobs`, `top_logprobs`, `seed`, `stop`; injects `reasoning_split`; parses `think` tags |
 | `minimax--messages` | `messages` | `https://api.minimaxi.com/anthropic` | `MINIMAX_API_KEY` | — |
 | `moonshot` | `chat_completions` | `https://api.moonshot.cn/v1` | `MOONSHOT_API_KEY` | strips `logprobs`, `top_logprobs`, `logit_bias`, `seed` |
 | `openai--chat_completions` | `chat_completions` | `https://api.openai.com/v1` | `OPENAI_API_KEY` | — |
+| `openai--embedding` | `openai` | `https://api.openai.com/v1` | `OPENAI_API_KEY` | — |
 | `openai--open_responses` | `open_responses` | `https://api.openai.com/v1` | `OPENAI_API_KEY` | — |
-| `openai_decisions` | `decision` | `https://api.openai.com` | `OPENAI_API_KEY` | — |
+| `openai_decisions` | `openai_decisions` | `https://api.openai.com` | `OPENAI_API_KEY` | — |
 | `opencode--chat_completions` | `chat_completions` | `https://opencode.ai/zen/go/v1` | `OPENCODE_API_KEY` | — |
 | `opencode--messages` | `messages` | `https://opencode.ai/zen/go/v1` | `OPENCODE_API_KEY` | — |
 | `opencode--open_responses` | `open_responses` | `https://opencode.ai/zen/go/v1` | `OPENCODE_API_KEY` | — |
@@ -258,9 +264,11 @@ that set. A name marked **†** is scheduled for removal — see
 | `openrouter--messages` | `messages` | `https://openrouter.ai/api` | `OPENROUTER_API_KEY` | — |
 | `openrouter--open_responses` | `open_responses` | `https://openrouter.ai/api/v1` | `OPENROUTER_API_KEY` | — |
 | `qwen` | `chat_completions` | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `DASHSCOPE_API_KEY` | strips `frequency_penalty`, `logit_bias` |
-| `typesafe` | `decision` | `https://api.typesafe.ai` | `TYPESAFE_API_KEY` | — |
+| `typesafe` | `systemone` | `https://api.typesafe.ai` | `TYPESAFE_API_KEY` | — |
 | `volcengine--chat_completions` | `chat_completions` | `https://ark.cn-beijing.volces.com/api/v3` | `ARK_API_KEY` | strips `logprobs`, `top_logprobs` |
 | `volcengine--open_responses` | `open_responses` | `https://ark.cn-beijing.volces.com/api/v3` | `ARK_API_KEY` | — |
+| `voyage--embedding` | `voyage` | `https://api.voyageai.com` | `VOYAGE_API_KEY` | — |
+| `voyage--rerank` | `voyage` | `https://api.voyageai.com` | `VOYAGE_API_KEY` | — |
 | `xai` | `chat_completions` | `https://api.x.ai/v1` | `XAI_API_KEY` | strips `logit_bias` |
 | `zhipu` | `chat_completions` | `https://open.bigmodel.cn/api/paas/v4` | `ZHIPU_API_KEY` | strips `n`, penalties, `logprobs`, `logit_bias`, `seed` |
 
