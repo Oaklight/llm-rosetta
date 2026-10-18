@@ -381,12 +381,16 @@ gate — missing any item means the converter is not fully integrated.
    Must include round-trip tests (provider→IR→provider).
 3. **Public API exports** — add the converter class to both
    `converters/__init__.py` and the top-level `__init__.py` `__all__`.
-4. **Auto-detect** — add detection function and wire into
-   `detect_provider()` in `auto_detect.py`.  Add the name to
-   `ProviderType` literal.  Add to `converter_map` in
-   `get_converter_for_provider()`.
-5. **Provider shim** — create `shims/providers/<name>/provider.yaml`.
-   Add the base type to `_BASE_TYPES` in `provider_shim.py`.
+4. **Auto-detect and the converter registry** — add detection function and
+   wire into `detect_provider()` in `auto_detect.py`.  Add the name to
+   `ProviderType` literal.  Add the format to
+   `model_vocabulary.py::FORMATS_BY_TYPE` and the converter class to
+   `CONVERTER_REGISTRY` in `converters/registry.py`; the
+   `ModelTypeDescriptor` format lists are derived from it.
+5. **Provider shim** — create `shims/providers/<name>/provider.yaml` with
+   `model_type: llm` and `format: <format>`.  The loader validates the
+   `(model_type, format)` pair against the converter registry; `base:` is the
+   deprecated alias for `format:`.
 6. **Gateway route** — register a route handler in `gateway/app.py`.
    Update `gateway/proxy.py` for error responses, stream detection,
    stream flag injection, preflight body, and usage extraction.
@@ -398,8 +402,8 @@ gate — missing any item means the converter is not fully integrated.
 9. **CI smoke test** — if applicable, add an import check in
    `.github/workflows/ci.yml`.
 10. **`test_public_api.py`** — add the new class to `EXPECTED_EXPORTS`.
-11. **`test_shim_loader.py`** — add to expected shim set and base-type
-    mapping.
+11. **`test_shim_loader.py`** — add to the expected shim set and the
+    `(model_type, format)` mapping.
 
 ## Escalation
 
