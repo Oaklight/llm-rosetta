@@ -23,7 +23,7 @@ from llm_rosetta.converters.open_responses import (
     OpenResponsesStreamContext,
     OpenResponsesToolOps,
 )
-from llm_rosetta.shims import get_shim, resolve_base
+from llm_rosetta.shims import get_shim, resolve_format
 
 
 class TestHierarchy:
@@ -86,5 +86,5 @@ class TestShim:
         # The spec defines no response-id prefix; OpenRouter's ids pass through.
         assert shim.response_id_prefix == ""
 
-    def test_resolve_base_is_identity(self):
-        assert resolve_base("open_responses") == "open_responses"
+    def test_resolve_format_is_identity(self):
+        assert resolve_format("open_responses") == "open_responses"

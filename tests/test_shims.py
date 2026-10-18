@@ -12,6 +12,8 @@ from llm_rosetta.shims.provider_shim import (
     list_shims,
     register_shim,
     resolve_base,
+    resolve_format,
+    resolve_model_type,
     unregister_shim,
 )
 
@@ -243,34 +245,68 @@ class TestRegistry:
 
 
 # ---------------------------------------------------------------------------
-# resolve_base
+# resolve_format / resolve_model_type
 # ---------------------------------------------------------------------------
 
 
-class TestResolveBase:
+class TestResolveFormat:
     def test_base_type_passthrough(self):
-        assert resolve_base("openai_chat") == "chat_completions"
-        assert resolve_base("anthropic") == "messages"
-        assert resolve_base("google_generate") == "google_generate"
-        assert resolve_base("open_responses") == "open_responses"
+        assert resolve_format("openai_chat") == "chat_completions"
+        assert resolve_format("anthropic") == "messages"
+        assert resolve_format("google_generate") == "google_generate"
+        assert resolve_format("open_responses") == "open_responses"
 
-    def test_responses_legacy_alias_resolves_to_shim_base(self):
+    def test_responses_legacy_alias_resolves_to_shim_format(self):
         """The legacy Responses spellings resolve via the OpenAI profile shim."""
         register_shim(
-            ProviderShim(name="openai--open_responses", base="open_responses")
+            ProviderShim(name="openai--open_responses", format="open_responses")
         )
-        assert resolve_base("openai_responses") == "open_responses"
-        assert resolve_base("openai-responses") == "open_responses"
-        assert resolve_base("openai--open_responses") == "open_responses"
+        assert resolve_format("openai_responses") == "open_responses"
+        assert resolve_format("openai-responses") == "open_responses"
+        assert resolve_format("openai--open_responses") == "open_responses"
 
     def test_shim_name_resolves(self):
         register_shim(
             ProviderShim(name="deepseek--chat_completions", format="openai_chat")
         )
-        assert resolve_base("deepseek--chat_completions") == "chat_completions"
+        assert resolve_format("deepseek--chat_completions") == "chat_completions"
 
     def test_unknown_name_passthrough(self):
-        assert resolve_base("unknown") == "unknown"
+        assert resolve_format("unknown") == "unknown"
+
+
+class TestResolveModelType:
+    def test_shim_declares_its_category(self):
+        register_shim(
+            ProviderShim(
+                name="vendor--embedding",
+                format="openai",
+                model_type="embedding",
+            )
+        )
+        assert resolve_model_type("vendor--embedding") == "embedding"
+
+    def test_chat_format_is_llm(self):
+        assert resolve_model_type("chat_completions") == "llm"
+        assert resolve_model_type("google") == "llm"
+
+    def test_category_name_is_itself(self):
+        for name in ("llm", "embedding", "rerank", "decision"):
+            assert resolve_model_type(name) == name
+
+    def test_ambiguous_non_chat_format_is_none(self):
+        # `openai` is both a vendor and an embedding format; without a shim or
+        # a caller-supplied category there is no answer.
+        assert resolve_model_type("openai") is None
+
+    def test_unknown_is_none(self):
+        assert resolve_model_type("not-a-provider") is None
+
+
+class TestResolveBaseDeprecated:
+    def test_it_warns_and_agrees(self):
+        with pytest.warns(DeprecationWarning, match="resolve_format"):
+            assert resolve_base("google") == "google_generate"
 
 
 # ---------------------------------------------------------------------------

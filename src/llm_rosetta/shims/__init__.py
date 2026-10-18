@@ -7,7 +7,8 @@ any plugin shims declared via ``llm_rosetta.shim_providers`` entry points.
 Public API:
 
 - **Registration** (startup): ``register_shim``, ``load_providers_from_dir``
-- **Query** (per request): ``get_shim``, ``list_shims``, ``resolve_base``
+- **Query** (per request): ``get_shim``, ``list_shims``, ``resolve_format``,
+  ``resolve_model_type`` (``resolve_base`` is the deprecated alias)
 - **Transforms**: ``apply_transforms``, ``strip_fields``, ``rename_field``, ``set_defaults``
 """
 
@@ -20,6 +21,8 @@ from .provider_shim import (
     list_shims,
     register_shim,
     resolve_base,
+    resolve_format,
+    resolve_model_type,
     resolve_shim,
     unregister_shim,
 )
@@ -78,6 +81,8 @@ __all__ = [
     "get_shim",
     "list_shims",
     "resolve_base",
+    "resolve_format",
+    "resolve_model_type",
     "resolve_shim",
     # External shim sources
     "rebuild_shims",

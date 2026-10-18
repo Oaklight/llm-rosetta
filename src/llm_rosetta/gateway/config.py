@@ -1053,7 +1053,15 @@ class GatewayConfig:
     def _resolve_provider_types(
         raw_providers: dict[str, dict[str, str]],
     ) -> tuple[dict[str, str], dict[str, str | None]]:
-        """Resolve each provider's API standard type via shim registry.
+        """Resolve each provider's wire format via the shim registry.
+
+        The returned mapping becomes ``GatewayConfig.provider_types``.  Despite
+        the historical name, its values are *formats* (``chat_completions``,
+        ``systemone``, ...), not capability categories; read the category with
+        :func:`llm_rosetta.shims.resolve_model_type`.  For the decision shims
+        this means the value is the dialect (``systemone`` /
+        ``openai_decisions``) rather than the category the old ``base`` field
+        happened to carry.
 
         Resolution order per provider:
           1. ``shim`` field → resolve via shim registry
@@ -1077,7 +1085,7 @@ class GatewayConfig:
             warn_legacy_provider_names,
             warn_legacy_shim_names,
         )
-        from llm_rosetta.shims import resolve_base
+        from llm_rosetta.shims import resolve_format
 
         from .name_migration import correct_legacy_names, legacy_name_error
 
@@ -1100,12 +1108,12 @@ class GatewayConfig:
             # keys are user identifiers and are not rewritten.
             if "shim" in cfg:
                 provider_types[name] = canonical_provider_name(
-                    resolve_base(cfg["shim"])
+                    resolve_format(cfg["shim"])
                 )
                 provider_shim_names[name] = cfg["shim"]
             elif "type" in cfg:
                 provider_types[name] = canonical_provider_name(
-                    resolve_base(cfg["type"])
+                    resolve_format(cfg["type"])
                 )
                 provider_shim_names[name] = cfg["type"]
             else:
@@ -1117,7 +1125,7 @@ class GatewayConfig:
                 # ``openai_responses`` alias of it) uses that shim's base and
                 # keeps its identity, rather than being read as a bare format
                 # name.
-                provider_types[name] = canonical_provider_name(resolve_base(name))
+                provider_types[name] = canonical_provider_name(resolve_format(name))
                 provider_shim_names[name] = name
         return provider_types, provider_shim_names
 

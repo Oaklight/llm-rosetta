@@ -21,7 +21,7 @@ from llm_rosetta import (
     normalize_provider_name,
 )
 from llm_rosetta.provider_names import LEGACY_PROVIDER_ALIASES
-from llm_rosetta.shims import resolve_base
+from llm_rosetta.shims import resolve_format
 
 OPENAI_CHAT_BODY = {
     "model": "gpt-4o",
@@ -129,18 +129,18 @@ class TestConverterLookupBoundary:
             get_converter_for_provider("not-a-provider")
 
 
-class TestResolveBaseBoundary:
-    """``resolve_base`` is an internal lookup: legacy names migrate silently."""
+class TestResolveFormatBoundary:
+    """``resolve_format`` is an internal lookup: legacy names migrate silently."""
 
     def test_google_legacy_migrates_without_warning(self):
         with warnings.catch_warnings():
             warnings.simplefilter("error", DeprecationWarning)
-            assert resolve_base("google") == "google_generate"
+            assert resolve_format("google") == "google_generate"
 
     def test_google_genai_migrates_without_warning(self):
         with warnings.catch_warnings():
             warnings.simplefilter("error", DeprecationWarning)
-            assert resolve_base("google-genai") == "google_generate"
+            assert resolve_format("google-genai") == "google_generate"
 
 
 class TestLibraryArgumentBoundary:
@@ -362,7 +362,7 @@ class TestBoundaryWarningAttribution:
         with warnings.catch_warnings():
             warnings.simplefilter("error", DeprecationWarning)
             get_converter_for_provider("openai_chat")
-            resolve_base("google")
+            resolve_format("google")
             get_shim("google")
 
     def test_canonical_names_never_warn(self):
@@ -601,7 +601,7 @@ class TestShimBoundaryWarnings:
             warnings.simplefilter("error", DeprecationWarning)
             get_shim("deepseek--openai_chat")
             get_shim("openai")
-            resolve_base("deepseek--openai_chat")
+            resolve_format("deepseek--openai_chat")
             resolve_shim("deepseek--openai_chat")
 
 

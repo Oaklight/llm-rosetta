@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from ..types.ir.configs import IREffort, IRMode  # re-exported
+from llm_rosetta.model_vocabulary import FORMATS_BY_TYPE, MODEL_TYPES
 from llm_rosetta.provider_names import (
     canonical_provider_name,
     canonical_shim_name,
@@ -578,17 +579,11 @@ def staging_registry() -> Iterator[dict[str, ProviderShim]]:
     _SHIM_REGISTRY = staging
 
 
-# Base converter types — used by resolve_base() for pass-through detection
-_BASE_TYPES: frozenset[str] = frozenset(
-    {
-        "chat_completions",
-        "open_responses",
-        "messages",
-        "google_generate",
-        "google_interactions",
-        "decision",
-    }
-)
+# Chat formats and model-type names are not shims.  Non-chat format names are
+# deliberately absent: ``openai``, ``cohere``, ``jina`` and ``voyage`` are also
+# vendor names, so a bare name is only resolved within a model-type context.
+_CHAT_FORMATS: frozenset[str] = frozenset(FORMATS_BY_TYPE["llm"])
+_NON_SHIM_NAMES: frozenset[str] = _CHAT_FORMATS | frozenset(MODEL_TYPES)
 
 
 def register_shim(shim: ProviderShim) -> None:
@@ -609,7 +604,7 @@ def register_shim(shim: ProviderShim) -> None:
     registry = _current_registry()
     key = shim.name
     if key in registry:
-        logger.info("Shim %r overridden (base: %s)", key, shim.base)
+        logger.info("Shim %r overridden (format: %s)", key, shim.format)
     registry[key] = shim
 
 
@@ -630,31 +625,32 @@ def get_shim(name: str) -> ProviderShim | None:
     """Look up a registered :class:`ProviderShim` by *name*.
 
     The exact name is tried first, so a shim whose name is itself a legacy
-    alias (a plugin case) is reachable under that name.  A **base converter
-    type** (``chat_completions``, ``open_responses``, ``messages``,
-    ``google_generate``, ``google_interactions``) is a *format*, never a shim:
-    it resolves to ``None`` so a format name can never silently inherit a
-    vendor shim's connection defaults (#917).  Any other name falls back to its
-    canonical *shim* spelling (``LEGACY_SHIM_ALIASES``) and then to its
-    canonical provider spelling, so a shim registered under its canonical
-    ``<provider>--<base>`` name stays reachable via a legacy alias (e.g.
-    ``"google"`` → ``"google--google_generate"``, ``"openai_responses"`` →
+    alias (a plugin case) is reachable under that name.  A **bare chat format**
+    (``chat_completions``, ``open_responses``, ``messages``, ``google_generate``,
+    ``google_interactions``) or a **model-type name** (``llm``, ``embedding``,
+    ``rerank``, ``decision``) is never a shim: it resolves to ``None`` so a
+    format name can never silently inherit a vendor shim's connection defaults
+    (#917).  Any other name falls back to its canonical *shim* spelling
+    (``LEGACY_SHIM_ALIASES``) and then to its canonical provider spelling, so a
+    shim registered under its canonical ``<provider>--<format>`` name stays
+    reachable via a legacy alias (e.g. ``"google"`` →
+    ``"google--google_generate"``, ``"openai_responses"`` →
     ``"openai--open_responses"``).  This is an internal lookup and never warns.
     """
     registry = _current_registry()
     shim = registry.get(name)
     if shim is not None:
         return shim
-    if name in _BASE_TYPES:
+    if name in _NON_SHIM_NAMES:
         return None
     legacy_shim = canonical_shim_name(name)
-    if legacy_shim in _BASE_TYPES:
+    if legacy_shim in _NON_SHIM_NAMES:
         return None
     shim = registry.get(legacy_shim)
     if shim is not None:
         return shim
     provider = canonical_provider_name(name)
-    if provider in _BASE_TYPES:
+    if provider in _NON_SHIM_NAMES:
         return None
     return registry.get(provider)
 
@@ -688,37 +684,71 @@ def list_shims() -> list[ProviderShim]:
     return out
 
 
-def resolve_base(name: str) -> str:
-    """Resolve a provider/shim *name* to its base converter type.
+def resolve_format(name: str) -> str:
+    """Resolve a provider/shim *name* to its wire format.
 
     An exact registered shim name is tried first, so a shim whose name is also
-    a legacy alias resolves to *its* declared base rather than being rewritten
+    a legacy alias resolves to *its* declared format rather than being rewritten
     (the OpenAI Responses profile ``"openai_responses"`` now normalises to the
-    ``"openai--open_responses"`` shim, whose base is ``"open_responses"``).
-    Otherwise legacy *name* inputs are resolved
-    to canonical spellings (see
+    ``"openai--open_responses"`` shim, whose format is ``"open_responses"``).
+    Otherwise legacy *name* inputs are resolved to canonical spellings (see
     :func:`llm_rosetta.provider_names.canonical_provider_name`); this is an
-    internal lookup and never warns.  A shim's
-    declared ``base`` is returned as-is; callers that need a canonical provider
-    type normalise the result themselves.  If the normalised *name* is already
-    a known base type (e.g. ``"chat_completions"``), it is returned unchanged.
-    If the name is not found in either, it is returned as-is (caller decides
-    how to handle unknown names).
+    internal lookup and never warns.  A shim's stored format is already
+    canonical.  If the normalised *name* is a known chat format or a model-type
+    name, it is returned unchanged.  If the name is not found in either, it is
+    returned as-is (caller decides how to handle unknown names).
     """
     registry = _current_registry()
     shim = registry.get(name)
     if shim is not None:
-        return shim.base
+        return shim.format
     resolved = canonical_provider_name(name)
-    if resolved in _BASE_TYPES:
+    if resolved in _NON_SHIM_NAMES:
         return resolved
     shim = registry.get(resolved)
     if shim is not None:
-        return shim.base
+        return shim.format
     shim = registry.get(canonical_shim_name(name))
     if shim is not None:
-        return shim.base
+        return shim.format
     return resolved
+
+
+def resolve_model_type(name: str) -> str | None:
+    """Resolve a provider/shim *name* to its capability category.
+
+    A registered shim declares the category.  A bare chat format or a
+    model-type name resolves without the registry.  A non-chat format name is
+    ambiguous at this boundary (``openai`` is both a vendor and an embedding
+    format), so it must come from a shim or from a caller that already knows the
+    category; this function returns ``None`` for it.
+
+    Returns:
+        ``"llm"``, ``"embedding"``, ``"rerank"`` or ``"decision"``, or
+        ``None`` when the name does not identify a category.
+    """
+    registry = _current_registry()
+    shim = registry.get(name)
+    if shim is None:
+        shim = registry.get(canonical_shim_name(name))
+    if shim is not None:
+        return shim.model_type
+    resolved = canonical_provider_name(name)
+    if resolved in MODEL_TYPES:
+        return resolved
+    if resolved in _CHAT_FORMATS:
+        return "llm"
+    return None
+
+
+def resolve_base(name: str) -> str:
+    """Deprecated alias for :func:`resolve_format`."""
+    warnings.warn(
+        "resolve_base() is deprecated, use resolve_format()",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return resolve_format(name)
 
 
 def _clear_registry_caches() -> None:

@@ -63,6 +63,8 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "get_shim",
             "list_shims",
             "resolve_base",
+            "resolve_format",
+            "resolve_model_type",
             # External shim sources
             "rebuild_shims",
             "resolve_remote",
@@ -76,7 +78,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "rename_field",
             "set_defaults",
         ],
-        "max_count": 48,
+        "max_count": 50,
     },
     "llm_rosetta.types.ir": {
         "items": None,  # too many to enumerate; just check count

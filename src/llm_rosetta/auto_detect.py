@@ -276,7 +276,7 @@ def get_converter_for_provider(provider: str):
         return _converter_cache[provider]
 
     from .converters.registry import CONVERTER_REGISTRY
-    from .shims import resolve_base
+    from .shims import resolve_format
 
     converter_map = CONVERTER_REGISTRY["llm"]
 
@@ -288,7 +288,7 @@ def get_converter_for_provider(provider: str):
 
     # Resolve through shim registry.  A shim's declared ``base`` may itself be
     # a legacy spelling, so normalise it before the map lookup.
-    base = canonical_provider_name(resolve_base(provider))
+    base = canonical_provider_name(resolve_format(provider))
     if base in converter_map:
         instance = converter_map[base]()
         _converter_cache[provider] = instance

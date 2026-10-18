@@ -53,7 +53,7 @@ from llm_rosetta.provider_names import (
     warn_legacy_provider_names,
     warn_legacy_shim_names,
 )
-from llm_rosetta.shims.provider_shim import ProviderShim, resolve_base, resolve_shim
+from llm_rosetta.shims.provider_shim import ProviderShim, resolve_format, resolve_shim
 from llm_rosetta.transforms.body import Transform, apply_transforms
 from llm_rosetta.transforms.ir import (
     TransformContext,
@@ -209,7 +209,7 @@ _EMPTY_TRANSFORMS: tuple[Transform, ...] = ()
 # therefore use the Generative Language REST body shape by default.
 # ``"google"`` is both a base type and a shim name; ``"google_generate"``
 # is the canonical converter name.  Shim names (e.g.
-# ``asksage--google_generate``) are normalised through ``resolve_base``
+# ``asksage--google_generate``) are normalised through ``resolve_format``
 # before the membership test so they select REST too.  The SDK body
 # shape (``config``) is rejected by the REST endpoint with HTTP 400.
 _GOOGLE_GENERATE_PROVIDERS: frozenset[str] = frozenset({"google", "google_generate"})
@@ -338,7 +338,7 @@ class ConversionPipeline:
         # Language REST endpoint rejects with HTTP 400 ``Unknown name
         # "config"`` (#882) — so fail at construction, not on the upstream
         # call.
-        if resolve_base(target_provider) in _GOOGLE_GENERATE_PROVIDERS:
+        if resolve_format(target_provider) in _GOOGLE_GENERATE_PROVIDERS:
             from llm_rosetta.converters.google_generate import (
                 validate_google_output_format,
             )
@@ -654,7 +654,7 @@ class ConversionPipeline:
         # request (see the converter's ``request_from_provider``).
         ctx.options["preserve_fields"] = self._source_preserve_fields
         ctx.options["store_default"] = self._source_store_default
-        if resolve_base(self._target_provider) in _GOOGLE_GENERATE_PROVIDERS:
+        if resolve_format(self._target_provider) in _GOOGLE_GENERATE_PROVIDERS:
             ctx.options["output_format"] = self._google_output_format
 
         if self._multimodal_tool_result is not None:

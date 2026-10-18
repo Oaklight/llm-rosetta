@@ -186,9 +186,10 @@ async def get_requests(request: Any) -> Response:
                 raw_prov = raw.get("providers", {}).get(provider, {})
                 raw_type = raw_prov.get("type") or raw_prov.get("shim")
                 if raw_type:
-                    from llm_rosetta.shims import resolve_base
+                    from llm_rosetta.provider_names import canonical_provider_name
+                    from llm_rosetta.shims import resolve_format
 
-                    provider_type = resolve_base(raw_type)
+                    provider_type = canonical_provider_name(resolve_format(raw_type))
             except Exception:
                 pass
 

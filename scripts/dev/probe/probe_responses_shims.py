@@ -124,7 +124,7 @@ def responses_shims(only: str | None = None) -> list[ProviderShim]:
         The matching shims, in registry order.
     """
     load_providers()
-    found = [s for s in list_shims() if s.base == "open_responses"]
+    found = [s for s in list_shims() if s.format == "open_responses"]
     if only:
         found = [s for s in found if s.name == only]
     return found

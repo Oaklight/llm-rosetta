@@ -47,6 +47,8 @@ from .shims import (
     register_shim,
     rename_field,
     resolve_base,
+    resolve_format,
+    resolve_model_type,
     resolve_remote,
     set_defaults,
     strip_fields,
@@ -96,6 +98,8 @@ __all__ = [
     "get_shim",
     "list_shims",
     "resolve_base",
+    "resolve_format",
+    "resolve_model_type",
     # External shim sources
     "rebuild_shims",
     "resolve_remote",
