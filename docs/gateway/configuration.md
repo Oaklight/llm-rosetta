@@ -116,6 +116,35 @@ commit；配置文件本身不会被改写。要可复现部署请固定 tag 或
     安装插件包是同一信任级别。建议固定 `ref`（必要时再给 `sha256`），并且只添加你信任的源。
     信任边界是「谁能修改配置文件」。
 
+### 非 LLM 端点 { #non-llm-endpoints }
+
+一个提供方条目也可以承载 embedding、rerank 或 decision 流量。可以直接写方言，也可以指向该能力对应的 shim：
+
+```jsonc
+"providers": {
+  // 显式格式：路径默认为 /v1/embeddings
+  "openai": {
+    "type": "openai",
+    "api_key": "${OPENAI_API_KEY}",
+    "embedding_format": "openai"
+  },
+  // 端点 shim：格式、路径与连接默认值都来自该 shim
+  "acme-embed":  { "embedding_shim": "acme--embedding" },
+  "acme-rerank": { "rerank_shim": "acme--rerank", "rerank_path": "/v1/rerank" }
+}
+```
+
+端点键为 `embedding_format` / `embedding_path` / `embedding_shim`、`rerank_format` / `rerank_path` / `rerank_shim`，以及 `decision_format` / `decision_path` / `decision_shim`。每个端点的优先级：
+
+1. **shim**：`<type>_shim`；否则使用提供方级的 `shim` 或 `type`，但仅当该 shim 的 `model_type` 与端点一致；
+2. **格式**：显式的 `<type>_format` 优先于 shim 的格式；
+3. **路径**：显式的 `<type>_path` 优先于 shim 的 `connection.default_path`（仅当最终格式就是该 shim 的格式时才使用），其次是 descriptor 的默认路径；
+4. **连接**：条目中非空的 `base_url` / `api_key` 优先于 shim 默认值。
+
+`<type>_shim` 若不属于该能力，启动时会报错并指明该 shim 的类别。gateway 把每个提供方的身份记录为 `(model_type, format)` 对；LLM 模型若被路由到身份为 `embedding`、`rerank` 或 `decision` 的提供方，会被拒绝。
+
+旧的 `embedding_providers` / `rerank_providers` / `decision_providers` 段仍然可用，并与统一条目合并。
+
 ### 图片数量限制
 
 Shim 支持 `max_images` 和 `max_images_pattern` 字段，用于对每次请求中的图片数量设置上限：
@@ -578,7 +607,7 @@ soft_error_patterns:
 
 ## Embedding 提供方
 
-网关可以代理 `/v1/embeddings` 请求，支持跨格式 IR 转换（OpenAI ↔ Cohere ↔ Jina ↔ Voyage）。Embedding 提供方和模型独立于 chat 提供方配置：
+网关可以代理 `/v1/embeddings` 请求，支持跨格式 IR 转换（OpenAI ↔ Cohere ↔ Jina ↔ Voyage）。统一提供方条目可以用 `embedding_format` 或 `embedding_shim` 声明该端点（见[非 LLM 端点](#non-llm-endpoints)）；下面的旧格式仍然受支持。Embedding 提供方和模型独立于 chat 提供方配置：
 
 ```jsonc
 {
@@ -604,7 +633,7 @@ soft_error_patterns:
 
 ## Rerank 提供方
 
-网关可以代理 `/v1/rerank` 和 `/v2/rerank` 请求，支持跨格式 IR 转换（Jina ↔ Cohere ↔ Voyage）：
+网关可以代理 `/v1/rerank` 和 `/v2/rerank` 请求，支持跨格式 IR 转换（Jina ↔ Cohere ↔ Voyage）。统一条目使用 `rerank_format` 或 `rerank_shim`（见[非 LLM 端点](#non-llm-endpoints)）；下面的旧格式仍然受支持：
 
 ```jsonc
 {
@@ -630,7 +659,7 @@ soft_error_patterns:
 
 ## Decision 提供方
 
-网关可代理 `/v1/decision` 和 `/v1/systemone` 请求，用于概率化结构决策模型：
+网关可代理 `/v1/decision` 和 `/v1/systemone` 请求，用于概率化结构决策模型。统一条目使用 `decision_format` 或 `decision_shim`（见[非 LLM 端点](#non-llm-endpoints)）；下面的旧格式仍然受支持：
 
 ```jsonc
 {
