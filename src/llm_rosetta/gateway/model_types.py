@@ -55,6 +55,10 @@ class ModelTypeDescriptor:
             (e.g. ``"embedding_format"``).  Used by config resolution.
         config_path_key: Provider config key for the type's endpoint path
             (e.g. ``"embedding_path"``).  Used by config resolution.
+        config_shim_key: Provider config key naming a shim for this type
+            (e.g. ``"embedding_shim"``).  A non-LLM endpoint may be configured
+            through a shim instead of a bare format, so the shim supplies the
+            format, path and connection defaults.
         default_path: Default upstream path for this type's endpoint
             (e.g. ``"/v1/embeddings"``).
         icon_svg: Inline SVG string for the capability icon.  Consumed
@@ -74,6 +78,7 @@ class ModelTypeDescriptor:
     badge_class: str = ""
     config_format_key: str | None = None
     config_path_key: str | None = None
+    config_shim_key: str | None = None
     default_path: str | None = None
     icon_svg: str = ""
     color: str = ""
@@ -208,6 +213,7 @@ def _register_builtins() -> None:
             badge_class="cap-badge-embedding",
             config_format_key="embedding_format",
             config_path_key="embedding_path",
+            config_shim_key="embedding_shim",
             default_path="/v1/embeddings",
             icon_svg=(
                 '<svg viewBox="0 0 16 16" fill="currentColor">'
@@ -237,6 +243,7 @@ def _register_builtins() -> None:
             badge_class="cap-badge-rerank",
             config_format_key="rerank_format",
             config_path_key="rerank_path",
+            config_shim_key="rerank_shim",
             default_path="/v1/rerank",
             icon_svg=(
                 '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor"'
@@ -282,6 +289,7 @@ def _register_decision() -> None:
             badge_class="cap-badge-decision",
             config_format_key="decision_format",
             config_path_key="decision_path",
+            config_shim_key="decision_shim",
             default_path="/v1/systemone",
             icon_svg=(
                 '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor"'

@@ -342,6 +342,8 @@ def _optional_provider_keys() -> list[str]:
             keys.append(desc.config_format_key)
         if desc.config_path_key:
             keys.append(desc.config_path_key)
+        if desc.config_shim_key:
+            keys.append(desc.config_shim_key)
     return keys
 
 

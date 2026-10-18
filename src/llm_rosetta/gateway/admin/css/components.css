@@ -313,6 +313,7 @@ tr:hover td { background: var(--bg-hover); }
   color:var(--accent);font-weight:600;
 }
 .tp-list { padding:4px; }
+.tp-group-label { padding:6px 10px 4px;font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.6px; }
 .tp-item {
   display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:4px;
   cursor:pointer;font-size:13px;color:var(--text);min-width:0;

@@ -117,7 +117,7 @@ async function copyText(text, toastMsg) {
 function copyProviderEntry(name) {
   const cfg = S.configData.providers[name] || {};
   // Open Add Provider modal pre-filled with non-sensitive fields; API key is intentionally omitted
-  window.openProviderModal?.('', cfg.base_url, '', cfg.proxy, cfg.type || name);
+  window.openProviderModal?.('', cfg.base_url, '', cfg.proxy, providerTypeName(cfg, name));
 }
 
 // ===================== Toast =====================
@@ -285,6 +285,25 @@ function fmtTokens(n) {
 
 // ===================== Window globals =====================
 // ── Free-source entries (shared by the Providers and Models tabs) ──
+
+/** The shim / base-format name a provider entry resolves to: an explicit
+ *  `shim` wins, then a real `type`, then the non-LLM endpoint shim, then the
+ *  provider name.  A config that declares `shim:` instead of `type:` arrives
+ *  with `type` filled in from the provider name (see admin/routes/config.py),
+ *  so a `type` equal to the name is synthetic and must not win.  A provider
+ *  defined only by `embedding_shim` / `rerank_shim` / `decision_shim` has no
+ *  chat type at all. */
+export function providerTypeName(cfg, name) {
+  if (!cfg) return name;
+  if (cfg.shim) return cfg.shim;
+  if (cfg.type && cfg.type !== name) return cfg.type;
+  for (const desc of S.configData?.model_types || []) {
+    if (!desc.is_llm && desc.config_shim_key && cfg[desc.config_shim_key]) {
+      return cfg[desc.config_shim_key];
+    }
+  }
+  return name;
+}
 
 /** The registered shim backing provider *name*, or null. */
 export function shimOf(providers, shims, name) {

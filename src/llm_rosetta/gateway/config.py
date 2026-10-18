@@ -10,6 +10,7 @@ import re
 import sys
 from collections.abc import AsyncGenerator, Generator
 from contextlib import asynccontextmanager, contextmanager, suppress
+from dataclasses import dataclass
 from typing import Any, NamedTuple, Protocol, runtime_checkable
 
 from llm_rosetta._vendor import jsonx
@@ -59,6 +60,22 @@ class DecisionRoute(NamedTuple):
     format: str
     decision_path: str
     provider_info: ProviderInfo
+
+
+@dataclass(frozen=True)
+class ProviderIdentity:
+    """What a configured provider is: its capability category and wire format.
+
+    The pair is the gateway-side counterpart of a shim's
+    ``(model_type, format)``.  ``model_type`` is one of the registry's
+    categories (``llm``, ``embedding``, ``rerank``, ``decision``); ``format``
+    is the dialect within that category.  A format name alone is ambiguous —
+    ``openai`` is a vendor, a chat shim and an embedding format — so consumers
+    that route or convert read the pair together.
+    """
+
+    model_type: str
+    format: str
 
 
 # ---------------------------------------------------------------------------
@@ -532,9 +549,15 @@ class GatewayConfig:
             if cfg.get("enabled", True) is not False
         }
 
-        self.provider_types, self.provider_shim_names = self._resolve_provider_types(
-            self._raw_providers
+        self.provider_identities, self.provider_shim_names = (
+            self._resolve_provider_identities(self._raw_providers)
         )
+        # ``provider_types`` keeps meaning the wire format for existing
+        # consumers (routing, proxy, observability, admin).  Read the pair from
+        # ``provider_identities`` when the category matters.
+        self.provider_types: dict[str, str] = {
+            name: ident.format for name, ident in self.provider_identities.items()
+        }
 
         self.provider_supports_custom_tools = self._parse_custom_tools_overrides(
             self._raw_providers
@@ -578,7 +601,7 @@ class GatewayConfig:
 
         self._apply_debug_settings(raw.get("debug", {}))
 
-        self._validate()
+        self._validate(raw.get("models", {}))
 
         # Build ProviderInfo objects (with key rotation support)
         self.providers: dict[str, ProviderInfo] = {
@@ -616,8 +639,10 @@ class GatewayConfig:
             self.rerank_models,
         ) = self._extract_endpoint_from_providers(
             self._raw_providers,
+            type_name="rerank",
             format_key="rerank_format",
             path_key="rerank_path",
+            shim_key="rerank_shim",
             default_path="/v1/rerank",
             info_prefix="rerank",
             global_proxy=self.proxy,
@@ -644,8 +669,10 @@ class GatewayConfig:
             self.embedding_models,
         ) = self._extract_endpoint_from_providers(
             self._raw_providers,
+            type_name="embedding",
             format_key="embedding_format",
             path_key="embedding_path",
+            shim_key="embedding_shim",
             default_path="/v1/embeddings",
             info_prefix="embedding",
             global_proxy=self.proxy,
@@ -673,8 +700,10 @@ class GatewayConfig:
             self.decision_models,
         ) = self._extract_endpoint_from_providers(
             self._raw_providers,
+            type_name="decision",
             format_key="decision_format",
             path_key="decision_path",
+            shim_key="decision_shim",
             default_path="/v1/systemone",
             info_prefix="decision",
             global_proxy=self.proxy,
@@ -1027,7 +1056,7 @@ class GatewayConfig:
             raw_log_format = "auto"
         self.log_format: str = raw_log_format  # resolved later by setup_logging
 
-    def _validate(self) -> None:
+    def _validate(self, raw_models: dict[str, Any]) -> None:
         if not self._raw_providers:
             logger.warning(
                 "config: no enabled providers — all providers may be disabled"
@@ -1039,10 +1068,25 @@ class GatewayConfig:
             )
             return
         for model, route in self.models.items():
+            entry = raw_models.get(model)
+            # Typed models are moved out of the LLM pool later; an embedding
+            # model legitimately points at an embedding provider.
+            declared_type = (
+                entry.get("type", "llm") if isinstance(entry, dict) else "llm"
+            )
             for pname in route.provider_names:
                 if pname not in self._raw_providers:
                     raise ValueError(
                         f"config: model '{model}' references unknown provider '{pname}'"
+                    )
+                if declared_type != "llm":
+                    continue
+                identity = self.provider_identities.get(pname)
+                if identity is not None and identity.model_type != "llm":
+                    raise ValueError(
+                        f"config: model '{model}' is an LLM model but provider "
+                        f"'{pname}' serves {identity.model_type} "
+                        f"({identity.format})"
                     )
 
         # Warn about potential routing loops.
@@ -1050,23 +1094,115 @@ class GatewayConfig:
             logger.warning("config: %s", warning)
 
     @staticmethod
-    def _resolve_provider_types(
-        raw_providers: dict[str, dict[str, str]],
-    ) -> tuple[dict[str, str], dict[str, str | None]]:
-        """Resolve each provider's wire format via the shim registry.
+    def _resolve_endpoint_shim(
+        cfg: dict[str, Any], *, type_name: str, shim_key: str
+    ) -> Any:
+        """Return the shim a non-LLM endpoint of *type_name* is configured through.
 
-        The returned mapping becomes ``GatewayConfig.provider_types``.  Despite
-        the historical name, its values are *formats* (``chat_completions``,
-        ``systemone``, ...), not capability categories; read the category with
-        :func:`llm_rosetta.shims.resolve_model_type`.  For the decision shims
-        this means the value is the dialect (``systemone`` /
+        An explicit ``cfg[shim_key]`` must name a registered shim serving
+        *type_name*; a mismatch is a configuration error.  Otherwise the
+        provider-wide ``shim`` / ``type`` is used only when its category
+        matches, so a chat provider named ``openai`` keeps its chat identity
+        while still serving embeddings through ``embedding_format``.
+
+        Args:
+            cfg: Raw provider config entry.
+            type_name: Registry category the endpoint belongs to.
+            shim_key: Provider config key naming the endpoint shim
+                (e.g. ``"embedding_shim"``).
+
+        Returns:
+            The effective :class:`~llm_rosetta.shims.provider_shim.ProviderShim`,
+            or ``None``.
+
+        Raises:
+            ValueError: If ``cfg[shim_key]`` is unknown or serves another type.
+        """
+        from llm_rosetta.shims import get_shim
+
+        declared = cfg.get(shim_key)
+        if declared:
+            shim = get_shim(declared)
+            if shim is None:
+                raise ValueError(f"config: {shim_key} names unknown shim '{declared}'")
+            if shim.model_type != type_name:
+                raise ValueError(
+                    f"config: {shim_key} shim '{declared}' serves "
+                    f"{shim.model_type}, not {type_name}"
+                )
+            return shim
+        for key in ("shim", "type"):
+            value = cfg.get(key)
+            if not value:
+                continue
+            shim = get_shim(value)
+            if shim is not None and shim.model_type == type_name:
+                return shim
+        return None
+
+    @staticmethod
+    def _identity_category(wire_format: str, cfg: dict[str, Any]) -> str | None:
+        """Return the category a bare *wire_format* names, or ``None`` if unknown.
+
+        Chat formats resolve to ``llm``.  A non-chat format name is known but
+        may span categories (``cohere``, ``jina`` and ``voyage`` are both
+        embedding and rerank formats), so prefer a category the provider
+        declares an endpoint for and otherwise the registry order.  A name that
+        appears in no category stays unknown, which lets the caller keep the
+        legacy ``llm`` default for a provider with no declared type.
+        """
+        from llm_rosetta.model_vocabulary import FORMATS_BY_TYPE
+
+        from .model_types import all_model_types
+
+        if wire_format in FORMATS_BY_TYPE["llm"]:
+            return "llm"
+        candidates = [
+            model_type
+            for model_type, formats in FORMATS_BY_TYPE.items()
+            if wire_format in formats
+        ]
+        if not candidates:
+            return None
+        declared = {
+            desc.name
+            for desc in all_model_types()
+            if not desc.is_llm
+            and (
+                (desc.config_format_key and cfg.get(desc.config_format_key))
+                or (desc.config_shim_key and cfg.get(desc.config_shim_key))
+            )
+        }
+        for candidate in candidates:
+            if candidate in declared:
+                return candidate
+        return candidates[0]
+
+    @classmethod
+    def _resolve_provider_identities(
+        cls,
+        raw_providers: dict[str, dict[str, str]],
+    ) -> tuple[dict[str, ProviderIdentity], dict[str, str | None]]:
+        """Resolve each provider's ``(model_type, format)`` identity.
+
+        ``GatewayConfig.provider_types`` is derived from these values as the
+        format, so the historical field keeps its meaning for existing
+        consumers; read this mapping when the capability category matters.
+        For the decision shims the format is the dialect (``systemone`` /
         ``openai_decisions``) rather than the category the old ``base`` field
         happened to carry.
 
         Resolution order per provider:
-          1. ``shim`` field → resolve via shim registry
-          2. ``type`` field → resolve via shim registry
+          1. ``shim`` field → the shim's pair
+          2. ``type`` field → the shim's pair, or the format's category
           3. provider name itself (backward-compatible fallback)
+          4. a non-LLM ``*_shim`` when the provider has no chat identity
+
+        Step 4 matters for a provider configured only as an endpoint, e.g.
+        ``{"embedding_shim": "jina--embedding"}``.  It never overrides a chat
+        identity: a provider named ``openai`` that also declares an embedding
+        shim stays an LLM provider and serves embeddings through the endpoint
+        config.
 
         Legacy provider/format names are resolved to canonical spellings
         (see :func:`llm_rosetta.provider_names.canonical_provider_name`), and
@@ -1078,15 +1214,16 @@ class GatewayConfig:
         operators migrate before 0.16.0 (#919).
 
         Returns:
-            Tuple of (provider_types, provider_shim_names).
+            Tuple of (provider_identities, provider_shim_names).
         """
         from llm_rosetta.provider_names import (
             canonical_provider_name,
             warn_legacy_provider_names,
             warn_legacy_shim_names,
         )
-        from llm_rosetta.shims import resolve_format
+        from llm_rosetta.shims import resolve_format, resolve_model_type
 
+        from .model_types import all_model_types
         from .name_migration import correct_legacy_names, legacy_name_error
 
         # Migrate legacy names in place.  File-backed configs are also
@@ -1098,7 +1235,13 @@ class GatewayConfig:
         if error is not None:
             raise ValueError(error)
 
-        provider_types: dict[str, str] = {}
+        endpoint_types = [
+            (desc.name, desc.config_shim_key)
+            for desc in all_model_types()
+            if not desc.is_llm and desc.config_shim_key
+        ]
+
+        identities: dict[str, ProviderIdentity] = {}
         provider_shim_names: dict[str, str | None] = {}
         for name, cfg in raw_providers.items():
             # ``shim:`` / ``type:`` values were already canonicalised above, so
@@ -1107,15 +1250,11 @@ class GatewayConfig:
             # each rewrite at INFO.  Only a legacy provider *key* still warns:
             # keys are user identifiers and are not rewritten.
             if "shim" in cfg:
-                provider_types[name] = canonical_provider_name(
-                    resolve_format(cfg["shim"])
-                )
-                provider_shim_names[name] = cfg["shim"]
+                source = cfg["shim"]
+                provider_shim_names[name] = source
             elif "type" in cfg:
-                provider_types[name] = canonical_provider_name(
-                    resolve_format(cfg["type"])
-                )
-                provider_shim_names[name] = cfg["type"]
+                source = cfg["type"]
+                provider_shim_names[name] = source
             else:
                 warn_legacy_provider_names(name)
                 if name not in BASE_FORMATS:
@@ -1125,9 +1264,42 @@ class GatewayConfig:
                 # ``openai_responses`` alias of it) uses that shim's base and
                 # keeps its identity, rather than being read as a bare format
                 # name.
-                provider_types[name] = canonical_provider_name(resolve_format(name))
+                source = name
                 provider_shim_names[name] = name
-        return provider_types, provider_shim_names
+
+            wire_format = canonical_provider_name(resolve_format(source))
+            model_type = resolve_model_type(source)
+
+            # A provider with no chat identity may be defined by a non-LLM
+            # endpoint shim alone.  The provider-wide shim/type wins when it
+            # names a category, so this only fills in the unknown case.
+            if model_type is None:
+                for type_name, shim_key in endpoint_types:
+                    if not cfg.get(shim_key):
+                        continue
+                    shim = cls._resolve_endpoint_shim(
+                        cfg, type_name=type_name, shim_key=shim_key
+                    )
+                    if shim is not None:
+                        model_type = shim.model_type
+                        wire_format = shim.format
+                        # The LLM-side ProviderInfo still needs the shim's
+                        # connection defaults (base_url, key env) so an
+                        # endpoint-only provider loads without duplicating
+                        # them in the config.
+                        provider_shim_names[name] = shim.name
+                        break
+
+            if model_type is None:
+                # A known non-chat format still names a category even when the
+                # bare name is ambiguous.  Never turn that "I do not know the
+                # chat format" into a confident ``llm`` identity.
+                model_type = cls._identity_category(wire_format, cfg)
+
+            identities[name] = ProviderIdentity(
+                model_type=model_type or "llm", format=wire_format
+            )
+        return identities, provider_shim_names
 
     @classmethod
     def _parse_models(
@@ -1396,34 +1568,67 @@ class GatewayConfig:
     def _extract_endpoint_from_providers(
         raw_providers: dict[str, dict[str, Any]],
         *,
+        type_name: str,
         format_key: str,
         path_key: str,
+        shim_key: str,
         default_path: str,
         info_prefix: str,
         global_proxy: str | None = None,
     ) -> tuple[dict[str, dict[str, Any]], dict[str, ProviderInfo], dict[str, str]]:
-        """Extract endpoint config from unified providers.
+        """Extract one non-LLM endpoint from the unified provider entries.
 
-        Providers that have the given *format_key* field are treated as
-        capable of the corresponding endpoint type.
+        A provider participates when its ``*_format`` is non-empty or it names
+        an effective shim for this category (the admin writes ``""`` to clear
+        a key).  Precedence:
+
+          1. shim: ``shim_key``, else the provider-wide ``shim`` / ``type``
+             when its category matches;
+          2. format: explicit ``*_format`` > the shim's format, canonicalised;
+          3. path: explicit ``*_path`` > the shim's ``default_path`` when the
+             effective format is the shim's > ``default_path``;
+          4. connection: a non-empty config value > shim defaults;
+          5. auth: Google's header for a ``google_generate`` embedding
+             upstream, OpenAI Bearer otherwise.
         """
-        from .transport.provider_info import openai_auth
+        from llm_rosetta.provider_names import canonical_provider_name
+
+        from .providers import _apply_shim_defaults
+        from .transport.provider_info import google_auth, openai_auth
 
         providers: dict[str, dict[str, Any]] = {}
         provider_infos: dict[str, ProviderInfo] = {}
         for name, cfg in raw_providers.items():
-            if format_key not in cfg:
+            shim = GatewayConfig._resolve_endpoint_shim(
+                cfg, type_name=type_name, shim_key=shim_key
+            )
+            explicit_format = cfg.get(format_key) or ""
+            if not explicit_format and shim is None:
                 continue
-            path = cfg.get(path_key, default_path)
+
+            if explicit_format:
+                wire_format = canonical_provider_name(explicit_format)
+            else:
+                assert shim is not None
+                wire_format = shim.format
+
+            path = cfg.get(path_key) or ""
+            if not path and shim is not None and wire_format == shim.format:
+                path = shim.default_path or ""
+            if not path:
+                path = default_path
+
+            effective = _apply_shim_defaults(cfg, shim) if shim is not None else cfg
+            auth_fn = google_auth if wire_format == "google_generate" else openai_auth
             providers[name] = {
-                "format": cfg[format_key],
+                "format": wire_format,
                 path_key: path,
             }
             provider_infos[name] = ProviderInfo(
                 name=f"{info_prefix}:{name}",
-                api_key=cfg.get("api_key", ""),
-                base_url=cfg.get("base_url", "").rstrip("/"),
-                auth_header_fn=openai_auth,
+                api_key=effective.get("api_key", ""),
+                base_url=effective.get("base_url", "").rstrip("/"),
+                auth_header_fn=auth_fn,
                 url_template="{base_url}" + path,
                 proxy_url=cfg.get("proxy") or global_proxy,
             )
@@ -1439,6 +1644,8 @@ class GatewayConfig:
         global_proxy: str | None = None,
     ) -> tuple[dict[str, dict[str, Any]], dict[str, ProviderInfo], dict[str, str]]:
         """Parse rerank_providers and rerank_models from config."""
+        from llm_rosetta.provider_names import canonical_provider_name
+
         from .transport.provider_info import openai_auth
 
         providers: dict[str, dict[str, Any]] = {}
@@ -1449,8 +1656,13 @@ class GatewayConfig:
             if cfg.get("enabled") is False:
                 continue
             rerank_path = cfg.get("rerank_path", "/v1/rerank")
+            # Legacy sections put the dialect in ``format``; a unified entry
+            # may still use ``type``.  Canonicalise either spelling.
+            wire_format = canonical_provider_name(
+                cfg.get("format") or cfg.get("type") or "jina"
+            )
             providers[name] = {
-                "format": cfg.get("format", "jina"),
+                "format": wire_format,
                 "rerank_path": rerank_path,
             }
             provider_infos[name] = ProviderInfo(
@@ -1500,7 +1712,9 @@ class GatewayConfig:
         global_proxy: str | None = None,
     ) -> tuple[dict[str, dict[str, Any]], dict[str, ProviderInfo], dict[str, str]]:
         """Parse embedding_providers and embedding_models from config."""
-        from .transport.provider_info import openai_auth
+        from llm_rosetta.provider_names import canonical_provider_name
+
+        from .transport.provider_info import google_auth, openai_auth
 
         providers: dict[str, dict[str, Any]] = {}
         provider_infos: dict[str, ProviderInfo] = {}
@@ -1510,15 +1724,22 @@ class GatewayConfig:
             if cfg.get("enabled") is False:
                 continue
             embedding_path = cfg.get("embedding_path", "/v1/embeddings")
+            # Legacy sections put the dialect in ``format``; a unified entry
+            # may still use ``type``.  Canonicalise either spelling.
+            wire_format = canonical_provider_name(
+                cfg.get("format") or cfg.get("type") or "openai"
+            )
             providers[name] = {
-                "format": cfg.get("format", "openai"),
+                "format": wire_format,
                 "embedding_path": embedding_path,
             }
             provider_infos[name] = ProviderInfo(
                 name=f"embedding:{name}",
                 api_key=cfg.get("api_key", ""),
                 base_url=cfg.get("base_url", "").rstrip("/"),
-                auth_header_fn=openai_auth,
+                auth_header_fn=(
+                    google_auth if wire_format == "google_generate" else openai_auth
+                ),
                 url_template="{base_url}" + embedding_path,
                 proxy_url=global_proxy,
             )

@@ -135,6 +135,13 @@ class ConnectionConfig:
     base_url: str | None = None
     api_key_env: str | None = None
     models_path: str | None = None
+    default_path: str | None = None
+    """Upstream endpoint path this shim serves for its ``model_type``.
+
+    Used when a non-LLM endpoint is configured through the shim but declares no
+    explicit ``*_path``.  Chat shims leave it ``None``: their path comes from
+    the chat format and URL template.
+    """
     model_id_field: str | None = None
     auth_header: str | None = None
     keyless: bool = False
@@ -188,6 +195,7 @@ _LEGACY_CONNECTION_FIELDS: dict[str, str] = {
     "default_base_url": "base_url",
     "default_api_key_env": "api_key_env",
     "models_path": "models_path",
+    "default_path": "default_path",
     "model_id_field": "model_id_field",
 }
 _LEGACY_TOOLS_FIELDS: dict[str, str] = {
@@ -506,6 +514,11 @@ class ProviderShim:
     def models_path(self) -> str | None:
         """Alias for ``connection.models_path`` (deprecated)."""
         return self.connection.models_path
+
+    @property
+    def default_path(self) -> str | None:
+        """Alias for ``connection.default_path``."""
+        return self.connection.default_path
 
     @property
     def model_id_field(self) -> str | None:

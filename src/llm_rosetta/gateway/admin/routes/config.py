@@ -83,6 +83,8 @@ def _get_model_type_metadata() -> list[dict[str, Any]]:
             "routes": [{"path": r.path, "methods": r.methods} for r in desc.routes],
             "config_format_key": desc.config_format_key,
             "config_path_key": desc.config_path_key,
+            "config_shim_key": desc.config_shim_key,
+            "default_format": desc.formats[0] if desc.formats else None,
             "default_path": desc.default_path,
             "icon_svg": desc.icon_svg,
             "color": desc.color,
@@ -299,6 +301,7 @@ async def get_config(request: Any) -> Response:
                     "keyless": s.connection.keyless,
                     "default_base_url": s.connection.base_url,
                     "default_api_key_env": s.connection.api_key_env,
+                    "default_path": s.connection.default_path,
                     "supports_custom_tools": s.tools.custom_tools,
                     "hoist_system_messages": s.hoist_system_messages,
                     "max_tool_description_length": s.tools.max_description_length,
@@ -336,10 +339,18 @@ async def put_provider(request: Any, **kwargs: Any) -> Response:
 
         # A shim can supply the connection defaults, so neither field is
         # mandatory when the selected type is one: the shim's base_url, and —
-        # for a keyless shim (free resource) — no credential at all.
-        shim = get_shim(body.get("type") or resolve_name)
-        shim_base = bool(shim and shim.connection.base_url)
-        keyless_ok = bool(shim and shim.connection.keyless)
+        # for a keyless shim (free resource) — no credential at all.  A
+        # non-LLM endpoint shim (``embedding_shim``, …) counts too, so a
+        # provider defined only by that shim needs no duplicated credentials.
+        from ...model_types import all_model_types
+
+        shims = [get_shim(body.get("type") or resolve_name)]
+        for desc in all_model_types():
+            if desc.is_llm or not desc.config_shim_key:
+                continue
+            shims.append(get_shim(body.get(desc.config_shim_key) or ""))
+        shim_base = any(s is not None and s.connection.base_url for s in shims)
+        keyless_ok = any(s is not None and s.connection.keyless for s in shims)
         missing = []
         if not base_url and not shim_base:
             missing.append("base_url")

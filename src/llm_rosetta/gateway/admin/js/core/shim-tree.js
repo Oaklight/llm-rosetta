@@ -134,6 +134,8 @@ export function shimBrand(s) {
  * — they are their own top level.  Returns ``{roots, rootOf(value)}``; each
  * root carries ``groupSource`` / ``titleSource`` and each child carries
  * ``labelSource``, so the branch behind every rendered string is inspectable.
+ * ``root.kind`` is ``'format'`` for a bare base format and ``'shim'`` for a
+ * vendor group, which is what lets the dropdown render them as two sections.
  */
 export function buildTypeModel(registeredShims, baseFormats) {
   const rootMap = new Map();
@@ -146,6 +148,7 @@ export function buildTypeModel(registeredShims, baseFormats) {
 
   for (const s of registeredShims) {
     const root = _root(shimGroupKey(s));
+    if (!root.kind) root.kind = 'shim';
     root.children.push({
       value: s.name,
       label: shimLabel(s),
@@ -166,7 +169,14 @@ export function buildTypeModel(registeredShims, baseFormats) {
     valueRoot.set(s.name, root);
   }
   for (const f of baseFormats) {
-    valueRoot.set(f.name, _root(f.name));
+    // A vendor group that happens to share a base format's name keeps its
+    // shim kind; only a root introduced here is a bare format.
+    let root = rootMap.get(f.name);
+    if (!root) {
+      root = _root(f.name);
+      root.kind = 'format';
+    }
+    valueRoot.set(f.name, root);
   }
 
   const roots = [...rootMap.values()];
@@ -183,6 +193,22 @@ export function buildTypeModel(registeredShims, baseFormats) {
     });
     if (root.children.length) root.defaultValue = root.children[0].value;
   }
-  roots.sort((a, b) => a.name.localeCompare(b.name));
+  // Two sections: bare base formats first (in the picker's historical order),
+  // then the provider/vendor groups alphabetically.  `kind` is what the
+  // dropdown reads to draw the section labels.
+  const formatRank = (name) => {
+    const i = _BASE_TYPE_ORDER.indexOf(name);
+    return i === -1 ? _BASE_TYPE_ORDER.length : i;
+  };
+  roots.sort((a, b) => {
+    const af = a.kind === 'format';
+    const bf = b.kind === 'format';
+    if (af !== bf) return af ? -1 : 1;
+    if (af) {
+      return formatRank(a.name) - formatRank(b.name)
+        || a.name.localeCompare(b.name);
+    }
+    return a.name.localeCompare(b.name);
+  });
   return { roots, rootOf: (v) => valueRoot.get(v) };
 }

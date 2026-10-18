@@ -177,6 +177,23 @@ test('the three ALCF clusters share one declared top level', () => {
   assert.equal(alcf.groupSource, DECLARED);
 });
 
+test('bare base formats and vendor groups are sectioned apart', () => {
+  const tree = buildTypeModel(
+    [{ name: 'acme--chat_completions', base: 'chat_completions', group: 'acme' }],
+    BASE_FORMATS,
+  );
+  const byName = Object.fromEntries(tree.roots.map((r) => [r.name, r.kind]));
+  assert.equal(byName.chat_completions, 'format');
+  assert.equal(byName.open_responses, 'format');
+  assert.equal(byName.acme, 'shim');
+
+  // Every format root precedes every shim root, so the dropdown's two
+  // sections never interleave.
+  const kinds = tree.roots.map((r) => r.kind);
+  const firstShim = kinds.indexOf('shim');
+  assert.equal(kinds.lastIndexOf('format'), firstShim - 1);
+});
+
 test('Kilo keeps its look: group_label titles the root, the row stays name-derived', () => {
   const migrated = {
     name: 'kilo--chat_completions',

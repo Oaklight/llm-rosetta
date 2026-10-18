@@ -8,7 +8,7 @@
 
 import { S, _CAP_ICONS, populateCapIcons } from '../core/state.js';
 import { t } from '../core/i18n.js';
-import { api, showToast, showToastHtml, closeModal, esc, copyText, inlineConfirm, isFreeEntry, freeEntryLabel } from '../core/utils.js';
+import { api, showToast, showToastHtml, closeModal, esc, copyText, inlineConfirm, isFreeEntry, freeEntryLabel, providerTypeName } from '../core/utils.js';
 import { initLogoPicker, setLogoPickerValue, getLogoPickerValue } from '../components/logo-picker.js';
 import { setTypeTree, getSelectedValue, selectValue, onTypeSelect } from '../components/type-picker.js';
 import { buildTypeModel, shimBrand } from '../core/shim-tree.js';
@@ -17,14 +17,6 @@ import { buildTypeModel, shimBrand } from '../core/shim-tree.js';
 
 /** Capitalize the first letter of a string. */
 function _capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
-
-/** The shim / base-format name a provider entry resolves to: an explicit
- *  `shim` wins, then `type`, then the provider name.  A config that declares
- *  `shim:` instead of `type:` arrives with `type` filled in from the provider
- *  name (see admin/routes/config.py), so `cfg.type` alone misses it. */
-function _providerTypeName(cfg, name) {
-  return (cfg && (cfg.shim || cfg.type)) || name;
-}
 
 /** Render a provider type's vendor hints as input *placeholders*.
  *
@@ -140,7 +132,10 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
     [...baseFormats, ...registeredShims].map(s => [s.name, s])
   );
 
-  const typeModel = buildTypeModel(registeredShims, baseFormats);
+  // The top-level picker is the LLM picker.  Non-LLM shims belong in their
+  // endpoint section, which filters by the same model_type.
+  const llmShims = registeredShims.filter(s => (s.model_type || 'llm') === 'llm');
+  const typeModel = buildTypeModel(llmShims, baseFormats);
 
   // Sync the Base type dropdown to the shims reachable under *root*.
   function _syncBaseTypeDropdown(root, value) {
@@ -269,10 +264,17 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
     if (fmtSel) {
       fmtSel.innerHTML = (desc.formats || []).map(f => `<option value="${f}">${f}</option>`).join('');
     }
+    const shimName = provCfg ? (provCfg[desc.config_shim_key] || '') : '';
+    const shimSel = document.getElementById(`provShim_${desc.name}`);
+    if (shimSel) shimSel.value = shimName;
     if (provCfg) {
       if (provCfg[desc.config_format_key] && fmtSel) fmtSel.value = provCfg[desc.config_format_key];
+      const shimDef = shimMap[shimName] || {};
       const pathEl = document.getElementById(`provPath_${desc.name}`);
-      if (pathEl) pathEl.value = provCfg[desc.config_path_key] || desc.default_path;
+      if (pathEl) {
+        pathEl.value =
+          provCfg[desc.config_path_key] || shimDef.default_path || desc.default_path;
+      }
     } else {
       const pathEl = document.getElementById(`provPath_${desc.name}`);
       if (pathEl) pathEl.value = '';
@@ -341,10 +343,23 @@ function _buildProvEndpointSections() {
     const endpointLabel = t('label.' + desc.name + 'Endpoint') || (desc.name.charAt(0).toUpperCase() + desc.name.slice(1) + ' Endpoint');
     const pathLabel = t('label.' + desc.name + 'Path') || (desc.name.charAt(0).toUpperCase() + desc.name.slice(1) + ' Path');
     const formatLabel = t('label.format') || 'Format';
+    const shimLabel = t('label.shim', 'Shim');
     const dotColor = desc.color || 'var(--border)';
+    // Only this category's shims can drive this endpoint.
+    const shimOptions = (S.configData?.registered_shims || [])
+      .filter(s => s.model_type === desc.name)
+      .map(s => `<option value="${esc(s.name)}">${esc(s.display_name || s.name)}</option>`)
+      .join('');
     section.innerHTML = `
       <div class="section-label"><span class="dot" style="background:${dotColor}"></span> <span>${esc(endpointLabel)}</span></div>
       <div class="form-row">
+        <div class="form-group">
+          <label>${esc(shimLabel)}</label>
+          <select id="provShim_${desc.name}">
+            <option value="">${esc(t('label.none', '—'))}</option>
+            ${shimOptions}
+          </select>
+        </div>
         <div class="form-group">
           <label>${esc(formatLabel)}</label>
           <select id="provFmt_${desc.name}"></select>
@@ -355,6 +370,29 @@ function _buildProvEndpointSections() {
         </div>
       </div>`;
     container.appendChild(section);
+    section.querySelector(`#provShim_${desc.name}`)
+      .addEventListener('change', () => _applyEndpointShim(desc));
+  }
+}
+
+/** Apply a non-LLM endpoint shim's defaults to its section and the shared
+ *  connection fields.  Only empty fields are filled, so the operator's own
+ *  values win. */
+function _applyEndpointShim(desc) {
+  const sel = document.getElementById(`provShim_${desc.name}`);
+  if (!sel) return;
+  const shim = (S.configData?.registered_shims || [])
+    .find(s => s.name === sel.value);
+  if (!shim) return;
+  const fmtSel = document.getElementById(`provFmt_${desc.name}`);
+  if (fmtSel && shim.format) fmtSel.value = shim.format;
+  const pathEl = document.getElementById(`provPath_${desc.name}`);
+  if (pathEl) pathEl.value = shim.default_path || desc.default_path || '';
+  const urlInput = document.getElementById('provBaseUrl');
+  if (urlInput && !urlInput.value.trim()) urlInput.value = shim.default_base_url || '';
+  const keyInput = document.getElementById('provApiKey');
+  if (keyInput && !keyInput.value.trim() && shim.default_api_key_env) {
+    keyInput.value = '${' + shim.default_api_key_env + '}';
   }
 }
 
@@ -581,7 +619,7 @@ function _getProviderCaps(cfg, provName) {
   // Check non-LLM capabilities via metadata-driven format keys
   let hasNonLlmCap = false;
   for (const desc of S.configData?.model_types || []) {
-    if (!desc.is_llm && cfg[desc.config_format_key]) {
+    if (!desc.is_llm && (cfg[desc.config_format_key] || cfg[desc.config_shim_key])) {
       caps.push(desc.name);
       hasNonLlmCap = true;
     }
@@ -596,8 +634,19 @@ function _getProviderCaps(cfg, provName) {
   // registry holds converter shims only, so embedding/rerank providers like
   // voyage or jina carry a `type` that isn't in it.
   const llmShims = (S.configData && S.configData.registered_shims) || [];
-  const cfgType = _providerTypeName(cfg, provName);
-  const typeIsLlmShim = !!cfgType && llmShims.some(s => s.name === cfgType);
+  const cfgType = providerTypeName(cfg, provName);
+  // A bare `type` can name a non-chat format (`cohere`, `jina`, `voyage`).
+  // That is not a shim, but it is still not an LLM provider.
+  if (!hasNonLlmCap) {
+    const formatType = (S.configData?.model_types || []).find(
+      d => !d.is_llm && (d.formats || []).includes(cfgType));
+    if (formatType) {
+      caps.push(formatType.name);
+      hasNonLlmCap = true;
+    }
+  }
+  const typeIsLlmShim = !!cfgType && llmShims.some(
+    s => s.name === cfgType && (s.model_type || 'llm') === 'llm');
   if (hasLlmModels || typeIsLlmShim || cfg.url_template || cfg.stream_url_template || !hasNonLlmCap) caps.unshift('llm');
   if (caps.length === 0) caps.push('llm');
   return caps;
@@ -681,7 +730,7 @@ function renderProviders() {
   let entries = allEntries;
   if (query) {
     entries = entries.filter(([name, cfg]) => {
-      const typeName = _providerTypeName(cfg, name);
+      const typeName = providerTypeName(cfg, name);
       return name.toLowerCase().includes(query) ||
         typeName.toLowerCase().includes(query) ||
         (cfg.base_url || '').toLowerCase().includes(query);
@@ -716,7 +765,7 @@ function renderProviders() {
   grid.innerHTML = '';
   const cardHtml = ([name, cfg]) => {
     const enabled = cfg.enabled !== false;
-    const typeName = _providerTypeName(cfg, name);
+    const typeName = providerTypeName(cfg, name);
     const logo = cfg.logo || shimLogo[name] || shimLogo[typeName] || '';
     const logoHtml = logo
       ? `<img class="pc-logo" src="${esc(logo)}" alt="">`
@@ -813,9 +862,13 @@ async function saveProvider() {
   for (const desc of S.configData?.model_types?.filter(d => !d.is_llm) || []) {
     const chk = document.getElementById(`provCap${_capitalize(desc.name)}`);
     if (chk?.checked) {
+      if (desc.config_shim_key) {
+        body[desc.config_shim_key] = document.getElementById(`provShim_${desc.name}`)?.value || '';
+      }
       body[desc.config_format_key] = document.getElementById(`provFmt_${desc.name}`)?.value || desc.formats[0];
       body[desc.config_path_key] = document.getElementById(`provPath_${desc.name}`)?.value?.trim() || desc.default_path;
     } else {
+      if (desc.config_shim_key) body[desc.config_shim_key] = '';
       body[desc.config_format_key] = '';
       body[desc.config_path_key] = '';
     }
@@ -916,16 +969,16 @@ async function toggleProvider(name) {
 function editProvider(name) {
   const cfg = S.configData.providers[name] || {};
   const shims = S.configData.registered_shims || [];
-  const shim = shims.find(s => s.name === _providerTypeName(cfg, name)) || {};
+  const shim = shims.find(s => s.name === providerTypeName(cfg, name)) || {};
   const baseUrl = cfg.base_url || shim.default_base_url || '';
   const apiKey = cfg.api_key || (cfg.token_command ? 'token_command' : '') || '';
-  openProviderModal(name, baseUrl, apiKey, cfg.proxy, _providerTypeName(cfg, name));
+  openProviderModal(name, baseUrl, apiKey, cfg.proxy, providerTypeName(cfg, name));
 }
 
 function copyProviderEntry(name) {
   const cfg = S.configData.providers[name] || {};
   // Open Add Provider modal pre-filled with non-sensitive fields; API key is intentionally omitted
-  openProviderModal('', cfg.base_url, '', cfg.proxy, _providerTypeName(cfg, name));
+  openProviderModal('', cfg.base_url, '', cfg.proxy, providerTypeName(cfg, name));
 }
 
 // ── Server settings ─────────────────────────────────────────────────

@@ -185,6 +185,38 @@ function _syncTrigger() {
   }
 }
 
+/** One root row and, in tree view, its children. */
+function _rootHtml(root, selectedRoot) {
+  // A root row stands for the child it currently owns; if the selection is
+  // elsewhere, clicking falls back to the root's default child.  This keeps
+  // the highlighted row meaning the same thing as a click on it.
+  const ownsSelection = !!selectedRoot && selectedRoot === root;
+  const rootValue = ownsSelection ? _selected : root.defaultValue;
+  let html = `<div class="tp-item tp-root${ownsSelection ? ' tp-active' : ''}" role="option" tabindex="-1" aria-selected="${ownsSelection}" data-value="${_esc(rootValue)}">`
+    + _logoHtml(root.logo)
+    + `<span class="tp-name">${_esc(root.label)}</span></div>`;
+  if (_view === 'tree' && root.children && root.children.length) {
+    const last = root.children.length - 1;
+    root.children.forEach((child, i) => {
+      const guide = i === last ? '└─' : '├─';
+      const active = child.value === _selected;
+      const suffix = child.label !== child.base && child.base
+        ? `<span class="tp-base">${_esc(child.base)}</span>` : '';
+      html += `<div class="tp-item tp-child${active ? ' tp-active' : ''}" role="option" tabindex="-1" aria-selected="${active}" data-value="${_esc(child.value)}">`
+        + `<span class="tp-guide">${guide}</span>`
+        + `<span class="tp-name">${_esc(child.label)}</span>${suffix}</div>`;
+    });
+  }
+  return html;
+}
+
+/** A labelled section of roots; an empty section renders nothing. */
+function _sectionHtml(label, roots, selectedRoot) {
+  if (!roots.length) return '';
+  return `<div class="tp-group-label" role="presentation">${_esc(label)}</div>`
+    + roots.map((root) => _rootHtml(root, selectedRoot)).join('');
+}
+
 function _renderPanel() {
   const host = document.getElementById('typePickerList');
   if (!host) return;
@@ -197,29 +229,12 @@ function _renderPanel() {
   }
 
   const selectedRoot = _byValue.get(_selected)?.root;
-  let html = '';
-  for (const root of _roots) {
-    // A root row stands for the child it currently owns; if the selection is
-    // elsewhere, clicking falls back to the root's default child.  This keeps
-    // the highlighted row meaning the same thing as a click on it.
-    const ownsSelection = !!selectedRoot && selectedRoot === root;
-    const rootValue = ownsSelection ? _selected : root.defaultValue;
-    html += `<div class="tp-item tp-root${ownsSelection ? ' tp-active' : ''}" role="option" tabindex="-1" aria-selected="${ownsSelection}" data-value="${_esc(rootValue)}">`
-      + _logoHtml(root.logo)
-      + `<span class="tp-name">${_esc(root.label)}</span></div>`;
-    if (_view === 'tree' && root.children && root.children.length) {
-      const last = root.children.length - 1;
-      root.children.forEach((child, i) => {
-        const guide = i === last ? '└─' : '├─';
-        const active = child.value === _selected;
-        const suffix = child.label !== child.base && child.base
-          ? `<span class="tp-base">${_esc(child.base)}</span>` : '';
-        html += `<div class="tp-item tp-child${active ? ' tp-active' : ''}" role="option" tabindex="-1" aria-selected="${active}" data-value="${_esc(child.value)}">`
-          + `<span class="tp-guide">${guide}</span>`
-          + `<span class="tp-name">${_esc(child.label)}</span>${suffix}</div>`;
-      });
-    }
-  }
+  // Bare base formats and vendor groups are different kinds of choice; the
+  // builder marks them, and the dropdown draws them as two sections.
+  const formatRoots = _roots.filter((root) => root.kind === 'format');
+  const shimRoots = _roots.filter((root) => root.kind !== 'format');
+  const html = _sectionHtml(t('label.baseFormats', 'Base formats'), formatRoots, selectedRoot)
+    + _sectionHtml(t('label.providerShims', 'Provider shims'), shimRoots, selectedRoot);
   host.innerHTML = html || `<div class="tp-empty">${_esc(t('label.selectOne', '— select —'))}</div>`;
 
   for (const el of host.querySelectorAll('.tp-item'))

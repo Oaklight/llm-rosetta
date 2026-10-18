@@ -146,6 +146,10 @@
           "type": "string",
           "description": "Path or full URL for the upstream model list endpoint. Relative paths are appended to base_url."
         },
+        "default_path": {
+          "type": "string",
+          "description": "Upstream endpoint path this shim serves for its model_type (e.g. '/v1/embeddings'). Used when a non-LLM endpoint names this shim but declares no explicit *_path."
+        },
         "model_id_field": {
           "type": "string",
           "description": "JSON field name to use as model identifier when fetching the upstream model list. Defaults to 'id'."
@@ -221,6 +225,10 @@
     "models_path": {
       "type": "string",
       "description": "Deprecated: use connection.models_path instead."
+    },
+    "default_path": {
+      "type": "string",
+      "description": "Deprecated: use connection.default_path instead."
     },
     "model_id_field": {
       "type": "string",
