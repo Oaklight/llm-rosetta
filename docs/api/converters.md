@@ -55,6 +55,8 @@ title: Converters
 
 ::: llm_rosetta.converters.embedding.cohere.CohereEmbeddingConverter
 
+::: llm_rosetta.converters.embedding.google.GoogleEmbeddingConverter
+
 ## Rerank Converters
 
 ::: llm_rosetta.converters.base.rerank_converter.BaseRerankConverter
