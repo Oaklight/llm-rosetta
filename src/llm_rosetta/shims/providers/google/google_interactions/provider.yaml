@@ -1,5 +1,6 @@
 name: google--google_interactions
-base: google_interactions
+model_type: llm
+format: google_interactions
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/google.svg
 
 connection:

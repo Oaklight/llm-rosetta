@@ -1,5 +1,6 @@
 name: argo--chat_completions
-base: chat_completions
+model_type: llm
+format: chat_completions
 logo: https://i.111666.best/image/wgp6hAUArNq2O6pICMRRvj.png
 
 connection:

@@ -5,7 +5,8 @@
 name: openai--open_responses
 # OpenAI Responses is a profile of the vendor-neutral Open Responses base;
 # the profile traits are opt-in settings below.
-base: open_responses
+model_type: llm
+format: open_responses
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/openai.svg
 
 connection:

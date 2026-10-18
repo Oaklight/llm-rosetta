@@ -6,7 +6,8 @@
 # entry the admin UI shows it as "Kilo (Free)" and groups it under the Free
 # Resource section.
 name: kilo--chat_completions
-base: chat_completions
+model_type: llm
+format: chat_completions
 # `group_label` titles the vendor's top level in the admin picker; with no
 # `group` the key is still derived from the name (`kilo`).  The shim's own
 # label is left unset, so its row reads as the bare base format.

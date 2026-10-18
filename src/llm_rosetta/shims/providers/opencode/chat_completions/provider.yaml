@@ -9,7 +9,8 @@
 # request (a missing one is a 400); the gateway derives a per-conversation
 # value.  Zen ignores the header.
 name: opencode--chat_completions
-base: chat_completions
+model_type: llm
+format: chat_completions
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/opencode.svg
 
 connection:

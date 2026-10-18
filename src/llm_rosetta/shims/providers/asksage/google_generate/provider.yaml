@@ -1,5 +1,6 @@
 name: asksage--google_generate
-base: google_generate
+model_type: llm
+format: google_generate
 
 connection:
   base_url: https://api.asksage.ai/server/google/v1beta

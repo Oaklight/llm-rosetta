@@ -1,5 +1,6 @@
 name: moonshot
-base: chat_completions
+model_type: llm
+format: chat_completions
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/moonshot.svg
 
 # Domestic (China mainland): api.moonshot.cn; international: api.moonshot.ai

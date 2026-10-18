@@ -1,5 +1,6 @@
 name: anthropic--messages
-base: messages
+model_type: llm
+format: messages
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/anthropic.svg
 
 connection:

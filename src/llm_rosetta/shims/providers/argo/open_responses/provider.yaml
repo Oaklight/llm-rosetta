@@ -1,5 +1,6 @@
 name: argo--open_responses
-base: open_responses
+model_type: llm
+format: open_responses
 logo: https://i.111666.best/image/wgp6hAUArNq2O6pICMRRvj.png
 
 connection:

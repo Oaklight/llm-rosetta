@@ -395,7 +395,7 @@ class TestLoadProviders:
             "alcf_sophia--chat_completions": "chat_completions",
             "alcf_metis--chat_completions": "chat_completions",
             "alcf_minerva--chat_completions": "chat_completions",
-            "typesafe": "decision",
+            "typesafe": "systemone",
             "asksage--chat_completions": "chat_completions",
             "asksage--open_responses": "open_responses",
             "asksage--messages": "messages",
@@ -780,3 +780,78 @@ class TestDeclaredGrouping:
             for s in shims
             if s.name not in self._ALCF and s.name != "kilo--chat_completions"
         )
+
+
+class TestShimPair:
+    """A shim declares ``(model_type, format)``; the pair is validated."""
+
+    def _load(self, tmp_path: Path, content: str):
+        leaf = tmp_path / "leaf"
+        leaf.mkdir()
+        (leaf / "provider.yaml").write_text(content)
+        return load_providers_from_dir(tmp_path, on_error="raise")
+
+    def test_format_is_canonicalised(self, tmp_path: Path):
+        shims = self._load(tmp_path, "name: x\nmodel_type: llm\nformat: openai_chat\n")
+        assert shims[0].format == "chat_completions"
+        assert shims[0].model_type == "llm"
+
+    def test_format_requires_model_type(self, tmp_path: Path):
+        """A new-style shim cannot omit the category.
+
+        Without this, ``format:`` would silently default to ``llm`` and an
+        embedding shim that forgot ``model_type`` would load as a chat shim.
+        """
+        with pytest.raises(ValueError, match="model_type is required"):
+            self._load(tmp_path, "name: x\nformat: chat_completions\n")
+
+    def test_legacy_base_is_accepted(self, tmp_path: Path):
+        shims = self._load(tmp_path, "name: x\nbase: openai_chat\n")
+        assert shims[0].format == "chat_completions"
+
+    def test_non_llm_pair(self, tmp_path: Path):
+        shims = self._load(tmp_path, "name: x\nmodel_type: embedding\nformat: openai\n")
+        assert shims[0].model_type == "embedding"
+        assert shims[0].format == "openai"
+
+    def test_mismatched_pair_is_refused(self, tmp_path: Path):
+        with pytest.raises(ValueError, match="not a embedding format"):
+            self._load(
+                tmp_path,
+                "name: x\nmodel_type: embedding\nformat: chat_completions\n",
+            )
+
+    def test_unknown_model_type_is_refused(self, tmp_path: Path):
+        with pytest.raises(ValueError, match="unknown model_type"):
+            self._load(
+                tmp_path,
+                "name: x\nmodel_type: speech\nformat: chat_completions\n",
+            )
+
+    def test_legacy_paradigm_base_needs_a_format(self, tmp_path: Path):
+        with pytest.raises(ValueError, match="add a 'format'"):
+            self._load(tmp_path, "name: x\nbase: decision\n")
+
+    def test_legacy_paradigm_base_with_format(self, tmp_path: Path):
+        shims = self._load(tmp_path, "name: x\nbase: decision\nformat: systemone\n")
+        assert shims[0].model_type == "decision"
+        assert shims[0].format == "systemone"
+
+    def test_every_builtin_shim_declares_a_valid_pair(self):
+        """The totality check behind "every shim speaks the pair".
+
+        A per-file test cannot catch the shim that was left out of the sweep;
+        iterating the registry can.  The registry's import-time check already
+        pins the converter maps to the vocabulary, so membership in
+        ``FORMATS_BY_TYPE[model_type]`` is what a load has to satisfy.
+        """
+        from llm_rosetta.model_vocabulary import FORMATS_BY_TYPE
+        from llm_rosetta.shims import list_shims
+
+        load_providers()
+        shims = list_shims()
+        assert shims, "the built-in shims did not register"
+        for shim in shims:
+            assert shim.format, shim.name
+            assert shim.model_type in FORMATS_BY_TYPE, shim.name
+            assert shim.format in FORMATS_BY_TYPE[shim.model_type], shim.name

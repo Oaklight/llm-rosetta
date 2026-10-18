@@ -236,16 +236,49 @@ class SoftErrorPattern:
 # ---------------------------------------------------------------------------
 
 
+def _normalize_format_kwargs(kwargs: dict[str, Any]) -> None:
+    """Fold the deprecated ``base`` keyword into ``format``.
+
+    ``format`` is the canonical spelling; ``base`` is its deprecated alias.
+    Both are canonicalised, so the stored pair never carries a legacy spelling.
+    """
+    if "base" in kwargs:
+        warnings.warn(
+            "ProviderShim(base=...) is deprecated, use format=...",
+            DeprecationWarning,
+            stacklevel=3,
+        )
+        legacy_base = canonical_provider_name(kwargs.pop("base"))
+        if "format" in kwargs:
+            canonical = canonical_provider_name(kwargs["format"])
+            if canonical != legacy_base:
+                raise ValueError(
+                    f"ProviderShim: base={legacy_base!r} disagrees with "
+                    f"format={canonical!r}"
+                )
+            kwargs["format"] = canonical
+        else:
+            kwargs["format"] = legacy_base
+    if "format" in kwargs:
+        # Legacy spellings (openai_chat, anthropic, google) normalise to
+        # their canonical format; the stored pair is always canonical.
+        kwargs["format"] = canonical_provider_name(kwargs["format"])
+
+
 @dataclass(frozen=True)
 class ProviderShim:
     """Provider identity card with optional transforms.
 
     Attributes:
         name: Canonical provider identifier (e.g. ``"deepseek"``).
-        base: API standard this provider follows.  Must be one of the
-            converter type strings (``"chat_completions"``,
-            ``"open_responses"``, ``"messages"``, ``"google_generate"``,
-            ``"google_interactions"``).
+        model_type: Capability category this shim serves (``"llm"``,
+            ``"embedding"``, ``"rerank"``, ``"decision"``).  A format name is
+            scoped by this category, so the same spelling may name a chat
+            format and an embedding format.
+        format: Wire format within :attr:`model_type` (e.g.
+            ``"chat_completions"``, ``"messages"``, ``"openai"``,
+            ``"systemone"``).  The deprecated ``base`` keyword and property
+            alias this field.
         logo: URL to the provider's logo image (SVG preferred).
         display_name: This shim's own human-readable label (e.g. ``"metis"`` on
             ``"alcf_metis--chat_completions"``).  The admin UI renders it as the
@@ -304,7 +337,8 @@ class ProviderShim:
     """
 
     name: str
-    base: str
+    format: str
+    model_type: str = "llm"
     logo: str | None = None
     display_name: str | None = None
     group: str | None = None
@@ -333,6 +367,9 @@ class ProviderShim:
         respective grouped config objects.
         New names take precedence if both are provided.
         """
+        # ── format / model_type ──────────────────────────────────────
+        _normalize_format_kwargs(kwargs)
+
         # ── Transform renames ────────────────────────────────────────
         if "from_transforms" in kwargs:
             warnings.warn(
@@ -395,6 +432,7 @@ class ProviderShim:
 
         # ── Apply defaults ───────────────────────────────────────────
         _FIELD_DEFAULTS: dict[str, Any] = {
+            "model_type": "llm",
             "logo": None,
             "display_name": None,
             "group": None,
@@ -414,9 +452,15 @@ class ProviderShim:
             "hoist_system_messages": True,
             "soft_error_patterns": (),
         }
-        _VALID_FIELDS = {"name", "base"} | _FIELD_DEFAULTS.keys()
+        _VALID_FIELDS = {"name", "format", "base"} | _FIELD_DEFAULTS.keys()
         for k, v in _FIELD_DEFAULTS.items():
             kwargs.setdefault(k, v)
+
+        for required in ("name", "format"):
+            if required not in kwargs:
+                raise TypeError(
+                    f"ProviderShim.__init__() missing required argument: {required!r}"
+                )
 
         # Reject unknown kwargs (match frozen dataclass behavior)
         unknown = set(kwargs) - _VALID_FIELDS
@@ -430,6 +474,11 @@ class ProviderShim:
             object.__setattr__(self, k, v)
 
     # ── Backward-compatible aliases (read-only) ─────────────────────
+
+    @property
+    def base(self) -> str:
+        """Deprecated alias for :attr:`format`."""
+        return self.format
 
     @property
     def from_transforms(self) -> tuple[Transform, ...]:

@@ -351,6 +351,79 @@ def _load_transforms(
     )
 
 
+def _resolve_shim_pair(cfg: dict[str, Any], yaml_path: Path) -> tuple[str, str]:
+    """Return the canonical ``(format, model_type)`` a shim declares.
+
+    ``format`` is the preferred key; ``base`` is its deprecated alias.  When
+    ``base`` names a model category (the old decision shims declared
+    ``base: decision``), the category is taken from it and a ``format`` is
+    still required.  The pair is validated against the converter registry so
+    a shim cannot claim a format another category owns.
+
+    Raises:
+        ValueError: With a message naming the shim file and the expected
+            formats.
+    """
+    # Imported lazily: the converter package imports shims.provider_shim at
+    # module scope (for ReasoningCapability), so a module-level import here
+    # would close the cycle while the shims package is initialising.  The
+    # vocabulary module is data-only and safe to import at any time.
+    from llm_rosetta.model_vocabulary import FORMATS_BY_TYPE, MODEL_TYPES
+    from llm_rosetta.provider_names import canonical_provider_name
+
+    declared_type = cfg.get("model_type")
+    legacy_base = cfg.get("base")
+    if not isinstance(legacy_base, str):
+        legacy_base = None
+
+    # ``format`` is the new spelling and the schema requires the category with
+    # it: without ``model_type`` the pair would silently default to ``llm``, so
+    # a future embedding shim that forgot the field would load as a chat shim.
+    # The deprecated ``base`` path keeps its inference (the base name may name
+    # the category, else it defaults to ``llm``).
+    if declared_type is None and legacy_base is None and cfg.get("format") is not None:
+        raise ValueError(
+            f"{yaml_path}: model_type is required when 'format' is declared "
+            f"(one of {', '.join(MODEL_TYPES)}); a legacy shim may use "
+            f"'base' instead"
+        )
+
+    model_type = declared_type or "llm"
+    if declared_type is None and legacy_base in MODEL_TYPES:
+        # Old-style paradigm shim: ``base`` named the category.
+        model_type = legacy_base
+
+    raw_format = cfg.get("format")
+    if raw_format is None:
+        if legacy_base in MODEL_TYPES:
+            raise ValueError(
+                f"{yaml_path}: base={legacy_base!r} names a model type; "
+                f"add a 'format' (available: "
+                f"{', '.join(FORMATS_BY_TYPE[legacy_base])})"
+            )
+        raw_format = legacy_base
+    if not isinstance(raw_format, str):
+        raise ValueError(f"{yaml_path}: a shim needs 'format' (or the legacy 'base')")
+    if legacy_base in MODEL_TYPES and declared_type not in (None, legacy_base):
+        raise ValueError(
+            f"{yaml_path}: base={legacy_base!r} names a model type but "
+            f"model_type={declared_type!r} disagrees"
+        )
+
+    fmt = canonical_provider_name(raw_format)
+    if model_type not in MODEL_TYPES:
+        raise ValueError(
+            f"{yaml_path}: unknown model_type {model_type!r}; "
+            f"expected one of {', '.join(MODEL_TYPES)}"
+        )
+    if fmt not in FORMATS_BY_TYPE[model_type]:
+        raise ValueError(
+            f"{yaml_path}: format {fmt!r} is not a {model_type} format; "
+            f"available: {', '.join(FORMATS_BY_TYPE[model_type])}"
+        )
+    return fmt, model_type
+
+
 def _load_single_provider(
     provider_dir: Path,
     *,
@@ -371,9 +444,17 @@ def _load_single_provider(
     yaml_path = provider_dir / "provider.yaml"
     with open(yaml_path, encoding="utf-8") as f:
         cfg = yaml_load(f.read())
-    if not isinstance(cfg, dict) or "name" not in cfg or "base" not in cfg:
-        logger.warning("Skipping %s: missing 'name' or 'base'", yaml_path)
+    if (
+        not isinstance(cfg, dict)
+        or "name" not in cfg
+        or ("format" not in cfg and "base" not in cfg)
+    ):
+        logger.warning(
+            "Skipping %s: missing 'name' or 'format' (legacy 'base')", yaml_path
+        )
         return None
+
+    fmt, model_type = _resolve_shim_pair(cfg, yaml_path)
 
     pre_t, post_t, ir_t, resp_t, transforms_mod = _load_transforms(
         provider_dir, group=group, _builtin=_builtin, root=root
@@ -460,7 +541,8 @@ def _load_single_provider(
 
     shim = ProviderShim(
         name=cfg["name"],
-        base=cfg["base"],
+        format=fmt,
+        model_type=model_type,
         logo=cfg.get("logo"),
         display_name=cfg.get("display_name"),
         group=cfg.get("group"),
@@ -489,7 +571,12 @@ def _load_single_provider(
         if mlt is not None:
             _model_list_transforms[shim.name] = mlt
 
-    logger.debug("Registered provider shim: %s (base=%s)", shim.name, shim.base)
+    logger.debug(
+        "Registered provider shim: %s (model_type=%s format=%s)",
+        shim.name,
+        shim.model_type,
+        shim.format,
+    )
     return shim
 
 

@@ -45,9 +45,11 @@ def _clean_registry():
 
 class TestProviderShim:
     def test_creation_minimal(self):
-        s = ProviderShim(name="test", base="openai_chat")
+        s = ProviderShim(name="test", format="openai_chat")
         assert s.name == "test"
-        assert s.base == "openai_chat"
+        assert s.format == "chat_completions"
+        assert s.base == "chat_completions"
+        assert s.model_type == "llm"
         assert s.default_base_url is None
         assert s.default_api_key_env is None
         assert s.logo is None
@@ -55,7 +57,7 @@ class TestProviderShim:
     def test_creation_full(self):
         s = ProviderShim(
             name="openai",
-            base="openai_chat",
+            format="openai_chat",
             default_base_url="https://api.openai.com/v1",
             default_api_key_env="OPENAI_API_KEY",
             logo="https://example.com/openai.svg",
@@ -64,7 +66,7 @@ class TestProviderShim:
         assert s.logo == "https://example.com/openai.svg"
 
     def test_frozen(self):
-        s = ProviderShim(name="test", base="openai_chat")
+        s = ProviderShim(name="test", format="openai_chat")
         with pytest.raises(AttributeError):
             s.name = "other"  # type: ignore
 
@@ -263,9 +265,9 @@ class TestResolveBase:
 
     def test_shim_name_resolves(self):
         register_shim(
-            ProviderShim(name="deepseek--chat_completions", base="openai_chat")
+            ProviderShim(name="deepseek--chat_completions", format="openai_chat")
         )
-        assert resolve_base("deepseek--chat_completions") == "openai_chat"
+        assert resolve_base("deepseek--chat_completions") == "chat_completions"
 
     def test_unknown_name_passthrough(self):
         assert resolve_base("unknown") == "unknown"
@@ -470,7 +472,7 @@ class TestBuiltinShims:
             section = data.get("reasoning")
             if not section or "effort_field" in section:
                 continue
-            base_cap = DEFAULT_REASONING_CAPS.get(data.get("base"))
+            base_cap = DEFAULT_REASONING_CAPS.get(data.get("format", data.get("base")))
             if base_cap is None:
                 continue  # a base type with no default cap to inherit
             shim = get_shim(data["name"])

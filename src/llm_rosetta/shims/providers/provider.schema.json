@@ -5,8 +5,20 @@
   "description": "Schema for provider.yaml shim configuration files.",
   "type": "object",
   "required": [
-    "name",
-    "base"
+    "name"
+  ],
+  "anyOf": [
+    {
+      "required": [
+        "format",
+        "model_type"
+      ]
+    },
+    {
+      "required": [
+        "base"
+      ]
+    }
   ],
   "additionalProperties": false,
   "properties": {
@@ -14,20 +26,38 @@
       "type": "string",
       "description": "Canonical provider identifier (e.g. 'deepseek', 'argo--messages')."
     },
-    "base": {
+    "model_type": {
       "type": "string",
-      "description": "API standard this provider follows.",
+      "description": "Capability category this shim serves. Required whenever 'format' is declared: a format name is scoped by this category, so the same spelling may name a chat format and an embedding format. A legacy shim that declares only 'base' may omit it; the base name then identifies the category (or it defaults to 'llm').",
+      "enum": [
+        "llm",
+        "embedding",
+        "rerank",
+        "decision"
+      ],
+      "default": "llm"
+    },
+    "format": {
+      "type": "string",
+      "description": "Wire format within model_type. Validated against the converter registry for that category (see the (model_type, format) pair).",
       "enum": [
         "chat_completions",
-        "openai_chat",
-        "openai_responses",
-        "open_responses",
         "messages",
-        "anthropic",
+        "open_responses",
         "google_generate",
         "google_interactions",
-        "eval"
+        "openai",
+        "cohere",
+        "jina",
+        "voyage",
+        "systemone",
+        "openai_decisions"
       ]
+    },
+    "base": {
+      "type": "string",
+      "deprecated": true,
+      "description": "Deprecated alias for 'format'. When it names a model type (the old decision shims declared base: decision), model_type is taken from it and a format is still required."
     },
     "logo": {
       "type": "string",
@@ -62,6 +92,31 @@
         "type": "string"
       },
       "description": "Extra response/echo fields this provider adds to the base format's preserve set (e.g. the OpenAI-only lifecycle fields). Additive; the base format's spec-level set always applies.",
+      "default": []
+    },
+    "soft_error_patterns": {
+      "type": "array",
+      "description": "A 200 response whose body matches 'pattern' is treated as this status code and message.",
+      "items": {
+        "type": "object",
+        "required": [
+          "pattern",
+          "status_code",
+          "message"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "pattern": {
+            "type": "string"
+          },
+          "status_code": {
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
       "default": []
     },
     "store_default": {

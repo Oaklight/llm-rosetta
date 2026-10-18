@@ -4,7 +4,8 @@
 # /messages.  Shares the credential and lanes described in the sibling
 # chat_completions shim; Zen is a base_url override.
 name: opencode--messages
-base: messages
+model_type: llm
+format: messages
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/opencode.svg
 
 connection:

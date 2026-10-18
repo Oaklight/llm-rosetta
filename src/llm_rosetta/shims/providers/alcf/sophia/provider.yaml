@@ -1,5 +1,6 @@
 name: alcf_sophia--chat_completions
-base: chat_completions
+model_type: llm
+format: chat_completions
 # The three ALCF clusters share one admin top level (`group`); `display_name`
 # is this shim's own label inside it, rendered as "sophia · chat_completions".
 group: alcf

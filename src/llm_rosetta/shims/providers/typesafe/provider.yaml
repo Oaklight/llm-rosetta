@@ -1,4 +1,5 @@
 name: typesafe
-base: decision
+model_type: decision
+format: systemone
 default_base_url: https://api.typesafe.ai
 default_api_key_env: TYPESAFE_API_KEY

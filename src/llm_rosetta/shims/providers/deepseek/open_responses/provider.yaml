@@ -1,5 +1,6 @@
 name: deepseek--open_responses
-base: open_responses
+model_type: llm
+format: open_responses
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/deepseek.svg
 
 connection:

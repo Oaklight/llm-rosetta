@@ -1,5 +1,6 @@
 name: asksage--messages
-base: messages
+model_type: llm
+format: messages
 
 connection:
   base_url: https://api.asksage.ai/server/anthropic

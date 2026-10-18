@@ -1,5 +1,6 @@
 name: google--google_generate
-base: google_generate
+model_type: llm
+format: google_generate
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/google.svg
 
 connection:

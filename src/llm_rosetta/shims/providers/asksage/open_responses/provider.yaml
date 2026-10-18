@@ -1,5 +1,6 @@
 name: asksage--open_responses
-base: open_responses
+model_type: llm
+format: open_responses
 
 connection:
   base_url: https://api.asksage.ai/server/openai/v1

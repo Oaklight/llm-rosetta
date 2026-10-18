@@ -288,7 +288,9 @@ async def get_config(request: Any) -> Response:
             "registered_shims": [
                 {
                     "name": s.name,
-                    "base": s.base,
+                    "base": s.base,  # deprecated alias for `format`
+                    "format": s.format,
+                    "model_type": s.model_type,
                     "logo": s.logo,
                     "display_name": s.display_name,
                     "group": s.group,

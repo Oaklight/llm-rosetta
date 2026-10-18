@@ -323,7 +323,7 @@ def build_provider_info(
     # Resolve through shim registry for defaults
     shim = get_shim(shim_name or provider_type)
     if shim is not None:
-        base_type = canonical_provider_name(shim.base)
+        base_type = shim.format
         # Apply shim defaults where the config value is missing *or empty*.
         cfg = _apply_shim_defaults(cfg, shim)
     else:
