@@ -129,6 +129,46 @@ migration is done — and the shim's name in your provider config never changes.
     pinning `ref` (and optionally `sha256`), and only add sources you trust.
     The trust boundary is whoever can edit the config file.
 
+### Non-LLM Endpoints
+
+A provider entry can also serve embeddings, rerank, or decision traffic. Name the
+dialect directly, or name a shim for that capability:
+
+```jsonc
+"providers": {
+  // Explicit format: the path defaults to /v1/embeddings
+  "openai": {
+    "type": "openai",
+    "api_key": "${OPENAI_API_KEY}",
+    "embedding_format": "openai"
+  },
+  // Endpoint shim: format, path and connection defaults come from the shim
+  "acme-embed":  { "embedding_shim": "acme--embedding" },
+  "acme-rerank": { "rerank_shim": "acme--rerank", "rerank_path": "/v1/rerank" }
+}
+```
+
+The endpoint keys are `embedding_format` / `embedding_path` / `embedding_shim`,
+`rerank_format` / `rerank_path` / `rerank_shim`, and `decision_format` /
+`decision_path` / `decision_shim`. Precedence for each endpoint:
+
+1. **shim**: `<type>_shim`; otherwise the provider-wide `shim` or `type` when
+   that shim's `model_type` matches the endpoint
+2. **format**: an explicit `<type>_format` beats the shim's format
+3. **path**: an explicit `<type>_path` beats the shim's
+   `connection.default_path` (used only when the effective format is the
+   shim's), then the descriptor default
+4. **connection**: a non-empty `base_url` / `api_key` in the entry beats the
+   shim's defaults
+
+A `<type>_shim` that does not serve that capability is rejected at startup with
+an error naming the shim's category. The gateway records each provider's
+identity as the pair `(model_type, format)`; an LLM model routed to a provider
+whose identity is `embedding`, `rerank`, or `decision` is rejected.
+
+The legacy `embedding_providers` / `rerank_providers` / `decision_providers`
+sections still load and are merged with the unified entries.
+
 ### Image Count Limits
 
 Shims support `max_images` and `max_images_pattern` fields to enforce per-model image count limits:
@@ -613,7 +653,7 @@ The `status` field is `"ok"` when all providers are healthy, or `"degraded"` whe
 
 ## Embedding Providers
 
-The gateway can proxy `/v1/embeddings` requests with cross-format IR conversion (OpenAI ↔ Cohere ↔ Jina ↔ Voyage). Configure embedding providers and models separately from chat providers:
+The gateway can proxy `/v1/embeddings` requests with cross-format IR conversion (OpenAI ↔ Cohere ↔ Jina ↔ Voyage). A unified provider entry can declare the endpoint with `embedding_format` or `embedding_shim` (see [Non-LLM Endpoints](#non-llm-endpoints)); the legacy section below remains supported. Configure embedding providers and models separately from chat providers:
 
 ```jsonc
 {
@@ -639,7 +679,7 @@ When `embedding_providers` is not configured, `/v1/embeddings` falls back to pas
 
 ## Rerank Providers
 
-The gateway can proxy `/v1/rerank` and `/v2/rerank` requests with cross-format IR conversion (Jina ↔ Cohere ↔ Voyage):
+The gateway can proxy `/v1/rerank` and `/v2/rerank` requests with cross-format IR conversion (Jina ↔ Cohere ↔ Voyage). Unified entries use `rerank_format` or `rerank_shim` (see [Non-LLM Endpoints](#non-llm-endpoints)); the legacy section below remains supported:
 
 ```jsonc
 {
@@ -665,7 +705,7 @@ The `/v2/rerank` endpoint auto-detects Cohere source format from the URL path.
 
 ## Decision Providers
 
-The gateway can proxy `/v1/decision` and `/v1/systemone` requests for probabilistic structured decision models:
+The gateway can proxy `/v1/decision` and `/v1/systemone` requests for probabilistic structured decision models. Unified entries use `decision_format` or `decision_shim` (see [Non-LLM Endpoints](#non-llm-endpoints)); the legacy section below remains supported:
 
 ```jsonc
 {
