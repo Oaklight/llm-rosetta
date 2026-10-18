@@ -1,0 +1,12 @@
+name: google--embedding
+model_type: embedding
+format: google_generate
+logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/google.svg
+
+connection:
+  base_url: https://generativelanguage.googleapis.com
+  api_key_env: GOOGLE_API_KEY
+  # Google carries the model in the path; batch requests use
+  # :batchEmbedContents, which the handler swaps in when the converted body
+  # carries multiple inputs.
+  default_path: /v1beta/models/{model}:embedContent

@@ -1,0 +1,9 @@
+name: jina--rerank
+model_type: rerank
+format: jina
+logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/jina.svg
+
+connection:
+  base_url: https://api.jina.ai
+  api_key_env: JINA_API_KEY
+  default_path: /v1/rerank

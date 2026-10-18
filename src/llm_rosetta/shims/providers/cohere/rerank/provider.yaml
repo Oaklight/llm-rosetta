@@ -1,0 +1,9 @@
+name: cohere--rerank
+model_type: rerank
+format: cohere
+logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/cohere.svg
+
+connection:
+  base_url: https://api.cohere.com
+  api_key_env: COHERE_API_KEY
+  default_path: /v2/rerank

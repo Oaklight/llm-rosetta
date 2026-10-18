@@ -257,6 +257,101 @@ class TestValidation:
         assert cfg.embedding_models["e"] == "acme"
 
 
+class TestBuiltinEndpointShims:
+    """The shipped embedding/rerank shims resolve an endpoint-only provider.
+
+    Each case names the shim alone (no ``*_format`` / ``*_path`` / connection
+    values in the config) so the shim supplies the whole endpoint: format,
+    path and base URL.  The auth header follows the format — Google takes
+    ``x-goog-api-key``, the OpenAI-shaped formats take a Bearer token.
+    """
+
+    @pytest.mark.parametrize(
+        ("shim_name", "type_name", "fmt", "url"),
+        [
+            (
+                "openai--embedding",
+                "embedding",
+                "openai",
+                "https://api.openai.com/v1/embeddings",
+            ),
+            (
+                "cohere--embedding",
+                "embedding",
+                "cohere",
+                "https://api.cohere.com/v2/embed",
+            ),
+            (
+                "jina--embedding",
+                "embedding",
+                "jina",
+                "https://api.jina.ai/v1/embeddings",
+            ),
+            (
+                "voyage--embedding",
+                "embedding",
+                "voyage",
+                "https://api.voyageai.com/v1/embeddings",
+            ),
+            (
+                "google--embedding",
+                "embedding",
+                "google_generate",
+                "https://generativelanguage.googleapis.com"
+                "/v1beta/models/m:embedContent",
+            ),
+        ],
+    )
+    def test_embedding_shims(self, shim_name, type_name, fmt, url):
+        from llm_rosetta.shims.providers import load_providers
+
+        load_providers()
+        cfg = GatewayConfig(
+            {
+                "providers": {"acme": {f"{type_name}_shim": shim_name, "api_key": "k"}},
+                "models": {},
+            }
+        )
+        assert cfg.provider_identities["acme"] == ProviderIdentity(
+            model_type=type_name, format=fmt
+        )
+        assert getattr(cfg, f"{type_name}_providers")["acme"]["format"] == fmt
+        info = getattr(cfg, f"{type_name}_provider_infos")["acme"]
+        assert info.upstream_url("m") == url
+        expected_auth = (
+            {"x-goog-api-key": "k"}
+            if fmt == "google_generate"
+            else {"Authorization": "Bearer k"}
+        )
+        assert info.auth_headers() == expected_auth
+
+    @pytest.mark.parametrize(
+        ("shim_name", "fmt", "url"),
+        [
+            ("cohere--rerank", "cohere", "https://api.cohere.com/v2/rerank"),
+            ("jina--rerank", "jina", "https://api.jina.ai/v1/rerank"),
+            ("voyage--rerank", "voyage", "https://api.voyageai.com/v1/rerank"),
+        ],
+    )
+    def test_rerank_shims(self, shim_name, fmt, url):
+        from llm_rosetta.shims.providers import load_providers
+
+        load_providers()
+        cfg = GatewayConfig(
+            {
+                "providers": {"acme": {"rerank_shim": shim_name, "api_key": "k"}},
+                "models": {},
+            }
+        )
+        assert cfg.provider_identities["acme"] == ProviderIdentity(
+            model_type="rerank", format=fmt
+        )
+        assert cfg.rerank_providers["acme"]["format"] == fmt
+        info = cfg.rerank_provider_infos["acme"]
+        assert info.upstream_url("m") == url
+        assert info.auth_headers() == {"Authorization": "Bearer k"}
+
+
 class TestAdminMetadata:
     def test_model_types_expose_the_endpoint_keys(self):
         meta = {d["name"]: d for d in admin_config._get_model_type_metadata()}

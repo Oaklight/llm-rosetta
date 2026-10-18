@@ -1,0 +1,9 @@
+name: voyage--rerank
+model_type: rerank
+format: voyage
+logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/voyage.svg
+
+connection:
+  base_url: https://api.voyageai.com
+  api_key_env: VOYAGE_API_KEY
+  default_path: /v1/rerank
