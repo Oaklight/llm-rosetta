@@ -413,6 +413,55 @@ class TestDistributeTypedModels:
         assert "jina-reranker-v2" in config.rerank_models
         assert "jina-reranker-v2" not in config.models
 
+    def test_typed_model_with_provider_list_is_distributed(self) -> None:
+        """A ``providers`` list routes to its first provider in the pool."""
+        from llm_rosetta.gateway.config import GatewayConfig
+
+        raw = {
+            "providers": {
+                "chat-only": {
+                    "api_key": "test",
+                    "base_url": "https://api.example.com",
+                    "type": "openai_chat",
+                },
+                "jina": {
+                    "api_key": "test",
+                    "base_url": "https://api.jina.ai",
+                    "type": "openai_chat",
+                    "embedding_format": "jina",
+                },
+            },
+            "models": {
+                "jina-embeddings-v3": {
+                    "providers": ["chat-only", "jina"],
+                    "type": "embedding",
+                },
+            },
+        }
+        config = GatewayConfig(raw)
+        assert config.embedding_models["jina-embeddings-v3"] == "jina"
+        assert "jina-embeddings-v3" not in config.models
+
+    def test_typed_model_without_a_pool_provider_is_skipped(self) -> None:
+        """No provider in the list serves the type — the model is not routed."""
+        from llm_rosetta.gateway.config import GatewayConfig
+
+        raw = {
+            "providers": {
+                "chat-only": {
+                    "api_key": "test",
+                    "base_url": "https://api.example.com",
+                    "type": "openai_chat",
+                },
+            },
+            "models": {
+                "m": {"providers": ["chat-only"], "type": "embedding"},
+            },
+        }
+        config = GatewayConfig(raw)
+        assert "m" not in config.embedding_models
+        assert "m" in config.models
+
 
 # ---------------------------------------------------------------------------
 # Admin route integration: _build_model_entry validates type

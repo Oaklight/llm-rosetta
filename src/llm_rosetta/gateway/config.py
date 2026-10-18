@@ -710,8 +710,15 @@ class GatewayConfig:
         )
         # Merge legacy decision_providers / decision_models
         for model_name, prov in raw.get("decision_models", {}).items():
-            provider_name = prov if isinstance(prov, str) else prov.get("provider", "")
-            if provider_name in self.decision_providers:
+            provider_name = next(
+                (
+                    p
+                    for p in self._declared_provider_names(prov)
+                    if p in self.decision_providers
+                ),
+                "",
+            )
+            if provider_name:
                 self.decision_models.setdefault(model_name, provider_name)
         self.default_decision_format: str = raw.get(
             "default_decision_format", "systemone"
@@ -728,7 +735,7 @@ class GatewayConfig:
         non-LLM types.  Models whose provider lacks the corresponding
         endpoint config are silently skipped.
         """
-        from .model_types import get_model_type, registered_type_names
+        from .model_types import registered_type_names
 
         # Build a mapping from type name -> (providers dict, models dict)
         # so the distribution loop is data-driven.
@@ -749,43 +756,72 @@ class GatewayConfig:
             if not isinstance(value, dict):
                 continue
             model_type = value.get("type", "llm")
-            if model_type == "llm":
-                continue
-            if value.get("enabled") is False:
+            if model_type == "llm" or value.get("enabled") is False:
                 continue
 
-            provider_name = value.get("provider", "")
             pool = type_pools.get(model_type)
+            if pool is None:
+                self._warn_unpooled_type(name, model_type)
+                continue
 
-            if pool is not None:
-                type_providers, type_models = pool
-                if provider_name in type_providers:
-                    type_models.setdefault(name, provider_name)
-                    to_remove.append(name)
-                else:
-                    desc = get_model_type(model_type)
-                    fmt_key = desc.config_format_key if desc else f"{model_type}_format"
-                    logger.warning(
-                        "Model %r has type=%s but provider %r lacks %s — skipped",
-                        name,
-                        model_type,
-                        provider_name,
-                        fmt_key,
-                    )
-            elif get_model_type(model_type) is not None:
-                # Type is registered but no providers/models attributes exist
-                # yet (e.g. a new type without config integration).
-                logger.debug(
-                    "Model %r has type=%s which is registered but has no "
-                    "config pool — skipped",
-                    name,
-                    model_type,
-                )
+            type_providers, type_models = pool
+            provider_name = self._first_pool_provider(value, type_providers)
+            if provider_name:
+                type_models.setdefault(name, provider_name)
+                to_remove.append(name)
+            else:
+                self._warn_skipped_typed_model(name, model_type, value)
 
         # Remove from main LLM pool (they belong in the specialized pool)
         for name in to_remove:
             self.models.pop(name, None)
             self.model_capabilities.pop(name, None)
+
+    @staticmethod
+    def _first_pool_provider(value: Any, type_providers: dict[str, Any]) -> str:
+        """The first provider a model names that serves the typed endpoint."""
+        return next(
+            (
+                provider
+                for provider in GatewayConfig._declared_provider_names(value)
+                if provider in type_providers
+            ),
+            "",
+        )
+
+    @staticmethod
+    def _warn_unpooled_type(name: str, model_type: str) -> None:
+        """Log a typed model whose type has no providers/models pool."""
+        from .model_types import get_model_type
+
+        if get_model_type(model_type) is not None:
+            # Type is registered but no providers/models attributes exist yet
+            # (e.g. a new type without config integration).
+            logger.debug(
+                "Model %r has type=%s which is registered but has no "
+                "config pool — skipped",
+                name,
+                model_type,
+            )
+
+    @staticmethod
+    def _warn_skipped_typed_model(
+        name: str, model_type: str, value: dict[str, Any]
+    ) -> None:
+        """Log a typed model none of whose providers serve the endpoint."""
+        from .model_types import get_model_type
+
+        desc = get_model_type(model_type)
+        fmt_key = desc.config_format_key if desc else f"{model_type}_format"
+        provider_names = GatewayConfig._declared_provider_names(value)
+        declared = provider_names[0] if len(provider_names) == 1 else provider_names
+        logger.warning(
+            "Model %r has type=%s but provider %r lacks %s — skipped",
+            name,
+            model_type,
+            declared,
+            fmt_key,
+        )
 
     @staticmethod
     def _parse_custom_tools_overrides(
@@ -1365,6 +1401,34 @@ class GatewayConfig:
             return None
         return ModelRoute([ProviderEntry(provider_name)], name)
 
+    @staticmethod
+    def _declared_provider_names(value: Any) -> list[str]:
+        """The providers a model entry names, in declared order.
+
+        The unified schema accepts ``provider`` (singular) or ``providers``
+        (a failover list of names or ``{"name": ...}`` entries); a legacy
+        entry may be the bare provider name.  Typed-endpoint resolution uses
+        this so an embedding/rerank/decision model declared with the list
+        form is routed instead of being read as ``provider: ''``.
+        """
+        if isinstance(value, str):
+            return [value] if value else []
+        if not isinstance(value, dict):
+            return []
+        single = value.get("provider")
+        if isinstance(single, str) and single:
+            return [single]
+        raw_list = value.get("providers")
+        if not isinstance(raw_list, list):
+            return []
+        names: list[str] = []
+        for item in raw_list:
+            if isinstance(item, str):
+                names.append(item)
+            elif isinstance(item, dict) and isinstance(item.get("name"), str):
+                names.append(item["name"])
+        return [name for name in names if name]
+
     @classmethod
     def _extract_model_metadata(cls, value: Any) -> tuple[list[str], str | None]:
         """Extract capabilities and upstream_model from a model entry."""
@@ -1676,13 +1740,15 @@ class GatewayConfig:
 
         models: dict[str, str] = {}
         for model_name, value in raw_models.items():
-            if isinstance(value, str):
-                provider_name = value
-            elif isinstance(value, dict):
-                provider_name = value.get("provider", "")
-            else:
-                continue
-            if provider_name in providers:
+            provider_name = next(
+                (
+                    p
+                    for p in GatewayConfig._declared_provider_names(value)
+                    if p in providers
+                ),
+                "",
+            )
+            if provider_name:
                 models[model_name] = provider_name
         return providers, provider_infos, models
 
@@ -1746,13 +1812,15 @@ class GatewayConfig:
 
         models: dict[str, str] = {}
         for model_name, value in raw_models.items():
-            if isinstance(value, str):
-                provider_name = value
-            elif isinstance(value, dict):
-                provider_name = value.get("provider", "")
-            else:
-                continue
-            if provider_name in providers:
+            provider_name = next(
+                (
+                    p
+                    for p in GatewayConfig._declared_provider_names(value)
+                    if p in providers
+                ),
+                "",
+            )
+            if provider_name:
                 models[model_name] = provider_name
         return providers, provider_infos, models
 

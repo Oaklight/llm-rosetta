@@ -83,11 +83,11 @@ def _embedding_config() -> GatewayConfig:
                 "emb": {
                     "api_key": "k",
                     "base_url": "https://emb.invalid",
-                    "type": "openai",
+                    "embedding_format": "openai",
                 }
             },
             "models": {
-                "my-embed": {"provider": "emb", "capabilities": ["embedding"]},
+                "my-embed": {"provider": "emb", "type": "embedding"},
             },
         }
     )

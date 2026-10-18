@@ -186,6 +186,25 @@ class TestRerankConfig:
         assert len(config.rerank_models) == 2
         assert config.default_rerank_format == "cohere"
 
+    def test_legacy_rerank_models_accept_a_provider_list(self) -> None:
+        from llm_rosetta.gateway.config import GatewayConfig
+
+        raw = {
+            "providers": {},
+            "rerank_providers": {
+                "cohere": {
+                    "api_key": "k",
+                    "base_url": "https://api.cohere.com",
+                    "format": "cohere",
+                }
+            },
+            "rerank_models": {
+                "rerank-v3.5": {"providers": ["cohere"]},
+            },
+        }
+        config = GatewayConfig(raw)
+        assert config.rerank_models["rerank-v3.5"] == "cohere"
+
     def test_resolve_rerank(self) -> None:
         from llm_rosetta.gateway.config import GatewayConfig
 

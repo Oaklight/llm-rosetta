@@ -121,12 +121,11 @@ class TestEmbeddingUrlConstruction:
         assert resolved is not None
         assert resolved.upstream_url == "https://api.custom.com/v4/embed"
 
-    def test_chat_fallback_no_embedding_format(self):
+    def test_chat_provider_is_not_an_embedding_fallback(self):
+        """An LLM provider without an embedding format cannot serve embeddings."""
         cfg = _config_with_provider("https://api.openai.com/v1")
         body: dict = {"model": "gpt-4", "input": "test"}
-        resolved = _resolve_embedding_provider(cfg, "gpt-4", body)
-        assert resolved is not None
-        assert resolved.upstream_url == "https://api.openai.com/v1/embeddings"
+        assert _resolve_embedding_provider(cfg, "gpt-4", body) is None
 
 
 # ── Rerank URL construction ──────────────────────────────────────────

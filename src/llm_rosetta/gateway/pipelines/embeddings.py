@@ -1,10 +1,12 @@
 """Embeddings proxy handler with optional cross-format conversion.
 
 Proxies ``/v1/embeddings`` requests to upstream embedding providers.
-When ``embedding_providers`` / ``embedding_models`` are configured, uses
-IR-based conversion between OpenAI, Cohere, Jina, and Voyage formats.
-Otherwise falls back to passthrough via the chat provider routing
-(backward compatible with existing configs).
+When the model's provider declares an embedding endpoint (``embedding_format``
+/ ``embedding_shim``, or the legacy ``embedding_providers`` section), uses
+IR-based conversion between OpenAI, Cohere, Jina, Voyage and Google GenAI
+formats.  There is no chat-provider passthrough: an unconfigured model gets a
+404 rather than a chat-shaped request forwarded to a provider that never
+declared an embedding endpoint.
 
 Every request that reaches an upstream is recorded in the usage ledger with
 ``model_type="embedding"``, through the same
@@ -36,21 +38,21 @@ from ..transport import (
 logger = get_logger()
 
 
-def _detect_embedding_source(body: dict[str, Any], config: GatewayConfig) -> str:
-    """Infer the source embedding format from the request body.
+def _detect_embedding_source(
+    request: Any, body: dict[str, Any], config: GatewayConfig
+) -> str:
+    """Infer the source embedding format through the type descriptor.
 
-    Detection order:
-    1. ``texts`` field (without ``input``) → Cohere
-    2. ``task`` field → Jina
-    3. ``output_dtype`` field → Voyage
-    4. Fall back to ``config.default_embedding_format``
+    The detector lives in :mod:`gateway.source_formats` and is attached to the
+    ``embedding`` descriptor, so it is the same object the descriptor exposes
+    and stays testable without a handler.  The fallback here only covers a
+    registry that has no detector (a test double or a future type).
     """
-    if "texts" in body and "input" not in body:
-        return "cohere"
-    if "task" in body:
-        return "jina"
-    if "output_dtype" in body:
-        return "voyage"
+    from ..model_types import get_model_type
+
+    descriptor = get_model_type("embedding")
+    if descriptor is not None and descriptor.detect_source_format is not None:
+        return descriptor.detect_source_format(request, body, config)
     return config.default_embedding_format
 
 
@@ -59,56 +61,51 @@ class _ResolvedEmbedding:
     provider_info: ProviderInfo
     upstream_url: str
     provider_name: str
-    #: The chat-provider fallback serves OpenAI-shaped embeddings, so that is
-    #: the default; the embedding-routing path always passes the real formats.
     target_format: str = "openai"
     source_format: str = "openai"
+    #: The configured endpoint path.  It may carry ``{model}`` (Google puts
+    #: the model in the URL) and is used to build the batch variant after the
+    #: request has been converted.
+    path: str = ""
     pipeline: EmbeddingConversionPipeline | None = field(default=None)
 
 
 def _resolve_embedding_provider(
-    config: GatewayConfig, model: str, body: dict[str, Any]
+    config: GatewayConfig,
+    model: str,
+    body: dict[str, Any],
+    request: Any = None,
 ) -> _ResolvedEmbedding | None:
-    """Resolve embedding provider; returns None if model not found anywhere."""
-    # Try embedding-specific routing first
+    """Resolve the embedding provider, or ``None`` when the model is unknown.
+
+    Embedding traffic is routed only through the embedding pool.  There is no
+    chat-provider fallback: an unconfigured model returns 404 instead of
+    forwarding a chat-shaped request to a provider that never declared an
+    embedding endpoint.
+    """
     try:
         route = config.resolve_embedding(model)
-        source_format = _detect_embedding_source(body, config)
-        logger.debug("embedding: detected source format: %s", source_format)
-        pipeline = (
-            EmbeddingConversionPipeline(source_format, route.format)
-            if source_format != route.format
-            else None
-        )
-        upstream_model = config.model_upstream_names.get(model)
-        if upstream_model:
-            body["model"] = upstream_model
-        return _ResolvedEmbedding(
-            provider_info=route.provider_info,
-            upstream_url=route.provider_info.upstream_url(""),
-            provider_name=route.provider_name,
-            target_format=route.format,
-            source_format=source_format,
-            pipeline=pipeline,
-        )
-    except KeyError:
-        pass
-
-    # Fall back to chat provider routing (backward compat)
-    try:
-        chat_route, provider_info = config.resolve(
-            config.selection_context(model, "chat_completions")
-        )
     except KeyError:
         return None
 
-    if chat_route.upstream_model:
-        body["model"] = chat_route.upstream_model
-
+    source_format = _detect_embedding_source(request, body, config)
+    logger.debug("embedding: detected source format: %s", source_format)
+    pipeline = (
+        EmbeddingConversionPipeline(source_format, route.format)
+        if source_format != route.format
+        else None
+    )
+    upstream_model = config.model_upstream_names.get(model)
+    if upstream_model:
+        body["model"] = upstream_model
     return _ResolvedEmbedding(
-        provider_info=provider_info,
-        upstream_url=f"{provider_info.base_url}/embeddings",  # chat fallback: no url_template
-        provider_name=chat_route.provider_name,
+        provider_info=route.provider_info,
+        upstream_url=route.provider_info.upstream_url(upstream_model or model),
+        provider_name=route.provider_name,
+        target_format=route.format,
+        source_format=source_format,
+        path=route.embedding_path,
+        pipeline=pipeline,
     )
 
 
@@ -154,11 +151,9 @@ async def handle_embeddings(
         )
 
     # --- Resolve provider ---
-    resolved = _resolve_embedding_provider(config, model, body)
+    resolved = _resolve_embedding_provider(config, model, body, request)
     if resolved is None:
-        all_models = sorted(
-            set(config.models.keys()) | set(config.embedding_models.keys())
-        )
+        all_models = sorted(config.embedding_models.keys())
         return with_request_id(
             JSONResponse(
                 {
@@ -173,6 +168,9 @@ async def handle_embeddings(
                 status_code=404,
             )
         )
+
+    # The model to place in the upstream URL; conversion may consume it.
+    upstream_model = body.get("model") or model
 
     # --- Convert request (if cross-format) ---
     if resolved.pipeline:
@@ -192,6 +190,16 @@ async def handle_embeddings(
                 )
             )
 
+    # Google carries the model in the path and has a distinct batch suffix.
+    # Both are decided after conversion: the converted body is what says
+    # single (``content``) or batch (``requests``).
+    upstream_url = resolved.upstream_url
+    if resolved.target_format == "google_generate":
+        path = resolved.path.replace("{model}", upstream_model)
+        if "requests" in body and path.endswith(":embedContent"):
+            path = path[: -len(":embedContent")] + ":batchEmbedContents"
+        upstream_url = resolved.provider_info.base_url + path
+
     # --- Forward via transport ---
     transport: UpstreamTransport = request.app.transport
     extra_headers = build_upstream_extra_headers(request, request_id)
@@ -204,7 +212,7 @@ async def handle_embeddings(
     try:
         resp = await transport.send(
             resolved.provider_info,
-            resolved.upstream_url,
+            upstream_url,
             body,
             extra_headers=extra_headers,
         )

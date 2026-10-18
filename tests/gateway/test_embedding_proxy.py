@@ -65,6 +65,19 @@ class TestEmbeddingConversionPipeline:
         pipeline = EmbeddingConversionPipeline("openai", "cohere")
         assert pipeline.warnings == []
 
+    def test_response_conversion_needs_no_request_first(self) -> None:
+        """Both legs are independent: the pipeline holds no request state."""
+        pipeline = EmbeddingConversionPipeline("openai", "cohere")
+        result = pipeline.convert_response(
+            {
+                "id": "abc",
+                "embeddings": {"float": [[0.1, 0.2, 0.3]]},
+                "meta": {"billed_units": {"input_tokens": 1}},
+                "response_type": "embeddings_by_type",
+            }
+        )
+        assert result["data"][0]["embedding"] == [0.1, 0.2, 0.3]
+
 
 class TestGetEmbeddingConverter:
     def test_valid_formats(self) -> None:
@@ -144,6 +157,25 @@ class TestEmbeddingConfig:
         assert route.embedding_path == "/v1/embeddings"
         assert route.provider_info.base_url == "https://api.jina.ai"
         assert route.provider_info.auth_headers()["Authorization"] == "Bearer jina-key"
+
+    def test_legacy_embedding_models_accept_a_provider_list(self) -> None:
+        from llm_rosetta.gateway.config import GatewayConfig
+
+        raw = {
+            "providers": {},
+            "embedding_providers": {
+                "g": {
+                    "api_key": "k",
+                    "base_url": "https://generativelanguage.googleapis.com",
+                    "format": "google_generate",
+                }
+            },
+            "embedding_models": {
+                "m": {"providers": ["g"]},
+            },
+        }
+        config = GatewayConfig(raw)
+        assert config.embedding_models["m"] == "g"
 
     def test_empty_embedding_config(self) -> None:
         from llm_rosetta.gateway.config import GatewayConfig

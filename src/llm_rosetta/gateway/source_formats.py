@@ -24,7 +24,10 @@ def detect_embedding_source(request: Any, body: dict[str, Any], config: Any) -> 
     Detection order:
     1. ``texts`` field (without ``input``) → Cohere
     2. ``task`` field → Jina
-    3. ``output_dtype`` field → Voyage
+    3. ``input_type`` or ``output_dtype`` beside ``input`` → Voyage
+       (Cohere sends ``input_type`` too, but with ``texts``, which rule 1
+       already claims; ``output_dtype`` is optional, so ``input_type`` is the
+       signal an ordinary Voyage request carries)
     4. Google-shaped body (``requests`` or ``content.parts`` without ``input``
        or ``texts``) → Google GenAI
     5. Fall back to ``config.default_embedding_format``
@@ -36,7 +39,7 @@ def detect_embedding_source(request: Any, body: dict[str, Any], config: Any) -> 
         return "cohere"
     if "task" in body:
         return "jina"
-    if "output_dtype" in body:
+    if "input_type" in body or "output_dtype" in body:
         return "voyage"
     if "input" not in body and ("requests" in body or "content" in body):
         return "google_generate"

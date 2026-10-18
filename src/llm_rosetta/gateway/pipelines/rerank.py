@@ -32,18 +32,17 @@ logger = get_logger()
 def _detect_source_format(
     request: Any, body: dict[str, Any], config: GatewayConfig
 ) -> str:
-    """Infer the source rerank format from the request path and body.
+    """Infer the source rerank format through the type descriptor.
 
-    Detection order:
-    1. ``/v2/rerank`` path → Cohere (only Cohere uses v2)
-    2. ``top_k`` in body (without ``top_n``) → Voyage
-    3. Fall back to ``config.default_rerank_format``
+    The detector lives in :mod:`gateway.source_formats` and is attached to the
+    ``rerank`` descriptor; this wrapper keeps the handler-local name used by
+    the tests and covers a registry without one.
     """
-    path: str = getattr(request, "path", "")
-    if path.startswith("/v2/"):
-        return "cohere"
-    if "top_k" in body and "top_n" not in body:
-        return "voyage"
+    from ..model_types import get_model_type
+
+    descriptor = get_model_type("rerank")
+    if descriptor is not None and descriptor.detect_source_format is not None:
+        return descriptor.detect_source_format(request, body, config)
     return config.default_rerank_format
 
 

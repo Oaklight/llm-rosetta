@@ -72,7 +72,7 @@ def _make_config(base_url: str, upstream_model: str | None = None) -> GatewayCon
     """Build a minimal GatewayConfig for embedding tests."""
     model_entry: dict[str, Any] = {
         "provider": "test-provider",
-        "capabilities": ["embedding"],
+        "type": "embedding",
     }
     if upstream_model:
         model_entry["upstream_model"] = upstream_model
@@ -83,6 +83,7 @@ def _make_config(base_url: str, upstream_model: str | None = None) -> GatewayCon
                 "api_key": "test-key",
                 "base_url": base_url,
                 "type": "openai",
+                "embedding_format": "openai",
             }
         },
         "models": {
@@ -190,6 +191,108 @@ class TestEmbeddingUpstreamModel:
 
 
 # ============================================================================
+# Google GenAI routing tests
+# ============================================================================
+
+
+def _make_google_config(
+    base_url: str = "https://generativelanguage.googleapis.com",
+    *,
+    upstream_model: str | None = None,
+) -> GatewayConfig:
+    """Build a config whose embedding endpoint is the Google shim."""
+    model_entry: dict[str, Any] = {
+        "provider": "google-embed",
+        "type": "embedding",
+    }
+    if upstream_model:
+        model_entry["upstream_model"] = upstream_model
+    return GatewayConfig(
+        {
+            "providers": {
+                "google-embed": {
+                    "api_key": "test-key",
+                    "base_url": base_url,
+                    "embedding_shim": "google--embedding",
+                }
+            },
+            "models": {"gemini-embedding": model_entry},
+        }
+    )
+
+
+def _google_transport(response_body: dict[str, Any]):
+    transport = MagicMock()
+    transport.send = AsyncMock(
+        return_value=UpstreamResponse(
+            status_code=200,
+            body=response_body,
+            raw_content=json.dumps(response_body).encode(),
+        )
+    )
+    return transport
+
+
+class TestGoogleEmbeddingRouting:
+    """The Google shim carries the model in the path and has a batch suffix."""
+
+    def test_single_input_uses_embed_content(self) -> None:
+        config = _make_google_config()
+        request = _make_request({"model": "gemini-embedding", "input": "hello"})
+        request.app.transport = _google_transport(
+            {
+                "embedding": {"values": [0.1, 0.2]},
+                "usageMetadata": {"promptTokenCount": 2, "totalTokenCount": 2},
+            }
+        )
+
+        response = asyncio.run(handle_embeddings(request, config))
+
+        assert response.status_code == 200
+        args, _ = request.app.transport.send.call_args
+        assert args[1] == (
+            "https://generativelanguage.googleapis.com"
+            "/v1beta/models/gemini-embedding:embedContent"
+        )
+        assert args[2]["content"] == {"parts": [{"text": "hello"}]}
+        body = json.loads(response.body)
+        assert body["data"][0]["embedding"] == [0.1, 0.2]
+        assert body["model"] == "gemini-embedding"
+
+    def test_batch_input_uses_batch_embed_contents(self) -> None:
+        config = _make_google_config()
+        request = _make_request({"model": "gemini-embedding", "input": ["a", "b"]})
+        request.app.transport = _google_transport(
+            {"embeddings": [{"values": [0.1]}, {"values": [0.2]}]}
+        )
+
+        response = asyncio.run(handle_embeddings(request, config))
+
+        assert response.status_code == 200
+        args, _ = request.app.transport.send.call_args
+        assert args[1] == (
+            "https://generativelanguage.googleapis.com"
+            "/v1beta/models/gemini-embedding:batchEmbedContents"
+        )
+        assert [item["model"] for item in args[2]["requests"]] == [
+            "models/gemini-embedding",
+            "models/gemini-embedding",
+        ]
+        body = json.loads(response.body)
+        assert len(body["data"]) == 2
+
+    def test_upstream_model_is_used_in_the_path(self) -> None:
+        config = _make_google_config(upstream_model="text-embedding-004")
+        request = _make_request({"model": "gemini-embedding", "input": "hello"})
+        request.app.transport = _google_transport({"embedding": {"values": [0.1]}})
+
+        asyncio.run(handle_embeddings(request, config))
+
+        args, _ = request.app.transport.send.call_args
+        assert args[1].endswith("/v1beta/models/text-embedding-004:embedContent")
+
+
+# ============================================================================
 # Auto-detection tests
 # ============================================================================
 
@@ -217,6 +320,21 @@ class TestDetectEmbeddingSource:
             ({"texts": ["hello"]}, "cohere"),
             ({"input": "hello", "task": "retrieval.query"}, "jina"),
             ({"input": "hello", "output_dtype": "float"}, "voyage"),
+            # input_type is the signal an ordinary Voyage request carries.
+            ({"input": "hello", "input_type": "query"}, "voyage"),
+            # Cohere also sends input_type, but with texts.
+            ({"texts": ["hello"], "input_type": "search_query"}, "cohere"),
+            # Google shapes: parts for embedContent, requests for batch.
+            ({"content": {"parts": [{"text": "hello"}]}}, "google_generate"),
+            (
+                {"requests": [{"content": {"parts": [{"text": "hello"}]}}]},
+                "google_generate",
+            ),
+            # An OpenAI-shaped body stays OpenAI even if it carries content.
+            (
+                {"input": "hello", "content": {"parts": [{"text": "hello"}]}},
+                "openai",
+            ),
             ({"input": "hello"}, "openai"),  # fallback
             ({"input": "hello", "model": "x"}, "openai"),  # fallback
             # edge: texts + input → not Cohere, falls to default
@@ -228,18 +346,18 @@ class TestDetectEmbeddingSource:
     ) -> None:
         from llm_rosetta.gateway.pipelines.embeddings import _detect_embedding_source
 
-        assert _detect_embedding_source(body, config) == expected
+        assert _detect_embedding_source(None, body, config) == expected
 
     def test_cohere_texts_field(self, config: GatewayConfig) -> None:
         from llm_rosetta.gateway.pipelines.embeddings import _detect_embedding_source
 
-        assert _detect_embedding_source({"texts": ["hi"]}, config) == "cohere"
+        assert _detect_embedding_source(None, {"texts": ["hi"]}, config) == "cohere"
 
     def test_cohere_skipped_when_input_present(self, config: GatewayConfig) -> None:
         from llm_rosetta.gateway.pipelines.embeddings import _detect_embedding_source
 
         assert (
-            _detect_embedding_source({"texts": ["hi"], "input": "hi"}, config)
+            _detect_embedding_source(None, {"texts": ["hi"], "input": "hi"}, config)
             != "cohere"
         )
 
@@ -247,7 +365,9 @@ class TestDetectEmbeddingSource:
         from llm_rosetta.gateway.pipelines.embeddings import _detect_embedding_source
 
         assert (
-            _detect_embedding_source({"input": "hi", "task": "retrieval.query"}, config)
+            _detect_embedding_source(
+                None, {"input": "hi", "task": "retrieval.query"}, config
+            )
             == "jina"
         )
 
@@ -255,7 +375,9 @@ class TestDetectEmbeddingSource:
         from llm_rosetta.gateway.pipelines.embeddings import _detect_embedding_source
 
         assert (
-            _detect_embedding_source({"input": "hi", "output_dtype": "float"}, config)
+            _detect_embedding_source(
+                None, {"input": "hi", "output_dtype": "float"}, config
+            )
             == "voyage"
         )
 
@@ -263,6 +385,6 @@ class TestDetectEmbeddingSource:
         from llm_rosetta.gateway.pipelines.embeddings import _detect_embedding_source
 
         assert (
-            _detect_embedding_source({"input": "hi"}, config)
+            _detect_embedding_source(None, {"input": "hi"}, config)
             == config.default_embedding_format
         )
