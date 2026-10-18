@@ -211,12 +211,12 @@ def register_shims():
 
 ## 内置 Shim
 
-LLM-Rosetta 内置 34 个提供方 shim，每个 shim 对应 `src/llm_rosetta/shims/providers/`
+LLM-Rosetta 内置 42 个提供方 shim，每个 shim 对应 `src/llm_rosetta/shims/providers/`
 下的一个目录。`list_shims()` 会打印当前实际的集合；下表即是该集合。标有 **†** 的名称
 计划移除 —— 参见[计划移除清单](#shims-scheduled-for-removal)。
 
-| 名称 | 基础类型 | 默认 Base URL | API Key 环境变量 | 转换规则 |
-|------|---------|--------------|-----------------|---------|
+| 名称 | 格式 | 默认 Base URL | API Key 环境变量 | 转换规则 |
+|------|------|--------------|-----------------|---------|
 | † `alcf_metis--chat_completions` | `chat_completions` | `https://inference-api.alcf.anl.gov/resource_server/metis/api/v1` | `ALCF_API_KEY` | 剥离 `logprobs`、`top_logprobs`、`parallel_tool_calls`；developer → system；补空 content/description |
 | † `alcf_minerva--chat_completions` | `chat_completions` | `https://inference-api.alcf.anl.gov/resource_server/minerva/api/v1` | `ALCF_API_KEY` | 剥离 `logprobs`、`top_logprobs`；developer → system；补空 content/description |
 | † `alcf_sophia--chat_completions` | `chat_completions` | `https://inference-api.alcf.anl.gov/resource_server/sophia/vllm/v1` | `ALCF_API_KEY` | 剥离 `logprobs`、`top_logprobs`；developer → system；补空 content/description；重命名 `reasoning_content` → `reasoning` |
@@ -228,17 +228,23 @@ LLM-Rosetta 内置 34 个提供方 shim，每个 shim 对应 `src/llm_rosetta/sh
 | † `asksage--google_generate` | `google_generate` | `https://api.asksage.ai/server/google/v1beta` | `ASKSAGE_API_KEY` | — |
 | † `asksage--messages` | `messages` | `https://api.asksage.ai/server/anthropic` | `ASKSAGE_API_KEY` | — |
 | † `asksage--open_responses` | `open_responses` | `https://api.asksage.ai/server/openai/v1` | `ASKSAGE_API_KEY` | `max_tokens` → `max_completion_tokens` |
+| `cohere--embedding` | `cohere` | `https://api.cohere.com` | `COHERE_API_KEY` | — |
+| `cohere--rerank` | `cohere` | `https://api.cohere.com` | `COHERE_API_KEY` | — |
 | `deepseek--chat_completions` | `chat_completions` | `https://api.deepseek.com` | `DEEPSEEK_API_KEY` | 剥离 `n`、`logit_bias`、`seed`、penalties；回填 `reasoning_content` |
 | `deepseek--open_responses` | `open_responses` | `https://api.deepseek.com` | `DEEPSEEK_API_KEY` | 剥离 `n`、`logit_bias`、`seed` |
+| `google--embedding` | `google_generate` | `https://generativelanguage.googleapis.com` | `GOOGLE_API_KEY` | — |
 | `google--google_generate` | `google_generate` | `https://generativelanguage.googleapis.com` | `GOOGLE_API_KEY` | — |
 | `google--google_interactions` | `google_interactions` | `https://generativelanguage.googleapis.com` | `GOOGLE_API_KEY` | — |
+| `jina--embedding` | `jina` | `https://api.jina.ai` | `JINA_API_KEY` | — |
+| `jina--rerank` | `jina` | `https://api.jina.ai` | `JINA_API_KEY` | — |
 | `kilo--chat_completions` | `chat_completions` | `https://api.kilo.ai/api/gateway` | *（keyless）* | — |
 | `minimax--chat_completions` | `chat_completions` | `https://api.minimaxi.com/v1` | `MINIMAX_API_KEY` | 剥离 `logprobs`、`top_logprobs`、`seed`、`stop`；注入 `reasoning_split`；解析 `think` 标签 |
 | `minimax--messages` | `messages` | `https://api.minimaxi.com/anthropic` | `MINIMAX_API_KEY` | — |
 | `moonshot` | `chat_completions` | `https://api.moonshot.cn/v1` | `MOONSHOT_API_KEY` | 剥离 `logprobs`、`top_logprobs`、`logit_bias`、`seed` |
 | `openai--chat_completions` | `chat_completions` | `https://api.openai.com/v1` | `OPENAI_API_KEY` | — |
+| `openai--embedding` | `openai` | `https://api.openai.com/v1` | `OPENAI_API_KEY` | — |
 | `openai--open_responses` | `open_responses` | `https://api.openai.com/v1` | `OPENAI_API_KEY` | — |
-| `openai_decisions` | `decision` | `https://api.openai.com` | `OPENAI_API_KEY` | — |
+| `openai_decisions` | `openai_decisions` | `https://api.openai.com` | `OPENAI_API_KEY` | — |
 | `opencode--chat_completions` | `chat_completions` | `https://opencode.ai/zen/go/v1` | `OPENCODE_API_KEY` | — |
 | `opencode--messages` | `messages` | `https://opencode.ai/zen/go/v1` | `OPENCODE_API_KEY` | — |
 | `opencode--open_responses` | `open_responses` | `https://opencode.ai/zen/go/v1` | `OPENCODE_API_KEY` | — |
@@ -246,9 +252,11 @@ LLM-Rosetta 内置 34 个提供方 shim，每个 shim 对应 `src/llm_rosetta/sh
 | `openrouter--messages` | `messages` | `https://openrouter.ai/api` | `OPENROUTER_API_KEY` | — |
 | `openrouter--open_responses` | `open_responses` | `https://openrouter.ai/api/v1` | `OPENROUTER_API_KEY` | — |
 | `qwen` | `chat_completions` | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `DASHSCOPE_API_KEY` | 剥离 `frequency_penalty`、`logit_bias` |
-| `typesafe` | `decision` | `https://api.typesafe.ai` | `TYPESAFE_API_KEY` | — |
+| `typesafe` | `systemone` | `https://api.typesafe.ai` | `TYPESAFE_API_KEY` | — |
 | `volcengine--chat_completions` | `chat_completions` | `https://ark.cn-beijing.volces.com/api/v3` | `ARK_API_KEY` | 剥离 `logprobs`、`top_logprobs` |
 | `volcengine--open_responses` | `open_responses` | `https://ark.cn-beijing.volces.com/api/v3` | `ARK_API_KEY` | — |
+| `voyage--embedding` | `voyage` | `https://api.voyageai.com` | `VOYAGE_API_KEY` | — |
+| `voyage--rerank` | `voyage` | `https://api.voyageai.com` | `VOYAGE_API_KEY` | — |
 | `xai` | `chat_completions` | `https://api.x.ai/v1` | `XAI_API_KEY` | 剥离 `logit_bias` |
 | `zhipu` | `chat_completions` | `https://open.bigmodel.cn/api/paas/v4` | `ZHIPU_API_KEY` | 剥离 `n`、penalties、`logprobs`、`logit_bias`、`seed` |
 

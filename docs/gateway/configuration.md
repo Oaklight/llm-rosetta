@@ -130,6 +130,7 @@ commit；配置文件本身不会被改写。要可复现部署请固定 tag 或
   },
   // 端点 shim：格式、路径与连接默认值都来自该 shim
   "acme-embed":  { "embedding_shim": "acme--embedding" },
+  "google-embed": { "embedding_shim": "google--embedding" },
   "acme-rerank": { "rerank_shim": "acme--rerank", "rerank_path": "/v1/rerank" }
 }
 ```
@@ -607,7 +608,7 @@ soft_error_patterns:
 
 ## Embedding 提供方
 
-网关可以代理 `/v1/embeddings` 请求，支持跨格式 IR 转换（OpenAI ↔ Cohere ↔ Jina ↔ Voyage）。统一提供方条目可以用 `embedding_format` 或 `embedding_shim` 声明该端点（见[非 LLM 端点](#non-llm-endpoints)）；下面的旧格式仍然受支持。Embedding 提供方和模型独立于 chat 提供方配置：
+网关可以代理 `/v1/embeddings` 请求，支持跨格式 IR 转换（OpenAI ↔ Cohere ↔ Jina ↔ Voyage ↔ Google GenAI）。统一提供方条目可以用 `embedding_format` 或 `embedding_shim` 声明该端点（见[非 LLM 端点](#non-llm-endpoints)）；下面的旧格式仍然受支持。Embedding 提供方和模型独立于 chat 提供方配置：
 
 ```jsonc
 {
@@ -627,9 +628,13 @@ soft_error_patterns:
 |------|------|--------|------|
 | `embedding_providers` | `dict` | `{}` | Embedding 上游的提供方配置（格式同 `providers`） |
 | `embedding_models` | `dict` | `{}` | 模型 → 提供方映射 |
-| `default_embedding_format` | `str` | `"openai"` | 源格式兜底。选项：`openai`、`cohere`、`jina`、`voyage` |
+| `default_embedding_format` | `str` | `"openai"` | 源格式兜底。选项：`openai`、`cohere`、`jina`、`voyage`、`google_generate` |
 
-未配置 `embedding_providers` 时，`/v1/embeddings` 回退到透传模式（直接转发给 chat 提供方，不做 IR 转换）。
+Embedding 流量**只**通过 embedding 端点路由。没有 embedding 路由的模型——即未列入
+`embedding_models`，或统一提供方上没有 `"type": "embedding"`——会返回 `404`，网关不会
+把它转发给 chat 提供方。Google 端点把模型放在 URL 中
+（`/v1beta/models/{model}:embedContent`），当转换后的请求包含多个输入时改用
+`:batchEmbedContents`。
 
 ## Rerank 提供方
 

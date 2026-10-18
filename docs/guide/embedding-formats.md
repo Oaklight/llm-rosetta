@@ -59,8 +59,8 @@ LLM-Rosetta 识别出 **5 个格式族**，覆盖主流 embedding 提供方。�
 ```json
 {
   "requests": [
-    {"content": {"parts": [{"text": "text 1"}]}, "taskType": "RETRIEVAL_QUERY"},
-    {"content": {"parts": [{"text": "text 2"}]}, "taskType": "RETRIEVAL_QUERY"}
+    {"model": "models/text-embedding-004", "content": {"parts": [{"text": "text 1"}]}, "taskType": "RETRIEVAL_QUERY"},
+    {"model": "models/text-embedding-004", "content": {"parts": [{"text": "text 2"}]}, "taskType": "RETRIEVAL_QUERY"}
   ]
 }
 ```
@@ -139,7 +139,7 @@ LLM-Rosetta 识别出 **5 个格式族**，覆盖主流 embedding 提供方。�
 ```json
 {
   "embedding": {"values": [0.123, -0.456, ...]},
-  "metadata": {"promptTokenCount": 5}
+  "usageMetadata": {"promptTokenCount": 5, "totalTokenCount": 5}
 }
 ```
 
@@ -158,6 +158,7 @@ LLM-Rosetta 识别出 **5 个格式族**，覆盖主流 embedding 提供方。�
 
 - 没有 `object`/`data`/`index` 包装 —— 向量直接在 `embedding.values` 中
 - 模型名在 URL 路径中，不在响应体中
+- 用量在 `usageMetadata` 中（`promptTokenCount`、`totalTokenCount`）；批量响应没有 `usageMetadata`
 - 仅支持 float 输出，不支持编码格式控制
 
 ### Cohere 格式
@@ -273,7 +274,7 @@ LLM-Rosetta 将五种格式归一化到统一的 IR：
 | Provider | `total_tokens` 来源 | `prompt_tokens` 来源 | 丢弃的字段 |
 |----------|-------------------|---------------------|-----------|
 | OpenAI | `usage.total_tokens` | `usage.prompt_tokens` | — |
-| Google | `metadata.promptTokenCount` | `metadata.promptTokenCount` | — |
+| Google | `usageMetadata.totalTokenCount` | `usageMetadata.promptTokenCount` | 批量响应没有 `usageMetadata` |
 | Cohere | `meta.tokens.input_tokens`（推导） | `meta.tokens.input_tokens` | `meta.billed_units.*` |
 | Voyage | `usage.total_tokens` | — | — |
 | Jina | `usage.total_tokens` | `usage.prompt_tokens` | `image_tokens`, `audio_tokens`, `video_tokens` |
