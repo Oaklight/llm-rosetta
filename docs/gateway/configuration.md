@@ -158,7 +158,8 @@ The endpoint keys are `embedding_format` / `embedding_path` / `embedding_shim`,
 2. **format**: an explicit `<type>_format` beats the shim's format
 3. **path**: an explicit `<type>_path` beats the shim's
    `connection.default_path` (used only when the effective format is the
-   shim's), then the descriptor default
+   shim's), then the format's own default (Cohere uses `/v2/...`; Google's
+   embedding path carries the model)
 4. **connection**: a non-empty `base_url` / `api_key` in the entry beats the
    shim's defaults
 
