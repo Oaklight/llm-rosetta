@@ -263,3 +263,57 @@ result = await OpsClearData(request.app.ops_ctx, table="request_log").execute()
 而非 `ops_log`。代理请求的频率过高，不适合写入审计日志。它的
 `_run()` 是空操作——实际的代理处理发生在 ops 类之外。这个类将遥测
 记录接口统一到同一个 `execute()` 契约下。
+
+## Gateway 路由层
+
+`gateway/routing/` 决定两件事：哪个 provider 服务这个请求，以及请求转换
+之后用哪份凭据、带哪个上游 session 身份发出。它们是同一层，因为读的是
+同一组输入——model、客户端、会话——但它们不能合成一次调用。
+
+### 两个调用点
+
+两个决定之间隔着一个 pipeline。provider 必须在请求体转换**之前**确定，
+因为转换依赖目标格式；凭据与 session id 的指纹取自 IR 消息，只能在
+**转换之后**决定。所以这一层每个请求保有一个 context，分两条链跑：
+
+```
+request ──→ GatewayConfig.resolve(ctx)     provider 选定（转换之前）
+            pipeline.ir_request            请求体转换为 IR
+        ──→ _apply_request_stages(ctx)     凭据与 session id（转换之后）
+```
+
+`SelectionContext` 在网关入口处创建，由各阶段逐步填充。路由表与 provider
+表在开始时就装进去了（`install_route()`），因此任何阶段都不需要反向引用
+config 对象。
+
+### 阶段
+
+一个阶段就是一个决定。每个阶段声明自己读（`requires`）写（`provides`）的
+context 字段，`RoutingChain` 在**构建**时校验这些声明：如果一个阶段排在
+它所依赖的东西之前，构造时就会抛 `StageOrderError`，而不是等到第一个会
+失败的请求。
+
+| 链 | 阶段 | 决定什么 |
+|----|------|----------|
+| provider | `AnchorStage` | 关掉偏好时路由本来会选的 provider。整条 route 的计数器在这里推进。 |
+| provider | `SameFormatStage` | `server.prefer_same_format` 打开时，按 tier 把锚点调整到说客户端格式的 provider。 |
+| request | `ProviderKeyAffinity` | key ring 里的哪把 key 服务这个会话：客户端身份加 IR 的前两条消息。 |
+| request | `SessionHeaderAffinity` | 写进 shim 声明头里的 session id：客户端身份加首条消息。 |
+
+两个请求阶段总是运行，各自在被选中的 provider 用不到它时弃权——只有一把
+key，或没有声明 session header。同格式阶段只在偏好打开时入链，因为它是
+偏好：开关关掉，选择行为完全不变。
+
+### route 身份
+
+`ModelRoute` 带一个 `route_id`，策略按它在其中记账。一个 model 的 provider
+子集——同一种格式、同一个 shim 端点、同一个账号——是一条独立的 route，
+id 各不相同，因此 tier 的计数器跨请求存活，并且与整条 route 的计数器各自
+推进。这一层不读任何历史：每个输入都来自手上这个请求，这也是网关不需要
+存储就能运行的原因。
+
+### 与 Ops 层的对比
+
+Ops 层刻意没有 registry，也没有链：它的成员是一组封闭的变更，顺序从无
+意义。路由正好相反——阶段有顺序，顺序正是校验要保护的东西，而且预期还会
+增加——所以它是网关里唯一带链的一层。
