@@ -284,3 +284,64 @@ result = await OpsClearData(request.app.ops_ctx, table="request_log").execute()
 for the audit log.  Its `_run()` is a no-op — the actual proxy handling
 happens outside the ops class.  This class unifies the telemetry
 recording interface under the same `execute()` contract.
+
+## Gateway Routing Layer
+
+`gateway/routing/` owns which provider serves a request and, once the request
+has been converted, which credential and upstream session identity it is sent
+with.  Those are one layer because they read the same inputs — the model, the
+client, the conversation — but they cannot be one call.
+
+### Two call points
+
+A pipeline sits between the two decisions.  The provider must be known before
+the request body is converted, because the conversion depends on the target
+format.  The credential and the session id are keyed on the *converted*
+request, because their fingerprints are taken from IR messages.  So the layer
+keeps one context per request and runs two chains against it:
+
+```
+request ──→ GatewayConfig.resolve(ctx)     provider chosen (before conversion)
+            pipeline.ir_request            body converted to IR
+        ──→ _apply_request_stages(ctx)     credential and session id (after)
+```
+
+`SelectionContext` is created at the edge of the gateway and filled stage by
+stage.  The routes and provider tables are installed up front
+(`install_route()`), so no stage needs a back-reference to the config object.
+
+### Stages
+
+A stage is one decision.  Each declares the context fields it reads
+(`requires`) and writes (`provides`), and `RoutingChain` checks those
+declarations when the chain is built: a stage slotted ahead of something it
+needs raises `StageOrderError` at construction, not on the first request that
+would fail.
+
+| Chain | Stage | Decides |
+|-------|-------|---------|
+| provider | `AnchorStage` | The provider routing would pick with no preference applied.  The full route's counter advances here. |
+| provider | `SameFormatStage` | Realigns the anchor onto a client-format provider, in tiers, when `server.prefer_same_format` is on. |
+| request | `ProviderKeyAffinity` | Which key of a key ring serves the conversation: the client plus a two-message IR prefix. |
+| request | `SessionHeaderAffinity` | The session id sent in a shim-declared header: the client plus the first message. |
+
+The two request stages always run and each declines when the selected provider
+has no use for it — a single key, or no declared session header.  The
+same-format stage is only in the chain when the preference is on, because it is
+a preference: with the flag off, nothing about selection changes.
+
+### Route identity
+
+`ModelRoute` carries a `route_id` under which its strategy keeps counters.  A
+subset of a model's providers — one format, one shim endpoint, one account — is
+a route of its own with a distinct id, so tier counters survive across requests
+and advance independently of the full route's counter.  Nothing in this layer
+reads history: every input is derived from the request in hand, which is what
+lets the gateway run without a store.
+
+### Contrast with the Ops layer
+
+The ops layer deliberately has no registry and no chain: its members are a
+closed set of mutations whose order never matters.  Routing is the opposite —
+stages are ordered, the order is what the checks protect, and adding a stage is
+expected — so it is the one layer in the gateway that has a chain.
