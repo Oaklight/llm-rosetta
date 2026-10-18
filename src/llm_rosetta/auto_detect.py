@@ -275,21 +275,10 @@ def get_converter_for_provider(provider: str):
     if provider in _converter_cache:
         return _converter_cache[provider]
 
-    from .converters.messages import MessagesConverter
-    from .converters.google_generate import GoogleGenerateConverter
-    from .converters.google_interactions import GoogleInteractionsConverter
-    from .converters.chat_completions import ChatCompletionsConverter
-    from .converters.open_responses import OpenResponsesConverter
+    from .converters.registry import CONVERTER_REGISTRY
     from .shims import resolve_base
 
-    converter_map = {
-        "chat_completions": ChatCompletionsConverter,
-        "open_responses": OpenResponsesConverter,
-        "messages": MessagesConverter,
-        "google": GoogleGenerateConverter,
-        "google_generate": GoogleGenerateConverter,
-        "google_interactions": GoogleInteractionsConverter,
-    }
+    converter_map = CONVERTER_REGISTRY["llm"]
 
     # Direct match against base converter types
     if provider in converter_map:

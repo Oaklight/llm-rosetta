@@ -27,11 +27,21 @@ from .decision import (
     SystemOneDecisionConverter,
 )
 from .rerank import CohereRerankConverter, JinaRerankConverter, VoyageRerankConverter
+from .registry import (
+    CONVERTER_REGISTRY,
+    FORMATS_BY_TYPE,
+    MODEL_TYPES,
+    get_converter_class,
+)
 
 __all__ = [
     "BaseConverter",
     "BaseRerankConverter",
     "BaseEmbeddingConverter",
+    "CONVERTER_REGISTRY",
+    "FORMATS_BY_TYPE",
+    "MODEL_TYPES",
+    "get_converter_class",
     "OpenAIEmbeddingConverter",
     "JinaEmbeddingConverter",
     "VoyageEmbeddingConverter",

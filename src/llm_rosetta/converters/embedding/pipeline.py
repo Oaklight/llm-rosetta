@@ -28,9 +28,9 @@ __all__ = [
 
 _EMBEDDING_CONVERTERS: dict[str, type[BaseEmbeddingConverter]] = {
     "openai": OpenAIEmbeddingConverter,
+    "cohere": CohereEmbeddingConverter,
     "jina": JinaEmbeddingConverter,
     "voyage": VoyageEmbeddingConverter,
-    "cohere": CohereEmbeddingConverter,
 }
 
 EMBEDDING_FORMATS = frozenset(_EMBEDDING_CONVERTERS.keys())

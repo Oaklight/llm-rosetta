@@ -160,6 +160,9 @@ def _rerank_pipeline() -> Callable[..., Any]:
 def _register_builtins() -> None:
     """Register the built-in model types: llm, embedding, rerank."""
 
+    # Converter registries are the single source of truth for formats.
+    from llm_rosetta.converters.registry import CONVERTER_REGISTRY
+
     # --- LLM ---
     # LLM uses the full converter pipeline via _proxy_handler in app.py,
     # so pipeline=None.  Its routes are registered explicitly in app.py
@@ -177,13 +180,7 @@ def _register_builtins() -> None:
                 ),
                 RouteSpec("/v1beta/interactions", source_format="google_interactions"),
             ],
-            formats=[
-                "chat_completions",
-                "messages",
-                "open_responses",
-                "google_generate",
-                "google_interactions",
-            ],
+            formats=list(CONVERTER_REGISTRY["llm"]),
             pipeline=None,
             supports_streaming=True,
             badge_class="cap-badge-llm",
@@ -205,7 +202,7 @@ def _register_builtins() -> None:
             routes=[
                 RouteSpec("/v1/embeddings"),
             ],
-            formats=["openai", "cohere", "jina", "voyage"],
+            formats=list(CONVERTER_REGISTRY["embedding"]),
             pipeline=_embedding_pipeline,
             supports_streaming=False,
             badge_class="cap-badge-embedding",
@@ -234,7 +231,7 @@ def _register_builtins() -> None:
                 RouteSpec("/v1/rerank"),
                 RouteSpec("/v2/rerank"),
             ],
-            formats=["jina", "cohere", "voyage"],
+            formats=list(CONVERTER_REGISTRY["rerank"]),
             pipeline=_rerank_pipeline,
             supports_streaming=False,
             badge_class="cap-badge-rerank",
@@ -269,6 +266,8 @@ def _register_decision() -> None:
     LLM-backed decision (via structured output) uses the chat pipeline, not
     this route.
     """
+    from llm_rosetta.converters.registry import CONVERTER_REGISTRY
+
     register_model_type(
         ModelTypeDescriptor(
             name="decision",
@@ -277,7 +276,7 @@ def _register_decision() -> None:
                 RouteSpec("/v1/decisions"),
                 RouteSpec("/v1/systemone"),
             ],
-            formats=["systemone", "openai_decisions"],
+            formats=list(CONVERTER_REGISTRY["decision"]),
             pipeline=_decision_pipeline,
             supports_streaming=False,
             badge_class="cap-badge-decision",
