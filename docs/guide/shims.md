@@ -13,7 +13,8 @@ The **shim layer** bridges this gap. A shim is a lightweight identity card that 
 ```text
 ProviderShim ("deepseek--chat_completions")
 ├── name: "deepseek--chat_completions"
-├── base: "chat_completions"              → selects the converter
+├── model_type: "llm"                     → the capability category
+├── format: "chat_completions"            → selects the converter
 ├── default_base_url: "https://api.deepseek.com"
 ├── default_api_key_env: "DEEPSEEK_API_KEY"
 ├── logo: "https://cdn.jsdelivr.net/..."
@@ -21,7 +22,7 @@ ProviderShim ("deepseek--chat_completions")
 └── pre_ir_transforms: ()
 ```
 
-- **ProviderShim** — provider identity: name, base converter type, default URL, default API key env var, logo URL, and optional transforms.
+- **ProviderShim** — provider identity: name, model type, wire format, default URL, default API key env var, logo URL, and optional transforms.
 - **Transforms** — pure `dict → dict` functions applied around converters. `post_ir_transforms` adapt outgoing requests to the provider's dialect; `pre_ir_transforms` normalize incoming responses.
 
 !!! note "Backward-compatible aliases"
@@ -47,7 +48,7 @@ src/llm_rosetta/shims/providers/
 
 Each provider subdirectory contains:
 
-- **`provider.yaml`** (required) — declares `name`, `base`, connection settings (`connection.base_url`, `connection.api_key_env`, `connection.auth_header`, `connection.keyless`, `connection.models_path`), plus optional `logo`, `display_name`, and `free_source`
+- **`provider.yaml`** (required) — declares `name`, `model_type`, `format`, connection settings (`connection.base_url`, `connection.api_key_env`, `connection.auth_header`, `connection.keyless`, `connection.models_path`), plus optional `logo`, `display_name`, and `free_source`.  `base` is the deprecated alias for `format`; the loader validates the `(model_type, format)` pair against the converter registry.
 - **`transforms.py`** (optional) — exports `post_ir_transforms` and/or `pre_ir_transforms` tuples (the old names `to_transforms` / `from_transforms` also work)
 
 `connection.keyless` marks an upstream that accepts requests with no credential: the
@@ -92,7 +93,8 @@ Example `provider.yaml`:
 
 ```yaml
 name: deepseek
-base: chat_completions
+model_type: llm
+format: chat_completions
 default_base_url: https://api.deepseek.com
 default_api_key_env: DEEPSEEK_API_KEY
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/deepseek.svg
@@ -176,7 +178,7 @@ def register_shims():
     if os.getenv("MY_INTERNAL_PROVIDER"):
         register_shim(ProviderShim(
             name="my-internal",
-            base="chat_completions",
+            format="chat_completions",
             default_base_url="http://internal:8080/v1",
         ))
 ```
@@ -394,7 +396,8 @@ Since v0.6.8, provider shims can declare how they handle reasoning effort and di
 
 ```yaml
 name: anthropic--messages
-base: messages
+model_type: llm
+format: messages
 default_base_url: https://api.anthropic.com
 default_api_key_env: ANTHROPIC_API_KEY
 reasoning:
@@ -411,7 +414,8 @@ reasoning:
 
 ```yaml
 name: openai--chat_completions
-base: chat_completions
+model_type: llm
+format: chat_completions
 default_base_url: https://api.openai.com/v1
 default_api_key_env: OPENAI_API_KEY
 reasoning:
@@ -433,7 +437,8 @@ When models under the same provider have different reasoning capabilities, use `
 
 ```yaml
 name: argo--messages
-base: messages
+model_type: llm
+format: messages
 reasoning:
   thinking_type: enabled       # default for most models
   effort_map: { ... }
@@ -476,7 +481,8 @@ Example in `provider.yaml`:
 
 ```yaml
 name: my-provider
-base: chat_completions
+model_type: llm
+format: chat_completions
 supports_custom_tools: true
 hoist_system_messages: true
 multimodal_tool_result: false
@@ -569,17 +575,24 @@ converter = get_converter_for_provider("chat_completions")
 converter = get_converter_for_provider("deepseek--chat_completions")
 ```
 
-### Resolving a Base Type
+### Resolving the Format and the Model Type
 
-Use `resolve_base()` to map a shim name to its base converter type:
+Use `resolve_format()` to map a shim name to its wire format, and
+`resolve_model_type()` to get its capability category:
 
 ```python
-from llm_rosetta import resolve_base
+from llm_rosetta import resolve_format, resolve_model_type
 
-resolve_base("deepseek--chat_completions")       # → "chat_completions"
-resolve_base("chat_completions")    # → "chat_completions" (pass-through)
-resolve_base("unknown")        # → "unknown" (pass-through)
+resolve_format("deepseek--chat_completions")  # → "chat_completions"
+resolve_format("chat_completions")            # → "chat_completions" (pass-through)
+resolve_format("unknown")                     # → "unknown" (pass-through)
+
+resolve_model_type("deepseek--chat_completions")  # → "llm"
+resolve_model_type("typesafe")                    # → "decision"
+resolve_model_type("openai")                      # → None (ambiguous: vendor and embedding format)
 ```
+
+`resolve_base()` is the deprecated alias for `resolve_format()`.
 
 ## Registering Custom Shims
 
@@ -593,7 +606,7 @@ from llm_rosetta.transforms import strip_fields
 
 my_shim = ProviderShim(
     name="my-provider",
-    base="chat_completions",
+    format="chat_completions",
     default_base_url="https://api.my-provider.com/v1",
     default_api_key_env="MY_PROVIDER_API_KEY",
     post_ir_transforms=(strip_fields("logprobs", "seed"),),
@@ -601,7 +614,7 @@ my_shim = ProviderShim(
 register_shim(my_shim)
 ```
 
-After registration the shim name works everywhere — `get_converter_for_provider()`, `resolve_base()`, `convert()`, and gateway config.
+After registration the shim name works everywhere — `get_converter_for_provider()`, `resolve_format()`, `convert()`, and gateway config.
 
 ### Adding a YAML-based Provider
 
@@ -612,7 +625,8 @@ To add a new provider to the built-in registry:
 
     ```yaml
     name: my-provider
-    base: chat_completions
+    model_type: llm
+    format: chat_completions
     default_base_url: https://api.my-provider.com/v1
     default_api_key_env: MY_PROVIDER_API_KEY
     logo: https://example.com/logo.svg
@@ -636,7 +650,7 @@ from llm_rosetta import list_shims, unregister_shim
 
 # List all registered shims
 for shim in list_shims():
-    print(f"{shim.name} → {shim.base}")
+    print(f"{shim.name} → {shim.format}")
 
 # Remove a shim
 unregister_shim("my-provider")
