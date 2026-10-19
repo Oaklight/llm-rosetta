@@ -1,13 +1,22 @@
-"""In-process metrics collector for the gateway admin panel.
+"""Deprecated — use :mod:`llm_rosetta.observability.metrics` instead.
 
-This module re-exports from :mod:`llm_rosetta.observability.metrics`
-for backward compatibility.  New code should import directly from
-``llm_rosetta.observability``.
+This module has re-exported the observability metrics API since 0.10.0 so
+admin-panel imports could stay short.  It warns on import and is removed in
+0.16.0 (#919); new code imports from :mod:`llm_rosetta.observability`.
 """
 
 from __future__ import annotations
 
-from llm_rosetta.observability.metrics import (  # noqa: F401
+import warnings
+
+warnings.warn(
+    "llm_rosetta.gateway.admin.metrics is deprecated, "
+    "use llm_rosetta.observability.metrics instead",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
+from llm_rosetta.observability.metrics import (  # noqa: E402, F401
     MetricsCollector,
     _Bucket,
     _ProviderStats,

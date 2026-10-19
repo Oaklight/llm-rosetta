@@ -31,7 +31,10 @@ from ..middleware.headers import build_upstream_extra_headers, get_request_id
 from ..logging import get_logger
 from ..ops.proxy import record_proxy_request
 from ._fidelity import check_same_format_fidelity
-from .decision_pipeline import DecisionConversionPipeline, response_usage
+from llm_rosetta.converters.decision.pipeline import (
+    DecisionConversionPipeline,
+    response_usage,
+)
 from ..transport import UpstreamConnectionError, UpstreamTimeoutError, UpstreamTransport
 
 logger = get_logger()

@@ -1284,7 +1284,7 @@ class GatewayConfig:
         legacy shim names to their canonical ``<provider>--<base>`` spelling.
         A config declaring e.g. ``type: google`` is migrated to
         ``google_generate``; a ``shim:`` / ``type:`` naming a legacy shim (e.g.
-        ``deepseek--openai_chat``) is migrated to ``deepseek--chat_completions``.
+        ``volcengine--openai_chat``) is migrated to ``volcengine--chat_completions``.
         Each emits one ``DeprecationWarning`` per distinct legacy name so
         operators migrate before 0.16.0 (#919).
 

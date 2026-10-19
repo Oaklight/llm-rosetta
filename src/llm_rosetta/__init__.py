@@ -5,6 +5,8 @@ LLM-Rosetta
 A library for converting message formats between different LLM providers
 """
 
+import warnings as _warnings
+
 from .auto_detect import (
     ProviderType,
     convert,
@@ -18,20 +20,16 @@ from .converters.decision.pipeline import DecisionConversionPipeline
 from .converters.embedding.pipeline import EmbeddingConversionPipeline
 from .converters.rerank.pipeline import RerankConversionPipeline
 from .converters import (
-    AnthropicConverter,
     BaseConverter,
     ChatCompletionsConverter,
     CohereEmbeddingConverter,
     CohereRerankConverter,
-    GoogleConverter,
     GoogleEmbeddingConverter,
     GoogleGenerateConverter,
-    GoogleGenAIConverter,  # deprecated alias
     GoogleInteractionsConverter,
     JinaEmbeddingConverter,
     JinaRerankConverter,
     MessagesConverter,
-    OpenAIChatConverter,  # deprecated alias
     OpenAIEmbeddingConverter,
     OpenAIResponsesConverter,
     OpenResponsesConverter,
@@ -64,6 +62,29 @@ from .shims import (
 )
 
 __version__ = "0.14.0.dev17"
+
+
+def __getattr__(name: str):
+    # 0.13.0 class names (``OpenAIChatConverter`` & co.) stay importable from
+    # the package root until 0.16.0 (#919).  Resolve and warn here rather than
+    # delegating to ``converters``: the extra frame would attribute the
+    # warning to this module instead of the caller's line.
+    from . import converters as _converters
+
+    canonical = _converters._DEPRECATED_CLASS_ALIASES.get(name)
+    if canonical is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    value = getattr(_converters, canonical)
+    _warnings.warn(
+        f"llm_rosetta.{name} is deprecated, use llm_rosetta.{canonical} instead",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    # Bind the alias after warning so the import machinery's ``hasattr`` probe
+    # and the subsequent fetch do not record two warnings for one import.
+    globals()[name] = value
+    return value
+
 
 __all__ = [
     # Converters

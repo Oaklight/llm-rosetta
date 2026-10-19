@@ -414,8 +414,8 @@ class TestWarnLegacyShimNames:
     def test_warns_with_canonical_replacement(self):
         from llm_rosetta.provider_names import warn_legacy_shim_names
 
-        with pytest.warns(DeprecationWarning, match="deepseek--chat_completions"):
-            warn_legacy_shim_names("deepseek--openai_chat")
+        with pytest.warns(DeprecationWarning, match="volcengine--chat_completions"):
+            warn_legacy_shim_names("volcengine--openai_chat")
 
     def test_dedupes_repeated_names_and_ignores_none(self):
         from llm_rosetta.provider_names import warn_legacy_shim_names
@@ -429,7 +429,7 @@ class TestWarnLegacyShimNames:
     @pytest.mark.parametrize(
         "name",
         [
-            "deepseek--chat_completions",  # canonical shim
+            "volcengine--chat_completions",  # canonical shim
             "openai--open_responses",  # canonical shim
             "chat_completions",  # base format
             "deepseek",  # bare provider, not a shim alias
@@ -463,12 +463,12 @@ class TestShimBoundaryWarnings:
             ConversionPipeline(
                 "chat_completions",
                 "chat_completions",
-                target_shim="deepseek--openai_chat",
+                target_shim="volcengine--openai_chat",
             )
         dep = [w for w in caught if issubclass(w.category, DeprecationWarning)]
         assert len(dep) == 1
         assert dep[0].filename == __file__
-        assert "deepseek--chat_completions" in str(dep[0].message)
+        assert "volcengine--chat_completions" in str(dep[0].message)
 
     def test_pipeline_same_legacy_shim_in_both_roles_warns_once(self):
         with warnings.catch_warnings(record=True) as caught:
@@ -476,8 +476,8 @@ class TestShimBoundaryWarnings:
             ConversionPipeline(
                 "chat_completions",
                 "chat_completions",
-                source_shim="deepseek--openai_chat",
-                target_shim="deepseek--openai_chat",
+                source_shim="volcengine--openai_chat",
+                target_shim="volcengine--openai_chat",
             )
         dep = [w for w in caught if issubclass(w.category, DeprecationWarning)]
         assert len(dep) == 1
@@ -489,8 +489,8 @@ class TestShimBoundaryWarnings:
             ConversionPipeline(
                 "chat_completions",
                 "chat_completions",
-                source_shim="deepseek--openai_chat",
-                target_shim="minimax--openai_chat",
+                source_shim="volcengine--openai_chat",
+                target_shim="openai",
             )
         dep = [w for w in caught if issubclass(w.category, DeprecationWarning)]
         assert len(dep) == 2
@@ -502,7 +502,7 @@ class TestShimBoundaryWarnings:
             ConversionPipeline(
                 "chat_completions",
                 "chat_completions",
-                target_shim="deepseek--chat_completions",
+                target_shim="volcengine--chat_completions",
             )
 
     def test_pipeline_shim_object_is_silent(self):
@@ -513,7 +513,7 @@ class TestShimBoundaryWarnings:
             ConversionPipeline(
                 "chat_completions",
                 "chat_completions",
-                target_shim=get_shim("deepseek--chat_completions"),
+                target_shim=get_shim("volcengine--chat_completions"),
             )
 
     def test_pipeline_bare_legacy_shim_string_warns(self):
@@ -530,15 +530,15 @@ class TestShimBoundaryWarnings:
 
         with warnings.catch_warnings():
             warnings.simplefilter("error", DeprecationWarning)
-            cfg = GatewayConfig(self._gw({"shim": "deepseek--openai_chat"}))
-        assert cfg.provider_shim_names["g"] == "deepseek--chat_completions"
+            cfg = GatewayConfig(self._gw({"shim": "volcengine--openai_chat"}))
+        assert cfg.provider_shim_names["g"] == "volcengine--chat_completions"
 
     def test_gateway_type_field_corrects_legacy_shim(self):
         from llm_rosetta.gateway.config import GatewayConfig
 
         with warnings.catch_warnings():
             warnings.simplefilter("error", DeprecationWarning)
-            cfg = GatewayConfig(self._gw({"type": "deepseek--openai_chat"}))
+            cfg = GatewayConfig(self._gw({"type": "volcengine--openai_chat"}))
         assert cfg.provider_types["g"] == "chat_completions"
 
     def test_gateway_name_fallback_warns_for_legacy_shim(self):
@@ -546,12 +546,12 @@ class TestShimBoundaryWarnings:
 
         raw = {
             "providers": {
-                "deepseek--openai_chat": {
+                "volcengine--openai_chat": {
                     "api_key": "k",
                     "base_url": "https://x",
                 }
             },
-            "models": {"m": "deepseek--openai_chat"},
+            "models": {"m": "volcengine--openai_chat"},
         }
         with pytest.warns(DeprecationWarning, match="Shim name"):
             GatewayConfig(raw)
@@ -584,10 +584,10 @@ class TestShimBoundaryWarnings:
 
         with warnings.catch_warnings():
             warnings.simplefilter("error", DeprecationWarning)
-            get_shim("deepseek--openai_chat")
+            get_shim("volcengine--openai_chat")
             get_shim("openai")
-            resolve_format("deepseek--openai_chat")
-            resolve_shim("deepseek--openai_chat")
+            resolve_format("volcengine--openai_chat")
+            resolve_shim("volcengine--openai_chat")
 
 
 def _chat_response() -> dict:
@@ -616,11 +616,11 @@ class TestConvertBoundaryShimWarnings:
     def test_convert_legacy_shim_target_warns_once(self):
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
-            convert(OPENAI_CHAT_BODY, "deepseek--openai_chat")
+            convert(OPENAI_CHAT_BODY, "volcengine--openai_chat")
         dep = [w for w in caught if issubclass(w.category, DeprecationWarning)]
         assert len(dep) == 1
         assert dep[0].filename == __file__
-        assert "deepseek--chat_completions" in str(dep[0].message)
+        assert "volcengine--chat_completions" in str(dep[0].message)
 
     def test_convert_legacy_shim_source_warns_once(self):
         with warnings.catch_warnings(record=True) as caught:
@@ -628,7 +628,7 @@ class TestConvertBoundaryShimWarnings:
             convert(
                 OPENAI_CHAT_BODY,
                 "chat_completions",
-                source_provider="deepseek--openai_chat",
+                source_provider="volcengine--openai_chat",
             )
         dep = [w for w in caught if issubclass(w.category, DeprecationWarning)]
         assert len(dep) == 1
@@ -639,8 +639,8 @@ class TestConvertBoundaryShimWarnings:
             warnings.simplefilter("always")
             convert(
                 OPENAI_CHAT_BODY,
-                "deepseek--openai_chat",
-                source_provider="deepseek--openai_chat",
+                "volcengine--openai_chat",
+                source_provider="volcengine--openai_chat",
             )
         dep = [w for w in caught if issubclass(w.category, DeprecationWarning)]
         assert len(dep) == 1
@@ -667,7 +667,7 @@ class TestConvertBoundaryShimWarnings:
     def test_convert_canonical_names_are_silent(self):
         with warnings.catch_warnings():
             warnings.simplefilter("error", DeprecationWarning)
-            convert(OPENAI_CHAT_BODY, "deepseek--chat_completions")
+            convert(OPENAI_CHAT_BODY, "volcengine--chat_completions")
 
     def test_convert_response_legacy_shim_warns_once(self):
         with warnings.catch_warnings(record=True) as caught:
@@ -675,8 +675,8 @@ class TestConvertBoundaryShimWarnings:
             convert_response(
                 _chat_response(),
                 OPENAI_CHAT_BODY,
-                source_provider="deepseek--openai_chat",
-                target_provider="deepseek--openai_chat",
+                source_provider="volcengine--openai_chat",
+                target_provider="volcengine--openai_chat",
             )
         dep = [w for w in caught if issubclass(w.category, DeprecationWarning)]
         assert len(dep) == 1
@@ -689,7 +689,12 @@ class TestLegacyShimAliasStillResolves:
     @pytest.mark.parametrize(
         "legacy,canonical",
         [
-            ("deepseek--openai_chat", "deepseek--chat_completions"),
+            # These three spellings shipped in 0.13.0; their window runs until
+            # 0.16.0 (#919), so they must stay reachable and silent here.
+            ("minimax--openai_chat", "minimax--chat_completions"),
+            ("openrouter--openai_chat", "openrouter--chat_completions"),
+            ("volcengine--openai_chat", "volcengine--chat_completions"),
+            ("volcengine--openai_responses", "volcengine--open_responses"),
             ("openai", "openai--chat_completions"),
             ("anthropic", "anthropic--messages"),
             # The `anthropic` base became `messages` (#917) without leaving a

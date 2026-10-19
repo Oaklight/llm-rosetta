@@ -86,25 +86,33 @@ class TestModuleLayout:
     def test_google_packages_keep_their_0130_paths(self) -> None:
         """``converters.google_generate`` was importable in 0.13.0.
 
-        The implementations moved under ``converters.llm``; the old paths are
-        registered against the same module objects, so an existing import gets
-        the class the registry holds, not a second copy.
+        The implementations moved under ``converters.llm``; the old path is a
+        stub package that warns on import and registers the new submodules
+        under the old dotted names, so a class fetched by the old path is the
+        one the registry holds, not a second copy.
         """
         import importlib
+        import sys
 
-        old = importlib.import_module("llm_rosetta.converters.google_generate")
-        new = importlib.import_module("llm_rosetta.converters.llm.google_generate")
-        assert old is new
-        # A submodule import goes through the same objects too, so a class
-        # fetched by the old path is the one the registry holds.
-        old_sub = importlib.import_module(
-            "llm_rosetta.converters.google_generate.converter"
-        )
-        new_sub = importlib.import_module(
-            "llm_rosetta.converters.llm.google_generate.converter"
-        )
-        assert old_sub is new_sub
-        assert old_sub.GoogleGenerateConverter is new.GoogleGenerateConverter
+        for name in ("google_generate", "google_interactions"):
+            sys.modules.pop(f"llm_rosetta.converters.{name}", None)
+            with pytest.warns(
+                DeprecationWarning, match=f"converters.{name} is deprecated"
+            ):
+                old = importlib.import_module(f"llm_rosetta.converters.{name}")
+            new = importlib.import_module(f"llm_rosetta.converters.llm.{name}")
+            assert old.__all__ == new.__all__
+            old_sub = importlib.import_module(
+                f"llm_rosetta.converters.{name}.converter"
+            )
+            new_sub = importlib.import_module(
+                f"llm_rosetta.converters.llm.{name}.converter"
+            )
+            assert old_sub is new_sub
+            # The 0.13.0 attribute form (``gg.converter.X``) must resolve too,
+            # not just the dotted import form registered in ``sys.modules``.
+            assert old.converter is new.converter
+        assert old_sub.GoogleInteractionsConverter is new.GoogleInteractionsConverter
 
     def test_other_llm_formats_have_no_legacy_top_level_path(self) -> None:
         """Those three names did not exist in 0.13.0, so they keep no alias."""

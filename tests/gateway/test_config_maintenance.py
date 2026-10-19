@@ -19,7 +19,7 @@ from llm_rosetta.observability.maintenance import Policy, StepContext
 #: A document as an older release wrote it: version 0, and both spellings that
 #: have since been renamed.
 _OLD = {
-    "providers": {"alcf": {"type": "openai_chat", "shim": "deepseek--openai_chat"}},
+    "providers": {"alcf": {"type": "openai_chat", "shim": "volcengine--openai_chat"}},
     "rerank_providers": {"jina": {"api_key": "k", "base_url": "https://x"}},
     "rerank_models": {"rerank-v1": "jina"},
 }
@@ -49,7 +49,7 @@ def test_a_document_with_work_to_do_reports_both_steps():
     assert document is raw, "the document is corrected in place, as it always was"
     assert raw["config_version"] == 1, "the structure migration keeps the ledger"
     assert raw["providers"]["alcf"]["type"] == "chat_completions"
-    assert raw["providers"]["alcf"]["shim"] == "deepseek--chat_completions"
+    assert raw["providers"]["alcf"]["shim"] == "volcengine--chat_completions"
     assert _by_name(registry) == {
         "config.migrate_structure": 1,
         "config.correct_legacy_names": 1,

@@ -247,7 +247,9 @@ class TestTheLoadTimeSteps:
     #: A document with both kinds of work in it, old names and all.
     _DOCUMENT = {
         "config_version": 1,
-        "providers": {"alcf": {"type": "openai_chat", "shim": "deepseek--openai_chat"}},
+        "providers": {
+            "alcf": {"type": "openai_chat", "shim": "volcengine--openai_chat"}
+        },
     }
 
     def _app_with_a_loaded_config(self) -> _App:

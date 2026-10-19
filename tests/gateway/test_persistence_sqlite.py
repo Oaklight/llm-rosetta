@@ -6,11 +6,11 @@ import time
 
 import pytest
 
-from llm_rosetta.gateway.admin.persistence import (
+from llm_rosetta.observability.persistence import (
     DEFAULT_SUCCESS_MAX,
     PersistenceManager,
 )
-from llm_rosetta.gateway.admin.request_log import RequestLog, RequestLogEntry
+from llm_rosetta.observability.request_log import RequestLog, RequestLogEntry
 
 
 # -- Helpers --
@@ -504,7 +504,7 @@ class TestRebuildFlag:
 
     @pytest.mark.asyncio
     async def test_cleanup_sets_flag_and_rebuild_fixes_counters(self, tmp_path):
-        from llm_rosetta.gateway.admin.metrics import MetricsCollector
+        from llm_rosetta.observability.metrics import MetricsCollector
 
         pm = await PersistenceManager.create(str(tmp_path))
         rl = RequestLog(persistence=pm)

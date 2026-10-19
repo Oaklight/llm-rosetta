@@ -21,8 +21,7 @@ Module map::
                            auth, ratelimit, request_context, error_format,
                            circuit_breaker, headers, sanitize, affinity
     Pipelines            pipelines/ subpackage:
-                           embeddings, embedding_pipeline, rerank,
-                           rerank_pipeline, decision
+                           embeddings, rerank, decision
     Model types          model_types (registry)
     Observability        (in llm_rosetta.observability, re-exported by admin/)
     Infrastructure       keystore, logging, migrations, deferred_startup

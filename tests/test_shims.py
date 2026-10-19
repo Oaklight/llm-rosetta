@@ -351,8 +351,6 @@ class TestBuiltinShims:
             ("anthropic", "anthropic--messages"),
             ("deepseek--open_responses", "deepseek--open_responses"),
             ("volcengine--chat_completions", "volcengine--chat_completions"),
-            ("typesafe", "typesafe--systemone"),
-            ("openai_decisions", "openai--openai_decisions"),
         )
         for legacy, canonical in pairs:
             assert get_shim(legacy) is get_shim(canonical) is not None

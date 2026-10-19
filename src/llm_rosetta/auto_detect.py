@@ -57,7 +57,7 @@ def _legacy_shim_boundary_names(*names: str | None) -> list[str]:
     shim names to :class:`~llm_rosetta.shims.provider_shim.ProviderShim`
     objects before constructing the pipeline, so the pipeline's own
     string-based shim warning never sees them.  These boundaries therefore
-    warn for a legacy shim name (``deepseek--openai_chat``) themselves.
+    warn for a legacy shim name (``volcengine--openai_chat``) themselves.
 
     Base formats (``google_generate``) and legacy *provider* aliases
     (``openai_chat``) are skipped: the former is a canonical format that
@@ -370,7 +370,7 @@ def convert(
     # Public boundary: emit one warning per distinct user-supplied legacy
     # name, attributed to the caller of ``convert``.  Every lookup below uses
     # the canonical form, so no duplicate or mis-attributed warnings fire.
-    # Legacy *shim* names (``deepseek--openai_chat``) need their own warning:
+    # Legacy *shim* names (``volcengine--openai_chat``) need their own warning:
     # the shim is resolved to a ProviderShim object below, so the pipeline's
     # string check never sees the raw name.
     warn_legacy_provider_names(source_provider, target_provider)

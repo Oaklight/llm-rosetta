@@ -5,8 +5,7 @@ LLM-Rosetta - Converters Package
 Provides converter implementations between various providers
 """
 
-import sys as _sys
-from types import ModuleType as _ModuleType
+import warnings as _warnings
 
 from .base import BaseConverter, BaseEmbeddingConverter, BaseRerankConverter
 from .embedding import (
@@ -16,15 +15,10 @@ from .embedding import (
     OpenAIEmbeddingConverter,
     VoyageEmbeddingConverter,
 )
-from .llm import google_generate as _google_generate
-from .llm import google_interactions as _google_interactions
-from .llm.chat_completions import ChatCompletionsConverter, OpenAIChatConverter
-from .llm.google_generate import GoogleConverter, GoogleGenerateConverter
-from .llm.google_generate import (
-    GoogleGenerateConverter as GoogleGenAIConverter,
-)  # deprecated alias
+from .llm.chat_completions import ChatCompletionsConverter
+from .llm.google_generate import GoogleGenerateConverter
 from .llm.google_interactions import GoogleInteractionsConverter
-from .llm.messages import AnthropicConverter, MessagesConverter
+from .llm.messages import MessagesConverter
 from .llm.open_responses import OpenAIResponsesConverter, OpenResponsesConverter
 from .decision import (
     EmbeddingDecisionConverter,
@@ -73,20 +67,32 @@ __all__ = [
 ]
 
 # ---------------------------------------------------------------------------
-# Legacy module paths (0.13.0)
+# Deprecated class aliases (0.13.0 names)
 # ---------------------------------------------------------------------------
-# ``converters.google_generate`` and ``converters.google_interactions`` were
-# importable packages in 0.13.0.  Their implementations now live under
-# ``converters.llm``; register the old paths against the same module objects so
-# existing imports keep resolving without a second copy of any module.  The
-# other three LLM formats were introduced after 0.13.0 and have no legacy path.
-for _legacy_name, _package in (
-    ("google_generate", _google_generate),
-    ("google_interactions", _google_interactions),
-):
-    _sys.modules[f"{__name__}.{_legacy_name}"] = _package
-    for _attr, _value in vars(_package).items():
-        if isinstance(_value, _ModuleType) and _value.__name__.startswith(
-            _package.__name__ + "."
-        ):
-            _sys.modules[f"{__name__}.{_legacy_name}.{_attr}"] = _value
+# These were the canonical class names in 0.13.0.  They stay importable from
+# this package until 0.16.0 (#919) but warn on access, so the module
+# ``__getattr__`` serves them instead of a plain import binding.
+_DEPRECATED_CLASS_ALIASES: dict[str, str] = {
+    "OpenAIChatConverter": "ChatCompletionsConverter",
+    "AnthropicConverter": "MessagesConverter",
+    "GoogleGenAIConverter": "GoogleGenerateConverter",
+    "GoogleConverter": "GoogleGenerateConverter",
+}
+
+
+def __getattr__(name: str):
+    canonical = _DEPRECATED_CLASS_ALIASES.get(name)
+    if canonical is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    value = globals()[canonical]
+    _warnings.warn(
+        f"llm_rosetta.converters.{name} is deprecated, "
+        f"use llm_rosetta.converters.{canonical} instead",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    # Bind the alias after warning: ``from ... import X`` probes the name with
+    # ``hasattr`` before fetching it, and without the binding that probe and
+    # the real fetch would each emit the same warning.
+    globals()[name] = value
+    return value

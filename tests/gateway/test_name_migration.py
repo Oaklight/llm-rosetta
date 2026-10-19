@@ -18,7 +18,7 @@ from llm_rosetta.gateway.name_migration import (
         ("shim", "openai", "openai--chat_completions"),
         ("shim", "anthropic", "anthropic--messages"),
         ("shim", "google", "google--google_generate"),
-        ("shim", "deepseek--openai_chat", "deepseek--chat_completions"),
+        ("shim", "volcengine--openai_chat", "volcengine--chat_completions"),
         ("shim", "openai--chat_completions", "openai--chat_completions"),
         # type: slot — names a format.
         ("type", "openai_chat", "chat_completions"),

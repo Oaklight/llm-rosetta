@@ -1,39 +1,53 @@
-"""Tests verifying backward-compatible imports from gateway.admin still work."""
+"""The 0.10.0-era ``gateway.admin`` re-export paths warn, then go in 0.16.0."""
 
-from llm_rosetta.gateway.admin.metrics import MetricsCollector, _RollingWindow
-from llm_rosetta.gateway.admin.persistence import (
-    DEFAULT_SUCCESS_MAX,
-    PersistenceManager,
-)
-from llm_rosetta.gateway.admin.request_log import RequestLog, RequestLogEntry
+import importlib
+import sys
+
+import pytest
+
+import llm_rosetta.observability as obs
 from llm_rosetta.gateway.admin.routes.profiling import ProfilerState
 
-# Also verify they are the same objects (not copies)
-import llm_rosetta.observability as obs
+_ADMIN_REEXPORTS = [
+    (
+        "llm_rosetta.gateway.admin.metrics",
+        "llm_rosetta.observability.metrics",
+        ["MetricsCollector", "_RollingWindow"],
+    ),
+    (
+        "llm_rosetta.gateway.admin.persistence",
+        "llm_rosetta.observability.persistence",
+        ["PersistenceManager", "DEFAULT_SUCCESS_MAX"],
+    ),
+    (
+        "llm_rosetta.gateway.admin.request_log",
+        "llm_rosetta.observability.request_log",
+        ["RequestLog", "RequestLogEntry"],
+    ),
+]
 
 
-class TestBackwardCompatImports:
-    """Verify that the old import paths still resolve to the canonical classes."""
+def _import_fresh(module_path: str):
+    """Import *module_path* from scratch so its import-time warning fires."""
+    sys.modules.pop(module_path, None)
+    return importlib.import_module(module_path)
 
-    def test_metrics_collector_identity(self):
-        assert MetricsCollector is obs.MetricsCollector
 
-    def test_rolling_window_identity(self):
-        from llm_rosetta.observability.metrics import _RollingWindow as _RW
+@pytest.mark.parametrize(("module_path", "canonical_path", "names"), _ADMIN_REEXPORTS)
+def test_admin_reexport_paths_warn(module_path, canonical_path, names):
+    with pytest.warns(DeprecationWarning, match=f"{module_path} is deprecated"):
+        module = _import_fresh(module_path)
+    canonical = importlib.import_module(canonical_path)
+    for name in names:
+        assert getattr(module, name) is getattr(canonical, name)
 
-        assert _RollingWindow is _RW
 
-    def test_persistence_manager_identity(self):
-        assert PersistenceManager is obs.PersistenceManager
+def test_ops_log_path_removed() -> None:
+    """``ops_log`` was only ever a dev convenience, not a released path."""
+    sys.modules.pop("llm_rosetta.gateway.admin.ops_log", None)
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module("llm_rosetta.gateway.admin.ops_log")
 
-    def test_persistence_defaults_identity(self):
-        assert DEFAULT_SUCCESS_MAX is obs.DEFAULT_SUCCESS_MAX
 
-    def test_request_log_identity(self):
-        assert RequestLog is obs.RequestLog
-
-    def test_request_log_entry_identity(self):
-        assert RequestLogEntry is obs.RequestLogEntry
-
-    def test_profiler_state_identity(self):
-        assert ProfilerState is obs.ProfilerState
+def test_profiler_state_identity() -> None:
+    assert ProfilerState is obs.ProfilerState

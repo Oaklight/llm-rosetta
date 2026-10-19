@@ -167,21 +167,6 @@ class TestLegacyBackwardCompat:
         assert cfg.decision_providers["oa"]["format"] == "openai_decisions"
         assert cfg.decision_providers["oa"]["decision_path"] == "/v1/decisions"
 
-    def test_legacy_decision_type_may_name_the_shim(self):
-        """The documented ``"type": "typesafe"`` spelling resolves to its format."""
-        raw = _base_config(
-            decision_providers={
-                "jev": {
-                    "api_key": "k",
-                    "base_url": "https://api.typesafe.ai",
-                    "type": "typesafe",
-                }
-            },
-        )
-        cfg = GatewayConfig(raw)
-        assert cfg.decision_providers["jev"]["format"] == "systemone"
-        assert cfg.decision_providers["jev"]["decision_path"] == "/v1/systemone"
-
     def test_legacy_decision_shim_supplies_connection_defaults(self):
         """A legacy entry may be just ``decision_shim``."""
         raw = _base_config(

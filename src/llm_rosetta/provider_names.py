@@ -102,12 +102,12 @@ LEGACY_SHIM_ALIASES: dict[str, str] = {
     # stranded-config error, which names the package and the preset.
     "argo--openai_chat": "argo--chat_completions",
     "argo--openai_responses": "argo--open_responses",
-    "deepseek--openai_chat": "deepseek--chat_completions",
-    "kilo--openai_chat": "kilo--chat_completions",
+    # These three spellings shipped in 0.13.0, so their window runs until
+    # 0.16.0 (#919).  ``deepseek--*`` and ``kilo--*`` never had a 0.13.0
+    # package and stay out of the table.
     "minimax--openai_chat": "minimax--chat_completions",
     "openrouter--openai_chat": "openrouter--chat_completions",
     "volcengine--openai_chat": "volcengine--chat_completions",
-    "deepseek--openai_responses": "deepseek--open_responses",
     "volcengine--openai_responses": "volcengine--open_responses",
     # ``<provider>--anthropic`` → ``<provider>--messages``: the ``anthropic``
     # base became ``messages`` (#917), which renamed these shims but left no
@@ -116,10 +116,6 @@ LEGACY_SHIM_ALIASES: dict[str, str] = {
     "argo--anthropic": "argo--messages",
     "minimax--anthropic": "minimax--messages",
     "openrouter--anthropic": "openrouter--messages",
-    # Decision shims took the canonical ``<vendor>--<format>`` form (#926):
-    # the bare names stay valid as aliases so existing configs keep loading.
-    "typesafe": "typesafe--systemone",
-    "openai_decisions": "openai--openai_decisions",
 }
 
 
