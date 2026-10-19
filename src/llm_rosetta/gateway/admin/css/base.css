@@ -203,6 +203,14 @@ a { color: var(--accent); text-decoration: none; }
 .settings-grid {
   display: grid; grid-template-columns: repeat(2, 1fr); gap: 2px 28px;
 }
+/* The retention section puts three narrow fields on one row.  Kept as a
+   class rather than an inline style so the phone rule below can stack it —
+   an inline `grid-template-columns` overrode the media query and left the
+   page scrolling sideways at 390px. */
+.settings-grid-retention { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px 16px; }
+@media (max-width: 768px) {
+  .settings-grid-retention { grid-template-columns: 1fr; }
+}
 .settings-popup-item {
   padding: 7px 0; font-size: 13px;
   display: flex; align-items: center; gap: 10px;
