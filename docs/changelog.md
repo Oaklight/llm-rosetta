@@ -186,6 +186,8 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### 修复
 
+- **手机上的 API Keys 页可以看到 token 用量**（issue [#1089](https://github.com/Oaklight/llm-rosetta/issues/1089)，PR [#1090](https://github.com/Oaklight/llm-rosetta/pull/1090)）：七列表格保留 760px 最小宽度，手机上看得到 Label、Created 与 Last Used，而这个页面真正要展示的用量数字都在屏幕之外。现在 768px 以下的每个 key 都是卡片：首行是标签与操作，其下是四个用量数字，最后是日期；因为表头被隐藏，每个数值在卡片上自带列名。隐藏表头同时也去掉了排序入口，因此工具栏新增与 Models 相同的排序下拉框和方向按钮；选择 **Default** 会恢复服务端顺序并禁用方向按钮。桌面端保持不变。
+
 - **手机上的 Server Ops Log 可读，详情行也可用键盘操作**（issue [#1087](https://github.com/Oaklight/llm-rosetta/issues/1087)，PR [#1088](https://github.com/Oaklight/llm-rosetta/pull/1088)）：五列表格保留 760px 最小宽度，手机上看得到 Time、Event 与 Severity，而说明发生了什么事的 Message 被推到屏幕外；详情行也只能点击展开。现在 768px 以下的每一行都是卡片（时间/事件/严重度，然后是消息，最后是来源），单元格保留显式角色与列名；详情行是 tab 停靠点，带 `aria-expanded` 与 `aria-controls`，Enter 或空格执行相同的切换，行键从 data 属性读取而不再拼进内联 JavaScript。桌面端保持不变。
 
 - **Request Log 的错误行可以用键盘展开**（issue [#1085](https://github.com/Oaklight/llm-rosetta/issues/1085)，PR [#1086](https://github.com/Oaklight/llm-rosetta/pull/1086)）：行内错误详情此前只能通过点击展开——没有 tab 停靠点、没有按键处理，也没有 `aria-expanded`，因此在任何视口下都只能鼠标操作，辅助技术也无法得知某行是否展开。现在错误行可以聚焦；Enter 或空格执行与点击相同的切换，`aria-expanded` 与 `aria-controls` 随状态更新，并且按键处理会忽略来自行内 dump 按钮的事件，避免激活按钮时同时折叠该行。展开状态的键从“时间戳+模型名”改为日志 id：它跨刷新稳定，也不再让模型名进入内联 JavaScript。
