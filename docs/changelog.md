@@ -186,6 +186,8 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### 修复
 
+- **手机端 Dashboard 的 KPI 网格会填满最后一行，Total Requests 也会分组显示**（issue [#1091](https://github.com/Oaklight/llm-rosetta/issues/1091)，PR [#1092](https://github.com/Oaklight/llm-rosetta/pull/1092)）：手机端两列网格里的五张卡片会让第五张（tokens）独自占一行，网格的间隙色透出来像一张空的半卡片，看起来像是缺少了指标。现在当卡片数为奇数时，最后一张会横跨两列；偶数时仍保持每行两张。Total Requests 也改为与页脚和面板其他数字一致的千分位分组。
+
 - **手机上的 API Keys 页可以看到 token 用量**（issue [#1089](https://github.com/Oaklight/llm-rosetta/issues/1089)，PR [#1090](https://github.com/Oaklight/llm-rosetta/pull/1090)）：七列表格保留 760px 最小宽度，手机上看得到 Label、Created 与 Last Used，而这个页面真正要展示的用量数字都在屏幕之外。现在 768px 以下的每个 key 都是卡片：首行是标签与操作，其下是四个用量数字，最后是日期；因为表头被隐藏，每个数值在卡片上自带列名。隐藏表头同时也去掉了排序入口，因此工具栏新增与 Models 相同的排序下拉框和方向按钮；选择 **Default** 会恢复服务端顺序并禁用方向按钮。桌面端保持不变。
 
 - **手机上的 Server Ops Log 可读，详情行也可用键盘操作**（issue [#1087](https://github.com/Oaklight/llm-rosetta/issues/1087)，PR [#1088](https://github.com/Oaklight/llm-rosetta/pull/1088)）：五列表格保留 760px 最小宽度，手机上看得到 Time、Event 与 Severity，而说明发生了什么事的 Message 被推到屏幕外；详情行也只能点击展开。现在 768px 以下的每一行都是卡片（时间/事件/严重度，然后是消息，最后是来源），单元格保留显式角色与列名；详情行是 tab 停靠点，带 `aria-expanded` 与 `aria-controls`，Enter 或空格执行相同的切换，行键从 data 属性读取而不再拼进内联 JavaScript。桌面端保持不变。
