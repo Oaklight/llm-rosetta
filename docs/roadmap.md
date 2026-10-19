@@ -104,7 +104,7 @@ We welcome pull requests for any of the planned features above. Here's how to ge
 
 1. Check the [issue tracker](https://github.com/Oaklight/llm-rosetta/issues) for open issues
 2. Read the [Core Concepts](guide/concepts.md) guide to understand the converter architecture
-3. Look at existing converters (e.g., `src/llm_rosetta/converters/chat_completions/`) as templates
+3. Look at existing converters (e.g., `src/llm_rosetta/converters/llm/chat_completions/`) as templates
 4. For new providers, consider creating a [shim](guide/shims.md) first — it's often enough
 5. Run `pre-commit run --all-files` before submitting
 

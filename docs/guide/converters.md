@@ -81,7 +81,7 @@ ir_response = google_conv.response_from_provider(google_response)
 Google launched the [Interactions API](https://ai.google.dev/gemini-api/docs/interactions) as their recommended interface for new Gemini projects. LLM-Rosetta provides a dedicated converter for this format:
 
 ```python
-from llm_rosetta.converters.google_interactions import GoogleInteractionsConverter
+from llm_rosetta.converters.llm.google_interactions import GoogleInteractionsConverter
 
 interactions_conv = GoogleInteractionsConverter()
 
@@ -239,13 +239,13 @@ LLM-Rosetta fixes both directions automatically and emits `WARNING`-level logs s
 
 ```python
 # For OpenAI Chat Completions format
-from llm_rosetta.converters.chat_completions.tool_ops import fix_orphaned_tool_calls
+from llm_rosetta.converters.llm.chat_completions.tool_ops import fix_orphaned_tool_calls
 
 messages = fix_orphaned_tool_calls(messages)
 messages = fix_orphaned_tool_calls(messages, placeholder="[Skipped by user]")
 
 # For OpenAI Responses format
-from llm_rosetta.converters.open_responses.tool_ops import fix_orphaned_tool_calls
+from llm_rosetta.converters.llm.open_responses.tool_ops import fix_orphaned_tool_calls
 
 items = fix_orphaned_tool_calls(items)
 ```
