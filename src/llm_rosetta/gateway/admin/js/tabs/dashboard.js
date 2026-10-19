@@ -596,12 +596,12 @@ function renderPersistence(p, totalReq) {
   const fmtN = (n) => Number.isFinite(n) ? n.toLocaleString() : '–';
 
   el.innerHTML = `
-    <span class="seg" title="${t('footer.tip.req')}"><span class="k">${t('footer.req')}</span><span class="v">${fmtN(totalReq)}</span></span>
-    <span class="seg" title="${t('footer.tip.ok')}"><span class="k">${t('footer.ok')}</span><span class="v ${pctClass(successPct)}">${successN}/${successCap} (${successPct}%)</span></span>
-    <span class="seg" title="${t('footer.tip.err')}"><span class="k">${t('footer.err')}</span><span class="v">${fmtN(errorN)}</span></span>
-    <span class="seg" title="${t('footer.tip.dumps')}"><span class="k">${t('footer.dumps')}</span><span class="v ${pctClass(dumpPct)}">${dumpN}/${dumpCap} (${dumpPct}%)</span></span>
-    <span class="seg" title="${t('footer.tip.db')}"><span class="k">${t('footer.db')}</span><span class="v">${fmtBytesShort(p.db_bytes)}</span></span>
-    <span class="seg" title="${t('footer.tip.wal')}"><span class="k">WAL</span><span class="v">${fmtBytesShort(p.wal_bytes)}</span></span>
+    <span class="seg seg-req" title="${t('footer.tip.req')}"><span class="k">${t('footer.req')}</span><span class="v">${fmtN(totalReq)}</span></span>
+    <span class="seg seg-ok" title="${t('footer.tip.ok')}"><span class="k">${t('footer.ok')}</span><span class="v ${pctClass(successPct)}">${successN}/${successCap} (${successPct}%)</span></span>
+    <span class="seg seg-err" title="${t('footer.tip.err')}"><span class="k">${t('footer.err')}</span><span class="v">${fmtN(errorN)}</span></span>
+    <span class="seg seg-dumps" title="${t('footer.tip.dumps')}"><span class="k">${t('footer.dumps')}</span><span class="v ${pctClass(dumpPct)}">${dumpN}/${dumpCap} (${dumpPct}%)</span></span>
+    <span class="seg seg-db" title="${t('footer.tip.db')}"><span class="k">${t('footer.db')}</span><span class="v">${fmtBytesShort(p.db_bytes)}</span></span>
+    <span class="seg seg-wal" title="${t('footer.tip.wal')}"><span class="k">WAL</span><span class="v">${fmtBytesShort(p.wal_bytes)}</span></span>
   `;
 }
 

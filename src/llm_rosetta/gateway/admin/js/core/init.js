@@ -305,6 +305,33 @@ document.addEventListener('mouseleave', (e) => {
   }, 100);
 }, true);
 
+// ===================== Scroll affordances =====================
+// Tabs and segmented filters hide their scrollbars. Toggle the fade class
+// only while an element actually overflows, so a bar that fits its options
+// is never dimmed. Content changes at runtime (model types, usage windows,
+// a newly revealed tab), hence the observers rather than a single call.
+let _overflowTimer = 0;
+
+function updateOverflowHints() {
+  document.querySelectorAll('.tabs, .seg-control').forEach((el) => {
+    el.classList.toggle('is-scrollable', el.scrollWidth > el.clientWidth + 1);
+  });
+}
+
+function _scheduleOverflowHints() {
+  clearTimeout(_overflowTimer);
+  _overflowTimer = setTimeout(updateOverflowHints, 50);
+}
+
+window.addEventListener('resize', _scheduleOverflowHints);
+new MutationObserver(_scheduleOverflowHints).observe(document.body, {
+  subtree: true,
+  childList: true,
+  attributes: true,
+  attributeFilter: ['class', 'style'],
+});
+_scheduleOverflowHints();
+
 // ===================== Start =====================
 initLogoPicker();
 initTypePicker();

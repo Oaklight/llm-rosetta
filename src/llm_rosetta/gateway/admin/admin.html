@@ -129,7 +129,7 @@
         <div class="seg-control" id="modelTypeSeg" role="radiogroup" aria-label="Model type filter">
           <!-- Populated by models.js::_buildTypeSegControls() from model_types metadata -->
         </div>
-        <input id="modelSearch" placeholder="Search models..." oninput="renderModels()" data-i18n-placeholder="label.searchModels" style="max-width:200px">
+        <input id="modelSearch" placeholder="Search models..." oninput="renderModels()" data-i18n-placeholder="label.searchModels">
         <button class="btn-reset" id="modelResetBtn" onclick="resetModelFilters()" data-i18n="btn.resetFilters">✕ Reset</button>
       </div>
       <div class="bulk-bar" id="modelBulkBar">
@@ -770,7 +770,7 @@
     </div>
 
     <!-- Connection — always visible -->
-    <div class="form-row" style="display:flex;gap:8px;align-items:flex-end">
+    <div class="form-row align-end">
       <div class="form-group" style="flex:0 0 auto">
         <label data-i18n="label.logo">Logo</label>
         <input id="provLogo" type="hidden">
@@ -808,7 +808,7 @@
         <a href="#" onclick="revealProviderKey();return false;" data-i18n="btn.useOwnKey">Use my own key</a>
       </div>
     </div>
-    <div class="form-row" style="display:flex;gap:8px;align-items:flex-end">
+    <div class="form-row align-end">
       <div class="form-group" style="flex:0 0 69%">
         <label data-i18n="label.baseUrl">Base URL<span class="hint-icon">?<span class="hint-popup" data-i18n="hint.docker">In Docker, "localhost" refers to the container itself. Use "host.docker.internal" (macOS/Windows) or "172.17.0.1" (Linux) to reach the host machine.</span></span></label>
         <input id="provBaseUrl" placeholder="https://api.openai.com/v1">
@@ -818,7 +818,7 @@
         <input id="provModelsPath" placeholder="/v1/models">
       </div>
     </div>
-    <div class="form-row" style="display:flex;gap:8px;align-items:flex-end">
+    <div class="form-row align-end">
       <div class="form-group" style="flex:0 0 69%">
         <label data-i18n="label.proxyUrl">Proxy URL<span class="hint-icon">?<span class="hint-popup" data-i18n="hint.docker">In Docker, "localhost" refers to the container itself. Use "host.docker.internal" (macOS/Windows) or "172.17.0.1" (Linux) to reach the host machine.</span></span></label>
         <input id="provProxy" placeholder="e.g. http://127.0.0.1:7890">
@@ -832,7 +832,7 @@
     <!-- LLM Endpoint panel -->
     <div class="endpoint-section" id="provLlmSection">
       <div class="section-label"><span class="dot dot-llm"></span> <span data-i18n="label.llmEndpoint">LLM Endpoint</span></div>
-      <div class="form-row" style="display:flex;gap:8px;align-items:flex-end">
+      <div class="form-row align-end">
         <div class="form-group" style="flex:1;min-width:0">
           <label data-i18n="label.topLevel">Top Level</label>
           <div class="type-picker" id="typePickerWrapper">
@@ -910,12 +910,12 @@
 
     <!-- Tab: General -->
     <div class="model-tab-content active" id="modelTab-general">
-      <div style="display:flex;gap:12px">
-        <div class="form-group" style="flex:1">
+      <div class="form-row">
+        <div class="form-group">
           <label data-i18n="label.modelName">Model Name</label>
           <input id="modelName" placeholder="e.g. gpt-4o, claude-sonnet-4-20250514">
         </div>
-        <div class="form-group" style="flex:1">
+        <div class="form-group">
           <label data-i18n="label.provider">Provider</label>
           <select id="modelProvider"></select>
           <div id="modelMultiProviderHint" style="display:none;font-size:11px;color:var(--text-dim);margin-top:4px"></div>

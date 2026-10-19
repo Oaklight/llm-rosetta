@@ -382,6 +382,17 @@ code.copyable:hover { background: var(--bg-hover); }
 }
 .form-group input { font-family: var(--mono); }
 .form-group input:focus, .form-group select:focus, .form-group textarea:focus { outline: none; border-color: var(--accent); }
+.form-row { display: flex; gap: 10px; }
+.form-row > .form-group { flex: 1; min-width: 0; }
+.form-row.align-end { align-items: flex-end; }
+@media (max-width: 600px) {
+  /* Side-by-side fields truncate their values on a phone; stack them.
+     `stretch` also stops an align-end row from right-aligning its fields
+     once the main axis is vertical. */
+  .modal .form-row { flex-direction: column; gap: 0; align-items: stretch; }
+  /* The capability chips otherwise run past the modal edge. */
+  .cap-checks { flex-wrap: wrap; gap: 10px 16px; }
+}
 /* Multi-key entry list (auto-switches from single input when comma-separated keys detected) */
 .multi-key-list { display:flex;flex-direction:column;gap:4px;margin-top:4px; }
 .multi-key-row { display:flex;gap:4px;align-items:center; }
@@ -564,6 +575,7 @@ th.sortable.desc::after { content:'\25BC';opacity:.8; }
 /* Provider / Model search & filter toolbars */
 .model-toolbar, .provider-toolbar { display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap; }
 .model-toolbar input, .provider-toolbar input { flex:1;min-width:180px;max-width:300px;padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:13px;font-family:var(--mono); }
+.model-toolbar #modelSearch { max-width: 200px; }
 .model-toolbar select { padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:13px; }
 #tab-models table { table-layout:fixed; }
 
@@ -636,13 +648,47 @@ th.sortable.desc::after { content:'\25BC';opacity:.8; }
 @media (max-width: 768px) {
   .header { padding: 12px 16px; }
   .header h1 { font-size: 16px; }
-  .tabs { padding: 0 12px; }
-  .tab { padding: 10px 14px; font-size: 13px; }
+  .header-right { gap: 6px; }
+  /* The live clock is enough context; the "System Time" label costs the
+     row width it does not have on phones. */
+  .header-right [data-i18n="label.systemTime"] { display: none; }
+  .tabs { padding: 0 8px; }
+  .tab { padding: 10px 6px; font-size: 13px; }
   .config-path { display: none; }
   .content { padding: 16px; }
   .chart-row { grid-template-columns: 1fr; }
   .stats-grid { grid-template-columns: repeat(2, 1fr); }
   .section-header { flex-wrap: wrap; gap: 8px; }
+
+  /* Filter controls: keep one line and scroll instead of clipping the
+     last option (e.g. "Decision") at the viewport edge. */
+  .seg-control {
+    max-width: 100%; min-width: 0; overflow-x: auto; overflow-y: hidden;
+    scrollbar-width: none; -webkit-overflow-scrolling: touch;
+  }
+  .seg-control::-webkit-scrollbar { display: none; }
+  .seg-control > * { flex: 0 0 auto; padding: 8px 14px; white-space: nowrap; }
+
+  /* Toolbars: let search take its own row so buttons stop wrapping
+     mid-group. */
+  .model-toolbar, .provider-toolbar { align-items: center; }
+  .model-toolbar #modelSearch,
+  .provider-toolbar #providerSearch { flex: 1 1 100%; max-width: none; }
+  .provider-toolbar .provider-count { margin-right: auto; }
+
+  /* Comfortable touch targets. 16px form text also prevents iOS from
+     zooming the page when an input receives focus. */
+  .btn-sm { padding: 6px 10px; min-height: 30px; }
+  .tab { min-height: 40px; display: flex; align-items: center; }
+  .model-toolbar input, .model-toolbar select,
+  .provider-toolbar input, .provider-toolbar select,
+  .modal input, .modal select, .login-box input { font-size: 16px; }
+
+  /* Tables keep legible columns and scroll inside their wrapper instead
+     of squeezing every column into the viewport. */
+  #tab-models table { min-width: 860px; }
+  #tab-keys table, #tab-logs table { min-width: 760px; }
+  #tab-dashboard table { min-width: 780px; }
 }
 
 /* DB status footer */
@@ -663,12 +709,42 @@ th.sortable.desc::after { content:'\25BC';opacity:.8; }
   gap: 14px;
   user-select: none;
 }
-.db-footer .seg { display: inline-flex; gap: 4px; }
+.db-footer .seg { display: inline-flex; gap: 4px; flex-shrink: 0; white-space: nowrap; }
 .db-footer .k { opacity: 0.7; }
 .db-footer .v { font-weight: 500; color: var(--text); }
 .db-footer .v.warn { color: var(--orange); }
 .db-footer .v.crit { color: var(--red); }
 .db-footer.hidden { display: none; }
+@media (max-width: 768px) {
+  /* Keep the metrics on a single line; wrapping made the bar two rows
+     tall and covered the bottom of the page content. */
+  .db-footer {
+    justify-content: flex-start; gap: 12px;
+    overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch;
+    /* Fade the right edge so clipped numbers read as scrollable. */
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 18px), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 18px), transparent);
+  }
+  .db-footer::-webkit-scrollbar { display: none; }
+  /* Surface the operational numbers (errors, DB/WAL size) before the
+     capacity ratios, which are the first to fall off a phone screen. */
+  .db-footer .seg-req { order: 1; }
+  .db-footer .seg-err { order: 2; }
+  .db-footer .seg-db { order: 3; }
+  .db-footer .seg-wal { order: 4; }
+  .db-footer .seg-ok { order: 5; }
+  .db-footer .seg-dumps { order: 6; }
+}
+/* The tab bar and segmented filters hide their scrollbars; when they
+   actually overflow (toggled in init.js), fade the right edge so the
+   cut-off content reads as scrollable. Driven by the class rather than a
+   viewport width, so a sixth tab or a longer filter list gets the cue at
+   any size, and bars that fit are never dimmed. */
+.tabs.is-scrollable,
+.seg-control.is-scrollable {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 14px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 14px), transparent);
+}
 body { padding-bottom: 26px; }
 
 /* ═══ Scheme-specific structural overrides ═══ */
