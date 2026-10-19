@@ -1,0 +1,947 @@
+"""
+LLM-Rosetta - Anthropic Tool Operations
+
+Anthropic Messages API tool conversion operations.
+Handles bidirectional conversion of tool definitions, calls, results,
+choice strategies, and call configurations.
+
+Also provides ``fix_orphaned_tool_calls`` — a module-level utility that
+fixes bidirectional mismatches between tool_use and tool_result blocks
+(Anthropic rejects both orphaned calls and orphaned results with 400).
+
+Self-contained: does not depend on utils/ToolCallConverter or utils/ToolConverter.
+"""
+
+import json
+import logging
+from typing import Any, cast
+
+from ...base.tools.content import (
+    convert_content_blocks_to_ir,
+    convert_ir_content_blocks_to_p,
+)
+from ....types.ir import (
+    ToolCallPart,
+    ToolChoice,
+    ToolDefinition,
+    ToolResultPart,
+)
+from ....types.ir.tools import ToolCallConfig
+from ...base import BaseToolOps, IntrinsicLeg
+from ...base.helpers.opaque import CARRIER_KEY
+from ...base.tools import (
+    convert_nullable_to_type_array,
+    extract_part_ids,
+    get_native_definition,
+    intrinsic_kind_of,
+    ir_strict,
+    make_intrinsic_tool_definition,
+    log_orphan_warnings,
+    prefixed_tool_call_id,
+    sanitize_schema,
+    sanitize_tool_call_id,
+    write_ir_strict,
+)
+
+logger = logging.getLogger(__name__)
+
+# Native Anthropic server tools for client-declared intrinsic kinds.
+# Native Anthropic server-tool type prefixes → canonical intrinsic kind.
+_ANTHROPIC_NATIVE_TYPE_TO_KIND: dict[str, str] = {
+    "web_search": "web_search",
+    "code_execution": "code_execution",
+}
+
+_ANTHROPIC_INTRINSIC_TOOLS: dict[str, dict[str, Any]] = {
+    "web_search": {"type": "web_search_20250305", "name": "web_search"},
+    "code_execution": {"type": "code_execution_20250522", "name": "code_execution"},
+}
+
+# Anthropic names a server tool's *runtime* call/result after the tool version.
+# The newer code-execution versions (20250825, 20260120, 20260521) run bash
+# under the hood and report it under a different runtime name: the call is a
+# ``server_tool_use`` named ``bash_code_execution`` and the result block type is
+# ``bash_code_execution_tool_result``.  The shim declares the canonical kind
+# ``code_execution``, so the read path folds the alias back onto it; otherwise
+# a response from a newer version would carry a kind no shim declares.
+#
+# This is a map of *runtime renames of a capability we already have a canonical
+# kind for*, not the table of every Anthropic server tool.  ``web_fetch`` and
+# ``text_editor_code_execution`` are capabilities of their own with no canonical
+# kind yet; folding them would mean adding kinds and shim declarations, so they
+# pass through unchanged rather than being silently rewritten onto something
+# they are not.
+_ANTHROPIC_SERVER_TOOL_KIND_ALIASES: dict[str, str] = {
+    "bash_code_execution": "code_execution",
+}
+
+#: The intrinsic kinds Anthropic renders natively: the server tools the IR
+#: gives a canonical kind (``_ANTHROPIC_INTRINSIC_TOOLS``), the runtime aliases
+#: the read path folds onto them, and the capabilities Anthropic reports under
+#: their own name — ``web_fetch`` and ``text_editor_code_execution`` are
+#: capabilities of their own with no canonical kind yet, so the reader passes
+#: them through unchanged (see the note above) and a same-dialect replay must
+#: keep them.  A kind outside this set belongs to a sibling dialect: Anthropic
+#: has no server tool for it, so a ``server_tool_use`` naming one would name a
+#: tool the API does not have.
+_ANTHROPIC_SERVER_TOOL_KINDS: frozenset[str] = frozenset(
+    {
+        *_ANTHROPIC_INTRINSIC_TOOLS,
+        *_ANTHROPIC_SERVER_TOOL_KIND_ALIASES,
+        "web_fetch",
+        "text_editor_code_execution",
+    }
+)
+
+
+def canonical_server_tool_kind(name: str) -> str:
+    """Fold an Anthropic server-tool runtime name onto its canonical kind.
+
+    Args:
+        name: ``server_tool_use`` block ``name``, or a server-tool result block
+            type with the ``_tool_result`` suffix already removed.
+
+    Returns:
+        The canonical intrinsic kind, or ``name`` unchanged when it is not a
+        known version alias.
+    """
+    return _ANTHROPIC_SERVER_TOOL_KIND_ALIASES.get(name, name)
+
+
+# ==================== Orphaned Tool Call Fix ====================
+
+
+def _collect_anthropic_tool_ids(
+    messages: list[dict[str, Any]],
+) -> tuple[set[str], set[str]]:
+    """Collect all tool_use IDs and answered (tool_result) IDs."""
+    known_use_ids: set[str] = set()
+    answered_ids: set[str] = set()
+    for msg in messages:
+        content = msg.get("content", [])
+        if not isinstance(content, list):
+            continue
+        known_use_ids |= extract_part_ids(content, "tool_use", "id")
+        answered_ids |= extract_part_ids(content, "tool_result", "tool_use_id")
+    return known_use_ids, answered_ids
+
+
+def fix_orphaned_tool_calls(
+    messages: list[dict[str, Any]],
+    *,
+    placeholder: str = "[No output available yet]",
+) -> list[dict[str, Any]]:
+    """Fix mismatched tool_use and tool_result blocks in Anthropic format.
+
+    The Anthropic Messages API **strictly requires** bidirectional pairing
+    between ``tool_use`` (in assistant messages) and ``tool_result`` (in user
+    messages):
+
+    1. Every ``tool_use`` block must have a corresponding ``tool_result``
+       block with the same ``id`` / ``tool_use_id`` (**orphaned tool_use**).
+    2. Every ``tool_result`` block must reference a preceding ``tool_use``
+       block (**orphaned tool_result**).
+
+    Violations of either rule cause a 400 error.  Only Google Gemini is
+    lenient about both cases.
+
+    This function handles both directions:
+
+    - **Orphaned tool_use**: injects a synthetic ``tool_result`` block with
+      *placeholder* content into the next user message (or creates one).
+    - **Orphaned tool_result**: removes ``tool_result`` blocks whose
+      ``tool_use_id`` does not appear in any preceding ``tool_use`` block.
+
+    The original list is **not** modified; a new list is returned.
+
+    Args:
+        messages: Anthropic Messages format messages list.
+        placeholder: Content string for injected synthetic tool results.
+
+    Returns:
+        A new messages list with orphaned tool_use/results fixed.
+    """
+    known_use_ids, answered_ids = _collect_anthropic_tool_ids(messages)
+
+    if not known_use_ids and not answered_ids:
+        return messages
+
+    patched: list[dict[str, Any]] = []
+    orphaned_use_ids: list[str] = []
+    orphaned_result_ids: list[str] = []
+
+    for msg in messages:
+        msg_role = msg.get("role")
+        content = msg.get("content", [])
+
+        # Filter orphaned tool_result blocks from user messages
+        if msg_role == "user" and isinstance(content, list):
+            orphaned = (
+                extract_part_ids(content, "tool_result", "tool_use_id") - known_use_ids
+            )
+            if orphaned:
+                orphaned_result_ids.extend(orphaned)
+                filtered = [
+                    b
+                    for b in content
+                    if not (isinstance(b, dict) and b.get("tool_use_id") in orphaned)
+                ]
+                if not filtered:
+                    continue  # entire message was orphaned
+                msg = {**msg, "content": filtered}
+
+        patched.append(msg)
+
+        # Inject synthetic results for orphaned tool_use in assistant messages
+        if msg_role == "assistant" and isinstance(content, list):
+            unanswered = extract_part_ids(content, "tool_use", "id") - answered_ids
+            if unanswered:
+                orphaned_use_ids.extend(unanswered)
+                patched.append(
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": uid,
+                                "content": placeholder,
+                            }
+                            for uid in unanswered
+                        ],
+                    }
+                )
+
+    log_orphan_warnings(
+        logger, orphaned_use_ids, orphaned_result_ids, "tool_use", "tool_result"
+    )
+    return patched
+
+
+def _server_result_content(kind: str, result: Any) -> Any:
+    """Give a foreign code-execution result the object Anthropic expects.
+
+    ``code_execution_tool_result.content`` must be a result object (live:
+    ``Input does not match the expected shape``); another dialect hands over a
+    plain output string, which becomes ``stdout``.
+    """
+    if kind != "code_execution" or isinstance(result, dict):
+        return result
+    return {
+        "type": "code_execution_result",
+        "stdout": result if isinstance(result, str) else json.dumps(result),
+        "stderr": "",
+        "return_code": 0,
+        "content": [],
+    }
+
+
+class MessagesToolOps(BaseToolOps):
+    """Anthropic Messages API tool conversion operations.
+
+    All methods are static and stateless. Handles tool definitions,
+    calls, results, choice strategies, and call configurations.
+
+    Key differences from OpenAI:
+    - Tool call arguments are Dict (not JSON string)
+    - Tool definitions use ``input_schema`` (not ``parameters``)
+    - Tool choice uses ``any`` instead of ``required``
+    - ``disable_parallel_tool_use`` is part of tool_choice
+    """
+
+    # ==================== Tool Definition ====================
+
+    @staticmethod
+    def ir_tool_definition_to_p(ir_tool: ToolDefinition, **kwargs: Any) -> dict:
+        """IR ToolDefinition → Anthropic tool definition.
+
+        Converts flat IR format to Anthropic's flat format with ``input_schema``.
+
+        Args:
+            ir_tool: IR tool definition.
+
+        Returns:
+            Anthropic tool definition dict.
+        """
+        if ir_tool.get("type") == "intrinsic":
+            stored = get_native_definition(ir_tool, "messages")
+            if stored is not None:
+                return dict(stored)
+            kind = intrinsic_kind_of(ir_tool)
+            native = _ANTHROPIC_INTRINSIC_TOOLS.get(kind)
+            if native is None:
+                logger.warning(
+                    "Anthropic has no server tool for intrinsic kind %r; dropping",
+                    kind,
+                )
+                return {}
+            return dict(native)
+
+        result: dict[str, Any] = {
+            "name": ir_tool["name"],
+            "description": ir_tool.get("description", ""),
+        }
+        # Anthropic validates the schema under strict, so the flag only means
+        # something when the client also sent a closed schema; that is the
+        # client's to arrange, not ours to patch.
+        strict = ir_strict(ir_tool)
+        if strict is not None:
+            result["strict"] = strict
+        raw_schema = ir_tool.get("parameters", {})
+        schema = (
+            sanitize_schema(raw_schema, extra_strip_keys={"title"})
+            if isinstance(raw_schema, dict)
+            else raw_schema
+        )
+        if isinstance(schema, dict):
+            schema = convert_nullable_to_type_array(schema)
+        # Anthropic requires input_schema to have "type"; default to object
+        if isinstance(schema, dict) and "type" not in schema:
+            schema = {"type": "object", **schema}
+        result["input_schema"] = schema
+        # Preserve cache_hint → cache_control
+        cache_hint = ir_tool.get("cache_hint")
+        if cache_hint is not None:
+            result["cache_control"] = cache_hint
+        return result
+
+    @staticmethod
+    def p_tool_definition_to_ir(provider_tool: Any, **kwargs: Any) -> ToolDefinition:
+        """Anthropic tool definition → IR ToolDefinition.
+
+        Converts Anthropic format to flat IR format.
+
+        Args:
+            provider_tool: Anthropic tool definition dict.
+
+        Returns:
+            IR ToolDefinition.
+        """
+        # Native server tool (e.g. {"type": "web_search_20250305"}).
+        prov_type = provider_tool.get("type", "")
+        if isinstance(prov_type, str):
+            for prefix, kind in _ANTHROPIC_NATIVE_TYPE_TO_KIND.items():
+                if prov_type == prefix or prov_type.startswith(prefix + "_"):
+                    return cast(
+                        ToolDefinition,
+                        make_intrinsic_tool_definition(
+                            kind,
+                            description=provider_tool.get("description", ""),
+                            native=provider_tool,
+                            native_base="messages",
+                        ),
+                    )
+
+        parameters = provider_tool.get("input_schema", {})
+        result: dict[str, Any] = {
+            "type": "function",
+            "name": provider_tool.get("name", ""),
+            "description": provider_tool.get("description", ""),
+            "parameters": parameters,
+        }
+
+        # Extract required_parameters from JSON Schema if available
+        if isinstance(parameters, dict) and "required" in parameters:
+            result["required_parameters"] = parameters["required"]
+        else:
+            result["required_parameters"] = []
+
+        result["metadata"] = {}
+        write_ir_strict(result, provider_tool.get("strict"))
+        # Read cache_control → cache_hint
+        cache_control = provider_tool.get("cache_control")
+        if cache_control is not None:
+            result["cache_hint"] = cache_control
+        return cast(ToolDefinition, result)
+
+    # ==================== Tool Choice ====================
+
+    @staticmethod
+    def ir_tool_choice_to_p(
+        ir_tool_choice: ToolChoice, **kwargs: Any
+    ) -> dict[str, Any]:
+        """IR ToolChoice → Anthropic tool_choice parameter.
+
+        Mapping:
+        - ``mode:"none"`` → ``{"type": "none"}`` (not officially supported)
+        - ``mode:"auto"`` → ``{"type": "auto"}``
+        - ``mode:"any"`` → ``{"type": "any"}``
+        - ``mode:"tool"`` → ``{"type": "tool", "name": "..."}``
+
+        Anthropic has no allow-list variant, so an IR ``allowed_tools``
+        restriction can only be widened back to its bare mode; *warnings*
+        receives a note when that happens, since a restriction going away is
+        not the same as an optional field being dropped.
+
+        Args:
+            ir_tool_choice: IR tool choice.
+            **kwargs: ``warnings`` (list[str] | None) — optional warning sink.
+
+        Returns:
+            Anthropic tool_choice dict.
+        """
+        mode = ir_tool_choice.get("mode", "auto")
+        result: dict[str, Any] = {}
+
+        if ir_tool_choice.get("allowed_tools"):
+            warnings = kwargs.get("warnings")
+            if warnings is not None:
+                warnings.append(
+                    "Anthropic Messages has no allowed_tools tool_choice, so "
+                    "the choice was widened past the restriction to "
+                    f"{len(ir_tool_choice['allowed_tools'])} tool(s): the model "
+                    "may now call any declared tool, where the source allowed "
+                    "only the listed ones"
+                )
+
+        if mode == "none":
+            result["type"] = "none"
+        elif mode == "auto":
+            result["type"] = "auto"
+        elif mode == "any":
+            result["type"] = "any"
+        elif mode == "tool":
+            result["type"] = "tool"
+            tool_name = ir_tool_choice.get("tool_name")
+            if tool_name:
+                result["name"] = tool_name
+
+        return result
+
+    @staticmethod
+    def p_tool_choice_to_ir(provider_tool_choice: Any, **kwargs: Any) -> ToolChoice:
+        """Anthropic tool_choice → IR ToolChoice.
+
+        Mapping:
+        - ``{"type": "auto"}`` → ``mode:"auto"``
+        - ``{"type": "any"}`` → ``mode:"any"``
+        - ``{"type": "tool", "name": "..."}`` → ``mode:"tool"``
+
+        Args:
+            provider_tool_choice: Anthropic tool_choice dict.
+
+        Returns:
+            IR ToolChoice.
+        """
+        if isinstance(provider_tool_choice, dict):
+            choice_type = provider_tool_choice.get("type", "auto")
+            if choice_type == "auto":
+                return cast(ToolChoice, {"mode": "auto", "tool_name": ""})
+            elif choice_type == "any":
+                return cast(ToolChoice, {"mode": "any", "tool_name": ""})
+            elif choice_type == "tool":
+                tool_name = provider_tool_choice.get("name", "")
+                return cast(ToolChoice, {"mode": "tool", "tool_name": tool_name})
+            elif choice_type == "none":
+                return cast(ToolChoice, {"mode": "none", "tool_name": ""})
+
+        return cast(ToolChoice, {"mode": "auto", "tool_name": ""})
+
+    # ==================== Tool Call ====================
+
+    @classmethod
+    def ir_client_call_to_p(cls, ir_tool_call: ToolCallPart, **kwargs: Any) -> dict:
+        """IR ToolCallPart → Anthropic tool_use content block.
+
+        Anthropic tool call arguments are Dict (not JSON string).
+
+        Args:
+            ir_tool_call: IR tool call part.
+
+        Returns:
+            Anthropic tool_use content block dict.
+        """
+        return cls._finish_call_block(
+            {
+                "type": "tool_use",
+                "id": sanitize_tool_call_id(ir_tool_call["tool_call_id"]),
+                "name": ir_tool_call["tool_name"],
+                "input": ir_tool_call.get("tool_input", {}),
+            },
+            ir_tool_call,
+        )
+
+    @classmethod
+    def intrinsic_renderable(cls, kind: str, fields: Any, *, leg: IntrinsicLeg) -> bool:
+        """Whether Anthropic has a server tool for *kind*.
+
+        Anthropic renders a server tool in one shape — ``server_tool_use``
+        named with the kind — but only for a kind it actually has a tool for
+        (see ``_ANTHROPIC_SERVER_TOOL_KINDS``).  The payload plays no part: the
+        block's ``input`` is free-form, so there is no field a kind needs and
+        the IR might be missing, and both legs answer the same.
+
+        Args:
+            kind: Canonical intrinsic kind (``intrinsic_kind_of``).
+            fields: The IR ``tool_input`` (unused: the block shape does not
+                depend on the payload).
+            leg: Which leg the part is written on; both are the same here.
+
+        Returns:
+            True when the kind is one Anthropic has a server tool for.
+        """
+        return kind in _ANTHROPIC_SERVER_TOOL_KINDS
+
+    @classmethod
+    def intrinsic_requires_result(cls, kind: str) -> bool:
+        """Anthropic rejects a ``server_tool_use`` with no paired result block."""
+        return True
+
+    @classmethod
+    def ir_intrinsic_call_to_p(
+        cls,
+        ir_tool_call: ToolCallPart,
+        *,
+        leg: IntrinsicLeg = "history",
+        **kwargs: Any,
+    ) -> dict[str, Any] | None:
+        """IR intrinsic ToolCallPart → Anthropic ``server_tool_use`` block.
+
+        The kind is the block's ``name``, exactly as :meth:`p_tool_call_to_ir`
+        reads it back — but only for a kind Anthropic has a server tool for
+        (:meth:`intrinsic_renderable`).  A sibling dialect's kind, or a part
+        with no kind at all, declines here; the template then decides per leg
+        (see :meth:`non_native_intrinsic_call_to_p`).
+
+        Args:
+            ir_tool_call: IR tool call part with ``tool_type == "intrinsic"``.
+            leg: Which leg the part is written on.
+            **kwargs: Extra arguments.
+
+        Returns:
+            Anthropic ``server_tool_use`` content block dict, or ``None``.
+        """
+        kind = intrinsic_kind_of(ir_tool_call)
+        if not cls.intrinsic_renderable(kind, ir_tool_call.get("tool_input"), leg=leg):
+            return None
+        return cls._finish_call_block(
+            {
+                "type": "server_tool_use",
+                "id": prefixed_tool_call_id(ir_tool_call["tool_call_id"], "srvtoolu_"),
+                "name": kind,
+                "input": ir_tool_call.get("tool_input", {}),
+            },
+            ir_tool_call,
+        )
+
+    @classmethod
+    def non_native_intrinsic_call_to_p(
+        cls, ir_tool_call: ToolCallPart, *, leg: IntrinsicLeg, **kwargs: Any
+    ) -> dict[str, Any]:
+        """Write a server call Anthropic has no tool for, per leg.
+
+        On the **history** leg it takes the parent path — an ordinary client
+        ``tool_use`` — which is the shape a caller reaches for when this
+        converter is used as a library, without the pipeline pass that owns the
+        history decision.  On the **response** leg a server call is never handed
+        to the client as a call it must run: the client cannot execute a server
+        tool, so the call is dropped with a warning instead.
+
+        Args:
+            ir_tool_call: IR tool call part with ``tool_type == "intrinsic"``.
+            leg: Which leg the part is written on.
+            **kwargs: Extra arguments (``warnings`` sink, when the caller has
+                one).
+
+        Returns:
+            A client ``tool_use`` block on the history leg, ``{}`` on the
+            response leg.
+        """
+        if leg == "response":
+            kind = intrinsic_kind_of(ir_tool_call)
+            warnings = kwargs.get("warnings")
+            message = (
+                f"Server tool call of kind {kind!r} has no Anthropic server "
+                "tool; dropped from the response"
+            )
+            if isinstance(warnings, list):
+                warnings.append(message)
+            logger.warning(message)
+            return {}
+        return cast(
+            dict[str, Any],
+            super().non_native_intrinsic_call_to_p(ir_tool_call, leg=leg, **kwargs),
+        )
+
+    @staticmethod
+    def _finish_call_block(
+        block: dict[str, Any], ir_tool_call: ToolCallPart
+    ) -> dict[str, Any]:
+        """Attach the fields both call shapes carry, in the same order.
+
+        Args:
+            block: The block built so far (``tool_use`` or ``server_tool_use``).
+            ir_tool_call: IR tool call part.
+
+        Returns:
+            The same block, with the shared fields attached.
+        """
+        # Preserve provider_metadata for cross-provider round-trip
+        # (e.g. Google thought_signature)
+        if "provider_metadata" in ir_tool_call:
+            block[CARRIER_KEY] = ir_tool_call["provider_metadata"]
+
+        # Restore caller from provider_metadata (only if originally present).
+        # Anthropic defines ``caller`` on a client ``tool_use`` only; the
+        # non-streaming and streaming writers make the same restriction.
+        caller = (ir_tool_call.get("provider_metadata") or {}).get("anthropic_caller")
+        if caller is not None and block["type"] == "tool_use":
+            block["caller"] = caller
+
+        # Preserve cache_hint → cache_control
+        cache_hint = ir_tool_call.get("cache_hint")
+        if cache_hint is not None:
+            block["cache_control"] = cache_hint
+
+        return block
+
+    @staticmethod
+    def p_tool_call_to_ir(provider_tool_call: Any, **kwargs: Any) -> ToolCallPart:
+        """Anthropic tool_use/server_tool_use → IR ToolCallPart.
+
+        Handles both ``tool_use`` and ``server_tool_use`` block types.
+
+        Args:
+            provider_tool_call: Anthropic tool call content block dict.
+
+        Returns:
+            IR ToolCallPart.
+        """
+        block_type = provider_tool_call.get("type", "tool_use")
+        tool_name = provider_tool_call.get("name", "")
+
+        if block_type == "server_tool_use":
+            tool_type = "intrinsic"
+        else:
+            tool_type = "function"
+
+        part = ToolCallPart(
+            type="tool_call",
+            tool_call_id=provider_tool_call.get("id", ""),
+            tool_name=tool_name,
+            tool_input=provider_tool_call.get("input", {}),
+            tool_type=tool_type,
+        )
+
+        # Read back provider_metadata for cross-provider round-trip
+        pm = provider_tool_call.get(CARRIER_KEY)
+        if pm:
+            part["provider_metadata"] = pm
+
+        if block_type == "server_tool_use":
+            # A newer-version runtime name (e.g. ``bash_code_execution``) folds
+            # onto the canonical kind the shim declares; keep ``tool_name`` in
+            # step so the IR does not carry two identities for one call.
+            kind = canonical_server_tool_kind(tool_name)
+            part["tool_name"] = kind
+            part["intrinsic_kind"] = kind
+
+        # Preserve non-default caller for Anthropic round-trip
+        caller = provider_tool_call.get("caller")
+        if isinstance(caller, dict) and caller.get("type") != "direct":
+            part.setdefault("provider_metadata", {})["anthropic_caller"] = caller
+
+        # Read cache_control → cache_hint
+        cache_control = provider_tool_call.get("cache_control")
+        if cache_control is not None:
+            part["cache_hint"] = cache_control
+
+        return part
+
+    # ==================== Tool Result ====================
+
+    @classmethod
+    def ir_client_result_to_p(
+        cls, ir_tool_result: ToolResultPart, **kwargs: Any
+    ) -> dict:
+        """IR ToolResultPart → Anthropic tool_result content block.
+
+        A server result reaches this path on the history leg only: Anthropic
+        accepts a ``*_tool_result`` block in the assistant turn that ran the
+        tool (see :meth:`ir_intrinsic_result_to_p`), but a replayed
+        conversation poses a server result as an ordinary result on a
+        ``role:"tool"`` message, where the kind does not survive.
+
+        Args:
+            ir_tool_result: IR tool result part.
+
+        Returns:
+            Anthropic tool_result content block dict.
+        """
+        result: dict[str, Any] = {
+            "type": "tool_result",
+            "tool_use_id": sanitize_tool_call_id(ir_tool_result["tool_call_id"]),
+        }
+
+        content = ir_tool_result.get("result", "")
+        if isinstance(content, str):
+            result["content"] = content
+        elif isinstance(content, list):
+            from .content_ops import MessagesContentOps
+
+            result["content"] = convert_ir_content_blocks_to_p(
+                content, MessagesContentOps
+            )
+        elif content is not None:
+            result["content"] = json.dumps(content)
+        else:
+            result["content"] = ""
+
+        is_error = ir_tool_result.get("is_error")
+        if is_error is not None:
+            result["is_error"] = is_error
+
+        # Preserve provider_metadata for cross-provider round-trip
+        if "provider_metadata" in ir_tool_result:
+            result[CARRIER_KEY] = ir_tool_result["provider_metadata"]
+
+        # Preserve cache_hint → cache_control
+        cache_hint = ir_tool_result.get("cache_hint")
+        if cache_hint is not None:
+            result["cache_control"] = cache_hint
+
+        return result
+
+    @staticmethod
+    def p_tool_result_to_ir(provider_tool_result: Any, **kwargs: Any) -> ToolResultPart:
+        """Anthropic tool_result → IR ToolResultPart.
+
+        Args:
+            provider_tool_result: Anthropic tool_result content block dict.
+
+        Returns:
+            IR ToolResultPart.
+        """
+        content = provider_tool_result.get("content", "")
+        if isinstance(content, list):
+            from .content_ops import MessagesContentOps
+
+            content = convert_content_blocks_to_ir(content, MessagesContentOps)
+
+        part = ToolResultPart(
+            type="tool_result",
+            tool_call_id=provider_tool_result.get("tool_use_id", ""),
+            result=content,
+        )
+        is_error = provider_tool_result.get("is_error")
+        if is_error is not None:
+            part["is_error"] = is_error
+
+        # Read back provider_metadata for cross-provider round-trip
+        pm = provider_tool_result.get(CARRIER_KEY)
+        if pm:
+            part["provider_metadata"] = pm
+
+        # Read cache_control → cache_hint
+        cache_control = provider_tool_result.get("cache_control")
+        if cache_control is not None:
+            part["cache_hint"] = cache_control
+
+        return part
+
+    # ==================== Server Tool Result ====================
+
+    @staticmethod
+    def p_server_tool_result_to_ir(
+        provider_block: Any, **kwargs: Any
+    ) -> ToolResultPart:
+        """Anthropic server tool result block → IR ToolResultPart.
+
+        Handles ``web_search_tool_result``, ``code_execution_tool_result``,
+        and other ``*_tool_result`` block types from Anthropic's server tools.
+        The block type suffix (minus ``_tool_result``) becomes the
+        ``intrinsic_kind``.
+        """
+        block_type = provider_block.get("type", "")
+        kind = canonical_server_tool_kind(block_type.removesuffix("_tool_result"))
+
+        content = provider_block.get("content", "")
+        if isinstance(content, list):
+            from .content_ops import MessagesContentOps
+
+            content = convert_content_blocks_to_ir(content, MessagesContentOps)
+        elif isinstance(content, dict):
+            content = json.dumps(content)
+
+        part = ToolResultPart(
+            type="tool_result",
+            tool_call_id=provider_block.get("tool_use_id", ""),
+            result=content,
+            tool_type="intrinsic",
+            is_error=provider_block.get("is_error", False),
+        )
+        part["intrinsic_kind"] = kind
+
+        # Keep the provider's whole block so a same-dialect writer can restore
+        # it verbatim, including fields the IR does not model (Anthropic's
+        # web-search ``caller``, for one).  This mirrors the ``_native``
+        # payload the definition path stores; the base key namespaces it to
+        # the dialect that produced it.
+        part.setdefault("provider_metadata", {})["_native"] = {
+            "base": "messages",
+            "block": dict(provider_block),
+        }
+
+        pm = provider_block.get(CARRIER_KEY)
+        if pm:
+            part["provider_metadata"].update(pm)
+
+        cache_control = provider_block.get("cache_control")
+        if cache_control is not None:
+            part["cache_hint"] = cache_control
+
+        return part
+
+    @classmethod
+    def ir_intrinsic_result_to_p(
+        cls,
+        ir_tool_result: ToolResultPart,
+        *,
+        leg: IntrinsicLeg = "history",
+        **kwargs: Any,
+    ) -> dict[str, Any] | None:
+        """IR intrinsic ToolResultPart → Anthropic ``*_tool_result`` block.
+
+        The kind is written into the block type (``web_search_tool_result``,
+        ``code_execution_tool_result``) whenever Anthropic has a server tool
+        for it (:meth:`intrinsic_renderable`), on either leg: a replayed
+        conversation keeps the server result the provider produced.  A kind
+        Anthropic has no tool for declines here, and the template takes the
+        parent path — a client result on the history leg, and a drop (a client
+        result cannot ride in an assistant turn) on the response leg.
+
+        A server result never takes the client path on the response leg: the
+        caller renders that turn with :meth:`ir_server_tool_result_to_p`, which
+        answers ``None`` for a result it cannot render rather than emitting one
+        inline.
+
+        Args:
+            ir_tool_result: IR tool result part with ``tool_type == "intrinsic"``.
+            leg: Which leg the part is written on.
+            **kwargs: Extra arguments.
+
+        Returns:
+            Anthropic ``*_tool_result`` block, or ``None`` when Anthropic has
+            no server tool for the kind.
+        """
+        kind = intrinsic_kind_of(ir_tool_result)
+        if not cls.intrinsic_renderable(kind, None, leg=leg):
+            return None
+        return cls._server_tool_result_block(ir_tool_result)
+
+    @classmethod
+    def ir_server_tool_result_to_p(
+        cls, ir_tool_result: ToolResultPart, **kwargs: Any
+    ) -> dict[str, Any] | None:
+        """IR ToolResultPart → Anthropic ``*_tool_result`` block, or ``None``.
+
+        The assistant-turn entry point: renders a server-executed result
+        (``tool_type == "intrinsic"``) inline next to its call, restoring the
+        provider's whole block from ``provider_metadata._native`` when the part
+        was read from this same dialect and rebuilding it from the IR fields
+        otherwise (see :meth:`ir_intrinsic_result_to_p`).
+
+        Returns ``None`` for a client (function) result, which the caller drops
+        with a warning: Anthropic accepts a plain ``tool_result`` only in a
+        ``user`` message, so it cannot be rendered inline in an assistant turn,
+        as the streaming write path does too.
+
+        Args:
+            ir_tool_result: IR tool result part.
+
+        Returns:
+            Anthropic ``*_tool_result`` block, or ``None`` for a client result.
+        """
+        if (
+            not intrinsic_kind_of(ir_tool_result)
+            and ir_tool_result.get("tool_type") != "intrinsic"
+        ):
+            return None
+        return cls.ir_intrinsic_result_to_p(ir_tool_result, leg="response")
+
+    @staticmethod
+    def _server_tool_result_block(ir_tool_result: ToolResultPart) -> dict[str, Any]:
+        """Build or restore the ``*_tool_result`` block for a server result.
+
+        Args:
+            ir_tool_result: IR tool result part with an intrinsic kind.
+
+        Returns:
+            Anthropic ``*_tool_result`` content block dict.
+        """
+        kind = intrinsic_kind_of(ir_tool_result)
+        pm = ir_tool_result.get("provider_metadata") or {}
+        native = pm.get("_native")
+        if isinstance(native, dict) and native.get("base") == "messages":
+            block = native.get("block")
+            if isinstance(block, dict):
+                return dict(block)
+
+        content_block: dict[str, Any] = {
+            "type": f"{kind}_tool_result" if kind else "tool_result",
+            "tool_use_id": prefixed_tool_call_id(
+                ir_tool_result["tool_call_id"], "srvtoolu_"
+            ),
+            "content": _server_result_content(kind, ir_tool_result.get("result", [])),
+        }
+        # Only the generic ``tool_result`` block defines ``is_error``; Anthropic
+        # refuses it on a ``*_tool_result`` one ("Extra inputs are not
+        # permitted", verified live 2026-10-13), so a rebuilt server result must
+        # not carry it.
+        if not kind and ir_tool_result.get("is_error") is not None:
+            content_block["is_error"] = ir_tool_result["is_error"]
+        cache_hint = ir_tool_result.get("cache_hint")
+        if cache_hint is not None:
+            content_block["cache_control"] = cache_hint
+        return content_block
+
+    # ==================== Tool Config ====================
+
+    @staticmethod
+    def ir_tool_config_to_p(ir_tool_config: ToolCallConfig, **kwargs: Any) -> dict:
+        """IR ToolCallConfig → Anthropic tool call config fields.
+
+        Anthropic handles ``disable_parallel_tool_use`` as part of
+        the ``tool_choice`` parameter.
+
+        Mapping:
+        - ``disable_parallel`` → ``disable_parallel_tool_use`` in tool_choice
+
+        Args:
+            ir_tool_config: IR tool call config.
+
+        Returns:
+            Dict of fields to merge into tool_choice.
+        """
+        result: dict[str, Any] = {}
+
+        if "disable_parallel" in ir_tool_config:
+            result["disable_parallel_tool_use"] = ir_tool_config["disable_parallel"]
+
+        # max_calls is not supported by Anthropic
+        return result
+
+    @staticmethod
+    def p_tool_config_to_ir(provider_tool_config: Any, **kwargs: Any) -> ToolCallConfig:
+        """Anthropic tool call config → IR ToolCallConfig.
+
+        Extracts ``disable_parallel_tool_use`` from tool_choice dict.
+
+        Args:
+            provider_tool_config: Dict with Anthropic tool config fields.
+
+        Returns:
+            IR ToolCallConfig.
+        """
+        result: dict[str, Any] = {}
+
+        if isinstance(provider_tool_config, dict):
+            disable_parallel = provider_tool_config.get("disable_parallel_tool_use")
+            if disable_parallel is not None:
+                result["disable_parallel"] = disable_parallel
+
+        return cast(ToolCallConfig, result)
+
+
+# Backward-compatible alias (deprecated) — the base type was renamed
+# ``anthropic`` → ``messages``.
+AnthropicToolOps = MessagesToolOps

@@ -8,14 +8,16 @@ Covers tool_call, tool_result, and reasoning parts.
 Refs: https://github.com/Oaklight/llm-rosetta/issues/225
 """
 
-from llm_rosetta.converters.messages.content_ops import MessagesContentOps
-from llm_rosetta.converters.messages.tool_ops import MessagesToolOps
-from llm_rosetta.converters.google_generate.content_ops import GoogleGenerateContentOps
-from llm_rosetta.converters.google_generate.tool_ops import GoogleGenerateToolOps
-from llm_rosetta.converters.google_interactions.tool_ops import (
+from llm_rosetta.converters.llm.messages.content_ops import MessagesContentOps
+from llm_rosetta.converters.llm.messages.tool_ops import MessagesToolOps
+from llm_rosetta.converters.llm.google_generate.content_ops import (
+    GoogleGenerateContentOps,
+)
+from llm_rosetta.converters.llm.google_generate.tool_ops import GoogleGenerateToolOps
+from llm_rosetta.converters.llm.google_interactions.tool_ops import (
     GoogleInteractionsToolOps,
 )
-from llm_rosetta.converters.open_responses.tool_ops import OpenResponsesToolOps
+from llm_rosetta.converters.llm.open_responses.tool_ops import OpenResponsesToolOps
 from llm_rosetta.types.ir import ToolCallPart, ToolResultPart, ReasoningPart
 
 

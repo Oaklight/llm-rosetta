@@ -1,0 +1,112 @@
+"""OpenAI Responses converter utilities — shared helpers for stream conversion."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from ...base.context import StreamContext
+from ._constants import ResponsesEventType, generate_message_id
+from .stream_context import OpenResponsesStreamContext
+
+
+def resolve_call_id(chunk: dict[str, Any], context: StreamContext | None) -> str:
+    """Resolve a tool call_id from a Responses API event chunk.
+
+    The Responses API may provide either ``call_id`` or ``item_id`` on
+    function-call-related events.  When only ``item_id`` is present and
+    the context carries an item-to-call-id mapping, the call_id is
+    resolved via that mapping.
+
+    Args:
+        chunk: Responses API event dict.
+        context: Stream context (must be ``OpenResponsesStreamContext``
+            for item_id resolution to work).
+
+    Returns:
+        The resolved call_id, or ``""`` if unresolvable.
+    """
+    call_id = chunk.get("call_id", "")
+    if not call_id and isinstance(context, OpenResponsesStreamContext):
+        item_id = chunk.get("item_id", "")
+        if item_id:
+            call_id = context.item_id_to_call_id.get(item_id, "")
+    return call_id
+
+
+def _build_message_item_skeleton(
+    item_id: str,
+    phase: str = "",
+) -> dict[str, Any]:
+    """Build message item dict for output_item.added, including phase if available."""
+    item: dict[str, Any] = {
+        "id": item_id,
+        "type": "message",
+        "role": "assistant",
+        "status": "in_progress",
+        "content": [],
+    }
+    if phase:
+        item["phase"] = phase
+    return item
+
+
+def _build_content_part(content_part_type: str) -> dict[str, Any]:
+    """Build the ``part`` dict for a ``content_part.added`` event."""
+    if content_part_type == "refusal":
+        return {"type": "refusal", "refusal": ""}
+    return {
+        "type": "output_text",
+        "text": "",
+        "annotations": [],
+        "logprobs": [],
+    }
+
+
+def build_message_preamble_events(
+    context: OpenResponsesStreamContext,
+    content_part_type: str = "output_text",
+    *,
+    phase: str = "",
+    source_item_id: str = "",
+) -> list[dict[str, Any]]:
+    """Build output_item.added + content_part.added for a new message item.
+
+    Allocates the next output_index from the unified counter and registers
+    the item on the context.  Every call opens a *new* item with its own id:
+    a turn that carries more than one — a commentary item, then a final
+    answer — is streamed as one item each, and clients that key items by id
+    would read two that shared one as a repeat of the first (#997).
+
+    Args:
+        context: Responses stream context.
+        content_part_type: The content part type for the added event
+            (``"output_text"`` or ``"refusal"``).
+        phase: Upstream phase of the item, when it reports one.
+        source_item_id: Id of the upstream item this one mirrors, when known.
+
+    Returns:
+        Two-element list of SSE event dicts.
+    """
+    output_index = context.next_output_index()
+    item_id = generate_message_id(context.response_id, len(context._message_items))
+    item = context.start_message_item(
+        item_id,
+        output_index,
+        phase=phase,
+        source_item_id=source_item_id,
+        content_part_type=content_part_type,
+    )
+    return [
+        {
+            "type": ResponsesEventType.OUTPUT_ITEM_ADDED,
+            "output_index": output_index,
+            "item": _build_message_item_skeleton(item.item_id, phase),
+        },
+        {
+            "type": ResponsesEventType.CONTENT_PART_ADDED,
+            "item_id": item.item_id,
+            "output_index": output_index,
+            "content_index": 0,
+            "part": _build_content_part(content_part_type),
+        },
+    ]

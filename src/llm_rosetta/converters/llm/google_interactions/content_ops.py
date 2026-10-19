@@ -1,0 +1,265 @@
+"""
+LLM-Rosetta - Google Interactions Content Operations
+
+Bidirectional conversion between Interactions API Content types
+(TextContent, ImageContent, etc.) and IR content parts.
+"""
+
+import logging
+from typing import Any
+
+from ....types.ir import (
+    CitationPart,
+    ImageData,
+    ImagePart,
+    ReasoningPart,
+    TextPart,
+)
+from ....types.ir.parts import ContentPart
+from ...base import BaseContentOps
+from ...base.helpers.citations import (
+    CITATION_TYPE_URL,
+    citation_end_index,
+    citation_provider_fields,
+    citation_start_index,
+    citation_title,
+    citation_type_of,
+    citation_url,
+    extra_fields,
+    make_url_citation,
+)
+from ...base.helpers.opaque import (
+    get_opaque_origin,
+    google_thought_signature,
+    is_own_origin,
+    set_google_thought_signature,
+    set_opaque_origin,
+)
+
+logger = logging.getLogger(__name__)
+
+
+class GoogleInteractionsContentOps(BaseContentOps):
+    """Google Interactions API content conversion operations."""
+
+    # ── Text ───────────────────────────────────────────────────────
+
+    @staticmethod
+    def ir_text_to_p(ir_text: TextPart, **kwargs: Any) -> dict:
+        """IR TextPart → Interactions TextContent."""
+        return {"type": "text", "text": ir_text["text"]}
+
+    @staticmethod
+    def p_text_to_ir(provider_text: Any, **kwargs: Any) -> TextPart:
+        """Interactions TextContent → IR TextPart."""
+        return {"type": "text", "text": provider_text["text"]}
+
+    # ── Image ──────────────────────────────────────────────────────
+
+    @staticmethod
+    def ir_image_to_p(ir_image: ImagePart, **kwargs: Any) -> dict:
+        """IR ImagePart → Interactions ImageContent."""
+        result: dict[str, Any] = {"type": "image"}
+        if "image_data" in ir_image:
+            data = ir_image["image_data"]
+            result["data"] = data["data"]
+            result["mime_type"] = data["media_type"]
+        elif "image_url" in ir_image:
+            result["uri"] = ir_image["image_url"]
+        return result
+
+    @staticmethod
+    def p_image_to_ir(provider_image: Any, **kwargs: Any) -> ImagePart:
+        """Interactions ImageContent → IR ImagePart."""
+        result: ImagePart = {"type": "image"}
+        if "data" in provider_image:
+            result["image_data"] = ImageData(
+                data=provider_image["data"],
+                media_type=provider_image.get("mime_type", "image/png"),
+            )
+        elif "uri" in provider_image:
+            result["image_url"] = provider_image["uri"]
+        return result
+
+    # ── Reasoning (ThoughtStep) ────────────────────────────────────
+
+    @staticmethod
+    def p_thought_to_ir(thought_step: dict, **kwargs: Any) -> ReasoningPart:
+        """Interactions ThoughtStep → IR ReasoningPart."""
+        part: ReasoningPart = {"type": "reasoning"}
+        if "signature" in thought_step:
+            part["signature"] = thought_step["signature"]
+            set_opaque_origin(part, signature="google_interactions")
+            # Mirror into the Google namespace so the value survives a hop
+            # through a foreign converter (which drops the flat signature).
+            set_google_thought_signature(part, thought_step["signature"])
+        summary = thought_step.get("summary")
+        if summary and isinstance(summary, list):
+            texts = [s["text"] for s in summary if isinstance(s, dict) and "text" in s]
+            if texts:
+                part["reasoning"] = "\n".join(texts)
+        return part
+
+    @staticmethod
+    def ir_reasoning_to_p(ir_reasoning: ReasoningPart, **kwargs: Any) -> dict:
+        """IR ReasoningPart → Interactions ThoughtStep."""
+        step: dict[str, Any] = {"type": "thought"}
+        # Prefer the Google-namespace carrier (survives a foreign hop); a
+        # flat signature is used only when it is Google-origin or unrecorded.
+        signature = google_thought_signature(ir_reasoning)
+        if signature is None and is_own_origin(
+            get_opaque_origin(ir_reasoning, "signature"), "google_interactions"
+        ):
+            signature = ir_reasoning.get("signature")
+        if signature:
+            step["signature"] = signature
+        reasoning_text = ir_reasoning.get("reasoning")
+        if reasoning_text:
+            step["summary"] = [{"type": "text", "text": reasoning_text}]
+        return step
+
+    # ── Annotations → Citations ────────────────────────────────────
+
+    #: The annotation fields this dialect defines, measured on the live API:
+    #: ``{"start_index", "end_index", "url", "title", "type": "url_citation"}``
+    #: — the same flat set the Responses surface uses, in snake_case.
+    _ANNOTATION_FIELDS = ("url", "title", "start_index", "end_index")
+
+    @staticmethod
+    def p_annotations_to_ir(annotations: list[dict]) -> list[CitationPart]:
+        """Interactions TextContent.annotations → IR CitationParts."""
+        return [
+            GoogleInteractionsContentOps.p_citation_to_ir(annotation)
+            for annotation in annotations
+            if isinstance(annotation, dict)
+        ]
+
+    # ── Generic content dispatch ───────────────────────────────────
+
+    @staticmethod
+    def p_content_to_ir(
+        content: dict, **kwargs: Any
+    ) -> ContentPart | list[ContentPart] | None:
+        """Dispatch a single Interactions Content item to IR part(s).
+
+        Returns a list when a TextContent has annotations (text + citations).
+        """
+        ops = GoogleInteractionsContentOps
+        ctype = content.get("type")
+        if ctype == "text":
+            text_part = ops.p_text_to_ir(content)
+            annotations = content.get("annotations")
+            if annotations:
+                citations = ops.p_annotations_to_ir(annotations)
+                return [text_part, *citations]
+            return text_part
+        elif ctype == "image":
+            return ops.p_image_to_ir(content)
+        return None
+
+    # ── Stubs for base class ───────────────────────────────────────
+
+    @staticmethod
+    def ir_file_to_p(ir_file: Any, **kwargs: Any) -> Any:
+        logger.warning("File content not yet supported by Interactions converter")
+        return {}
+
+    @staticmethod
+    def p_file_to_ir(provider_file: Any, **kwargs: Any) -> Any:
+        logger.warning("File content not yet supported by Interactions converter")
+        return {"type": "file"}
+
+    @staticmethod
+    def ir_audio_to_p(ir_audio: Any, **kwargs: Any) -> Any:
+        logger.warning("Audio content not yet supported by Interactions converter")
+        return {}
+
+    @staticmethod
+    def p_audio_to_ir(provider_audio: Any, **kwargs: Any) -> Any:
+        logger.warning("Audio content not yet supported by Interactions converter")
+        return {"type": "audio"}
+
+    @staticmethod
+    def ir_reasoning_to_p_part(ir_reasoning: ReasoningPart, **kwargs: Any) -> Any:
+        return GoogleInteractionsContentOps.ir_reasoning_to_p(ir_reasoning, **kwargs)
+
+    @staticmethod
+    def p_reasoning_to_ir(provider_reasoning: Any, **kwargs: Any) -> ReasoningPart:
+        return GoogleInteractionsContentOps.p_thought_to_ir(provider_reasoning)
+
+    @staticmethod
+    def ir_refusal_to_p(ir_refusal: Any, **kwargs: Any) -> Any:
+        logger.warning("Refusal content not yet supported by Interactions converter")
+        return {}
+
+    @staticmethod
+    def p_refusal_to_ir(provider_refusal: Any, **kwargs: Any) -> Any:
+        logger.warning("Refusal content not yet supported by Interactions converter")
+        return {"type": "refusal", "refusal": ""}
+
+    @staticmethod
+    def ir_citation_to_p(ir_citation: Any, **kwargs: Any) -> Any:
+        """IR CitationPart → an Interactions text annotation.
+
+        Only the shared ``url_citation`` kind has a form here (the measured
+        field set is ``start_index``/``end_index``/``url``/``title``/``type``);
+        the caller reports the loss for anything else.  Returns ``{}`` rather
+        than ``None`` to match this class's convention.
+        """
+        kind = citation_type_of(ir_citation)
+        # The annotation vocabulary is the URL one, so any citation naming a
+        # source has a form here; a dialect-private kind with no URL does not.
+        if kind not in ("", CITATION_TYPE_URL) and not citation_url(ir_citation):
+            raw = citation_provider_fields(ir_citation, "google").get("_raw")
+            return dict(raw) if isinstance(raw, dict) else {}
+        url = citation_url(ir_citation)
+        if not url:
+            return {}
+        annotation: dict[str, Any] = {
+            "type": CITATION_TYPE_URL,
+            "url": url,
+            "title": citation_title(ir_citation) or "",
+        }
+        # Only a span that exists: a spanless citation (Anthropic's document
+        # kinds) must not claim 0/0 here.
+        start = citation_start_index(ir_citation)
+        end = citation_end_index(ir_citation)
+        if start is not None:
+            annotation["start_index"] = start
+        if end is not None:
+            annotation["end_index"] = end
+        annotation.update(
+            {
+                k: v
+                for k, v in citation_provider_fields(ir_citation, "google").items()
+                if not k.startswith("_")
+            }
+        )
+        return annotation
+
+    @staticmethod
+    def p_citation_to_ir(provider_citation: Any, **kwargs: Any) -> CitationPart:
+        """An Interactions annotation → IR CitationPart."""
+        if not isinstance(provider_citation, dict):
+            return {"type": "citation"}
+        kind = provider_citation.get("type", "")
+        if kind in ("", CITATION_TYPE_URL):
+            url = provider_citation.get("url")
+            if not url:
+                return {"type": "citation"}
+            return make_url_citation(
+                url,
+                title=provider_citation.get("title"),
+                start_index=provider_citation.get("start_index"),
+                end_index=provider_citation.get("end_index"),
+                provider="google",
+                provider_fields=extra_fields(
+                    provider_citation,
+                    GoogleInteractionsContentOps._ANNOTATION_FIELDS,
+                ),
+            )
+        return {
+            "type": "citation",
+            "citation_type": kind,
+            "provider_metadata": {"google": {"_raw": dict(provider_citation)}},
+        }

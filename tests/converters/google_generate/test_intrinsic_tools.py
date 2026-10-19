@@ -8,13 +8,13 @@ Covers:
 
 from typing import Any, cast
 
-from llm_rosetta.converters.google_generate.content_ops import (
+from llm_rosetta.converters.llm.google_generate.content_ops import (
     GoogleGenerateContentOps,
 )
-from llm_rosetta.converters.google_generate.message_ops import (
+from llm_rosetta.converters.llm.google_generate.message_ops import (
     GoogleGenerateMessageOps,
 )
-from llm_rosetta.converters.google_generate.tool_ops import GoogleGenerateToolOps
+from llm_rosetta.converters.llm.google_generate.tool_ops import GoogleGenerateToolOps
 from llm_rosetta.types.ir import ToolCallPart, ToolDefinition, ToolResultPart
 
 

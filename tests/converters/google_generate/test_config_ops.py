@@ -6,7 +6,9 @@ from typing import cast
 
 import pytest
 
-from llm_rosetta.converters.google_generate.config_ops import GoogleGenerateConfigOps
+from llm_rosetta.converters.llm.google_generate.config_ops import (
+    GoogleGenerateConfigOps,
+)
 from llm_rosetta.types.ir import (
     CacheConfig,
     GenerationConfig,

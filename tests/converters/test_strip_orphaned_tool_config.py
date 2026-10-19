@@ -11,10 +11,12 @@ structural integrity (see llm-rosetta#87):
 from typing import cast
 
 from llm_rosetta.converters.base.tools import strip_orphaned_tool_config
-from llm_rosetta.converters.messages.converter import MessagesConverter
-from llm_rosetta.converters.google_generate.converter import GoogleGenerateConverter
-from llm_rosetta.converters.chat_completions.converter import ChatCompletionsConverter
-from llm_rosetta.converters.open_responses.converter import OpenAIResponsesConverter
+from llm_rosetta.converters.llm.messages.converter import MessagesConverter
+from llm_rosetta.converters.llm.google_generate.converter import GoogleGenerateConverter
+from llm_rosetta.converters.llm.chat_completions.converter import (
+    ChatCompletionsConverter,
+)
+from llm_rosetta.converters.llm.open_responses.converter import OpenAIResponsesConverter
 from llm_rosetta.types.ir import ToolChoice
 from llm_rosetta.types.ir.request import IRRequest
 

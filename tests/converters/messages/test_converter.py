@@ -8,7 +8,7 @@ from typing import Any, cast
 
 import pytest
 
-from llm_rosetta.converters.messages import MessagesConverter
+from llm_rosetta.converters.llm.messages import MessagesConverter
 from llm_rosetta.types.ir import (
     FinishEvent,
     IRRequest,
@@ -820,7 +820,7 @@ class TestAnthropicStructuredRefusal:
     """Tests for structured refusal handling (#432)."""
 
     def setup_method(self):
-        from llm_rosetta.converters.messages import MessagesConverter
+        from llm_rosetta.converters.llm.messages import MessagesConverter
 
         self.converter = MessagesConverter()
 
@@ -925,7 +925,7 @@ class TestAnthropicStructuredRefusal:
         assert result["stop_details"]["explanation"] == "Declined."
 
     def test_cross_format_refusal_round_trip(self):
-        from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
+        from llm_rosetta.converters.llm.chat_completions import ChatCompletionsConverter
 
         chat = ChatCompletionsConverter()
         ir_msg = chat.message_ops._p_message_to_ir(
@@ -1096,7 +1096,7 @@ class TestAnthropicUsageRoundTrip:
 
     def setup_method(self):
         self.anthropic = MessagesConverter()
-        from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
+        from llm_rosetta.converters.llm.chat_completions import ChatCompletionsConverter
 
         self.openai_chat = ChatCompletionsConverter()
 
@@ -1316,7 +1316,7 @@ class TestAnthropicStopFieldsCompliance:
 
     def test_cross_format_stop_fields_present(self):
         """B→IR→A: stop_sequence/stop_details present even from OpenAI source."""
-        from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
+        from llm_rosetta.converters.llm.chat_completions import ChatCompletionsConverter
 
         openai = ChatCompletionsConverter()
         openai_response = {
@@ -1465,7 +1465,7 @@ class TestAnthropicContentBlockCompliance:
 
     def test_cross_format_tool_use_has_caller(self):
         """B→IR→A: OpenAI tool call gets default caller."""
-        from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
+        from llm_rosetta.converters.llm.chat_completions import ChatCompletionsConverter
 
         openai = ChatCompletionsConverter()
         openai_response = {

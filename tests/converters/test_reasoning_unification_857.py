@@ -13,10 +13,12 @@ provider, because the target rejects a foreign opaque field.
 
 from typing import cast
 
-from llm_rosetta.converters.messages.content_ops import MessagesContentOps
-from llm_rosetta.converters.google_generate.content_ops import GoogleGenerateContentOps
-from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
-from llm_rosetta.converters.open_responses.content_ops import (
+from llm_rosetta.converters.llm.messages.content_ops import MessagesContentOps
+from llm_rosetta.converters.llm.google_generate.content_ops import (
+    GoogleGenerateContentOps,
+)
+from llm_rosetta.converters.llm.chat_completions import ChatCompletionsConverter
+from llm_rosetta.converters.llm.open_responses.content_ops import (
     OpenAIResponsesContentOps,
 )
 from llm_rosetta.types.ir import ReasoningPart

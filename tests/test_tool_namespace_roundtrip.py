@@ -1375,7 +1375,7 @@ class TestGroupsToACapableTarget:
         out, which every upstream that accepts one rejects.
         """
         from llm_rosetta.converters.base.context import ConversionContext
-        from llm_rosetta.converters.open_responses.converter import (
+        from llm_rosetta.converters.llm.open_responses.converter import (
             OpenResponsesConverter,
         )
 

@@ -2,7 +2,7 @@
 Anthropic ToolOps unit tests.
 """
 
-from llm_rosetta.converters.messages.tool_ops import MessagesToolOps
+from llm_rosetta.converters.llm.messages.tool_ops import MessagesToolOps
 from typing import cast
 
 from llm_rosetta.types.ir import (

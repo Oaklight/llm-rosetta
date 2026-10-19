@@ -5,7 +5,7 @@ OpenAI Chat Completions stream converter unit tests.
 from typing import Any, cast
 
 from llm_rosetta.converters.base.context import StreamContext
-from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
+from llm_rosetta.converters.llm.chat_completions import ChatCompletionsConverter
 from llm_rosetta.types.ir.stream import (
     ContentBlockEndEvent,
     ContentBlockStartEvent,
@@ -1293,7 +1293,7 @@ class TestStreamingRefusal:
     """Tests for streaming refusal handling (#430)."""
 
     def setup_method(self):
-        from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
+        from llm_rosetta.converters.llm.chat_completions import ChatCompletionsConverter
 
         self.converter = ChatCompletionsConverter()
 
@@ -1526,7 +1526,7 @@ class TestDeferredStreamEnd:
         Verifies that message_delta (with stop_reason) and message_stop
         are present — the exact bug reported in #838.
         """
-        from llm_rosetta.converters.messages import MessagesConverter
+        from llm_rosetta.converters.llm.messages import MessagesConverter
 
         oc = ChatCompletionsConverter()
         ac = MessagesConverter()
@@ -1633,7 +1633,7 @@ class TestIterStreamFromProvider:
 
     def test_iter_stream_safe_for_converters_without_none_support(self):
         """iter_stream_from_provider gracefully handles converters that reject None."""
-        from llm_rosetta.converters.google_generate import GoogleGenerateConverter
+        from llm_rosetta.converters.llm.google_generate import GoogleGenerateConverter
 
         gc = GoogleGenerateConverter()
         chunks = [

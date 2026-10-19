@@ -3,10 +3,10 @@
 from typing import Any
 
 from llm_rosetta.converters.base.context import ConversionContext
-from llm_rosetta.converters.open_responses.converter import (
+from llm_rosetta.converters.llm.open_responses.converter import (
     OpenAIResponsesConverter,
 )
-from llm_rosetta.converters.open_responses.tool_ops import (
+from llm_rosetta.converters.llm.open_responses.tool_ops import (
     OpenAIResponsesToolOps,
     _flatten_namespace_tool,
 )

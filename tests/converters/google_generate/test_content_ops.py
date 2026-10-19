@@ -6,7 +6,9 @@ from typing import cast
 
 import pytest
 
-from llm_rosetta.converters.google_generate.content_ops import GoogleGenerateContentOps
+from llm_rosetta.converters.llm.google_generate.content_ops import (
+    GoogleGenerateContentOps,
+)
 from llm_rosetta.types.ir import AudioPart, FilePart, ImagePart, ReasoningPart, TextPart
 
 
@@ -86,7 +88,7 @@ class TestGoogleGenerateContentOps:
         mock_opener.open.return_value = mock_resp
 
         with patch(
-            "llm_rosetta.converters.google_generate.content_ops.urllib.request.build_opener",
+            "llm_rosetta.converters.llm.google_generate.content_ops.urllib.request.build_opener",
             return_value=mock_opener,
         ):
             result = GoogleGenerateContentOps.ir_image_to_p(ir_image)
@@ -103,7 +105,7 @@ class TestGoogleGenerateContentOps:
 
         ir_image = ImagePart(type="image", image_url="https://example.com/img.jpg")
         with patch(
-            "llm_rosetta.converters.google_generate.content_ops.urllib.request.build_opener",
+            "llm_rosetta.converters.llm.google_generate.content_ops.urllib.request.build_opener",
             side_effect=Exception("timeout"),
         ):
             result = GoogleGenerateContentOps.ir_image_to_p(ir_image)

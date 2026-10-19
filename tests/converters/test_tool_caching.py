@@ -9,14 +9,14 @@ import copy
 
 import pytest
 
-from llm_rosetta.converters.messages import MessagesConverter
+from llm_rosetta.converters.llm.messages import MessagesConverter
 from llm_rosetta.converters.base.helpers.cache import (
     cache_info,
     clear_all_caches,
 )
-from llm_rosetta.converters.google_generate import GoogleConverter
-from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
-from llm_rosetta.converters.open_responses import OpenAIResponsesConverter
+from llm_rosetta.converters.llm.google_generate import GoogleConverter
+from llm_rosetta.converters.llm.chat_completions import ChatCompletionsConverter
+from llm_rosetta.converters.llm.open_responses import OpenAIResponsesConverter
 
 # ---------------------------------------------------------------------------
 # Fixtures — provider-specific tool definitions and minimal requests

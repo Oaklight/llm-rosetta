@@ -20,15 +20,17 @@ from llm_rosetta.converters.base.helpers.opaque import (
     set_google_thought_signature,
     set_opaque_origin,
 )
-from llm_rosetta.converters.google_generate import GoogleGenerateConverter
-from llm_rosetta.converters.google_generate.content_ops import GoogleGenerateContentOps
-from llm_rosetta.converters.google_interactions import GoogleInteractionsConverter
-from llm_rosetta.converters.google_interactions.content_ops import (
+from llm_rosetta.converters.llm.google_generate import GoogleGenerateConverter
+from llm_rosetta.converters.llm.google_generate.content_ops import (
+    GoogleGenerateContentOps,
+)
+from llm_rosetta.converters.llm.google_interactions import GoogleInteractionsConverter
+from llm_rosetta.converters.llm.google_interactions.content_ops import (
     GoogleInteractionsContentOps,
 )
-from llm_rosetta.converters.messages import MessagesConverter
-from llm_rosetta.converters.messages.content_ops import MessagesContentOps
-from llm_rosetta.converters.open_responses.content_ops import (
+from llm_rosetta.converters.llm.messages import MessagesConverter
+from llm_rosetta.converters.llm.messages.content_ops import MessagesContentOps
+from llm_rosetta.converters.llm.open_responses.content_ops import (
     OpenAIResponsesContentOps,
 )
 from llm_rosetta.types.ir import IRRequest, ToolCallPart

@@ -11,7 +11,7 @@ from llm_rosetta.converters.base.tools import (
     TOOL_ERROR_MARKER,
     make_intrinsic_tool_result,
 )
-from llm_rosetta.converters.open_responses.tool_ops import OpenAIResponsesToolOps
+from llm_rosetta.converters.llm.open_responses.tool_ops import OpenAIResponsesToolOps
 from llm_rosetta.types.ir import (
     ToolCallConfig,
     ToolCallPart,

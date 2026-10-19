@@ -1,6 +1,6 @@
 """Tests for Google Interactions streaming conversion."""
 
-from llm_rosetta.converters.google_interactions import GoogleInteractionsConverter
+from llm_rosetta.converters.llm.google_interactions import GoogleInteractionsConverter
 from llm_rosetta.converters.base.context import StreamContext
 from typing import cast
 

@@ -6,9 +6,13 @@ from typing import Any, Union, cast
 
 import pytest
 
-from llm_rosetta.converters.google_generate.content_ops import GoogleGenerateContentOps
-from llm_rosetta.converters.google_generate.message_ops import GoogleGenerateMessageOps
-from llm_rosetta.converters.google_generate.tool_ops import GoogleGenerateToolOps
+from llm_rosetta.converters.llm.google_generate.content_ops import (
+    GoogleGenerateContentOps,
+)
+from llm_rosetta.converters.llm.google_generate.message_ops import (
+    GoogleGenerateMessageOps,
+)
+from llm_rosetta.converters.llm.google_generate.tool_ops import GoogleGenerateToolOps
 from llm_rosetta.types.ir import Message
 from llm_rosetta.types.ir.extensions_experimental import ExtensionItem
 

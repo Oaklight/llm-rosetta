@@ -5,7 +5,9 @@ LLM-Rosetta - Converters Package
 Provides converter implementations between various providers
 """
 
-from .messages import AnthropicConverter, MessagesConverter
+import sys as _sys
+from types import ModuleType as _ModuleType
+
 from .base import BaseConverter, BaseEmbeddingConverter, BaseRerankConverter
 from .embedding import (
     CohereEmbeddingConverter,
@@ -14,13 +16,16 @@ from .embedding import (
     OpenAIEmbeddingConverter,
     VoyageEmbeddingConverter,
 )
-from .google_generate import GoogleConverter, GoogleGenerateConverter
-from .google_generate import (
+from .llm import google_generate as _google_generate
+from .llm import google_interactions as _google_interactions
+from .llm.chat_completions import ChatCompletionsConverter, OpenAIChatConverter
+from .llm.google_generate import GoogleConverter, GoogleGenerateConverter
+from .llm.google_generate import (
     GoogleGenerateConverter as GoogleGenAIConverter,
 )  # deprecated alias
-from .google_interactions import GoogleInteractionsConverter
-from .chat_completions import ChatCompletionsConverter, OpenAIChatConverter
-from .open_responses import OpenAIResponsesConverter, OpenResponsesConverter
+from .llm.google_interactions import GoogleInteractionsConverter
+from .llm.messages import AnthropicConverter, MessagesConverter
+from .llm.open_responses import OpenAIResponsesConverter, OpenResponsesConverter
 from .decision import (
     EmbeddingDecisionConverter,
     LLMChatDecisionConverter,
@@ -66,3 +71,22 @@ __all__ = [
     "RerankerDecisionConverter",
     "EmbeddingDecisionConverter",
 ]
+
+# ---------------------------------------------------------------------------
+# Legacy module paths (0.13.0)
+# ---------------------------------------------------------------------------
+# ``converters.google_generate`` and ``converters.google_interactions`` were
+# importable packages in 0.13.0.  Their implementations now live under
+# ``converters.llm``; register the old paths against the same module objects so
+# existing imports keep resolving without a second copy of any module.  The
+# other three LLM formats were introduced after 0.13.0 and have no legacy path.
+for _legacy_name, _package in (
+    ("google_generate", _google_generate),
+    ("google_interactions", _google_interactions),
+):
+    _sys.modules[f"{__name__}.{_legacy_name}"] = _package
+    for _attr, _value in vars(_package).items():
+        if isinstance(_value, _ModuleType) and _value.__name__.startswith(
+            _package.__name__ + "."
+        ):
+            _sys.modules[f"{__name__}.{_legacy_name}.{_attr}"] = _value

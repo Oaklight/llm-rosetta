@@ -97,7 +97,7 @@ class TestSanitizationInConverters:
     """Integration tests: verify sanitized IDs flow through converter output."""
 
     def test_openai_chat_tool_call_sanitized(self):
-        from llm_rosetta.converters.chat_completions.tool_ops import (
+        from llm_rosetta.converters.llm.chat_completions.tool_ops import (
             ChatCompletionsToolOps,
         )
 
@@ -113,7 +113,7 @@ class TestSanitizationInConverters:
         assert re.match(r"^[a-zA-Z0-9_-]+$", result["id"])
 
     def test_openai_chat_tool_result_sanitized(self):
-        from llm_rosetta.converters.chat_completions.tool_ops import (
+        from llm_rosetta.converters.llm.chat_completions.tool_ops import (
             ChatCompletionsToolOps,
         )
 
@@ -126,7 +126,7 @@ class TestSanitizationInConverters:
         assert "\n" not in result["tool_call_id"]
 
     def test_anthropic_tool_call_sanitized(self):
-        from llm_rosetta.converters.messages.tool_ops import MessagesToolOps
+        from llm_rosetta.converters.llm.messages.tool_ops import MessagesToolOps
 
         ir_tool_call = {
             "type": "tool_call",
@@ -140,7 +140,7 @@ class TestSanitizationInConverters:
         assert re.match(r"^[a-zA-Z0-9_-]+$", result["id"])
 
     def test_anthropic_tool_result_sanitized(self):
-        from llm_rosetta.converters.messages.tool_ops import MessagesToolOps
+        from llm_rosetta.converters.llm.messages.tool_ops import MessagesToolOps
 
         ir_tool_result = {
             "type": "tool_result",
@@ -152,7 +152,7 @@ class TestSanitizationInConverters:
 
     def test_openai_chat_tool_call_result_ids_match(self):
         """Tool call and result must produce matching sanitized IDs."""
-        from llm_rosetta.converters.chat_completions.tool_ops import (
+        from llm_rosetta.converters.llm.chat_completions.tool_ops import (
             ChatCompletionsToolOps,
         )
 
@@ -177,7 +177,7 @@ class TestSanitizationInConverters:
         assert call_result["id"] == result_result["tool_call_id"]
 
     def test_google_generate_tool_call_sanitized(self):
-        from llm_rosetta.converters.google_generate.tool_ops import (
+        from llm_rosetta.converters.llm.google_generate.tool_ops import (
             GoogleGenerateToolOps,
         )
 
@@ -194,7 +194,7 @@ class TestSanitizationInConverters:
         assert re.match(r"^[a-zA-Z0-9_-]+$", fc["id"])
 
     def test_openai_responses_tool_call_sanitized(self):
-        from llm_rosetta.converters.open_responses.tool_ops import (
+        from llm_rosetta.converters.llm.open_responses.tool_ops import (
             OpenAIResponsesToolOps,
         )
 

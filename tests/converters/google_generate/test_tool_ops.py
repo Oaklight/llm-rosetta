@@ -4,7 +4,7 @@ Google GenAI ToolOps unit tests.
 
 import pytest
 
-from llm_rosetta.converters.google_generate.tool_ops import GoogleGenerateToolOps
+from llm_rosetta.converters.llm.google_generate.tool_ops import GoogleGenerateToolOps
 from typing import cast
 
 from llm_rosetta.types.ir import (

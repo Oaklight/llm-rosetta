@@ -7,7 +7,7 @@ import json
 import pytest
 
 from llm_rosetta.converters.base.tools import TOOL_ERROR_MARKER
-from llm_rosetta.converters.chat_completions.tool_ops import ChatCompletionsToolOps
+from llm_rosetta.converters.llm.chat_completions.tool_ops import ChatCompletionsToolOps
 from typing import cast
 
 from llm_rosetta.types.ir import (

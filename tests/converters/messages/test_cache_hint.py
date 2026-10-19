@@ -7,9 +7,9 @@ the IR pipeline via the `cache_hint` field.
 Scope: PR 1 of #362 — preservation only, no auto-injection.
 """
 
-from llm_rosetta.converters.messages import MessagesConverter
-from llm_rosetta.converters.messages.content_ops import MessagesContentOps
-from llm_rosetta.converters.messages.tool_ops import MessagesToolOps
+from llm_rosetta.converters.llm.messages import MessagesConverter
+from llm_rosetta.converters.llm.messages.content_ops import MessagesContentOps
+from llm_rosetta.converters.llm.messages.tool_ops import MessagesToolOps
 from llm_rosetta.types.ir import (
     FilePart,
     IRRequest,
@@ -577,7 +577,7 @@ class TestCacheHintIgnoredByOtherConverters:
 
     def test_openai_ignores_cache_hint_on_text(self):
         """OpenAI converter output does not include cache_control."""
-        from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
+        from llm_rosetta.converters.llm.chat_completions import ChatCompletionsConverter
 
         converter = ChatCompletionsConverter()
         # Create an IR request with cache_hint on text
@@ -612,7 +612,7 @@ class TestCrossFormatSystemCacheHint:
 
     def test_anthropic_system_cache_to_openai_flattens(self):
         """Anthropic system with cache_control → IR → OpenAI: string, no cache_control."""
-        from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
+        from llm_rosetta.converters.llm.chat_completions import ChatCompletionsConverter
 
         anthropic_converter = MessagesConverter()
         openai_converter = ChatCompletionsConverter()
@@ -645,7 +645,7 @@ class TestCrossFormatSystemCacheHint:
 
     def test_anthropic_system_cache_to_google_flattens(self):
         """Anthropic system with cache_control → IR → Google: string, no cache_control."""
-        from llm_rosetta.converters.google_generate import GoogleGenerateConverter
+        from llm_rosetta.converters.llm.google_generate import GoogleGenerateConverter
 
         anthropic_converter = MessagesConverter()
         google_converter = GoogleGenerateConverter()

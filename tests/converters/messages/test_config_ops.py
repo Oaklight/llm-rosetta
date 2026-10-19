@@ -6,7 +6,7 @@ from typing import cast
 
 import pytest
 
-from llm_rosetta.converters.messages.config_ops import MessagesConfigOps
+from llm_rosetta.converters.llm.messages.config_ops import MessagesConfigOps
 from llm_rosetta.types.ir import GenerationConfig, ReasoningConfig
 
 

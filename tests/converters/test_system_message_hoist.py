@@ -227,19 +227,19 @@ class TestTransformIntegration:
         assert repr(t) == "hoist_late_system_messages()"
 
     def test_anthropic_converter_has_intrinsic_hoist(self):
-        from llm_rosetta.converters.messages import MessagesConverter
+        from llm_rosetta.converters.llm.messages import MessagesConverter
 
         names = [repr(t) for t in MessagesConverter._INTRINSIC_IR_TRANSFORMS]
         assert "hoist_late_system_messages()" in names
 
     def test_google_generate_converter_has_intrinsic_hoist(self):
-        from llm_rosetta.converters.google_generate import GoogleGenerateConverter
+        from llm_rosetta.converters.llm.google_generate import GoogleGenerateConverter
 
         names = [repr(t) for t in GoogleGenerateConverter._INTRINSIC_IR_TRANSFORMS]
         assert "hoist_late_system_messages()" in names
 
     def test_hoist_before_cache_breakpoints(self):
-        from llm_rosetta.converters.messages import MessagesConverter
+        from llm_rosetta.converters.llm.messages import MessagesConverter
 
         names = [repr(t) for t in MessagesConverter._INTRINSIC_IR_TRANSFORMS]
         hoist_idx = names.index("hoist_late_system_messages()")
@@ -267,7 +267,7 @@ class TestTransformIntegration:
                 {"role": "user", "content": [{"type": "text", "text": "ok"}]},
             ],
         }
-        from llm_rosetta.converters.messages import MessagesConverter
+        from llm_rosetta.converters.llm.messages import MessagesConverter
 
         result = apply_ir_transforms(
             ir_request, "argo--messages", converter=MessagesConverter()
@@ -309,7 +309,7 @@ class TestTransformIntegration:
                 {"role": "user", "content": [{"type": "text", "text": "ok"}]},
             ],
         }
-        from llm_rosetta.converters.messages import MessagesConverter
+        from llm_rosetta.converters.llm.messages import MessagesConverter
 
         hoisted = apply_ir_transforms(
             ir_request, "argo--messages", converter=MessagesConverter()
@@ -336,7 +336,7 @@ class TestDeveloperRole:
 
     def test_chat_developer_to_ir_system(self):
         """Leading Chat developer messages are extracted to system_instruction."""
-        from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
+        from llm_rosetta.converters.llm.chat_completions import ChatCompletionsConverter
 
         body = {
             "model": "gpt-4o",

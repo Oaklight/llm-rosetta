@@ -1,5 +1,5 @@
 """
-Deprecated — use ``llm_rosetta.converters.open_responses`` instead.
+Deprecated — use ``llm_rosetta.converters.llm.open_responses`` instead.
 
 This module exists only for backward compatibility and will be removed in a
 future release.  It re-exports the canonical ``OpenResponses*`` names (plus
@@ -14,12 +14,12 @@ import warnings as _warnings
 
 _warnings.warn(
     "llm_rosetta.converters.openai_responses is deprecated, "
-    "use llm_rosetta.converters.open_responses instead",
+    "use llm_rosetta.converters.llm.open_responses instead",
     DeprecationWarning,
     stacklevel=2,
 )
 
-from ..open_responses import (  # noqa: F401, E402
+from ..llm.open_responses import (  # noqa: F401, E402
     _constants as _constants,
     config_ops as config_ops,
     content_ops as content_ops,
@@ -28,7 +28,7 @@ from ..open_responses import (  # noqa: F401, E402
     stream_context as stream_context,
     tool_ops as tool_ops,
 )
-from ..open_responses import (  # noqa: F401, E402
+from ..llm.open_responses import (  # noqa: F401, E402
     OpenAIResponsesConfigOps,
     OpenAIResponsesContentOps,
     OpenAIResponsesConverter,

@@ -3,16 +3,18 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, cast
 
-from llm_rosetta.converters.messages.converter import MessagesConverter
+from llm_rosetta.converters.llm.messages.converter import MessagesConverter
 from llm_rosetta.converters.base import BaseConverter
 from llm_rosetta.converters.base.context import ConversionContext, StreamContext
 from llm_rosetta.pipeline import StreamProcessor
 from llm_rosetta.converters.base.tools.orphan_fix import (
     fix_orphaned_tool_calls_ir,
 )
-from llm_rosetta.converters.open_responses.converter import OpenAIResponsesConverter
-from llm_rosetta.converters.chat_completions.converter import ChatCompletionsConverter
-from llm_rosetta.converters.google_generate.converter import GoogleGenerateConverter
+from llm_rosetta.converters.llm.open_responses.converter import OpenAIResponsesConverter
+from llm_rosetta.converters.llm.chat_completions.converter import (
+    ChatCompletionsConverter,
+)
+from llm_rosetta.converters.llm.google_generate.converter import GoogleGenerateConverter
 from llm_rosetta.types.ir import (
     IRInputItem,
     IRResponse,

@@ -7,8 +7,8 @@ upstream is rejected with
 ``Missing required parameter: 'tools[N].custom.format.grammar'``.
 """
 
-from llm_rosetta.converters.chat_completions.tool_ops import ChatCompletionsToolOps
-from llm_rosetta.converters.open_responses.tool_ops import OpenAIResponsesToolOps
+from llm_rosetta.converters.llm.chat_completions.tool_ops import ChatCompletionsToolOps
+from llm_rosetta.converters.llm.open_responses.tool_ops import OpenAIResponsesToolOps
 
 LARK_DEFINITION = 'start: "*** Begin Patch" /(.|\\n)+/ "*** End Patch"'
 

@@ -2,7 +2,7 @@
 
 import pytest
 
-from llm_rosetta.converters.messages._constants import (
+from llm_rosetta.converters.llm.messages._constants import (
     ANTHROPIC_REASON_FROM_PROVIDER,
     ANTHROPIC_REASON_TO_PROVIDER,
     AnthropicEventType,

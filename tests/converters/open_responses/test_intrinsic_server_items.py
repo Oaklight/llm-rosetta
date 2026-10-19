@@ -13,9 +13,13 @@ from llm_rosetta.converters.base.tools import (
     make_intrinsic_tool_call,
     make_intrinsic_tool_result,
 )
-from llm_rosetta.converters.open_responses.content_ops import OpenResponsesContentOps
-from llm_rosetta.converters.open_responses.message_ops import OpenResponsesMessageOps
-from llm_rosetta.converters.open_responses.tool_ops import OpenResponsesToolOps
+from llm_rosetta.converters.llm.open_responses.content_ops import (
+    OpenResponsesContentOps,
+)
+from llm_rosetta.converters.llm.open_responses.message_ops import (
+    OpenResponsesMessageOps,
+)
+from llm_rosetta.converters.llm.open_responses.tool_ops import OpenResponsesToolOps
 from llm_rosetta.types.ir import IRInputItem, ToolCallPart, ToolResultPart
 
 # The two item shapes as returned by the live OpenAI endpoint.

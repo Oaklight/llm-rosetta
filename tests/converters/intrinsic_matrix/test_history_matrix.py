@@ -28,11 +28,11 @@ import pytest
 
 from llm_rosetta.capabilities import degrade_intrinsic_history
 from llm_rosetta.converters.base.context import ConversionContext
-from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
-from llm_rosetta.converters.google_generate import GoogleGenerateConverter
-from llm_rosetta.converters.google_interactions import GoogleInteractionsConverter
-from llm_rosetta.converters.messages import MessagesConverter
-from llm_rosetta.converters.open_responses import OpenAIResponsesConverter
+from llm_rosetta.converters.llm.chat_completions import ChatCompletionsConverter
+from llm_rosetta.converters.llm.google_generate import GoogleGenerateConverter
+from llm_rosetta.converters.llm.google_interactions import GoogleInteractionsConverter
+from llm_rosetta.converters.llm.messages import MessagesConverter
+from llm_rosetta.converters.llm.open_responses import OpenAIResponsesConverter
 from llm_rosetta.types.ir import IRRequest
 
 from .conftest import (

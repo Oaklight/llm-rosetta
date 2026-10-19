@@ -8,9 +8,9 @@ call (with the intrinsic's natural name) otherwise.  See #839.
 import json
 from typing import cast
 
-from llm_rosetta.converters.messages import MessagesConverter
-from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
-from llm_rosetta.converters.open_responses import OpenAIResponsesConverter
+from llm_rosetta.converters.llm.messages import MessagesConverter
+from llm_rosetta.converters.llm.chat_completions import ChatCompletionsConverter
+from llm_rosetta.converters.llm.open_responses import OpenAIResponsesConverter
 from llm_rosetta.pipeline import ConversionPipeline
 from llm_rosetta.types.ir import IRRequest
 

@@ -28,11 +28,11 @@ Five chat converters, one per API standard:
 
 | Converter | API Standard | Module |
 |-----------|-------------|--------|
-| `chat_completions` | OpenAI Chat Completions | `converters/chat_completions/` |
-| `open_responses` | Open Responses spec (vendor-neutral) | `converters/open_responses/` |
-| `anthropic` | Anthropic Messages API | `converters/anthropic/` |
-| `google_generate` | Google generateContent API | `converters/google_generate/` |
-| `google_interactions` | Google Interactions API | `converters/google_interactions/` |
+| `chat_completions` | OpenAI Chat Completions | `converters/llm/chat_completions/` |
+| `open_responses` | Open Responses spec (vendor-neutral) | `converters/llm/open_responses/` |
+| `messages` | Anthropic Messages API | `converters/llm/messages/` |
+| `google_generate` | Google generateContent API | `converters/llm/google_generate/` |
+| `google_interactions` | Google Interactions API | `converters/llm/google_interactions/` |
 
 `OpenResponsesConverter` implements the vendor-neutral Open Responses spec (the
 base of the two Responses classes); `OpenAIResponsesConverter` derives from it as
@@ -48,7 +48,7 @@ set `base_url` explicitly. Vendors ship a `<vendor>--<base>` shim (e.g.
 vendor URL for a bare format is offered in the admin UI as a *placeholder*
 hint only.
 
-`ChatCompletionsConverter` (module `converters/chat_completions/`) is the
+`ChatCompletionsConverter` (module `converters/llm/chat_completions/`) is the
 canonical name of the Chat Completions converter; the `OpenAIChat*` classes and
 the `converters/openai_chat/` module are retained as deprecated aliases.
 
@@ -134,13 +134,14 @@ src/llm_rosetta/
 ├── __init__.py              # Public API: convert(), get_converter_for_provider()
 ├── auto_detect.py           # Provider auto-detection from request body
 ├── tool_ops.py              # Cross-provider tool call utilities
-├── converters/              # chat converters + embedding / rerank / decision
+├── converters/              # one directory per (model_type, format)
 │   ├── base/                # Abstract base + ConversionContext
-│   ├── chat_completions/
-│   ├── open_responses/
-│   ├── messages/
-│   ├── google_generate/
-│   ├── google_interactions/
+│   ├── llm/                 # chat: one package per wire format
+│   │   ├── chat_completions/
+│   │   ├── open_responses/
+│   │   ├── messages/
+│   │   ├── google_generate/
+│   │   └── google_interactions/
 │   ├── embedding/
 │   ├── rerank/
 │   └── decision/            # Decision paradigm (TypeSafe System One)
@@ -393,7 +394,8 @@ When adding a converter for a new API standard, **every** item below
 must be completed before the work is considered done.  Use this as a
 gate — missing any item means the converter is not fully integrated.
 
-1. **Converter module** — `converters/<name>/` with `__init__.py`,
+1. **Converter module** — `converters/llm/<format>/` (chat) or the
+   model-type package (embedding/rerank/decision), with `__init__.py`,
    `converter.py`, `content_ops.py`, `tool_ops.py`, `config_ops.py`,
    `message_ops.py`.  Converter class extends `BaseConverter` and
    implements all abstract hooks.

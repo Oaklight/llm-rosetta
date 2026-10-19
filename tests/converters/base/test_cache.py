@@ -739,7 +739,7 @@ class TestEpochCacheIntegration:
         """On second call with same data, epoch guard should short-circuit."""
         import copy
 
-        from llm_rosetta.converters.messages import MessagesConverter
+        from llm_rosetta.converters.llm.messages import MessagesConverter
 
         clear_all_caches()
         request = {

@@ -715,7 +715,7 @@ class TestResponsesProfileTraitsBehavior:
     def test_deepseek_converter_options_are_spec_level(self):
         """A DeepSeek context contributes no OpenAI profile to the converter."""
         from llm_rosetta.converters.base.context import ConversionContext
-        from llm_rosetta.converters.open_responses import OpenResponsesConverter
+        from llm_rosetta.converters.llm.open_responses import OpenResponsesConverter
 
         shim = get_shim("deepseek--open_responses")
         assert shim is not None
@@ -914,7 +914,7 @@ class TestMultimodalToolResultCapability:
 
         captured_ctx: list[Any] = []
 
-        from llm_rosetta.converters.chat_completions.converter import (
+        from llm_rosetta.converters.llm.chat_completions.converter import (
             ChatCompletionsConverter,
         )
 
@@ -952,7 +952,7 @@ class TestMultimodalToolResultCapability:
 
         captured_ctx: list[Any] = []
 
-        from llm_rosetta.converters.chat_completions.converter import (
+        from llm_rosetta.converters.llm.chat_completions.converter import (
             ChatCompletionsConverter,
         )
 

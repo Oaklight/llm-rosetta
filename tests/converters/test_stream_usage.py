@@ -13,11 +13,11 @@ from __future__ import annotations
 
 from typing import Any, cast
 
-from llm_rosetta.converters.messages import MessagesConverter
+from llm_rosetta.converters.llm.messages import MessagesConverter
 from llm_rosetta.converters.base.context import StreamContext
-from llm_rosetta.converters.google_generate import GoogleGenerateConverter
-from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
-from llm_rosetta.converters.open_responses import OpenAIResponsesConverter
+from llm_rosetta.converters.llm.google_generate import GoogleGenerateConverter
+from llm_rosetta.converters.llm.chat_completions import ChatCompletionsConverter
+from llm_rosetta.converters.llm.open_responses import OpenAIResponsesConverter
 from llm_rosetta.types.ir.stream import IRStreamEvent
 
 

@@ -7,8 +7,8 @@ from typing import Any, cast
 import pytest
 
 from llm_rosetta.converters.base.context import StreamContext
-from llm_rosetta.converters.open_responses import OpenAIResponsesConverter
-from llm_rosetta.converters.open_responses.stream_context import (
+from llm_rosetta.converters.llm.open_responses import OpenAIResponsesConverter
+from llm_rosetta.converters.llm.open_responses.stream_context import (
     OpenAIResponsesStreamContext,
 )
 from llm_rosetta.pipeline import ConversionPipeline

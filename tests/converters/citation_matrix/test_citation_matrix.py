@@ -35,19 +35,21 @@ import pytest
 from llm_rosetta.types.ir import CitationPart
 from llm_rosetta.converters.base.context import ConversionContext
 from llm_rosetta.converters.base.helpers.citations import citation_url
-from llm_rosetta.converters.chat_completions.converter import (
+from llm_rosetta.converters.llm.chat_completions.converter import (
     ChatCompletionsConverter,
 )
-from llm_rosetta.converters.chat_completions.content_ops import (
+from llm_rosetta.converters.llm.chat_completions.content_ops import (
     ChatCompletionsContentOps,
 )
-from llm_rosetta.converters.google_generate.converter import GoogleGenerateConverter
-from llm_rosetta.converters.google_interactions.content_ops import (
+from llm_rosetta.converters.llm.google_generate.converter import GoogleGenerateConverter
+from llm_rosetta.converters.llm.google_interactions.content_ops import (
     GoogleInteractionsContentOps,
 )
-from llm_rosetta.converters.messages.content_ops import MessagesContentOps
-from llm_rosetta.converters.messages.converter import MessagesConverter
-from llm_rosetta.converters.open_responses.content_ops import OpenResponsesContentOps
+from llm_rosetta.converters.llm.messages.content_ops import MessagesContentOps
+from llm_rosetta.converters.llm.messages.converter import MessagesConverter
+from llm_rosetta.converters.llm.open_responses.content_ops import (
+    OpenResponsesContentOps,
+)
 
 URL = "https://example.com/source"
 SPAN = {"start_index": 5, "end_index": 25}

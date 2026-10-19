@@ -14,7 +14,7 @@ from typing import Any, cast
 import pytest
 
 from llm_rosetta import get_converter_for_provider
-from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
+from llm_rosetta.converters.llm.chat_completions import ChatCompletionsConverter
 from llm_rosetta.pipeline import ConversionPipeline
 
 #: Every chat format, as the *upstream* the gateway proxies to.

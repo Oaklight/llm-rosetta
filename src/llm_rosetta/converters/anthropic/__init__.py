@@ -1,5 +1,5 @@
 """
-Deprecated — use ``llm_rosetta.converters.messages`` instead.
+Deprecated — use ``llm_rosetta.converters.llm.messages`` instead.
 
 This module exists only for backward compatibility and will be removed in a
 future release.  It re-exports the canonical ``Messages*`` names (plus their
@@ -19,12 +19,12 @@ import warnings as _warnings
 
 _warnings.warn(
     "llm_rosetta.converters.anthropic is deprecated, "
-    "use llm_rosetta.converters.messages instead",
+    "use llm_rosetta.converters.llm.messages instead",
     DeprecationWarning,
     stacklevel=2,
 )
 
-from ..messages import (  # noqa: F401, E402
+from ..llm.messages import (  # noqa: F401, E402
     _constants as _constants,
     config_ops as config_ops,
     content_ops as content_ops,
@@ -32,7 +32,7 @@ from ..messages import (  # noqa: F401, E402
     message_ops as message_ops,
     tool_ops as tool_ops,
 )
-from ..messages import (  # noqa: F401, E402
+from ..llm.messages import (  # noqa: F401, E402
     AnthropicConfigOps,
     AnthropicContentOps,
     AnthropicConverter,

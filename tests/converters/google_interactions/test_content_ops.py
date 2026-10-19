@@ -1,6 +1,6 @@
 """Tests for Google Interactions content_ops."""
 
-from llm_rosetta.converters.google_interactions.content_ops import (
+from llm_rosetta.converters.llm.google_interactions.content_ops import (
     GoogleInteractionsContentOps,
 )
 

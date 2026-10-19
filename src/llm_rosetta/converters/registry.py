@@ -22,17 +22,19 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import cast
 
-from llm_rosetta.converters.chat_completions.converter import ChatCompletionsConverter
+from llm_rosetta.converters.llm.chat_completions.converter import (
+    ChatCompletionsConverter,
+)
 from llm_rosetta.converters.decision.pipeline import _DECISION_CONVERTERS
 from llm_rosetta.converters.embedding.pipeline import _EMBEDDING_CONVERTERS
-from llm_rosetta.converters.google_generate.converter import (
+from llm_rosetta.converters.llm.google_generate.converter import (
     GoogleGenerateConverter,
 )
-from llm_rosetta.converters.google_interactions.converter import (
+from llm_rosetta.converters.llm.google_interactions.converter import (
     GoogleInteractionsConverter,
 )
-from llm_rosetta.converters.messages.converter import MessagesConverter
-from llm_rosetta.converters.open_responses.converter import OpenResponsesConverter
+from llm_rosetta.converters.llm.messages.converter import MessagesConverter
+from llm_rosetta.converters.llm.open_responses.converter import OpenResponsesConverter
 from llm_rosetta.converters.rerank.pipeline import _RERANK_CONVERTERS
 from llm_rosetta.model_vocabulary import FORMATS_BY_TYPE as _DECLARED_FORMATS
 from llm_rosetta.model_vocabulary import MODEL_TYPES

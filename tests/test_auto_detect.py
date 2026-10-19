@@ -894,7 +894,7 @@ class TestDetectGoogleInteractions:
 
     def test_get_interactions_converter(self):
         converter = get_converter_for_provider("google_interactions")
-        from llm_rosetta.converters.google_interactions import (
+        from llm_rosetta.converters.llm.google_interactions import (
             GoogleInteractionsConverter,
         )
 

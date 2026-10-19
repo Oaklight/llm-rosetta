@@ -34,7 +34,7 @@ class TestRegistryShape:
 
 class TestLookup:
     def test_known_pair(self) -> None:
-        from llm_rosetta.converters.chat_completions.converter import (
+        from llm_rosetta.converters.llm.chat_completions.converter import (
             ChatCompletionsConverter,
         )
 
@@ -64,10 +64,53 @@ class TestTheDescriptorsAgree:
 
     def test_chat_converter_lookup_uses_the_registry(self) -> None:
         from llm_rosetta.auto_detect import get_converter_for_provider
-        from llm_rosetta.converters.chat_completions.converter import (
+        from llm_rosetta.converters.llm.chat_completions.converter import (
             ChatCompletionsConverter,
         )
 
         assert isinstance(
             get_converter_for_provider("chat_completions"), ChatCompletionsConverter
         )
+
+
+class TestModuleLayout:
+    """Where each family's packages live, and which old paths still resolve."""
+
+    def test_llm_formats_live_under_the_llm_package(self) -> None:
+        import importlib
+
+        for fmt in FORMATS_BY_TYPE["llm"]:
+            module = importlib.import_module(f"llm_rosetta.converters.llm.{fmt}")
+            assert module.__name__ == f"llm_rosetta.converters.llm.{fmt}"
+
+    def test_google_packages_keep_their_0130_paths(self) -> None:
+        """``converters.google_generate`` was importable in 0.13.0.
+
+        The implementations moved under ``converters.llm``; the old paths are
+        registered against the same module objects, so an existing import gets
+        the class the registry holds, not a second copy.
+        """
+        import importlib
+
+        old = importlib.import_module("llm_rosetta.converters.google_generate")
+        new = importlib.import_module("llm_rosetta.converters.llm.google_generate")
+        assert old is new
+        # A submodule import goes through the same objects too, so a class
+        # fetched by the old path is the one the registry holds.
+        old_sub = importlib.import_module(
+            "llm_rosetta.converters.google_generate.converter"
+        )
+        new_sub = importlib.import_module(
+            "llm_rosetta.converters.llm.google_generate.converter"
+        )
+        assert old_sub is new_sub
+        assert old_sub.GoogleGenerateConverter is new.GoogleGenerateConverter
+
+    def test_other_llm_formats_have_no_legacy_top_level_path(self) -> None:
+        """Those three names did not exist in 0.13.0, so they keep no alias."""
+        import importlib.util
+
+        for fmt in ("chat_completions", "messages", "open_responses"):
+            assert importlib.util.find_spec(f"llm_rosetta.converters.{fmt}") is None, (
+                fmt
+            )

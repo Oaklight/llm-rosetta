@@ -309,7 +309,7 @@ class TestCrossFormatGrouping:
 
     def test_backward_compat_ir_without_batch_id(self):
         """IR messages without batch_id should still merge by adjacency."""
-        from llm_rosetta.converters.messages import MessagesConverter
+        from llm_rosetta.converters.llm.messages import MessagesConverter
 
         converter = MessagesConverter()
         ir_messages = [

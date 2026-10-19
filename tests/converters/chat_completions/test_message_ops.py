@@ -4,20 +4,20 @@ OpenAI Chat MessageOps unit tests.
 
 from typing import Any, Union, cast
 
-from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
+from llm_rosetta.converters.llm.chat_completions import ChatCompletionsConverter
 
 from llm_rosetta._vendor.validate import validate
 from llm_rosetta.converters.base.tools.multimodal_patch import (
     has_multimodal_content,
     is_synthetic_tool_content_msg,
 )
-from llm_rosetta.converters.chat_completions.content_ops import (
+from llm_rosetta.converters.llm.chat_completions.content_ops import (
     ChatCompletionsContentOps,
 )
-from llm_rosetta.converters.chat_completions.message_ops import (
+from llm_rosetta.converters.llm.chat_completions.message_ops import (
     ChatCompletionsMessageOps,
 )
-from llm_rosetta.converters.chat_completions.tool_ops import ChatCompletionsToolOps
+from llm_rosetta.converters.llm.chat_completions.tool_ops import ChatCompletionsToolOps
 from llm_rosetta.types.ir import Message, ToolCallPart, ToolResultPart
 from llm_rosetta.types.ir.extensions_experimental import ExtensionItem
 
@@ -1272,7 +1272,7 @@ class TestRefusalBuildResponseMessage:
     """Tests for refusal in _build_response_message (response path, #430)."""
 
     def setup_method(self):
-        from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
+        from llm_rosetta.converters.llm.chat_completions import ChatCompletionsConverter
 
         self.converter = ChatCompletionsConverter()
 

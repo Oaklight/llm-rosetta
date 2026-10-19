@@ -1,6 +1,6 @@
 """Tests for Google Interactions Converter (full request/response conversion)."""
 
-from llm_rosetta.converters.google_interactions import GoogleInteractionsConverter
+from llm_rosetta.converters.llm.google_interactions import GoogleInteractionsConverter
 from llm_rosetta.types.ir import IRRequest, IRResponse
 
 

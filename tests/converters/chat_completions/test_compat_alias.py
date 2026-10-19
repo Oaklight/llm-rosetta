@@ -1,6 +1,6 @@
 """Backward-compatibility tests for the deprecated ``openai_chat`` package.
 
-The canonical module is ``llm_rosetta.converters.chat_completions``; the
+The canonical module is ``llm_rosetta.converters.llm.chat_completions``; the
 ``llm_rosetta.converters.openai_chat`` package (and the ``OpenAIChat*`` class
 names) are retained as deprecated aliases.
 """
@@ -10,7 +10,7 @@ import sys
 import warnings
 
 LEGACY = "llm_rosetta.converters.openai_chat"
-CANONICAL = "llm_rosetta.converters.chat_completions"
+CANONICAL = "llm_rosetta.converters.llm.chat_completions"
 _LEGACY_SUBMODULES = (
     "_constants",
     "config_ops",

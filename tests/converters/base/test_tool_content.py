@@ -6,8 +6,8 @@ from llm_rosetta.converters.base.tools.content import (
     convert_content_blocks_to_ir,
     convert_ir_content_blocks_to_p,
 )
-from llm_rosetta.converters.messages.content_ops import MessagesContentOps
-from llm_rosetta.converters.open_responses.content_ops import (
+from llm_rosetta.converters.llm.messages.content_ops import MessagesContentOps
+from llm_rosetta.converters.llm.open_responses.content_ops import (
     OpenAIResponsesContentOps,
 )
 

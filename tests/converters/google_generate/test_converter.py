@@ -9,7 +9,7 @@ from typing import Any, cast
 import pytest
 
 from llm_rosetta.converters.base.helpers.citations import citation_url
-from llm_rosetta.converters.google_generate import (
+from llm_rosetta.converters.llm.google_generate import (
     GoogleConverter,
     GoogleGenerateConverter,
 )
@@ -1343,7 +1343,7 @@ class TestGooglePromptBlockHandling:
     """Tests for promptFeedback.blockReason and missing finishReason values (#433)."""
 
     def setup_method(self):
-        from llm_rosetta.converters.google_generate import GoogleGenerateConverter
+        from llm_rosetta.converters.llm.google_generate import GoogleGenerateConverter
 
         self.converter = GoogleGenerateConverter()
 
@@ -1457,7 +1457,7 @@ class TestGooglePromptBlockHandling:
 
     def test_refusal_ops_round_trip(self):
         """The ops-level refusal round trip still recovers the refusal (#941)."""
-        from llm_rosetta.converters.google_generate.content_ops import (
+        from llm_rosetta.converters.llm.google_generate.content_ops import (
             GoogleGenerateContentOps,
         )
 

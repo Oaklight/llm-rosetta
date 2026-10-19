@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from llm_rosetta.converters.open_responses import OpenAIResponsesConverter
+from llm_rosetta.converters.llm.open_responses import OpenAIResponsesConverter
 
 
 class TestToolSearchStreamingPassthrough:

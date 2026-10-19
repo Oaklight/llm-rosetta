@@ -9,7 +9,7 @@ as backward-compatible aliases.
 from __future__ import annotations
 
 from llm_rosetta.auto_detect import get_converter_for_provider
-from llm_rosetta.converters.open_responses import (
+from llm_rosetta.converters.llm.open_responses import (
     OpenAIResponsesConfigOps,
     OpenAIResponsesContentOps,
     OpenAIResponsesConverter,

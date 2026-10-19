@@ -6,7 +6,7 @@ import json
 from typing import Any, cast
 
 from llm_rosetta.converters.base.context import StreamContext
-from llm_rosetta.converters.google_generate import GoogleGenerateConverter
+from llm_rosetta.converters.llm.google_generate import GoogleGenerateConverter
 from llm_rosetta.types.ir.stream import (
     ContentBlockEndEvent,
     ContentBlockStartEvent,

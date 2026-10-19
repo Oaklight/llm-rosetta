@@ -339,7 +339,7 @@ class ConversionPipeline:
         # "config"`` (#882) — so fail at construction, not on the upstream
         # call.
         if resolve_format(target_provider) in _GOOGLE_GENERATE_PROVIDERS:
-            from llm_rosetta.converters.google_generate import (
+            from llm_rosetta.converters.llm.google_generate import (
                 validate_google_output_format,
             )
 

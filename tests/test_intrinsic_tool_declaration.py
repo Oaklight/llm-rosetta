@@ -8,11 +8,11 @@ name (``{"type":"function","function":{"name":"web_search"}}``) or explicitly
 """
 
 from llm_rosetta.capabilities import resolve_intrinsic_tools
-from llm_rosetta.converters.messages import MessagesConverter
-from llm_rosetta.converters.google_generate import GoogleGenerateConverter
-from llm_rosetta.converters.google_interactions import GoogleInteractionsConverter
-from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
-from llm_rosetta.converters.open_responses import OpenAIResponsesConverter
+from llm_rosetta.converters.llm.messages import MessagesConverter
+from llm_rosetta.converters.llm.google_generate import GoogleGenerateConverter
+from llm_rosetta.converters.llm.google_interactions import GoogleInteractionsConverter
+from llm_rosetta.converters.llm.chat_completions import ChatCompletionsConverter
+from llm_rosetta.converters.llm.open_responses import OpenAIResponsesConverter
 from llm_rosetta.converters.base.tools.intrinsic import (
     get_definition_kind,
     make_intrinsic_tool_definition,
@@ -425,26 +425,30 @@ class TestShimEmitConsistency:
         return set(shims[name].tools.intrinsic_tools) if name in shims else set()
 
     def test_anthropic(self):
-        from llm_rosetta.converters.messages.tool_ops import _ANTHROPIC_INTRINSIC_TOOLS
+        from llm_rosetta.converters.llm.messages.tool_ops import (
+            _ANTHROPIC_INTRINSIC_TOOLS,
+        )
 
         assert self._shim_kinds("anthropic--messages") <= set(
             _ANTHROPIC_INTRINSIC_TOOLS
         )
 
     def test_openai_responses(self):
-        from llm_rosetta.converters.open_responses.tool_ops import (
+        from llm_rosetta.converters.llm.open_responses.tool_ops import (
             _RESPONSES_INTRINSIC_TOOLS,
         )
 
         assert self._shim_kinds("openai_responses") <= set(_RESPONSES_INTRINSIC_TOOLS)
 
     def test_google(self):
-        from llm_rosetta.converters.google_generate.tool_ops import _INTRINSIC_TOOL_KEYS
+        from llm_rosetta.converters.llm.google_generate.tool_ops import (
+            _INTRINSIC_TOOL_KEYS,
+        )
 
         assert self._shim_kinds("google") <= set(_INTRINSIC_TOOL_KEYS.values())
 
     def test_google_interactions(self):
-        from llm_rosetta.converters.google_interactions.tool_ops import (
+        from llm_rosetta.converters.llm.google_interactions.tool_ops import (
             _GI_INTRINSIC_TOOLS,
         )
 

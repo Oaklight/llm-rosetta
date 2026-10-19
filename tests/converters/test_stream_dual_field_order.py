@@ -8,8 +8,10 @@ event first, otherwise the leftover reasoning opens a second thinking block
 
 from typing import Any, cast
 
-from llm_rosetta.converters.chat_completions.converter import ChatCompletionsConverter
-from llm_rosetta.converters.messages.converter import MessagesConverter
+from llm_rosetta.converters.llm.chat_completions.converter import (
+    ChatCompletionsConverter,
+)
+from llm_rosetta.converters.llm.messages.converter import MessagesConverter
 
 
 def _chat_chunk(

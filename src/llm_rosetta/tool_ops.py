@@ -106,23 +106,23 @@ def _get_tool_ops(provider: str) -> Any:
     """Lazy-import and return the ToolOps class for *provider*."""
     canonical = _resolve(provider)
     if canonical == "chat_completions":
-        from .converters.chat_completions import ChatCompletionsToolOps
+        from .converters.llm.chat_completions import ChatCompletionsToolOps
 
         return ChatCompletionsToolOps
     if canonical == "open_responses":
-        from .converters.open_responses import OpenResponsesToolOps
+        from .converters.llm.open_responses import OpenResponsesToolOps
 
         return OpenResponsesToolOps
     if canonical == "messages":
-        from .converters.messages import MessagesToolOps
+        from .converters.llm.messages import MessagesToolOps
 
         return MessagesToolOps
     if canonical == "google_generate":
-        from .converters.google_generate import GoogleGenerateToolOps
+        from .converters.llm.google_generate import GoogleGenerateToolOps
 
         return GoogleGenerateToolOps
     if canonical == "google_interactions":
-        from .converters.google_interactions import GoogleInteractionsToolOps
+        from .converters.llm.google_interactions import GoogleInteractionsToolOps
 
         return GoogleInteractionsToolOps
     raise ValueError(
@@ -248,7 +248,7 @@ def config_from_provider(
 
 def to_chat_completions(ir_tool: ToolDefinition, **kwargs: Any) -> dict[str, Any]:
     """Convert IR tool definition to OpenAI Chat Completions format."""
-    from .converters.chat_completions import ChatCompletionsToolOps
+    from .converters.llm.chat_completions import ChatCompletionsToolOps
 
     return ChatCompletionsToolOps.ir_tool_definition_to_p(ir_tool, **kwargs)
 
@@ -265,7 +265,7 @@ def to_openai_chat(ir_tool: ToolDefinition, **kwargs: Any) -> dict[str, Any]:
 
 def to_open_responses(ir_tool: ToolDefinition, **kwargs: Any) -> dict[str, Any]:
     """Convert IR tool definition to OpenAI Responses format."""
-    from .converters.open_responses import OpenAIResponsesToolOps
+    from .converters.llm.open_responses import OpenAIResponsesToolOps
 
     return OpenAIResponsesToolOps.ir_tool_definition_to_p(ir_tool, **kwargs)
 
@@ -282,28 +282,28 @@ def to_openai_responses(ir_tool: ToolDefinition, **kwargs: Any) -> dict[str, Any
 
 def to_messages(ir_tool: ToolDefinition, **kwargs: Any) -> dict[str, Any]:
     """Convert IR tool definition to Messages format."""
-    from .converters.messages import MessagesToolOps
+    from .converters.llm.messages import MessagesToolOps
 
     return MessagesToolOps.ir_tool_definition_to_p(ir_tool, **kwargs)
 
 
 def to_google_generate(ir_tool: ToolDefinition, **kwargs: Any) -> dict[str, Any]:
     """Convert IR tool definition to Google generateContent format."""
-    from .converters.google_generate import GoogleGenerateToolOps
+    from .converters.llm.google_generate import GoogleGenerateToolOps
 
     return GoogleGenerateToolOps.ir_tool_definition_to_p(ir_tool, **kwargs)
 
 
 def to_google_interactions(ir_tool: ToolDefinition, **kwargs: Any) -> dict[str, Any]:
     """Convert IR tool definition to Google Interactions format."""
-    from .converters.google_interactions import GoogleInteractionsToolOps
+    from .converters.llm.google_interactions import GoogleInteractionsToolOps
 
     return GoogleInteractionsToolOps.ir_tool_definition_to_p(ir_tool, **kwargs)
 
 
 def from_chat_completions(provider_tool: Any, **kwargs: Any) -> ToolDefinition | None:
     """Convert OpenAI Chat Completions tool definition to IR format."""
-    from .converters.chat_completions import ChatCompletionsToolOps
+    from .converters.llm.chat_completions import ChatCompletionsToolOps
 
     return ChatCompletionsToolOps.p_tool_definition_to_ir(provider_tool, **kwargs)
 
@@ -322,7 +322,7 @@ def from_open_responses(
     provider_tool: Any, **kwargs: Any
 ) -> ToolDefinition | list[ToolDefinition] | None:
     """Convert OpenAI Responses tool definition to IR format."""
-    from .converters.open_responses import OpenAIResponsesToolOps
+    from .converters.llm.open_responses import OpenAIResponsesToolOps
 
     return OpenAIResponsesToolOps.p_tool_definition_to_ir(provider_tool, **kwargs)
 
@@ -341,7 +341,7 @@ def from_openai_responses(
 
 def from_messages(provider_tool: Any, **kwargs: Any) -> ToolDefinition | None:
     """Convert Messages tool definition to IR format."""
-    from .converters.messages import MessagesToolOps
+    from .converters.llm.messages import MessagesToolOps
 
     return MessagesToolOps.p_tool_definition_to_ir(provider_tool, **kwargs)
 
@@ -350,7 +350,7 @@ def from_google_generate(
     provider_tool: Any, **kwargs: Any
 ) -> ToolDefinition | list[ToolDefinition] | None:
     """Convert Google generateContent tool definition to IR format."""
-    from .converters.google_generate import GoogleGenerateToolOps
+    from .converters.llm.google_generate import GoogleGenerateToolOps
 
     return GoogleGenerateToolOps.p_tool_definition_to_ir(provider_tool, **kwargs)
 
@@ -359,7 +359,7 @@ def from_google_interactions(
     provider_tool: Any, **kwargs: Any
 ) -> ToolDefinition | list[ToolDefinition] | None:
     """Convert Google Interactions tool definition to IR format."""
-    from .converters.google_interactions import GoogleInteractionsToolOps
+    from .converters.llm.google_interactions import GoogleInteractionsToolOps
 
     return GoogleInteractionsToolOps.p_tool_definition_to_ir(provider_tool, **kwargs)
 

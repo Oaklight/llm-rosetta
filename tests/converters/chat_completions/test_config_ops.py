@@ -6,7 +6,9 @@ import pytest
 
 from typing import cast
 
-from llm_rosetta.converters.chat_completions.config_ops import ChatCompletionsConfigOps
+from llm_rosetta.converters.llm.chat_completions.config_ops import (
+    ChatCompletionsConfigOps,
+)
 from llm_rosetta.types.ir import CacheConfig, GenerationConfig, ReasoningConfig
 
 

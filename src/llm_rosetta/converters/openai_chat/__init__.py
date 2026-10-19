@@ -1,5 +1,5 @@
 """
-Deprecated — use ``llm_rosetta.converters.chat_completions`` instead.
+Deprecated — use ``llm_rosetta.converters.llm.chat_completions`` instead.
 
 This module exists only for backward compatibility and will be removed in a
 future release.  It re-exports the canonical ``ChatCompletion*`` names (plus
@@ -14,12 +14,12 @@ import warnings as _warnings
 
 _warnings.warn(
     "llm_rosetta.converters.openai_chat is deprecated, "
-    "use llm_rosetta.converters.chat_completions instead",
+    "use llm_rosetta.converters.llm.chat_completions instead",
     DeprecationWarning,
     stacklevel=2,
 )
 
-from ..chat_completions import (  # noqa: F401, E402
+from ..llm.chat_completions import (  # noqa: F401, E402
     _constants as _constants,
     config_ops as config_ops,
     content_ops as content_ops,
@@ -27,7 +27,7 @@ from ..chat_completions import (  # noqa: F401, E402
     message_ops as message_ops,
     tool_ops as tool_ops,
 )
-from ..chat_completions import (  # noqa: F401, E402
+from ..llm.chat_completions import (  # noqa: F401, E402
     ChatCompletionsConfigOps,
     ChatCompletionsContentOps,
     ChatCompletionsConverter,

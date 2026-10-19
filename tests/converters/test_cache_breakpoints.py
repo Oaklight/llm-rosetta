@@ -318,8 +318,8 @@ class TestRoundTrip:
         """End-to-end: an OpenAI Chat request converted to Anthropic
         body should have cache_control on the expected blocks after
         auto_cache_breakpoints fires."""
-        from llm_rosetta.converters.messages.converter import MessagesConverter
-        from llm_rosetta.converters.chat_completions.converter import (
+        from llm_rosetta.converters.llm.messages.converter import MessagesConverter
+        from llm_rosetta.converters.llm.chat_completions.converter import (
             ChatCompletionsConverter,
         )
 

@@ -641,7 +641,7 @@ class TestConversionPipeline:
         converter.  A ``Literal`` cannot be derived from a constant, so pin
         the two in lockstep here.
         """
-        from llm_rosetta.converters.google_generate import GOOGLE_OUTPUT_FORMATS
+        from llm_rosetta.converters.llm.google_generate import GOOGLE_OUTPUT_FORMATS
         from llm_rosetta.pipeline import ConversionPipeline
 
         hints = get_type_hints(ConversionPipeline.__init__)
@@ -1448,19 +1448,19 @@ class TestIntrinsicIrTransforms:
 
     def test_openai_chat_has_no_intrinsic_transforms(self):
         """OpenAI Chat converter should not declare intrinsic transforms."""
-        from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
+        from llm_rosetta.converters.llm.chat_completions import ChatCompletionsConverter
 
         assert ChatCompletionsConverter._INTRINSIC_IR_TRANSFORMS == ()
 
     def test_openai_responses_has_no_intrinsic_transforms(self):
         """OpenAI Responses converter should not declare intrinsic transforms."""
-        from llm_rosetta.converters.open_responses import OpenAIResponsesConverter
+        from llm_rosetta.converters.llm.open_responses import OpenAIResponsesConverter
 
         assert OpenAIResponsesConverter._INTRINSIC_IR_TRANSFORMS == ()
 
     def test_anthropic_has_intrinsic_transforms(self):
         """Anthropic converter declares hoist + cache breakpoints."""
-        from llm_rosetta.converters.messages import MessagesConverter
+        from llm_rosetta.converters.llm.messages import MessagesConverter
 
         names = [repr(t) for t in MessagesConverter._INTRINSIC_IR_TRANSFORMS]
         assert "hoist_late_system_messages()" in names
@@ -1468,14 +1468,14 @@ class TestIntrinsicIrTransforms:
 
     def test_google_generate_has_intrinsic_transforms(self):
         """Google Generate converter declares hoist."""
-        from llm_rosetta.converters.google_generate import GoogleGenerateConverter
+        from llm_rosetta.converters.llm.google_generate import GoogleGenerateConverter
 
         names = [repr(t) for t in GoogleGenerateConverter._INTRINSIC_IR_TRANSFORMS]
         assert "hoist_late_system_messages()" in names
 
     def test_google_interactions_has_intrinsic_transforms(self):
         """Google Interactions converter declares hoist."""
-        from llm_rosetta.converters.google_interactions import (
+        from llm_rosetta.converters.llm.google_interactions import (
             GoogleInteractionsConverter,
         )
 

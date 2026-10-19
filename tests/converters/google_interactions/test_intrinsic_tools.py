@@ -2,10 +2,10 @@
 
 from typing import Any, cast
 
-from llm_rosetta.converters.google_interactions.tool_ops import (
+from llm_rosetta.converters.llm.google_interactions.tool_ops import (
     GoogleInteractionsToolOps,
 )
-from llm_rosetta.converters.google_interactions.message_ops import (
+from llm_rosetta.converters.llm.google_interactions.message_ops import (
     GoogleInteractionsMessageOps,
 )
 from llm_rosetta.types.ir import ToolCallPart, ToolResultPart

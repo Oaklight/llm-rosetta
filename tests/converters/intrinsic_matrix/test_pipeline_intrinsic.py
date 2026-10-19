@@ -401,7 +401,7 @@ def _orphan_ir():
 
 def test_orphan_fix_does_not_placeholder_a_server_call():
     """Phase 4: a server call owes no client result, so no placeholder."""
-    from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
+    from llm_rosetta.converters.llm.chat_completions import ChatCompletionsConverter
 
     out, _ = ChatCompletionsConverter().request_to_provider(cast(Any, _orphan_ir()))
     roles = [m["role"] for m in out["messages"]]
@@ -410,7 +410,7 @@ def test_orphan_fix_does_not_placeholder_a_server_call():
 
 
 def test_orphan_fix_placeholder_does_not_reach_google_generate():
-    from llm_rosetta.converters.google_generate import GoogleGenerateConverter
+    from llm_rosetta.converters.llm.google_generate import GoogleGenerateConverter
 
     out, _ = GoogleGenerateConverter().request_to_provider(cast(Any, _orphan_ir()))
     assert "[No output available yet]" not in json.dumps(out)
@@ -418,7 +418,7 @@ def test_orphan_fix_placeholder_does_not_reach_google_generate():
 
 def test_orphan_fix_still_placeholders_an_unanswered_client_call():
     """A client call *does* owe the client a result, placeholder and all."""
-    from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
+    from llm_rosetta.converters.llm.chat_completions import ChatCompletionsConverter
 
     ir: dict[str, Any] = {
         "model": "m",
@@ -446,7 +446,7 @@ def test_orphan_fix_still_placeholders_an_unanswered_client_call():
 
 
 def test_orphan_fix_leaves_an_answered_intrinsic_call_alone():
-    from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
+    from llm_rosetta.converters.llm.chat_completions import ChatCompletionsConverter
 
     ir = ir_history("web_search")
     out, _ = ChatCompletionsConverter().request_to_provider(cast(Any, ir))
@@ -496,7 +496,7 @@ def test_respell_still_renames_a_degraded_history_call():
     call and renames it like any other.
     """
     from llm_rosetta.capabilities import degrade_intrinsic_history
-    from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
+    from llm_rosetta.converters.llm.chat_completions import ChatCompletionsConverter
 
     ir = {
         "tools": [

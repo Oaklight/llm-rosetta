@@ -1,0 +1,608 @@
+"""
+LLM-Rosetta - OpenAI Responses Content Operations
+
+OpenAI Responses API content conversion operations.
+Handles bidirectional conversion of text, image, file, reasoning, and other content parts.
+
+Note: Responses API uses input_text/output_text for text, input_image for images,
+and input_file for files. Images and files are always input-only.
+"""
+
+import re
+from typing import Any
+
+from ....types.ir import (
+    AudioPart,
+    CitationPart,
+    FileData,
+    FilePart,
+    ImagePart,
+    ReasoningPart,
+    RefusalPart,
+    TextPart,
+)
+from ...base import BaseContentOps
+from ...base.helpers.citations import (
+    CITATION_TYPE_FILE,
+    CITATION_TYPE_URL,
+    citation_end_index,
+    citation_provider_fields,
+    citation_start_index,
+    citation_title,
+    citation_type_of,
+    citation_url,
+    extra_fields,
+    make_citation,
+    make_url_citation,
+)
+from ...base.helpers.opaque import (
+    get_opaque_origin,
+    is_own_origin,
+    set_opaque_origin,
+)
+from ._constants import generate_reasoning_id
+
+
+def _extract_content_text(raw_content: Any) -> str:
+    """Extract text from a reasoning ``content`` field.
+
+    Handles both plain strings and DeepSeek-style typed item lists
+    (e.g. ``[{"type": "reasoning_text", "text": "..."}]``).
+    """
+    if isinstance(raw_content, str):
+        return raw_content
+    if isinstance(raw_content, list):
+        texts = [
+            c.get("text", "")
+            for c in raw_content
+            if isinstance(c, dict) and c.get("text")
+        ]
+        return "".join(texts)
+    return ""
+
+
+class OpenResponsesContentOps(BaseContentOps):
+    """OpenAI Responses API content conversion operations.
+
+    All methods are static and stateless. Handles TextPart, ImagePart,
+    FilePart, and ReasoningPart bidirectional conversion.
+    """
+
+    # ==================== Text ====================
+
+    @staticmethod
+    def ir_text_to_p(ir_text: TextPart, **kwargs: Any) -> dict:
+        """IR TextPart → OpenAI Responses text content part.
+
+        The ``context`` kwarg determines the text type:
+        - ``"input"`` (default) → ``input_text``
+        - ``"output"`` → ``output_text``
+
+        Args:
+            ir_text: IR text part.
+            **kwargs: May contain ``context`` ("input" or "output").
+
+        Returns:
+            OpenAI Responses text content dict.
+        """
+        context = kwargs.get("context", "input")
+        text_type = "output_text" if context == "output" else "input_text"
+        return {"type": text_type, "text": ir_text["text"]}
+
+    @staticmethod
+    def p_text_to_ir(provider_text: Any, **kwargs: Any) -> TextPart:
+        """OpenAI Responses text content → IR TextPart.
+
+        Supports string, input_text, output_text, and plain text dict formats.
+
+        Args:
+            provider_text: Text content in various formats.
+
+        Returns:
+            IR TextPart.
+        """
+        if isinstance(provider_text, str):
+            return TextPart(type="text", text=provider_text)
+        if isinstance(provider_text, dict):
+            part_type = provider_text.get("type")
+            if part_type in ("input_text", "output_text", "text"):
+                return TextPart(type="text", text=provider_text["text"])
+        raise ValueError(f"Cannot convert to TextPart: {provider_text!r}")
+
+    # ==================== Image ====================
+
+    @staticmethod
+    def ir_image_to_p(ir_image: ImagePart, **kwargs: Any) -> dict:
+        """IR ImagePart → OpenAI Responses input_image content part.
+
+        Images are always input_image in Responses API.
+        Handles both URL and base64 image data.
+
+        Args:
+            ir_image: IR image part with ``image_url`` or ``image_data``.
+
+        Returns:
+            OpenAI Responses image content dict.
+
+        Raises:
+            ValueError: If neither ``image_url`` nor ``image_data`` is present.
+        """
+        result: dict = {
+            "type": "input_image",
+            "detail": ir_image.get("detail", "auto"),
+        }
+
+        # Support multiple URL field names (image_url, url)
+        url = ir_image.get("image_url") or ir_image.get("url")
+        image_data = ir_image.get("image_data")
+
+        if url:
+            result["image_url"] = url
+        elif image_data:
+            data_url = f"data:{image_data['media_type']};base64,{image_data['data']}"
+            result["image_url"] = data_url
+        elif "provider_ref" in ir_image and "file_id" in ir_image["provider_ref"]:
+            result["file_id"] = ir_image["provider_ref"]["file_id"]
+        else:
+            raise ValueError("Image part must have either image_url/url or image_data")
+
+        return result
+
+    @staticmethod
+    def p_image_to_ir(provider_image: Any, **kwargs: Any) -> ImagePart:
+        """OpenAI Responses input_image content → IR ImagePart.
+
+        Parses data URIs back into ``image_data`` with media_type.
+
+        Args:
+            provider_image: OpenAI Responses image content dict.
+
+        Returns:
+            IR ImagePart.
+        """
+        detail = provider_image.get("detail", "auto")
+
+        if "image_url" in provider_image:
+            url = provider_image["image_url"]
+            if url.startswith("data:"):
+                match = re.match(r"data:([^;]+);base64,(.+)", url)
+                if match:
+                    media_type, data = match.groups()
+                    return ImagePart(
+                        type="image",
+                        image_data={"data": data, "media_type": media_type},
+                        detail=detail,
+                    )
+                else:
+                    return ImagePart(type="image", image_url=url, detail=detail)
+            else:
+                return ImagePart(type="image", image_url=url, detail=detail)
+        elif "file_id" in provider_image:
+            return ImagePart(
+                type="image",
+                provider_ref={"file_id": provider_image["file_id"]},
+                detail=detail,
+            )
+
+        return ImagePart(type="image", detail=detail)
+
+    # ==================== File ====================
+
+    @staticmethod
+    def ir_file_to_p(ir_file: FilePart, **kwargs: Any) -> dict:
+        """IR FilePart → OpenAI Responses input_file content part.
+
+        Files are always input_file in Responses API.
+
+        Args:
+            ir_file: IR file part.
+
+        Returns:
+            OpenAI Responses file content dict.
+
+        Raises:
+            ValueError: If neither ``file_data`` nor ``file_url`` is present.
+        """
+        result: dict = {
+            "type": "input_file",
+            "filename": ir_file.get("file_name", "unknown"),
+        }
+
+        if "file_data" in ir_file:
+            result["file_data"] = ir_file["file_data"]["data"]
+        elif "file_url" in ir_file:
+            result["file_url"] = ir_file["file_url"]
+        elif "provider_ref" in ir_file and "file_id" in ir_file["provider_ref"]:
+            result["file_id"] = ir_file["provider_ref"]["file_id"]
+        else:
+            raise ValueError("File part must have either file_data or file_url")
+
+        return result
+
+    @staticmethod
+    def p_file_to_ir(provider_file: Any, **kwargs: Any) -> FilePart:
+        """OpenAI Responses input_file content → IR FilePart.
+
+        Args:
+            provider_file: OpenAI Responses file content dict.
+
+        Returns:
+            IR FilePart.
+        """
+        file_name = provider_file.get("filename", "unknown")
+
+        if "file_data" in provider_file:
+            return FilePart(
+                type="file",
+                file_name=file_name,
+                file_data=FileData(
+                    data=provider_file["file_data"],
+                    media_type="application/octet-stream",
+                ),
+            )
+        elif "file_url" in provider_file:
+            return FilePart(
+                type="file", file_name=file_name, file_url=provider_file["file_url"]
+            )
+        elif "file_id" in provider_file:
+            return FilePart(
+                type="file",
+                file_name=file_name,
+                provider_ref={"file_id": provider_file["file_id"]},
+            )
+
+        return FilePart(type="file", file_name=file_name)
+
+    # ==================== Audio (not supported) ====================
+
+    @staticmethod
+    def ir_audio_to_p(ir_audio: AudioPart, **kwargs: Any) -> Any:
+        """IR AudioPart → OpenAI Responses audio content.
+
+        Raises:
+            NotImplementedError: OpenAI Responses API does not support audio parts.
+        """
+        raise NotImplementedError(
+            "OpenAI Responses API does not support audio content parts."
+        )
+
+    @staticmethod
+    def p_audio_to_ir(provider_audio: Any, **kwargs: Any) -> AudioPart:
+        """OpenAI Responses audio content → IR AudioPart.
+
+        Raises:
+            NotImplementedError: OpenAI Responses API does not support audio parts.
+        """
+        raise NotImplementedError(
+            "OpenAI Responses API does not support audio content parts."
+        )
+
+    # ==================== Reasoning ====================
+
+    @staticmethod
+    def ir_reasoning_to_p(
+        ir_reasoning: ReasoningPart,
+        *,
+        output_item: bool = False,
+        **kwargs: Any,
+    ) -> dict | None:
+        """IR ReasoningPart → OpenAI Responses reasoning item.
+
+        Args:
+            ir_reasoning: IR reasoning part.
+            output_item: Whether to serialize a response output lifecycle item.
+
+        Returns:
+            OpenAI Responses reasoning item, or ``None`` when a request item has
+            no proven Responses-origin identity.
+        """
+        metadata = ir_reasoning.get("provider_metadata") or {}
+        item_id = metadata.get("responses_reasoning_id")
+        if not output_item and not item_id:
+            return None
+
+        result: dict[str, Any] = {
+            "type": "reasoning",
+        }
+
+        if not item_id:
+            response_id = kwargs.get("response_id", "")
+            reasoning_index = kwargs.get("reasoning_index", 0)
+            item_id = generate_reasoning_id(response_id, reasoning_index)
+        result["id"] = item_id
+        if output_item:
+            result["status"] = metadata.get("responses_reasoning_status", "completed")
+
+        # Preserve an explicit structured summary, including an empty list.
+        if "responses_reasoning_summary" in metadata:
+            result["summary"] = metadata["responses_reasoning_summary"]
+        else:
+            content = ir_reasoning.get("reasoning", "")
+            # The Responses API uses a summary array, not a flat content field.
+            if content:
+                result["summary"] = [{"type": "summary_text", "text": content}]
+            else:
+                result["summary"] = []
+
+        # Open Responses spec: raw `content` field
+        raw_content = metadata.get("responses_reasoning_content")
+        if raw_content:
+            result["content"] = raw_content
+
+        # Preserve the opaque encrypted reasoning blob, but only when it
+        # originated here — a foreign blob is not valid for this API.
+        redacted = ir_reasoning.get("redacted_data")
+        if redacted and is_own_origin(
+            get_opaque_origin(ir_reasoning, "redacted_data"), "open_responses"
+        ):
+            result["encrypted_content"] = redacted
+
+        return result
+
+    @staticmethod
+    def p_reasoning_to_ir(
+        provider_reasoning: Any, **kwargs: Any
+    ) -> ReasoningPart | None:
+        """OpenAI Responses reasoning item → IR ReasoningPart.
+
+        Handles cases where reasoning content may be None (e.g., o4-mini).
+        Preserves the item id and structured summary for round-trip fidelity.
+
+        Args:
+            provider_reasoning: OpenAI Responses reasoning item dict.
+
+        Returns:
+            IR ReasoningPart, or None if content is empty/null.
+        """
+        # Extract text from structured summary array or flat content.
+        summary = provider_reasoning.get("summary")
+        if isinstance(summary, list):
+            texts = [
+                s.get("text", "")
+                for s in summary
+                if isinstance(s, dict) and s.get("type") == "summary_text"
+            ]
+            reasoning_content = "".join(texts)
+        else:
+            reasoning_content = provider_reasoning.get(
+                "reasoning"
+            ) or provider_reasoning.get("content")
+
+        # Build provider_metadata for round-trip preservation.
+        metadata: dict[str, Any] = {}
+        item_id = provider_reasoning.get("id")
+        if item_id:
+            metadata["responses_reasoning_id"] = item_id
+        reasoning_status = provider_reasoning.get("status")
+        if reasoning_status is not None:
+            metadata["responses_reasoning_status"] = reasoning_status
+        if isinstance(summary, list):
+            metadata["responses_reasoning_summary"] = summary
+
+        # Open Responses spec: raw `content` field (distinct from `summary`).
+        raw_content = provider_reasoning.get("content")
+        if raw_content:
+            metadata["responses_reasoning_content"] = raw_content
+            if not reasoning_content:
+                reasoning_content = _extract_content_text(raw_content)
+
+        part = ReasoningPart(type="reasoning")
+
+        if reasoning_content:
+            part["reasoning"] = str(reasoning_content)
+
+        # Preserve encrypted_content as opaque reasoning blob.
+        encrypted = provider_reasoning.get("encrypted_content")
+        if encrypted:
+            part["redacted_data"] = str(encrypted)
+
+        if metadata:
+            part["provider_metadata"] = metadata
+
+        # Record origin so a foreign target can drop this blob.
+        if encrypted:
+            set_opaque_origin(part, redacted_data="open_responses")
+
+        # Return part if it has any meaningful content or metadata to preserve.
+        if reasoning_content or encrypted or metadata:
+            return part
+
+        return None
+
+    # ==================== Refusal ====================
+
+    @staticmethod
+    def ir_refusal_to_p(ir_refusal: RefusalPart, **kwargs: Any) -> dict:
+        """IR RefusalPart → OpenAI Responses RefusalContent.
+
+        Args:
+            ir_refusal: IR refusal part.
+
+        Returns:
+            OpenAI Responses RefusalContent dict.
+        """
+        return {"type": "refusal", "refusal": ir_refusal["refusal"]}
+
+    @staticmethod
+    def p_refusal_to_ir(provider_refusal: Any, **kwargs: Any) -> RefusalPart:
+        """OpenAI Responses RefusalContent → IR RefusalPart.
+
+        Args:
+            provider_refusal: RefusalContent dict with type and refusal fields.
+
+        Returns:
+            IR RefusalPart.
+        """
+        if isinstance(provider_refusal, dict):
+            return RefusalPart(
+                type="refusal", refusal=provider_refusal.get("refusal", "")
+            )
+        return RefusalPart(type="refusal", refusal=str(provider_refusal))
+
+    # ==================== Citation ====================
+
+    #: The annotation fields this dialect defines.  Anything else an endpoint
+    #: adds rides ``provider_metadata``.
+    _URL_CITATION_FIELDS = ("url", "title", "start_index", "end_index")
+    _FILE_CITATION_FIELDS = ("file_id", "filename", "index")
+    _CONTAINER_CITATION_FIELDS = (
+        "container_id",
+        "file_id",
+        "filename",
+        "start_index",
+        "end_index",
+    )
+
+    @staticmethod
+    def ir_citation_to_p(ir_citation: CitationPart, **kwargs: Any) -> dict | None:
+        """IR CitationPart → Responses API annotation.
+
+        This surface **flattens** the annotation (the chat surface nests it
+        under a ``url_citation`` key — see the chat converter), and it is the
+        only one that spells OpenAI's file and container citations.
+
+        Returns:
+            The annotation, or ``None`` when this dialect has no form for it.
+        """
+        kind = citation_type_of(ir_citation)
+        # A citation that names a source fits the annotation vocabulary whatever
+        # kind it arrived as; one that does not (a document or file citation of
+        # another dialect) has no form here.
+        if kind in ("", CITATION_TYPE_URL) or citation_url(ir_citation):
+            url = citation_url(ir_citation)
+            if not url:
+                return None
+            annotation = OpenResponsesContentOps._url_annotation(ir_citation, url)
+            annotation.update(
+                {
+                    k: v
+                    for k, v in citation_provider_fields(ir_citation, "openai").items()
+                    if not k.startswith("_")
+                }
+            )
+            return annotation
+        if kind == CITATION_TYPE_FILE:
+            fields = citation_provider_fields(ir_citation, "openai")
+            if not fields.get("file_id"):
+                return None
+            file_annotation: dict[str, Any] = {"type": CITATION_TYPE_FILE}
+            start = citation_start_index(ir_citation)
+            if start is not None:
+                file_annotation["index"] = start
+            file_annotation.update(
+                {k: v for k, v in fields.items() if not k.startswith("_")}
+            )
+            return file_annotation
+        if kind == "container_file_citation":
+            fields = citation_provider_fields(ir_citation, "openai")
+            if not fields.get("container_id"):
+                return None
+            container_annotation: dict[str, Any] = {"type": "container_file_citation"}
+            container_annotation.update(
+                {k: v for k, v in fields.items() if not k.startswith("_")}
+            )
+            start = citation_start_index(ir_citation)
+            if start is not None:
+                container_annotation["start_index"] = start
+            end = citation_end_index(ir_citation)
+            if end is not None:
+                container_annotation["end_index"] = end
+            return container_annotation
+        raw = citation_provider_fields(ir_citation, "openai").get("_raw")
+        return dict(raw) if isinstance(raw, dict) else None
+
+    @staticmethod
+    def _url_annotation(ir_citation: CitationPart, url: str) -> dict[str, Any]:
+        """The flat annotation of a source, with the span only when it has one.
+
+        A citation read from a dialect whose citations carry no message-level
+        span (Anthropic's document kinds) gets none here, rather than a ``0/0``
+        that would read as "the first characters".
+        """
+        annotation: dict[str, Any] = {
+            "type": CITATION_TYPE_URL,
+            "title": citation_title(ir_citation) or "",
+            "url": url,
+        }
+        start = citation_start_index(ir_citation)
+        end = citation_end_index(ir_citation)
+        if start is not None:
+            annotation["start_index"] = start
+        if end is not None:
+            annotation["end_index"] = end
+        return annotation
+
+    @staticmethod
+    def p_citation_to_ir(provider_citation: Any, **kwargs: Any) -> CitationPart:
+        """Responses API annotation → IR CitationPart.
+
+        Annotations arrive flat on the content part.  ``file_citation``'s
+        ``index`` is the offset of the annotated text in the message, so it
+        becomes the shared ``start_index``; the file's identity stays
+        provider-private.
+        """
+        if not isinstance(provider_citation, dict):
+            return CitationPart(type="citation")
+        kind = provider_citation.get("type", "")
+        if kind == CITATION_TYPE_URL:
+            url = provider_citation.get("url")
+            if not url:
+                return CitationPart(type="citation")
+            return make_url_citation(
+                url,
+                title=provider_citation.get("title"),
+                start_index=provider_citation.get("start_index"),
+                end_index=provider_citation.get("end_index"),
+                provider="openai",
+                provider_fields=extra_fields(
+                    provider_citation, OpenResponsesContentOps._URL_CITATION_FIELDS
+                ),
+            )
+        if kind == CITATION_TYPE_FILE:
+            fields = {
+                k: provider_citation[k]
+                for k in ("file_id", "filename")
+                if provider_citation.get(k) is not None
+            }
+            fields.update(
+                extra_fields(
+                    provider_citation, OpenResponsesContentOps._FILE_CITATION_FIELDS
+                )
+            )
+            return make_citation(
+                CITATION_TYPE_FILE,
+                start_index=provider_citation.get("index"),
+                provider="openai",
+                provider_fields=fields,
+            )
+        if kind == "container_file_citation":
+            fields = {
+                k: provider_citation[k]
+                for k in ("container_id", "file_id", "filename")
+                if provider_citation.get(k) is not None
+            }
+            fields.update(
+                extra_fields(
+                    provider_citation,
+                    OpenResponsesContentOps._CONTAINER_CITATION_FIELDS,
+                )
+            )
+            return make_citation(
+                kind,
+                start_index=provider_citation.get("start_index"),
+                end_index=provider_citation.get("end_index"),
+                provider="openai",
+                provider_fields=fields,
+            )
+        if kind:
+            return CitationPart(
+                type="citation",
+                citation_type=kind,
+                provider_metadata={"openai": {"_raw": dict(provider_citation)}},
+            )
+        return CitationPart(type="citation")
+
+
+# Backward-compatible alias (deprecated): the OpenAI Responses profile reuses
+# the same content operations as the vendor-neutral Open Responses base.
+OpenAIResponsesContentOps = OpenResponsesContentOps

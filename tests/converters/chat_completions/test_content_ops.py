@@ -4,7 +4,7 @@ OpenAI Chat ContentOps unit tests.
 
 import pytest
 
-from llm_rosetta.converters.chat_completions.content_ops import (
+from llm_rosetta.converters.llm.chat_completions.content_ops import (
     ChatCompletionsContentOps,
 )
 from typing import cast

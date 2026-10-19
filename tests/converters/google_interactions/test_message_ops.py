@@ -1,7 +1,7 @@
 """Tests for Google Interactions message_ops."""
 
 import pytest
-from llm_rosetta.converters.google_interactions.message_ops import (
+from llm_rosetta.converters.llm.google_interactions.message_ops import (
     GoogleInteractionsMessageOps,
 )
 

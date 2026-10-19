@@ -12,7 +12,7 @@ from typing import Any, cast
 
 import pytest
 
-from llm_rosetta.converters.chat_completions import ChatCompletionsConverter
+from llm_rosetta.converters.llm.chat_completions import ChatCompletionsConverter
 from llm_rosetta.converters.base.helpers.system_message_hoist import (
     hoist_late_system_messages_ir,
 )
