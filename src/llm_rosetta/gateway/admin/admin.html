@@ -190,13 +190,13 @@
       </div>
       <div class="table-scroll"><table>
         <thead><tr>
-          <th style="width:24%" data-i18n="col.label">Label</th>
-          <th style="width:12%" data-i18n="col.created">Created</th>
-          <th style="width:12%" data-i18n="col.lastUsed">Last Used</th>
-          <th style="width:9%;text-align:right" data-i18n="col.requests">Requests</th>
-          <th style="width:9%;text-align:right" data-i18n="tokenUsage.col.input">Input</th>
-          <th style="width:9%;text-align:right" data-i18n="tokenUsage.col.output">Output</th>
-          <th style="width:9%;text-align:right" data-i18n="tokenUsage.col.total">Total</th>
+          <th class="sortable" id="keySortLabel" onclick="sortKeys('label')" style="width:24%" data-i18n="col.label">Label</th>
+          <th class="sortable" id="keySortCreated" onclick="sortKeys('created')" style="width:12%" data-i18n="col.created">Created</th>
+          <th class="sortable" id="keySortLastUsed" onclick="sortKeys('last_used')" style="width:12%" data-i18n="col.lastUsed">Last Used</th>
+          <th class="sortable" id="keySortRequests" onclick="sortKeys('requests')" style="width:9%;text-align:right" data-i18n="col.requests">Requests</th>
+          <th class="sortable" id="keySortInput" onclick="sortKeys('input')" style="width:9%;text-align:right" data-i18n="tokenUsage.col.input">Input</th>
+          <th class="sortable" id="keySortOutput" onclick="sortKeys('output')" style="width:9%;text-align:right" data-i18n="tokenUsage.col.output">Output</th>
+          <th class="sortable" id="keySortTotal" onclick="sortKeys('total')" style="width:9%;text-align:right" data-i18n="tokenUsage.col.total">Total</th>
           <th style="text-align:right"></th>
         </tr></thead>
         <tbody id="keysTable"></tbody>

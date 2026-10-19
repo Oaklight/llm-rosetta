@@ -109,16 +109,77 @@ function renderUnattributedRows(win) {
   return rows;
 }
 
+// Column sorting mirrors the Models table: clicking the active column
+// flips the direction, clicking another starts ascending.  Until a column is
+// chosen the server's order is kept.
+function sortKeys(key) {
+  if (S._keysSortKey === key) {
+    S._keysSortDir = S._keysSortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    S._keysSortKey = key;
+    S._keysSortDir = 'asc';
+  }
+  renderKeys();
+}
+
+// A single unparseable timestamp would turn every comparison into NaN and
+// freeze the whole column, so a bad value reads as "oldest" instead.
+function _parseDate(value) {
+  if (!value) return 0;
+  const ms = Date.parse(value);
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+function _keySortValue(k, win) {
+  const entry = S.keyUsage && S.keyUsage.keys && S.keyUsage.keys[k.id];
+  const w = (entry && entry.windows && entry.windows[win]) || {};
+  switch (S._keysSortKey) {
+    case 'label': return (k.label || '').toLowerCase();
+    case 'created': return _parseDate(k.created);
+    case 'last_used': return _parseDate(k.last_used);
+    case 'requests': return w.request_count || 0;
+    case 'input': return w.input_tokens || 0;
+    case 'output': return w.output_tokens || 0;
+    case 'total': return w.total_tokens || 0;
+    default: return 0;
+  }
+}
+
+function _syncKeySortHeaders() {
+  for (const key of ['label', 'created', 'last_used', 'requests', 'input', 'output', 'total']) {
+    const el = document.getElementById('keySort' + key.split('_').map(s => s[0].toUpperCase() + s.slice(1)).join(''));
+    if (!el) continue;
+    el.className = 'sortable' + (S._keysSortKey === key ? ' ' + S._keysSortDir : '');
+  }
+}
+
 function renderKeys() {
   // Re-rendered here too so a language switch relabels the tier control.
   renderKeyUsageControl();
   const tbody = document.getElementById('keysTable');
   const allKeys = (S.keysData && S.keysData.keys) || [];
   const query = (document.getElementById('keySearch')?.value || '').trim().toLowerCase();
+  // `slice()` keeps the sort from reordering S.keysData.keys in place: the
+  // server's order has to survive until a column is clicked.
   const keys = query
     ? allKeys.filter(k => (k.label || '').toLowerCase().includes(query))
-    : allKeys;
+    : allKeys.slice();
   const win = S.keyUsageWindow || usageWindows()[0];
+  _syncKeySortHeaders();
+  if (S._keysSortKey) {
+    const dir = S._keysSortDir === 'asc' ? 1 : -1;
+    keys.sort((a, b) => {
+      const va = _keySortValue(a, win);
+      const vb = _keySortValue(b, win);
+      const cmp = (typeof va === 'string' || typeof vb === 'string')
+        ? String(va).localeCompare(String(vb))
+        : va - vb;
+      if (cmp !== 0) return cmp * dir;
+      // Ties break on the label in ascending order, so equal usage or the
+      // same creation day does not depend on what was sorted last.
+      return (a.label || '').localeCompare(b.label || '');
+    });
+  }
   // Unattributed rows carry no label, so they cannot match a search.
   const extraRows = query ? [] : renderUnattributedRows(win);
   const countEl = document.getElementById('keyCount');
@@ -275,7 +336,7 @@ Object.assign(window, {
   loadKeys, loadLogKeyLabels, renderKeys, openKeyModal,
   generateKey, copyCreatedKey, deleteKey, rotateKey, editKeyLabel,
   onKeyLabelInputKeydown, saveKeyLabel,
-  backfillKeysLastUsed, setKeyUsageWindow,
+  backfillKeysLastUsed, setKeyUsageWindow, sortKeys,
 });
 
 export { loadKeys, loadLogKeyLabels, renderKeys, setKeyUsageWindow };

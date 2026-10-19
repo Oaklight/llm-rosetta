@@ -53,6 +53,9 @@ export const S = {
   _providerViewMode: localStorage.getItem('provider-view') || 'grid',
   _modelSortKey: 'name',
   _modelSortDir: 'asc',
+  // Empty key = keep the server's order until a column is clicked.
+  _keysSortKey: '',
+  _keysSortDir: 'asc',
   _pendingDeleteProvider: '',
   _keyFieldIsMulti: false,
   _keyFieldVisible: false,
