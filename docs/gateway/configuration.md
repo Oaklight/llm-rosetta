@@ -71,7 +71,7 @@ without installing anything into the gateway image.
       "path": "src/llm_rosetta_shim_alcf/providers",   // subpath inside the archive
       "archive": "auto",                               // auto | tar.gz | zip
       "sha256": "0123…abcd",                           // optional archive pin
-      "token_env": "GITHUB_TOKEN",                     // optional; private repos
+      "token_env": "GITHUB_TOKEN",                     // optional; private mirror only
       "refresh": "auto"                                // auto | always | never
     }
   ],
@@ -119,8 +119,10 @@ applies a config dict. `create_app` also applies the section automatically.
 **Standalone packages and presets.** The ALCF, AskSage and Argo shims ship in
 their own repositories. `presets` names one of them (`alcf`, `argo`, `asksage`)
 and expands to the catalog remote, which is exactly the `remotes` entry shown
-above. Presets are applied first and an explicit remote with the same URL
-overrides its preset, so a pinned `ref` or `sha256` can be layered on later. A
+above. Presets are applied first and an explicit remote with the same URL is
+merged onto its preset (explicit keys win), so a pinned `ref` or `sha256` layers
+on without losing the catalog `path`. The published repositories are public, so
+the presets carry no `token_env`. A
 provider config that still names one of these shims without a declared source
 fails at startup with an error naming the package, the preset and the expanded
 remote. The admin panel's preset catalog (see

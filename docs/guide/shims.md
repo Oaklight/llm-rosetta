@@ -200,9 +200,9 @@ ships no `pip` and no `git`) and the shims live in their own repository:
   "remotes": [
     {
       "url": "https://github.com/Oaklight/llm-rosetta-shim-alcf",
-      "ref": "v0.1.0",                             // pin for reproducibility; omit => HEAD, pinned on first fetch
+      // "ref": "v0.1.0",                          // pin once the repo is tagged; omit => HEAD, pinned on first fetch
       "path": "src/llm_rosetta_shim_alcf/providers",
-      "token_env": "GITHUB_TOKEN"                  // private repos
+      "token_env": "GITHUB_TOKEN"                  // optional; private mirror only
     }
   ]
 }
@@ -210,7 +210,7 @@ ships no `pip` and no `git`) and the shims live in their own repository:
 
 A `presets` entry names a package from the source catalog (ALCF, Argo,
 AskSage) and expands to the remote shown below; an explicit remote with the same
-URL overrides it. A remote `path` is the directory inside the archive that holds
+URL is merged onto it (explicit keys win). A remote `path` is the directory inside the archive that holds
 the provider directories (for the `llm-rosetta-shim-*` packages that is
 `src/<package>/providers`). See
 [Gateway → External Shim Sources](../gateway/configuration.md#external-shim-sources)
@@ -301,16 +301,16 @@ repository, path and token variable, so one line replaces the expanded remote:
   "remotes": [
     {
       "url": "https://github.com/Oaklight/llm-rosetta-shim-argo",
-      "path": "src/llm_rosetta_shim_argo/providers",
-      "token_env": "GITHUB_TOKEN"          // the three repositories are private
+      "path": "src/llm_rosetta_shim_argo/providers"
     }
   ]
 }
 ```
 
 Presets are applied before explicit remotes, and an explicit remote with the
-same URL overrides its preset. The three repositories are private, so
-`token_env` names the variable that carries the forge token. No `ref` is pinned
+same URL is merged onto its preset (explicit keys win), so a `ref` can be pinned
+without restating the `path`. The three repositories are public, so a preset
+carries no `token_env`; add one only for a private mirror. No `ref` is pinned
 because none of them is tagged yet: a remote without a `ref` resolves `HEAD` to
 a commit once and records it in the cache stamp. Once they are tagged, pin the
 tag — see [Ref resolution](../gateway/configuration.md#external-shim-sources).
@@ -321,10 +321,12 @@ remote to the config. A config that still names one of these shims without a
 declared source gets a startup error naming the package, the preset and the
 expanded remote; once the source loads, the error goes away.
 
-Legacy spellings do **not** resolve in core any more: `argo--openai_chat`,
+Legacy spellings do **not** resolve to a shim any more: `argo--openai_chat`,
 `argo--anthropic` and `argo--openai_responses` were aliases of the built-in
-shims and left with them, and the standalone packages register canonical names
-only. Change a legacy value to its canonical name when declaring the preset.
+shims, and the standalone packages register canonical names only. The aliases
+remain as a spelling map, so an old value canonicalises first and reaches the
+stranded-config error that names the package; change it to the canonical name
+when declaring the preset.
 
 A CI check (`scripts/check_shim_removals.py`, `make check-shim-removals`) still
 guards future removals: it reads `SHIM_REMOVALS`, fails if a shim disappears

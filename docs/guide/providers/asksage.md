@@ -6,17 +6,12 @@
     Since 0.14.0 the four AskSage shims are no longer built into LLM-Rosetta; they
     ship in the
     [llm-rosetta-shim-asksage](https://github.com/Oaklight/llm-rosetta-shim-asksage)
-    package. Declare it under `shims.remotes` and the names below keep working.
+    package. Declare it with `shims.presets` (or the equivalent
+    `shims.remotes` entry) and the names below keep working.
     **Settings → Shim Sources** offers the same entry as a one-click preset.
 
     ```jsonc
-    "shims": {
-      "remotes": [{
-        "url": "https://github.com/Oaklight/llm-rosetta-shim-asksage",
-        "path": "src/llm_rosetta_shim_asksage/providers",
-        "token_env": "GITHUB_TOKEN"      // the repository is private
-      }]
-    }
+    "shims": { "presets": ["asksage"] }
     ```
 
 ## Endpoints
