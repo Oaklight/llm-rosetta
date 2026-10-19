@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 
 from llm_rosetta._vendor.httpclient import AsyncClient, Response as HttpResponse
@@ -9,6 +10,62 @@ from llm_rosetta._vendor.httpserver import JSONResponse, Response
 
 from ...config import GatewayConfig
 from ._shared import _qp, parse_json_body
+
+
+def _normalise_time_bound(value: str) -> str:
+    """Normalise an ISO 8601 query bound to UTC ``isoformat()``.
+
+    Stored log timestamps are ``datetime.now(timezone.utc).isoformat()``
+    strings, so the bounds are converted to the same representation
+    before they are compared lexicographically.  A trailing ``Z`` is
+    accepted because that is what JavaScript's ``toISOString()`` emits.
+
+    A value without a UTC offset is rejected rather than assumed to be
+    UTC: guessing would silently shift the window by the caller's local
+    offset, and the error names the expected shape instead.
+
+    Raises:
+        ValueError: If *value* is not a parseable ISO 8601 timestamp with
+            an explicit offset.
+    """
+    text = value.strip()
+    if text.endswith(("Z", "z")):
+        text = text[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError as exc:
+        raise ValueError(
+            f"Invalid ISO 8601 timestamp {value!r} (expected e.g. 2026-10-19T07:00:00Z)"
+        ) from exc
+    if parsed.tzinfo is None:
+        raise ValueError(
+            f"Timestamp {value!r} has no UTC offset; add Z or an explicit "
+            f"offset (e.g. 2026-10-19T07:00:00Z)"
+        )
+    return parsed.astimezone(timezone.utc).isoformat()
+
+
+def _bounded_int(
+    request: Any, key: str, default: int, *, minimum: int, maximum: int
+) -> int:
+    """Parse an integer query parameter and clamp it to a closed range.
+
+    ``LIMIT -1`` in SQLite means "no limit", so a negative page size must
+    not reach the query.  The clamp also keeps a hand-edited URL from
+    asking for the whole table in one response.
+
+    Raises:
+        ValueError: If the value is not an integer; callers turn this into
+            a 400 rather than letting it surface as a 500.
+    """
+    raw = _qp(request, key)
+    if raw is None or raw == "":
+        return default
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise ValueError(f"{key} must be an integer, got {raw!r}") from exc
+    return max(minimum, min(value, maximum))
 
 
 def _detect_host_ip() -> dict[str, Any]:
@@ -157,14 +214,27 @@ async def get_request_key_labels(request: Any) -> Response:
 
 
 async def get_requests(request: Any) -> Response:
-    """Return paginated, filtered request log entries."""
+    """Return paginated, filtered request log entries.
+
+    ``since`` and ``until`` accept ISO 8601 timestamps (``Z`` or an
+    explicit offset); ``until`` is exclusive so adjacent windows do not
+    double-count the boundary instant.
+    """
     log = request.app.request_log
-    limit = int(_qp(request, "limit", "50"))
-    offset = int(_qp(request, "offset", "0"))
     model = _qp(request, "model")
     provider = _qp(request, "provider")
     status = _qp(request, "status")
     api_key_label = _qp(request, "api_key_label")
+
+    try:
+        limit = _bounded_int(request, "limit", 50, minimum=1, maximum=500)
+        offset = _bounded_int(request, "offset", 0, minimum=0, maximum=10_000_000)
+        since_raw = _qp(request, "since")
+        until_raw = _qp(request, "until")
+        since = _normalise_time_bound(since_raw) if since_raw else None
+        until = _normalise_time_bound(until_raw) if until_raw else None
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
 
     # Resolve provider name → provider type so the query can match old
     # entries that only have target_provider (the API type) without a
@@ -201,6 +271,8 @@ async def get_requests(request: Any) -> Response:
         provider_type=provider_type,
         status=status,
         api_key_label=api_key_label,
+        since=since,
+        until=until,
     )
     return JSONResponse({"entries": entries, "total": total})
 
@@ -328,8 +400,11 @@ async def get_error_dumps(request: Any) -> Response:
     if persistence is None:
         return JSONResponse({"error": "No persistence configured"}, status_code=400)
 
-    limit = int(_qp(request, "limit", "50"))
-    offset = int(_qp(request, "offset", "0"))
+    try:
+        limit = _bounded_int(request, "limit", 50, minimum=1, maximum=500)
+        offset = _bounded_int(request, "offset", 0, minimum=0, maximum=10_000_000)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
     model = _qp(request, "model")
     error_phase = _qp(request, "error_phase")
     provider = _qp(request, "provider")
@@ -547,8 +622,11 @@ async def get_ops_log(request: Any) -> Response:
     ops_log = getattr(request.app, "ops_log", None)
     if ops_log is None:
         return JSONResponse({"entries": [], "total": 0})
-    limit = min(int(_qp(request, "limit", "50")), 500)
-    offset = int(_qp(request, "offset", "0"))
+    try:
+        limit = _bounded_int(request, "limit", 50, minimum=1, maximum=500)
+        offset = _bounded_int(request, "offset", 0, minimum=0, maximum=10_000_000)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
     event_type = _qp(request, "event_type")
     severity = _qp(request, "severity")
     source = _qp(request, "source")

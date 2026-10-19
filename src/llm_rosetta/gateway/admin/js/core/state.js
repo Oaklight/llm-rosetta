@@ -42,6 +42,7 @@ export const S = {
   logKeyLabels: [],
   internalToken: null,
   logOffset: 0,
+  logPageSize: LOG_LIMIT,
   dashboardTimer: null,
   logTimer: null,
   healthTimer: null,

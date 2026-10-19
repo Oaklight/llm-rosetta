@@ -638,6 +638,8 @@ class PersistenceManager:
         provider_type: str | None = None,
         status: str | None = None,
         api_key_label: str | None = None,
+        since: str | None = None,
+        until: str | None = None,
     ) -> tuple[list[dict[str, Any]], int]:
         """Query request log with optional filters, newest first.
 
@@ -647,6 +649,10 @@ class PersistenceManager:
                 ``"google"``).  Enables matching legacy rows that only
                 have ``target_provider`` (the API type) without a
                 ``target_provider_name`` backfill.
+            since: ISO 8601 lower bound (inclusive), compared against the
+                stored UTC timestamp.
+            until: ISO 8601 upper bound (exclusive), so consecutive
+                windows do not double-count an event on the boundary.
 
         Returns:
             A ``(entries, total)`` tuple.
@@ -686,6 +692,12 @@ class PersistenceManager:
         if api_key_label:
             where_clauses.append("api_key_label = ?")
             params.append(api_key_label)
+        if since:
+            where_clauses.append("timestamp >= ?")
+            params.append(since)
+        if until:
+            where_clauses.append("timestamp < ?")
+            params.append(until)
 
         where_sql = ""
         if where_clauses:

@@ -16,14 +16,41 @@ async function loadLogs() {
   const statusSearch = document.getElementById('logStatusSearch').value.trim();
   const status = (statusDrop === 'custom' || (!statusDrop && statusSearch)) ? statusSearch : statusDrop;
   const apiKey = document.getElementById('filterApiKey').value;
-  let url = `/admin/api/requests?limit=${LOG_LIMIT}&offset=${S.logOffset}`;
+  const limit = S.logPageSize || LOG_LIMIT;
+  let url = `/admin/api/requests?limit=${limit}&offset=${S.logOffset}`;
   if (model) url += `&model=${encodeURIComponent(model)}`;
   if (provider) url += `&provider=${encodeURIComponent(provider)}`;
   if (status) url += `&status=${encodeURIComponent(status)}`;
   if (apiKey) url += `&api_key_label=${encodeURIComponent(apiKey)}`;
+  const bounds = logTimeBounds();
+  if (bounds.since) url += `&since=${encodeURIComponent(bounds.since)}`;
+  if (bounds.until) url += `&until=${encodeURIComponent(bounds.until)}`;
 
   const data = await api.get(url);
   renderLogs(data.entries, data.total);
+}
+
+// Translate the time-range control into ISO bounds. `until` is exclusive
+// and, for a custom end date, means the start of the following day so the
+// selected end date is included in full.
+function logTimeBounds() {
+  const range = document.getElementById('filterTimeRange').value;
+  if (!range) return {};
+  if (range === 'custom') {
+    const out = {};
+    const from = document.getElementById('logDateFrom').value;
+    const to = document.getElementById('logDateTo').value;
+    if (from) out.since = new Date(from + 'T00:00:00').toISOString();
+    if (to) {
+      const end = new Date(to + 'T00:00:00');
+      end.setDate(end.getDate() + 1);
+      out.until = end.toISOString();
+    }
+    return out;
+  }
+  const hours = { '1h': 1, '24h': 24, '7d': 24 * 7, '30d': 24 * 30 }[range];
+  if (!hours) return {};
+  return { since: new Date(Date.now() - hours * 3600 * 1000).toISOString() };
 }
 
 // Reverse-lookup: provider API type → display name from config
@@ -84,11 +111,12 @@ function renderLogs(entries, total) {
   }
 
   // Pagination
-  const totalPages = Math.ceil(total / LOG_LIMIT) || 1;
-  const currentPage = Math.floor(S.logOffset / LOG_LIMIT) + 1;
+  const limit = S.logPageSize || LOG_LIMIT;
+  const totalPages = Math.ceil(total / limit) || 1;
+  const currentPage = Math.floor(S.logOffset / limit) + 1;
   document.getElementById('pageInfo').textContent = t('page.info', {current: currentPage, total: totalPages, count: total});
   document.getElementById('prevPage').disabled = S.logOffset === 0;
-  document.getElementById('nextPage').disabled = S.logOffset + LOG_LIMIT >= total;
+  document.getElementById('nextPage').disabled = S.logOffset + limit >= total;
 }
 
 function toggleLogRow(rowId, tr) {
@@ -100,7 +128,23 @@ function toggleLogRow(rowId, tr) {
 }
 
 function changePage(dir) {
-  S.logOffset = Math.max(0, S.logOffset + dir * LOG_LIMIT);
+  S.logOffset = Math.max(0, S.logOffset + dir * (S.logPageSize || LOG_LIMIT));
+  S.expandedLogRows.clear();
+  loadLogs();
+}
+
+function onLogPageSizeChange() {
+  const value = parseInt(document.getElementById('logPageSize').value, 10);
+  S.logPageSize = Number.isFinite(value) && value > 0 ? value : LOG_LIMIT;
+  S.logOffset = 0;
+  S.expandedLogRows.clear();
+  loadLogs();
+}
+
+function onLogTimeRangeChange() {
+  const custom = document.getElementById('filterTimeRange').value === 'custom';
+  document.getElementById('logCustomRange').style.display = custom ? 'inline-flex' : 'none';
+  S.logOffset = 0;
   S.expandedLogRows.clear();
   loadLogs();
 }
@@ -149,6 +193,10 @@ function resetLogFilters() {
   document.getElementById('filterModel').value = '';
   document.getElementById('filterProvider').value = '';
   document.getElementById('filterApiKey').value = '';
+  document.getElementById('filterTimeRange').value = '';
+  document.getElementById('logDateFrom').value = '';
+  document.getElementById('logDateTo').value = '';
+  document.getElementById('logCustomRange').style.display = 'none';
   closeLogStatusSearch(true);
   S.logOffset = 0;
   S.expandedLogRows.clear();
@@ -219,7 +267,8 @@ Object.assign(window, {
   loadLogs, renderLogs, toggleLogRow, changePage, jumpToErrorDump,
   resetLogFilters, updateFilterOptions, updateKeyFilterOptions,
   onLogStatusFilterChange, onLogStatusSearchInput, closeLogStatusSearch,
+  onLogTimeRangeChange, onLogPageSizeChange,
   deleteModel,
 });
 
-export { loadLogs, renderLogs, updateFilterOptions, updateKeyFilterOptions, onLogStatusFilterChange, onLogStatusSearchInput, closeLogStatusSearch };
+export { loadLogs, renderLogs, updateFilterOptions, updateKeyFilterOptions, onLogStatusFilterChange, onLogStatusSearchInput, closeLogStatusSearch, onLogTimeRangeChange, onLogPageSizeChange };

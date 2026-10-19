@@ -193,6 +193,8 @@ class RequestLog:
         provider_type: str | None = None,
         status: str | None = None,
         api_key_label: str | None = None,
+        since: str | None = None,
+        until: str | None = None,
     ) -> tuple[list[dict[str, Any]], int]:
         """Return filtered entries (newest-first) and total count.
 
@@ -203,6 +205,8 @@ class RequestLog:
                 legacy entries whose ``target_provider`` stores the API
                 type but have no ``target_provider_name`` backfill.
             api_key_label: Filter by API key label (exact match).
+            since: ISO 8601 lower bound (inclusive).
+            until: ISO 8601 upper bound (exclusive).
         """
         if self._persistence is not None:
             return await self._persistence.query_log_entries(
@@ -213,6 +217,8 @@ class RequestLog:
                 provider_type=provider_type,
                 status=status,
                 api_key_label=api_key_label,
+                since=since,
+                until=until,
             )
 
         # Fallback: in-memory filtering
@@ -235,6 +241,10 @@ class RequestLog:
             filtered = [e for e in filtered if _match_status(e.status_code, status)]
         if api_key_label:
             filtered = [e for e in filtered if e.api_key_label == api_key_label]
+        if since:
+            filtered = [e for e in filtered if e.timestamp >= since]
+        if until:
+            filtered = [e for e in filtered if e.timestamp < until]
         total = len(filtered)
         page = filtered[offset : offset + limit]
         return [e.to_dict() for e in page], total

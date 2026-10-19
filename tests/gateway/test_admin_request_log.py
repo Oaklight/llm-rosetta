@@ -1,8 +1,14 @@
 """Tests for the admin panel RequestLog."""
 
+from dataclasses import replace
+
 import pytest
 
 from llm_rosetta.gateway.admin.request_log import RequestLog, RequestLogEntry
+from llm_rosetta.gateway.admin.routes.observability import (
+    _bounded_int,
+    _normalise_time_bound,
+)
 
 
 class TestRequestLogEntry:
@@ -160,6 +166,38 @@ class TestRequestLog:
         assert await log.get_api_key_labels() == ["alice", "bob"]
 
     @pytest.mark.asyncio
+    async def test_filter_by_time_range(self):
+        log = RequestLog()
+        entries = [
+            replace(
+                self._make_entry(model="old"), timestamp="2026-10-01T00:00:00+00:00"
+            ),
+            replace(
+                self._make_entry(model="mid"), timestamp="2026-10-10T00:00:00+00:00"
+            ),
+            replace(
+                self._make_entry(model="new"), timestamp="2026-10-19T00:00:00+00:00"
+            ),
+        ]
+        for entry in entries:
+            await log.add(entry)
+
+        _, total = await log.get_entries(since="2026-10-05T00:00:00+00:00")
+        assert total == 2
+
+        results, total = await log.get_entries(
+            since="2026-10-05T00:00:00+00:00",
+            until="2026-10-15T00:00:00+00:00",
+        )
+        assert total == 1
+        assert results[0]["model"] == "mid"
+
+        # The upper bound is exclusive, so an entry exactly on it is excluded.
+        results, total = await log.get_entries(until="2026-10-10T00:00:00+00:00")
+        assert total == 1
+        assert results[0]["model"] == "old"
+
+    @pytest.mark.asyncio
     async def test_clear(self):
         log = RequestLog()
         await log.add(self._make_entry())
@@ -167,3 +205,61 @@ class TestRequestLog:
         assert len(log._entries) == 2
         await log.clear()
         assert len(log._entries) == 0
+
+
+class TestNormaliseTimeBound:
+    def test_z_suffix(self):
+        assert (
+            _normalise_time_bound("2026-10-19T07:00:00Z") == "2026-10-19T07:00:00+00:00"
+        )
+
+    def test_offset_converted_to_utc(self):
+        assert (
+            _normalise_time_bound("2026-10-19T15:00:00+08:00")
+            == "2026-10-19T07:00:00+00:00"
+        )
+
+    def test_naive_rejected(self):
+        with pytest.raises(ValueError, match="has no UTC offset"):
+            _normalise_time_bound("2026-10-19T07:00:00")
+
+    def test_invalid_raises(self):
+        with pytest.raises(ValueError, match="Invalid ISO 8601 timestamp"):
+            _normalise_time_bound("yesterday")
+
+
+class _StubRequest:
+    """Minimal request stand-in for the query-param helpers."""
+
+    def __init__(self, **params: str):
+        self.query_params = {key: [value] for key, value in params.items()}
+
+
+class TestBoundedInt:
+    def test_default_when_absent(self):
+        assert _bounded_int(_StubRequest(), "limit", 50, minimum=1, maximum=500) == 50
+
+    def test_negative_is_clamped_up(self):
+        # SQLite reads LIMIT -1 as "no limit", so this must not pass through.
+        assert (
+            _bounded_int(_StubRequest(limit="-1"), "limit", 50, minimum=1, maximum=500)
+            == 1
+        )
+
+    def test_zero_is_clamped_up(self):
+        assert (
+            _bounded_int(_StubRequest(limit="0"), "limit", 50, minimum=1, maximum=500)
+            == 1
+        )
+
+    def test_huge_is_clamped_down(self):
+        assert (
+            _bounded_int(
+                _StubRequest(limit="1000000"), "limit", 50, minimum=1, maximum=500
+            )
+            == 500
+        )
+
+    def test_non_integer_raises(self):
+        with pytest.raises(ValueError, match="limit must be an integer"):
+            _bounded_int(_StubRequest(limit="abc"), "limit", 50, minimum=1, maximum=500)

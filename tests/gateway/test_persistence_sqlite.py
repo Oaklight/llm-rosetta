@@ -179,6 +179,36 @@ class TestPersistenceManagerRequestLog:
         await pm.close()
 
     @pytest.mark.asyncio
+    async def test_filter_by_time_range(self, tmp_path):
+        pm = await PersistenceManager.create(str(tmp_path))
+        entries = []
+        for model, timestamp in (
+            ("old", "2026-10-01T00:00:00+00:00"),
+            ("mid", "2026-10-10T00:00:00+00:00"),
+            ("new", "2026-10-19T00:00:00+00:00"),
+        ):
+            entry = _make_entry_dict(model=model)
+            entry["timestamp"] = timestamp
+            entries.append(entry)
+        await pm.insert_log_entries(entries)
+
+        results, total = await pm.query_log_entries(since="2026-10-05T00:00:00+00:00")
+        assert total == 2
+
+        results, total = await pm.query_log_entries(
+            since="2026-10-05T00:00:00+00:00",
+            until="2026-10-15T00:00:00+00:00",
+        )
+        assert total == 1
+        assert results[0]["model"] == "mid"
+
+        # The upper bound is exclusive, so an entry exactly on it is excluded.
+        results, total = await pm.query_log_entries(until="2026-10-10T00:00:00+00:00")
+        assert total == 1
+        assert results[0]["model"] == "old"
+        await pm.close()
+
+    @pytest.mark.asyncio
     async def test_pagination(self, tmp_path):
         pm = await PersistenceManager.create(str(tmp_path))
         entries = [_make_entry_dict(model=f"m-{i}") for i in range(20)]

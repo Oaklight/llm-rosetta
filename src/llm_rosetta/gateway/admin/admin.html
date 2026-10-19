@@ -428,6 +428,19 @@
           </span>
         </span>
         <select id="filterApiKey"><option value="" data-i18n="filter.allKeys">All Keys</option></select>
+        <select id="filterTimeRange" onchange="onLogTimeRangeChange()">
+          <option value="" data-i18n="filter.allTime">All Time</option>
+          <option value="1h" data-i18n="filter.last1h">Last 1h</option>
+          <option value="24h" data-i18n="filter.last24h">Last 24h</option>
+          <option value="7d" data-i18n="filter.last7d">Last 7d</option>
+          <option value="30d" data-i18n="filter.last30d">Last 30d</option>
+          <option value="custom" data-i18n="filter.custom">Custom...</option>
+        </select>
+        <span id="logCustomRange" style="display:none;align-items:center;gap:4px">
+          <input type="date" id="logDateFrom" onchange="onLogTimeRangeChange()">
+          <span style="color:var(--text-dim)">—</span>
+          <input type="date" id="logDateTo" onchange="onLogTimeRangeChange()">
+        </span>
         <button class="btn btn-sm" onclick="resetLogFilters()" data-i18n="btn.resetFilters">Reset Filters</button>
       </div>
       <div class="table-scroll"><table>
@@ -438,6 +451,13 @@
         <button class="btn btn-sm" id="prevPage" onclick="changePage(-1)" data-i18n="btn.prev">Prev</button>
         <span class="info" id="pageInfo"></span>
         <button class="btn btn-sm" id="nextPage" onclick="changePage(1)" data-i18n="btn.next">Next</button>
+        <label class="info" for="logPageSize" data-i18n="page.rows">Rows/page</label>
+        <select id="logPageSize" onchange="onLogPageSizeChange()" style="padding:4px 8px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:13px">
+          <option value="30">30</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+          <option value="200">200</option>
+        </select>
       </div>
     </div>
     <div id="logView-ops" style="display:none">
