@@ -22,19 +22,19 @@ title: 管理面板
 
 **Settings** 标签页中有一个 **Shim Sources** 区块，对应顶层 `shims` 配置段（见
 [外部 Shim 源](configuration.md#external-shim-sources)）。它列出声明的 **Directories**
-（每行一个）、**Remotes**（JSON 数组）以及其余开关 —— **缓存目录**、**重新拉取间隔（秒）**、
-**源加载失败时拒绝启动** —— 并给出每个源的状态表：`已加载` / `失败`、是否使用了过期缓存、
+（每行一个）、**Presets**（逗号或空白分隔的 catalog 键）、**Remotes**（JSON 数组）以及其余
+开关 —— **缓存目录**、**重新拉取间隔（秒）**、**源加载失败时拒绝启动** —— 并给出每个源的状态表：`已加载` / `失败`、是否使用了过期缓存、
 shim 数量（shim 名在 tooltip 中）、解析出的目录，以及远程源被固定到的 commit SHA。
 
 **Save** 保存该段并重新应用；**Reload** 重新应用当前配置；**Refetch** 强制重新下载所有
 远程源（绕过缓存与 `refresh` 设置）。失败的源会在这里报告，但不会阻止 gateway 启动。
 
 **预设目录。** 在 remotes 列表上方，目录提供 gateway 已知的全部独立 shim 包 —— ALCF、Argo
-与 AskSage —— 无论其内置 shim 是否
-[计划移除](../guide/shims.md#shims-scheduled-for-removal)。选中一个并按下
-**Add source**，会把对应的 `shims.remotes` 条目追加到下方的 JSON 列表中 —— 它**不会**
-保存，因此该条目与手工输入的条目一样，要经过同样的审阅和同样的 **Save**。`url` 已在
-列表中的条目不会被重复添加，按钮也会说明这一点。
+与 AskSage。选中一个并按下 **Add source**，会把展开后的 `shims.remotes` 条目追加到下方的
+JSON 列表中 —— 它**不会**保存，因此该条目与手工输入的条目一样，要经过同样的审阅和同样的
+**Save**。上方的 **Presets** 字段是更短的写法：直接写 catalog 键（`argo, alcf`），由服务端
+展开；当 URL 相同时，显式 remote 会覆盖对应的预设。`url` 已在列表中的条目不会被重复添加，
+按钮也会说明这一点。参见[独立 Shim 包](../guide/shims.md#standalone-shim-packages)。
 
 **移除提示。** 在状态表下方，提示会列出配置中 shim 即将退场的每个提供方、移除它的版本，
 以及替代它的源 —— 并提供同样的 **Add source** 操作。该列表按请求从配置和加载报告推导

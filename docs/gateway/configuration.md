@@ -54,6 +54,10 @@ shim 不必放在包内。顶层 `shims` 段可以让 gateway 额外扫描若干
 
 ```jsonc
 "shims": {
+  // 按名称预载 catalog 包：alcf | argo | asksage。每个都会展开为下方的 remote；
+  // 同一 URL 的显式 remote 会覆盖对应的预设。
+  "presets": ["alcf"],
+
   // 扫描 <name>/provider.yaml（平铺）或 <group>/<leaf>/provider.yaml（分组）。
   // 相对路径以本配置文件所在目录为基准解析。
   "paths": ["./local-shims", "../shared/rosetta-shims"],
@@ -104,15 +108,12 @@ commit；配置文件本身不会被改写。要可复现部署请固定 tag 或
 `llm_rosetta.gateway.apply_shim_sources(raw, config_path)` 应用一个配置字典。
 `create_app` 也会自动应用该段。
 
-**替换即将退场的内置 shim。** Argo 的 shim
-[计划于 0.16.0 移除](../guide/shims.md#shims-scheduled-for-removal)，届时只能从
-[llm-rosetta-shim-argo](https://github.com/Oaklight/llm-rosetta-shim-argo) 获取。
-使用其中之一的配置会在启动时收到一条告警，指明该 shim、移除它的版本以及替代它的源；
-一旦有已声明的源提供该 shim，告警立即消失，因此日志会告诉你迁移是否完成 —— 而提供方配置中
-的 shim 名称始终不变。ALCF 与 AskSage 的 shim 已在 0.14.0 离开核心；在使用它们的名称之前，
-请先声明 `llm-rosetta-shim-alcf` / `llm-rosetta-shim-asksage`。管理面板的预设目录（见
-[管理面板 → Shim 源](admin-panel.md#shim-sources)）预载了全部三个独立包，无论是否安排了移除，
-都可以一键添加其中任何一个。
+**独立包与预设。** ALCF、AskSage 与 Argo 的 shim 维护在各自的仓库中。`presets`
+命名其中之一（`alcf`、`argo`、`asksage`），并展开为 catalog 中的 remote —— 也就是上面
+`remotes` 示例里的那条条目。预设先被应用，同一 URL 的显式 remote 会覆盖对应预设，因此可以
+随后再叠加固定的 `ref` 或 `sha256`。若提供方配置仍使用这些 shim 却没有声明源，启动时会得到
+一条错误，指明包名、预设与展开后的 remote。管理面板的预设目录（见
+[管理面板 → Shim 源](admin-panel.md#shim-sources)）可一键添加同样的条目。
 
 !!! warning "声明的源会执行代码"
     shim 目录可以携带 `transforms.py`，它会在 shim 加载时被执行 —— 与 `pip install`
@@ -160,9 +161,9 @@ Shim 支持 `max_images` 和 `max_images_pattern` 字段，用于对每次请求
 
 当请求超出上限时，最旧的图片将被替换为文本占位符。如果设置了 `max_images_pattern`，仅匹配的模型名称受限——其他模型不受影响，直接透传。
 
-**示例 — 内置 Argo OpenAI shim：**
+**示例 — 独立的 Argo OpenAI shim：**
 
-内置的 Argo OpenAI shim 声明了 `max_images: 50`，`max_images_pattern: "^(gpt|o\d)"`，效果如下：
+Argo OpenAI shim 声明了 `max_images: 50`，`max_images_pattern: "^(gpt|o\d)"`，效果如下：
 
 - GPT 系列和 o 系列模型：图片截断至 50 张
 - 通过同一服务方路由的 Gemini 和 Claude 模型：不受限制，直接透传

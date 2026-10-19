@@ -2,12 +2,17 @@
 
 Argo 是美国阿贡国家实验室的内部 API 网关，通过统一端点提供对多种 LLM 模型的访问。它通过三个 shim 端点提供支持。
 
-!!! warning "计划于 0.16.0 移除"
-    三个 Argo shim 将在 0.16.0 迁移到独立的
+!!! warning "不是内置的"
+    三个 Argo shim 位于独立的
     [llm-rosetta-shim-argo](https://github.com/Oaklight/llm-rosetta-shim-argo)
-    包。在此之前其行为不变 —— 下面的名称也不会改变，迁移只需一条 `shims.remotes` 条目。
-    **Settings → Shim Sources** 已将该源作为预设提供，因此迁移可以早于 0.16.0 完成。
-    参见[计划移除清单](../shims.md#shims-scheduled-for-removal)。
+    包中。使用下面的名称前请先声明它：
+
+    ```jsonc
+    { "shims": { "presets": ["argo"] } }
+    ```
+
+    该包注册相同的规范名称，因此提供方配置无需改动。**Settings → Shim Sources**
+    已将该源作为预设提供。参见[独立 Shim 包](../shims.md#standalone-shim-packages)。
 
 ## 端点
 
@@ -94,6 +99,9 @@ Argo 是美国阿贡国家实验室的内部 API 网关，通过统一端点提�
 | Post-IR | `strip temperature`（gpto\*、gpt5\*） | 为拒绝 temperature 的 GPT/o 系列模型移除 temperature |
 
 ## 网关配置
+
+上面的 `presets` 声明确实必需 —— 没有它，下列提供方条目会因 shim 不在内置集合中而加载失败。
+
 
 === "Chat Completions"
 
