@@ -71,9 +71,8 @@ def response_usage(
 
     The gateway's embedding handler never holds the IR — the conversion
     pipeline goes from the provider's format back to the source format in one
-    step, and a same-format request skips conversion altogether — so the
-    ledger's figures are read here, by the converter that would have produced
-    them.
+    step, including when both sides are the same format — so the ledger's
+    figures are read here, by the converter that would have produced them.
 
     A body the converter cannot read, or none at all, reports no usage rather
     than raising: a metering gap is not worth failing a response the caller has
@@ -90,11 +89,14 @@ def response_usage(
 
 
 class EmbeddingConversionPipeline:
-    """Convert embedding requests/responses between two provider formats.
+    """Convert embedding requests/responses to and from the IR.
 
-    When *source_format* == *target_format*, conversion is skipped.  Both
-    spellings are canonicalised first, so ``google`` and ``google_generate``
-    are the same format rather than a cross-format conversion.
+    Every request and response goes through the IR, even when source and
+    target are the same format — the rule the chat pipeline follows (#577).
+    The round-trip canonicalises the body (an OpenAI ``input`` string becomes
+    a list, unknown fields are dropped) and keeps one conversion path in
+    production and in tests.  Both spellings are canonicalised first, so
+    ``google`` and ``google_generate`` are the same format.
 
     The pipeline keeps no per-request state beyond the shared warning
     context: request and response conversion are independent, pure
@@ -105,7 +107,6 @@ class EmbeddingConversionPipeline:
     def __init__(self, source_format: str, target_format: str) -> None:
         self.source_format = canonical_embedding_format(source_format)
         self.target_format = canonical_embedding_format(target_format)
-        self._needs_conversion = self.source_format != self.target_format
         self._source_converter = get_embedding_converter(self.source_format)
         self._target_converter = get_embedding_converter(self.target_format)
         self._ctx = ConversionContext()
@@ -115,9 +116,7 @@ class EmbeddingConversionPipeline:
         return self._ctx.warnings
 
     def convert_request(self, body: dict[str, Any]) -> dict[str, Any]:
-        """Source format request → target format request."""
-        if not self._needs_conversion:
-            return body
+        """Source format request → IR → target format request."""
         ir = self._source_converter.request_from_provider(body, context=self._ctx)
         target_body, _ = self._target_converter.request_to_provider(
             ir, context=self._ctx
@@ -127,7 +126,7 @@ class EmbeddingConversionPipeline:
     def convert_response(
         self, body: dict[str, Any], *, model: str | None = None
     ) -> dict[str, Any]:
-        """Target format response → source format response.
+        """Target format response → IR → source format response.
 
         *model* is the request's model.  It is stored on the context because
         some upstreams (Google) do not echo it in the response, while the IR
@@ -135,7 +134,5 @@ class EmbeddingConversionPipeline:
         """
         if model is not None:
             self._ctx.metadata["model"] = model
-        if not self._needs_conversion:
-            return body
         ir = self._target_converter.response_from_provider(body, context=self._ctx)
         return self._source_converter.response_to_provider(ir, context=self._ctx)

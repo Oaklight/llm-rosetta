@@ -147,6 +147,45 @@ class TestEmbeddingUpstreamModel:
         body = json.loads(response.body)
         assert body["model"] == "my-embed"
 
+    def test_same_format_request_goes_through_the_ir(self) -> None:
+        """OpenAI → OpenAI is still converted: the input string becomes a list."""
+        config = _make_config("https://api.example.com")
+        request = _make_request({"model": "my-embed", "input": "hello"})
+        request.app.transport = MagicMock()
+        request.app.transport.send = AsyncMock(
+            return_value=UpstreamResponse(
+                status_code=200,
+                body={"object": "list", "data": [], "model": "my-embed"},
+                raw_content=b'{"object":"list","data":[],"model":"my-embed"}',
+            )
+        )
+
+        asyncio.run(handle_embeddings(request, config))
+
+        args, _ = request.app.transport.send.call_args
+        assert args[2]["input"] == ["hello"]
+
+    def test_same_format_fidelity_check_runs_both_ways(self, monkeypatch) -> None:
+        config = _make_config("https://api.example.com")
+        request = _make_request({"model": "my-embed", "input": "hello"})
+        request.app.transport = MagicMock()
+        request.app.transport.send = AsyncMock(
+            return_value=UpstreamResponse(
+                status_code=200,
+                body={"object": "list", "data": [], "model": "my-embed"},
+                raw_content=b'{"object":"list","data":[],"model":"my-embed"}',
+            )
+        )
+        calls = []
+        monkeypatch.setattr(
+            "llm_rosetta.gateway.pipelines.embeddings.check_same_format_fidelity",
+            lambda *args, **kwargs: calls.append((args, kwargs)),
+        )
+
+        asyncio.run(handle_embeddings(request, config))
+
+        assert [args[5] for args, _ in calls] == ["request", "response"]
+
     def test_validation_error_includes_generated_request_id(self):
         config = _make_config("https://api.example.com/v1")
         request = _make_request({"input": "hello"})

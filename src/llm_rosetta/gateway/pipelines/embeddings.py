@@ -1,12 +1,14 @@
-"""Embeddings proxy handler with optional cross-format conversion.
+"""Embeddings proxy handler with IR-based conversion.
 
 Proxies ``/v1/embeddings`` requests to upstream embedding providers.
 When the model's provider declares an embedding endpoint (``embedding_format``
-/ ``embedding_shim``, or the legacy ``embedding_providers`` section), uses
-IR-based conversion between OpenAI, Cohere, Jina, Voyage and Google GenAI
-formats.  There is no chat-provider passthrough: an unconfigured model gets a
-404 rather than a chat-shaped request forwarded to a provider that never
-declared an embedding endpoint.
+/ ``embedding_shim``, or the legacy ``embedding_providers`` section), every
+request and response goes through the IR — the same rule the chat routes
+follow — so a request is converted between OpenAI, Cohere, Jina, Voyage and
+Google GenAI formats even when the source and target format are the same.
+There is no chat-provider passthrough: an unconfigured model gets a 404 rather
+than a chat-shaped request forwarded to a provider that never declared an
+embedding endpoint.
 
 Every request that reaches an upstream is recorded in the usage ledger with
 ``model_type="embedding"``, through the same
@@ -17,13 +19,15 @@ failed request conversion — are not recorded: nothing was billed.
 
 from __future__ import annotations
 
+import copy
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from llm_rosetta._vendor.httpserver import JSONResponse, Response
 
 from ..config import GatewayConfig
+from ._fidelity import check_same_format_fidelity
 from .embedding_pipeline import EmbeddingConversionPipeline, response_usage
 from ..middleware.headers import build_upstream_extra_headers, get_request_id
 from ..logging import get_logger
@@ -61,13 +65,13 @@ class _ResolvedEmbedding:
     provider_info: ProviderInfo
     upstream_url: str
     provider_name: str
+    pipeline: EmbeddingConversionPipeline
     target_format: str = "openai"
     source_format: str = "openai"
     #: The configured endpoint path.  It may carry ``{model}`` (Google puts
     #: the model in the URL) and is used to build the batch variant after the
     #: request has been converted.
     path: str = ""
-    pipeline: EmbeddingConversionPipeline | None = field(default=None)
 
 
 def _resolve_embedding_provider(
@@ -90,11 +94,7 @@ def _resolve_embedding_provider(
 
     source_format = _detect_embedding_source(request, body, config)
     logger.debug("embedding: detected source format: %s", source_format)
-    pipeline = (
-        EmbeddingConversionPipeline(source_format, route.format)
-        if source_format != route.format
-        else None
-    )
+    pipeline = EmbeddingConversionPipeline(source_format, route.format)
     upstream_model = config.model_upstream_names.get(model)
     if upstream_model:
         body["model"] = upstream_model
@@ -113,7 +113,7 @@ async def handle_embeddings(
     request: Any,
     config: GatewayConfig,
 ) -> Response:
-    """Proxy an embedding request with optional cross-format conversion."""
+    """Proxy an embedding request with IR-based conversion."""
     request_id = get_request_id(request)
 
     def with_request_id(response: Response) -> Response:
@@ -172,23 +172,33 @@ async def handle_embeddings(
     # The model to place in the upstream URL; conversion may consume it.
     upstream_model = body.get("model") or model
 
-    # --- Convert request (if cross-format) ---
-    if resolved.pipeline:
-        try:
-            body = resolved.pipeline.convert_request(body)
-        except Exception as exc:
-            logger.warning("embedding: request conversion failed: %s", exc)
-            return with_request_id(
-                JSONResponse(
-                    {
-                        "error": {
-                            "message": f"Request conversion failed: {exc}",
-                            "type": "conversion_error",
-                        }
-                    },
-                    status_code=400,
-                )
+    # --- Convert request through the IR ---
+    same_format = resolved.source_format == resolved.target_format
+    original_body = copy.deepcopy(body) if same_format else None
+    try:
+        body = resolved.pipeline.convert_request(body)
+    except Exception as exc:
+        logger.warning("embedding: request conversion failed: %s", exc)
+        return with_request_id(
+            JSONResponse(
+                {
+                    "error": {
+                        "message": f"Request conversion failed: {exc}",
+                        "type": "conversion_error",
+                    }
+                },
+                status_code=400,
             )
+        )
+    check_same_format_fidelity(
+        "embedding",
+        resolved.source_format,
+        resolved.target_format,
+        original_body,
+        body,
+        "request",
+        model=model,
+    )
 
     # Google carries the model in the path and has a distinct batch suffix.
     # Both are decided after conversion: the converted body is what says
@@ -231,10 +241,20 @@ async def handle_embeddings(
                 )
             )
 
-        # --- Convert response (if cross-format) ---
-        if resolved.pipeline and resp.body is not None:
+        # --- Convert response through the IR ---
+        if resp.body is not None:
             try:
+                original_response = copy.deepcopy(resp.body) if same_format else None
                 source_body = resolved.pipeline.convert_response(resp.body)
+                check_same_format_fidelity(
+                    "embedding",
+                    resolved.source_format,
+                    resolved.target_format,
+                    original_response,
+                    source_body,
+                    "response",
+                    model=model,
+                )
                 if not source_body.get("model"):
                     source_body["model"] = model
                 return with_request_id(JSONResponse(source_body, status_code=200))

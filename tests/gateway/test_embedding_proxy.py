@@ -11,11 +11,29 @@ from llm_rosetta.gateway.pipelines.embedding_pipeline import (
 
 
 class TestEmbeddingConversionPipeline:
-    def test_same_format_passthrough(self) -> None:
+    def test_same_format_goes_through_the_ir(self) -> None:
+        """Same-format requests are canonicalised by the IR round-trip."""
         pipeline = EmbeddingConversionPipeline("openai", "openai")
-        body = {"model": "test", "input": ["hello"]}
+        body = {"model": "test", "input": "hello"}
         result = pipeline.convert_request(body)
-        assert result is body
+        assert result is not body
+        assert result == {"model": "test", "input": ["hello"]}
+
+    def test_same_format_response_is_rebuilt(self) -> None:
+        """Same-format responses are rebuilt from the IR, not passed through."""
+        pipeline = EmbeddingConversionPipeline("openai", "openai")
+        upstream = {
+            "object": "list",
+            "data": [{"object": "embedding", "embedding": [0.1], "index": 0}],
+            "model": "test",
+            "provider_extra": "dropped",
+        }
+        result = pipeline.convert_response(upstream)
+        assert result == {
+            "object": "list",
+            "data": [{"object": "embedding", "index": 0, "embedding": [0.1]}],
+            "model": "test",
+        }
 
     def test_openai_to_cohere_request(self) -> None:
         pipeline = EmbeddingConversionPipeline("openai", "cohere")

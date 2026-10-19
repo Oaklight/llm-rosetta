@@ -149,6 +149,98 @@ _CRITICAL_RESPONSE_BY_FORMAT: dict[str, list[str]] = {
 }
 
 
+# Non-LLM model types serve one route for several dialects, so the critical
+# paths are the union across their formats: a path that does not exist in the
+# source dialect is absent from both sides of the comparison and never diffs.
+_CRITICAL_REQUEST_BY_TYPE: dict[str, list[str]] = {
+    "embedding": [
+        "input",
+        "texts",
+        "encoding_format",
+        "dimensions",
+        "output_dimension",
+        "taskType",
+        "task",
+        "input_type",
+        "embedding_types",
+        "embedding_type",
+        "output_dtype",
+        "truncate",
+        "truncation",
+        "autoTruncate",
+        "user",
+        "title",
+        "normalized",
+        "late_chunking",
+        "return_multivector",
+        "content.parts.*.text",
+        "requests.*.model",
+        "requests.*.content.parts.*.text",
+    ],
+    "rerank": [
+        "query",
+        "documents",
+        "top_n",
+        "top_k",
+        "return_documents",
+        "max_chunks_per_doc",
+    ],
+    "decision": [
+        "state",
+        "images",
+        "questions.*.type",
+        "questions.*.instructions",
+        "questions.*.criteria",
+        "questions.*.criteria.*",
+    ],
+}
+
+_CRITICAL_RESPONSE_BY_TYPE: dict[str, list[str]] = {
+    "embedding": [
+        "object",
+        "id",
+        "texts",
+        "data.*.index",
+        "data.*.embedding",
+        "embeddings.float",
+        "embeddings.int8",
+        "embeddings.uint8",
+        "embeddings.binary",
+        "embeddings.ubinary",
+        "embedding.values",
+        "embeddings.*.values",
+        "usage.prompt_tokens",
+        "usage.total_tokens",
+        "usageMetadata.promptTokenCount",
+        "usageMetadata.totalTokenCount",
+        "meta.billed_units.input_tokens",
+        "meta.tokens.input_tokens",
+    ],
+    "rerank": [
+        "object",
+        "id",
+        "results.*.index",
+        "results.*.relevance_score",
+        "results.*.document",
+        "usage.total_tokens",
+        "usage.prompt_tokens",
+        "meta.billed_units",
+        "meta.tokens.input_tokens",
+    ],
+    "decision": [
+        "object",
+        "answers.*.type",
+        "answers.*.probability",
+        "answers.*.choice",
+        "answers.*.score",
+        "answers.*.probabilities",
+        "answers.*.confidence",
+        "usage.input_tokens",
+        "usage.output_tokens",
+    ],
+}
+
+
 def _get_critical_paths(
     format_name: str | None,
     common: list[str],
@@ -208,8 +300,11 @@ class FidelityDiff:
 
 
 def _get_at_path(obj: Any, segments: list[str]) -> list[tuple[str, Any]]:
-    """Extract values at a dotted path with ``*`` wildcard for arrays.
+    """Extract values at a dotted path with a ``*`` wildcard.
 
+    ``*`` iterates a list's items or a dict's values, so a path can name a
+    per-item field without knowing the container's shape (``answers.*.probability``
+    for a dict keyed by question id, ``data.*.embedding`` for a list).
     Returns list of (resolved_path, value) pairs.
     """
     if not segments:
@@ -218,14 +313,21 @@ def _get_at_path(obj: Any, segments: list[str]) -> list[tuple[str, Any]]:
     head, *rest = segments
 
     if head == "*":
-        if not isinstance(obj, list):
-            return []
-        results = []
-        for i, item in enumerate(obj):
-            for sub_path, val in _get_at_path(item, rest):
-                full = f"[{i}]{('.' + sub_path) if sub_path else ''}"
-                results.append((full, val))
-        return results
+        if isinstance(obj, list):
+            results = []
+            for i, item in enumerate(obj):
+                for sub_path, val in _get_at_path(item, rest):
+                    full = f"[{i}]{('.' + sub_path) if sub_path else ''}"
+                    results.append((full, val))
+            return results
+        if isinstance(obj, dict):
+            results = []
+            for key in sorted(obj):
+                for sub_path, val in _get_at_path(obj[key], rest):
+                    full = f"{key}{('.' + sub_path) if sub_path else ''}"
+                    results.append((full, val))
+            return results
+        return []
 
     if isinstance(obj, dict) and head in obj:
         results = []
@@ -406,18 +508,40 @@ class FidelityChecker:
             ``"messages"``, ``"open_responses"``).  When ``None``,
             checks all formats' paths (slower but safe when format is
             unknown).
+        model_type: Capability category.  For a non-LLM type
+            (``embedding``, ``rerank``, ``decision``) the critical paths
+            are the union over that family's dialects, because one route
+            serves all of them; *format_name* only labels the warning.
     """
 
     def __init__(
         self,
         mode: FidelityMode = "critical",
         format_name: str | None = None,
+        model_type: str = "llm",
     ) -> None:
         self.mode = mode
+        self.model_type = model_type
         # Accept legacy base/format spellings (e.g. ``openai_chat``) in the
         # internal format name without emitting a duplicate warning.
         self.format_name = (
             canonical_provider_name(format_name) if format_name is not None else None
+        )
+
+    def _request_paths(self) -> list[str]:
+        by_type = _CRITICAL_REQUEST_BY_TYPE.get(self.model_type)
+        if by_type is not None:
+            return _COMMON_REQUEST_PATHS + by_type
+        return _get_critical_paths(
+            self.format_name, _COMMON_REQUEST_PATHS, _CRITICAL_REQUEST_BY_FORMAT
+        )
+
+    def _response_paths(self) -> list[str]:
+        by_type = _CRITICAL_RESPONSE_BY_TYPE.get(self.model_type)
+        if by_type is not None:
+            return _COMMON_RESPONSE_PATHS + by_type
+        return _get_critical_paths(
+            self.format_name, _COMMON_RESPONSE_PATHS, _CRITICAL_RESPONSE_BY_FORMAT
         )
 
     def compare_request(
@@ -427,10 +551,7 @@ class FidelityChecker:
     ) -> list[FidelityDiff]:
         """Compare an original request body against its round-tripped version."""
         if self.mode == "critical":
-            paths = _get_critical_paths(
-                self.format_name, _COMMON_REQUEST_PATHS, _CRITICAL_REQUEST_BY_FORMAT
-            )
-            return _compare_critical(original, roundtripped, paths)
+            return _compare_critical(original, roundtripped, self._request_paths())
         return _compare_full(original, roundtripped)
 
     def compare_response(
@@ -440,10 +561,7 @@ class FidelityChecker:
     ) -> list[FidelityDiff]:
         """Compare an original response body against its round-tripped version."""
         if self.mode == "critical":
-            paths = _get_critical_paths(
-                self.format_name, _COMMON_RESPONSE_PATHS, _CRITICAL_RESPONSE_BY_FORMAT
-            )
-            return _compare_critical(original, roundtripped, paths)
+            return _compare_critical(original, roundtripped, self._response_paths())
         return _compare_full(original, roundtripped)
 
     def compare(

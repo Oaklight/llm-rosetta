@@ -18,16 +18,39 @@ from llm_rosetta.gateway.pipelines.rerank_pipeline import (
 
 
 class TestRerankConversionPipeline:
-    def test_same_format_passthrough(self) -> None:
+    def test_same_format_goes_through_the_ir(self) -> None:
+        """Same-format requests are canonicalised by the IR round-trip."""
         pipeline = RerankConversionPipeline("jina", "jina")
         body = {
+            "model": "test",
+            "query": "hello",
+            "documents": [{"text": "doc1"}],
+            "top_n": 1,
+        }
+        result = pipeline.convert_request(body)
+        assert result is not body
+        assert result == {
             "model": "test",
             "query": "hello",
             "documents": ["doc1"],
             "top_n": 1,
         }
-        result = pipeline.convert_request(body)
-        assert result is body  # same object, no copy
+
+    def test_same_format_response_is_rebuilt(self) -> None:
+        """Same-format responses are rebuilt from the IR, not passed through."""
+        pipeline = RerankConversionPipeline("jina", "jina")
+        upstream = {
+            "model": "test",
+            "object": "list",
+            "usage": {"total_tokens": 3},
+            "results": [{"index": 0, "relevance_score": 0.9, "document": "doc1"}],
+            "provider_extra": "dropped",
+        }
+        result = pipeline.convert_response(upstream)
+        assert "provider_extra" not in result
+        assert result["results"] == [
+            {"index": 0, "relevance_score": 0.9, "document": "doc1"}
+        ]
 
     def test_jina_to_cohere_request(self) -> None:
         pipeline = RerankConversionPipeline("jina", "cohere")

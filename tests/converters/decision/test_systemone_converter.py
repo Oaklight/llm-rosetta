@@ -435,3 +435,18 @@ class TestMultimodal:
         assert wire["state"] == "look"
         assert wire["images"] == ["data:image/png;base64,AA"]
         assert warnings == []
+
+
+class TestSameFormatPipeline:
+    def test_every_request_goes_through_the_ir(self):
+        """A same-format request is rebuilt from the IR, not passed through."""
+        from llm_rosetta.converters.decision.pipeline import DecisionConversionPipeline
+
+        pipeline = DecisionConversionPipeline("systemone", "systemone")
+        body = dict(TYPESAFE_REQUEST)
+        body["provider_extra"] = "dropped"
+        result = pipeline.convert_request(body)
+        assert result is not body
+        assert "provider_extra" not in result
+        assert result["model"] == TYPESAFE_REQUEST["model"]
+        assert set(result["questions"]) == set(TYPESAFE_REQUEST["questions"])

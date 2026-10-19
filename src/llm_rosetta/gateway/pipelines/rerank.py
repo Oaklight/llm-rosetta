@@ -1,9 +1,10 @@
-"""Rerank proxy handler with cross-format conversion.
+"""Rerank proxy handler with IR-based conversion.
 
 Proxies ``/v1/rerank`` and ``/v2/rerank`` requests to upstream rerank
-providers, converting between Jina, Cohere, and Voyage formats via IR.
-Uses the shared :class:`~transport.UpstreamTransport` interface,
-consistent with the embeddings and chat handlers.
+providers, converting every request and response through the IR — between
+Jina, Cohere, and Voyage formats, and even when the source and target format
+are the same.  Uses the shared :class:`~transport.UpstreamTransport`
+interface, consistent with the embeddings and chat handlers.
 
 Every request that reaches an upstream is recorded in the usage ledger with
 ``model_type="rerank"``, through the same
@@ -14,6 +15,7 @@ failed request conversion — are not recorded: nothing was billed.
 
 from __future__ import annotations
 
+import copy
 import time
 from typing import Any
 
@@ -23,6 +25,7 @@ from ..config import GatewayConfig
 from ..middleware.headers import build_upstream_extra_headers, get_request_id
 from ..logging import get_logger
 from ..ops.proxy import record_proxy_request
+from ._fidelity import check_same_format_fidelity
 from .rerank_pipeline import RerankConversionPipeline, response_usage
 from ..transport import UpstreamConnectionError, UpstreamTimeoutError, UpstreamTransport
 
@@ -50,7 +53,7 @@ async def handle_rerank(
     request: Any,
     config: GatewayConfig,
 ) -> Response:
-    """Proxy a rerank request with cross-format conversion."""
+    """Proxy a rerank request with IR-based conversion."""
     request_id = get_request_id(request)
 
     def with_request_id(response: Response) -> Response:
@@ -111,6 +114,8 @@ async def handle_rerank(
 
     logger.debug("rerank: detected source format: %s", source_format)
     # --- Convert request ---
+    same_format = source_format == route.format
+    original_body = copy.deepcopy(body) if same_format else None
     pipeline = RerankConversionPipeline(source_format, route.format)
     try:
         target_body = pipeline.convert_request(body)
@@ -127,6 +132,15 @@ async def handle_rerank(
                 status_code=400,
             )
         )
+    check_same_format_fidelity(
+        "rerank",
+        source_format,
+        route.format,
+        original_body,
+        target_body,
+        "request",
+        model=model,
+    )
 
     # --- Forward via transport ---
     upstream_url = route.provider_info.upstream_url("")
@@ -177,6 +191,7 @@ async def handle_rerank(
             return fallback
 
         try:
+            original_response = copy.deepcopy(upstream_body) if same_format else None
             source_body = pipeline.convert_response(upstream_body)
         except Exception as exc:
             logger.warning("rerank: response conversion failed: %s", exc)
@@ -189,6 +204,15 @@ async def handle_rerank(
             )
             fallback.headers["x-rosetta-conversion"] = "passthrough"
             return fallback
+        check_same_format_fidelity(
+            "rerank",
+            source_format,
+            route.format,
+            original_response,
+            source_body,
+            "response",
+            model=model,
+        )
 
         return with_request_id(JSONResponse(source_body, status_code=200))
 

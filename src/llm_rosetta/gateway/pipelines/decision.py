@@ -1,13 +1,13 @@
-"""Decision proxy handler with optional cross-format conversion.
+"""Decision proxy handler with IR-based conversion.
 
 Proxies ``/v1/decision`` and ``/v1/systemone`` requests to upstream
 decision providers (currently TypeSafe System One).  No streaming —
 decision requests return a single JSON response.
 
-When the source format (inferred from ``default_decision_format``)
-differs from the target format (declared on the provider config), uses
-IR-based conversion via
-:class:`~llm_rosetta.converters.decision.pipeline.DecisionConversionPipeline`.
+Every request and response is converted through the IR via
+:class:`~llm_rosetta.converters.decision.pipeline.DecisionConversionPipeline`,
+including when the source format (inferred from the request) and the target
+format (declared on the provider config) are the same.
 
 Registered via the model type registry in ``model_types.py``.
 
@@ -20,6 +20,7 @@ failed request conversion — are not recorded: nothing was billed.
 
 from __future__ import annotations
 
+import copy
 import time
 from typing import Any
 
@@ -29,6 +30,7 @@ from ..config import GatewayConfig
 from ..middleware.headers import build_upstream_extra_headers, get_request_id
 from ..logging import get_logger
 from ..ops.proxy import record_proxy_request
+from ._fidelity import check_same_format_fidelity
 from .decision_pipeline import DecisionConversionPipeline, response_usage
 from ..transport import UpstreamConnectionError, UpstreamTimeoutError, UpstreamTransport
 
@@ -67,7 +69,7 @@ async def handle_decision(
     request: Any,
     config: GatewayConfig,
 ) -> Response:
-    """Proxy a decision request with optional cross-format conversion."""
+    """Proxy a decision request with IR-based conversion."""
     request_id = get_request_id(request)
 
     def with_request_id(response: Response) -> Response:
@@ -122,32 +124,38 @@ async def handle_decision(
             )
         )
 
-    # --- Build pipeline for format conversion ---
+    # --- Build the IR conversion pipeline ---
     source_format = _detect_decision_source_format(request, body, config)
     target_format = route.format
-    pipeline = (
-        DecisionConversionPipeline(source_format, target_format)
-        if source_format != target_format
-        else None
-    )
+    pipeline = DecisionConversionPipeline(source_format, target_format)
 
-    # --- Convert request (if cross-format) ---
-    if pipeline:
-        try:
-            body = pipeline.convert_request(body)
-        except Exception as exc:
-            logger.warning("decision: request conversion failed: %s", exc)
-            return with_request_id(
-                JSONResponse(
-                    {
-                        "error": {
-                            "message": f"Request conversion failed: {exc}",
-                            "type": "conversion_error",
-                        }
-                    },
-                    status_code=400,
-                )
+    # --- Convert request through the IR ---
+    same_format = source_format == target_format
+    original_body = copy.deepcopy(body) if same_format else None
+    try:
+        body = pipeline.convert_request(body)
+    except Exception as exc:
+        logger.warning("decision: request conversion failed: %s", exc)
+        return with_request_id(
+            JSONResponse(
+                {
+                    "error": {
+                        "message": f"Request conversion failed: {exc}",
+                        "type": "conversion_error",
+                    }
+                },
+                status_code=400,
             )
+        )
+    check_same_format_fidelity(
+        "decision",
+        source_format,
+        target_format,
+        original_body,
+        body,
+        "request",
+        model=model,
+    )
 
     upstream_url = route.provider_info.upstream_url("")
     transport: UpstreamTransport = request.app.transport
@@ -180,10 +188,20 @@ async def handle_decision(
                 )
             )
 
-        # --- Convert response (if cross-format) ---
-        if pipeline and resp.body is not None:
+        # --- Convert response through the IR ---
+        if resp.body is not None:
             try:
+                original_response = copy.deepcopy(resp.body) if same_format else None
                 source_body = pipeline.convert_response(resp.body)
+                check_same_format_fidelity(
+                    "decision",
+                    source_format,
+                    target_format,
+                    original_response,
+                    source_body,
+                    "response",
+                    model=model,
+                )
                 if not source_body.get("model"):
                     source_body["model"] = model
                 return with_request_id(JSONResponse(source_body, status_code=200))
@@ -239,7 +257,7 @@ async def handle_decision(
         raise
     finally:
         duration_ms = (time.monotonic() - t0) * 1000
-        if pipeline and pipeline.warnings:
+        if pipeline.warnings:
             logger.info(
                 "decision: conversion warnings for %s: %s",
                 model,

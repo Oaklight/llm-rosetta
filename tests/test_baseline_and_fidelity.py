@@ -179,6 +179,57 @@ class TestFidelityCheckerCritical:
         assert any("stop_reason" in d.path for d in diffs)
 
 
+class TestFidelityCheckerNonLlm:
+    """A non-LLM type checks its family's critical paths, not chat's."""
+
+    def test_embedding_request_drop_is_detected(self) -> None:
+        checker = FidelityChecker(
+            mode="critical", format_name="openai", model_type="embedding"
+        )
+        diffs = checker.compare_request(
+            {"model": "m", "input": ["hello"], "dimensions": 8},
+            {"model": "m", "input": ["hello"]},
+        )
+        assert any("dimensions" in diff.path for diff in diffs)
+
+    def test_embedding_response_change_is_detected(self) -> None:
+        checker = FidelityChecker(
+            mode="critical", format_name="openai", model_type="embedding"
+        )
+        diffs = checker.compare_response(
+            {"data": [{"index": 0, "embedding": [0.1]}]},
+            {"data": [{"index": 0, "embedding": [0.2]}]},
+        )
+        assert any("embedding" in diff.path for diff in diffs)
+
+    def test_rerank_request_drop_is_detected(self) -> None:
+        checker = FidelityChecker(
+            mode="critical", format_name="jina", model_type="rerank"
+        )
+        diffs = checker.compare_request(
+            {"model": "m", "query": "q", "documents": ["a"], "top_n": 2},
+            {"model": "m", "query": "q", "documents": ["a"]},
+        )
+        assert any("top_n" in diff.path for diff in diffs)
+
+    def test_decision_response_change_is_detected(self) -> None:
+        checker = FidelityChecker(
+            mode="critical", format_name="systemone", model_type="decision"
+        )
+        diffs = checker.compare_response(
+            {"answers": {"q": {"type": "assertion", "probability": 0.9}}},
+            {"answers": {"q": {"type": "assertion", "probability": 0.5}}},
+        )
+        assert any("probability" in diff.path for diff in diffs)
+
+    def test_chat_paths_are_not_applied_to_a_non_llm_type(self) -> None:
+        checker = FidelityChecker(
+            mode="critical", format_name="openai", model_type="embedding"
+        )
+        # A chat-only field is outside the embedding family's paths.
+        assert checker.compare_request({"messages": [{"role": "user"}]}, {}) == []
+
+
 class TestFidelityCheckerFull:
     def setup_method(self) -> None:
         self.checker = FidelityChecker(mode="full")

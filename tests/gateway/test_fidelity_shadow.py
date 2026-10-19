@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+import logging
+
+import pytest
+
+from llm_rosetta.gateway.pipelines._fidelity import check_same_format_fidelity
 from llm_rosetta.gateway.proxy import _check_fidelity
 
 
@@ -143,3 +148,48 @@ class TestCheckFidelity:
             "openai_chat", "openai_chat", original, converted, "request", profile
         )
         assert result is True
+
+
+class TestNonLlmFidelityShadow:
+    """The non-LLM handlers warn on same-format round-trip loss."""
+
+    @pytest.fixture(autouse=True)
+    def _propagate(self, monkeypatch):
+        # The gateway logger sets propagate=False; caplog needs it to reach
+        # the root handler.
+        from llm_rosetta.gateway.logging import _logger
+
+        monkeypatch.setattr(_logger, "propagate", True)
+
+    def test_same_format_diff_logs_a_warning(self, caplog):
+        with caplog.at_level(logging.WARNING):
+            check_same_format_fidelity(
+                "embedding",
+                "openai",
+                "openai",
+                {"model": "m", "input": ["hi"], "dimensions": 8},
+                {"model": "m", "input": ["hi"]},
+                "request",
+                model="m",
+            )
+        assert any("[FIDELITY]" in record.message for record in caplog.records)
+
+    def test_cross_format_is_skipped(self, caplog):
+        with caplog.at_level(logging.WARNING):
+            check_same_format_fidelity(
+                "embedding",
+                "openai",
+                "cohere",
+                {"texts": ["hi"]},
+                {"model": "m"},
+                "request",
+            )
+        assert not any("[FIDELITY]" in record.message for record in caplog.records)
+
+    def test_identical_bodies_do_not_warn(self, caplog):
+        body = {"model": "m", "input": ["hi"]}
+        with caplog.at_level(logging.WARNING):
+            check_same_format_fidelity(
+                "embedding", "openai", "openai", body, dict(body), "request"
+            )
+        assert not any("[FIDELITY]" in record.message for record in caplog.records)
