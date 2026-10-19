@@ -936,3 +936,87 @@ body { padding-bottom: 26px; }
   #tab-models .pd-upstream { grid-area:upstream; overflow-wrap:anywhere; }
   #tab-models .pd-remove { grid-area:remove; }
 }
+
+/* ── Primary navigation: icon + label ──
+   The icons are decorative — the label already names the tab — so the SVG is
+   aria-hidden in the markup.  They sit *beside* the label rather than inside
+   it because `data-i18n` on the tab would rewrite its textContent on a
+   language switch and drop the icon. */
+.tab { display: flex; align-items: center; gap: 7px; }
+.tab-ico { display: inline-flex; opacity: .7; transition: opacity .15s; }
+.tab-ico svg { width: 16px; height: 16px; display: block; }
+.tab:hover .tab-ico, .tab.active .tab-ico { opacity: 1; }
+
+/* Tablets and narrow desktop: tighter tabs, and the config path goes before
+   the bar has to scroll. */
+@media (max-width: 1100px) {
+  .tabs { padding: 0 12px; }
+  .tab { padding: 12px 12px; }
+  .config-path { display: none; }
+}
+
+/* Phones: the tab strip becomes a fixed bottom navigation bar with five
+   equal items, and the diagnostics footer moves above it.  A horizontal
+   strip cannot show five destinations at this width without scrolling,
+   which hides the last ones; five equal targets do not have that trade-off,
+   and they sit in the thumb's reach. */
+@media (max-width: 768px) {
+  body { padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
+
+  .header { padding: 10px 14px; flex-wrap: nowrap; gap: 8px; }
+  .header > div:first-child { min-width: 0; overflow: hidden; }
+  .header h1 { font-size: 15px; overflow: hidden; text-overflow: ellipsis; }
+  .header-right { flex-shrink: 0; gap: 6px; }
+  .header-right [data-i18n="label.systemTime"] { display: none; }
+  .content { padding: 14px; }
+
+  .tabs {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 80;
+    height: calc(56px + env(safe-area-inset-bottom, 0px));
+    padding: 0 0 env(safe-area-inset-bottom, 0px);
+    background: var(--bg-card);
+    border-top: 1px solid var(--border);
+    border-bottom: none;
+    overflow: visible;
+  }
+  .tabs-spacer { display: none; }
+  .tab {
+    position: relative;
+    flex: 1 1 0; min-width: 0; height: 100%;
+    flex-direction: column; justify-content: center; gap: 3px;
+    padding: 4px 2px; font-size: 10px; line-height: 1.2;
+    border-bottom: none; text-align: center;
+  }
+  .tab-ico svg { width: 20px; height: 20px; }
+  .tab.active { border-bottom: none; }
+  .tab.active::after {
+    content: '';
+    position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+    width: 26px; height: 2px; border-radius: 0 0 2px 2px;
+    background: var(--accent);
+  }
+
+  /* Status footer: one scrollable line above the bar, instead of wrapping
+     into two rows and eating the viewport. */
+  .db-footer {
+    bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+    padding: 4px 10px;
+    gap: 12px;
+    justify-content: flex-start;
+    overflow-x: auto;
+    white-space: nowrap;
+    scrollbar-width: none;
+  }
+  .db-footer::-webkit-scrollbar { display: none; }
+  .db-footer .seg { flex-shrink: 0; white-space: nowrap; }
+}
+
+/* Small phones: the "gateway admin" subtitle goes first, so the product
+   name itself never truncates; below 360px the clock goes too.  The
+   identity that has to survive is the brand. */
+@media (max-width: 480px) {
+  .header h1 span { display: none; }
+}
+@media (max-width: 360px) {
+  .header-right > span:first-child { display: none; }
+}

@@ -52,13 +52,16 @@
   </div>
 </div>
 
-<div class="tabs" role="tablist">
-  <div class="tab active" role="tab" id="tabBtn-providers" tabindex="0" aria-selected="true" aria-controls="tab-providers" data-tab="providers" data-i18n="tab.providers">Providers</div>
-  <div class="tab" role="tab" id="tabBtn-models" tabindex="-1" aria-selected="false" aria-controls="tab-models" data-tab="models" data-i18n="tab.models">Models</div>
-  <div class="tab" role="tab" id="tabBtn-keys" tabindex="-1" aria-selected="false" aria-controls="tab-keys" data-tab="keys" data-i18n="tab.keys">API Keys</div>
-  <div class="tab" role="tab" id="tabBtn-dashboard" tabindex="-1" aria-selected="false" aria-controls="tab-dashboard" data-tab="dashboard" data-i18n="tab.dashboard">Dashboard</div>
-  <div class="tab" role="tab" id="tabBtn-logs" tabindex="-1" aria-selected="false" aria-controls="tab-logs" data-tab="logs" data-i18n="tab.logs">Request Log</div>
-  <div style="flex:1"></div>
+<!-- Note: the icons live beside the label, not around it.  `data-i18n` on a
+     tab would rewrite its whole textContent and drop the SVG on a language
+     switch, so the attribute sits on the inner label span instead. -->
+<div class="tabs" role="tablist" aria-label="Main navigation">
+  <div class="tab active" role="tab" id="tabBtn-providers" tabindex="0" aria-selected="true" aria-controls="tab-providers" data-tab="providers"><span class="tab-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="7" rx="1.5"/><rect x="3" y="13" width="18" height="7" rx="1.5"/><path d="M7 7.5h.01M7 16.5h.01"/></svg></span><span class="tab-label" data-i18n="tab.providers">Providers</span></div>
+  <div class="tab" role="tab" id="tabBtn-models" tabindex="-1" aria-selected="false" aria-controls="tab-models" data-tab="models"><span class="tab-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></svg></span><span class="tab-label" data-i18n="tab.models">Models</span></div>
+  <div class="tab" role="tab" id="tabBtn-keys" tabindex="-1" aria-selected="false" aria-controls="tab-keys" data-tab="keys"><span class="tab-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"/><path d="m10.7 12.3 9.3-9.3M17 6l3 3M14 9l3 3"/></svg></span><span class="tab-label" data-i18n="tab.keys">API Keys</span></div>
+  <div class="tab" role="tab" id="tabBtn-dashboard" tabindex="-1" aria-selected="false" aria-controls="tab-dashboard" data-tab="dashboard"><span class="tab-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg></span><span class="tab-label" data-i18n="tab.dashboard">Dashboard</span></div>
+  <div class="tab" role="tab" id="tabBtn-logs" tabindex="-1" aria-selected="false" aria-controls="tab-logs" data-tab="logs"><span class="tab-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg></span><span class="tab-label" data-i18n="tab.logs">Request Log</span></div>
+  <div class="tabs-spacer"></div>
   <div class="config-path" id="configPath"></div>
   <div class="tab" role="tab" id="tabBtn-settings" tabindex="-1" aria-selected="false" aria-controls="tab-settings" data-tab="settings" style="display:none"></div>
 </div>

@@ -136,6 +136,12 @@
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
+/* Reserve the scrollbar gutter on every page, not just the tall ones.
+   Without this, a page that fits the viewport (e.g. a filtered Request
+   Log) loses its scrollbar, the layout viewport grows by the scrollbar
+   width, and the fixed navigation and status bars visibly jump.
+   Overlay-scrollbar platforms reserve nothing, so this is a no-op there. */
+html { scrollbar-gutter: stable; }
 body { font-family: var(--font); background: var(--bg); color: var(--text); min-height: 100vh; }
 /* Hide main content until auth check completes to prevent flash of unauthenticated content */
 body.auth-pending > .header,
