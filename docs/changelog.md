@@ -282,6 +282,7 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 - **Test Release 工作流** (PR [#686](https://github.com/Oaklight/llm-rosetta/pull/686))：发布 dev 版本到 Test PyPI，自动构建 Docker dev 镜像。
 - **Vendored zerodep 更新** (PRs [#658](https://github.com/Oaklight/llm-rosetta/pull/658), [#710](https://github.com/Oaklight/llm-rosetta/pull/710), [#798](https://github.com/Oaklight/llm-rosetta/pull/798), [#780](https://github.com/Oaklight/llm-rosetta/pull/780))。
+- **公共 API 兼容性检查**（PR [#1102](https://github.com/Oaklight/llm-rosetta/pull/1102)）：CI 会把最新稳定版 `vX.Y.Z` 标签的 `__all__` 名称与可调用签名，和每个 PR、每次推送到 master 的工作树做对比，因此被删除的名称或参数会在评审阶段而不是发布之后被发现。破坏性发现会使任务失败，除非旧拼写保留为带弃用警告的别名；有意的破坏需要连同原因记录在 `scripts/dev/public_api_allowlist.json`。新增名称与可选参数只作信息报告。本地可用 `make check-public-api` 运行同一检查。
 
 ## v0.13.0 — 2026-09-08
 
