@@ -85,7 +85,7 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### 变更（**破坏性变更**）
 
-- **（破坏性变更）Argo shim 离开核心包**（epic [#927](https://github.com/Oaklight/llm-rosetta/issues/927)）：`argo--chat_completions`、`argo--messages` 与 `argo--open_responses` 现在和 ALCF、AskSage 一样，随独立的 [llm-rosetta-shim-argo](https://github.com/Oaklight/llm-rosetta-shim-argo) 包发布。shim 名称不变，但使用过内置版本的配置必须先声明源 —— `"shims": {"presets": ["argo"]}` —— 否则启动会报错并指明包与需要声明的条目。旧别名 `argo--openai_chat`、`argo--anthropic` 与 `argo--openai_responses` 已随内置 shim 一并移除，请改用规范名称。目前不再有任何计划移除的内置 shim，但 `scripts/check_shim_removals.py` 仍会约束未来的移除。
+- **（破坏性变更）Argo shim 离开核心包**（epic [#927](https://github.com/Oaklight/llm-rosetta/issues/927)）：`argo--chat_completions`、`argo--messages` 与 `argo--open_responses` 现在和 ALCF、AskSage 一样，随独立的 [llm-rosetta-shim-argo](https://github.com/Oaklight/llm-rosetta-shim-argo) 包发布。**移除原计划于 0.16.0，本周期改为 0.14.0 —— 在任何稳定版发布该时间表之前**，因此目前不再有任何计划移除的内置 shim。shim 名称不变，但使用过内置版本的配置必须先声明源 —— `"shims": {"presets": ["argo"]}` —— 否则启动会报错并指明包与需要声明的条目。旧别名 `argo--openai_chat`、`argo--anthropic` 与 `argo--openai_responses` 已随内置 shim 一并移除，请改用规范名称。`scripts/check_shim_removals.py` 仍会约束未来的移除。
 
   **迁移：** 添加预设后重载 gateway：
 
