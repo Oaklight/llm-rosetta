@@ -41,6 +41,37 @@ from .provider_names import LEGACY_PROVIDER_ALIASES
 from .types.ir.tools import ToolCallConfig, ToolChoice, ToolDefinition
 from .types.ir.parts import ToolCallPart, ToolResultPart
 
+__all__ = [
+    # Unified dispatch
+    "to_provider",
+    "from_provider",
+    "choice_to_provider",
+    "choice_from_provider",
+    "call_to_provider",
+    "call_from_provider",
+    "result_to_provider",
+    "result_from_provider",
+    "config_to_provider",
+    "config_from_provider",
+    # Per-format shortcuts
+    "to_chat_completions",
+    "to_openai_chat",
+    "to_open_responses",
+    "to_openai_responses",
+    "to_messages",
+    "to_google_generate",
+    "to_google_interactions",
+    "from_chat_completions",
+    "from_openai_chat",
+    "from_open_responses",
+    "from_openai_responses",
+    "from_messages",
+    "from_google_generate",
+    "from_google_interactions",
+    "to_anthropic",
+    "from_anthropic",
+]
+
 ToolProvider = Literal[
     # Canonical names — the base converter types (underscore spelling).
     "messages",

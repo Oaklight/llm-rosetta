@@ -1,0 +1,65 @@
+{
+  "comment": "Breaking public-API changes that are intentional. The CI job compares the latest stable vX.Y.Z tag with the working tree; every removed name/parameter must either keep a deprecated alias or be listed here with a reason. Keys are '<module>::<name>::<change>[::<param>]'.",
+  "acknowledged": [
+    {
+      "key": "llm_rosetta::ConversionPipeline::removed-parameter::force_conversion",
+      "reason": "0.14.0 replaced force_conversion (default False) with its inverse baseline (default True). Landed before this check existed."
+    },
+    {
+      "key": "llm_rosetta::convert::removed-parameter::force_conversion",
+      "reason": "0.14.0 replaced force_conversion (default False) with its inverse baseline (default True). Landed before this check existed."
+    },
+    {
+      "key": "llm_rosetta::convert_response::removed-parameter::force_conversion",
+      "reason": "0.14.0 replaced force_conversion (default False) with its inverse baseline (default True). Landed before this check existed."
+    },
+    {
+      "key": "llm_rosetta.converters.openai_responses::OpenAIResponsesStreamContext::removed-parameter::accumulated_refusal",
+      "reason": "0.14.0 restructured the Responses stream context into _message_items/_reasoning_items. This field was internal stream state exposed only because the dataclass is in __all__."
+    },
+    {
+      "key": "llm_rosetta.converters.openai_responses::OpenAIResponsesStreamContext::removed-parameter::accumulated_text",
+      "reason": "0.14.0 restructured the Responses stream context into _message_items/_reasoning_items. This field was internal stream state exposed only because the dataclass is in __all__."
+    },
+    {
+      "key": "llm_rosetta.converters.openai_responses::OpenAIResponsesStreamContext::removed-parameter::content_part_done_emitted",
+      "reason": "0.14.0 restructured the Responses stream context into _message_items/_reasoning_items. This field was internal stream state exposed only because the dataclass is in __all__."
+    },
+    {
+      "key": "llm_rosetta.converters.openai_responses::OpenAIResponsesStreamContext::removed-parameter::item_id",
+      "reason": "0.14.0 restructured the Responses stream context into _message_items/_reasoning_items. This field was internal stream state exposed only because the dataclass is in __all__."
+    },
+    {
+      "key": "llm_rosetta.converters.openai_responses::OpenAIResponsesStreamContext::removed-parameter::output_item_emitted",
+      "reason": "0.14.0 restructured the Responses stream context into _message_items/_reasoning_items. This field was internal stream state exposed only because the dataclass is in __all__."
+    },
+    {
+      "key": "llm_rosetta.observability::DEFAULT_ERROR_MAX::removed",
+      "reason": "0.14.0 renamed it to DEFAULT_DUMP_MAX as part of the retention policy. Landed before this check existed."
+    },
+    {
+      "key": "llm_rosetta.observability::PersistenceManager::removed-parameter::error_max",
+      "reason": "0.14.0 renamed it to dump_max as part of the retention policy. Landed before this check existed."
+    },
+    {
+      "key": "llm_rosetta.auto_detect::convert::removed-parameter::force_conversion",
+      "reason": "0.14.0 replaced force_conversion (default False) with its inverse baseline (default True). Landed before this check existed."
+    },
+    {
+      "key": "llm_rosetta.auto_detect::convert_response::removed-parameter::force_conversion",
+      "reason": "0.14.0 replaced force_conversion (default False) with its inverse baseline (default True). Landed before this check existed."
+    },
+    {
+      "key": "llm_rosetta.pipeline::ConversionPipeline::removed-parameter::force_conversion",
+      "reason": "0.14.0 replaced force_conversion (default False) with its inverse baseline (default True). Landed before this check existed."
+    },
+    {
+      "key": "llm_rosetta.pipeline::PassthroughStreamProcessor::removed",
+      "reason": "0.14.0 renamed it to BaselineStreamProcessor (PR #793): 'passthrough' implied a production path that skips IR, which the mode does not provide. Landed before this check existed."
+    },
+    {
+      "key": "llm_rosetta.observability.persistence::PersistenceManager::removed-parameter::error_max",
+      "reason": "0.14.0 renamed it to dump_max as part of the retention policy. Landed before this check existed."
+    }
+  ]
+}

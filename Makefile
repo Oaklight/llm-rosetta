@@ -67,6 +67,19 @@ check-shim-removals:
 	@echo "Shim removals check complete."
 
 
+# ──────────────────────────────────────────────
+# Public API compatibility
+# ──────────────────────────────────────────────
+
+# Compare the public surface (__all__ names and signatures) against the latest
+# stable vX.Y.Z tag.  A removed name or parameter must keep a deprecated alias,
+# or be recorded in scripts/dev/public_api_allowlist.json.
+check-public-api:
+	@echo "Comparing public API with the latest stable release..."
+	python scripts/dev/public_api_diff.py
+	@echo "Public API check complete."
+
+
 # Run conversion pipeline benchmarks
 BENCH_ROUNDS ?= 5
 bench:
@@ -430,4 +443,4 @@ help:
 	@echo ""
 	@echo "Detected version: $(VERSION)"
 
-.PHONY: all lint bench lint-fix test test-js test-integration test-gateway check-shim-removals build-package build-wheel push-package clean-package build push clean build-binary build-binary-musl clean-binary clean-binary-all build-docker-alpine build-docker-glibc build-docker-python build-docker push-docker clean-docker deploy-dev help
+.PHONY: all lint bench lint-fix test test-js test-integration test-gateway check-shim-removals check-public-api build-package build-wheel push-package clean-package build push clean build-binary build-binary-musl clean-binary clean-binary-all build-docker-alpine build-docker-glibc build-docker-python build-docker push-docker clean-docker deploy-dev help

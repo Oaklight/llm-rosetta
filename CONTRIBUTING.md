@@ -21,7 +21,19 @@ pip install -e ".[all]"
 pre-commit install
 make test
 make test-js   # admin UI: node --test over tests/js/ (skipped when node is absent)
+make check-public-api  # public surface vs the latest stable tag
 ```
+
+## Public API changes
+
+CI compares the public surface (`__all__` names and callable signatures) of the
+latest stable `vX.Y.Z` tag with the working tree. Removing a name or parameter
+fails the check.
+
+Keep the old spelling as a deprecated alias until its removal window. If a
+removal is intentional, record it with a reason in
+`scripts/dev/public_api_allowlist.json`. Additions and optional parameters are
+reported for information only.
 
 ## License
 

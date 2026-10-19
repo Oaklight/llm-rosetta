@@ -60,6 +60,18 @@ from llm_rosetta.transforms.ir import (
     apply_ir_transforms as _apply_ir_transforms_exec,
 )
 
+__all__ = [
+    "configure_context",
+    "apply_ir_transforms",
+    "setup_shim_context",
+    "apply_shim_to_ir",
+    "ConversionError",
+    "StreamProcessorProtocol",
+    "ConversionPipeline",
+    "BaselineStreamProcessor",
+    "StreamProcessor",
+]
+
 
 class _HasIntrinsicTransforms(Protocol):
     _INTRINSIC_IR_TRANSFORMS: tuple
