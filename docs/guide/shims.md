@@ -192,16 +192,16 @@ def register_shims():
   "remotes": [
     {
       "url": "https://github.com/Oaklight/llm-rosetta-shim-alcf",
-      "ref": "v0.1.0",                             // 固定版本以可复现；省略则取 HEAD，首次拉取时固化
+      // "ref": "v0.1.0",                          // 仓库打 tag 后再固定；省略则取 HEAD，首次拉取时固化
       "path": "src/llm_rosetta_shim_alcf/providers",
-      "token_env": "GITHUB_TOKEN"                  // 私有仓库
+      "token_env": "GITHUB_TOKEN"                  // 可选；仅私有镜像需要
     }
   ]
 }
 ```
 
 `presets` 条目命名源 catalog 中的包（ALCF、Argo、AskSage），并展开为下方所示的
-remote；同一 URL 的显式 remote 会覆盖它。远程源的 `path` 是归档内存放提供方目录的路径（对
+remote；同一 URL 的显式 remote 会合并到预设上（显式键优先）。远程源的 `path` 是归档内存放提供方目录的路径（对
 `llm-rosetta-shim-*` 包来说是 `src/<package>/providers`）。完整字段、缓存与刷新行为、优先级和安全提示见
 [Gateway → 外部 Shim 源](../gateway/configuration.md#external-shim-sources)。
 编程方式可用 `llm_rosetta.shims.rebuild_shims()`（无需配置文件）或
@@ -285,15 +285,15 @@ v0.6.3 起一直作为内置 shim 发布。三者均已在 0.14.0 离开核心�
   "remotes": [
     {
       "url": "https://github.com/Oaklight/llm-rosetta-shim-argo",
-      "path": "src/llm_rosetta_shim_argo/providers",
-      "token_env": "GITHUB_TOKEN"          // 三个仓库都是私有的
+      "path": "src/llm_rosetta_shim_argo/providers"
     }
   ]
 }
 ```
 
-预设先于显式 remote 应用，同一 URL 的显式 remote 会覆盖对应的预设。三个仓库都是私有的，
-因此 `token_env` 指定携带 forge token 的环境变量。预设中不固定 `ref`，因为这些仓库都还
+预设先于显式 remote 应用，同一 URL 的显式 remote 会合并到对应预设上（显式键优先），
+因此固定 `ref` 时无需重复 `path`。三个仓库都是公开的，预设不带 `token_env`；只有私有镜像
+才需要添加。预设中不固定 `ref`，因为这些仓库都还
 没有打 tag：不带 `ref` 的远程源会先把 `HEAD` 解析为某个 commit 并记录进缓存 stamp。等它们
 打上 tag 后再固定该 tag —— 参见 [ref 解析](../gateway/configuration.md#external-shim-sources)。
 
@@ -301,8 +301,9 @@ v0.6.3 起一直作为内置 shim 发布。三者均已在 0.14.0 离开核心�
 保存时会把 `presets` 或展开后的 remote 写入配置。若配置仍使用这些 shim 却没有声明源，
 启动时会得到一条错误，指明包名、预设与展开后的 remote；源加载成功后错误即消失。
 
-旧拼写**不再**在核心中解析：`argo--openai_chat`、`argo--anthropic` 和
-`argo--openai_responses` 是内置 shim 的别名，已随内置 shim 一同移除；独立包只注册规范名称。
+旧拼写**不再**解析到 shim：`argo--openai_chat`、`argo--anthropic` 和
+`argo--openai_responses` 是内置 shim 的别名，独立包只注册规范名称。别名仍作为拼写映射保留，
+因此旧值会先规范化，再进入那条指明包名的“配置滞留”错误；声明预设时请改成规范名称。
 声明预设时请把旧值改为规范名称。
 
 CI 检查（`scripts/check_shim_removals.py`、`make check-shim-removals`）仍会约束未来的移除：

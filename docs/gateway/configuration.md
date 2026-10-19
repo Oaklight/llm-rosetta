@@ -70,7 +70,7 @@ shim 不必放在包内。顶层 `shims` 段可以让 gateway 额外扫描若干
       "path": "src/llm_rosetta_shim_alcf/providers",   // 归档内的子路径
       "archive": "auto",                               // auto | tar.gz | zip
       "sha256": "0123…abcd",                           // 可选；归档校验
-      "token_env": "GITHUB_TOKEN",                     // 可选；私有仓库
+      "token_env": "GITHUB_TOKEN",                     // 可选；仅私有镜像需要
       "refresh": "auto"                                // auto | always | never
     }
   ],
@@ -110,8 +110,9 @@ commit；配置文件本身不会被改写。要可复现部署请固定 tag 或
 
 **独立包与预设。** ALCF、AskSage 与 Argo 的 shim 维护在各自的仓库中。`presets`
 命名其中之一（`alcf`、`argo`、`asksage`），并展开为 catalog 中的 remote —— 也就是上面
-`remotes` 示例里的那条条目。预设先被应用，同一 URL 的显式 remote 会覆盖对应预设，因此可以
-随后再叠加固定的 `ref` 或 `sha256`。若提供方配置仍使用这些 shim 却没有声明源，启动时会得到
+`remotes` 示例里的那条条目。预设先被应用，同一 URL 的显式 remote 会合并到对应预设上
+（显式键优先），因此随后叠加固定的 `ref` 或 `sha256` 时不会丢掉 catalog 中的 `path`。发布的
+仓库都是公开的，预设不带 `token_env`。若提供方配置仍使用这些 shim 却没有声明源，启动时会得到
 一条错误，指明包名、预设与展开后的 remote。管理面板的预设目录（见
 [管理面板 → Shim 源](admin-panel.md#shim-sources)）可一键添加同样的条目。
 

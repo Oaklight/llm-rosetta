@@ -5,17 +5,11 @@
 !!! warning "以独立包形式发布"
     自 0.14.0 起，四个 AskSage shim 不再内置在 LLM-Rosetta 中，而是由
     [llm-rosetta-shim-asksage](https://github.com/Oaklight/llm-rosetta-shim-asksage)
-    包提供。将它声明在 `shims.remotes` 下，下面的名称即可继续使用。
+    包提供。通过 `shims.presets`（或等价的 `shims.remotes` 条目）声明后，下面的名称即可继续使用。
     **Settings → Shim Sources** 提供同一条目的一键预设。
 
     ```jsonc
-    "shims": {
-      "remotes": [{
-        "url": "https://github.com/Oaklight/llm-rosetta-shim-asksage",
-        "path": "src/llm_rosetta_shim_asksage/providers",
-        "token_env": "GITHUB_TOKEN"      // 该仓库是私有的
-      }]
-    }
+    "shims": { "presets": ["asksage"] }
     ```
 
 ## 端点
