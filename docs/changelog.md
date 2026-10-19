@@ -10,6 +10,8 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### 新增
 
+- **Models 的 provider 过滤器显示 provider logo**（PR [#1077](https://github.com/Oaklight/llm-rosetta/pull/1077)）：该过滤器原本是原生 `<select>`，只能列出名称，而旁边的 provider 卡片都带有厂商标识。现在换成一个轻量自定义列表：触发器显示所选 provider 的 logo 与名称，每一行显示与 provider 卡片相同的标识（优先配置里的 `logo`，其次是 shim 的）；隐藏 input 继续承载 `modelProviderFilter.value`，因此重置按钮和 Providers → Models 跳转都不受影响。键盘操作：Enter/Space/ArrowDown 打开，方向键与 Home/End 移动，Enter 提交，Escape 关闭并把焦点还给触发器。手机上该控件独占一行。
+
 - **面板导航加入图标，并在手机上变为底栏**（PR [#1075](https://github.com/Oaklight/llm-rosetta/pull/1075)）：每个一级标签的文字前现在有一个 16px 图标；≤768px 时标签条改为固定底栏——五个等宽目标、图标在上文字在下、激活项带主题色指示条——而不再是一条会隐藏末尾目的地的横向滚动条。769–1100px 之间收紧标签内边距并在需要滚动前隐藏配置路径；手机上头部保持单行：先隐藏 “System Time” 文字，480px 以下隐藏 “gateway admin” 副标题，360px 以下连时钟一起隐藏。诊断状态栏移到导航栏上方，保持一行可横向滚动。图标与文字是兄弟节点——若在标签上使用 `data-i18n`，切换语言时 `textContent` 会被整体重写并抹掉 SVG。顺带修复了点击测试中发现的跳动：当 Request Log 过滤到一页就能放下时滚动条消失，布局视口随之变宽，固定导航与状态栏会移动；现在 `scrollbar-gutter: stable` 在每个页面预留滚动条槽位，两条栏宽度恒定。
 
 - **`shims.presets` 可按名称预载独立 shim 包**（epic [#927](https://github.com/Oaklight/llm-rosetta/issues/927)）：配置现在可以写 `"shims": {"presets": ["argo"]}`，无需再复制仓库 URL、归档路径与 `token_env`。每个预设键（`alcf`、`argo`、`asksage`）都会展开为 catalog 中对应的远程源，先于显式 `remotes` 应用，且同一 URL 的显式 remote 会覆盖它。Settings → Shim Sources 新增 **Presets** 字段用于填写同样的键，原有的预设选择器仍会把展开后的 remote 追加到列表供审阅；`GET /admin/api/config` 以 `shim_source_presets` 暴露 catalog；若配置使用了某个未声明源的 shim，启动时会报错并指明包名、预设与展开后的 remote。
