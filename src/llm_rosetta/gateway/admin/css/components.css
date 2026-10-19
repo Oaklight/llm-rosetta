@@ -580,6 +580,10 @@ th.sortable.desc::after { content:'\25BC';opacity:.8; }
 .model-toolbar input, .provider-toolbar input { flex:1;min-width:180px;max-width:300px;padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:13px;font-family:var(--mono); }
 .model-toolbar #modelSearch { max-width: 200px; }
 .model-toolbar select { padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:13px; }
+/* The narrow-screen card layout has no visible column header to click,
+   so the toolbar grows a compact sort control there. */
+.model-sort-mobile { display:none;align-items:center;gap:6px; }
+#modelSortDirBtn { min-width:34px; }
 #tab-models table { table-layout:fixed; }
 
 /* API keys toolbar: usage tiers on the left, search/count on the right. */
@@ -600,7 +604,11 @@ th.sortable.desc::after { content:'\25BC';opacity:.8; }
 .pb-name { flex:1;min-width:0; }
 .pb-count { font-variant-numeric:tabular-nums;text-align:right; }
 #tab-models .model-name-cell { overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
-#tab-models .model-name-cell code { overflow:hidden;text-overflow:ellipsis; }
+#tab-models .model-name-cell code { display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+#tab-models .model-type-cell, #tab-models .model-caps-cell { text-align:center; }
+#tab-models .model-actions-cell { text-align:right;white-space:nowrap;position:relative; }
+#tab-models .model-empty { color:var(--text-dim); }
+.provider-detail-grid { display:grid;grid-template-columns:minmax(100px,auto) 56px 1fr auto;gap:8px;align-items:center;font-size:12px; }
 .model-count, .provider-count { font-size:12px;color:var(--text-dim);margin-left:auto; }
 
 /* Fetch models modal */
@@ -877,4 +885,54 @@ body { padding-bottom: 26px; }
   background:color-mix(in srgb, var(--yellow, #eab308) 15%, var(--bg-card));
   border:1px solid var(--yellow, #eab308);color:var(--text);
   font-size:13px;line-height:1.5;
+}
+
+/* ── Models table → stacked cards on narrow screens ──
+   Six fixed columns cannot fit a model's name, type, capabilities, provider
+   and actions at phone width, so each row becomes a self-contained card:
+   identity on top, metadata below, actions last.  Kept at the end of the
+   file so it wins over the generic table min-width rules in the responsive
+   section above. */
+@media (max-width: 768px) {
+  #tab-models table { table-layout:auto; min-width:0; }
+  #tab-models thead { display:none; }
+  .model-sort-mobile { display:flex; }
+  #tab-models tbody tr:not(.provider-detail-row) {
+    display:grid;
+    grid-template-columns:18px auto minmax(0,1fr);
+    grid-template-areas:
+      "check name name"
+      ".     type caps"
+      ".     prov prov"
+      "acts  acts acts";
+    gap:6px 8px;
+    padding:12px;
+    border-bottom:1px solid var(--border);
+  }
+  #tab-models tbody tr:not(.provider-detail-row) > td { display:block; padding:0; border:none; }
+  #tab-models tbody tr:not(.provider-detail-row):hover { background:var(--bg-hover); }
+  #tab-models tbody tr:not(.provider-detail-row):hover > td { background:transparent; }
+  #tab-models .col-check { grid-area:check; }
+  #tab-models .model-name-cell { grid-area:name; overflow:visible; white-space:normal; }
+  #tab-models .model-name-cell code { white-space:normal; overflow:visible; overflow-wrap:anywhere; }
+  #tab-models .model-type-cell { grid-area:type; text-align:left; }
+  #tab-models .model-caps-cell { grid-area:caps; text-align:left; }
+  #tab-models .model-provider-cell { grid-area:prov; font-size:12px; }
+  #tab-models .model-actions-cell { grid-area:acts; white-space:normal; padding-top:8px; border-top:1px dashed var(--border); }
+  #tab-models .model-empty { grid-column:1 / -1; }
+
+  /* Expanded provider breakdown row: its cells are block-level so the
+     grid can use the full card width. */
+  #tab-models .provider-detail-row { display:block; }
+  #tab-models .provider-detail-row > td { display:block; }
+  #tab-models .provider-detail-row > td:first-child { display:none; }
+  #tab-models .provider-detail-grid {
+    grid-template-columns:minmax(0,1fr) 48px auto;
+    grid-template-areas:"name weight remove" "upstream upstream upstream";
+    row-gap:4px;
+  }
+  #tab-models .pd-name { grid-area:name; overflow-wrap:anywhere; }
+  #tab-models .pd-weight { grid-area:weight; }
+  #tab-models .pd-upstream { grid-area:upstream; overflow-wrap:anywhere; }
+  #tab-models .pd-remove { grid-area:remove; }
 }

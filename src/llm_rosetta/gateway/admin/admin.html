@@ -130,6 +130,14 @@
           <!-- Populated by models.js::_buildTypeSegControls() from model_types metadata -->
         </div>
         <input id="modelSearch" placeholder="Search models..." oninput="renderModels()" data-i18n-placeholder="label.searchModels">
+        <div class="model-sort-mobile">
+          <select id="modelSortKey" onchange="setModelSortKey(this.value)" aria-label="Sort by" data-i18n-aria-label="sort.by">
+            <option value="name" data-i18n="col.model">Model</option>
+            <option value="provider" data-i18n="col.provider">Provider</option>
+            <option value="enabled" data-i18n="col.status">Status</option>
+          </select>
+          <button type="button" class="btn btn-sm" id="modelSortDirBtn" onclick="toggleModelSortDir()" aria-label="Sort direction" data-i18n-aria-label="sort.direction" title="Sort direction" data-i18n-title="sort.direction">↑</button>
+        </div>
         <button class="btn-reset" id="modelResetBtn" onclick="resetModelFilters()" data-i18n="btn.resetFilters">✕ Reset</button>
       </div>
       <div class="bulk-bar" id="modelBulkBar">
@@ -142,10 +150,10 @@
       </div>
       <div class="table-scroll"><table>
         <thead><tr>
-          <th style="width:3%"><input type="checkbox" class="row-check" onchange="selectAllModels(this)"></th>
+          <th id="thModelSelect" style="width:3%"><input type="checkbox" class="row-check" onchange="selectAllModels(this)"></th>
           <th class="sortable" onclick="sortModels('name')" id="sortName" data-i18n="col.model" style="width:19%">Model</th>
-          <th style="width:15%;text-align:center" data-i18n="col.type">Type</th>
-          <th style="width:23%;text-align:center" data-i18n="col.capabilities">Capabilities</th>
+          <th id="thModelType" style="width:15%;text-align:center" data-i18n="col.type">Type</th>
+          <th id="thModelCaps" style="width:23%;text-align:center" data-i18n="col.capabilities">Capabilities</th>
           <th class="sortable" onclick="sortModels('provider')" id="sortProvider" data-i18n="col.provider" style="width:13%">Provider</th>
           <th class="sortable" onclick="sortModels('enabled')" id="sortEnabled" style="width:22%;text-align:right" data-i18n="col.actions">Actions</th>
         </tr></thead>

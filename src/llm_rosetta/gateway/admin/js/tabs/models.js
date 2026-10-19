@@ -275,6 +275,18 @@ function sortModels(key) {
   renderModels();
 }
 
+// The narrow-screen layout hides the sortable header, so the toolbar offers
+// the same three keys as a select plus a direction toggle.
+function setModelSortKey(key) {
+  S._modelSortKey = key;
+  renderModels();
+}
+
+function toggleModelSortDir() {
+  S._modelSortDir = S._modelSortDir === 'asc' ? 'desc' : 'asc';
+  renderModels();
+}
+
 // ── Cross-tab navigation ──
 
 function goToModelsForProvider(provName) {
@@ -410,14 +422,14 @@ function toggleProviderRows(el, modelName) {
   const rows = details.map(p => {
     const dis = disabledProviders.has(p.name);
     const w = p.weight || 1;
-    return `<tr class="provider-detail-row" data-parent-model="${esc(modelName)}" style="background:var(--bg)">
-      <td></td>
-      <td colspan="5" style="padding:4px 12px 4px 20px">
-        <div style="display:grid;grid-template-columns:minmax(100px,auto) 56px 1fr auto;gap:8px;align-items:center;font-size:12px">
-          <span class="provider-link" onclick="goToProviderFromModel('${esc(p.name)}')">${esc(p.name)}${dis ? ` <span style="color:var(--text-dim);font-size:10px">(${t('provider.disabled')})</span>` : ''}</span>
-          <input type="number" class="weight-input" min="1" max="100" value="${w}" title="Routing weight" style="width:48px;padding:2px 4px;font-size:11px;text-align:center;border:1px solid var(--border);border-radius:3px;background:var(--bg-card);color:var(--text);font-family:var(--mono)" onchange="updateProviderWeight('${esc(modelName)}','${esc(p.name)}',this.value)" onkeydown="if(event.key==='Enter'){this.blur()}">
-          <span style="font-size:11px;color:var(--text-dim)">${p.upstream_model ? `→ ${esc(p.upstream_model)}` : ''}</span>
-          <button class="btn btn-sm" style="font-size:10px;padding:1px 6px;opacity:0.4" title="Remove" onclick="event.stopPropagation();removeProviderFromModel('${esc(modelName)}','${esc(p.name)}')">✕</button>
+    return `<tr class="provider-detail-row" role="row" data-parent-model="${esc(modelName)}" style="background:var(--bg)">
+      <td role="cell"></td>
+      <td colspan="5" role="cell" style="padding:4px 12px 4px 20px">
+        <div class="provider-detail-grid">
+          <span class="provider-link pd-name" onclick="goToProviderFromModel('${esc(p.name)}')">${esc(p.name)}${dis ? ` <span style="color:var(--text-dim);font-size:10px">(${t('provider.disabled')})</span>` : ''}</span>
+          <input type="number" class="weight-input pd-weight" min="1" max="100" value="${w}" title="Routing weight" style="width:48px;padding:2px 4px;font-size:11px;text-align:center;border:1px solid var(--border);border-radius:3px;background:var(--bg-card);color:var(--text);font-family:var(--mono)" onchange="updateProviderWeight('${esc(modelName)}','${esc(p.name)}',this.value)" onkeydown="if(event.key==='Enter'){this.blur()}">
+          <span class="pd-upstream" style="font-size:11px;color:var(--text-dim)">${p.upstream_model ? `→ ${esc(p.upstream_model)}` : ''}</span>
+          <button class="btn btn-sm pd-remove" style="font-size:10px;padding:1px 6px;opacity:0.4" title="Remove" onclick="event.stopPropagation();removeProviderFromModel('${esc(modelName)}','${esc(p.name)}')">✕</button>
         </div>
       </td>
     </tr>`;
@@ -500,9 +512,16 @@ function renderModels() {
   document.getElementById('sortProvider').className = 'sortable' + (S._modelSortKey === 'provider' ? ` ${S._modelSortDir}` : '');
   const sortEnabledEl = document.getElementById('sortEnabled');
   if (sortEnabledEl) sortEnabledEl.className = 'sortable' + (S._modelSortKey === 'enabled' ? ` ${S._modelSortDir}` : '');
+  const sortKeyEl = document.getElementById('modelSortKey');
+  if (sortKeyEl) sortKeyEl.value = S._modelSortKey;
+  const sortDirEl = document.getElementById('modelSortDirBtn');
+  if (sortDirEl) {
+    sortDirEl.textContent = S._modelSortDir === 'asc' ? '\u2191' : '\u2193';
+    sortDirEl.setAttribute('aria-label', t('sort.direction') + ': ' + t(S._modelSortDir === 'asc' ? 'sort.asc' : 'sort.desc'));
+  }
 
   if (totalCount === 0) {
-    tbody.innerHTML = `<tr><td colspan="4" style="color:var(--text-dim)">${t('empty.models')}</td></tr>`;
+    tbody.innerHTML = `<tr role="row"><td colspan="6" role="cell" class="model-empty">${t('empty.models')}</td></tr>`;
     document.getElementById('modelCount').textContent = '';
     return;
   }
@@ -551,7 +570,7 @@ function renderModels() {
   countEl.textContent = t('model.count', {shown: entries.length, total: totalCount});
 
   if (entries.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="4" style="color:var(--text-dim)">${t('empty.models')}</td></tr>`;
+    tbody.innerHTML = `<tr role="row"><td colspan="6" role="cell" class="model-empty">${t('empty.models')}</td></tr>`;
     return;
   }
 
@@ -579,16 +598,16 @@ function renderModels() {
     const upstreamTag = upstream ? ` <span style="font-size:11px;color:var(--text-dim)" title="Upstream: ${esc(upstream)}">→ ${esc(upstream)}</span>` : '';
     const urlTpl = (typeof info === 'object' && info.url_template) ? info.url_template : '';
     const urlTplTag = urlTpl ? ` <span style="font-size:10px;color:var(--text-dim);background:var(--bg-card);padding:1px 4px;border-radius:3px;border:1px solid var(--border)" title="URL Template: ${esc(urlTpl)}">⛓ url</span>` : '';
-    return `<tr${rowDimmed ? ' class="model-disabled"' : ''}>
-      <td><input type="checkbox" class="row-check" data-model="${esc(name)}" onchange="updateModelBulk()"></td>
-      <td class="model-name-cell">
-        <code class="copyable" title="${esc(name)}" onclick="copyText('${esc(name)}')" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block">${esc(name)}</code>
+    return `<tr${rowDimmed ? ' class="model-disabled"' : ''} role="row">
+      <td class="col-check" role="cell" aria-labelledby="thModelSelect"><input type="checkbox" class="row-check" data-model="${esc(name)}" onchange="updateModelBulk()"></td>
+      <td class="model-name-cell" role="cell" aria-labelledby="sortName">
+        <code class="copyable" title="${esc(name)}" onclick="copyText('${esc(name)}')">${esc(name)}</code>
         ${upstreamTag || urlTplTag ? `<div style="margin-top:2px">${upstreamTag}${urlTplTag}</div>` : ''}
       </td>
-      <td style="text-align:center">${typeBadge}</td>
-      <td style="text-align:center">${capBadges || '<span style="color:var(--text-dim);font-size:11px">—</span>'}</td>
-      <td>${_renderProviderCell(name, info, disabledProviders)}</td>
-      <td style="text-align:right;white-space:nowrap;position:relative">
+      <td class="model-type-cell" role="cell" aria-labelledby="thModelType">${typeBadge}</td>
+      <td class="model-caps-cell" role="cell" aria-labelledby="thModelCaps">${capBadges || '<span style="color:var(--text-dim);font-size:11px">—</span>'}</td>
+      <td class="model-provider-cell" role="cell" aria-labelledby="sortProvider">${_renderProviderCell(name, info, disabledProviders)}</td>
+      <td class="model-actions-cell" role="cell" aria-labelledby="sortEnabled">
         <div class="pill-toggle ${effectiveEnabled ? 'is-on' : 'is-off'}" role="switch" tabindex="0" aria-checked="${effectiveEnabled}" aria-label="${esc(name)}" onclick="toggleModel('${esc(name)}')" onkeydown="if(event.key===' '||event.key==='Enter'){event.preventDefault();toggleModel('${esc(name)}')}" title="${allProvsDisabled ? t('provider.disabled') : modelEnabled ? t('model.enabled') : t('model.disabled')}" style="vertical-align:middle;margin-right:4px"><span class="pill-on">${t('label.on')}</span><span class="pill-off">${t('label.off')}</span></div>
         <div class="test-group" style="display:inline-block">
           <button class="btn btn-sm btn-test${modelType !== 'llm' ? ' btn-test-embed' : ''}" onclick="runTest('${esc(name)}','${_defaultTestKind(modelType)}')">${t('btn.test')}</button>
@@ -770,6 +789,7 @@ Object.assign(window, {
   selectAllModels, updateModelBulk, bulkModels, toggleMoreMenu,
   deleteModel, goToModelsForProvider, goToProviderFromModel,
   removeProviderFromModel, updateProviderWeight, _buildTypeSegControls,
+  setModelSortKey, toggleModelSortDir,
 });
 
 export { renderModels };

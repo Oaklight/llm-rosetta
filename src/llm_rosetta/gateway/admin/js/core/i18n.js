@@ -100,7 +100,7 @@ export const I18N = {
     'hint.docker':'In Docker, "localhost" refers to the container itself. Use "host.docker.internal" (macOS/Windows) or "172.17.0.1" (Linux) to reach the host machine.',
     'diag.host':'Host IP', 'diag.ip':'IP Location', 'diag.google':'Google', 'diag.runDiag':'Network Diagnostics',
     'diag.testing':'testing...', 'diag.unknown':'unknown', 'diag.direct':'direct, no proxy',
-    'label.searchModels':'Search models...', 'label.searchKeys':'Search keys...',
+    'label.searchModels':'Search models...', 'label.searchKeys':'Search keys...', 'sort.by':'Sort by', 'sort.direction':'Sort direction', 'sort.asc':'ascending', 'sort.desc':'descending',
     'label.searchProviders':'Search providers...',
     'label.keyCount':'{count} keys (rotation)',
     'label.addKey':'Add key',
@@ -298,7 +298,7 @@ export const I18N = {
     'hint.docker':'\u5728 Docker \u4e2d\uff0c"localhost" \u6307\u7684\u662f\u5bb9\u5668\u81ea\u8eab\u3002\u8981\u8bbf\u95ee\u5bbf\u4e3b\u673a\uff0c\u8bf7\u4f7f\u7528 "host.docker.internal"\uff08macOS/Windows\uff09\u6216 "172.17.0.1"\uff08Linux\uff09\u3002',
     'diag.host':'\u4e3b\u673a IP', 'diag.ip':'IP \u5f52\u5c5e', 'diag.google':'Google', 'diag.runDiag':'\u7f51\u7edc\u8bca\u65ad',
     'diag.testing':'\u68c0\u6d4b\u4e2d...', 'diag.unknown':'\u672a\u77e5', 'diag.direct':'\u76f4\u8fde\uff0c\u672a\u4f7f\u7528\u4ee3\u7406',
-    'label.searchModels':'\u641c\u7d22\u6a21\u578b...', 'label.searchKeys':'\u641c\u7d22\u5bc6\u94a5...',
+    'label.searchModels':'\u641c\u7d22\u6a21\u578b...', 'label.searchKeys':'\u641c\u7d22\u5bc6\u94a5...', 'sort.by':'\u6392\u5e8f\u4f9d\u636e', 'sort.direction':'\u6392\u5e8f\u65b9\u5411', 'sort.asc':'\u5347\u5e8f', 'sort.desc':'\u964d\u5e8f',
     'label.searchProviders':'\u641c\u7d22\u670d\u52a1\u65b9...',
     'label.keyCount':'{count} \u4e2a\u5bc6\u94a5\uff08\u8f6e\u8f6c\uff09',
     'label.addKey':'\u6dfb\u52a0\u5bc6\u94a5',
@@ -470,6 +470,9 @@ export function applyI18n() {
   });
   document.querySelectorAll('[data-i18n-title]').forEach(el => {
     el.title = t(el.dataset.i18nTitle);
+  });
+  document.querySelectorAll('[data-i18n-aria-label]').forEach(el => {
+    el.setAttribute('aria-label', t(el.dataset.i18nAriaLabel));
   });
   // Re-render dynamic content via window.* to break circular deps
   if (S.configData) { window.renderProviders?.(); window.renderModels?.(); }
