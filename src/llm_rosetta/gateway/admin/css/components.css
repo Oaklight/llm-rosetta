@@ -1060,3 +1060,20 @@ body { padding-bottom: 26px; }
   .logo-select-trigger { width: 100%; max-width: none; min-height: 36px; }
   .logo-select-panel { max-height: 50vh; }
 }
+
+/* ── Collapsible section header (Server Settings) ──
+   The summary states the current value, so the closed control is informative
+   rather than a bare title, and <details> supplies keyboard behaviour and
+   the open state without JS. */
+.section-collapsible > summary { list-style:none; cursor:pointer; user-select:none; gap:8px; }
+.section-collapsible > summary::-webkit-details-marker { display:none; }
+.section-collapsible > summary::after {
+  content:'\25B8'; font-size:10px; color:var(--text-dim); transition:transform .15s;
+}
+.section-collapsible[open] > summary::after { transform:rotate(90deg); }
+.section-collapsible > summary:focus-visible { outline:2px solid var(--accent); outline-offset:2px; border-radius:4px; }
+.section-collapsible[open] > summary { margin-bottom:12px; }
+.section-summary {
+  margin-left:auto; max-width:50%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  font-size:12px; color:var(--text-dim); font-family:var(--mono);
+}

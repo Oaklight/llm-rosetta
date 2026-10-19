@@ -733,6 +733,9 @@ function goToProviderFromModel(provName) {
 // ── Main provider rendering ─────────────────────────────────────────
 
 function renderProviders() {
+  // Also reached from applyI18n(), so the collapsed summary is re-translated
+  // on a language switch.
+  _syncServerSettingsSummary();
   const grid = document.getElementById('providerGrid');
   const providers = S.configData.providers || {};
   const allEntries = Object.entries(providers);
@@ -1011,6 +1014,30 @@ function copyProviderEntry(name) {
 }
 
 // ── Server settings ─────────────────────────────────────────────────
+
+// The collapsed header states the effective proxy, so the common case
+// ("no proxy") needs no click to read.
+function _syncServerSettingsSummary() {
+  const el = document.getElementById('serverSettingsSummary');
+  if (!el) return;
+  const proxy = (S.configData && S.configData.server && S.configData.server.proxy) || '';
+  // The collapsed header sits above the provider list on the landing tab, so
+  // it shows the endpoint without any credentials embedded in the URL.  The
+  // input and the saved value keep the full string.
+  const shown = proxy.replace(/\/\/[^@/]*@/, '//');
+  el.textContent = shown || t('server.proxyNone');
+  el.title = shown;
+}
+
+// Remember whether the operator left the panel open across reloads.
+(function initServerSettingsPanel() {
+  const el = document.getElementById('serverSettings');
+  if (!el) return;
+  el.open = localStorage.getItem('llm-rosetta-server-settings-open') === '1';
+  el.addEventListener('toggle', () => {
+    localStorage.setItem('llm-rosetta-server-settings-open', el.open ? '1' : '0');
+  });
+})();
 
 async function saveServerSettings() {
   const proxy = document.getElementById('globalProxy').value.trim();

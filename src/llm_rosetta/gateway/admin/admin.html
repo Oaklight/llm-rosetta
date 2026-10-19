@@ -69,10 +69,14 @@
 <div class="content">
   <!-- Providers Tab -->
   <div class="tab-panel active" id="tab-providers" role="tabpanel" aria-labelledby="tabBtn-providers">
-    <div class="section">
-      <div class="section-header">
+    <!-- Collapsed by default: a global proxy is a deploy-time setting, and
+         the card used to push the provider list below the fold.  <details>
+         gives the toggle its keyboard behaviour and open state for free. -->
+    <details class="section section-collapsible" id="serverSettings">
+      <summary class="section-header">
         <h2 data-i18n="section.server">Server Settings</h2>
-      </div>
+        <span class="section-summary" id="serverSettingsSummary"></span>
+      </summary>
       <div class="provider-card" style="max-width:480px">
         <div class="form-group" style="margin-bottom:0">
           <label data-i18n="label.globalProxy">Global Proxy URL<span class="hint-icon">?<span class="hint-popup" data-i18n="hint.docker">In Docker, "localhost" refers to the container itself. Use "host.docker.internal" (macOS/Windows) or "172.17.0.1" (Linux) to reach the host machine.</span></span></label>
@@ -87,7 +91,7 @@
           </div>
         </div>
       </div>
-    </div>
+    </details>
     <div class="section">
       <div class="section-header">
         <h2 data-i18n="section.providers">Providers</h2>
