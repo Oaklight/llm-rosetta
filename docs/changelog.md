@@ -186,6 +186,8 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### 修复
 
+- **Settings 页在手机上不再横向滚动**（issue [#1093](https://github.com/Oaklight/llm-rosetta/issues/1093)，PR [#1094](https://github.com/Oaklight/llm-rosetta/pull/1094)）：在 390px 视口下页面宽度达到 619px，Settings 会横向滚动，固定的底栏也随之漂移。日志保留（Log Retention）网格带有内联的三列模板，压过了手机端的堆叠规则；其八个清理按钮也不会换行。现在三列定义移入 class 并在 768px 以下堆叠，按钮行允许换行。桌面端仍保持三列。
+
 - **手机端 Dashboard 的 KPI 网格会填满最后一行，Total Requests 也会分组显示**（issue [#1091](https://github.com/Oaklight/llm-rosetta/issues/1091)，PR [#1092](https://github.com/Oaklight/llm-rosetta/pull/1092)）：手机端两列网格里的五张卡片会让第五张（tokens）独自占一行，网格的间隙色透出来像一张空的半卡片，看起来像是缺少了指标。现在当卡片数为奇数时，最后一张会横跨两列；偶数时仍保持每行两张。Total Requests 也改为与页脚和面板其他数字一致的千分位分组。
 
 - **手机上的 API Keys 页可以看到 token 用量**（issue [#1089](https://github.com/Oaklight/llm-rosetta/issues/1089)，PR [#1090](https://github.com/Oaklight/llm-rosetta/pull/1090)）：七列表格保留 760px 最小宽度，手机上看得到 Label、Created 与 Last Used，而这个页面真正要展示的用量数字都在屏幕之外。现在 768px 以下的每个 key 都是卡片：首行是标签与操作，其下是四个用量数字，最后是日期；因为表头被隐藏，每个数值在卡片上自带列名。隐藏表头同时也去掉了排序入口，因此工具栏新增与 Models 相同的排序下拉框和方向按钮；选择 **Default** 会恢复服务端顺序并禁用方向按钮。桌面端保持不变。
