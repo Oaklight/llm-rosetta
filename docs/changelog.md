@@ -186,6 +186,8 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### 修复
 
+- **手机上的 Request Log 不再需要横向滚动才能读到 Status**（issue [#1083](https://github.com/Oaklight/llm-rosetta/issues/1083)，PR [#1084](https://github.com/Oaklight/llm-rosetta/pull/1084)）：九列表格保留 760px 最小宽度并在容器内横向滚动，390px 屏幕上只显示 Time、Model 与 Source → Target——Status（读日志时最关心的列）在屏幕之外，而且没有任何提示还有更多列。现在 768px 以下的每一行都渲染为卡片：第一行是时间与状态，其下是模型与路由，再下面是 mode/key/ip 以及 tokens/duration。被隐藏的表头行仍留在 DOM 中，作为每个单元格的可访问名称（显式 `role="cell"` 与 `aria-labelledby`）；展开的错误详情仍是卡片下方的整宽区块。桌面端与 Server Ops Log 保持不变。
+
 - **可排序表头现在可以用键盘操作**（issue [#1079](https://github.com/Oaklight/llm-rosetta/issues/1079)，PR [#1082](https://github.com/Oaklight/llm-rosetta/pull/1082)）：Models 与 API Keys 的列表头是 `<th onclick=…>`，键盘完全无法排序这两张表，屏幕阅读器也无从知道哪一列在排序、朝哪个方向——唯一的提示是一个伪元素画出的 ▲/▼。现在每个 `th.sortable` 都是 tab 停靠点，Enter 或空格执行同一个排序处理器（空格会 `preventDefault`，避免页面滚动）；共享的 `syncAriaSort()` 把 `aria-sort` 写到当前列，其余列不写该属性（即隐式的 `none`），新增的可排序表格因此直接继承这套行为，而不必各自重复推导。聚焦的表头会绘制 2px 强调色描边并向内偏移 2px，避免被表格的滚动容器裁掉。
 
 - **管理面板现在能在手机尺寸的视口中使用**（PR [#1070](https://github.com/Oaklight/llm-rosetta/pull/1070)）：在 768px 以下，固定的状态页脚会折成两行并遮住页面内容，标签栏会裁掉 *Request Log*，provider/model 类型筛选器在右边缘被截断，而所有表格都把全部列挤进约 340px，导致模型表和请求日志表无法阅读。现在页脚保持单行、可横向滚动并在边缘淡出，并优先显示错误数与 DB/WAL 体积，而不是容量比例；五个标签在 375px 视口中都能放下；分段筛选器改为滚动而不是裁切；工具栏搜索独占一行；表格保留可读的最小宽度并在容器内横向滚动；Add Model 的名称/provider 行在手机上改为纵向堆叠；16px 的表单字号可避免 iOS 在聚焦时缩放。桌面布局保持不变。
