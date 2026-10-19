@@ -228,10 +228,12 @@
       </div>
       <div id="providerBreakdownGrid" class="pb-grid"></div>
     </div>
-    <div class="section" id="profilingSection">
-      <h2 style="margin-bottom:12px" data-i18n="section.profiling">Profiling</h2>
+    <details class="section section-collapsible" id="profilingSection">
+      <summary class="section-header">
+        <h2 data-i18n="section.profiling">Profiling</h2>
+        <span id="profilingBadge" class="badge" style="margin-left:auto;padding:4px 10px;border-radius:4px;font-size:12px;font-weight:600;visibility:hidden">OFF</span>
+      </summary>
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap">
-        <span id="profilingBadge" class="badge" style="padding:4px 10px;border-radius:4px;font-size:12px;font-weight:600">OFF</span>
         <label style="font-size:13px" data-i18n="profiling.requests">Requests:</label>
         <input type="number" id="profilingCount" value="5" min="1" max="100" style="width:60px;padding:4px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text)">
         <label style="font-size:13px;display:inline-flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="profilingTracing"> <span data-i18n="profiling.tracing">Tracing</span></label>
@@ -263,11 +265,13 @@
         <div class="empty-state-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 20h18M6 20V14M10 20V10M14 20V6M18 20V4"/></svg></div>
         <div class="empty-state-text" data-i18n="profiling.empty">No profiling results. Enable profiling and send requests.</div>
       </div>
-    </div>
-    <div class="section" id="captureSection">
-      <h2 style="margin-bottom:12px" data-i18n="section.capture">Content Capture</h2>
+    </details>
+    <details class="section section-collapsible" id="captureSection">
+      <summary class="section-header">
+        <h2 data-i18n="section.capture">Content Capture</h2>
+        <span id="captureBadge" class="badge" style="margin-left:auto;padding:4px 10px;border-radius:4px;font-size:12px;font-weight:600;visibility:hidden">OFF</span>
+      </summary>
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap">
-        <span id="captureBadge" class="badge" style="padding:4px 10px;border-radius:4px;font-size:12px;font-weight:600">OFF</span>
         <label style="font-size:13px" data-i18n="capture.requests">Requests:</label>
         <input type="number" id="captureCount" value="5" min="1" max="100" style="width:60px;padding:4px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text)">
         <button class="btn btn-sm" onclick="toggleCapture()" id="captureToggleBtn" data-i18n="capture.enable">Enable</button>
@@ -297,7 +301,7 @@
         <div class="empty-state-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg></div>
         <div class="empty-state-text" data-i18n="capture.empty">No captures. Enable capture and send requests.</div>
       </div>
-    </div>
+    </details>
 
     <!-- Error Dumps Section -->
     <div class="section" id="errorDumpSection">

@@ -42,6 +42,10 @@ async function loadProfilingStatus() {
         badge.style.background = 'var(--text-dim, #888)';
         badge.style.color = '#fff';
       }
+      // The stored text is a placeholder; reveal the badge only once the
+      // server has answered, so a collapsed summary never claims OFF while
+      // profiling is actually on.
+      badge.style.visibility = 'visible';
     }
     if (btn) btn.textContent = s.enabled ? t('profiling.disable') : t('profiling.enable');
     const cb = document.getElementById('profilingTracing');
@@ -159,6 +163,8 @@ async function loadCaptureStatus() {
         badge.style.background = 'var(--text-dim, #888)';
         badge.style.color = '#fff';
       }
+      // Same rule as the profiling badge: no state claim before the fetch.
+      badge.style.visibility = 'visible';
     }
     if (btn) btn.textContent = s.enabled ? t('capture.disable') : t('capture.enable');
   } catch (e) { /* ignore */ }
@@ -1013,6 +1019,19 @@ async function bulkDeleteDumps() {
 }
 
 // ===================== Window globals =====================
+
+// Profiling and Content Capture are opt-in debugging tools, so their panels
+// stay closed until asked for; the choice survives a reload.  The badge in the
+// summary still reports OFF / remaining while collapsed.
+(function initDashboardSections() {
+  for (const id of ['profilingSection', 'captureSection']) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    const key = 'llm-rosetta-' + id + '-open';
+    el.open = localStorage.getItem(key) === '1';
+    el.addEventListener('toggle', () => localStorage.setItem(key, el.open ? '1' : '0'));
+  }
+})();
 
 Object.assign(window, {
   loadMetrics, loadProfilingStatus, loadProfilingResults,
