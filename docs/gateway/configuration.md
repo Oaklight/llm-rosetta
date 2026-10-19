@@ -732,7 +732,7 @@ The gateway can proxy `/v1/decision` and `/v1/systemone` requests for probabilis
 | `decision_models` | `dict` | `{}` | Model → provider mapping for decision requests |
 | `default_decision_format` | `str` | `"systemone"` | Source format fallback |
 
-A legacy entry's `format` or `type` may name a decision format (`systemone`, `openai_decisions`) or a registered decision shim, which supplies its format (e.g. `"type": "typesafe"` → `systemone`). `decision_path` defaults to the format's upstream path (`openai_decisions` → `/v1/decisions`, otherwise `/v1/systemone`).
+A legacy entry's `format` or `type` may name a decision format (`systemone`, `openai_decisions`) or a registered decision shim, which supplies its format and connection defaults (e.g. `"type": "typesafe"` → `systemone`). `decision_path` defaults to the format's upstream path (`openai_decisions` → `/v1/decisions`, otherwise `/v1/systemone`).
 
 ## Full Example
 
