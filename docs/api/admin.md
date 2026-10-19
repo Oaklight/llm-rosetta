@@ -583,14 +583,14 @@ GET /admin/api/requests?limit=50&offset=0&model=gpt-4o&provider=openai&status=ok
 
 | Query param | Type | Default | Description |
 |-------------|------|---------|-------------|
-| `limit` | `int` | `50` | Page size. |
-| `offset` | `int` | `0` | Number of entries to skip. |
+| `limit` | `int` | `50` | Page size. Clamped to 1–500 (a negative value must not reach SQLite, where `LIMIT -1` means unbounded); a non-integer returns `400`. |
+| `offset` | `int` | `0` | Number of entries to skip. Negative values are clamped to 0; a non-integer returns `400`. |
 | `model` | `string` | — | Filter by model name. |
 | `provider` | `string` | — | Filter by target provider. |
 | `status` | `"ok"` \| `"error"` | — | `ok` = 2xx/3xx, `error` = 4xx/5xx. |
 | `api_key_label` | `string` | — | Filter by API key label. |
-| `since` | ISO 8601 | — | Lower bound (inclusive) on the entry timestamp. |
-| `until` | ISO 8601 | — | Upper bound (**exclusive**), so adjacent windows do not double-count the boundary. Accepts `Z` or an explicit offset; an unparseable value returns `400`. |
+| `since` | ISO 8601 | — | Lower bound (inclusive) on the entry timestamp. An explicit UTC offset (or `Z`) is required; a timestamp without one returns `400`. |
+| `until` | ISO 8601 | — | Upper bound (**exclusive**), so adjacent windows do not double-count the boundary. Accepts `Z` or an explicit offset; an unparseable or offset-less value returns `400`. |
 
 **Response**
 
@@ -1036,8 +1036,8 @@ GET /admin/api/error-dumps?limit=50&offset=0
 
 | Query param | Type | Default | Description |
 |-------------|------|---------|-------------|
-| `limit` | `int` | `50` | Page size. |
-| `offset` | `int` | `0` | Number of entries to skip. |
+| `limit` | `int` | `50` | Page size. Clamped to 1–500; a non-integer returns `400`. |
+| `offset` | `int` | `0` | Number of entries to skip. Negative values are clamped to 0; a non-integer returns `400`. |
 | `model` | `string` | — | Filter by model name. |
 | `error_phase` | `string` | — | Filter by the phase where the error occurred. |
 | `provider` | `string` | — | Filter by target provider. |
