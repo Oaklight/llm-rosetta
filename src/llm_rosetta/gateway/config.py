@@ -614,6 +614,14 @@ class GatewayConfig:
             for name, cfg in self._raw_providers.items()
         }
 
+        # Attach the process-wide quota state: the key ring learns which
+        # credentials a probe or an in-band 429 has demoted.  State outlives a
+        # config reload, so it is bound here rather than owned by the config.
+        from .quota.service import bind_provider_quota
+
+        for provider_name, provider_info in self.providers.items():
+            bind_provider_quota(provider_name, provider_info)
+
         # Upstream-account identity per provider, derived from the credential
         # source at build time.  Two providers sharing a token front one
         # account — the key tier-2 same-format routing compares on.  Computed

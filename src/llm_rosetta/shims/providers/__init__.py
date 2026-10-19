@@ -67,6 +67,7 @@ from llm_rosetta._vendor.yaml import load as yaml_load
 from ..provider_shim import (
     ConnectionConfig,
     ProviderShim,
+    QuotaDeclaration,
     ReasoningCapability,
     SoftErrorPattern,
     ToolsConfig,
@@ -270,6 +271,43 @@ def _parse_reasoning_cap(
     )
 
 
+def _load_quota_probes(path: Path) -> tuple[Any, ...]:
+    """Execute a shim's ``quota.py`` and return the probes it exports.
+
+    A shim that serves an upstream allowance ships the probe beside its
+    ``provider.yaml`` (group-level for a vendor spanning several formats,
+    leaf-level for a one-off).  The module may import the standard library and
+    :mod:`llm_rosetta.shims.quota_probe` at module scope; it must not import
+    ``gateway`` — the shim layer loads before the gateway, and the core
+    boundary forbids it.
+
+    Args:
+        path: The ``quota.py`` to execute.  A missing file yields ``()``.
+
+    Returns:
+        The module's ``PROBES`` (a tuple, or a mapping of id → probe).
+    """
+    if not path.exists():
+        return ()
+    digest = hashlib.sha1(str(path.resolve()).encode()).hexdigest()[:12]
+    module_name = f"_llm_rosetta_shim_quota_{digest}"
+    spec = importlib.util.spec_from_file_location(module_name, path)
+    if spec is None or spec.loader is None:
+        logger.warning("Could not load %s", path)
+        return ()
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = mod
+    try:
+        spec.loader.exec_module(mod)
+    except BaseException:
+        sys.modules.pop(module_name, None)
+        raise
+    probes = getattr(mod, "PROBES", ())
+    if isinstance(probes, dict):
+        probes = tuple(probes.values())
+    return tuple(probes)
+
+
 def _load_transforms(
     provider_dir: Path,
     *,
@@ -431,6 +469,7 @@ def _load_single_provider(
     group: str | None = None,
     _builtin: bool = True,
     root: Path | None = None,
+    quota_probes: tuple[Any, ...] = (),
 ) -> ProviderShim | None:
     """Load a single provider from *provider_dir* and register it.
 
@@ -460,6 +499,12 @@ def _load_single_provider(
     pre_t, post_t, ir_t, resp_t, transforms_mod = _load_transforms(
         provider_dir, group=group, _builtin=_builtin, root=root
     )
+
+    # A leaf-level quota.py complements the group's: the group module carries
+    # a vendor's shared lanes, a leaf module a one-off.  Both are attached to
+    # every shim in the leaf so a config can select either by probe id.
+    leaf_quota_probes = _load_quota_probes(provider_dir / "quota.py")
+    all_quota_probes = tuple(quota_probes) + leaf_quota_probes
 
     # Parse optional reasoning capability config from YAML.
     reasoning_cfg = cfg.get("reasoning")
@@ -493,6 +538,11 @@ def _load_single_provider(
             auth_header=conn_raw.get("auth_header"),
             keyless=conn_raw.get("keyless", False),
             session_header=conn_raw.get("session_header"),
+            headers=conn_raw.get("headers"),
+            request_header=conn_raw.get("request_header"),
+            session_id_format=conn_raw.get("session_id_format"),
+            request_id_format=conn_raw.get("request_id_format"),
+            stream_required=bool(conn_raw.get("stream_required", False)),
         )
     else:
         connection = ConnectionConfig(
@@ -503,6 +553,24 @@ def _load_single_provider(
             model_id_field=cfg.get("model_id_field"),
             keyless=cfg.get("keyless", False),
             session_header=cfg.get("session_header"),
+            headers=cfg.get("headers"),
+            request_header=cfg.get("request_header"),
+            session_id_format=cfg.get("session_id_format"),
+            request_id_format=cfg.get("request_id_format"),
+            stream_required=bool(cfg.get("stream_required", False)),
+        )
+
+    # Parse the quota declaration: which probe reads this lane, and how often
+    # the gateway should read it.  Parsers live in the gateway; the shim only
+    # names one.
+    quota_raw = cfg.get("quota")
+    quota_decl: QuotaDeclaration | None = None
+    if isinstance(quota_raw, dict):
+        quota_decl = QuotaDeclaration(
+            probe=quota_raw.get("probe"),
+            url=quota_raw.get("url"),
+            interval=int(quota_raw.get("interval", 0) or 0),
+            demote_at=float(quota_raw.get("demote_at", 100.0)),
         )
 
     # Parse tools config (grouped or flat fallback).
@@ -552,6 +620,8 @@ def _load_single_provider(
         group_label=cfg.get("group_label"),
         free_source=cfg.get("free_source", False),
         connection=connection,
+        quota=quota_decl,
+        quota_probes=all_quota_probes,
         tools=tools,
         pre_ir_transforms=pre_t,
         post_ir_transforms=post_t,
@@ -590,6 +660,7 @@ def _load_provider_tolerant(
     builtin: bool,
     root: Path,
     on_error: str,
+    quota_probes: tuple[Any, ...] = (),
 ) -> ProviderShim | None:
     """Load one provider directory, optionally downgrading errors to a warning.
 
@@ -599,7 +670,11 @@ def _load_provider_tolerant(
     """
     try:
         return _load_single_provider(
-            directory, group=group, _builtin=builtin, root=root
+            directory,
+            group=group,
+            _builtin=builtin,
+            root=root,
+            quota_probes=quota_probes,
         )
     except Exception as exc:
         if on_error == "warn":
@@ -615,6 +690,7 @@ def _load_group_folder(
     builtin: bool,
     root: Path,
     on_error: str,
+    quota_probes: tuple[Any, ...] = (),
 ) -> list[ProviderShim]:
     """Load every leaf provider inside a *group_dir* (``<group>/<leaf>/``)."""
     child_group = f"{group}.{group_dir.name}" if group else group_dir.name
@@ -624,7 +700,12 @@ def _load_group_folder(
             continue
         if (sub / "provider.yaml").exists():
             shim = _load_provider_tolerant(
-                sub, child_group, builtin=builtin, root=root, on_error=on_error
+                sub,
+                child_group,
+                builtin=builtin,
+                root=root,
+                on_error=on_error,
+                quota_probes=quota_probes,
             )
             if shim is not None:
                 loaded.append(shim)
@@ -676,10 +757,23 @@ def load_providers_from_dir(
             if shim is not None:
                 shims.append(shim)
         else:
-            # Potential group folder — scan its children.
+            # Potential group folder — load the vendor's shared quota probes
+            # once, then scan its leaf providers.
+            group_probes: tuple[Any, ...] = ()
+            try:
+                group_probes = _load_quota_probes(d / "quota.py")
+            except Exception as exc:
+                if on_error == "raise":
+                    raise
+                logger.warning("Skipping quota probes in %s: %s", d, exc)
             shims.extend(
                 _load_group_folder(
-                    d, group, builtin=builtin, root=providers_dir, on_error=on_error
+                    d,
+                    group,
+                    builtin=builtin,
+                    root=providers_dir,
+                    on_error=on_error,
+                    quota_probes=group_probes,
                 )
             )
     return shims

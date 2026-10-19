@@ -57,7 +57,7 @@ async def test_provider_connectivity(request: Any, name: str) -> Response:
         # about reachability, so the authenticated probes are skipped until it
         # has been seeded.
         auth_ready = pinfo is None or pinfo.ready
-        auth_headers = pinfo.auth_headers() if pinfo else {}
+        auth_headers = {**pinfo.extra_headers, **pinfo.auth_headers()} if pinfo else {}
 
         results: dict[str, Any] = {
             "provider": name,

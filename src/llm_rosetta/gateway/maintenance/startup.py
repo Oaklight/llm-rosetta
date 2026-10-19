@@ -68,6 +68,7 @@ class DeferredStartup:
     """
 
     _RETRY_DELAY = 30  # seconds before retrying a failed token_command
+    _QUOTA_TICK = 15  # seconds between due-provider checks
 
     def __init__(self, config: Any, app: Any) -> None:
         self._config = config
@@ -142,6 +143,14 @@ class DeferredStartup:
                 )
             )
 
+        # Quota polling — only providers that declared an interval
+        from ..quota.service import quota_intervals
+
+        if quota_intervals(self._config):
+            self._tasks.append(
+                asyncio.create_task(self._poll_quota(), name="quota-poller")
+            )
+
         # Database backfills
         persistence = getattr(self._app, "persistence", None)
         if persistence is not None:
@@ -149,6 +158,33 @@ class DeferredStartup:
             self._tasks.append(
                 asyncio.create_task(self._run_backfills(), name="deferred-backfills")
             )
+
+    async def _poll_quota(self) -> None:
+        """Refresh the quota of providers that declared a poll interval.
+
+        Reads share the same cache the admin card uses, so a page refresh and
+        a poll never duplicate one vendor call within a TTL.  A provider whose
+        shim or config declares ``quota.interval`` seconds is read at most
+        that often; the loop wakes more frequently to notice due providers.
+        """
+        from ..quota.service import quota_intervals, read_provider_quota
+
+        next_due: dict[str, float] = {}
+        while True:
+            await asyncio.sleep(self._QUOTA_TICK)
+            config = getattr(self._app, "gateway_config", self._config)
+            intervals = quota_intervals(config)
+            now = asyncio.get_running_loop().time()
+            for name, interval in intervals.items():
+                if now < next_due.get(name, 0.0):
+                    continue
+                next_due[name] = now + interval
+                try:
+                    await read_provider_quota(
+                        config, name, force=False, ttl=float(interval)
+                    )
+                except Exception:  # noqa: BLE001 - a poll must never kill the loop
+                    logger.debug("Quota poll failed for %s", name, exc_info=True)
 
     async def shutdown(self) -> None:
         """Cancel any in-flight deferred tasks."""

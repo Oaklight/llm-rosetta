@@ -96,16 +96,25 @@ class HttpTransport:
         provider_info: ProviderInfo,
         extra_headers: dict[str, str] | None = None,
     ) -> dict[str, str]:
-        headers = {
-            "Content-Type": "application/json",
-            **provider_info.auth_headers(),
-            # Shim-declared per-conversation session header; a request-scoped
-            # extra header of the same name (e.g. forwarded from the client)
-            # overrides it below.
-            **provider_info.session_headers(),
-        }
+        headers: dict[str, str] = {"Content-Type": "application/json"}
+        # Request-scoped headers forwarded from the client (x-request-id, hop
+        # count, the client's User-Agent).
         if extra_headers:
             headers.update(extra_headers)
+        # Shim-declared static fingerprint headers win over the forwarded
+        # client ones: a lane that validates its client shape cannot be
+        # handed curl's User-Agent.  Auth comes after, so a static map can
+        # never shadow the credential.
+        headers.update(provider_info.extra_headers)
+        headers.update(provider_info.auth_headers())
+        headers.update(provider_info.session_headers())
+        # Per-request identifier header, when the shim declares one.
+        headers.update(provider_info.request_headers())
+        # A client-supplied session id is forwarded verbatim, as before: it is
+        # conversation identity, not a fingerprint the shim owns.
+        session_header = provider_info.session_header
+        if extra_headers and session_header and session_header in extra_headers:
+            headers[session_header] = extra_headers[session_header]
         return headers
 
     async def send(

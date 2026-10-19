@@ -246,6 +246,26 @@ async def _handle_401(
     return False, None
 
 
+def _retry_after_quota_signal(
+    provider_info: ProviderInfo,
+    status_code: int,
+    error_text: str,
+) -> bool:
+    """Demote the serving credential after a quota refusal and retry, if useful.
+
+    The signal parser belongs to the vendor probe, so a provider that names the
+    exhausted window is demoted immediately rather than at the next poll.  A
+    retry is only worth it when the ring holds another usable credential; the
+    already-demoted key is skipped by :meth:`KeyRing.next`.
+    """
+    from .quota.service import has_usable_alternative, note_upstream_quota_error
+
+    signal = note_upstream_quota_error(provider_info, status_code, error_text)
+    if signal is None:
+        return False
+    return has_usable_alternative(provider_info)
+
+
 def _check_soft_errors(
     patterns: tuple[SoftErrorPattern, ...],
     body: Any,
@@ -677,7 +697,237 @@ async def _fidelity_check_and_dump(
         )
 
 
-async def handle_non_streaming(
+def _merge_tool_call_delta(merged_calls: list[dict[str, Any]], call: Any) -> None:
+    """Fold one streamed tool-call fragment into the accumulated call list."""
+    if not isinstance(call, dict):
+        return
+    position = call.get("index")
+    if not isinstance(position, int):
+        position = len(merged_calls)
+    while len(merged_calls) <= position:
+        merged_calls.append(
+            {
+                "id": "",
+                "type": "function",
+                "function": {"name": "", "arguments": ""},
+            }
+        )
+    target = merged_calls[position]
+    if call.get("id"):
+        target["id"] = call["id"]
+    if call.get("type"):
+        target["type"] = call["type"]
+    function = call.get("function")
+    if isinstance(function, dict):
+        if function.get("name"):
+            target["function"]["name"] = function["name"]
+        if isinstance(function.get("arguments"), str):
+            target["function"]["arguments"] += function["arguments"]
+
+
+def _merge_choice_delta(acc: dict[str, Any], delta: Any) -> None:
+    """Fold one streamed delta into an accumulated choice."""
+    if not isinstance(delta, dict):
+        return
+    if delta.get("role"):
+        acc["message"]["role"] = delta["role"]
+    for field_name in ("content", "reasoning_content", "refusal"):
+        value = delta.get(field_name)
+        if isinstance(value, str):
+            acc["message"][field_name] = acc["message"].get(field_name, "") + value
+    calls = delta.get("tool_calls")
+    if isinstance(calls, list):
+        merged_calls = acc["message"].setdefault("tool_calls", [])
+        for call in calls:
+            _merge_tool_call_delta(merged_calls, call)
+
+
+def merge_chat_completion_events(events: list[dict[str, Any]]) -> dict[str, Any]:
+    """Reassemble a non-streaming Chat Completions reply from stream events.
+
+    Only the fields a client reads are merged: identity, per-choice message
+    content and reasoning, tool calls by index, the finish reason and the
+    usage block.  Vendor echo fields are not invented — a non-streaming
+    request that was served by a streaming upstream is a synthesized reply,
+    and claiming fields the vendor never sent would be worse than omitting
+    them.
+
+    Args:
+        events: Source-format ``chat.completion.chunk`` events, in order.
+
+    Returns:
+        A ``chat.completion`` object.
+    """
+    first: dict[str, Any] = {}
+    choices: dict[int, dict[str, Any]] = {}
+    usage: dict[str, Any] | None = None
+    for event in events:
+        if not isinstance(event, dict):
+            continue
+        if not first:
+            first = event
+        if isinstance(event.get("usage"), dict):
+            usage = event["usage"]
+        for choice in event.get("choices") or []:
+            if not isinstance(choice, dict):
+                continue
+            index = choice.get("index", 0)
+            acc = choices.setdefault(
+                index,
+                {
+                    "index": index,
+                    "message": {"role": "assistant"},
+                    "finish_reason": None,
+                },
+            )
+            _merge_choice_delta(acc, choice.get("delta"))
+            if choice.get("finish_reason") is not None:
+                acc["finish_reason"] = choice["finish_reason"]
+
+    merged: dict[str, Any] = {
+        "id": first.get("id", ""),
+        "object": "chat.completion",
+        "created": first.get("created", 0),
+        "model": first.get("model", ""),
+        "choices": [choices[key] for key in sorted(choices)],
+    }
+    if isinstance(first.get("system_fingerprint"), str):
+        merged["system_fingerprint"] = first["system_fingerprint"]
+    if usage is not None:
+        merged["usage"] = usage
+    return merged
+
+
+async def _non_streaming_from_stream(
+    *,
+    route: ResolvedRoute,
+    provider_info: ProviderInfo,
+    pipeline: ConversionPipeline,
+    target_body: dict[str, Any],
+    body: dict[str, Any],
+    model: str,
+    transport: UpstreamTransport,
+    metadata_store: ProviderMetadataStore | None,
+    extra_headers: dict[str, str] | None,
+    persistence: Any | None,
+    capture_state: CaptureState | None,
+    entry_id: str | None,
+    profile: dict[str, Any],
+) -> tuple[Response, dict[str, Any]]:
+    """Serve a non-streaming client from an upstream that only streams.
+
+    A shim declares ``connection.stream_required`` when the vendor refuses
+    ``stream: false``.  The request is sent as a stream, the source-format
+    events are reassembled into one body, and the result is returned as
+    ordinary JSON.  Only Chat Completions clients are supported: every other
+    source format has a different terminal-event shape, and synthesizing one
+    without a measured sample would be guesswork.
+    """
+    if route.source_provider != "chat_completions":
+        return (
+            error_response_for_source(
+                route.source_provider,
+                400,
+                "This upstream only answers streaming requests, and the gateway "
+                "can only reassemble a non-streaming reply for the Chat "
+                "Completions format. Retry with stream=true.",
+            ),
+            profile,
+        )
+
+    target_body = _inject_stream_flags(route.target_provider, target_body, stream=True)
+    upstream_url = provider_info.upstream_url(model, stream=True)
+    stream = None
+    error_text = ""
+    for _attempt in range(2):
+        stream = await transport.send_streaming(
+            provider_info, upstream_url, target_body, extra_headers=extra_headers
+        )
+        if not stream.is_error:
+            break
+        error_text = await stream.read_error()
+        status = stream.status_code
+        await stream.close()
+        stream = None
+        retry, err = await _handle_401(
+            provider_info, status, error_text, route.source_provider
+        )
+        if err is not None:
+            return err, profile
+        if not retry:
+            break
+    if stream is None:
+        return (
+            await _upstream_error_passthrough(
+                status,
+                error_text,
+                error_text,
+                None,
+                body=body,
+                target_body=target_body,
+                route=route,
+                provider_info=provider_info,
+                persistence=persistence,
+                entry_id=entry_id,
+                extra_headers=extra_headers,
+                capture_state=capture_state,
+                error_phase="stream_header",
+                is_streaming=True,
+                tool_name_collisions=pipeline.tool_name_collisions,
+            ),
+            profile,
+        )
+
+    store = metadata_store or _default_metadata_store
+    processor = pipeline.create_stream_processor(
+        on_ir_event=store.cache_from_stream_event,
+    )
+    events: list[dict[str, Any]] = []
+    async with stream:
+        async for chunk in stream:
+            stream_error = await _detect_stream_chunk_error(
+                chunk,
+                soft_error_patterns=route.soft_error_patterns,
+                stream_status=getattr(stream, "status_code", 200),
+                model=model,
+                dump_ctx=None,
+                entry_id=entry_id,
+            )
+            if stream_error is not None:
+                return (
+                    error_response_for_source(route.source_provider, 502, stream_error),
+                    profile,
+                )
+            events.extend(processor.process_chunk(chunk))
+    try:
+        events.extend(processor.process_chunk(None))
+    except Exception:  # noqa: BLE001 - a flush failure is not a lost reply
+        logger.debug("Stream flush failed during reassembly", exc_info=True)
+
+    merged = merge_chat_completion_events(events)
+    usage = getattr(processor, "get_accumulated_usage", lambda: None)()
+    if usage:
+        profile["usage"] = usage
+    if capture_state is not None:
+        capture_state.record(
+            CapturedRequest(
+                original_request=body,
+                converted_body=target_body,
+                upstream_response=events,
+                request_id=(
+                    extra_headers.get("x-request-id", "") if extra_headers else ""
+                ),
+                model=model,
+                source_provider=route.source_provider,
+                target_provider=route.target_provider,
+                is_stream=True,
+                status_code=200,
+            )
+        )
+    return JSONResponse(merged), profile
+
+
+async def handle_non_streaming(  # noqa: C901
     route: ResolvedRoute,
     provider_info: ProviderInfo,
     body: dict[str, Any],
@@ -758,6 +1008,25 @@ async def handle_non_streaming(
     selection.with_ir_request(pipeline.ir_request)
     provider_info = _apply_request_stages(selection)
 
+    # ``is True`` rather than truthiness: a mock provider in a test would
+    # otherwise present a truthy attribute and divert the request.
+    if getattr(provider_info, "stream_required", False) is True:
+        return await _non_streaming_from_stream(
+            route=route,
+            provider_info=provider_info,
+            pipeline=pipeline,
+            target_body=target_body,
+            body=body,
+            model=model,
+            transport=transport,
+            metadata_store=store,
+            extra_headers=extra_headers,
+            persistence=persistence,
+            capture_state=capture_state,
+            entry_id=entry_id,
+            profile=profile,
+        )
+
     # Phase 3: Forward to upstream via transport
     # Wrapped in a retry loop: on 401 from a token_command provider,
     # reactively refresh the token and retry once.
@@ -803,6 +1072,10 @@ async def handle_non_streaming(
         )
         if err is not None:
             return err, profile
+        if not retry:
+            retry = _retry_after_quota_signal(
+                provider_info, resp.status_code, resp.error_text
+            )
         if not retry:
             break
 
@@ -1399,6 +1672,10 @@ async def handle_streaming(
         )
         if err is not None:
             return err, profile
+        if not retry:
+            retry = _retry_after_quota_signal(
+                provider_info, stream_error_code, stream_error_text
+            )
         if not retry:
             break
 

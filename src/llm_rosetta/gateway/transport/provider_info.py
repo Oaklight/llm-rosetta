@@ -15,8 +15,11 @@ Higher-level factory logic (shim resolution, config parsing) stays in
 from __future__ import annotations
 
 import hashlib
+import itertools
 import re
 from collections.abc import Callable
+from contextvars import ContextVar
+from typing import Any
 
 # Type alias for auth-header builder callables
 AuthHeaderFn = Callable[[str], dict[str, str]]
@@ -26,6 +29,22 @@ AuthHeaderFn = Callable[[str], dict[str, str]]
 # upstream providers reject it immediately if it leaks past the readiness
 # guard.
 TOKEN_PENDING_SENTINEL = "__token_pending__"
+
+# The credential a request actually went out with.  ``auth_headers()`` is
+# synchronous and is called once per upstream request from the task that will
+# also see the response, so a context variable carries the key from the header
+# build to the in-band quota handler without leaking across concurrent
+# requests.  ``None`` for a keyless request.
+_ACTIVE_CREDENTIAL: ContextVar[str | None] = ContextVar(
+    "rosetta_active_credential", default=None
+)
+
+# Characters used by OpenCode's identifier encoding (base62).
+_BASE62 = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+# Per-upstream-request identifier sequence.  Process-scoped so the minted id
+# differs between requests even though ProviderInfo copies are per request.
+_REQUEST_SEQ = itertools.count(1)
 
 
 # ---------------------------------------------------------------------------
@@ -40,9 +59,30 @@ class KeyRing:
     Each call to :meth:`next` returns the next key in rotation.
     """
 
-    def __init__(self, keys_csv: str) -> None:
+    def __init__(
+        self,
+        keys_csv: str,
+        *,
+        usable: Callable[[str], bool] | None = None,
+    ) -> None:
         self._keys = [k.strip() for k in keys_csv.split(",") if k.strip()]
         self._idx = 0
+        self._usable = usable
+
+    def set_usable(self, usable: Callable[[str], bool] | None) -> None:
+        """Install (or clear) the predicate that says a key may be used.
+
+        The predicate is consulted on every selection, so quota demotions
+        take effect without rebuilding the ring.
+        """
+        self._usable = usable
+
+    def keys(self) -> tuple[str, ...]:
+        """Return the configured keys in order (never logged or returned)."""
+        return tuple(self._keys)
+
+    def _is_usable(self, key: str) -> bool:
+        return self._usable is None or self._usable(key)
 
     def refresh(self, keys_csv: str) -> int | None:
         """Replace all keys atomically via reference swap.
@@ -67,11 +107,25 @@ class KeyRing:
         return old_count if old_count != len(new) else None
 
     def next(self) -> str:
-        """Return the next API key."""
+        """Return the next usable API key.
+
+        A key the configured predicate rejects (for example one a quota probe
+        demoted until its window resets) is skipped exactly like an absent
+        key.  If every key is rejected the ring falls back to plain
+        round-robin: a demotion is advisory, and refusing here would take the
+        whole provider out of service on a stale reading.
+        """
         if not self._keys:
             raise ValueError("No API keys configured")
+        n = len(self._keys)
+        for offset in range(n):
+            idx = (self._idx + offset) % n
+            key = self._keys[idx]
+            if self._is_usable(key):
+                self._idx = (idx + 1) % n
+                return key
         key = self._keys[self._idx]
-        self._idx = (self._idx + 1) % len(self._keys)
+        self._idx = (self._idx + 1) % n
         return key
 
     def select(self, identity: str) -> str:
@@ -87,11 +141,12 @@ class KeyRing:
         """
         if not self._keys:
             raise ValueError("No API keys configured")
-        if len(self._keys) == 1:
-            return self._keys[0]
-        best_key = self._keys[0]
-        best_score = hashlib.sha256(f"{identity}\0{self._keys[0]}".encode()).digest()
-        for key in self._keys[1:]:
+        candidates = [k for k in self._keys if self._is_usable(k)] or self._keys
+        if len(candidates) == 1:
+            return candidates[0]
+        best_key = candidates[0]
+        best_score = hashlib.sha256(f"{identity}\0{candidates[0]}".encode()).digest()
+        for key in candidates[1:]:
             score = hashlib.sha256(f"{identity}\0{key}".encode()).digest()
             if score > best_score:  # bytes comparison is lexicographic
                 best_score = score
@@ -164,6 +219,14 @@ class ProviderInfo:
         keyless: bool = False,
         session_header: str | None = None,
         credential_token: str | None = None,
+        extra_headers: dict[str, str] | None = None,
+        request_header: str | None = None,
+        session_id_format: str | None = None,
+        request_id_format: str | None = None,
+        stream_required: bool = False,
+        quota_probe_id: str | None = None,
+        quota_url: str | None = None,
+        quota_probes: tuple[Any, ...] = (),
     ) -> None:
         if not base_url.startswith(("http://", "https://")):
             raise ValueError(
@@ -193,6 +256,33 @@ class ProviderInfo:
         # providers that front the same upstream account.  Never the raw key.
         self.credential_token = credential_token
 
+        # Static headers a shim adds to every upstream request (a client
+        # fingerprint, for instance) and the per-request identifier header.
+        self.extra_headers = dict(extra_headers or {})
+        self.request_header = request_header
+        # ``"opencode"`` mints OpenCode's canonical identifiers; ``None`` keeps
+        # the plain sha256 session id the session stage derives.
+        self.session_id_format = session_id_format
+        self.request_id_format = request_id_format
+        # A shim whose upstream only answers SSE: the non-streaming handler
+        # forces streaming and reassembles the reply.
+        self.stream_required = stream_required
+
+        # Quota probe declaration and the shim's implementations.  The
+        # declaration names one probe; ``bind_provider_quota`` resolves it to
+        # ``quota_probe_impl`` / ``quota_usage_url`` (or records why not).
+        self.quota_probe_id = quota_probe_id
+        self.quota_url = quota_url
+        self.quota_probes = tuple(quota_probes)
+        self.quota_probe: str | None = None
+        self.quota_probe_impl: Any | None = None
+        self.quota_usage_url: str | None = None
+        self.quota_unsupported: str | None = None
+        self.quota_identity = credential_token
+        # Set by ``gateway.quota.service.bind_provider_quota``: says whether
+        # the provider (not one key) is cooling down.
+        self.quota_provider_blocked: Callable[[], bool] | None = None
+
     # -- readiness ----------------------------------------------------------
 
     @property
@@ -201,11 +291,16 @@ class ProviderInfo:
 
         Returns ``False`` when the key ring contains only the deferred
         token-command sentinel, meaning the initial token fetch has not
-        yet completed.  A keyless provider is always ready.
+        yet completed, and when a keyless upstream is in a quota cooldown.
         """
         if self.keyless:
-            return True
-        return not self.key_ring.contains_only(TOKEN_PENDING_SENTINEL)
+            return not (
+                self.quota_provider_blocked is not None
+                and self.quota_provider_blocked()
+            )
+        if self.key_ring.contains_only(TOKEN_PENDING_SENTINEL):
+            return False
+        return True
 
     # -- public helpers used by the proxy -----------------------------------
 
@@ -234,10 +329,45 @@ class ProviderInfo:
         never raises "No API keys configured".
         """
         if self.keyless:
+            _ACTIVE_CREDENTIAL.set(None)
             return self._auth_header_fn("")
         if self._affinity_identity is not None:
-            return self._auth_header_fn(self.key_ring.select(self._affinity_identity))
-        return self._auth_header_fn(self.key_ring.next())
+            key = self.key_ring.select(self._affinity_identity)
+        else:
+            key = self.key_ring.next()
+        _ACTIVE_CREDENTIAL.set(key)
+        return self._auth_header_fn(key)
+
+    def auth_headers_for(self, key: str) -> dict[str, str]:
+        """Build auth headers for one specific key.
+
+        Used by the quota probe, which must read every key rather than the
+        one the next request would rotate to.  Does not touch the
+        per-request active-credential record.
+        """
+        if self.keyless:
+            return self._auth_header_fn("")
+        return self._auth_header_fn(key)
+
+    def active_key(self) -> str | None:
+        """Return the credential this request went out with, if any."""
+        return _ACTIVE_CREDENTIAL.get()
+
+    def request_headers(self) -> dict[str, str]:
+        """Return the per-request identifier header, if the shim declared one.
+
+        The value is minted per upstream request, not per conversation: an
+        upstream that validates it expects a fresh one each time.
+        """
+        if not self.request_header:
+            return {}
+        seq = next(_REQUEST_SEQ)
+        seed = f"{self.session_id or ''}:{seq}"
+        if self.request_id_format == "opencode":
+            value = opencode_identifier("msg", seed, counter=seq)
+        else:
+            value = hashlib.sha256(seed.encode("utf-8")).hexdigest()[:24]
+        return {self.request_header: value}
 
     def session_headers(self) -> dict[str, str]:
         """Return the per-conversation session header, if configured.
@@ -329,6 +459,41 @@ class ProviderInfo:
 # ---------------------------------------------------------------------------
 # Per-provider auth header builders
 # ---------------------------------------------------------------------------
+
+
+def opencode_identifier(prefix: str, seed: str, *, counter: int = 1) -> str:
+    """Mint an OpenCode-shaped identifier (``ses_``/``msg_``).
+
+    OpenCode's free lane validates the identifier's *value*: it decodes the
+    first six bytes back into a timestamp and refuses one outside a recent
+    window.  The layout is ``~((unix_ms << 12) | counter)`` truncated to 48
+    bits, hex-encoded, followed by 14 base62 characters.  The timestamp is
+    anchored to the current UTC day minus a seed-derived offset, so the value
+    is stable for every request of one conversation within a day and stays
+    inside the window as time passes.
+
+    Args:
+        prefix: ``"ses"`` or ``"msg"``.
+        seed: Conversation seed; only its digest is used.
+        counter: 12-bit counter mixed into the timestamp half.
+
+    Returns:
+        The identifier, e.g. ``ses_02f1c3d4e5ffeeAb12Cd34Ef56Gh``.
+    """
+    digest = hashlib.sha256(seed.encode("utf-8")).digest()
+    day_start_ms = (int(_time_now() // 86400) - 1 - (digest[0] % 25)) * 86400 * 1000
+    payload = ~(((day_start_ms // 1000 * 1000) << 12) | (counter & 0xFFF))
+    payload &= (1 << 48) - 1
+    head = payload.to_bytes(6, "big").hex()
+    suffix = "".join(_BASE62[b % 62] for b in digest[:14])
+    return f"{prefix}_{head}{suffix}"
+
+
+def _time_now() -> float:
+    """Return the current epoch seconds (indirection keeps the mint testable)."""
+    import time
+
+    return time.time()
 
 
 def no_auth(_api_key: str) -> dict[str, str]:

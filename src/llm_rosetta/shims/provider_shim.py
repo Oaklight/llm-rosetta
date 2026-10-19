@@ -146,6 +146,30 @@ class ConnectionConfig:
     auth_header: str | None = None
     keyless: bool = False
     session_header: str | None = None
+    headers: dict[str, str] | None = None
+    """Static headers this upstream requires on every request.
+
+    A client fingerprint (a specific ``User-Agent`` and a client marker) is a
+    vendor fact, so it is declared here rather than in operator config.  The
+    gateway merges these into every upstream request, including the models
+    listing and the quota probe.
+    """
+    request_header: str | None = None
+    """Name of a per-request identifier header the upstream validates.
+
+    Unlike :attr:`session_header`, the value is minted for each upstream
+    request.  ``request_id_format`` selects the encoding.
+    """
+    session_id_format: str | None = None
+    """Encoding for the session id: ``"opencode"`` or ``None`` (sha256 hex)."""
+    request_id_format: str | None = None
+    """Encoding for the per-request id: ``"opencode"`` or ``None``."""
+    stream_required: bool = False
+    """Whether the upstream refuses non-streaming inference requests.
+
+    If set, the gateway forces ``stream: true`` upstream and reassembles the
+    SSE reply for a client that asked for a non-streaming response.
+    """
     """Name of a per-conversation session header the gateway must add.
 
     Some upstreams (e.g. OpenCode Go) require a stable session identifier on
@@ -154,6 +178,37 @@ class ConnectionConfig:
     (see ``gateway.proxy``); a client-supplied value is passed through
     verbatim.  ``None`` means the provider needs no session header.
     """
+
+
+@dataclass(frozen=True)
+class QuotaDeclaration:
+    """A shim's declaration of where its allowance can be read.
+
+    Attributes:
+        probe: Identifier of a probe implemented in
+            :mod:`llm_rosetta.shims.quota_probe`.  ``None`` lets the
+            gateway resolve one from the base URL's host and lane.
+        url: Explicit usage URL, for a vendor whose endpoint is not derivable
+            from ``base_url``.
+        interval: Background probe interval in seconds.  ``0`` (the default)
+            reads on demand only.
+        demote_at: Used share at which a window demotes the credential.
+            ``100`` keeps the vendor's own exhaustion rule.
+    """
+
+    probe: str | None = None
+    url: str | None = None
+    interval: int = 0
+    demote_at: float = 100.0
+
+    def as_dict(self) -> dict[str, Any]:
+        """Return the non-``None`` fields as a plain dict."""
+        out: dict[str, Any] = {"demote_at": self.demote_at, "interval": self.interval}
+        if self.probe:
+            out["probe"] = self.probe
+        if self.url:
+            out["url"] = self.url
+        return out
 
 
 @dataclass(frozen=True)
@@ -354,6 +409,15 @@ class ProviderShim:
     group_label: str | None = None
     free_source: bool = False
     connection: ConnectionConfig = ConnectionConfig()
+    quota: QuotaDeclaration | None = None
+    quota_probes: tuple[Any, ...] = ()
+    """Probe implementations the shim ships in ``quota.py``.
+
+    Vendor facts live with the shim: the endpoint, the auth header, the body
+    decoder and the error wording.  The gateway only holds the contract and
+    the runtime state; it resolves the probe named by ``quota.probe`` against
+    this tuple.
+    """
     tools: ToolsConfig = ToolsConfig()
     pre_ir_transforms: tuple[Transform, ...] = ()
     post_ir_transforms: tuple[Transform, ...] = ()
@@ -448,6 +512,8 @@ class ProviderShim:
             "group_label": None,
             "free_source": False,
             "connection": ConnectionConfig(),
+            "quota": None,
+            "quota_probes": (),
             "tools": ToolsConfig(),
             "pre_ir_transforms": (),
             "post_ir_transforms": (),

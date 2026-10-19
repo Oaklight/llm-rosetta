@@ -347,7 +347,7 @@ def _optional_provider_keys() -> list[str]:
     """
     from ...model_types import all_model_types
 
-    keys: list[str] = ["models_path", "logo"]
+    keys: list[str] = ["models_path", "logo", "quota"]
     for desc in all_model_types():
         if desc.is_llm:
             continue

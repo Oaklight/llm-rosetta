@@ -859,6 +859,7 @@ function renderProviders() {
         <button class="btn btn-sm" aria-label="${t('btn.edit')} ${esc(name)}" onclick="editProvider('${esc(name)}')">${t('btn.edit')}</button>
         ${isFree ? `<button class="btn btn-sm btn-refresh-models" aria-label="${t('btn.refreshModels')} ${esc(name)}" onclick="refreshFreeModels('${esc(name)}')">${t('btn.refreshModels')}</button>` : ''}
         <button class="btn btn-sm btn-test-conn" aria-label="${t('btn.test')} ${esc(name)}" onclick="testProviderConnectivity('${esc(name)}')">${t('btn.test')}</button>
+        <button class="btn btn-sm btn-quota" aria-label="${t('btn.quota')} ${esc(name)}" onclick="showProviderQuota('${esc(name)}')">${t('btn.quota')}</button>
         <button class="btn btn-sm btn-danger" aria-label="${t('btn.delete')} ${esc(name)}" onclick="deleteProvider('${esc(name)}')">${t('btn.delete')}</button>
         ${modelLink}
       </div>
@@ -1126,6 +1127,7 @@ Object.assign(window, {
   confirmDeleteProvider, toggleProvider, editProvider, copyProviderEntry,
   saveServerSettings, runNetDiag, loadConfig,
   goToModelsForProvider, goToProviderFromModel, testProviderConnectivity,
+  showProviderQuota,
   _activateSegChild,
   openFreeProvider, refreshFreeModels, revealProviderKey,
 });
@@ -1192,6 +1194,53 @@ async function refreshFreeModels(name) {
     showToast(String(e.message || e), 'error');
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = t('btn.refreshModels'); }
+  }
+}
+
+// ── Provider Quota ──────────────────────────────────────────────────
+
+/** Read a provider's allowance windows and show them per credential. */
+async function showProviderQuota(name) {
+  const card = document.querySelector(`.provider-card[data-provider="${name}"]`);
+  const btn = card?.querySelector('.btn-quota');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>'; }
+  try {
+    const r = await api.get(`/admin/api/config/providers/${encodeURIComponent(name)}/quota?refresh=1`);
+    if (!r.supported) {
+      showToast(t('quota.none', {reason: r.reason || r.status || '—'}), 'info');
+      return;
+    }
+    const lines = [];
+    for (const entry of (r.credentials || [])) {
+      const reading = entry.reading;
+      const head = t('quota.credential', {id: entry.credential})
+        + (reading?.plan ? ' · ' + t('quota.plan', {plan: reading.plan}) : '');
+      if (!reading) {
+        lines.push(`<div class="conn-row"><span class="conn-warn"></span><span class="conn-label">${esc(head)}</span><span class="conn-detail">—</span></div>`);
+        continue;
+      }
+      if (reading.status !== 'ok') {
+        lines.push(`<div class="conn-row"><span class="conn-fail"></span><span class="conn-label">${esc(head)}</span><span class="conn-detail">${esc(reading.error || reading.status)}</span></div>`);
+        continue;
+      }
+      for (const w of reading.windows) {
+        const pct = w.used_percent == null ? '—' : `${Math.round(w.used_percent)}%`;
+        const reset = w.resets_at ? ` · ${new Date(w.resets_at).toLocaleString()}` : '';
+        const cls = w.exhausted ? 'conn-fail' : 'conn-ok';
+        lines.push(`<div class="conn-row"><span class="${cls}"></span><span class="conn-label">${esc(head)} · ${esc(w.name)}</span><span class="conn-detail">${esc(pct + reset)}</span></div>`);
+      }
+      if (entry.demotion) {
+        lines.push(`<div class="conn-row"><span class="conn-warn"></span><span class="conn-detail">${esc(t('quota.demoted', {until: new Date(entry.demotion.until).toLocaleString(), reason: entry.demotion.reason}))}</span></div>`);
+      }
+    }
+    if (!lines.length) {
+      lines.push(`<div class="conn-row"><span class="conn-warn"></span><span class="conn-detail">${esc(t('quota.none', {reason: '—'}))}</span></div>`);
+    }
+    showToastHtml(lines.join(''), 'success');
+  } catch (e) {
+    showToast(String(e.message || e), 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = t('btn.quota'); }
   }
 }
 

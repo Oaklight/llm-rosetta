@@ -14,6 +14,14 @@ connection:
   models_path: https://opencode.ai/zen/go/v1/models
   session_header: x-opencode-session
 
+# Subscription windows are read from the Go lane's usage endpoint.  The probe
+# lives in the gateway (`gateway/quota/probes.py`); the shim only names it.
+quota:
+  probe: opencode_go
+  # Refresh the windows in the background so routing learns a reset
+  # without waiting for a request to fail.
+  interval: 300
+
 # The Messages lane fronts Claude and rejects an unsigned thinking block the
 # same way Anthropic does; the Go lane's credential is sent as `x-api-key`
 # (see `anthropic_auth`), not as a bearer token.

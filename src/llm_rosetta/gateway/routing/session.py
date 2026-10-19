@@ -54,6 +54,14 @@ class SessionHeaderAffinity(RoutingStage):
             or first_prefix
             or _SESSION_FALLBACK
         )
-        session_id = hashlib.sha256(seed.encode("utf-8")).hexdigest()[:32]
+        if provider_info.session_id_format == "opencode":
+            # The free lane decodes the id back into a timestamp and refuses
+            # one outside a recent window, so the minted value must follow
+            # OpenCode's identifier layout rather than a bare digest.
+            from ..transport.provider_info import opencode_identifier
+
+            session_id = opencode_identifier("ses", seed)
+        else:
+            session_id = hashlib.sha256(seed.encode("utf-8")).hexdigest()[:32]
         ctx.with_upstream_session_id(session_id)
         ctx.with_provider_info(provider_info.with_session(session_id))

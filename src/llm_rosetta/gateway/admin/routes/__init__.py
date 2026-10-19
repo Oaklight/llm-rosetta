@@ -122,6 +122,7 @@ from .profiling import (
     get_profiling_status,
 )
 from .connectivity import test_provider_connectivity
+from .quota import get_provider_quota
 from .testing import (
     cancel_test,
     get_test_result,
@@ -306,6 +307,10 @@ def register_admin_routes(app: Any) -> None:
     # Provider connectivity test
     app.route("/admin/api/config/providers/<name>/test-connectivity", methods=["POST"])(
         test_provider_connectivity
+    )
+    # Provider quota reading (one entry per credential)
+    app.route("/admin/api/config/providers/<name>/quota", methods=["GET"])(
+        get_provider_quota
     )
     # Content capture (dashboard tab)
     app.route("/admin/api/capture/status", methods=["GET"])(

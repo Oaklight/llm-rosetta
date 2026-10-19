@@ -171,6 +171,59 @@
         "session_header": {
           "type": "string",
           "description": "Name of a per-conversation session header the gateway injects on every inference request (e.g. 'x-opencode-session'). The value is derived per conversation; a client-supplied value is passed through verbatim."
+        },
+        "headers": {
+          "type": "object",
+          "description": "Static headers this upstream requires on every request (a client fingerprint: User-Agent, client marker). They are sent on inference, model listing and quota probes, and win over a client-forwarded header of the same name.",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "request_header": {
+          "type": "string",
+          "description": "Name of a per-request identifier header the upstream validates (e.g. 'x-opencode-request'). A fresh value is minted for every upstream request."
+        },
+        "session_id_format": {
+          "type": "string",
+          "enum": ["opencode"],
+          "description": "Encoding for the session header's value. Omit for the gateway's plain sha256 digest; 'opencode' mints the vendor's timestamp-bearing identifier."
+        },
+        "request_id_format": {
+          "type": "string",
+          "enum": ["opencode"],
+          "description": "Encoding for the per-request identifier header's value."
+        },
+        "stream_required": {
+          "type": "boolean",
+          "description": "The upstream refuses non-streaming inference (stream: false). The gateway forces streaming upstream and reassembles the reply for a non-streaming client.",
+          "default": false
+        }
+      }
+    },
+    "quota": {
+      "type": "object",
+      "description": "Where this lane's allowance can be read. The probe parsers live in the gateway; the shim only names one.",
+      "additionalProperties": false,
+      "properties": {
+        "probe": {
+          "type": "string",
+          "description": "Probe identifier: 'opencode_go' or 'openai_codex'."
+        },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "description": "Explicit usage URL when it is not derivable from base_url."
+        },
+        "interval": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Background probe interval in seconds. 0 reads on demand only.",
+          "default": 0
+        },
+        "demote_at": {
+          "type": "number",
+          "description": "Used share at which a window demotes the credential. 100 keeps the vendor's own rule.",
+          "default": 100
         }
       }
     },

@@ -1495,7 +1495,7 @@ async def fetch_upstream_models(request: Any, **kwargs: Any) -> Response:
     else:
         models_url = f"{pinfo.base_url}/models"
 
-    headers = pinfo.auth_headers()
+    headers = {**pinfo.extra_headers, **pinfo.auth_headers()}
 
     try:
         client = AsyncClient(timeout=10.0, proxy=pinfo.proxy_url)

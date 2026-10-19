@@ -73,7 +73,7 @@ llm-rosetta-usage = "llm_rosetta.observability.usage.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-"llm_rosetta" = ["py.typed", "shims/providers/*/provider.yaml", "shims/providers/*/*/provider.yaml"]
+"llm_rosetta" = ["py.typed", "shims/providers/provider.schema.json", "shims/providers/*/provider.yaml", "shims/providers/*/*/provider.yaml"]
 "llm_rosetta.gateway.admin" = ["admin.html", "css/*.css", "js/**/*.js"]
 
 [tool.setuptools.dynamic]

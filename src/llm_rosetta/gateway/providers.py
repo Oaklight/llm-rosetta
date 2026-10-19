@@ -413,6 +413,16 @@ def build_provider_info(
             )
         raise ValueError(message)
 
+    quota_raw = cfg.get("quota")
+    quota_cfg: dict[str, Any] = quota_raw if isinstance(quota_raw, dict) else {}
+    shim_quota = getattr(shim, "quota", None) if shim is not None else None
+    quota_probe = quota_cfg.get("probe") or (
+        shim_quota.probe if shim_quota is not None else None
+    )
+    quota_url = quota_cfg.get("url") or (
+        shim_quota.url if shim_quota is not None else None
+    )
+
     return ProviderInfo(
         name=provider_type,
         api_key=api_key,
@@ -430,4 +440,16 @@ def build_provider_info(
         ),
         session_header=cfg.get("session_header")
         or (shim.connection.session_header if shim is not None else None),
+        extra_headers=(shim.connection.headers if shim is not None else None),
+        request_header=(shim.connection.request_header if shim is not None else None),
+        session_id_format=(
+            shim.connection.session_id_format if shim is not None else None
+        ),
+        request_id_format=(
+            shim.connection.request_id_format if shim is not None else None
+        ),
+        stream_required=bool(shim.connection.stream_required if shim else False),
+        quota_probe_id=quota_probe,
+        quota_url=quota_url,
+        quota_probes=(shim.quota_probes if shim is not None else ()),
     )
