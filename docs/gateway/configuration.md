@@ -684,7 +684,7 @@ Embedding 流量**只**通过 embedding 端点路由。没有 embedding 路由�
 | `decision_models` | `dict` | `{}` | 模型 → provider 映射 |
 | `default_decision_format` | `str` | `"systemone"` | 源格式回退 |
 
-旧式条目的 `format` 或 `type` 可以写 decision format（`systemone`、`openai_decisions`），也可以写已注册的 decision shim，由其提供 format（例如 `"type": "typesafe"` → `systemone`）。`decision_path` 默认取该 format 的上游路径（`openai_decisions` → `/v1/decisions`，其余为 `/v1/systemone`）。
+旧式条目的 `format` 或 `type` 可以写 decision format（`systemone`、`openai_decisions`），也可以写已注册的 decision shim，由其提供 format 与连接默认值（例如 `"type": "typesafe"` → `systemone`）。`decision_path` 默认取该 format 的上游路径（`openai_decisions` → `/v1/decisions`，其余为 `/v1/systemone`）。
 
 ## 完整示例
 
