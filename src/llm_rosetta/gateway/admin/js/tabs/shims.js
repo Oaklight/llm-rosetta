@@ -137,7 +137,12 @@ async function reloadShimSources(forceRefresh) {
     await window.loadConfig();
     renderShimSources();
     const failures = (r && r.status && r.status.failure_count) || 0;
-    if (failures) {
+    const providerWarnings = (r && r.provider_warnings) || [];
+    if (providerWarnings.length) {
+      showToast(t('toast.providersAutoDisabled', {
+        providers: providerWarnings.map(x => x.provider).join(', ')
+      }), 'error');
+    } else if (failures) {
       showToast(t('toast.shimsReloadFailed', { count: failures }), 'error');
     } else {
       showToast(t('toast.shimsReloaded'));

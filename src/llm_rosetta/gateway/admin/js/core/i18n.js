@@ -211,6 +211,7 @@ export const I18N = {
     'toast.shimsSaved':'Shim sources saved',
     'toast.shimsReloaded':'Shim sources reloaded',
     'toast.shimsReloadFailed':'Reloaded with {count} source(s) failed',
+    'toast.providersAutoDisabled':'Provider(s) auto-disabled: {providers}. Fix the shim source before re-enabling.',
   },
   zh: {
     'btn.logout':'\u9000\u51fa\u767b\u5f55',
@@ -403,6 +404,7 @@ export const I18N = {
     'toast.shimsSaved':'Shim 源已保存',
     'toast.shimsReloaded':'Shim 源已重新加载',
     'toast.shimsReloadFailed':'重新加载完成，{count} 个源失败',
+    'toast.providersAutoDisabled':'Provider 已自动禁用：{providers}。请修复 shim 源后再重新启用。',
     'footer.tip.ok':'\u5df2\u8bb0\u5f55\u7684\u6210\u529f\u6761\u76ee / \u4fdd\u7559\u4e0a\u9650\uff08\u72b6\u6001\u7801 < 400\uff09',
     'footer.tip.err':'\u8bf7\u6c42\u65e5\u5fd7\u4e2d\u7684\u9519\u8bef\u6761\u76ee\uff08\u72b6\u6001\u7801 \u2265 400\uff09',
     'footer.tip.dumps':'\u9519\u8bef\u8bb0\u5f55\u6570\u91cf / \u4fdd\u7559\u4e0a\u9650',

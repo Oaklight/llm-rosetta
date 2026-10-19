@@ -396,6 +396,7 @@ async def put_provider(request: Any, **kwargs: Any) -> Response:
             "ok": True,
             "provider": name,
             "providers": list(ctx.new_config.providers.keys()),
+            "provider_warnings": ctx.warnings,
         }
     )
 
@@ -1313,6 +1314,9 @@ async def post_shims_reload(request: Any) -> Response:
         {
             "ok": True,
             "status": _shim_status_payload(request),
+            "provider_warnings": getattr(
+                request.app, "provider_validation_warnings", []
+            ),
             "providers": list(new_config.providers.keys()),
         }
     )
@@ -1332,6 +1336,9 @@ async def reload_config(request: Any) -> Response:
             "ok": True,
             "providers": list(new_config.providers.keys()),
             "models": list(new_config.models),
+            "provider_warnings": getattr(
+                request.app, "provider_validation_warnings", []
+            ),
         }
     )
 

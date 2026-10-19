@@ -252,6 +252,8 @@ async def setup_admin(
         request_log=request_log,
         metrics=metrics,
         persistence=persistence,
+        config_io=config_io,
+        config_path=config_path,
     )
     app.ops_ctx = _ops_ctx
 

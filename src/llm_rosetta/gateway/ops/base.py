@@ -32,7 +32,14 @@ class OpsContext:
     configured (e.g. no persistence in in-memory mode).
     """
 
-    __slots__ = ("ops_log", "request_log", "metrics", "persistence")
+    __slots__ = (
+        "ops_log",
+        "request_log",
+        "metrics",
+        "persistence",
+        "config_io",
+        "config_path",
+    )
 
     def __init__(
         self,
@@ -41,11 +48,15 @@ class OpsContext:
         request_log: Any = None,
         metrics: Any = None,
         persistence: Any = None,
+        config_io: Any = None,
+        config_path: str | None = None,
     ) -> None:
         self.ops_log = ops_log
         self.request_log = request_log
         self.metrics = metrics
         self.persistence = persistence
+        self.config_io = config_io
+        self.config_path = config_path
 
 
 class OpsBase(ABC):

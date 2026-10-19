@@ -58,12 +58,13 @@ class ConfigMutationContext:
             successful commit.  ``None`` until commit + reload completes.
     """
 
-    __slots__ = ("data", "error", "new_config", "_committed")
+    __slots__ = ("data", "error", "new_config", "warnings", "_committed")
 
     def __init__(self) -> None:
         self.data: dict[str, Any] = {}
         self.error: Response | None = None
         self.new_config: GatewayConfig | None = None
+        self.warnings: list[dict[str, Any]] = []
         self._committed: bool = False
 
     def commit(self) -> None:
@@ -123,6 +124,7 @@ async def config_mutate(
     # Reload happens outside the lock
     try:
         ctx.new_config = await _reload_gateway_config(request, config_path)
+        ctx.warnings = list(getattr(request.app, "provider_validation_warnings", []))
     except Exception as exc:
         ctx.error = JSONResponse(
             {
@@ -212,6 +214,7 @@ async def _reload_gateway_config(
     # nothing — the same answer as a config built from a literal.
     maintenance = getattr(config_io, "last_load_registry", None)
 
+    report = getattr(request.app, "shim_source_report", None)
     signature = shims_signature(raw)
     if force_shims or signature != getattr(request.app, "shim_source_signature", None):
         loop = asyncio.get_running_loop()
@@ -219,6 +222,16 @@ async def _reload_gateway_config(
         request.app.shim_source_report = report
         request.app.shim_source_signature = signature
 
+    from ...ops import OpsContext, OpsProviderValidation
+
+    recovery = OpsProviderValidation(
+        getattr(request.app, "ops_ctx", None) or OpsContext(),
+        raw,
+        report=report if "report" in locals() else None,
+        persist=True,
+    )
+    recovery_result = await recovery.execute()
+    request.app.provider_validation_warnings = recovery_result.get("disabled", [])
     new_config = GatewayConfig(raw, maintenance=maintenance)
     _app_mod._config = new_config
     request.app.gateway_config = new_config

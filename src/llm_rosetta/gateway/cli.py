@@ -443,6 +443,47 @@ def _cmd_db_export_errors(args: argparse.Namespace) -> None:
     print(f"Exported {len(data)} bytes to {output}")
 
 
+def _cmd_shims_preset(args: argparse.Namespace) -> None:
+    """Add or remove an explicitly selected standalone shim preset."""
+    from llm_rosetta.shims import get_source_package
+
+    config_path = discover_config(args.config) or PATHS_TO_TRY[0]
+    if not os.path.isfile(config_path):
+        print(f"Config file not found: {config_path}", file=sys.stderr)
+        sys.exit(1)
+    package = get_source_package(args.preset)
+    if package is None:
+        print(f"Unknown shim preset: {args.preset}", file=sys.stderr)
+        sys.exit(1)
+    data = load_config_raw(config_path)
+    section = data.setdefault("shims", {})
+    if not isinstance(section, dict):
+        print("Error: config 'shims' must be an object", file=sys.stderr)
+        sys.exit(1)
+    presets = section.setdefault("presets", [])
+    if not isinstance(presets, list):
+        print("Error: config 'shims.presets' must be an array", file=sys.stderr)
+        sys.exit(1)
+    if args.action == "enable":
+        if args.preset not in presets:
+            presets.append(args.preset)
+            _write_jsonc(config_path, data)
+            print(f"Enabled shim preset '{args.preset}' in {config_path}")
+        else:
+            print(f"Shim preset '{args.preset}' is already enabled")
+    else:
+        if args.preset in presets:
+            presets.remove(args.preset)
+            if not presets:
+                section.pop("presets", None)
+            if not section:
+                data.pop("shims", None)
+            _write_jsonc(config_path, data)
+            print(f"Disabled shim preset '{args.preset}' in {config_path}")
+        else:
+            print(f"Shim preset '{args.preset}' is not enabled")
+
+
 def _dispatch_subcommand(args: argparse.Namespace, sub: Any) -> bool:
     """Handle subcommands; return True if one matched."""
     if args.command == "init":
@@ -455,6 +496,13 @@ def _dispatch_subcommand(args: argparse.Namespace, sub: Any) -> bool:
             _cmd_add_model(args)
         else:
             sub.choices["add"].print_help()
+        return True
+    if args.command == "shims":
+        if args.shim_action in {"enable-preset", "disable-preset"}:
+            args.action = "enable" if args.shim_action == "enable-preset" else "disable"
+            _cmd_shims_preset(args)
+        else:
+            sub.choices["shims"].print_help()
         return True
     if args.command == "set-password":
         _cmd_set_password(args)
@@ -541,6 +589,19 @@ def _load_startup_config(
         raw_config.setdefault("server", {})["tls_key"] = args.tls_key
 
     shim_source_report = _apply_shim_sources_or_exit(raw_config, config_path)
+    # Recover only providers whose standalone shim failed to load.  This runs
+    # before identity resolution so healthy providers can still serve repairs.
+    from .ops import OpsContext, OpsProviderValidation
+
+    recovery = OpsProviderValidation(
+        OpsContext(config_io=reader, config_path=config_path),
+        raw_config,
+        report=shim_source_report,
+        persist=True,
+    )
+    recovery_result = asyncio.run(recovery.execute())
+    if recovery_result.get("disabled"):
+        logger.warning("Provider recovery disabled: %s", recovery_result["disabled"])
     config = GatewayConfig(raw_config, maintenance=reader.last_load_registry)
     return config, shim_source_report
 
@@ -640,6 +701,17 @@ def main() -> None:  # noqa: C901
     model_parser = add_sub.add_parser("model", help="Add a model routing entry")
     model_parser.add_argument("name", help="Model name (e.g. gpt-4o)")
     model_parser.add_argument("--provider", default=None, help="Target provider name")
+
+    # ``shims`` subcommands
+    shims_parser = sub.add_parser("shims", help="Manage external shim sources")
+    shim_sub = shims_parser.add_subparsers(dest="shim_action")
+    for action, help_text in (
+        ("enable-preset", "Enable a standalone shim preset"),
+        ("disable-preset", "Disable a standalone shim preset"),
+    ):
+        preset_parser = shim_sub.add_parser(action, help=help_text)
+        preset_parser.add_argument("preset", help="Preset name, e.g. argo")
+        preset_parser.add_argument("--config", default=None, help="Path to config file")
 
     # ``set-password`` subcommand
     pw_parser = sub.add_parser(
