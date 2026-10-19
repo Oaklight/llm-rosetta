@@ -104,7 +104,7 @@ LLM-Rosetta v0.9.0 支持 3 个 API 族的双向转换：
 
 1. 查看 [Issue 跟踪器](https://github.com/Oaklight/llm-rosetta/issues) 中的开放问题
 2. 阅读[核心概念](guide/concepts.md)指南，了解转换器架构
-3. 参考现有转换器（如 `src/llm_rosetta/converters/chat_completions/`）作为模板
+3. 参考现有转换器（如 `src/llm_rosetta/converters/llm/chat_completions/`）作为模板
 4. 对于新提供方，优先考虑创建 [shim](guide/shims.md)——通常就够了
 5. 提交前运行 `pre-commit run --all-files`
 

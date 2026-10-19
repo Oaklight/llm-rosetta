@@ -80,7 +80,7 @@ ir_response = google_conv.response_from_provider(google_response)
 Google 推出了 [Interactions API](https://ai.google.dev/gemini-api/docs/interactions) 作为新 Gemini 项目的推荐接口。LLM-Rosetta 为此格式提供了专用转换器：
 
 ```python
-from llm_rosetta.converters.google_interactions import GoogleInteractionsConverter
+from llm_rosetta.converters.llm.google_interactions import GoogleInteractionsConverter
 
 interactions_conv = GoogleInteractionsConverter()
 
@@ -238,13 +238,13 @@ LLM-Rosetta 自动修复两个方向的不匹配，并输出 `WARNING` 级别日
 
 ```python
 # OpenAI Chat Completions 格式
-from llm_rosetta.converters.chat_completions.tool_ops import fix_orphaned_tool_calls
+from llm_rosetta.converters.llm.chat_completions.tool_ops import fix_orphaned_tool_calls
 
 messages = fix_orphaned_tool_calls(messages)
 messages = fix_orphaned_tool_calls(messages, placeholder="[已跳过]")
 
 # OpenAI Responses 格式
-from llm_rosetta.converters.open_responses.tool_ops import fix_orphaned_tool_calls
+from llm_rosetta.converters.llm.open_responses.tool_ops import fix_orphaned_tool_calls
 
 items = fix_orphaned_tool_calls(items)
 ```

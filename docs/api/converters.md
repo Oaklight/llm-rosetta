@@ -31,17 +31,17 @@ title: Converters
 
 ::: llm_rosetta.converters.base.converter.BaseConverter
 
-::: llm_rosetta.converters.chat_completions.converter.ChatCompletionsConverter
+::: llm_rosetta.converters.llm.chat_completions.converter.ChatCompletionsConverter
 
-::: llm_rosetta.converters.open_responses.converter.OpenResponsesConverter
+::: llm_rosetta.converters.llm.open_responses.converter.OpenResponsesConverter
 
-::: llm_rosetta.converters.open_responses.converter.OpenAIResponsesConverter
+::: llm_rosetta.converters.llm.open_responses.converter.OpenAIResponsesConverter
 
-::: llm_rosetta.converters.messages.converter.MessagesConverter
+::: llm_rosetta.converters.llm.messages.converter.MessagesConverter
 
-::: llm_rosetta.converters.google_generate.converter.GoogleGenerateConverter
+::: llm_rosetta.converters.llm.google_generate.converter.GoogleGenerateConverter
 
-::: llm_rosetta.converters.google_interactions.converter.GoogleInteractionsConverter
+::: llm_rosetta.converters.llm.google_interactions.converter.GoogleInteractionsConverter
 
 ## Embedding Converters
 
