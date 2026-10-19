@@ -10,6 +10,8 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### 新增
 
+- **面板导航加入图标，并在手机上变为底栏**（PR [#1075](https://github.com/Oaklight/llm-rosetta/pull/1075)）：每个一级标签的文字前现在有一个 16px 图标；≤768px 时标签条改为固定底栏——五个等宽目标、图标在上文字在下、激活项带主题色指示条——而不再是一条会隐藏末尾目的地的横向滚动条。769–1100px 之间收紧标签内边距并在需要滚动前隐藏配置路径；手机上头部保持单行：先隐藏 “System Time” 文字，480px 以下隐藏 “gateway admin” 副标题，360px 以下连时钟一起隐藏。诊断状态栏移到导航栏上方，保持一行可横向滚动。图标与文字是兄弟节点——若在标签上使用 `data-i18n`，切换语言时 `textContent` 会被整体重写并抹掉 SVG。顺带修复了点击测试中发现的跳动：当 Request Log 过滤到一页就能放下时滚动条消失，布局视口随之变宽，固定导航与状态栏会移动；现在 `scrollbar-gutter: stable` 在每个页面预留滚动条槽位，两条栏宽度恒定。
+
 - **`shims.presets` 可按名称预载独立 shim 包**（epic [#927](https://github.com/Oaklight/llm-rosetta/issues/927)）：配置现在可以写 `"shims": {"presets": ["argo"]}`，无需再复制仓库 URL、归档路径与 `token_env`。每个预设键（`alcf`、`argo`、`asksage`）都会展开为 catalog 中对应的远程源，先于显式 `remotes` 应用，且同一 URL 的显式 remote 会覆盖它。Settings → Shim Sources 新增 **Presets** 字段用于填写同样的键，原有的预设选择器仍会把展开后的 remote 追加到列表供审阅；`GET /admin/api/config` 以 `shim_source_presets` 暴露 catalog；若配置使用了某个未声明源的 shim，启动时会报错并指明包名、预设与展开后的 remote。
 
 - **窄屏下 Models 表变为卡片列表**（PR [#1074](https://github.com/Oaklight/llm-rosetta/pull/1074)）：手机宽度下，六列表格把模型名压缩到只剩几个字符，能力徽章则堆叠在 40px 宽的列里，一行已无法说明它描述的是哪个模型。现在 768px 以下每行渲染为一张卡片——首行是完整且可换行的模型名及其上游标记，下一行并排显示类型与能力徽章，再下一行单独显示 provider，最后一行以分隔线隔开，放置启用开关与 Test / 编辑 / 更多操作。展开的 provider 明细（`N providers`）会把权重与上游字段铺满卡片宽度而不是溢出，无匹配结果的状态也横跨整张卡片。因为隐藏的列头是唯一的排序入口，工具栏在该宽度下提供同样的三种排序键（模型 / provider / 状态）的选择器与方向切换按钮，并与表头按钮共用同一状态；卡片行带有显式的 `row` / `cell` 角色，每个单元格都标明所属列，无障碍树仍能报告带表头的表格。桌面端渲染不变。空状态单元格的 `colspan` 也从 4 修正为表格实际的 6 列。
