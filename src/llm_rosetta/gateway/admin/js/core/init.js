@@ -1,6 +1,7 @@
 import { S } from './state.js';
 import { t, setLang, applyI18n } from './i18n.js';
 import { wireSortableHeaders } from './sort.js';
+import { isSegActivationKey, segKeyTargetIndex } from './seg.js';
 import {
   setScheme, setMode, setTheme, api, showToast, closeModal, esc, closeMenus,
   _startInactivityTracking, _stopInactivityTracking,
@@ -254,15 +255,28 @@ document.addEventListener('click', function(e) {
 window.addEventListener('scroll', closeMenus, true);
 
 // ===================== Seg-control keyboard navigation =====================
+// Groups whose items are pseudo-radios (role="radio" on a div/label) have no
+// native keyboard activation: Enter and Space do nothing, and Space would
+// otherwise scroll the page.  Groups whose items are real <input type=radio>
+// return index -1 here, so their native arrow/Space behaviour is untouched and
+// only the change handler in the owning module has to keep the styled state in
+// sync.
 document.querySelectorAll('.seg-control[role="radiogroup"]').forEach(group => {
   group.addEventListener('keydown', (e) => {
     const items = Array.from(group.querySelectorAll('[role="radio"]'));
     const idx = items.indexOf(e.target);
     if (idx < 0) return;
-    let target = null;
-    if (e.key === 'ArrowRight') target = items[(idx + 1) % items.length];
-    else if (e.key === 'ArrowLeft') target = items[(idx - 1 + items.length) % items.length];
-    if (target) { e.preventDefault(); target.focus(); target.click(); }
+    if (isSegActivationKey(e.key)) {
+      e.preventDefault();
+      e.target.click();
+      return;
+    }
+    const next = segKeyTargetIndex(items.length, idx, e.key);
+    if (next >= 0) {
+      e.preventDefault();
+      items[next].focus();
+      items[next].click();
+    }
   });
 });
 

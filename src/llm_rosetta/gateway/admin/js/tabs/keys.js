@@ -54,9 +54,27 @@ function renderKeyUsageControl() {
   const ctrl = document.getElementById('keyUsageRange');
   if (!ctrl) return;
   const win = S.keyUsageWindow || usageWindows()[0];
-  ctrl.innerHTML = usageWindows().map(w =>
-    `<label class="${w === win ? 'active' : ''}" onclick="setKeyUsageWindow('${esc(w)}')">` +
-    `<input type="radio" name="kuRange"${w === win ? ' checked' : ''}>` +
+  const windows = usageWindows();
+  // Rebuild only when the set of tiers changed.  A plain state sync keeps the
+  // focused <input> in the DOM, which is what lets a keyboard user arrow
+  // along the group without losing focus on every step.
+  const labels = Array.from(ctrl.querySelectorAll(':scope > label'));
+  const sameSet = labels.length === windows.length &&
+    labels.every((l, i) => l.querySelector('input')?.value === windows[i]);
+  if (sameSet) {
+    labels.forEach((l, i) => {
+      const active = windows[i] === win;
+      l.classList.toggle('active', active);
+      const input = l.querySelector('input');
+      if (input) input.checked = active;
+      const span = l.querySelector('span');
+      if (span) span.textContent = windowLabel(windows[i]);
+    });
+    return;
+  }
+  ctrl.innerHTML = windows.map(w =>
+    `<label class="${w === win ? 'active' : ''}">` +
+    `<input type="radio" name="kuRange" value="${esc(w)}"${w === win ? ' checked' : ''} onchange="setKeyUsageWindow('${esc(w)}')">` +
     `<span>${esc(windowLabel(w))}</span></label>`
   ).join('');
 }

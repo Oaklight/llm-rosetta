@@ -60,6 +60,15 @@ tr:hover td { background: var(--bg-hover); }
 .seg-control > *:hover { background:var(--bg); }
 .seg-control input { position:absolute;opacity:0;width:0;height:0;pointer-events:auto; }
 .seg-control > *.active { background:var(--accent);color:var(--accent-on); }
+/* Keyboard focus.  Some groups are role="radio" divs, others wrap a visually
+   hidden <input type=radio> that is 0x0 — a ring on the input would be
+   invisible, so it goes on the option box (:has handles the input case).  On
+   the selected option the accent ring would vanish into the accent fill, so
+   it switches to the on-accent colour. */
+.seg-control > *:focus-visible,
+.seg-control > *:has(input:focus-visible) { outline:2px solid var(--accent);outline-offset:-2px; }
+.seg-control > *.active:focus-visible,
+.seg-control > *.active:has(input:focus-visible) { outline-color:var(--accent-on); }
 /* Capability badges for provider cards */
 /* Capability badges are secondary metadata — kept small so a provider with
    all three still fits its column without squeezing the base URL. */

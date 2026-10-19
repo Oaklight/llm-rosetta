@@ -45,53 +45,66 @@ function _registeredTypeNames() {
 
 /**
  * Build the filter seg-control and modal seg-control from model_types
- * metadata.  Called once after config loads.
+ * metadata.  Called once after config loads and again on every model render.
+ *
+ * A rebuild replaces the option nodes, so it is only done when the option set
+ * actually changed — a keyboard user arrowing through the group would
+ * otherwise lose focus to <body> on every step.  The state-only path also
+ * keeps the modal's selection intact when a render happens while it is open.
  */
 function _buildTypeSegControls() {
   const typeNames = _registeredTypeNames();
   if (!typeNames.length) return;
+  _syncFilterTypeSeg(document.getElementById('modelTypeSeg'), typeNames);
+  _syncModalTypeSeg(document.getElementById('modelModalTypeSeg'), typeNames);
+}
 
-  // --- Filter seg-control (#modelTypeSeg) ---
-  const filterSeg = document.getElementById('modelTypeSeg');
-  if (filterSeg) {
-    filterSeg.innerHTML = '';
-    // "All" option
-    const allDiv = document.createElement('div');
-    allDiv.className = S._modelDomain === 'all' ? 'active' : '';
-    allDiv.setAttribute('role', 'radio');
-    allDiv.setAttribute('aria-checked', S._modelDomain === 'all' ? 'true' : 'false');
-    allDiv.setAttribute('tabindex', S._modelDomain === 'all' ? '0' : '-1');
-    allDiv.setAttribute('onclick', "switchModelDomain(this,'all')");
-    allDiv.innerHTML = `<span data-i18n="filter.all">${t('filter.all')}</span>`;
-    filterSeg.appendChild(allDiv);
-    // One option per registered type
-    for (const name of typeNames) {
-      const div = document.createElement('div');
-      div.className = S._modelDomain === name ? 'active' : '';
-      div.setAttribute('role', 'radio');
-      div.setAttribute('aria-checked', S._modelDomain === name ? 'true' : 'false');
-      div.setAttribute('tabindex', S._modelDomain === name ? '0' : '-1');
-      div.setAttribute('onclick', `switchModelDomain(this,'${name}')`);
-      const labelKey = 'label.' + name;
-      div.innerHTML = `<span data-i18n="${labelKey}">${t(labelKey) || name.toUpperCase()}</span>`;
-      filterSeg.appendChild(div);
-    }
+function _syncFilterTypeSeg(seg, typeNames) {
+  if (!seg) return;
+  const domains = ['all', ...typeNames];
+  const items = Array.from(seg.querySelectorAll(':scope > *'));
+  const sameSet = items.length === domains.length &&
+    items.every((el, i) => el.dataset.domain === domains[i]);
+  if (sameSet) {
+    items.forEach((el, i) => {
+      const domain = domains[i];
+      const active = S._modelDomain === domain;
+      el.classList.toggle('active', active);
+      el.setAttribute('aria-checked', active ? 'true' : 'false');
+      el.setAttribute('tabindex', active ? '0' : '-1');
+      const span = el.querySelector('span');
+      const labelKey = domain === 'all' ? 'filter.all' : 'label.' + domain;
+      if (span) span.textContent = t(labelKey) || (domain === 'all' ? 'All' : domain.toUpperCase());
+    });
+    return;
   }
+  seg.innerHTML = domains.map((domain) => {
+    const active = S._modelDomain === domain;
+    const labelKey = domain === 'all' ? 'filter.all' : 'label.' + domain;
+    const label = t(labelKey) || (domain === 'all' ? 'All' : domain.toUpperCase());
+    return `<div class="${active ? 'active' : ''}" role="radio" data-domain="${esc(domain)}" aria-checked="${active}" tabindex="${active ? '0' : '-1'}" onclick="switchModelDomain(this,'${esc(domain)}')"><span data-i18n="${labelKey}">${esc(label)}</span></div>`;
+  }).join('');
+}
 
-  // --- Modal seg-control (#modelModalTypeSeg) ---
-  const modalSeg = document.getElementById('modelModalTypeSeg');
-  if (modalSeg) {
-    modalSeg.innerHTML = '';
-    for (let i = 0; i < typeNames.length; i++) {
-      const name = typeNames[i];
-      const div = document.createElement('div');
-      if (i === 0) div.className = 'active';
-      div.setAttribute('onclick', `segModelType(this,'${name}')`);
-      const labelKey = 'label.' + name;
-      div.innerHTML = `<input type="radio" name="modelType" value="${name}"${i === 0 ? ' checked' : ''}><span data-i18n="${labelKey}">${t(labelKey) || name.toUpperCase()}</span>`;
-      modalSeg.appendChild(div);
-    }
+function _syncModalTypeSeg(seg, typeNames) {
+  if (!seg) return;
+  const items = Array.from(seg.querySelectorAll(':scope > *'));
+  const sameSet = items.length === typeNames.length &&
+    items.every((el, i) => el.querySelector('input')?.value === typeNames[i]);
+  if (sameSet) {
+    // The radios own the selection (openModelModal sets it), so only refresh
+    // the labels, which is what a language switch needs.
+    items.forEach((el, i) => {
+      const span = el.querySelector('span');
+      const labelKey = 'label.' + typeNames[i];
+      if (span) span.textContent = t(labelKey) || typeNames[i].toUpperCase();
+    });
+    return;
   }
+  seg.innerHTML = typeNames.map((name, i) => {
+    const labelKey = 'label.' + name;
+    return `<div class="${i === 0 ? 'active' : ''}" onclick="segModelType(this,'${esc(name)}')"><input type="radio" name="modelType" value="${esc(name)}"${i === 0 ? ' checked' : ''} onchange="segModelType(this)"><span data-i18n="${labelKey}">${esc(t(labelKey) || name.toUpperCase())}</span></div>`;
+  }).join('');
 }
 
 // ── Model modal ──
@@ -104,10 +117,16 @@ function switchModelTab(clicked, showId) {
   clicked.classList.add('active');
 }
 
+// Called from the option div's click and from the radio's change event: the
+// change path is what a keyboard arrow or Space produces, and it must not be
+// mistaken for a second activation.  Resolve the option box first, then make
+// the checked radio and the styled class agree.
 function segModelType(el, value) {
-  el.parentElement.querySelectorAll(':scope > *').forEach(l => l.classList.remove('active'));
-  el.classList.add('active');
-  el.querySelector('input').checked = true;
+  const box = el.closest('.seg-control > *') || el;
+  box.parentElement.querySelectorAll(':scope > *').forEach(l => l.classList.remove('active'));
+  box.classList.add('active');
+  const radio = box.querySelector('input');
+  if (radio) radio.checked = true;
   onModelTypeChange();
 }
 

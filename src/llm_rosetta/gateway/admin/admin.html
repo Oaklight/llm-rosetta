@@ -188,7 +188,7 @@
       <div class="key-toolbar">
         <span class="key-toolbar-label" data-i18n="keys.usageRange">Token usage</span>
         <!-- Tiers are rendered from the window list the usage endpoint returns. -->
-        <div class="seg-control" id="keyUsageRange"></div>
+        <div class="seg-control" id="keyUsageRange" role="radiogroup" aria-label="Usage range"></div>
         <input id="keySearch" type="search" placeholder="Search keys..." data-i18n-placeholder="label.searchKeys" oninput="renderKeys()">
         <span class="key-count" id="keyCount"></span>
         <div class="key-sort-mobile">
@@ -997,7 +997,7 @@
       </div>
       <div class="form-group">
         <label data-i18n="label.modelType">Type</label>
-        <div class="seg-control" id="modelModalTypeSeg">
+        <div class="seg-control" id="modelModalTypeSeg" role="radiogroup" aria-label="Model type">
           <!-- Populated by models.js::_buildTypeSegControls() from model_types metadata -->
         </div>
       </div>
@@ -1295,10 +1295,10 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
       <button class="btn btn-sm" onclick="closeModal('tokenUsageModal')" data-i18n="btn.close">Close</button>
     </div>
     <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
-      <div class="seg-control" id="tokenUsageRange">
-        <label class="active" onclick="setTokenUsageRange(1)"><input type="radio" name="tuRange" checked><span data-i18n="tokenUsage.range1d">1 day</span></label>
-        <label onclick="setTokenUsageRange(7)"><input type="radio" name="tuRange"><span data-i18n="tokenUsage.range7d">7 days</span></label>
-        <label onclick="setTokenUsageRange(30)"><input type="radio" name="tuRange"><span data-i18n="tokenUsage.range30d">30 days</span></label>
+      <div class="seg-control" id="tokenUsageRange" role="radiogroup" aria-label="Token usage range">
+        <label class="active"><input type="radio" name="tuRange" checked onchange="setTokenUsageRange(1)"><span data-i18n="tokenUsage.range1d">1 day</span></label>
+        <label><input type="radio" name="tuRange" onchange="setTokenUsageRange(7)"><span data-i18n="tokenUsage.range7d">7 days</span></label>
+        <label><input type="radio" name="tuRange" onchange="setTokenUsageRange(30)"><span data-i18n="tokenUsage.range30d">30 days</span></label>
       </div>
       <select id="tokenUsageKeyFilter" onchange="loadTokenUsage()" style="padding:6px 10px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:13px">
         <option value="" data-i18n="filter.allKeys">All Keys</option>
