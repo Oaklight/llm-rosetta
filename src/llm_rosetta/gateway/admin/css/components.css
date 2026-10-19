@@ -629,6 +629,17 @@ th.sortable:focus-visible { outline:2px solid var(--accent);outline-offset:-2px;
 /* API keys toolbar: usage tiers on the left, search/count on the right. */
 .key-toolbar { display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap; }
 .key-toolbar-label { font-size:13px;color:var(--text-dim); }
+/* Numeric columns stay right-aligned; the card layout re-flows them. */
+#keysTable .key-requests-cell,
+#keysTable .key-input-cell,
+#keysTable .key-output-cell,
+#keysTable .key-total-cell,
+#keysTable .key-actions-cell { text-align:right; }
+/* The narrow-screen card layout has no visible column header to click, so
+   the toolbar grows the same sort select + direction toggle as Models. */
+.key-sort-mobile { display:none;align-items:center;gap:6px; }
+#keySortDirBtn { min-width:34px; }
+.key-sort-mobile #keySortDirBtn:disabled { opacity:.4; cursor:default; }
 .key-toolbar #keySearch {
   flex:1;min-width:160px;max-width:260px;margin-left:auto;padding:6px 10px;
   background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);
@@ -1152,4 +1163,57 @@ body { padding-bottom: 26px; }
   #opsLogTable tr.ops-error-row { display:block; padding:0 12px 12px; }
   #opsLogTable tr.ops-error-row[hidden] { display:none; }
   #opsLogTable tr.ops-empty-row { display:block; padding:12px; }
+}
+
+/* ── API Keys → stacked cards on narrow screens ──
+   Seven columns at a 760px minimum meant a phone showed Label, Created and
+   Last Used only: the token usage the page exists to report was off-screen.
+   Each row becomes a card with the label and its actions on top, the four
+   usage numbers underneath and the dates last.  The usage cells carry their
+   column name in data-label, filled from t() at render time, because the
+   header row is hidden. */
+@media (max-width: 768px) {
+  .key-sort-mobile { display:flex; }
+  /* Two ids, so this outranks `#tab-keys table { min-width:760px }` above by
+     specificity rather than by source order. */
+  #tab-keys #keysTableEl { table-layout:auto; min-width:0; }
+  #tab-keys thead { display:none; }
+  #keysTable tr {
+    display:grid;
+    grid-template-columns:minmax(0,1fr) repeat(3, auto);
+    grid-template-areas:
+      "label   label    label    actions"
+      "req     input    output   total"
+      "created created  lastused lastused";
+    gap:6px 12px;
+    padding:12px;
+    border-bottom:1px solid var(--border);
+  }
+  #keysTable tr:hover { background:var(--bg-hover); }
+  #keysTable tr:hover td { background:transparent; }
+  /* Two ids outrank the top-level #keysTable .key-*-cell { text-align:right }
+     rules, so the card's values read left-aligned next to their labels. */
+  #tab-keys #keysTable td { display:block; padding:0; border:none; text-align:left; }
+  #keysTable .key-label-cell { grid-area:label; overflow-wrap:anywhere; }
+  #keysTable .key-created-cell { grid-area:created; }
+  #keysTable .key-lastused-cell { grid-area:lastused; }
+  #keysTable .key-requests-cell { grid-area:req; }
+  #keysTable .key-input-cell { grid-area:input; }
+  #keysTable .key-output-cell { grid-area:output; }
+  #keysTable .key-total-cell { grid-area:total; }
+  #keysTable .key-actions-cell { grid-area:actions; justify-self:end; }
+  #keysTable .key-created-cell,
+  #keysTable .key-lastused-cell { font-size:12px; color:var(--text-dim); }
+  /* Dates and usage numbers lose their header with the thead, so each one
+     names itself in the card. */
+  #keysTable .key-created-cell::before,
+  #keysTable .key-lastused-cell::before,
+  #keysTable .key-requests-cell::before,
+  #keysTable .key-input-cell::before,
+  #keysTable .key-output-cell::before,
+  #keysTable .key-total-cell::before {
+    content:attr(data-label) " ";
+    font-size:11px;
+    color:var(--text-dim);
+  }
 }

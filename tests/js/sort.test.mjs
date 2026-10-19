@@ -13,7 +13,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { syncAriaSort, wireSortableHeaders } from '../../src/llm_rosetta/gateway/admin/js/core/sort.js';
+import { syncAriaSort, wireSortableHeaders, sortByKey } from '../../src/llm_rosetta/gateway/admin/js/core/sort.js';
 
 function makeTh() {
   const attrs = new Map();
@@ -103,4 +103,32 @@ test('Enter and Space run the click handler; Space does not scroll', () => {
   th.fire('keydown', other);
   assert.equal(th.clicks(), 2);
   assert.equal(other.prevented, false);
+});
+
+test('sortByKey with no key returns a copy in server order', () => {
+  const items = [{id: 'b'}, {id: 'a'}];
+  const out = sortByKey(items, {key: '', dir: 'asc', valueOf: x => x.id, labelOf: x => x.id});
+  assert.deepEqual(out.map(x => x.id), ['b', 'a']);
+  assert.notEqual(out, items);  // a copy, so Default cannot be undone by a sort
+  assert.deepEqual(items.map(x => x.id), ['b', 'a']);  // input untouched
+});
+
+test('sortByKey orders by value and flips with the direction', () => {
+  const items = [{id: 'a', n: 2}, {id: 'b', n: 1}, {id: 'c', n: 3}];
+  const opts = dir => ({key: 'n', dir, valueOf: x => x.n, labelOf: x => x.id});
+  assert.deepEqual(sortByKey(items, opts('asc')).map(x => x.id), ['b', 'a', 'c']);
+  assert.deepEqual(sortByKey(items, opts('desc')).map(x => x.id), ['c', 'a', 'b']);
+});
+
+test('sortByKey breaks ties on the label, ascending in both directions', () => {
+  const items = [{id: 'c', n: 0}, {id: 'a', n: 0}, {id: 'b', n: 0}];
+  const opts = dir => ({key: 'n', dir, valueOf: x => x.n, labelOf: x => x.id});
+  assert.deepEqual(sortByKey(items, opts('asc')).map(x => x.id), ['a', 'b', 'c']);
+  assert.deepEqual(sortByKey(items, opts('desc')).map(x => x.id), ['a', 'b', 'c']);
+});
+
+test('sortByKey compares string values with localeCompare', () => {
+  const items = [{id: 'b'}, {id: 'A'}];
+  const out = sortByKey(items, {key: 'id', dir: 'asc', valueOf: x => x.id, labelOf: x => x.id});
+  assert.deepEqual(out.map(x => x.id), ['A', 'b']);
 });

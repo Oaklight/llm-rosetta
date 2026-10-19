@@ -191,8 +191,21 @@
         <div class="seg-control" id="keyUsageRange"></div>
         <input id="keySearch" type="search" placeholder="Search keys..." data-i18n-placeholder="label.searchKeys" oninput="renderKeys()">
         <span class="key-count" id="keyCount"></span>
+        <div class="key-sort-mobile">
+          <select id="keySortKey" onchange="setKeySortKey(this.value)" aria-label="Sort by" data-i18n-aria-label="sort.by">
+            <option value="" data-i18n="sort.default">Default</option>
+            <option value="label" data-i18n="col.label">Label</option>
+            <option value="created" data-i18n="col.created">Created</option>
+            <option value="last_used" data-i18n="col.lastUsed">Last Used</option>
+            <option value="requests" data-i18n="col.requests">Requests</option>
+            <option value="input" data-i18n="tokenUsage.col.input">Input</option>
+            <option value="output" data-i18n="tokenUsage.col.output">Output</option>
+            <option value="total" data-i18n="tokenUsage.col.total">Total</option>
+          </select>
+          <button type="button" class="btn btn-sm" id="keySortDirBtn" onclick="toggleKeySortDir()" aria-label="Sort direction" data-i18n-aria-label="sort.direction" title="Sort direction" data-i18n-title="sort.direction">↑</button>
+        </div>
       </div>
-      <div class="table-scroll"><table>
+      <div class="table-scroll"><table id="keysTableEl">
         <thead><tr>
           <th class="sortable" id="keySortLabel" onclick="sortKeys('label')" style="width:24%" data-i18n="col.label">Label</th>
           <th class="sortable" id="keySortCreated" onclick="sortKeys('created')" style="width:12%" data-i18n="col.created">Created</th>

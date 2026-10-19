@@ -1,7 +1,7 @@
 import { S } from '../core/state.js';
 import { t } from '../core/i18n.js';
 import { api, showToast, closeModal, openModal, esc, fmtTokens, inlineConfirm } from '../core/utils.js';
-import { syncAriaSort } from '../core/sort.js';
+import { syncAriaSort, sortByKey } from '../core/sort.js';
 
 // ===================== API Keys Tab =====================
 
@@ -75,15 +75,15 @@ function setKeyUsageWindow(win) {
 function attributedUsageRow(label, win, tip, counts) {
   const w = counts || {};
   const title = esc(tip);
-  return `<tr style="color:var(--text-dim)">
-    <td title="${title}">${esc(label)}</td>
-    <td>—</td>
-    <td>—</td>
-    <td style="text-align:right" title="${title}">${(w.request_count || 0).toLocaleString()}</td>
-    <td style="text-align:right" title="${title}">${fmtTokens(w.input_tokens || 0)}</td>
-    <td style="text-align:right" title="${title}">${fmtTokens(w.output_tokens || 0)}</td>
-    <td style="text-align:right" title="${title}"><strong>${fmtTokens(w.total_tokens || 0)}</strong></td>
-    <td></td>
+  return `<tr style="color:var(--text-dim)" role="row">
+    <td class="key-label-cell" role="cell" aria-labelledby="keySortLabel" title="${title}">${esc(label)}</td>
+    <td class="key-created-cell" role="cell" aria-labelledby="keySortCreated" data-label="${esc(t('col.created'))}">—</td>
+    <td class="key-lastused-cell" role="cell" aria-labelledby="keySortLastUsed" data-label="${esc(t('col.lastUsed'))}">—</td>
+    <td class="key-requests-cell" role="cell" aria-labelledby="keySortRequests" data-label="${esc(t('col.requests'))}" title="${title}">${(w.request_count || 0).toLocaleString()}</td>
+    <td class="key-input-cell" role="cell" aria-labelledby="keySortInput" data-label="${esc(t('tokenUsage.col.input'))}" title="${title}">${fmtTokens(w.input_tokens || 0)}</td>
+    <td class="key-output-cell" role="cell" aria-labelledby="keySortOutput" data-label="${esc(t('tokenUsage.col.output'))}" title="${title}">${fmtTokens(w.output_tokens || 0)}</td>
+    <td class="key-total-cell" role="cell" aria-labelledby="keySortTotal" data-label="${esc(t('tokenUsage.col.total'))}" title="${title}"><strong>${fmtTokens(w.total_tokens || 0)}</strong></td>
+    <td class="key-actions-cell" role="cell"></td>
   </tr>`;
 }
 
@@ -120,6 +120,19 @@ function sortKeys(key) {
     S._keysSortKey = key;
     S._keysSortDir = 'asc';
   }
+  renderKeys();
+}
+
+// The card layout hides the sortable header row, so the toolbar offers the
+// same keys as a select plus a direction toggle at phone width.  The empty
+// value restores the server's order.
+function setKeySortKey(key) {
+  S._keysSortKey = key;
+  renderKeys();
+}
+
+function toggleKeySortDir() {
+  S._keysSortDir = S._keysSortDir === 'asc' ? 'desc' : 'asc';
   renderKeys();
 }
 
@@ -163,26 +176,27 @@ function renderKeys() {
   const tbody = document.getElementById('keysTable');
   const allKeys = (S.keysData && S.keysData.keys) || [];
   const query = (document.getElementById('keySearch')?.value || '').trim().toLowerCase();
-  // `slice()` keeps the sort from reordering S.keysData.keys in place: the
-  // server's order has to survive until a column is clicked.
-  const keys = query
-    ? allKeys.filter(k => (k.label || '').toLowerCase().includes(query))
-    : allKeys.slice();
   const win = S.keyUsageWindow || usageWindows()[0];
+  // sortByKey returns a copy, so the server's order survives until a column
+  // is chosen and the mobile "Default" option can restore it.
+  const keys = sortByKey(
+    query ? allKeys.filter(k => (k.label || '').toLowerCase().includes(query)) : allKeys,
+    {
+      key: S._keysSortKey,
+      dir: S._keysSortDir,
+      valueOf: k => _keySortValue(k, win),
+      labelOf: k => k.label || '',
+    },
+  );
   _syncKeySortHeaders();
-  if (S._keysSortKey) {
-    const dir = S._keysSortDir === 'asc' ? 1 : -1;
-    keys.sort((a, b) => {
-      const va = _keySortValue(a, win);
-      const vb = _keySortValue(b, win);
-      const cmp = (typeof va === 'string' || typeof vb === 'string')
-        ? String(va).localeCompare(String(vb))
-        : va - vb;
-      if (cmp !== 0) return cmp * dir;
-      // Ties break on the label in ascending order, so equal usage or the
-      // same creation day does not depend on what was sorted last.
-      return (a.label || '').localeCompare(b.label || '');
-    });
+  const sortSel = document.getElementById('keySortKey');
+  if (sortSel) sortSel.value = S._keysSortKey;
+  const sortDirBtn = document.getElementById('keySortDirBtn');
+  if (sortDirBtn) {
+    // With the server's order restored there is no direction to flip.
+    sortDirBtn.disabled = !S._keysSortKey;
+    sortDirBtn.textContent = S._keysSortDir === 'asc' ? '↑' : '↓';
+    sortDirBtn.setAttribute('aria-label', t('sort.direction') + ': ' + t(S._keysSortDir === 'asc' ? 'sort.asc' : 'sort.desc'));
   }
   // Unattributed rows carry no label, so they cannot match a search.
   const extraRows = query ? [] : renderUnattributedRows(win);
@@ -215,16 +229,16 @@ function renderKeys() {
     const sharedMark = (entry && entry.shared_label)
       ? `<span title="${esc(t('keys.sharedLabelHint'))}" style="color:var(--orange);margin-left:4px;cursor:help">⚠</span>`
       : '';
-    return `<tr>
-      <td><span class="key-label-text" id="label-${k.id}">${esc(k.label || '—')}</span>
+    return `<tr role="row">
+      <td class="key-label-cell" role="cell" aria-labelledby="keySortLabel"><span class="key-label-text" id="label-${k.id}">${esc(k.label || '—')}</span>
         <button class="key-btn" style="margin-left:4px" onclick="editKeyLabel('${k.id}')" title="Edit"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button>${sharedMark}</td>
-      <td title="${createdFull}">${created}</td>
-      <td title="${lastUsedFull}">${lastUsed}</td>
-      <td style="text-align:right" title="${usageTip}">${reqs}</td>
-      <td style="text-align:right" title="${usageTip}">${fmtTokens(w.input_tokens || 0)}</td>
-      <td style="text-align:right" title="${usageTip}">${fmtTokens(w.output_tokens || 0)}</td>
-      <td style="text-align:right" title="${usageTip}"><strong>${fmtTokens(w.total_tokens || 0)}</strong></td>
-      <td style="white-space:nowrap;text-align:right"><button class="btn btn-sm" onclick="rotateKey('${k.id}','${esc(k.label || k.id)}', this)">${t('btn.rotate')}</button> <button class="btn btn-sm btn-danger" onclick="deleteKey('${k.id}','${esc(k.label || k.id)}', this)">${t('btn.delete')}</button></td>
+      <td class="key-created-cell" role="cell" aria-labelledby="keySortCreated" data-label="${esc(t('col.created'))}" title="${createdFull}">${created}</td>
+      <td class="key-lastused-cell" role="cell" aria-labelledby="keySortLastUsed" data-label="${esc(t('col.lastUsed'))}" title="${lastUsedFull}">${lastUsed}</td>
+      <td class="key-requests-cell" role="cell" aria-labelledby="keySortRequests" data-label="${esc(t('col.requests'))}" title="${usageTip}">${reqs}</td>
+      <td class="key-input-cell" role="cell" aria-labelledby="keySortInput" data-label="${esc(t('tokenUsage.col.input'))}" title="${usageTip}">${fmtTokens(w.input_tokens || 0)}</td>
+      <td class="key-output-cell" role="cell" aria-labelledby="keySortOutput" data-label="${esc(t('tokenUsage.col.output'))}" title="${usageTip}">${fmtTokens(w.output_tokens || 0)}</td>
+      <td class="key-total-cell" role="cell" aria-labelledby="keySortTotal" data-label="${esc(t('tokenUsage.col.total'))}" title="${usageTip}"><strong>${fmtTokens(w.total_tokens || 0)}</strong></td>
+      <td class="key-actions-cell" role="cell" style="white-space:nowrap"><button class="btn btn-sm" onclick="rotateKey('${k.id}','${esc(k.label || k.id)}', this)">${t('btn.rotate')}</button> <button class="btn btn-sm btn-danger" onclick="deleteKey('${k.id}','${esc(k.label || k.id)}', this)">${t('btn.delete')}</button></td>
     </tr>`;
   }).join('') + extraRows.join('');
 }
@@ -340,7 +354,7 @@ Object.assign(window, {
   loadKeys, loadLogKeyLabels, renderKeys, openKeyModal,
   generateKey, copyCreatedKey, deleteKey, rotateKey, editKeyLabel,
   onKeyLabelInputKeydown, saveKeyLabel,
-  backfillKeysLastUsed, setKeyUsageWindow, sortKeys,
+  backfillKeysLastUsed, setKeyUsageWindow, sortKeys, setKeySortKey, toggleKeySortDir,
 });
 
 export { loadKeys, loadLogKeyLabels, renderKeys, setKeyUsageWindow };

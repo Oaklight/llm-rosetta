@@ -24,6 +24,31 @@ export function syncAriaSort(headers, activeKey, dir) {
 }
 
 /**
+ * Order *items* by one key.  An empty *key* returns a copy in the server's
+ * order, which is what the mobile "Default" option means.  Ties break on the
+ * label in ascending order, so equal usage does not depend on which column
+ * was sorted last.
+ *
+ * @param {Array} items
+ * @param {{key: string, dir: 'asc'|'desc', valueOf: function, labelOf: function}} opts
+ * @returns {Array} a new array; the input is never reordered in place.
+ */
+export function sortByKey(items, { key, dir, valueOf, labelOf }) {
+  const copy = items.slice();
+  if (!key) return copy;
+  const sign = dir === 'desc' ? -1 : 1;
+  return copy.sort((a, b) => {
+    const va = valueOf(a);
+    const vb = valueOf(b);
+    const cmp = (typeof va === 'string' || typeof vb === 'string')
+      ? String(va).localeCompare(String(vb))
+      : va - vb;
+    if (cmp !== 0) return cmp * sign;
+    return String(labelOf(a)).localeCompare(String(labelOf(b)));
+  });
+}
+
+/**
  * Make every `th.sortable` under *root* a keyboard-operable tab stop.  Enter
  * or Space runs the header's own click handler, so the keyboard path cannot
  * drift from the mouse path.  Idempotent, and exported for any renderer that
