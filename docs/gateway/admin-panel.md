@@ -34,8 +34,9 @@ current config; **Refetch** forces every remote to be downloaded again, bypassin
 its cache and `refresh` mode. A source that fails is reported here without
 stopping the gateway.
 
-**Preset catalog.** Above the remotes list, a catalog offers the shim packages
-that replace the built-ins
+**Preset catalog.** Above the remotes list, a catalog offers every standalone
+shim package the gateway knows about — ALCF, Argo and AskSage — whether or not
+its built-in is
 [scheduled for removal](../guide/shims.md#shims-scheduled-for-removal). Choosing
 one and pressing **Add source** appends its `shims.remotes` entry to the JSON list
 below — it does **not** save, so the entry goes through the same review and the

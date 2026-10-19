@@ -112,16 +112,20 @@ startup instead.
 remotes directly (no config file needed); `llm_rosetta.gateway.apply_shim_sources(raw, config_path)`
 applies a config dict. `create_app` also applies the section automatically.
 
-**Replacing a built-in that is on its way out.** Ten built-ins — the ALCF, Argo
-and AskSage shims — are
+**Replacing a built-in that is on its way out.** The Argo shims are
 [scheduled for removal](../guide/shims.md#shims-scheduled-for-removal) in 0.16.0
-and will then be available only from their own repositories. A config that uses
-one of them gets a warning at startup naming the shim, the release that removes
-it, and the source that replaces it; the admin panel shows the same advisories
-and can add that source from a preset catalog (see
-[Admin Panel → Shim Sources](admin-panel.md#shim-sources)). The warning clears as
+and will then be available only from
+[llm-rosetta-shim-argo](https://github.com/Oaklight/llm-rosetta-shim-argo). A
+config that uses one of them gets a warning at startup naming the shim, the
+release that removes it, and the source that replaces it; the warning clears as
 soon as a declared source supplies the shim, so the log says whether the
 migration is done — and the shim's name in your provider config never changes.
+The ALCF and AskSage shims already left core in 0.14.0; declare
+`llm-rosetta-shim-alcf` / `llm-rosetta-shim-asksage` before using their names.
+The admin panel's preset catalog (see
+[Admin Panel → Shim Sources](admin-panel.md#shim-sources)) is preloaded with all
+three standalone packages, whether or not a removal is scheduled, so any of them
+can be added with one click.
 
 !!! warning "Declared sources run code"
     A shim directory may ship a `transforms.py`, which is executed when the shim

@@ -2,12 +2,22 @@
 
 ALCF (Argonne Leadership Computing Facility) Inference Service is supported through three shim endpoints, one per compute cluster. All use the OpenAI Chat Completions compatible API.
 
-!!! warning "Scheduled for removal in 0.16.0"
-    All three ALCF shims move to the standalone
+!!! warning "Ships as a standalone package"
+    Since 0.14.0 the three ALCF shims are no longer built into LLM-Rosetta; they
+    ship in the
     [llm-rosetta-shim-alcf](https://github.com/Oaklight/llm-rosetta-shim-alcf)
-    package in 0.16.0. They work unchanged until then — and the names below do not
-    change, so migrating is one `shims.remotes` entry. See
-    [Shims scheduled for removal](../shims.md#shims-scheduled-for-removal).
+    package. Declare it under `shims.remotes` and the names below keep working.
+    **Settings → Shim Sources** offers the same entry as a one-click preset.
+
+    ```jsonc
+    "shims": {
+      "remotes": [{
+        "url": "https://github.com/Oaklight/llm-rosetta-shim-alcf",
+        "path": "src/llm_rosetta_shim_alcf/providers",
+        "token_env": "GITHUB_TOKEN"      // the repository is private
+      }]
+    }
+    ```
 
 ## Endpoints
 
@@ -20,8 +30,9 @@ ALCF (Argonne Leadership Computing Facility) Inference Service is supported thro
 The three share one admin-panel top level: each declares `group: alcf`, so the
 provider-type picker shows a single `alcf` group whose rows read
 `metis · chat_completions`, `minerva · chat_completions` and
-`sophia · chat_completions`. The older names `alcf--metis`, `alcf--minerva` and
-`alcf--sophia` still resolve and are rewritten in your config file at startup.
+`sophia · chat_completions`. The older deployment-first spellings (`alcf--metis`, `alcf--minerva`,
+`alcf--sophia`) are not registered by the standalone package; use the canonical
+names above.
 
 ## Reasoning Support
 

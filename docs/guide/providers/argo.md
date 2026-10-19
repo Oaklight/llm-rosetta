@@ -6,7 +6,9 @@ Argo is Argonne National Laboratory's internal API gateway, providing access to 
     All three Argo shims move to the standalone
     [llm-rosetta-shim-argo](https://github.com/Oaklight/llm-rosetta-shim-argo)
     package in 0.16.0. They work unchanged until then — and the names below do not
-    change, so migrating is one `shims.remotes` entry. See
+    change, so migrating is one `shims.remotes` entry. **Settings → Shim
+    Sources** already offers that source as a preset, so the migration can land
+    before 0.16.0. See
     [Shims scheduled for removal](../shims.md#shims-scheduled-for-removal).
 
 ## Endpoints
