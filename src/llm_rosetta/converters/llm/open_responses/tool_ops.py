@@ -1717,7 +1717,16 @@ class OpenResponsesToolOps(BaseToolOps):
         # Sanitize here to match the ID registered by ir_tool_call_to_p / streaming start.
         call_id = sanitize_tool_call_id(ir_tool_result["tool_call_id"])
 
-        if ir_tool_result.get("is_error"):
+        # A status read from a Responses item is replayed as the item's own
+        # status rather than re-encoded as an error marker: ``incomplete`` is
+        # the native spelling of the same fact, and the marker would mutate
+        # model-visible output on a same-format round-trip.  Only an error
+        # flag with no such status takes the marker path.
+        provider_metadata = ir_tool_result.get("provider_metadata") or {}
+        responses_status = provider_metadata.get("responses_status")
+        if not isinstance(responses_status, str) or not responses_status:
+            responses_status = None
+        if ir_tool_result.get("is_error") and responses_status != "incomplete":
             # Both function_call_output and custom_tool_call_output accept a
             # list of input_* content blocks, so the marker rides along as one.
             output = mark_tool_error(output, text_block_type="input_text")
@@ -1739,13 +1748,13 @@ class OpenResponsesToolOps(BaseToolOps):
                 "type": "custom_tool_call_output",
                 "call_id": call_id,
                 "output": output,
-                "status": "completed",
+                "status": responses_status or "completed",
             }
         return {
             "type": "function_call_output",
             "call_id": call_id,
             "output": output,
-            "status": "completed",
+            "status": responses_status or "completed",
         }
 
     @staticmethod
@@ -1777,18 +1786,21 @@ class OpenResponsesToolOps(BaseToolOps):
         # Only a boolean is copied: the IR field is typed ``bool``, so a
         # malformed value would fail IR validation and take the request down.
         is_error = provider_tool_result.get("is_error")
-        # An incomplete function output is authoritative over a conflicting flag.
+        item_type = provider_tool_result.get("type", "")
+        # An incomplete function output is authoritative over a conflicting
+        # flag.  The status rides along so a Responses target can replay it
+        # instead of re-encoding the same fact as an error marker.
         if (
-            provider_tool_result.get("type") == "function_call_output"
+            item_type == "function_call_output"
             and provider_tool_result.get("status") == "incomplete"
         ):
             part["is_error"] = True
+            part.setdefault("provider_metadata", {})["responses_status"] = "incomplete"
         elif isinstance(is_error, bool):
             part["is_error"] = is_error
         # Record the non-default types so the outbound leg can emit the
         # same item kind.  The context it would otherwise consult is only
         # populated while streaming a response, never by parsing history.
-        item_type = provider_tool_result.get("type", "")
         tool_type = _RESULT_ITEM_TOOL_TYPES.get(item_type)
         if tool_type is not None:
             part["tool_type"] = tool_type

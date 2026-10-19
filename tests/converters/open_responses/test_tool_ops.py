@@ -751,6 +751,8 @@ class TestOpenAIResponsesToolOps:
         result = OpenAIResponsesToolOps.p_tool_result_to_ir(provider_tr)
 
         assert result["is_error"] is True
+        # The status rides along so a Responses target can replay it.
+        assert result["provider_metadata"] == {"responses_status": "incomplete"}
 
     def test_p_tool_result_to_ir_incomplete_status_overrides_false_is_error(self):
         provider_tr = {
@@ -777,6 +779,44 @@ class TestOpenAIResponsesToolOps:
         result = OpenAIResponsesToolOps.p_tool_result_to_ir(provider_tr)
 
         assert "is_error" not in result
+
+    def test_ir_client_result_to_p_marks_error_without_status(self):
+        """An error flag with no carried status still gets the marker."""
+        result = OpenAIResponsesToolOps.ir_client_result_to_p(
+            cast(
+                ToolResultPart,
+                {
+                    "type": "tool_result",
+                    "tool_call_id": "call_err",
+                    "result": "Error occurred",
+                    "is_error": True,
+                },
+            )
+        )
+
+        assert result["output"] == [
+            {"type": "input_text", "text": "Error occurred"},
+            {"type": "input_text", "text": TOOL_ERROR_MARKER},
+        ]
+        assert result["status"] == "completed"
+
+    def test_ir_client_result_to_p_replays_incomplete_status(self):
+        """A carried incomplete status is replayed without the marker."""
+        result = OpenAIResponsesToolOps.ir_client_result_to_p(
+            cast(
+                ToolResultPart,
+                {
+                    "type": "tool_result",
+                    "tool_call_id": "call_err",
+                    "result": "City not found",
+                    "is_error": True,
+                    "provider_metadata": {"responses_status": "incomplete"},
+                },
+            )
+        )
+
+        assert result["output"] == "City not found"
+        assert result["status"] == "incomplete"
 
     @pytest.mark.parametrize("malformed", ["true", 1, 0, {}, [], "False"])
     def test_p_tool_result_to_ir_ignores_non_bool_is_error(self, malformed):

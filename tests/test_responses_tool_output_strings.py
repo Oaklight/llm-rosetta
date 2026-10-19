@@ -141,6 +141,55 @@ def test_incomplete_tool_output_becomes_anthropic_error():
     }
 
 
+def test_incomplete_tool_output_roundtrips_as_incomplete():
+    """A same-format round-trip replays the status instead of marking text."""
+    request = {
+        "model": "gpt-4o",
+        "tools": [
+            {
+                "type": "function",
+                "name": "get_weather",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"city": {"type": "string"}},
+                    "required": ["city"],
+                },
+            }
+        ],
+        "input": [
+            {"type": "message", "role": "user", "content": "Weather in Atlantis?"},
+            {
+                "type": "function_call",
+                "call_id": "call_err1",
+                "name": "get_weather",
+                "arguments": '{"city":"Atlantis"}',
+            },
+            {
+                "type": "function_call_output",
+                "call_id": "call_err1",
+                "status": "incomplete",
+                "output": "City not found",
+            },
+            {"type": "message", "role": "user", "content": "Did it fail?"},
+        ],
+        "max_output_tokens": 128,
+    }
+
+    converted = ConversionPipeline(
+        "openai_responses", "openai_responses"
+    ).convert_request(request)
+
+    tool_output = next(
+        item for item in converted["input"] if item["type"] == "function_call_output"
+    )
+    assert tool_output == {
+        "type": "function_call_output",
+        "call_id": "call_err1",
+        "output": "City not found",
+        "status": "incomplete",
+    }
+
+
 def test_responses_same_format_ir_roundtrip_keeps_json_text():
     output = '[{"type":"input_image","image_url":"ordinary tool data"}]'
     request = _request(output)
