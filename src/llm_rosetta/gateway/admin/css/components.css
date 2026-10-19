@@ -730,6 +730,10 @@ th.sortable:focus-visible { outline:2px solid var(--accent);outline-offset:-2px;
   .content { padding: 16px; }
   .chart-row { grid-template-columns: 1fr; }
   .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  /* With an odd number of KPI cards the last one was left alone in its row,
+     showing the grid's gap colour as an empty half-card.  Span it only when
+     it is actually alone, so an even count keeps two per row. */
+  .stats-grid > :last-child:nth-child(odd) { grid-column: 1 / -1; }
   .section-header { flex-wrap: wrap; gap: 8px; }
 
   /* Filter controls: keep one line and scroll instead of clipping the

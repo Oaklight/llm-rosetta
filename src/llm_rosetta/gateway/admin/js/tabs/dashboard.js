@@ -628,9 +628,9 @@ function renderStats(d) {
   const tokReason = has24h ? (d.reasoning_tokens_24h||0) : (d.total_reasoning_tokens||0);
   const tokLabel = has24h ? t('stat.tokens24h') : t('stat.totalTokens');
   document.getElementById('statsGrid').innerHTML = `
-    <div class="stat-card"><div class="label">${t('stat.totalRequests')}</div><div class="value">${d.total_requests}</div></div>
+    <div class="stat-card"><div class="label">${t('stat.totalRequests')}</div><div class="value">${(d.total_requests || 0).toLocaleString()}</div></div>
     <div class="stat-card"><div class="label">${t('stat.errorRate')}</div><div class="value ${d.error_rate > 0.05 ? 'red' : 'green'}">${errRate}</div></div>
-    <div class="stat-card"><div class="label">${t('stat.activeStreams')}</div><div class="value blue">${d.active_streams}</div></div>
+    <div class="stat-card"><div class="label">${t('stat.activeStreams')}</div><div class="value blue">${(d.active_streams || 0).toLocaleString()}</div></div>
     <div class="stat-card"><div class="label">${t('stat.uptime')}</div><div class="value">${uptime}</div></div>
     <div class="stat-card"><div class="label">${tokLabel}</div><div class="value">${fmtTokens(tokTotal)}</div><div class="sub">↑${fmtTokens(tokIn)} ↓${fmtTokens(tokOut)}${tokCacheR>0?` · ${t('stat.cacheRead')} ${fmtTokens(tokCacheR)}`:''}${tokCacheW>0?` · ${t('stat.cacheWrite')} ${fmtTokens(tokCacheW)}`:''}${tokReason>0?` · ${t('stat.reasoning')} ${fmtTokens(tokReason)}`:''}</div><div class="sub" style="margin-top:4px"><a href="#" onclick="event.preventDefault();openTokenUsageModal()" style="color:var(--accent);font-size:11px;text-decoration:none">${t('tokenUsage.details')}</a></div></div>
   `;
