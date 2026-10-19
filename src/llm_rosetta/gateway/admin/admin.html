@@ -475,8 +475,8 @@
         </span>
         <button class="btn btn-sm" onclick="resetLogFilters()" data-i18n="btn.resetFilters">Reset Filters</button>
       </div>
-      <div class="table-scroll"><table>
-        <thead><tr><th data-i18n="col.time">Time</th><th data-i18n="col.model">Model</th><th data-i18n="col.sourceTarget">Source &rarr; Target</th><th data-i18n="col.mode">Mode</th><th data-i18n="col.apiKey">API Key</th><th data-i18n="col.clientIp">Client IP</th><th data-i18n="col.status">Status</th><th data-i18n="col.tokens">Tokens</th><th data-i18n="col.duration">Duration</th></tr></thead>
+      <div class="table-scroll"><table id="requestLogTable">
+        <thead><tr><th id="thLogTime" data-i18n="col.time">Time</th><th id="thLogModel" data-i18n="col.model">Model</th><th id="thLogSourceTarget" data-i18n="col.sourceTarget">Source &rarr; Target</th><th id="thLogMode" data-i18n="col.mode">Mode</th><th id="thLogApiKey" data-i18n="col.apiKey">API Key</th><th id="thLogClientIp" data-i18n="col.clientIp">Client IP</th><th id="thLogStatus" data-i18n="col.status">Status</th><th id="thLogTokens" data-i18n="col.tokens">Tokens</th><th id="thLogDuration" data-i18n="col.duration">Duration</th></tr></thead>
         <tbody id="logTable"></tbody>
       </table></div>
       <div class="pagination">

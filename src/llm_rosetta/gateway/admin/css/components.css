@@ -1080,3 +1080,44 @@ body { padding-bottom: 26px; }
   margin-left:auto; max-width:50%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
   font-size:12px; color:var(--text-dim); font-family:var(--mono);
 }
+
+/* ── Request Log → stacked cards on narrow screens ──
+   Nine columns do not fit a phone, so the table scrolled sideways and the
+   first screenful showed only Time / Model / Source — Status, the column a
+   log is read for, was off-screen.  Each row becomes a card: the time and
+   the outcome on top, the route underneath, then mode/key/ip and finally
+   tokens/duration.  Kept at the end of the file so it wins over the generic
+   table min-width rule in the responsive section above. */
+@media (max-width: 768px) {
+  /* Two ids so this outranks `#tab-logs table { min-width:760px }` above. */
+  #tab-logs #requestLogTable { table-layout:auto; min-width:0; }
+  #tab-logs #requestLogTable thead { display:none; }
+  #logTable tr {
+    display:grid;
+    grid-template-columns:auto minmax(0,1fr) auto;
+    grid-template-areas:
+      "time   model  status"
+      "source source source"
+      "mode   key    ip"
+      "tokens tokens duration";
+    gap:6px 8px;
+    padding:12px;
+    border-bottom:1px solid var(--border);
+  }
+  #logTable tr:hover { background:var(--bg-hover); }
+  #logTable tr:hover td { background:transparent; }
+  #logTable td { display:block; padding:0; border:none; }
+  #logTable .log-time { grid-area:time; font-size:12px; color:var(--text-dim); }
+  #logTable .log-model { grid-area:model; white-space:normal; overflow-wrap:anywhere; }
+  #logTable .log-source { grid-area:source; font-size:12px; color:var(--text-dim); overflow-wrap:anywhere; }
+  #logTable .log-status { grid-area:status; justify-self:end; }
+  #logTable .log-mode { grid-area:mode; }
+  #logTable .log-key { grid-area:key; align-self:center; }
+  #logTable .log-ip { grid-area:ip; justify-self:end; align-self:center; }
+  #logTable .log-tokens { grid-area:tokens; }
+  #logTable .log-duration { grid-area:duration; justify-self:end; align-self:end; }
+  /* The expanded error detail is a block after its card, not a grid row. */
+  #logTable tr.log-error-row { display:block; padding:0 12px 12px; }
+  #logTable tr.log-error-row[hidden] { display:none; }
+  #logTable tr.log-empty-row { display:block; padding:12px; }
+}
