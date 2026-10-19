@@ -256,7 +256,7 @@ that set. A name marked **†** is scheduled for removal — see
 | `openai--chat_completions` | `chat_completions` | `https://api.openai.com/v1` | `OPENAI_API_KEY` | — |
 | `openai--embedding` | `openai` | `https://api.openai.com/v1` | `OPENAI_API_KEY` | — |
 | `openai--open_responses` | `open_responses` | `https://api.openai.com/v1` | `OPENAI_API_KEY` | — |
-| `openai_decisions` | `openai_decisions` | `https://api.openai.com` | `OPENAI_API_KEY` | — |
+| `openai--openai_decisions` | `openai_decisions` | `https://api.openai.com` | `OPENAI_API_KEY` | — |
 | `opencode--chat_completions` | `chat_completions` | `https://opencode.ai/zen/go/v1` | `OPENCODE_API_KEY` | — |
 | `opencode--messages` | `messages` | `https://opencode.ai/zen/go/v1` | `OPENCODE_API_KEY` | — |
 | `opencode--open_responses` | `open_responses` | `https://opencode.ai/zen/go/v1` | `OPENCODE_API_KEY` | — |
@@ -264,7 +264,7 @@ that set. A name marked **†** is scheduled for removal — see
 | `openrouter--messages` | `messages` | `https://openrouter.ai/api` | `OPENROUTER_API_KEY` | — |
 | `openrouter--open_responses` | `open_responses` | `https://openrouter.ai/api/v1` | `OPENROUTER_API_KEY` | — |
 | `qwen` | `chat_completions` | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `DASHSCOPE_API_KEY` | strips `frequency_penalty`, `logit_bias` |
-| `typesafe` | `systemone` | `https://api.typesafe.ai` | `TYPESAFE_API_KEY` | — |
+| `typesafe--systemone` | `systemone` | `https://api.typesafe.ai` | `TYPESAFE_API_KEY` | — |
 | `volcengine--chat_completions` | `chat_completions` | `https://ark.cn-beijing.volces.com/api/v3` | `ARK_API_KEY` | strips `logprobs`, `top_logprobs` |
 | `volcengine--open_responses` | `open_responses` | `https://ark.cn-beijing.volces.com/api/v3` | `ARK_API_KEY` | — |
 | `voyage--embedding` | `voyage` | `https://api.voyageai.com` | `VOYAGE_API_KEY` | — |
@@ -596,7 +596,8 @@ resolve_format("chat_completions")            # → "chat_completions" (pass-thr
 resolve_format("unknown")                     # → "unknown" (pass-through)
 
 resolve_model_type("deepseek--chat_completions")  # → "llm"
-resolve_model_type("typesafe")                    # → "decision"
+resolve_model_type("typesafe--systemone")         # → "decision"
+resolve_model_type("typesafe")                    # → "decision" (legacy alias)
 resolve_model_type("openai")                      # → None (ambiguous: vendor and embedding format)
 ```
 
