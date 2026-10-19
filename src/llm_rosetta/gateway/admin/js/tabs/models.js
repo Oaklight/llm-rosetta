@@ -2,6 +2,7 @@
 import { S, _CAP_ICONS } from '../core/state.js';
 import { t } from '../core/i18n.js';
 import { api, showToast, closeModal, esc, inlineConfirm, closeMenus, openMenu, isFreeEntry, freeEntryLabel, providerTypeName } from '../core/utils.js';
+import { syncAriaSort } from '../core/sort.js';
 import { initLogoSelect, setLogoSelectOptions } from '../components/logo-select.js';
 
 // ── helpers (module-private) ──
@@ -521,10 +522,17 @@ function renderModels() {
   ], prevProv);
 
   // Update sort header indicators
-  document.getElementById('sortName').className = 'sortable' + (S._modelSortKey === 'name' ? ` ${S._modelSortDir}` : '');
-  document.getElementById('sortProvider').className = 'sortable' + (S._modelSortKey === 'provider' ? ` ${S._modelSortDir}` : '');
+  const sortNameEl = document.getElementById('sortName');
+  const sortProviderEl = document.getElementById('sortProvider');
   const sortEnabledEl = document.getElementById('sortEnabled');
+  sortNameEl.className = 'sortable' + (S._modelSortKey === 'name' ? ` ${S._modelSortDir}` : '');
+  sortProviderEl.className = 'sortable' + (S._modelSortKey === 'provider' ? ` ${S._modelSortDir}` : '');
   if (sortEnabledEl) sortEnabledEl.className = 'sortable' + (S._modelSortKey === 'enabled' ? ` ${S._modelSortDir}` : '');
+  syncAriaSort([
+    [sortNameEl, 'name'],
+    [sortProviderEl, 'provider'],
+    [sortEnabledEl, 'enabled'],
+  ], S._modelSortKey, S._modelSortDir);
   const sortKeyEl = document.getElementById('modelSortKey');
   if (sortKeyEl) sortKeyEl.value = S._modelSortKey;
   const sortDirEl = document.getElementById('modelSortDirBtn');

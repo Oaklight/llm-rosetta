@@ -1,5 +1,6 @@
 import { S } from './state.js';
 import { t, setLang, applyI18n } from './i18n.js';
+import { wireSortableHeaders } from './sort.js';
 import {
   setScheme, setMode, setTheme, api, showToast, closeModal, esc, closeMenus,
   _startInactivityTracking, _stopInactivityTracking,
@@ -357,6 +358,13 @@ new MutationObserver(_scheduleOverflowHints).observe(document.body, {
   attributeFilter: ['class', 'style'],
 });
 _scheduleOverflowHints();
+
+// ===================== Sortable header keyboard access =====================
+// Sortable columns are <th class="sortable" onclick=…>, which a keyboard
+// cannot reach.  wireSortableHeaders() makes them tab stops and lets Enter or
+// Space run the same click handler; a renderer that builds a header row after
+// startup calls it on the new subtree.
+wireSortableHeaders();
 
 // ===================== Start =====================
 initLogoPicker();

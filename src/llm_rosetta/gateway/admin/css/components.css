@@ -575,6 +575,9 @@ th.sortable:hover { color:var(--text); }
 th.sortable::after { content:'';display:inline-block;margin-left:4px;opacity:.4;font-size:10px; }
 th.sortable.asc::after { content:'\25B2';opacity:.8; }
 th.sortable.desc::after { content:'\25BC';opacity:.8; }
+/* Inset, because a cell's ring would otherwise be clipped by the table scroll
+   container and overlap the neighbouring header. */
+th.sortable:focus-visible { outline:2px solid var(--accent);outline-offset:-2px; }
 
 /* Provider / Model search & filter toolbars */
 .model-toolbar, .provider-toolbar { display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap; }

@@ -1,6 +1,7 @@
 import { S } from '../core/state.js';
 import { t } from '../core/i18n.js';
 import { api, showToast, closeModal, openModal, esc, fmtTokens, inlineConfirm } from '../core/utils.js';
+import { syncAriaSort } from '../core/sort.js';
 
 // ===================== API Keys Tab =====================
 
@@ -146,11 +147,14 @@ function _keySortValue(k, win) {
 }
 
 function _syncKeySortHeaders() {
+  const headers = [];
   for (const key of ['label', 'created', 'last_used', 'requests', 'input', 'output', 'total']) {
     const el = document.getElementById('keySort' + key.split('_').map(s => s[0].toUpperCase() + s.slice(1)).join(''));
     if (!el) continue;
     el.className = 'sortable' + (S._keysSortKey === key ? ' ' + S._keysSortDir : '');
+    headers.push([el, key]);
   }
+  syncAriaSort(headers, S._keysSortKey, S._keysSortDir);
 }
 
 function renderKeys() {
