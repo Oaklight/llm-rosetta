@@ -114,3 +114,95 @@ class TestModuleLayout:
             assert importlib.util.find_spec(f"llm_rosetta.converters.{fmt}") is None, (
                 fmt
             )
+
+
+class TestBasePackage:
+    """The shared base package: its public surface and its layering."""
+
+    _PACKAGES = (
+        "llm_rosetta.converters.base",
+        "llm_rosetta.converters.base.helpers",
+        "llm_rosetta.converters.base.tools",
+    )
+
+    def test_every_all_name_exists(self) -> None:
+        """``__all__`` may not promise a name the package does not export."""
+        import importlib
+
+        for name in self._PACKAGES:
+            module = importlib.import_module(name)
+            missing = [n for n in module.__all__ if not hasattr(module, n)]
+            assert missing == [], f"{name}: {missing}"
+
+    def test_star_import_resolves(self) -> None:
+        namespace: dict[str, object] = {}
+        exec(  # noqa: S102 - the contract is the import itself
+            "from llm_rosetta.converters.base import *\n"
+            "from llm_rosetta.converters.base.helpers import *\n"
+            "from llm_rosetta.converters.base.tools import *",
+            namespace,
+        )
+
+    def test_base_does_not_import_a_family_package(self) -> None:
+        """Families depend on ``base``; ``base`` must not depend on them.
+
+        The direction is what keeps the shared layer free of per-type
+        knowledge (and keeps the import graph acyclic); a helper that needs a
+        family's code belongs in that family.
+        """
+        import ast
+        import importlib.util
+        from pathlib import Path
+
+        spec = importlib.util.find_spec("llm_rosetta.converters.base")
+        assert spec is not None and spec.origin is not None
+        root = Path(spec.origin).parent
+        families = (
+            "llm_rosetta.converters.llm",
+            "llm_rosetta.converters.embedding",
+            "llm_rosetta.converters.rerank",
+            "llm_rosetta.converters.decision",
+            "llm_rosetta.converters.registry",
+        )
+
+        offences: list[str] = []
+        for path in sorted(root.rglob("*.py")):
+            tree = ast.parse(path.read_text(), filename=str(path))
+            package = _module_name(path, root)
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ImportFrom):
+                    target = _resolve_import(node, package)
+                    if target and any(
+                        target == family or target.startswith(family + ".")
+                        for family in families
+                    ):
+                        offences.append(f"{path}: {target}")
+                elif isinstance(node, ast.Import):
+                    for alias in node.names:
+                        if any(
+                            alias.name == family or alias.name.startswith(family + ".")
+                            for family in families
+                        ):
+                            offences.append(f"{path}: {alias.name}")
+        assert offences == [], offences
+
+
+def _module_name(path, root) -> str:
+    """``.../converters/base/helpers/x.py`` → ``...base.helpers``."""
+    rel = path.relative_to(root)
+    parts = ["llm_rosetta", "converters", "base", *rel.parts[:-1]]
+    return ".".join(parts)
+
+
+def _resolve_import(node, package: str) -> str | None:
+    """Resolve an ``ImportFrom`` to an absolute module name."""
+    if node.level == 0:
+        return node.module
+    parts = package.split(".")
+    keep = len(parts) - (node.level - 1)
+    if keep < 0:
+        return None
+    resolved = parts[:keep]
+    if node.module:
+        resolved += node.module.split(".")
+    return ".".join(resolved)
