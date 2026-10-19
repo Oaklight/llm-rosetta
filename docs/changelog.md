@@ -68,6 +68,9 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 - **Embedding 与 rerank 端点补全，并加入 Google GenAI**（epic [#1050](https://github.com/Oaklight/llm-rosetta/issues/1050)，issue [#926](https://github.com/Oaklight/llm-rosetta/issues/926)）：`google_generate` 加入 embedding 转换器注册表——单输入用 `embedContent`，多输入用 `batchEmbedContents`，模型放在 URL 中，批量响应不带用量元数据——因此 `/v1/embeddings` 现在可在 OpenAI、Cohere、Jina、Voyage 与 Google 之间转换。八个提供方 shim（`openai--embedding`、`cohere--embedding`、`cohere--rerank`、`jina--embedding`、`jina--rerank`、`voyage--embedding`、`voyage--rerank`、`google--embedding`）声明各自端点的格式、`connection.default_path` 与连接默认值，统一提供方只需一行 `embedding_shim` / `rerank_shim` 即可承载 embedding 或 rerank 流量。源格式检测改由 model type descriptor 负责（`gateway/source_formats.py`），并识别 Google 形状的请求体（`content.parts`、`requests`）。`default_embedding_format` 新增 `google_generate`。参见 [embedding 格式](guide/embedding-formats.md) 与 [非 LLM 端点](gateway/configuration.md#non-llm-endpoints)。
 
+- **Decision 端点与 embedding、rerank 采用同一套解析方式**（issue [#926](https://github.com/Oaklight/llm-rosetta/issues/926)）：`decision` descriptor 现在负责源格式探测与各 format 的上游路径——`openai_decisions` 使用 `/v1/decisions`，`systemone` 使用 `/v1/systemone`——统一条目只需声明 `decision_format`。旧的 `decision_providers` 段现在会被解析（此前被忽略），其中文档写法的 `"type": "typesafe"` 会经由 shim 解析为对应 format；`decision_models` 也接受 failover 的 `providers` 列表。两个内置 shim 改用规范名 `openai--openai_decisions` 与 `typesafe--systemone`，裸名保留为别名。参见 [decision 格式](guide/decision-formats.md)。
+
+
 ### 变更（**破坏性变更**）
 
 - **（破坏性）Embedding 流量不再回退到 chat 提供方**（issue [#926](https://github.com/Oaklight/llm-rosetta/issues/926)）：当模型没有 embedding 路由时，`/v1/embeddings` 会把请求不经过转换直接转发给该模型的 chat 提供方，前提是上游恰好实现了 OpenAI 形状的 embedding。这个前提并不属于 chat 提供方的契约，而且该回退会让写错的模型名落到一个无关端点上。现在 embedding 请求只通过 embedding 端点路由：没有 `embedding_models` 条目（统一提供方上没有 `"type": "embedding"`）的模型返回 `404`。
