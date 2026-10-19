@@ -582,6 +582,9 @@ GET /admin/api/requests?limit=50&offset=0&model=gpt-4o&provider=openai&status=ok
 | `model` | `string` | — | 按模型名称过滤。 |
 | `provider` | `string` | — | 按目标提供方过滤。 |
 | `status` | `"ok"` \| `"error"` | — | `ok` = 2xx/3xx，`error` = 4xx/5xx。 |
+| `api_key_label` | `string` | — | 按 API 密钥标签过滤。 |
+| `since` | ISO 8601 | — | 条目时间戳的下界（含）。 |
+| `until` | ISO 8601 | — | 条目时间戳的上界（**不含**），相邻时间窗不会重复计入边界时刻。接受 `Z` 或显式偏移；无法解析的值返回 `400`。 |
 
 **响应**
 
