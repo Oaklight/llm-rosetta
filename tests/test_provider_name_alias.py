@@ -490,7 +490,7 @@ class TestShimBoundaryWarnings:
                 "chat_completions",
                 "chat_completions",
                 source_shim="deepseek--openai_chat",
-                target_shim="argo--openai_chat",
+                target_shim="minimax--openai_chat",
             )
         dep = [w for w in caught if issubclass(w.category, DeprecationWarning)]
         assert len(dep) == 2
@@ -690,12 +690,10 @@ class TestLegacyShimAliasStillResolves:
         "legacy,canonical",
         [
             ("deepseek--openai_chat", "deepseek--chat_completions"),
-            ("argo--openai_chat", "argo--chat_completions"),
             ("openai", "openai--chat_completions"),
             ("anthropic", "anthropic--messages"),
             # The `anthropic` base became `messages` (#917) without leaving a
             # per-vendor alias; the bare glyph above never covered these.
-            ("argo--anthropic", "argo--messages"),
             ("minimax--anthropic", "minimax--messages"),
             ("openrouter--anthropic", "openrouter--messages"),
         ],
@@ -710,16 +708,37 @@ class TestLegacyShimAliasStillResolves:
         assert legacy_shim is not None
         assert legacy_shim is canonical_shim
 
+    def test_moved_legacy_names_canonicalise_without_a_shim(self):
+        """The Argo aliases stay as a spelling map, not as a shim lookup.
+
+        Their targets live in a standalone package, so both spellings resolve
+        to no shim — but canonicalising first is what lets the gateway's
+        stranded-config error name the package and the preset.
+        """
+        from llm_rosetta.provider_names import canonical_shim_name
+        from llm_rosetta.shims import get_shim
+
+        for legacy, canonical in (
+            ("argo--openai_chat", "argo--chat_completions"),
+            ("argo--anthropic", "argo--messages"),
+            ("argo--openai_responses", "argo--open_responses"),
+        ):
+            assert canonical_shim_name(legacy) == canonical
+            assert get_shim(legacy) is None
+            assert get_shim(canonical) is None
+
     def test_every_shim_alias_target_is_registered(self):
-        """A shim alias has to point at a shim that exists.
+        """A shim alias has to point at a shim that exists in core or a package.
 
         The table is hand-maintained, so a rename that renames the shim but
         forgets to leave the canonical name registered — or a typo on either
         side — shows up here rather than as a silent ``get_shim(...) is None``
-        at runtime.
+        at runtime.  Names supplied by a standalone package are allowed: they
+        are unregistered by design, and the alias is the spelling map that
+        leads a stale config to the package-aware error.
         """
         from llm_rosetta.provider_names import LEGACY_SHIM_ALIASES
-        from llm_rosetta.shims import list_shims
+        from llm_rosetta.shims import find_source_package, list_shims
         from llm_rosetta.shims.providers import load_providers
 
         load_providers()
@@ -727,6 +746,6 @@ class TestLegacyShimAliasStillResolves:
         unregistered = {
             old: new
             for old, new in LEGACY_SHIM_ALIASES.items()
-            if new not in registered
+            if new not in registered and find_source_package(new) is None
         }
         assert unregistered == {}

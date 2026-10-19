@@ -1225,7 +1225,7 @@ class TestConversionPipeline:
     def test_implied_target_applies_the_custom_tool_policy(self):
         """A custom tool survives a shim-spelled target that declares support.
 
-        Pins the custom-tools site on its own.  ``argo--chat_completions`` declares
+        Pins the custom-tools site on its own.  ``openai--chat_completions`` declares
         ``custom_tools: true``, so the implied form must keep the tool rather
         than downgrade it to a function with a synthesised ``input`` schema.
         """
@@ -1238,12 +1238,12 @@ class TestConversionPipeline:
             "tools": [{"type": "custom", "name": "x", "format": {"type": "text"}}],
         }
         out = ConversionPipeline(
-            "open_responses", "argo--chat_completions"
+            "open_responses", "openai--chat_completions"
         ).convert_request(copy.deepcopy(body))
         explicit = ConversionPipeline(
             "open_responses",
-            "argo--chat_completions",
-            target_shim=resolve_shim("argo--chat_completions"),
+            "openai--chat_completions",
+            target_shim=resolve_shim("openai--chat_completions"),
         ).convert_request(copy.deepcopy(body))
         assert out["tools"] == [
             {"type": "custom", "custom": {"name": "x", "format": {"type": "text"}}}

@@ -6,7 +6,7 @@ This module provides two layers of API:
 full conversion lifecycle (Phase 1→2→4).  Use this when you need
 request conversion, response conversion, and/or streaming:
 
-    pipeline = ConversionPipeline("chat_completions", "messages", target_shim="argo--messages")
+    pipeline = ConversionPipeline("chat_completions", "messages", target_shim="anthropic--messages")
     target_body = pipeline.convert_request(body)
     # ... transport sends target_body, receives upstream_response ...
     source_response = pipeline.convert_response(upstream_response)
@@ -239,7 +239,7 @@ class ConversionPipeline:
     Usage::
 
         pipeline = ConversionPipeline("chat_completions", "messages",
-                                      shim="argo--messages")
+                                      shim="anthropic--messages")
 
         # Phase 1+2: request conversion
         target_body = pipeline.convert_request(body)

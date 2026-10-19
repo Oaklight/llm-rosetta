@@ -64,6 +64,7 @@ from .catalog import (  # noqa: E402
     SHIM_SOURCE_PACKAGES,
     ShimSourcePackage,
     find_source_package,
+    get_source_package,
 )
 from .removals import (  # noqa: E402
     SHIM_REMOVALS,
@@ -109,6 +110,7 @@ __all__ = [
     "SHIM_SOURCE_PACKAGES",
     "ShimSourcePackage",
     "find_source_package",
+    "get_source_package",
     # Transforms
     "Transform",
     "apply_transforms",

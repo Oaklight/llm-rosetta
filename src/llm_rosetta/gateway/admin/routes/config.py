@@ -1178,10 +1178,13 @@ def _validate_shim_sources_body(
     """
     paths = body.get("paths")
     remotes = body.get("remotes")
+    presets = body.get("presets")
     if paths is not None and not isinstance(paths, list):
         return JSONResponse({"error": "'paths' must be an array"}, status_code=400)
     if remotes is not None and not isinstance(remotes, list):
         return JSONResponse({"error": "'remotes' must be an array"}, status_code=400)
+    if presets is not None and not isinstance(presets, list):
+        return JSONResponse({"error": "'presets' must be an array"}, status_code=400)
     for entry in remotes or []:
         if not isinstance(entry, dict) or not entry.get("url"):
             return JSONResponse(
@@ -1193,6 +1196,37 @@ def _validate_shim_sources_body(
     except ValueError as exc:
         return JSONResponse({"error": str(exc)}, status_code=400)
     return None
+
+
+def _merge_shim_sources_body(
+    section: dict[str, Any], body: dict[str, Any]
+) -> dict[str, Any]:
+    """Merge a validated PUT body into the ``shims`` section.
+
+    A key absent from *body* is left alone; a present ``null`` for a list key
+    also leaves it alone (the panel sends the full state it wants).  Optional
+    knobs clear on a falsy value, and empty sub-keys are dropped so the
+    section stays tidy.
+    """
+    for key in ("paths", "remotes", "presets"):
+        if body.get(key) is not None:
+            section[key] = body[key]
+    for key, empty in (
+        ("cache_dir", ""),
+        ("remote_ttl", None),
+        ("strict", False),
+    ):
+        if key not in body:
+            continue
+        value = body[key]
+        if value is None or value == empty:
+            section.pop(key, None)
+        else:
+            section[key] = value
+    for key in ("paths", "remotes", "presets", "cache_dir"):
+        if key in section and not section[key]:
+            section.pop(key)
+    return section
 
 
 async def put_shim_sources(request: Any) -> Response:
@@ -1207,9 +1241,6 @@ async def put_shim_sources(request: Any) -> Response:
     if validation_error is not None:
         return validation_error
 
-    paths = body.get("paths")
-    remotes = body.get("remotes")
-
     async with config_mutate(request) as ctx:
         if ctx.error:
             return ctx.error
@@ -1217,28 +1248,7 @@ async def put_shim_sources(request: Any) -> Response:
         section = ctx.data.get("shims")
         if not isinstance(section, dict):
             section = {}
-        if paths is not None:
-            section["paths"] = paths
-        if remotes is not None:
-            section["remotes"] = remotes
-        # Optional knobs: a falsy value clears the key rather than persisting
-        # a meaningless `""` / `false` / `null`.
-        for key, empty in (
-            ("cache_dir", ""),
-            ("remote_ttl", None),
-            ("strict", False),
-        ):
-            if key not in body:
-                continue
-            value = body[key]
-            if value is None or value == empty:
-                section.pop(key, None)
-            else:
-                section[key] = value
-        # Drop empty sub-keys so the section stays tidy.
-        for key in ("paths", "remotes", "cache_dir"):
-            if key in section and not section[key]:
-                section.pop(key)
+        section = _merge_shim_sources_body(section, body)
         if section:
             ctx.data["shims"] = section
         else:
@@ -1484,7 +1494,7 @@ async def fetch_upstream_models(request: Any, **kwargs: Any) -> Response:
             {"error": "Upstream returned non-JSON response"},
         )
 
-    # Resolve model_id_field from shim (e.g. Argo uses "internal_id")
+    # Resolve model_id_field from shim (e.g. "internal_id" instead of "model")
     shim_name = config.provider_shim_names.get(provider_name)
     shim = get_shim(shim_name) if shim_name else None
     id_field = (

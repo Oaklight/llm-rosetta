@@ -27,15 +27,6 @@ from dataclasses import dataclass
 from typing import Any
 
 from ..provider_names import canonical_provider_name, canonical_shim_name
-from .catalog import SHIM_SOURCE_PACKAGES
-
-#: The standalone package the remaining removals move to.  Its remote is
-#: recorded once, in the source catalogue the admin presets also read.
-_ARGO = next(entry for entry in SHIM_SOURCE_PACKAGES if entry.key == "argo")
-
-#: The version that removes the built-in vendor shims and their legacy names.
-#: It is a 0.x minor because the removal is breaking (see #919).
-_REMOVAL_VERSION = "0.16.0"
 
 
 @dataclass(frozen=True)
@@ -67,31 +58,12 @@ class ShimRemoval:
         }
 
 
-#: Every built-in shim with a removal scheduled.  Adding an entry is what makes
-#: the advisory, the admin preset and the CI gate know about a shim at once.
-SHIM_REMOVALS: tuple[ShimRemoval, ...] = (
-    ShimRemoval(
-        shim="argo--chat_completions",
-        removed_in=_REMOVAL_VERSION,
-        remote=_ARGO.remote,
-        source_repo=_ARGO.repo,
-        legacy_names=("argo--openai_chat",),
-    ),
-    ShimRemoval(
-        shim="argo--messages",
-        removed_in=_REMOVAL_VERSION,
-        remote=_ARGO.remote,
-        source_repo=_ARGO.repo,
-        legacy_names=("argo--anthropic",),
-    ),
-    ShimRemoval(
-        shim="argo--open_responses",
-        removed_in=_REMOVAL_VERSION,
-        remote=_ARGO.remote,
-        source_repo=_ARGO.repo,
-        legacy_names=("argo--openai_responses",),
-    ),
-)
+#: Every built-in shim with a removal scheduled.  Empty since 0.14.0: the
+#: ALCF, AskSage and Argo shims all ship standalone, and their names are served
+#: by :data:`llm_rosetta.shims.catalog.SHIM_SOURCE_PACKAGES`.  Adding an entry
+#: here is still what makes the advisory, the admin preset and the CI gate know
+#: about a future removal at once.
+SHIM_REMOVALS: tuple[ShimRemoval, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -147,7 +119,7 @@ def detect_shim_removals(
     providers: Mapping[str, Any] | None,
     *,
     external_shims: Iterable[str] = (),
-    removals: Sequence[ShimRemoval] = SHIM_REMOVALS,
+    removals: Sequence[ShimRemoval] | None = None,
 ) -> list[ShimRemovalAdvisory]:
     """Advisories for providers that name a shim scheduled for removal.
 
@@ -169,6 +141,8 @@ def detect_shim_removals(
     """
     if not providers:
         return []
+    if removals is None:
+        removals = SHIM_REMOVALS
     scheduled = {entry.shim: entry for entry in removals}
     supplied = set(external_shims)
     advisories: list[ShimRemovalAdvisory] = []
@@ -215,7 +189,7 @@ def parse_version(text: str) -> tuple[int, ...]:
 def removals_due(
     version: str | tuple[int, ...],
     *,
-    removals: Sequence[ShimRemoval] = SHIM_REMOVALS,
+    removals: Sequence[ShimRemoval] | None = None,
 ) -> list[ShimRemoval]:
     """Return the removals whose version has been reached by *version*.
 
@@ -231,6 +205,8 @@ def removals_due(
         The removals that are due, in manifest order.
     """
     current = parse_version(version) if isinstance(version, str) else tuple(version)
+    if removals is None:
+        removals = SHIM_REMOVALS
     return [
         entry
         for entry in removals
@@ -279,14 +255,14 @@ _MARKER = "shim-removal-ok"
 def scan_removal_references(
     roots: Iterable[str | os.PathLike[str]],
     *,
-    removals: Sequence[ShimRemoval] = SHIM_REMOVALS,
+    removals: Sequence[ShimRemoval] | None = None,
     exempt_files: Iterable[str] = (),
     marker: str = _MARKER,
 ) -> list[RemovalReference]:
     """Find every line under *roots* that still names a removed shim.
 
-    Matching is on whole tokens (``argo--anthropic`` does not match
-    ``argo--anthropic-extra``), and both a shim's canonical name and its legacy
+    Matching is on whole tokens (``acme--messages`` does not match
+    ``acme--messages-extra``), and both a shim's canonical name and its legacy
     spellings count, because either one is a stale reference once the shim is
     gone.
 
@@ -305,6 +281,8 @@ def scan_removal_references(
     Returns:
         One reference per matching line, sorted by path then line.
     """
+    if removals is None:
+        removals = SHIM_REMOVALS
     names = sorted(
         {entry.shim for entry in removals}
         | {name for entry in removals for name in entry.legacy_names}

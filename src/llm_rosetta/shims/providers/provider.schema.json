@@ -29,7 +29,7 @@
   "properties": {
     "name": {
       "type": "string",
-      "description": "Canonical provider identifier (e.g. 'deepseek', 'argo--messages')."
+      "description": "Canonical provider identifier (e.g. 'deepseek', 'openai--chat_completions')."
     },
     "model_type": {
       "type": "string",

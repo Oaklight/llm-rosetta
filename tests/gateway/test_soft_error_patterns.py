@@ -225,31 +225,31 @@ class TestStreamSoftError:
 # ---------------------------------------------------------------------------
 
 
-class TestArgoShimLoading:
-    @pytest.fixture(autouse=True)
-    def _ensure_shims_loaded(self):
-        from llm_rosetta.shims import get_shim
-        from llm_rosetta.shims.providers import load_providers
+class TestShimSoftErrorPatternsLoading:
+    def test_soft_error_patterns_load_from_yaml(self, tmp_path):
+        from llm_rosetta.shims import get_shim, unregister_shim
+        from llm_rosetta.shims.providers import load_providers_from_dir
 
-        if get_shim("argo--messages") is None:
-            load_providers()
-
-    def test_argo_anthropic_shim_has_patterns(self):
-        from llm_rosetta.shims import get_shim
-
-        shim = get_shim("argo--messages")
-        assert shim is not None
-        assert len(shim.soft_error_patterns) > 0
-        p = shim.soft_error_patterns[0]
-        assert "AUTHENTICATION NOTICE FROM ARGO" in p.pattern
-        assert p.status_code == 403
-
-    def test_argo_openai_chat_shim_has_patterns(self):
-        from llm_rosetta.shims import get_shim
-
-        shim = get_shim("argo--chat_completions")
-        assert shim is not None
-        assert len(shim.soft_error_patterns) > 0
-        p = shim.soft_error_patterns[0]
-        assert "AUTHENTICATION NOTICE FROM ARGO" in p.pattern
-        assert p.status_code == 403
+        leaf = tmp_path / "acme"
+        leaf.mkdir()
+        (leaf / "provider.yaml").write_text(
+            "name: acme--messages\n"
+            "model_type: llm\n"
+            "format: messages\n"
+            "connection:\n"
+            "  base_url: https://example.invalid\n"
+            "soft_error_patterns:\n"
+            "  - pattern: 'AUTHENTICATION NOTICE FROM ARGO'\n"
+            "    status_code: 403\n"
+            "    message: ARGO authentication error\n"
+        )
+        try:
+            load_providers_from_dir(tmp_path)
+            shim = get_shim("acme--messages")
+            assert shim is not None
+            assert len(shim.soft_error_patterns) > 0
+            p = shim.soft_error_patterns[0]
+            assert "AUTHENTICATION NOTICE FROM ARGO" in p.pattern
+            assert p.status_code == 403
+        finally:
+            unregister_shim("acme--messages")

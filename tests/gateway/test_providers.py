@@ -9,31 +9,28 @@ from llm_rosetta.shims.providers import load_providers
 
 
 class TestBuildProviderInfo:
-    def test_argo_openai_chat_uses_bearer_auth(self, monkeypatch):
+    def test_chat_shim_uses_bearer_auth(self, monkeypatch):
         load_providers()
-        monkeypatch.setenv("ARGO_API_KEY", "pding")
+        monkeypatch.setenv("OPENAI_API_KEY", "pding")
 
-        info = build_provider_info("argo--chat_completions", {})
+        info = build_provider_info("openai--chat_completions", {})
 
         assert info.auth_headers() == {"Authorization": "Bearer pding"}
-        assert (
-            info.upstream_url("gpt5")
-            == "https://apps.inside.anl.gov/argoapi/v1/chat/completions"
-        )
+        assert info.upstream_url("gpt5") == "https://api.openai.com/v1/chat/completions"
 
-    def test_argo_anthropic_uses_x_api_key_auth(self, monkeypatch):
+    def test_messages_shim_uses_x_api_key_auth(self, monkeypatch):
         load_providers()
-        monkeypatch.setenv("ARGO_API_KEY", "pding")
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "pding")
 
-        info = build_provider_info("argo--messages", {})
+        info = build_provider_info("anthropic--messages", {})
 
         assert info.auth_headers() == {
             "x-api-key": "pding",
             "anthropic-version": "2023-06-01",
         }
         assert (
-            info.upstream_url("claudeopus47")
-            == "https://apps.inside.anl.gov/argoapi/v1/messages"
+            info.upstream_url("claude-opus-4-6")
+            == "https://api.anthropic.com/v1/messages"
         )
 
 

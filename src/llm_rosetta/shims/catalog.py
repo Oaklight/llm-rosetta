@@ -7,11 +7,11 @@ this module is the single place that records both: the admin panel turns each
 entry into a one-click preset, and the removal manifest reuses the same remote
 for the shims it schedules to leave core.
 
-The catalogue is deliberately independent of the removal schedule.  A package
-that was never in a stable release (ALCF, AskSage) can leave core without a
-deprecation window, while still being offered as a source in the panel; a
-package that is still built in (Argo) is offered too, so an operator can adopt
-the standalone source before the removal lands.
+The catalogue is independent of the removal schedule.  All three packages now
+ship standalone: the panel offers each of them as a preset, and the config's
+``shims.presets`` key resolves the same entries by name, so a provider config
+that still spells ``argo--*`` (or ``alcf--*``, ``asksage--*``) keeps working
+once the operator declares the preset.
 """
 
 from __future__ import annotations
@@ -32,8 +32,8 @@ class ShimSourcePackage:
             under ``src/<package>/providers``.
         shims: Canonical names of the shims the package provides.
         token_env: Environment variable holding the forge token, for a private
-            repository.  The three repositories this project publishes are
-            private, so the preset names ``GITHUB_TOKEN`` by default.
+            repository or mirror.  The repositories this project publishes are
+            public, so the presets carry no token by default.
     """
 
     key: str
@@ -41,7 +41,7 @@ class ShimSourcePackage:
     repo: str
     package: str
     shims: tuple[str, ...]
-    token_env: str | None = "GITHUB_TOKEN"
+    token_env: str | None = None
 
     @property
     def remote(self) -> dict[str, Any]:
@@ -68,6 +68,24 @@ class ShimSourcePackage:
             "remote": self.remote,
             "shims": list(self.shims),
         }
+
+
+def get_source_package(key: str) -> ShimSourcePackage | None:
+    """Return the standalone package with *key*, if any.
+
+    This is the lookup ``shims.presets`` uses: a config names a package
+    (``"argo"``) rather than spelling out its repository and path.
+
+    Args:
+        key: A catalogue key, e.g. ``"argo"``.
+
+    Returns:
+        The matching package, or ``None`` for an unknown key.
+    """
+    for package in SHIM_SOURCE_PACKAGES:
+        if package.key == key:
+            return package
+    return None
 
 
 def find_source_package(shim_name: str) -> ShimSourcePackage | None:

@@ -96,19 +96,23 @@ LEGACY_SHIM_ALIASES: dict[str, str] = {
     "google_interactions": "google--google_interactions",
     "anthropic": "anthropic--messages",
     # ``<provider>--<old base>`` → ``<provider>--<canonical base>``.
+    # The Argo built-ins moved to a standalone package in 0.14.0, so these
+    # aliases no longer lead to a registered shim; they are kept so a config
+    # still using an old spelling canonicalises first and reaches the
+    # stranded-config error, which names the package and the preset.
     "argo--openai_chat": "argo--chat_completions",
+    "argo--openai_responses": "argo--open_responses",
     "deepseek--openai_chat": "deepseek--chat_completions",
     "kilo--openai_chat": "kilo--chat_completions",
     "minimax--openai_chat": "minimax--chat_completions",
     "openrouter--openai_chat": "openrouter--chat_completions",
     "volcengine--openai_chat": "volcengine--chat_completions",
-    "argo--openai_responses": "argo--open_responses",
     "deepseek--openai_responses": "deepseek--open_responses",
     "volcengine--openai_responses": "volcengine--open_responses",
     # ``<provider>--anthropic`` → ``<provider>--messages``: the ``anthropic``
     # base became ``messages`` (#917), which renamed these shims but left no
     # per-vendor alias behind — only the bare ``anthropic`` glyph above, which
-    # never covered ``argo--anthropic`` and friends.
+    # never covered ``minimax--anthropic`` and friends.
     "argo--anthropic": "argo--messages",
     "minimax--anthropic": "minimax--messages",
     "openrouter--anthropic": "openrouter--messages",

@@ -116,9 +116,6 @@ class TestLoadProviders:
         expected = {
             # Grouped vendor shims use the canonical ``<provider>--<base>`` form.
             "anthropic--messages",
-            "argo--messages",
-            "argo--chat_completions",
-            "argo--open_responses",
             # Embedding and rerank shims.
             "cohere--embedding",
             "cohere--rerank",
@@ -339,8 +336,6 @@ class TestLoadProviders:
             "google--google_interactions": "google_interactions",
             "deepseek--chat_completions": "chat_completions",
             "deepseek--open_responses": "open_responses",
-            "argo--chat_completions": "chat_completions",
-            "argo--open_responses": "open_responses",
             "minimax--chat_completions": "chat_completions",
             "minimax--messages": "messages",
             "moonshot": "chat_completions",
@@ -361,9 +356,6 @@ class TestLoadProviders:
 
     # Shims that intentionally have no public logo
     _LOGO_EXEMPT = {
-        "argo--messages",
-        "argo--chat_completions",
-        "argo--open_responses",
         "typesafe--systemone",
         "openai--openai_decisions",
     }

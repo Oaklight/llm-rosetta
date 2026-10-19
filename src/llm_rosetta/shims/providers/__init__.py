@@ -24,7 +24,7 @@ may export ``pre_ir_transforms`` and/or ``post_ir_transforms`` tuples
 
 **Grouped directories** are also supported: a child directory that does
 NOT contain ``provider.yaml`` but DOES contain subdirectories with one is
-treated as a *group folder* (e.g. ``argo/messages/``, ``argo/chat_completions/``).
+treated as a *group folder* (e.g. ``vendor/messages/``, ``vendor/chat_completions/``).
 
 Plugin shims
 ------------
@@ -568,7 +568,7 @@ def _load_single_provider(
     register_shim(shim)
 
     # Register convention-based model_list_transform if the transforms
-    # module exports one (e.g. Argo shims that slug-ify display names).
+    # module exports one (e.g. shims that slug-ify display names).
     if transforms_mod is not None:
         mlt = getattr(transforms_mod, "model_list_transform", None)
         if mlt is not None:
@@ -648,7 +648,7 @@ def load_providers_from_dir(
 
     * **Flat** — a direct child with ``provider.yaml`` (e.g. ``openai/``).
     * **Grouped** — a child WITHOUT ``provider.yaml`` whose own children
-      each contain one (e.g. ``argo/messages/``, ``argo/chat_completions/``).
+      each contain one (e.g. ``vendor/messages/``, ``vendor/chat_completions/``).
 
     Args:
         providers_dir: Root directory to scan for provider subdirectories.

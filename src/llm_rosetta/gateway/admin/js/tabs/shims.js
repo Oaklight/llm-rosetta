@@ -1,8 +1,9 @@
 // shims.js — External shim sources (Settings tab).
 //
-// Lets the operator declare extra shim directories and remote shim archives
-// from the admin UI.  The two textareas map 1:1 onto the top-level `shims`
-// config section; the status table reports what the gateway loaded.
+// Lets the operator declare extra shim directories, preload a catalogue
+// package by name, and add remote shim archives from the admin UI.  The
+// fields map 1:1 onto the top-level `shims` config section; the status table
+// reports what the gateway loaded.
 import { S } from '../core/state.js';
 import { t } from '../core/i18n.js';
 import { api, showToast, esc } from '../core/utils.js';
@@ -32,6 +33,10 @@ function renderShimSources() {
   if (!pathsEl) return;
   const sec = _section();
   pathsEl.value = Array.isArray(sec.paths) ? sec.paths.join('\n') : '';
+  const presetsEl = document.getElementById('shimPresetsInput');
+  if (presetsEl) {
+    presetsEl.value = Array.isArray(sec.presets) ? sec.presets.join(', ') : '';
+  }
   const remEl = document.getElementById('shimRemotesInput');
   if (remEl) {
     remEl.value = Array.isArray(sec.remotes) && sec.remotes.length
@@ -91,6 +96,9 @@ async function saveShimSources() {
   const paths = (document.getElementById('shimPathsInput').value || '')
     .split('\n').map(s => s.trim()).filter(Boolean);
 
+  const presets = (document.getElementById('shimPresetsInput').value || '')
+    .split(/[\s,]+/).map(s => s.trim()).filter(Boolean);
+
   let remotes = [];
   const rawRemotes = (document.getElementById('shimRemotesInput').value || '').trim();
   if (rawRemotes) {
@@ -104,7 +112,7 @@ async function saveShimSources() {
   }
 
   try {
-    const body = { paths, remotes };
+    const body = { paths, remotes, presets };
     const cacheDir = (document.getElementById('shimCacheDirInput').value || '').trim();
     body.cache_dir = cacheDir;
     const ttlRaw = (document.getElementById('shimTtlInput').value || '').trim();

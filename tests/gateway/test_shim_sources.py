@@ -24,10 +24,19 @@ from llm_rosetta.shims.provider_shim import _reset_registry
 
 @pytest.fixture(autouse=True)
 def _clean_registry():
-    """Reset the shim registry before and after each test."""
+    """Reset the shim registry before and after each test.
+
+    Tests here start from *no* shims so ``apply_shim_sources`` is what puts
+    shims in the registry.  The built-ins are restored on teardown: leaving the
+    registry empty would break every later test in the process that resolves a
+    provider through a built-in shim.
+    """
+    from llm_rosetta.shims.providers import load_providers
+
     _reset_registry()
     yield
     _reset_registry()
+    load_providers()
 
 
 def _write_provider(root: Path, slug: str, name: str) -> None:
@@ -164,6 +173,36 @@ class TestApplyShimSources:
         )
 
         assert seen and seen[0]["refresh"] == "always"
+
+
+class TestMergeShimSourcesBody:
+    """The PUT handler's merge, in isolation from the request plumbing."""
+
+    def test_presets_are_persisted(self):
+        from llm_rosetta.gateway.admin.routes.config import _merge_shim_sources_body
+
+        assert _merge_shim_sources_body({}, {"presets": ["argo"]}) == {
+            "presets": ["argo"]
+        }
+
+    def test_absent_presets_leave_the_section_alone(self):
+        from llm_rosetta.gateway.admin.routes.config import _merge_shim_sources_body
+
+        section = {"presets": ["argo"]}
+        assert _merge_shim_sources_body(section, {"paths": []}) == {"presets": ["argo"]}
+
+    def test_empty_presets_are_dropped(self):
+        from llm_rosetta.gateway.admin.routes.config import _merge_shim_sources_body
+
+        assert _merge_shim_sources_body({"presets": ["argo"]}, {"presets": []}) == {}
+
+    def test_other_keys_survive_a_presets_update(self):
+        from llm_rosetta.gateway.admin.routes.config import _merge_shim_sources_body
+
+        merged = _merge_shim_sources_body(
+            {"paths": ["/a"], "strict": True}, {"presets": ["alcf"]}
+        )
+        assert merged == {"paths": ["/a"], "strict": True, "presets": ["alcf"]}
 
 
 class TestAdminHelpers:

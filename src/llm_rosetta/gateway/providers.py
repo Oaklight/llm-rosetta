@@ -404,10 +404,10 @@ def build_provider_info(
             message += (
                 f" Shim {name!r} is not built in: it ships in the standalone "
                 f"package {missing_package.label!r} ({missing_package.repo}). "
-                "Declare its source under `shims.remotes` (Settings -> Shim "
-                f"Sources offers the preset): {missing_package.remote!r}. If the "
-                "source is already declared, check the shim-source status for a "
-                "load failure."
+                f"Declare `shims.presets: [{missing_package.key!r}]` (or the "
+                f"equivalent `shims.remotes` entry: {missing_package.remote!r}); "
+                "Settings -> Shim Sources offers both. If the source is already "
+                "declared, check the shim-source status for a load failure."
             )
         raise ValueError(message)
 

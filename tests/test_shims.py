@@ -186,10 +186,6 @@ class TestGroupedConfig:
         assert ds.connection.base_url == "https://api.deepseek.com"
         assert ds.tools.custom_tools is False
 
-        argo = get_shim("argo--messages")
-        assert argo is not None
-        assert argo.connection.model_id_field == "internal_id"
-
         # session_header is parsed from the shim's connection block.
         oc = get_shim("opencode--chat_completions")
         assert oc is not None
@@ -353,7 +349,6 @@ class TestBuiltinShims:
         pairs = (
             ("openai", "openai--chat_completions"),
             ("anthropic", "anthropic--messages"),
-            ("argo--chat_completions", "argo--chat_completions"),
             ("deepseek--open_responses", "deepseek--open_responses"),
             ("volcengine--chat_completions", "volcengine--chat_completions"),
             ("typesafe", "typesafe--systemone"),
@@ -385,23 +380,10 @@ class TestBuiltinShims:
         assert shim is not None
         assert shim.base == "open_responses"
 
-    def test_argo_responses_base_type(self):
-        shim = get_shim("argo--open_responses")
-        assert shim is not None
-        assert shim.base == "open_responses"
-
     def test_anthropic_base_type(self):
         shim = get_shim("anthropic--messages")
         assert shim is not None
         assert shim.base == "messages"
-
-    def test_argo_anthropic_preserves_unsigned_blocks(self):
-        shim = get_shim("argo--messages")
-        assert shim is not None
-        assert shim.reasoning is not None
-        assert shim.reasoning.unsigned_blocks == "preserve"
-        assert shim.model_reasoning is not None
-        assert shim.model_reasoning["claudeopus47"].unsigned_blocks == "preserve"
 
     def test_signature_requiring_messages_shims_preserve_unsigned_blocks(self):
         """Anthropic rejects a thinking block without a signature (#954).
@@ -482,12 +464,10 @@ class TestBuiltinShims:
         next one, so this walks every shim YAML that carries a section.
 
         The walk deliberately stops at ``effort_field``, the field whose loss is
-        silent.  ``effort_range`` is per lane instead: ``argo--chat_completions``
-        documents its omission in place ("effort_range not set = full IR
-        ladder") and the two MiniMax lanes carry their own notes, while
-        ``argo--open_responses`` has the same shape as the chat lane with no
-        note at all — so a blanket assertion over that field would encode an
-        opinion rather than a rule.
+        silent.  ``effort_range`` is per lane instead: some shims document their
+        omission in place ("effort_range not set = full IR ladder"), while
+        others declare their own range, so a blanket assertion over that field
+        would encode an opinion rather than a rule.
         """
         from llm_rosetta._vendor.yaml import load as yaml_load
         from llm_rosetta.converters.base.helpers.reasoning import (
@@ -546,7 +526,7 @@ class TestBuiltinShims:
         the route resolver, but the YAML loader never read the key, so the
         declared value was silently dropped and relocation never fired.
         """
-        for name in ("openai--chat_completions", "argo--chat_completions"):
+        for name in ("openai--chat_completions",):
             shim = get_shim(name)
             assert shim is not None
             assert shim.max_tool_description_length == 1024, (
@@ -603,14 +583,6 @@ class TestResponsesProfileTraits:
         assert shim.response_id_prefix == ""
         assert shim.store_default is None
         assert shim.preserve_fields == ()
-
-    def test_argo_declares_prefix_and_only_populated_fields(self):
-        """ARGO returns ``resp_`` ids and populates two echo fields."""
-        shim = get_shim("argo--open_responses")
-        assert shim is not None
-        assert shim.response_id_prefix == "resp_"
-        assert shim.store_default is None
-        assert set(shim.preserve_fields) == {"content_filters", "tool_usage"}
 
     def test_volcengine_keeps_store_and_gains_prefix(self):
         """ARK is the one non-OpenAI shim where ``store_default: true`` holds.
@@ -736,11 +708,11 @@ class TestShimConverterIntegration:
         converter = get_converter_for_provider("deepseek--open_responses")
         assert isinstance(converter, OpenResponsesConverter)
 
-    def test_argo_responses_resolves_to_responses_converter(self):
+    def test_openai_responses_resolves_to_responses_converter(self):
         from llm_rosetta.auto_detect import get_converter_for_provider
         from llm_rosetta.converters import OpenResponsesConverter
 
-        converter = get_converter_for_provider("argo--open_responses")
+        converter = get_converter_for_provider("openai--open_responses")
         assert isinstance(converter, OpenResponsesConverter)
 
     def test_volcengine_resolves_to_openai_chat_converter(self):
@@ -772,7 +744,7 @@ class TestShimConverterIntegration:
 
 
 # ---------------------------------------------------------------------------
-# Grouped provider directories (e.g. argo/anthropic/, argo/openai_chat/)
+# Grouped provider directories (e.g. openai/chat_completions/)
 # ---------------------------------------------------------------------------
 
 
@@ -786,72 +758,43 @@ class TestGroupedProviders:
 
     def test_grouped_providers_registered(self):
         """Shims under a group folder register with their YAML name."""
-        for name in ("argo--messages", "argo--chat_completions"):
+        for name in ("openai--chat_completions", "openai--open_responses"):
             shim = get_shim(name)
             assert shim is not None, f"Grouped shim '{name}' not registered"
 
     def test_grouped_provider_base_types(self):
         """Grouped shims resolve to the correct base converter."""
-        anth = get_shim("argo--messages")
-        oai = get_shim("argo--chat_completions")
-        assert anth is not None and anth.base == "messages"
-        assert oai is not None and oai.base == "chat_completions"
+        chat = get_shim("openai--chat_completions")
+        responses = get_shim("openai--open_responses")
+        assert chat is not None and chat.base == "chat_completions"
+        assert responses is not None and responses.base == "open_responses"
 
     def test_grouped_provider_transforms_loaded(self):
         """Grouped shims have their transforms.py imported."""
-        anth = get_shim("argo--messages")
-        assert anth is not None
-        # argo_anthropic has pre_ir_transforms (post_ir_transforms retired)
-        assert len(anth.pre_ir_transforms) > 0
+        ds = get_shim("deepseek--chat_completions")
+        assert ds is not None
+        assert len(ds.post_ir_transforms) > 0
 
     def test_grouped_provider_reasoning_configs_loaded(self):
         """Grouped shims load reasoning capability configs."""
-        anth = get_shim("argo--messages")
-        oai = get_shim("argo--chat_completions")
-        assert anth is not None and anth.reasoning is not None
-        assert oai is not None and oai.reasoning is not None
-        assert anth.reasoning.effort_field == "output_config.effort"
-        assert anth.reasoning.effort_range == ("low", "max")
-        # Argo OpenAI has no effort_range (full ladder)
-        assert oai.reasoning.effort_range is None
-
-    def test_argo_anthropic_model_reasoning_overrides(self):
-        """Argo anthropic has model_reasoning for claudeopus47."""
-        anth = get_shim("argo--messages")
-        assert anth is not None
-        assert anth.model_reasoning is not None
-        assert "claudeopus47" in anth.model_reasoning
-        override = anth.model_reasoning["claudeopus47"]
-        assert override.thinking_modes == {
-            "auto": "adaptive",
-            "enabled": "adaptive",
-            "disabled": "disabled",
-        }
-        assert override.effort_field == "output_config.effort"
-        assert override.effort_range == ("low", "max")
-
-    def test_argo_anthropic_provider_thinking_modes(self):
-        """Argo anthropic provider-level thinking_modes includes all three modes."""
-        anth = get_shim("argo--messages")
-        assert anth is not None and anth.reasoning is not None
-        assert anth.reasoning.thinking_modes is not None
-        assert "auto" in anth.reasoning.thinking_modes
-        assert "enabled" in anth.reasoning.thinking_modes
-        assert "disabled" in anth.reasoning.thinking_modes
+        chat = get_shim("openai--chat_completions")
+        responses = get_shim("openai--open_responses")
+        assert chat is not None and chat.reasoning is not None
+        assert responses is not None and responses.reasoning is not None
+        assert chat.reasoning.effort_field == "reasoning_effort"
+        assert chat.reasoning.effort_range == ("minimal", "max")
+        assert responses.reasoning.effort_field == "reasoning.effort"
+        assert responses.reasoning.effort_range == ("minimal", "max")
 
     def test_mixed_flat_and_grouped(self):
         """Flat shims and grouped shims coexist in the registry."""
-        flat_names = (
-            "openai--chat_completions",
-            "anthropic--messages",
-            "google--google_generate",
-        )
+        flat_names = ("moonshot", "qwen", "xai", "zhipu")
         grouped_names = (
-            "argo--messages",
-            "argo--chat_completions",
-            "argo--open_responses",
+            "openai--chat_completions",
+            "openai--open_responses",
             "deepseek--chat_completions",
             "deepseek--open_responses",
+            "openrouter--chat_completions",
         )
         for name in (*flat_names, *grouped_names):
             assert get_shim(name) is not None, f"Shim '{name}' not found"

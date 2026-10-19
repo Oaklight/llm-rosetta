@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 # `pytest.ini` puts `src` on the path for the test suite; a plain
@@ -41,6 +42,7 @@ from llm_rosetta import __version__  # noqa: E402
 from llm_rosetta.shims import (  # noqa: E402
     SHIM_REMOVALS,
     RemovalReference,
+    ShimRemoval,
     get_shim,
     removals_due,
     scan_removal_references,
@@ -115,13 +117,21 @@ def _reference_message(reference: RemovalReference) -> str:
     )
 
 
-def check(version: str, roots: list[str], exempt_files: list[str]) -> list[str]:
+def check(
+    version: str,
+    roots: list[str],
+    exempt_files: list[str],
+    removals: Sequence[ShimRemoval] | None = None,
+) -> list[str]:
     """Return one message per inconsistency between *version* and the repository.
 
     Args:
         version: The version to check against.
         roots: Files or directories to scan.
         exempt_files: Files to skip entirely.
+        removals: The manifest to check (defaults to ``SHIM_REMOVALS``; a
+            parameter so the gate's behaviour stays testable while the shipped
+            manifest is empty).
 
     Returns:
         The problems found, empty when the repository is consistent.
@@ -131,9 +141,11 @@ def check(version: str, roots: list[str], exempt_files: list[str]) -> list[str]:
     # as well means the answer does not depend on what the calling process
     # happens to have loaded.
     load_providers()
-    due = {entry.shim for entry in removals_due(version)}
+    if removals is None:
+        removals = SHIM_REMOVALS
+    due = {entry.shim for entry in removals_due(version, removals=removals)}
     problems: list[str] = []
-    for entry in SHIM_REMOVALS:
+    for entry in removals:
         registered = get_shim(entry.shim) is not None
         if entry.shim in due:
             if registered:
