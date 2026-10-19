@@ -186,6 +186,8 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### 修复
 
+- **模型弹窗里的能力选项可用键盘操作**（issue [#1097](https://github.com/Oaklight/llm-rosetta/issues/1097)，PR [#1098](https://github.com/Oaklight/llm-rosetta/pull/1098)）：能力 chip 是 `<div>`，由处理器手动翻转隐藏的复选框；于是聚焦复选框按空格时浏览器先切换一次，点击冒泡到 chip 后处理器又翻回去——状态永远不变，也没有任何焦点提示。现在 chip 改为 label，点击或空格只切换一次，处理器只根据 `cb.checked` 同步 `active` 类；`:focus-within` 描边显示键盘焦点所在，隐藏输入框的样式加了类型限定，弹窗的 `width:100%` 规则不再把它撑开。
+
 - **手机上的 Error Dumps 可读**（issue [#1095](https://github.com/Oaklight/llm-rosetta/issues/1095)，PR [#1096](https://github.com/Oaklight/llm-rosetta/pull/1096)）：八列表格保留 780px 最小宽度，手机上看得到勾选框、折成三行的时间戳、模型与路由的开头——状态、阶段、错误预览和行内操作都在屏幕之外。现在 768px 以下的每条 dump 都是一张卡片：首行时间与状态，然后是模型、路由、错误文本（改为换行而非省略），最后是阶段与操作，单元格保留显式角色与列名。预览的单行截断移入 class，卡片得以覆盖它；桌面端保持不变。
 
 - **Settings 页在手机上不再横向滚动**（issue [#1093](https://github.com/Oaklight/llm-rosetta/issues/1093)，PR [#1094](https://github.com/Oaklight/llm-rosetta/pull/1094)）：在 390px 视口下页面宽度达到 619px，Settings 会横向滚动，固定的底栏也随之漂移。日志保留（Log Retention）网格带有内联的三列模板，压过了手机端的堆叠规则；其八个清理按钮也不会换行。现在三列定义移入 class 并在 768px 以下堆叠，按钮行允许换行。桌面端仍保持三列。
