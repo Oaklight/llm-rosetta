@@ -15,6 +15,7 @@ import llm_rosetta
 from llm_rosetta.provider_names import LEGACY_SHIM_ALIASES, canonical_shim_name
 from llm_rosetta.shims import (
     SHIM_REMOVALS,
+    SHIM_SOURCE_PACKAGES,
     detect_shim_removals,
     get_shim,
     parse_version,
@@ -27,16 +28,9 @@ from llm_rosetta.shims.providers import load_providers
 #: Pinned so a silently dropped entry fails here rather than quietly reducing
 #: what the advisory covers.
 EXPECTED_SHIMS = {
-    "alcf_metis--chat_completions",
-    "alcf_minerva--chat_completions",
-    "alcf_sophia--chat_completions",
     "argo--chat_completions",
     "argo--messages",
     "argo--open_responses",
-    "asksage--chat_completions",
-    "asksage--messages",
-    "asksage--open_responses",
-    "asksage--google_generate",
 }
 
 
@@ -69,8 +63,11 @@ class TestManifest:
             assert entry.source_repo.startswith("https://github.com/")
             assert entry.remote["url"] == entry.source_repo
             assert entry.remote["path"].endswith("/providers")
-            # No `ref` while none of the three repos is tagged: an omitted ref is
-            # resolved to a commit and pinned in the cache stamp instead.
+            # The three standalone repositories are private, so the preset
+            # names the environment variable that carries the forge token.
+            assert entry.remote["token_env"] == "GITHUB_TOKEN"
+            # No `ref` while none of the standalone repos is tagged: an omitted
+            # ref is resolved to a commit and pinned in the cache stamp instead.
             assert "ref" not in entry.remote
 
     def test_every_removed_shim_is_currently_registered(self):
@@ -115,16 +112,14 @@ class TestDetectShimRemovals:
     """The pure detection shared by the warning, the panel and the gate."""
 
     def test_current_provider_on_a_removed_shim_is_reported(self):
-        advisories = detect_shim_removals(
-            {"alcf": {"shim": "alcf_sophia--chat_completions"}}
-        )
+        advisories = detect_shim_removals({"argo": {"shim": "argo--messages"}})
         assert len(advisories) == 1
         advisory = advisories[0]
-        assert advisory.provider == "alcf"
+        assert advisory.provider == "argo"
         assert advisory.slot == "shim"
-        assert advisory.shim == "alcf_sophia--chat_completions"
+        assert advisory.shim == "argo--messages"
         assert advisory.removed_in == "0.16.0"
-        assert advisory.remote["url"].endswith("llm-rosetta-shim-alcf")
+        assert advisory.remote["url"].endswith("llm-rosetta-shim-argo")
         assert set(advisory.to_dict()) == {
             "provider",
             "slot",
@@ -140,8 +135,8 @@ class TestDetectShimRemovals:
         assert advisories[0].slot == "type"
 
     def test_a_provider_keyed_by_the_shim_is_reported(self):
-        advisories = detect_shim_removals({"alcf--metis": {"api_key": "k"}})
-        assert [a.shim for a in advisories] == ["alcf_metis--chat_completions"]
+        advisories = detect_shim_removals({"argo--openai_chat": {"api_key": "k"}})
+        assert [a.shim for a in advisories] == ["argo--chat_completions"]
         assert advisories[0].slot == "name"
 
     def test_unrelated_and_base_format_providers_are_silent(self):
@@ -166,20 +161,20 @@ class TestDetectShimRemovals:
 
     def test_a_declared_external_source_silences_its_own_shim(self):
         providers = {
-            "alcf": {"shim": "alcf_sophia--chat_completions"},
-            "argo": {"shim": "argo--messages"},
+            "argo-chat": {"shim": "argo--chat_completions"},
+            "argo-messages": {"shim": "argo--messages"},
         }
         advisories = detect_shim_removals(
-            providers, external_shims={"alcf_sophia--chat_completions"}
+            providers, external_shims={"argo--chat_completions"}
         )
         assert [a.shim for a in advisories] == ["argo--messages"]
 
     def test_is_sorted_by_provider(self):
         advisories = detect_shim_removals(
             {
-                "zeta": {"shim": "asksage--messages"},
-                "alpha": {"shim": "argo--messages"},
-                "mid": {"shim": "alcf_metis--chat_completions"},
+                "zeta": {"shim": "argo--messages"},
+                "alpha": {"shim": "argo--chat_completions"},
+                "mid": {"shim": "argo--open_responses"},
             }
         )
         assert [a.provider for a in advisories] == ["alpha", "mid", "zeta"]
@@ -196,13 +191,60 @@ class TestDetectShimRemovals:
         answer comes from the config mapping alone, not from what happens to be
         loaded.
         """
-        assert get_shim("alcf_sophia--chat_completions") is None
-        advisories = detect_shim_removals({"alcf": {"shim": "alcf--sophia"}})
-        assert [a.shim for a in advisories] == ["alcf_sophia--chat_completions"]
+        assert get_shim("argo--messages") is None
+        advisories = detect_shim_removals({"argo": {"shim": "argo--anthropic"}})
+        assert [a.shim for a in advisories] == ["argo--messages"]
 
     def test_the_legacy_spelling_reports_the_canonical_shim(self):
-        advisories = detect_shim_removals({"alcf": {"shim": "alcf--sophia"}})
-        assert [a.shim for a in advisories] == ["alcf_sophia--chat_completions"]
+        advisories = detect_shim_removals({"argo": {"shim": "argo--anthropic"}})
+        assert [a.shim for a in advisories] == ["argo--messages"]
+
+
+class TestSourceCatalog:
+    """The standalone packages the Settings panel offers as presets."""
+
+    def test_catalog_covers_the_three_standalone_repos(self):
+        assert [entry.key for entry in SHIM_SOURCE_PACKAGES] == [
+            "alcf",
+            "argo",
+            "asksage",
+        ]
+
+    def test_every_package_lists_its_shims_and_remote(self):
+        for entry in SHIM_SOURCE_PACKAGES:
+            assert entry.label
+            assert entry.repo.startswith("https://github.com/")
+            assert entry.shims
+            assert entry.to_dict()["remote"] == {
+                "url": entry.repo,
+                "path": f"src/{entry.package}/providers",
+                "token_env": "GITHUB_TOKEN",
+            }
+
+    def test_every_preset_round_trips_through_the_source_resolver(self):
+        from llm_rosetta.gateway.shim_sources import resolve_source_config
+
+        for entry in SHIM_SOURCE_PACKAGES:
+            _dirs, remotes, _cache = resolve_source_config(
+                {"remotes": [entry.remote]}, None
+            )
+            assert remotes and remotes[0]["url"] == entry.repo
+
+    def test_the_removal_manifest_reuses_the_catalog_remote(self):
+        argo = next(entry for entry in SHIM_SOURCE_PACKAGES if entry.key == "argo")
+        assert {entry.remote["url"] for entry in SHIM_REMOVALS} == {argo.repo}
+        assert {entry.remote["path"] for entry in SHIM_REMOVALS} == {
+            argo.remote["path"]
+        }
+
+    def test_to_dict_keys(self):
+        assert set(SHIM_SOURCE_PACKAGES[0].to_dict()) == {
+            "key",
+            "label",
+            "source_repo",
+            "remote",
+            "shims",
+        }
 
 
 class TestVersionGate:
@@ -261,28 +303,26 @@ class TestScanRemovalReferences:
 
     def test_finds_a_reference_in_a_config(self, tmp_path):
         examples = self._examples(tmp_path)
-        (examples / "config.jsonc").write_text('{"shim": "alcf--sophia"}\n')
+        (examples / "config.jsonc").write_text('{"shim": "argo--anthropic"}\n')
         assert self._hits(scan_removal_references((examples,))) == [
-            ("config.jsonc", 1, "alcf--sophia")
+            ("config.jsonc", 1, "argo--anthropic")
         ]
 
     def test_canonical_names_count_too(self, tmp_path):
         examples = self._examples(tmp_path)
-        (examples / "config.jsonc").write_text(
-            '"shim": "alcf_sophia--chat_completions"\n'
-        )
+        (examples / "config.jsonc").write_text('"shim": "argo--messages"\n')
         assert len(scan_removal_references((examples,))) == 1
 
     def test_marker_lets_a_deliberate_mention_through(self, tmp_path):
         examples = self._examples(tmp_path)
         (examples / "migration.md").write_text(
-            "| `alcf--sophia` | `alcf_sophia--chat_completions` |  # shim-removal-ok\n"
+            "| `argo--anthropic` | `argo--messages` |  # shim-removal-ok\n"
         )
         assert scan_removal_references((examples,)) == []
 
     def test_exempt_file_is_skipped_entirely(self, tmp_path):
         changelog = tmp_path / "changelog.md"
-        changelog.write_text("`alcf--sophia` was removed in 0.16.0\n")
+        changelog.write_text("`argo--anthropic` was removed in 0.16.0\n")
         assert len(scan_removal_references((changelog,))) == 1
         assert scan_removal_references((changelog,), exempt_files=(changelog,)) == []
 
@@ -296,7 +336,7 @@ class TestScanRemovalReferences:
         """
         relocated = tmp_path / "elsewhere" / "en" / "docs" / "changelog.md"
         relocated.parent.mkdir(parents=True)
-        relocated.write_text("`alcf--sophia` was removed in 0.16.0\n")
+        relocated.write_text("`argo--anthropic` was removed in 0.16.0\n")
 
         assert len(scan_removal_references((tmp_path,))) == 1
         assert (
@@ -309,9 +349,9 @@ class TestScanRemovalReferences:
     def test_neighbours_and_substrings_are_not_hits(self, tmp_path):
         examples = self._examples(tmp_path)
         (examples / "notes.txt").write_text(
-            "alcf--sophia-extra\n"
-            "xalcf--sophia\n"
-            "alcf_sophia--chat_completions_now\n"
+            "argo--anthropic-extra\n"
+            "xargo--anthropic\n"
+            "argo--messages_now\n"
             "gpt-4.1-nano\n"
             "xai\n"
         )
@@ -319,13 +359,13 @@ class TestScanRemovalReferences:
 
     def test_missing_roots_and_skipped_file_types(self, tmp_path):
         examples = self._examples(tmp_path)
-        (examples / "logo.svg").write_text("alcf--sophia")
+        (examples / "logo.svg").write_text("argo--anthropic")
         assert scan_removal_references((tmp_path / "nope", examples)) == []
 
     def test_results_are_sorted_by_path_then_line(self, tmp_path):
         examples = self._examples(tmp_path)
-        (examples / "b.txt").write_text("alcf--metis\n")
-        (examples / "a.txt").write_text("x\nalcf--sophia\n")
+        (examples / "b.txt").write_text("argo--openai_chat\n")
+        (examples / "a.txt").write_text("x\nargo--anthropic\n")
         assert [
             (os.path.basename(f.path), f.line)
             for f in scan_removal_references((examples,))
@@ -335,7 +375,5 @@ class TestScanRemovalReferences:
         examples = self._examples(tmp_path)
         nested = examples / "gateway"
         nested.mkdir()
-        (nested / "alcf.jsonc").write_text(
-            '{"shim": "alcf_sophia--chat_completions"}\n'
-        )
+        (nested / "argo.jsonc").write_text('{"shim": "argo--messages"}\n')
         assert len(scan_removal_references((examples,))) == 1

@@ -1,8 +1,0 @@
-name: asksage--google_generate
-model_type: llm
-format: google_generate
-
-connection:
-  base_url: https://api.asksage.ai/server/google/v1beta
-  api_key_env: ASKSAGE_API_KEY
-  auth_header: x-access-tokens

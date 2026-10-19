@@ -545,17 +545,13 @@ class TestConversionPipeline:
         assert "messages" in target
         assert target["model"] == "gpt-4"
 
-    @pytest.mark.parametrize(
-        "target_provider",
-        ["google", "google_generate", "asksage--google_generate"],
-    )
+    @pytest.mark.parametrize("target_provider", ["google", "google_generate"])
     def test_google_target_emits_rest_body(self, target_provider):
         """Every google provider name selects the REST body shape (#882).
 
         SDK-shaped output (``config``) is rejected by the Generative
         Language REST endpoint, so the canonical ``google_generate``
-        name — and any shim name resolving to it — must apply the same
-        REST transform as the ``google`` shim name.
+        name must apply the same REST transform as ``google``.
         """
         from llm_rosetta.pipeline import ConversionPipeline
 
@@ -1229,7 +1225,7 @@ class TestConversionPipeline:
     def test_implied_target_applies_the_custom_tool_policy(self):
         """A custom tool survives a shim-spelled target that declares support.
 
-        Pins the custom-tools site on its own.  ``alcf_sophia--chat_completions`` declares
+        Pins the custom-tools site on its own.  ``argo--chat_completions`` declares
         ``custom_tools: true``, so the implied form must keep the tool rather
         than downgrade it to a function with a synthesised ``input`` schema.
         """
@@ -1242,12 +1238,12 @@ class TestConversionPipeline:
             "tools": [{"type": "custom", "name": "x", "format": {"type": "text"}}],
         }
         out = ConversionPipeline(
-            "open_responses", "alcf_sophia--chat_completions"
+            "open_responses", "argo--chat_completions"
         ).convert_request(copy.deepcopy(body))
         explicit = ConversionPipeline(
             "open_responses",
-            "alcf_sophia--chat_completions",
-            target_shim=resolve_shim("alcf_sophia--chat_completions"),
+            "argo--chat_completions",
+            target_shim=resolve_shim("argo--chat_completions"),
         ).convert_request(copy.deepcopy(body))
         assert out["tools"] == [
             {"type": "custom", "custom": {"name": "x", "format": {"type": "text"}}}
@@ -1600,8 +1596,8 @@ class TestUnsignedBlocksPolicy:
     from the wire and keeps it in metadata; the default ``as_is`` sends it.
 
     Which targets need the policy is per provider, probed live 2026-10-13
-    (anthropic, openrouter, the opencode Messages lane and AskSage reject;
-    MiniMax's lane accepts).
+    (anthropic, openrouter and the opencode Messages lane reject; MiniMax's
+    lane accepts).
     """
 
     @pytest.fixture(autouse=True)
@@ -1642,7 +1638,6 @@ class TestUnsignedBlocksPolicy:
             "anthropic--messages",
             "openrouter--messages",
             "opencode--messages",
-            "asksage--messages",
         ],
     )
     def test_signature_requiring_shim_withholds_unsigned_reasoning(self, shim_name):
@@ -1680,10 +1675,10 @@ class TestUnsignedBlocksPolicy:
 class TestMessagesShimReasoningDefaults:
     """Adding a shim ``reasoning:`` section must not reset the cap (#954).
 
-    ``opencode--messages`` and ``asksage--messages`` had no section before, so
-    they inherited the Messages base cap.  Adding one to carry the unsigned
-    policy made the omitted fields fall back to the loader defaults, which sent
-    the effort out as a flat ``reasoning_effort`` on an Anthropic payload.
+    ``opencode--messages`` had no section before, so it inherited the Messages
+    base cap.  Adding one to carry the unsigned policy made the omitted fields
+    fall back to the loader defaults, which sent the effort out as a flat
+    ``reasoning_effort`` on an Anthropic payload.
     """
 
     @pytest.fixture(autouse=True)
@@ -1700,10 +1695,7 @@ class TestMessagesShimReasoningDefaults:
             "messages": [{"role": "user", "content": "hi"}],
         }
 
-    @pytest.mark.parametrize(
-        "shim_name",
-        ["opencode--messages", "asksage--messages"],
-    )
+    @pytest.mark.parametrize("shim_name", ["opencode--messages"])
     def test_effort_still_goes_out_as_output_config(self, shim_name):
         """MiniMax is not in this list: it has no effort parameter (#961)."""
         from llm_rosetta.pipeline import ConversionPipeline
@@ -1720,9 +1712,9 @@ class TestMessagesShimReasoningDefaults:
 class TestShimEffortLadders:
     """Each lane clamps or drops the effort its server requires (#961).
 
-    ALCF answers 500 for anything outside vLLM's low/medium/high, MiniMax's
-    Messages lane has no effort parameter at all, and MiniMax's Chat lane
-    documents low…max.  The shim declarations have to land on exactly those.
+    MiniMax's Messages lane has no effort parameter at all, and MiniMax's Chat
+    lane documents low…max.  The shim declarations have to land on exactly
+    those.
     """
 
     @pytest.fixture(autouse=True)
@@ -1738,27 +1730,6 @@ class TestShimEffortLadders:
             "reasoning_effort": effort,
             "messages": [{"role": "user", "content": "hi"}],
         }
-
-    @pytest.mark.parametrize(
-        ("effort", "sent"),
-        [
-            ("minimal", "low"),
-            ("low", "low"),
-            ("high", "high"),
-            ("xhigh", "high"),
-            ("max", "high"),
-        ],
-    )
-    def test_alcf_clamps_to_the_vllm_ladder(self, effort, sent):
-        from llm_rosetta.pipeline import ConversionPipeline
-
-        out = ConversionPipeline(
-            "chat_completions",
-            "chat_completions",
-            target_shim="alcf_sophia--chat_completions",
-        ).convert_request(self._body(effort))
-
-        assert out["reasoning_effort"] == sent
 
     def test_minimax_messages_sends_no_effort_at_all(self):
         """Thinking is supported there; effort is not — not even as a stray field."""
@@ -1786,13 +1757,12 @@ class TestShimEffortLadders:
 
 
 class TestReasoningRenameWiring:
-    """The rename only helps if it is wired, and if it covers both holders.
+    """The rename only helps if it is wired.
 
-    The unit tests call ``_rename_reasoning_field`` directly, so emptying a
+    The unit tests call ``_rename_reasoning_field`` directly, so emptying the
     shim's ``pre_ir_transforms`` used to leave the suite green while the lane
-    lost its reasoning again — both the ``alcf_sophia--chat_completions`` and the
-    ``openrouter--chat_completions`` shim carry this rename, so both are driven
-    through the response leg here (#969 review).
+    lost its reasoning again — ``openrouter--chat_completions`` carries this
+    rename, so it is driven through the response leg here (#969 review).
     """
 
     @pytest.fixture(autouse=True)
@@ -1820,16 +1790,14 @@ class TestReasoningRenameWiring:
     @staticmethod
     def _chunk(delta, finish_reason=None):
         return {
-            "id": "chatcmpl-alcf",
+            "id": "chatcmpl-lane",
             "object": "chat.completion.chunk",
             "created": 1,
             "model": "openai/gpt-oss-120b",
             "choices": [{"index": 0, "delta": delta, "finish_reason": finish_reason}],
         }
 
-    @pytest.mark.parametrize(
-        "shim_name", ["alcf_sophia--chat_completions", "openrouter--chat_completions"]
-    )
+    @pytest.mark.parametrize("shim_name", ["openrouter--chat_completions"])
     def test_non_streaming_response_keeps_the_lane_reasoning(self, shim_name):
         out = self._pipeline(shim_name).convert_response(
             {
@@ -1859,9 +1827,7 @@ class TestReasoningRenameWiring:
         assert [b["type"] for b in out["content"]] == ["thinking", "text"]
         assert out["content"][0]["thinking"] == "15*37 = 555"
 
-    @pytest.mark.parametrize(
-        "shim_name", ["alcf_sophia--chat_completions", "openrouter--chat_completions"]
-    )
+    @pytest.mark.parametrize("shim_name", ["openrouter--chat_completions"])
     def test_streaming_delta_keeps_the_lane_reasoning(self, shim_name):
         processor = self._pipeline(shim_name).create_stream_processor()
 

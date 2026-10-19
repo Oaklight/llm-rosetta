@@ -1,7 +1,0 @@
-name: asksage--chat_completions
-model_type: llm
-format: chat_completions
-
-connection:
-  base_url: https://api.asksage.ai/server/openai/v1
-  api_key_env: ASKSAGE_API_KEY

@@ -9,9 +9,6 @@ from llm_rosetta.shims.providers.minimax.chat_completions.transforms import (
     _inject_reasoning_split,
     _parse_think_tags,
 )
-from llm_rosetta.shims.providers.alcf.sophia.transforms import (
-    _rename_reasoning_field as _alcf_rename_reasoning_field,
-)
 from llm_rosetta.shims.providers.openrouter.chat_completions.transforms import (
     _rename_reasoning_field,
 )
@@ -179,57 +176,6 @@ class TestRenameReasoningField:
         body = {"error": "something"}
         result = _rename_reasoning_field(body)
         assert result == body
-
-
-# ===========================================================================
-# ALCF Sophia: _rename_reasoning_field (message and delta)
-# ===========================================================================
-
-
-class TestAlcfRenameReasoningField:
-    """vLLM names the reasoning text ``reasoning``; the converter reads
-    ``reasoning_content``. Both the non-streaming message and the streaming
-    delta carry it, so both have to be renamed (#961)."""
-
-    def test_renames_on_message(self):
-        body = {
-            "choices": [
-                {
-                    "message": {
-                        "role": "assistant",
-                        "content": "555",
-                        "reasoning": "15*37 = 555.",
-                    }
-                }
-            ]
-        }
-        msg = _alcf_rename_reasoning_field(body)["choices"][0]["message"]
-        assert msg["reasoning_content"] == "15*37 = 555."
-        assert "reasoning" not in msg
-
-    def test_renames_on_streaming_delta(self):
-        body = {
-            "choices": [
-                {"index": 0, "delta": {"reasoning": "The"}, "finish_reason": None}
-            ]
-        }
-        delta = _alcf_rename_reasoning_field(body)["choices"][0]["delta"]
-        assert delta["reasoning_content"] == "The"
-        assert "reasoning" not in delta
-
-    def test_keeps_an_existing_reasoning_content(self):
-        body = {"choices": [{"delta": {"reasoning": "a", "reasoning_content": "b"}}]}
-        delta = _alcf_rename_reasoning_field(body)["choices"][0]["delta"]
-        assert delta["reasoning_content"] == "b"
-        assert delta["reasoning"] == "a"
-
-    def test_ignores_shapes_without_choices(self):
-        for body in (
-            {"error": "x"},
-            {"choices": [{"message": {"role": "assistant", "content": "hi"}}]},
-            {"choices": []},
-        ):
-            assert _alcf_rename_reasoning_field(dict(body)) == body
 
 
 # ===========================================================================

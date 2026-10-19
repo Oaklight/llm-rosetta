@@ -70,10 +70,13 @@ DEFAULT_ROOTS = (
 #: The changelogs record what happened; their history is not rewritten, and a
 #: "removed in 0.16.0" line is exactly the kind of mention that must survive.
 #: ``removals.py`` is the manifest itself — it names every shim that is going
-#: away, by design, so scanning it would fail each entry on its own name.
+#: away, by design, so scanning it would fail each entry on its own name.  The
+#: source catalogue is the same kind of list: it names the shims each standalone
+#: package provides, including those still scheduled for removal.
 DEFAULT_EXEMPT_FILES = (
     "docs_en/docs/changelog.md",
     "docs_zh/docs/changelog.md",
+    "src/llm_rosetta/shims/catalog.py",
     "src/llm_rosetta/shims/removals.py",
 )
 

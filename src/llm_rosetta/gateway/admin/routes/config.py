@@ -8,7 +8,7 @@ from typing import Any
 
 from llm_rosetta._vendor.httpclient import AsyncClient, Response as HttpResponse
 from llm_rosetta._vendor.httpserver import JSONResponse, Response
-from llm_rosetta.shims import SHIM_REMOVALS, get_shim, list_shims
+from llm_rosetta.shims import SHIM_SOURCE_PACKAGES, get_shim, list_shims
 
 from ...config import GatewayConfig
 from ...providers import (
@@ -35,6 +35,16 @@ from ._shared import (
 import logging
 
 logger = logging.getLogger("llm-rosetta-gateway")
+
+
+def _shim_source_presets_payload() -> list[dict[str, Any]]:
+    """Payload for the Settings → Shim Sources preset picker.
+
+    The catalogue is server-supplied so the client never hardcodes package
+    names; adding a standalone package is a change to
+    :data:`llm_rosetta.shims.SHIM_SOURCE_PACKAGES` only.
+    """
+    return [entry.to_dict() for entry in SHIM_SOURCE_PACKAGES]
 
 
 def _base_formats_payload() -> list[dict[str, Any]]:
@@ -280,7 +290,7 @@ async def get_config(request: Any) -> Response:
             "shims": raw.get("shims", {}),
             "shim_sources": _shim_status_payload(request),
             "shim_removals": _shim_removal_advisories(request, raw),
-            "shim_removal_presets": [entry.to_dict() for entry in SHIM_REMOVALS],
+            "shim_source_presets": _shim_source_presets_payload(),
             "debug": raw.get("debug", {}),
             "credential_visible": config.credential_visible,
             "has_admin_password": bool(request.app.auth_state.admin_password),

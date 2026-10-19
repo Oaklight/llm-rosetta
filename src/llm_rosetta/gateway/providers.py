@@ -314,7 +314,7 @@ def build_provider_info(
     registry.  Unknown types fall back to Bearer-token auth and a simple
     ``{base_url}/`` URL template.
     """
-    from llm_rosetta.shims import get_shim
+    from llm_rosetta.shims import find_source_package, get_shim
 
     # Legacy spellings (e.g. ``openai_chat``) migrate to canonical names so the
     # registry lookup below hits.
@@ -328,6 +328,14 @@ def build_provider_info(
         cfg = _apply_shim_defaults(cfg, shim)
     else:
         base_type = provider_type
+
+    # A name that a standalone package provides but the registry does not hold
+    # means the source was not declared (or failed to load).  The missing
+    # base_url error below is the first thing such a config hits, so it is the
+    # right place to name the package and the entry to declare.
+    missing_package = (
+        None if shim is not None else find_source_package(shim_name or provider_type)
+    )
 
     keyless_shim = bool(shim and shim.connection.keyless)
 
@@ -386,11 +394,22 @@ def build_provider_info(
         )
 
     if not cfg.get("base_url"):
-        raise ValueError(
+        message = (
             f"Provider {provider_type!r} (base type {base_type!r}) has no "
             "base_url configured; set it in the provider config or via a shim "
             "connection.base_url."
         )
+        if missing_package is not None:
+            name = shim_name or provider_type
+            message += (
+                f" Shim {name!r} is not built in: it ships in the standalone "
+                f"package {missing_package.label!r} ({missing_package.repo}). "
+                "Declare its source under `shims.remotes` (Settings -> Shim "
+                f"Sources offers the preset): {missing_package.remote!r}. If the "
+                "source is already declared, check the shim-source status for a "
+                "load failure."
+            )
+        raise ValueError(message)
 
     return ProviderInfo(
         name=provider_type,

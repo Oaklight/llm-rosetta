@@ -21,9 +21,9 @@ function _removals() {
   return (S.configData && S.configData.shim_removals) || [];
 }
 
-/** The catalogue of replacement sources, one per scheduled removal. */
+/** The catalogue of standalone shim packages, shown as presets. */
 function _presets() {
-  return (S.configData && S.configData.shim_removal_presets) || [];
+  return (S.configData && S.configData.shim_source_presets) || [];
 }
 
 /** Fill the form from the loaded config and render the status table. */
@@ -139,7 +139,7 @@ async function reloadShimSources(forceRefresh) {
   }
 }
 
-/** Offer the replacement sources for the shims that are going away. */
+/** Offer the standalone shim packages the gateway knows about. */
 function _renderPresets() {
   const sel = document.getElementById('shimPresetSelect');
   if (!sel) return;
@@ -151,7 +151,10 @@ function _renderPresets() {
   }
   sel.disabled = false;
   sel.innerHTML = presets.map((p, i) => {
-    const label = t('shim.preset.option', { shim: p.shim, version: p.removed_in });
+    const label = t('shim.preset.option', {
+      label: p.label || p.source_repo,
+      count: Array.isArray(p.shims) ? p.shims.length : 0,
+    });
     return `<option value="${i}">${esc(label)}</option>`;
   }).join('');
 }
@@ -201,7 +204,7 @@ function appendShimPreset(entry) {
   remotes.push({ ...entry.remote });
   remEl.value = JSON.stringify(remotes, null, 2);
   if (err) err.textContent = '';
-  showToast(t('shim.preset.added', { name: entry.shim }));
+  showToast(t('shim.preset.added', { name: entry.label || entry.remote.url }));
 }
 
 /** "Add source" on the preset picker. */

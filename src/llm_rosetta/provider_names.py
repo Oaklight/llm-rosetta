@@ -97,14 +97,12 @@ LEGACY_SHIM_ALIASES: dict[str, str] = {
     "anthropic": "anthropic--messages",
     # ``<provider>--<old base>`` → ``<provider>--<canonical base>``.
     "argo--openai_chat": "argo--chat_completions",
-    "asksage--openai_chat": "asksage--chat_completions",
     "deepseek--openai_chat": "deepseek--chat_completions",
     "kilo--openai_chat": "kilo--chat_completions",
     "minimax--openai_chat": "minimax--chat_completions",
     "openrouter--openai_chat": "openrouter--chat_completions",
     "volcengine--openai_chat": "volcengine--chat_completions",
     "argo--openai_responses": "argo--open_responses",
-    "asksage--openai_responses": "asksage--open_responses",
     "deepseek--openai_responses": "deepseek--open_responses",
     "volcengine--openai_responses": "volcengine--open_responses",
     # ``<provider>--anthropic`` → ``<provider>--messages``: the ``anthropic``
@@ -112,15 +110,8 @@ LEGACY_SHIM_ALIASES: dict[str, str] = {
     # per-vendor alias behind — only the bare ``anthropic`` glyph above, which
     # never covered ``argo--anthropic`` and friends.
     "argo--anthropic": "argo--messages",
-    "asksage--anthropic": "asksage--messages",
     "minimax--anthropic": "minimax--messages",
     "openrouter--anthropic": "openrouter--messages",
-    # Cluster-qualified ALCF shims (epic #927): the segment after ``--`` is the
-    # API format, so the cluster moved into the provider segment
-    # (``alcf--metis`` -> ``alcf_metis--chat_completions``).
-    "alcf--metis": "alcf_metis--chat_completions",
-    "alcf--minerva": "alcf_minerva--chat_completions",
-    "alcf--sophia": "alcf_sophia--chat_completions",
     # Decision shims took the canonical ``<vendor>--<format>`` form (#926):
     # the bare names stay valid as aliases so existing configs keep loading.
     "typesafe": "typesafe--systemone",

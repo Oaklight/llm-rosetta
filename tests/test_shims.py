@@ -406,18 +406,15 @@ class TestBuiltinShims:
     def test_signature_requiring_messages_shims_preserve_unsigned_blocks(self):
         """Anthropic rejects a thinking block without a signature (#954).
 
-        Probed live 2026-10-13: anthropic, openrouter, the opencode Messages
-        lane and AskSage all answer 400 for a history carrying an unsigned
-        thinking block, so all four withhold it (AskSage needed a token minted
-        by ``scripts/asksage-token.py``; its API key is not accepted directly).
-        MiniMax's lane accepts one, which is why it keeps the default and the
-        block stays on the wire.
+        Probed live 2026-10-13: anthropic, openrouter and the opencode Messages
+        lane all answer 400 for a history carrying an unsigned thinking block,
+        so all three withhold it.  MiniMax's lane accepts one, which is why it
+        keeps the default and the block stays on the wire.
         """
         for name in (
             "anthropic--messages",
             "openrouter--messages",
             "opencode--messages",
-            "asksage--messages",
         ):
             shim = get_shim(name)
             assert shim is not None, name
@@ -442,11 +439,10 @@ class TestBuiltinShims:
         """
         from llm_rosetta.converters.base.helpers.reasoning import _DEFAULT_ANTHROPIC
 
-        # Lanes that gained a section where there was none: every field must
+        # The lane that gained a section where there was none: every field must
         # land back on the base cap.
         for name, unsigned in {
             "opencode--messages": "preserve",
-            "asksage--messages": "preserve",
         }.items():
             shim = get_shim(name)
             assert shim is not None, name
@@ -524,8 +520,6 @@ class TestBuiltinShims:
     def test_effort_ranges_match_the_documented_ladders(self):
         """Each lane declares the ladder its own server accepts (#961).
 
-        Both lanes were sending values their endpoint does not accept, in
-        opposite ways: ALCF answered 500 for anything outside low/medium/high,
         MiniMax's Chat lane answers 400 for an unlisted value while accepting
         the documented low…max set.
         """
@@ -535,10 +529,6 @@ class TestBuiltinShims:
             assert shim is not None, name
             assert shim.reasoning is not None, name
             return shim.reasoning
-
-        sophia = cap("alcf_sophia--chat_completions")
-        assert sophia.effort_field == "reasoning_effort"
-        assert sophia.effort_range == ("low", "high")
 
         minimax_chat = cap("minimax--chat_completions")
         assert minimax_chat.effort_field == "reasoning_effort"
@@ -621,18 +611,6 @@ class TestResponsesProfileTraits:
         assert shim.response_id_prefix == "resp_"
         assert shim.store_default is None
         assert set(shim.preserve_fields) == {"content_filters", "tool_usage"}
-
-    def test_asksage_declares_prefix_and_observed_fields(self):
-        """AskSage returns ``resp_`` ids; its echo fields vary by model."""
-        shim = get_shim("asksage--open_responses")
-        assert shim is not None
-        assert shim.response_id_prefix == "resp_"
-        assert shim.store_default is None
-        assert set(shim.preserve_fields) == {
-            "billing",
-            "content_filters",
-            "tool_usage",
-        }
 
     def test_volcengine_keeps_store_and_gains_prefix(self):
         """ARK is the one non-OpenAI shim where ``store_default: true`` holds.

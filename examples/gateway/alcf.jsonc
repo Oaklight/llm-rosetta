@@ -3,6 +3,11 @@
 
   // ALCF Inference Service — all three clusters.
   //
+  // The ALCF shims ship as a standalone package (issue #666), so declare its
+  // source here: the gateway fetches and caches the repository itself — no
+  // pip install and no image rebuild.  Settings → Shim Sources offers the same
+  // entry as a one-click preset.
+  //
   // First-time setup:
   //   python3 scripts/alcf-token.py --login
   //
@@ -12,6 +17,14 @@
   // the file valid, but an external shared refresh process can avoid
   // redundant Globus calls. For static key fallback, replace token_command
   // with: "api_key": "${ALCF_API_KEY}"
+  "shims": {
+    "remotes": [
+      {
+        "url": "https://github.com/Oaklight/llm-rosetta-shim-alcf",
+        "path": "src/llm_rosetta_shim_alcf/providers"
+      }
+    ]
+  },
   "providers": {
     "alcf-sophia": {
       "shim": "alcf_sophia--chat_completions",

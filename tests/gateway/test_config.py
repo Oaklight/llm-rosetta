@@ -191,19 +191,33 @@ class TestShimConnectionDefaults:
         # ProviderInfo.name keeps the base type (unchanged semantics)
         assert info.name == "chat_completions"
 
-    def test_shim_custom_auth_header_applied(self):
-        from llm_rosetta.shims.providers import load_providers
+    def test_shim_custom_auth_header_applied(self, tmp_path):
+        from llm_rosetta.shims import unregister_shim
+        from llm_rosetta.shims.providers import load_providers_from_dir
 
-        load_providers()
-        raw = {
-            "providers": {
-                "asksage": {"type": "asksage--google_generate", "api_key": "k"}
-            },
-            "models": {"m": "asksage"},
-            "server": {},
-        }
-        cfg = GatewayConfig(raw)
-        assert cfg.providers["asksage"].auth_headers() == {"x-access-tokens": "k"}
+        leaf = tmp_path / "acme"
+        leaf.mkdir()
+        (leaf / "provider.yaml").write_text(
+            "name: acme--google_generate\n"
+            "model_type: llm\n"
+            "format: google_generate\n"
+            "connection:\n"
+            "  base_url: https://example.invalid/v1\n"
+            "  auth_header: x-access-tokens\n"
+        )
+        load_providers_from_dir(tmp_path)
+        try:
+            raw = {
+                "providers": {
+                    "acme": {"type": "acme--google_generate", "api_key": "k"}
+                },
+                "models": {"m": "acme"},
+                "server": {},
+            }
+            cfg = GatewayConfig(raw)
+            assert cfg.providers["acme"].auth_headers() == {"x-access-tokens": "k"}
+        finally:
+            unregister_shim("acme--google_generate")
 
     def test_explicit_base_url_wins_over_shim_default(self):
         from llm_rosetta.shims.providers import load_providers

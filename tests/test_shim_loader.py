@@ -115,17 +115,10 @@ class TestLoadProviders:
         names = {s.name for s in shims}
         expected = {
             # Grouped vendor shims use the canonical ``<provider>--<base>`` form.
-            "alcf_metis--chat_completions",
-            "alcf_minerva--chat_completions",
-            "alcf_sophia--chat_completions",
             "anthropic--messages",
             "argo--messages",
             "argo--chat_completions",
             "argo--open_responses",
-            "asksage--messages",
-            "asksage--chat_completions",
-            "asksage--google_generate",
-            "asksage--open_responses",
             # Embedding and rerank shims.
             "cohere--embedding",
             "cohere--rerank",
@@ -188,15 +181,8 @@ class TestLoadProviders:
             "minimax--messages",
             "zhipu",
             "google--google_interactions",
-            "alcf_sophia--chat_completions",
-            "alcf_metis--chat_completions",
-            "alcf_minerva--chat_completions",
             "typesafe--systemone",
             "openai--openai_decisions",
-            "asksage--chat_completions",
-            "asksage--open_responses",
-            "asksage--messages",
-            "asksage--google_generate",
         ):
             shim = get_shim(name)
             assert shim is not None
@@ -335,45 +321,6 @@ class TestLoadProviders:
         assert "seed" not in result
         assert "messages" in result
 
-    def test_asksage_openai_chat_has_transforms(self):
-        """AskSage OpenAI Chat shim should rename max_tokens to max_completion_tokens."""
-        load_providers()
-        s = get_shim("asksage--chat_completions")
-        assert s is not None
-        assert len(s.post_ir_transforms) == 1
-        assert len(s.pre_ir_transforms) == 0
-        body = {"max_tokens": 100, "messages": []}
-        result = s.post_ir_transforms[0](body)
-        assert "max_tokens" not in result
-        assert result["max_completion_tokens"] == 100
-        assert result["messages"] == []
-
-    def test_asksage_openai_responses_has_transforms(self):
-        """AskSage OpenAI Responses shim should rename max_tokens."""
-        load_providers()
-        s = get_shim("asksage--open_responses")
-        assert s is not None
-        assert len(s.post_ir_transforms) == 1
-        body = {"max_tokens": 50, "input": "hello"}
-        result = s.post_ir_transforms[0](body)
-        assert "max_tokens" not in result
-        assert result["max_completion_tokens"] == 50
-
-    def test_asksage_anthropic_no_transforms(self):
-        """AskSage Anthropic shim should have no transforms."""
-        load_providers()
-        s = get_shim("asksage--messages")
-        assert s is not None
-        assert len(s.post_ir_transforms) == 0
-        assert len(s.pre_ir_transforms) == 0
-
-    def test_asksage_google_generate_auth_header(self):
-        """AskSage Google Generate shim should use x-access-tokens auth header."""
-        load_providers()
-        s = get_shim("asksage--google_generate")
-        assert s is not None
-        assert s.connection.auth_header == "x-access-tokens"
-
     def test_base_types_correct(self):
         """Each shim should have the expected base converter type."""
         load_providers()
@@ -402,15 +349,8 @@ class TestLoadProviders:
             "volcengine--open_responses": "open_responses",
             "xai": "chat_completions",
             "zhipu": "chat_completions",
-            "alcf_sophia--chat_completions": "chat_completions",
-            "alcf_metis--chat_completions": "chat_completions",
-            "alcf_minerva--chat_completions": "chat_completions",
             "typesafe--systemone": "systemone",
             "openai--openai_decisions": "openai_decisions",
-            "asksage--chat_completions": "chat_completions",
-            "asksage--open_responses": "open_responses",
-            "asksage--messages": "messages",
-            "asksage--google_generate": "google_generate",
         }
         for name, base in expected.items():
             shim = get_shim(name)
@@ -424,10 +364,6 @@ class TestLoadProviders:
         "argo--messages",
         "argo--chat_completions",
         "argo--open_responses",
-        "asksage--chat_completions",
-        "asksage--open_responses",
-        "asksage--messages",
-        "asksage--google_generate",
         "typesafe--systemone",
         "openai--openai_decisions",
     }
@@ -745,34 +681,52 @@ class TestDeclaredGrouping:
     falls back to the historical ``vendor--base`` name split, so a shim that
     declares none of them renders exactly as it did before those fields
     existed.
+
+    Grouping is exercised with synthetic shims: the provider that used to
+    declare it (ALCF) now ships as a standalone package.
     """
 
-    _ALCF = (
-        "alcf_metis--chat_completions",
-        "alcf_minerva--chat_completions",
-        "alcf_sophia--chat_completions",
-    )
+    @staticmethod
+    def _write(root: Path, name: str, extra: str = "") -> None:
+        d = root / name.split("--")[0]
+        d.mkdir()
+        (d / "provider.yaml").write_text(
+            f"name: {name}\nmodel_type: llm\nformat: chat_completions\n{extra}"
+        )
 
-    def test_alcf_clusters_share_one_group(self):
+    def test_one_declared_group_spans_several_name_prefixes(self, tmp_path: Path):
         """The cluster is the shim's label; the vendor is the group."""
-        load_providers()
-        clusters = [s for name in self._ALCF if (s := get_shim(name)) is not None]
-        assert len(clusters) == len(self._ALCF)
-        assert {s.group for s in clusters} == {"alcf"}
-        assert {s.display_name for s in clusters} == {
-            "metis",
-            "minerva",
-            "sophia",
-        }
-        # No declared title: the group renders as its key, "alcf".
-        assert all(s.group_label is None for s in clusters)
-        # Every cluster speaks the same format, so the picker reads
-        # "metis · chat_completions" inside the one ALCF group.
-        assert {s.base for s in clusters} == {"chat_completions"}
+        root = tmp_path / "providers"
+        root.mkdir()
+        for cluster in ("metis", "minerva", "sophia"):
+            self._write(
+                root,
+                f"acme_{cluster}--chat_completions",
+                f"group: acme\ndisplay_name: {cluster}\n",
+            )
 
-    def test_only_alcf_declares_a_group(self):
+        shims = load_providers_from_dir(root)
+        assert {s.group for s in shims} == {"acme"}
+        assert {s.display_name for s in shims} == {"metis", "minerva", "sophia"}
+        # No declared title: the group renders as its key, "acme".
+        assert all(s.group_label is None for s in shims)
+        # Every cluster speaks the same format, so the picker reads
+        # "metis · chat_completions" inside the one group.
+        assert {s.base for s in shims} == {"chat_completions"}
+
+    def test_a_title_can_be_declared_without_a_group_key(self, tmp_path: Path):
+        root = tmp_path / "providers"
+        root.mkdir()
+        self._write(root, "acme--chat_completions", "group_label: Acme\n")
+
+        (shim,) = load_providers_from_dir(root)
+        assert shim.group is None
+        assert shim.group_label == "Acme"
+        assert shim.display_name is None
+
+    def test_no_builtin_declares_a_group(self):
         shims = load_providers()
-        assert {s.name for s in shims if s.group} == set(self._ALCF)
+        assert {s.name for s in shims if s.group} == set()
 
     def test_only_kilo_titles_its_group(self):
         """A vendor may declare a title without declaring a key (Kilo)."""
@@ -789,7 +743,7 @@ class TestDeclaredGrouping:
         assert all(
             s.group is None and s.group_label is None
             for s in shims
-            if s.name not in self._ALCF and s.name != "kilo--chat_completions"
+            if s.name != "kilo--chat_completions"
         )
 
 

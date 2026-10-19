@@ -59,7 +59,12 @@ from .sources import (  # noqa: E402
     resolve_remote,
 )
 
-# Shims with a removal scheduled, and who still uses them.
+# Known standalone shim packages, then the shims with a removal scheduled.
+from .catalog import (  # noqa: E402
+    SHIM_SOURCE_PACKAGES,
+    ShimSourcePackage,
+    find_source_package,
+)
 from .removals import (  # noqa: E402
     SHIM_REMOVALS,
     RemovalReference,
@@ -100,6 +105,10 @@ __all__ = [
     "parse_version",
     "removals_due",
     "scan_removal_references",
+    # Standalone shim packages (Settings presets)
+    "SHIM_SOURCE_PACKAGES",
+    "ShimSourcePackage",
+    "find_source_package",
     # Transforms
     "Transform",
     "apply_transforms",

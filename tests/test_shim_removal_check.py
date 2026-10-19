@@ -33,10 +33,10 @@ class TestGateOnThisCheckout:
     def test_the_whole_manifest_arms_at_the_removal_version(self):
         assert _load_script().main(["--version", "0.16.0", "--quiet"]) == 1
 
-    def test_it_names_the_example_that_needs_migrating(self):
+    def test_it_names_the_mockup_that_needs_migrating(self):
         """The 0.16.0 failure list is actionable, not just red."""
-        problems = _load_script().check("0.16.0", ["examples"], [])
-        assert any("examples/gateway/alcf.jsonc" in problem for problem in problems)
+        problems = _load_script().check("0.16.0", ["design"], [])
+        assert any("provider-list-responsive.html" in problem for problem in problems)
 
     def test_the_default_roots_reach_the_code_that_has_to_change(self):
         """The gate's own cleanup list has to be inside what it scans.
@@ -50,6 +50,8 @@ class TestGateOnThisCheckout:
         assert {"src", "scripts", "design"} <= set(module.DEFAULT_ROOTS)
         # The manifest names every scheduled shim by design, so it exempts itself.
         assert "src/llm_rosetta/shims/removals.py" in module.DEFAULT_EXEMPT_FILES
+        # The source catalogue names the shims each package provides.
+        assert "src/llm_rosetta/shims/catalog.py" in module.DEFAULT_EXEMPT_FILES
 
     def test_the_shipped_scripts_and_mock_ups_are_in_reach(self):
         """Every root that names a scheduled shim today is actually scanned.
@@ -65,7 +67,7 @@ class TestGateOnThisCheckout:
         module = _load_script()
         alias = tmp_path / "src" / "llm_rosetta" / "provider_names.py"
         alias.parent.mkdir(parents=True)
-        alias.write_text('    "alcf--metis": "alcf_metis--chat_completions",\n')
+        alias.write_text('    "argo--openai_chat": "argo--chat_completions",\n')
 
         problems = module.check("0.16.0", [str(tmp_path / "src")], [])
         assert any("provider_names.py" in problem for problem in problems)
@@ -75,17 +77,17 @@ class TestReferenceHalf:
     """Stale mentions under the scanned roots."""
 
     def test_a_mention_is_ignored_while_the_removal_is_not_due(self, tmp_path):
-        (tmp_path / "config.jsonc").write_text('{"shim": "alcf--sophia"}\n')
+        (tmp_path / "config.jsonc").write_text('{"shim": "argo--anthropic"}\n')
         assert _load_script().check("0.15.0", [str(tmp_path)], []) == []
 
     def test_a_mention_fails_once_the_removal_is_due(self, tmp_path):
-        (tmp_path / "config.jsonc").write_text('{"shim": "alcf--sophia"}\n')
+        (tmp_path / "config.jsonc").write_text('{"shim": "argo--anthropic"}\n')
         problems = _load_script().check("0.16.0", [str(tmp_path)], [])
         assert any("config.jsonc:1" in problem for problem in problems)
 
     def test_an_exempt_file_is_not_reported(self, tmp_path):
         changelog = tmp_path / "changelog.md"
-        changelog.write_text("`alcf--sophia` was removed in 0.16.0\n")
+        changelog.write_text("`argo--anthropic` was removed in 0.16.0\n")
         problems = _load_script().check("0.16.0", [str(tmp_path)], [str(changelog)])
         assert not any("changelog.md" in problem for problem in problems)
 

@@ -27,25 +27,15 @@ from dataclasses import dataclass
 from typing import Any
 
 from ..provider_names import canonical_provider_name, canonical_shim_name
+from .catalog import SHIM_SOURCE_PACKAGES
 
-#: The three standalone packages these shims are moving to.
-_ALCF_REPO = "https://github.com/Oaklight/llm-rosetta-shim-alcf"
-_ARGO_REPO = "https://github.com/Oaklight/llm-rosetta-shim-argo"
-_ASKSAGE_REPO = "https://github.com/Oaklight/llm-rosetta-shim-asksage"
+#: The standalone package the remaining removals move to.  Its remote is
+#: recorded once, in the source catalogue the admin presets also read.
+_ARGO = next(entry for entry in SHIM_SOURCE_PACKAGES if entry.key == "argo")
 
 #: The version that removes the built-in vendor shims and their legacy names.
 #: It is a 0.x minor because the removal is breaking (see #919).
 _REMOVAL_VERSION = "0.16.0"
-
-
-def _remote(repo: str, package: str) -> dict[str, Any]:
-    """The ``shims.remotes`` entry that replaces a shim from *repo*.
-
-    No ``ref``: none of the three repositories is tagged yet, and an omitted ref
-    is resolved to a concrete commit and pinned in the cache stamp, which is
-    both reproducible and fetchable today.  Pin a tag here once there is one.
-    """
-    return {"url": repo, "path": f"src/{package}/providers"}
 
 
 @dataclass(frozen=True)
@@ -81,73 +71,25 @@ class ShimRemoval:
 #: the advisory, the admin preset and the CI gate know about a shim at once.
 SHIM_REMOVALS: tuple[ShimRemoval, ...] = (
     ShimRemoval(
-        shim="alcf_metis--chat_completions",
-        removed_in=_REMOVAL_VERSION,
-        remote=_remote(_ALCF_REPO, "llm_rosetta_shim_alcf"),
-        source_repo=_ALCF_REPO,
-        legacy_names=("alcf--metis",),
-    ),
-    ShimRemoval(
-        shim="alcf_minerva--chat_completions",
-        removed_in=_REMOVAL_VERSION,
-        remote=_remote(_ALCF_REPO, "llm_rosetta_shim_alcf"),
-        source_repo=_ALCF_REPO,
-        legacy_names=("alcf--minerva",),
-    ),
-    ShimRemoval(
-        shim="alcf_sophia--chat_completions",
-        removed_in=_REMOVAL_VERSION,
-        remote=_remote(_ALCF_REPO, "llm_rosetta_shim_alcf"),
-        source_repo=_ALCF_REPO,
-        legacy_names=("alcf--sophia",),
-    ),
-    ShimRemoval(
         shim="argo--chat_completions",
         removed_in=_REMOVAL_VERSION,
-        remote=_remote(_ARGO_REPO, "llm_rosetta_shim_argo"),
-        source_repo=_ARGO_REPO,
+        remote=_ARGO.remote,
+        source_repo=_ARGO.repo,
         legacy_names=("argo--openai_chat",),
     ),
     ShimRemoval(
         shim="argo--messages",
         removed_in=_REMOVAL_VERSION,
-        remote=_remote(_ARGO_REPO, "llm_rosetta_shim_argo"),
-        source_repo=_ARGO_REPO,
+        remote=_ARGO.remote,
+        source_repo=_ARGO.repo,
         legacy_names=("argo--anthropic",),
     ),
     ShimRemoval(
         shim="argo--open_responses",
         removed_in=_REMOVAL_VERSION,
-        remote=_remote(_ARGO_REPO, "llm_rosetta_shim_argo"),
-        source_repo=_ARGO_REPO,
+        remote=_ARGO.remote,
+        source_repo=_ARGO.repo,
         legacy_names=("argo--openai_responses",),
-    ),
-    ShimRemoval(
-        shim="asksage--chat_completions",
-        removed_in=_REMOVAL_VERSION,
-        remote=_remote(_ASKSAGE_REPO, "llm_rosetta_shim_asksage"),
-        source_repo=_ASKSAGE_REPO,
-        legacy_names=("asksage--openai_chat",),
-    ),
-    ShimRemoval(
-        shim="asksage--messages",
-        removed_in=_REMOVAL_VERSION,
-        remote=_remote(_ASKSAGE_REPO, "llm_rosetta_shim_asksage"),
-        source_repo=_ASKSAGE_REPO,
-        legacy_names=("asksage--anthropic",),
-    ),
-    ShimRemoval(
-        shim="asksage--open_responses",
-        removed_in=_REMOVAL_VERSION,
-        remote=_remote(_ASKSAGE_REPO, "llm_rosetta_shim_asksage"),
-        source_repo=_ASKSAGE_REPO,
-        legacy_names=("asksage--openai_responses",),
-    ),
-    ShimRemoval(
-        shim="asksage--google_generate",
-        removed_in=_REMOVAL_VERSION,
-        remote=_remote(_ASKSAGE_REPO, "llm_rosetta_shim_asksage"),
-        source_repo=_ASKSAGE_REPO,
     ),
 )
 
@@ -343,8 +285,8 @@ def scan_removal_references(
 ) -> list[RemovalReference]:
     """Find every line under *roots* that still names a removed shim.
 
-    Matching is on whole tokens (``alcf--sophia`` does not match
-    ``alcf--sophia-extra``), and both a shim's canonical name and its legacy
+    Matching is on whole tokens (``argo--anthropic`` does not match
+    ``argo--anthropic-extra``), and both a shim's canonical name and its legacy
     spellings count, because either one is a stale reference once the shim is
     gone.
 

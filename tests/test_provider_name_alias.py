@@ -239,21 +239,6 @@ class TestGatewayConfigBoundary:
             cfg = GatewayConfig(self._raw({"shim": "google-genai"}))
         assert cfg.provider_types["g"] == "google_generate"
 
-    def test_cluster_rename_migrates(self):
-        """#927: the ALCF cluster moved into the provider segment.
-
-        The correction is in place, so a config loaded through the gateway
-        ends up holding the canonical name rather than resolving it lazily.
-        """
-        from llm_rosetta.gateway.config import GatewayConfig
-
-        raw = self._raw({"shim": "alcf--sophia"})
-        with warnings.catch_warnings():
-            warnings.simplefilter("error", DeprecationWarning)
-            cfg = GatewayConfig(raw)
-        assert cfg.provider_types["g"] == "chat_completions"
-        assert raw["providers"]["g"]["shim"] == "alcf_sophia--chat_completions"
-
     def test_provider_name_fallback_migrates(self):
         from llm_rosetta.gateway.config import GatewayConfig
 
@@ -711,13 +696,8 @@ class TestLegacyShimAliasStillResolves:
             # The `anthropic` base became `messages` (#917) without leaving a
             # per-vendor alias; the bare glyph above never covered these.
             ("argo--anthropic", "argo--messages"),
-            ("asksage--anthropic", "asksage--messages"),
             ("minimax--anthropic", "minimax--messages"),
             ("openrouter--anthropic", "openrouter--messages"),
-            # The ALCF cluster moved into the provider segment (epic #927).
-            ("alcf--sophia", "alcf_sophia--chat_completions"),
-            ("alcf--metis", "alcf_metis--chat_completions"),
-            ("alcf--minerva", "alcf_minerva--chat_completions"),
         ],
     )
     def test_get_shim_legacy_is_canonical(self, legacy: str, canonical: str):

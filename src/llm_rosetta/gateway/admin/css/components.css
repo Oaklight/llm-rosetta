@@ -331,7 +331,7 @@ tr:hover td { background: var(--bg-hover); }
 .tp-empty { padding:14px 10px;font-size:13px;color:var(--text-dim);text-align:center; }
 /* Dark mode: seat logo images on a light chip rather than inverting them —
    inverting keeps monochrome vendor marks legible but shifts full-colour
-   logos (e.g. alcf) to wrong hues. */
+   logos (e.g. a dark vendor mark) to wrong hues. */
 [data-mode="dark"] .pc-logo:not(.pc-logo-empty),
 [data-mode="dark"] .type-picker-logo,
 [data-mode="dark"] .tp-logo:not(.tp-logo-empty) {
