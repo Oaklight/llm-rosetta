@@ -22,6 +22,34 @@ const _dt = (window.__branding && window.__branding.disabled_tabs) || [];
 function _tabEnabled(id) { return _dt.indexOf(id) === -1; }
 function _logRefreshMs() { return S._dashboardRefreshMs > 0 ? S._dashboardRefreshMs : 5000; }
 
+// One place starts the request/ops log refresh timer, so the pause state
+// applies to both views and survives tab switches and view switches.
+function startLogTimers() {
+  if (S.logTimer) { clearInterval(S.logTimer); S.logTimer = null; }
+  if (S.opsLogTimer) { clearInterval(S.opsLogTimer); S.opsLogTimer = null; }
+  syncLogPauseButton();
+  if (S.logPaused) return;
+  if (S._logView === 'ops') S.opsLogTimer = setInterval(loadOpsLog, _logRefreshMs());
+  else S.logTimer = setInterval(loadLogs, _logRefreshMs());
+}
+
+function syncLogPauseButton() {
+  const btn = document.getElementById('logPauseBtn');
+  if (!btn) return;
+  btn.textContent = t(S.logPaused ? 'btn.resumeRefresh' : 'btn.pauseRefresh');
+  btn.setAttribute('aria-pressed', S.logPaused ? 'true' : 'false');
+  btn.classList.toggle('btn-primary', S.logPaused);
+}
+
+function toggleLogPause() {
+  S.logPaused = !S.logPaused;
+  if (!S.logPaused) {
+    if (S._logView === 'ops') loadOpsLog();
+    else loadLogs();
+  }
+  startLogTimers();
+}
+
 // ===================== Init =====================
 function initApp(prefetchedConfig) {
   loadConfig(prefetchedConfig);
@@ -33,9 +61,10 @@ function initApp(prefetchedConfig) {
   stopTimers();
   if (S.currentTab === 'dashboard' && _tabEnabled('dashboard')) { loadMetrics(); S.dashboardTimer = (S._dashboardRefreshMs > 0 ? setInterval(loadMetrics, S._dashboardRefreshMs) : null); }
   if (S.currentTab === 'logs' && _tabEnabled('logs')) {
-    if (S._logView === 'ops') { loadOpsLog(); S.opsLogTimer = setInterval(loadOpsLog, _logRefreshMs()); }
-    else { S.logOffset = 0; loadLogs(); S.logTimer = setInterval(loadLogs, _logRefreshMs()); }
+    if (S._logView === 'ops') { loadOpsLog(); }
+    else { S.logOffset = 0; loadLogs(); }
     populateOpsLogFilters();
+    startLogTimers();
   }
   if (S.currentTab === 'providers') { S.healthTimer = setInterval(applyProviderHealth, 30000); }
   if (S.currentTab === 'settings') { openSettings(); }
@@ -62,9 +91,10 @@ function activateTab(tab) {
   stopTimers();
   if (id === 'dashboard' && _tabEnabled('dashboard')) { loadMetrics(); loadDumps(); S.dashboardTimer = (S._dashboardRefreshMs > 0 ? setInterval(loadMetrics, S._dashboardRefreshMs) : null); }
   if (id === 'logs' && _tabEnabled('logs')) {
-    if (S._logView === 'ops') { loadOpsLog(); S.opsLogTimer = setInterval(loadOpsLog, _logRefreshMs()); }
-    else { if (!S._keepLogOffset) S.logOffset = 0; S._keepLogOffset = false; loadLogs(); S.logTimer = setInterval(loadLogs, _logRefreshMs()); }
+    if (S._logView === 'ops') { loadOpsLog(); }
+    else { if (!S._keepLogOffset) S.logOffset = 0; S._keepLogOffset = false; loadLogs(); }
     populateOpsLogFilters();
+    startLogTimers();
   }
   if (id === 'providers' || id === 'models') { loadConfig(); }
   if (id === 'providers') { S.healthTimer = setInterval(applyProviderHealth, 30000); }
@@ -338,4 +368,4 @@ initTypePicker();
 setLang(S.currentLang);
 checkAuthAndInit();
 
-Object.assign(window, { initApp, stopTimers });
+Object.assign(window, { initApp, stopTimers, toggleLogPause, startLogTimers });

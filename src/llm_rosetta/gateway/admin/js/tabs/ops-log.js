@@ -149,19 +149,15 @@ function switchLogView(view) {
   }
 
   // Stop both timers, start the active one
-  if (S.logTimer) { clearInterval(S.logTimer); S.logTimer = null; }
-  if (S.opsLogTimer) { clearInterval(S.opsLogTimer); S.opsLogTimer = null; }
-
-  const ms = S._dashboardRefreshMs > 0 ? S._dashboardRefreshMs : 5000;
   if (view === 'requests') {
     S.logOffset = 0;
     window.loadLogs();
-    S.logTimer = setInterval(window.loadLogs, ms);
   } else {
     S.opsLogOffset = 0;
     loadOpsLog();
-    S.opsLogTimer = setInterval(loadOpsLog, ms);
   }
+  // The shared starter respects the pause state and the active view.
+  window.startLogTimers?.();
 }
 
 // ===================== Exports =====================

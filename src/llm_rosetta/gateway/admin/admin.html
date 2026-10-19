@@ -406,9 +406,12 @@
 
   <!-- Request Log Tab -->
   <div class="tab-panel" id="tab-logs" role="tabpanel" aria-labelledby="tabBtn-logs">
-    <div class="seg-control" id="logViewSeg" role="radiogroup" aria-label="Log view" style="margin-bottom:12px">
-      <label class="active" role="radio" aria-checked="true" tabindex="0" onclick="switchLogView('requests')" data-i18n="logView.requests">Request Log</label>
-      <label role="radio" aria-checked="false" tabindex="-1" onclick="switchLogView('ops')" data-i18n="logView.ops">Server Ops Log</label>
+    <div class="log-view-bar">
+      <div class="seg-control" id="logViewSeg" role="radiogroup" aria-label="Log view">
+        <label class="active" role="radio" aria-checked="true" tabindex="0" onclick="switchLogView('requests')" data-i18n="logView.requests">Request Log</label>
+        <label role="radio" aria-checked="false" tabindex="-1" onclick="switchLogView('ops')" data-i18n="logView.ops">Server Ops Log</label>
+      </div>
+      <button class="btn btn-sm" id="logPauseBtn" onclick="toggleLogPause()" aria-pressed="false" data-i18n="btn.pauseRefresh" data-i18n-title="hint.pauseRefresh" title="Pause automatic refresh while you read">Pause refresh</button>
     </div>
     <div id="logView-requests">
       <div class="filters">
