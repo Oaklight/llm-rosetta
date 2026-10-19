@@ -310,6 +310,8 @@ def _register_decision() -> None:
     """
     from llm_rosetta.converters.registry import CONVERTER_REGISTRY
 
+    from .source_formats import detect_decision_source
+
     register_model_type(
         ModelTypeDescriptor(
             name="decision",
@@ -327,6 +329,8 @@ def _register_decision() -> None:
             config_shim_key="decision_shim",
             default_format="systemone",
             default_path="/v1/systemone",
+            default_paths={"openai_decisions": "/v1/decisions"},
+            detect_source_format=detect_decision_source,
             icon_svg=(
                 '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor"'
                 ' stroke-width="1.5" stroke-linecap="round"'

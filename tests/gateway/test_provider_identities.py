@@ -389,4 +389,7 @@ class TestAdminMetadata:
         assert meta["rerank"]["config_shim_key"] == "rerank_shim"
         assert meta["rerank"]["default_format"] == "jina"
         assert meta["decision"]["config_shim_key"] == "decision_shim"
+        assert meta["decision"]["default_paths"] == {
+            "openai_decisions": "/v1/decisions"
+        }
         assert meta["llm"]["config_shim_key"] is None

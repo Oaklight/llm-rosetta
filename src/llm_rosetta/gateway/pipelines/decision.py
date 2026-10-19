@@ -40,28 +40,17 @@ logger = get_logger()
 def _detect_decision_source_format(
     request: Any, body: dict[str, Any], config: GatewayConfig
 ) -> str:
-    """Infer the source decision format from the request path and body.
+    """Infer the source decision format through the type descriptor.
 
-    Detection order:
-    1. ``/v1/decisions`` path → OpenAI Decisions
-    2. ``/v1/systemone`` path → System One
-    3. OpenAI-shaped body (``input`` + list ``questions``) → OpenAI Decisions
-    4. System One-shaped body (``state`` + map ``questions``) → System One
-    5. Fall back to ``config.default_decision_format``
-
-    The canonical ``/v1/decision`` route predates both conventions, so it falls
-    through to body detection (then the configured default).
+    The detector lives in :mod:`gateway.source_formats` and is attached to the
+    ``decision`` descriptor; this wrapper keeps the handler-local name used by
+    the tests and covers a registry without one.
     """
-    path: str = (getattr(request, "path", "") or "").rstrip("/")
-    if path == "/v1/decisions":
-        return "openai_decisions"
-    if path == "/v1/systemone":
-        return "systemone"
-    questions = body.get("questions")
-    if "input" in body and isinstance(questions, list):
-        return "openai_decisions"
-    if "state" in body and isinstance(questions, dict):
-        return "systemone"
+    from ..model_types import get_model_type
+
+    descriptor = get_model_type("decision")
+    if descriptor is not None and descriptor.detect_source_format is not None:
+        return descriptor.detect_source_format(request, body, config)
     return config.default_decision_format
 
 

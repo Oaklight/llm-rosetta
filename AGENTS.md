@@ -84,8 +84,11 @@ structure):
 They are reached through `EmbeddingConversionPipeline` /
 `RerankConversionPipeline` (or `get_embedding_converter(format)`), not through
 `auto_detect.detect_provider()`: the gateway's model-type descriptors own
-source detection for these routes (`gateway/source_formats.py`), and an
-embedding body cannot be attributed to a vendor from its model name.
+source detection for embedding, rerank and decision routes
+(`gateway/source_formats.py`), and an embedding body cannot be attributed to
+a vendor from its model name.  The decision detector also reads the route
+(`/v1/decisions` vs `/v1/systemone`), so a provider's default path follows
+the format it declares.
 
 ### Shim layer
 
