@@ -20,11 +20,11 @@ title: 提供方参考
 | [OpenRouter](openrouter.md) | `openrouter--chat_completions` | `chat_completions` | 多模型路由 |
 | [MiniMax](minimax.md) | `minimax--chat_completions` | `chat_completions` | OpenAI 兼容 |
 | [Argo](argo.md) | † `argo--*` | `chat_completions` | 阿贡内部网关 |
-| [AskSage](asksage.md) | † `asksage--*` | 多种 | 多格式聚合器 |
-| [ALCF](alcf.md) | † `alcf_<cluster>--chat_completions` | `chat_completions` | Globus OAuth, token_command |
+| [AskSage](asksage.md) | `asksage--*` | 多种 | 独立包；多格式聚合器 |
+| [ALCF](alcf.md) | `alcf_<cluster>--chat_completions` | `chat_completions` | 独立包；Globus OAuth, token_command |
 | [Kilo](kilo.md) | `kilo--chat_completions` | `chat_completions` | 免费池，keyless |
 | [OpenCode](opencode.md) | `opencode--*` | 多种 | Go 订阅 / Zen 余额 |
 
-† Argo、AskSage 和 ALCF 的 shim [计划于 0.16.0 移除](../shims.md#shims-scheduled-for-removal)，届时将迁移到独立的 shim 包。在此之前它们继续可用，名称也保持不变。
+† Argo 的 shim [计划于 0.16.0 移除](../shims.md#shims-scheduled-for-removal)，届时将迁移到独立的 shim 包。在此之前它们继续可用，名称也保持不变。ALCF 与 AskSage 的 shim 已作为独立包发布 —— 在使用其名称之前先声明对应源（**Settings → Shim Sources** 提供预设）。
 
 关于 shim 的通用概念和自定义 shim 注册，请参阅[提供方 Shims](../shims.md)。

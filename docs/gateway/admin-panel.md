@@ -29,8 +29,9 @@ shim 数量（shim 名在 tooltip 中）、解析出的目录，以及远程源�
 **Save** 保存该段并重新应用；**Reload** 重新应用当前配置；**Refetch** 强制重新下载所有
 远程源（绕过缓存与 `refresh` 设置）。失败的源会在这里报告，但不会阻止 gateway 启动。
 
-**预设目录。** 在 remotes 列表上方，一个目录提供那些替代
-[计划移除](../guide/shims.md#shims-scheduled-for-removal)的内置 shim 的 shim 包。选中一个并按下
+**预设目录。** 在 remotes 列表上方，目录提供 gateway 已知的全部独立 shim 包 —— ALCF、Argo
+与 AskSage —— 无论其内置 shim 是否
+[计划移除](../guide/shims.md#shims-scheduled-for-removal)。选中一个并按下
 **Add source**，会把对应的 `shims.remotes` 条目追加到下方的 JSON 列表中 —— 它**不会**
 保存，因此该条目与手工输入的条目一样，要经过同样的审阅和同样的 **Save**。`url` 已在
 列表中的条目不会被重复添加，按钮也会说明这一点。

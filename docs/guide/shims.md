@@ -211,23 +211,16 @@ def register_shims():
 
 ## 内置 Shim
 
-LLM-Rosetta 内置 42 个提供方 shim，每个 shim 对应 `src/llm_rosetta/shims/providers/`
-下的一个目录。`list_shims()` 会打印当前实际的集合；下表即是该集合。标有 **†** 的名称
-计划移除 —— 参见[计划移除清单](#shims-scheduled-for-removal)。
+LLM-Rosetta 内置 35 个提供方 shim，每个 shim 对应 `src/llm_rosetta/shims/providers/`
+下的一个目录。`list_shims()` 会打印当前实际的集合；下表即是该集合。标有 **†** 的是 Argo
+shim，计划移除 —— 参见[计划移除清单](#shims-scheduled-for-removal)。
 
 | 名称 | 格式 | 默认 Base URL | API Key 环境变量 | 转换规则 |
 |------|------|--------------|-----------------|---------|
-| † `alcf_metis--chat_completions` | `chat_completions` | `https://inference-api.alcf.anl.gov/resource_server/metis/api/v1` | `ALCF_API_KEY` | 剥离 `logprobs`、`top_logprobs`、`parallel_tool_calls`；developer → system；补空 content/description |
-| † `alcf_minerva--chat_completions` | `chat_completions` | `https://inference-api.alcf.anl.gov/resource_server/minerva/api/v1` | `ALCF_API_KEY` | 剥离 `logprobs`、`top_logprobs`；developer → system；补空 content/description |
-| † `alcf_sophia--chat_completions` | `chat_completions` | `https://inference-api.alcf.anl.gov/resource_server/sophia/vllm/v1` | `ALCF_API_KEY` | 剥离 `logprobs`、`top_logprobs`；developer → system；补空 content/description；重命名 `reasoning_content` → `reasoning` |
 | `anthropic--messages` | `messages` | `https://api.anthropic.com` | `ANTHROPIC_API_KEY` | — |
 | † `argo--chat_completions` | `chat_completions` | `https://apps.inside.anl.gov/argoapi/v1` | `ARGO_API_KEY` | `max_tokens` → `max_completion_tokens`（gemini）；developer → system；按模型剥离 temperature；gemini 系统内容展平；图片截断；并行工具调用解绕 |
 | † `argo--messages` | `messages` | `https://apps.inside.anl.gov/argoapi` | `ARGO_API_KEY` | OpenAI → Anthropic 响应归一化；按模型剥离 temperature |
 | † `argo--open_responses` | `open_responses` | `https://apps.inside.anl.gov/argoapi/v1` | `ARGO_API_KEY` | 按模型剥离 temperature |
-| † `asksage--chat_completions` | `chat_completions` | `https://api.asksage.ai/server/openai/v1` | `ASKSAGE_API_KEY` | `max_tokens` → `max_completion_tokens` |
-| † `asksage--google_generate` | `google_generate` | `https://api.asksage.ai/server/google/v1beta` | `ASKSAGE_API_KEY` | — |
-| † `asksage--messages` | `messages` | `https://api.asksage.ai/server/anthropic` | `ASKSAGE_API_KEY` | — |
-| † `asksage--open_responses` | `open_responses` | `https://api.asksage.ai/server/openai/v1` | `ASKSAGE_API_KEY` | `max_tokens` → `max_completion_tokens` |
 | `cohere--embedding` | `cohere` | `https://api.cohere.com` | `COHERE_API_KEY` | — |
 | `cohere--rerank` | `cohere` | `https://api.cohere.com` | `COHERE_API_KEY` | — |
 | `deepseek--chat_completions` | `chat_completions` | `https://api.deepseek.com` | `DEEPSEEK_API_KEY` | 剥离 `n`、`logit_bias`、`seed`、penalties；回填 `reasoning_content` |
@@ -266,25 +259,22 @@ LLM-Rosetta 内置 42 个提供方 shim，每个 shim 对应 `src/llm_rosetta/sh
 
 ### 计划移除清单 { #shims-scheduled-for-removal }
 
-十个内置 shim 正在迁往各自的仓库。ALCF、Argo 和 AskSage 的 shim 绑定于上游按各自节奏
-变化的部署，因此它们作为独立的 shim 包维护 —— 由 gateway 声明为一个
-[外部源](../gateway/configuration.md#external-shim-sources)来消费 —— 无需新的核心版本即可使用。
+Argo 的 shim 正在迁往独立的仓库。Argo 是一条面向具体部署的通道，其上游按自己的节奏变化，
+因此作为独立的 shim 包维护 —— 由 gateway 声明为一个
+[外部源](../gateway/configuration.md#external-shim-sources) 来消费 —— 无需新的核心版本即可使用。
 
-它们**仍随包发布，也仍然可用**：0.14 和 0.15 都不会移除任何东西。新的是「移除」这件事本身
-被声明了出来，既对你可见，也对代码可见。
+ALCF 与 AskSage 的 shim 已在 0.14.0 离开核心。它们是在 0.14.0 开发周期中引入的，因此没有任何
+稳定版发布过它们：ALCF 只出现在 `0.14.0.dev3`/`dev4` 测试版中，AskSage 一次也没有。它们的独立包
+注册相同的规范 shim 名称。Argo 自 v0.6.3 起随稳定版发布，因此保留为内置直到 0.16.0。
+
+Argo 的 shim **仍随包发布，也仍然可用**：0.14 和 0.15 都不会移除任何东西。新的是「移除」这件事
+本身被声明了出来，既对你可见，也对代码可见。
 
 | Shim | 移除版本 | 替代源 |
 |------|---------|--------|
-| † `alcf_metis--chat_completions` | 0.16.0 | [llm-rosetta-shim-alcf](https://github.com/Oaklight/llm-rosetta-shim-alcf) |
-| † `alcf_minerva--chat_completions` | 0.16.0 | [llm-rosetta-shim-alcf](https://github.com/Oaklight/llm-rosetta-shim-alcf) |
-| † `alcf_sophia--chat_completions` | 0.16.0 | [llm-rosetta-shim-alcf](https://github.com/Oaklight/llm-rosetta-shim-alcf) |
 | † `argo--chat_completions` | 0.16.0 | [llm-rosetta-shim-argo](https://github.com/Oaklight/llm-rosetta-shim-argo) |
 | † `argo--messages` | 0.16.0 | [llm-rosetta-shim-argo](https://github.com/Oaklight/llm-rosetta-shim-argo) |
 | † `argo--open_responses` | 0.16.0 | [llm-rosetta-shim-argo](https://github.com/Oaklight/llm-rosetta-shim-argo) |
-| † `asksage--chat_completions` | 0.16.0 | [llm-rosetta-shim-asksage](https://github.com/Oaklight/llm-rosetta-shim-asksage) |
-| † `asksage--google_generate` | 0.16.0 | [llm-rosetta-shim-asksage](https://github.com/Oaklight/llm-rosetta-shim-asksage) |
-| † `asksage--messages` | 0.16.0 | [llm-rosetta-shim-asksage](https://github.com/Oaklight/llm-rosetta-shim-asksage) |
-| † `asksage--open_responses` | 0.16.0 | [llm-rosetta-shim-asksage](https://github.com/Oaklight/llm-rosetta-shim-asksage) |
 
 **该怎么办。** 添加该源即可；提供方的 `shim` 值不需要改动，因为替代 shim 沿用原来的名称。
 
@@ -292,8 +282,8 @@ LLM-Rosetta 内置 42 个提供方 shim，每个 shim 对应 `src/llm_rosetta/sh
 "shims": {
   "remotes": [
     {
-      "url": "https://github.com/Oaklight/llm-rosetta-shim-alcf",
-      "path": "src/llm_rosetta_shim_alcf/providers",
+      "url": "https://github.com/Oaklight/llm-rosetta-shim-argo",
+      "path": "src/llm_rosetta_shim_argo/providers",
       "token_env": "GITHUB_TOKEN"          // 三个仓库都是私有的
     }
   ]
@@ -305,15 +295,16 @@ LLM-Rosetta 内置 42 个提供方 shim，每个 shim 对应 `src/llm_rosetta/sh
 commit 并记录进缓存 stamp，后续运行便复用同一个 commit。等它们打上 tag 后再固定该 tag ——
 参见 [ref 解析](../gateway/configuration.md#external-shim-sources)。
 
-管理面板会替你完成这些：**Settings → Shim Sources** 列出你的配置实际用到的 shim 对应的
-提示，从预设目录添加一个源会把上面那条条目原样追加到 remotes 列表，供你在保存前审阅。
-gateway 还会在启动时对每个受影响的提供方记录一条告警，指明该 shim、移除它的版本以及替代
-它的源 —— 一旦有已声明的源提供该 shim，告警即停止，因此日志安静下来就说明迁移已经完成。
+**Settings → Shim Sources 已预置这些源。** 面板的目录预载了本项目发布的全部独立包 ——
+ALCF、Argo 与 AskSage —— 无论是否安排了移除，都可以一键声明其中任何一个。添加预设只会把
+条目追加到 remotes 列表，供保存前审阅。gateway 还会在启动时对每个受影响的提供方记录一条
+告警，指明该 shim、移除它的版本以及替代它的源 —— 一旦有已声明的源提供该 shim，告警即停止，
+因此日志安静下来就说明迁移已经完成。
 
-在此期间，别名让旧配置继续可用：`alcf--metis`、`alcf--minerva`、`alcf--sophia`、
-`argo--openai_chat`、`argo--anthropic`、`argo--openai_responses`、`asksage--openai_chat`、
-`asksage--anthropic` 和 `asksage--openai_responses` 会解析到新名称，并在启动时于配置文件中
-改写，同时保存 `.pre-migration.bak` 备份。这些别名会随它们所代表的 shim 一起在 0.16.0 消失。
+在此期间，别名让旧配置继续可用：`argo--openai_chat`、`argo--anthropic` 和
+`argo--openai_responses` 会解析到新名称，并在启动时于配置文件中改写，同时保存
+`.pre-migration.bak` 备份。这些别名会随 shim 一起在 0.16.0 消失。ALCF 与 AskSage 的别名
+已随其内置 shim 一并移除；独立包只注册规范名称。
 
 一项 CI 检查把这份时间表约束到代码上，因此移除既不会提前也不会延后：
 `scripts/check_shim_removals.py`（`make check-shim-removals`）读取同一份清单，若某个 shim
@@ -444,7 +435,7 @@ Responses 格式通道，为拒绝 temperature 的 GPT/o 系列模型按模型�
 ```
 
 !!! note
-    默认 URL（`https://apps.inside.anl.gov/argoapi/`）仅在 ANL 内网可达。三个 Argo shim 都[计划于 0.16.0 移除](#shims-scheduled-for-removal)，届时迁移到独立的 `llm-rosetta-shim-argo` 包 —— 将其声明为外部源，配置中的名称即可继续使用。
+    默认 URL（`https://apps.inside.anl.gov/argoapi/`）仅在 ANL 内网可达。三个 Argo shim 都[计划于 0.16.0 移除](#shims-scheduled-for-removal)，届时迁移到独立的 `llm-rosetta-shim-argo` 包 —— 将其声明为外部源，配置中的名称即可继续使用。 **Settings → Shim Sources** 已将该源作为预设提供，因此迁移可以早于 0.16.0 完成。
 
 ## 能力标志
 

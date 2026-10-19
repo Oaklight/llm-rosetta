@@ -2,11 +2,21 @@
 
 ALCF（阿贡领先计算设施）推理服务通过三个 shim 端点提供支持，每个计算集群对应一个端点。所有端点均使用兼容 OpenAI Chat Completions 的 API。
 
-!!! warning "计划于 0.16.0 移除"
-    三个 ALCF shim 将在 0.16.0 迁移到独立的
+!!! warning "以独立包形式发布"
+    自 0.14.0 起，三个 ALCF shim 不再内置在 LLM-Rosetta 中，而是由
     [llm-rosetta-shim-alcf](https://github.com/Oaklight/llm-rosetta-shim-alcf)
-    包。在此之前其行为不变 —— 下面的名称也不会改变，迁移只需一条 `shims.remotes` 条目。
-    参见[计划移除清单](../shims.md#shims-scheduled-for-removal)。
+    包提供。将它声明在 `shims.remotes` 下，下面的名称即可继续使用。
+    **Settings → Shim Sources** 提供同一条目的一键预设。
+
+    ```jsonc
+    "shims": {
+      "remotes": [{
+        "url": "https://github.com/Oaklight/llm-rosetta-shim-alcf",
+        "path": "src/llm_rosetta_shim_alcf/providers",
+        "token_env": "GITHUB_TOKEN"      // 该仓库是私有的
+      }]
+    }
+    ```
 
 ## 端点
 
@@ -18,8 +28,8 @@ ALCF（阿贡领先计算设施）推理服务通过三个 shim 端点提供支�
 
 三个集群共用一个管理面板顶层：每个都声明 `group: alcf`，因此提供方类型选择器只显示一个
 `alcf` 分组，其条目读作 `metis · chat_completions`、`minerva · chat_completions` 和
-`sophia · chat_completions`。旧名称 `alcf--metis`、`alcf--minerva` 和 `alcf--sophia`
-仍然可以解析，并会在启动时于配置文件中被改写。
+`sophia · chat_completions`。旧的部署优先拼写（`alcf--metis`、`alcf--minerva`、
+`alcf--sophia`）不会由独立包注册；请使用上面的规范名称。
 
 ## 推理支持
 

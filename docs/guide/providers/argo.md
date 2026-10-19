@@ -6,6 +6,7 @@ Argo 是美国阿贡国家实验室的内部 API 网关，通过统一端点提�
     三个 Argo shim 将在 0.16.0 迁移到独立的
     [llm-rosetta-shim-argo](https://github.com/Oaklight/llm-rosetta-shim-argo)
     包。在此之前其行为不变 —— 下面的名称也不会改变，迁移只需一条 `shims.remotes` 条目。
+    **Settings → Shim Sources** 已将该源作为预设提供，因此迁移可以早于 0.16.0 完成。
     参见[计划移除清单](../shims.md#shims-scheduled-for-removal)。
 
 ## 端点

@@ -104,12 +104,15 @@ commit；配置文件本身不会被改写。要可复现部署请固定 tag 或
 `llm_rosetta.gateway.apply_shim_sources(raw, config_path)` 应用一个配置字典。
 `create_app` 也会自动应用该段。
 
-**替换即将退场的内置 shim。** 有十个内置 shim —— ALCF、Argo 和 AskSage 的 shim ——
-[计划于 0.16.0 移除](../guide/shims.md#shims-scheduled-for-removal)，届时只能从它们各自的仓库获取。
+**替换即将退场的内置 shim。** Argo 的 shim
+[计划于 0.16.0 移除](../guide/shims.md#shims-scheduled-for-removal)，届时只能从
+[llm-rosetta-shim-argo](https://github.com/Oaklight/llm-rosetta-shim-argo) 获取。
 使用其中之一的配置会在启动时收到一条告警，指明该 shim、移除它的版本以及替代它的源；
-管理面板会显示同样的提示，并能从预设目录中直接添加该源（见
-[管理面板 → Shim 源](admin-panel.md#shim-sources)）。一旦有已声明的源提供该 shim，告警
-立即消失，因此日志会告诉你迁移是否完成 —— 而提供方配置中的 shim 名称始终不变。
+一旦有已声明的源提供该 shim，告警立即消失，因此日志会告诉你迁移是否完成 —— 而提供方配置中
+的 shim 名称始终不变。ALCF 与 AskSage 的 shim 已在 0.14.0 离开核心；在使用它们的名称之前，
+请先声明 `llm-rosetta-shim-alcf` / `llm-rosetta-shim-asksage`。管理面板的预设目录（见
+[管理面板 → Shim 源](admin-panel.md#shim-sources)）预载了全部三个独立包，无论是否安排了移除，
+都可以一键添加其中任何一个。
 
 !!! warning "声明的源会执行代码"
     shim 目录可以携带 `transforms.py`，它会在 shim 加载时被执行 —— 与 `pip install`
