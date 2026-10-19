@@ -504,8 +504,8 @@
         <select id="filterOpsSource"><option value="" data-i18n="filter.allSources">All Sources</option></select>
         <button class="btn btn-sm" onclick="resetOpsLogFilters()" data-i18n="btn.resetFilters">Reset Filters</button>
       </div>
-      <div class="table-scroll"><table>
-        <thead><tr><th data-i18n="col.time">Time</th><th data-i18n="col.eventType">Event</th><th data-i18n="col.severity">Severity</th><th data-i18n="col.message">Message</th><th data-i18n="col.source">Source</th></tr></thead>
+      <div class="table-scroll"><table id="opsLogTableEl">
+        <thead><tr><th id="thOpsTime" data-i18n="col.time">Time</th><th id="thOpsEvent" data-i18n="col.eventType">Event</th><th id="thOpsSeverity" data-i18n="col.severity">Severity</th><th id="thOpsMessage" data-i18n="col.message">Message</th><th id="thOpsSource" data-i18n="col.source">Source</th></tr></thead>
         <tbody id="opsLogTable"></tbody>
       </table></div>
       <div class="pagination">

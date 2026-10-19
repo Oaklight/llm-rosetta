@@ -87,7 +87,7 @@ function renderLogs(entries, total) {
       // An expandable error row is a tab stop; aria-expanded reports the
       // same state the detail row's hidden attribute carries.
       const rowKeyboard = hasError
-        ? ` tabindex="0" aria-expanded="${isExpanded}" aria-controls="${detailId}" onkeydown="if(event.target===this&&(event.key==='Enter'||event.key===' ')){event.preventDefault();this.click();}"`
+        ? ` tabindex="0" aria-expanded="${isExpanded}" aria-controls="${detailId}" onkeydown="rowToggleKey(event,this)"`
         : '';
       let rows = `<tr data-log-id="${esc(e.id)}" role="row"${styleAttr}${rowClick}${rowKeyboard}${expandHint}>
         <td class="log-time" role="cell" aria-labelledby="thLogTime">${time}</td>

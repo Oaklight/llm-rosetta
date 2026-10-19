@@ -24,7 +24,8 @@ th { color: var(--th-color); font-weight: var(--th-weight); font-size: var(--th-
 tr:hover td { background: var(--bg-hover); }
 /* An expandable error row is a tab stop; the ring is inset so the table's
    scroll container cannot clip it. */
-#logTable tr[tabindex]:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
+#logTable tr[tabindex]:focus-visible,
+#opsLogTable tr[tabindex]:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
 .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 
 /* Provider cards */
@@ -1123,4 +1124,32 @@ body { padding-bottom: 26px; }
   #logTable tr.log-error-row { display:block; padding:0 12px 12px; }
   #logTable tr.log-error-row[hidden] { display:none; }
   #logTable tr.log-empty-row { display:block; padding:12px; }
+
+  /* ── Server Ops Log → the same card treatment ──
+     Time/Event/Severity fit a phone, but Message — the why of the event —
+     and Source were pushed off-screen by the 760px minimum. */
+  #tab-logs #opsLogTableEl { table-layout:auto; min-width:0; }
+  #tab-logs #opsLogTableEl thead { display:none; }
+  #opsLogTable tr {
+    display:grid;
+    grid-template-columns:auto minmax(0,1fr) auto;
+    grid-template-areas:
+      "time  event  severity"
+      "message message message"
+      "source source source";
+    gap:6px 8px;
+    padding:12px;
+    border-bottom:1px solid var(--border);
+  }
+  #opsLogTable tr:hover { background:var(--bg-hover); }
+  #opsLogTable tr:hover td { background:transparent; }
+  #opsLogTable td { display:block; padding:0; border:none; }
+  #opsLogTable .ops-time { grid-area:time; font-size:12px; color:var(--text-dim); }
+  #opsLogTable .ops-event { grid-area:event; }
+  #opsLogTable .ops-severity { grid-area:severity; justify-self:end; }
+  #opsLogTable .ops-message { grid-area:message; overflow-wrap:anywhere; }
+  #opsLogTable .ops-source { grid-area:source; overflow-wrap:anywhere; }
+  #opsLogTable tr.ops-error-row { display:block; padding:0 12px 12px; }
+  #opsLogTable tr.ops-error-row[hidden] { display:none; }
+  #opsLogTable tr.ops-empty-row { display:block; padding:12px; }
 }

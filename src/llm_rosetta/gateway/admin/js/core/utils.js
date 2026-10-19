@@ -342,9 +342,25 @@ export function freeEntryLabel(providers, shims, name, suffix) {
   return `${brand} ${suffix}`;
 }
 
+/**
+ * Keyboard path for an expandable table row: Enter or Space runs the row's
+ * own click handler, so the keyboard and pointer paths cannot drift.  Events
+ * from controls inside the row are ignored, so activating the error-dump
+ * button does not also fold the row.
+ *
+ * @param {KeyboardEvent} event
+ * @param {HTMLElement} row
+ */
+function rowToggleKey(event, row) {
+  if (event.target !== row) return;
+  if (event.key !== 'Enter' && event.key !== ' ' && event.key !== 'Spacebar') return;
+  event.preventDefault();  // Space would otherwise scroll the page
+  row.click();
+}
+
 Object.assign(window, {
   setScheme, setMode, setTheme, api, doLogout, copyText, copyProviderEntry,
-  showToast, showToastHtml, openModal, closeModal, inlineConfirm, esc, formatDuration,
+  showToast, showToastHtml, openModal, closeModal, inlineConfirm, esc, formatDuration, rowToggleKey,
   fmtBytesShort, fmtBytesLong, fmtTokens, closeMenus,
   _startInactivityTracking, _stopInactivityTracking,
 });

@@ -46,27 +46,33 @@ async function loadOpsLog() {
 function renderOpsLog(entries, total) {
   const tbody = document.getElementById('opsLogTable');
   if (entries.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="5" style="color:var(--text-dim)">${t('empty.opsLog')}</td></tr>`;
+    tbody.innerHTML = `<tr class="ops-empty-row" role="row"><td colspan="5" role="cell" style="color:var(--text-dim)">${t('empty.opsLog')}</td></tr>`;
   } else {
-    tbody.innerHTML = entries.map(e => {
+    tbody.innerHTML = entries.map((e, idx) => {
       const time = new Date(e.timestamp).toLocaleString(undefined, {month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit'});
       const label = EVENT_KEYS[e.event_type] ? t(EVENT_KEYS[e.event_type]) : e.event_type;
       const sevCls = SEVERITY_BADGE[e.severity] || '';
       const hasDetails = !!e.details;
       const rowId = e.id;
+      const detailId = 'opsErr-' + idx;
       const isExpanded = S.expandedOpsLogRows.has(rowId);
       const rowCursor = hasDetails ? 'cursor:pointer;' : '';
-      const rowClick = hasDetails ? ` onclick="toggleOpsLogRow('${esc(rowId)}',this)"` : '';
+      const rowClick = hasDetails ? ' onclick="toggleOpsLogRow(this.dataset.opsLogId,this)"' : '';
+      // Same keyboard contract as the Request Log's error rows: a tab stop,
+      // Enter/Space runs the click path, and the nested pre does not re-toggle.
+      const rowKeyboard = hasDetails
+        ? ` tabindex="0" aria-expanded="${isExpanded}" aria-controls="${detailId}" onkeydown="rowToggleKey(event,this)"`
+        : '';
       const expandHint = hasDetails ? ' ▸' : '';
-      let rows = `<tr${rowCursor ? ` style="${rowCursor}"` : ''}${rowClick}>
-        <td>${time}</td>
-        <td><span class="badge badge-stream">${esc(label)}</span></td>
-        <td><span class="badge ${sevCls}">${esc(e.severity)}${expandHint}</span></td>
-        <td>${esc(e.message)}</td>
-        <td style="font-size:12px;color:var(--text-dim)">${esc(e.source || '—')}</td>
+      let rows = `<tr data-ops-log-id="${esc(rowId)}" role="row"${rowCursor ? ` style="${rowCursor}"` : ''}${rowClick}${rowKeyboard}>
+        <td class="ops-time" role="cell" aria-labelledby="thOpsTime">${time}</td>
+        <td class="ops-event" role="cell" aria-labelledby="thOpsEvent"><span class="badge badge-stream">${esc(label)}</span></td>
+        <td class="ops-severity" role="cell" aria-labelledby="thOpsSeverity"><span class="badge ${sevCls}">${esc(e.severity)}${expandHint}</span></td>
+        <td class="ops-message" role="cell" aria-labelledby="thOpsMessage">${esc(e.message)}</td>
+        <td class="ops-source" role="cell" aria-labelledby="thOpsSource" style="font-size:12px;color:var(--text-dim)">${esc(e.source || '—')}</td>
       </tr>`;
       if (hasDetails) {
-        rows += `<tr${isExpanded ? '' : ' hidden'}><td colspan="5"><pre style="margin:0;padding:8px;background:var(--bg);border-radius:6px;font-size:11px;max-height:200px;overflow:auto;white-space:pre-wrap;word-break:break-all">${esc(JSON.stringify(e.details, null, 2))}</pre></td></tr>`;
+        rows += `<tr class="ops-error-row" id="${detailId}" role="row"${isExpanded ? '' : ' hidden'}><td colspan="5" role="cell"><pre style="margin:0;padding:8px;background:var(--bg);border-radius:6px;font-size:11px;max-height:200px;overflow:auto;white-space:pre-wrap;word-break:break-all">${esc(JSON.stringify(e.details, null, 2))}</pre></td></tr>`;
       }
       return rows;
     }).join('');
@@ -83,6 +89,7 @@ function toggleOpsLogRow(rowId, tr) {
   const detail = tr.nextElementSibling;
   if (!detail) return;
   detail.hidden = !detail.hidden;
+  tr.setAttribute('aria-expanded', String(!detail.hidden));
   if (detail.hidden) S.expandedOpsLogRows.delete(rowId);
   else S.expandedOpsLogRows.add(rowId);
 }
