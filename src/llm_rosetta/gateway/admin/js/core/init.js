@@ -133,13 +133,9 @@ document.querySelectorAll('.modal-overlay').forEach(m => {
   m.addEventListener('click', e => { if (e.target === m) closeModal(m.id); });
 });
 
-// Close popups/modals on Escape key
-document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') {
-    const testModal = document.getElementById('testModal');
-    if (testModal && testModal.classList.contains('open')) closeModal('testModal');
-  }
-});
+// Close popups/modals on Escape key. Modal dialogs register their own
+// handler in openModal (utils.js) when they open, so a picker or dropdown
+// inside the dialog runs first and can consume the key.
 
 // ===================== System Clock =====================
 (function initClock() {

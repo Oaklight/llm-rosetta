@@ -147,14 +147,30 @@ function showToastHtml(trustedHtml, type = 'success') {
 
 // ===================== Modal =====================
 const _modalTriggers = new Map();
+const _modalEscapeHandlers = new Map();
 
 function openModal(id) {
   _modalTriggers.set(id, document.activeElement);
   document.getElementById(id).classList.add('open');
+  if (!_modalEscapeHandlers.has(id)) {
+    // Registered when the dialog opens, so component handlers (pickers,
+    // dropdowns) that were bound earlier run first and can consume Escape
+    // with preventDefault; only an unconsumed Escape closes the dialog.
+    const onKey = (e) => {
+      if (e.key === 'Escape' && !e.defaultPrevented) closeModal(id);
+    };
+    _modalEscapeHandlers.set(id, onKey);
+    document.addEventListener('keydown', onKey);
+  }
 }
 
 function closeModal(id) {
   document.getElementById(id).classList.remove('open');
+  const onKey = _modalEscapeHandlers.get(id);
+  if (onKey) {
+    document.removeEventListener('keydown', onKey);
+    _modalEscapeHandlers.delete(id);
+  }
   if (id === 'testModal') window._abortPendingTest?.();
   const trigger = _modalTriggers.get(id);
   _modalTriggers.delete(id);

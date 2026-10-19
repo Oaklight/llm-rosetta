@@ -1,6 +1,6 @@
 import { S } from '../core/state.js';
 import { t } from '../core/i18n.js';
-import { api, showToast, closeModal, esc, fmtTokens, inlineConfirm } from '../core/utils.js';
+import { api, showToast, closeModal, openModal, esc, fmtTokens, inlineConfirm } from '../core/utils.js';
 
 // ===================== API Keys Tab =====================
 
@@ -113,11 +113,26 @@ function renderKeys() {
   // Re-rendered here too so a language switch relabels the tier control.
   renderKeyUsageControl();
   const tbody = document.getElementById('keysTable');
-  const keys = (S.keysData && S.keysData.keys) || [];
+  const allKeys = (S.keysData && S.keysData.keys) || [];
+  const query = (document.getElementById('keySearch')?.value || '').trim().toLowerCase();
+  const keys = query
+    ? allKeys.filter(k => (k.label || '').toLowerCase().includes(query))
+    : allKeys;
   const win = S.keyUsageWindow || usageWindows()[0];
-  const extraRows = renderUnattributedRows(win);
-  if (keys.length === 0 && extraRows.length === 0) {
+  // Unattributed rows carry no label, so they cannot match a search.
+  const extraRows = query ? [] : renderUnattributedRows(win);
+  const countEl = document.getElementById('keyCount');
+  if (countEl) {
+    countEl.textContent = query
+      ? t('keys.countFiltered', {shown: keys.length, total: allKeys.length})
+      : t('keys.count', {count: allKeys.length});
+  }
+  if (allKeys.length === 0 && extraRows.length === 0) {
     tbody.innerHTML = `<tr><td colspan="8" style="color:var(--text-dim)">${t('keys.noKeys')}</td></tr>`;
+    return;
+  }
+  if (keys.length === 0 && extraRows.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="8" style="color:var(--text-dim)">${t('keys.noMatch')}</td></tr>`;
     return;
   }
   const usageKeys = (S.keyUsage && S.keyUsage.keys) || {};
@@ -137,7 +152,7 @@ function renderKeys() {
       : '';
     return `<tr>
       <td><span class="key-label-text" id="label-${k.id}">${esc(k.label || '—')}</span>
-        <button class="key-btn" style="margin-left:4px" onclick="editKeyLabel('${k.id}','${esc(k.label || '')}')" title="Edit"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button>${sharedMark}</td>
+        <button class="key-btn" style="margin-left:4px" onclick="editKeyLabel('${k.id}')" title="Edit"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button>${sharedMark}</td>
       <td title="${createdFull}">${created}</td>
       <td title="${lastUsedFull}">${lastUsed}</td>
       <td style="text-align:right" title="${usageTip}">${reqs}</td>
@@ -189,12 +204,42 @@ async function _doDeleteKey(id, label) {
   else { showToast(res.error || 'Failed', 'error'); }
 }
 
-async function editKeyLabel(id, currentLabel) {
-  const newLabel = prompt('Label:', currentLabel);
-  if (newLabel === null) return;
-  const res = await api.put(`/admin/api/keys/${encodeURIComponent(id)}`, {label: newLabel});
-  if (res.ok) { showToast(t('toast.keyLabelUpdated')); loadKeys(); }
-  else { showToast(res.error || 'Failed', 'error'); }
+// The row's label span is the source of truth: embedding the label in the
+// onclick attribute would need JS-string escaping on top of HTML escaping.
+let _editingKeyId = null;
+
+function editKeyLabel(id) {
+  _editingKeyId = id;
+  const span = document.getElementById('label-' + id);
+  const current = span ? span.textContent.trim() : '';
+  const input = document.getElementById('keyLabelInput');
+  input.value = current === '—' ? '' : current;
+  openModal('keyLabelModal');
+  setTimeout(() => { input.focus(); input.select(); }, 0);
+}
+
+function onKeyLabelInputKeydown(e) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    saveKeyLabel();
+  } else if (e.key === 'Escape') {
+    e.preventDefault();
+    closeModal('keyLabelModal');
+  }
+}
+
+async function saveKeyLabel() {
+  if (!_editingKeyId) return;
+  const label = document.getElementById('keyLabelInput').value.trim();
+  const res = await api.put(`/admin/api/keys/${encodeURIComponent(_editingKeyId)}`, {label});
+  if (res.ok) {
+    closeModal('keyLabelModal');
+    _editingKeyId = null;
+    showToast(t('toast.keyLabelUpdated'));
+    loadKeys();
+  } else {
+    showToast(res.error || 'Failed', 'error');
+  }
 }
 
 function deleteKey(id, label, btn) {
@@ -229,6 +274,7 @@ async function backfillKeysLastUsed() {
 Object.assign(window, {
   loadKeys, loadLogKeyLabels, renderKeys, openKeyModal,
   generateKey, copyCreatedKey, deleteKey, rotateKey, editKeyLabel,
+  onKeyLabelInputKeydown, saveKeyLabel,
   backfillKeysLastUsed, setKeyUsageWindow,
 });
 
