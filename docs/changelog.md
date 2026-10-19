@@ -10,7 +10,7 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### 新增
 
-- **Providers 页的 Server Settings 折叠为一行摘要**（PR [#1080](https://github.com/Oaklight/llm-rosetta/pull/1080)）：全局代理卡片是部署期设置，大多数运维人员不会用到，却占据了 provider 列表上方约 190px 的手机首屏，桌面端也把所有 provider 卡片向下推。现在该区块是一个 `<details>`，摘要行显示当前生效值（“未设置全局代理”或具体 URL），默认折叠；展开后仍是原来的卡片，展开状态会跨刷新保留。`<details>` 自带键盘操作与展开状态，摘要文本由 provider 渲染流程重新同步，因此会随面板一起切换语言。
+- **Providers 页的 Server Settings 折叠为一行摘要**（PR [#1080](https://github.com/Oaklight/llm-rosetta/pull/1080)）：全局代理卡片是部署期设置，大多数运维人员不会用到，却占据了 provider 列表上方约 190px 的手机首屏，桌面端也把所有 provider 卡片向下推。现在该区块是一个 `<details>`，摘要行显示当前生效值（“未设置全局代理”或具体 URL），默认折叠；展开后仍是原来的卡片，展开状态会跨刷新保留。`<details>` 自带键盘操作与展开状态，摘要文本由 provider 渲染流程重新同步，因此会随面板一起切换语言。折叠行会去掉 URL 中的凭据（`http://user:pass@host` 显示为 `http://host`），输入框与已保存的值保持不变。
 
 - **API 密钥表可以按任意列排序**（PR [#1078](https://github.com/Oaklight/llm-rosetta/pull/1078)）：密钥表此前只有服务端给出的顺序，想回答“某一时间窗内哪个密钥消耗最多 token”或“最近创建的是哪个”，只能通读整张表。现在 Label、Created、Last Used、Requests、Input、Output、Total 都是可排序列，交互与箭头和 Models 表一致：点击当前列切换升降序，点击其他列从升序开始；用量列跟随所选的 5h/24h/7d/30d 时间窗，缺失日期视为最旧，internal 与 Unattributed 行始终排在末尾而不会与有标签的密钥交错。未点击任何列之前保持服务端顺序。
 
