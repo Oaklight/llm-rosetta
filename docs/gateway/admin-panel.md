@@ -22,8 +22,9 @@ Set a global proxy URL that applies to all providers unless overridden per-provi
 
 The **Settings** tab has a **Shim Sources** section for the top-level `shims`
 config section (see [External Shim Sources](configuration.md#external-shim-sources)).
-It lists the declared **Directories** (one per line), **Remotes** (a JSON
-array) and the remaining knobs — **Cache directory**, **Re-fetch TTL (s)** and
+It lists the declared **Directories** (one per line), **Presets** (comma- or
+whitespace-separated catalog keys), **Remotes** (a JSON array) and the remaining
+knobs — **Cache directory**, **Re-fetch TTL (s)** and
 **Fail startup on a bad source** — and shows a per-source status table:
 `loaded` / `failed`, whether a stale cache was used, the shim count (shim names
 are in the tooltip), the resolved directory and, for remotes, the commit SHA the
@@ -35,13 +36,14 @@ its cache and `refresh` mode. A source that fails is reported here without
 stopping the gateway.
 
 **Preset catalog.** Above the remotes list, a catalog offers every standalone
-shim package the gateway knows about — ALCF, Argo and AskSage — whether or not
-its built-in is
-[scheduled for removal](../guide/shims.md#shims-scheduled-for-removal). Choosing
-one and pressing **Add source** appends its `shims.remotes` entry to the JSON list
-below — it does **not** save, so the entry goes through the same review and the
-same **Save** as one typed by hand. An entry whose `url` is already in the list is
-not added a second time, and the button says so.
+shim package the gateway knows about — ALCF, Argo and AskSage. Choosing one and
+pressing **Add source** appends its expanded `shims.remotes` entry to the JSON
+list below — it does **not** save, so the entry goes through the same review and
+the same **Save** as one typed by hand. The **Presets** field above is the
+shorter spelling: catalog keys (`argo, alcf`) that expand server-side, with an
+explicit remote overriding its preset when the URLs match. An entry whose `url`
+is already in the list is not added a second time, and the button says so. See
+[Standalone shim packages](../guide/shims.md#standalone-shim-packages).
 
 **Removal advisories.** Below the status table, the advisories name each provider
 in the config whose shim is going away, the release that removes it, and the

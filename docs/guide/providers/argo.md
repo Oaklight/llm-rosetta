@@ -2,14 +2,18 @@
 
 Argo is Argonne National Laboratory's internal API gateway, providing access to various LLM models through a unified endpoint. It is supported through three shim endpoints.
 
-!!! warning "Scheduled for removal in 0.16.0"
-    All three Argo shims move to the standalone
+!!! warning "Not built in"
+    The three Argo shims ship in the standalone
     [llm-rosetta-shim-argo](https://github.com/Oaklight/llm-rosetta-shim-argo)
-    package in 0.16.0. They work unchanged until then — and the names below do not
-    change, so migrating is one `shims.remotes` entry. **Settings → Shim
-    Sources** already offers that source as a preset, so the migration can land
-    before 0.16.0. See
-    [Shims scheduled for removal](../shims.md#shims-scheduled-for-removal).
+    package. Declare it before using the names below:
+
+    ```jsonc
+    { "shims": { "presets": ["argo"] } }
+    ```
+
+    The package registers the same canonical names, so provider configs do not
+    change. **Settings → Shim Sources** offers the source as a preset. See
+    [Standalone shim packages](../shims.md#standalone-shim-packages).
 
 ## Endpoints
 
@@ -96,6 +100,10 @@ Argo is Argonne National Laboratory's internal API gateway, providing access to 
 | Post-IR | `strip temperature` (gpto\*, gpt5\*) | Removes temperature for the GPT/o-series models that reject it |
 
 ## Gateway Configuration
+
+The `presets` declaration above is required — without it these provider entries
+fail to load because the shims are not built in.
+
 
 === "Chat Completions"
 

@@ -99,7 +99,7 @@ Probed 2026-05-23 ([#220](https://github.com/Oaklight/llm-rosetta/issues/220#iss
 | **opus47** | ❌ type not accepted | ❌ type not accepted | ✅ | **`adaptive` only** |
 
 !!! info "opus47 shim override"
-    The `argo--messages` shim declares `thinking_type: enabled` at the provider level, with a `model_overrides` entry for `claudeopus47: thinking_type: adaptive`. See [PR #256](https://github.com/Oaklight/llm-rosetta/pull/256).
+    The standalone `argo--messages` shim declares `thinking_type: enabled` at the provider level, with a `model_overrides` entry for `claudeopus47: thinking_type: adaptive`. See [PR #256](https://github.com/Oaklight/llm-rosetta/pull/256).
 
 ### Automatic Fallback
 
@@ -152,7 +152,7 @@ messages.9.content.0: Invalid `signature` in `thinking` block
 | `as_is` (default) | Forward unsigned reasoning blocks as-is. The target provider decides whether to accept or reject them. |
 | `preserve` | Remove unsigned reasoning blocks from outbound messages. The reasoning content is preserved in `provider_metadata.anthropic.unsigned_reasoning_blocks` on the IR part for downstream consumers. |
 
-Currently only `argo--messages` uses `preserve`. Direct Anthropic API calls use `as_is` because the official API handles unsigned blocks differently from Argo's proxy layer.
+Currently only the standalone `argo--messages` shim uses `preserve`. Direct Anthropic API calls use `as_is` because the official API handles unsigned blocks differently from Argo's proxy layer.
 
 When `preserve` filters all reasoning parts from an assistant message, the message is skipped entirely (with a warning) rather than sending an empty `content: []` array.
 

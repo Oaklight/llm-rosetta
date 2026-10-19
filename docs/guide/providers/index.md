@@ -19,12 +19,12 @@ Per-provider guides covering shim configuration, transforms, authentication, and
 | [Volcengine](volcengine.md) | `volcengine--chat_completions` | `chat_completions` | Field transforms |
 | [OpenRouter](openrouter.md) | `openrouter--chat_completions` | `chat_completions` | Multi-model router |
 | [MiniMax](minimax.md) | `minimax--chat_completions` | `chat_completions` | OpenAI-compatible |
-| [Argo](argo.md) | † `argo--*` | `chat_completions` | Argonne internal gateway |
+| [Argo](argo.md) | `argo--*` | `chat_completions` | Standalone package; Argonne internal gateway |
 | [AskSage](asksage.md) | `asksage--*` | multiple | Standalone package; multi-format aggregator |
 | [ALCF](alcf.md) | `alcf_<cluster>--chat_completions` | `chat_completions` | Standalone package; Globus OAuth, token_command |
 | [Kilo](kilo.md) | `kilo--chat_completions` | `chat_completions` | Free pool, keyless |
 | [OpenCode](opencode.md) | `opencode--*` | multiple | Go subscription / Zen balance |
 
-† The Argo shims are [scheduled for removal](../shims.md#shims-scheduled-for-removal) in 0.16.0, when they move to the standalone shim package. They keep working, and keep their names, until then. The ALCF and AskSage shims already ship as standalone packages — declare their source (**Settings → Shim Sources** offers the preset) before using their names.
+The Argo, AskSage and ALCF shims ship as standalone packages — declare their source with `shims.presets` (or **Settings → Shim Sources**) before using their names. See [Standalone shim packages](../shims.md#standalone-shim-packages).
 
 For general shim concepts and custom shim registration, see [Provider Shims](../shims.md).

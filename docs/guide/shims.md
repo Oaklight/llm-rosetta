@@ -195,6 +195,7 @@ ships no `pip` and no `git`) and the shims live in their own repository:
 
 ```jsonc
 "shims": {
+  "presets": ["alcf"],                            // shorthand for the catalog remote below
   "paths": ["/config/shims"],                     // dirs holding <name>/provider.yaml
   "remotes": [
     {
@@ -207,8 +208,10 @@ ships no `pip` and no `git`) and the shims live in their own repository:
 }
 ```
 
-A remote `path` is the directory inside the archive that holds the provider
-directories (for the `llm-rosetta-shim-*` packages that is
+A `presets` entry names a package from the source catalog (ALCF, Argo,
+AskSage) and expands to the remote shown below; an explicit remote with the same
+URL overrides it. A remote `path` is the directory inside the archive that holds
+the provider directories (for the `llm-rosetta-shim-*` packages that is
 `src/<package>/providers`). See
 [Gateway → External Shim Sources](../gateway/configuration.md#external-shim-sources)
 for the full field list, caching and refresh behaviour, precedence, and the
@@ -222,17 +225,14 @@ config file needed) or `llm_rosetta.gateway.apply_shim_sources(raw, config_path)
 
 ## Built-in Shims
 
-LLM-Rosetta ships with 35 built-in provider shims, one directory per shim under
+LLM-Rosetta ships with 32 built-in provider shims, one directory per shim under
 `src/llm_rosetta/shims/providers/`. `list_shims()` prints the live set; this is
-that set. The Argo shims are marked **†**: they are scheduled for removal — see
-[Shims scheduled for removal](#shims-scheduled-for-removal).
+that set. The ALCF, AskSage and Argo shims ship as standalone packages — see
+[Standalone shim packages](#standalone-shim-packages).
 
 | Name | Format | Default Base URL | API Key Env | Transforms |
 |------|--------|-----------------|-------------|------------|
 | `anthropic--messages` | `messages` | `https://api.anthropic.com` | `ANTHROPIC_API_KEY` | — |
-| † `argo--chat_completions` | `chat_completions` | `https://apps.inside.anl.gov/argoapi/v1` | `ARGO_API_KEY` | `max_tokens` → `max_completion_tokens` (gemini); developer → system; per-model temperature stripping; gemini system flattening; image truncation; parallel-tool-call unwinding |
-| † `argo--messages` | `messages` | `https://apps.inside.anl.gov/argoapi` | `ARGO_API_KEY` | OpenAI → Anthropic response normalization; per-model temperature stripping |
-| † `argo--open_responses` | `open_responses` | `https://apps.inside.anl.gov/argoapi/v1` | `ARGO_API_KEY` | per-model temperature stripping |
 | `cohere--embedding` | `cohere` | `https://api.cohere.com` | `COHERE_API_KEY` | — |
 | `cohere--rerank` | `cohere` | `https://api.cohere.com` | `COHERE_API_KEY` | — |
 | `deepseek--chat_completions` | `chat_completions` | `https://api.deepseek.com` | `DEEPSEEK_API_KEY` | strips `n`, `logit_bias`, `seed`, penalties; backfills `reasoning_content` |
@@ -270,33 +270,33 @@ rewrites mid-conversation system/developer messages so the prompt-cache prefix
 stays stable, is declared by most `chat_completions` shims and is not repeated
 here; every shim's full declaration is in its own `transforms.py`.
 
-### Shims scheduled for removal
+### Standalone shim packages
 
-The Argo shims are moving into their own repository. Argo is a
-deployment-specific lane whose upstream changes on its own schedule, so it is
-maintained as a standalone shim package that a gateway declares as an
-[external source](../gateway/configuration.md#external-shim-sources) — and
-consumed without a new core release.
+Three shim sets live in their own repositories rather than in core:
 
-The ALCF and AskSage shims already left core in 0.14.0. They were introduced
-during the 0.14.0 development cycle, so no stable release ever shipped them;
-ALCF only appeared in the `0.14.0.dev3`/`dev4` test builds, and AskSage in none.
-Their standalone packages register the same canonical shim names. Argo has
-shipped since v0.6.3, so it stays built in until 0.16.0.
+| Package | Shim names | Repository |
+|---------|------------|------------|
+| ALCF | `alcf_metis--chat_completions`, `alcf_minerva--chat_completions`, `alcf_sophia--chat_completions` | [llm-rosetta-shim-alcf](https://github.com/Oaklight/llm-rosetta-shim-alcf) |
+| Argo | `argo--chat_completions`, `argo--messages`, `argo--open_responses` | [llm-rosetta-shim-argo](https://github.com/Oaklight/llm-rosetta-shim-argo) |
+| AskSage | `asksage--chat_completions`, `asksage--messages`, `asksage--open_responses`, `asksage--google_generate` | [llm-rosetta-shim-asksage](https://github.com/Oaklight/llm-rosetta-shim-asksage) |
 
-The Argo shims **still ship, and still work**: nothing is removed in 0.14 or
-0.15. What is new is that the removal is declared, both to you and to the code.
+ALCF and AskSage were introduced during the 0.14.0 development cycle and never
+appeared in a stable release's built-in set; Argo had shipped built in since
+v0.6.3. All three left core in 0.14.0. Their packages register the same
+canonical shim names, so a provider's `shim` value does not change — only the
+source declaration is new.
 
-| Shim | Removed in | Replacement source |
-|------|-----------|--------------------|
-| † `argo--chat_completions` | 0.16.0 | [llm-rosetta-shim-argo](https://github.com/Oaklight/llm-rosetta-shim-argo) |
-| † `argo--messages` | 0.16.0 | [llm-rosetta-shim-argo](https://github.com/Oaklight/llm-rosetta-shim-argo) |
-| † `argo--open_responses` | 0.16.0 | [llm-rosetta-shim-argo](https://github.com/Oaklight/llm-rosetta-shim-argo) |
-
-**What to do about it.** Add the source; the provider's `shim` value does not
-change, because the replacement shims keep the names.
+**Preload a package by name.** `shims.presets` expands a catalog key into the
+repository, path and token variable, so one line replaces the expanded remote:
 
 ```jsonc
+"shims": {
+  "presets": ["argo"]
+}
+```
+
+```jsonc
+// equivalent explicit remote
 "shims": {
   "remotes": [
     {
@@ -308,41 +308,41 @@ change, because the replacement shims keep the names.
 }
 ```
 
-The three replacement repositories are private, so `token_env` is required; the
-per-repository `path` is the one thing that differs between the three. No `ref`
-is pinned in the preset, because none of the repositories is tagged yet: a remote
-without a `ref` resolves `HEAD` to a commit once and records it in the cache
-stamp, so the same commit is reused on later runs. Once they are tagged, pin the
+Presets are applied before explicit remotes, and an explicit remote with the
+same URL overrides its preset. The three repositories are private, so
+`token_env` names the variable that carries the forge token. No `ref` is pinned
+because none of them is tagged yet: a remote without a `ref` resolves `HEAD` to
+a commit once and records it in the cache stamp. Once they are tagged, pin the
 tag — see [Ref resolution](../gateway/configuration.md#external-shim-sources).
 
-**Settings → Shim Sources has the presets.** The panel's catalog is preloaded
-with every standalone package this project publishes — ALCF, Argo and AskSage —
-whether or not a removal is scheduled, so any of them can be declared with one
-click. Adding a preset only appends the entry to the remotes list, for review
-before saving. The gateway also logs one warning per affected provider at
-startup, naming the shim, the release that removes it and the source that
-replaces it — and it stops warning as soon as a declared source supplies that
-shim, so a quiet log is the confirmation that the migration is done.
+**Settings → Shim Sources** offers every catalog package as a one-click preset
+(and a text field for the same keys); saving writes `presets` or the expanded
+remote to the config. A config that still names one of these shims without a
+declared source gets a startup error naming the package, the preset and the
+expanded remote; once the source loads, the error goes away.
 
-Aliases keep older configs working in the meantime: `argo--openai_chat`,
-`argo--anthropic` and `argo--openai_responses` resolve to their new names and are
-rewritten in the config file at startup, with a `.pre-migration.bak` backup.
-Those aliases go away with the shim in 0.16.0. The ALCF and AskSage aliases are
-gone with their built-ins; the standalone packages register the canonical names
-only.
+Legacy spellings do **not** resolve in core any more: `argo--openai_chat`,
+`argo--anthropic` and `argo--openai_responses` were aliases of the built-in
+shims and left with them, and the standalone packages register canonical names
+only. Change a legacy value to its canonical name when declaring the preset.
 
-A CI check holds the schedule to the code, so the removal cannot happen early or
-late: `scripts/check_shim_removals.py` (`make check-shim-removals`) reads the same
-manifest and fails if a shim disappears before its `removed_in` release, and once
-the version reaches that release it fails while the shim is still registered, or
-still referenced by an example, a Docker file, the docs, or the source — a
-leftover alias entry in `provider_names.py` counts, and so does the shim's own
-`provider.yaml`. The boundary is the version, not a date — nothing has to be
-remembered.
+A CI check (`scripts/check_shim_removals.py`, `make check-shim-removals`) still
+guards future removals: it reads `SHIM_REMOVALS`, fails if a shim disappears
+before its `removed_in` release, and once the version reaches that release it
+fails while the shim is still registered or still named by an example, a Docker
+file, the docs or the source. No built-in removal is scheduled today.
 
 ## Argo Shims
 
 `argo--chat_completions`, `argo--messages` and `argo--open_responses` target the **Argo gateway** — a proxy layer used at certain institutions (such as Argonne National Laboratory) that fronts multiple upstream LLM providers behind a single endpoint.
+
+They are **not built in**. Declare the standalone package first:
+
+```jsonc
+{
+  "shims": { "presets": ["argo"] }
+}
+```
 
 All three shims use `model_id_field: internal_id` — the model identifier is sent as `internal_id` instead of `model`.
 
@@ -377,7 +377,7 @@ Override the `default_base_url` in your gateway config:
 ```
 
 !!! note
-    The default URL (`https://apps.inside.anl.gov/argoapi/`) is only reachable from within the ANL network. All three Argo shims are [scheduled for removal](#shims-scheduled-for-removal) in 0.16.0, when they move to the standalone `llm-rosetta-shim-argo` package — declare it as an external source and the names in your config keep working. **Settings → Shim Sources** already offers that source as a preset, so the migration can land before 0.16.0.
+    The default URL (`https://apps.inside.anl.gov/argoapi/`) is only reachable from within the ANL network. The three Argo shims ship in the standalone [`llm-rosetta-shim-argo`](https://github.com/Oaklight/llm-rosetta-shim-argo) package — declare `"shims": {"presets": ["argo"]}` and the names in your config keep working. **Settings → Shim Sources** offers that source as a preset.
 
 ## Reasoning Configuration
 

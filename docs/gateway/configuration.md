@@ -55,6 +55,10 @@ without installing anything into the gateway image.
 
 ```jsonc
 "shims": {
+  // Preload a catalog package by name: alcf | argo | asksage. Each expands to
+  // its remote below; an explicit remote with the same URL overrides the preset.
+  "presets": ["alcf"],
+
   // Scanned for <name>/provider.yaml (flat) or <group>/<leaf>/provider.yaml (grouped).
   // Relative entries are anchored to the directory containing this config file.
   "paths": ["./local-shims", "../shared/rosetta-shims"],
@@ -112,20 +116,16 @@ startup instead.
 remotes directly (no config file needed); `llm_rosetta.gateway.apply_shim_sources(raw, config_path)`
 applies a config dict. `create_app` also applies the section automatically.
 
-**Replacing a built-in that is on its way out.** The Argo shims are
-[scheduled for removal](../guide/shims.md#shims-scheduled-for-removal) in 0.16.0
-and will then be available only from
-[llm-rosetta-shim-argo](https://github.com/Oaklight/llm-rosetta-shim-argo). A
-config that uses one of them gets a warning at startup naming the shim, the
-release that removes it, and the source that replaces it; the warning clears as
-soon as a declared source supplies the shim, so the log says whether the
-migration is done — and the shim's name in your provider config never changes.
-The ALCF and AskSage shims already left core in 0.14.0; declare
-`llm-rosetta-shim-alcf` / `llm-rosetta-shim-asksage` before using their names.
-The admin panel's preset catalog (see
-[Admin Panel → Shim Sources](admin-panel.md#shim-sources)) is preloaded with all
-three standalone packages, whether or not a removal is scheduled, so any of them
-can be added with one click.
+**Standalone packages and presets.** The ALCF, AskSage and Argo shims ship in
+their own repositories. `presets` names one of them (`alcf`, `argo`, `asksage`)
+and expands to the catalog remote, which is exactly the `remotes` entry shown
+above. Presets are applied first and an explicit remote with the same URL
+overrides its preset, so a pinned `ref` or `sha256` can be layered on later. A
+provider config that still names one of these shims without a declared source
+fails at startup with an error naming the package, the preset and the expanded
+remote. The admin panel's preset catalog (see
+[Admin Panel → Shim Sources](admin-panel.md#shim-sources)) offers the same
+entries with one click.
 
 !!! warning "Declared sources run code"
     A shim directory may ship a `transforms.py`, which is executed when the shim
@@ -186,9 +186,9 @@ Shims support `max_images` and `max_images_pattern` fields to enforce per-model 
 
 When a request exceeds the limit, the oldest images are replaced with a text placeholder. If `max_images_pattern` is set, only matching model names are subject to the limit — others pass through unchanged.
 
-**Example — built-in Argo OpenAI shim:**
+**Example — the standalone Argo OpenAI shim:**
 
-The built-in Argo OpenAI shim declares `max_images: 50` with `max_images_pattern: "^(gpt|o\d)"`. This means:
+The Argo OpenAI shim declares `max_images: 50` with `max_images_pattern: "^(gpt|o\d)"`. This means:
 
 - GPT and o-series models: truncated to 50 images
 - Gemini and Claude models routed through the same provider: pass through unchanged
