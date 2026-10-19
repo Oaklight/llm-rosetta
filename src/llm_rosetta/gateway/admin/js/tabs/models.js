@@ -1,7 +1,8 @@
 // models.js — Model management: modal, CRUD, rendering, filtering, bulk ops
 import { S, _CAP_ICONS } from '../core/state.js';
 import { t } from '../core/i18n.js';
-import { api, showToast, closeModal, esc, inlineConfirm, closeMenus, openMenu, isFreeEntry, freeEntryLabel } from '../core/utils.js';
+import { api, showToast, closeModal, esc, inlineConfirm, closeMenus, openMenu, isFreeEntry, freeEntryLabel, providerTypeName } from '../core/utils.js';
+import { initLogoSelect, setLogoSelectOptions } from '../components/logo-select.js';
 
 // ── helpers (module-private) ──
 
@@ -463,6 +464,14 @@ async function updateProviderWeight(modelName, providerName, newWeight) {
 
 // ── Model rendering ──
 
+/** The mark a provider card shows, resolved the same way (config > shim). */
+function _providerLogo(name) {
+  const cfg = (S.configData.providers || {})[name] || {};
+  const shims = S.configData.registered_shims || [];
+  const shimLogo = Object.fromEntries(shims.map(s => [s.name, s.logo]));
+  return cfg.logo || shimLogo[name] || shimLogo[providerTypeName(cfg, name)] || '';
+}
+
 const _capIcons = {
   text: '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7V4h16v3"/><path d="M12 4v16"/><path d="M8 20h8"/></svg>',
   vision: '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
@@ -497,15 +506,19 @@ function renderModels() {
   const models = S.configData.models || {};
   const totalCount = Object.keys(models).length;
 
-  // Populate provider filter dropdown (preserve selection)
+  // Populate provider filter (preserve selection).  A native <select> cannot
+  // render the provider logo, so this is a custom listbox over a hidden input.
+  initLogoSelect('modelProviderFilter', () => renderModels());
   const provFilter = document.getElementById('modelProviderFilter');
   const prevProv = provFilter.value;
   const provSet = new Set();
   for (const [, info] of Object.entries(models)) {
     _getAllProviders(info).forEach(p => provSet.add(p));
   }
-  provFilter.innerHTML = `<option value="">${t('filter.allProviders')}</option>` +
-    [...provSet].sort().map(p => `<option value="${esc(p)}"${p === prevProv ? ' selected' : ''}>${esc(p)}</option>`).join('');
+  setLogoSelectOptions('modelProviderFilter', [
+    {value: '', label: t('filter.allProviders'), logo: ''},
+    ...[...provSet].sort().map(p => ({value: p, label: p, logo: _providerLogo(p)})),
+  ], prevProv);
 
   // Update sort header indicators
   document.getElementById('sortName').className = 'sortable' + (S._modelSortKey === 'name' ? ` ${S._modelSortDir}` : '');

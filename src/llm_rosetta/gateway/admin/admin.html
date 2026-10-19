@@ -126,9 +126,17 @@
       <div id="loopWarningBanner" class="loop-warning-banner" style="display:none"></div>
       <!-- Row 2: Filters only -->
       <div class="model-toolbar">
-        <select id="modelProviderFilter" onchange="renderModels()">
-          <option value="" data-i18n="filter.allProviders">All Providers</option>
-        </select>
+        <div class="logo-select">
+          <input type="hidden" id="modelProviderFilter">
+          <button type="button" class="logo-select-trigger" id="modelProviderFilterTrigger"
+                  aria-haspopup="listbox" aria-expanded="false" aria-controls="modelProviderFilterList">
+            <img class="logo-select-img" alt="" hidden>
+            <span class="logo-select-label" data-i18n="filter.allProviders">All Providers</span>
+            <span class="logo-select-chevron" aria-hidden="true">&#9662;</span>
+          </button>
+          <div class="logo-select-panel" id="modelProviderFilterList" role="listbox"
+               aria-label="Filter by provider" tabindex="-1"></div>
+        </div>
         <div class="seg-control" id="modelTypeSeg" role="radiogroup" aria-label="Model type filter">
           <!-- Populated by models.js::_buildTypeSegControls() from model_types metadata -->
         </div>
