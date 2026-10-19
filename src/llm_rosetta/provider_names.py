@@ -121,6 +121,10 @@ LEGACY_SHIM_ALIASES: dict[str, str] = {
     "alcf--metis": "alcf_metis--chat_completions",
     "alcf--minerva": "alcf_minerva--chat_completions",
     "alcf--sophia": "alcf_sophia--chat_completions",
+    # Decision shims took the canonical ``<vendor>--<format>`` form (#926):
+    # the bare names stay valid as aliases so existing configs keep loading.
+    "typesafe": "typesafe--systemone",
+    "openai_decisions": "openai--openai_decisions",
 }
 
 

@@ -328,7 +328,8 @@ class TestBuiltinShims:
             "openai--open_responses",
             "anthropic--messages",
             "google--google_generate",
-            "typesafe",
+            "typesafe--systemone",
+            "openai--openai_decisions",
         ):
             shim = get_shim(name)
             assert shim is not None, f"Built-in shim '{name}' not registered"
@@ -355,6 +356,8 @@ class TestBuiltinShims:
             ("argo--chat_completions", "argo--chat_completions"),
             ("deepseek--open_responses", "deepseek--open_responses"),
             ("volcengine--chat_completions", "volcengine--chat_completions"),
+            ("typesafe", "typesafe--systemone"),
+            ("openai_decisions", "openai--openai_decisions"),
         )
         for legacy, canonical in pairs:
             assert get_shim(legacy) is get_shim(canonical) is not None
