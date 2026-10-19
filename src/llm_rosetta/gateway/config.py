@@ -709,17 +709,17 @@ class GatewayConfig:
             global_proxy=self.proxy,
         )
         # Merge legacy decision_providers / decision_models
-        for model_name, prov in raw.get("decision_models", {}).items():
-            provider_name = next(
-                (
-                    p
-                    for p in self._declared_provider_names(prov)
-                    if p in self.decision_providers
-                ),
-                "",
-            )
-            if provider_name:
-                self.decision_models.setdefault(model_name, provider_name)
+        legacy_dp, legacy_di, legacy_dm = self._parse_decision_config(
+            raw.get("decision_providers", {}),
+            raw.get("decision_models", {}),
+            global_proxy=self.proxy,
+        )
+        for k, v in legacy_dp.items():
+            self.decision_providers.setdefault(k, v)
+        for k, v in legacy_di.items():
+            self.decision_provider_infos.setdefault(k, v)
+        for k, v in legacy_dm.items():
+            self.decision_models.setdefault(k, v)
         self.default_decision_format: str = raw.get(
             "default_decision_format", "systemone"
         )
@@ -1835,6 +1835,74 @@ class GatewayConfig:
         return providers, provider_infos, models
 
     # ---- Decision routing ------------------------------------------------
+
+    @staticmethod
+    def _parse_decision_config(
+        raw_providers: dict[str, Any],
+        raw_models: dict[str, Any],
+        *,
+        global_proxy: str | None = None,
+    ) -> tuple[dict[str, dict[str, Any]], dict[str, ProviderInfo], dict[str, str]]:
+        """Parse the legacy ``decision_providers`` / ``decision_models`` sections."""
+        from llm_rosetta.provider_names import canonical_provider_name
+
+        from .model_types import get_model_type
+        from .providers import _apply_shim_defaults
+        from .transport.provider_info import openai_auth
+
+        descriptor = get_model_type("decision")
+        providers: dict[str, dict[str, Any]] = {}
+        provider_infos: dict[str, ProviderInfo] = {}
+        for name, cfg in raw_providers.items():
+            if not isinstance(cfg, dict):
+                continue
+            if cfg.get("enabled") is False:
+                continue
+            shim = GatewayConfig._resolve_endpoint_shim(
+                cfg, type_name="decision", shim_key="decision_shim"
+            )
+            explicit_format = cfg.get("format")
+            if explicit_format:
+                wire_format = canonical_provider_name(explicit_format)
+            elif shim is not None:
+                wire_format = shim.format
+            else:
+                wire_format = canonical_provider_name(cfg.get("type") or "systemone")
+            decision_path = cfg.get("decision_path") or ""
+            if not decision_path and shim is not None and wire_format == shim.format:
+                decision_path = shim.default_path or ""
+            if not decision_path and descriptor is not None:
+                decision_path = descriptor.path_for(wire_format) or ""
+            if not decision_path:
+                decision_path = "/v1/systemone"
+
+            effective = _apply_shim_defaults(cfg, shim) if shim is not None else cfg
+            providers[name] = {
+                "format": wire_format,
+                "decision_path": decision_path,
+            }
+            provider_infos[name] = ProviderInfo(
+                name=f"decision:{name}",
+                api_key=effective.get("api_key", ""),
+                base_url=effective.get("base_url", "").rstrip("/"),
+                auth_header_fn=openai_auth,
+                url_template="{base_url}" + decision_path,
+                proxy_url=global_proxy,
+            )
+
+        models: dict[str, str] = {}
+        for model_name, value in raw_models.items():
+            provider_name = next(
+                (
+                    p
+                    for p in GatewayConfig._declared_provider_names(value)
+                    if p in providers
+                ),
+                "",
+            )
+            if provider_name:
+                models[model_name] = provider_name
+        return providers, provider_infos, models
 
     def resolve_decision(self, model: str) -> DecisionRoute:
         """Resolve a decision model to its provider config.
