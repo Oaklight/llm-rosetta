@@ -3,6 +3,7 @@ import { S, _CAP_ICONS } from '../core/state.js';
 import { t } from '../core/i18n.js';
 import { api, showToast, closeModal, esc, inlineConfirm, closeMenus, openMenu, isFreeEntry, freeEntryLabel, providerTypeName } from '../core/utils.js';
 import { syncAriaSort } from '../core/sort.js';
+import { syncChipState } from '../core/chips.js';
 import { initLogoSelect, setLogoSelectOptions } from '../components/logo-select.js';
 
 // ── helpers (module-private) ──
@@ -110,10 +111,13 @@ function segModelType(el, value) {
   onModelTypeChange();
 }
 
-function toggleCap(el, checkboxId) {
+// The chip is a <label>, so a click anywhere on it (or Space on the focused
+// checkbox) toggles the input natively before this runs.  Reading the input's
+// state instead of flipping it is what makes the keyboard path work: flipping
+// here cancelled the browser's own toggle and left the chip unchanged.
+function syncCapChip(el, checkboxId) {
   const cb = document.getElementById(checkboxId);
-  cb.checked = !cb.checked;
-  el.classList.toggle('active', cb.checked);
+  syncChipState(el, cb);
   if (checkboxId === 'capReasoning') updateReasoningVisibility();
 }
 
@@ -803,7 +807,7 @@ function toggleMoreMenu(btn) {
 // ── Register on window for cross-module and inline-handler access ──
 
 Object.assign(window, {
-  switchModelTab, segModelType, toggleCap, toggleStreamUrl,
+  switchModelTab, segModelType, syncCapChip, toggleStreamUrl,
   openModelModal, onModelTypeChange, updateReasoningVisibility,
   switchModelDomain, resetModelFilters, sortModels,
   renderModels, saveModel, toggleModel, editModel, cloneModel,

@@ -1004,10 +1004,10 @@
       <div class="form-group" id="modelCapsGroup">
         <label data-i18n="label.capabilities">Capabilities</label>
         <div class="chip-group">
-          <div class="chip active" onclick="toggleCap(this,'capText')"><input type="checkbox" id="capText" checked>text</div>
-          <div class="chip" onclick="toggleCap(this,'capVision')"><input type="checkbox" id="capVision">vision</div>
-          <div class="chip active" onclick="toggleCap(this,'capTools')"><input type="checkbox" id="capTools" checked>tools</div>
-          <div class="chip" onclick="toggleCap(this,'capReasoning')"><input type="checkbox" id="capReasoning">reasoning</div>
+          <label class="chip active" onclick="syncCapChip(this,'capText')"><input type="checkbox" id="capText" checked>text</label>
+          <label class="chip" onclick="syncCapChip(this,'capVision')"><input type="checkbox" id="capVision">vision</label>
+          <label class="chip active" onclick="syncCapChip(this,'capTools')"><input type="checkbox" id="capTools" checked>tools</label>
+          <label class="chip" onclick="syncCapChip(this,'capReasoning')"><input type="checkbox" id="capReasoning">reasoning</label>
         </div>
       </div>
     </div>
