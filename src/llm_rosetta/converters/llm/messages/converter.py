@@ -93,15 +93,35 @@ class _AnthropicBlockState:
     tool_indices: dict[str, int] = field(default_factory=dict)
     tool_index_to_block: dict[int, int] = field(default_factory=dict)
     open_indices: set[int] = field(default_factory=set)
+    block_types: dict[int, str] = field(default_factory=dict)
     pending_tool_index: int | None = None
 
-    def open(self, context: StreamContext, index: int | None = None) -> int:
+    def open(
+        self,
+        context: StreamContext,
+        index: int | None = None,
+        *,
+        block_type: str | None = None,
+    ) -> int:
         if index is None:
             index = max(self.next_index, context.current_block_index + 1)
         self.next_index = max(self.next_index, index + 1)
         self.open_indices.add(index)
+        if block_type is not None:
+            self.block_types[index] = block_type
         context.current_block_index = index
         return index
+
+    def close(self, index: int) -> None:
+        """Close a block and discard tool identities registered to its index."""
+        self.open_indices.discard(index)
+        stale_ids = [
+            tool_id
+            for tool_id, tool_index in self.tool_indices.items()
+            if tool_index == index
+        ]
+        for tool_id in stale_ids:
+            del self.tool_indices[tool_id]
 
 
 def _stream_blocks(context: StreamContext) -> _AnthropicBlockState:
@@ -118,11 +138,13 @@ def _close_content_blocks(context: StreamContext) -> list[dict[str, Any]]:
     state = _stream_blocks(context)
     if context.current_block_index >= 0:
         state.open(context, context.current_block_index)
+    closing_indices = sorted(state.open_indices)
     events = [
         {"type": AnthropicEventType.CONTENT_BLOCK_STOP, "index": index}
-        for index in sorted(state.open_indices)
+        for index in closing_indices
     ]
-    state.open_indices.clear()
+    for index in closing_indices:
+        state.close(index)
     state.pending_tool_index = None
     context.current_block_index = -1
     context.current_block_type = None
@@ -1146,7 +1168,7 @@ class MessagesConverter(BaseConverter):
             # instead of auto-incrementing, so subsequent deltas that read
             # context.current_block_index stay in sync.  (#246)
             state = _stream_blocks(context)
-            state.open(context, block_index)
+            state.open(context, block_index, block_type=block_type)
             state.pending_tool_index = (
                 block_index if block_type in ("tool_use", "server_tool_use") else None
             )
@@ -1174,7 +1196,7 @@ class MessagesConverter(BaseConverter):
         if context is not None:
             index = event["block_index"]
             state = _stream_blocks(context)
-            state.open_indices.discard(index)
+            state.close(index)
             state.next_index = max(state.next_index, index + 1)
             if state.pending_tool_index == index:
                 state.pending_tool_index = None
@@ -1203,7 +1225,7 @@ class MessagesConverter(BaseConverter):
         if explicit_idx is not None:
             result["index"] = explicit_idx
             if context is not None:
-                _stream_blocks(context).open(context, explicit_idx)
+                _stream_blocks(context).open(context, explicit_idx, block_type="text")
                 context.current_block_type = "text"
         elif context is not None:
             needs_new_block = context.current_block_index < 0 or (
@@ -1212,7 +1234,7 @@ class MessagesConverter(BaseConverter):
             )
             if needs_new_block:
                 preamble = _close_content_blocks(context)
-                _stream_blocks(context).open(context)
+                _stream_blocks(context).open(context, block_type="text")
                 context.current_block_type = "text"
                 result["index"] = context.current_block_index
                 preamble.append(
@@ -1270,7 +1292,9 @@ class MessagesConverter(BaseConverter):
             for result in rd_results:
                 result["index"] = explicit_idx
             if context is not None:
-                _stream_blocks(context).open(context, explicit_idx)
+                _stream_blocks(context).open(
+                    context, explicit_idx, block_type="thinking"
+                )
                 context.current_block_type = "thinking"
         elif context is not None:
             needs_new_block = context.current_block_index < 0 or (
@@ -1279,7 +1303,7 @@ class MessagesConverter(BaseConverter):
             )
             if needs_new_block:
                 preamble = _close_content_blocks(context)
-                _stream_blocks(context).open(context)
+                _stream_blocks(context).open(context, block_type="thinking")
                 context.current_block_type = "thinking"
                 index = context.current_block_index
                 for result in rd_results:
@@ -1417,7 +1441,7 @@ class MessagesConverter(BaseConverter):
                 # Honor a caller-preallocated generic context index.
                 if context.current_block_index >= state.next_index:
                     index = context.current_block_index
-            index = state.open(context, index)
+            index = state.open(context, index, block_type=block_type)
             state.tool_indices[tool_id] = index
             tool_call_index = event.get("tool_call_index")
             if tool_call_index is not None:
@@ -1438,36 +1462,62 @@ class MessagesConverter(BaseConverter):
         writing it would open one for a server call the client was never told
         about, so it is dropped too.
         """
-        if context is not None:
-            dropped = context.metadata.get("_dropped_intrinsic_calls")
-            if dropped and event["tool_call_id"] in dropped:
-                return {}
-        result: dict[str, Any] = {
-            "type": AnthropicEventType.CONTENT_BLOCK_DELTA,
-            "delta": {
-                "type": "input_json_delta",
-                "partial_json": event["arguments_delta"],
-            },
-        }
-        # Prefer explicit block_index from the IR event (#246)
+        tool_call_id = event.get("tool_call_id", "")
         explicit_idx: int | None = event.get("block_index")
-        if context is not None:
-            state = _stream_blocks(context)
+
+        if context is None:
+            # Stateless conversion: an explicit block index is all we have.
+            if explicit_idx is None:
+                logger.warning(
+                    "Dropping Messages tool-call delta without a context or "
+                    "an explicit block index"
+                )
+                return {}
+            return {
+                "type": AnthropicEventType.CONTENT_BLOCK_DELTA,
+                "delta": {
+                    "type": "input_json_delta",
+                    "partial_json": event["arguments_delta"],
+                },
+                "index": explicit_idx,
+            }
+
+        dropped = context.metadata.get("_dropped_intrinsic_calls")
+        if dropped and tool_call_id in dropped:
+            return {}
+
+        state = _stream_blocks(context)
+        registered_index = (
+            state.tool_indices.get(tool_call_id) if tool_call_id else None
+        )
+
+        # The tool ID is the authority: the block it was registered to is the
+        # one this fragment belongs to.  An explicit block_index is a
+        # source-provider index (#246) and only breaks ties when no identity
+        # is known.
+        index: int | None = None
+        if registered_index is not None:
+            index = registered_index
+            if explicit_idx is not None and explicit_idx != registered_index:
+                logger.warning(
+                    "Messages tool-call delta block_index=%s disagrees with the "
+                    "registered index %s for %s; using the registered index",
+                    explicit_idx,
+                    registered_index,
+                    tool_call_id,
+                )
+        elif explicit_idx is not None:
             index = explicit_idx
-            if index is None:
-                index = state.tool_indices.get(event["tool_call_id"])
-            if index is None:
-                tool_call_index = event.get("tool_call_index")
-                if tool_call_index is not None:
-                    index = state.tool_index_to_block.get(tool_call_index)
+        else:
+            tool_call_index = event.get("tool_call_index")
+            if tool_call_index is not None:
+                index = state.tool_index_to_block.get(tool_call_index)
             if index is None:
                 index = state.pending_tool_index
             if (
                 index is None
                 and context.current_block_index >= 0
-                and (
-                    context.current_block_type in (None, "tool_use", "server_tool_use")
-                )
+                and context.current_block_type in (None, "tool_use", "server_tool_use")
             ):
                 if len(state.open_indices) > 1:
                     logger.warning(
@@ -1476,16 +1526,32 @@ class MessagesConverter(BaseConverter):
                     )
                     return {}
                 index = context.current_block_index
-            if index is None:
-                logger.warning(
-                    "Dropping unresolvable tool-call argument delta for %s",
-                    event.get("tool_call_id") or "<unknown>",
-                )
-                return {}
-            result["index"] = state.open(context, index)
-            context.current_block_type = "tool_use"
-        elif explicit_idx is not None:
-            result["index"] = explicit_idx
+
+        block_type = state.block_types.get(index) if index is not None else None
+        if (
+            index is None
+            or index not in state.open_indices
+            or block_type not in ("tool_use", "server_tool_use")
+        ):
+            logger.warning(
+                "Dropping Messages tool-call delta for an unregistered, closed, "
+                "or non-tool block (tool_call_id=%s, block_index=%s, index=%s)",
+                tool_call_id,
+                explicit_idx,
+                index,
+            )
+            return {}
+
+        result: dict[str, Any] = {
+            "type": AnthropicEventType.CONTENT_BLOCK_DELTA,
+            "delta": {
+                "type": "input_json_delta",
+                "partial_json": event["arguments_delta"],
+            },
+            "index": index,
+        }
+        context.current_block_index = index
+        context.current_block_type = block_type
         return result
 
     def _handle_ir_tool_result_to_p(
@@ -1524,7 +1590,7 @@ class MessagesConverter(BaseConverter):
         index = event.get("block_index")
         if context is not None:
             state = _stream_blocks(context)
-            index = state.open(context, index)
+            index = state.open(context, index, block_type=content_block.get("type"))
             context.current_block_type = content_block.get("type")
             result["index"] = index
         elif index is not None:

@@ -61,6 +61,17 @@ def _synthetic_tool_call_id(choice_index: int, tool_call_index: int) -> str:
     return f"call_{choice_index}_{tool_call_index}"
 
 
+def _provider_tool_id_map(context: StreamContext) -> dict[Any, Any]:
+    """Return the choice-and-provider-index to tool-call-ID association."""
+    provider_map = context.metadata.setdefault(
+        "_chat_completions_tool_ids_by_index", {}
+    )
+    if not isinstance(provider_map, dict):
+        provider_map = {}
+        context.metadata["_chat_completions_tool_ids_by_index"] = provider_map
+    return provider_map
+
+
 def _resolve_tool_call_delta(
     tc: dict[str, Any],
     effective_tc_id: str | None,
@@ -630,6 +641,8 @@ class ChatCompletionsConverter(BaseConverter):
             List of IR stream events extracted from the chunk.
         """
         if chunk is None:
+            if context is not None:
+                self._clear_provider_tool_index_map(context)
             if (
                 context is not None
                 and context._stream_end_deferred
@@ -637,6 +650,7 @@ class ChatCompletionsConverter(BaseConverter):
             ):
                 context._stream_end_deferred = False
                 context.mark_ended()
+                self._clear_provider_tool_index_map(context)
                 return [StreamEndEvent(type="stream_end")]
             return []
 
@@ -775,6 +789,83 @@ class ChatCompletionsConverter(BaseConverter):
             return None
         return context.get_tool_call_index(context.tool_call_ids[-1])
 
+    def _resolve_known_tool_call_id(
+        self,
+        tc_id: str | None,
+        tc_index: int | None,
+        choice_index: int,
+        context: StreamContext | None,
+        provider_index: int | None,
+    ) -> str | None:
+        """Resolve a fragment's identity without guessing blindly.
+
+        The provider's (choice, index) association is authoritative for a
+        fragment that repeats only its index.  A later explicit ID cannot
+        retract the identity the client was already told, so the first one
+        wins and the fragment is routed with it.
+        """
+        effective_tc_id = tc_id
+        if context is not None and provider_index is not None:
+            provider_map = _provider_tool_id_map(context)
+            index_key = (choice_index, provider_index)
+            mapped_id = provider_map.get(index_key)
+            if tc_id:
+                if mapped_id is None:
+                    provider_map[index_key] = tc_id
+                elif mapped_id != tc_id:
+                    logger.warning(
+                        "Conflicting Chat Completions tool IDs for "
+                        "choice_index=%s, tool_call_index=%s; keeping %r",
+                        choice_index,
+                        provider_index,
+                        mapped_id,
+                    )
+                    effective_tc_id = mapped_id
+            else:
+                effective_tc_id = mapped_id
+
+        if not effective_tc_id and context is not None and tc_index is not None:
+            effective_tc_id = context.resolve_tool_call_id_by_index(tc_index) or tc_id
+        return effective_tc_id
+
+    def _synthesize_tool_call_id(
+        self,
+        effective_tc_id: str | None,
+        tc_index: int | None,
+        choice_index: int,
+        context: StreamContext | None,
+        provider_index: int | None,
+        *,
+        has_content: bool,
+    ) -> str | None:
+        """Give an ID-less fragment a stable ID when its index is known."""
+        if (
+            effective_tc_id is not None
+            or context is None
+            or tc_index is None
+            or not has_content
+        ):
+            return effective_tc_id
+        effective_tc_id = _synthetic_tool_call_id(choice_index, tc_index)
+        if provider_index is not None:
+            # A provider that adds an ID only after the first fragment must
+            # not open a second block for the same index.
+            _provider_tool_id_map(context).setdefault(
+                (choice_index, provider_index), effective_tc_id
+            )
+        return effective_tc_id
+
+    @staticmethod
+    def _accept_tool_choice(context: StreamContext, choice_index: int) -> None:
+        """Record that this choice emitted an identified tool call."""
+        accepted_choices = context.metadata.setdefault(
+            "_chat_completions_tool_choices", set()
+        )
+        if not isinstance(accepted_choices, set):
+            accepted_choices = set()
+            context.metadata["_chat_completions_tool_choices"] = accepted_choices
+        accepted_choices.add(choice_index)
+
     def _handle_p_tool_call_to_ir(
         self,
         tc: dict[str, Any],
@@ -782,23 +873,35 @@ class ChatCompletionsConverter(BaseConverter):
         choice_index: int,
         context: StreamContext | None,
         events: list[IRStreamEvent],
+        *,
+        provider_index: int | None,
     ) -> None:
-        """Convert one Chat Completions tool-call delta into IR events."""
+        """Convert one Chat Completions tool-call delta into IR events.
+
+        A provider tool index is scoped to its choice and identifies one call
+        for the whole stream.  A late fragment that repeats only the index is
+        resolved through the association recorded when the call started --
+        registration order is not used for this, because providers may number
+        their calls sparsely.  A conflicting ID for an index cannot retract
+        what the client was already told, so the first identity wins and the
+        fragment is routed with it.
+        """
         tc_id = tc.get("id")
-        effective_tc_id = tc_id
-        if context is not None and tc_index is not None:
-            effective_tc_id = context.resolve_tool_call_id_by_index(tc_index) or tc_id
+        effective_tc_id = self._resolve_known_tool_call_id(
+            tc_id, tc_index, choice_index, context, provider_index
+        )
 
         tc_type, tc_name, tc_input = _resolve_tool_call_delta(
             tc, effective_tc_id, context
         )
-        if (
-            not effective_tc_id
-            and context is not None
-            and tc_index is not None
-            and (tc_name or tc_input)
-        ):
-            effective_tc_id = _synthetic_tool_call_id(choice_index, tc_index)
+        effective_tc_id = self._synthesize_tool_call_id(
+            effective_tc_id,
+            tc_index,
+            choice_index,
+            context,
+            provider_index,
+            has_content=bool(tc_name or tc_input),
+        )
 
         is_new_call = bool(effective_tc_id) and (
             context is None or context.get_tool_call_index(effective_tc_id) is None
@@ -821,8 +924,18 @@ class ChatCompletionsConverter(BaseConverter):
                     tc_name,
                     "custom" if tc_type == "custom" else "function",
                 )
+                self._accept_tool_choice(context, choice_index)
 
-        if tc_input:
+        if tc_input and not effective_tc_id:
+            # Nothing the client was told identifies this fragment; writing it
+            # would ask the target to open a tool block with no identity.
+            logger.warning(
+                "Dropping Chat Completions tool-call delta with unresolved "
+                "identity (choice_index=%s, tool_call_index=%s)",
+                choice_index,
+                provider_index,
+            )
+        elif tc_input:
             delta_event = ToolCallDeltaEvent(
                 type="tool_call_delta",
                 tool_call_id=effective_tc_id or "",
@@ -844,10 +957,18 @@ class ChatCompletionsConverter(BaseConverter):
     ) -> None:
         """Process tool call deltas from a choice."""
         for position, tc in enumerate(tool_calls):
+            provider_index = tc.get("index")
             tc_index = self._resolve_delta_tool_call_index(
-                tool_calls, position, tc.get("index"), context
+                tool_calls, position, provider_index, context
             )
-            self._handle_p_tool_call_to_ir(tc, tc_index, choice_index, context, events)
+            self._handle_p_tool_call_to_ir(
+                tc,
+                tc_index,
+                choice_index,
+                context,
+                events,
+                provider_index=provider_index,
+            )
 
     def _handle_p_finish_reason_to_ir(
         self,
@@ -874,6 +995,15 @@ class ChatCompletionsConverter(BaseConverter):
             )
 
         reason = OPENAI_CHAT_REASON_FROM_PROVIDER.get(finish_reason, "stop")
+        if (
+            context is not None
+            and reason == "tool_calls"
+            and choice_index
+            not in context.metadata.get("_chat_completions_tool_choices", set())
+        ):
+            # A provider finish reason cannot ask the client to run a tool when
+            # this choice emitted no identified ToolCallStartEvent.
+            reason = "stop"
         # If refusal text accumulated from streaming deltas, mark as refusal
         refusal_text = (
             context.metadata.get("_refusal_text") if context is not None else None
@@ -920,6 +1050,7 @@ class ChatCompletionsConverter(BaseConverter):
         if context._stream_end_deferred and not context.is_ended:
             context._stream_end_deferred = False
             context.mark_ended()
+            self._clear_provider_tool_index_map(context)
             events.append(StreamEndEvent(type="stream_end"))
             return
 
@@ -934,6 +1065,7 @@ class ChatCompletionsConverter(BaseConverter):
             and not context.is_ended
         ):
             context.mark_ended()
+            self._clear_provider_tool_index_map(context)
             events.append(StreamEndEvent(type="stream_end"))
 
         # Also emit StreamEndEvent when we got a finish_reason and all
@@ -947,9 +1079,16 @@ class ChatCompletionsConverter(BaseConverter):
         ):
             if usage:
                 context.mark_ended()
+                self._clear_provider_tool_index_map(context)
                 events.append(StreamEndEvent(type="stream_end"))
             else:
                 context._stream_end_deferred = True
+
+    @staticmethod
+    def _clear_provider_tool_index_map(context: StreamContext) -> None:
+        """Discard Chat provider-index associations when this stream ends."""
+        context.metadata.pop("_chat_completions_tool_ids_by_index", None)
+        context.metadata.pop("_chat_completions_tool_choices", None)
 
     # --- to_provider ---
 
@@ -1023,6 +1162,7 @@ class ChatCompletionsConverter(BaseConverter):
         """
         if context is not None:
             context.mark_ended()
+            self._clear_provider_tool_index_map(context)
             usage = context.pop_pending_usage()
             if usage is not None:
                 return {

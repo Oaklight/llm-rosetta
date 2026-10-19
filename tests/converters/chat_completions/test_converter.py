@@ -493,7 +493,15 @@ class TestChatCompletionsConverter:
             "choices": [
                 {
                     "index": 0,
-                    "delta": {"tool_calls": [{"function": {"arguments": '{"city":'}}]},
+                    "delta": {
+                        "tool_calls": [
+                            {
+                                "id": "call_1",
+                                "index": 0,
+                                "function": {"arguments": '{"city":'},
+                            }
+                        ]
+                    },
                 }
             ]
         }
