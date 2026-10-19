@@ -588,6 +588,9 @@ GET /admin/api/requests?limit=50&offset=0&model=gpt-4o&provider=openai&status=ok
 | `model` | `string` | — | Filter by model name. |
 | `provider` | `string` | — | Filter by target provider. |
 | `status` | `"ok"` \| `"error"` | — | `ok` = 2xx/3xx, `error` = 4xx/5xx. |
+| `api_key_label` | `string` | — | Filter by API key label. |
+| `since` | ISO 8601 | — | Lower bound (inclusive) on the entry timestamp. |
+| `until` | ISO 8601 | — | Upper bound (**exclusive**), so adjacent windows do not double-count the boundary. Accepts `Z` or an explicit offset; an unparseable value returns `400`. |
 
 **Response**
 
