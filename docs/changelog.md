@@ -186,6 +186,8 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### 修复
 
+- **手机上的 Error Dumps 可读**（issue [#1095](https://github.com/Oaklight/llm-rosetta/issues/1095)，PR [#1096](https://github.com/Oaklight/llm-rosetta/pull/1096)）：八列表格保留 780px 最小宽度，手机上看得到勾选框、折成三行的时间戳、模型与路由的开头——状态、阶段、错误预览和行内操作都在屏幕之外。现在 768px 以下的每条 dump 都是一张卡片：首行时间与状态，然后是模型、路由、错误文本（改为换行而非省略），最后是阶段与操作，单元格保留显式角色与列名。预览的单行截断移入 class，卡片得以覆盖它；桌面端保持不变。
+
 - **Settings 页在手机上不再横向滚动**（issue [#1093](https://github.com/Oaklight/llm-rosetta/issues/1093)，PR [#1094](https://github.com/Oaklight/llm-rosetta/pull/1094)）：在 390px 视口下页面宽度达到 619px，Settings 会横向滚动，固定的底栏也随之漂移。日志保留（Log Retention）网格带有内联的三列模板，压过了手机端的堆叠规则；其八个清理按钮也不会换行。现在三列定义移入 class 并在 768px 以下堆叠，按钮行允许换行。桌面端仍保持三列。
 
 - **手机端 Dashboard 的 KPI 网格会填满最后一行，Total Requests 也会分组显示**（issue [#1091](https://github.com/Oaklight/llm-rosetta/issues/1091)，PR [#1092](https://github.com/Oaklight/llm-rosetta/pull/1092)）：手机端两列网格里的五张卡片会让第五张（tokens）独自占一行，网格的间隙色透出来像一张空的半卡片，看起来像是缺少了指标。现在当卡片数为奇数时，最后一张会横跨两列；偶数时仍保持每行两张。Total Requests 也改为与页脚和面板其他数字一致的千分位分组。
