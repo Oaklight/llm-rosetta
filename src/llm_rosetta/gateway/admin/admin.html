@@ -391,16 +391,16 @@
           <button class="btn btn-sm btn-danger" onclick="bulkDeleteDumps()" data-i18n="btn.deleteSelected">Delete Selected</button>
         </div>
       </div>
-      <div class="table-scroll"><table>
+      <div class="table-scroll"><table id="dumpTableEl">
         <thead><tr>
-          <th style="width:3%"><input type="checkbox" class="row-check" onchange="selectAllDumps(this)"></th>
-          <th data-i18n="col.time">Time</th>
-          <th data-i18n="col.model">Model</th>
-          <th data-i18n="col.sourceTarget">Source &rarr; Target</th>
-          <th>Phase</th>
-          <th data-i18n="col.status">Status</th>
-          <th>Error</th>
-          <th style="width:90px" data-i18n="col.actions">Actions</th>
+          <th id="dumpThSelect"><input type="checkbox" id="dumpSelectAll" class="row-check" onchange="selectAllDumps(this)"><label for="dumpSelectAll" class="dump-select-all-label" data-i18n="btn.selectAll">Select All</label></th>
+          <th id="dumpThTime" data-i18n="col.time">Time</th>
+          <th id="dumpThModel" data-i18n="col.model">Model</th>
+          <th id="dumpThSourceTarget" data-i18n="col.sourceTarget">Source &rarr; Target</th>
+          <th id="dumpThPhase">Phase</th>
+          <th id="dumpThStatus" data-i18n="col.status">Status</th>
+          <th id="dumpThError">Error</th>
+          <th id="dumpThActions" style="width:90px" data-i18n="col.actions">Actions</th>
         </tr></thead>
         <tbody id="dumpTable"></tbody>
       </table></div>

@@ -26,6 +26,15 @@ tr:hover td { background: var(--bg-hover); }
    scroll container cannot clip it. */
 #logTable tr[tabindex]:focus-visible,
 #opsLogTable tr[tabindex]:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
+/* The select-all box lives in the header and is the only reason the Error
+   Dumps header row survives the phone card layout. */
+.dump-select-all-label { display:none; }
+#dumpTableEl thead th:first-child { width:3%; }
+/* One truncated line in the Error Dumps table; the phone card lets it wrap. */
+.dump-error-text {
+  font-size:11px; color:var(--red); font-family:var(--mono);
+  max-width:300px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:block;
+}
 .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 
 /* Provider cards */
@@ -1220,4 +1229,58 @@ body { padding-bottom: 26px; }
     font-size:11px;
     color:var(--text-dim);
   }
+}
+
+/* ── Error Dumps → cards on narrow screens ──
+   Eight columns at a 780px minimum meant a phone showed the checkbox,
+   Time, Model and the start of the route; status, phase, the error text
+   and the actions were off-screen.  Each dump becomes a card: checkbox,
+   time and status on top, then model, route, the (now wrapping) error
+   preview, and finally the phase with its actions. */
+@media (max-width: 768px) {
+  #tab-dashboard #dumpTableEl { table-layout:auto; min-width:0; }
+  /* The header row stays as a slim strip holding the select-all box: hiding
+     it entirely would remove the only bulk-selection control at this width.
+     Every other header cell is redundant now that each card names its own
+     fields. */
+  #tab-dashboard #dumpTableEl thead,
+  #tab-dashboard #dumpTableEl thead tr { display:block; }
+  #tab-dashboard #dumpTableEl thead th { display:none; }
+  #tab-dashboard #dumpTableEl thead th:first-child {
+    display:flex; align-items:center; gap:6px; padding:0 0 6px; border:none;
+    width:auto; white-space:nowrap;
+  }
+  #tab-dashboard #dumpTableEl .dump-select-all-label {
+    display:inline; font-size:12px; color:var(--text-dim);
+  }
+  #dumpTable tr {
+    display:grid;
+    grid-template-columns:18px minmax(0,1fr) auto;
+    grid-template-areas:
+      "check time   status"
+      "model model  model"
+      "route route  route"
+      "error error  error"
+      "phase acts   acts";
+    gap:6px 8px;
+    padding:12px;
+    border-bottom:1px solid var(--border);
+  }
+  #dumpTable tr:hover { background:var(--bg-hover); }
+  #dumpTable tr:hover td { background:transparent; }
+  #dumpTable td { display:block; padding:0; border:none; }
+  #dumpTable .dump-check { grid-area:check; align-self:center; }
+  /* The 13px default control is a small target on a card; 18px fills the
+     check track and is easier to hit without widening the layout. */
+  #dumpTable .dump-check input { width:18px; height:18px; }
+  #dumpTable .dump-time { grid-area:time; font-size:12px; color:var(--text-dim); white-space:nowrap; }
+  #dumpTable .dump-model { grid-area:model; overflow-wrap:anywhere; }
+  #dumpTable .dump-route { grid-area:route; font-size:12px; color:var(--text-dim); overflow-wrap:anywhere; }
+  #dumpTable .dump-phase { grid-area:phase; }
+  #dumpTable .dump-status { grid-area:status; justify-self:end; }
+  #dumpTable .dump-error { grid-area:error; }
+  #dumpTable .dump-error-text {
+    max-width:none; white-space:normal; overflow:visible; text-overflow:clip; overflow-wrap:anywhere;
+  }
+  #dumpTable .dump-actions { grid-area:acts; justify-self:end; }
 }

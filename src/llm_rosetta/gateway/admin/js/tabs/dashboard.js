@@ -376,15 +376,15 @@ async function renderDumps() {
       const did = esc(e.dump_id||e.id||'');
       const chk = S._selectedDumpIds && S._selectedDumpIds.has(did) ? ' checked' : '';
       const dumpHlStyle = S._highlightDumpId === did ? ' style="background:color-mix(in srgb, var(--accent) 20%, transparent)"' : '';
-      return `<tr${dumpHlStyle}>
-        <td><input type="checkbox" class="row-check" data-id="${did}" onchange="updateDumpBulk()"${chk}></td>
-        <td>${time}</td>
-        <td><code>${esc(e.model||'-')}</code></td>
-        <td>${esc(e.source_provider||'-')} → ${esc(e.target_provider||'-')}</td>
-        <td><span class="badge badge-stream">${esc(e.error_phase||'-')}</span></td>
-        <td><span class="badge badge-error">${e.status_code||'-'}</span></td>
-        <td><span style="font-size:11px;color:var(--red);font-family:var(--mono);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block" title="${esc(e.response_text||'')}">${esc(errPreview)}</span></td>
-        <td style="white-space:nowrap">
+      return `<tr role="row"${dumpHlStyle}>
+        <td class="dump-check" role="cell" aria-labelledby="dumpThSelect"><input type="checkbox" class="row-check" data-id="${did}" onchange="updateDumpBulk()"${chk}></td>
+        <td class="dump-time" role="cell" aria-labelledby="dumpThTime">${time}</td>
+        <td class="dump-model" role="cell" aria-labelledby="dumpThModel"><code>${esc(e.model||'-')}</code></td>
+        <td class="dump-route" role="cell" aria-labelledby="dumpThSourceTarget">${esc(e.source_provider||'-')} → ${esc(e.target_provider||'-')}</td>
+        <td class="dump-phase" role="cell" aria-labelledby="dumpThPhase"><span class="badge badge-stream">${esc(e.error_phase||'-')}</span></td>
+        <td class="dump-status" role="cell" aria-labelledby="dumpThStatus"><span class="badge badge-error">${e.status_code||'-'}</span></td>
+        <td class="dump-error" role="cell" aria-labelledby="dumpThError"><span class="dump-error-text" title="${esc(e.response_text||'')}">${esc(errPreview)}</span></td>
+        <td class="dump-actions" role="cell" aria-labelledby="dumpThActions" style="white-space:nowrap">
           <button class="btn btn-sm" onclick="viewDump('${esc(e.dump_id||e.id)}')" title="View"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></button>
           <button class="btn btn-sm" onclick="downloadDump('${esc(e.dump_id||e.id)}')" title="Download"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:middle"><path d="M8 2v8m0 0l-3-3m3 3l3-3M3 12h10"/></svg></button>${e.request_log_id ? ` <button class="btn btn-sm" onclick="jumpToRequestLog('${esc(e.request_log_id)}')" title="View in request log"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></button>` : ''}
         </td>
