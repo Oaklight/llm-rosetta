@@ -186,6 +186,8 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### 修复
 
+- **分段控件可用键盘操作**（PR [#1099](https://github.com/Oaklight/llm-rosetta/pull/1099)）：筛选组（提供方类型、模型类型、请求/Ops 日志视图）声明了 `role="radio"` 选项却没有激活键——回车无效，空格会滚动页面；用量时间窗和模型类型组包裹的是原生 radio 输入，方向键会移动 radio，但 `active` 样式类留在原地。现在回车/空格可激活聚焦选项，Home/End 与方向键移动选择并在两端循环，聚焦选项显示焦点环（选中项改用强调色前景色描边，避免与填充同色），基于 radio 的组在 `change` 事件中同步样式类。模型类型筛选在选项集合不变时原地更新，方向键不再把焦点丢回页面。
+
 - **模型弹窗里的能力选项可用键盘操作**（issue [#1097](https://github.com/Oaklight/llm-rosetta/issues/1097)，PR [#1098](https://github.com/Oaklight/llm-rosetta/pull/1098)）：能力 chip 是 `<div>`，由处理器手动翻转隐藏的复选框；于是聚焦复选框按空格时浏览器先切换一次，点击冒泡到 chip 后处理器又翻回去——状态永远不变，也没有任何焦点提示。现在 chip 改为 label，点击或空格只切换一次，处理器只根据 `cb.checked` 同步 `active` 类；`:focus-within` 描边显示键盘焦点所在，隐藏输入框的样式加了类型限定，弹窗的 `width:100%` 规则不再把它撑开。
 
 - **手机上的 Error Dumps 可读**（issue [#1095](https://github.com/Oaklight/llm-rosetta/issues/1095)，PR [#1096](https://github.com/Oaklight/llm-rosetta/pull/1096)）：八列表格保留 780px 最小宽度，手机上看得到勾选框、折成三行的时间戳、模型与路由的开头——状态、阶段、错误预览和行内操作都在屏幕之外。现在 768px 以下的每条 dump 都是一张卡片：首行时间与状态，然后是模型、路由、错误文本（改为换行而非省略），最后是阶段与操作，单元格保留显式角色与列名。预览的单行截断移入 class，卡片得以覆盖它；桌面端保持不变。
