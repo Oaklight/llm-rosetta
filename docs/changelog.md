@@ -10,6 +10,8 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### 新增
 
+- **API 密钥可以搜索，并在弹窗中重命名**（PR [#1072](https://github.com/Oaklight/llm-rosetta/pull/1072)）：密钥表此前无法按标签收窄 20 多条记录，重命名用的又是浏览器阻塞式 `prompt()`，既不遵循面板主题，也无法用常规弹窗方式关闭。现在搜索框按标签过滤行，并在有查询时显示 `x / y 个密钥`（没有标签的未归属用量行在搜索时隐藏），另有独立的"无匹配"空状态。重命名改为页内弹窗：回车保存，Esc、取消或点击遮罩关闭，当前标签会被预选中；行的标签改从 DOM 读取，不再嵌进 `onclick` 字符串，因此包含引号的标签不会再破坏编辑操作。
+
 - **请求日志可以按时间窗收窄，并且每页条数可选**（PR [#1071](https://github.com/Oaklight/llm-rosetta/pull/1071)）：日志此前只有模型/provider/状态/密钥过滤，想回答"最近一小时的失败"只能在混杂流量中翻页，而错误记录区早已提供时间范围。`GET /admin/api/requests` 现在接受 `since` / `until` 两个 ISO 8601 边界——`until` 不含端点，相邻时间窗不会重复计入边界时刻；`Z` 与显式偏移都会归一到 UTC，以匹配存储的时间戳；无法解析的值返回 `400` 并指出该值。面板提供与错误记录视图相同的预设（最近 1 小时/24 小时/7 天/30 天，以及本地日期的自定义范围），并增加每页条数（30/50/100/200），切换过滤条件时保持所选值；"重置"会连同其余过滤器一起清除时间过滤。分页被钳制在 1–500 条，非整数的 `limit`/`offset` 返回 `400`——在 SQLite 中负的 `LIMIT` 表示*不设上限*，绝不能让这样的值到达查询——不带 UTC 偏移的时间戳会被拒绝，而不是静默按 UTC 处理。错误转储与服务运维日志列表也采用同样的钳制与 `400` 处理。
 
 - **ALCF 与 AskSage 离开核心，Settings 选择器预载全部独立 shim 包**（issue [#666](https://github.com/Oaklight/llm-rosetta/issues/666)，epic [#927](https://github.com/Oaklight/llm-rosetta/issues/927)）：ALCF 与 AskSage 的 shim 是在 0.14.0 开发周期引入的，从未进入稳定版 —— ALCF 只出现在 `0.14.0.dev3`/`dev4` 测试版中，AskSage 一次也没有 —— 因此它们现在就迁往各自的独立仓库，而不必等到 0.16.0 的窗口。自 `0.6.3` 起随稳定版发布的 Argo shim 则保留内置直到该版本。三个独立包现在统一记录在 `llm_rosetta.shims.catalog` 中，**Settings → Shim Sources** 无论是否安排了移除，都会把每个独立包（包括 Argo，便于提前采用其源）作为一个一键预设提供。由于三个仓库都是私有的，预设会写明 `token_env: GITHUB_TOKEN`。`alcf--*` 与 `asksage--*` 旧别名随内置 shim 一并移除；独立包只注册规范名称。仍在使用这些名称的配置现在会直接指出提供它的独立包以及应声明的 `shims.remotes` 条目，而不只是报告缺少 `base_url`。参见[计划移除清单](guide/shims.md#shims-scheduled-for-removal)。
