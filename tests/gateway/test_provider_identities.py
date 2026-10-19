@@ -96,6 +96,55 @@ class TestProviderIdentities:
         assert identity.model_type == expected
         assert identity.format == fmt
 
+    @pytest.mark.parametrize(
+        ("endpoint_key", "format_name", "expected_type"),
+        [
+            ("embedding_format", "openai", "embedding"),
+            ("rerank_format", "jina", "rerank"),
+            ("decision_format", "openai_decisions", "decision"),
+        ],
+    )
+    def test_format_only_provider_takes_the_endpoint_identity(
+        self, endpoint_key, format_name, expected_type
+    ):
+        """A shim-free endpoint declaration names the provider's category.
+
+        The format defaults to the provider *name* when nothing else declares
+        one, so without reading ``<type>_format`` here the identity would stay
+        ``llm`` — hiding the provider from the admin picker and from the
+        LLM-model validator.
+        """
+        cfg = GatewayConfig(
+            {
+                "providers": {
+                    "acme": {
+                        endpoint_key: format_name,
+                        "api_key": "k",
+                        "base_url": "https://acme.test",
+                    }
+                },
+                "models": {},
+            }
+        )
+        assert cfg.provider_identities["acme"] == ProviderIdentity(
+            model_type=expected_type, format=format_name
+        )
+
+    def test_format_only_decision_provider_rejects_an_llm_model(self):
+        with pytest.raises(ValueError, match="serves decision"):
+            GatewayConfig(
+                {
+                    "providers": {
+                        "d": {
+                            "decision_format": "openai_decisions",
+                            "api_key": "k",
+                            "base_url": "https://d.test",
+                        }
+                    },
+                    "models": {"m": {"providers": ["d"]}},
+                }
+            )
+
     def test_declared_endpoint_category_wins_over_registry_order(self):
         cfg = GatewayConfig(
             {

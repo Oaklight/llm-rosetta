@@ -1215,6 +1215,45 @@ class GatewayConfig:
         return candidates[0]
 
     @classmethod
+    def _endpoint_identity(
+        cls,
+        cfg: dict[str, Any],
+        endpoint_types: list[tuple[str, str, str | None]],
+        provider_shim_names: dict[str, str | None],
+        name: str,
+    ) -> tuple[str, str] | None:
+        """Return the ``(model_type, format)`` a non-LLM endpoint declares.
+
+        A populated ``<type>_format`` key declares the endpoint just as a
+        ``<type>_shim`` does.  Reading only the shim keys left such a provider
+        with the provider *name* as its format and an ``llm`` identity, which
+        hid it from the admin picker and from the LLM-model validator.
+        """
+        from llm_rosetta.provider_names import canonical_provider_name
+
+        for type_name, shim_key, format_key in endpoint_types:
+            declared_format = (cfg.get(format_key) if format_key else "") or ""
+            if not declared_format and not cfg.get(shim_key):
+                continue
+            shim = cls._resolve_endpoint_shim(
+                cfg, type_name=type_name, shim_key=shim_key
+            )
+            if shim is None and not declared_format:
+                continue
+            if declared_format:
+                wire_format = canonical_provider_name(declared_format)
+            else:
+                assert shim is not None
+                wire_format = shim.format
+            if shim is not None:
+                # The LLM-side ProviderInfo still needs the shim's connection
+                # defaults (base_url, key env) so an endpoint-only provider
+                # loads without duplicating them in the config.
+                provider_shim_names[name] = shim.name
+            return type_name, wire_format
+        return None
+
+    @classmethod
     def _resolve_provider_identities(
         cls,
         raw_providers: dict[str, dict[str, str]],
@@ -1272,7 +1311,7 @@ class GatewayConfig:
             raise ValueError(error)
 
         endpoint_types = [
-            (desc.name, desc.config_shim_key)
+            (desc.name, desc.config_shim_key, desc.config_format_key)
             for desc in all_model_types()
             if not desc.is_llm and desc.config_shim_key
         ]
@@ -1307,24 +1346,14 @@ class GatewayConfig:
             model_type = resolve_model_type(source)
 
             # A provider with no chat identity may be defined by a non-LLM
-            # endpoint shim alone.  The provider-wide shim/type wins when it
-            # names a category, so this only fills in the unknown case.
+            # endpoint alone.  The provider-wide shim/type wins when it names
+            # a category, so this only fills in the unknown case.
             if model_type is None:
-                for type_name, shim_key in endpoint_types:
-                    if not cfg.get(shim_key):
-                        continue
-                    shim = cls._resolve_endpoint_shim(
-                        cfg, type_name=type_name, shim_key=shim_key
-                    )
-                    if shim is not None:
-                        model_type = shim.model_type
-                        wire_format = shim.format
-                        # The LLM-side ProviderInfo still needs the shim's
-                        # connection defaults (base_url, key env) so an
-                        # endpoint-only provider loads without duplicating
-                        # them in the config.
-                        provider_shim_names[name] = shim.name
-                        break
+                endpoint = cls._endpoint_identity(
+                    cfg, endpoint_types, provider_shim_names, name
+                )
+                if endpoint is not None:
+                    model_type, wire_format = endpoint
 
             if model_type is None:
                 # A known non-chat format still names a category even when the
