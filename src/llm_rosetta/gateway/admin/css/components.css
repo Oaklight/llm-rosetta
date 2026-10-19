@@ -22,6 +22,9 @@ th, td {
 }
 th { color: var(--th-color); font-weight: var(--th-weight); font-size: var(--th-size); text-transform: var(--th-transform); letter-spacing: var(--th-spacing); }
 tr:hover td { background: var(--bg-hover); }
+/* An expandable error row is a tab stop; the ring is inset so the table's
+   scroll container cannot clip it. */
+#logTable tr[tabindex]:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
 .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 
 /* Provider cards */

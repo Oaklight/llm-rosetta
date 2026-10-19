@@ -67,21 +67,29 @@ function renderLogs(entries, total) {
   if (entries.length === 0) {
     tbody.innerHTML = `<tr class="log-empty-row" role="row"><td colspan="9" role="cell" style="color:var(--text-dim)">${t('empty.logs')}</td></tr>`;
   } else {
-    tbody.innerHTML = entries.map(e => {
+    tbody.innerHTML = entries.map((e, idx) => {
       const time = new Date(e.timestamp).toLocaleString(undefined, {month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit'});
       const statusCls = e.status_code < 400 ? 'badge-ok' : 'badge-error';
       const modeBadge = e.is_stream ? '<span class="badge badge-stream">stream</span>' : '';
       const keyLabel = e.api_key_label || '—';
       const hasError = !!e.error_detail;
-      const rowId = e.timestamp + '_' + e.model;
+      // The log id is stable across refreshes (unlike an index) and cannot
+      // contain a quote, which the old timestamp+model key could.
+      const rowId = String(e.id);
+      const detailId = 'logErr-' + idx;
       const isExpanded = S.expandedLogRows.has(rowId);
-      const expandHint = hasError ? ' title="Click to expand error"' : '';
+      const expandHint = hasError ? ' title="Click or press Enter to expand the error"' : '';
       const clientIp = e.client_ip || '—';
       const hlBg = S._highlightLogId === e.id ? 'background:color-mix(in srgb, var(--accent) 20%, transparent);' : '';
       const rowCursor = hasError ? 'cursor:pointer;' : '';
       const styleAttr = (hlBg || rowCursor) ? ` style="${hlBg}${rowCursor}"` : '';
-      const rowClick = hasError ? ` onclick="toggleLogRow('${rowId}',this)"` : '';
-      let rows = `<tr data-log-id="${esc(e.id)}" role="row"${styleAttr}${rowClick}${expandHint}>
+      const rowClick = hasError ? ' onclick="toggleLogRow(this.dataset.logId,this)"' : '';
+      // An expandable error row is a tab stop; aria-expanded reports the
+      // same state the detail row's hidden attribute carries.
+      const rowKeyboard = hasError
+        ? ` tabindex="0" aria-expanded="${isExpanded}" aria-controls="${detailId}" onkeydown="if(event.target===this&&(event.key==='Enter'||event.key===' ')){event.preventDefault();this.click();}"`
+        : '';
+      let rows = `<tr data-log-id="${esc(e.id)}" role="row"${styleAttr}${rowClick}${rowKeyboard}${expandHint}>
         <td class="log-time" role="cell" aria-labelledby="thLogTime">${time}</td>
         <td class="log-model" role="cell" aria-labelledby="thLogModel"><code>${esc(e.model)}</code></td>
         <td class="log-source" role="cell" aria-labelledby="thLogSourceTarget">${esc(e.source_provider)} &rarr; ${esc(e.target_provider_name || resolveProviderName(e.target_provider))}</td>
@@ -93,7 +101,7 @@ function renderLogs(entries, total) {
         <td class="log-duration" role="cell" aria-labelledby="thLogDuration">${e.duration_ms.toFixed(0)} ms</td>
       </tr>`;
       if (hasError) {
-        rows += `<tr class="log-error-row" role="row"${isExpanded ? '' : ' hidden'}><td colspan="9" role="cell"><pre style="margin:0;padding:8px;background:var(--bg);border-radius:6px;font-size:11px;max-height:200px;overflow:auto;white-space:pre-wrap;word-break:break-all">${esc(e.error_detail)}</pre></td></tr>`;
+        rows += `<tr class="log-error-row" id="${detailId}" role="row"${isExpanded ? '' : ' hidden'}><td colspan="9" role="cell"><pre style="margin:0;padding:8px;background:var(--bg);border-radius:6px;font-size:11px;max-height:200px;overflow:auto;white-space:pre-wrap;word-break:break-all">${esc(e.error_detail)}</pre></td></tr>`;
       }
       return rows;
     }).join('');
@@ -123,6 +131,7 @@ function toggleLogRow(rowId, tr) {
   const detail = tr.nextElementSibling;
   if (!detail) return;
   detail.hidden = !detail.hidden;
+  tr.setAttribute('aria-expanded', String(!detail.hidden));
   if (detail.hidden) S.expandedLogRows.delete(rowId);
   else S.expandedLogRows.add(rowId);
 }
