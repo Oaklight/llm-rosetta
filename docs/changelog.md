@@ -186,6 +186,8 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### 修复
 
+- **Request Log 的错误行可以用键盘展开**（issue [#1085](https://github.com/Oaklight/llm-rosetta/issues/1085)，PR [#1086](https://github.com/Oaklight/llm-rosetta/pull/1086)）：行内错误详情此前只能通过点击展开——没有 tab 停靠点、没有按键处理，也没有 `aria-expanded`，因此在任何视口下都只能鼠标操作，辅助技术也无法得知某行是否展开。现在错误行可以聚焦；Enter 或空格执行与点击相同的切换，`aria-expanded` 与 `aria-controls` 随状态更新，并且按键处理会忽略来自行内 dump 按钮的事件，避免激活按钮时同时折叠该行。展开状态的键从“时间戳+模型名”改为日志 id：它跨刷新稳定，也不再让模型名进入内联 JavaScript。
+
 - **手机上的 Request Log 不再需要横向滚动才能读到 Status**（issue [#1083](https://github.com/Oaklight/llm-rosetta/issues/1083)，PR [#1084](https://github.com/Oaklight/llm-rosetta/pull/1084)）：九列表格保留 760px 最小宽度并在容器内横向滚动，390px 屏幕上只显示 Time、Model 与 Source → Target——Status（读日志时最关心的列）在屏幕之外，而且没有任何提示还有更多列。现在 768px 以下的每一行都渲染为卡片：第一行是时间与状态，其下是模型与路由，再下面是 mode/key/ip 以及 tokens/duration。被隐藏的表头行仍留在 DOM 中，作为每个单元格的可访问名称（显式 `role="cell"` 与 `aria-labelledby`）；展开的错误详情仍是卡片下方的整宽区块。桌面端与 Server Ops Log 保持不变。
 
 - **可排序表头现在可以用键盘操作**（issue [#1079](https://github.com/Oaklight/llm-rosetta/issues/1079)，PR [#1082](https://github.com/Oaklight/llm-rosetta/pull/1082)）：Models 与 API Keys 的列表头是 `<th onclick=…>`，键盘完全无法排序这两张表，屏幕阅读器也无从知道哪一列在排序、朝哪个方向——唯一的提示是一个伪元素画出的 ▲/▼。现在每个 `th.sortable` 都是 tab 停靠点，Enter 或空格执行同一个排序处理器（空格会 `preventDefault`，避免页面滚动）；共享的 `syncAriaSort()` 把 `aria-sort` 写到当前列，其余列不写该属性（即隐式的 `none`），新增的可排序表格因此直接继承这套行为，而不必各自重复推导。聚焦的表头会绘制 2px 强调色描边并向内偏移 2px，避免被表格的滚动容器裁掉。
