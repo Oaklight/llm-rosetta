@@ -187,6 +187,8 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### 修复
 
+- **上游要求字符串时，Chat 的工具内容就是字符串**（issue [#1121](https://github.com/Oaklight/llm-rosetta/issues/1121)、PR [#1125](https://github.com/Oaklight/llm-rosetta/pull/1125)）：内容为文本块列表的 Messages `tool_result`，以及所有 `is_error` 结果，都会被写成 `role: "tool"` 的**列表**内容。Chat 转换器声明了 `_SUPPORTS_MULTIMODAL_TOOL_RESULT = False`，但只有图片/文件 packing 路径拿到了这个标志，纯文本与错误结果因此绕过了它——OpenAI 兼容的 gRPC 线路以 `tool message content must be a string` 拒绝请求体。写入端现在把转换后的内容压成一个字符串：文本块按换行拼接，仍残留的非文本块以 JSON 序列化保留（沿用旧的 residual 意图），`is_error` 则通过 `mark_tool_error_text` 追加为 `[Tool error]` 标记行。声明支持 block 的目标仍会收到 block 列表与标记 block，packing 路径与按目标的能力覆盖保持原样。
+
 - **分段控件可用键盘操作**（PR [#1099](https://github.com/Oaklight/llm-rosetta/pull/1099)）：筛选组（提供方类型、模型类型、请求/Ops 日志视图）声明了 `role="radio"` 选项却没有激活键——回车无效，空格会滚动页面；用量时间窗和模型类型组包裹的是原生 radio 输入，方向键会移动 radio，但 `active` 样式类留在原地。现在回车/空格可激活聚焦选项，Home/End 与方向键移动选择并在两端循环，聚焦选项显示焦点环（选中项改用强调色前景色描边，避免与填充同色），基于 radio 的组在 `change` 事件中同步样式类。模型类型筛选在选项集合不变时原地更新，方向键不再把焦点丢回页面。
 
 - **模型弹窗里的能力选项可用键盘操作**（issue [#1097](https://github.com/Oaklight/llm-rosetta/issues/1097)，PR [#1098](https://github.com/Oaklight/llm-rosetta/pull/1098)）：能力 chip 是 `<div>`，由处理器手动翻转隐藏的复选框；于是聚焦复选框按空格时浏览器先切换一次，点击冒泡到 chip 后处理器又翻回去——状态永远不变，也没有任何焦点提示。现在 chip 改为 label，点击或空格只切换一次，处理器只根据 `cb.checked` 同步 `active` 类；`:focus-within` 描边显示键盘焦点所在，隐藏输入框的样式加了类型限定，弹窗的 `width:100%` 规则不再把它撑开。
