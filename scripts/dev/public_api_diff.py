@@ -84,6 +84,8 @@ PUBLIC_MODULES = (
     "llm_rosetta.shims",
     "llm_rosetta.auto_detect",
     "llm_rosetta.pipeline",
+    "llm_rosetta.routing",
+    "llm_rosetta.fidelity",
     "llm_rosetta.provider_names",
     "llm_rosetta.tool_ops",
     "llm_rosetta.observability",

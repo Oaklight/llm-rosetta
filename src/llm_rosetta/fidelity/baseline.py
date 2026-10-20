@@ -51,7 +51,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-from .fidelity import FidelityChecker, FidelityDiff
+from .checker import FidelityChecker, FidelityDiff
 
 # ============================================================================
 # Format version

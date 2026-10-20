@@ -23,7 +23,7 @@ from pathlib import Path
 import pytest
 
 from llm_rosetta.fidelity import FidelityChecker, FidelityDiff
-from llm_rosetta.fidelity_baseline import (
+from llm_rosetta.fidelity.baseline import (
     BASELINE_FORMAT_VERSION,
     BaselineComparisonReport,
     BaselineEntry,
