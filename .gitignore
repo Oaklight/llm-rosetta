@@ -217,6 +217,9 @@ __marimo__/
 docs_en/
 docs_zh/
 
+# Local production replica (config, keys.db, gateway.db) — never commit
+.local-gateway/
+
 # AI coding agents
 .claude/
 .opencode/
