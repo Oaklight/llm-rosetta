@@ -75,12 +75,12 @@ def test_invalid_provider_config_isolated_from_healthy_provider():
         "bad_token",
     }
     assert raw["providers"]["healthy"].get("enabled", True) is True
-    assert raw["providers"]["broken"]["_auto_disabled"]["category"] == (
-        "missing_base_url"
-    )
-    assert raw["providers"]["bad_token"]["_auto_disabled"]["category"] == (
-        "invalid_provider_info"
-    )
+    broken_marker = raw["providers"]["broken"].get("_auto_disabled")
+    bad_token_marker = raw["providers"]["bad_token"].get("_auto_disabled")
+    assert isinstance(broken_marker, dict)
+    assert isinstance(bad_token_marker, dict)
+    assert broken_marker["category"] == "missing_base_url"
+    assert bad_token_marker["category"] == "invalid_provider_info"
 
 
 def test_malformed_provider_entry_is_disabled_with_structured_diagnostic():
@@ -97,7 +97,9 @@ def test_malformed_provider_entry_is_disabled_with_structured_diagnostic():
     result = asyncio.run(OpsProviderValidation(OpsContext(), raw).execute())
 
     assert result["disabled"][0]["category"] == "invalid_provider_config"
-    assert raw["providers"]["broken"]["enabled"] is False
+    broken = raw["providers"]["broken"]
+    assert isinstance(broken, dict)
+    assert broken["enabled"] is False
     assert raw["providers"]["healthy"].get("enabled", True) is True
 
 
