@@ -804,9 +804,11 @@ function renderProviders() {
     const autoWarningTitle = autoReason || autoShim || t('provider.autoDisabled');
     const typeName = providerTypeName(cfg, name);
     const logo = cfg.logo || shimLogo[name] || shimLogo[typeName] || '';
-    const logoHtml = logo
-      ? `<img class="pc-logo" src="${esc(logo)}" alt="">`
-      : '<span class="pc-logo pc-logo-empty"></span>';
+    const logoHtml = autoDisabled
+      ? `<span class="pc-logo pc-logo-warning" role="img" aria-label="${esc(t('provider.autoDisabled'))}" title="${esc(autoWarningTitle)}">&#9888;</span>`
+      : logo
+        ? `<img class="pc-logo" src="${esc(logo)}" alt="">`
+        : '<span class="pc-logo pc-logo-empty"></span>';
     const shim = shimDefaults[typeName] || {};
     // Base type shown as a badge beside the logo: the shim's declared base, or
     // the type name itself when it is a bare vendor-neutral base format.
@@ -836,7 +838,7 @@ function renderProviders() {
     return `
     <div class="provider-card${enabled ? '' : ' disabled'}${autoDisabled ? ' auto-disabled' : ''}" data-provider="${esc(name)}">
       <div class="pc-head">
-        <div class="pc-name"${isFree ? ` title="${esc(t('free.disclosure'))}"` : ''}>${logoHtml}<span class="pc-name-text">${esc(title)}</span>${autoDisabled ? `<span class="pc-warning" role="img" aria-label="${esc(t('provider.autoDisabled'))}" title="${esc(autoWarningTitle)}">&#9888;</span>` : ''}${baseType ? `<span class="pc-base-badge" title="${esc(baseType)}">${esc(baseType)}</span>` : ''}</div>
+        <div class="pc-name"${isFree ? ` title="${esc(t('free.disclosure'))}"` : ''}>${logoHtml}<span class="pc-name-text">${esc(title)}</span>${baseType ? `<span class="pc-base-badge" title="${esc(baseType)}">${esc(baseType)}</span>` : ''}</div>
         <label class="pc-toggle toggle" title="${enabled ? t('provider.enabled') : t('provider.disabled')}">
           <input type="checkbox" ${enabled ? 'checked' : ''} role="switch" aria-checked="${enabled}" aria-label="${esc(name)}" onchange="this.setAttribute('aria-checked',this.checked);toggleProvider('${esc(name)}')">
           <span class="slider"></span>

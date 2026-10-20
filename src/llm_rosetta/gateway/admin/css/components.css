@@ -49,6 +49,7 @@ tr:hover td { background: var(--bg-hover); }
 .provider-card.disabled { opacity: 0.5; }
 .provider-card.auto-disabled { border-color: color-mix(in srgb, var(--yellow, #eab308) 65%, var(--border)); }
 .pc-warning { color: var(--yellow, #eab308); margin-left: 6px; font-size: 15px; cursor: help; }
+.pc-logo-warning { color: var(--yellow, #eab308); font-size: 16px; line-height: 16px; text-align: center; }
 .pc-validation-warning {
   display: none;
   min-width: 0;
