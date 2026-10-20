@@ -513,7 +513,18 @@ async def toggle_provider(request: Any, **kwargs: Any) -> Response:
     if ctx.error:
         return ctx.error
 
-    return JSONResponse({"ok": True, "provider": name, "enabled": new_enabled})
+    warnings = ctx.warnings
+    effective_enabled = (
+        name in ctx.new_config.providers if ctx.new_config is not None else new_enabled
+    )
+    response: dict[str, Any] = {
+        "ok": True,
+        "provider": name,
+        "enabled": effective_enabled,
+    }
+    if warnings:
+        response["provider_warnings"] = warnings
+    return JSONResponse(response)
 
 
 async def toggle_model(request: Any, **kwargs: Any) -> Response:
