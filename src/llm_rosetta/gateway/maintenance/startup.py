@@ -25,7 +25,7 @@ from typing import Any
 
 from llm_rosetta.observability.maintenance import Registry, StepContext
 
-from .deferred_backfills import build_registry
+from .backfills import build_registry
 
 logger = logging.getLogger(__name__)
 
@@ -235,7 +235,7 @@ class DeferredStartup:
 
     async def _seed_one_provider(self, name: str) -> None:
         """Fetch the initial token for a single provider."""
-        from .transport.token_refresh import run_token_command
+        from ..transport.token_refresh import run_token_command
 
         pinfo = self._config.providers[name]
         assert pinfo.token_command is not None
@@ -273,7 +273,7 @@ class DeferredStartup:
         returns without registering refresh loops or clearing the readiness
         flag that now belongs to its replacement.
         """
-        from .transport.token_refresh import start_token_refreshers
+        from ..transport.token_refresh import start_token_refreshers
 
         generation = self._seed_generation
         pending = [
@@ -388,7 +388,7 @@ class DeferredStartup:
         """Run the deferred registry: every step, and a failure survives.
 
         The steps are the five repairs in
-        :mod:`~llm_rosetta.gateway.deferred_backfills`, under
+        :mod:`~llm_rosetta.gateway.maintenance.backfills`, under
         :attr:`Policy.DEFERRED <llm_rosetta.observability.maintenance.Policy.DEFERRED>`:
         one failing is logged, recorded against its own name, and the steps
         behind it still run.  They used to share one ``try``, which meant a

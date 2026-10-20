@@ -397,7 +397,7 @@ class TestReadinessInteraction:
             assert route.provider_name == "resp_b"
 
     def test_all_unready_still_raises(self):
-        from llm_rosetta.gateway.deferred_startup import ProviderNotReady
+        from llm_rosetta.gateway.maintenance.startup import ProviderNotReady
 
         config = _make_config(
             {"m": {"providers": ["chat_a", "resp_a"]}}, prefer_same_format=True

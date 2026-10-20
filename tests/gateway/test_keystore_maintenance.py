@@ -19,7 +19,7 @@ from typing import Any
 import pytest
 
 from llm_rosetta.gateway.keystore import VERSIONS, KeyStore, key_bucket
-from llm_rosetta.gateway.keystore_maintenance import COLUMN_OF, build_registry
+from llm_rosetta.gateway.maintenance.keystore import COLUMN_OF, build_registry
 from llm_rosetta.observability.maintenance import Policy
 
 _STEPS = [

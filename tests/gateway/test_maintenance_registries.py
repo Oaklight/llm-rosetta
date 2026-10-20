@@ -16,11 +16,11 @@ from __future__ import annotations
 
 import pytest
 
-from llm_rosetta.gateway.config_maintenance import (
+from llm_rosetta.gateway.maintenance.config import (
     build_registry as config_registry,
 )
 from llm_rosetta.gateway.keystore import KeyStore
-from llm_rosetta.gateway.keystore_maintenance import (
+from llm_rosetta.gateway.maintenance.keystore import (
     build_registry as keystore_registry,
 )
 from llm_rosetta.observability import PersistenceManager

@@ -24,7 +24,7 @@ Module map::
                            embeddings, rerank, decision
     Model types          model_types (registry)
     Observability        (in llm_rosetta.observability, re-exported by admin/)
-    Infrastructure       keystore, logging, migrations, deferred_startup
+    Infrastructure       keystore, logging, maintenance/
     Admin UI             admin/ (routes, static assets, JS/CSS)
     Transport            transport/ subpackage
     CLI / bootstrap      cli, banner, __main__
@@ -34,27 +34,56 @@ Module map::
 
     Middleware hook order (registered in create_app):
     request_context → auth → ratelimit → [extension hooks] → handler
+
+The public names are resolved lazily.  Importing one submodule (for example
+``llm_rosetta.gateway.keystore``) must not drag the HTTP application in with
+it; ``create_app`` pulls that graph when it is actually requested.
 """
 
 # httpserver and httpclient are vendored in _vendor/ — no external deps needed.
 
-from .app import GatewayExtensions, create_app
-from .cli import main
-from .config import (
-    ConfigIO,
-    GatewayConfig,
-    JsoncConfigIO,
-    discover_config,
-    load_config,
-    load_gateway_config,
-)
-from .proxy import ProviderMetadataStore
-from .shim_sources import (
-    apply_shim_section,
-    apply_shim_sources,
-    resolve_source_config,
-    shims_signature,
-)
+from __future__ import annotations
+
+from importlib import import_module
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .app import GatewayExtensions, create_app
+    from .cli import main
+    from .config import (
+        ConfigIO,
+        GatewayConfig,
+        JsoncConfigIO,
+        discover_config,
+        load_config,
+        load_gateway_config,
+    )
+    from .proxy import ProviderMetadataStore
+    from .shim_sources import (
+        apply_shim_section,
+        apply_shim_sources,
+        resolve_source_config,
+        shims_signature,
+    )
+
+#: Public name -> (submodule, attribute).  Data only, so importing the package
+#: is free; see the module docstring for why that matters.
+_EXPORTS: dict[str, tuple[str, str]] = {
+    "ConfigIO": (".config", "ConfigIO"),
+    "GatewayConfig": (".config", "GatewayConfig"),
+    "GatewayExtensions": (".app", "GatewayExtensions"),
+    "JsoncConfigIO": (".config", "JsoncConfigIO"),
+    "ProviderMetadataStore": (".proxy", "ProviderMetadataStore"),
+    "apply_shim_section": (".shim_sources", "apply_shim_section"),
+    "apply_shim_sources": (".shim_sources", "apply_shim_sources"),
+    "create_app": (".app", "create_app"),
+    "discover_config": (".config", "discover_config"),
+    "load_config": (".config", "load_config"),
+    "load_gateway_config": (".config", "load_gateway_config"),
+    "main": (".cli", "main"),
+    "resolve_source_config": (".shim_sources", "resolve_source_config"),
+    "shims_signature": (".shim_sources", "shims_signature"),
+}
 
 __all__ = [
     "ConfigIO",
@@ -72,3 +101,18 @@ __all__ = [
     "resolve_source_config",
     "shims_signature",
 ]
+
+
+def __getattr__(name: str) -> Any:
+    """Resolve a public name from its submodule on first access."""
+    try:
+        module_name, attribute = _EXPORTS[name]
+    except KeyError:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}") from None
+    value = getattr(import_module(module_name, __name__), attribute)
+    globals()[name] = value
+    return value
+
+
+def __dir__() -> list[str]:
+    return sorted(__all__)

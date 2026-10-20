@@ -175,7 +175,7 @@ def _resolve_token_command(
     When ``token_command`` is set, the actual subprocess call is **not**
     performed here — a sentinel placeholder is returned instead, and the
     real token is fetched asynchronously after the event loop starts (via
-    :class:`~gateway.deferred_startup.DeferredStartup`).
+    :class:`~gateway.maintenance.startup.DeferredStartup`).
 
     Raises ValueError on invalid config (bad types, missing binary, etc.).
     """

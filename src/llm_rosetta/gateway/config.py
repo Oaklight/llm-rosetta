@@ -341,7 +341,7 @@ class JsoncConfigIO:
         the registry that ran is kept on this reader, which is what read the
         document, and is handed to the config built from it.
         """
-        from .config_maintenance import apply
+        from .maintenance.config import apply
 
         raw, changed, registry = apply(raw, path=path)
         self.last_load_registry = registry
@@ -361,7 +361,7 @@ class JsoncConfigIO:
         the process holds the migrated one either way, and the version on disk
         simply does not advance.
         """
-        from .config_maintenance import apply
+        from .maintenance.config import apply
 
         if is_raw:
             disk_data = raw
@@ -1299,7 +1299,7 @@ class GatewayConfig:
         from llm_rosetta.shims import resolve_format, resolve_model_type
 
         from .model_types import all_model_types
-        from .name_migration import correct_legacy_names, legacy_name_error
+        from .maintenance.names import correct_legacy_names, legacy_name_error
 
         # Migrate legacy names in place.  File-backed configs are also
         # corrected and written back by ``JsoncConfigIO``; this covers
@@ -1573,7 +1573,7 @@ class GatewayConfig:
         """
         from typing import cast
 
-        from .deferred_startup import ProviderInitState, ProviderNotReady
+        from .maintenance.startup import ProviderInitState, ProviderNotReady
 
         model = ctx.model
         source_provider = cast(ProviderType, ctx.source_format)

@@ -17,7 +17,7 @@ import pytest
 
 import llm_rosetta.gateway.app as app_module
 from llm_rosetta._vendor.httpserver import JSONResponse
-from llm_rosetta.gateway.deferred_dumps import DeferredDumpStore
+from llm_rosetta.gateway.maintenance.dumps import DeferredDumpStore
 from llm_rosetta.gateway.ops import OpsContext
 from llm_rosetta.observability.error_dump import dump_error
 from llm_rosetta.observability.persistence import PersistenceManager

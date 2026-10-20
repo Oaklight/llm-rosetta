@@ -7,7 +7,7 @@ import logging
 import os
 
 
-from llm_rosetta.gateway.migrations import CURRENT_VERSION, migrate
+from llm_rosetta.gateway.maintenance.migrations import CURRENT_VERSION, migrate
 
 
 class TestMigrationFramework:

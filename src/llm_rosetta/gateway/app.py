@@ -37,7 +37,7 @@ from .middleware.error_format import (
     is_admin_path as _is_admin_path,
 )
 from .keystore import KeyStore
-from .deferred_dumps import DeferredDumpStore
+from .maintenance.dumps import DeferredDumpStore
 from .middleware.circuit_breaker import CircuitBreaker
 from .middleware.request_context import request_context_var, setup_request_context
 from .transport import ProviderInfo
@@ -58,7 +58,7 @@ from .proxy import (
     handle_non_streaming,
     handle_streaming,
 )
-from .deferred_startup import ProviderNotReady
+from .maintenance.startup import ProviderNotReady
 
 logger = get_logger()
 
@@ -1529,7 +1529,7 @@ async def run_gateway(
     )
 
     # Deferred startup: token seeding, counter rebuild, backfills
-    from .deferred_startup import DeferredStartup
+    from .maintenance.startup import DeferredStartup
 
     config = getattr(app, "gateway_config", None)
     deferred = DeferredStartup(config, app) if config else None

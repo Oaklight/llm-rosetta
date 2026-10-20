@@ -25,8 +25,8 @@ from llm_rosetta.observability.maintenance import (
     StepResult,
 )
 
-from ...deferred_backfills import build_registry as build_deferred_registry
-from ...keystore_maintenance import build_registry as build_keystore_registry
+from ...maintenance.backfills import build_registry as build_deferred_registry
+from ...maintenance.keystore import build_registry as build_keystore_registry
 
 
 def _as_registry(candidate: Any) -> Registry | None:

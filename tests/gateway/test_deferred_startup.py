@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from llm_rosetta.gateway.deferred_startup import (
+from llm_rosetta.gateway.maintenance.startup import (
     DeferredStartup,
     ProviderInitState,
     ProviderNotReady,

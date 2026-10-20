@@ -171,7 +171,7 @@ async def _backfill_usage_bucket(context: StepContext) -> int:
     bucket is what the request log attributes usage by.  Idempotent by its own
     ``WHERE`` clause: once every row has one, this matches nothing.
     """
-    from .keystore import key_bucket
+    from ..keystore import key_bucket
 
     conn = context.keystore._conn
     cursor = await conn.execute(
@@ -205,7 +205,7 @@ def build_registry() -> Registry:
     at module scope: this module is imported by :mod:`~llm_rosetta.gateway.keystore`,
     so naming them at the top would be a cycle.
     """
-    from .keystore import VERSIONS, _DB_FILENAME
+    from ..keystore import VERSIONS, _DB_FILENAME
 
     steps = [
         Step(

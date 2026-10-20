@@ -101,7 +101,7 @@ class ShimRemovalAdvisory:
 def _named_shim(cfg: Mapping[str, Any], key: str) -> tuple[str, str]:
     """Return the ``(slot, shim name)`` a provider entry points at.
 
-    Mirrors :func:`llm_rosetta.gateway.name_migration._corrected_value` and
+    Mirrors :func:`llm_rosetta.gateway.maintenance.names._corrected_value` and
     ``GatewayConfig._resolve_provider_types``: an explicit ``shim`` wins, then
     ``type``, then the provider key itself.
     """

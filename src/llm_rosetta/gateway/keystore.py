@@ -22,7 +22,7 @@ from llm_rosetta._vendor import aiosqlite
 from llm_rosetta.observability.maintenance import Registry, StepContext
 from llm_rosetta.observability.usage import INTERNAL_LABEL, INTERNAL_SUBJECT
 
-from .keystore_maintenance import build_registry
+from .maintenance.keystore import build_registry
 
 logger = logging.getLogger("llm-rosetta.keystore")
 
@@ -32,7 +32,7 @@ _DB_FILENAME = "keys.db"
 #: description, statements)`` — the same table shape the request log keeps, so
 #: there is one way to read a store's history in this codebase.  The statements
 #: are applied by the steps in
-#: :mod:`~llm_rosetta.gateway.keystore_maintenance`, which also records them in
+#: :mod:`~llm_rosetta.gateway.maintenance.keystore`, which also records them in
 #: this store's ``schema_version`` ledger.
 VERSIONS: list[tuple[int, str, list[str]]] = [
     (1, "add api_keys.last_used", ["ALTER TABLE api_keys ADD COLUMN last_used TEXT"]),
@@ -134,7 +134,7 @@ class KeyStore:
 
         The table is created with the columns a store started with, and the
         versioned migrations that follow are steps in this store's own registry
-        (:mod:`~llm_rosetta.gateway.keystore_maintenance`):
+        (:mod:`~llm_rosetta.gateway.maintenance.keystore`):
 
         - ``api_keys.last_used`` and ``api_keys.usage_bucket`` are added by
           migrations rather than by the ``CREATE TABLE``, so a fresh store and a

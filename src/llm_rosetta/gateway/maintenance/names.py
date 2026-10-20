@@ -1,7 +1,7 @@
 """One-time correction of legacy provider/shim names in the gateway config.
 
 This is deliberately **not** part of the versioned ``config_version`` schema
-migrations (:mod:`llm_rosetta.gateway.migrations`): it is a scoped, idempotent
+migrations (:mod:`llm_rosetta.gateway.maintenance.migrations`): it is a scoped, idempotent
 rewrite of *names* only.  It runs at load time and the config is written back
 to disk the first time it changes anything, so a config only carries canonical
 names afterwards.
@@ -44,7 +44,7 @@ def _corrected_value(value: str, *, shim_slot: bool) -> str:
     canonical = canonical_provider_name(value)
     if canonical != value:
         return canonical
-    from .providers import BASE_FORMATS
+    from ..providers import BASE_FORMATS
 
     if value in BASE_FORMATS:
         return value
@@ -87,7 +87,7 @@ def legacy_name_error(providers: dict[str, Any]) -> str | None:
     Guards load paths that bypass :func:`correct_legacy_names`: the gateway
     rejects the config rather than silently resolving a legacy name at runtime.
     """
-    from .providers import BASE_FORMATS
+    from ..providers import BASE_FORMATS
 
     for name, cfg in providers.items():
         if not isinstance(cfg, dict):

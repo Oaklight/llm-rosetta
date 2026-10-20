@@ -50,7 +50,7 @@ STEPS = ["config.migrate_structure", "config.correct_legacy_names"]
 def _migrate_structure(context: StepContext) -> int:
     """Apply the versioned config migrations, which own ``config_version``.
 
-    The migrations themselves stay where they are (:mod:`~...gateway.migrations`):
+    The migrations themselves stay where they are (:mod:`~...gateway.maintenance.migrations`):
     the table is written once, with its own log line per migration, and this
     step is what puts it in the load's order and reports whether it moved.
     """
@@ -69,7 +69,7 @@ def _correct_legacy_names(context: StepContext) -> int:
     ``config_version`` — it corrects *names*, not structure, and it must run for
     a config whose version is already current.
     """
-    from .name_migration import correct_legacy_names
+    from .names import correct_legacy_names
 
     raw: dict[str, Any] = context.config
     return 1 if correct_legacy_names(raw) else 0

@@ -20,7 +20,7 @@ from llm_rosetta.gateway.admin.routes.config import fetch_upstream_models
 from llm_rosetta.gateway.admin.routes.connectivity import (
     test_provider_connectivity as _provider_connectivity,
 )
-from llm_rosetta.gateway.deferred_startup import DeferredStartup, ProviderInitState
+from llm_rosetta.gateway.maintenance.startup import DeferredStartup, ProviderInitState
 from llm_rosetta.gateway.shim_sources import shims_signature
 from llm_rosetta.gateway.transport.provider_info import (
     TOKEN_PENDING_SENTINEL,
@@ -303,7 +303,7 @@ def test_reload_config_carries_the_registry_the_reader_ran(tmp_path):
     import llm_rosetta.gateway.app as app_mod
 
     from llm_rosetta.gateway.config import JsoncConfigIO
-    from llm_rosetta.gateway.config_maintenance import STEPS
+    from llm_rosetta.gateway.maintenance.config import STEPS
 
     document: dict[str, Any] = {
         "config_version": 1,
