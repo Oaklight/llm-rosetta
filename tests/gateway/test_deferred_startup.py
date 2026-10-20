@@ -712,11 +712,11 @@ class TestResolveOrError:
         from llm_rosetta._vendor.httpserver import Response
         from llm_rosetta.gateway.app import _resolve_or_error
 
-        with patch("llm_rosetta.gateway.app._config") as mock_config:
-            mock_config.resolve.side_effect = ProviderNotReady("model-x")
-            result = _resolve_or_error(
-                SelectionContext("model-x", "openai_chat"), "req-1"
-            )
+        mock_config = MagicMock()
+        mock_config.resolve.side_effect = ProviderNotReady("model-x")
+        result = _resolve_or_error(
+            mock_config, SelectionContext("model-x", "openai_chat"), "req-1"
+        )
 
         assert isinstance(result, Response)
         assert result.status_code == 503
@@ -726,11 +726,11 @@ class TestResolveOrError:
         from llm_rosetta._vendor.httpserver import Response
         from llm_rosetta.gateway.app import _resolve_or_error
 
-        with patch("llm_rosetta.gateway.app._config") as mock_config:
-            mock_config.resolve.side_effect = ProviderNotReady("model-x", failed=True)
-            result = _resolve_or_error(
-                SelectionContext("model-x", "openai_chat"), "req-1"
-            )
+        mock_config = MagicMock()
+        mock_config.resolve.side_effect = ProviderNotReady("model-x", failed=True)
+        result = _resolve_or_error(
+            mock_config, SelectionContext("model-x", "openai_chat"), "req-1"
+        )
 
         assert isinstance(result, Response)
         assert result.status_code == 502
@@ -740,12 +740,12 @@ class TestResolveOrError:
         from llm_rosetta._vendor.httpserver import Response
         from llm_rosetta.gateway.app import _resolve_or_error
 
-        with patch("llm_rosetta.gateway.app._config") as mock_config:
-            mock_config.resolve.side_effect = KeyError("no-model")
-            mock_config.models.keys.return_value = ["gpt-4o"]
-            result = _resolve_or_error(
-                SelectionContext("no-model", "openai_chat"), "req-1"
-            )
+        mock_config = MagicMock()
+        mock_config.resolve.side_effect = KeyError("no-model")
+        mock_config.models.keys.return_value = ["gpt-4o"]
+        result = _resolve_or_error(
+            mock_config, SelectionContext("no-model", "openai_chat"), "req-1"
+        )
 
         assert isinstance(result, Response)
         assert result.status_code == 404

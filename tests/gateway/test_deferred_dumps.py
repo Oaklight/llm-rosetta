@@ -16,6 +16,7 @@ from unittest.mock import MagicMock
 import pytest
 
 import llm_rosetta.gateway.app as app_module
+import llm_rosetta.gateway.lifecycle as lifecycle_module
 from llm_rosetta._vendor.httpserver import JSONResponse
 from llm_rosetta.gateway.maintenance.dumps import DeferredDumpStore
 from llm_rosetta.gateway.ops import OpsContext
@@ -169,7 +170,7 @@ async def _run_proxy_handler(monkeypatch: Any, pm: PersistenceManager) -> str:
     """Drive one failing request through the real ``_proxy_handler``.
 
     The fake handler dumps the way the real error paths do — before returning —
-    and the real ``_record_proxy_op`` writes the request-log row afterwards.
+    and the lifecycle writes the request-log row afterwards.
     """
     captured: dict[str, Any] = {}
 
@@ -236,12 +237,12 @@ def test_dump_is_written_once_the_request_log_row_exists(tmp_path, monkeypatch):
 
 
 def test_flush_runs_even_if_the_log_write_fails(monkeypatch):
-    """A failing ``_record_proxy_op`` must not swallow the queued dumps.
+    """A failing log write must not swallow the queued dumps.
 
-    The queued dumps are flushed in a ``finally`` around the log write, so a log
-    write that raises still replays them — they fail their FK and log at
-    ``WARNING``, which is the point — instead of going out of scope in silence,
-    which is the defect this module exists to fix (#964).
+    The queued dumps are flushed in a ``finally`` around the lifecycle's log
+    write, so a write that raises still replays them — they fail their FK and
+    log at ``WARNING``, which is the point — instead of going out of scope in
+    silence, which is the defect this module exists to fix (#964).
     """
     store = _RecordingStore()
 
@@ -263,7 +264,7 @@ def test_flush_runs_even_if_the_log_write_fails(monkeypatch):
 
     monkeypatch.setattr(app_module, "_config", _config())
     monkeypatch.setattr(app_module, "handle_non_streaming", _fake_handle_non_streaming)
-    monkeypatch.setattr(app_module, "_record_proxy_op", _boom)
+    monkeypatch.setattr(lifecycle_module, "record_proxy_request", _boom)
 
     request = MagicMock()
     request.headers = {}

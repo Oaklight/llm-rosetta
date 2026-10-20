@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import time
-import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, cast
@@ -32,22 +31,17 @@ from .config import GatewayConfig, ResolvedRoute
 from .routing import SelectionContext
 from .middleware.error_format import (
     apply_cors_headers,
-    detect_api_format,
-    format_error_response,
     is_admin_path as _is_admin_path,
 )
 from .keystore import KeyStore
-from .maintenance.dumps import DeferredDumpStore
-from .middleware.circuit_breaker import CircuitBreaker
+from .lifecycle import current_lifecycle, instrumented_handler
 from .middleware.request_context import request_context_var, setup_request_context
 from .transport import ProviderInfo
 from .middleware.headers import (
     build_upstream_extra_headers,
     get_preflight_tokens_override,
-    get_request_id,
 )
 from .logging import get_logger
-from llm_rosetta.observability.error_dump import dump_error
 
 from .proxy import (
     ProviderMetadataStore,
@@ -63,103 +57,9 @@ from .maintenance.startup import ProviderNotReady
 logger = get_logger()
 
 
-async def _record_proxy_op(
-    app: Any,
-    *,
-    model: str,
-    source_provider: str,
-    target_provider: str,
-    provider_name: str,
-    is_stream: bool,
-    status_code: int,
-    duration_ms: float,
-    error_detail: str | None,
-    profile: dict[str, Any] | None = None,
-    entry_id_override: str | None = None,
-) -> None:
-    """Record a proxy request via OpsProxyRequest.
-
-    Thin wrapper that fetches ``ops_ctx`` from ``app`` and delegates to
-    :class:`~llm_rosetta.gateway.ops.proxy.OpsProxyRequest`.
-    """
-    from .ops.proxy import record_proxy_request
-
-    await record_proxy_request(
-        app,
-        model=model,
-        source_provider=source_provider,
-        target_provider=target_provider,
-        provider_name=provider_name,
-        is_stream=is_stream,
-        status_code=status_code,
-        duration_ms=duration_ms,
-        error_detail=error_detail,
-        profile=profile,
-        entry_id_override=entry_id_override,
-    )
-
-
 # ---------------------------------------------------------------------------
 # Route handlers
 # ---------------------------------------------------------------------------
-
-
-def _try_start_profiler(app: Any) -> Any | None:
-    """Start a per-request deep profiler if profiling is enabled.
-
-    Returns a started DeepProfiler instance, or ``None`` if profiling
-    is disabled or pyinstrument is not installed.
-    """
-    state = getattr(app, "profiler_state", None)
-    if state is None or not state.should_profile():
-        return None
-    try:
-        profiler = state.create_profiler()
-        profiler.start()
-        return profiler
-    except Exception:
-        # cProfile on Python 3.12+ raises ValueError when a second
-        # profiler is started concurrently (tool-ID collision).
-        # Restore the consumed slot so remaining count stays accurate.
-        state.remaining += 1
-        if not state.enabled:
-            state.enabled = True
-        state.release()
-        return None
-
-
-def _try_stop_profiler(
-    profiler: Any,
-    app: Any,
-    *,
-    request_id: str,
-    model: str,
-    source: str,
-    target: str,
-    is_stream: bool,
-    duration_ms: float,
-) -> None:
-    """Stop a running deep profiler and store the result."""
-    if profiler is None:
-        return
-    state = getattr(app, "profiler_state", None)
-    try:
-        profiler.stop()
-        if state is not None:
-            state.store_result(
-                profiler,
-                request_id=request_id,
-                model=model,
-                source=source,
-                target=target,
-                is_stream=is_stream,
-                duration_ms=duration_ms,
-            )
-    except Exception:
-        logger.debug("Failed to store profiling result")
-    finally:
-        if state is not None:
-            state.release()
 
 
 # Global config — set at startup
@@ -167,15 +67,15 @@ _config: GatewayConfig | None = None
 
 
 def _resolve_or_error(
-    ctx: SelectionContext,
+    config: GatewayConfig,
+    selection: SelectionContext,
     request_id: str,
 ) -> tuple[ResolvedRoute, ProviderInfo] | Response:
-    """Resolve the context's model to route+provider, returning a Response on failure."""
-    assert _config is not None
-    source_provider = cast(ProviderType, ctx.source_format)
-    model = ctx.model
+    """Resolve the selection's model to route+provider, or a Response on failure."""
+    source_provider = cast(ProviderType, selection.source_format)
+    model = selection.model
     try:
-        return _config.resolve(ctx)
+        return config.resolve(selection)
     except ProviderNotReady as exc:
         status = 502 if exc.failed else 503
         resp = error_response_for_source(source_provider, status, str(exc))
@@ -184,7 +84,7 @@ def _resolve_or_error(
             resp.headers["Retry-After"] = "5"
         return resp
     except KeyError:
-        configured = ", ".join(sorted(_config.models.keys()))
+        configured = ", ".join(sorted(config.models.keys()))
         resp = error_response_for_source(
             source_provider,
             404,
@@ -192,66 +92,6 @@ def _resolve_or_error(
         )
         resp.headers["x-request-id"] = request_id
         return resp
-
-
-def _record_circuit_breaker_outcome(cb: CircuitBreaker, status_code: int) -> None:
-    """Record a circuit breaker success or failure based on HTTP status.
-
-    5xx responses are treated as upstream failures.  Everything else
-    (including 4xx client errors) counts as a success because the
-    upstream is reachable and functioning.
-    """
-    if status_code >= 500:
-        cb.record_failure()
-    else:
-        cb.record_success()
-
-
-def _check_circuit_breaker(
-    cb: CircuitBreaker,
-    provider_name: str,
-    request: Any,
-    request_id: str,
-) -> Response | None:
-    """Return a 503 response if the circuit breaker is open, else None."""
-    if cb.allow_request():
-        return None
-    remaining = cb.cooldown_remaining()
-    rctx = request_context_var.get()
-    api_format = (
-        rctx.api_format if rctx and rctx.api_format else detect_api_format(request.path)
-    )
-    resp = format_error_response(
-        api_format,
-        503,
-        (
-            f"Provider '{provider_name}' is temporarily unavailable "
-            f"(circuit breaker open, cooldown {remaining:.0f}s remaining)"
-        ),
-        error_type="service_unavailable",
-        google_status="UNAVAILABLE",
-        cors=True,
-    )
-    resp.headers["x-request-id"] = request_id
-    resp.headers["Retry-After"] = str(max(1, int(remaining)))
-    return resp
-
-
-def _deferred_dumps_for(persistence: Any | None) -> DeferredDumpStore | None:
-    """Wrap *persistence* so dump writes wait for the request-log row (#964).
-
-    Returns ``None`` when dumps are disabled, matching the ``persistence=None``
-    convention that turns ``dump_error`` into a no-op.
-    """
-    if persistence is None:
-        return None
-    return DeferredDumpStore(persistence)
-
-
-async def _flush_deferred_dumps(deferred: DeferredDumpStore | None) -> None:
-    """Replay queued dumps once the request-log row exists; no-op if unused."""
-    if deferred is not None:
-        await deferred.flush()
 
 
 async def _proxy_handler(
@@ -267,16 +107,38 @@ async def _proxy_handler(
     # canonical format so downstream route/table lookups match.
     source_provider = cast(ProviderType, canonical_provider_name(str(source_provider)))
 
-    # Read request ID from context (populated by the early middleware
-    # hook) and fall back to header extraction for safety.
-    rctx = request_context_var.get()
-    request_id = rctx.request_id if rctx else get_request_id(request)
+    async def _handle(
+        request: Any, config: GatewayConfig
+    ) -> Response | StreamingResponse:
+        return await _handle_llm(
+            request, config, source_provider, model_override, force_stream
+        )
 
-    try:
-        body: dict[str, Any] = request.json()
-    except Exception:
+    return await instrumented_handler(
+        request,
+        _config,
+        _handle,
+        source_format=source_provider,
+        error_phase="conversion",
+        error_format=source_provider,
+    )
+
+
+async def _handle_llm(
+    request: Any,
+    config: GatewayConfig,
+    source_provider: ProviderType,
+    model_override: str | None,
+    force_stream: bool,
+) -> Response | StreamingResponse:
+    """The chat route's own work, run inside the shared lifecycle."""
+    ctx = current_lifecycle()
+    assert ctx is not None
+
+    body = ctx.body
+    if body is None:
         resp = error_response_for_source(source_provider, 400, "Invalid JSON body")
-        resp.headers["x-request-id"] = request_id
+        resp.headers["x-request-id"] = ctx.request_id
         return resp
 
     # Determine model
@@ -285,7 +147,7 @@ async def _proxy_handler(
         resp = error_response_for_source(
             source_provider, 400, "Missing 'model' in request body"
         )
-        resp.headers["x-request-id"] = request_id
+        resp.headers["x-request-id"] = ctx.request_id
         return resp
 
     # If model came from URL (Google), inject it into body for the converter
@@ -296,11 +158,11 @@ async def _proxy_handler(
     # provider selection needs it now, and the upstream credential and session
     # identity will need it again once the request has been converted.
     _kctx = api_key_context_var.get()
-    ctx = _config.selection_context(model, source_provider)
-    ctx.with_client(_kctx.key_hash if _kctx else None)
+    selection = config.selection_context(model, source_provider)
+    selection.with_client(_kctx.key_hash if _kctx else None)
 
     # Resolve target provider via unified routing
-    result = _resolve_or_error(ctx, request_id)
+    result = _resolve_or_error(config, selection, ctx.request_id)
     if isinstance(result, Response):
         return result
     route, provider_info = result
@@ -311,21 +173,27 @@ async def _proxy_handler(
     if route.upstream_model:
         body["model"] = route.upstream_model
 
+    ctx.note_route(
+        model=model,
+        target_format=route.target_provider,
+        provider_name=route.provider_name,
+    )
+
     # --- Circuit breaker check ---
-    cb = _config.circuit_breaker_registry.get_or_create(route.provider_name)
-    cb_reject = _check_circuit_breaker(cb, route.provider_name, request, request_id)
+    cb_reject = ctx.check_circuit_breaker(request)
     if cb_reject is not None:
         return cb_reject
 
     # Determine streaming
     is_stream = force_stream or detect_stream_request(source_provider, body)
+    ctx.note_route(is_stream=is_stream)
 
     model_label = (
         f"{model} (upstream={route.upstream_model})" if route.upstream_model else model
     )
     logger.info(
         "[%s] %s -> %s | model=%s stream=%s",
-        request_id,
+        ctx.request_id,
         source_provider,
         route.target_provider,
         model_label,
@@ -339,7 +207,7 @@ async def _proxy_handler(
     # value is preserved (docs recommend forwarding it verbatim); it overrides
     # the gateway-derived value in the transport.
     extra_headers = build_upstream_extra_headers(
-        request, request_id, session_header=provider_info.session_header
+        request, ctx.request_id, session_header=provider_info.session_header
     )
 
     # --- Metrics instrumentation ---
@@ -348,164 +216,50 @@ async def _proxy_handler(
         if metrics:
             metrics.active_streams += 1
 
-    t0 = time.monotonic()
-    status_code = 500
-    error_detail: str | None = None
-    profile: dict[str, Any] | None = None
-    request_log = getattr(request.app, "request_log", None)
-
-    # Error dump persistence — pass None to disable dump_error in handlers.
-    # Dumps name this request's log entry, but that row is written in the
-    # finally below, after the error paths have run, so the FK on
-    # error_dumps.request_log_id would reject them.  Hand the handlers a store
-    # that queues the writes until the row exists (#964).
-    _raw_persistence = getattr(request.app, "persistence", None)
-    deferred_dumps = _deferred_dumps_for(
-        _raw_persistence if _config.error_dumps_enabled else None
+    selection.with_key_affinity(
+        config.provider_key_affinity.get(route.provider_name, True)
     )
-    persistence = deferred_dumps
     capture_state = getattr(request.app, "capture_state", None)
-    deep_profiler = _try_start_profiler(request.app)
 
-    # Shared across streaming / non-streaming paths — also stored on
-    # request.state so lifecycle hooks can write back to the log entry.
-    pre_entry_id = uuid.uuid4().hex
-    request.state.log_entry_id = pre_entry_id
-    ctx.with_key_affinity(_config.provider_key_affinity.get(route.provider_name, True))
-
-    try:
-        if is_stream:
-            preflight_override = get_preflight_tokens_override(request)
-            preflight = (
-                preflight_override
-                if preflight_override is not None
-                else route.preflight_token_count
-            )
-
-            response, profile = await handle_streaming(
-                route,
-                provider_info,
-                body,
-                reported_model=model,
-                transport=request.app.transport,
-                metadata_store=store,
-                extra_headers=extra_headers,
-                entry_id=pre_entry_id,
-                request_log=request_log,
-                metrics=getattr(request.app, "metrics", None),
-                persistence=persistence,
-                preflight_token_count=preflight,
-                selection=ctx,
-                capture_state=capture_state,
-            )
-        else:
-            response, profile = await handle_non_streaming(
-                route,
-                provider_info,
-                body,
-                transport=request.app.transport,
-                metadata_store=store,
-                extra_headers=extra_headers,
-                persistence=persistence,
-                entry_id=pre_entry_id,
-                selection=ctx,
-                capture_state=capture_state,
-            )
-        status_code = response.status_code
-        if status_code >= 400 and hasattr(response, "body"):
-            body_bytes = response.body
-            if isinstance(body_bytes, bytes):
-                error_detail = body_bytes.decode("utf-8", errors="replace")
-        response.headers["x-request-id"] = request_id
-        logger.info("[%s] response status=%s", request_id, status_code)
-
-        _record_circuit_breaker_outcome(cb, status_code)
-
-        # For streaming responses, defer profiler stop to after the
-        # generator is fully consumed via StreamingResponse.background.
-        if deep_profiler is not None and isinstance(response, StreamingResponse):
-            _dp = deep_profiler
-            _app = request.app
-            _t0 = t0
-            _rid = request_id
-            _model = model
-            _src = source_provider
-            _tgt = route.target_provider
-
-            def _stop_profiler_background() -> None:
-                _try_stop_profiler(
-                    _dp,
-                    _app,
-                    request_id=_rid,
-                    model=_model,
-                    source=_src,
-                    target=_tgt,
-                    is_stream=True,
-                    duration_ms=(time.monotonic() - _t0) * 1000,
-                )
-
-            response.background = _stop_profiler_background
-            deep_profiler = None  # prevent finally from double-stopping
-
-        return response
-    except Exception as exc:
-        error_detail = str(exc)
-        logger.exception("[%s] unhandled error in proxy handler", request_id)
-        status_code = 500
-        cb.record_failure()
-        await dump_error(
-            persistence,
-            request_body=body,
-            response_text=error_detail,
-            model=model,
-            source_provider=source_provider,
-            target_provider=route.target_provider,
-            provider_name=route.provider_name,
-            status_code=500,
-            error_phase="conversion",
-            request_log_id=pre_entry_id,
-        )
-        resp = error_response_for_source(
-            source_provider, 500, f"Internal server error: {exc}"
-        )
-        resp.headers["x-request-id"] = request_id
-        return resp
-    finally:
-        duration_ms = (time.monotonic() - t0) * 1000
-
-        _try_stop_profiler(
-            deep_profiler,
-            request.app,
-            request_id=request_id,
-            model=model,
-            source=source_provider,
-            target=route.target_provider,
-            is_stream=is_stream,
-            duration_ms=duration_ms,
+    if is_stream:
+        preflight_override = get_preflight_tokens_override(request)
+        preflight = (
+            preflight_override
+            if preflight_override is not None
+            else route.preflight_token_count
         )
 
-        try:
-            await _record_proxy_op(
-                request.app,
-                model=model,
-                source_provider=source_provider,
-                target_provider=route.target_provider,
-                provider_name=route.provider_name,
-                is_stream=is_stream,
-                status_code=status_code,
-                duration_ms=duration_ms,
-                error_detail=error_detail,
-                profile=profile,
-                entry_id_override=pre_entry_id,
-            )
-        finally:
-            # The request-log row exists now, so the dumps queued during
-            # handling can be written with their request_log_id intact (#964).
-            # In a finally so a failing log write cannot swallow them — a dump
-            # that cannot be written is logged, never dropped in silence.
-            # Anything still to come — mid-stream dumps — goes straight
-            # through, since flush() stops deferring.
-            await _flush_deferred_dumps(deferred_dumps)
+        response, profile = await handle_streaming(
+            route,
+            provider_info,
+            body,
+            reported_model=model,
+            transport=request.app.transport,
+            metadata_store=store,
+            extra_headers=extra_headers,
+            entry_id=ctx.entry_id,
+            request_log=getattr(request.app, "request_log", None),
+            metrics=getattr(request.app, "metrics", None),
+            persistence=ctx.dump_store,
+            preflight_token_count=preflight,
+            selection=selection,
+            capture_state=capture_state,
+        )
+    else:
+        response, profile = await handle_non_streaming(
+            route,
+            provider_info,
+            body,
+            transport=request.app.transport,
+            metadata_store=store,
+            extra_headers=extra_headers,
+            persistence=ctx.dump_store,
+            entry_id=ctx.entry_id,
+            selection=selection,
+            capture_state=capture_state,
+        )
+    ctx.profile = profile
+    return response
 
 
 # --- Endpoint handlers ---
@@ -794,15 +548,12 @@ def _register_non_llm_routes(app: App, config: GatewayConfig) -> None:
     For each non-LLM descriptor whose ``pipeline`` is set, resolves the
     handler via ``desc.pipeline()`` (a lazy import wrapper) and registers
     its routes.  Descriptors with ``pipeline=None`` are skipped with a
-    warning — this is expected only for the ``llm`` type, which uses
-    ``_proxy_handler`` with per-format route registration.
+    warning — this is expected only for the ``llm`` type, whose routes come
+    from the descriptor's ``RouteSpec`` list via :func:`_register_llm_routes`.
 
-    The wrapper adds the same cross-cutting concerns that
-    ``_proxy_handler`` provides for LLM routes:
-
-    * Telemetry recording (metrics + request log)
-    * Deep profiling (``_try_start_profiler`` / ``_try_stop_profiler``)
-    * Error dumps (``dump_error``) on unhandled exceptions
+    The handler runs inside :func:`~.lifecycle.instrumented_handler`, the same
+    lifecycle the chat routes use, so telemetry, profiling, error dumps,
+    deferred dumps and the circuit breaker cannot be missing from one side.
     """
     from .model_types import all_model_types
 
@@ -821,100 +572,67 @@ def _register_non_llm_routes(app: App, config: GatewayConfig) -> None:
         # the descriptor.  The wrapper defers imports to avoid circular
         # dependencies between model_types and handler modules.
         raw_handler = desc.pipeline()
-
-        # Wrap the raw handler to inject the gateway config AND add
-        # telemetry / profiling / error-dump instrumentation, matching
-        # the cross-cutting concerns that ``_proxy_handler`` provides.
-        def _make_handler(h: Callable, type_name: str) -> Callable:
-            async def _handler(request: Any) -> Response:
-                assert _config is not None
-
-                rctx = request_context_var.get()
-                request_id = rctx.request_id if rctx else get_request_id(request)
-
-                # Best-effort model extraction from JSON body
-                model = ""
-                try:
-                    body: dict[str, Any] = request.json()
-                    model = body.get("model", "") or ""
-                except Exception:
-                    pass
-
-                t0 = time.monotonic()
-                status_code = 500
-                error_detail: str | None = None
-                deep_profiler = _try_start_profiler(request.app)
-
-                _raw_persistence = getattr(request.app, "persistence", None)
-                persistence = _raw_persistence if _config.error_dumps_enabled else None
-
-                try:
-                    response = await h(request, _config)
-                    status_code = response.status_code
-                    if status_code >= 400 and hasattr(response, "body"):
-                        body_bytes = response.body
-                        if isinstance(body_bytes, bytes):
-                            error_detail = body_bytes.decode("utf-8", errors="replace")
-                    return response
-                except Exception as exc:
-                    error_detail = str(exc)
-                    logger.exception(
-                        "[%s] unhandled error in %s handler",
-                        request_id,
-                        type_name,
-                    )
-                    status_code = 500
-                    await dump_error(
-                        persistence,
-                        request_body=None,
-                        response_text=error_detail,
-                        model=model or None,
-                        source_provider=type_name,
-                        target_provider=type_name,
-                        status_code=500,
-                        error_phase="handler",
-                    )
-                    from .proxy import error_response_for_source
-
-                    resp = error_response_for_source(
-                        "chat_completions",
-                        500,
-                        f"Internal server error: {exc}",
-                    )
-                    resp.headers["x-request-id"] = request_id
-                    return resp
-                finally:
-                    duration_ms = (time.monotonic() - t0) * 1000
-
-                    _try_stop_profiler(
-                        deep_profiler,
-                        request.app,
-                        request_id=request_id,
-                        model=model,
-                        source=type_name,
-                        target=type_name,
-                        is_stream=False,
-                        duration_ms=duration_ms,
-                    )
-
-                    await _record_proxy_op(
-                        request.app,
-                        model=model,
-                        source_provider=cast(ProviderType, type_name),
-                        target_provider=cast(ProviderType, type_name),
-                        provider_name=type_name,
-                        is_stream=False,
-                        status_code=status_code,
-                        duration_ms=duration_ms,
-                        error_detail=error_detail,
-                    )
-
-            return _handler
-
-        handler = _make_handler(raw_handler, desc.name)
+        handler = _make_typed_handler(raw_handler, desc.name)
 
         for route_spec in desc.routes:
             app.route(route_spec.path, methods=route_spec.methods)(handler)
+
+
+def _make_typed_handler(raw_handler: Callable, type_name: str) -> Callable:
+    """Wrap a typed pipeline handler in the shared request lifecycle."""
+
+    async def _handler(request: Any) -> Response | StreamingResponse:
+        assert _config is not None
+        return await instrumented_handler(
+            request,
+            _config,
+            raw_handler,
+            source_format=type_name,
+            model_type=type_name,
+            provider_name=type_name,
+            error_phase="handler",
+            error_format="chat_completions",
+        )
+
+    return _handler
+
+
+#: The handler that owns each chat source format.  ``RouteSpec.source_format``
+#: selects from this table, so the route list lives in ``model_types`` only.
+_LLM_ROUTE_HANDLERS: dict[str, Callable[..., Any]] = {
+    "chat_completions": handle_chat_completion,
+    "messages": handle_messages,
+    "open_responses": handle_open_responses,
+    "google_generate": handle_google_generate,
+    "google_interactions": handle_google_interactions,
+}
+
+
+def _register_llm_routes(app: App) -> None:
+    """Register the chat routes declared by the ``llm`` model type."""
+    from .model_types import get_model_type
+
+    descriptor = get_model_type("llm")
+    if descriptor is None:
+        raise RuntimeError("the 'llm' model type is not registered")
+
+    for spec in descriptor.routes:
+        handler = _LLM_ROUTE_HANDLERS.get(spec.source_format or "")
+        if handler is None:
+            raise RuntimeError(
+                f"llm route {spec.path!r} names unknown source format "
+                f"{spec.source_format!r}"
+            )
+        app.route(spec.path, methods=spec.methods)(_llm_route_handler(handler))
+
+
+def _llm_route_handler(handler: Callable[..., Any]) -> Callable[..., Any]:
+    """Adapt a chat handler to the router's ``(request, **path_params)`` call."""
+
+    async def _route(request: Any, **path_params: Any) -> Response:
+        return await handler(request, **path_params)
+
+    return _route
 
 
 # ---------------------------------------------------------------------------
@@ -1368,14 +1086,8 @@ async def create_app(
 
     # --- Routes ---
     if not ext.skip_default_routes:
-        # LLM routes: explicit registration (complex per-format handler logic)
-        app.route("/v1/chat/completions", methods=["POST"])(handle_chat_completion)
-        app.route("/v1/messages", methods=["POST"])(handle_messages)
-        app.route("/v1/responses", methods=["POST"])(handle_open_responses)
-        app.route("/v1beta/models/<path:model_path>", methods=["POST"])(
-            handle_google_generate
-        )
-        app.route("/v1beta/interactions", methods=["POST"])(handle_google_interactions)
+        # LLM routes: registered from the model type registry
+        _register_llm_routes(app)
 
         # Non-LLM routes: registered from the model type registry
         _register_non_llm_routes(app, config)

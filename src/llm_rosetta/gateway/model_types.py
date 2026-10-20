@@ -8,8 +8,11 @@ admin routes.
 Built-in types registered at import time: ``llm``, ``embedding``, ``rerank``.
 
 LLM is special: it uses the full converter pipeline via ``_proxy_handler``
-in ``app.py``, so its ``pipeline`` is ``None``.  Non-LLM types (embedding,
-rerank) point to their dedicated pipeline-handler callables.
+in ``app.py``, so its ``pipeline`` is ``None``.  Its routes are still the
+descriptor's: ``app.py`` walks :attr:`ModelTypeDescriptor.routes` and picks a
+handler by ``source_format``, so the chat path list exists only here.
+Non-LLM types (embedding, rerank) point to their dedicated pipeline-handler
+callables.
 
 The non-LLM descriptors take their format list from the converter registries
 (``EMBEDDING_FORMATS``, ``RERANK_FORMATS``, ``DECISION_FORMATS``) rather than
@@ -195,9 +198,9 @@ def _register_builtins() -> None:
     from .source_formats import detect_embedding_source, detect_rerank_source
 
     # --- LLM ---
-    # LLM uses the full converter pipeline via _proxy_handler in app.py,
-    # so pipeline=None.  Its routes are registered explicitly in app.py
-    # because each format has its own handler with complex logic.
+    # LLM uses the full converter pipeline via _proxy_handler in app.py, so
+    # pipeline=None.  These routes are the one chat route table: app.py walks
+    # them and selects a handler by source_format.
     register_model_type(
         ModelTypeDescriptor(
             name="llm",

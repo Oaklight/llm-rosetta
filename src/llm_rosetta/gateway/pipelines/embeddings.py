@@ -14,7 +14,8 @@ Every request that reaches an upstream is recorded in the usage ledger with
 ``model_type="embedding"``, through the same
 :class:`~llm_rosetta.gateway.ops.proxy.OpsProxyRequest` the chat routes use.
 Requests rejected before the upstream call — bad JSON, an unknown model, a
-failed request conversion — are not recorded: nothing was billed.
+failed request conversion — are recorded by the shared request lifecycle with
+no token usage: nothing was billed.
 """
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ from typing import Any
 from llm_rosetta._vendor.httpserver import JSONResponse, Response
 
 from ..config import GatewayConfig
+from ..lifecycle import begin_typed, finish_typed
 from ._fidelity import check_same_format_fidelity
 from llm_rosetta.converters.embedding.pipeline import (
     EmbeddingConversionPipeline,
@@ -34,7 +36,6 @@ from llm_rosetta.converters.embedding.pipeline import (
 )
 from ..middleware.headers import build_upstream_extra_headers, get_request_id
 from ..logging import get_logger
-from ..ops.proxy import record_proxy_request
 from ..transport import (
     ProviderInfo,
     UpstreamConnectionError,
@@ -171,6 +172,15 @@ async def handle_embeddings(
                 status_code=404,
             )
         )
+
+    rejection = begin_typed(
+        request,
+        source_format=resolved.source_format,
+        target_format=resolved.target_format,
+        provider_name=resolved.provider_name,
+    )
+    if rejection is not None:
+        return rejection
 
     # The model to place in the upstream URL; conversion may consume it.
     upstream_model = body.get("model") or model
@@ -309,13 +319,12 @@ async def handle_embeddings(
             )
         )
     finally:
-        await record_proxy_request(
-            request.app,
+        await finish_typed(
+            request,
             model=model,
             source_provider=resolved.source_format,
             target_provider=resolved.target_format,
             provider_name=resolved.provider_name,
-            is_stream=False,
             status_code=status_code,
             duration_ms=(time.monotonic() - t0) * 1000,
             error_detail=error_detail,
