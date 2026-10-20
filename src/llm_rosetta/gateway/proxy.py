@@ -52,7 +52,7 @@ from .routing import (
     SelectionContext,
     SessionHeaderAffinity,
 )
-from .middleware.sanitize import sanitize_upstream_error
+from llm_rosetta.observability.sanitize import sanitize_upstream_error
 from .transport import (
     ProviderInfo,
     UpstreamConnectionError,

@@ -43,6 +43,11 @@ from .error_dump import (
 from .capture import CapturedRequest, CaptureState
 from .maintenance import Policy, Registry, Step, StepContext, StepResult
 from .metrics import MetricsCollector
+from .sanitize import (
+    sanitize_headers,
+    sanitize_upstream_error,
+    scrub_credential_patterns,
+)
 from .ops_log import (
     ALL_EVENT_TYPES,
     ALL_SEVERITIES,
@@ -162,4 +167,7 @@ __all__ = [
     "decompress_body",
     "dump_error",
     "offload_images",
+    "sanitize_headers",
+    "sanitize_upstream_error",
+    "scrub_credential_patterns",
 ]
