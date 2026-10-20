@@ -47,6 +47,19 @@ tr:hover td { background: var(--bg-hover); }
   border-radius: var(--radius); padding: 16px;
 }
 .provider-card.disabled { opacity: 0.5; }
+.provider-card.auto-disabled { border-color: color-mix(in srgb, var(--yellow, #eab308) 65%, var(--border)); }
+.pc-warning { color: var(--yellow, #eab308); margin-left: 6px; font-size: 15px; cursor: help; }
+.pc-validation-warning {
+  display: none;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+/* Keep auto-disabled cards the same height as ordinary cards.  The warning
+   icon carries the complete diagnostic in its native tooltip, so the verbose
+   reason must not become an extra grid/list row. */
+.pc-warning { flex: 0 0 auto; line-height: 1; }
 .model-disabled td { opacity: 0.4; }
 .model-tab-bar { display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:16px; }
 .model-tab { padding:7px 16px;font-size:13px;font-weight:500;cursor:pointer;color:var(--text-dim);border-bottom:2px solid transparent;margin-bottom:-2px;transition:all 0.15s;user-select:none; }

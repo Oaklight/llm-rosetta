@@ -795,6 +795,13 @@ function renderProviders() {
   grid.innerHTML = '';
   const cardHtml = ([name, cfg]) => {
     const enabled = cfg.enabled !== false;
+    const autoDisabled = !enabled && cfg._auto_disabled &&
+      typeof cfg._auto_disabled === 'object';
+    const autoReason = autoDisabled && typeof cfg._auto_disabled.reason === 'string'
+      ? cfg._auto_disabled.reason : '';
+    const autoShim = autoDisabled && typeof cfg._auto_disabled.shim === 'string'
+      ? cfg._auto_disabled.shim : '';
+    const autoWarningTitle = autoReason || autoShim || t('provider.autoDisabled');
     const typeName = providerTypeName(cfg, name);
     const logo = cfg.logo || shimLogo[name] || shimLogo[typeName] || '';
     const logoHtml = logo
@@ -827,14 +834,15 @@ function renderProviders() {
       ? `<span class="pc-models" onclick="goToModelsForProvider('${esc(name)}')">${modelCount} model${modelCount !== 1 ? 's' : ''} →</span>`
       : '<span class="pc-models pc-models-empty"></span>';
     return `
-    <div class="provider-card${enabled ? '' : ' disabled'}" data-provider="${esc(name)}">
+    <div class="provider-card${enabled ? '' : ' disabled'}${autoDisabled ? ' auto-disabled' : ''}" data-provider="${esc(name)}">
       <div class="pc-head">
-        <div class="pc-name"${isFree ? ` title="${esc(t('free.disclosure'))}"` : ''}>${logoHtml}<span class="pc-name-text">${esc(title)}</span>${baseType ? `<span class="pc-base-badge" title="${esc(baseType)}">${esc(baseType)}</span>` : ''}</div>
+        <div class="pc-name"${isFree ? ` title="${esc(t('free.disclosure'))}"` : ''}>${logoHtml}<span class="pc-name-text">${esc(title)}</span>${autoDisabled ? `<span class="pc-warning" role="img" aria-label="${esc(t('provider.autoDisabled'))}" title="${esc(autoWarningTitle)}">&#9888;</span>` : ''}${baseType ? `<span class="pc-base-badge" title="${esc(baseType)}">${esc(baseType)}</span>` : ''}</div>
         <label class="pc-toggle toggle" title="${enabled ? t('provider.enabled') : t('provider.disabled')}">
           <input type="checkbox" ${enabled ? 'checked' : ''} role="switch" aria-checked="${enabled}" aria-label="${esc(name)}" onchange="this.setAttribute('aria-checked',this.checked);toggleProvider('${esc(name)}')">
           <span class="slider"></span>
         </label>
       </div>
+      <div class="pc-validation-warning" role="status" aria-hidden="true" title="${autoDisabled ? esc(autoWarningTitle) : ''}">${autoDisabled ? esc(autoWarningTitle) : ''}</div>
       <div class="pc-badges">${_capBadgesHtml(_getProviderCaps(cfg, name), {compact: true})}</div>
       <div class="pc-meta">
         <div class="pc-field" data-label="${t('card.type')}" title="${esc(typeName)}"><code>${esc(typeName)}</code></div>

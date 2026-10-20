@@ -243,6 +243,17 @@ async def get_config(request: Any) -> Response:
             masked["api_key"] = _mask_api_key(masked["api_key"])
         if "proxy" in masked:
             masked["proxy"] = _mask_proxy_url(masked["proxy"])
+        # Keep only the diagnostic fields needed by the admin UI.  Provider
+        # validation reasons are configuration text, never credentials.
+        marker = masked.get("_auto_disabled")
+        if isinstance(marker, dict):
+            masked["_auto_disabled"] = {
+                key: str(marker[key])
+                for key in ("reason", "category", "shim")
+                if marker.get(key) is not None
+            }
+        else:
+            masked.pop("_auto_disabled", None)
         # Ensure explicit type — fall back to provider name for legacy configs
         if "type" not in masked:
             masked["type"] = name
@@ -489,8 +500,11 @@ async def toggle_provider(request: Any, **kwargs: Any) -> Response:
         new_enabled = not currently_enabled
 
         if new_enabled:
-            # Remove the key entirely when re-enabling (True is the default)
+            # Remove the key entirely when re-enabling (True is the default).
+            # A prior automatic disable is no longer authoritative after an
+            # explicit operator action; the next reload will revalidate it.
             providers[name].pop("enabled", None)
+            providers[name].pop("_auto_disabled", None)
         else:
             providers[name]["enabled"] = False
 
