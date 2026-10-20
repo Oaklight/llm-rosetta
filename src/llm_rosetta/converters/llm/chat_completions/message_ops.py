@@ -502,12 +502,18 @@ class ChatCompletionsMessageOps(BaseMessageOps):
         """
         result = part.get("result", "")
         if supports_multimodal or not has_multimodal_content(result):
-            return self.tool_ops.ir_tool_result_to_p(part, warnings=warnings)
+            return self.tool_ops.ir_tool_result_to_p(
+                part,
+                warnings=warnings,
+                supports_multimodal_tool_result=supports_multimodal,
+            )
         residual = pack_multimodal_tool_result(
             result, self.content_ops, multimodal_packs, part["tool_call_id"], warnings
         )
         return self.tool_ops.ir_tool_result_to_p(
-            {**part, "result": residual}, warnings=warnings
+            {**part, "result": residual},
+            warnings=warnings,
+            supports_multimodal_tool_result=False,
         )
 
     # ==================== Provider → IR ====================

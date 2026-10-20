@@ -322,8 +322,24 @@ class TestChatCompletionsToolOps:
         assert restored["tool_call_id"] == original["tool_call_id"]
         assert restored["result"] == original["result"]
 
-    def test_ir_tool_result_to_p_list_converted_to_provider(self):
-        """Test list result is converted to provider format via content_ops."""
+    def test_ir_tool_result_to_p_text_list_flattened(self):
+        """A text-only list becomes the string strict upstreams require (#1121)."""
+        ir_tr = cast(
+            ToolResultPart,
+            {
+                "type": "tool_result",
+                "tool_call_id": "call_list",
+                "result": [
+                    {"type": "text", "text": "line one"},
+                    {"type": "text", "text": "line two"},
+                ],
+            },
+        )
+        result = ChatCompletionsToolOps.ir_tool_result_to_p(ir_tr)
+        assert result["content"] == "line one\nline two"
+
+    def test_ir_tool_result_to_p_list_kept_when_multimodal_supported(self):
+        """A target that declares block support still receives blocks."""
         ir_tr = cast(
             ToolResultPart,
             {
@@ -332,9 +348,9 @@ class TestChatCompletionsToolOps:
                 "result": [{"type": "text", "text": "hello"}],
             },
         )
-        result = ChatCompletionsToolOps.ir_tool_result_to_p(ir_tr)
-        # List content is converted to Chat format (not json.dumps'd)
-        assert isinstance(result["content"], list)
+        result = ChatCompletionsToolOps.ir_tool_result_to_p(
+            ir_tr, supports_multimodal_tool_result=True
+        )
         assert result["content"] == [{"type": "text", "text": "hello"}]
 
     def test_ir_tool_result_to_p_dict_json_serialized(self):
@@ -351,7 +367,7 @@ class TestChatCompletionsToolOps:
         assert result["content"] == '{"temperature": 72}'
 
     def test_ir_tool_result_to_p_is_error_appends_marker(self):
-        """Chat has no error field, so the flag rides as a trailing text block."""
+        """Chat has no error field, so the flag rides as a trailing marker line."""
         ir_tr = cast(
             ToolResultPart,
             {
@@ -363,12 +379,42 @@ class TestChatCompletionsToolOps:
         )
         warnings: list[str] = []
         result = ChatCompletionsToolOps.ir_tool_result_to_p(ir_tr, warnings=warnings)
+        assert result["content"] == f"exit code 1\n{TOOL_ERROR_MARKER}"
+        assert len(warnings) == 1
+        assert "call_err" in warnings[0]
+
+    def test_ir_tool_result_to_p_is_error_on_text_list_is_a_string(self):
+        """The issue's reproduction: an error result is one string, not blocks."""
+        ir_tr = cast(
+            ToolResultPart,
+            {
+                "type": "tool_result",
+                "tool_call_id": "call_err_list",
+                "result": [{"type": "text", "text": "Exit code 1"}],
+                "is_error": True,
+            },
+        )
+        result = ChatCompletionsToolOps.ir_tool_result_to_p(ir_tr)
+        assert result["content"] == f"Exit code 1\n{TOOL_ERROR_MARKER}"
+
+    def test_ir_tool_result_to_p_is_error_blocks_when_multimodal_supported(self):
+        """A block-supporting target keeps the trailing text block."""
+        ir_tr = cast(
+            ToolResultPart,
+            {
+                "type": "tool_result",
+                "tool_call_id": "call_err_mm",
+                "result": "exit code 1",
+                "is_error": True,
+            },
+        )
+        result = ChatCompletionsToolOps.ir_tool_result_to_p(
+            ir_tr, supports_multimodal_tool_result=True
+        )
         assert result["content"] == [
             {"type": "text", "text": "exit code 1"},
             {"type": "text", "text": TOOL_ERROR_MARKER},
         ]
-        assert len(warnings) == 1
-        assert "call_err" in warnings[0]
 
     def test_ir_tool_result_to_p_is_error_empty_result(self):
         """A silent failure is the case the flag exists for."""
@@ -382,7 +428,7 @@ class TestChatCompletionsToolOps:
             },
         )
         result = ChatCompletionsToolOps.ir_tool_result_to_p(ir_tr)
-        assert result["content"] == [{"type": "text", "text": TOOL_ERROR_MARKER}]
+        assert result["content"] == TOOL_ERROR_MARKER
 
     def test_ir_tool_result_to_p_is_error_false_is_untouched(self):
         """Only ``true`` is re-encoded; ``false`` needs no marker."""
@@ -412,7 +458,7 @@ class TestChatCompletionsToolOps:
             },
         )
         result = ChatCompletionsToolOps.ir_tool_result_to_p(ir_tr)
-        assert result["content"][-1]["text"] == TOOL_ERROR_MARKER
+        assert result["content"] == f"boom\n{TOOL_ERROR_MARKER}"
 
     # ==================== Tool Config ====================
 

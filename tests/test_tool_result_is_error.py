@@ -82,18 +82,16 @@ def _responses_payload(body: dict[str, Any]) -> Any:
 # ---------------------------------------------------------------------------
 
 
-def test_chat_true_flag_becomes_marker_block():
+def test_chat_true_flag_becomes_marker_line():
+    """Chat tool content is a string, so the marker is the last line (#1121)."""
     payload = _chat_payload(_request("exit code 1", True))
-    assert payload == [
-        {"type": "text", "text": "exit code 1"},
-        {"type": "text", "text": TOOL_ERROR_MARKER},
-    ]
+    assert payload == f"exit code 1\n{TOOL_ERROR_MARKER}"
 
 
 def test_chat_silent_failure_still_carries_the_flag():
     """The empty payload is exactly the case the flag exists for."""
     payload = _chat_payload(_request("", True))
-    assert payload == [{"type": "text", "text": TOOL_ERROR_MARKER}]
+    assert payload == TOOL_ERROR_MARKER
 
 
 @pytest.mark.parametrize("is_error", [False, None])
@@ -339,9 +337,10 @@ def test_intrinsic_result_has_nowhere_to_put_the_flag():
     assert TOOL_ERROR_MARKER not in pipeline.warnings[0]
 
     # The flag is not lost between targets: Chat has no native server items,
-    # so it renders the result as an ordinary tool message with the marker.
+    # so it renders the result as an ordinary tool message with the marker as
+    # the last line of its string content.
     chat = _chat_payload(body)
-    assert chat[-1]["text"] == TOOL_ERROR_MARKER
+    assert chat.splitlines()[-1] == TOOL_ERROR_MARKER
 
 
 def test_messages_keeps_the_flag():

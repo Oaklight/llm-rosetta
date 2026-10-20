@@ -1152,9 +1152,9 @@ class TestConversionPipeline:
         # Chat packing moves image to synthetic user message
         tool_msg = [m for m in target["messages"] if m.get("role") == "tool"][0]
         content = tool_msg["content"]
-        # Tool message retains text only (image packed out)
-        assert isinstance(content, list)
-        assert content == [{"type": "text", "text": "Screenshot captured"}]
+        # Tool message retains the text only (image packed out), as a string:
+        # Chat's tool role takes a string on strict upstreams (#1121).
+        assert content == "Screenshot captured"
 
         # Image appears in the synthetic user message
         user_msgs = [m for m in target["messages"] if m.get("role") == "user"]

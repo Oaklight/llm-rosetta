@@ -66,6 +66,7 @@ from .intrinsic import (
 from .error_marker import (
     TOOL_ERROR_MARKER,
     mark_tool_error,
+    mark_tool_error_text,
     warn_tool_error,
     warn_tool_error_dropped,
 )
@@ -130,6 +131,7 @@ __all__ = [
     # error_marker
     "TOOL_ERROR_MARKER",
     "mark_tool_error",
+    "mark_tool_error_text",
     "warn_tool_error",
     "warn_tool_error_dropped",
     # multimodal_patch

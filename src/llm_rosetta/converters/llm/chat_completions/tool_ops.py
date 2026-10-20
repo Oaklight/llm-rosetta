@@ -30,6 +30,7 @@ from ...base.tools import (
     log_orphan_warnings,
     make_intrinsic_tool_definition,
     mark_tool_error,
+    mark_tool_error_text,
     provider_allowed_tools_to_ir,
     sanitize_schema,
     sanitize_tool_call_id,
@@ -38,6 +39,29 @@ from ...base.tools import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _flatten_tool_result_content(content: Any) -> str:
+    """Collapse converted tool-result blocks into one string.
+
+    The Chat wire format permits list-valued tool content, but strict
+    upstreams behind it (gRPC lanes, some gateways) accept only a string.
+    Text blocks are joined with newlines; anything else — a multimodal block
+    that survived packing — is JSON-serialized so no content is silently lost.
+    """
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return str(content)
+    parts: list[str] = []
+    for block in content:
+        if isinstance(block, dict) and block.get("type") == "text":
+            text = block.get("text")
+            if text:
+                parts.append(str(text))
+        else:
+            parts.append(json.dumps(block, ensure_ascii=False))
+    return "\n".join(parts)
 
 
 # ==================== Custom Tool Format Shape ====================
@@ -538,7 +562,11 @@ class ChatCompletionsToolOps(BaseToolOps):
 
     @classmethod
     def ir_client_result_to_p(
-        cls, ir_tool_result: ToolResultPart, **kwargs: Any
+        cls,
+        ir_tool_result: ToolResultPart,
+        *,
+        supports_multimodal_tool_result: bool = False,
+        **kwargs: Any,
     ) -> dict:
         """IR ToolResultPart → OpenAI Chat tool role message.
 
@@ -546,12 +574,23 @@ class ChatCompletionsToolOps(BaseToolOps):
         a ``role:"tool"`` message like any other, since this dialect has no
         server-tool result block to write.
 
+        Chat *allows* list-valued tool content, but not every upstream behind
+        the Chat wire format accepts it — the OpenAI-compatible gRPC lanes
+        reject anything but a string.  The converter's own capability flag
+        (``_SUPPORTS_MULTIMODAL_TOOL_RESULT = False``) therefore decides the
+        shape: a text-only list is flattened to one string, and multimodal
+        blocks that survived packing are JSON-serialized into it.  Only a
+        target that declares support gets blocks.
 
         Chat Completions has no tool error field, so an ``is_error`` flag is
-        re-encoded as a trailing text block (see ``base.tools.error_marker``).
+        re-encoded as a trailing marker — a text block when blocks are
+        allowed, the marker line of the same string otherwise (see
+        ``base.tools.error_marker``).
 
         Args:
             ir_tool_result: IR tool result part.
+            supports_multimodal_tool_result: Whether the target accepts
+                list-valued tool content.
             **kwargs: ``warnings`` (list[str]) receives a note when the error
                 flag had to be re-encoded.
 
@@ -567,9 +606,11 @@ class ChatCompletionsToolOps(BaseToolOps):
 
             from .content_ops import ChatCompletionsContentOps
 
-            content = convert_ir_content_blocks_to_p(result, ChatCompletionsContentOps)
-            # Return list content directly — Chat API supports list-valued
-            # tool message content for multimodal results
+            content: Any = convert_ir_content_blocks_to_p(
+                result, ChatCompletionsContentOps
+            )
+            if not supports_multimodal_tool_result:
+                content = _flatten_tool_result_content(content)
         elif isinstance(result, dict):
             content = json.dumps(result)
         elif result is not None:
@@ -580,7 +621,10 @@ class ChatCompletionsToolOps(BaseToolOps):
         tool_call_id = sanitize_tool_call_id(ir_tool_result["tool_call_id"])
 
         if ir_tool_result.get("is_error"):
-            content = mark_tool_error(content, text_block_type="text")
+            if supports_multimodal_tool_result:
+                content = mark_tool_error(content, text_block_type="text")
+            else:
+                content = mark_tool_error_text(content)
             warn_tool_error(
                 kwargs.get("warnings"),
                 format_name="OpenAI Chat Completions",

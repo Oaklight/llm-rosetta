@@ -792,8 +792,10 @@ class TestMultimodalToolResultPacking:
         roles = [m["role"] for m in result]
         assert roles == ["user", "assistant", "tool", "user"]
 
-        # Packed image is stripped from the tool message
-        assert result[2]["content"] == []
+        # Packed image is stripped from the tool message; with no text left
+        # the tool slot is an empty string, the only shape strict upstreams
+        # accept (#1121).
+        assert result[2]["content"] == ""
 
         # Synthetic user message has tagged image_url
         synthetic = result[3]
@@ -1108,8 +1110,8 @@ class TestMultimodalToolResultPacking:
         assert len(images) == 1
         assert images[0]["image_url"]["url"] == data_url
 
-        # Text is still readable in the tool slot
-        assert result[2]["content"] == [{"type": "text", "text": "rendered page"}]
+        # Text is still readable in the tool slot, as a string (#1121)
+        assert result[2]["content"] == "rendered page"
 
     def test_unpackable_image_dropped_from_tool_message(self):
         """An image that fails both packing and IR→Chat conversion is dropped.
@@ -1131,8 +1133,9 @@ class TestMultimodalToolResultPacking:
         assert any("Skipped image in tool result packing" in w for w in warnings)
         tool_msg = [m for m in result if m["role"] == "tool"][0]
         # Unpackable image block is dropped during IR→Chat conversion
-        # (no URL/data means it can't be converted to Chat image_url)
-        assert tool_msg["content"] == []
+        # (no URL/data means it can't be converted to Chat image_url), so
+        # nothing is left but the empty string the tool role requires.
+        assert tool_msg["content"] == ""
 
     def test_has_multimodal_content_helper(self):
         """has_multimodal_content correctly detects multimodal vs text-only."""

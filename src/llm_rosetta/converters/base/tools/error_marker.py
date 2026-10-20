@@ -50,6 +50,23 @@ def mark_tool_error(
     return blocks
 
 
+def mark_tool_error_text(content: str) -> str:
+    """Append the error marker to a string tool result.
+
+    The string form of :func:`mark_tool_error`, for targets whose tool role
+    accepts only text (Chat Completions' gRPC lanes among them).  An empty
+    result becomes the marker alone: a silent failure is the case the flag
+    exists for.
+
+    Args:
+        content: The already-stringified tool result.
+
+    Returns:
+        The result with the marker as its last line.
+    """
+    return f"{content}\n{TOOL_ERROR_MARKER}" if content else TOOL_ERROR_MARKER
+
+
 def warn_tool_error(
     warnings: list[str] | None,
     *,
