@@ -217,6 +217,50 @@ def _merge_typed_models(raw: dict[str, Any], models: dict[str, Any]) -> None:
                 }
 
 
+def _mask_provider_entry(name: str, cfg: Any) -> dict[str, Any]:
+    """Mask one provider's credentials and keep its diagnostics.
+
+    The admin UI needs the validation reasons but never the API key, the
+    proxy userinfo, or any other field a diagnostic mapping might carry.
+    """
+    masked = dict(cfg)
+    if "api_key" in masked:
+        masked["api_key"] = _mask_api_key(masked["api_key"])
+    if "proxy" in masked:
+        masked["proxy"] = _mask_proxy_url(masked["proxy"])
+    # Keep only the diagnostic fields needed by the admin UI.  Provider
+    # validation reasons are configuration text, never credentials.
+    marker = masked.get("_auto_disabled")
+    if isinstance(marker, dict):
+        masked["_auto_disabled"] = {
+            key: str(marker[key])
+            for key in ("reason", "category", "shim")
+            if marker.get(key) is not None
+        }
+    else:
+        masked.pop("_auto_disabled", None)
+    # A provider can serve several model types; one endpoint having a bad
+    # shim degrades that endpoint only.  Keep the same diagnostic shape,
+    # keyed by model type.
+    endpoints = masked.get("_auto_disabled_endpoints")
+    if isinstance(endpoints, dict):
+        masked["_auto_disabled_endpoints"] = {
+            str(type_name): {
+                key: str(marker[key])
+                for key in ("reason", "category")
+                if isinstance(marker, dict) and marker.get(key) is not None
+            }
+            for type_name, marker in endpoints.items()
+            if isinstance(marker, dict)
+        }
+    else:
+        masked.pop("_auto_disabled_endpoints", None)
+    # Ensure explicit type — fall back to provider name for legacy configs
+    if "type" not in masked:
+        masked["type"] = name
+    return masked
+
+
 async def get_config(request: Any) -> Response:
     """Return the current (raw) gateway configuration."""
     config_path = _get_config_path(request)
@@ -231,25 +275,7 @@ async def get_config(request: Any) -> Response:
     masked_providers: dict[str, Any] = {}
     gateway_config: GatewayConfig | None = getattr(request.app, "gateway_config", None)
     for name, cfg in providers.items():
-        masked = dict(cfg)
-        if "api_key" in masked:
-            masked["api_key"] = _mask_api_key(masked["api_key"])
-        if "proxy" in masked:
-            masked["proxy"] = _mask_proxy_url(masked["proxy"])
-        # Keep only the diagnostic fields needed by the admin UI.  Provider
-        # validation reasons are configuration text, never credentials.
-        marker = masked.get("_auto_disabled")
-        if isinstance(marker, dict):
-            masked["_auto_disabled"] = {
-                key: str(marker[key])
-                for key in ("reason", "category", "shim")
-                if marker.get(key) is not None
-            }
-        else:
-            masked.pop("_auto_disabled", None)
-        # Ensure explicit type — fall back to provider name for legacy configs
-        if "type" not in masked:
-            masked["type"] = name
+        masked = _mask_provider_entry(name, cfg)
         # Inject token_status from the live ProviderInfo if available
         if gateway_config is not None:
             pinfo = gateway_config.providers.get(name)

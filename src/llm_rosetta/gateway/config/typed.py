@@ -6,6 +6,7 @@ one implementation; :func:`parse_typed_config` documents the precedence.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -14,6 +15,8 @@ from .parse import first_pool_provider
 
 if TYPE_CHECKING:
     from ..model_types import ModelTypeDescriptor
+
+logger = logging.getLogger("llm-rosetta-gateway")
 
 
 @dataclass(frozen=True)
@@ -97,14 +100,29 @@ def parse_typed_config(
     providers: dict[str, dict[str, Any]] = {}
     provider_infos: dict[str, ProviderInfo] = {}
     for name, cfg in raw_providers.items():
-        parsed = parse_typed_provider(
-            name,
-            cfg,
-            keys,
-            descriptor=descriptor,
-            require_declared_format=require_declared_format,
-            global_proxy=global_proxy,
-        )
+        try:
+            parsed = parse_typed_provider(
+                name,
+                cfg,
+                keys,
+                descriptor=descriptor,
+                require_declared_format=require_declared_format,
+                global_proxy=global_proxy,
+            )
+        except (ValueError, KeyError, TypeError) as exc:
+            # One broken endpoint must not take the provider's other
+            # endpoints — or every other provider — down with it.  The
+            # provider stays in the pools it does parse; the failure is
+            # recorded on its config entry for the admin payload.
+            reason = str(exc)
+            _record_endpoint_failure(cfg, keys.type_name, reason)
+            logger.warning(
+                "Provider %r: %s endpoint disabled: %s",
+                name,
+                keys.type_name,
+                reason,
+            )
+            continue
         if parsed is not None:
             providers[name] = parsed[0]
             provider_infos[name] = parsed[1]
@@ -116,6 +134,32 @@ def parse_typed_config(
             if provider_name:
                 models[model_name] = provider_name
     return providers, provider_infos, models
+
+
+_ENDPOINT_CATEGORIES = (
+    ("names unknown shim", "unknown_shim"),
+    ("serves ", "wrong_model_type"),
+    ("no base_url", "missing_base_url"),
+)
+
+
+def _endpoint_failure_category(reason: str) -> str:
+    """Classify an endpoint failure for the admin payload."""
+    for needle, category in _ENDPOINT_CATEGORIES:
+        if needle in reason:
+            return category
+    return "invalid_endpoint_config"
+
+
+def _record_endpoint_failure(cfg: Any, type_name: str, reason: str) -> None:
+    """Attach a per-endpoint diagnostic to the provider's config entry."""
+    if not isinstance(cfg, dict):
+        return
+    endpoints = cfg.setdefault("_auto_disabled_endpoints", {})
+    endpoints[type_name] = {
+        "reason": reason,
+        "category": _endpoint_failure_category(reason),
+    }
 
 
 def parse_typed_provider(

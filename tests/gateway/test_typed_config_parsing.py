@@ -12,7 +12,7 @@ recorded next to it.
 
 from __future__ import annotations
 
-import pytest
+from typing import Any
 
 from llm_rosetta.gateway.config import GatewayConfig
 
@@ -274,18 +274,45 @@ class TestDecisionSection:
         info = cfg.decision_provider_infos["p"]
         assert info.base_url == "https://api.typesafe.ai"
 
-    def test_shim_of_another_type_is_an_error(self) -> None:
-        with pytest.raises(ValueError, match="serves llm, not decision"):
-            GatewayConfig(
-                {
-                    "decision_providers": {
-                        "p": {
-                            "decision_shim": "deepseek--chat_completions",
-                            "base_url": "https://x",
-                        }
-                    }
+    def test_shim_of_another_type_degrades_that_endpoint_only(self) -> None:
+        """A bad endpoint shim is provider-local, not a config-wide failure.
+
+        The provider keeps the endpoints it does parse and the failure is
+        recorded on its entry for the admin payload (#1106).
+        """
+        raw: dict[str, Any] = {
+            "decision_providers": {
+                "p": {
+                    "decision_shim": "deepseek--chat_completions",
+                    "base_url": "https://x",
                 }
-            )
+            }
+        }
+        cfg = GatewayConfig(raw)
+
+        assert "p" not in cfg.decision_providers
+        marker: Any = raw["decision_providers"]["p"]["_auto_disabled_endpoints"]
+        assert marker["decision"]["category"] == "wrong_model_type"
+        assert "serves llm, not decision" in marker["decision"]["reason"]
+
+    def test_a_broken_endpoint_does_not_take_other_providers_down(self) -> None:
+        raw: dict[str, Any] = {
+            "decision_providers": {
+                "bad": {
+                    "decision_shim": "nope--decision",
+                    "base_url": "https://x",
+                },
+                "good": {"base_url": "https://y"},
+            }
+        }
+        cfg = GatewayConfig(raw)
+
+        assert "good" in cfg.decision_providers
+        assert "good" not in raw["decision_providers"]["good"].get(
+            "_auto_disabled_endpoints", {}
+        )
+        failed: Any = raw["decision_providers"]["bad"]["_auto_disabled_endpoints"]
+        assert failed["decision"]["category"] == "unknown_shim"
 
     def test_disabled_provider_is_skipped(self) -> None:
         cfg = GatewayConfig(
