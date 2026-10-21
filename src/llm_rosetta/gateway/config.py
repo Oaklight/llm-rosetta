@@ -18,6 +18,7 @@ from llm_rosetta.auto_detect import ProviderType
 from llm_rosetta.observability.maintenance import Registry
 from llm_rosetta.routing import ResolvedRoute
 
+from .model_types import ModelTypeDescriptor
 from .providers import BASE_FORMATS, build_provider_info
 from .routing import (
     DEFAULT_STRATEGY,
@@ -35,30 +36,60 @@ from .transport import ProviderInfo
 logger = logging.getLogger("llm-rosetta-gateway")
 
 
-class EmbeddingRoute(NamedTuple):
-    """Resolved embedding provider routing info."""
+@dataclass(frozen=True)
+class _TypedKeys:
+    """The config keys and defaults one typed endpoint is parsed with."""
+
+    type_name: str
+    format_key: str
+    path_key: str
+    shim_key: str
+    default_path: str
+    default_format: str
+
+    @classmethod
+    def for_descriptor(
+        cls, descriptor: ModelTypeDescriptor, format_key: str | None = None
+    ) -> _TypedKeys:
+        """The keys *descriptor* declares, with *format_key* overriding one."""
+        name = descriptor.name
+        return cls(
+            type_name=name,
+            format_key=format_key or descriptor.config_format_key or f"{name}_format",
+            path_key=descriptor.config_path_key or f"{name}_path",
+            shim_key=descriptor.config_shim_key or f"{name}_shim",
+            default_path=descriptor.default_path or "",
+            default_format=descriptor.default_format or "",
+        )
+
+
+def _typed_descriptors() -> list[ModelTypeDescriptor]:
+    """The registered model types that carry a typed (non-LLM) endpoint.
+
+    A descriptor joins the loop by declaring ``config_format_key``; ``llm``
+    routes through the chat pipeline instead and has none.
+    """
+    from .model_types import all_model_types
+
+    return [
+        desc
+        for desc in all_model_types()
+        if not desc.is_llm and desc.config_format_key is not None
+    ]
+
+
+class TypedRoute(NamedTuple):
+    """Resolved provider routing info for a typed (non-LLM) model type.
+
+    Embedding, rerank and decision resolve to the same four facts — which
+    provider, in which format, at which upstream path, with which connection
+    — so they share one value.  ``path`` is the configured endpoint path; the
+    upstream URL itself lives in ``provider_info``.
+    """
 
     provider_name: str
     format: str
-    embedding_path: str
-    provider_info: ProviderInfo
-
-
-class RerankRoute(NamedTuple):
-    """Resolved rerank provider routing info."""
-
-    provider_name: str
-    format: str
-    rerank_path: str
-    provider_info: ProviderInfo
-
-
-class DecisionRoute(NamedTuple):
-    """Resolved decision provider routing info."""
-
-    provider_name: str
-    format: str
-    decision_path: str
+    path: str
     provider_info: ProviderInfo
 
 
@@ -498,6 +529,23 @@ class GatewayConfig:
     # Default capabilities when not specified in config.
     DEFAULT_CAPABILITIES: list[str] = ["text"]
 
+    # Typed (non-LLM) endpoint pools.  The registry-driven loop in __init__
+    # fills one set per registered type; the built-in three are declared here
+    # so their attributes are visible to a type checker.  A further type reads
+    # its pools through :meth:`typed_pool`.
+    embedding_providers: dict[str, dict[str, Any]]
+    embedding_provider_infos: dict[str, ProviderInfo]
+    embedding_models: dict[str, str]
+    rerank_providers: dict[str, dict[str, Any]]
+    rerank_provider_infos: dict[str, ProviderInfo]
+    rerank_models: dict[str, str]
+    decision_providers: dict[str, dict[str, Any]]
+    decision_provider_infos: dict[str, ProviderInfo]
+    decision_models: dict[str, str]
+    default_embedding_format: str
+    default_rerank_format: str
+    default_decision_format: str
+
     @staticmethod
     def _formats_for_type(type_name: str) -> list[str]:
         """Return supported formats for a model type from the registry.
@@ -639,98 +687,45 @@ class GatewayConfig:
             stages.append(self._same_format)
         self._selection = RoutingChain(stages)
 
-        # --- Rerank routing ---
-        # 1. Extract from unified providers (new format)
-        (
-            self.rerank_providers,
-            self.rerank_provider_infos,
-            self.rerank_models,
-        ) = self._extract_endpoint_from_providers(
-            self._raw_providers,
-            type_name="rerank",
-            format_key="rerank_format",
-            path_key="rerank_path",
-            shim_key="rerank_shim",
-            default_path="/v1/rerank",
-            info_prefix="rerank",
-            global_proxy=self.proxy,
-        )
-        # 2. Merge legacy rerank_providers / rerank_models (old format)
-        legacy_rp, legacy_ri, legacy_rm = self._parse_rerank_config(
-            raw.get("rerank_providers", {}),
-            raw.get("rerank_models", {}),
-            global_proxy=self.proxy,
-        )
-        for k, v in legacy_rp.items():
-            self.rerank_providers.setdefault(k, v)
-        for k, v in legacy_ri.items():
-            self.rerank_provider_infos.setdefault(k, v)
-        for k, v in legacy_rm.items():
-            self.rerank_models.setdefault(k, v)
-        self.default_rerank_format: str = raw.get("default_rerank_format", "jina")
-
-        # --- Embedding routing ---
-        # 1. Extract from unified providers (new format)
-        (
-            self.embedding_providers,
-            self.embedding_provider_infos,
-            self.embedding_models,
-        ) = self._extract_endpoint_from_providers(
-            self._raw_providers,
-            type_name="embedding",
-            format_key="embedding_format",
-            path_key="embedding_path",
-            shim_key="embedding_shim",
-            default_path="/v1/embeddings",
-            info_prefix="embedding",
-            global_proxy=self.proxy,
-        )
-        # 2. Merge legacy embedding_providers / embedding_models (old format)
-        legacy_ep, legacy_ei, legacy_em = self._parse_embedding_config(
-            raw.get("embedding_providers", {}),
-            raw.get("embedding_models", {}),
-            global_proxy=self.proxy,
-        )
-        for k, v in legacy_ep.items():
-            self.embedding_providers.setdefault(k, v)
-        for k, v in legacy_ei.items():
-            self.embedding_provider_infos.setdefault(k, v)
-        for k, v in legacy_em.items():
-            self.embedding_models.setdefault(k, v)
-        self.default_embedding_format: str = raw.get(
-            "default_embedding_format", "openai"
-        )
-
-        # --- Decision routing ---
-        (
-            self.decision_providers,
-            self.decision_provider_infos,
-            self.decision_models,
-        ) = self._extract_endpoint_from_providers(
-            self._raw_providers,
-            type_name="decision",
-            format_key="decision_format",
-            path_key="decision_path",
-            shim_key="decision_shim",
-            default_path="/v1/systemone",
-            info_prefix="decision",
-            global_proxy=self.proxy,
-        )
-        # Merge legacy decision_providers / decision_models
-        legacy_dp, legacy_di, legacy_dm = self._parse_decision_config(
-            raw.get("decision_providers", {}),
-            raw.get("decision_models", {}),
-            global_proxy=self.proxy,
-        )
-        for k, v in legacy_dp.items():
-            self.decision_providers.setdefault(k, v)
-        for k, v in legacy_di.items():
-            self.decision_provider_infos.setdefault(k, v)
-        for k, v in legacy_dm.items():
-            self.decision_models.setdefault(k, v)
-        self.default_decision_format: str = raw.get(
-            "default_decision_format", "systemone"
-        )
+        # --- Typed (non-LLM) endpoint pools ---
+        # One loop over the model-type registry: every non-LLM type gets its
+        # providers / provider_infos / models pools from the unified provider
+        # entries plus its legacy ``<type>_providers`` section, and its
+        # default format from the registry.  A newly registered type needs no
+        # edit here.
+        for descriptor in _typed_descriptors():
+            name = descriptor.name
+            pools = self._parse_typed_config(
+                self._raw_providers,
+                {},
+                descriptor=descriptor,
+                require_declared_format=True,
+                map_models=False,
+                global_proxy=self.proxy,
+            )
+            legacy = self._parse_typed_config(
+                raw.get(f"{name}_providers", {}),
+                raw.get(f"{name}_models", {}),
+                descriptor=descriptor,
+                format_key="format",
+                global_proxy=self.proxy,
+            )
+            # Unified entries win; the legacy section fills the gaps.
+            providers, provider_infos, models = pools
+            for key, value in legacy[0].items():
+                providers.setdefault(key, value)
+            for key, value in legacy[1].items():
+                provider_infos.setdefault(key, value)
+            for key, value in legacy[2].items():
+                models.setdefault(key, value)
+            setattr(self, f"{name}_providers", providers)
+            setattr(self, f"{name}_provider_infos", provider_infos)
+            setattr(self, f"{name}_models", models)
+            setattr(
+                self,
+                f"default_{name}_format",
+                raw.get(f"default_{name}_format", descriptor.default_format or ""),
+            )
 
         # --- Extract type-tagged models from unified models pool ---
         self._distribute_typed_models(raw.get("models", {}))
@@ -1666,311 +1661,226 @@ class GatewayConfig:
     # ---- Unified endpoint extraction ------------------------------------
 
     @staticmethod
-    def _extract_endpoint_from_providers(
-        raw_providers: dict[str, dict[str, Any]],
+    # ---- Typed (non-LLM) endpoint parsing --------------------------------
+
+    @staticmethod
+    def _parse_typed_config(
+        raw_providers: dict[str, Any],
+        raw_models: dict[str, Any],
         *,
-        type_name: str,
-        format_key: str,
-        path_key: str,
-        shim_key: str,
-        default_path: str,
-        info_prefix: str,
+        descriptor: ModelTypeDescriptor,
+        format_key: str | None = None,
+        require_declared_format: bool = False,
+        map_models: bool = True,
         global_proxy: str | None = None,
     ) -> tuple[dict[str, dict[str, Any]], dict[str, ProviderInfo], dict[str, str]]:
-        """Extract one non-LLM endpoint from the unified provider entries.
+        """Parse one typed endpoint out of a provider section.
 
-        A provider participates when its ``*_format`` is non-empty or it names
-        an effective shim for this category (the admin writes ``""`` to clear
-        a key).  Precedence:
+        The unified ``providers:`` entries and the legacy
+        ``<type>_providers`` section both come through here, so embedding,
+        rerank and decision cannot drift apart.  :meth:`_parse_typed_provider`
+        documents the shim / format / path / connection precedence.
 
-          1. shim: ``shim_key``, else the provider-wide ``shim`` / ``type``
-             when its category matches;
-          2. format: explicit ``*_format`` > the shim's format, canonicalised;
-          3. path: explicit ``*_path`` > the shim's ``default_path`` when the
-             effective format is the shim's > ``default_path``;
-          4. connection: a non-empty config value > shim defaults;
-          5. auth: Google's header for a ``google_generate`` embedding
-             upstream, OpenAI Bearer otherwise.
+        Args:
+            raw_providers: Provider entries to read.
+            raw_models: Model entries to map onto the surviving providers.
+            descriptor: The model type's registry descriptor; it supplies the
+                category, the config keys, the default format and the default
+                and per-format paths.
+            format_key: Config key naming the endpoint format, when it is not
+                the descriptor's (the legacy sections spell it ``format``).
+            require_declared_format: Skip an entry that declares neither a
+                format nor a shim — the unified pool's participation rule.
+            map_models: Return the model→provider mapping; ``False`` when the
+                caller distributes typed models separately.
+            global_proxy: Server-level proxy URL.
+
+        Returns:
+            ``(providers, provider_infos, models)``.
         """
+        keys = _TypedKeys.for_descriptor(descriptor, format_key)
+        providers: dict[str, dict[str, Any]] = {}
+        provider_infos: dict[str, ProviderInfo] = {}
+        for name, cfg in raw_providers.items():
+            parsed = GatewayConfig._parse_typed_provider(
+                name,
+                cfg,
+                keys,
+                descriptor=descriptor,
+                require_declared_format=require_declared_format,
+                global_proxy=global_proxy,
+            )
+            if parsed is not None:
+                providers[name] = parsed[0]
+                provider_infos[name] = parsed[1]
+
+        models: dict[str, str] = {}
+        if map_models:
+            for model_name, value in raw_models.items():
+                provider_name = GatewayConfig._first_pool_provider(value, providers)
+                if provider_name:
+                    models[model_name] = provider_name
+        return providers, provider_infos, models
+
+    @staticmethod
+    def _parse_typed_provider(
+        name: str,
+        cfg: Any,
+        keys: _TypedKeys,
+        *,
+        descriptor: ModelTypeDescriptor,
+        require_declared_format: bool,
+        global_proxy: str | None,
+    ) -> tuple[dict[str, Any], ProviderInfo] | None:
+        """Parse one provider entry, or ``None`` when it does not participate.
+
+        Precedence:
+
+        1. shim: *shim_key*, else the provider-wide ``shim`` / ``type`` when
+           its category matches;
+        2. format: an explicit *format_key* > the shim's format > the
+           provider-wide ``type`` > *default_format*, canonicalised;
+        3. path: an explicit *path_key* > the shim's ``default_path`` when the
+           effective format is the shim's > the descriptor's per-format path >
+           *default_path*;
+        4. connection: a non-empty config value > the shim's default, and a
+           per-provider ``proxy`` > the server proxy;
+        5. auth: Google's header for a ``google_generate`` upstream, OpenAI
+           Bearer otherwise.
+        """
+        if not isinstance(cfg, dict) or cfg.get("enabled") is False:
+            return None
+        shim = GatewayConfig._resolve_endpoint_shim(
+            cfg, type_name=keys.type_name, shim_key=keys.shim_key
+        )
+        explicit_format = cfg.get(keys.format_key) or ""
+        if require_declared_format and not explicit_format and shim is None:
+            return None
+
+        wire_format = GatewayConfig._typed_wire_format(cfg, keys, explicit_format, shim)
+        path = GatewayConfig._typed_path(cfg, keys, descriptor, shim, wire_format)
+        info = GatewayConfig._typed_provider_info(
+            name, cfg, keys, wire_format, path, shim, global_proxy
+        )
+        return {"format": wire_format, keys.path_key: path}, info
+
+    @staticmethod
+    def _typed_wire_format(
+        cfg: dict[str, Any], keys: _TypedKeys, explicit_format: str, shim: Any
+    ) -> str:
+        """The wire format an entry resolves to, canonicalised."""
         from llm_rosetta.provider_names import canonical_provider_name
 
-        from .model_types import get_model_type
+        if explicit_format:
+            return canonical_provider_name(explicit_format)
+        if shim is not None:
+            return shim.format
+        return canonical_provider_name(cfg.get("type") or keys.default_format)
+
+    @staticmethod
+    def _typed_path(
+        cfg: dict[str, Any],
+        keys: _TypedKeys,
+        descriptor: ModelTypeDescriptor,
+        shim: Any,
+        wire_format: str,
+    ) -> str:
+        """The upstream endpoint path an entry resolves to."""
+        path = cfg.get(keys.path_key) or ""
+        if not path and shim is not None and wire_format == shim.format:
+            path = shim.default_path or ""
+        if not path:
+            path = descriptor.path_for(wire_format) or ""
+        return path or keys.default_path
+
+    @staticmethod
+    def _typed_provider_info(
+        name: str,
+        cfg: dict[str, Any],
+        keys: _TypedKeys,
+        wire_format: str,
+        path: str,
+        shim: Any,
+        global_proxy: str | None,
+    ) -> ProviderInfo:
+        """The connection a parsed entry forwards through."""
         from .providers import _apply_shim_defaults
         from .transport.provider_info import google_auth, openai_auth
+
+        effective = _apply_shim_defaults(cfg, shim) if shim is not None else cfg
+        return ProviderInfo(
+            name=f"{keys.type_name}:{name}",
+            api_key=effective.get("api_key", ""),
+            base_url=effective.get("base_url", "").rstrip("/"),
+            auth_header_fn=(
+                google_auth if wire_format == "google_generate" else openai_auth
+            ),
+            url_template="{base_url}" + path,
+            proxy_url=cfg.get("proxy") or global_proxy,
+        )
+
+    def typed_pool(
+        self, type_name: str
+    ) -> tuple[dict[str, dict[str, Any]], dict[str, ProviderInfo], dict[str, str]]:
+        """The ``(providers, provider_infos, models)`` pools of *type_name*.
+
+        The registry-driven counterpart of the per-type attributes, for a
+        caller that only has the type's name.
+        """
+        return (
+            getattr(self, f"{type_name}_providers"),
+            getattr(self, f"{type_name}_provider_infos"),
+            getattr(self, f"{type_name}_models"),
+        )
+
+    def resolve_typed(self, type_name: str, model: str) -> TypedRoute:
+        """Resolve *model* to its provider config for *type_name*.
+
+        The one implementation behind ``resolve_embedding``, ``resolve_rerank``
+        and ``resolve_decision``; a newly registered type resolves through it
+        without a new method.
+
+        Raises:
+            KeyError: If the model is not configured for that type.
+        """
+        from .model_types import get_model_type
 
         descriptor = get_model_type(type_name)
-        providers: dict[str, dict[str, Any]] = {}
-        provider_infos: dict[str, ProviderInfo] = {}
-        for name, cfg in raw_providers.items():
-            shim = GatewayConfig._resolve_endpoint_shim(
-                cfg, type_name=type_name, shim_key=shim_key
-            )
-            explicit_format = cfg.get(format_key) or ""
-            if not explicit_format and shim is None:
-                continue
-
-            if explicit_format:
-                wire_format = canonical_provider_name(explicit_format)
-            else:
-                assert shim is not None
-                wire_format = shim.format
-
-            path = cfg.get(path_key) or ""
-            if not path and shim is not None and wire_format == shim.format:
-                path = shim.default_path or ""
-            if not path and descriptor is not None:
-                path = descriptor.path_for(wire_format) or ""
-            if not path:
-                path = default_path
-
-            effective = _apply_shim_defaults(cfg, shim) if shim is not None else cfg
-            auth_fn = google_auth if wire_format == "google_generate" else openai_auth
-            providers[name] = {
-                "format": wire_format,
-                path_key: path,
-            }
-            provider_infos[name] = ProviderInfo(
-                name=f"{info_prefix}:{name}",
-                api_key=effective.get("api_key", ""),
-                base_url=effective.get("base_url", "").rstrip("/"),
-                auth_header_fn=auth_fn,
-                url_template="{base_url}" + path,
-                proxy_url=cfg.get("proxy") or global_proxy,
-            )
-        return providers, provider_infos, {}
-
-    # ---- Rerank routing -------------------------------------------------
-
-    @staticmethod
-    def _parse_rerank_config(
-        raw_providers: dict[str, Any],
-        raw_models: dict[str, Any],
-        *,
-        global_proxy: str | None = None,
-    ) -> tuple[dict[str, dict[str, Any]], dict[str, ProviderInfo], dict[str, str]]:
-        """Parse rerank_providers and rerank_models from config."""
-        from llm_rosetta.provider_names import canonical_provider_name
-
-        from .transport.provider_info import openai_auth
-
-        providers: dict[str, dict[str, Any]] = {}
-        provider_infos: dict[str, ProviderInfo] = {}
-        for name, cfg in raw_providers.items():
-            if not isinstance(cfg, dict):
-                continue
-            if cfg.get("enabled") is False:
-                continue
-            rerank_path = cfg.get("rerank_path", "/v1/rerank")
-            # Legacy sections put the dialect in ``format``; a unified entry
-            # may still use ``type``.  Canonicalise either spelling.
-            wire_format = canonical_provider_name(
-                cfg.get("format") or cfg.get("type") or "jina"
-            )
-            providers[name] = {
-                "format": wire_format,
-                "rerank_path": rerank_path,
-            }
-            provider_infos[name] = ProviderInfo(
-                name=f"rerank:{name}",
-                api_key=cfg.get("api_key", ""),
-                base_url=cfg.get("base_url", "").rstrip("/"),
-                auth_header_fn=openai_auth,
-                url_template="{base_url}" + rerank_path,
-                proxy_url=global_proxy,
-            )
-
-        models: dict[str, str] = {}
-        for model_name, value in raw_models.items():
-            provider_name = next(
-                (
-                    p
-                    for p in GatewayConfig._declared_provider_names(value)
-                    if p in providers
-                ),
-                "",
-            )
-            if provider_name:
-                models[model_name] = provider_name
-        return providers, provider_infos, models
-
-    def resolve_rerank(self, model: str) -> RerankRoute:
-        """Resolve a rerank model to its provider config.
-
-        Raises:
-            KeyError: If the model is not in rerank_models.
-        """
-        provider_name = self.rerank_models[model]
-        pcfg = self.rerank_providers[provider_name]
-        pinfo = self.rerank_provider_infos[provider_name]
-        return RerankRoute(
+        path_key = (
+            descriptor.config_path_key if descriptor is not None else None
+        ) or f"{type_name}_path"
+        models: dict[str, str] = getattr(self, f"{type_name}_models")
+        providers: dict[str, dict[str, Any]] = getattr(self, f"{type_name}_providers")
+        infos: dict[str, ProviderInfo] = getattr(self, f"{type_name}_provider_infos")
+        provider_name = models[model]
+        pcfg = providers[provider_name]
+        return TypedRoute(
             provider_name=provider_name,
             format=pcfg["format"],
-            rerank_path=pcfg["rerank_path"],
-            provider_info=pinfo,
+            path=pcfg[path_key],
+            provider_info=infos[provider_name],
         )
 
-    # ---- Embedding routing ----------------------------------------------
-
-    @staticmethod
-    def _parse_embedding_config(
-        raw_providers: dict[str, Any],
-        raw_models: dict[str, Any],
-        *,
-        global_proxy: str | None = None,
-    ) -> tuple[dict[str, dict[str, Any]], dict[str, ProviderInfo], dict[str, str]]:
-        """Parse embedding_providers and embedding_models from config."""
-        from llm_rosetta.provider_names import canonical_provider_name
-
-        from .model_types import get_model_type
-        from .transport.provider_info import google_auth, openai_auth
-
-        descriptor = get_model_type("embedding")
-        providers: dict[str, dict[str, Any]] = {}
-        provider_infos: dict[str, ProviderInfo] = {}
-        for name, cfg in raw_providers.items():
-            if not isinstance(cfg, dict):
-                continue
-            if cfg.get("enabled") is False:
-                continue
-            # Legacy sections put the dialect in ``format``; a unified entry
-            # may still use ``type``.  Canonicalise either spelling.
-            wire_format = canonical_provider_name(
-                cfg.get("format") or cfg.get("type") or "openai"
-            )
-            embedding_path = (
-                cfg.get("embedding_path")
-                or (descriptor.path_for(wire_format) if descriptor else None)
-                or "/v1/embeddings"
-            )
-            providers[name] = {
-                "format": wire_format,
-                "embedding_path": embedding_path,
-            }
-            provider_infos[name] = ProviderInfo(
-                name=f"embedding:{name}",
-                api_key=cfg.get("api_key", ""),
-                base_url=cfg.get("base_url", "").rstrip("/"),
-                auth_header_fn=(
-                    google_auth if wire_format == "google_generate" else openai_auth
-                ),
-                url_template="{base_url}" + embedding_path,
-                proxy_url=global_proxy,
-            )
-
-        models: dict[str, str] = {}
-        for model_name, value in raw_models.items():
-            provider_name = next(
-                (
-                    p
-                    for p in GatewayConfig._declared_provider_names(value)
-                    if p in providers
-                ),
-                "",
-            )
-            if provider_name:
-                models[model_name] = provider_name
-        return providers, provider_infos, models
-
-    # ---- Decision routing ------------------------------------------------
-
-    @staticmethod
-    def _parse_decision_config(
-        raw_providers: dict[str, Any],
-        raw_models: dict[str, Any],
-        *,
-        global_proxy: str | None = None,
-    ) -> tuple[dict[str, dict[str, Any]], dict[str, ProviderInfo], dict[str, str]]:
-        """Parse the legacy ``decision_providers`` / ``decision_models`` sections."""
-        from llm_rosetta.provider_names import canonical_provider_name
-
-        from .model_types import get_model_type
-        from .providers import _apply_shim_defaults
-        from .transport.provider_info import openai_auth
-
-        descriptor = get_model_type("decision")
-        providers: dict[str, dict[str, Any]] = {}
-        provider_infos: dict[str, ProviderInfo] = {}
-        for name, cfg in raw_providers.items():
-            if not isinstance(cfg, dict):
-                continue
-            if cfg.get("enabled") is False:
-                continue
-            shim = GatewayConfig._resolve_endpoint_shim(
-                cfg, type_name="decision", shim_key="decision_shim"
-            )
-            explicit_format = cfg.get("format")
-            if explicit_format:
-                wire_format = canonical_provider_name(explicit_format)
-            elif shim is not None:
-                wire_format = shim.format
-            else:
-                wire_format = canonical_provider_name(cfg.get("type") or "systemone")
-            decision_path = cfg.get("decision_path") or ""
-            if not decision_path and shim is not None and wire_format == shim.format:
-                decision_path = shim.default_path or ""
-            if not decision_path and descriptor is not None:
-                decision_path = descriptor.path_for(wire_format) or ""
-            if not decision_path:
-                decision_path = "/v1/systemone"
-
-            effective = _apply_shim_defaults(cfg, shim) if shim is not None else cfg
-            providers[name] = {
-                "format": wire_format,
-                "decision_path": decision_path,
-            }
-            provider_infos[name] = ProviderInfo(
-                name=f"decision:{name}",
-                api_key=effective.get("api_key", ""),
-                base_url=effective.get("base_url", "").rstrip("/"),
-                auth_header_fn=openai_auth,
-                url_template="{base_url}" + decision_path,
-                proxy_url=global_proxy,
-            )
-
-        models: dict[str, str] = {}
-        for model_name, value in raw_models.items():
-            provider_name = next(
-                (
-                    p
-                    for p in GatewayConfig._declared_provider_names(value)
-                    if p in providers
-                ),
-                "",
-            )
-            if provider_name:
-                models[model_name] = provider_name
-        return providers, provider_infos, models
-
-    def resolve_decision(self, model: str) -> DecisionRoute:
-        """Resolve a decision model to its provider config.
-
-        Raises:
-            KeyError: If the model is not in decision_models.
-        """
-        provider_name = self.decision_models[model]
-        pcfg = self.decision_providers[provider_name]
-        pinfo = self.decision_provider_infos[provider_name]
-        return DecisionRoute(
-            provider_name=provider_name,
-            format=pcfg["format"],
-            decision_path=pcfg["decision_path"],
-            provider_info=pinfo,
-        )
-
-    # ---- Embedding routing ----------------------------------------------
-
-    def resolve_embedding(self, model: str) -> EmbeddingRoute:
+    def resolve_embedding(self, model: str) -> TypedRoute:
         """Resolve an embedding model to its provider config.
 
         Raises:
             KeyError: If the model is not in embedding_models.
         """
-        provider_name = self.embedding_models[model]
-        pcfg = self.embedding_providers[provider_name]
-        pinfo = self.embedding_provider_infos[provider_name]
-        return EmbeddingRoute(
-            provider_name=provider_name,
-            format=pcfg["format"],
-            embedding_path=pcfg["embedding_path"],
-            provider_info=pinfo,
-        )
+        return self.resolve_typed("embedding", model)
+
+    def resolve_rerank(self, model: str) -> TypedRoute:
+        """Resolve a rerank model to its provider config.
+
+        Raises:
+            KeyError: If the model is not in rerank_models.
+        """
+        return self.resolve_typed("rerank", model)
+
+    def resolve_decision(self, model: str) -> TypedRoute:
+        """Resolve a decision model to its provider config.
+
+        Raises:
+            KeyError: If the model is not in decision_models.
+        """
+        return self.resolve_typed("decision", model)

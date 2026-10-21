@@ -172,7 +172,7 @@ class TestEmbeddingConfig:
         route = config.resolve_embedding("jina-embeddings-v3")
         assert route.provider_name == "jina"
         assert route.format == "jina"
-        assert route.embedding_path == "/v1/embeddings"
+        assert route.path == "/v1/embeddings"
         assert route.provider_info.base_url == "https://api.jina.ai"
         assert route.provider_info.auth_headers()["Authorization"] == "Bearer jina-key"
 

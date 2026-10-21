@@ -291,7 +291,7 @@ class TestModelTypeField:
         route = cfg.resolve_embedding("text-embed-3")
         assert route.provider_name == "openai"
         assert route.format == "openai"
-        assert route.embedding_path == "/v1/embeddings"
+        assert route.path == "/v1/embeddings"
 
     def test_resolve_rerank_via_type(self):
         raw = _base_config()
@@ -310,7 +310,7 @@ class TestModelTypeField:
         route = cfg.resolve_rerank("jina-reranker")
         assert route.provider_name == "jina"
         assert route.format == "jina"
-        assert route.rerank_path == "/v1/rerank"
+        assert route.path == "/v1/rerank"
 
     def test_disabled_model_not_distributed(self):
         raw = _base_config()

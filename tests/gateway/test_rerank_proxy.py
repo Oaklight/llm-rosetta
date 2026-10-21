@@ -253,7 +253,7 @@ class TestRerankConfig:
         route = config.resolve_rerank("jina-reranker-v2")
         assert route.provider_name == "jina"
         assert route.format == "jina"
-        assert route.rerank_path == "/v1/rerank"
+        assert route.path == "/v1/rerank"
         assert route.provider_info.base_url == "https://api.jina.ai"
         assert route.provider_info.auth_headers()["Authorization"] == "Bearer jina-key"
 

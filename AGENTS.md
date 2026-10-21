@@ -171,7 +171,7 @@ src/llm_rosetta/
 │   ├── routing/, maintenance/  # Selection strategies; config/key/backfill steps
 │   ├── cli.py, banner.py, __main__.py
 │   ├── middleware/           # Auth, rate limiting, error format, headers, etc.
-│   ├── pipelines/            # Embeddings, rerank, decision handlers
+│   ├── pipelines/            # typed.py shell + embeddings/rerank/decision specs
 │   ├── transport/            # Upstream HTTP transport
 │   ├── ops/                  # Unified operations audit layer
 │   │   ├── base.py           # OpsContext, OpsBase ABC
@@ -470,24 +470,25 @@ When adding a new model type (like `decision`), **every** item below
 must be completed.  The model type registry makes most of this
 declarative — steps 1–3 are the core work, the rest is wiring.
 
-1. **Handler module** — `gateway/<name>.py` implementing
-   `async handle_<name>(request, config) -> Response`.  Follow the
-   pattern in `gateway/decision.py` or `gateway/embeddings.py`.
-   The handler receives requests, resolves the provider via
-   `config.resolve()`, forwards upstream, and returns the response.
+1. **Handler** — describe the type with a `TypedHandler` in
+   `gateway/pipelines/<name>.py` and serve it through
+   `pipelines/typed.py::handle_typed_request`; a type supplies its
+   pipeline, its resolver, its detector and any request/response
+   hooks, and nothing else.  `handle_<name>(request, config)` stays the
+   public entry point (a three-line wrapper).
 2. **Register descriptor** — in `gateway/model_types.py`, add a
    `_<name>_pipeline()` lazy import wrapper and a
    `_register_<name>()` function that calls `register_model_type()`
    with a `ModelTypeDescriptor`.  Required fields: `name`, `routes`,
    `formats`, `pipeline`, `badge_class`, `config_format_key`,
-   `config_path_key`, `default_path`, `icon_svg`, `color`.
-   Call it at module level after `_register_builtins()`.
-3. **Config pool** — in `gateway/config.py`, add
-   `self.<name>_providers`, `self.<name>_provider_infos`,
-   `self.<name>_models` dicts and a `_extract_<name>_providers()`
-   method following the embedding/rerank/decision pattern.  Call the
-   extractor from `__init__` alongside the existing ones, and wire
-   `_distribute_typed_models()` (automatic via the registry).
+   `config_path_key`, `default_format`, `default_path`, `icon_svg`,
+   `color`.  Call it at module level after `_register_builtins()`.
+3. **Config pool** — nothing to do: `GatewayConfig.__init__` walks the
+   registry and builds `<name>_providers` / `<name>_provider_infos` /
+   `<name>_models` plus `default_<name>_format` from the descriptor's
+   config keys, reading both the unified `providers:` entries and the
+   legacy `<name>_providers` section through one parser.
+   `_distribute_typed_models()` is registry-driven too.
 4. **Frontend test spec** — in `admin/js/test.js`, add a
    `registerTestType('<name>', { endpoint, payloads, renderResult })`
    call.  This is the **only** JS change needed — seg-controls,

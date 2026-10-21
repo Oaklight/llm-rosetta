@@ -177,8 +177,9 @@ class TestEmbeddingUpstreamModel:
             )
         )
         calls = []
+        # The fidelity check runs in the shared typed-handler flow.
         monkeypatch.setattr(
-            "llm_rosetta.gateway.pipelines.embeddings.check_same_format_fidelity",
+            "llm_rosetta.gateway.pipelines.typed.check_same_format_fidelity",
             lambda *args, **kwargs: calls.append((args, kwargs)),
         )
 

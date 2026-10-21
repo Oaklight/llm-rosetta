@@ -10,40 +10,28 @@ There is no chat-provider passthrough: an unconfigured model gets a 404 rather
 than a chat-shaped request forwarded to a provider that never declared an
 embedding endpoint.
 
+The request flow itself is the shared one in :mod:`pipelines.typed`; this
+module supplies the embedding hooks — the IR pipeline, the upstream model
+rename, and Google's model-in-URL path with its batch variant.
+
 Every request that reaches an upstream is recorded in the usage ledger with
-``model_type="embedding"``, through the same
-:class:`~llm_rosetta.gateway.ops.proxy.OpsProxyRequest` the chat routes use.
-Requests rejected before the upstream call — bad JSON, an unknown model, a
-failed request conversion — are recorded by the shared request lifecycle with
-no token usage: nothing was billed.
+``model_type="embedding"``.
 """
 
 from __future__ import annotations
 
-import copy
-import time
 from dataclasses import dataclass
 from typing import Any
 
-from llm_rosetta._vendor.httpserver import JSONResponse, Response
-
-from ..config import GatewayConfig
-from ..lifecycle import begin_typed, finish_typed
-from ._fidelity import check_same_format_fidelity
+from llm_rosetta._vendor.httpserver import Response
 from llm_rosetta.converters.embedding.pipeline import (
     EmbeddingConversionPipeline,
     response_usage,
 )
-from ..middleware.headers import build_upstream_extra_headers, get_request_id
-from ..logging import get_logger
-from ..transport import (
-    ProviderInfo,
-    UpstreamConnectionError,
-    UpstreamTimeoutError,
-    UpstreamTransport,
-)
 
-logger = get_logger()
+from ..config import GatewayConfig, TypedRoute
+from ..transport import ProviderInfo
+from .typed import TypedHandler, detect_source_format, handle_typed_request
 
 
 def _detect_embedding_source(
@@ -53,19 +41,15 @@ def _detect_embedding_source(
 
     The detector lives in :mod:`gateway.source_formats` and is attached to the
     ``embedding`` descriptor, so it is the same object the descriptor exposes
-    and stays testable without a handler.  The fallback here only covers a
-    registry that has no detector (a test double or a future type).
+    and stays testable without a handler.
     """
-    from ..model_types import get_model_type
-
-    descriptor = get_model_type("embedding")
-    if descriptor is not None and descriptor.detect_source_format is not None:
-        return descriptor.detect_source_format(request, body, config)
-    return config.default_embedding_format
+    return detect_source_format(request, body, config, "embedding")
 
 
 @dataclass
 class _ResolvedEmbedding:
+    """One resolved embedding call, as the URL-construction tests read it."""
+
     provider_info: ProviderInfo
     upstream_url: str
     provider_name: str
@@ -78,12 +62,7 @@ class _ResolvedEmbedding:
     path: str = ""
 
 
-def _resolve_embedding_provider(
-    config: GatewayConfig,
-    model: str,
-    body: dict[str, Any],
-    request: Any = None,
-) -> _ResolvedEmbedding | None:
+def _resolve_route(config: GatewayConfig, model: str) -> TypedRoute | None:
     """Resolve the embedding provider, or ``None`` when the model is unknown.
 
     Embedding traffic is routed only through the embedding pool.  There is no
@@ -92,13 +71,23 @@ def _resolve_embedding_provider(
     embedding endpoint.
     """
     try:
-        route = config.resolve_embedding(model)
+        return config.resolve_embedding(model)
     except KeyError:
         return None
 
+
+def _resolve_embedding_provider(
+    config: GatewayConfig,
+    model: str,
+    body: dict[str, Any],
+    request: Any = None,
+) -> _ResolvedEmbedding | None:
+    """Resolve one embedding call, or ``None`` when the model is unknown."""
+    route = _resolve_route(config, model)
+    if route is None:
+        return None
+
     source_format = _detect_embedding_source(request, body, config)
-    logger.debug("embedding: detected source format: %s", source_format)
-    pipeline = EmbeddingConversionPipeline(source_format, route.format)
     upstream_model = config.model_upstream_names.get(model)
     if upstream_model:
         body["model"] = upstream_model
@@ -108,226 +97,58 @@ def _resolve_embedding_provider(
         provider_name=route.provider_name,
         target_format=route.format,
         source_format=source_format,
-        path=route.embedding_path,
-        pipeline=pipeline,
+        path=route.path,
+        pipeline=EmbeddingConversionPipeline(source_format, route.format),
     )
 
 
-async def handle_embeddings(
-    request: Any,
+def _prepare_body(body: dict[str, Any], model: str, config: GatewayConfig) -> None:
+    """Send the provider's upstream name for the model, when it declares one."""
+    upstream_model = config.model_upstream_names.get(model)
+    if upstream_model:
+        body["model"] = upstream_model
+
+
+def _upstream_url(
+    route: TypedRoute,
+    body: dict[str, Any],
+    upstream_model: str,
     config: GatewayConfig,
-) -> Response:
+) -> str:
+    """The upstream URL, after conversion.
+
+    Google carries the model in the path and has a distinct batch suffix; both
+    are decided after conversion, because the converted body is what says
+    single (``content``) or batch (``requests``).
+    """
+    if route.format != "google_generate":
+        return route.provider_info.upstream_url(upstream_model)
+    path = route.path.replace("{model}", upstream_model)
+    if "requests" in body and path.endswith(":embedContent"):
+        path = path[: -len(":embedContent")] + ":batchEmbedContents"
+    return route.provider_info.base_url + path
+
+
+def _response_post(body: dict[str, Any], model: str) -> None:
+    """Echo the client's model name when the upstream response omits it."""
+    if not body.get("model"):
+        body["model"] = model
+
+
+_EMBEDDINGS = TypedHandler(
+    model_type="embedding",
+    build_pipeline=EmbeddingConversionPipeline,
+    resolve=_resolve_route,
+    configured_models=lambda config: config.embedding_models.keys(),
+    response_usage=response_usage,
+    prepare_body=_prepare_body,
+    upstream_url=_upstream_url,
+    response_post=_response_post,
+    connection_error_message="Upstream request failed",
+    log_conversion=False,
+)
+
+
+async def handle_embeddings(request: Any, config: GatewayConfig) -> Response:
     """Proxy an embedding request with IR-based conversion."""
-    request_id = get_request_id(request)
-
-    def with_request_id(response: Response) -> Response:
-        response.headers["x-request-id"] = request_id
-        return response
-
-    # --- Parse request ---
-    try:
-        body: dict[str, Any] = request.json()
-    except Exception:
-        return with_request_id(
-            JSONResponse(
-                {
-                    "error": {
-                        "message": "Invalid JSON body",
-                        "type": "invalid_request_error",
-                    }
-                },
-                status_code=400,
-            )
-        )
-
-    model = body.get("model")
-    if not model:
-        return with_request_id(
-            JSONResponse(
-                {
-                    "error": {
-                        "message": "Missing 'model' in request body",
-                        "type": "invalid_request_error",
-                    }
-                },
-                status_code=400,
-            )
-        )
-
-    # --- Resolve provider ---
-    resolved = _resolve_embedding_provider(config, model, body, request)
-    if resolved is None:
-        all_models = sorted(config.embedding_models.keys())
-        return with_request_id(
-            JSONResponse(
-                {
-                    "error": {
-                        "message": (
-                            f"Unknown model: '{model}'. "
-                            f"Configured: {', '.join(all_models)}"
-                        ),
-                        "type": "model_not_found",
-                    }
-                },
-                status_code=404,
-            )
-        )
-
-    rejection = begin_typed(
-        request,
-        source_format=resolved.source_format,
-        target_format=resolved.target_format,
-        provider_name=resolved.provider_name,
-    )
-    if rejection is not None:
-        return rejection
-
-    # The model to place in the upstream URL; conversion may consume it.
-    upstream_model = body.get("model") or model
-
-    # --- Convert request through the IR ---
-    same_format = resolved.source_format == resolved.target_format
-    original_body = copy.deepcopy(body) if same_format else None
-    try:
-        body = resolved.pipeline.convert_request(body)
-    except Exception as exc:
-        logger.warning("embedding: request conversion failed: %s", exc)
-        return with_request_id(
-            JSONResponse(
-                {
-                    "error": {
-                        "message": f"Request conversion failed: {exc}",
-                        "type": "conversion_error",
-                    }
-                },
-                status_code=400,
-            )
-        )
-    check_same_format_fidelity(
-        "embedding",
-        resolved.source_format,
-        resolved.target_format,
-        original_body,
-        body,
-        "request",
-        model=model,
-    )
-
-    # Google carries the model in the path and has a distinct batch suffix.
-    # Both are decided after conversion: the converted body is what says
-    # single (``content``) or batch (``requests``).
-    upstream_url = resolved.upstream_url
-    if resolved.target_format == "google_generate":
-        path = resolved.path.replace("{model}", upstream_model)
-        if "requests" in body and path.endswith(":embedContent"):
-            path = path[: -len(":embedContent")] + ":batchEmbedContents"
-        upstream_url = resolved.provider_info.base_url + path
-
-    # --- Forward via transport ---
-    transport: UpstreamTransport = request.app.transport
-    extra_headers = build_upstream_extra_headers(request, request_id)
-
-    t0 = time.monotonic()
-    status_code = 500
-    error_detail: str | None = None
-    usage: dict[str, Any] = {}
-
-    try:
-        resp = await transport.send(
-            resolved.provider_info,
-            upstream_url,
-            body,
-            extra_headers=extra_headers,
-        )
-        status_code = resp.status_code
-        # Read even on an error status: a 4xx can still carry the tokens the
-        # upstream counted before it refused.
-        usage = response_usage(resolved.target_format, resp.body)
-
-        if resp.is_error:
-            error_detail = resp.error_text
-            return with_request_id(
-                Response(
-                    body=resp.raw_content,
-                    status_code=resp.status_code,
-                    content_type="application/json",
-                )
-            )
-
-        # --- Convert response through the IR ---
-        if resp.body is not None:
-            try:
-                original_response = copy.deepcopy(resp.body) if same_format else None
-                source_body = resolved.pipeline.convert_response(resp.body)
-                check_same_format_fidelity(
-                    "embedding",
-                    resolved.source_format,
-                    resolved.target_format,
-                    original_response,
-                    source_body,
-                    "response",
-                    model=model,
-                )
-                if not source_body.get("model"):
-                    source_body["model"] = model
-                return with_request_id(JSONResponse(source_body, status_code=200))
-            except Exception as exc:
-                logger.warning("embedding: response conversion failed: %s", exc)
-                fallback = with_request_id(
-                    Response(
-                        body=resp.raw_content,
-                        status_code=200,
-                        content_type="application/json",
-                    )
-                )
-                fallback.headers["x-rosetta-conversion"] = "passthrough"
-                return fallback
-
-        return with_request_id(
-            Response(
-                body=resp.raw_content,
-                status_code=200,
-                content_type="application/json",
-            )
-        )
-    except UpstreamTimeoutError as exc:
-        status_code = 504
-        error_detail = f"Upstream timeout: {exc}"
-        return with_request_id(
-            JSONResponse(
-                {
-                    "error": {
-                        "message": f"Upstream timeout: {exc}",
-                        "type": "upstream_error",
-                    }
-                },
-                status_code=504,
-            )
-        )
-    except UpstreamConnectionError as exc:
-        status_code = 502
-        error_detail = f"Upstream request failed: {exc}"
-        return with_request_id(
-            JSONResponse(
-                {
-                    "error": {
-                        "message": f"Upstream request failed: {exc}",
-                        "type": "upstream_error",
-                    }
-                },
-                status_code=502,
-            )
-        )
-    finally:
-        await finish_typed(
-            request,
-            model=model,
-            source_provider=resolved.source_format,
-            target_provider=resolved.target_format,
-            provider_name=resolved.provider_name,
-            status_code=status_code,
-            duration_ms=(time.monotonic() - t0) * 1000,
-            error_detail=error_detail,
-            model_type="embedding",
-            usage=usage,
-        )
+    return await handle_typed_request(request, config, _EMBEDDINGS)

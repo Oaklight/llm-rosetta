@@ -7,38 +7,28 @@ decision requests return a single JSON response.
 Every request and response is converted through the IR via
 :class:`~llm_rosetta.converters.decision.pipeline.DecisionConversionPipeline`,
 including when the source format (inferred from the request) and the target
-format (declared on the provider config) are the same.
+format (declared on the provider config) are the same.  The request flow is
+the shared one in :mod:`pipelines.typed`; this module supplies the decision
+hooks.
 
 Registered via the model type registry in ``model_types.py``.
 
 Every request that reaches an upstream is recorded in the usage ledger with
-``model_type="decision"``, through the same
-:class:`~llm_rosetta.gateway.ops.proxy.OpsProxyRequest` the chat routes use.
-Requests rejected before the upstream call — bad JSON, an unknown model, a
-failed request conversion — are recorded by the shared request lifecycle with
-no token usage: nothing was billed.
+``model_type="decision"``.
 """
 
 from __future__ import annotations
 
-import copy
-import time
 from typing import Any
 
-from llm_rosetta._vendor.httpserver import JSONResponse, Response
-
-from ..config import GatewayConfig
-from ..lifecycle import begin_typed, finish_typed
-from ..middleware.headers import build_upstream_extra_headers, get_request_id
-from ..logging import get_logger
-from ._fidelity import check_same_format_fidelity
+from llm_rosetta._vendor.httpserver import Response
 from llm_rosetta.converters.decision.pipeline import (
     DecisionConversionPipeline,
     response_usage,
 )
-from ..transport import UpstreamConnectionError, UpstreamTimeoutError, UpstreamTransport
 
-logger = get_logger()
+from ..config import GatewayConfig, TypedRoute
+from .typed import TypedHandler, detect_source_format, handle_typed_request
 
 
 def _detect_decision_source_format(
@@ -48,240 +38,36 @@ def _detect_decision_source_format(
 
     The detector lives in :mod:`gateway.source_formats` and is attached to the
     ``decision`` descriptor; this wrapper keeps the handler-local name used by
-    the tests and covers a registry without one.
+    the tests.
     """
-    from ..model_types import get_model_type
-
-    descriptor = get_model_type("decision")
-    if descriptor is not None and descriptor.detect_source_format is not None:
-        return descriptor.detect_source_format(request, body, config)
-    return config.default_decision_format
+    return detect_source_format(request, body, config, "decision")
 
 
-async def handle_decision(
-    request: Any,
-    config: GatewayConfig,
-) -> Response:
-    """Proxy a decision request with IR-based conversion."""
-    request_id = get_request_id(request)
-
-    def with_request_id(response: Response) -> Response:
-        response.headers["x-request-id"] = request_id
-        return response
-
+def _resolve_route(config: GatewayConfig, model: str) -> TypedRoute | None:
+    """Resolve the decision provider, or ``None`` when the model is unknown."""
     try:
-        body: dict[str, Any] = request.json()
-    except Exception:
-        return with_request_id(
-            JSONResponse(
-                {
-                    "error": {
-                        "message": "Invalid JSON body",
-                        "type": "invalid_request_error",
-                    }
-                },
-                status_code=400,
-            )
-        )
-
-    model = body.get("model")
-    if not model:
-        return with_request_id(
-            JSONResponse(
-                {
-                    "error": {
-                        "message": "Missing 'model' in request body",
-                        "type": "invalid_request_error",
-                    }
-                },
-                status_code=400,
-            )
-        )
-
-    try:
-        route = config.resolve_decision(model)
+        return config.resolve_decision(model)
     except KeyError:
-        configured = ", ".join(sorted(config.decision_models.keys()))
-        return with_request_id(
-            JSONResponse(
-                {
-                    "error": {
-                        "message": (
-                            f"Unknown decision model: '{model}'. "
-                            f"Configured: {configured or '(none)'}"
-                        ),
-                        "type": "model_not_found",
-                    }
-                },
-                status_code=404,
-            )
-        )
+        return None
 
-    # --- Build the IR conversion pipeline ---
-    source_format = _detect_decision_source_format(request, body, config)
-    target_format = route.format
-    rejection = begin_typed(
-        request,
-        source_format=source_format,
-        target_format=target_format,
-        provider_name=route.provider_name,
-    )
-    if rejection is not None:
-        return rejection
-    pipeline = DecisionConversionPipeline(source_format, target_format)
 
-    # --- Convert request through the IR ---
-    same_format = source_format == target_format
-    original_body = copy.deepcopy(body) if same_format else None
-    try:
-        body = pipeline.convert_request(body)
-    except Exception as exc:
-        logger.warning("decision: request conversion failed: %s", exc)
-        return with_request_id(
-            JSONResponse(
-                {
-                    "error": {
-                        "message": f"Request conversion failed: {exc}",
-                        "type": "conversion_error",
-                    }
-                },
-                status_code=400,
-            )
-        )
-    check_same_format_fidelity(
-        "decision",
-        source_format,
-        target_format,
-        original_body,
-        body,
-        "request",
-        model=model,
-    )
+def _response_post(body: dict[str, Any], model: str) -> None:
+    """Echo the client's model name when the upstream response omits it."""
+    if not body.get("model"):
+        body["model"] = model
 
-    upstream_url = route.provider_info.upstream_url("")
-    transport: UpstreamTransport = request.app.transport
-    extra_headers = build_upstream_extra_headers(request, request_id)
 
-    t0 = time.monotonic()
-    status_code = 500
-    error_detail: str | None = None
-    usage: dict[str, Any] = {}
+_DECISION = TypedHandler(
+    model_type="decision",
+    build_pipeline=DecisionConversionPipeline,
+    resolve=_resolve_route,
+    configured_models=lambda config: config.decision_models.keys(),
+    response_usage=response_usage,
+    not_found_label="decision model",
+    response_post=_response_post,
+)
 
-    try:
-        resp = await transport.send(
-            route.provider_info,
-            upstream_url,
-            body,
-            extra_headers=extra_headers,
-        )
-        status_code = resp.status_code
-        # Read even on an error status: a 4xx can still carry the tokens the
-        # upstream counted before it refused.
-        usage = response_usage(target_format, resp.body)
 
-        if resp.is_error:
-            error_detail = resp.error_text
-            return with_request_id(
-                Response(
-                    body=resp.raw_content,
-                    status_code=resp.status_code,
-                    content_type="application/json",
-                )
-            )
-
-        # --- Convert response through the IR ---
-        if resp.body is not None:
-            try:
-                original_response = copy.deepcopy(resp.body) if same_format else None
-                source_body = pipeline.convert_response(resp.body)
-                check_same_format_fidelity(
-                    "decision",
-                    source_format,
-                    target_format,
-                    original_response,
-                    source_body,
-                    "response",
-                    model=model,
-                )
-                if not source_body.get("model"):
-                    source_body["model"] = model
-                return with_request_id(JSONResponse(source_body, status_code=200))
-            except Exception as exc:
-                logger.warning("decision: response conversion failed: %s", exc)
-                fallback = with_request_id(
-                    Response(
-                        body=resp.raw_content,
-                        status_code=200,
-                        content_type="application/json",
-                    )
-                )
-                fallback.headers["x-rosetta-conversion"] = "passthrough"
-                return fallback
-
-        return with_request_id(
-            Response(
-                body=resp.raw_content,
-                status_code=200,
-                content_type="application/json",
-            )
-        )
-
-    except UpstreamTimeoutError as exc:
-        status_code = 504
-        error_detail = f"Upstream timeout: {exc}"
-        return with_request_id(
-            JSONResponse(
-                {
-                    "error": {
-                        "message": f"Upstream timeout: {exc}",
-                        "type": "upstream_error",
-                    }
-                },
-                status_code=504,
-            )
-        )
-    except UpstreamConnectionError as exc:
-        status_code = 502
-        error_detail = f"Upstream connection failed: {exc}"
-        return with_request_id(
-            JSONResponse(
-                {
-                    "error": {
-                        "message": f"Upstream connection failed: {exc}",
-                        "type": "upstream_error",
-                    }
-                },
-                status_code=502,
-            )
-        )
-    except Exception:
-        raise
-    finally:
-        duration_ms = (time.monotonic() - t0) * 1000
-        if pipeline.warnings:
-            logger.info(
-                "decision: conversion warnings for %s: %s",
-                model,
-                "; ".join(pipeline.warnings),
-            )
-        logger.info(
-            "decision: %s → %s (%s→%s) %dms status=%d",
-            model,
-            route.provider_name,
-            source_format,
-            target_format,
-            duration_ms,
-            status_code,
-        )
-        await finish_typed(
-            request,
-            model=model,
-            source_provider=source_format,
-            target_provider=target_format,
-            provider_name=route.provider_name,
-            status_code=status_code,
-            duration_ms=duration_ms,
-            error_detail=error_detail,
-            model_type="decision",
-            usage=usage,
-        )
+async def handle_decision(request: Any, config: GatewayConfig) -> Response:
+    """Proxy a decision request with IR-based conversion."""
+    return await handle_typed_request(request, config, _DECISION)
