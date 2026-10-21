@@ -2,35 +2,49 @@
 """Scan upstream LLM SDK types against our TypedDict replicas.
 
 Compares field-level coverage of types we replicate and flags potentially
-relevant new types from upstream SDKs.
+relevant new types from upstream SDKs.  A declared module that cannot be
+imported is an error, not a skip: a renamed replica module used to make the
+whole provider disappear from the report while the run exited 0.
+
+Types whose name means something different upstream are listed under
+``name_collisions`` and excluded from field drift.  Those entries are
+reviewed by hand; the report names them so a new collision is visible.
 
 Usage:
-    python scripts/scan_sdk_types.py          # Full report
-    python scripts/scan_sdk_types.py anthropic # Single provider
+    python scripts/dev/scan_sdk_types.py             # Full Markdown report
+    python scripts/dev/scan_sdk_types.py --json      # Machine-readable report
+    python scripts/dev/scan_sdk_types.py messages    # Single provider
 """
 
 from __future__ import annotations
 
 import importlib
 import importlib.metadata
+import json
 import re
 import sys
+from collections.abc import Iterable, Sequence
 from datetime import datetime, timezone
-from typing import get_type_hints
+from typing import Any, get_type_hints
 
 # Date-stamped type names (e.g., CodeExecutionTool20250522Param) are versioned
 # SDK internals — not worth flagging individually.
 _DATE_STAMPED_RE = re.compile(r"\d{8}")
 
+
+class ScanError(RuntimeError):
+    """A declared module could not be imported, or a provider is unknown."""
+
+
 # ---------------------------------------------------------------------------
 # Provider configuration
 # ---------------------------------------------------------------------------
 
-PROVIDERS: dict[str, dict] = {
-    "anthropic": {
+PROVIDERS: dict[str, dict[str, Any]] = {
+    "messages": {
         "our_modules": [
-            "llm_rosetta.types.anthropic.request_types",
-            "llm_rosetta.types.anthropic.response_types",
+            "llm_rosetta.types.messages.request_types",
+            "llm_rosetta.types.messages.response_types",
         ],
         "sdk_modules": [
             "anthropic.types",
@@ -57,6 +71,7 @@ PROVIDERS: dict[str, dict] = {
             "ResultError",
             "Encrypted",
         ],
+        "name_collisions": [],
         "sdk_package": "anthropic",
     },
     "openai_chat": {
@@ -81,6 +96,9 @@ PROVIDERS: dict[str, dict] = {
             "Logprob",
         ],
         "exclude_patterns": ["Deprecated", "Parsed", "Chunk"],
+        # Ours is the function *call* (arguments, name); the SDK's is the
+        # function *definition* (description, name, parameters).
+        "name_collisions": ["Function"],
         "sdk_package": "openai",
     },
     "openai_responses": {
@@ -105,6 +123,9 @@ PROVIDERS: dict[str, dict] = {
             "Compaction",
         ],
         "exclude_patterns": ["Deprecated", "Parsed", "Event"],
+        # Ours is the tool wrapper ({type, function}); the SDK's is the inner
+        # definition (name, description, parameters, strict).
+        "name_collisions": ["FunctionToolParam"],
         "sdk_package": "openai",
     },
     "google_genai": {
@@ -156,9 +177,15 @@ PROVIDERS: dict[str, dict] = {
             "Video",
             "Vqa",
         ],
+        # Ours is the part nested inside a function response; the SDK's is a
+        # part in the function response's own parts list (files, inline data).
+        "name_collisions": ["FunctionResponsePart"],
         "sdk_package": "google-genai",
     },
 }
+
+#: Accepted aliases for CLI selection, keyed by their canonical provider key.
+ALIASES: dict[str, str] = {"anthropic": "messages"}
 
 
 # ---------------------------------------------------------------------------
@@ -189,25 +216,33 @@ def is_pydantic_model(obj: object) -> bool:
 def get_fields(obj: object) -> set[str] | None:
     """Extract field names from a type (TypedDict or Pydantic model)."""
     if is_pydantic_model(obj):
-        return set(obj.model_fields.keys())  # type: ignore[union-attr]
+        fields = getattr(obj, "model_fields", None)
+        return set(fields.keys()) if fields else None
     if is_typeddict(obj):
         try:
             hints = get_type_hints(obj)
             return set(hints.keys())
         except Exception:
-            if hasattr(obj, "__annotations__"):
-                return set(obj.__annotations__.keys())
+            annotations = getattr(obj, "__annotations__", None)
+            return set(annotations.keys()) if annotations else None
     return None
+
+
+def _import(module_name: str, *, what: str) -> Any:
+    try:
+        return importlib.import_module(module_name)
+    except ImportError as exc:
+        raise ScanError(
+            f"{what} {module_name!r} cannot be imported: {exc}. "
+            "A renamed or deleted module must be fixed in PROVIDERS, not skipped."
+        ) from exc
 
 
 def collect_our_types(module_names: list[str]) -> dict[str, object]:
     """Collect all TypedDict/type-alias names from our modules."""
     types: dict[str, object] = {}
     for mod_name in module_names:
-        try:
-            mod = importlib.import_module(mod_name)
-        except ImportError:
-            continue
+        mod = _import(mod_name, what="replica module")
 
         all_names = getattr(mod, "__all__", None)
         if all_names is None:
@@ -226,10 +261,7 @@ def collect_sdk_types(module_names: list[str]) -> dict[str, object]:
     """Collect all public types from SDK modules."""
     types: dict[str, object] = {}
     for mod_name in module_names:
-        try:
-            mod = importlib.import_module(mod_name)
-        except ImportError:
-            continue
+        mod = _import(mod_name, what="SDK module")
 
         for name in dir(mod):
             if name.startswith("_"):
@@ -254,17 +286,26 @@ def is_relevant(name: str, patterns: list[str], excludes: list[str]) -> bool:
     return False
 
 
+def split_collisions(
+    drift: dict[str, list[str]], collisions: Iterable[str]
+) -> tuple[dict[str, list[str]], list[str]]:
+    """Return the drift with reviewed name collisions removed.
+
+    The collisions are returned as a sorted list so the report can name what
+    it excluded — an entry that stops colliding is then visible as a change.
+    """
+    excluded = sorted(set(collisions) & set(drift))
+    kept = {name: fields for name, fields in drift.items() if name not in excluded}
+    return kept, excluded
+
+
 # ---------------------------------------------------------------------------
 # Report generation
 # ---------------------------------------------------------------------------
 
 
-def scan_provider(provider_key: str, config: dict) -> list[str]:
-    """Scan a single provider and return report lines."""
-    lines: list[str] = []
-    lines.append(f"## {provider_key}")
-    lines.append("")
-
+def scan_provider(provider_key: str, config: dict[str, Any]) -> dict[str, Any]:
+    """Scan one provider and return its machine-readable result."""
     our_types = collect_our_types(config["our_modules"])
     sdk_types = collect_sdk_types(config["sdk_modules"])
 
@@ -273,8 +314,7 @@ def scan_provider(provider_key: str, config: dict) -> list[str]:
     }
     our_names = set(our_types.keys())
 
-    # --- Field drift ---
-    drift_lines: list[str] = []
+    drift: dict[str, list[str]] = {}
     for name, our_obj in sorted(our_type_classes.items()):
         sdk_obj = sdk_types.get(name)
         if sdk_obj is None:
@@ -287,21 +327,10 @@ def scan_provider(provider_key: str, config: dict) -> list[str]:
 
         missing = sdk_fields - our_fields
         if missing:
-            drift_lines.append(
-                f"- `{name}`: missing fields `{'`, `'.join(sorted(missing))}`"
-            )
+            drift[name] = sorted(missing)
 
-    if drift_lines:
-        lines.append(f"### Field drift in covered types ({len(drift_lines)} issues)")
-        lines.append("")
-        lines.extend(drift_lines)
-    else:
-        lines.append("### Field drift in covered types")
-        lines.append("")
-        lines.append("(none)")
-    lines.append("")
+    drift, excluded = split_collisions(drift, config.get("name_collisions", []))
 
-    # --- New potentially relevant types ---
     sdk_only = set(sdk_types.keys()) - our_names
     relevant_new = sorted(
         name
@@ -309,73 +338,129 @@ def scan_provider(provider_key: str, config: dict) -> list[str]:
         if is_relevant(name, config["relevance_patterns"], config["exclude_patterns"])
     )
 
-    if relevant_new:
+    return {
+        "drift": drift,
+        "relevant_new": relevant_new,
+        "collisions": excluded,
+        "coverage": {
+            "matched": sum(1 for name in our_type_classes if name in sdk_types),
+            "replicas": len(our_type_classes),
+            "sdk_types": len(sdk_types),
+        },
+    }
+
+
+def build_report(providers: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """Build the full report for the selected providers."""
+    versions: dict[str, str] = {}
+    for cfg in providers.values():
+        package = cfg["sdk_package"]
+        versions.setdefault(package, get_sdk_version(package))
+
+    return {
+        "generated": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+        "sdk_versions": versions,
+        "providers": {key: scan_provider(key, cfg) for key, cfg in providers.items()},
+    }
+
+
+def render_markdown(report: dict[str, Any]) -> str:
+    lines: list[str] = [
+        "# SDK Type Coverage Report",
+        "",
+        "Generated: {generated} | {versions}".format(
+            generated=report["generated"],
+            versions=", ".join(
+                f"{pkg}=={version}" for pkg, version in report["sdk_versions"].items()
+            ),
+        ),
+        "",
+    ]
+
+    for key, data in report["providers"].items():
+        lines.extend([f"## {key}", ""])
+
+        drift = data["drift"]
+        lines.append(f"### Field drift in covered types ({len(drift)} issues)")
+        lines.append("")
+        if drift:
+            for name, fields in drift.items():
+                lines.append(f"- `{name}`: missing fields `{chr(96).join(fields)}`")
+        else:
+            lines.append("(none)")
+        if data["collisions"]:
+            lines.append("")
+            lines.append(
+                "Excluded as name collisions: "
+                + ", ".join(f"`{name}`" for name in data["collisions"])
+            )
+        lines.append("")
+
+        relevant_new = data["relevant_new"]
         lines.append(f"### Potentially relevant new types ({len(relevant_new)} found)")
         lines.append("")
-        for name in relevant_new:
-            lines.append(f"- `{name}`")
-    else:
-        lines.append("### Potentially relevant new types")
+        if relevant_new:
+            lines.extend(f"- `{name}`" for name in relevant_new)
+        else:
+            lines.append("(none)")
         lines.append("")
-        lines.append("(none)")
-    lines.append("")
 
-    # --- Coverage summary ---
-    matched = sum(1 for name in our_type_classes if name in sdk_types)
-    lines.append(
-        f"*Coverage: {matched} types matched against SDK, "
-        f"{len(our_type_classes)} total replicas, "
-        f"{len(sdk_types)} SDK types scanned.*"
-    )
-    lines.append("")
-    return lines
+        coverage = data["coverage"]
+        lines.append(
+            f"*Coverage: {coverage['matched']} types matched against SDK, "
+            f"{coverage['replicas']} total replicas, "
+            f"{coverage['sdk_types']} SDK types scanned.*"
+        )
+        lines.append("")
+
+    return "\n".join(lines)
 
 
-def main() -> None:
-    # Optional: scan only specific providers
-    requested = set()
-    if len(sys.argv) > 1:
-        for arg in sys.argv[1:]:
-            key = arg.lower().replace("-", "_")
-            if key in PROVIDERS:
-                requested.add(key)
-            else:
-                matches = [k for k in PROVIDERS if key in k]
-                if matches:
-                    requested.update(matches)
-                else:
-                    print(f"Unknown provider: {arg}", file=sys.stderr)
-                    print(f"Available: {', '.join(PROVIDERS.keys())}", file=sys.stderr)
-                    sys.exit(1)
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
 
-    providers = {k: v for k, v in PROVIDERS.items() if not requested or k in requested}
 
-    # Header
-    versions = []
-    seen_packages: set[str] = set()
-    for cfg in providers.values():
-        pkg = cfg["sdk_package"]
-        if pkg not in seen_packages:
-            seen_packages.add(pkg)
-            versions.append(f"{pkg}=={get_sdk_version(pkg)}")
+def select_providers(requested: Sequence[str]) -> dict[str, dict[str, Any]]:
+    """Resolve CLI arguments to provider configs, or raise ScanError."""
+    if not requested:
+        return dict(PROVIDERS)
 
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    print("# SDK Type Coverage Report")
-    print("")
-    print(f"Generated: {now} | {', '.join(versions)}")
-    print("")
+    selected: dict[str, dict[str, Any]] = {}
+    for arg in requested:
+        key = arg.lower().replace("-", "_")
+        key = ALIASES.get(key, key)
+        if key in PROVIDERS:
+            selected[key] = PROVIDERS[key]
+            continue
+        matches = [k for k in PROVIDERS if key in k]
+        if not matches:
+            raise ScanError(
+                f"unknown provider {arg!r}; available: {', '.join(PROVIDERS)}"
+            )
+        for match in matches:
+            selected[match] = PROVIDERS[match]
+    return selected
 
-    # Per-provider reports
-    for key, config in providers.items():
-        try:
-            lines = scan_provider(key, config)
-            print("\n".join(lines))
-        except ImportError as e:
-            print(f"## {key}")
-            print("")
-            print(f"**Skipped** — SDK not installed: {e}")
-            print("")
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = list(sys.argv[1:] if argv is None else argv)
+    as_json = "--json" in args
+    requested = [arg for arg in args if not arg.startswith("-")]
+
+    try:
+        providers = select_providers(requested)
+        report = build_report(providers)
+    except ScanError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    if as_json:
+        print(json.dumps(report, indent=2, sort_keys=True))
+    else:
+        print(render_markdown(report))
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
