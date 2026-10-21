@@ -8,7 +8,7 @@ title: Architecture Guide
 
 LLM-Rosetta uses a hub-and-spoke architecture where each converter handles bidirectional conversion between a specific API format and the shared IR (Intermediate Representation).
 
-Every converter lives under `src/llm_rosetta/converters/<name>/` and extends `BaseConverter`. The base class uses a **composition pattern** — subclasses declare ops classes for each concern:
+Every converter lives under `packages/llm-rosetta/src/llm_rosetta/converters/<name>/` and extends `BaseConverter`. The base class uses a **composition pattern** — subclasses declare ops classes for each concern:
 
 ```
 converters/<name>/
@@ -40,7 +40,7 @@ If you find yourself duplicating logic across converters, consider extracting it
 
 ## Shim Layer
 
-A `ProviderShim` is a lightweight identity card that declares which base converter a provider uses, plus connection defaults and field-level transforms. Shims live under `src/llm_rosetta/shims/providers/<name>/provider.yaml`.
+A `ProviderShim` is a lightweight identity card that declares which base converter a provider uses, plus connection defaults and field-level transforms. Shims live under `packages/llm-rosetta/src/llm_rosetta/shims/providers/<name>/provider.yaml`.
 
 Converters stay format-generic; shims declare provider-specific differences (e.g. response ID prefix, default headers, field renames).
 
@@ -48,13 +48,13 @@ Converters stay format-generic; shims declare provider-specific differences (e.g
 
 To add support for a new API standard:
 
-1. Create a converter directory under `src/llm_rosetta/converters/llm/<name>/`
+1. Create a converter directory under `packages/llm-rosetta/src/llm_rosetta/converters/llm/<name>/`
 2. Subclass `BaseConverter` and implement all abstract methods
 3. Create ops classes following the pattern above
-4. Add one `FormatSpec` to `src/llm_rosetta/formats/catalog.py` and register
+4. Add one `FormatSpec` to `packages/llm-rosetta/src/llm_rosetta/formats/catalog.py` and register
    its body detector in `formats/detect.py`, then bind the converter class in
    `converters/registry.py`
-5. Add a shim under `src/llm_rosetta/shims/providers/<name>/`
+5. Add a shim under `packages/llm-rosetta/src/llm_rosetta/shims/providers/<name>/`
 6. Add tests under `tests/converters/`
 7. Submit a PR
 
@@ -278,7 +278,7 @@ Route handlers construct an Ops subclass with `OpsContext` and call
 `execute()` — recording happens automatically:
 
 ```python
-from llm_rosetta.gateway.ops import OpsClearData
+from llm_rosetta_gateway.ops import OpsClearData
 
 result = await OpsClearData(request.app.ops_ctx, table="request_log").execute()
 ```

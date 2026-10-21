@@ -293,7 +293,7 @@ from llm_rosetta.observability import OpsLog, OpsLogEntry
 subsystems.  Created once at app init in `setup_admin()`:
 
 ```python
-from llm_rosetta.gateway.ops import OpsContext
+from llm_rosetta_gateway.ops import OpsContext
 
 ctx = OpsContext(
     ops_log=ops_log,
@@ -652,10 +652,10 @@ All classes remain importable from their original `gateway.admin` locations:
 
 ```python
 # These still work (re-exports from observability)
-from llm_rosetta.gateway.admin.metrics import MetricsCollector
-from llm_rosetta.gateway.admin.request_log import RequestLog, RequestLogEntry
-from llm_rosetta.gateway.admin.persistence import PersistenceManager
-from llm_rosetta.gateway.admin.routes.profiling import ProfilerState
+from llm_rosetta_gateway.admin.metrics import MetricsCollector
+from llm_rosetta_gateway.admin.request_log import RequestLog, RequestLogEntry
+from llm_rosetta_gateway.admin.persistence import PersistenceManager
+from llm_rosetta_gateway.admin.routes.profiling import ProfilerState
 ```
 
 New code should import from `llm_rosetta.observability` directly.

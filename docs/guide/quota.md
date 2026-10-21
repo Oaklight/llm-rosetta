@@ -19,7 +19,7 @@ The layer is split so that each fact lives where it is maintained:
 | **Provider** | Which credentials exist, and any override of the shim | `config.jsonc` → `quota:` |
 | **Quota state** | The last reading and any demotion, per credential | Runtime only |
 
-The gateway package (`llm_rosetta.gateway.quota`) owns the **runtime**: the
+The gateway package (`llm_rosetta_gateway.quota`) owns the **runtime**: the
 per-credential state, probe execution and the admin surface. The **contract and
 resolution** — the `QuotaProbe` interface, the window and in-band signal types,
 `resolve_probe` — live in `llm_rosetta.shims.quota_probe`, because a shim's

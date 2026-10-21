@@ -113,7 +113,7 @@ panel, and skipped — the gateway still starts. Set `shims.strict: true` to abo
 startup instead.
 
 **Programmatic use.** `llm_rosetta.shims.rebuild_shims()` loads directories and
-remotes directly (no config file needed); `llm_rosetta.gateway.apply_shim_sources(raw, config_path)`
+remotes directly (no config file needed); `llm_rosetta_gateway.apply_shim_sources(raw, config_path)`
 applies a config dict. `create_app` also applies the section automatically.
 
 **Standalone packages and presets.** The ALCF, AskSage and Argo shims ship in

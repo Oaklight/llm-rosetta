@@ -8,7 +8,7 @@ title: Style Guide
 
 - Code follows `ruff` defaults — run `make lint` or let pre-commit catch issues on commit
 - Type hints are encouraged on all public APIs
-- Do not edit files under `src/llm_rosetta/_vendor/` — those are managed externally
+- Do not edit files under `packages/llm-rosetta/src/llm_rosetta/_vendor/` — those are managed externally
 
 ## Docstrings
 

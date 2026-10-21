@@ -82,7 +82,7 @@ class MyConfigIO:
 The `setup_admin()` function initializes the admin panel state on your app instance. It is typically called during app startup after your app's own config and transport are ready.
 
 ```python
-from llm_rosetta.gateway.admin import setup_admin
+from llm_rosetta_gateway.admin import setup_admin
 
 def setup_admin(
     app,
@@ -108,8 +108,8 @@ def setup_admin(
 ### Full Example
 
 ```python
-from llm_rosetta.gateway.admin import setup_admin
-from llm_rosetta.gateway.admin.routes import register_admin_routes
+from llm_rosetta_gateway.admin import setup_admin
+from llm_rosetta_gateway.admin.routes import register_admin_routes
 
 # 1. Register admin routes before setup
 register_admin_routes(app)
@@ -230,7 +230,7 @@ created by `setup_admin()` and attached to `app.ops_ctx`.
 observability subsystems:
 
 ```python
-from llm_rosetta.gateway.ops import OpsContext
+from llm_rosetta_gateway.ops import OpsContext
 
 # Created automatically by setup_admin():
 ctx = OpsContext(
@@ -251,7 +251,7 @@ Route handlers construct an Ops subclass with the context and call
 `execute()`:
 
 ```python
-from llm_rosetta.gateway.ops import OpsClearData
+from llm_rosetta_gateway.ops import OpsClearData
 
 async def handle_clear_log(request):
     result = await OpsClearData(request.app.ops_ctx, table="request_log").execute()
@@ -267,7 +267,7 @@ exception is re-raised.
 Downstream projects can define custom `OpsBase` subclasses:
 
 ```python
-from llm_rosetta.gateway.ops import OpsBase, OpsContext
+from llm_rosetta_gateway.ops import OpsBase, OpsContext
 
 class OpsCustomAction(OpsBase):
     event_type = "custom_action"

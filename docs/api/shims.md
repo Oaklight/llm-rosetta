@@ -20,7 +20,7 @@ title: Shims
 
 ## External Shim Sources
 
-::: llm_rosetta.gateway.shims.sources.rebuild_shims
+::: llm_rosetta_gateway.shims.sources.rebuild_shims
 
 ::: llm_rosetta.shims.sources.resolve_remote
 

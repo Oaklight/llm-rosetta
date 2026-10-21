@@ -75,7 +75,7 @@ When `--config` is not specified, the gateway searches these paths in order:
 The gateway can also be used as a library:
 
 ```python
-from llm_rosetta.gateway import create_app, GatewayConfig, load_config
+from llm_rosetta_gateway import create_app, GatewayConfig, load_config
 
 # Load config and create ASGI app
 raw = load_config("config.jsonc")

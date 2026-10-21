@@ -14,7 +14,7 @@ version number, so "which versions go together" has one answer: the same one.
   and `llm-rosetta-gateway 0.15.0`. The release workflow refuses a tag whose
   two `__version__` values disagree.
 - **Same-minor compatibility.** The gateway declares
-  `llm-rosetta>=0.15.0.dev0,<0.16`: core patch releases are accepted without a
+  `llm-rosetta>=0.14.0.dev0,<0.15`: core patch releases are accepted without a
   new gateway, while a new core minor line requires a matching gateway release.
 - **Dev builds** (`0.14.0.devN`) go to TestPyPI and the Docker `-dev` tags.
   They are for testing the release line, not for production.

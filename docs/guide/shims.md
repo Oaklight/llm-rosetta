@@ -33,7 +33,7 @@ ProviderShim ("deepseek--chat_completions")
 Built-in shims are defined as a directory structure under `shims/providers/`:
 
 ```text
-src/llm_rosetta/shims/providers/
+packages/llm-rosetta/src/llm_rosetta/shims/providers/
 ├── __init__.py              # Auto-discovery: scans subdirectories
 ├── openai/
 │   └── provider.yaml        # Provider identity (YAML)
@@ -216,7 +216,7 @@ the provider directories (for the `llm-rosetta-shim-*` packages that is
 [Gateway → External Shim Sources](../gateway/configuration.md#external-shim-sources)
 for the full field list, caching and refresh behaviour, precedence, and the
 security note. Programmatically, use `llm_rosetta.shims.rebuild_shims()` (no
-config file needed) or `llm_rosetta.gateway.apply_shim_sources(raw, config_path)`.
+config file needed) or `llm_rosetta_gateway.apply_shim_sources(raw, config_path)`.
 
 !!! warning
     A declared source may ship a `transforms.py` that is executed on load — the
@@ -226,7 +226,7 @@ config file needed) or `llm_rosetta.gateway.apply_shim_sources(raw, config_path)
 ## Built-in Shims
 
 LLM-Rosetta ships with 32 built-in provider shims, one directory per shim under
-`src/llm_rosetta/shims/providers/`. `list_shims()` prints the live set; this is
+`packages/llm-rosetta/src/llm_rosetta/shims/providers/`. `list_shims()` prints the live set; this is
 that set. The ALCF, AskSage and Argo shims ship as standalone packages — see
 [Standalone shim packages](#standalone-shim-packages).
 
@@ -624,7 +624,7 @@ After registration the shim name works everywhere — `get_converter_for_provide
 
 To add a new provider to the built-in registry:
 
-1. Create a directory under `src/llm_rosetta/shims/providers/<name>/`
+1. Create a directory under `packages/llm-rosetta/src/llm_rosetta/shims/providers/<name>/`
 2. Add a `provider.yaml` with required fields:
 
     ```yaml
