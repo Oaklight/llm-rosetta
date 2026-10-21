@@ -365,13 +365,58 @@ class TestBuiltinShims:
         assert shim is not None
         assert shim.base == "chat_completions"
 
-    def test_deepseek_backfills_reasoning_content(self):
-        """The thinking-mode fix rides on the shim's post-IR transforms."""
+    def test_deepseek_declares_reasoning_replay(self):
+        """The thinking-mode requirement is a capability, not a transform.
+
+        It used to ride on ``backfill_reasoning_content()`` in this shim's
+        ``post_ir_transforms`` (#948).  That covered one vendor only, so the
+        same model served through another endpoint failed (#1143).  The
+        declaration now lives on the model capability and is enforced by the
+        pipeline pass.
+        """
         shim = get_shim("deepseek--chat_completions")
         assert shim is not None
-        assert any(
+        assert shim.reasoning is not None
+        assert shim.reasoning.replay_missing == "fill_empty"
+        assert not any(
             "backfill_reasoning_content" in repr(t) for t in shim.post_ir_transforms
         )
+
+    def test_opencode_declares_replay_for_the_deepseek_family(self):
+        """A vendor shim declares the requirement for a model family.
+
+        OpenCode fronts DeepSeek alongside Claude, GPT and Gemini.  Only the
+        DeepSeek thinking models need the replay field, and they are the ones
+        that produced the production 400s (#1143).  The override is keyed by
+        the ``deepseek-*`` family so a new snapshot is covered without editing
+        the shim; the provider-level cap must stay equal to the Chat
+        Completions base default so the other models' effort ladder is
+        unchanged.
+        """
+        from llm_rosetta.shims.provider_shim import match_model_reasoning
+
+        shim = get_shim("opencode--chat_completions")
+        assert shim is not None
+        assert shim.reasoning is not None
+        assert shim.reasoning.replay_missing == "as_is"
+        assert shim.reasoning.effort_field == "reasoning_effort"
+        assert shim.reasoning.effort_range == ("minimal", "high")
+
+        assert shim.model_reasoning is not None
+        assert "deepseek*" in shim.model_reasoning
+        for model in (
+            "deepseek-v4.1-flash",
+            "deepseek-v4.1-flash-free",
+            "deepseek-v9",
+            "deepseek/deepseek-v3",
+        ):
+            override = match_model_reasoning(shim, model)
+            assert override is not None, model
+            assert override.replay_missing == "fill_empty", model
+            # The override inherits the provider-level fields it does not set.
+            assert override.effort_range == ("minimal", "high"), model
+        for model in ("claude-sonnet-4", "gpt-5.6", "gemini-3.5-flash"):
+            assert match_model_reasoning(shim, model) is None, model
 
     def test_deepseek_responses_base_type(self):
         shim = get_shim("deepseek--open_responses")

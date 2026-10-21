@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from .description_limit import relocate_oversized_tool_descriptions  # noqa: F401
 from .enforcement import (  # noqa: F401
+    backfill_reasoning_replay,
     enforce_custom_tools,
     enforce_reasoning,
     enforce_vision,
@@ -36,6 +37,7 @@ __all__ = [
     "MAX_TOOL_NAME_LEN",
     "ToolNameMap",
     "apply_upstream_tool_names",
+    "backfill_reasoning_replay",
     "build_tool_name_map",
     "dedupe_tool_definitions",
     "degrade_intrinsic_history",

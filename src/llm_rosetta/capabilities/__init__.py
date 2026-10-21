@@ -15,6 +15,7 @@ for tool identity and naming, :mod:`.description_limit` for oversized descriptio
 
 from llm_rosetta.ir.passes.description_limit import relocate_oversized_tool_descriptions
 from llm_rosetta.ir.passes.enforcement import (
+    backfill_reasoning_replay,
     enforce_reasoning,
     strip_reasoning_for_non_reasoning,
     enforce_vision,
@@ -38,6 +39,7 @@ from llm_rosetta.ir.passes.tool_names import (
 
 __all__ = [
     "MAX_TOOL_NAME_LEN",
+    "backfill_reasoning_replay",
     "enforce_reasoning",
     "strip_reasoning_for_non_reasoning",
     "enforce_vision",

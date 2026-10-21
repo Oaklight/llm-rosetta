@@ -8,6 +8,7 @@ from typing import Any
 
 from llm_rosetta._vendor.httpserver import JSONResponse, Response
 from llm_rosetta.shims import get_shim, list_shims
+from llm_rosetta.shims.provider_shim import match_model_reasoning
 
 from ....config import GatewayConfig
 from ....providers import (
@@ -128,7 +129,7 @@ def _resolve_model_reasoning(
 
     Resolution priority:
     1. config.jsonc model-level ``reasoning_override``
-    2. Shim ``model_reasoning[upstream_id]``
+    2. Shim ``model_reasoning`` (exact upstream ID, then glob patterns)
     3. Shim provider-level ``reasoning``
 
     Returns a dict with ``source`` indicating where the config came from,
@@ -145,8 +146,9 @@ def _resolve_model_reasoning(
 
     cap = shim.reasoning
     source = "provider"
-    if shim.model_reasoning and upstream in shim.model_reasoning:
-        cap = shim.model_reasoning[upstream]
+    override = match_model_reasoning(shim, upstream)
+    if override is not None:
+        cap = override
         source = "model_override"
 
     # Check config-level override
@@ -164,6 +166,7 @@ def _resolve_model_reasoning(
         "effort_range": list(cap.effort_range) if cap.effort_range else None,
         "budget_ratio": cap.budget_ratio,
         "visibility_modes": cap.visibility_modes,
+        "replay_missing": cap.replay_missing,
         "config_override": config_override,
     }
 

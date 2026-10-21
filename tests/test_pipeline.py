@@ -1586,6 +1586,140 @@ class TestDeepSeekReasoningContentBackfill:
         assert callers[0]["reasoning_content"] == "I should read the file."
         assert "reasoning_content" not in callers[1]
 
+    def test_shim_without_the_capability_leaves_field_absent(self):
+        """The gate is the declared capability, not "a shim is present"."""
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        out = ConversionPipeline(
+            "messages", "chat_completions", target_shim="xai"
+        ).convert_request(self._source_body())
+
+        callers = self._callers(out)
+        assert "reasoning_content" not in callers[1]
+
+    def test_gateway_default_capabilities_do_not_suppress_the_fix(self):
+        """The gateway passes ``["text"]`` when a model declares no caps.
+
+        ``GatewayConfig.DEFAULT_CAPABILITIES`` is ``["text"]`` and the proxy
+        hands ``route.model_capabilities`` to the pipeline on every request,
+        so gating the pass on that list would silently drop the DeepSeek lane
+        protection for every deployment that relies on the default.
+        """
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        out = ConversionPipeline(
+            "messages",
+            "chat_completions",
+            target_shim="deepseek--chat_completions",
+            model_capabilities=["text"],
+        ).convert_request(self._source_body())
+
+        assert self._callers(out)[1]["reasoning_content"] == ""
+
+
+class TestReasoningReplayForVendorLanes:
+    """A vendor serving someone else's model inherits its replay rule (#1143).
+
+    The production incident: OpenCode Go fronts ``deepseek-v4.1-flash`` and
+    relaying Claude Code's history hit ``400 The `reasoning_content` in the
+    thinking mode must be passed back`` because the requirement had been
+    mounted on the DeepSeek vendor shim only.  Declaring it per model on the
+    OpenCode shim fixes the lane without touching the non-DeepSeek models the
+    same shim also serves.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _load_shims(self):
+        from llm_rosetta.shims.providers import load_providers
+
+        load_providers()
+
+    @staticmethod
+    def _source_body(model: str = "deepseek-v4.1-flash"):
+        return {
+            "model": model,
+            "messages": [
+                {"role": "user", "content": [{"type": "text", "text": "read it"}]},
+                {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "tool_use",
+                            "id": "c1",
+                            "name": "read",
+                            "input": {"path": "/x"},
+                        }
+                    ],
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "c1",
+                            "content": "data",
+                        }
+                    ],
+                },
+            ],
+        }
+
+    @staticmethod
+    def _assistant(out):
+        return [m for m in out["messages"] if m["role"] == "assistant"][0]
+
+    def test_opencode_deepseek_gets_the_backfill(self):
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        out = ConversionPipeline(
+            "messages",
+            "chat_completions",
+            target_shim="opencode--chat_completions",
+            # The shape the gateway produces for a model with no declared
+            # capabilities; it must not suppress the per-model declaration.
+            model_capabilities=["text"],
+        ).convert_request(self._source_body())
+
+        assert self._assistant(out)["reasoning_content"] == ""
+        assert out["messages"][-1]["role"] == "tool"
+
+    def test_opencode_non_deepseek_model_is_untouched(self):
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        out = ConversionPipeline(
+            "messages",
+            "chat_completions",
+            target_shim="opencode--chat_completions",
+            model_capabilities=["text", "reasoning"],
+        ).convert_request(self._source_body("claude-haiku-4.5"))
+
+        assert "reasoning_content" not in self._assistant(out)
+
+    def test_opencode_family_member_gets_the_backfill(self):
+        """A model the shim has never seen is covered by the family pattern."""
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        out = ConversionPipeline(
+            "messages",
+            "chat_completions",
+            target_shim="opencode--chat_completions",
+        ).convert_request(self._source_body("deepseek-v9"))
+
+        assert self._assistant(out)["reasoning_content"] == ""
+
+    def test_config_override_keeps_the_shim_policy(self):
+        """An admin reasoning override must not reset ``replay_missing``."""
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        out = ConversionPipeline(
+            "messages",
+            "chat_completions",
+            target_shim="opencode--chat_completions",
+            reasoning_config_override={"effort_range": ["low", "high"]},
+        ).convert_request(self._source_body())
+
+        assert self._assistant(out)["reasoning_content"] == ""
+
 
 class TestUnsignedBlocksPolicy:
     """Signature-requiring Messages targets withhold unsigned reasoning (#954).

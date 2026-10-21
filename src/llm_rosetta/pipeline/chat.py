@@ -28,6 +28,7 @@ from collections.abc import Callable, Iterable, Iterator
 from typing import Any, Literal, Protocol, runtime_checkable
 
 from llm_rosetta.capabilities import (
+    backfill_reasoning_replay,
     dedupe_tool_definitions,
     qualify_tool_names,
     degrade_intrinsic_history,
@@ -720,6 +721,18 @@ class ConversionPipeline:
         ir_request = strip_reasoning_for_non_reasoning(
             ir_request,
             model_capabilities=self._model_capabilities,
+            model=self._upstream_model or body.get("model") or "",
+            request_id=request_id,
+        )
+
+        # Capability enforcement: reasoning replay.  A thinking-mode target
+        # that declares ``replay_missing: fill_empty`` needs the field present
+        # on every assistant turn once tools are in play; an empty value is
+        # accepted.  This is a property of the target model, not of a vendor
+        # shim, so it runs here for every target format.  See epic #1143.
+        ir_request = backfill_reasoning_replay(
+            ir_request,
+            reasoning_cap=ctx.options.get("reasoning_cap"),
             model=self._upstream_model or body.get("model") or "",
             request_id=request_id,
         )

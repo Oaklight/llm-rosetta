@@ -13,6 +13,7 @@ functions (``get_shim``, ``list_shims``) read from it.
 from __future__ import annotations
 
 import contextlib
+import fnmatch
 import functools
 import logging
 import re
@@ -41,6 +42,9 @@ logger = logging.getLogger(__name__)
 
 #: How outbound unsigned reasoning blocks are handled.
 UnsignedBlocks = Literal["as_is", "preserve"]
+
+#: What to do when a replayed history omits the reasoning of an assistant turn.
+ReplayMissing = Literal["as_is", "fill_empty"]
 
 #: Tool search capability mode.
 ToolSearchMode = Literal["disabled", "native", "bridge"]
@@ -107,6 +111,21 @@ class ReasoningCapability:
     # Example (Anthropic):  {"auto": "summarized", "none": "omitted"}
     # Example (OpenAI):     {"auto": "auto", "concise": "concise", "detailed": "detailed"}
     visibility_modes: dict[str, str] | None = None
+
+    # ── Replay (request-side) ────────────────────────────────────────
+    # Some thinking-mode upstreams reject a replayed history whose assistant
+    # turns omit the reasoning field once tools are in play:
+    #
+    #   400 The `reasoning_content` in the thinking mode must be passed back
+    #       to the API
+    #
+    # The requirement belongs to the *model*, not to one vendor: the same
+    # DeepSeek model is fronted by many compatible endpoints, and a client
+    # that replays history across a format boundary drops the reasoning for
+    # some turns.  ``"fill_empty"`` declares the requirement and lets the
+    # capability pass fill an empty value (accepted by the upstream), so the
+    # request can still round-trip.  See #948 and epic #1143.
+    replay_missing: ReplayMissing = "as_is"
 
     # ── Response handling ────────────────────────────────────────────
     # How to handle unsigned (non-redacted) reasoning blocks in responses.
@@ -745,6 +764,40 @@ def resolve_shim(shim: ProviderShim | str | None) -> ProviderShim | None:
     if isinstance(shim, ProviderShim):
         return shim
     return get_shim(shim)
+
+
+def match_model_reasoning(
+    shim: ProviderShim | str | None,
+    model: str | None,
+) -> ReasoningCapability | None:
+    """Return the reasoning override declared for *model*, if any.
+
+    ``model_overrides`` keys are matched against the **upstream model ID**.
+    An exact key wins; otherwise the keys are tried in declaration order as
+    shell-style patterns (:func:`fnmatch.fnmatchcase`), so a vendor can cover
+    a model family with one entry (``deepseek*``) while an exact ID still
+    overrides it.  ``fnmatch``'s ``*`` matches ``/`` too, so the same
+    pattern covers vendor-prefixed IDs such as ``deepseek/deepseek-v3``.
+
+    Args:
+        shim: A shim object or registered name.
+        model: The upstream model ID.  ``None`` or empty matches nothing.
+
+    Returns:
+        The matching per-model capability, or ``None`` when the model has no
+        override (the caller then falls back to the provider-level one).
+    """
+    resolved = resolve_shim(shim)
+    if resolved is None or not resolved.model_reasoning or not model:
+        return None
+    overrides = resolved.model_reasoning
+    exact = overrides.get(model)
+    if exact is not None:
+        return exact
+    for pattern, capability in overrides.items():
+        if fnmatch.fnmatchcase(model, pattern):
+            return capability
+    return None
 
 
 def list_shims() -> list[ProviderShim]:

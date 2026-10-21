@@ -265,6 +265,7 @@ def _parse_reasoning_cap(
         visibility_modes=cfg.get(
             "visibility_modes", _d.visibility_modes if _d else None
         ),
+        replay_missing=cfg.get("replay_missing", _d.replay_missing if _d else "as_is"),
         unsigned_blocks=cfg.get(
             "unsigned_blocks", _d.unsigned_blocks if _d else "as_is"
         ),

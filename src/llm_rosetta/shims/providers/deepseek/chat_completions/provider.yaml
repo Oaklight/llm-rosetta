@@ -14,3 +14,9 @@ reasoning:
     disabled: disabled
   effort_field: reasoning_effort
   effort_range: [low, max]
+  # Thinking mode rejects a replayed history whose assistant turns omit
+  # ``reasoning_content`` once tools are in play.  A client that replays
+  # history across a format boundary drops the reasoning for some turns, so
+  # the capability pass fills an empty value (accepted by the API) instead of
+  # letting the request fail.  See #948, epic #1143.
+  replay_missing: fill_empty

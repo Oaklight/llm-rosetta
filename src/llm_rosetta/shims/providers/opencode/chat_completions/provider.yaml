@@ -28,3 +28,26 @@ quota:
   # Refresh the windows in the background so routing learns a reset
   # without waiting for a request to fail.
   interval: 300
+
+reasoning:
+  # Kept equal to the Chat Completions base capability
+  # (``converters/base/helpers/reasoning.py::_DEFAULT_CHAT_COMPLETIONS``): a
+  # provider-level ``reasoning:`` section supplies the loader's defaults for
+  # every field it omits, and the base cap clamps effort to [minimal, high].
+  # Declaring both keeps the wire unchanged for the non-DeepSeek models this
+  # shim also serves.
+  effort_field: reasoning_effort
+  effort_range: [minimal, high]
+  model_overrides:
+    # DeepSeek's thinking mode rejects a replayed history whose assistant
+    # turns omit ``reasoning_content`` once tools are in play.  The OpenCode
+    # front door accepts the body and relays it to DeepSeek, so the 400
+    # surfaces intermittently on whichever backend enforces the rule.
+    # Declared on the model *family*, not on the whole shim: this shim also
+    # fronts Claude, GPT and Gemini models.  Keys are exact upstream IDs
+    # first, then glob patterns in declaration order, so a new DeepSeek
+    # snapshot is covered without touching this file.  The pattern has no
+    # hyphen so it also matches vendor-prefixed IDs (deepseek/deepseek-v3).
+    # See #948, epic #1143.
+    "deepseek*":
+      replay_missing: fill_empty

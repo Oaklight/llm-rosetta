@@ -22,6 +22,7 @@ from ..primitives.image_limit import strip_images_for_non_vision
 from llm_rosetta.shims.provider_shim import (
     ProviderShim,
     ReasoningCapability,
+    match_model_reasoning,
     resolve_shim,
 )
 
@@ -68,6 +69,7 @@ def _apply_config_reasoning_override(
         effort_range=effort_range,
         budget_ratio=budget,
         visibility_modes=override.get("visibility_modes", base.visibility_modes),
+        replay_missing=override.get("replay_missing", base.replay_missing),
         unsigned_blocks=override.get("unsigned_blocks", base.unsigned_blocks),
     )
 
@@ -96,8 +98,10 @@ def enforce_reasoning(
 
     1. *config_override* — per-model override from external config
        (e.g. gateway admin UI).
-    2. ``shim.model_reasoning[model]`` — per-model override from the
-       provider YAML.
+    2. ``shim.model_reasoning`` — per-model override from the provider YAML.
+       An exact upstream-ID key wins; otherwise the keys are tried in
+       declaration order as shell-style patterns, so a family such as
+       ``deepseek-*`` covers every model that lane serves.
     3. ``shim.reasoning`` — provider-level default.
 
     Args:
@@ -110,10 +114,7 @@ def enforce_reasoning(
     if resolved is None:
         return
 
-    cap = resolved.reasoning
-    # Model-level override (keyed by upstream model ID)
-    if model and resolved.model_reasoning and model in resolved.model_reasoning:
-        cap = resolved.model_reasoning[model]
+    cap = match_model_reasoning(resolved, model) or resolved.reasoning
     # Config-level override (from admin UI, keyed by gateway model name)
     if cap is not None and config_override:
         cap = _apply_config_reasoning_override(cap, config_override)
@@ -157,6 +158,92 @@ def strip_reasoning_for_non_reasoning(
             model,
         )
 
+    return ir_request
+
+
+def backfill_reasoning_replay(
+    ir_request: dict[str, Any],
+    *,
+    reasoning_cap: ReasoningCapability | None = None,
+    model: str = "",
+    request_id: str = "-",
+) -> dict[str, Any]:
+    """Give every assistant turn a reasoning part the target must replay.
+
+    A thinking-mode upstream may require the model's reasoning to be passed
+    back: for a request carrying ``tools``, the history must carry the
+    reasoning field on every assistant message — tool call or not — or the
+    upstream answers ``400 The `reasoning_content` in the thinking mode must
+    be passed back to the API``.  A history ending on a ``user`` turn needs
+    nothing; one ending on a ``tool`` result trips the check even without the
+    ``tools`` parameter, and one ending on an assistant turn only does when
+    tools are sent.
+
+    The requirement is declared by the target model
+    (``ReasoningCapability.replay_missing == "fill_empty"``), not by a
+    vendor transform, so every endpoint that fronts the same model inherits
+    it.  The pass is format-neutral: it appends an empty ``reasoning`` part to
+    each assistant message that has none, and the target converter renders it
+    in its own dialect (Chat Completions' ``reasoning_content: ""``).  An
+    empty value satisfies the upstream — verified live on ``deepseek-flash``
+    — which keeps a client that dropped the reasoning when replaying history
+    across a format boundary from failing.
+
+    Must be called **after** source → IR conversion: an assistant message
+    that already carries a reasoning part is left untouched, so the pass is
+    idempotent.  Like the other enforcement passes it mutates *ir_request* in
+    place and returns it; callers must use the return value, and must not
+    keep a reference to the pre-pass IR for a later comparison.
+
+    Args:
+        ir_request: The IR request dict — **always use the return value**.
+        reasoning_cap: The target's resolved reasoning capability.  ``None``
+            or ``replay_missing == "as_is"`` is a no-op.
+        model: Upstream model identifier (for logging).
+        request_id: Request identifier (for logging).
+
+    Returns:
+        The IR request with an empty reasoning part on each assistant message
+        that lacked one, or the original request when the target does not
+        require a replay.
+    """
+    if reasoning_cap is None or reasoning_cap.replay_missing != "fill_empty":
+        return ir_request
+
+    messages = ir_request.get("messages")
+    if not messages or not isinstance(messages, list):
+        return ir_request
+    last = messages[-1]
+    if not isinstance(last, dict) or last.get("role") == "user":
+        return ir_request
+    # Ending on a tool result trips the check even without the tools
+    # parameter; a trailing assistant turn only does when tools are sent.
+    if last.get("role") != "tool" and not ir_request.get("tools"):
+        return ir_request
+
+    filled = 0
+    for message in messages:
+        if not isinstance(message, dict) or message.get("role") != "assistant":
+            continue
+        content = message.get("content")
+        if not isinstance(content, list):
+            continue
+        if any(
+            isinstance(part, dict) and part.get("type") == "reasoning"
+            for part in content
+        ):
+            continue
+        content.insert(0, {"type": "reasoning", "reasoning": ""})
+        filled += 1
+
+    if filled:
+        logger.debug(
+            "[%s] model=%s: backfilled an empty reasoning part on %d assistant "
+            "message(s); the client replayed history without the model's reasoning",
+            request_id,
+            model,
+            filled,
+        )
     return ir_request
 
 
