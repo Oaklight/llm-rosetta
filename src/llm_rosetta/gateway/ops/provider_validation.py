@@ -167,12 +167,10 @@ def _validate_provider(
         # Reuse GatewayConfig's identity resolver so validation cannot drift
         # from the runtime resolution rules.  The one-entry mapping is local
         # and the resolver only canonicalizes that mapping in place.
-        from ..config import GatewayConfig
+        from ..config.resolve import resolve_provider_identities
         from ..providers import build_provider_info
 
-        identity_map, shim_names = GatewayConfig._resolve_provider_identities(
-            {name: dict(cfg)}
-        )
+        identity_map, shim_names = resolve_provider_identities({name: dict(cfg)})
         identity = identity_map[name]
         build_provider_info(
             identity.format,

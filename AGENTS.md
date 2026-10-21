@@ -113,7 +113,7 @@ supported format and forwards them to any configured upstream provider.
 |--------|---------|
 | `gateway/app.py` | Route handlers, app factory |
 | `gateway/proxy.py` | Core proxy engine (non-streaming, streaming, SSE, transforms) |
-| `gateway/config.py` | JSONC config loading, env-var substitution |
+| `gateway/config/` | Config package: JSONC loading, locking, parsing, resolution |
 | `gateway/providers.py` | Provider info, auth headers, key rotation |
 | `gateway/admin/` | Admin UI, metrics, request logging, persistence |
 | `gateway/ops/` | Unified operations audit layer (OpsBase + typed operation subclasses) |
@@ -164,7 +164,9 @@ src/llm_rosetta/
 │   ├── transforms.py
 │   └── builtins.py
 ├── gateway/                 # HTTP proxy gateway
-│   ├── app.py, proxy.py, config.py, providers.py
+│   ├── app.py, proxy.py, providers.py
+│   ├── config/              # config package: io, loader, schema, core,
+│   │                        #   parse, typed, settings, resolve
 │   ├── shims/                # External shim sources, catalog, scheduled removals
 │   ├── shim_sources.py      # Config `shims` section → shim registry
 │   ├── model_types.py, keystore.py, logging.py
@@ -449,7 +451,8 @@ gate — missing any item means the converter is not fully integrated.
 - Converter output mismatch → check IR types in `types/ir/`, then the
   converter's `*_ops.py` modules
 - Shim/transform issue → check `shims/builtins.py` and `shims/transforms.py`
-- Gateway config issue → check `gateway/config.py` resolution order
+- Gateway config issue → check `gateway/config/` resolution order
+  (`loader` → `core` → `parse`/`typed`/`settings`, then `resolve`)
   (shim → type → name fallback)
 - Ops audit issue → check `gateway/ops/base.py` execute flow, verify
   OpsContext wiring in `gateway/admin/__init__.py` (`setup_admin`)

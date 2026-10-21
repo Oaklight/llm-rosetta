@@ -27,8 +27,9 @@ from .middleware.auth import (
     api_key_context_var,
     create_auth_hook,
 )
-from .config import GatewayConfig, ResolvedRoute
+from .config import GatewayConfig
 from .routing import SelectionContext
+from llm_rosetta.routing import ResolvedRoute
 from .middleware.error_format import (
     apply_cors_headers,
     is_admin_path as _is_admin_path,
