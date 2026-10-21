@@ -28,24 +28,41 @@ jobs:
         run: |
           VERSION="${{ inputs.version }}"
           TAG="v$VERSION"
-          read_pkg_ver() {
-            sed -n 's/^__version__ = "\(.*\)"/\1/p' packages/llm-rosetta/src/llm_rosetta/__init__.py
-          }
+          # One regex, four readers: the tag and the working tree, for the
+          # core and the gateway.  Two copies of this pattern drift.
+          ver_of() { sed -n 's/^__version__ = "\(.*\)"/\1/p'; }
+          CORE_INIT=packages/llm-rosetta/src/llm_rosetta/__init__.py
+          GW_INIT=packages/llm-rosetta-gateway/src/llm_rosetta_gateway/__init__.py
           if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
             # Back-release: tag already exists. Verify __init__.py *at the tag*
             # matches, so we publish exactly what was tagged.
             echo "Tag $TAG already exists — back-release mode."
-            PKG_VER=$(git show "$TAG:packages/llm-rosetta/src/llm_rosetta/__init__.py" | sed -n 's/^__version__ = "\(.*\)"/\1/p')
-            echo "Package version at $TAG: $PKG_VER"
+            # A tag cut before the split has no gateway package, and this
+            # workflow builds both distributions from the tag.  Fail with the
+            # reason rather than an empty version plus a confusing sed error.
+            if ! git cat-file -e "$TAG:$GW_INIT" 2>/dev/null; then
+              echo "::error::Tag $TAG predates the two-distribution split; it cannot be re-released with this workflow."
+              exit 1
+            fi
+            PKG_VER=$(git show "$TAG:$CORE_INIT" | ver_of)
+            GW_VER=$(git show "$TAG:$GW_INIT" | ver_of)
+            echo "Core version at $TAG: $PKG_VER"
+            echo "Gateway version at $TAG: $GW_VER"
             [ "$PKG_VER" = "$VERSION" ] || \
-              (echo "::error::Version mismatch: $TAG has $PKG_VER but release requested $VERSION"; exit 1)
+              (echo "::error::Version mismatch: $TAG has core $PKG_VER but release requested $VERSION"; exit 1)
+            [ "$GW_VER" = "$VERSION" ] || \
+              (echo "::error::Version mismatch: $TAG has gateway $GW_VER but release requested $VERSION"; exit 1)
           else
             # Fresh release: verify the current checkout, then create the tag.
             echo "Tag $TAG does not exist — fresh release mode."
-            PKG_VER=$(read_pkg_ver)
-            echo "Package version: $PKG_VER"
+            PKG_VER=$(ver_of < "$CORE_INIT")
+            GW_VER=$(ver_of < "$GW_INIT")
+            echo "Core version: $PKG_VER"
+            echo "Gateway version: $GW_VER"
             [ "$PKG_VER" = "$VERSION" ] || \
-              (echo "::error::Version mismatch: __init__.py has $PKG_VER but release requested $VERSION"; exit 1)
+              (echo "::error::Version mismatch: core __init__.py has $PKG_VER but release requested $VERSION"; exit 1)
+            [ "$GW_VER" = "$VERSION" ] || \
+              (echo "::error::Version mismatch: gateway __init__.py has $GW_VER but release requested $VERSION"; exit 1)
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git tag "$TAG"

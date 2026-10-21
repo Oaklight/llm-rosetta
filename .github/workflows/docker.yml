@@ -53,11 +53,11 @@ jobs:
       - name: Wait for PyPI availability
         run: |
           VERSION="${{ steps.meta.outputs.version }}"
-          echo "Waiting for llm-rosetta==$VERSION on PyPI (pip-installable)..."
+          echo "Waiting for llm-rosetta==$VERSION and llm-rosetta-gateway==$VERSION on PyPI (pip-installable)..."
           for i in $(seq 1 30); do
             if pip install --dry-run --no-deps \
-                "llm-rosetta==$VERSION" 2>/dev/null; then
-              echo "Installable on PyPI (attempt $i)"
+                "llm-rosetta==$VERSION" "llm-rosetta-gateway==$VERSION" 2>/dev/null; then
+              echo "Both packages installable on PyPI (attempt $i)"
               exit 0
             fi
             echo "  Attempt $i/30: waiting 20s..."
