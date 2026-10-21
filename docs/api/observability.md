@@ -287,7 +287,7 @@ from llm_rosetta.observability import OpsLog, OpsLogEntry
 在应用初始化时由 `setup_admin()` 创建一次：
 
 ```python
-from llm_rosetta.gateway.ops import OpsContext
+from llm_rosetta_gateway.ops import OpsContext
 
 ctx = OpsContext(
     ops_log=ops_log,
@@ -611,10 +611,10 @@ SQLite 关于 `-wal`/`-shm` 的规则，而不取决于存储的新旧；因此�
 
 ```python
 # 以下导入仍然有效（从 observability 重新导出）
-from llm_rosetta.gateway.admin.metrics import MetricsCollector
-from llm_rosetta.gateway.admin.request_log import RequestLog, RequestLogEntry
-from llm_rosetta.gateway.admin.persistence import PersistenceManager
-from llm_rosetta.gateway.admin.routes.profiling import ProfilerState
+from llm_rosetta_gateway.admin.metrics import MetricsCollector
+from llm_rosetta_gateway.admin.request_log import RequestLog, RequestLogEntry
+from llm_rosetta_gateway.admin.persistence import PersistenceManager
+from llm_rosetta_gateway.admin.routes.profiling import ProfilerState
 ```
 
 新代码应直接从 `llm_rosetta.observability` 导入。

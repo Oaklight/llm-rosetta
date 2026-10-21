@@ -8,7 +8,7 @@ title: 架构指南
 
 LLM-Rosetta 使用轴辐式（hub-and-spoke）架构，每个转换器负责特定 API 格式与共享 IR（Intermediate Representation）之间的双向转换。
 
-每个转换器位于 `src/llm_rosetta/converters/<name>/` 下，继承 `BaseConverter`。基类使用**组合模式**——子类通过类属性声明各关注点的 ops 类：
+每个转换器位于 `packages/llm-rosetta/src/llm_rosetta/converters/<name>/` 下，继承 `BaseConverter`。基类使用**组合模式**——子类通过类属性声明各关注点的 ops 类：
 
 ```
 converters/<name>/
@@ -40,7 +40,7 @@ converters/<name>/
 
 ## Shim 层
 
-`ProviderShim` 是一个轻量级身份卡，声明 provider 使用的基础转换器以及连接默认值和字段级变换。Shim 位于 `src/llm_rosetta/shims/providers/<name>/provider.yaml`。
+`ProviderShim` 是一个轻量级身份卡，声明 provider 使用的基础转换器以及连接默认值和字段级变换。Shim 位于 `packages/llm-rosetta/src/llm_rosetta/shims/providers/<name>/provider.yaml`。
 
 转换器保持格式通用；shim 声明 provider 特定的差异（如 response ID 前缀、默认请求头、字段重命名）。
 
@@ -48,13 +48,13 @@ converters/<name>/
 
 要添加对新 API 标准的支持：
 
-1. 在 `src/llm_rosetta/converters/llm/<name>/` 下创建转换器目录
+1. 在 `packages/llm-rosetta/src/llm_rosetta/converters/llm/<name>/` 下创建转换器目录
 2. 继承 `BaseConverter` 并实现所有抽象方法
 3. 按照上述模式创建 ops 类
-4. 在 `src/llm_rosetta/formats/catalog.py` 中添加一条 `FormatSpec`，在
+4. 在 `packages/llm-rosetta/src/llm_rosetta/formats/catalog.py` 中添加一条 `FormatSpec`，在
    `formats/detect.py` 中注册其请求体探测器，并在 `converters/registry.py`
    中绑定转换器类
-5. 在 `src/llm_rosetta/shims/providers/<name>/` 下添加 shim
+5. 在 `packages/llm-rosetta/src/llm_rosetta/shims/providers/<name>/` 下添加 shim
 6. 在 `tests/converters/` 下添加测试
 7. 提交 PR
 
@@ -257,7 +257,7 @@ WARNING，原始异常被重新抛出。记录过程的错误会被日志记录�
 记录自动完成：
 
 ```python
-from llm_rosetta.gateway.ops import OpsClearData
+from llm_rosetta_gateway.ops import OpsClearData
 
 result = await OpsClearData(request.app.ops_ctx, table="request_log").execute()
 ```

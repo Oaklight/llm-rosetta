@@ -8,7 +8,7 @@ title: 风格指南
 
 - 代码遵循 `ruff` 默认规则——运行 `make lint` 或在 commit 时由 pre-commit 自动检查
 - 鼓励在所有公开 API 上使用 type hints
-- 不要编辑 `src/llm_rosetta/_vendor/` 下的文件——这些文件由外部管理
+- 不要编辑 `packages/llm-rosetta/src/llm_rosetta/_vendor/` 下的文件——这些文件由外部管理
 
 ## Docstring
 

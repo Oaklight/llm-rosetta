@@ -75,7 +75,7 @@ llm-rosetta-gateway add model gemini-2.0-flash --provider my-google
 网关也可以作为库使用：
 
 ```python
-from llm_rosetta.gateway import create_app, GatewayConfig, load_config
+from llm_rosetta_gateway import create_app, GatewayConfig, load_config
 
 # 加载配置并创建 ASGI 应用
 raw = load_config("config.jsonc")

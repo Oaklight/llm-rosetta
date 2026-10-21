@@ -81,7 +81,7 @@ class MyConfigIO:
 `setup_admin()` 函数在你的 app 实例上初始化管理面板状态。通常在应用启动期间，在你自己的配置和传输层准备就绪后调用。
 
 ```python
-from llm_rosetta.gateway.admin import setup_admin
+from llm_rosetta_gateway.admin import setup_admin
 
 def setup_admin(
     app,
@@ -107,8 +107,8 @@ def setup_admin(
 ### 完整示例
 
 ```python
-from llm_rosetta.gateway.admin import setup_admin
-from llm_rosetta.gateway.admin.routes import register_admin_routes
+from llm_rosetta_gateway.admin import setup_admin
+from llm_rosetta_gateway.admin.routes import register_admin_routes
 
 # 1. 先注册管理路由
 register_admin_routes(app)
@@ -227,7 +227,7 @@ app._bind_port = port
 `setup_admin()` 创建 `OpsContext`，引用所有四个可观测性子系统：
 
 ```python
-from llm_rosetta.gateway.ops import OpsContext
+from llm_rosetta_gateway.ops import OpsContext
 
 # 由 setup_admin() 自动创建：
 ctx = OpsContext(
@@ -246,7 +246,7 @@ app.ops_ctx = ctx
 路由处理器构造 Ops 子类并调用 `execute()`：
 
 ```python
-from llm_rosetta.gateway.ops import OpsClearData
+from llm_rosetta_gateway.ops import OpsClearData
 
 async def handle_clear_log(request):
     result = await OpsClearData(request.app.ops_ctx, table="request_log").execute()
@@ -261,7 +261,7 @@ async def handle_clear_log(request):
 下游项目可以定义自定义的 `OpsBase` 子类：
 
 ```python
-from llm_rosetta.gateway.ops import OpsBase, OpsContext
+from llm_rosetta_gateway.ops import OpsBase, OpsContext
 
 class OpsCustomAction(OpsBase):
     event_type = "custom_action"

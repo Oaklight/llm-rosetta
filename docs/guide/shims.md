@@ -33,7 +33,7 @@ ProviderShim ("deepseek--chat_completions")
 内置 shim 以目录结构定义在 `shims/providers/` 下：
 
 ```text
-src/llm_rosetta/shims/providers/
+packages/llm-rosetta/src/llm_rosetta/shims/providers/
 ├── __init__.py              # 自动发现：扫描子目录
 ├── openai/
 │   └── provider.yaml        # 提供方身份（YAML）
@@ -205,7 +205,7 @@ remote；同一 URL 的显式 remote 会合并到预设上（显式键优先）�
 `llm-rosetta-shim-*` 包来说是 `src/<package>/providers`）。完整字段、缓存与刷新行为、优先级和安全提示见
 [Gateway → 外部 Shim 源](../gateway/configuration.md#external-shim-sources)。
 编程方式可用 `llm_rosetta.shims.rebuild_shims()`（无需配置文件）或
-`llm_rosetta.gateway.apply_shim_sources(raw, config_path)`。
+`llm_rosetta_gateway.apply_shim_sources(raw, config_path)`。
 
 !!! warning
     声明的源可能携带在加载时被执行的 `transforms.py` —— 与安装插件包是同一信任级别。
@@ -213,7 +213,7 @@ remote；同一 URL 的显式 remote 会合并到预设上（显式键优先）�
 
 ## 内置 Shim
 
-LLM-Rosetta 内置 32 个提供方 shim，每个 shim 对应 `src/llm_rosetta/shims/providers/`
+LLM-Rosetta 内置 32 个提供方 shim，每个 shim 对应 `packages/llm-rosetta/src/llm_rosetta/shims/providers/`
 下的一个目录。`list_shims()` 会打印当前实际的集合；下表即是该集合。ALCF、AskSage 与 Argo
 的 shim 作为独立包发布 —— 参见[独立 Shim 包](#standalone-shim-packages)。
 
@@ -598,7 +598,7 @@ register_shim(my_shim)
 
 要向内置注册表添加新提供方：
 
-1. 在 `src/llm_rosetta/shims/providers/<name>/` 下创建目录
+1. 在 `packages/llm-rosetta/src/llm_rosetta/shims/providers/<name>/` 下创建目录
 2. 添加 `provider.yaml`，包含必填字段：
 
     ```yaml

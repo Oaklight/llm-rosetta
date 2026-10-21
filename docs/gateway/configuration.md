@@ -105,7 +105,7 @@ commit；配置文件本身不会被改写。要可复现部署请固定 tag 或
 设置 `shims.strict: true` 可改为启动失败。
 
 **编程调用。** `llm_rosetta.shims.rebuild_shims()` 可直接加载目录与远程源（不需要配置文件）；
-`llm_rosetta.gateway.apply_shim_sources(raw, config_path)` 应用一个配置字典。
+`llm_rosetta_gateway.apply_shim_sources(raw, config_path)` 应用一个配置字典。
 `create_app` 也会自动应用该段。
 
 **独立包与预设。** ALCF、AskSage 与 Argo 的 shim 维护在各自的仓库中。`presets`

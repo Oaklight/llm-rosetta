@@ -18,7 +18,7 @@ title: 提供方额度
 | **Provider** | 有哪些凭据，以及对 shim 的覆盖 | `config.jsonc` → `quota:` |
 | **Quota 状态** | 每个凭据的最后一次读数与降级 | 仅运行时 |
 
-网关侧的 `llm_rosetta.gateway.quota` 只负责**运行时**：按凭据的状态、探测执行与
+网关侧的 `llm_rosetta_gateway.quota` 只负责**运行时**：按凭据的状态、探测执行与
 管理接口。**契约与解析**——`QuotaProbe` 接口、窗口与带内信号类型、
 `resolve_probe`——位于 `llm_rosetta.shims.quota_probe`，因为 shim 的 `quota.py`
 实现该契约，而翻译核心绝不能导入 gateway。这里不包含任何 vendor 代码。
