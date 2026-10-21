@@ -222,7 +222,7 @@ LLM-Rosetta 内置 32 个提供方 shim，每个 shim 对应 `src/llm_rosetta/sh
 | `anthropic--messages` | `messages` | `https://api.anthropic.com` | `ANTHROPIC_API_KEY` | — |
 | `cohere--embedding` | `cohere` | `https://api.cohere.com` | `COHERE_API_KEY` | — |
 | `cohere--rerank` | `cohere` | `https://api.cohere.com` | `COHERE_API_KEY` | — |
-| `deepseek--chat_completions` | `chat_completions` | `https://api.deepseek.com` | `DEEPSEEK_API_KEY` | 剥离 `n`、`logit_bias`、`seed`、penalties；回填 `reasoning_content` |
+| `deepseek--chat_completions` | `chat_completions` | `https://api.deepseek.com` | `DEEPSEEK_API_KEY` | 剥离 `n`、`logit_bias`、`seed`、penalties；声明推理回放（`replay_missing`） |
 | `deepseek--open_responses` | `open_responses` | `https://api.deepseek.com` | `DEEPSEEK_API_KEY` | 剥离 `n`、`logit_bias`、`seed` |
 | `google--embedding` | `google_generate` | `https://generativelanguage.googleapis.com` | `GOOGLE_API_KEY` | — |
 | `google--google_generate` | `google_generate` | `https://generativelanguage.googleapis.com` | `GOOGLE_API_KEY` | — |
