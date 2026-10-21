@@ -75,12 +75,6 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "resolve_base",
             "resolve_format",
             "resolve_model_type",
-            # External shim sources
-            "rebuild_shims",
-            "resolve_remote",
-            "ShimLoadReport",
-            "ShimSourceStatus",
-            "ShimSourceError",
             # Transforms
             "Transform",
             "apply_transforms",

@@ -22,8 +22,9 @@ _GATEWAY = "llm_rosetta.gateway"
 
 # Modules the core may never initialize by accident.  ``usage`` is
 # deliberately absent: it is the core-side metering subsystem and
-# ``pipeline.chat`` reads its semantics.
-_GATEWAY_TELEMETRY = {
+# ``pipeline.chat`` reads its semantics.  The HTTP client is gateway-side
+# too — the external shim-source loader lives in ``gateway.shims``.
+_GATEWAY_SIDE = {
     "llm_rosetta.observability.capture",
     "llm_rosetta.observability.error_dump",
     "llm_rosetta.observability.maintenance",
@@ -33,6 +34,12 @@ _GATEWAY_TELEMETRY = {
     "llm_rosetta.observability.profiling",
     "llm_rosetta.observability.request_log",
     "llm_rosetta.observability.retention",
+    "llm_rosetta._vendor.httpclient",
+    # The loader modules themselves: eager re-imports from ``shims`` would
+    # bring them back, and the HTTP client is only reached from inside one.
+    "llm_rosetta.shims.sources",
+    "llm_rosetta.shims.removals",
+    "llm_rosetta.shims.catalog",
 }
 
 
@@ -136,7 +143,7 @@ bad = sorted(
     m for m in sys.modules
     if m == "llm_rosetta.gateway" or m.startswith("llm_rosetta.gateway.")
 )
-bad += sorted(sys.modules.keys() & {_GATEWAY_TELEMETRY!r})
+bad += sorted(sys.modules.keys() & {_GATEWAY_SIDE!r})
 print("\\n".join(bad))
 """
     out = subprocess.check_output([sys.executable, "-c", code], text=True).strip()

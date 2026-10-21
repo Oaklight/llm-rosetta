@@ -26,7 +26,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from ..provider_names import canonical_provider_name, canonical_shim_name
+from llm_rosetta.provider_names import canonical_provider_name, canonical_shim_name
 
 
 @dataclass(frozen=True)
@@ -60,7 +60,7 @@ class ShimRemoval:
 
 #: Every built-in shim with a removal scheduled.  Empty since 0.14.0: the
 #: ALCF, AskSage and Argo shims all ship standalone, and their names are served
-#: by :data:`llm_rosetta.shims.catalog.SHIM_SOURCE_PACKAGES`.  Adding an entry
+#: by :data:`llm_rosetta.gateway.shims.catalog.SHIM_SOURCE_PACKAGES`.  Adding an entry
 #: here is still what makes the advisory, the admin preset and the CI gate know
 #: about a future removal at once.
 SHIM_REMOVALS: tuple[ShimRemoval, ...] = ()

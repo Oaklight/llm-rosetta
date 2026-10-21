@@ -27,8 +27,8 @@ from llm_rosetta.gateway.shim_sources import (
     resolve_source_config,
     shim_removal_advisories,
 )
-from llm_rosetta.shims import SHIM_SOURCE_PACKAGES, ShimRemoval
-from llm_rosetta.shims.sources import ShimLoadReport, ShimSourceStatus
+from llm_rosetta.gateway.shims import SHIM_SOURCE_PACKAGES, ShimRemoval
+from llm_rosetta.gateway.shims.sources import ShimLoadReport, ShimSourceStatus
 
 ARGO_PACKAGE = next(p for p in SHIM_SOURCE_PACKAGES if p.key == "argo")
 ALCF_PACKAGE = next(p for p in SHIM_SOURCE_PACKAGES if p.key == "alcf")
@@ -70,13 +70,17 @@ ARGO_REMOVAL = ShimRemoval(
 @pytest.fixture
 def scheduled_minimax(monkeypatch):
     """Make the detector treat ``minimax--messages`` as a scheduled removal."""
-    monkeypatch.setattr("llm_rosetta.shims.removals.SHIM_REMOVALS", MINIMAX_REMOVALS)
+    monkeypatch.setattr(
+        "llm_rosetta.gateway.shims.removals.SHIM_REMOVALS", MINIMAX_REMOVALS
+    )
     return MINIMAX_REMOVALS
 
 
 @pytest.fixture
 def scheduled_argo(monkeypatch):
-    monkeypatch.setattr("llm_rosetta.shims.removals.SHIM_REMOVALS", (ARGO_REMOVAL,))
+    monkeypatch.setattr(
+        "llm_rosetta.gateway.shims.removals.SHIM_REMOVALS", (ARGO_REMOVAL,)
+    )
     return (ARGO_REMOVAL,)
 
 
@@ -443,7 +447,7 @@ class TestCreateAppWiring:
     ):
         """The whole point of the advisory: a quiet log means the migration landed."""
         from llm_rosetta.gateway.app import create_app
-        from llm_rosetta.shims import rebuild_shims
+        from llm_rosetta.gateway.shims import rebuild_shims
 
         leaf = tmp_path / "local-shims" / "messages"
         leaf.mkdir(parents=True)

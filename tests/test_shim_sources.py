@@ -13,15 +13,13 @@ from pathlib import Path
 
 import pytest
 
-from llm_rosetta.shims import (
+from llm_rosetta.shims import get_shim, list_shims, register_shim
+from llm_rosetta.gateway.shims import (
     ShimSourceError,
-    get_shim,
-    list_shims,
     rebuild_shims,
-    register_shim,
     resolve_remote,
 )
-from llm_rosetta.shims import sources as sources_mod
+from llm_rosetta.gateway.shims import sources as sources_mod
 from llm_rosetta.shims.provider_shim import (
     ConnectionConfig,
     ProviderShim,

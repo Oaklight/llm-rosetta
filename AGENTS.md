@@ -102,6 +102,7 @@ declare the differences.
 | `ProviderShim` / `ModelShim` | `shims/provider_shim.py` | Data classes + registry |
 | `Transform` primitives | `shims/transforms.py` | `strip_fields`, `rename_field`, `set_defaults` |
 | Built-in shims | `shims/builtins.py` | OpenAI, Anthropic, Google, DeepSeek, Volcengine |
+| External shim sources | `gateway/shims/` | Directory/archive loaders, standalone catalog, scheduled removals |
 
 ### Gateway
 
@@ -161,10 +162,10 @@ src/llm_rosetta/
 ├── shims/                   # Provider/model identity cards + transforms
 │   ├── provider_shim.py
 │   ├── transforms.py
-│   ├── sources.py           # External shim sources (dirs + remote archives)
 │   └── builtins.py
 ├── gateway/                 # HTTP proxy gateway
 │   ├── app.py, proxy.py, config.py, providers.py
+│   ├── shims/                # External shim sources, catalog, scheduled removals
 │   ├── shim_sources.py      # Config `shims` section → shim registry
 │   ├── model_types.py, keystore.py, logging.py
 │   ├── routing/, maintenance/  # Selection strategies; config/key/backfill steps

@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any, cast
 from llm_rosetta._compat import sync_compat as _sync_compat
 
 if TYPE_CHECKING:
-    from llm_rosetta.shims import ShimLoadReport
+    from .shims import ShimLoadReport
 
 from llm_rosetta._vendor.httpserver import (
     App,

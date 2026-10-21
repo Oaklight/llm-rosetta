@@ -743,7 +743,8 @@ class TestLegacyShimAliasStillResolves:
         leads a stale config to the package-aware error.
         """
         from llm_rosetta.provider_names import LEGACY_SHIM_ALIASES
-        from llm_rosetta.shims import find_source_package, list_shims
+        from llm_rosetta.shims import list_shims
+        from llm_rosetta.gateway.shims import find_source_package
         from llm_rosetta.shims.providers import load_providers
 
         load_providers()

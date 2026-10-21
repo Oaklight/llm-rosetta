@@ -50,13 +50,13 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal, cast
 
-from .provider_shim import (
+from llm_rosetta.shims.provider_shim import (
     _clear_registry_caches,
     list_shims,
     register_shim,
     staging_registry,
 )
-from .providers import load_providers, load_providers_from_dir
+from llm_rosetta.shims.providers import load_providers, load_providers_from_dir
 
 logger = logging.getLogger(__name__)
 

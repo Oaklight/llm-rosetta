@@ -18,12 +18,12 @@ import pytest
 
 import llm_rosetta
 from llm_rosetta.provider_names import LEGACY_SHIM_ALIASES, canonical_shim_name
-from llm_rosetta.shims import (
+from llm_rosetta.shims import get_shim
+from llm_rosetta.gateway.shims import (
     SHIM_REMOVALS,
     SHIM_SOURCE_PACKAGES,
     ShimRemoval,
     detect_shim_removals,
-    get_shim,
     get_source_package,
     parse_version,
     removals_due,
@@ -274,7 +274,7 @@ class TestSourceCatalog:
         assert get_source_package("nope") is None
 
     def test_find_source_package_maps_a_shim_to_its_package(self):
-        from llm_rosetta.shims import find_source_package
+        from llm_rosetta.gateway.shims import find_source_package
 
         package = find_source_package("argo--messages")
         assert package is not None

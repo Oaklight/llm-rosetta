@@ -8,7 +8,9 @@ from typing import Any
 
 from llm_rosetta._vendor.httpclient import AsyncClient, Response as HttpResponse
 from llm_rosetta._vendor.httpserver import JSONResponse, Response
-from llm_rosetta.shims import SHIM_SOURCE_PACKAGES, get_shim, list_shims
+from llm_rosetta.shims import get_shim, list_shims
+
+from ...shims import SHIM_SOURCE_PACKAGES
 
 from ...config import GatewayConfig
 from ...providers import (

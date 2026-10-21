@@ -26,14 +26,14 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from llm_rosetta.shims import (
+from .shims import (
     SHIM_SOURCE_PACKAGES,
     ShimLoadReport,
     get_source_package,
     rebuild_shims,
 )
-from llm_rosetta.shims.removals import ShimRemovalAdvisory, detect_shim_removals
-from llm_rosetta.shims.sources import (
+from .shims.removals import ShimRemovalAdvisory, detect_shim_removals
+from .shims.sources import (
     DEFAULT_CACHE_DIRNAME,
     REMOTE_TTL_SECONDS,
     HttpGet,

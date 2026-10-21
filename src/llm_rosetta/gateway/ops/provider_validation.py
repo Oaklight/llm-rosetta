@@ -9,7 +9,9 @@ from llm_rosetta.observability.ops_log import (
     SEVERITY_WARNING,
     SOURCE_CONFIG,
 )
-from llm_rosetta.shims import find_source_package, get_shim
+from llm_rosetta.shims import get_shim
+
+from ..shims import find_source_package
 
 from .base import OpsBase, OpsContext
 

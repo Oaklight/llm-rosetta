@@ -8,7 +8,7 @@ mention under the scanned roots, and every one still registered, becomes an
 error, so a removal cannot land without the cleanup that belongs with it:
 
 * the built-in shim directory and its ``LEGACY_SHIM_ALIASES`` entry,
-* the ``SHIM_REMOVALS`` entry in ``llm_rosetta.shims.removals``,
+* the ``SHIM_REMOVALS`` entry in ``llm_rosetta.gateway.shims.removals``,
 * the examples under ``examples/`` and the tables in ``docs_en`` / ``docs_zh``.
 
 The manifest is the single source of what is going away, so this script reads it
@@ -39,11 +39,11 @@ if _SRC.is_dir() and str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
 from llm_rosetta import __version__  # noqa: E402
-from llm_rosetta.shims import (  # noqa: E402
+from llm_rosetta.shims import get_shim  # noqa: E402
+from llm_rosetta.gateway.shims import (  # noqa: E402
     SHIM_REMOVALS,
     RemovalReference,
     ShimRemoval,
-    get_shim,
     removals_due,
     scan_removal_references,
 )
@@ -78,8 +78,8 @@ DEFAULT_ROOTS = (
 DEFAULT_EXEMPT_FILES = (
     "docs_en/docs/changelog.md",
     "docs_zh/docs/changelog.md",
-    "src/llm_rosetta/shims/catalog.py",
-    "src/llm_rosetta/shims/removals.py",
+    "src/llm_rosetta/gateway/shims/catalog.py",
+    "src/llm_rosetta/gateway/shims/removals.py",
 )
 
 

@@ -10,6 +10,10 @@ Public API:
 - **Query** (per request): ``get_shim``, ``list_shims``, ``resolve_format``,
   ``resolve_model_type`` (``resolve_base`` is the deprecated alias)
 - **Transforms**: ``apply_transforms``, ``strip_fields``, ``rename_field``, ``set_defaults``
+
+External shim sources — directory and archive loaders, the standalone
+package catalog and scheduled removals — live in
+:mod:`llm_rosetta.gateway.shims`; they need the gateway's HTTP client.
 """
 
 from .provider_shim import (
@@ -48,35 +52,6 @@ from .providers import load_providers_from_dir
 
 _load_providers()
 
-# Declarative external sources (directories + remote archives).  Imported after
-# the built-ins so a rebuild can rely on them already being registered.
-from .sources import (  # noqa: E402
-    ShimArchiveMismatch,
-    ShimLoadReport,
-    ShimSourceError,
-    ShimSourceStatus,
-    rebuild_shims,
-    resolve_remote,
-)
-
-# Known standalone shim packages, then the shims with a removal scheduled.
-from .catalog import (  # noqa: E402
-    SHIM_SOURCE_PACKAGES,
-    ShimSourcePackage,
-    find_source_package,
-    get_source_package,
-)
-from .removals import (  # noqa: E402
-    SHIM_REMOVALS,
-    RemovalReference,
-    ShimRemoval,
-    ShimRemovalAdvisory,
-    detect_shim_removals,
-    parse_version,
-    removals_due,
-    scan_removal_references,
-)
-
 __all__ = [
     "ConnectionConfig",
     "ToolsConfig",
@@ -90,27 +65,6 @@ __all__ = [
     "resolve_format",
     "resolve_model_type",
     "resolve_shim",
-    # External shim sources
-    "rebuild_shims",
-    "resolve_remote",
-    "ShimLoadReport",
-    "ShimSourceStatus",
-    "ShimSourceError",
-    "ShimArchiveMismatch",
-    # Scheduled removals
-    "SHIM_REMOVALS",
-    "ShimRemoval",
-    "ShimRemovalAdvisory",
-    "RemovalReference",
-    "detect_shim_removals",
-    "parse_version",
-    "removals_due",
-    "scan_removal_references",
-    # Standalone shim packages (Settings presets)
-    "SHIM_SOURCE_PACKAGES",
-    "ShimSourcePackage",
-    "find_source_package",
-    "get_source_package",
     # Transforms
     "Transform",
     "apply_transforms",

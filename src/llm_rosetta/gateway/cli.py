@@ -13,10 +13,10 @@ from typing import TYPE_CHECKING, Any
 import asyncio
 
 from llm_rosetta import __version__
-from llm_rosetta.shims import ShimSourceError
+from .shims import ShimSourceError
 
 if TYPE_CHECKING:
-    from llm_rosetta.shims import ShimLoadReport
+    from .shims import ShimLoadReport
 
 from .banner import print_banner
 from .config import (
@@ -445,7 +445,7 @@ def _cmd_db_export_errors(args: argparse.Namespace) -> None:
 
 def _cmd_shims_preset(args: argparse.Namespace) -> None:
     """Add or remove an explicitly selected standalone shim preset."""
-    from llm_rosetta.shims import get_source_package
+    from .shims import get_source_package
 
     config_path = discover_config(args.config) or PATHS_TO_TRY[0]
     if not os.path.isfile(config_path):

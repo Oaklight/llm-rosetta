@@ -314,7 +314,9 @@ def build_provider_info(
     registry.  Unknown types fall back to Bearer-token auth and a simple
     ``{base_url}/`` URL template.
     """
-    from llm_rosetta.shims import find_source_package, get_shim
+    from llm_rosetta.shims import get_shim
+
+    from .shims import find_source_package
 
     # Legacy spellings (e.g. ``openai_chat``) migrate to canonical names so the
     # registry lookup below hits.
