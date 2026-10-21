@@ -865,14 +865,17 @@ body { padding-bottom: 26px; }
 
 /* Dot-grid background (Emerald only) */
 [data-scheme="emerald"] body::before {
-  content:'';position:fixed;inset:0;pointer-events:auto;z-index:-1;
+  content:'';position:fixed;inset:0;pointer-events:none;z-index:-1;
   background-image:radial-gradient(circle,var(--dot) 1px,transparent 1px);
   background-size:24px 24px;
 }
 /* Stat cards: Emerald gets cross-hatch grid + bottom bar */
 [data-scheme="emerald"] .stat-card { position:relative;overflow:hidden; }
+/* Decorative only: with `pointer-events: auto` this absolutely positioned
+   overlay sat above the card's contents and swallowed every click on them —
+   the Token card's "details" link among them. */
 [data-scheme="emerald"] .stat-card::before {
-  content:'';position:absolute;inset:0;pointer-events:auto;opacity:.5;
+  content:'';position:absolute;inset:0;pointer-events:none;opacity:.5;
   background:
     repeating-linear-gradient(90deg,var(--grid) 0 1px,transparent 1px 28px),
     repeating-linear-gradient(0deg,var(--grid) 0 1px,transparent 1px 28px);
