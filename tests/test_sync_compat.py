@@ -103,14 +103,14 @@ class TestFlushNowSync:
     """_flush_now() sync/async compatibility."""
 
     def test_sync_noop_when_no_persistence(self):
-        from llm_rosetta.gateway.app import _flush_now
+        from llm_rosetta_gateway.app import _flush_now
 
         app = MagicMock(spec=[])  # no attributes
         _flush_now(app)  # should not raise
 
     @pytest.mark.asyncio
     async def test_async_noop_when_no_persistence(self):
-        from llm_rosetta.gateway.app import _flush_now
+        from llm_rosetta_gateway.app import _flush_now
 
         app = MagicMock(spec=[])
         await _flush_now(app)  # should not raise
@@ -126,8 +126,8 @@ class TestSetupAdminSync:
 
     @pytest.mark.asyncio
     async def test_async_returns_awaitable(self, tmp_path):
-        from llm_rosetta.gateway.admin import setup_admin
-        from llm_rosetta.gateway.config import GatewayConfig
+        from llm_rosetta_gateway.admin import setup_admin
+        from llm_rosetta_gateway.config import GatewayConfig
 
         app = MagicMock()
         app.disabled_tabs = frozenset()
@@ -149,8 +149,8 @@ class TestCreateAppSync:
     """create_app() sync/async compatibility."""
 
     def test_sync_returns_app(self):
-        from llm_rosetta.gateway.app import create_app
-        from llm_rosetta.gateway.config import GatewayConfig
+        from llm_rosetta_gateway.app import create_app
+        from llm_rosetta_gateway.config import GatewayConfig
 
         config = GatewayConfig({"providers": {}})
         app = create_app(config)
@@ -160,8 +160,8 @@ class TestCreateAppSync:
 
     @pytest.mark.asyncio
     async def test_async_returns_app(self):
-        from llm_rosetta.gateway.app import create_app
-        from llm_rosetta.gateway.config import GatewayConfig
+        from llm_rosetta_gateway.app import create_app
+        from llm_rosetta_gateway.config import GatewayConfig
 
         config = GatewayConfig({"providers": {}})
         app = await create_app(config)

@@ -4,7 +4,7 @@
 PACKAGE_NAME := llm-rosetta
 DOCKER_IMAGE := oaklight/llm-rosetta-gateway
 DIST_DIR := dist
-VERSION := $(shell sed -n 's/^__version__ = "\(.*\)"/\1/p' src/llm_rosetta/__init__.py || echo "0.1.0")
+VERSION := $(shell sed -n 's/^__version__ = "\(.*\)"/\1/p' packages/llm-rosetta/src/llm_rosetta/__init__.py || echo "0.1.0")
 
 # Optional variables
 V ?= $(VERSION)
@@ -21,16 +21,16 @@ all: lint test test-js check-shim-removals build
 # Run ruff linter
 lint:
 	@echo "Running ruff check..."
-	ruff check src/ tests/
+	ruff check packages/ tests/
 	@echo "Running ruff format check..."
-	ruff format --check src/ tests/
+	ruff format --check packages/ tests/
 	@echo "Lint complete."
 
 # Auto-fix lint issues
 lint-fix:
 	@echo "Auto-fixing lint issues..."
-	ruff check --fix src/ tests/
-	ruff format src/ tests/
+	ruff check --fix packages/ tests/
+	ruff format packages/ tests/
 	@echo "Lint fix complete."
 
 # ──────────────────────────────────────────────
@@ -110,8 +110,9 @@ test-gateway:
 
 # Build the Python package
 build-package: clean-package
-	@echo "Building $(PACKAGE_NAME) package..."
-	python -m build
+	@echo "Building $(PACKAGE_NAME) and llm-rosetta-gateway packages..."
+	python -m build packages/llm-rosetta --outdir $(DIST_DIR)
+	python -m build packages/llm-rosetta-gateway --outdir $(DIST_DIR)
 	@echo "Build complete. Distribution files are in $(DIST_DIR)/"
 
 # Build wheel with dev version stamp (x.y.z.devN+gHASH)
@@ -120,12 +121,15 @@ build-wheel: clean-package
 	ORIG_VER=$(VERSION); \
 	COMMIT=$$(git rev-parse --short HEAD); \
 	DEV_VER=$$(printf '%s' "$$ORIG_VER" | grep -q '\.dev[0-9]' && printf '%s+g%s' "$$ORIG_VER" "$$COMMIT" || printf '%s.dev0+g%s' "$$ORIG_VER" "$$COMMIT"); \
-	INIT=src/llm_rosetta/__init__.py; \
-	cp "$$INIT" "$$INIT.bak"; \
-	trap 'mv "$$INIT.bak" "$$INIT"' EXIT; \
-	sed 's/^__version__ = ".*"/__version__ = "'"$$DEV_VER"'"/' "$$INIT.bak" > "$$INIT"; \
-	echo "Building wheel $$DEV_VER..."; \
-	python -m build --wheel -q; \
+	CORE_INIT=packages/llm-rosetta/src/llm_rosetta/__init__.py; \
+	GW_INIT=packages/llm-rosetta-gateway/src/llm_rosetta_gateway/__init__.py; \
+	cp "$$CORE_INIT" "$$CORE_INIT.bak"; cp "$$GW_INIT" "$$GW_INIT.bak"; \
+	trap 'mv "$$CORE_INIT.bak" "$$CORE_INIT"; mv "$$GW_INIT.bak" "$$GW_INIT"' EXIT; \
+	sed 's/^__version__ = ".*"/__version__ = "'"$$DEV_VER"'"/' "$$CORE_INIT.bak" > "$$CORE_INIT"; \
+	sed 's/^__version__ = ".*"/__version__ = "'"$$DEV_VER"'"/' "$$GW_INIT.bak" > "$$GW_INIT"; \
+	echo "Building wheels $$DEV_VER..."; \
+	python -m build --wheel -q packages/llm-rosetta --outdir dist; \
+	python -m build --wheel -q packages/llm-rosetta-gateway --outdir dist; \
 	echo "Built: $$(ls dist/*.whl)"
 
 # Push the package to PyPI
@@ -177,7 +181,7 @@ NUITKA_ENTRY := _nuitka_entry.py
 NUITKA_JOBS := $(shell nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 2)
 NUITKA_EXTRA_FLAGS ?=
 
-# Modules excluded from binary — validated against src/llm_rosetta/ imports.
+# Modules excluded from binary — validated against packages/*/src imports.
 # Do NOT add concurrent (asyncio imports it) or multiprocessing (Nuitka
 # plugin conflict).
 NUITKA_NOFOLLOW := \
@@ -198,10 +202,11 @@ NUITKA_FLAGS = \
 	--python-flag=-O \
 	--python-flag=no_warnings \
 	--include-package=llm_rosetta \
-	--include-data-files=src/llm_rosetta/gateway/admin/admin.html=llm_rosetta/gateway/admin/admin.html \
-	--include-data-dir=src/llm_rosetta/gateway/admin/css=llm_rosetta/gateway/admin/css \
-	--include-data-dir=src/llm_rosetta/gateway/admin/js=llm_rosetta/gateway/admin/js \
-	--include-data-dir=src/llm_rosetta/shims/providers=llm_rosetta/shims/providers \
+	--include-package=llm_rosetta_gateway \
+	--include-data-files=packages/llm-rosetta-gateway/src/llm_rosetta_gateway/admin/admin.html=llm_rosetta_gateway/admin/admin.html \
+	--include-data-dir=packages/llm-rosetta-gateway/src/llm_rosetta_gateway/admin/css=llm_rosetta_gateway/admin/css \
+	--include-data-dir=packages/llm-rosetta-gateway/src/llm_rosetta_gateway/admin/js=llm_rosetta_gateway/admin/js \
+	--include-data-dir=packages/llm-rosetta/src/llm_rosetta/shims/providers=llm_rosetta/shims/providers \
 	$(NUITKA_NOFOLLOW_FLAGS) \
 	--assume-yes-for-downloads \
 	$(NUITKA_EXTRA_FLAGS)
@@ -209,7 +214,7 @@ NUITKA_FLAGS = \
 # Build native binary (glibc on Linux, system libc on macOS, MSVC on Windows)
 build-binary:
 	@echo "Building native binary: $(BINARY_NAME)..."
-	@printf 'from llm_rosetta.gateway import main\nmain()\n' > $(NUITKA_ENTRY)
+	@printf 'from llm_rosetta_gateway import main\nmain()\n' > $(NUITKA_ENTRY)
 	python -m nuitka $(NUITKA_FLAGS) \
 		--output-filename=$(BINARY_NAME)$(if $(filter windows,$(BINARY_OS)),.exe,) \
 		$(NUITKA_ENTRY); \
@@ -231,7 +236,7 @@ build-binary-musl:
 			pip install --break-system-packages patchelf -q && \
 			pip install --break-system-packages -e "." -q && \
 			pip install --break-system-packages "nuitka[onefile]" ordered-set -q && \
-			printf "from llm_rosetta.gateway import main\nmain()\n" > /tmp/_entry.py && \
+			printf "from llm_rosetta_gateway import main\nmain()\n" > /tmp/_entry.py && \
 			python -m nuitka \
 				--standalone --onefile \
 				--jobs=$$(nproc) \
@@ -242,10 +247,11 @@ build-binary-musl:
 				--python-flag=-O \
 				--python-flag=no_warnings \
 				--include-package=llm_rosetta \
-				--include-data-files=src/llm_rosetta/gateway/admin/admin.html=llm_rosetta/gateway/admin/admin.html \
-				--include-data-dir=src/llm_rosetta/gateway/admin/css=llm_rosetta/gateway/admin/css \
-				--include-data-dir=src/llm_rosetta/gateway/admin/js=llm_rosetta/gateway/admin/js \
-				--include-data-dir=src/llm_rosetta/shims/providers=llm_rosetta/shims/providers \
+	--include-package=llm_rosetta_gateway \
+				--include-data-files=packages/llm-rosetta-gateway/src/llm_rosetta_gateway/admin/admin.html=llm_rosetta_gateway/admin/admin.html \
+				--include-data-dir=packages/llm-rosetta-gateway/src/llm_rosetta_gateway/admin/css=llm_rosetta_gateway/admin/css \
+				--include-data-dir=packages/llm-rosetta-gateway/src/llm_rosetta_gateway/admin/js=llm_rosetta_gateway/admin/js \
+				--include-data-dir=packages/llm-rosetta/src/llm_rosetta/shims/providers=llm_rosetta/shims/providers \
 				$(NUITKA_NOFOLLOW_FLAGS) \
 				--assume-yes-for-downloads \
 				$(NUITKA_EXTRA_FLAGS) \

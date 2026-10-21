@@ -10,7 +10,7 @@ import threading
 import time
 
 
-from llm_rosetta.gateway.middleware.circuit_breaker import (
+from llm_rosetta_gateway.middleware.circuit_breaker import (
     CircuitBreaker,
     CircuitBreakerConfig,
     CircuitBreakerRegistry,
@@ -509,7 +509,7 @@ class TestConfigIntegration:
     """Test circuit breaker config parsing via GatewayConfig."""
 
     def test_default_config_creates_disabled_registry(self):
-        from llm_rosetta.gateway.config import GatewayConfig
+        from llm_rosetta_gateway.config import GatewayConfig
 
         raw = {
             "providers": {
@@ -522,7 +522,7 @@ class TestConfigIntegration:
         assert config.circuit_breaker_registry.enabled is False
 
     def test_enabled_config(self):
-        from llm_rosetta.gateway.config import GatewayConfig
+        from llm_rosetta_gateway.config import GatewayConfig
 
         raw = {
             "providers": {
@@ -542,7 +542,7 @@ class TestConfigIntegration:
         assert config.circuit_breaker_registry.enabled is True
 
     def test_per_provider_override(self):
-        from llm_rosetta.gateway.config import GatewayConfig
+        from llm_rosetta_gateway.config import GatewayConfig
 
         raw = {
             "providers": {
@@ -582,7 +582,7 @@ class TestCircuitBreaker503Integration:
 
     def test_503_response_format_openai(self):
         """When circuit is open, the handler returns a 503 with a clear message."""
-        from llm_rosetta.gateway.middleware.error_format import (
+        from llm_rosetta_gateway.middleware.error_format import (
             detect_api_format,
             format_error_response,
         )
@@ -608,7 +608,7 @@ class TestCircuitBreaker503Integration:
         assert "test-provider" in body["error"]["message"]
 
     def test_503_response_format_anthropic(self):
-        from llm_rosetta.gateway.middleware.error_format import (
+        from llm_rosetta_gateway.middleware.error_format import (
             detect_api_format,
             format_error_response,
         )
@@ -632,7 +632,7 @@ class TestCircuitBreaker503Integration:
         assert "circuit breaker open" in body["error"]["message"]
 
     def test_503_response_format_google(self):
-        from llm_rosetta.gateway.middleware.error_format import (
+        from llm_rosetta_gateway.middleware.error_format import (
             detect_api_format,
             format_error_response,
         )

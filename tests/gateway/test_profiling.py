@@ -2,7 +2,7 @@
 
 import pytest
 
-from llm_rosetta.gateway.admin.routes.profiling import ProfilerState
+from llm_rosetta_gateway.admin.routes.profiling import ProfilerState
 
 
 class TestProfilerState:
@@ -164,7 +164,7 @@ class TestStreamingProfilerDefer:
         from unittest.mock import MagicMock
 
         from llm_rosetta._vendor.httpserver import StreamingResponse
-        from llm_rosetta.gateway.lifecycle import try_stop_profiler
+        from llm_rosetta_gateway.lifecycle import try_stop_profiler
 
         state = ProfilerState()
         state.enable(requests=2)

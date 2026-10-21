@@ -14,7 +14,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { syncChipState } from '../../src/llm_rosetta/gateway/admin/js/core/chips.js';
+import { syncChipState } from '../../packages/llm-rosetta-gateway/src/llm_rosetta_gateway/admin/js/core/chips.js';
 
 function makeChip() {
   const classes = new Set();

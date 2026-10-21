@@ -12,18 +12,18 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from llm_rosetta.gateway.maintenance.startup import (
+from llm_rosetta_gateway.maintenance.startup import (
     DeferredStartup,
     ProviderInitState,
     ProviderNotReady,
 )
-from llm_rosetta.gateway.transport.provider_info import (
+from llm_rosetta_gateway.transport.provider_info import (
     TOKEN_PENDING_SENTINEL,
     ProviderInfo,
     openai_auth,
 )
 from llm_rosetta.observability.metrics import MetricsCollector
-from llm_rosetta.gateway.routing import SelectionContext
+from llm_rosetta_gateway.routing import SelectionContext
 
 
 async def _async_iter(items):
@@ -120,19 +120,19 @@ class TestProviderInfoReady:
 
 class TestKeyRingContainsOnly:
     def test_single_match(self):
-        from llm_rosetta.gateway.transport.provider_info import KeyRing
+        from llm_rosetta_gateway.transport.provider_info import KeyRing
 
         kr = KeyRing(TOKEN_PENDING_SENTINEL)
         assert kr.contains_only(TOKEN_PENDING_SENTINEL) is True
 
     def test_single_no_match(self):
-        from llm_rosetta.gateway.transport.provider_info import KeyRing
+        from llm_rosetta_gateway.transport.provider_info import KeyRing
 
         kr = KeyRing("real-key")
         assert kr.contains_only(TOKEN_PENDING_SENTINEL) is False
 
     def test_multiple_keys(self):
-        from llm_rosetta.gateway.transport.provider_info import KeyRing
+        from llm_rosetta_gateway.transport.provider_info import KeyRing
 
         kr = KeyRing(f"{TOKEN_PENDING_SENTINEL},other")
         assert kr.contains_only(TOKEN_PENDING_SENTINEL) is False
@@ -211,12 +211,12 @@ class TestTokenSeeding:
         async def _run():
             with (
                 patch(
-                    "llm_rosetta.gateway.transport.token_refresh.run_token_command",
+                    "llm_rosetta_gateway.transport.token_refresh.run_token_command",
                     new_callable=AsyncMock,
                     return_value="real-token",
                 ),
                 patch(
-                    "llm_rosetta.gateway.transport.token_refresh.start_token_refreshers",
+                    "llm_rosetta_gateway.transport.token_refresh.start_token_refreshers",
                     new_callable=AsyncMock,
                     return_value=[],
                 ),
@@ -238,12 +238,12 @@ class TestTokenSeeding:
         async def _run():
             with (
                 patch(
-                    "llm_rosetta.gateway.transport.token_refresh.run_token_command",
+                    "llm_rosetta_gateway.transport.token_refresh.run_token_command",
                     new_callable=AsyncMock,
                     side_effect=RuntimeError("command failed"),
                 ),
                 patch(
-                    "llm_rosetta.gateway.transport.token_refresh.start_token_refreshers",
+                    "llm_rosetta_gateway.transport.token_refresh.start_token_refreshers",
                     new_callable=AsyncMock,
                     return_value=[],
                 ),
@@ -281,11 +281,11 @@ class TestTokenSeeding:
         async def _run():
             with (
                 patch(
-                    "llm_rosetta.gateway.transport.token_refresh.run_token_command",
+                    "llm_rosetta_gateway.transport.token_refresh.run_token_command",
                     side_effect=_mock_run_token,
                 ),
                 patch(
-                    "llm_rosetta.gateway.transport.token_refresh.start_token_refreshers",
+                    "llm_rosetta_gateway.transport.token_refresh.start_token_refreshers",
                     new_callable=AsyncMock,
                     return_value=[],
                 ),
@@ -438,7 +438,7 @@ class TestMergeRebuild:
 
 class TestTokenCommandValidation:
     def test_missing_binary_warns_but_succeeds(self):
-        from llm_rosetta.gateway.providers import _resolve_token_command
+        from llm_rosetta_gateway.providers import _resolve_token_command
 
         api_key, cmd, _ = _resolve_token_command(
             "test-provider",
@@ -451,7 +451,7 @@ class TestTokenCommandValidation:
         assert cmd == ["/nonexistent/binary-xyz", "--arg"]
 
     def test_valid_binary_returns_sentinel(self):
-        from llm_rosetta.gateway.providers import _resolve_token_command
+        from llm_rosetta_gateway.providers import _resolve_token_command
 
         api_key, cmd, interval = _resolve_token_command(
             "test-provider",
@@ -464,7 +464,7 @@ class TestTokenCommandValidation:
         assert cmd == ["echo", "test"]
 
     def test_static_api_key_unchanged(self):
-        from llm_rosetta.gateway.providers import _resolve_token_command
+        from llm_rosetta_gateway.providers import _resolve_token_command
 
         api_key, cmd, interval = _resolve_token_command(
             "test-provider",
@@ -546,7 +546,7 @@ class TestDeferredCounterRebuild:
 class TestDeferredBackfills:
     def test_backfills_run_sequentially(self):
         """Every backfill is called, in sequence."""
-        from llm_rosetta.gateway.routing import ModelRoute, ProviderEntry
+        from llm_rosetta_gateway.routing import ModelRoute, ProviderEntry
 
         persistence = MagicMock()
         persistence.backfill_provider_names = AsyncMock(return_value=3)
@@ -626,7 +626,7 @@ class TestResolveSkipsUnready:
 
     def _build_config(self, providers: dict[str, ProviderInfo]):
         """Build a minimal GatewayConfig with routing for 'test-model'."""
-        from llm_rosetta.gateway.routing import ModelRoute, ProviderEntry
+        from llm_rosetta_gateway.routing import ModelRoute, ProviderEntry
 
         # Use the first provider name as the single-provider model route
         first_name = next(iter(providers))
@@ -639,10 +639,10 @@ class TestResolveSkipsUnready:
             "server": {},
         }
         with patch(
-            "llm_rosetta.gateway.providers._resolve_token_command",
+            "llm_rosetta_gateway.providers._resolve_token_command",
             return_value=("sk-x", None, 3600),
         ):
-            from llm_rosetta.gateway.config import GatewayConfig
+            from llm_rosetta_gateway.config import GatewayConfig
 
             cfg = GatewayConfig(config_dict)
 
@@ -710,7 +710,7 @@ class TestResolveSkipsUnready:
 class TestResolveOrError:
     def test_returns_503_for_pending(self):
         from llm_rosetta._vendor.httpserver import Response
-        from llm_rosetta.gateway.app import _resolve_or_error
+        from llm_rosetta_gateway.app import _resolve_or_error
 
         mock_config = MagicMock()
         mock_config.resolve.side_effect = ProviderNotReady("model-x")
@@ -724,7 +724,7 @@ class TestResolveOrError:
 
     def test_returns_502_for_failed(self):
         from llm_rosetta._vendor.httpserver import Response
-        from llm_rosetta.gateway.app import _resolve_or_error
+        from llm_rosetta_gateway.app import _resolve_or_error
 
         mock_config = MagicMock()
         mock_config.resolve.side_effect = ProviderNotReady("model-x", failed=True)
@@ -738,7 +738,7 @@ class TestResolveOrError:
 
     def test_returns_404_for_unknown_model(self):
         from llm_rosetta._vendor.httpserver import Response
-        from llm_rosetta.gateway.app import _resolve_or_error
+        from llm_rosetta_gateway.app import _resolve_or_error
 
         mock_config = MagicMock()
         mock_config.resolve.side_effect = KeyError("no-model")
@@ -773,12 +773,12 @@ class TestDeferredStartupLifecycle:
         async def _run():
             with (
                 patch(
-                    "llm_rosetta.gateway.transport.token_refresh.run_token_command",
+                    "llm_rosetta_gateway.transport.token_refresh.run_token_command",
                     new_callable=AsyncMock,
                     return_value="tok",
                 ),
                 patch(
-                    "llm_rosetta.gateway.transport.token_refresh.start_token_refreshers",
+                    "llm_rosetta_gateway.transport.token_refresh.start_token_refreshers",
                     new_callable=AsyncMock,
                     return_value=[],
                 ),

@@ -7,7 +7,7 @@ import logging
 import os
 
 
-from llm_rosetta.gateway.maintenance.migrations import CURRENT_VERSION, migrate
+from llm_rosetta_gateway.maintenance.migrations import CURRENT_VERSION, migrate
 
 
 class TestMigrationFramework:
@@ -209,7 +209,7 @@ class TestMigrationV0ToV1:
 
     def test_full_migration_roundtrip(self):
         """Migrated config should parse correctly in GatewayConfig."""
-        from llm_rosetta.gateway.config import GatewayConfig
+        from llm_rosetta_gateway.config import GatewayConfig
 
         raw = {
             "providers": {
@@ -267,7 +267,7 @@ class TestConfigIOIntegration:
         with open(config_path, "w") as f:
             json.dump(old_config, f)
 
-        from llm_rosetta.gateway.config import JsoncConfigIO
+        from llm_rosetta_gateway.config import JsoncConfigIO
 
         io = JsoncConfigIO()
         raw = io.load(config_path)
@@ -300,7 +300,7 @@ class TestConfigIOIntegration:
         with open(config_path, "w") as f:
             json.dump(old_config, f)
 
-        from llm_rosetta.gateway.config import JsoncConfigIO
+        from llm_rosetta_gateway.config import JsoncConfigIO
 
         io = JsoncConfigIO()
         raw = io.load_raw(config_path)
@@ -328,7 +328,7 @@ class TestConfigIOIntegration:
         with open(config_path, "w") as f:
             json.dump(old_config, f)
 
-        from llm_rosetta.gateway.config import JsoncConfigIO
+        from llm_rosetta_gateway.config import JsoncConfigIO
 
         io = JsoncConfigIO()
         raw = io.load(config_path)
@@ -358,7 +358,7 @@ class TestConfigIOIntegration:
         with open(config_path, "w") as f:
             json.dump(old_config, f)
 
-        from llm_rosetta.gateway.config import JsoncConfigIO
+        from llm_rosetta_gateway.config import JsoncConfigIO
 
         io = JsoncConfigIO()
         io.load(config_path)

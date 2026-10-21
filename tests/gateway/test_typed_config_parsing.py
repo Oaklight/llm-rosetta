@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from llm_rosetta.gateway.config import GatewayConfig
+from llm_rosetta_gateway.config import GatewayConfig
 
 
 def _auth(pinfo) -> str:

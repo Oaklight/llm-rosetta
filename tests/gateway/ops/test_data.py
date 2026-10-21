@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from llm_rosetta.gateway.ops.base import OpsContext
-from llm_rosetta.gateway.ops.data import (
+from llm_rosetta_gateway.ops.base import OpsContext
+from llm_rosetta_gateway.ops.data import (
     OpsClearData,
     OpsClearOpsLog,
     OpsCleanupData,
@@ -294,7 +294,7 @@ class TestOpsPrune:
         ops_log.add = AsyncMock()
         ctx = OpsContext(ops_log=ops_log)
 
-        from llm_rosetta.gateway.ops.data import OpsPrune
+        from llm_rosetta_gateway.ops.data import OpsPrune
 
         await OpsPrune(ctx, table="request_log", count=50).execute()
 
@@ -307,7 +307,7 @@ class TestOpsPrune:
 
     @pytest.mark.asyncio
     async def test_prune_no_ops_log(self):
-        from llm_rosetta.gateway.ops.data import OpsPrune
+        from llm_rosetta_gateway.ops.data import OpsPrune
 
         ctx = OpsContext()
         await OpsPrune(ctx, table="error_dumps", count=10).execute()
@@ -316,7 +316,7 @@ class TestOpsPrune:
 class TestOpsPeriodicCleanup:
     @pytest.mark.asyncio
     async def test_periodic_cleanup_with_deletions(self):
-        from llm_rosetta.gateway.ops.data import OpsPeriodicCleanup
+        from llm_rosetta_gateway.ops.data import OpsPeriodicCleanup
 
         p = _mock_persistence()
         m = MagicMock()
@@ -340,7 +340,7 @@ class TestOpsPeriodicCleanup:
 
     @pytest.mark.asyncio
     async def test_periodic_cleanup_zero_deletions_no_record(self):
-        from llm_rosetta.gateway.ops.data import OpsPeriodicCleanup
+        from llm_rosetta_gateway.ops.data import OpsPeriodicCleanup
 
         p = MagicMock()
         p.cleanup_logs_by_age = AsyncMock(return_value={"deleted": 0})

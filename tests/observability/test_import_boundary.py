@@ -7,8 +7,12 @@ import subprocess
 import sys
 from pathlib import Path
 
-_OBSERVABILITY = Path(__file__).parents[2] / "src/llm_rosetta/observability"
-_GATEWAY = "llm_rosetta.gateway"
+_OBSERVABILITY = (
+    Path(__file__).parents[2] / "packages/llm-rosetta/src/llm_rosetta/observability"
+)
+_GATEWAY = "llm_rosetta_gateway"
+#: The deprecation shim in the core tree resolves to the same package.
+_GATEWAY_ALIAS = "llm_rosetta.gateway"
 
 
 def _absolute_module(path: Path, node: ast.ImportFrom) -> str:
@@ -32,7 +36,9 @@ def _absolute_module(path: Path, node: ast.ImportFrom) -> str:
 
 
 def _is_gateway(name: str) -> bool:
-    return name == _GATEWAY or name.startswith(_GATEWAY + ".")
+    return name in (_GATEWAY, _GATEWAY_ALIAS) or name.startswith(
+        (_GATEWAY + ".", _GATEWAY_ALIAS + ".")
+    )
 
 
 def _from_hit(path: Path, node: ast.ImportFrom) -> str | None:
@@ -85,7 +91,7 @@ def _node_hit(path: Path, node: ast.AST) -> str | None:
 
 
 def _gateway_imports(path: Path, source: str) -> list[str]:
-    """Return every import in *source* that reaches ``llm_rosetta.gateway``."""
+    """Return every import in *source* that reaches ``llm_rosetta_gateway``."""
     hits = (_node_hit(path, node) for node in ast.walk(ast.parse(source)))
     return [hit for hit in hits if hit is not None]
 
@@ -108,14 +114,14 @@ def test_guard_catches_absolute_relative_and_from_import():
     top = _OBSERVABILITY / "error_dump.py"
     nested = _OBSERVABILITY / "usage" / "cli.py"
 
-    assert _gateway_imports(top, "from llm_rosetta.gateway import x")
+    assert _gateway_imports(top, "from llm_rosetta_gateway import x")
     assert _gateway_imports(top, "from ..gateway.middleware import sanitize")
     assert _gateway_imports(top, "from .. import gateway")
     assert _gateway_imports(top, "from llm_rosetta import gateway as _gw")
     assert _gateway_imports(
-        top, 'import importlib\nimportlib.import_module("llm_rosetta.gateway.x")'
+        top, 'import importlib\nimportlib.import_module("llm_rosetta_gateway.x")'
     )
-    assert _gateway_imports(top, '__import__("llm_rosetta.gateway.x")')
+    assert _gateway_imports(top, '__import__("llm_rosetta_gateway.x")')
     # From observability.usage one more dot is needed to leave observability.
     assert not _gateway_imports(nested, "from ..gateway import x")
     assert _gateway_imports(nested, "from ...gateway import x")
@@ -128,14 +134,14 @@ def test_error_dump_import_does_not_load_gateway():
     """Importing an observability module must not pull the gateway in."""
     code = (
         "import sys; import llm_rosetta.observability.error_dump; "
-        "print(int(any(m.startswith('llm_rosetta.gateway') for m in sys.modules)))"
+        "print(int(any(m.startswith('llm_rosetta_gateway') for m in sys.modules)))"
     )
     out = subprocess.check_output([sys.executable, "-c", code], text=True).strip()
     assert out == "0"
 
 
 def test_scrub_is_identical_through_both_paths():
-    from llm_rosetta.gateway.middleware.sanitize import (
+    from llm_rosetta_gateway.middleware.sanitize import (
         scrub_credential_patterns as legacy,
     )
     from llm_rosetta.observability.sanitize import (

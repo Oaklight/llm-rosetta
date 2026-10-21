@@ -251,6 +251,6 @@ def test_timeout_leaves_room_under_the_gateway_budget(asksage_token):
     discarded and the operator sees the gateway's timeout instead of the
     script's diagnostic.
     """
-    from llm_rosetta.gateway.transport.token_refresh import COMMAND_TIMEOUT
+    from llm_rosetta_gateway.transport.token_refresh import COMMAND_TIMEOUT
 
     assert asksage_token.TIMEOUT < COMMAND_TIMEOUT

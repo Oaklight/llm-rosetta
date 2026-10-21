@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import threading
 
-from llm_rosetta.gateway.config.io import async_config_lock, config_lock
+from llm_rosetta_gateway.config.io import async_config_lock, config_lock
 
 
 def test_a_nested_acquisition_in_one_thread_does_not_deadlock(tmp_path):

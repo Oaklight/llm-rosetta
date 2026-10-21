@@ -7,16 +7,16 @@ import json
 from typing import Any, cast
 from unittest.mock import MagicMock
 
-from llm_rosetta.gateway.config import GatewayConfig
-from llm_rosetta.gateway.middleware.error_format import detect_api_format
-from llm_rosetta.gateway.middleware.ratelimit import (
+from llm_rosetta_gateway.config import GatewayConfig
+from llm_rosetta_gateway.middleware.error_format import detect_api_format
+from llm_rosetta_gateway.middleware.ratelimit import (
     RateLimitState,
     _extract_model,
     _rate_limit_response,
     create_rate_limit_after_hook,
     create_rate_limit_hook,
 )
-from llm_rosetta.gateway.middleware.request_context import (
+from llm_rosetta_gateway.middleware.request_context import (
     RequestContext,
     extract_client_ip,
     request_context_var,
@@ -161,7 +161,7 @@ class TestExtractModel:
 
 class TestRateLimitResponse:
     def _make_result(self):
-        from llm_rosetta.gateway.middleware.ratelimit import RateLimitResult
+        from llm_rosetta_gateway.middleware.ratelimit import RateLimitResult
 
         return RateLimitResult(
             allowed=False,
@@ -353,8 +353,8 @@ class TestRateLimitHook:
         assert r2 is None
 
     def test_per_key_uses_label(self):
-        from llm_rosetta.gateway.middleware.auth import api_key_context_var
-        from llm_rosetta.gateway.keystore import KeyContext
+        from llm_rosetta_gateway.middleware.auth import api_key_context_var
+        from llm_rosetta_gateway.keystore import KeyContext
 
         state = self._make_state(enabled=True, per_key="1/m")
         hook = create_rate_limit_hook(state)
@@ -370,7 +370,7 @@ class TestRateLimitHook:
             api_key_context_var.reset(token)
 
     def test_no_key_skips_per_key(self):
-        from llm_rosetta.gateway.middleware.auth import api_key_context_var
+        from llm_rosetta_gateway.middleware.auth import api_key_context_var
 
         state = self._make_state(enabled=True, per_key="1/m")
         hook = create_rate_limit_hook(state)
@@ -391,7 +391,7 @@ class TestRateLimitHook:
 
 class TestRateLimitAfterHook:
     def test_adds_headers_when_result_set(self):
-        from llm_rosetta.gateway.middleware.ratelimit import (
+        from llm_rosetta_gateway.middleware.ratelimit import (
             _rate_limit_result_var,
             RateLimitResult,
         )
@@ -411,7 +411,7 @@ class TestRateLimitAfterHook:
             _rate_limit_result_var.reset(token)
 
     def test_no_headers_when_no_result(self):
-        from llm_rosetta.gateway.middleware.ratelimit import _rate_limit_result_var
+        from llm_rosetta_gateway.middleware.ratelimit import _rate_limit_result_var
 
         token = _rate_limit_result_var.set(None)
         try:
@@ -431,7 +431,7 @@ class TestRateLimitAfterHook:
 
 class TestRateLimitConfig:
     def test_defaults(self):
-        from llm_rosetta.gateway.config import GatewayConfig
+        from llm_rosetta_gateway.config import GatewayConfig
 
         config = GatewayConfig(
             {
@@ -446,7 +446,7 @@ class TestRateLimitConfig:
         assert config.rate_limit_exclude == ["/health", "/admin"]
 
     def test_parses_all_fields(self):
-        from llm_rosetta.gateway.config import GatewayConfig
+        from llm_rosetta_gateway.config import GatewayConfig
 
         raw = {
             "providers": {"test": {"api_key": "k", "base_url": "http://x"}},
@@ -473,7 +473,7 @@ class TestRateLimitConfig:
         assert config.rate_limit_exclude == ["/health"]
 
     def test_invalid_algorithm_falls_back(self):
-        from llm_rosetta.gateway.config import GatewayConfig
+        from llm_rosetta_gateway.config import GatewayConfig
 
         raw = {
             "providers": {"test": {"api_key": "k", "base_url": "http://x"}},
@@ -491,7 +491,7 @@ class TestRateLimitConfig:
 
 class TestBuildLimiterComposite:
     def test_single_string_returns_simple_limiter(self):
-        from llm_rosetta.gateway.middleware.ratelimit import _build_limiter
+        from llm_rosetta_gateway.middleware.ratelimit import _build_limiter
 
         lim = _build_limiter("sliding_window", "100/m")
         assert lim is not None
@@ -499,7 +499,7 @@ class TestBuildLimiterComposite:
         assert r.allowed
 
     def test_list_returns_composite(self):
-        from llm_rosetta.gateway.middleware.ratelimit import (
+        from llm_rosetta_gateway.middleware.ratelimit import (
             CompositeLimiter,
             ThreadSafeLimiter,
             _build_limiter,
@@ -512,17 +512,17 @@ class TestBuildLimiterComposite:
         assert len(lim.limiter) == 2
 
     def test_none_returns_none(self):
-        from llm_rosetta.gateway.middleware.ratelimit import _build_limiter
+        from llm_rosetta_gateway.middleware.ratelimit import _build_limiter
 
         assert _build_limiter("sliding_window", None) is None
 
     def test_empty_list_returns_none(self):
-        from llm_rosetta.gateway.middleware.ratelimit import _build_limiter
+        from llm_rosetta_gateway.middleware.ratelimit import _build_limiter
 
         assert _build_limiter("sliding_window", []) is None
 
     def test_composite_enforces_strictest(self):
-        from llm_rosetta.gateway.middleware.ratelimit import _build_limiter
+        from llm_rosetta_gateway.middleware.ratelimit import _build_limiter
 
         lim = _build_limiter("sliding_window", ["2/m", "1000/h"])
         assert lim is not None
@@ -557,7 +557,7 @@ class TestRateLimitStateComposite:
 
 class TestConfigMultiWindow:
     def test_config_accepts_list_quota(self):
-        from llm_rosetta.gateway.config import GatewayConfig
+        from llm_rosetta_gateway.config import GatewayConfig
 
         raw = {
             "providers": {"test": {"api_key": "k", "base_url": "http://x"}},

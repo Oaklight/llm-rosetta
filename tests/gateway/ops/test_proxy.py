@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from llm_rosetta.gateway.ops.base import OpsContext
-from llm_rosetta.gateway.ops.proxy import OpsProxyRequest
+from llm_rosetta_gateway.ops.base import OpsContext
+from llm_rosetta_gateway.ops.proxy import OpsProxyRequest
 
 
 def _make_ctx(

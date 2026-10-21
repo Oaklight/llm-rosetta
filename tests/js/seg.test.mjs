@@ -12,7 +12,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { isSegActivationKey, segKeyTargetIndex } from '../../src/llm_rosetta/gateway/admin/js/core/seg.js';
+import { isSegActivationKey, segKeyTargetIndex } from '../../packages/llm-rosetta-gateway/src/llm_rosetta_gateway/admin/js/core/seg.js';
 
 test('Arrow keys move one step and wrap at both ends', () => {
   assert.equal(segKeyTargetIndex(3, 0, 'ArrowRight'), 1);

@@ -13,7 +13,7 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
-from llm_rosetta.gateway.shims import SHIM_REMOVALS, ShimRemoval
+from llm_rosetta_gateway.shims import SHIM_REMOVALS, ShimRemoval
 
 _SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "check_shim_removals.py"
 
@@ -73,13 +73,17 @@ class TestGateOnThisCheckout:
         resolves to ``None`` whether or not its alias is still there.
         """
         module = _load_script()
-        assert {"src", "scripts", "design"} <= set(module.DEFAULT_ROOTS)
+        assert {"packages", "scripts", "design"} <= set(module.DEFAULT_ROOTS)
         # The manifest names every scheduled shim by design, so it exempts itself.
         assert (
-            "src/llm_rosetta/gateway/shims/removals.py" in module.DEFAULT_EXEMPT_FILES
+            "packages/llm-rosetta-gateway/src/llm_rosetta_gateway/shims/removals.py"
+            in module.DEFAULT_EXEMPT_FILES
         )
         # The source catalogue names the shims each package provides.
-        assert "src/llm_rosetta/gateway/shims/catalog.py" in module.DEFAULT_EXEMPT_FILES
+        assert (
+            "packages/llm-rosetta-gateway/src/llm_rosetta_gateway/shims/catalog.py"
+            in module.DEFAULT_EXEMPT_FILES
+        )
 
     def test_the_gate_scans_the_real_roots_without_false_positives(self):
         """The shipped roots stay clean for a shim that is not scheduled.

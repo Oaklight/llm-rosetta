@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from llm_rosetta.gateway.proxy import _apply_request_stages
-from llm_rosetta.gateway.routing import SelectionContext
-from llm_rosetta.gateway.transport.http.transport import HttpTransport
-from llm_rosetta.gateway.transport.provider_info import ProviderInfo, openai_auth
+from llm_rosetta_gateway.proxy import _apply_request_stages
+from llm_rosetta_gateway.routing import SelectionContext
+from llm_rosetta_gateway.transport.http.transport import HttpTransport
+from llm_rosetta_gateway.transport.provider_info import ProviderInfo, openai_auth
 
 
 def _pi(**kwargs) -> ProviderInfo:

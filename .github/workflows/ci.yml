@@ -36,7 +36,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e .
+          pip install -e packages/llm-rosetta -e packages/llm-rosetta-gateway
 
       - name: Check scheduled shim removals
         run: make check-shim-removals
@@ -60,7 +60,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[all]"
+          pip install -e "packages/llm-rosetta[all]" -e packages/llm-rosetta-gateway
 
       - name: Run pre-commit checks
         uses: pre-commit/action@v3.0.1
@@ -93,7 +93,7 @@ jobs:
         run: |
           python -m venv /tmp/dev-extras-venv
           /tmp/dev-extras-venv/bin/pip install --upgrade pip
-          /tmp/dev-extras-venv/bin/pip install -e ".[dev]"
+          /tmp/dev-extras-venv/bin/pip install -e "packages/llm-rosetta[dev]" -e packages/llm-rosetta-gateway
 
       - name: Run test suite
         run: /tmp/dev-extras-venv/bin/python -m pytest tests/ --ignore=tests/integration
@@ -113,7 +113,7 @@ jobs:
           - name: gateway
             extras: "[gateway]"
             check: |
-              python -c "from llm_rosetta.gateway import main; print('gateway import OK')"
+              python -c "from llm_rosetta_gateway import main; print('gateway import OK')"
               llm-rosetta-gateway --version
 
     name: smoke-test (${{ matrix.variant.name }})
@@ -128,14 +128,17 @@ jobs:
       - name: Build wheel
         run: |
           python -m pip install --upgrade pip build
-          python -m build --wheel
+          python -m build --wheel packages/llm-rosetta --outdir dist
+          python -m build --wheel packages/llm-rosetta-gateway --outdir dist
 
       - name: Install from wheel in clean venv
         run: |
           python -m venv /tmp/smoke-venv
           /tmp/smoke-venv/bin/pip install --upgrade pip
-          WHL=$(ls dist/*.whl)
-          /tmp/smoke-venv/bin/pip install "${WHL}${{ matrix.variant.extras }}"
+          /tmp/smoke-venv/bin/pip install dist/llm_rosetta-*.whl
+          if [ "${{ matrix.variant.name }}" = "gateway" ]; then
+            /tmp/smoke-venv/bin/pip install dist/llm_rosetta_gateway-*.whl
+          fi
 
       - name: Smoke test imports
         run: |

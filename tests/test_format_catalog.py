@@ -38,7 +38,7 @@ def test_every_detector_key_resolves():
 
 
 def test_llm_specs_carry_a_route_and_an_sse_key():
-    from llm_rosetta.gateway.transport.sse_format import SSE_FORMATTERS
+    from llm_rosetta_gateway.transport.sse_format import SSE_FORMATTERS
 
     for spec in FORMAT_SPECS:
         if spec.model_type != "llm":
@@ -63,7 +63,7 @@ def test_detection_order_follows_priorities():
 
 
 def test_gateway_tables_cover_the_llm_catalog():
-    from llm_rosetta.gateway.providers import (
+    from llm_rosetta_gateway.providers import (
         BASE_FORMATS,
         _BASE_TYPE_HINTS,
         _CUSTOM_TOOLS_BY_TYPE,
@@ -140,7 +140,7 @@ import llm_rosetta.model_vocabulary as vocabulary
 importlib.reload(vocabulary)
 assert "fake_wire" in vocabulary.FORMATS_BY_TYPE["llm"], "format vocabulary"
 
-import llm_rosetta.gateway.providers as providers
+import llm_rosetta_gateway.providers as providers
 
 importlib.reload(providers)
 assert (
@@ -151,14 +151,14 @@ assert providers.BASE_FORMATS.index("fake_wire") == (
 ), "picker order"
 assert providers.default_models_path("fake_wire") == "/fake/models", "models path"
 
-import llm_rosetta.gateway.transport.sse_format as sse_format
+import llm_rosetta_gateway.transport.sse_format as sse_format
 
 importlib.reload(sse_format)
 assert "fake_wire" in sse_format.SSE_FORMATTERS, "SSE formatter"
 
 import json
 
-import llm_rosetta.gateway.middleware.error_format as error_format
+import llm_rosetta_gateway.middleware.error_format as error_format
 
 importlib.reload(error_format)
 assert error_format._PROVIDER_FORMAT_MAP["fake_wire"] == "anthropic", "error family"
@@ -201,7 +201,7 @@ from llm_rosetta.auto_detect import detect_provider
 assert detect_provider({"fake_marker": 1}) == "fake_wire", "auto-detection"
 assert detect_provider({"messages": [{"role": "user"}]}) == "chat_completions"
 
-from llm_rosetta.gateway.model_types import get_model_type
+from llm_rosetta_gateway.model_types import get_model_type
 
 llm = get_model_type("llm")
 assert "fake_wire" in llm.formats, "admin payload"

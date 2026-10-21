@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, cast
 
 import pytest
 
-from llm_rosetta.gateway.routing import (
+from llm_rosetta_gateway.routing import (
     Identity,
     ModelRoute,
     ProviderEntry,
@@ -19,7 +19,7 @@ from llm_rosetta.gateway.routing import (
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from llm_rosetta.gateway.transport import ProviderInfo
+    from llm_rosetta_gateway.transport import ProviderInfo
 
 
 def _ctx() -> SelectionContext:

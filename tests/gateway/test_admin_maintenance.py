@@ -13,8 +13,8 @@ from typing import Any
 
 from unittest.mock import AsyncMock, MagicMock
 
-from llm_rosetta.gateway.admin.routes import maintenance as routes
-from llm_rosetta.gateway.maintenance.backfills import build_registry
+from llm_rosetta_gateway.admin.routes import maintenance as routes
+from llm_rosetta_gateway.maintenance.backfills import build_registry
 
 
 class _App:
@@ -253,7 +253,7 @@ class TestTheLoadTimeSteps:
     }
 
     def _app_with_a_loaded_config(self) -> _App:
-        from llm_rosetta.gateway.maintenance.config import build_registry
+        from llm_rosetta_gateway.maintenance.config import build_registry
 
         persistence, key_store = _stores()
         app = _App(persistence=persistence, keystore=key_store)
@@ -262,7 +262,7 @@ class TestTheLoadTimeSteps:
 
     def _app_with_a_real_load(self, tmp_path) -> _App:
         """The same surface, over the load a real reader ran rather than a stand-in."""
-        from llm_rosetta.gateway.config import GatewayConfig, JsoncConfigIO
+        from llm_rosetta_gateway.config import GatewayConfig, JsoncConfigIO
 
         path = tmp_path / "gateway.jsonc"
         path.write_text(json.dumps(self._DOCUMENT))
@@ -310,10 +310,10 @@ class TestTheLoadTimeSteps:
 
     async def test_all_four_registries_are_listed(self, tmp_path):
         """One surface for every store and the load, each with its own policy."""
-        from llm_rosetta.gateway.maintenance.config import (
+        from llm_rosetta_gateway.maintenance.config import (
             build_registry as config_steps,
         )
-        from llm_rosetta.gateway.maintenance.keystore import (
+        from llm_rosetta_gateway.maintenance.keystore import (
             build_registry as keystore_steps,
         )
         from llm_rosetta.observability.persistence import PersistenceManager

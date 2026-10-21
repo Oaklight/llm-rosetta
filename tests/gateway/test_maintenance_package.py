@@ -10,18 +10,21 @@ from pathlib import Path
 
 import pytest
 
-_INIT = Path(__file__).parents[2] / "src/llm_rosetta/gateway/maintenance/__init__.py"
+_INIT = (
+    Path(__file__).parents[2]
+    / "packages/llm-rosetta-gateway/src/llm_rosetta_gateway/maintenance/__init__.py"
+)
 
 
 def test_facade_resolves_every_public_name():
-    import llm_rosetta.gateway.maintenance as maintenance
+    import llm_rosetta_gateway.maintenance as maintenance
 
     for name in maintenance.__all__:
         assert getattr(maintenance, name) is not None
 
 
 def test_gateway_facade_resolves_every_public_name():
-    import llm_rosetta.gateway as gateway
+    import llm_rosetta_gateway as gateway
 
     for name in gateway.__all__:
         assert getattr(gateway, name) is not None
@@ -62,9 +65,9 @@ def test_importing_keystore_does_not_load_startup_or_dumps():
     must not execute the ``.app`` graph that holds these two.
     """
     code = (
-        "import sys; import llm_rosetta.gateway.keystore; "
-        "print(int('llm_rosetta.gateway.maintenance.startup' in sys.modules), "
-        "int('llm_rosetta.gateway.maintenance.dumps' in sys.modules))"
+        "import sys; import llm_rosetta_gateway.keystore; "
+        "print(int('llm_rosetta_gateway.maintenance.startup' in sys.modules), "
+        "int('llm_rosetta_gateway.maintenance.dumps' in sys.modules))"
     )
     out = subprocess.check_output([sys.executable, "-c", code], text=True).strip()
     assert out == "0 0"
@@ -72,11 +75,11 @@ def test_importing_keystore_does_not_load_startup_or_dumps():
 
 def test_deprecated_gateway_migrations_path_warns_and_reexports():
     """The v0.13.0 dotted path keeps resolving until 0.16.0 (#919)."""
-    from llm_rosetta.gateway.maintenance.migrations import CURRENT_VERSION, migrate
+    from llm_rosetta_gateway.maintenance.migrations import CURRENT_VERSION, migrate
 
-    sys.modules.pop("llm_rosetta.gateway.migrations", None)
+    sys.modules.pop("llm_rosetta_gateway.migrations", None)
     with pytest.warns(DeprecationWarning, match="gateway.maintenance.migrations"):
-        legacy = importlib.import_module("llm_rosetta.gateway.migrations")
+        legacy = importlib.import_module("llm_rosetta_gateway.migrations")
 
     assert legacy.CURRENT_VERSION == CURRENT_VERSION
     assert legacy.migrate is migrate

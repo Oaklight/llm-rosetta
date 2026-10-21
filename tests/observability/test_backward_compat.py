@@ -6,21 +6,21 @@ import sys
 import pytest
 
 import llm_rosetta.observability as obs
-from llm_rosetta.gateway.admin.routes.profiling import ProfilerState
+from llm_rosetta_gateway.admin.routes.profiling import ProfilerState
 
 _ADMIN_REEXPORTS = [
     (
-        "llm_rosetta.gateway.admin.metrics",
+        "llm_rosetta_gateway.admin.metrics",
         "llm_rosetta.observability.metrics",
         ["MetricsCollector", "_RollingWindow"],
     ),
     (
-        "llm_rosetta.gateway.admin.persistence",
+        "llm_rosetta_gateway.admin.persistence",
         "llm_rosetta.observability.persistence",
         ["PersistenceManager", "DEFAULT_SUCCESS_MAX"],
     ),
     (
-        "llm_rosetta.gateway.admin.request_log",
+        "llm_rosetta_gateway.admin.request_log",
         "llm_rosetta.observability.request_log",
         ["RequestLog", "RequestLogEntry"],
     ),
@@ -44,9 +44,9 @@ def test_admin_reexport_paths_warn(module_path, canonical_path, names):
 
 def test_ops_log_path_removed() -> None:
     """``ops_log`` was only ever a dev convenience, not a released path."""
-    sys.modules.pop("llm_rosetta.gateway.admin.ops_log", None)
+    sys.modules.pop("llm_rosetta_gateway.admin.ops_log", None)
     with pytest.raises(ModuleNotFoundError):
-        importlib.import_module("llm_rosetta.gateway.admin.ops_log")
+        importlib.import_module("llm_rosetta_gateway.admin.ops_log")
 
 
 def test_profiler_state_identity() -> None:

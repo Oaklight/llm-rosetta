@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 
-from llm_rosetta.gateway.ops import OpsContext, OpsProviderValidation
+from llm_rosetta_gateway.ops import OpsContext, OpsProviderValidation
 
 
 def test_missing_external_shim_disables_only_affected_provider():

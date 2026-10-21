@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from llm_rosetta.gateway.config import GatewayConfig
+from llm_rosetta_gateway.config import GatewayConfig
 
 
 def _minimal_raw(**server_overrides) -> dict:
@@ -74,7 +74,7 @@ class TestTimeoutConfig:
 class TestTimeoutWiring:
     @pytest.mark.asyncio
     async def test_transport_receives_upstream_timeout(self):
-        from llm_rosetta.gateway.app import create_app
+        from llm_rosetta_gateway.app import create_app
 
         cfg = GatewayConfig(_minimal_raw(upstream_timeout=600))
         app = await create_app(cfg)
@@ -82,7 +82,7 @@ class TestTimeoutWiring:
 
     @pytest.mark.asyncio
     async def test_transport_receives_default_timeout(self):
-        from llm_rosetta.gateway.app import create_app
+        from llm_rosetta_gateway.app import create_app
 
         cfg = GatewayConfig(_minimal_raw())
         app = await create_app(cfg)
@@ -90,7 +90,7 @@ class TestTimeoutWiring:
 
     @pytest.mark.asyncio
     async def test_app_receives_read_timeout(self):
-        from llm_rosetta.gateway.app import create_app
+        from llm_rosetta_gateway.app import create_app
 
         cfg = GatewayConfig(_minimal_raw(read_timeout=120))
         app = await create_app(cfg)
@@ -98,7 +98,7 @@ class TestTimeoutWiring:
 
     @pytest.mark.asyncio
     async def test_app_receives_default_read_timeout(self):
-        from llm_rosetta.gateway.app import create_app
+        from llm_rosetta_gateway.app import create_app
 
         cfg = GatewayConfig(_minimal_raw())
         app = await create_app(cfg)

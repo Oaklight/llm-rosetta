@@ -8,18 +8,18 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from llm_rosetta.gateway.middleware.auth import (
+from llm_rosetta_gateway.middleware.auth import (
     AuthState,
     api_key_context_var,
     create_auth_hook,
 )
-from llm_rosetta.gateway.middleware.error_format import detect_api_format, is_admin_path
-from llm_rosetta.gateway.keystore import (
+from llm_rosetta_gateway.middleware.error_format import detect_api_format, is_admin_path
+from llm_rosetta_gateway.keystore import (
     INTERNAL_USAGE_BUCKET,
     KeyContext,
     KeyStore,
 )
-from llm_rosetta.gateway.middleware.request_context import (
+from llm_rosetta_gateway.middleware.request_context import (
     RequestContext,
     request_context_var,
 )
@@ -504,7 +504,7 @@ class TestAdminSessionAuth:
     # -- check_admin_auth with internal_token header --
 
     async def test_admin_auth_accepts_internal_token_header(self):
-        from llm_rosetta.gateway.middleware.auth import check_admin_auth
+        from llm_rosetta_gateway.middleware.auth import check_admin_auth
 
         state = self._make_auth_state()
         req = self._admin_request(headers={"x-admin-token": "rsk-internal-test1234"})
@@ -512,7 +512,7 @@ class TestAdminSessionAuth:
         assert result is None  # allowed
 
     async def test_admin_auth_rejects_wrong_token_header(self):
-        from llm_rosetta.gateway.middleware.auth import check_admin_auth
+        from llm_rosetta_gateway.middleware.auth import check_admin_auth
 
         state = self._make_auth_state()
         req = self._admin_request(headers={"x-admin-token": "wrong-token"})
@@ -523,7 +523,7 @@ class TestAdminSessionAuth:
     # -- check_admin_auth with session cookie --
 
     async def test_admin_auth_accepts_valid_session_cookie(self):
-        from llm_rosetta.gateway.middleware.auth import (
+        from llm_rosetta_gateway.middleware.auth import (
             ADMIN_COOKIE_NAME,
             check_admin_auth,
         )
@@ -535,7 +535,7 @@ class TestAdminSessionAuth:
         assert result is None  # allowed
 
     async def test_admin_auth_rejects_invalid_cookie(self):
-        from llm_rosetta.gateway.middleware.auth import (
+        from llm_rosetta_gateway.middleware.auth import (
             ADMIN_COOKIE_NAME,
             check_admin_auth,
         )
@@ -549,7 +549,7 @@ class TestAdminSessionAuth:
     # -- No password configured → pass through --
 
     async def test_admin_auth_no_password_allows_all(self):
-        from llm_rosetta.gateway.middleware.auth import check_admin_auth
+        from llm_rosetta_gateway.middleware.auth import check_admin_auth
 
         state = AuthState(
             keystore=None, internal_token="rsk-internal-x", admin_password=None
@@ -561,7 +561,7 @@ class TestAdminSessionAuth:
     # -- Login/logout/auth-check always allowed --
 
     async def test_admin_auth_always_allows_login(self):
-        from llm_rosetta.gateway.middleware.auth import check_admin_auth
+        from llm_rosetta_gateway.middleware.auth import check_admin_auth
 
         state = self._make_auth_state()
         for path in (

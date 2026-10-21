@@ -12,8 +12,8 @@ import asyncio
 
 import pytest
 
-from llm_rosetta.gateway.proxy import _stream_event_generator
-from llm_rosetta.gateway.transport.sse_format import (
+from llm_rosetta_gateway.proxy import _stream_event_generator
+from llm_rosetta_gateway.transport.sse_format import (
     build_stream_error_events,
     is_upstream_error_chunk,
 )
@@ -145,7 +145,7 @@ def test_stream_chunk_error_persists_tool_collisions(tmp_path):
     entry is written when the request finishes, so this test provides it up
     front, the way a corrected lifecycle would.
     """
-    from llm_rosetta.gateway.proxy import DumpContext
+    from llm_rosetta_gateway.proxy import DumpContext
     from llm_rosetta.observability.persistence import PersistenceManager
 
     async def run():

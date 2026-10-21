@@ -6,7 +6,7 @@ import pytest
 
 from unittest.mock import MagicMock
 
-from llm_rosetta.gateway.config import GatewayConfig
+from llm_rosetta_gateway.config import GatewayConfig
 
 
 def _minimal_raw(**server_overrides) -> dict:
@@ -52,7 +52,7 @@ class TestRootRedirectConfig:
 class TestRootRedirectRoute:
     @pytest.mark.asyncio
     async def test_root_route_registered_when_configured(self):
-        from llm_rosetta.gateway.app import create_app
+        from llm_rosetta_gateway.app import create_app
 
         cfg = GatewayConfig(_minimal_raw(root_redirect="/admin"))
         app = await create_app(cfg)
@@ -60,7 +60,7 @@ class TestRootRedirectRoute:
 
     @pytest.mark.asyncio
     async def test_root_route_not_registered_when_disabled(self):
-        from llm_rosetta.gateway.app import create_app
+        from llm_rosetta_gateway.app import create_app
 
         cfg = GatewayConfig(_minimal_raw())
         app = await create_app(cfg)
@@ -68,7 +68,7 @@ class TestRootRedirectRoute:
 
     @pytest.mark.asyncio
     async def test_redirect_returns_307_to_admin(self):
-        from llm_rosetta.gateway.app import create_app
+        from llm_rosetta_gateway.app import create_app
 
         cfg = GatewayConfig(_minimal_raw(root_redirect="/admin"))
         app = await create_app(cfg)
@@ -82,7 +82,7 @@ class TestRootRedirectRoute:
 
     @pytest.mark.asyncio
     async def test_redirect_to_custom_path(self):
-        from llm_rosetta.gateway.app import create_app
+        from llm_rosetta_gateway.app import create_app
 
         cfg = GatewayConfig(_minimal_raw(root_redirect="/dashboard"))
         app = await create_app(cfg)

@@ -8,7 +8,7 @@ mention under the scanned roots, and every one still registered, becomes an
 error, so a removal cannot land without the cleanup that belongs with it:
 
 * the built-in shim directory and its ``LEGACY_SHIM_ALIASES`` entry,
-* the ``SHIM_REMOVALS`` entry in ``llm_rosetta.gateway.shims.removals``,
+* the ``SHIM_REMOVALS`` entry in ``llm_rosetta_gateway.shims.removals``,
 * the examples under ``examples/`` and the tables in ``docs_en`` / ``docs_zh``.
 
 The manifest is the single source of what is going away, so this script reads it
@@ -34,13 +34,15 @@ from pathlib import Path
 # `python scripts/...` run does not, so do it here too and let the gate work
 # from a checkout — the package it inspects is the one next to it, not whichever
 # llm-rosetta happens to be installed.
-_SRC = Path(__file__).resolve().parent.parent / "src"
-if _SRC.is_dir() and str(_SRC) not in sys.path:
-    sys.path.insert(0, str(_SRC))
+_SRC = Path(__file__).resolve().parent.parent / "packages/llm-rosetta/src"
+_GW_SRC = Path(__file__).resolve().parent.parent / "packages/llm-rosetta-gateway/src"
+for _path in (_SRC, _GW_SRC):
+    if _path.is_dir() and str(_path) not in sys.path:
+        sys.path.insert(0, str(_path))
 
 from llm_rosetta import __version__  # noqa: E402
 from llm_rosetta.shims import get_shim  # noqa: E402
-from llm_rosetta.gateway.shims import (  # noqa: E402
+from llm_rosetta_gateway.shims import (  # noqa: E402
     SHIM_REMOVALS,
     RemovalReference,
     ShimRemoval,
@@ -66,7 +68,7 @@ DEFAULT_ROOTS = (
     "scripts",
     "docs_en/docs",
     "docs_zh/docs",
-    "src",
+    "packages",
 )
 
 #: The changelogs record what happened; their history is not rewritten, and a
@@ -78,8 +80,8 @@ DEFAULT_ROOTS = (
 DEFAULT_EXEMPT_FILES = (
     "docs_en/docs/changelog.md",
     "docs_zh/docs/changelog.md",
-    "src/llm_rosetta/gateway/shims/catalog.py",
-    "src/llm_rosetta/gateway/shims/removals.py",
+    "packages/llm-rosetta-gateway/src/llm_rosetta_gateway/shims/catalog.py",
+    "packages/llm-rosetta-gateway/src/llm_rosetta_gateway/shims/removals.py",
 )
 
 

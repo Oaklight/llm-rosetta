@@ -1,90 +1,15 @@
-[build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
-
-[project]
-name = "llm-rosetta"
-dynamic = ["version"]
-authors = [{ name = "Oaklight", email = "oaklight@gmx.com" }]
-description = "LLM-Rosetta: Unified LLM API adapter — bidirectional conversion between OpenAI, Anthropic, and Google formats via intermediate representation (IR)."
-readme = "README.md"
-requires-python = ">=3.10"
-license = "MIT"
-keywords = [
-    "openai",
-    "anthropic",
-    "gemini",
-    "google-genai",
-    "api-adapter",
-    "llm-gateway",
-    "llmir",
-    "streaming",
-    "tool-calling",
-    "multi-provider",
-    "responses-api",
-]
-classifiers = [
-    "Development Status :: 3 - Alpha",
-    "Intended Audience :: Developers",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
-    "Topic :: Software Development :: Libraries :: Python Modules",
-    "Topic :: Scientific/Engineering :: Artificial Intelligence",
-]
-dependencies = [
-    'typing_extensions>=4.0.0; python_version < "3.11"',
-]
-
-[project.optional-dependencies]
-openai = ["openai>=2.0.0"]
-anthropic = ["anthropic>=0.84.0"]
-google = ["google-genai>=1.67.0"]
-gateway = []
-
-dev = [
-    "python-dotenv",
-    "pytest",
-    "pytest-asyncio",
-    "llm-comply>=0.2.0",
-    "pytest-cov",
-    "pre-commit>=4.0.0",
-    "complexipy>=6.2.0,<7",
-    "ruff==0.15.20",
-    "ty==0.0.54",
-    "build>=1.2.2.post1",
-    "twine>=6.1.0",
-]
-
-all = ["llm-rosetta[openai,anthropic,google,gateway,dev]"]
-
-[project.urls]
-Documentation = "https://llm-rosetta.readthedocs.io"
-Repository = "https://github.com/Oaklight/llm-rosetta"
-Issues = "https://github.com/Oaklight/llm-rosetta/issues"
-
-[project.scripts]
-llm-rosetta-gateway = "llm_rosetta.gateway:main"
-llm-rosetta-usage = "llm_rosetta.observability.usage.cli:main"
-
-[tool.setuptools.packages.find]
-where = ["src"]
-
-[tool.setuptools.package-data]
-"llm_rosetta" = ["py.typed", "shims/providers/provider.schema.json", "shims/providers/*/provider.yaml", "shims/providers/*/*/provider.yaml"]
-"llm_rosetta.gateway.admin" = ["admin.html", "css/*.css", "js/**/*.js"]
-
-[tool.setuptools.dynamic]
-version = { attr = "llm_rosetta.__version__" }
+# Repository tooling.  The distributions live in `packages/`:
+#   packages/llm-rosetta/           core (import root `llm_rosetta`)
+#   packages/llm-rosetta-gateway/   gateway (import root `llm_rosetta_gateway`)
+# Install both for development:
+#   pip install -e packages/llm-rosetta -e packages/llm-rosetta-gateway
 
 [tool.ty.environment]
 python-version = "3.10"
 
 [tool.ty.src]
-include = ["src", "tests"]
-exclude = ["src/llm_rosetta/_vendor", "llm_api_simple_tests", "tests/integration"]
+include = ["packages", "tests"]
+exclude = ["packages/*/src/*/_vendor", "llm_api_simple_tests", "tests/integration"]
 
 [tool.ty.rules]
 # pytest.skip() / pytest.fail() are mistyped by some ty pytest stubs;
@@ -94,7 +19,7 @@ unused-ignore-comment = "ignore"
 
 [tool.ruff]
 target-version = "py310"
-exclude = ["src/llm_rosetta/_vendor", "llm_api_simple_tests", "tests/integration"]
+exclude = ["packages/*/src/*/_vendor", "llm_api_simple_tests", "tests/integration"]
 
 [tool.ruff.lint]
 select = ["E", "F", "UP", "C901"]
@@ -104,12 +29,12 @@ ignore = ["UP007", "E501"]  # Allow Union[X, Y] syntax; tolerate long lines
 max-complexity = 15
 
 [tool.ruff.lint.per-file-ignores]
-"src/llm_rosetta/_vendor/*" = ["C901", "UP"]
+"packages/*/src/*/_vendor/*" = ["C901", "UP"]
 
 [tool.complexipy]
-paths = ["src", "tests"]
+paths = ["packages", "tests"]
 max-complexity-allowed = 30
-exclude = ["src/llm_rosetta/_vendor"]
+exclude = ["packages/*/src/*/_vendor"]
 
 [tool.zerodep]
-vendor-dir = "src/llm_rosetta/_vendor"
+vendor-dir = "packages/llm-rosetta/src/llm_rosetta/_vendor"

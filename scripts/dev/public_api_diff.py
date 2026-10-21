@@ -13,7 +13,7 @@ neither is an imported module object.
 Scope limits: only module-level names and the constructor signature of an
 exported class are compared — methods on a class are not.  The module list is
 deliberately explicit, so packages that are not listed (for example
-``llm_rosetta.gateway.admin.*``) are out of scope.
+``llm_rosetta_gateway.admin.*``) are out of scope.
 
 The two trees are imported in separate subprocesses, so module state cannot
 leak between them.
@@ -100,6 +100,8 @@ PUBLIC_MODULES = (
     "llm_rosetta.observability.persistence",
     "llm_rosetta.observability.request_log",
     "llm_rosetta.observability.ops_log",
+    "llm_rosetta_gateway",
+    # Deprecated alias, kept importable until 0.16.0 (#919).
     "llm_rosetta.gateway",
 )
 
@@ -139,11 +141,23 @@ def _describe(obj: object) -> dict:
     return {"kind": kind, "params": params}
 
 
-def dump_surface(root: Path) -> dict:
-    src = (root / "src").resolve()
-    if not (src / "llm_rosetta").is_dir():
+def _src_roots(root: Path) -> list[Path]:
+    """The import roots of a checkout, old layout or ``packages/`` layout."""
+    candidates = (
+        root / "packages/llm-rosetta/src",
+        root / "packages/llm-rosetta-gateway/src",
+        root / "src",
+    )
+    found = [path.resolve() for path in candidates if (path / "llm_rosetta").is_dir()]
+    if not found:
         raise SystemExit(f"{root} does not look like an llm-rosetta source tree")
-    sys.path.insert(0, str(src))
+    return found
+
+
+def dump_surface(root: Path) -> dict:
+    src = _src_roots(root)[0]
+    for path in reversed(_src_roots(root)):
+        sys.path.insert(0, str(path))
 
     import llm_rosetta  # noqa: PLC0415
 
@@ -152,7 +166,19 @@ def dump_surface(root: Path) -> dict:
         raise SystemExit(f"imported llm_rosetta from {origin}, expected under {src}")
 
     result: dict[str, dict] = {}
+    # A tree that predates the split has no ``llm_rosetta_gateway``; importing
+    # the name anyway would find this machine's installed copy and measure the
+    # wrong tree, so report it absent instead.
+    gateway_in_tree = any(
+        (path / "llm_rosetta_gateway").is_dir() for path in _src_roots(root)
+    )
     for module_name in PUBLIC_MODULES:
+        if module_name.startswith("llm_rosetta_gateway") and not gateway_in_tree:
+            result[module_name] = {
+                "status": "absent",
+                "error": "not part of this tree",
+            }
+            continue
         try:
             module = importlib.import_module(module_name)
         except ModuleNotFoundError as exc:
@@ -244,7 +270,7 @@ def _inferred_names(module: object, module_name: str) -> list[str]:
 def dump_in_subprocess(root: Path) -> dict:
     """Import *root* in a clean process so two trees never share module state."""
     env = dict(os.environ)
-    env["PYTHONPATH"] = str((root / "src").resolve())
+    env["PYTHONPATH"] = os.pathsep.join(str(path) for path in _src_roots(root))
     with tempfile.TemporaryDirectory(prefix="llm-rosetta-api-cwd-") as cwd:
         proc = subprocess.run(
             [sys.executable, str(Path(__file__).resolve()), "--dump", str(root)],

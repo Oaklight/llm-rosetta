@@ -17,15 +17,15 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from llm_rosetta.gateway.config import GatewayConfig
-from llm_rosetta.gateway.model_types import (
+from llm_rosetta_gateway.config import GatewayConfig
+from llm_rosetta_gateway.model_types import (
     MODEL_TYPE_REGISTRY,
     ModelTypeDescriptor,
     RouteSpec,
     register_model_type,
 )
-from llm_rosetta.gateway.pipelines.typed import TypedHandler, handle_typed_request
-from llm_rosetta.gateway.transport._base import UpstreamResponse
+from llm_rosetta_gateway.pipelines.typed import TypedHandler, handle_typed_request
+from llm_rosetta_gateway.transport._base import UpstreamResponse
 
 TYPE_NAME = "sentiment"
 FORMAT = "acme"

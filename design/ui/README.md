@@ -1,7 +1,7 @@
 # UI Design Prototypes
 
 Standalone HTML mockups used to explore admin panel layouts before implementing
-them in `src/llm_rosetta/gateway/admin/`. Open directly in a browser — no build
+them in `packages/llm-rosetta-gateway/src/llm_rosetta_gateway/admin/`. Open directly in a browser — no build
 step, no dependencies.
 
 ## provider-list-responsive.html

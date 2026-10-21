@@ -12,8 +12,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from llm_rosetta.gateway.config import GatewayConfig, JsoncConfigIO
-from llm_rosetta.gateway.maintenance.config import STEPS, apply, build_registry
+from llm_rosetta_gateway.config import GatewayConfig, JsoncConfigIO
+from llm_rosetta_gateway.maintenance.config import STEPS, apply, build_registry
 from llm_rosetta.observability.maintenance import Policy, StepContext
 
 #: A document as an older release wrote it: version 0, and both spellings that

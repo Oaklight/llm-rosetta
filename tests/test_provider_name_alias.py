@@ -216,7 +216,7 @@ class TestGatewayConfigBoundary:
         }
 
     def test_type_field_migrates(self):
-        from llm_rosetta.gateway.config import GatewayConfig
+        from llm_rosetta_gateway.config import GatewayConfig
 
         with warnings.catch_warnings():
             warnings.simplefilter("error", DeprecationWarning)
@@ -224,7 +224,7 @@ class TestGatewayConfigBoundary:
         assert cfg.provider_types["g"] == "google_generate"
 
     def test_hyphen_type_field_migrates(self):
-        from llm_rosetta.gateway.config import GatewayConfig
+        from llm_rosetta_gateway.config import GatewayConfig
 
         with warnings.catch_warnings():
             warnings.simplefilter("error", DeprecationWarning)
@@ -232,7 +232,7 @@ class TestGatewayConfigBoundary:
         assert cfg.provider_types["g"] == "google_generate"
 
     def test_shim_field_migrates(self):
-        from llm_rosetta.gateway.config import GatewayConfig
+        from llm_rosetta_gateway.config import GatewayConfig
 
         with warnings.catch_warnings():
             warnings.simplefilter("error", DeprecationWarning)
@@ -240,7 +240,7 @@ class TestGatewayConfigBoundary:
         assert cfg.provider_types["g"] == "google_generate"
 
     def test_provider_name_fallback_migrates(self):
-        from llm_rosetta.gateway.config import GatewayConfig
+        from llm_rosetta_gateway.config import GatewayConfig
 
         raw = {
             "providers": {
@@ -526,7 +526,7 @@ class TestShimBoundaryWarnings:
             )
 
     def test_gateway_shim_field_corrects(self):
-        from llm_rosetta.gateway.config import GatewayConfig
+        from llm_rosetta_gateway.config import GatewayConfig
 
         with warnings.catch_warnings():
             warnings.simplefilter("error", DeprecationWarning)
@@ -534,7 +534,7 @@ class TestShimBoundaryWarnings:
         assert cfg.provider_shim_names["g"] == "volcengine--chat_completions"
 
     def test_gateway_type_field_corrects_legacy_shim(self):
-        from llm_rosetta.gateway.config import GatewayConfig
+        from llm_rosetta_gateway.config import GatewayConfig
 
         with warnings.catch_warnings():
             warnings.simplefilter("error", DeprecationWarning)
@@ -542,7 +542,7 @@ class TestShimBoundaryWarnings:
         assert cfg.provider_types["g"] == "chat_completions"
 
     def test_gateway_name_fallback_warns_for_legacy_shim(self):
-        from llm_rosetta.gateway.config import GatewayConfig
+        from llm_rosetta_gateway.config import GatewayConfig
 
         raw = {
             "providers": {
@@ -557,7 +557,7 @@ class TestShimBoundaryWarnings:
             GatewayConfig(raw)
 
     def test_gateway_bare_shim_field_corrects(self):
-        from llm_rosetta.gateway.config import GatewayConfig
+        from llm_rosetta_gateway.config import GatewayConfig
 
         with warnings.catch_warnings():
             warnings.simplefilter("error", DeprecationWarning)
@@ -571,7 +571,7 @@ class TestShimBoundaryWarnings:
         ``type:`` field it is the canonical base format, so a shim warning
         there would be a false positive.
         """
-        from llm_rosetta.gateway.config import GatewayConfig
+        from llm_rosetta_gateway.config import GatewayConfig
 
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
@@ -744,7 +744,7 @@ class TestLegacyShimAliasStillResolves:
         """
         from llm_rosetta.provider_names import LEGACY_SHIM_ALIASES
         from llm_rosetta.shims import list_shims
-        from llm_rosetta.gateway.shims import find_source_package
+        from llm_rosetta_gateway.shims import find_source_package
         from llm_rosetta.shims.providers import load_providers
 
         load_providers()

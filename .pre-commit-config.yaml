@@ -21,6 +21,6 @@ repos:
     rev: v6.2.0
     hooks:
       - id: complexipy
-        files: ^(src/llm_rosetta/|tests/)
-        exclude: ^src/llm_rosetta/_vendor/
+        files: ^(packages/.*/src/|tests/)
+        exclude: ^packages/.*/src/.*/_vendor/
         args: [-mx, "30"]

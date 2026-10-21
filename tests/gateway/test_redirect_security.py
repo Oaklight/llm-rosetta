@@ -8,10 +8,10 @@ from unittest.mock import patch
 import pytest
 
 from llm_rosetta._vendor.httpclient import TooManyRedirects
-from llm_rosetta.gateway.transport.http.client_pool import HttpClientPool
-from llm_rosetta.gateway.transport.http.transport import HttpTransport
-from llm_rosetta.gateway.transport._base import UpstreamConnectionError
-from llm_rosetta.gateway.transport.provider_info import ProviderInfo, openai_auth
+from llm_rosetta_gateway.transport.http.client_pool import HttpClientPool
+from llm_rosetta_gateway.transport.http.transport import HttpTransport
+from llm_rosetta_gateway.transport._base import UpstreamConnectionError
+from llm_rosetta_gateway.transport.provider_info import ProviderInfo, openai_auth
 
 
 def _test_provider() -> ProviderInfo:

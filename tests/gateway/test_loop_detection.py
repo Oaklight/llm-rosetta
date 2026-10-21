@@ -5,15 +5,15 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import MagicMock
 
-from llm_rosetta.gateway.config import detect_routing_loops
-from llm_rosetta.gateway.middleware.headers import (
+from llm_rosetta_gateway.config import detect_routing_loops
+from llm_rosetta_gateway.middleware.headers import (
     HOP_COUNT_HEADER,
     MAX_HOPS,
     build_upstream_extra_headers,
     get_hop_count,
 )
-from llm_rosetta.gateway.middleware.hop_limit import create_hop_limit_hook
-from llm_rosetta.gateway.routing import ModelRoute, ProviderEntry
+from llm_rosetta_gateway.middleware.hop_limit import create_hop_limit_hook
+from llm_rosetta_gateway.routing import ModelRoute, ProviderEntry
 
 
 # ---------------------------------------------------------------------------

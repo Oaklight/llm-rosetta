@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from llm_rosetta.gateway.app import GatewayExtensions, create_app
-from llm_rosetta.gateway.config import GatewayConfig
+from llm_rosetta_gateway.app import GatewayExtensions, create_app
+from llm_rosetta_gateway.config import GatewayConfig
 
 
 def _minimal_cfg(**overrides) -> GatewayConfig:
@@ -69,7 +69,7 @@ class TestCustomTransport:
 
     @pytest.mark.asyncio
     async def test_default_transport(self):
-        from llm_rosetta.gateway.transport import HttpTransport
+        from llm_rosetta_gateway.transport import HttpTransport
 
         app = await create_app(_minimal_cfg())
         assert isinstance(app.transport, HttpTransport)  # ty: ignore[unresolved-attribute]

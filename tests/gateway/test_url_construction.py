@@ -6,8 +6,8 @@ chat, embedding, and rerank endpoints.
 
 from __future__ import annotations
 
-from llm_rosetta.gateway.config import GatewayConfig
-from llm_rosetta.gateway.pipelines.embeddings import _resolve_embedding_provider
+from llm_rosetta_gateway.config import GatewayConfig
+from llm_rosetta_gateway.pipelines.embeddings import _resolve_embedding_provider
 
 
 def _config_with_provider(

@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from llm_rosetta._vendor.httpserver import App, JSONResponse
-from llm_rosetta.gateway.config import GatewayConfig
+from llm_rosetta_gateway.config import GatewayConfig
 
 
 # ---------------------------------------------------------------------------

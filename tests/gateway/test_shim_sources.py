@@ -8,12 +8,12 @@ from pathlib import Path
 
 import pytest
 
-from llm_rosetta.gateway.admin.routes.config import (
+from llm_rosetta_gateway.admin.routes.config import (
     _shim_status_payload,
     _validate_shim_sources_body,
 )
-from llm_rosetta.gateway.config import GatewayConfig
-from llm_rosetta.gateway.shim_sources import (
+from llm_rosetta_gateway.config import GatewayConfig
+from llm_rosetta_gateway.shim_sources import (
     apply_shim_section,
     apply_shim_sources,
     resolve_source_config,
@@ -163,7 +163,7 @@ class TestApplyShimSources:
                 sources=[], total_shims=0, failures=lambda: [], to_dict=lambda: {}
             )
 
-        import llm_rosetta.gateway.shim_sources as mod
+        import llm_rosetta_gateway.shim_sources as mod
 
         monkeypatch.setattr(mod, "rebuild_shims", fake_rebuild)
         apply_shim_section(
@@ -179,25 +179,25 @@ class TestMergeShimSourcesBody:
     """The PUT handler's merge, in isolation from the request plumbing."""
 
     def test_presets_are_persisted(self):
-        from llm_rosetta.gateway.admin.routes.config import _merge_shim_sources_body
+        from llm_rosetta_gateway.admin.routes.config import _merge_shim_sources_body
 
         assert _merge_shim_sources_body({}, {"presets": ["argo"]}) == {
             "presets": ["argo"]
         }
 
     def test_absent_presets_leave_the_section_alone(self):
-        from llm_rosetta.gateway.admin.routes.config import _merge_shim_sources_body
+        from llm_rosetta_gateway.admin.routes.config import _merge_shim_sources_body
 
         section = {"presets": ["argo"]}
         assert _merge_shim_sources_body(section, {"paths": []}) == {"presets": ["argo"]}
 
     def test_empty_presets_are_dropped(self):
-        from llm_rosetta.gateway.admin.routes.config import _merge_shim_sources_body
+        from llm_rosetta_gateway.admin.routes.config import _merge_shim_sources_body
 
         assert _merge_shim_sources_body({"presets": ["argo"]}, {"presets": []}) == {}
 
     def test_other_keys_survive_a_presets_update(self):
-        from llm_rosetta.gateway.admin.routes.config import _merge_shim_sources_body
+        from llm_rosetta_gateway.admin.routes.config import _merge_shim_sources_body
 
         merged = _merge_shim_sources_body(
             {"paths": ["/a"], "strict": True}, {"presets": ["alcf"]}

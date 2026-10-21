@@ -53,7 +53,7 @@ class TestLookup:
 
 class TestTheDescriptorsAgree:
     def test_each_descriptor_lists_its_registry(self) -> None:
-        from llm_rosetta.gateway.model_types import all_model_types
+        from llm_rosetta_gateway.model_types import all_model_types
 
         descriptors = {d.name: d for d in all_model_types()}
         assert set(descriptors) == set(MODEL_TYPES)

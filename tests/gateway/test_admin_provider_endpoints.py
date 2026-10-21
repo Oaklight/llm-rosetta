@@ -8,7 +8,7 @@ entry, with the same sanitised shape as ``_auto_disabled``.
 
 from __future__ import annotations
 
-from llm_rosetta.gateway.admin.routes.config.payload import _mask_provider_entry
+from llm_rosetta_gateway.admin.routes.config.payload import _mask_provider_entry
 
 
 def test_endpoint_diagnostics_keep_only_reason_and_category():

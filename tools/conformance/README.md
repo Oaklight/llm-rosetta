@@ -1,6 +1,6 @@
 # Conformance probes
 
-Developer-only probe harness. It lives outside `src/llm_rosetta` so the wheel
+Developer-only probe harness. It lives outside the `packages/` trees so the wheel
 does not ship it.
 
 ```bash

@@ -6,7 +6,7 @@ import json
 import os
 import threading
 
-from llm_rosetta.gateway.config import config_lock, write_config
+from llm_rosetta_gateway.config import config_lock, write_config
 
 
 class TestWriteConfigAtomic:

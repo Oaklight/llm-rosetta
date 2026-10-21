@@ -5,17 +5,17 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import AsyncMock
 
-from llm_rosetta.gateway.proxy import (
+from llm_rosetta_gateway.proxy import (
     _build_preflight_body,
     _extract_preflight_input_tokens,
     _run_preflight,
 )
-from llm_rosetta.gateway.transport._base import UpstreamResponse
+from llm_rosetta_gateway.transport._base import UpstreamResponse
 from llm_rosetta.converters.base.context import StreamContext
 from llm_rosetta.converters.llm.messages.converter import MessagesConverter
 from llm_rosetta.types.ir.stream import StreamStartEvent
-from llm_rosetta.gateway.config import GatewayConfig
-from llm_rosetta.gateway.middleware.headers import get_preflight_tokens_override
+from llm_rosetta_gateway.config import GatewayConfig
+from llm_rosetta_gateway.middleware.headers import get_preflight_tokens_override
 
 
 # ---------------------------------------------------------------------------

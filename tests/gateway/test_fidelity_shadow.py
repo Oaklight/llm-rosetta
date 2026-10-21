@@ -6,8 +6,8 @@ import logging
 
 import pytest
 
-from llm_rosetta.gateway.pipelines._fidelity import check_same_format_fidelity
-from llm_rosetta.gateway.proxy import _check_fidelity
+from llm_rosetta_gateway.pipelines._fidelity import check_same_format_fidelity
+from llm_rosetta_gateway.proxy import _check_fidelity
 
 
 class TestCheckFidelity:
@@ -157,7 +157,7 @@ class TestNonLlmFidelityShadow:
     def _propagate(self, monkeypatch):
         # The gateway logger sets propagate=False; caplog needs it to reach
         # the root handler.
-        from llm_rosetta.gateway.logging import _logger
+        from llm_rosetta_gateway.logging import _logger
 
         monkeypatch.setattr(_logger, "propagate", True)
 

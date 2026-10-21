@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from llm_rosetta.gateway.admin.routes import config as admin_config
-from llm_rosetta.gateway.config import GatewayConfig, ProviderIdentity
+from llm_rosetta_gateway.admin.routes import config as admin_config
+from llm_rosetta_gateway.config import GatewayConfig, ProviderIdentity
 from llm_rosetta.shims.provider_shim import (
     ConnectionConfig,
     ProviderShim,

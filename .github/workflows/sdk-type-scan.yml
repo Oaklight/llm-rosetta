@@ -18,7 +18,7 @@ jobs:
       - name: Install project with SDK extras
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[openai,anthropic,google]"
+          pip install -e "packages/llm-rosetta[openai,anthropic,google]"
 
       - name: Upgrade SDKs to latest versions
         run: pip install --upgrade openai anthropic google-genai

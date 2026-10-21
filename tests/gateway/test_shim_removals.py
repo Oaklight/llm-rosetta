@@ -17,18 +17,18 @@ from types import SimpleNamespace
 
 import pytest
 
-from llm_rosetta.gateway.admin.routes.config import (
+from llm_rosetta_gateway.admin.routes.config import (
     _shim_removal_advisories,
     _validate_shim_sources_body,
 )
-from llm_rosetta.gateway.config import GatewayConfig
-from llm_rosetta.gateway.shim_sources import (
+from llm_rosetta_gateway.config import GatewayConfig
+from llm_rosetta_gateway.shim_sources import (
     report_shim_removals,
     resolve_source_config,
     shim_removal_advisories,
 )
-from llm_rosetta.gateway.shims import SHIM_SOURCE_PACKAGES, ShimRemoval
-from llm_rosetta.gateway.shims.sources import ShimLoadReport, ShimSourceStatus
+from llm_rosetta_gateway.shims import SHIM_SOURCE_PACKAGES, ShimRemoval
+from llm_rosetta_gateway.shims.sources import ShimLoadReport, ShimSourceStatus
 
 ARGO_PACKAGE = next(p for p in SHIM_SOURCE_PACKAGES if p.key == "argo")
 ALCF_PACKAGE = next(p for p in SHIM_SOURCE_PACKAGES if p.key == "alcf")
@@ -71,7 +71,7 @@ ARGO_REMOVAL = ShimRemoval(
 def scheduled_minimax(monkeypatch):
     """Make the detector treat ``minimax--messages`` as a scheduled removal."""
     monkeypatch.setattr(
-        "llm_rosetta.gateway.shims.removals.SHIM_REMOVALS", MINIMAX_REMOVALS
+        "llm_rosetta_gateway.shims.removals.SHIM_REMOVALS", MINIMAX_REMOVALS
     )
     return MINIMAX_REMOVALS
 
@@ -79,7 +79,7 @@ def scheduled_minimax(monkeypatch):
 @pytest.fixture
 def scheduled_argo(monkeypatch):
     monkeypatch.setattr(
-        "llm_rosetta.gateway.shims.removals.SHIM_REMOVALS", (ARGO_REMOVAL,)
+        "llm_rosetta_gateway.shims.removals.SHIM_REMOVALS", (ARGO_REMOVAL,)
     )
     return (ARGO_REMOVAL,)
 
@@ -261,7 +261,7 @@ class TestAdminPayload:
 
     def test_preset_payload_shape(self):
         """The shape the Settings picker consumes is pinned here."""
-        from llm_rosetta.gateway.admin.routes.config import payload as config_payload
+        from llm_rosetta_gateway.admin.routes.config import payload as config_payload
 
         payload = config_payload._shim_source_presets_payload()
         assert [entry["key"] for entry in payload] == ["alcf", "argo", "asksage"]
@@ -278,7 +278,7 @@ class TestAdminPayload:
 
     def test_presets_come_from_the_source_catalog(self):
         """The panel's catalogue is the standalone-package list, not the manifest."""
-        from llm_rosetta.gateway.admin.routes.config import payload as config_payload
+        from llm_rosetta_gateway.admin.routes.config import payload as config_payload
 
         assert config_payload.SHIM_SOURCE_PACKAGES is SHIM_SOURCE_PACKAGES
 
@@ -435,7 +435,7 @@ class TestCreateAppWiring:
     async def test_starting_the_gateway_warns_about_a_scheduled_removal(
         self, scheduled_minimax, gateway_warnings
     ):
-        from llm_rosetta.gateway.app import create_app
+        from llm_rosetta_gateway.app import create_app
 
         await create_app(GatewayConfig(self._raw()))
 
@@ -446,8 +446,8 @@ class TestCreateAppWiring:
         self, scheduled_minimax, tmp_path, gateway_warnings
     ):
         """The whole point of the advisory: a quiet log means the migration landed."""
-        from llm_rosetta.gateway.app import create_app
-        from llm_rosetta.gateway.shims import rebuild_shims
+        from llm_rosetta_gateway.app import create_app
+        from llm_rosetta_gateway.shims import rebuild_shims
 
         leaf = tmp_path / "local-shims" / "messages"
         leaf.mkdir(parents=True)
@@ -476,7 +476,7 @@ class TestCreateAppWiring:
         The mutation this catches is ``raw_providers`` -> the enabled-only view:
         the warning for the disabled provider disappears and nothing else moves.
         """
-        from llm_rosetta.gateway.app import create_app
+        from llm_rosetta_gateway.app import create_app
 
         raw = {
             "providers": {

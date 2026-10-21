@@ -56,7 +56,7 @@ jobs:
       - name: Resolve version
         id: version
         run: |
-          PKG_VER=$(sed -n 's/^__version__ = "\(.*\)"/\1/p' src/llm_rosetta/__init__.py)
+          PKG_VER=$(sed -n 's/^__version__ = "\(.*\)"/\1/p' packages/llm-rosetta/src/llm_rosetta/__init__.py)
           SHORT_SHA=$(git rev-parse --short HEAD)
           if git describe --exact-match --tags HEAD >/dev/null 2>&1; then
             VERSION="$PKG_VER"
@@ -111,7 +111,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install -e "."
+          pip install -e packages/llm-rosetta -e packages/llm-rosetta-gateway
           pip install "nuitka[onefile]" ordered-set
 
       - name: Snapshot resources before build

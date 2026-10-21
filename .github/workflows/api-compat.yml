@@ -29,7 +29,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[all]"
+          pip install -e "packages/llm-rosetta[all]" -e packages/llm-rosetta-gateway
 
       - name: Compare public API with the latest stable release
         run: python scripts/dev/public_api_diff.py --github-summary

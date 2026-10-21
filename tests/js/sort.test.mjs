@@ -13,7 +13,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { syncAriaSort, wireSortableHeaders, sortByKey } from '../../src/llm_rosetta/gateway/admin/js/core/sort.js';
+import { syncAriaSort, wireSortableHeaders, sortByKey } from '../../packages/llm-rosetta-gateway/src/llm_rosetta_gateway/admin/js/core/sort.js';
 
 function makeTh() {
   const attrs = new Map();

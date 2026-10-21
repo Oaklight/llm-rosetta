@@ -7,7 +7,7 @@ import os
 
 import pytest
 
-from llm_rosetta.gateway.config import (
+from llm_rosetta_gateway.config import (
     GatewayConfig,
     async_config_lock,
     config_lock,

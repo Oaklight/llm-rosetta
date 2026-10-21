@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import pytest
-from llm_rosetta.gateway.config import GatewayConfig
-from llm_rosetta.gateway.pipelines.rerank import _detect_source_format
+from llm_rosetta_gateway.config import GatewayConfig
+from llm_rosetta_gateway.pipelines.rerank import _detect_source_format
 
 from llm_rosetta.converters.rerank.pipeline import (
     RerankConversionPipeline,
@@ -172,7 +172,7 @@ class TestGetRerankConverter:
 
 class TestRerankConfig:
     def test_parse_rerank_config(self) -> None:
-        from llm_rosetta.gateway.config import GatewayConfig
+        from llm_rosetta_gateway.config import GatewayConfig
 
         raw = {
             "providers": {
@@ -210,7 +210,7 @@ class TestRerankConfig:
         assert config.default_rerank_format == "cohere"
 
     def test_legacy_rerank_models_accept_a_provider_list(self) -> None:
-        from llm_rosetta.gateway.config import GatewayConfig
+        from llm_rosetta_gateway.config import GatewayConfig
 
         raw = {
             "providers": {},
@@ -229,7 +229,7 @@ class TestRerankConfig:
         assert config.rerank_models["rerank-v3.5"] == "cohere"
 
     def test_resolve_rerank(self) -> None:
-        from llm_rosetta.gateway.config import GatewayConfig
+        from llm_rosetta_gateway.config import GatewayConfig
 
         raw = {
             "providers": {
@@ -258,7 +258,7 @@ class TestRerankConfig:
         assert route.provider_info.auth_headers()["Authorization"] == "Bearer jina-key"
 
     def test_resolve_rerank_unknown_model(self) -> None:
-        from llm_rosetta.gateway.config import GatewayConfig
+        from llm_rosetta_gateway.config import GatewayConfig
 
         raw = {
             "providers": {
@@ -276,7 +276,7 @@ class TestRerankConfig:
             config.resolve_rerank("nonexistent")
 
     def test_empty_rerank_config(self) -> None:
-        from llm_rosetta.gateway.config import GatewayConfig
+        from llm_rosetta_gateway.config import GatewayConfig
 
         raw = {
             "providers": {
@@ -293,7 +293,7 @@ class TestRerankConfig:
         assert config.default_rerank_format == "jina"
 
     def test_disabled_rerank_provider_skipped(self) -> None:
-        from llm_rosetta.gateway.config import GatewayConfig
+        from llm_rosetta_gateway.config import GatewayConfig
 
         raw = {
             "providers": {

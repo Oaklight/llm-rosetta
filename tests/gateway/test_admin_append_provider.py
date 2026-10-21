@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from llm_rosetta.gateway.admin.routes.config import (
+from llm_rosetta_gateway.admin.routes.config import (
     _add_new_models,
     _append_provider_to_model,
     _merge_provider_into_model,

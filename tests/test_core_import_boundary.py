@@ -17,8 +17,10 @@ import subprocess
 import sys
 from pathlib import Path
 
-_PKG_ROOT = Path(__file__).parents[1] / "src/llm_rosetta"
-_GATEWAY = "llm_rosetta.gateway"
+_PKG_ROOT = Path(__file__).parents[1] / "packages/llm-rosetta/src/llm_rosetta"
+_GATEWAY = "llm_rosetta_gateway"
+#: The deprecation shim in the core tree resolves to the same package.
+_GATEWAY_ALIAS = "llm_rosetta.gateway"
 
 # Modules the core may never initialize by accident.  ``usage`` is
 # deliberately absent: it is the core-side metering subsystem and
@@ -55,7 +57,9 @@ def _absolute_module(path: Path, node: ast.ImportFrom) -> str:
 
 
 def _is_gateway(name: str) -> bool:
-    return name == _GATEWAY or name.startswith(_GATEWAY + ".")
+    return name in (_GATEWAY, _GATEWAY_ALIAS) or name.startswith(
+        (_GATEWAY + ".", _GATEWAY_ALIAS + ".")
+    )
 
 
 def _from_hit(path: Path, node: ast.ImportFrom) -> str | None:
@@ -120,13 +124,13 @@ def test_core_sources_never_import_the_gateway():
 def test_guard_catches_absolute_relative_and_dynamic_imports():
     probe = _PKG_ROOT / "pipeline" / "chat.py"
 
-    assert _gateway_imports(probe, "from llm_rosetta.gateway import x")
+    assert _gateway_imports(probe, "from llm_rosetta_gateway import x")
     assert _gateway_imports(probe, "from ..gateway.proxy import x")
     assert _gateway_imports(probe, "from .. import gateway as _gw")
     assert _gateway_imports(
-        probe, 'import importlib\nimportlib.import_module("llm_rosetta.gateway.x")'
+        probe, 'import importlib\nimportlib.import_module("llm_rosetta_gateway.x")'
     )
-    assert _gateway_imports(probe, '__import__("llm_rosetta.gateway.x")')
+    assert _gateway_imports(probe, '__import__("llm_rosetta_gateway.x")')
     assert _gateway_imports(probe, "from llm_rosetta import gateway as _gw")
     assert _gateway_imports(probe, "from .usage.semantics import shape_for") == []
 
@@ -141,7 +145,7 @@ import llm_rosetta.shims
 
 bad = sorted(
     m for m in sys.modules
-    if m == "llm_rosetta.gateway" or m.startswith("llm_rosetta.gateway.")
+    if m == "llm_rosetta_gateway" or m.startswith("llm_rosetta_gateway.")
 )
 bad += sorted(sys.modules.keys() & {_GATEWAY_SIDE!r})
 print("\\n".join(bad))

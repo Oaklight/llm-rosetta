@@ -19,7 +19,7 @@ import pytest
 import llm_rosetta
 from llm_rosetta.provider_names import LEGACY_SHIM_ALIASES, canonical_shim_name
 from llm_rosetta.shims import get_shim
-from llm_rosetta.gateway.shims import (
+from llm_rosetta_gateway.shims import (
     SHIM_REMOVALS,
     SHIM_SOURCE_PACKAGES,
     ShimRemoval,
@@ -131,7 +131,7 @@ class TestManifest:
 
     def test_every_remote_round_trips_through_the_source_resolver(self):
         """A preset is only useful if the gateway would accept it."""
-        from llm_rosetta.gateway.shim_sources import resolve_source_config
+        from llm_rosetta_gateway.shim_sources import resolve_source_config
 
         for entry in SAMPLES:
             _dirs, remotes, _cache = resolve_source_config(
@@ -259,7 +259,7 @@ class TestSourceCatalog:
             assert "token_env" not in entry.to_dict()["remote"]
 
     def test_every_preset_round_trips_through_the_source_resolver(self):
-        from llm_rosetta.gateway.shim_sources import resolve_source_config
+        from llm_rosetta_gateway.shim_sources import resolve_source_config
 
         for entry in SHIM_SOURCE_PACKAGES:
             _dirs, remotes, _cache = resolve_source_config(
@@ -274,7 +274,7 @@ class TestSourceCatalog:
         assert get_source_package("nope") is None
 
     def test_find_source_package_maps_a_shim_to_its_package(self):
-        from llm_rosetta.gateway.shims import find_source_package
+        from llm_rosetta_gateway.shims import find_source_package
 
         package = find_source_package("argo--messages")
         assert package is not None

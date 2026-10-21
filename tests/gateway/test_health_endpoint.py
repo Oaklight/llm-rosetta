@@ -196,7 +196,7 @@ class TestHandleHealthFunction:
     """Test handle_health / handle_health_live / handle_health_ready directly."""
 
     def setup_method(self):
-        from llm_rosetta.gateway.app import (
+        from llm_rosetta_gateway.app import (
             handle_health,
             handle_health_live,
             handle_health_ready,

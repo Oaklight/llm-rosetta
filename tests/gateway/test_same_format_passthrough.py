@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import pytest
 
-from llm_rosetta.gateway.config import GatewayConfig
-from llm_rosetta.gateway.routing import SelectionContext
+from llm_rosetta_gateway.config import GatewayConfig
+from llm_rosetta_gateway.routing import SelectionContext
 
 
 @pytest.fixture(autouse=True)
@@ -76,7 +76,7 @@ def _make_config(
 
 def _make_unready(config: GatewayConfig, *names: str) -> None:
     """Swap providers for ones whose deferred token fetch is pending."""
-    from llm_rosetta.gateway.transport.provider_info import (
+    from llm_rosetta_gateway.transport.provider_info import (
         TOKEN_PENDING_SENTINEL,
         ProviderInfo,
         openai_auth,
@@ -188,7 +188,7 @@ class TestFormatAffinity:
         The short-circuit is observable only as the absence of a tier scan —
         one would advance a second counter and could realign the anchor.
         """
-        from llm_rosetta.gateway.routing import same_format
+        from llm_rosetta_gateway.routing import same_format
 
         scans = []
         original = same_format.select_ready_entry
@@ -397,7 +397,7 @@ class TestReadinessInteraction:
             assert route.provider_name == "resp_b"
 
     def test_all_unready_still_raises(self):
-        from llm_rosetta.gateway.maintenance.startup import ProviderNotReady
+        from llm_rosetta_gateway.maintenance.startup import ProviderNotReady
 
         config = _make_config(
             {"m": {"providers": ["chat_a", "resp_a"]}}, prefer_same_format=True
@@ -633,7 +633,7 @@ class TestAccountTiers:
         assert tokens["t1"].startswith("cmd:")
 
     def test_keyless_providers_never_group(self):
-        from llm_rosetta.gateway.transport.provider_info import (
+        from llm_rosetta_gateway.transport.provider_info import (
             ProviderInfo,
             openai_auth,
         )

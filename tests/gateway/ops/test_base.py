@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from llm_rosetta.gateway.ops.base import OpsBase, OpsContext
+from llm_rosetta_gateway.ops.base import OpsBase, OpsContext
 from llm_rosetta.observability.ops_log import (
     SEVERITY_INFO,
     SEVERITY_WARNING,

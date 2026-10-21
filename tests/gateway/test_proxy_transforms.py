@@ -9,21 +9,21 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from llm_rosetta.gateway.proxy import (
+from llm_rosetta_gateway.proxy import (
     ProviderMetadataStore,
     handle_non_streaming,
 )
 from llm_rosetta.auto_detect import ProviderType
 from llm_rosetta.pipeline import ConversionPipeline
 from llm_rosetta.routing import ResolvedRoute
-from llm_rosetta.gateway.transport._base import UpstreamResponse
+from llm_rosetta_gateway.transport._base import UpstreamResponse
 from llm_rosetta.shims.provider_shim import (
     ProviderShim,
     _reset_registry,
     register_shim,
 )
 from llm_rosetta.transforms import rename_field, strip_fields
-from llm_rosetta.gateway.routing import SelectionContext
+from llm_rosetta_gateway.routing import SelectionContext
 
 
 # ---------------------------------------------------------------------------
@@ -421,7 +421,7 @@ class TestToolCollisionHintStreaming:
     """The pre-stream 4xx path returns a plain response, hint included (#907)."""
 
     def test_stream_400_with_collisions_appends_hint(self):
-        from llm_rosetta.gateway.proxy import handle_streaming
+        from llm_rosetta_gateway.proxy import handle_streaming
 
         transport = _make_stream_error_transport(
             400, '{"error": {"message": "Tool names must be unique."}}'
@@ -530,7 +530,7 @@ class TestStreamUsageModelName:
             raise StopAsyncIteration
 
     def test_usage_lands_under_the_reported_model(self):
-        from llm_rosetta.gateway.proxy import _stream_event_generator
+        from llm_rosetta_gateway.proxy import _stream_event_generator
         from llm_rosetta.observability.metrics import MetricsCollector
 
         metrics = MetricsCollector()
@@ -569,7 +569,7 @@ class TestStreamUsageModelName:
     def test_reported_model_defaults_to_the_body_model(self):
         """A caller with no client name still reports the model it has, and
         the total is filled in from the parts when the upstream omits one."""
-        from llm_rosetta.gateway.proxy import _stream_event_generator
+        from llm_rosetta_gateway.proxy import _stream_event_generator
         from llm_rosetta.observability.metrics import MetricsCollector
 
         metrics = MetricsCollector()

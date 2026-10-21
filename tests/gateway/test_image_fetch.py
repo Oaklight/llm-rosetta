@@ -11,7 +11,7 @@ from typing import Any
 
 import pytest
 
-from llm_rosetta.gateway.proxy.image_fetch import fetch_image
+from llm_rosetta_gateway.proxy.image_fetch import fetch_image
 
 
 def test_fetch_image_returns_the_body_and_content_type(monkeypatch):

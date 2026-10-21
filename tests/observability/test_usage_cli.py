@@ -111,7 +111,7 @@ async def store(tmp_path: Path) -> Path:
 
 def _run(store: Path | str, *args: str) -> subprocess.CompletedProcess[str]:
     """Run the CLI the way a shell would, from the source tree."""
-    src = str(Path(__file__).resolve().parents[2] / "src")
+    src = str(Path(__file__).resolve().parents[2] / "packages" / "llm-rosetta" / "src")
     return subprocess.run(
         [
             sys.executable,
@@ -561,7 +561,12 @@ class TestItsEdges:
 class TestItIsWiredUp:
     def test_the_console_script_points_at_main(self):
         """The entry point is what a shell runs; a rename here breaks it."""
-        pyproject = Path(__file__).resolve().parents[2] / "pyproject.toml"
+        pyproject = (
+            Path(__file__).resolve().parents[2]
+            / "packages"
+            / "llm-rosetta"
+            / "pyproject.toml"
+        )
         text = pyproject.read_text()
         assert (
             'llm-rosetta-usage = "llm_rosetta.observability.usage.cli:main"' in text

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from llm_rosetta.gateway.maintenance.names import (
+from llm_rosetta_gateway.maintenance.names import (
     DOCS_URL,
     correct_legacy_names,
     legacy_name_error,

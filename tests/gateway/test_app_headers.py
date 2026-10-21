@@ -6,12 +6,12 @@ import asyncio
 from typing import Any
 from unittest.mock import MagicMock
 
-import llm_rosetta.gateway.app as app_module
-from llm_rosetta.gateway.app import _state
+import llm_rosetta_gateway.app as app_module
+from llm_rosetta_gateway.app import _state
 from llm_rosetta._vendor.httpserver import JSONResponse
-from llm_rosetta.gateway.middleware.headers import build_upstream_extra_headers
+from llm_rosetta_gateway.middleware.headers import build_upstream_extra_headers
 from llm_rosetta.routing import ResolvedRoute
-from llm_rosetta.gateway.routing import SelectionContext
+from llm_rosetta_gateway.routing import SelectionContext
 
 
 def test_build_upstream_extra_headers_preserves_user_agent_and_responses_version():
@@ -67,7 +67,7 @@ def test_proxy_handler_forwards_user_agent_to_non_streaming_proxy(monkeypatch):
         provider_key_affinity: dict[str, bool] = {}
 
         def __init__(self):
-            from llm_rosetta.gateway.middleware.circuit_breaker import (
+            from llm_rosetta_gateway.middleware.circuit_breaker import (
                 CircuitBreakerConfig,
                 CircuitBreakerRegistry,
             )

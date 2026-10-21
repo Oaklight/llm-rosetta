@@ -15,9 +15,9 @@ from typing import Any
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from llm_rosetta.gateway.maintenance.backfills import build_registry
-from llm_rosetta.gateway.maintenance.startup import DeferredStartup
-from llm_rosetta.gateway.routing import ModelRoute, ProviderEntry
+from llm_rosetta_gateway.maintenance.backfills import build_registry
+from llm_rosetta_gateway.maintenance.startup import DeferredStartup
+from llm_rosetta_gateway.routing import ModelRoute, ProviderEntry
 from llm_rosetta.observability.maintenance import Policy, StepContext
 
 _ALL_STEPS = [
@@ -378,7 +378,7 @@ class TestTheReadinessProbe:
     async def test_a_failed_repair_is_reported_without_withholding_traffic(self):
         import json
 
-        from llm_rosetta.gateway.app import handle_health_ready
+        from llm_rosetta_gateway.app import handle_health_ready
         from llm_rosetta.observability import MetricsCollector
 
         persistence, key_store = _stores()
@@ -404,7 +404,7 @@ class TestTheReadinessProbe:
     async def test_a_clean_run_says_done(self):
         import json
 
-        from llm_rosetta.gateway.app import handle_health_ready
+        from llm_rosetta_gateway.app import handle_health_ready
         from llm_rosetta.observability import MetricsCollector
 
         persistence, key_store = _stores()
@@ -423,7 +423,7 @@ class TestTheReadinessProbe:
         """Which is the pre-existing behaviour: the *task* is not finished."""
         import json
 
-        from llm_rosetta.gateway.app import handle_health_ready
+        from llm_rosetta_gateway.app import handle_health_ready
 
         persistence, key_store = _stores()
         app = _App(persistence=persistence, keystore=key_store)

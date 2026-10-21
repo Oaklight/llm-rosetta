@@ -110,7 +110,7 @@ class TestGetEmbeddingConverter:
 
 class TestEmbeddingConfig:
     def test_parse_embedding_config(self) -> None:
-        from llm_rosetta.gateway.config import GatewayConfig
+        from llm_rosetta_gateway.config import GatewayConfig
 
         raw = {
             "providers": {
@@ -148,7 +148,7 @@ class TestEmbeddingConfig:
         assert config.default_embedding_format == "openai"
 
     def test_resolve_embedding(self) -> None:
-        from llm_rosetta.gateway.config import GatewayConfig
+        from llm_rosetta_gateway.config import GatewayConfig
 
         raw = {
             "providers": {
@@ -177,7 +177,7 @@ class TestEmbeddingConfig:
         assert route.provider_info.auth_headers()["Authorization"] == "Bearer jina-key"
 
     def test_legacy_embedding_models_accept_a_provider_list(self) -> None:
-        from llm_rosetta.gateway.config import GatewayConfig
+        from llm_rosetta_gateway.config import GatewayConfig
 
         raw = {
             "providers": {},
@@ -196,7 +196,7 @@ class TestEmbeddingConfig:
         assert config.embedding_models["m"] == "g"
 
     def test_empty_embedding_config(self) -> None:
-        from llm_rosetta.gateway.config import GatewayConfig
+        from llm_rosetta_gateway.config import GatewayConfig
 
         raw = {
             "providers": {
@@ -213,7 +213,7 @@ class TestEmbeddingConfig:
         assert config.default_embedding_format == "openai"
 
     def test_resolve_embedding_unknown_model(self) -> None:
-        from llm_rosetta.gateway.config import GatewayConfig
+        from llm_rosetta_gateway.config import GatewayConfig
 
         raw = {
             "providers": {

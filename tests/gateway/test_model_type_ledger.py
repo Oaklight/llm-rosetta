@@ -3,7 +3,7 @@
 Chat has always recorded what it moved; ``/v1/embeddings``, ``/v1/rerank`` and
 ``/v1/decision`` bill the same upstreams and recorded nothing.  Each handler now
 records one row through
-:class:`~llm_rosetta.gateway.ops.proxy.OpsProxyRequest` — the chat routes' own
+:class:`~llm_rosetta_gateway.ops.proxy.OpsProxyRequest` — the chat routes' own
 write path — carrying the model type and the ledger columns its IR usage
 normalizes to.
 """
@@ -18,12 +18,12 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from llm_rosetta.gateway.config import GatewayConfig
-from llm_rosetta.gateway.ops.base import OpsContext
-from llm_rosetta.gateway.pipelines.decision import handle_decision
-from llm_rosetta.gateway.pipelines.embeddings import handle_embeddings
-from llm_rosetta.gateway.pipelines.rerank import handle_rerank
-from llm_rosetta.gateway.transport._base import UpstreamResponse
+from llm_rosetta_gateway.config import GatewayConfig
+from llm_rosetta_gateway.ops.base import OpsContext
+from llm_rosetta_gateway.pipelines.decision import handle_decision
+from llm_rosetta_gateway.pipelines.embeddings import handle_embeddings
+from llm_rosetta_gateway.pipelines.rerank import handle_rerank
+from llm_rosetta_gateway.transport._base import UpstreamResponse
 from llm_rosetta.observability import PersistenceManager, RequestLog
 
 

@@ -13,7 +13,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-_IR = Path(__file__).parents[1] / "src/llm_rosetta/ir"
+_IR = Path(__file__).parents[1] / "packages/llm-rosetta/src/llm_rosetta/ir"
 _LAYERS = (_IR / "primitives", _IR / "tools")
 _CONVERTERS = "llm_rosetta.converters"
 

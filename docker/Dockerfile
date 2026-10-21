@@ -34,13 +34,13 @@ RUN set -e; \
     fi; \
     if [ -n "$LOCAL_WHEEL" ] && [ -f "/tmp/dist/$LOCAL_WHEEL" ]; then \
         echo "Installing from local wheel: $LOCAL_WHEEL"; \
-        pip install $MIRROR_IDX $EXTRA_IDX --no-cache-dir "/tmp/dist/${LOCAL_WHEEL}[gateway,profiling]"; \
+        pip install $MIRROR_IDX $EXTRA_IDX --no-cache-dir /tmp/dist/llm_rosetta-*.whl /tmp/dist/llm_rosetta_gateway-*.whl; \
     elif [ -n "$PACKAGE_VERSION" ]; then \
         echo "Installing llm-rosetta version: $PACKAGE_VERSION"; \
-        pip install $MIRROR_IDX $EXTRA_IDX --no-cache-dir "llm-rosetta[gateway,profiling]==$PACKAGE_VERSION"; \
+        pip install $MIRROR_IDX $EXTRA_IDX --no-cache-dir "llm-rosetta==$PACKAGE_VERSION" "llm-rosetta-gateway==$PACKAGE_VERSION"; \
     else \
         echo "Installing latest llm-rosetta from PyPI"; \
-        pip install $MIRROR_IDX $EXTRA_IDX --no-cache-dir "llm-rosetta[gateway,profiling]"; \
+        pip install $MIRROR_IDX $EXTRA_IDX --no-cache-dir llm-rosetta llm-rosetta-gateway; \
     fi; \
     pip uninstall -y pip setuptools 2>/dev/null || true; \
     rm -rf /tmp/dist/

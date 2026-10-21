@@ -29,13 +29,13 @@ jobs:
           VERSION="${{ inputs.version }}"
           TAG="v$VERSION"
           read_pkg_ver() {
-            sed -n 's/^__version__ = "\(.*\)"/\1/p' src/llm_rosetta/__init__.py
+            sed -n 's/^__version__ = "\(.*\)"/\1/p' packages/llm-rosetta/src/llm_rosetta/__init__.py
           }
           if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
             # Back-release: tag already exists. Verify __init__.py *at the tag*
             # matches, so we publish exactly what was tagged.
             echo "Tag $TAG already exists — back-release mode."
-            PKG_VER=$(git show "$TAG:src/llm_rosetta/__init__.py" | sed -n 's/^__version__ = "\(.*\)"/\1/p')
+            PKG_VER=$(git show "$TAG:packages/llm-rosetta/src/llm_rosetta/__init__.py" | sed -n 's/^__version__ = "\(.*\)"/\1/p')
             echo "Package version at $TAG: $PKG_VER"
             [ "$PKG_VER" = "$VERSION" ] || \
               (echo "::error::Version mismatch: $TAG has $PKG_VER but release requested $VERSION"; exit 1)
@@ -69,7 +69,8 @@ jobs:
       - name: Build wheel + sdist
         run: |
           pip install --upgrade pip build
-          python -m build
+          python -m build packages/llm-rosetta --outdir dist
+          python -m build packages/llm-rosetta-gateway --outdir dist
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1

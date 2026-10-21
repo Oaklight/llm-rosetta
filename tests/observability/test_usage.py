@@ -251,7 +251,7 @@ class TestTheModelTypesAreTheRegistrys:
 
     def test_the_registry_registers_exactly_these(self):
         """A rename on either side must break a test, not a report."""
-        from llm_rosetta.gateway.model_types import MODEL_TYPE_REGISTRY
+        from llm_rosetta_gateway.model_types import MODEL_TYPE_REGISTRY
 
         assert set(MODEL_TYPE_REGISTRY) == set(MODEL_TYPES)
         # The default is a registered name too, or every row without one would
@@ -633,13 +633,13 @@ def _gateway_imports(tree: ast.Module, *, everywhere: bool) -> list[str]:
     found: list[str] = []
     for node in nodes:
         if isinstance(node, ast.ImportFrom) and node.module:
-            if node.module.startswith("llm_rosetta.gateway"):
+            if node.module.startswith("llm_rosetta_gateway"):
                 found.append(node.module)
         elif isinstance(node, ast.Import):
             found.extend(
                 alias.name
                 for alias in node.names
-                if alias.name.startswith("llm_rosetta.gateway")
+                if alias.name.startswith("llm_rosetta_gateway")
             )
     return found
 

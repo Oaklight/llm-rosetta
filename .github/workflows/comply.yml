@@ -27,7 +27,7 @@ jobs:
 
       - name: Install gateway + llm-comply
         run: |
-          pip install -e ".[gateway]"
+          pip install -e packages/llm-rosetta -e packages/llm-rosetta-gateway
           pip install llm-comply>=0.3.0
 
       - name: Start gateway

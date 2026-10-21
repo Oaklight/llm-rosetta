@@ -6,8 +6,8 @@ import importlib
 import re
 import time
 
-from llm_rosetta.gateway.providers import build_provider_info
-from llm_rosetta.gateway.transport.provider_info import opencode_identifier
+from llm_rosetta_gateway.providers import build_provider_info
+from llm_rosetta_gateway.transport.provider_info import opencode_identifier
 from llm_rosetta.shims import get_shim
 
 _TRANSFORMS = importlib.import_module(

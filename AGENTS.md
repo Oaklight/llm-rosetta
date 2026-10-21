@@ -155,68 +155,79 @@ converter *base* contracts and the shim contract. `llm_rosetta.transforms` and
 
 ## Repository layout
 
+Two distributions live side by side in one repository (epic #1127):
+
 ```
-src/llm_rosetta/
-├── __init__.py              # Public API: convert(), get_converter_for_provider()
-├── auto_detect.py           # Provider auto-detection (delegates to formats.detect)
-├── tool_ops.py              # Cross-provider tool call utilities
-├── formats/                 # Format catalog: one FormatSpec per (model_type, format)
-│   ├── spec.py              # The record type
-│   ├── catalog.py           # The records + BY_PAIR
-│   └── detect.py            # Priority-ordered body detectors
-├── converters/              # one directory per (model_type, format)
-│   ├── base/                # Abstract base + ConversionContext
-│   ├── llm/                 # chat: one package per wire format
-│   │   ├── chat_completions/
-│   │   ├── open_responses/
-│   │   ├── messages/
-│   │   ├── google_generate/
-│   │   └── google_interactions/
-│   ├── embedding/
-│   ├── rerank/
-│   └── decision/            # Decision paradigm (TypeSafe System One)
-├── shims/                   # Provider/model identity cards + transforms
-│   ├── provider_shim.py
-│   ├── transforms.py
-│   └── builtins.py
-├── gateway/                 # HTTP proxy gateway
-│   ├── app/                 # package: factory, routes_llm/models/health/
-│   │                        #   typed, tasks, _state
-│   ├── proxy/               # package: errors, metadata, fidelity, preflight,
-│   │                        #   engine, streaming, stream_merge
-│   ├── config/              # config package: io, loader, schema, core,
-│   │                        #   parse, typed, settings, resolve
-│   ├── providers.py
-│   ├── shims/                # External shim sources, catalog, scheduled removals
-│   ├── shim_sources.py      # Config `shims` section → shim registry
-│   ├── model_types.py, keystore.py, logging.py
-│   ├── routing/, maintenance/  # Selection strategies; config/key/backfill steps
-│   ├── cli.py, banner.py, __main__.py
-│   ├── middleware/           # Auth, rate limiting, error format, headers, etc.
-│   ├── pipelines/            # typed.py shell + embeddings/rerank/decision specs
-│   ├── transport/            # Upstream HTTP transport
-│   ├── ops/                  # Unified operations audit layer
-│   │   ├── base.py           # OpsContext, OpsBase ABC
-│   │   ├── proxy.py          # OpsProxyRequest (hot path)
-│   │   ├── data.py           # Data mutation ops
-│   │   ├── security.py       # Auth/session ops
-│   │   └── keys.py           # API key management ops
-│   └── admin/               # Admin panel (metrics, request log, persistence)
-│       └── routes/          # one module per resource; routes/config/ is
-│                            #   split into payload/providers/models/
-│                            #   model_providers/settings/shims/upstream/bulk
-├── ir/                      # IR logic: primitives/, tools/, passes/
-├── types/                   # Typed IR and provider-specific types
-│   └── ir/                  # IR dataclasses (messages, parts, tools, stream)
-├── transforms/              # Facade over ir.primitives (compat)
-├── capabilities/            # Facade over ir.passes (compat)
-└── _vendor/                 # Vendored dependencies (DO NOT EDIT)
+packages/
+├── llm-rosetta/             # core distribution (import root `llm_rosetta`)
+│   ├── pyproject.toml
+│   └── src/llm_rosetta/
+│       ├── __init__.py              # Public API: convert(), get_converter_for_provider()
+│       ├── auto_detect.py           # Provider auto-detection (delegates to formats.detect)
+│       ├── tool_ops.py              # Cross-provider tool call utilities
+│       ├── formats/                 # Format catalog: one FormatSpec per (model_type, format)
+│       │   ├── spec.py              # The record type
+│       │   ├── catalog.py           # The records + BY_PAIR
+│       │   └── detect.py            # Priority-ordered body detectors
+│       ├── converters/              # one directory per (model_type, format)
+│       │   ├── base/                # Abstract base + ConversionContext
+│       │   ├── llm/                 # chat: one package per wire format
+│       │   │   ├── chat_completions/
+│       │   │   ├── open_responses/
+│       │   │   ├── messages/
+│       │   │   ├── google_generate/
+│       │   │   └── google_interactions/
+│       │   ├── embedding/
+│       │   ├── rerank/
+│       │   └── decision/            # Decision paradigm (TypeSafe System One)
+│       ├── shims/                   # Provider/model identity cards + transforms
+│       │   ├── provider_shim.py
+│       │   ├── transforms.py
+│       │   └── builtins.py
+│       ├── ir/                      # IR logic: primitives/, tools/, passes/
+│       ├── types/                   # Typed IR and provider-specific types
+│       │   └── ir/                  # IR dataclasses (messages, parts, tools, stream)
+│       ├── transforms/              # Facade over ir.primitives (compat)
+│       ├── capabilities/            # Facade over ir.passes (compat)
+│       ├── gateway/                 # Deprecated shim: aliases llm_rosetta_gateway,
+│       │                            #   removed in 0.16.0 (#919)
+│       └── _vendor/                 # Vendored dependencies (DO NOT EDIT)
+└── llm-rosetta-gateway/     # gateway distribution (import root `llm_rosetta_gateway`)
+    ├── pyproject.toml
+    └── src/llm_rosetta_gateway/
+        ├── app/                 # package: factory, routes_llm/models/health/
+        │                        #   typed, tasks, _state
+        ├── proxy/               # package: errors, metadata, fidelity, preflight,
+        │                        #   engine, streaming, stream_merge
+        ├── config/              # config package: io, loader, schema, core,
+        │                        #   parse, typed, settings, resolve
+        ├── providers.py
+        ├── shims/               # External shim sources, catalog, scheduled removals
+        ├── shim_sources.py      # Config `shims` section → shim registry
+        ├── model_types.py, keystore.py, logging.py
+        ├── routing/, maintenance/  # Selection strategies; config/key/backfill steps
+        ├── cli.py, banner.py, __main__.py
+        ├── middleware/          # Auth, rate limiting, error format, headers, etc.
+        ├── pipelines/           # typed.py shell + embeddings/rerank/decision specs
+        ├── transport/           # Upstream HTTP transport
+        ├── ops/                 # Unified operations audit layer
+        │   ├── base.py          # OpsContext, OpsBase ABC
+        │   ├── proxy.py         # OpsProxyRequest (hot path)
+        │   ├── data.py          # Data mutation ops
+        │   ├── security.py      # Auth/session ops
+        │   └── keys.py          # API key management ops
+        └── admin/               # Admin panel (metrics, request log, persistence)
+            └── routes/          # one module per resource; routes/config/ is
+                                 #   split into payload/providers/models/
+                                 #   model_providers/settings/shims/upstream/bulk
 
 tests/
 ├── converters/              # Per-converter test suites
 ├── gateway/                 # Gateway unit tests
 ├── integration/             # E2E tests (require API keys)
 ├── test_types/              # IR type system tests
+├── test_core_import_boundary.py   # core must not import the gateway
+├── test_package_split.py    # the deprecated llm_rosetta.gateway alias
 ├── test_shims.py
 ├── test_transforms.py
 ├── test_auto_detect.py
@@ -232,6 +243,7 @@ scripts/
 │   ├── extract_tool_choice_types.py
 │   ├── scan_sdk_types.py
 │   ├── merge-pr.sh
+│   ├── public_api_diff.py        # public-API break check (knows both layouts)
 │   └── probe/                    # Upstream API probing
 │       └── probe_argo.py         # Unified ARGO model probe
 └── integration/                  # Integration test scripts
@@ -247,7 +259,7 @@ examples/                    # Usage examples
 
 ```bash
 conda activate llm-rosetta
-pip install -e ".[all]"
+pip install -e "packages/llm-rosetta[all]" -e packages/llm-rosetta-gateway
 ```
 
 Run `make help` for all targets. Key ones:
@@ -325,7 +337,7 @@ For deeper validation (file reads, writes, multi-step reasoning):
 
 ```python
 result = run_sync(
-    "Read src/llm_rosetta/shims/provider_shim.py and write a summary to /tmp/test-output.md",
+    "Read packages/llm-rosetta/src/llm_rosetta/shims/provider_shim.py and write a summary to /tmp/test-output.md",
     agent="codex", model="claude-haiku-4-5",
     env=PROXY_ENV, max_turns=10, timeout=120,
     working_dir="/path/to/llm-rosetta",
@@ -356,13 +368,16 @@ Releases are triggered manually via GitHub Actions, not by tag push.
 
 ### Steps
 
-1. **Bump version** in `src/llm_rosetta/__init__.py`
+1. **Bump version** in `packages/llm-rosetta/src/llm_rosetta/__init__.py`
+   (and `packages/llm-rosetta-gateway/src/llm_rosetta_gateway/__init__.py`; the
+   release workflow verifies both)
 2. **Update changelogs** — move `[Unreleased]` entries into a versioned section
    (`## vX.Y.Z — YYYY-MM-DD`) in both `docs_en/docs/changelog.md` and
    `docs_zh/docs/changelog.md`. Commit and push both doc worktrees.
 3. **Commit and tag**:
    ```bash
-   git add src/llm_rosetta/__init__.py
+   git add packages/llm-rosetta/src/llm_rosetta/__init__.py \
+           packages/llm-rosetta-gateway/src/llm_rosetta_gateway/__init__.py
    git commit -m "release: vX.Y.Z"
    git tag vX.Y.Z
    git push origin master vX.Y.Z
@@ -460,8 +475,9 @@ gate — missing any item means the converter is not fully integrated.
    `model_type: llm` and `format: <format>`.  The loader validates the
    `(model_type, format)` pair against the converter registry; `base:` is the
    deprecated alias for `format:`.
-6. **Gateway route** — register a route handler in `gateway/app.py`.
-   Update `gateway/proxy.py` for error responses, stream detection,
+6. **Gateway route** — register a route handler in
+   `llm_rosetta_gateway/app/routes_llm.py`.
+   Update `llm_rosetta_gateway/proxy/` for error responses, stream detection,
    stream flag injection, preflight body, and usage extraction.
 7. **CLAUDE.md** — update the converter table and repository layout
    in this file.
@@ -492,7 +508,7 @@ gate — missing any item means the converter is not fully integrated.
 
 ## Files to never edit
 
-- `src/llm_rosetta/_vendor/**` — vendored dependencies, managed externally
+- `packages/llm-rosetta/src/llm_rosetta/_vendor/**` — vendored dependencies, managed externally
 - `docs_en/`, `docs_zh/` — separate git branches, edit inside the worktree only
 
 ## Adding a new model type (checklist)
@@ -541,7 +557,7 @@ declarative — steps 1–3 are the core work, the rest is wiring.
 
 Thanks to the model type registry and data-driven admin UI:
 
-- `gateway/app.py` — routes auto-registered from descriptor
+- `llm_rosetta_gateway/app/` — routes auto-registered from descriptor
 - `admin/admin.html` — no HTML changes (checkboxes, endpoint
   sections, seg-controls, fetch-models radios all generated by JS)
 - `admin/css/components.css` — badge/dot colors injected

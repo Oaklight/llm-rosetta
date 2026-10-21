@@ -7,7 +7,7 @@ import pytest
 import argparse
 import json
 import os
-from llm_rosetta.gateway.cli import _resolve_data_dir
+from llm_rosetta_gateway.cli import _resolve_data_dir
 
 
 from typing import Any
@@ -85,7 +85,7 @@ class TestSetupAdminDataDir:
 
     @pytest.mark.asyncio
     async def test_explicit_data_dir_wins(self, tmp_path):
-        from llm_rosetta.gateway.config import GatewayConfig
+        from llm_rosetta_gateway.config import GatewayConfig
 
         explicit_dir = str(tmp_path / "explicit")
         raw = {
@@ -98,7 +98,7 @@ class TestSetupAdminDataDir:
         _write_config(config_path)
 
         app = _MockApp()
-        from llm_rosetta.gateway.admin import setup_admin
+        from llm_rosetta_gateway.admin import setup_admin
 
         await setup_admin(app, config, config_path, data_dir=explicit_dir)
         assert app.persistence is not None
@@ -106,7 +106,7 @@ class TestSetupAdminDataDir:
 
     @pytest.mark.asyncio
     async def test_config_relative_resolved(self, tmp_path):
-        from llm_rosetta.gateway.config import GatewayConfig
+        from llm_rosetta_gateway.config import GatewayConfig
 
         raw = {
             "providers": {"t": {"api_key": "k", "base_url": "http://x"}},
@@ -118,7 +118,7 @@ class TestSetupAdminDataDir:
         _write_config(config_path)
 
         app = _MockApp()
-        from llm_rosetta.gateway.admin import setup_admin
+        from llm_rosetta_gateway.admin import setup_admin
 
         await setup_admin(app, config, config_path)
         assert app.persistence is not None
@@ -174,7 +174,7 @@ class TestKeysDbDataDir:
     """keys.db should default to data_dir when available."""
 
     def _make_config(self, tmp_path, server_extra=None):
-        from llm_rosetta.gateway.config import GatewayConfig
+        from llm_rosetta_gateway.config import GatewayConfig
 
         config_path = str(tmp_path / "config.jsonc")
         server = {}
@@ -192,7 +192,7 @@ class TestKeysDbDataDir:
     @pytest.mark.asyncio
     async def test_keys_db_defaults_to_data_dir(self, tmp_path):
         """Fresh start, no existing keys.db → created in data_dir."""
-        from llm_rosetta.gateway.app import _setup_auth
+        from llm_rosetta_gateway.app import _setup_auth
 
         config, config_path = self._make_config(tmp_path)
         data_dir = str(tmp_path / "data")
@@ -209,7 +209,7 @@ class TestKeysDbDataDir:
         """keys.db exists at old config-sibling location → uses old path."""
         import sqlite3
 
-        from llm_rosetta.gateway.app import _setup_auth
+        from llm_rosetta_gateway.app import _setup_auth
 
         config, config_path = self._make_config(tmp_path)
         data_dir = str(tmp_path / "data")
@@ -230,8 +230,8 @@ class TestKeysDbDataDir:
     @pytest.mark.asyncio
     async def test_keys_db_explicit_api_keys_db_wins(self, tmp_path):
         """config.api_keys_db set → uses that, ignores data_dir."""
-        from llm_rosetta.gateway.app import _setup_auth
-        from llm_rosetta.gateway.config import GatewayConfig
+        from llm_rosetta_gateway.app import _setup_auth
+        from llm_rosetta_gateway.config import GatewayConfig
 
         explicit = str(tmp_path / "custom" / "my-keys.db")
         raw = {
@@ -255,7 +255,7 @@ class TestKeysDbDataDir:
         """keys.db exists in both old and data_dir → uses data_dir."""
         import sqlite3
 
-        from llm_rosetta.gateway.app import _setup_auth
+        from llm_rosetta_gateway.app import _setup_auth
 
         config, config_path = self._make_config(tmp_path)
         data_dir = str(tmp_path / "data")
@@ -276,8 +276,8 @@ class TestKeysDbDataDir:
     @pytest.mark.asyncio
     async def test_resolve_data_dir_for_app(self, tmp_path):
         """_resolve_data_dir_for_app mirrors _resolve_data_dir behavior."""
-        from llm_rosetta.gateway.app import _resolve_data_dir_for_app
-        from llm_rosetta.gateway.config import GatewayConfig
+        from llm_rosetta_gateway.app import _resolve_data_dir_for_app
+        from llm_rosetta_gateway.config import GatewayConfig
 
         config_path = str(tmp_path / "config.jsonc")
         _write_config(config_path)

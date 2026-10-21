@@ -2,8 +2,8 @@
 
 from types import SimpleNamespace
 
-from llm_rosetta.gateway.config import GatewayConfig
-from llm_rosetta.gateway.pipelines.decision import _detect_decision_source_format
+from llm_rosetta_gateway.config import GatewayConfig
+from llm_rosetta_gateway.pipelines.decision import _detect_decision_source_format
 
 
 def _req(path: str = "") -> SimpleNamespace:

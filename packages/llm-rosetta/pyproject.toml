@@ -1,0 +1,79 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "llm-rosetta"
+dynamic = ["version"]
+authors = [{ name = "Oaklight", email = "oaklight@gmx.com" }]
+description = "LLM-Rosetta: Unified LLM API adapter — bidirectional conversion between OpenAI, Anthropic, and Google formats via intermediate representation (IR)."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+keywords = [
+    "openai",
+    "anthropic",
+    "gemini",
+    "google-genai",
+    "api-adapter",
+    "llm-gateway",
+    "llmir",
+    "streaming",
+    "tool-calling",
+    "multi-provider",
+    "responses-api",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    'typing_extensions>=4.0.0; python_version < "3.11"',
+]
+
+[project.optional-dependencies]
+openai = ["openai>=2.0.0"]
+anthropic = ["anthropic>=0.84.0"]
+google = ["google-genai>=1.67.0"]
+# One-release meta alias: the gateway is its own distribution now.
+gateway = ["llm-rosetta-gateway"]
+
+dev = [
+    "python-dotenv",
+    "pytest",
+    "pytest-asyncio",
+    "llm-comply>=0.2.0",
+    "pytest-cov",
+    "pre-commit>=4.0.0",
+    "complexipy>=6.2.0,<7",
+    "ruff==0.15.20",
+    "ty==0.0.54",
+    "build>=1.2.2.post1",
+    "twine>=6.1.0",
+]
+
+all = ["llm-rosetta[openai,anthropic,google,gateway,dev]"]
+
+[project.urls]
+Documentation = "https://llm-rosetta.readthedocs.io"
+Repository = "https://github.com/Oaklight/llm-rosetta"
+Issues = "https://github.com/Oaklight/llm-rosetta/issues"
+
+[project.scripts]
+llm-rosetta-usage = "llm_rosetta.observability.usage.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"llm_rosetta" = ["py.typed", "shims/providers/provider.schema.json", "shims/providers/*/provider.yaml", "shims/providers/*/*/provider.yaml"]
+
+[tool.setuptools.dynamic]
+version = { attr = "llm_rosetta.__version__" }

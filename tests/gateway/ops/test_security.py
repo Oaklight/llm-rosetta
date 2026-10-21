@@ -6,14 +6,14 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from llm_rosetta.gateway.ops.base import OpsContext
-from llm_rosetta.gateway.ops.keys import (
+from llm_rosetta_gateway.ops.base import OpsContext
+from llm_rosetta_gateway.ops.keys import (
     OpsKeyCreate,
     OpsKeyDelete,
     OpsKeyRotate,
     OpsKeyUpdate,
 )
-from llm_rosetta.gateway.ops.security import (
+from llm_rosetta_gateway.ops.security import (
     OpsPasswordChange,
     OpsSessionLogoutAll,
     OpsTokenRotate,

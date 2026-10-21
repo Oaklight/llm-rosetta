@@ -15,17 +15,17 @@ from unittest.mock import MagicMock
 
 import pytest
 
-import llm_rosetta.gateway.app as app_module
-from llm_rosetta.gateway.app import _state
-import llm_rosetta.gateway.lifecycle as lifecycle_module
+import llm_rosetta_gateway.app as app_module
+from llm_rosetta_gateway.app import _state
+import llm_rosetta_gateway.lifecycle as lifecycle_module
 from llm_rosetta._vendor.httpserver import JSONResponse
-from llm_rosetta.gateway.maintenance.dumps import DeferredDumpStore
-from llm_rosetta.gateway.ops import OpsContext
+from llm_rosetta_gateway.maintenance.dumps import DeferredDumpStore
+from llm_rosetta_gateway.ops import OpsContext
 from llm_rosetta.observability.error_dump import dump_error
 from llm_rosetta.observability.persistence import PersistenceManager
 from llm_rosetta.observability.request_log import RequestLog
 from llm_rosetta.routing import ResolvedRoute
-from llm_rosetta.gateway.routing import SelectionContext
+from llm_rosetta_gateway.routing import SelectionContext
 
 # ---------------------------------------------------------------------------
 # DeferredDumpStore
@@ -138,7 +138,7 @@ class TestDeferredDumpStore:
 
 
 def _config():
-    from llm_rosetta.gateway.middleware.circuit_breaker import (
+    from llm_rosetta_gateway.middleware.circuit_breaker import (
         CircuitBreakerConfig,
         CircuitBreakerRegistry,
     )

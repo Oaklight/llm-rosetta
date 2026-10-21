@@ -15,14 +15,14 @@ import json
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
-from llm_rosetta.gateway.admin.routes._shared import _reload_gateway_config
-from llm_rosetta.gateway.admin.routes.config import fetch_upstream_models
-from llm_rosetta.gateway.admin.routes.connectivity import (
+from llm_rosetta_gateway.admin.routes._shared import _reload_gateway_config
+from llm_rosetta_gateway.admin.routes.config import fetch_upstream_models
+from llm_rosetta_gateway.admin.routes.connectivity import (
     test_provider_connectivity as _provider_connectivity,
 )
-from llm_rosetta.gateway.maintenance.startup import DeferredStartup, ProviderInitState
-from llm_rosetta.gateway.shim_sources import shims_signature
-from llm_rosetta.gateway.transport.provider_info import (
+from llm_rosetta_gateway.maintenance.startup import DeferredStartup, ProviderInitState
+from llm_rosetta_gateway.shim_sources import shims_signature
+from llm_rosetta_gateway.transport.provider_info import (
     TOKEN_PENDING_SENTINEL,
     ProviderInfo,
     openai_auth,
@@ -114,12 +114,12 @@ class TestApplyConfigReload:
         async def _run():
             with (
                 patch(
-                    "llm_rosetta.gateway.transport.token_refresh.run_token_command",
+                    "llm_rosetta_gateway.transport.token_refresh.run_token_command",
                     new_callable=AsyncMock,
                     return_value="fresh-token",
                 ),
                 patch(
-                    "llm_rosetta.gateway.transport.token_refresh.start_token_refreshers",
+                    "llm_rosetta_gateway.transport.token_refresh.start_token_refreshers",
                     new_callable=AsyncMock,
                     return_value=[],
                 ),
@@ -213,11 +213,11 @@ class TestApplyConfigReload:
         async def _run():
             with (
                 patch(
-                    "llm_rosetta.gateway.transport.token_refresh.run_token_command",
+                    "llm_rosetta_gateway.transport.token_refresh.run_token_command",
                     side_effect=_run_token,
                 ),
                 patch(
-                    "llm_rosetta.gateway.transport.token_refresh.start_token_refreshers",
+                    "llm_rosetta_gateway.transport.token_refresh.start_token_refreshers",
                     new=AsyncMock(side_effect=_fake_refreshers),
                 ),
             ):
@@ -269,7 +269,7 @@ class _RecordingDeferred:
 
 def test_reload_config_reseeds_providers():
     """``_reload_gateway_config`` must hand the new config to the deferred seeder."""
-    from llm_rosetta.gateway.app import _state as app_state
+    from llm_rosetta_gateway.app import _state as app_state
 
     raw: dict[str, Any] = {"providers": {}, "models": {}}
     app = _App()
@@ -300,10 +300,10 @@ def test_reload_config_carries_the_registry_the_reader_ran(tmp_path):
     Taken in the same turn as the read, so the config built from the document is
     the one that carries it — not whichever config happens to be built next.
     """
-    from llm_rosetta.gateway.app import _state as app_state
+    from llm_rosetta_gateway.app import _state as app_state
 
-    from llm_rosetta.gateway.config import JsoncConfigIO
-    from llm_rosetta.gateway.maintenance.config import STEPS
+    from llm_rosetta_gateway.config import JsoncConfigIO
+    from llm_rosetta_gateway.maintenance.config import STEPS
 
     document: dict[str, Any] = {
         "config_version": 1,

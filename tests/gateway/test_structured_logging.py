@@ -16,8 +16,8 @@ import os
 from io import StringIO
 from unittest import mock
 
-from llm_rosetta.gateway.config import GatewayConfig
-from llm_rosetta.gateway.logging import (
+from llm_rosetta_gateway.config import GatewayConfig
+from llm_rosetta_gateway.logging import (
     JsonFormatter,
     _resolve_log_format,
     _structured_extra,
@@ -224,7 +224,7 @@ class TestSetupLogging:
         assert isinstance(handler.formatter, JsonFormatter)
 
     def test_text_format_uses_colored_formatter(self):
-        from llm_rosetta.gateway.logging import ColoredFormatter
+        from llm_rosetta_gateway.logging import ColoredFormatter
 
         logger = setup_logging(log_format="text")
         handler = logger.handlers[-1]
@@ -253,13 +253,13 @@ class TestSetupLogging:
 
 class TestStructuredExtra:
     def setup_method(self):
-        import llm_rosetta.gateway.logging as _mod
+        import llm_rosetta_gateway.logging as _mod
 
         self._orig = _mod._log_format
         _mod._log_format = "json"
 
     def teardown_method(self):
-        import llm_rosetta.gateway.logging as _mod
+        import llm_rosetta_gateway.logging as _mod
 
         _mod._log_format = self._orig
 
@@ -290,7 +290,7 @@ class TestStructuredExtra:
         }
 
     def test_text_mode_returns_empty(self):
-        import llm_rosetta.gateway.logging as _mod
+        import llm_rosetta_gateway.logging as _mod
 
         _mod._log_format = "text"
         extra = _structured_extra(request_id="abc", model="gpt-4", status=200)
@@ -307,7 +307,7 @@ class TestLogHelpersStructured:
 
     def test_log_request_accepts_structured_kwargs(self):
         """log_request should not raise when given structured kwargs."""
-        from llm_rosetta.gateway.logging import log_request
+        from llm_rosetta_gateway.logging import log_request
 
         # Should not raise
         log_request(
@@ -319,7 +319,7 @@ class TestLogHelpersStructured:
         )
 
     def test_log_stream_summary_accepts_structured_kwargs(self):
-        from llm_rosetta.gateway.logging import log_stream_summary
+        from llm_rosetta_gateway.logging import log_stream_summary
 
         log_stream_summary(
             model="gpt-4",
@@ -332,7 +332,7 @@ class TestLogHelpersStructured:
         )
 
     def test_log_upstream_error_accepts_structured_kwargs(self):
-        from llm_rosetta.gateway.logging import log_upstream_error
+        from llm_rosetta_gateway.logging import log_upstream_error
 
         log_upstream_error(
             500,
@@ -344,7 +344,7 @@ class TestLogHelpersStructured:
         )
 
     def test_log_response_accepts_structured_kwargs(self):
-        from llm_rosetta.gateway.logging import log_response
+        from llm_rosetta_gateway.logging import log_response
 
         log_response(
             {"choices": [{"message": {"content": "hi"}}]},
@@ -356,7 +356,7 @@ class TestLogHelpersStructured:
 
     def test_json_format_captures_extras_from_helper(self):
         """End-to-end: log_request with JSON format should include extras."""
-        from llm_rosetta.gateway.logging import log_request
+        from llm_rosetta_gateway.logging import log_request
 
         stream = StringIO()
         logger = setup_logging(log_format="json", verbose=True)

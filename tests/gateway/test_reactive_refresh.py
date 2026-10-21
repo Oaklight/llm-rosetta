@@ -7,22 +7,22 @@ import json
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from llm_rosetta.gateway.proxy import (
+from llm_rosetta_gateway.proxy import (
     ProviderMetadataStore,
     handle_non_streaming,
 )
-from llm_rosetta.gateway.transport._base import UpstreamResponse
-from llm_rosetta.gateway.transport.provider_info import (
+from llm_rosetta_gateway.transport._base import UpstreamResponse
+from llm_rosetta_gateway.transport.provider_info import (
     ProviderInfo,
     openai_auth,
 )
-from llm_rosetta.gateway.transport.token_refresh import (
+from llm_rosetta_gateway.transport.token_refresh import (
     force_refresh,
     reset_reactive_state,
 )
 from llm_rosetta.auto_detect import ProviderType
 from llm_rosetta.routing import ResolvedRoute
-from llm_rosetta.gateway.routing import SelectionContext
+from llm_rosetta_gateway.routing import SelectionContext
 
 
 # ---------------------------------------------------------------------------
@@ -97,7 +97,7 @@ class TestForceRefresh:
         _reset()
         pinfo = _make_provider(token_command=["echo", "new-token"])
         with patch(
-            "llm_rosetta.gateway.transport.token_refresh.run_token_command",
+            "llm_rosetta_gateway.transport.token_refresh.run_token_command",
             new_callable=AsyncMock,
             return_value="new-token",
         ) as mock_cmd:
@@ -114,7 +114,7 @@ class TestForceRefresh:
         _reset()
         pinfo = _make_provider(token_command=["echo", "x"])
         with patch(
-            "llm_rosetta.gateway.transport.token_refresh.run_token_command",
+            "llm_rosetta_gateway.transport.token_refresh.run_token_command",
             new_callable=AsyncMock,
             side_effect=RuntimeError("command failed"),
         ):
@@ -134,7 +134,7 @@ class TestForceRefresh:
 
         async def _run():
             with patch(
-                "llm_rosetta.gateway.transport.token_refresh.run_token_command",
+                "llm_rosetta_gateway.transport.token_refresh.run_token_command",
                 new_callable=AsyncMock,
                 return_value="fresh-token",
             ) as mock_cmd:
@@ -161,7 +161,7 @@ class TestForceRefresh:
 
         async def _run():
             with patch(
-                "llm_rosetta.gateway.transport.token_refresh.run_token_command",
+                "llm_rosetta_gateway.transport.token_refresh.run_token_command",
                 new_callable=AsyncMock,
                 side_effect=slow_command,
             ):
@@ -184,7 +184,7 @@ class TestForceRefresh:
 
         async def _run():
             with patch(
-                "llm_rosetta.gateway.transport.token_refresh.run_token_command",
+                "llm_rosetta_gateway.transport.token_refresh.run_token_command",
                 new_callable=AsyncMock,
                 return_value="token",
             ) as mock_cmd:
@@ -235,7 +235,7 @@ class TestProxyRetryOn401:
 
         async def _run():
             with patch(
-                "llm_rosetta.gateway.proxy.errors.force_refresh",
+                "llm_rosetta_gateway.proxy.errors.force_refresh",
                 new_callable=AsyncMock,
                 return_value=True,
             ):
@@ -328,7 +328,7 @@ class TestProxyRetryOn401:
 
         async def _run():
             with patch(
-                "llm_rosetta.gateway.proxy.errors.force_refresh",
+                "llm_rosetta_gateway.proxy.errors.force_refresh",
                 new_callable=AsyncMock,
                 return_value=False,
             ):

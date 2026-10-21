@@ -13,8 +13,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from llm_rosetta.gateway.admin.routes.config.providers import toggle_provider
-from llm_rosetta.gateway.config import JsoncConfigIO
+from llm_rosetta_gateway.admin.routes.config.providers import toggle_provider
+from llm_rosetta_gateway.config import JsoncConfigIO
 
 
 def _request(tmp_path, raw: dict) -> SimpleNamespace:

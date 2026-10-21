@@ -1,7 +1,7 @@
 """Conformance probes — run a suite, write one versioned report.
 
 This is a developer tool, not a library dependency: it lives outside
-``src/llm_rosetta`` so the wheel does not ship it.  The first suite wraps the
+the ``packages/`` trees so the wheel does not ship it.  The first suite wraps the
 SDK type scan; wire and live-provider suites follow.
 
 Entry point::

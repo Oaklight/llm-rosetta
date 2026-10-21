@@ -519,6 +519,8 @@ class TestBuiltinShims:
 
         root = (
             Path(__file__).resolve().parents[1]
+            / "packages"
+            / "llm-rosetta"
             / "src"
             / "llm_rosetta"
             / "shims"

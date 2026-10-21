@@ -2,7 +2,7 @@
 
 import time
 
-from llm_rosetta.gateway.proxy import ProviderMetadataStore
+from llm_rosetta_gateway.proxy import ProviderMetadataStore
 
 
 def _make_ir_response(tool_call_id: str, metadata: dict) -> dict:

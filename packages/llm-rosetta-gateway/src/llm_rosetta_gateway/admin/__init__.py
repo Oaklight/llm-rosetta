@@ -1,0 +1,303 @@
+"""Admin panel for the llm-rosetta gateway."""
+
+from __future__ import annotations
+
+import logging
+import os
+from typing import TYPE_CHECKING, Any
+from llm_rosetta._compat import sync_compat
+
+from llm_rosetta.observability import (
+    DEFAULT_SUCCESS_MAX,
+    EVENT_ADMIN_SETUP,
+    MetricsCollector,
+    OpsLog,
+    OpsLogEntry,
+    PersistenceManager,
+    RequestLog,
+    SEVERITY_INFO,
+    SOURCE_ADMIN,
+)
+
+if TYPE_CHECKING:
+    from ..config import ConfigIO, GatewayConfig
+
+__all__ = ["setup_admin", "MetricsCollector", "RequestLog", "PersistenceManager"]
+
+logger = logging.getLogger("llm-rosetta-gateway")
+
+
+def _resolve_log_caps(config: GatewayConfig) -> tuple[int, int | None]:
+    """Resolve (success_max, dump_max) from env vars and config.
+
+    Precedence: env vars > config.request_log.{success_max,error_dump_max} >
+    legacy config.request_log.max_entries > built-in defaults.
+    """
+    rl_cfg: dict[str, Any] = getattr(config, "request_log", {}) or {}
+
+    def _parse_int_env(name: str) -> int | None:
+        raw = os.environ.get(name)
+        if raw is None or raw == "":
+            return None
+        try:
+            return int(raw)
+        except ValueError:
+            logger.warning("Ignoring non-integer %s=%r", name, raw)
+            return None
+
+    success_max = _parse_int_env("REQUEST_LOG_SUCCESS_MAX")
+    if success_max is None:
+        success_max = rl_cfg.get("success_max")
+    legacy = rl_cfg.get("max_entries")
+    if legacy is not None and success_max is None:
+        logger.warning(
+            "config: server.request_log.max_entries is deprecated; "
+            "use success_max instead."
+        )
+        success_max = legacy
+
+    # Warn if old error_max key is still in config
+    if rl_cfg.get("error_max") is not None:
+        logger.warning(
+            "config: server.request_log.error_max is deprecated and ignored; "
+            "use error_dump_max to control error dump retention instead."
+        )
+
+    dump_max = _parse_int_env("ERROR_DUMP_MAX")
+    if dump_max is None:
+        dump_max = rl_cfg.get("error_dump_max")
+    if dump_max is not None:
+        dump_max = int(dump_max)
+
+    return (
+        int(success_max) if success_max is not None else DEFAULT_SUCCESS_MAX,
+        dump_max,
+    )
+
+
+_VALID_TABS = frozenset(
+    {"providers", "models", "keys", "dashboard", "logs", "settings"}
+)
+
+
+async def _init_persistence(
+    config: Any,
+    config_path: str | None,
+    data_dir: str | None,
+    metrics: MetricsCollector,
+) -> tuple[PersistenceManager, bool] | None:
+    """Resolve data_dir, create PersistenceManager, and restore counters."""
+    resolved_data_dir: str | None = data_dir
+    if not resolved_data_dir:
+        configured = getattr(config, "data_dir", None)
+        if configured:
+            if config_path and not os.path.isabs(configured):
+                resolved_data_dir = os.path.join(
+                    os.path.dirname(config_path), configured
+                )
+            else:
+                resolved_data_dir = configured
+        elif config_path:
+            resolved_data_dir = os.path.join(os.path.dirname(config_path), "data")
+    if not resolved_data_dir:
+        return None
+
+    success_max, dump_max = _resolve_log_caps(config)
+    ol_cfg = getattr(config, "ops_log", {}) or {}
+    ops_info_max = ol_cfg.get("info_max")
+    ops_warn_max = ol_cfg.get("warn_max")
+    if ops_info_max is not None:
+        ops_info_max = int(ops_info_max)
+    if ops_warn_max is not None:
+        ops_warn_max = int(ops_warn_max)
+    persistence = await PersistenceManager.create(
+        resolved_data_dir,
+        success_max=success_max,
+        dump_max=dump_max,
+        ops_info_max=ops_info_max,
+        ops_warn_max=ops_warn_max,
+    )
+
+    saved_metrics = await persistence.load_metrics()
+    if saved_metrics:
+        metrics.load_counters(saved_metrics)
+        logger.info(
+            "Loaded metrics from disk (total_requests=%d)",
+            metrics.total_requests,
+        )
+
+    # Detect counter drift (ungraceful shutdown) but defer the rebuild to
+    # a background task so the server starts accepting connections immediately.
+    # Compare lifetime counter (monotonic) against current log size.
+    # lifetime < log means counters were never persisted for some requests.
+    # The reverse (lifetime > log) is normal after pruning.
+    log_entries = await persistence.count_log_entries()
+    _counter_rebuild_needed = False
+    if await persistence.check_and_clear_rebuild_flag():
+        logger.info(
+            "Rebuild flag detected (external cleanup) — "
+            "rebuild will run in the background after startup"
+        )
+        _counter_rebuild_needed = True
+    elif metrics.lifetime_total_requests < log_entries:
+        logger.warning(
+            "Counter drift detected (lifetime=%d, log=%d) — "
+            "rebuild will run in the background after startup",
+            metrics.lifetime_total_requests,
+            log_entries,
+        )
+        _counter_rebuild_needed = True
+
+    return persistence, _counter_rebuild_needed
+
+
+@sync_compat
+async def setup_admin(
+    app: Any,
+    config: GatewayConfig,
+    config_path: str | None,
+    config_io: ConfigIO | None = None,
+    disabled_tabs: list[str] | None = None,
+    custom_head: str | None = None,
+    branding: dict[str, Any] | None = None,
+    data_dir: str | None = None,
+) -> None:
+    """Initialize admin panel state on the app.
+
+    Args:
+        app: The httpserver application.
+        config: Parsed gateway configuration.
+        config_path: Path to the config file on disk (``None`` disables
+            persistence and config editing).
+        config_io: Optional I/O adapter for reading/writing the config
+            file.  Defaults to :class:`JsoncConfigIO` when ``None``.
+            Supply a custom implementation for non-JSONC formats
+            (e.g. YAML in argo-proxy).
+        disabled_tabs: Optional list of tab identifiers to hide from the
+            admin panel.  Valid values: ``"providers"``, ``"models"``,
+            ``"keys"``, ``"dashboard"``, ``"logs"``.  Disabled tabs are
+            hidden via CSS, their data-fetching JS functions are
+            suppressed, and their API routes return 404.
+        custom_head: Optional HTML fragment (``<style>``, ``<script>``,
+            etc.) injected before ``</head>`` when serving the admin
+            panel.  Allows downstream projects to override UI behavior
+            without modifying the reference ``admin.html``.
+        branding: Optional dict to customize the admin panel identity.
+            Supported keys::
+
+                title       — header title (default: "llm-rosetta")
+                subtitle    — header subtitle (default: "gateway admin")
+                version     — version shown in settings footer
+                links       — list of {"label", "url", "icon"} for footer buttons
+                              icon: "github" | "pypi" | "docker" | "docs" | None
+                attribution — "Powered by ..." line in settings footer
+
+    Routes are registered separately via ``register_admin_routes`` before
+    calling this function.
+    """
+    disabled = frozenset(disabled_tabs or ())
+    unknown = disabled - _VALID_TABS
+    if unknown:
+        logger.warning(
+            "Ignoring unknown disabled_tabs: %s (valid: %s)",
+            ", ".join(sorted(unknown)),
+            ", ".join(sorted(_VALID_TABS)),
+        )
+        disabled = disabled & _VALID_TABS
+    app.disabled_tabs = disabled
+    if config_io is None:
+        from ..config import JsoncConfigIO
+
+        config_io = JsoncConfigIO()
+    metrics = MetricsCollector()
+
+    result = await _init_persistence(config, config_path, data_dir, metrics)
+    if result is not None:
+        persistence, counter_rebuild_needed = result
+    else:
+        persistence, counter_rebuild_needed = None, False
+
+    # Backfills are deferred to DeferredStartup (run in background after
+    # the event loop starts).  Store the flag for the rebuild task.
+    app._counter_rebuild_needed = counter_rebuild_needed  # type: ignore[attr-defined]
+
+    # Request log delegates to persistence when available
+    request_log = RequestLog(persistence=persistence)
+
+    # Ops log: PersistenceManager creates the table, OpsLog wraps it
+    ops_log = OpsLog(persistence=persistence)
+
+    # On-demand deep profiling state
+    from llm_rosetta.observability import ProfilerState
+
+    profiler_state = ProfilerState()
+
+    # In-memory content capture state
+    from llm_rosetta.observability import CaptureState
+
+    capture_state = CaptureState()
+
+    # Backfills (last_used, error_dump_log_ids) are deferred to
+    # DeferredStartup — they run in a background thread after startup.
+
+    app.metrics = metrics
+    app.request_log = request_log
+    app.ops_log = ops_log
+    app.persistence = persistence
+    # Unified ops context — used by gateway/ops/ operation layer
+    from llm_rosetta_gateway.ops import OpsContext
+
+    _ops_ctx = OpsContext(
+        ops_log=ops_log,
+        request_log=request_log,
+        metrics=metrics,
+        persistence=persistence,
+        config_io=config_io,
+        config_path=config_path,
+    )
+    app.ops_ctx = _ops_ctx
+
+    # Wire amortized prune audit callback
+    if persistence is not None:
+
+        async def _on_prune(table: str, count: int) -> None:
+            from llm_rosetta_gateway.ops.data import OpsPrune
+
+            await OpsPrune(_ops_ctx, table=table, count=count).execute()
+
+        persistence.on_prune = _on_prune
+
+    app.gateway_config = config
+    app.config_path = config_path
+    app.config_io = config_io
+    app.profiler_state = profiler_state
+    app.capture_state = capture_state
+    # Build custom_head: disabled-tab CSS + user fragment + branding injection
+    parts: list[str] = []
+    if disabled:
+        selectors = ", ".join(
+            f'.tab[data-tab="{t}"], #tab-{t}' for t in sorted(disabled)
+        )
+        parts.append(f"<style>{selectors} {{ display: none !important; }}</style>")
+    if custom_head:
+        parts.append(custom_head)
+    merged_branding = dict(branding) if branding else {}
+    if disabled:
+        merged_branding["disabled_tabs"] = sorted(disabled)
+        merged_branding["all_tabs"] = sorted(_VALID_TABS)
+    if merged_branding:
+        import json as _json
+
+        serialized = _json.dumps(merged_branding).replace("</", r"<\/")
+        parts.append(f"<script>window.__branding={serialized};</script>")
+    app.admin_custom_head = "\n".join(parts)
+
+    # Record admin setup event (after all wiring is complete)
+    await ops_log.add(
+        OpsLogEntry.create(
+            event_type=EVENT_ADMIN_SETUP,
+            severity=SEVERITY_INFO,
+            message="Admin panel initialized",
+            source=SOURCE_ADMIN,
+        )
+    )

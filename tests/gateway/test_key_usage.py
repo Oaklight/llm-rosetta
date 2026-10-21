@@ -9,17 +9,17 @@ from types import SimpleNamespace
 
 import pytest
 
-from llm_rosetta.gateway.admin.routes.keys import get_key_usage
-from llm_rosetta.gateway.keystore import (
+from llm_rosetta_gateway.admin.routes.keys import get_key_usage
+from llm_rosetta_gateway.keystore import (
     INTERNAL_LABEL,
     INTERNAL_USAGE_BUCKET,
     KeyContext,
     KeyStore,
     key_bucket,
 )
-from llm_rosetta.gateway.middleware.auth import api_key_context_var
-from llm_rosetta.gateway.ops.base import OpsContext
-from llm_rosetta.gateway.ops.proxy import OpsProxyRequest
+from llm_rosetta_gateway.middleware.auth import api_key_context_var
+from llm_rosetta_gateway.ops.base import OpsContext
+from llm_rosetta_gateway.ops.proxy import OpsProxyRequest
 from llm_rosetta.observability import PersistenceManager, RequestLog
 
 

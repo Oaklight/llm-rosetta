@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from llm_rosetta.gateway.keystore import KeyContext, KeyStore
+from llm_rosetta_gateway.keystore import KeyContext, KeyStore
 
 
 @pytest.fixture()

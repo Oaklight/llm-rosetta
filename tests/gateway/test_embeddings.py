@@ -11,10 +11,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from llm_rosetta.gateway.config import GatewayConfig
-from llm_rosetta.gateway.pipelines.embeddings import handle_embeddings
-from llm_rosetta.gateway.transport._base import UpstreamResponse
-from llm_rosetta.gateway.transport.http import HttpTransport
+from llm_rosetta_gateway.config import GatewayConfig
+from llm_rosetta_gateway.pipelines.embeddings import handle_embeddings
+from llm_rosetta_gateway.transport._base import UpstreamResponse
+from llm_rosetta_gateway.transport.http import HttpTransport
 
 
 # ---------------------------------------------------------------------------
@@ -179,7 +179,7 @@ class TestEmbeddingUpstreamModel:
         calls = []
         # The fidelity check runs in the shared typed-handler flow.
         monkeypatch.setattr(
-            "llm_rosetta.gateway.pipelines.typed.check_same_format_fidelity",
+            "llm_rosetta_gateway.pipelines.typed.check_same_format_fidelity",
             lambda *args, **kwargs: calls.append((args, kwargs)),
         )
 
@@ -414,17 +414,17 @@ class TestDetectEmbeddingSource:
     def test_parametrized(
         self, body: dict, expected: str, config: GatewayConfig
     ) -> None:
-        from llm_rosetta.gateway.pipelines.embeddings import _detect_embedding_source
+        from llm_rosetta_gateway.pipelines.embeddings import _detect_embedding_source
 
         assert _detect_embedding_source(None, body, config) == expected
 
     def test_cohere_texts_field(self, config: GatewayConfig) -> None:
-        from llm_rosetta.gateway.pipelines.embeddings import _detect_embedding_source
+        from llm_rosetta_gateway.pipelines.embeddings import _detect_embedding_source
 
         assert _detect_embedding_source(None, {"texts": ["hi"]}, config) == "cohere"
 
     def test_cohere_skipped_when_input_present(self, config: GatewayConfig) -> None:
-        from llm_rosetta.gateway.pipelines.embeddings import _detect_embedding_source
+        from llm_rosetta_gateway.pipelines.embeddings import _detect_embedding_source
 
         assert (
             _detect_embedding_source(None, {"texts": ["hi"], "input": "hi"}, config)
@@ -432,7 +432,7 @@ class TestDetectEmbeddingSource:
         )
 
     def test_jina_task_field(self, config: GatewayConfig) -> None:
-        from llm_rosetta.gateway.pipelines.embeddings import _detect_embedding_source
+        from llm_rosetta_gateway.pipelines.embeddings import _detect_embedding_source
 
         assert (
             _detect_embedding_source(
@@ -442,7 +442,7 @@ class TestDetectEmbeddingSource:
         )
 
     def test_voyage_output_dtype(self, config: GatewayConfig) -> None:
-        from llm_rosetta.gateway.pipelines.embeddings import _detect_embedding_source
+        from llm_rosetta_gateway.pipelines.embeddings import _detect_embedding_source
 
         assert (
             _detect_embedding_source(
@@ -452,7 +452,7 @@ class TestDetectEmbeddingSource:
         )
 
     def test_fallback_to_default(self, config: GatewayConfig) -> None:
-        from llm_rosetta.gateway.pipelines.embeddings import _detect_embedding_source
+        from llm_rosetta_gateway.pipelines.embeddings import _detect_embedding_source
 
         assert (
             _detect_embedding_source(None, {"input": "hi"}, config)

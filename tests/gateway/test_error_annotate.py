@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from llm_rosetta.gateway.middleware.error_annotate import (
+from llm_rosetta_gateway.middleware.error_annotate import (
     annotate_tool_collisions,
     collision_hint,
 )

@@ -13,11 +13,11 @@ from __future__ import annotations
 
 import pytest
 
-from llm_rosetta.gateway.routing import (
+from llm_rosetta_gateway.routing import (
     compute_affinity_identity,
     extract_prefix_from_ir,
 )
-from llm_rosetta.gateway.transport.provider_info import KeyRing, ProviderInfo
+from llm_rosetta_gateway.transport.provider_info import KeyRing, ProviderInfo
 
 
 # ---------------------------------------------------------------------------
@@ -307,13 +307,13 @@ class TestProviderInfoWithAffinity:
 
 class TestKeyContextKeyHash:
     def test_default_empty(self):
-        from llm_rosetta.gateway.keystore import KeyContext
+        from llm_rosetta_gateway.keystore import KeyContext
 
         ctx = KeyContext(label="test", allowed_shims=frozenset())
         assert ctx.key_hash == ""
 
     def test_explicit_hash(self):
-        from llm_rosetta.gateway.keystore import KeyContext
+        from llm_rosetta_gateway.keystore import KeyContext
 
         ctx = KeyContext(label="test", allowed_shims=frozenset(), key_hash="abc123")
         assert ctx.key_hash == "abc123"

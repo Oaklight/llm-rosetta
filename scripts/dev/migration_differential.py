@@ -389,7 +389,11 @@ def _compare(old: dict[str, Any], new: dict[str, Any]) -> bool:
 
 def _source_root(root: Path) -> Path | None:
     """Where ``llm_rosetta`` is importable from, inside a checkout or an export."""
-    for candidate in (root / "src", root):
+    for candidate in (
+        root / "packages/llm-rosetta/src",
+        root / "src",
+        root,
+    ):
         if (candidate / "llm_rosetta").is_dir():
             return candidate
     return None

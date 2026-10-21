@@ -1,6 +1,6 @@
 """Tests for _strip_internal_metadata in proxy.py."""
 
-from llm_rosetta.gateway.proxy import _strip_internal_metadata
+from llm_rosetta_gateway.proxy import _strip_internal_metadata
 
 
 class TestStripInternalMetadata:

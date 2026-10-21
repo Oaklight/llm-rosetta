@@ -14,7 +14,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "scripts" / "dev" / "public_api_diff.py"
 ALLOWLIST = REPO_ROOT / "scripts" / "dev" / "public_api_allowlist.json"
-SRC = REPO_ROOT / "src" / "llm_rosetta"
+SRC = REPO_ROOT / "packages" / "llm-rosetta" / "src" / "llm_rosetta"
 
 #: Listed modules with no ``__all__`` of their own.  Their names are
 #: re-exported by a package that *is* compared.
@@ -36,7 +36,7 @@ INTERNAL_TOP_LEVEL = {
 
 
 def _module_name(path: Path) -> str:
-    parts = path.relative_to(REPO_ROOT / "src").with_suffix("").parts
+    parts = path.relative_to(SRC.parent).with_suffix("").parts
     if parts[-1] == "__init__":
         parts = parts[:-1]
     return ".".join(parts)

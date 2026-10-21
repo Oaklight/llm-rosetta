@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from llm_rosetta.gateway.transport.auth_errors import (
+from llm_rosetta_gateway.transport.auth_errors import (
     AuthErrorKind,
     classify_auth_error,
     rewrite_session_policy_error,

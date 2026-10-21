@@ -14,18 +14,18 @@ from unittest.mock import MagicMock
 
 import pytest
 
-import llm_rosetta.gateway.app as app_module
-from llm_rosetta.gateway.app import _state
+import llm_rosetta_gateway.app as app_module
+from llm_rosetta_gateway.app import _state
 from llm_rosetta._vendor.httpserver import App, JSONResponse
-from llm_rosetta.gateway.config import GatewayConfig
-from llm_rosetta.gateway.lifecycle import begin_typed, finish_typed
-from llm_rosetta.gateway.model_types import (
+from llm_rosetta_gateway.config import GatewayConfig
+from llm_rosetta_gateway.lifecycle import begin_typed, finish_typed
+from llm_rosetta_gateway.model_types import (
     ModelTypeDescriptor,
     RouteSpec,
     _reset_registry,
     register_model_type,
 )
-from llm_rosetta.gateway.ops import OpsContext
+from llm_rosetta_gateway.ops import OpsContext
 from llm_rosetta.observability import PersistenceManager, RequestLog
 from llm_rosetta.observability.usage.normalize import MODEL_TYPE_FIELDS
 

@@ -9,7 +9,7 @@ import pytest
 from typing import Any
 
 from llm_rosetta._vendor.httpserver import State
-from llm_rosetta.gateway.middleware.request_context import (
+from llm_rosetta_gateway.middleware.request_context import (
     RequestContext,
     request_context_var,
 )
@@ -58,7 +58,7 @@ def _run(coro: Any) -> Any:
 # Import the hook installer
 # ---------------------------------------------------------------------------
 
-from llm_rosetta.gateway.app import _install_lifecycle_hooks  # noqa: E402
+from llm_rosetta_gateway.app import _install_lifecycle_hooks  # noqa: E402
 
 
 class _HookCapture:

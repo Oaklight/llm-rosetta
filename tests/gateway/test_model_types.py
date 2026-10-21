@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import pytest
 
-from llm_rosetta.gateway.model_types import (
+from llm_rosetta_gateway.model_types import (
     ModelTypeDescriptor,
     RouteSpec,
     _reset_registry,
@@ -334,7 +334,7 @@ class TestConfigIntegration:
     """Verify that GatewayConfig format lists align with the registry."""
 
     def test_embedding_formats_match_registry(self) -> None:
-        from llm_rosetta.gateway.config import GatewayConfig
+        from llm_rosetta_gateway.config import GatewayConfig
 
         desc = get_model_type("embedding")
         assert desc is not None
@@ -343,14 +343,14 @@ class TestConfigIntegration:
         assert set(GatewayConfig.embedding_formats()) == set(desc.formats)
 
     def test_rerank_formats_match_registry(self) -> None:
-        from llm_rosetta.gateway.config import GatewayConfig
+        from llm_rosetta_gateway.config import GatewayConfig
 
         desc = get_model_type("rerank")
         assert desc is not None
         assert set(GatewayConfig.rerank_formats()) == set(desc.formats)
 
     def test_formats_for_type_helper(self) -> None:
-        from llm_rosetta.gateway.config import GatewayConfig
+        from llm_rosetta_gateway.config import GatewayConfig
 
         desc = get_model_type("embedding")
         assert desc is not None
@@ -368,7 +368,7 @@ class TestDistributeTypedModels:
 
     def test_embedding_model_distributed(self) -> None:
         """An embedding model should be moved from the LLM pool."""
-        from llm_rosetta.gateway.config import GatewayConfig
+        from llm_rosetta_gateway.config import GatewayConfig
 
         raw = {
             "providers": {
@@ -398,7 +398,7 @@ class TestDistributeTypedModels:
 
     def test_rerank_model_distributed(self) -> None:
         """A rerank model should be moved from the LLM pool."""
-        from llm_rosetta.gateway.config import GatewayConfig
+        from llm_rosetta_gateway.config import GatewayConfig
 
         raw = {
             "providers": {
@@ -422,7 +422,7 @@ class TestDistributeTypedModels:
 
     def test_typed_model_with_provider_list_is_distributed(self) -> None:
         """A ``providers`` list routes to its first provider in the pool."""
-        from llm_rosetta.gateway.config import GatewayConfig
+        from llm_rosetta_gateway.config import GatewayConfig
 
         raw = {
             "providers": {
@@ -451,7 +451,7 @@ class TestDistributeTypedModels:
 
     def test_typed_model_without_a_pool_provider_is_skipped(self) -> None:
         """No provider in the list serves the type — the model is not routed."""
-        from llm_rosetta.gateway.config import GatewayConfig
+        from llm_rosetta_gateway.config import GatewayConfig
 
         raw = {
             "providers": {
@@ -479,26 +479,26 @@ class TestAdminModelEntry:
     """Verify that admin _build_model_entry validates against registry."""
 
     def test_valid_type_accepted(self) -> None:
-        from llm_rosetta.gateway.admin.routes.config import _build_model_entry
+        from llm_rosetta_gateway.admin.routes.config import _build_model_entry
 
         entry = _build_model_entry({"type": "embedding"}, "provider-a")
         assert entry["type"] == "embedding"
 
     def test_llm_type_omitted_from_entry(self) -> None:
-        from llm_rosetta.gateway.admin.routes.config import _build_model_entry
+        from llm_rosetta_gateway.admin.routes.config import _build_model_entry
 
         entry = _build_model_entry({"type": "llm"}, "provider-a")
         assert "type" not in entry
 
     def test_unknown_type_falls_back_to_llm(self) -> None:
-        from llm_rosetta.gateway.admin.routes.config import _build_model_entry
+        from llm_rosetta_gateway.admin.routes.config import _build_model_entry
 
         entry = _build_model_entry({"type": "nonexistent_xyz"}, "provider-a")
         # Unknown type should fall back to LLM (no "type" key in entry)
         assert "type" not in entry
 
     def test_no_type_defaults_to_llm(self) -> None:
-        from llm_rosetta.gateway.admin.routes.config import _build_model_entry
+        from llm_rosetta_gateway.admin.routes.config import _build_model_entry
 
         entry = _build_model_entry({}, "provider-a")
         assert "type" not in entry
@@ -513,7 +513,7 @@ class TestAdminModelTypeMetadata:
     """Verify the _get_model_type_metadata helper."""
 
     def test_metadata_contains_builtins(self) -> None:
-        from llm_rosetta.gateway.admin.routes.config import _get_model_type_metadata
+        from llm_rosetta_gateway.admin.routes.config import _get_model_type_metadata
 
         metadata = _get_model_type_metadata()
         names = [m["name"] for m in metadata]
@@ -522,7 +522,7 @@ class TestAdminModelTypeMetadata:
         assert "rerank" in names
 
     def test_metadata_has_expected_fields(self) -> None:
-        from llm_rosetta.gateway.admin.routes.config import _get_model_type_metadata
+        from llm_rosetta_gateway.admin.routes.config import _get_model_type_metadata
 
         metadata = _get_model_type_metadata()
         for entry in metadata:
@@ -539,7 +539,7 @@ class TestAdminModelTypeMetadata:
             assert "is_llm" in entry
 
     def test_metadata_llm_is_llm_true(self) -> None:
-        from llm_rosetta.gateway.admin.routes.config import _get_model_type_metadata
+        from llm_rosetta_gateway.admin.routes.config import _get_model_type_metadata
 
         metadata = _get_model_type_metadata()
         llm_entry = next(m for m in metadata if m["name"] == "llm")
@@ -548,7 +548,7 @@ class TestAdminModelTypeMetadata:
         assert llm_entry["color"] == "var(--green)"
 
     def test_metadata_non_llm_is_llm_false(self) -> None:
-        from llm_rosetta.gateway.admin.routes.config import _get_model_type_metadata
+        from llm_rosetta_gateway.admin.routes.config import _get_model_type_metadata
 
         metadata = _get_model_type_metadata()
         for entry in metadata:
@@ -556,7 +556,7 @@ class TestAdminModelTypeMetadata:
                 assert entry["is_llm"] is False
 
     def test_metadata_embedding_config_keys(self) -> None:
-        from llm_rosetta.gateway.admin.routes.config import _get_model_type_metadata
+        from llm_rosetta_gateway.admin.routes.config import _get_model_type_metadata
 
         metadata = _get_model_type_metadata()
         emb = next(m for m in metadata if m["name"] == "embedding")
@@ -633,7 +633,7 @@ class TestNoPipelineWarning:
         """A non-LLM type with pipeline=None should produce a warning."""
         from unittest.mock import MagicMock, patch
 
-        from llm_rosetta.gateway.app import _register_non_llm_routes
+        from llm_rosetta_gateway.app import _register_non_llm_routes
 
         custom_name = "_test_no_pipeline_type"
         try:
@@ -651,7 +651,7 @@ class TestNoPipelineWarning:
 
             # Patch the gateway logger (propagate=False prevents caplog
             # from seeing it) and capture warning calls directly.
-            with patch("llm_rosetta.gateway.app.routes_typed.logger") as mock_logger:
+            with patch("llm_rosetta_gateway.app.routes_typed.logger") as mock_logger:
                 _register_non_llm_routes(mock_app, mock_config)
 
             # Verify that a warning was logged mentioning the custom type

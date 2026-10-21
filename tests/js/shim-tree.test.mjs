@@ -24,7 +24,7 @@ import {
   shimGroupSource,
   shimLabel,
   shimLabelSource,
-} from '../../src/llm_rosetta/gateway/admin/js/core/shim-tree.js';
+} from '../../packages/llm-rosetta-gateway/src/llm_rosetta_gateway/admin/js/core/shim-tree.js';
 
 /** Preferred order for base types within a group, as the picker has always used. */
 const BASE_TYPE_ORDER = [

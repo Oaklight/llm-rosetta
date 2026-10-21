@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 
-from llm_rosetta.gateway.config import GatewayConfig
+from llm_rosetta_gateway.config import GatewayConfig
 
 
 def _base_config(**overrides):

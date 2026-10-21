@@ -9,15 +9,15 @@ from types import SimpleNamespace
 
 import pytest
 
-from llm_rosetta.gateway.proxy import merge_chat_completion_events
-from llm_rosetta.gateway.quota.models import (
+from llm_rosetta_gateway.proxy import merge_chat_completion_events
+from llm_rosetta_gateway.quota.models import (
     QuotaReading,
     QuotaWindow,
     credential_fingerprint,
 )
-from llm_rosetta.gateway.quota.probes import resolve_probe
-from llm_rosetta.gateway.quota.state import QuotaState
-from llm_rosetta.gateway.transport.provider_info import KeyRing
+from llm_rosetta_gateway.quota.probes import resolve_probe
+from llm_rosetta_gateway.quota.state import QuotaState
+from llm_rosetta_gateway.transport.provider_info import KeyRing
 from llm_rosetta.shims.providers.openai.quota import OpenAICodexProbe
 from llm_rosetta.shims.providers.opencode.quota import OpenCodeGoProbe
 
@@ -28,7 +28,7 @@ _PROBES = (OpenCodeGoProbe(), OpenAICodexProbe())
 @pytest.fixture(autouse=True)
 def _clean_quota_state():
     """The state is process-wide; no test may inherit another's demotions."""
-    from llm_rosetta.gateway.quota.state import QUOTA_STATE
+    from llm_rosetta_gateway.quota.state import QUOTA_STATE
 
     QUOTA_STATE.clear()
     yield
@@ -171,7 +171,7 @@ class TestOpenCodeGoProbe:
     def test_malformed_answer_is_an_error(self):
         import pytest
 
-        from llm_rosetta.gateway.quota.probes import QuotaProbeError
+        from llm_rosetta_gateway.quota.probes import QuotaProbeError
 
         with pytest.raises(QuotaProbeError):
             self.probe.parse({"usage": {}})
@@ -305,7 +305,7 @@ class TestProbeResolution:
         assert [p.id for p in openai.quota_probes] == ["openai_codex"]
 
     def test_the_pivot_holds_no_vendor_probe(self):
-        import llm_rosetta.gateway.quota.probes as pivot
+        import llm_rosetta_gateway.quota.probes as pivot
 
         assert not hasattr(pivot, "OpenCodeGoProbe")
         assert not hasattr(pivot, "OpenAICodexProbe")
@@ -373,7 +373,7 @@ class TestQuotaIntervals:
     def test_reads_the_shim_declaration(self):
         from types import SimpleNamespace
 
-        from llm_rosetta.gateway.quota.service import quota_intervals
+        from llm_rosetta_gateway.quota.service import quota_intervals
         from llm_rosetta.shims import _load_providers, get_shim
 
         # Other test modules reset the shim registry; load the built-ins so
@@ -397,7 +397,7 @@ class TestQuotaIntervals:
     def test_provider_config_overrides_the_interval(self):
         from types import SimpleNamespace
 
-        from llm_rosetta.gateway.quota.service import quota_intervals
+        from llm_rosetta_gateway.quota.service import quota_intervals
         from llm_rosetta.shims import _load_providers, get_shim
 
         if get_shim("opencode--chat_completions") is None:
@@ -417,8 +417,8 @@ class TestInBandDemotion:
     def test_429_demotes_the_serving_key(self):
         from types import SimpleNamespace
 
-        from llm_rosetta.gateway.quota.service import note_upstream_quota_error
-        from llm_rosetta.gateway.quota.state import QUOTA_STATE
+        from llm_rosetta_gateway.quota.service import note_upstream_quota_error
+        from llm_rosetta_gateway.quota.state import QUOTA_STATE
 
         key = "sk-inband-detour-1"
         pinfo = SimpleNamespace(
@@ -443,8 +443,8 @@ class TestInBandDemotion:
     def test_rotating_token_demotes_the_provider(self):
         from types import SimpleNamespace
 
-        from llm_rosetta.gateway.quota.service import note_upstream_quota_error
-        from llm_rosetta.gateway.quota.state import QUOTA_STATE
+        from llm_rosetta_gateway.quota.service import note_upstream_quota_error
+        from llm_rosetta_gateway.quota.state import QUOTA_STATE
 
         identity = "cmd:inband-rotating-token"
         pinfo = SimpleNamespace(
@@ -463,8 +463,8 @@ class TestInBandDemotion:
     def test_keyless_429_cools_the_provider(self):
         from types import SimpleNamespace
 
-        from llm_rosetta.gateway.quota.service import note_upstream_quota_error
-        from llm_rosetta.gateway.quota.state import QUOTA_STATE
+        from llm_rosetta_gateway.quota.service import note_upstream_quota_error
+        from llm_rosetta_gateway.quota.state import QUOTA_STATE
 
         identity = "@free-lane-test"
         pinfo = SimpleNamespace(
@@ -578,14 +578,14 @@ class TestDeferredQuotaPolling:
     async def test_start_launches_the_poller_when_an_interval_is_declared(
         self, monkeypatch
     ):
-        from llm_rosetta.gateway.maintenance.startup import DeferredStartup
+        from llm_rosetta_gateway.maintenance.startup import DeferredStartup
 
         config = SimpleNamespace(providers={})
         app = SimpleNamespace(
             persistence=None, _counter_rebuild_needed=False, gateway_config=None
         )
         monkeypatch.setattr(
-            "llm_rosetta.gateway.quota.service.quota_intervals",
+            "llm_rosetta_gateway.quota.service.quota_intervals",
             lambda _config: {"p": 60.0},
         )
 
@@ -596,14 +596,14 @@ class TestDeferredQuotaPolling:
         await startup.shutdown()
 
     async def test_start_skips_the_poller_without_an_interval(self, monkeypatch):
-        from llm_rosetta.gateway.maintenance.startup import DeferredStartup
+        from llm_rosetta_gateway.maintenance.startup import DeferredStartup
 
         config = SimpleNamespace(providers={})
         app = SimpleNamespace(
             persistence=None, _counter_rebuild_needed=False, gateway_config=None
         )
         monkeypatch.setattr(
-            "llm_rosetta.gateway.quota.service.quota_intervals",
+            "llm_rosetta_gateway.quota.service.quota_intervals",
             lambda _config: {},
         )
 

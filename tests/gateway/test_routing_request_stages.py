@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from llm_rosetta.gateway.routing import (
+from llm_rosetta_gateway.routing import (
     ProviderKeyAffinity,
     SelectionContext,
     SessionHeaderAffinity,
 )
-from llm_rosetta.gateway.transport.provider_info import ProviderInfo, openai_auth
+from llm_rosetta_gateway.transport.provider_info import ProviderInfo, openai_auth
 
 
 def _pi(**kwargs) -> ProviderInfo:

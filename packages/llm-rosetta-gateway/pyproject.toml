@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "llm-rosetta-gateway"
+dynamic = ["version"]
+authors = [{ name = "Oaklight", email = "oaklight@gmx.com" }]
+description = "LLM-Rosetta Gateway — an HTTP proxy that accepts any supported LLM API format and forwards it to any configured upstream."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Internet :: Proxy Servers",
+]
+dependencies = ["llm-rosetta"]
+
+[project.urls]
+Documentation = "https://llm-rosetta.readthedocs.io"
+Repository = "https://github.com/Oaklight/llm-rosetta"
+Issues = "https://github.com/Oaklight/llm-rosetta/issues"
+
+[project.scripts]
+llm-rosetta-gateway = "llm_rosetta_gateway:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"llm_rosetta_gateway.admin" = ["admin.html", "css/*.css", "js/**/*.js"]
+
+[tool.setuptools.dynamic]
+version = { attr = "llm_rosetta_gateway.__version__" }
