@@ -6,7 +6,48 @@ on:
   pull_request:
     branches: [master]
 
+# Per-package groups (epic #1127).  The filters below only say which paths
+# belong to which package; the dependency direction is applied in the step and
+# job conditions: the gateway imports the core, so a core change runs the
+# gateway group too, while a gateway-only change skips the converter suite.
+# Pushes to master always run everything, so the merge commit is never
+# under-tested.
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      core: ${{ steps.filter.outputs.core }}
+      gateway: ${{ steps.filter.outputs.gateway }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            core:
+              - 'packages/llm-rosetta/**'
+              - 'tests/**'
+              - '!tests/gateway/**'
+              - '!tests/js/**'
+              # Tests drive these: test_public_api_diff/test_migration_differential
+              # execute scripts/dev/*, check_shim_removals and the token scripts
+              # are read as source, and tests/conformance imports tools/conformance.
+              - 'scripts/**'
+              - 'tools/**'
+              - 'pyproject.toml'
+              - 'pytest.ini'
+              - 'Makefile'
+              - '.pre-commit-config.yaml'
+              - '.github/workflows/ci.yml'
+            gateway:
+              - 'packages/llm-rosetta-gateway/**'
+              - 'tests/gateway/**'
+              - 'tests/js/**'
+              - '.github/workflows/ci.yml'
+
   shim-removal-check:
     # Passes while the version is below every scheduled removal; fails on its own
     # once the version reaches one, so a removal cannot land without the cleanup
@@ -42,6 +83,7 @@ jobs:
         run: make check-shim-removals
 
   lint-and-test:
+    needs: changes
     runs-on: ubuntu-latest
 
     steps:
@@ -66,20 +108,45 @@ jobs:
         uses: pre-commit/action@v3.0.1
 
       - name: Run import boundary tests
+        if: needs.changes.outputs.core == 'true'
         run: |
           python -m pytest tests/test_core_import_boundary.py \
                            tests/observability/test_import_boundary.py -q
 
       - name: Run admin UI tests
+        if: needs.changes.outputs.gateway == 'true'
         run: node --test tests/js/*.test.mjs
 
+      - name: Run gateway tests
+        # The gateway imports the core, so a core change is a gateway change.
+        if: needs.changes.outputs.gateway == 'true' || needs.changes.outputs.core == 'true'
+        run: python -m pytest tests/gateway -v
+
+      - name: Run root tests that reference the gateway
+        # `tests/gateway/` is not the whole gateway surface: root-level tests
+        # exercise the deprecated alias, the shim loader and the split itself
+        # (`test_package_split`, `test_shim_sources`, `test_sync_compat`, …).
+        # Discovered rather than listed, so a new one cannot be forgotten.
+        if: needs.changes.outputs.gateway == 'true'
+        run: |
+          mapfile -t files < <(grep -rl "llm_rosetta_gateway" tests --include=*.py \
+            | grep -v -e '^tests/gateway/' -e '^tests/js/')
+          python -m pytest "${files[@]}" -q
+
       - name: Run converter tests
+        if: needs.changes.outputs.core == 'true'
         run: python -m pytest tests/converters/ -v
 
       - name: Run type compatibility tests
+        if: needs.changes.outputs.core == 'true'
         run: python -m pytest tests/test_types/ -v
 
   dev-extras-test:
+    needs: changes
+    # The full suite is the cross-package safety net: it runs when the core
+    # changed (a gateway-only PR is covered by the gateway group above) and
+    # always on master, so the merge commit is never under-tested.
+    if: github.event_name == 'push' || needs.changes.outputs.core == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -98,25 +165,11 @@ jobs:
       - name: Run test suite
         run: /tmp/dev-extras-venv/bin/python -m pytest tests/ --ignore=tests/integration
 
-  install-smoke-test:
+  smoke-test-core:
+    name: smoke-test (core)
+    needs: changes
+    if: github.event_name == 'push' || needs.changes.outputs.core == 'true'
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        variant:
-          - name: core
-            extras: ""
-            check: |
-              python -c "from llm_rosetta import get_converter_for_provider; print('core import OK')"
-              python -c "from llm_rosetta.converters.google_generate.content_ops import GoogleGenerateContentOps; print('google generate converter OK')"
-              python -c "from llm_rosetta import GoogleInteractionsConverter; print('google interactions converter OK')"
-              python -c "from llm_rosetta.converters.decision import SystemOneDecisionConverter; print('decision converter OK')"
-          - name: gateway
-            extras: "[gateway]"
-            check: |
-              python -c "from llm_rosetta_gateway import main; print('gateway import OK')"
-              llm-rosetta-gateway --version
-
-    name: smoke-test (${{ matrix.variant.name }})
     steps:
       - uses: actions/checkout@v6
 
@@ -131,16 +184,51 @@ jobs:
           python -m build --wheel packages/llm-rosetta --outdir dist
           python -m build --wheel packages/llm-rosetta-gateway --outdir dist
 
-      - name: Install from wheel in clean venv
+      - name: Install the core wheel in a clean venv
         run: |
           python -m venv /tmp/smoke-venv
           /tmp/smoke-venv/bin/pip install --upgrade pip
           /tmp/smoke-venv/bin/pip install dist/llm_rosetta-*.whl
-          if [ "${{ matrix.variant.name }}" = "gateway" ]; then
-            /tmp/smoke-venv/bin/pip install dist/llm_rosetta_gateway-*.whl
-          fi
 
       - name: Smoke test imports
         run: |
           source /tmp/smoke-venv/bin/activate
-          ${{ matrix.variant.check }}
+          python -c "from llm_rosetta import get_converter_for_provider; print('core import OK')"
+          python -c "from llm_rosetta.converters.google_generate.content_ops import GoogleGenerateContentOps; print('google generate converter OK')"
+          python -c "from llm_rosetta import GoogleInteractionsConverter; print('google interactions converter OK')"
+          python -c "from llm_rosetta.converters.decision import SystemOneDecisionConverter; print('decision converter OK')"
+
+  smoke-test-gateway:
+    name: smoke-test (gateway)
+    needs: changes
+    # The gateway is downstream of the core, so a core change validates it too.
+    if: |
+      github.event_name == 'push' ||
+      needs.changes.outputs.core == 'true' ||
+      needs.changes.outputs.gateway == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Build wheel
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build --wheel packages/llm-rosetta --outdir dist
+          python -m build --wheel packages/llm-rosetta-gateway --outdir dist
+
+      - name: Install both wheels in a clean venv
+        run: |
+          python -m venv /tmp/smoke-venv
+          /tmp/smoke-venv/bin/pip install --upgrade pip
+          /tmp/smoke-venv/bin/pip install dist/llm_rosetta-*.whl dist/llm_rosetta_gateway-*.whl
+
+      - name: Smoke test imports
+        run: |
+          source /tmp/smoke-venv/bin/activate
+          python -c "from llm_rosetta_gateway import main; print('gateway import OK')"
+          llm-rosetta-gateway --version
