@@ -116,6 +116,19 @@ LEGACY_SHIM_ALIASES: dict[str, str] = {
     "argo--anthropic": "argo--messages",
     "minimax--anthropic": "minimax--messages",
     "openrouter--anthropic": "openrouter--messages",
+    # The standalone packages' own older spellings.  ALCF's shims became
+    # cluster-qualified in #1035, and AskSage's old base names were never
+    # aliased; both are listed so a config that still spells one of them
+    # canonicalises *first* and then reaches the stranded-config error naming
+    # the package and the preset to declare — the same treatment the Argo
+    # entries above get.  The gateway's shim catalogue records which package
+    # replaces each of these, and a test there keeps the two lists in step.
+    "alcf--metis": "alcf_metis--chat_completions",
+    "alcf--minerva": "alcf_minerva--chat_completions",
+    "alcf--sophia": "alcf_sophia--chat_completions",
+    "asksage--anthropic": "asksage--messages",
+    "asksage--openai_chat": "asksage--chat_completions",
+    "asksage--openai_responses": "asksage--open_responses",
 }
 
 

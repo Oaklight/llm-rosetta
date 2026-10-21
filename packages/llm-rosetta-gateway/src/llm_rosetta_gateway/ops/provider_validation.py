@@ -11,7 +11,7 @@ from llm_rosetta.observability.ops_log import (
 )
 from llm_rosetta.shims import get_shim
 
-from ..shims import find_source_package
+from ..shims import find_source_package, legacy_shim_migration_advice
 
 from .base import OpsBase, OpsContext
 
@@ -156,12 +156,15 @@ def _validate_provider(
         return ProviderIssue(reason, "missing_external_shim", shim)
     if "shim" in cfg and isinstance(cfg["shim"], str):
         if get_shim(cfg["shim"]) is None:
-            return ProviderIssue(
+            reason = (
                 f"Provider {name!r} references unknown shim {cfg['shim']!r}; "
-                "choose a registered shim or declare its external source.",
-                "unknown_shim",
-                cfg["shim"],
+                "choose a registered shim or declare its external source."
             )
+            # A spelling the catalogue records gets the canonical name and the
+            # preset here as well: the ``shim:`` field does not go through the
+            # base_url path that carries the same sentence.
+            reason += legacy_shim_migration_advice(cfg["shim"])
+            return ProviderIssue(reason, "unknown_shim", cfg["shim"])
 
     try:
         # Reuse GatewayConfig's identity resolver so validation cannot drift
@@ -183,16 +186,7 @@ def _validate_provider(
         category = (
             "missing_base_url" if "no base_url" in reason else "invalid_provider_info"
         )
-        if (
-            shim_name in {"alcf--sophia", "alcf--minerva", "alcf--metis"}
-            and "no base_url" in reason
-        ):
-            cluster = shim_name.rsplit("--", 1)[-1]
-            canonical = f"alcf_{cluster}--chat_completions"
-            reason += (
-                f" Use the canonical shim {canonical!r} with "
-                "shims.presets: ['alcf'] and configure its connection defaults."
-            )
+        reason += legacy_shim_migration_advice(shim_name)
         return ProviderIssue(reason, category, shim_name)
     except (TypeError, KeyError) as exc:
         return ProviderIssue(

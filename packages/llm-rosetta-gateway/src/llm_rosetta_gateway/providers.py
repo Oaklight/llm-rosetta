@@ -316,7 +316,11 @@ def build_provider_info(
     """
     from llm_rosetta.shims import get_shim
 
-    from .shims import find_source_package
+    from .shims import (
+        find_source_package,
+        legacy_shim_migration_advice,
+        source_package_advice,
+    )
 
     # Legacy spellings (e.g. ``openai_chat``) migrate to canonical names so the
     # registry lookup below hits.
@@ -351,9 +355,16 @@ def build_provider_info(
         auth_fn = openai_auth
         url_tpl = "{base_url}/"
         stream_tpl = None
+        # A shim that is simply not registered — usually one that moved to a
+        # standalone package, or an older spelling of one — lands here and runs
+        # on generic defaults, so this is where the operator has to be told
+        # what to declare.  Without it the warning names the type and nothing
+        # else, and a legacy spelling looks like a typo.
         logger.warning(
-            "Unknown provider type '%s'; using Bearer auth and generic URL template",
+            "Unknown provider type '%s'; using Bearer auth and generic URL template%s",
             base_type,
+            legacy_shim_migration_advice(shim_name)
+            or source_package_advice(shim_name or base_type),
         )
 
     # Per-shim auth_header override: when the shim declares a custom

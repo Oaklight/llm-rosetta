@@ -727,6 +727,15 @@ class TestLegacyShimAliasStillResolves:
             ("argo--openai_chat", "argo--chat_completions"),
             ("argo--anthropic", "argo--messages"),
             ("argo--openai_responses", "argo--open_responses"),
+            # The standalone packages' own older spellings (#1106): ALCF's
+            # shims became cluster-qualified, AskSage's old base names were
+            # never aliased.
+            ("alcf--metis", "alcf_metis--chat_completions"),
+            ("alcf--minerva", "alcf_minerva--chat_completions"),
+            ("alcf--sophia", "alcf_sophia--chat_completions"),
+            ("asksage--anthropic", "asksage--messages"),
+            ("asksage--openai_chat", "asksage--chat_completions"),
+            ("asksage--openai_responses", "asksage--open_responses"),
         ):
             assert canonical_shim_name(legacy) == canonical
             assert get_shim(legacy) is None

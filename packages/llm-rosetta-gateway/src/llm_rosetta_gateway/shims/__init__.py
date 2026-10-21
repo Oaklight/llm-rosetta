@@ -12,8 +12,12 @@ llm_rosetta.shims`` no longer pulls in the HTTP client these modules use.
 from .catalog import (
     SHIM_SOURCE_PACKAGES,
     ShimSourcePackage,
+    canonical_shim_for,
+    find_legacy_source_package,
     find_source_package,
     get_source_package,
+    legacy_shim_migration_advice,
+    source_package_advice,
 )
 from .removals import (
     SHIM_REMOVALS,
@@ -37,6 +41,10 @@ from .sources import (
 __all__ = [
     "SHIM_REMOVALS",
     "SHIM_SOURCE_PACKAGES",
+    "canonical_shim_for",
+    "find_legacy_source_package",
+    "legacy_shim_migration_advice",
+    "source_package_advice",
     "RemovalReference",
     "ShimArchiveMismatch",
     "ShimLoadReport",
