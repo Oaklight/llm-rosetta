@@ -92,5 +92,5 @@ Or use Docker Compose — see `docker/docker-compose.yaml` in the repository.
 ```bash
 git clone https://github.com/Oaklight/llm-rosetta.git
 cd llm-rosetta
-pip install -e ".[all]"
+pip install -e "packages/llm-rosetta[all]" -e packages/llm-rosetta-gateway
 ```

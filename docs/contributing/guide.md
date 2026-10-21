@@ -8,7 +8,7 @@ title: Contributing
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/my-change`)
-3. Install dev dependencies: `pip install -e ".[all]"`
+3. Install dev dependencies: `pip install -e "packages/llm-rosetta[all]" -e packages/llm-rosetta-gateway`
 4. Set up pre-commit hooks: `pre-commit install`
 5. Make your changes
 6. Run `make lint` (or let pre-commit catch issues on commit)
