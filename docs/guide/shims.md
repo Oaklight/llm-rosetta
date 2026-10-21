@@ -213,7 +213,7 @@ remote；同一 URL 的显式 remote 会合并到预设上（显式键优先）�
 
 ## 内置 Shim
 
-LLM-Rosetta 内置 32 个提供方 shim，每个 shim 对应 `packages/llm-rosetta/src/llm_rosetta/shims/providers/`
+LLM-Rosetta 内置 33 个提供方 shim，每个 shim 对应 `packages/llm-rosetta/src/llm_rosetta/shims/providers/`
 下的一个目录。`list_shims()` 会打印当前实际的集合；下表即是该集合。ALCF、AskSage 与 Argo
 的 shim 作为独立包发布 —— 参见[独立 Shim 包](#standalone-shim-packages)。
 
