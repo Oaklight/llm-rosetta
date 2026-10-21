@@ -408,10 +408,16 @@
         <div class="empty-state-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg></div>
         <div class="empty-state-text" data-i18n="dump.empty">No error dumps recorded.</div>
       </div>
-      <div style="display:flex;align-items:center;justify-content:center;gap:12px;margin-top:16px;font-size:13px;color:var(--text-dim)">
+      <div class="pagination">
         <button class="btn btn-sm" onclick="changeDumpPage(-1)" id="dumpPrevPage" disabled>← Prev</button>
-        <span id="dumpPageInfo">Page 1 / 1</span>
+        <span class="info" id="dumpPageInfo">Page 1 / 1</span>
         <button class="btn btn-sm" onclick="changeDumpPage(1)" id="dumpNextPage" disabled>Next →</button>
+        <span class="page-jump-group">
+          <input type="number" id="dumpPageJump" class="page-jump" min="1" step="1" inputmode="numeric" disabled
+                 data-i18n-placeholder="page.number" data-i18n-aria-label="page.number" placeholder="Page"
+                 onkeydown="if(event.key==='Enter'){event.preventDefault();jumpToDumpPage();}">
+          <button class="btn btn-sm" onclick="jumpToDumpPage()" data-i18n="btn.go">Go</button>
+        </span>
       </div>
     </div>
   </div>
@@ -496,6 +502,12 @@
         <button class="btn btn-sm" id="prevPage" onclick="changePage(-1)" data-i18n="btn.prev">Prev</button>
         <span class="info" id="pageInfo"></span>
         <button class="btn btn-sm" id="nextPage" onclick="changePage(1)" data-i18n="btn.next">Next</button>
+        <span class="page-jump-group">
+          <input type="number" id="logPageJump" class="page-jump" min="1" step="1" inputmode="numeric" disabled
+                 data-i18n-placeholder="page.number" data-i18n-aria-label="page.number" placeholder="Page"
+                 onkeydown="if(event.key==='Enter'){event.preventDefault();jumpToLogPage();}">
+          <button class="btn btn-sm" onclick="jumpToLogPage()" data-i18n="btn.go">Go</button>
+        </span>
         <label class="info" for="logPageSize" data-i18n="page.rows">Rows/page</label>
         <select id="logPageSize" onchange="onLogPageSizeChange()" style="padding:4px 8px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:13px">
           <option value="30">30</option>
@@ -525,6 +537,12 @@
         <button class="btn btn-sm" id="opsLogPrevPage" onclick="changeOpsLogPage(-1)" data-i18n="btn.prev">Prev</button>
         <span class="info" id="opsLogPageInfo"></span>
         <button class="btn btn-sm" id="opsLogNextPage" onclick="changeOpsLogPage(1)" data-i18n="btn.next">Next</button>
+        <span class="page-jump-group">
+          <input type="number" id="opsLogPageJump" class="page-jump" min="1" step="1" inputmode="numeric" disabled
+                 data-i18n-placeholder="page.number" data-i18n-aria-label="page.number" placeholder="Page"
+                 onkeydown="if(event.key==='Enter'){event.preventDefault();jumpToOpsLogPage();}">
+          <button class="btn btn-sm" onclick="jumpToOpsLogPage()" data-i18n="btn.go">Go</button>
+        </span>
       </div>
     </div>
   </div>

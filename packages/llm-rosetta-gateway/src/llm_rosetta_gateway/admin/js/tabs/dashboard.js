@@ -5,6 +5,7 @@
 
 import { S, DUMP_PAGE_SIZE, LOG_LIMIT } from '../core/state.js';
 import { t } from '../core/i18n.js';
+import { pageCount, clampPage, shouldResync } from '../core/pagination.js';
 import { api, _adminHeaders, showToast, esc, formatDuration, openModal, closeModal, fmtBytesShort, fmtBytesLong, fmtTokens } from '../core/utils.js';
 
 // ===================== Metrics =====================
@@ -285,6 +286,15 @@ async function loadDumps() {
   renderDumps();
 }
 
+// Page the dump jump box was last synced to, and whether the user has edited
+// it since.  See shouldResync() for why both signals are needed.
+let _dumpJumpShown = 1;
+let _dumpJumpDirty = false;
+
+const _dumpJumpInput = document.getElementById('dumpPageJump');
+_dumpJumpInput?.addEventListener?.('input', () => { _dumpJumpDirty = true; });
+_dumpJumpInput?.addEventListener?.('blur', () => { _dumpJumpDirty = false; });
+
 async function renderDumps() {
   const phase = document.getElementById('dumpPhaseFilter').value;
   const statusDrop = document.getElementById('dumpStatusFilter').value;
@@ -356,13 +366,24 @@ async function renderDumps() {
     if (resetBtn) resetBtn.style.display = hasFilters ? 'inline-flex' : 'none';
 
     // Client-side pagination on filtered results
-    const totalPages = Math.ceil(total / DUMP_PAGE_SIZE) || 1;
+    const totalPages = pageCount(total, DUMP_PAGE_SIZE);
     if (S._dumpPage >= totalPages) S._dumpPage = Math.max(0, totalPages - 1);
     const pageStart = S._dumpPage * DUMP_PAGE_SIZE;
     const pageEntries = entries.slice(pageStart, pageStart + DUMP_PAGE_SIZE);
+    S._dumpTotalPages = totalPages;
     document.getElementById('dumpPageInfo').textContent = `Page ${S._dumpPage + 1} / ${totalPages}`;
     document.getElementById('dumpPrevPage').disabled = S._dumpPage === 0;
     document.getElementById('dumpNextPage').disabled = (S._dumpPage + 1) * DUMP_PAGE_SIZE >= total;
+    const jump = document.getElementById('dumpPageJump');
+    if (jump) {
+      jump.max = String(totalPages);
+      jump.disabled = totalPages <= 1;
+      const focused = document.activeElement === jump;
+      if (shouldResync(jump.value, _dumpJumpShown, { focused, dirty: _dumpJumpDirty })) {
+        jump.value = String(S._dumpPage + 1);
+        _dumpJumpShown = S._dumpPage + 1;
+      }
+    }
 
     if (total === 0) { tbody.innerHTML = ''; return; }
 
@@ -473,6 +494,26 @@ async function downloadAllDumps() {
 
 function changeDumpPage(dir) {
   S._dumpPage = Math.max(0, S._dumpPage + dir);
+  _dumpJumpDirty = false;
+  renderDumps();
+}
+
+// The dump list paginates in the browser, so a jump is just a re-render at the
+// clamped page.  Out-of-range numbers clamp; an empty box is ignored.
+function jumpToDumpPage() {
+  const input = document.getElementById('dumpPageJump');
+  if (!input) return;
+  const page = clampPage(input.value, S._dumpTotalPages || 1);
+  if (page === null) {
+    input.value = String(S._dumpPage + 1);
+    _dumpJumpShown = S._dumpPage + 1;
+    _dumpJumpDirty = false;
+    return;
+  }
+  input.value = String(page);
+  _dumpJumpShown = page;
+  _dumpJumpDirty = false;
+  S._dumpPage = page - 1;
   renderDumps();
 }
 
@@ -1040,7 +1081,7 @@ Object.assign(window, {
   loadCaptureStatus, loadCaptureResults, toggleCapture,
   clearCaptureResults, viewCapture, downloadCapture, downloadAllCaptures,
   loadDumps, renderDumps, invalidateDumpCache, viewDump, downloadDump, downloadAllDumps,
-  changeDumpPage, toggleDumpMoreMenu, openClearDumpsConfirm,
+  changeDumpPage, jumpToDumpPage, toggleDumpMoreMenu, openClearDumpsConfirm,
   onClearDumpsInput, confirmClearDumps,
   onDumpModelFilterChange, closeDumpModelSearch,
   onDumpStatusFilterChange, onDumpStatusSearchInput, closeDumpStatusSearch,

@@ -5,6 +5,7 @@
 
 import { S, OPS_LOG_LIMIT } from '../core/state.js';
 import { t } from '../core/i18n.js';
+import { pageCount, clampPage, offsetForPage, shouldResync } from '../core/pagination.js';
 import { api, esc } from '../core/utils.js';
 
 const EVENT_KEYS = {
@@ -43,6 +44,15 @@ async function loadOpsLog() {
   } catch (_) { /* auth redirect handled by api.get */ }
 }
 
+// Page the jump box was last synced to, and whether the user has edited it
+// since.  See shouldResync() for why both signals are needed.
+let _opsJumpShown = 1;
+let _opsJumpDirty = false;
+
+const _opsJumpInput = document.getElementById('opsLogPageJump');
+_opsJumpInput?.addEventListener?.('input', () => { _opsJumpDirty = true; });
+_opsJumpInput?.addEventListener?.('blur', () => { _opsJumpDirty = false; });
+
 function renderOpsLog(entries, total) {
   const tbody = document.getElementById('opsLogTable');
   if (entries.length === 0) {
@@ -78,11 +88,22 @@ function renderOpsLog(entries, total) {
     }).join('');
   }
 
-  const totalPages = Math.ceil(total / OPS_LOG_LIMIT) || 1;
+  const totalPages = pageCount(total, OPS_LOG_LIMIT);
   const currentPage = Math.floor(S.opsLogOffset / OPS_LOG_LIMIT) + 1;
+  S.opsLogTotal = total;
   document.getElementById('opsLogPageInfo').textContent = t('page.info', {current: currentPage, total: totalPages, count: total});
   document.getElementById('opsLogPrevPage').disabled = S.opsLogOffset === 0;
   document.getElementById('opsLogNextPage').disabled = S.opsLogOffset + OPS_LOG_LIMIT >= total;
+  const jump = document.getElementById('opsLogPageJump');
+  if (jump) {
+    jump.max = String(totalPages);
+    jump.disabled = totalPages <= 1;
+    const focused = document.activeElement === jump;
+    if (shouldResync(jump.value, _opsJumpShown, { focused, dirty: _opsJumpDirty })) {
+      jump.value = String(currentPage);
+      _opsJumpShown = currentPage;
+    }
+  }
 }
 
 function toggleOpsLogRow(rowId, tr) {
@@ -96,6 +117,29 @@ function toggleOpsLogRow(rowId, tr) {
 
 function changeOpsLogPage(dir) {
   S.opsLogOffset = Math.max(0, S.opsLogOffset + dir * OPS_LOG_LIMIT);
+  S.expandedOpsLogRows.clear();
+  _opsJumpDirty = false;
+  loadOpsLog();
+}
+
+// Same contract as the Request Log's jump box: clamp out-of-range numbers,
+// ignore an empty box, and re-ask the server for the chosen offset.
+function jumpToOpsLogPage() {
+  const input = document.getElementById('opsLogPageJump');
+  if (!input) return;
+  const totalPages = pageCount(S.opsLogTotal || 0, OPS_LOG_LIMIT);
+  const page = clampPage(input.value, totalPages);
+  if (page === null) {
+    const current = Math.floor(S.opsLogOffset / OPS_LOG_LIMIT) + 1;
+    input.value = String(current);
+    _opsJumpShown = current;
+    _opsJumpDirty = false;
+    return;
+  }
+  input.value = String(page);
+  _opsJumpShown = page;
+  _opsJumpDirty = false;
+  S.opsLogOffset = offsetForPage(page, OPS_LOG_LIMIT);
   S.expandedOpsLogRows.clear();
   loadOpsLog();
 }
@@ -170,7 +214,7 @@ function switchLogView(view) {
 // ===================== Exports =====================
 
 Object.assign(window, {
-  loadOpsLog, renderOpsLog, toggleOpsLogRow, changeOpsLogPage,
+  loadOpsLog, renderOpsLog, toggleOpsLogRow, changeOpsLogPage, jumpToOpsLogPage,
   resetOpsLogFilters, switchLogView, populateOpsLogFilters,
 });
 

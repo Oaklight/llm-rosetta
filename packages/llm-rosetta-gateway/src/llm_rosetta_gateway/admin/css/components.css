@@ -491,8 +491,15 @@ canvas { width: 100%; height: 160px; }
 .log-view-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
 
 /* Pagination */
-.pagination { display: flex; align-items: center; gap: 12px; margin-top: 16px; justify-content: center; }
+.pagination { display: flex; align-items: center; gap: 12px; margin-top: 16px; justify-content: center; flex-wrap: wrap; }
 .pagination .info { font-size: 13px; color: var(--text-dim); }
+/* Page-jump box: narrow, so it never competes with the pager buttons. */
+.page-jump-group { display: inline-flex; align-items: center; gap: 6px; }
+.page-jump {
+  width: 68px; padding: 5px 8px; background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius); color: var(--text); font-size: 13px; text-align: center;
+}
+.page-jump:disabled { opacity: 0.5; }
 
 /* Status badge */
 .badge {

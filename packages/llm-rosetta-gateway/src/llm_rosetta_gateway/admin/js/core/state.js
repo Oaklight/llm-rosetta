@@ -43,6 +43,8 @@ export const S = {
   internalToken: null,
   logOffset: 0,
   logPageSize: LOG_LIMIT,
+  // Total rows behind the current Request Log page; the jump box clamps to it.
+  logTotal: 0,
   dashboardTimer: null,
   logTimer: null,
   healthTimer: null,
@@ -65,6 +67,8 @@ export const S = {
   _captureEnabled: false,
   _dumpPage: 0,
   _dumpAllEntries: [],
+  // Pages the filtered dump list spans; set by renderDumps.
+  _dumpTotalPages: 1,
   _lastPersistence: null,
   _lastTotalReq: 0,
   _testAbortCtrl: null,
@@ -75,5 +79,7 @@ export const S = {
   opsLogOffset: 0,
   opsLogTimer: null,
   expandedOpsLogRows: new Set(),
+  // Total rows behind the current Server Ops Log page.
+  opsLogTotal: 0,
   _logView: 'requests',
 };

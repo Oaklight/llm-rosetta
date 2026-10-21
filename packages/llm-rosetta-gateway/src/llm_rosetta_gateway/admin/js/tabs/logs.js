@@ -5,6 +5,7 @@
 
 import { S, LOG_LIMIT } from '../core/state.js';
 import { t } from '../core/i18n.js';
+import { pageCount, clampPage, offsetForPage, shouldResync } from '../core/pagination.js';
 import { api, esc, formatDuration, inlineConfirm, showToast } from '../core/utils.js';
 
 // ===================== Request Log =====================
@@ -120,11 +121,33 @@ function renderLogs(entries, total) {
 
   // Pagination
   const limit = S.logPageSize || LOG_LIMIT;
-  const totalPages = Math.ceil(total / limit) || 1;
+  const totalPages = pageCount(total, limit);
   const currentPage = Math.floor(S.logOffset / limit) + 1;
+  S.logTotal = total;
   document.getElementById('pageInfo').textContent = t('page.info', {current: currentPage, total: totalPages, count: total});
   document.getElementById('prevPage').disabled = S.logOffset === 0;
   document.getElementById('nextPage').disabled = S.logOffset + limit >= total;
+  syncLogPageJump(currentPage, totalPages);
+}
+
+// Page the jump box was last synced to, and whether the user has edited it
+// since.  See shouldResync() for why both signals are needed.
+let _logJumpShown = 1;
+let _logJumpDirty = false;
+
+const _logJumpInput = document.getElementById('logPageJump');
+_logJumpInput?.addEventListener?.('input', () => { _logJumpDirty = true; });
+_logJumpInput?.addEventListener?.('blur', () => { _logJumpDirty = false; });
+
+function syncLogPageJump(currentPage, totalPages) {
+  const input = document.getElementById('logPageJump');
+  if (!input) return;
+  input.max = String(totalPages);
+  input.disabled = totalPages <= 1;
+  const focused = document.activeElement === input;
+  if (!shouldResync(input.value, _logJumpShown, { focused, dirty: _logJumpDirty })) return;
+  input.value = String(currentPage);
+  _logJumpShown = currentPage;
 }
 
 function toggleLogRow(rowId, tr) {
@@ -139,6 +162,30 @@ function toggleLogRow(rowId, tr) {
 function changePage(dir) {
   S.logOffset = Math.max(0, S.logOffset + dir * (S.logPageSize || LOG_LIMIT));
   S.expandedLogRows.clear();
+  _logJumpDirty = false;
+  loadLogs();
+}
+
+// Jump straight to a page typed into the box.  Out-of-range numbers clamp to
+// the first/last page; an empty or non-numeric box leaves the page alone.
+function jumpToLogPage() {
+  const input = document.getElementById('logPageJump');
+  if (!input) return;
+  const limit = S.logPageSize || LOG_LIMIT;
+  const totalPages = pageCount(S.logTotal || 0, limit);
+  const page = clampPage(input.value, totalPages);
+  if (page === null) {
+    const current = Math.floor(S.logOffset / limit) + 1;
+    input.value = String(current);
+    _logJumpShown = current;
+    _logJumpDirty = false;
+    return;
+  }
+  input.value = String(page);
+  _logJumpShown = page;
+  _logJumpDirty = false;
+  S.logOffset = offsetForPage(page, limit);
+  S.expandedLogRows.clear();
   loadLogs();
 }
 
@@ -147,6 +194,7 @@ function onLogPageSizeChange() {
   S.logPageSize = Number.isFinite(value) && value > 0 ? value : LOG_LIMIT;
   S.logOffset = 0;
   S.expandedLogRows.clear();
+  _logJumpDirty = false;
   loadLogs();
 }
 
@@ -273,7 +321,7 @@ function jumpToErrorDump(requestLogId) {
 }
 
 Object.assign(window, {
-  loadLogs, renderLogs, toggleLogRow, changePage, jumpToErrorDump,
+  loadLogs, renderLogs, toggleLogRow, changePage, jumpToLogPage, jumpToErrorDump,
   resetLogFilters, updateFilterOptions, updateKeyFilterOptions,
   onLogStatusFilterChange, onLogStatusSearchInput, closeLogStatusSearch,
   onLogTimeRangeChange, onLogPageSizeChange,
