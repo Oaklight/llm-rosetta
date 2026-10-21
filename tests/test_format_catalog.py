@@ -106,10 +106,21 @@ fake = spec.FormatSpec(
     models_path="/fake/models",
 )
 
-patched = formats.FORMAT_SPECS + (fake,)
+# A second fake stands in for a Google-family route, so the error-envelope
+# derivation is pinned too: the family comes from the catalog's ``wire_family``
+# and the path from its ``route_path``.
+fake_google = spec.FormatSpec(
+    model_type="llm",
+    format="fake_google_wire",
+    wire_family="google",
+    route_path="/v1beta/fake_google",
+)
+
+patched = formats.FORMAT_SPECS + (fake, fake_google)
 catalog.FORMAT_SPECS = patched
 formats.FORMAT_SPECS = patched
 catalog.BY_PAIR[("llm", "fake_wire")] = fake
+catalog.BY_PAIR[("llm", "fake_google_wire")] = fake_google
 detect.DETECTORS["fake_wire"] = lambda body: "fake_marker" in body
 
 
@@ -145,10 +156,40 @@ import llm_rosetta.gateway.transport.sse_format as sse_format
 importlib.reload(sse_format)
 assert "fake_wire" in sse_format.SSE_FORMATTERS, "SSE formatter"
 
+import json
+
 import llm_rosetta.gateway.middleware.error_format as error_format
 
 importlib.reload(error_format)
 assert error_format._PROVIDER_FORMAT_MAP["fake_wire"] == "anthropic", "error family"
+assert error_format._PROVIDER_FORMAT_MAP["fake_google_wire"] == "google"
+
+# The route -> envelope family and the envelope itself both derive from the
+# catalog record; this is the path the `/v1beta/interactions` change rides on.
+assert error_format.detect_api_format("/v1/fake_wire") == "anthropic", "route family"
+assert error_format.detect_api_format("/v1beta/fake_google") == "google", "route family"
+assert json.loads(
+    error_format.format_error_response(
+        error_format.detect_api_format("/v1beta/fake_google"), 400, "boom"
+    ).body
+) == {
+    "error": {"code": 400, "message": "boom", "status": "INVALID_ARGUMENT"}
+}, "google envelope"
+assert json.loads(
+    error_format.format_error_response(
+        error_format.detect_api_format("/v1/fake_wire"), 400, "boom"
+    ).body
+) == {"type": "error", "error": {"type": "invalid_request_error", "message": "boom"}}, (
+    "anthropic envelope"
+)
+# The disclosed change: the interactions route resolves to the Google
+# envelope because its catalog record says ``wire_family="google"``.
+assert error_format.detect_api_format("/v1beta/interactions") == "google"
+
+assert error_format.detect_api_format("/v1/chat/completions") == "openai"
+assert json.loads(error_format.format_error_response("openai", 400, "boom").body) == {
+    "error": {"message": "boom", "type": "invalid_request_error", "code": None}
+}, "openai envelope"
 
 import llm_rosetta.observability.usage.semantics as semantics
 
