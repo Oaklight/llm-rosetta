@@ -225,7 +225,7 @@ config file needed) or `llm_rosetta_gateway.apply_shim_sources(raw, config_path)
 
 ## Built-in Shims
 
-LLM-Rosetta ships with 32 built-in provider shims, one directory per shim under
+LLM-Rosetta ships with 33 built-in provider shims, one directory per shim under
 `packages/llm-rosetta/src/llm_rosetta/shims/providers/`. `list_shims()` prints the live set; this is
 that set. The ALCF, AskSage and Argo shims ship as standalone packages — see
 [Standalone shim packages](#standalone-shim-packages).
