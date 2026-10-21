@@ -5,7 +5,7 @@
   transition: all 0.15s;
 }
 .btn:hover { background: var(--bg-hover); }
-.btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-on); }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-on); font-weight: var(--btn-primary-weight); }
 .btn-primary:hover { background: var(--accent-hover); }
 .btn-danger { color: var(--red); border-color: color-mix(in srgb, var(--red) 30%, transparent); }
 .btn-danger:hover { background: color-mix(in srgb, var(--red) 6%, transparent); border-color: var(--red); }
@@ -868,26 +868,6 @@ th.sortable:focus-visible { outline:2px solid var(--accent);outline-offset:-2px;
 }
 body { padding-bottom: 26px; }
 
-/* ═══ Scheme-specific structural overrides ═══ */
-
-/* Dot-grid background (Emerald only) */
-[data-scheme="emerald"] body::before {
-  content:'';position:fixed;inset:0;pointer-events:none;z-index:-1;
-  background-image:radial-gradient(circle,var(--dot) 1px,transparent 1px);
-  background-size:24px 24px;
-}
-/* Stat cards: Emerald gets cross-hatch grid + bottom bar */
-[data-scheme="emerald"] .stat-card { position:relative;overflow:hidden; }
-/* Decorative only: with `pointer-events: auto` this absolutely positioned
-   overlay sat above the card's contents and swallowed every click on them —
-   the Token card's "details" link among them. */
-[data-scheme="emerald"] .stat-card::before {
-  content:'';position:absolute;inset:0;pointer-events:none;opacity:.5;
-  background:
-    repeating-linear-gradient(90deg,var(--grid) 0 1px,transparent 1px 28px),
-    repeating-linear-gradient(0deg,var(--grid) 0 1px,transparent 1px 28px);
-}
-
 /* ═══ Logo picker ═══ */
 .lp-wrapper { position:relative; }
 .lp-input-row { display:flex;align-items:center;gap:6px; }
@@ -940,12 +920,6 @@ body { padding-bottom: 26px; }
 .lp-more { padding:6px 10px;font-size:11px;color:var(--text-dim);text-align:center; }
 .lp-empty { padding:16px 10px;font-size:13px;color:var(--text-dim);text-align:center; }
 .lp-custom-hint { padding:0 10px 10px;font-size:11px;color:var(--text-muted);text-align:center; }
-
-/* Stat cards: Minimal gets merged grid layout */
-[data-scheme="minimal"] .stats-grid { gap:1px;background:var(--border);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden; }
-[data-scheme="minimal"] .stat-card { border-radius:0;border:none;background:var(--bg); }
-/* Primary button font-weight */
-[data-scheme="emerald"] .btn-primary { font-weight:600; }
 
 /* Compact logo picker (icon button mode) */
 .lp-compact { display:inline-flex;align-items:flex-start;gap:4px;position:relative; }

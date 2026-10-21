@@ -18,6 +18,22 @@
   --th-color: var(--text-dim);
   --badge-radius: 20px;
   --badge-weight: 500;
+  /* Surfaces.  Minimal merges the KPI cards into one seamless frame and
+     paints no texture; the components own where these values land, the
+     scheme owns only the values (see the theme contract, epic #1154). */
+  --stats-gap: 1px;
+  --stats-frame-bg: var(--border);
+  --stats-frame-border: 1px solid var(--border);
+  --stats-frame-radius: var(--radius);
+  --card-bg: var(--bg);
+  --card-border: none;
+  --card-radius: 0;
+  --card-texture: none;
+  --card-texture-opacity: 0;
+  --page-texture: none;
+  --page-texture-size: auto;
+  --page-texture-display: none;
+  --btn-primary-weight: 400;
 }
 
 /* Minimal Light — colors */
@@ -83,6 +99,25 @@
   --th-color: var(--text-muted);
   --badge-radius: 10px;
   --badge-weight: 600;
+  /* Surfaces.  Emerald separates the cards and textures both the page and
+     each card with the --dot / --grid colours declared above; the dark block
+     below re-declares those two, and the gradients follow it because a
+     var() in a token value is substituted where it is used. */
+  --stats-gap: 16px;
+  --stats-frame-bg: transparent;
+  --stats-frame-border: 0;
+  --stats-frame-radius: 0;
+  --card-bg: var(--bg-card);
+  --card-border: 1px solid var(--border);
+  --card-radius: var(--radius);
+  --card-texture:
+    repeating-linear-gradient(90deg,var(--grid) 0 1px,transparent 1px 28px),
+    repeating-linear-gradient(0deg,var(--grid) 0 1px,transparent 1px 28px);
+  --card-texture-opacity: .5;
+  --page-texture: radial-gradient(circle,var(--dot) 1px,transparent 1px);
+  --page-texture-size: 24px 24px;
+  --page-texture-display: block;
+  --btn-primary-weight: 600;
 }
 
 /* Emerald Light — colors */
@@ -336,14 +371,38 @@ a { color: var(--accent); text-decoration: none; }
 .tab-panel { display: none; }
 .tab-panel.active { display: block; }
 
-/* Cards */
+/* Cards.
+   The components own their box model and their decorations; a scheme supplies
+   values through the surface tokens above and never reaches in.  A texture
+   lives on a pseudo-element that cannot take a pointer event, so it can never
+   swallow a click meant for the card's contents (#1149).
+
+   The page texture is painted by a fixed `body::before` that exists for every
+   scheme, but is only *generated* where a texture is declared: a viewport-sized
+   fixed layer changes how Chromium composites the page, which silently
+   switches text from subpixel to greyscale antialiasing in a scheme that had
+   no such layer.  `display: none` on the pseudo-element is a strict no-op —
+   no box, no paint, no layer — so a scheme without a texture renders exactly
+   as it did before the layer existed. */
+body::before {
+  content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  display: var(--page-texture-display, none);
+  background-image: var(--page-texture); background-size: var(--page-texture-size);
+}
 .stats-grid {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 16px; margin-bottom: 24px;
+  gap: var(--stats-gap); margin-bottom: 24px;
+  background: var(--stats-frame-bg); border: var(--stats-frame-border);
+  border-radius: var(--stats-frame-radius); overflow: hidden;
 }
 .stat-card {
-  background: var(--bg-card); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 16px;
+  position: relative; overflow: hidden;
+  background: var(--card-bg); border: var(--card-border);
+  border-radius: var(--card-radius); padding: 16px;
+}
+.stat-card::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  opacity: var(--card-texture-opacity); background-image: var(--card-texture);
 }
 .stat-card .label { font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
 .stat-card .value { font-size: 28px; font-weight: 700; margin-top: 4px; }
