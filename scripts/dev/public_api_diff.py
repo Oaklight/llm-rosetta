@@ -3,8 +3,12 @@
 
 A tree's surface is the set of names each public module exports plus the
 parameter list of every callable or class it exports.  A module that declares
-``__all__`` uses it; otherwise the public names the module defines itself are
-used, and the report marks that surface as *inferred*.
+``__all__`` uses it; otherwise the reachable public names are used and the
+report marks that surface as *inferred*.  "Reachable" is read from the source
+at module level: classes and functions defined there, UPPER_CASE constants,
+and names imported from another ``llm_rosetta`` module (a re-export).  A name
+imported from the standard library or a third party is not surface, and
+neither is an imported module object.
 
 Scope limits: only module-level names and the constructor signature of an
 exported class are compared — methods on a class are not.  The module list is
@@ -36,6 +40,7 @@ Usage::
 from __future__ import annotations
 
 import argparse
+import ast
 import importlib
 import inspect
 import json
@@ -56,8 +61,9 @@ DEFAULT_ALLOWLIST = Path(__file__).with_name("public_api_allowlist.json")
 STABLE_TAG_RE = re.compile(r"v\d+\.\d+\.\d+")
 
 #: Modules whose declared or inferred surface is part of the supported public
-#: API.  A module without ``__all__`` falls back to the names it defines, and
-#: the report labels that surface as inferred.  The list is deliberately
+#: API.  A module without ``__all__`` falls back to the names reachable at
+#: module scope (definitions, UPPER_CASE constants and intra-package
+#: re-exports), and the report labels that surface as inferred.  The list is deliberately
 #: explicit: importing every module under the package would execute the gateway
 #: CLI's argv parsing.
 PUBLIC_MODULES = (
@@ -161,14 +167,12 @@ def dump_surface(root: Path) -> dict:
         declared = getattr(module, "__all__", None)
         if declared is None:
             # No ``__all__`` does not mean no surface: fall back to the public
-            # names the module defines itself.  The ``__module__`` check keeps
-            # imported callables out (they belong to their defining module).
-            names = sorted(
-                name
-                for name, value in vars(module).items()
-                if not name.startswith("_")
-                and getattr(value, "__module__", None) == module_name
-            )
+            # names reachable at module scope.  ``__module__`` alone would miss
+            # two shapes that users can reach and that #1122 removed silently:
+            # an imported alias (its ``__module__`` is the defining module, or
+            # ``typing`` for a ``Literal`` alias) and a constant (data has no
+            # ``__module__``).  The source is the only place both are visible.
+            names = _inferred_names(module, module_name)
             source = "inferred"
         else:
             names = declared
@@ -179,6 +183,62 @@ def dump_surface(root: Path) -> dict:
             "exports": {name: _describe(getattr(module, name, None)) for name in names},
         }
     return result
+
+
+def _bound_names(target: ast.expr) -> list[str]:
+    """Names bound by an assignment target, including tuple unpacking."""
+    if isinstance(target, ast.Name):
+        return [target.id]
+    if isinstance(target, (ast.Tuple, ast.List)):
+        names: list[str] = []
+        for element in target.elts:
+            names.extend(_bound_names(element))
+        return names
+    return []
+
+
+def _inferred_names(module: object, module_name: str) -> list[str]:
+    """Public surface of a module that declares no ``__all__``.
+
+    The surface is what a caller can reach at module scope and that belongs to
+    this package:
+
+    * classes and functions defined in the module;
+    * module-level UPPER_CASE constants (``DEFAULT_MAX_AGE_DAYS``); and
+    * names imported from another ``llm_rosetta`` module — a deliberate
+      re-export such as ``routing.ProviderType``.
+
+    Imported stdlib/third-party names (``Any``, ``dataclass``) and imported
+    module objects are implementation imports, not API.
+    """
+    source = inspect.getsourcefile(module)
+    if source is None or not Path(source).is_file():
+        return []
+    tree = ast.parse(Path(source).read_text(encoding="utf-8"))
+    bound: set[str] = set()
+    for node in tree.body:
+        if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            bound.add(node.name)
+        elif isinstance(node, (ast.Assign, ast.AnnAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            for target in targets:
+                # ``logger = get_logger()`` is module state; a constant is API.
+                bound.update(name for name in _bound_names(target) if name.isupper())
+        elif isinstance(node, ast.ImportFrom):
+            intra_package = node.level > 0 or (node.module or "").startswith(
+                "llm_rosetta"
+            )
+            if intra_package:
+                for alias in node.names:
+                    if alias.name != "*":
+                        bound.add(alias.asname or alias.name)
+    return sorted(
+        name
+        for name in bound
+        if not name.startswith("_")
+        and name in vars(module)
+        and not inspect.ismodule(vars(module)[name])
+    )
 
 
 def dump_in_subprocess(root: Path) -> dict:

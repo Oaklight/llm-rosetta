@@ -6,6 +6,7 @@ import ast
 import importlib
 import importlib.util
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -246,6 +247,63 @@ def test_inferred_surface_is_reported():
     assert [finding["key"] for finding in findings] == [
         "llm_rosetta::<module>::surface-inferred"
     ]
+
+
+def test_inferred_surface_sees_constants_and_intra_package_reexports(tmp_path):
+    """No ``__all__`` means reachability, not just definitions (#1123).
+
+    A constant has no ``__module__`` and a re-exported alias reports the
+    alphabet it came from (``typing`` for a ``Literal``), so the old
+    ``__module__ == module_name`` fallback saw neither.  The source does.
+    """
+    package = tmp_path / "inferred_surface_fixture"
+    package.mkdir()
+    (package / "__init__.py").write_text("", encoding="utf-8")
+    (package / "defs.py").write_text(
+        "\n\n".join(
+            [
+                "MAX_ENTRIES = 3",
+                "logger = object()",
+                "",
+                "def helper():",
+                "    return 1",
+                "",
+                "class Widget:",
+                "    pass",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (package / "surface.py").write_text(
+        "\n".join(
+            [
+                "import os",
+                "from typing import Any",
+                "from .defs import MAX_ENTRIES, Widget, helper",
+                "OWN_LIMIT = 5",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    sys.path.insert(0, str(tmp_path))
+    try:
+        module = importlib.import_module("inferred_surface_fixture.surface")
+        names = api._inferred_names(module, "inferred_surface_fixture.surface")
+    finally:
+        sys.path.remove(str(tmp_path))
+        for name in ("inferred_surface_fixture.surface", "inferred_surface_fixture"):
+            sys.modules.pop(name, None)
+
+    assert names == ["MAX_ENTRIES", "OWN_LIMIT", "Widget", "helper"]
+
+
+def test_inferred_surface_keeps_data_constants_of_a_real_module():
+    """Deleting ``ALL_EVENT_TYPES`` must be visible to the checker."""
+    module = importlib.import_module("llm_rosetta.observability.ops_log")
+    assert getattr(module, "__all__", None) is None
+    names = api._inferred_names(module, "llm_rosetta.observability.ops_log")
+    assert "ALL_EVENT_TYPES" in names
+    assert "ALL_SEVERITIES" in names
 
 
 def test_listed_modules_have_a_real_surface():
