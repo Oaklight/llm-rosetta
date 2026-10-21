@@ -136,6 +136,25 @@ reasoning:
 
 Each model override inherits unset fields from the provider-level config.
 
+### Model families
+
+Keys are matched against the **upstream model ID**: an exact key wins, and otherwise the keys are tried in declaration order as shell-style patterns (`fnmatch`). `*` also matches `/`, so one entry covers a vendor-prefixed family:
+
+```yaml
+reasoning:
+  effort_field: reasoning_effort
+  effort_range: [minimal, high]
+  model_overrides:
+    # exact ID: wins over the family entry below
+    deepseek-v4.1-flash:
+      effort_range: [low, high]
+    # family: deepseek-v4.1-flash-free, deepseek-v9, deepseek/deepseek-v3, …
+    deepseek*:
+      replay_missing: fill_empty
+```
+
+This is how a vendor that fronts several model families declares a requirement for just one of them: `opencode--chat_completions` uses `deepseek*`, leaving its Claude, GPT and Gemini models on the provider-level default.
+
 ## API Reference
 
 ::: llm_rosetta.shims.provider_shim.ReasoningCapability
