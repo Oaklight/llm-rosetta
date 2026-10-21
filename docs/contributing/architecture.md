@@ -48,14 +48,19 @@ converters/<name>/
 
 要添加对新 API 标准的支持：
 
-1. 在 `src/llm_rosetta/converters/<name>/` 下创建转换器目录
+1. 在 `src/llm_rosetta/converters/llm/<name>/` 下创建转换器目录
 2. 继承 `BaseConverter` 并实现所有抽象方法
 3. 按照上述模式创建 ops 类
-4. 在 `src/llm_rosetta/shims/providers/<name>/` 下添加 shim
-5. 在 `tests/converters/` 下添加测试
-6. 提交 PR
+4. 在 `src/llm_rosetta/formats/catalog.py` 中添加一条 `FormatSpec`，在
+   `formats/detect.py` 中注册其请求体探测器，并在 `converters/registry.py`
+   中绑定转换器类
+5. 在 `src/llm_rosetta/shims/providers/<name>/` 下添加 shim
+6. 在 `tests/converters/` 下添加测试
+7. 提交 PR
 
-可参考现有转换器。
+这条 catalog 记录决定了该格式能否被看见：模型词表、网关的 provider 表、
+SSE／错误信封／用量形状映射、自动检测、admin 选择器以及聊天路由都由它派生，
+因此不需要在任何其它文件中为该格式做修改。可参考现有转换器。
 
 ## Provider 特定数据保留
 
