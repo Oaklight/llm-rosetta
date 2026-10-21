@@ -157,6 +157,7 @@ nav:
   - Gateway:
       - gateway/index.md
       - Configuration: gateway/configuration.md
+      - Upgrading: gateway/upgrading.md
       - CLI:
           - CLI Reference: gateway/cli.md
           - CLI Integrations: gateway/cli-integrations.md
