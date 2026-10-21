@@ -73,9 +73,39 @@ Zen 通道——同一个 shim 覆盖 `base_url`：
 
 在网关进程的环境里设置 `OPENCODE_API_KEY`——两条通道用的是同一个凭据。
 
-## 免费通道
+## 额度
 
-keyless 的 `/zen/v1` 免费池**没有**接入：上游把它限制在自家桌面客户端内，
-且在做任何工作前需要一次政策决策——见
-[issue #884](https://github.com/Oaklight/llm-rosetta/issues/884)。Go 订阅本身
-通过付费通道确实提供了两个 *Preview Free* 模型。
+Go 订阅的窗口（5 小时 / 每周 / 每月）可以按 key 读取，显示在 provider 卡片上，
+并用于跳过已耗尽的凭据。见[提供方额度](../quota.md)。
+
+## 公共免费通道 {#public-free-lane}
+
+keyless 的 `/zen/v1` 免费池是一个独立 shim：
+`opencode_zen_free--chat_completions`。上游会拒绝任何不像它自家桌面客户端的请求，
+所以该 shim 在 `connection` 块和 `transforms.py` 里复现这个形状：
+
+- `opencode/<version>` 的 `User-Agent`，以及 `x-opencode-client` /
+  `x-opencode-project` 标记；
+- `x-opencode-session` 的值可以解码回最近的时间戳（`session_id_format: opencode`），
+  外加每个请求独立的 `x-opencode-request`；
+- 恰好一个名为 `read` 的工具声明——仅在客户端没有声明时注入，注入工具产生的调用
+  会被移除而不是转发给客户端；
+- `stream: true`（`stream_required`），非流式回复由网关重新拼装。
+
+这是反滥用网关，而不是公共池：它可能随时变化或关闭，额度按源地址和会话计，
+prompt 也可能被上游记录。该 provider 会出现在 **Free Resource** 分组下，并带上
+面板的第三方声明。测量过程见
+[issue #884](https://github.com/Oaklight/llm-rosetta/issues/884)。
+
+```jsonc
+{
+  "providers": {
+    "zen-free": { "type": "opencode_zen_free--chat_completions" }
+  },
+  "models": {
+    "beam-free": { "provider": "zen-free" }
+  }
+}
+```
+
+不需要任何 key。Go 订阅本身也通过付费通道提供两个 *Preview Free* 模型。
