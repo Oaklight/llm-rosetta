@@ -47,7 +47,7 @@ from llm_rosetta.capabilities import (
     strip_reasoning_for_non_reasoning,
     unwrap_custom_tool_input,
 )
-from llm_rosetta.converters.base.context import ConversionContext
+from llm_rosetta.converters.base.context import ConversionContext, ImageFetcher
 from llm_rosetta.observability.usage.semantics import GOOGLE_METADATA, USAGE_SHAPES
 from llm_rosetta.provider_names import (
     canonical_provider_name,
@@ -311,6 +311,7 @@ class ConversionPipeline:
         fidelity_mode: Literal["critical", "full"] | None = None,
         metadata_mode: str = "preserve",
         google_output_format: Literal["rest", "sdk"] = "rest",
+        image_fetcher: ImageFetcher | None = None,
     ) -> None:
         from llm_rosetta import get_converter_for_provider
 
@@ -371,6 +372,7 @@ class ConversionPipeline:
         self._hoist_system_messages = hoist_system_messages
         self._metadata_mode = metadata_mode
         self._google_output_format = google_output_format
+        self._image_fetcher = image_fetcher
 
         self._source_converter = get_converter_for_provider(source_provider)
         self._target_converter = get_converter_for_provider(target_provider)
@@ -585,7 +587,7 @@ class ConversionPipeline:
     def _run_fidelity_check(self, body: dict[str, Any], *, direction: str) -> None:
         """Shadow round-trip and compare for fidelity monitoring."""
         try:
-            ctx = ConversionContext()
+            ctx = ConversionContext(image_fetcher=self._image_fetcher)
             ctx.options["metadata_mode"] = "preserve"
             if direction == "request":
                 ir = self._source_converter.request_from_provider(body, context=ctx)
@@ -637,7 +639,7 @@ class ConversionPipeline:
             )
 
         # Setup context
-        ctx = ConversionContext()
+        ctx = ConversionContext(image_fetcher=self._image_fetcher)
         self._ctx = ctx
 
         # Baseline mode: skip IR round-trip, apply only shim body-level
@@ -1035,6 +1037,8 @@ class ConversionPipeline:
         to_ctx = self._source_converter.create_stream_context()
 
         # Bridge preserve-mode metadata and shim-driven prefix
+        to_ctx.image_fetcher = self._image_fetcher
+        from_ctx.image_fetcher = self._image_fetcher
         to_ctx.options["metadata_mode"] = self._metadata_mode
         from_ctx.options["metadata_mode"] = self._metadata_mode
         from_ctx.options["response_id_prefix"] = self._target_id_prefix

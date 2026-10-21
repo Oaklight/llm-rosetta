@@ -111,6 +111,32 @@ class TestGoogleGenerateContentOps:
             result = GoogleGenerateContentOps.ir_image_to_p(ir_image)
         assert result is None
 
+    def test_ir_image_to_p_uses_the_injected_fetcher(self):
+        """A context-supplied fetcher replaces the urllib download entirely."""
+        from unittest.mock import patch
+
+        ir_image = ImagePart(type="image", image_url="https://example.com/img.png")
+        calls: list[str] = []
+
+        def fetcher(url: str) -> tuple[bytes, str]:
+            calls.append(url)
+            return b"\x89PNG\r\n", "image/webp"
+
+        with patch(
+            "llm_rosetta.converters.llm.google_generate.content_ops.urllib.request.build_opener",
+            side_effect=AssertionError("urllib must not be used"),
+        ):
+            result = GoogleGenerateContentOps.ir_image_to_p(
+                ir_image, image_fetcher=fetcher
+            )
+
+        assert calls == ["https://example.com/img.png"]
+        assert result is not None
+        assert result["inlineData"]["mimeType"] == "image/webp"
+        import base64
+
+        assert result["inlineData"]["data"] == base64.b64encode(b"\x89PNG\r\n").decode()
+
     def test_ir_image_to_p_with_data_uri(self):
         """Test IR ImagePart with data URI is parsed directly."""
         data_uri = "data:image/png;base64,aWNvbg=="

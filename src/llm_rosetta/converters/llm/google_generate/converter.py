@@ -631,7 +631,9 @@ class GoogleGenerateConverter(BaseConverter):
 
         # Convert non-system messages
         contents, msg_warnings = self.message_ops.ir_messages_to_p(
-            ir_messages, target_provider=self._CONVERTER_TAG
+            ir_messages,
+            target_provider=self._CONVERTER_TAG,
+            image_fetcher=ctx.image_fetcher,
         )
         ctx.warnings.extend(msg_warnings)
         result["contents"] = contents

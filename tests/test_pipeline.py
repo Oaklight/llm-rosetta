@@ -1986,3 +1986,52 @@ class TestReasoningRenameWiring:
             and e["delta"]["type"] == "thinking_delta"
         )
         assert thinking == "let me think"
+
+
+class TestImageFetcherInjection:
+    """The pipeline's image fetcher reaches the Google converter (#1155)."""
+
+    def test_a_supplied_fetcher_is_used_for_url_images(self):
+        from unittest.mock import patch
+
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        calls: list[str] = []
+
+        def fetcher(url: str) -> tuple[bytes, str]:
+            calls.append(url)
+            return b"\x89PNG", "image/png"
+
+        pipeline = ConversionPipeline(
+            "chat_completions",
+            "google_generate",
+            google_output_format="rest",
+            image_fetcher=fetcher,
+        )
+        with patch(
+            "llm_rosetta.converters.llm.google_generate.content_ops.urllib.request.build_opener",
+            side_effect=AssertionError("urllib must not be used"),
+        ):
+            out = pipeline.convert_request(
+                {
+                    "model": "gemini-2.5-flash",
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "image_url",
+                                    "image_url": {"url": "https://example.com/a.png"},
+                                }
+                            ],
+                        }
+                    ],
+                }
+            )
+
+        assert calls == ["https://example.com/a.png"]
+        part = out["contents"][0]["parts"][0]
+        assert part["inlineData"]["mimeType"] == "image/png"
+        import base64
+
+        assert part["inlineData"]["data"] == base64.b64encode(b"\x89PNG").decode()

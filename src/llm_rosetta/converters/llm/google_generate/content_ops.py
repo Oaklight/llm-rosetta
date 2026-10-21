@@ -39,6 +39,48 @@ from ...base.helpers.opaque import (
 )
 
 
+def _fetch_image(url: str, fetcher: Any = None) -> tuple[bytes, str] | None:
+    """Download *url* and return ``(data, mime)``, or ``None``.
+
+    A *fetcher* supplied through the conversion context is used as-is — the
+    gateway passes one built on its own HTTP transport, so conversion performs
+    no I/O of its own.  Without one the library keeps its ``urllib`` default,
+    including the ``HTTPS_PROXY``/``HTTP_PROXY`` handling.
+    """
+    if fetcher is not None:
+        fetched = fetcher(url)
+        if fetched is None:
+            return None
+        data, content_type = fetched
+        mime = (
+            (content_type or "").split(";")[0].strip()
+            or mimetypes.guess_type(url)[0]
+            or "image/jpeg"
+        )
+        return data, mime
+
+    import os
+
+    proxy = os.environ.get("HTTPS_PROXY") or os.environ.get("HTTP_PROXY")
+    req = urllib.request.Request(
+        url, headers={"User-Agent": "llm-rosetta/1.0 (image fetch)"}
+    )
+    if proxy:
+        handler = urllib.request.ProxyHandler({"https": proxy, "http": proxy})
+        opener = urllib.request.build_opener(handler)
+    else:
+        opener = urllib.request.build_opener()
+    resp = opener.open(req, timeout=30)
+    data = resp.read()
+    content_type = resp.headers.get("Content-Type", "")
+    mime = (
+        content_type.split(";")[0].strip()
+        or mimetypes.guess_type(url)[0]
+        or "image/jpeg"
+    )
+    return data, mime
+
+
 class GoogleGenerateContentOps(BaseContentOps):
     """Google GenAI content conversion operations.
 
@@ -122,36 +164,18 @@ class GoogleGenerateContentOps(BaseContentOps):
                 return None
 
             try:
-                import os
-
-                proxy = os.environ.get("HTTPS_PROXY") or os.environ.get("HTTP_PROXY")
-                req = urllib.request.Request(
-                    url,
-                    headers={"User-Agent": "llm-rosetta/1.0 (image fetch)"},
-                )
-                if proxy:
-                    handler = urllib.request.ProxyHandler(
-                        {"https": proxy, "http": proxy}
-                    )
-                    opener = urllib.request.build_opener(handler)
-                else:
-                    opener = urllib.request.build_opener()
-                resp = opener.open(req, timeout=30)
-                data = resp.read()
-                content_type = resp.headers.get("Content-Type", "")
-                mime = (
-                    content_type.split(";")[0].strip()
-                    or mimetypes.guess_type(url)[0]
-                    or "image/jpeg"
-                )
-                b64 = base64.b64encode(data).decode()
-                return {"inlineData": {"mimeType": mime, "data": b64}}
+                fetched = _fetch_image(url, kwargs.get("image_fetcher"))
             except Exception as exc:
                 logging.getLogger("llm-rosetta").warning(
                     "Failed to download image URL for Google GenAI conversion: %s",
                     exc,
                 )
                 return None
+            if fetched is None:
+                return None
+            data, mime = fetched
+            b64 = base64.b64encode(data).decode()
+            return {"inlineData": {"mimeType": mime, "data": b64}}
 
         return None
 

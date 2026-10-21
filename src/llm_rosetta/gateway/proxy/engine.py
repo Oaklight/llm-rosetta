@@ -31,6 +31,7 @@ from ..transport import (
     UpstreamConnectionError,
     UpstreamTransport,
 )
+from .image_fetch import fetch_image
 from .errors import (
     _connection_error_response,
     _detect_stream_chunk_error,
@@ -298,6 +299,7 @@ async def handle_non_streaming(  # noqa: C901
         supports_custom_tools=route.supports_custom_tools,
         max_tool_description_length=route.max_tool_description_length,
         hoist_system_messages=route.hoist_system_messages,
+        image_fetcher=fetch_image,
     )
 
     # Phase 1+2: Source → IR → Target

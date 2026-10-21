@@ -171,7 +171,12 @@ class GoogleGenerateMessageOps(BaseMessageOps):
                         tc_name = part.get("tool_name")
                         if tc_id and tc_name:
                             tool_call_index[tc_id] = tc_name
-                converted = self._ir_message_to_p(msg, tool_call_index, warnings_list)
+                converted = self._ir_message_to_p(
+                    msg,
+                    tool_call_index,
+                    warnings_list,
+                    image_fetcher=kwargs.get("image_fetcher"),
+                )
                 if converted:
                     contents.append(converted)
             elif is_extension_item(item):
@@ -191,6 +196,8 @@ class GoogleGenerateMessageOps(BaseMessageOps):
         message: Message,
         tool_call_index: dict[str, str] | None = None,
         warnings_list: list[str] | None = None,
+        *,
+        image_fetcher: Any = None,
     ) -> dict[str, Any]:
         """Convert a single IR message to Google Content format.
 
@@ -209,7 +216,10 @@ class GoogleGenerateMessageOps(BaseMessageOps):
 
         for content_part in message.get("content", []):
             part = self._ir_content_part_to_p(
-                content_part, tool_call_index, warnings_list
+                content_part,
+                tool_call_index,
+                warnings_list,
+                image_fetcher=image_fetcher,
             )
             if part:
                 parts.append(part)
@@ -227,6 +237,8 @@ class GoogleGenerateMessageOps(BaseMessageOps):
         content_part: ContentPart,
         tool_call_index: dict[str, str] | None = None,
         warnings_list: list[str] | None = None,
+        *,
+        image_fetcher: Any = None,
     ) -> Any:
         """Convert a single IR content part to Google Part format.
 
@@ -241,7 +253,9 @@ class GoogleGenerateMessageOps(BaseMessageOps):
         if is_text_part(content_part):
             return self.content_ops.ir_text_to_p(content_part)
         elif is_image_part(content_part):
-            return self.content_ops.ir_image_to_p(content_part)
+            return self.content_ops.ir_image_to_p(
+                content_part, image_fetcher=image_fetcher
+            )
         elif is_file_part(content_part):
             return self.content_ops.ir_file_to_p(content_part)
         elif is_audio_part(content_part):

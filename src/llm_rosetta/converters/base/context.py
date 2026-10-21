@@ -14,10 +14,17 @@ Provides the context hierarchy for conversion pipelines:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Any, Literal
 
 MetadataMode = Literal["strip", "preserve"]
+
+#: Synchronous image downloader: ``url -> (bytes, content_type) | None``.
+#:
+#: The converter falls back to ``urllib`` when a context carries none, so a
+#: library user needs no wiring.  A caller that already owns an HTTP stack —
+#: the gateway — passes its own so conversion performs no I/O of its own.
+ImageFetcher = Callable[[str], "tuple[bytes, str] | None"]
 
 
 @dataclass
@@ -37,6 +44,9 @@ class ConversionContext:
     warnings: list[str] = field(default_factory=list)
     options: dict[str, Any] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
+    #: Downloader for URL images the target format needs as inline bytes.
+    #: ``None`` keeps the converter's ``urllib`` default.
+    image_fetcher: ImageFetcher | None = None
 
     @property
     def metadata_mode(self) -> MetadataMode:
