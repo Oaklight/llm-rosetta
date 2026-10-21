@@ -92,5 +92,5 @@ docker run --user $(id -u):$(id -g) -p 8765:8765 -v /path/to/config:/config oakl
 ```bash
 git clone https://github.com/Oaklight/llm-rosetta.git
 cd llm-rosetta
-pip install -e ".[all]"
+pip install -e "packages/llm-rosetta[all]" -e packages/llm-rosetta-gateway
 ```

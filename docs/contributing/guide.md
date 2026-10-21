@@ -8,7 +8,7 @@ title: 贡献指南
 
 1. Fork 本仓库
 2. 创建功能分支（`git checkout -b feature/my-change`）
-3. 安装开发依赖：`pip install -e ".[all]"`
+3. 安装开发依赖：`pip install -e "packages/llm-rosetta[all]" -e packages/llm-rosetta-gateway`
 4. 设置 pre-commit hooks：`pre-commit install`
 5. 进行修改
 6. 运行 `make lint`（或在 commit 时由 pre-commit 自动检查）
