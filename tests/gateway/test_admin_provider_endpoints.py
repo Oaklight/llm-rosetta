@@ -8,7 +8,10 @@ entry, with the same sanitised shape as ``_auto_disabled``.
 
 from __future__ import annotations
 
-from llm_rosetta_gateway.admin.routes.config.payload import _mask_provider_entry
+from llm_rosetta_gateway.admin.routes.config.payload import (
+    _mask_provider_entry,
+    _with_live_endpoint_markers,
+)
 
 
 def test_endpoint_diagnostics_keep_only_reason_and_category():
@@ -68,3 +71,60 @@ def test_the_whole_provider_marker_still_works():
         "category": "missing_base_url",
         "shim": "argo--chat_completions",
     }
+
+
+class _LiveConfig:
+    """The bit of ``GatewayConfig`` the payload overlay reads."""
+
+    def __init__(self, providers):
+        self.raw_providers = providers
+
+
+def test_the_live_parse_marker_reaches_the_payload():
+    """The marker is written on the running parse, not on disk.
+
+    ``get_config`` reads the document from disk, so without the overlay a
+    degraded endpoint would never reach the panel (#1106).
+    """
+    masked = {"type": "openai--chat_completions"}
+    live = _LiveConfig(
+        {
+            "p": {
+                "_auto_disabled_endpoints": {
+                    "embedding": {
+                        "reason": "config: embedding_shim names unknown shim 'nope'",
+                        "category": "unknown_shim",
+                        "api_key": "should-not-leak",
+                    }
+                }
+            }
+        }
+    )
+
+    _with_live_endpoint_markers(masked, "p", live)
+
+    assert masked["_auto_disabled_endpoints"] == {
+        "embedding": {
+            "reason": "config: embedding_shim names unknown shim 'nope'",
+            "category": "unknown_shim",
+        }
+    }
+
+
+def test_a_healthy_provider_gets_no_live_marker():
+    masked = {"type": "openai--chat_completions"}
+    _with_live_endpoint_markers(
+        masked, "p", _LiveConfig({"p": {"base_url": "https://x"}})
+    )
+    assert "_auto_disabled_endpoints" not in masked
+
+
+def test_the_overlay_tolerates_a_missing_or_odd_live_config():
+    masked = {"type": "openai--chat_completions"}
+    _with_live_endpoint_markers(masked, "p", None)
+    _with_live_endpoint_markers(masked, "p", object())
+    _with_live_endpoint_markers(masked, "p", _LiveConfig({"p": "not-a-mapping"}))
+    _with_live_endpoint_markers(
+        masked, "p", _LiveConfig({"p": {"_auto_disabled_endpoints": "nope"}})
+    )
+    assert "_auto_disabled_endpoints" not in masked

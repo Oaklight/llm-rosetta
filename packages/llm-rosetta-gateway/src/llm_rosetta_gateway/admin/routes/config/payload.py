@@ -220,6 +220,51 @@ def _merge_typed_models(raw: dict[str, Any], models: dict[str, Any]) -> None:
                 }
 
 
+def _mask_endpoint_markers(endpoints: Any) -> dict[str, dict[str, str]]:
+    """Sanitise per-endpoint degradation markers, keyed by model type.
+
+    Same contract as the whole-provider marker: the reason and the category
+    are configuration text and travel to the panel, nothing else does.
+    """
+    if not isinstance(endpoints, dict):
+        return {}
+    return {
+        str(type_name): {
+            key: str(marker[key])
+            for key in ("reason", "category")
+            if marker.get(key) is not None
+        }
+        for type_name, marker in endpoints.items()
+        if isinstance(marker, dict)
+    }
+
+
+def _with_live_endpoint_markers(
+    masked: dict[str, Any], name: str, gateway_config: Any
+) -> None:
+    """Overlay the endpoint markers the running parse recorded (#1106).
+
+    ``config/typed.py`` writes ``_auto_disabled_endpoints`` onto the caller's
+    provider mapping while the config is parsed; this payload reads the
+    *document on disk*, so a degraded endpoint would never reach the panel.
+    The whole-provider marker does not have that problem because the
+    validation step persists it — this one is deliberately not persisted (a
+    parse runs on every load, and a stale marker on disk would outlive the
+    shim being fixed), so it is merged in from the live config instead.
+    """
+    if gateway_config is None:
+        return
+    live_providers = getattr(gateway_config, "raw_providers", None)
+    if not isinstance(live_providers, dict):
+        return
+    live = live_providers.get(name)
+    if not isinstance(live, dict):
+        return
+    markers = _mask_endpoint_markers(live.get("_auto_disabled_endpoints"))
+    if markers:
+        masked["_auto_disabled_endpoints"] = markers
+
+
 def _mask_provider_entry(name: str, cfg: Any) -> dict[str, Any]:
     """Mask one provider's credentials and keep its diagnostics.
 
@@ -245,17 +290,9 @@ def _mask_provider_entry(name: str, cfg: Any) -> dict[str, Any]:
     # A provider can serve several model types; one endpoint having a bad
     # shim degrades that endpoint only.  Keep the same diagnostic shape,
     # keyed by model type.
-    endpoints = masked.get("_auto_disabled_endpoints")
-    if isinstance(endpoints, dict):
-        masked["_auto_disabled_endpoints"] = {
-            str(type_name): {
-                key: str(marker[key])
-                for key in ("reason", "category")
-                if isinstance(marker, dict) and marker.get(key) is not None
-            }
-            for type_name, marker in endpoints.items()
-            if isinstance(marker, dict)
-        }
+    markers = _mask_endpoint_markers(masked.get("_auto_disabled_endpoints"))
+    if markers:
+        masked["_auto_disabled_endpoints"] = markers
     else:
         masked.pop("_auto_disabled_endpoints", None)
     # Ensure explicit type — fall back to provider name for legacy configs
@@ -279,6 +316,7 @@ async def get_config(request: Any) -> Response:
     gateway_config: GatewayConfig | None = getattr(request.app, "gateway_config", None)
     for name, cfg in providers.items():
         masked = _mask_provider_entry(name, cfg)
+        _with_live_endpoint_markers(masked, name, gateway_config)
         # Inject token_status from the live ProviderInfo if available
         if gateway_config is not None:
             pinfo = gateway_config.providers.get(name)

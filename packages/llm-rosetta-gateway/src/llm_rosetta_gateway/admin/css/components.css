@@ -48,6 +48,23 @@ tr:hover td { background: var(--bg-hover); }
 }
 .provider-card.disabled { opacity: 0.5; }
 .provider-card.auto-disabled { border-color: color-mix(in srgb, var(--yellow, #eab308) 65%, var(--border)); }
+/* A provider that serves several model types can lose one endpoint without
+   going away (#1106): the card names each degraded endpoint and why, and the
+   border carries a softer warning than a whole-provider auto-disable. */
+.provider-card.endpoint-degraded { border-color: color-mix(in srgb, var(--yellow, #eab308) 45%, var(--border)); }
+.pc-endpoint-warnings { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.pc-endpoint-warning {
+  display: inline-flex; align-items: center; gap: 4px; max-width: 100%;
+  padding: 2px 6px; border-radius: var(--badge-radius); font-size: 11px;
+  color: var(--yellow, #eab308);
+  background: color-mix(in srgb, var(--yellow, #eab308) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--yellow, #eab308) 30%, transparent);
+}
+.pc-endpoint-warning-icon { line-height: 1; }
+.pc-endpoint-warning .pc-endpoint-type { font-weight: 600; }
+.pc-endpoint-warning .pc-endpoint-reason {
+  color: var(--text-dim); min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+}
 .pc-warning { color: var(--yellow, #eab308); margin-left: 6px; font-size: 15px; cursor: help; }
 .pc-logo-warning { color: var(--yellow, #eab308); font-size: 16px; line-height: 16px; text-align: center; }
 .pc-validation-warning {

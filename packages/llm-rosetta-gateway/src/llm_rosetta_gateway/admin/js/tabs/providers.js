@@ -12,6 +12,7 @@ import { api, showToast, showToastHtml, closeModal, esc, copyText, inlineConfirm
 import { initLogoPicker, setLogoPickerValue, getLogoPickerValue } from '../components/logo-picker.js';
 import { setTypeTree, getSelectedValue, selectValue, onTypeSelect } from '../components/type-picker.js';
 import { buildTypeModel, shimBrand } from '../core/shim-tree.js';
+import { degradedEndpoints, categoryKey } from '../core/provider-endpoints.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
@@ -802,6 +803,17 @@ function renderProviders() {
     const autoShim = autoDisabled && typeof cfg._auto_disabled.shim === 'string'
       ? cfg._auto_disabled.shim : '';
     const autoWarningTitle = autoReason || autoShim || t('provider.autoDisabled');
+    // A provider that serves several model types can lose one endpoint without
+    // going away: the card names each degraded endpoint and why (#1106).
+    const degraded = degradedEndpoints(cfg);
+    const degradedHtml = degraded.length === 0 ? '' : `
+      <div class="pc-endpoint-warnings" role="status">
+        ${degraded.map(e => {
+          const key = categoryKey(e.category);
+          const why = key ? t(key) : (e.reason || t('provider.endpointDegraded'));
+          return `<span class="pc-endpoint-warning" title="${esc(e.reason || why)}"><span class="pc-endpoint-warning-icon" aria-hidden="true">&#9888;</span><span class="pc-endpoint-type">${esc(t('label.' + e.type))}</span><span class="pc-endpoint-reason">${esc(why)}</span></span>`;
+        }).join('')}
+      </div>`;
     const typeName = providerTypeName(cfg, name);
     const logo = cfg.logo || shimLogo[name] || shimLogo[typeName] || '';
     const logoHtml = autoDisabled
@@ -836,7 +848,7 @@ function renderProviders() {
       ? `<span class="pc-models" onclick="goToModelsForProvider('${esc(name)}')">${modelCount} model${modelCount !== 1 ? 's' : ''} →</span>`
       : '<span class="pc-models pc-models-empty"></span>';
     return `
-    <div class="provider-card${enabled ? '' : ' disabled'}${autoDisabled ? ' auto-disabled' : ''}" data-provider="${esc(name)}">
+    <div class="provider-card${enabled ? '' : ' disabled'}${autoDisabled ? ' auto-disabled' : ''}${degraded.length ? ' endpoint-degraded' : ''}" data-provider="${esc(name)}">
       <div class="pc-head">
         <div class="pc-name"${isFree ? ` title="${esc(t('free.disclosure'))}"` : ''}>${logoHtml}<span class="pc-name-text">${esc(title)}</span>${baseType ? `<span class="pc-base-badge" title="${esc(baseType)}">${esc(baseType)}</span>` : ''}</div>
         <label class="pc-toggle toggle" title="${enabled ? t('provider.enabled') : t('provider.disabled')}">
@@ -845,6 +857,7 @@ function renderProviders() {
         </label>
       </div>
       <div class="pc-validation-warning" role="status" aria-hidden="true" title="${autoDisabled ? esc(autoWarningTitle) : ''}">${autoDisabled ? esc(autoWarningTitle) : ''}</div>
+      ${degradedHtml}
       <div class="pc-badges">${_capBadgesHtml(_getProviderCaps(cfg, name), {compact: true})}</div>
       <div class="pc-meta">
         <div class="pc-field" data-label="${t('card.type')}" title="${esc(typeName)}"><code>${esc(typeName)}</code></div>
