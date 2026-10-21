@@ -129,6 +129,7 @@ nav:
       - Providers:
           - Provider Compatibility: guide/compatibility.md
           - Provider Shims: guide/shims.md
+          - Provider Quota: guide/quota.md
           - Provider Reference:
               - guide/providers/index.md
               - OpenAI: guide/providers/openai.md

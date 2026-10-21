@@ -80,9 +80,45 @@ Zen lane — the same shim with a `base_url` override:
 Set `OPENCODE_API_KEY` in the gateway's environment — the credential is the same
 for both lanes.
 
-## Free lane
+## Quota
 
-The keyless `/zen/v1` free pool is **not** wired up: the upstream restricts it to
-its own desktop client, and it needs a policy decision before any work — see
-[issue #884](https://github.com/Oaklight/llm-rosetta/issues/884). The Go
-subscription does grant the two *Preview Free* models through the paid lane.
+The Go subscription's windows (5-hour, weekly, monthly) are readable per key,
+shown on the provider card and used to skip a spent credential. See [Provider
+Quota](../quota.md).
+
+## Public free lane
+
+The keyless `/zen/v1` pool is a separate shim,
+`opencode_zen_free--chat_completions`. The upstream refuses a request that does
+not look like its own desktop client, so the shim reproduces that shape in its
+`connection` block and `transforms.py`:
+
+- a `User-Agent` of `opencode/<version>` and the `x-opencode-client` /
+  `x-opencode-project` markers;
+- an `x-opencode-session` whose value decodes back into a recent timestamp
+  (`session_id_format: opencode`), plus a per-request `x-opencode-request`;
+- one tool declared under the exact name `read` — injected only when the client
+  did not declare one, and calls to an injected tool are removed rather than
+  forwarded;
+- `stream: true` (`stream_required`), with the non-streaming reply reassembled
+  by the gateway.
+
+This is an anti-abuse gate rather than a public pool: it can change or close
+without notice, its quota is per source address and session, and prompts may be
+logged upstream. The provider appears under **Free Resource** with the panel's
+third-party disclosure. See [issue #884](https://github.com/Oaklight/llm-rosetta/issues/884)
+for the measurements.
+
+```jsonc
+{
+  "providers": {
+    "zen-free": { "type": "opencode_zen_free--chat_completions" }
+  },
+  "models": {
+    "beam-free": { "provider": "zen-free" }
+  }
+}
+```
+
+No key is required. The Go subscription also grants the two *Preview Free* models
+through the paid lane.
