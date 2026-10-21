@@ -113,8 +113,8 @@ declare the differences.
 |-----------|------|---------|
 | `ProviderShim` / `ModelShim` | `shims/provider_shim.py` | Data classes + registry |
 | `Transform` primitives | `shims/transforms.py` | `strip_fields`, `rename_field`, `set_defaults` |
-| Built-in shims | `shims/builtins.py` | OpenAI, Anthropic, Google, DeepSeek, Volcengine |
-| External shim sources | `gateway/shims/` | Directory/archive loaders, standalone catalog, scheduled removals |
+| Built-in shims | `shims/providers/<name>/provider.yaml` | One shim per vendor/format pair (33 built in) |
+| External shim sources | `llm_rosetta_gateway/shims/` | Directory/archive loaders, standalone catalog, scheduled removals |
 
 ### Gateway
 
@@ -183,7 +183,7 @@ packages/
 │       ├── shims/                   # Provider/model identity cards + transforms
 │       │   ├── provider_shim.py
 │       │   ├── transforms.py
-│       │   └── builtins.py
+│       │   └── providers/           # One provider.yaml per vendor/format pair
 │       ├── ir/                      # IR logic: primitives/, tools/, passes/
 │       ├── types/                   # Typed IR and provider-specific types
 │       │   └── ir/                  # IR dataclasses (messages, parts, tools, stream)
@@ -494,7 +494,7 @@ gate — missing any item means the converter is not fully integrated.
 
 - Converter output mismatch → check IR types in `types/ir/`, then the
   converter's `*_ops.py` modules
-- Shim/transform issue → check `shims/builtins.py` and `shims/transforms.py`
+- Shim/transform issue → check `shims/providers/` and `shims/transforms.py`
 - Gateway config issue → check `gateway/config/` resolution order
   (`loader` → `core` → `parse`/`typed`/`settings`, then `resolve`)
   (shim → type → name fallback)
