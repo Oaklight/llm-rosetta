@@ -12,10 +12,8 @@ This package splits the admin route handlers into focused modules:
 
 from __future__ import annotations
 
-import functools
 from typing import Any
 
-from llm_rosetta._vendor.httpserver import JSONResponse
 
 from ._shared import (  # noqa: F401  (re-exported for backward compat)
     _ENV_VAR_RE,
@@ -38,25 +36,8 @@ from .auth import (
     serve_admin_static,
     serve_favicon,
 )
-from .config import (
-    bulk_add_models,
-    check_routing_loops,
-    delete_model,
-    delete_provider,
-    fetch_upstream_models,
-    get_config,
-    put_model,
-    post_shims_reload,
-    put_provider,
-    put_server_settings,
-    put_shim_sources,
-    reload_config,
-    bulk_update_models,
-    remove_model_provider,
-    toggle_model,
-    toggle_provider,
-    update_model_provider,
-)
+from ._shared import _guard
+from .config import register_config_routes
 from .keys import (
     create_api_key,
     delete_api_key,
@@ -95,7 +76,6 @@ from .observability import (
     get_ops_log,
     get_ops_log_event_types,
     get_ops_log_sources,
-    get_provider_key,
     get_rate_limit_status,
     get_request_key_labels,
     get_token_usage,
@@ -130,27 +110,6 @@ from .testing import (
 )
 
 
-def _guard(tab_id: str, handler: Any) -> Any:
-    """Wrap a route handler to return 404 when its tab is disabled.
-
-    Read-only endpoints (``get_config``, ``get_metrics``,
-    ``get_request_key_labels``) are intentionally left unguarded —
-    disabled tabs are a UI convenience, not security isolation, and
-    other components (e.g. argo-proxy's ``ArgoConfigIO``) may depend
-    on them regardless of tab visibility.
-    """
-
-    @functools.wraps(handler)
-    async def _guarded(request: Any, **kw: Any) -> Any:
-        if tab_id in getattr(request.app, "disabled_tabs", ()):
-            return JSONResponse(
-                {"error": "Tab disabled", "disabled": True}, status_code=404
-            )
-        return await handler(request, **kw)
-
-    return _guarded
-
-
 def register_admin_routes(app: Any) -> None:
     """Register all admin panel routes on the httpserver App."""
     # HTML + favicon
@@ -165,55 +124,8 @@ def register_admin_routes(app: Any) -> None:
     app.route("/admin/api/config/password", methods=["PUT"])(change_password)
     app.route("/admin/api/token/rotate", methods=["POST"])(rotate_token)
     app.route("/admin/api/sessions/logout-all", methods=["POST"])(logout_all_sessions)
-    # Config CRUD (providers + models tabs)
-    app.route("/admin/api/config", methods=["GET"])(get_config)
-    app.route("/admin/api/config/providers/<name>", methods=["PUT"])(
-        _guard("providers", put_provider)
-    )
-    app.route("/admin/api/config/providers/<name>", methods=["DELETE"])(
-        _guard("providers", delete_provider)
-    )
-    app.route("/admin/api/config/providers/<name>/toggle", methods=["POST"])(
-        _guard("providers", toggle_provider)
-    )
-    app.route("/admin/api/config/providers/<name>/key", methods=["GET"])(
-        get_provider_key
-    )
-    app.route("/admin/api/config/models/<path:name>", methods=["PUT"])(
-        _guard("models", put_model)
-    )
-    app.route("/admin/api/config/models/<path:name>", methods=["DELETE"])(
-        _guard("models", delete_model)
-    )
-    app.route("/admin/api/config/models/<path:name>/toggle", methods=["POST"])(
-        _guard("models", toggle_model)
-    )
-    app.route("/admin/api/config/models/<path:name>/remove-provider", methods=["POST"])(
-        _guard("models", remove_model_provider)
-    )
-    app.route("/admin/api/config/models/<path:name>/update-provider", methods=["POST"])(
-        _guard("models", update_model_provider)
-    )
-    app.route("/admin/api/config/models/bulk", methods=["POST"])(
-        _guard("models", bulk_update_models)
-    )
-    app.route("/admin/api/config/providers/<name>/models", methods=["GET"])(
-        fetch_upstream_models
-    )
-    app.route("/admin/api/config/models", methods=["POST"])(
-        _guard("models", bulk_add_models)
-    )
-    app.route("/admin/api/config/models/loop-check", methods=["GET"])(
-        check_routing_loops
-    )
-    app.route("/admin/api/config/server", methods=["PUT"])(put_server_settings)
-    app.route("/admin/api/config/shims", methods=["PUT"])(
-        _guard("providers", put_shim_sources)
-    )
-    app.route("/admin/api/config/shims/reload", methods=["POST"])(
-        _guard("providers", post_shims_reload)
-    )
-    app.route("/admin/api/config/reload", methods=["POST"])(reload_config)
+    # Config CRUD (providers + models tabs, settings, shims)
+    register_config_routes(app)
     # Metrics (dashboard tab)
     app.route("/admin/api/metrics", methods=["GET"])(get_metrics)
     app.route("/admin/api/metrics/rebuild", methods=["POST"])(

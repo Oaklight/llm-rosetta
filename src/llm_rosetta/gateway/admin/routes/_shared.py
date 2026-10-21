@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import logging
 import re
 from contextlib import asynccontextmanager
@@ -23,6 +24,27 @@ def _qp(request: Any, key: str) -> str | None: ...
 
 @overload
 def _qp(request: Any, key: str, default: str) -> str: ...
+
+
+def _guard(tab_id: str, handler: Any) -> Any:
+    """Wrap a route handler to return 404 when its tab is disabled.
+
+    Read-only endpoints (``get_config``, ``get_metrics``,
+    ``get_request_key_labels``) are intentionally left unguarded —
+    disabled tabs are a UI convenience, not security isolation, and
+    other components (e.g. argo-proxy's ``ArgoConfigIO``) may depend
+    on them regardless of tab visibility.
+    """
+
+    @functools.wraps(handler)
+    async def _guarded(request: Any, **kw: Any) -> Any:
+        if tab_id in getattr(request.app, "disabled_tabs", ()):
+            return JSONResponse(
+                {"error": "Tab disabled", "disabled": True}, status_code=404
+            )
+        return await handler(request, **kw)
+
+    return _guarded
 
 
 def _qp(request: Any, key: str, default: str | None = None) -> str | None:

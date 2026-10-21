@@ -180,6 +180,9 @@ src/llm_rosetta/
 │   │   ├── security.py       # Auth/session ops
 │   │   └── keys.py           # API key management ops
 │   └── admin/               # Admin panel (metrics, request log, persistence)
+│       └── routes/          # one module per resource; routes/config/ is
+│                            #   split into payload/providers/models/
+│                            #   model_providers/settings/shims/upstream/bulk
 ├── ir/                      # IR logic: primitives/, tools/, passes/
 ├── types/                   # Typed IR and provider-specific types
 │   └── ir/                  # IR dataclasses (messages, parts, tools, stream)

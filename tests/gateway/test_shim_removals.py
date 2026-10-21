@@ -261,9 +261,9 @@ class TestAdminPayload:
 
     def test_preset_payload_shape(self):
         """The shape the Settings picker consumes is pinned here."""
-        from llm_rosetta.gateway.admin.routes import config as routes_config
+        from llm_rosetta.gateway.admin.routes.config import payload as config_payload
 
-        payload = routes_config._shim_source_presets_payload()
+        payload = config_payload._shim_source_presets_payload()
         assert [entry["key"] for entry in payload] == ["alcf", "argo", "asksage"]
         for entry in payload:
             assert set(entry) == {
@@ -278,9 +278,9 @@ class TestAdminPayload:
 
     def test_presets_come_from_the_source_catalog(self):
         """The panel's catalogue is the standalone-package list, not the manifest."""
-        from llm_rosetta.gateway.admin.routes import config as routes_config
+        from llm_rosetta.gateway.admin.routes.config import payload as config_payload
 
-        assert routes_config.SHIM_SOURCE_PACKAGES is SHIM_SOURCE_PACKAGES
+        assert config_payload.SHIM_SOURCE_PACKAGES is SHIM_SOURCE_PACKAGES
 
 
 class TestPresets:

@@ -13,7 +13,7 @@ from llm_rosetta._vendor.httpserver import JSONResponse, Response
 from llm_rosetta.observability.sanitize import scrub_credential_patterns
 
 from ._shared import _qp
-from .config import _get_gateway_config
+from .config.payload import _get_gateway_config
 
 
 def _wants_refresh(request: Any) -> bool:
