@@ -16,17 +16,26 @@ import sys
 import warnings
 from typing import Any
 
+_ALIAS = "llm_rosetta.gateway"
+_TARGET = "llm_rosetta_gateway"
+
+try:
+    _real = importlib.import_module(_TARGET)
+except ModuleNotFoundError as exc:
+    # The core distribution ships this shim but not the gateway.  Say which
+    # package to install instead of leaking the alias target's module name.
+    raise ImportError(
+        "llm_rosetta.gateway is a deprecated alias for llm_rosetta_gateway, "
+        "which is not installed. Install the gateway distribution: "
+        "pip install llm-rosetta-gateway"
+    ) from exc
+
 warnings.warn(
     "importing llm_rosetta.gateway is deprecated; use llm_rosetta_gateway "
     "(llm_rosetta.gateway will be removed in 0.16.0)",
     DeprecationWarning,
     stacklevel=2,
 )
-
-_ALIAS = "llm_rosetta.gateway"
-_TARGET = "llm_rosetta_gateway"
-
-_real = importlib.import_module(_TARGET)
 
 
 class _AliasFinder(importlib.abc.MetaPathFinder, importlib.abc.Loader):
