@@ -46,7 +46,7 @@ from ...base.helpers.opaque import (
     set_google_thought_signature,
     set_opaque_origin,
 )
-from ...base.helpers.system_message_hoist import hoist_system_in_converter
+from llm_rosetta.ir.primitives.system_message_hoist import hoist_system_in_converter
 from ...base.tools import is_intrinsic_part
 from ...base.tools.intrinsic import intrinsic_kind_of
 from ....transforms.ir import hoist_late_system_messages

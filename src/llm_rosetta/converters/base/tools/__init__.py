@@ -10,17 +10,15 @@ by external callers (e.g. argo-proxy)::
     from llm_rosetta.converters.base.tools import BaseToolOps
     from llm_rosetta.converters.base.tools import sanitize_schema
 
-Submodules:
+The stateless helpers live in :mod:`llm_rosetta.ir.tools` (and
+``ir.primitives.call_unwind``); this package re-exports them so the documented
+``converters.base.tools`` names keep working.  What stays here is the part
+that needs converter internals:
+
     ops             — :class:`BaseToolOps` abstract base class
-    schema          — JSON Schema sanitization for provider compatibility
-    call_id         — Tool call ID sanitization
-    content         — Multimodal content block conversion in tool results
-    orphan_fix      — Orphaned tool call/result repair
-    call_unwind     — Parallel tool call unwinding
-    intrinsic       — Intrinsic (server-side) tool helpers
-    batch           — Tool result batch tracking
-    multimodal_patch — Tool result dual-encoding for non-multimodal providers
-    error_marker    — Tool result error marking for formats without is_error
+    schema          — JSON Schema sanitization (uses the converter cache)
+    content         — Multimodal content block conversion (``BaseContentOps``)
+    multimodal_patch — Tool result dual-encoding (``BaseContentOps``)
 """
 
 # -- Abstract base class --
@@ -30,10 +28,10 @@ from .ops import BaseToolOps, IntrinsicLeg
 from .schema import convert_nullable_to_type_array, sanitize_schema
 
 # -- Call ID --
-from .call_id import prefixed_tool_call_id, sanitize_tool_call_id
+from llm_rosetta.ir.tools.call_id import prefixed_tool_call_id, sanitize_tool_call_id
 
 # -- Orphan fix --
-from .orphan_fix import (
+from llm_rosetta.ir.tools.orphan_fix import (
     extract_part_ids,
     fix_orphaned_tool_calls_ir,
     log_orphan_warnings,
@@ -41,16 +39,16 @@ from .orphan_fix import (
 )
 
 # -- Call unwind --
-from .call_unwind import unwind_parallel_tool_calls_ir
+from llm_rosetta.ir.primitives.call_unwind import unwind_parallel_tool_calls_ir
 
 # -- Content --
 from .content import convert_content_blocks_to_ir, convert_ir_content_blocks_to_p
 
 # -- Batch --
-from .batch import assign_tool_batch_ids, merge_tool_messages
+from llm_rosetta.ir.tools.batch import assign_tool_batch_ids, merge_tool_messages
 
 # -- Intrinsic --
-from .intrinsic import (
+from llm_rosetta.ir.tools.intrinsic import (
     get_definition_kind,
     get_intrinsic_kind,
     get_native_definition,
@@ -63,7 +61,7 @@ from .intrinsic import (
 )
 
 # -- Error marker --
-from .error_marker import (
+from llm_rosetta.ir.tools.error_marker import (
     TOOL_ERROR_MARKER,
     mark_tool_error,
     mark_tool_error_text,
@@ -83,13 +81,13 @@ from .multimodal_patch import (
 )
 
 # -- Strict mode --
-from .strict_mode import (
+from llm_rosetta.ir.tools.strict_mode import (
     ir_strict,
     write_ir_strict,
 )
 
 # -- Allow-list --
-from .allowed_tools import (
+from llm_rosetta.ir.tools.allowed_tools import (
     allowed_tool_names,
     allowed_tool_refs,
     provider_allowed_tools_to_ir,

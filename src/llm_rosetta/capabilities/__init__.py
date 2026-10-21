@@ -13,8 +13,8 @@ Split by concern: :mod:`.enforcement` for the capability passes, :mod:`.tool_nam
 for tool identity and naming, :mod:`.description_limit` for oversized descriptions.
 """
 
-from .description_limit import relocate_oversized_tool_descriptions
-from .enforcement import (
+from llm_rosetta.ir.passes.description_limit import relocate_oversized_tool_descriptions
+from llm_rosetta.ir.passes.enforcement import (
     enforce_reasoning,
     strip_reasoning_for_non_reasoning,
     enforce_vision,
@@ -24,8 +24,8 @@ from .enforcement import (
     restore_custom_tool_calls,
     unwrap_custom_tool_input,
 )
-from .intrinsic_history import degrade_intrinsic_history
-from .tool_names import (
+from llm_rosetta.ir.passes.intrinsic_history import degrade_intrinsic_history
+from llm_rosetta.ir.passes.tool_names import (
     MAX_TOOL_NAME_LEN,
     qualify_tool_names,
     build_tool_name_map,

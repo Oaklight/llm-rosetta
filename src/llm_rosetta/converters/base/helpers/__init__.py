@@ -10,15 +10,14 @@ a migration hint.
 
 Modules:
     cache              — LRU cache for tool definition conversion results.
-    cache_breakpoints  — Cache breakpoint detection.
     citations          — Citation-block provenance and filtering.
     extensions         — Wire-extension passthrough.
-    image_limit        — Truncate images to provider-declared limits.
     opaque             — Provenance for opaque provider-specific reasoning values.
     reasoning          — Shim-driven reasoning configuration helpers.
-    system_message_hoist — Hoist late system messages to the front.
-    tool_group         — Tool-group container handling.
-    truncate           — Fit an identifier into a length budget uniquely.
+
+The stateless IR helpers — cache breakpoints, image limits, system-message
+hoisting, tool groups and truncation — live in
+:mod:`llm_rosetta.ir.primitives`; this package re-exports them.
 """
 
 from .opaque import (
@@ -36,8 +35,8 @@ from .opaque import (
     strip_internal_metadata,
 )
 from .reasoning import DEFAULT_REASONING_CAPS, apply_reasoning_config
-from .truncate import truncate_with_digest
-from .system_message_hoist import hoist_late_system_messages_ir
+from llm_rosetta.ir.primitives.truncate import truncate_with_digest
+from llm_rosetta.ir.primitives.system_message_hoist import hoist_late_system_messages_ir
 
 # ── Moved names: clear error instead of silent breakage ──
 

@@ -24,7 +24,7 @@ from ....types.ir import (
     ToolResultPart,
 )
 from ....types.ir.tools import ToolCallConfig
-from .intrinsic import intrinsic_kind_of, is_intrinsic_part
+from llm_rosetta.ir.tools.intrinsic import intrinsic_kind_of, is_intrinsic_part
 
 logger = logging.getLogger(__name__)
 

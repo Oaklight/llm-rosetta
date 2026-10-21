@@ -12,7 +12,7 @@ and e7e7768e.
 from __future__ import annotations
 from typing import Any, cast
 
-from llm_rosetta.converters.base.helpers.system_message_hoist import (
+from llm_rosetta.ir.primitives.system_message_hoist import (
     hoist_late_system_messages_ir,
 )
 

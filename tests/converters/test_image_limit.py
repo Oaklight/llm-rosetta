@@ -1,6 +1,6 @@
 """Tests for image truncation utility."""
 
-from llm_rosetta.converters.base.helpers.image_limit import truncate_images
+from llm_rosetta.ir.primitives.image_limit import truncate_images
 
 
 def _make_request(image_counts_per_message: list[int]) -> dict:
@@ -210,7 +210,7 @@ class TestApplyImageLimitPattern:
         """Drive truncation logic directly without a real shim registry."""
         import re
 
-        from llm_rosetta.converters.base.helpers.image_limit import truncate_images
+        from llm_rosetta.ir.primitives.image_limit import truncate_images
 
         if pattern is not None and not re.search(pattern, model):
             return req
@@ -250,7 +250,7 @@ class TestStripImagesForNonVision:
 
     def test_strips_all_images(self):
         req = _make_request([5])
-        from llm_rosetta.converters.base.helpers.image_limit import (
+        from llm_rosetta.ir.primitives.image_limit import (
             strip_images_for_non_vision,
         )
 
@@ -260,7 +260,7 @@ class TestStripImagesForNonVision:
 
     def test_placeholder_text(self):
         req = _make_request([1])
-        from llm_rosetta.converters.base.helpers.image_limit import (
+        from llm_rosetta.ir.primitives.image_limit import (
             strip_images_for_non_vision,
         )
 
@@ -272,7 +272,7 @@ class TestStripImagesForNonVision:
         req = {
             "messages": [{"role": "user", "content": [{"type": "text", "text": "hi"}]}]
         }
-        from llm_rosetta.converters.base.helpers.image_limit import (
+        from llm_rosetta.ir.primitives.image_limit import (
             strip_images_for_non_vision,
         )
 
@@ -294,7 +294,7 @@ class TestStripImagesForNonVision:
             },
         ]
         req = {"messages": [{"role": "user", "content": content}]}
-        from llm_rosetta.converters.base.helpers.image_limit import (
+        from llm_rosetta.ir.primitives.image_limit import (
             strip_images_for_non_vision,
         )
 
@@ -311,7 +311,7 @@ class TestStripImagesForNonVision:
         import copy
 
         original = copy.deepcopy(req)
-        from llm_rosetta.converters.base.helpers.image_limit import (
+        from llm_rosetta.ir.primitives.image_limit import (
             strip_images_for_non_vision,
         )
 

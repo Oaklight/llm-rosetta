@@ -14,7 +14,7 @@ Most callers can import directly from this package::
     from llm_rosetta.transforms import hoist_late_system_messages, strip_fields
 """
 
-from llm_rosetta.transforms.body import (  # noqa: F401
+from llm_rosetta.ir.primitives.body import (  # noqa: F401
     Transform,
     _NamedTransform,
     apply_transforms,
@@ -29,7 +29,7 @@ from llm_rosetta.transforms.body import (  # noqa: F401
     strip_fields,
     strip_fields_for_model,
 )
-from llm_rosetta.transforms.ir import (  # noqa: F401
+from llm_rosetta.ir.primitives.ir import (  # noqa: F401
     IRTransform,
     TransformContext,
     _NamedIRTransform,

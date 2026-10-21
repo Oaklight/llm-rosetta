@@ -1092,7 +1092,7 @@ class TestBackfillReasoningContent:
                 self._tool_result(),
             ]
         }
-        with caplog.at_level(logging.DEBUG, logger="llm_rosetta.transforms.body"):
+        with caplog.at_level(logging.DEBUG, logger="llm_rosetta.ir.primitives.body"):
             backfill_reasoning_content()(body)
         assert "backfilled reasoning_content on 1" in caplog.text
 
@@ -1108,7 +1108,7 @@ class TestBackfillReasoningContent:
                 self._tool_result(),
             ]
         }
-        with caplog.at_level(logging.DEBUG, logger="llm_rosetta.transforms.body"):
+        with caplog.at_level(logging.DEBUG, logger="llm_rosetta.ir.primitives.body"):
             backfill_reasoning_content()(body)
         assert "backfilled" not in caplog.text
 

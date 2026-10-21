@@ -70,7 +70,7 @@ from ...base.helpers.opaque import (
     is_own_origin,
     set_opaque_origin,
 )
-from ...base.helpers.system_message_hoist import hoist_system_in_converter
+from llm_rosetta.ir.primitives.system_message_hoist import hoist_system_in_converter
 from ....transforms.ir import auto_cache_breakpoints, hoist_late_system_messages
 from ._constants import (
     ANTHROPIC_REASON_FROM_PROVIDER,

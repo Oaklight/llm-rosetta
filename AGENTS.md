@@ -127,6 +127,19 @@ embedding (`embedding.py`), rerank (`rerank.py`), and decision (`decision.py`).
 Provider-specific types (for documentation, not runtime) in
 `types/anthropic/`, `types/google/`.
 
+The logic that operates on IR values lives in `ir/`:
+
+| Sub-package | Holds |
+|-------------|-------|
+| `ir/primitives/` | Body/IR transforms plus their stateless helpers |
+| `ir/tools/` | Stateless tool helpers (intrinsic kinds, call ids, error markers) |
+| `ir/passes/` | Capability passes (vision, reasoning, custom tools, names) |
+
+`ir/primitives` and `ir/tools` must not import `converters`; a pass may use the
+converter *base* contracts and the shim contract. `llm_rosetta.transforms` and
+`llm_rosetta.capabilities` are facades, and the old
+`converters/base/{helpers,tools}/*` submodule paths re-export from `ir/`.
+
 ## Repository layout
 
 ```
@@ -166,8 +179,11 @@ src/llm_rosetta/
 │   │   ├── security.py       # Auth/session ops
 │   │   └── keys.py           # API key management ops
 │   └── admin/               # Admin panel (metrics, request log, persistence)
+├── ir/                      # IR logic: primitives/, tools/, passes/
 ├── types/                   # Typed IR and provider-specific types
 │   └── ir/                  # IR dataclasses (messages, parts, tools, stream)
+├── transforms/              # Facade over ir.primitives (compat)
+├── capabilities/            # Facade over ir.passes (compat)
 └── _vendor/                 # Vendored dependencies (DO NOT EDIT)
 
 tests/

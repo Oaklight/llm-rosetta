@@ -9,7 +9,7 @@ from __future__ import annotations
 import copy
 from typing import Any, cast
 
-from llm_rosetta.converters.base.helpers.cache_breakpoints import (
+from llm_rosetta.ir.primitives.cache_breakpoints import (
     inject_cache_breakpoints,
 )
 

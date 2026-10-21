@@ -99,7 +99,7 @@ class TestRelocateOversizedToolDescriptions:
 
 class TestRelocationWithPipeline:
     def test_relocation_before_hoist(self):
-        from llm_rosetta.converters.base.helpers.system_message_hoist import (
+        from llm_rosetta.ir.primitives.system_message_hoist import (
             hoist_late_system_messages_ir,
         )
 
