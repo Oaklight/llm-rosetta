@@ -91,6 +91,27 @@ When set, derives `budget_tokens` as `max(1024, int(max_tokens × ratio))`, clam
 
 Controls how unsigned (non-redacted) reasoning blocks are handled in responses. Values: `"as_is"` (default), `"preserve"`.
 
+### Replay (`replay_missing`)
+
+Some thinking-mode upstreams require the model's reasoning to be passed back once a request carries `tools`. If the history does not end on a `user` turn and any assistant message omits the field, the upstream answers `400 The reasoning_content in the thinking mode must be passed back to the API`. A client that replays history across a format boundary (for example Claude Code → `messages` → `chat_completions`) can drop the reasoning for some turns, so a faithful conversion still trips this.
+
+- `"as_is"` (default) — send the replayed history unchanged.
+- `"fill_empty"` — declare the requirement. After source → IR conversion, the capability pass adds an empty reasoning part to every assistant message that lacks one, and the target converter renders it in its own dialect (Chat Completions' `reasoning_content: ""`). An empty value satisfies the upstream — verified live on `deepseek-flash` — so the request completes.
+
+The requirement belongs to the **model**, not to a vendor. Declaring it on a shim-wide default protects only that one endpoint; the same model served by another vendor needs its own declaration. For a vendor that fronts several model families, put it in `model_overrides`:
+
+```yaml
+# opencode--chat_completions: only the DeepSeek thinking models need replay
+reasoning:
+  effort_field: reasoning_effort
+  effort_range: [minimal, high]
+  model_overrides:
+    deepseek-v4.1-flash:
+      replay_missing: fill_empty
+```
+
+`backfill_reasoning_content()` remains available as a body transform for callers that build wire bodies themselves, but shims should declare `replay_missing` instead: a transform mounted on one vendor shim does not cover the same model behind another endpoint.
+
 ## Per-Model Overrides
 
 Provider YAMLs support `model_overrides` for model-specific reasoning behavior:
