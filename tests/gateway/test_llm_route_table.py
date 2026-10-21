@@ -69,7 +69,7 @@ async def test_create_app_registers_chat_routes_from_the_registry(
 ) -> None:
     called: list[Any] = []
     monkeypatch.setattr(
-        app_module, "_register_llm_routes", lambda app: called.append(app)
+        app_module.factory, "_register_llm_routes", lambda app: called.append(app)
     )
 
     await app_module.create_app(_minimal_cfg())

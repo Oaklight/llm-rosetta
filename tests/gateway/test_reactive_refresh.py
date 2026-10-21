@@ -235,7 +235,7 @@ class TestProxyRetryOn401:
 
         async def _run():
             with patch(
-                "llm_rosetta.gateway.proxy.force_refresh",
+                "llm_rosetta.gateway.proxy.errors.force_refresh",
                 new_callable=AsyncMock,
                 return_value=True,
             ):
@@ -328,7 +328,7 @@ class TestProxyRetryOn401:
 
         async def _run():
             with patch(
-                "llm_rosetta.gateway.proxy.force_refresh",
+                "llm_rosetta.gateway.proxy.errors.force_refresh",
                 new_callable=AsyncMock,
                 return_value=False,
             ):

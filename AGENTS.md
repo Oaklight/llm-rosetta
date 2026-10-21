@@ -111,8 +111,8 @@ supported format and forwards them to any configured upstream provider.
 
 | Module | Purpose |
 |--------|---------|
-| `gateway/app.py` | Route handlers, app factory |
-| `gateway/proxy.py` | Core proxy engine (non-streaming, streaming, SSE, transforms) |
+| `gateway/app/` | Route handlers (chat/models/health/typed), app factory, tasks |
+| `gateway/proxy/` | Core proxy engine: errors, metadata, fidelity, preflight, engine, streaming |
 | `gateway/config/` | Config package: JSONC loading, locking, parsing, resolution |
 | `gateway/providers.py` | Provider info, auth headers, key rotation |
 | `gateway/admin/` | Admin UI, metrics, request logging, persistence |
@@ -164,9 +164,13 @@ src/llm_rosetta/
 │   ├── transforms.py
 │   └── builtins.py
 ├── gateway/                 # HTTP proxy gateway
-│   ├── app.py, proxy.py, providers.py
+│   ├── app/                 # package: factory, routes_llm/models/health/
+│   │                        #   typed, tasks, _state
+│   ├── proxy/               # package: errors, metadata, fidelity, preflight,
+│   │                        #   engine, streaming, stream_merge
 │   ├── config/              # config package: io, loader, schema, core,
 │   │                        #   parse, typed, settings, resolve
+│   ├── providers.py
 │   ├── shims/                # External shim sources, catalog, scheduled removals
 │   ├── shim_sources.py      # Config `shims` section → shim registry
 │   ├── model_types.py, keystore.py, logging.py

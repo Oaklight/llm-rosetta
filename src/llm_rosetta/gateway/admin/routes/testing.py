@@ -110,9 +110,9 @@ def _get_gateway_config(request: Any) -> GatewayConfig | None:
     cfg = getattr(request.app, "gateway_config", None)
     if cfg is not None:
         return cfg
-    import llm_rosetta.gateway.app as _app_mod
+    from llm_rosetta.gateway.app import _state as _app_state
 
-    return _app_mod._config
+    return _app_state._config
 
 
 async def start_test(request: Any) -> Response:

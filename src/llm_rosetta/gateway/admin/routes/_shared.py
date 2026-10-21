@@ -224,7 +224,7 @@ async def _reload_gateway_config(
     """
     import asyncio
 
-    import llm_rosetta.gateway.app as _app_mod
+    from llm_rosetta.gateway.app import _state as _app_state
     from ...shim_sources import apply_shim_sources, shims_signature
 
     config_io = _get_config_io(request)
@@ -255,7 +255,7 @@ async def _reload_gateway_config(
     recovery_result = await recovery.execute()
     request.app.provider_validation_warnings = recovery_result.get("disabled", [])
     new_config = GatewayConfig(raw, maintenance=maintenance)
-    _app_mod._config = new_config
+    _app_state._config = new_config
     request.app.gateway_config = new_config
 
     _sync_auth_middleware(request.app, new_config)

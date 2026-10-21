@@ -651,7 +651,7 @@ class TestNoPipelineWarning:
 
             # Patch the gateway logger (propagate=False prevents caplog
             # from seeing it) and capture warning calls directly.
-            with patch("llm_rosetta.gateway.app.logger") as mock_logger:
+            with patch("llm_rosetta.gateway.app.routes_typed.logger") as mock_logger:
                 _register_non_llm_routes(mock_app, mock_config)
 
             # Verify that a warning was logged mentioning the custom type

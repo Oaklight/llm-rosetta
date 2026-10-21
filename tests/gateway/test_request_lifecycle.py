@@ -15,6 +15,7 @@ from unittest.mock import MagicMock
 import pytest
 
 import llm_rosetta.gateway.app as app_module
+from llm_rosetta.gateway.app import _state
 from llm_rosetta._vendor.httpserver import App, JSONResponse
 from llm_rosetta.gateway.config import GatewayConfig
 from llm_rosetta.gateway.lifecycle import begin_typed, finish_typed
@@ -138,7 +139,7 @@ def _request(pm: PersistenceManager, path: str = "/v1/fake") -> MagicMock:
 def _typed_handler(config: GatewayConfig) -> Any:
     """The wrapper `_register_non_llm_routes` would install for the fake type."""
     app = _CapturingApp()
-    app_module._config = config
+    _state._config = config
     app_module._register_non_llm_routes(cast(App, app), config)
     return app.handlers["/v1/fake"]
 
@@ -170,7 +171,7 @@ class TestTypedRouteLifecycle:
         _register(monkeypatch, "exploding", "/v1/exploding", _exploding_route)
         app = _CapturingApp()
         config = _config()
-        app_module._config = config
+        _state._config = config
         app_module._register_non_llm_routes(cast(App, app), config)
         request = _request(pm, path="/v1/exploding")
 
@@ -260,7 +261,7 @@ class TestTypedRouteCircuitBreaker:
             return JSONResponse({"error": "bad gateway"}, status_code=502)
 
         app = _CapturingApp()
-        app_module._config = config
+        _state._config = config
         _register(monkeypatch, "failing", "/v1/failing", _failing)
         app_module._register_non_llm_routes(cast(App, app), config)
         request.path = "/v1/failing"

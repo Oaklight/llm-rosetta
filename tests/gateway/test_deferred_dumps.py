@@ -16,6 +16,7 @@ from unittest.mock import MagicMock
 import pytest
 
 import llm_rosetta.gateway.app as app_module
+from llm_rosetta.gateway.app import _state
 import llm_rosetta.gateway.lifecycle as lifecycle_module
 from llm_rosetta._vendor.httpserver import JSONResponse
 from llm_rosetta.gateway.maintenance.dumps import DeferredDumpStore
@@ -189,8 +190,10 @@ async def _run_proxy_handler(monkeypatch: Any, pm: PersistenceManager) -> str:
         )
         return JSONResponse({"error": {"message": "boom"}}, status_code=400), {}
 
-    monkeypatch.setattr(app_module, "_config", _config())
-    monkeypatch.setattr(app_module, "handle_non_streaming", _fake_handle_non_streaming)
+    monkeypatch.setattr(_state, "_config", _config())
+    monkeypatch.setattr(
+        app_module.routes_llm, "handle_non_streaming", _fake_handle_non_streaming
+    )
 
     request = MagicMock()
     request.headers = {}
@@ -198,7 +201,7 @@ async def _run_proxy_handler(monkeypatch: Any, pm: PersistenceManager) -> str:
         "model": "test-model",
         "messages": [{"role": "user", "content": "hi"}],
     }
-    request.app.gateway_config = app_module._config
+    request.app.gateway_config = _state._config
     request.app.metadata_store = MagicMock()
     request.app.metrics = None
     request.app.request_log = RequestLog(persistence=pm)
@@ -262,8 +265,10 @@ def test_flush_runs_even_if_the_log_write_fails(monkeypatch):
         )
         return JSONResponse({"error": {"message": "boom"}}, status_code=400), {}
 
-    monkeypatch.setattr(app_module, "_config", _config())
-    monkeypatch.setattr(app_module, "handle_non_streaming", _fake_handle_non_streaming)
+    monkeypatch.setattr(_state, "_config", _config())
+    monkeypatch.setattr(
+        app_module.routes_llm, "handle_non_streaming", _fake_handle_non_streaming
+    )
     monkeypatch.setattr(lifecycle_module, "record_proxy_request", _boom)
 
     request = MagicMock()
@@ -272,7 +277,7 @@ def test_flush_runs_even_if_the_log_write_fails(monkeypatch):
         "model": "test-model",
         "messages": [{"role": "user", "content": "hi"}],
     }
-    request.app.gateway_config = app_module._config
+    request.app.gateway_config = _state._config
     request.app.metadata_store = MagicMock()
     request.app.metrics = None
     request.app.request_log = None

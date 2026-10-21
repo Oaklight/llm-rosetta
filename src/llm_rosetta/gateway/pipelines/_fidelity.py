@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
+from ..fidelity_check import compare_same_format
 from ..logging import get_logger, log_fidelity_warning
 
 logger = get_logger()
@@ -42,24 +43,19 @@ def check_same_format_fidelity(
     skipped.  Cross-format conversions are skipped too: the source and target
     shapes are expected to differ.
     """
-    if original is None or source_format != target_format:
+    summary = compare_same_format(
+        source_format,
+        target_format,
+        original,
+        converted,
+        direction,
+        model_type=model_type,
+    )
+    if summary is None:
         return
-    try:
-        from llm_rosetta.fidelity import FidelityChecker
-
-        checker = FidelityChecker(
-            mode="critical", format_name=source_format, model_type=model_type
-        )
-        diffs = checker.compare(original, converted, direction=direction)
-    except Exception:
-        logger.debug("fidelity check failed", exc_info=True)
-        return
-    if not diffs:
-        return
-    max_severity = max(diff.effective_severity for diff in diffs)
     log_fidelity_warning(
-        len(diffs),
-        max_severity,
+        summary.diff_count,
+        summary.max_severity,
         direction,
         model=model,
         source_provider=source_format,
