@@ -157,6 +157,7 @@ nav:
   - 网关:
       - gateway/index.md
       - 配置: gateway/configuration.md
+      - 升级: gateway/upgrading.md
       - CLI:
           - CLI 参考: gateway/cli.md
           - CLI 工具集成: gateway/cli-integrations.md
