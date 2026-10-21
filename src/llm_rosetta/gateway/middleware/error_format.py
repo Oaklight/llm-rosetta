@@ -14,30 +14,39 @@ from __future__ import annotations
 
 from llm_rosetta._vendor.httpserver import JSONResponse, Response
 
+from llm_rosetta.formats import FORMAT_SPECS
 from llm_rosetta.provider_names import canonical_provider_name
 
 # ---------------------------------------------------------------------------
 # Path → API format detection (single mapping table)
 # ---------------------------------------------------------------------------
 
-_PATH_FORMAT_TABLE: list[tuple[str, str]] = [
-    ("/v1beta/models", "google"),
-    ("/v1/messages", "anthropic"),
-    ("/v1/", "openai"),
-]
+
+def _route_prefix(route_path: str) -> str:
+    """Strip a router converter tail (``<path:model_path>``) from a route."""
+    return route_path.split("/<", 1)[0]
+
+
+#: Client path prefix → error-envelope family, derived from the catalog's chat
+#: routes.  Longest prefix first, so ``/v1beta/models`` is tested before any
+#: shorter prefix that also matches; a path matching nothing is OpenAI-shaped
+#: (see :func:`detect_api_format`).
+_PATH_FORMAT_TABLE: list[tuple[str, str]] = sorted(
+    {
+        (_route_prefix(spec.route_path), spec.wire_family)
+        for spec in FORMAT_SPECS
+        if spec.model_type == "llm" and spec.route_path
+    },
+    key=lambda entry: (-len(entry[0]), entry[0]),
+)
 
 _PROVIDER_FORMAT_MAP: dict[str, str] = {
-    "chat_completions": "openai",
-    "openai_responses": "openai",
-    "open_responses": "openai",
-    # ``messages`` is the canonical provider type for the Anthropic Messages
-    # standard; it maps to the vendor-shaped ``anthropic`` *label* (kept as-is).
-    "messages": "anthropic",
-    "anthropic": "anthropic",
-    "google": "google",
-    "google_generate": "google",
-    "google_interactions": "google",
+    spec.format: spec.wire_family for spec in FORMAT_SPECS if spec.model_type == "llm"
 }
+# Historical route spellings kept until #919 removes them.
+_PROVIDER_FORMAT_MAP["openai_responses"] = "openai"
+_PROVIDER_FORMAT_MAP["anthropic"] = "anthropic"
+_PROVIDER_FORMAT_MAP["google"] = "google"
 
 
 def detect_api_format(path: str) -> str:

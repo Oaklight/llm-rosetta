@@ -20,6 +20,7 @@ from .transport.provider_info import (
     openai_auth,
 )
 
+from llm_rosetta.formats import FORMAT_SPECS
 from llm_rosetta.provider_names import canonical_provider_name
 
 # Re-export ProviderInfo so existing ``from .providers import ProviderInfo``
@@ -33,62 +34,43 @@ logger = logging.getLogger("llm-rosetta-gateway")
 # Provider registry — known provider types and their characteristics
 # ---------------------------------------------------------------------------
 
-_PROVIDER_REGISTRY: dict[str, dict[str, Any]] = {
-    "chat_completions": {
-        "auth_header_fn": openai_auth,
-        "url_template": "{base_url}/chat/completions",
-    },
-    "open_responses": {
-        "auth_header_fn": openai_auth,
-        "url_template": "{base_url}/responses",
-    },
-    "messages": {
-        "auth_header_fn": anthropic_auth,
-        "url_template": "{base_url}/v1/messages",
-    },
-    "google": {
-        "auth_header_fn": google_auth,
-        "url_template": "{base_url}/v1beta/models/{model}:generateContent",
-        "stream_url_template": "{base_url}/v1beta/models/{model}:streamGenerateContent?alt=sse",
-    },
-    "google_generate": {
-        "auth_header_fn": google_auth,
-        "url_template": "{base_url}/v1beta/models/{model}:generateContent",
-        "stream_url_template": "{base_url}/v1beta/models/{model}:streamGenerateContent?alt=sse",
-    },
-    "google_interactions": {
-        "auth_header_fn": google_auth,
-        "url_template": "{base_url}/v1beta/interactions",
-        "stream_url_template": "{base_url}/v1beta/interactions?alt=sse",
-    },
+_AUTH_BUILDERS = {
+    "openai": openai_auth,
+    "anthropic": anthropic_auth,
+    "google": google_auth,
 }
+
+# Derived from the format catalog (``llm_rosetta.formats``).  The registry key
+# is the format; the legacy ``google`` spelling stays here because provider
+# validation historically accepts it as a registry key as well as through
+# ``canonical_provider_name``.
+_PROVIDER_REGISTRY: dict[str, dict[str, Any]] = {}
+for _spec in FORMAT_SPECS:
+    if _spec.model_type != "llm" or _spec.url_template is None:
+        continue
+    _entry: dict[str, Any] = {
+        "auth_header_fn": _AUTH_BUILDERS[_spec.auth or "openai"],
+        "url_template": _spec.url_template,
+    }
+    if _spec.stream_url_template:
+        _entry["stream_url_template"] = _spec.stream_url_template
+    _PROVIDER_REGISTRY[_spec.format] = _entry
+
+_PROVIDER_REGISTRY["google"] = _PROVIDER_REGISTRY["google_generate"]
 
 # Vendor hints for bare base formats, surfaced by the admin provider picker as
 # input *placeholders* only.  They are never runtime fallbacks: a bare base
 # type with no ``base_url`` fails to load rather than silently inheriting a
 # vendor host, and its credential env var is not consulted either.
 _BASE_TYPE_HINTS: dict[str, dict[str, str]] = {
-    "chat_completions": {
-        "base_url": "https://api.openai.com/v1",
-        "api_key_env": "OPENAI_API_KEY",
-    },
-    "open_responses": {
-        "base_url": "https://openrouter.ai/api/v1",
-        "api_key_env": "OPENROUTER_API_KEY",
-    },
-    "messages": {
-        "base_url": "https://api.anthropic.com",
-        "api_key_env": "ANTHROPIC_API_KEY",
-    },
-    "google_generate": {
-        "base_url": "https://generativelanguage.googleapis.com",
-        "api_key_env": "GOOGLE_API_KEY",
-    },
-    "google_interactions": {
-        "base_url": "https://generativelanguage.googleapis.com",
-        "api_key_env": "GOOGLE_API_KEY",
-    },
+    spec.format: {
+        "base_url": spec.base_url_hint,
+        "api_key_env": spec.api_key_env_hint,
+    }
+    for spec in FORMAT_SPECS
+    if spec.model_type == "llm" and spec.base_url_hint and spec.api_key_env_hint
 }
+_BASE_TYPE_HINTS["google"] = _BASE_TYPE_HINTS["google_generate"]
 
 
 def get_base_type_hints(provider_type: str) -> dict[str, str]:
@@ -119,6 +101,22 @@ def get_default_api_key_env(provider_type: str) -> str:
     return ""
 
 
+def default_models_path(provider_type: str) -> str:
+    """Default model-listing path appended to ``base_url`` for *provider_type*.
+
+    Derived from the format catalog's ``models_path``; the generic
+    ``/models`` is the fallback for a provider type the catalog does not know.
+    """
+    from llm_rosetta.formats import BY_PAIR
+
+    fmt = canonical_provider_name(provider_type)
+    for model_type in ("llm", "embedding"):
+        spec = BY_PAIR.get((model_type, fmt))
+        if spec is not None and spec.models_path:
+            return spec.models_path
+    return "/models"
+
+
 def known_provider_types() -> list[str]:
     """Return the list of built-in provider type names."""
     return list(_PROVIDER_REGISTRY)
@@ -131,13 +129,11 @@ def known_provider_types() -> list[str]:
 # shim entry wins in the merged lookup; the table is the format's own default
 # regardless of whether a shim shadows it.
 _CUSTOM_TOOLS_BY_TYPE: dict[str, bool] = {
-    "chat_completions": True,
-    "open_responses": True,
-    "messages": False,
-    "google": False,
-    "google_generate": False,
-    "google_interactions": False,
+    spec.format: spec.supports_custom_tools
+    for spec in FORMAT_SPECS
+    if spec.model_type == "llm"
 }
+_CUSTOM_TOOLS_BY_TYPE["google"] = _CUSTOM_TOOLS_BY_TYPE["google_generate"]
 
 
 def get_default_supports_custom_tools(provider_type: str) -> bool:
@@ -150,12 +146,16 @@ def get_default_supports_custom_tools(provider_type: str) -> bool:
 # same standard (see ``registered_shims``).  ``google`` is a plain alias of
 # ``google_generate`` and stays reachable through the ``google`` shim, so it is
 # not listed separately here.
-BASE_FORMATS: tuple[str, ...] = (
-    "chat_completions",
-    "open_responses",
-    "messages",
-    "google_generate",
-    "google_interactions",
+BASE_FORMATS: tuple[str, ...] = tuple(
+    spec.format
+    for spec in sorted(
+        (
+            spec
+            for spec in FORMAT_SPECS
+            if spec.model_type == "llm" and spec.url_template is not None
+        ),
+        key=lambda spec: spec.picker_order,
+    )
 )
 
 

@@ -134,36 +134,27 @@ def _resolve(provider: str) -> str:
 
 
 def _get_tool_ops(provider: str) -> Any:
-    """Lazy-import and return the ToolOps class for *provider*."""
+    """Return the ToolOps class bound to *provider*'s converter.
+
+    Resolved through the converter registry — the format's own package names
+    its ToolOps class, so a new format needs no branch here.
+    """
     canonical = _resolve(provider)
-    if canonical == "chat_completions":
-        from .converters.llm.chat_completions import ChatCompletionsToolOps
 
-        return ChatCompletionsToolOps
-    if canonical == "open_responses":
-        from .converters.llm.open_responses import OpenResponsesToolOps
+    from .converters.registry import CONVERTER_REGISTRY
 
-        return OpenResponsesToolOps
-    if canonical == "messages":
-        from .converters.llm.messages import MessagesToolOps
-
-        return MessagesToolOps
-    if canonical == "google_generate":
-        from .converters.llm.google_generate import GoogleGenerateToolOps
-
-        return GoogleGenerateToolOps
-    if canonical == "google_interactions":
-        from .converters.llm.google_interactions import GoogleInteractionsToolOps
-
-        return GoogleInteractionsToolOps
-    raise ValueError(
-        f"Unknown provider: {provider!r}. "
-        f"Supported: {', '.join(sorted(_CANONICAL_TOOL_PROVIDERS))}. "
-        f"Deprecated aliases (removed in 0.16.0): openai_chat, openai-chat, "
-        f"openai_responses, openai-responses, openai--open_responses, "
-        f"open-responses, google, google-genai, google-generate, "
-        f"google-interactions, chat-completions"
-    )
+    converter_cls = CONVERTER_REGISTRY.get("llm", {}).get(canonical)
+    tool_ops_cls = getattr(converter_cls, "tool_ops_class", None)
+    if tool_ops_cls is None:
+        raise ValueError(
+            f"Unknown provider: {provider!r}. "
+            f"Supported: {', '.join(sorted(_CANONICAL_TOOL_PROVIDERS))}. "
+            f"Deprecated aliases (removed in 0.16.0): openai_chat, openai-chat, "
+            f"openai_responses, openai-responses, openai--open_responses, "
+            f"open-responses, google, google-genai, google-generate, "
+            f"google-interactions, chat-completions"
+        )
+    return tool_ops_cls
 
 
 # ==================== Definition dispatch ====================

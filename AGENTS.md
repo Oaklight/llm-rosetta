@@ -56,6 +56,18 @@ Each chat converter implements bidirectional conversion (request/response) and
 streaming. Converters are provider-agnostic — provider-specific quirks are
 handled by the **shim layer**.
 
+### Format catalog
+
+`formats/catalog.py` holds one `FormatSpec` per `(model_type, format)` — the
+single home for per-format facts: wire family, auth builder key, URL
+templates, SSE formatter key, usage shape, chat route path, default upstream
+path, models-listing path, picker order and detection order.  The model
+vocabulary, the gateway's provider tables, the SSE / error-envelope /
+usage-shape maps, `auto_detect.detect_provider` and the model-type descriptor
+format lists and chat routes are all derived from it.  Adding a format means
+adding a record, its converter binding (`converters/registry.py`) and its body
+detector (`formats/detect.py`) — nothing else.
+
 ### Decision converters
 
 Decision is a separate model paradigm (like embedding and rerank) for
@@ -146,8 +158,12 @@ converter *base* contracts and the shim contract. `llm_rosetta.transforms` and
 ```
 src/llm_rosetta/
 ├── __init__.py              # Public API: convert(), get_converter_for_provider()
-├── auto_detect.py           # Provider auto-detection from request body
+├── auto_detect.py           # Provider auto-detection (delegates to formats.detect)
 ├── tool_ops.py              # Cross-provider tool call utilities
+├── formats/                 # Format catalog: one FormatSpec per (model_type, format)
+│   ├── spec.py              # The record type
+│   ├── catalog.py           # The records + BY_PAIR
+│   └── detect.py            # Priority-ordered body detectors
 ├── converters/              # one directory per (model_type, format)
 │   ├── base/                # Abstract base + ConversionContext
 │   ├── llm/                 # chat: one package per wire format
@@ -425,12 +441,17 @@ gate — missing any item means the converter is not fully integrated.
    Must include round-trip tests (provider→IR→provider).
 3. **Public API exports** — add the converter class to both
    `converters/__init__.py` and the top-level `__init__.py` `__all__`.
-4. **Auto-detect and the converter registry** — add detection function and
-   wire into `detect_provider()` in `auto_detect.py`.  Add the name to
-   `ProviderType` literal.  Add the format to
-   `model_vocabulary.py::FORMATS_BY_TYPE` and the converter class to
-   `CONVERTER_REGISTRY` in `converters/registry.py`; the
-   `ModelTypeDescriptor` format lists are derived from it.
+4. **Catalog record** — add one `FormatSpec` to
+   `formats/catalog.py` (model_type, format, wire_family, detect +
+   detect_priority, picker_order, auth, url_template, sse, usage_shape,
+   route_path / default_path, models_path) and register its detector in
+   `formats/detect.py::DETECTORS`.  Bind the converter class in
+   `converters/registry.py::_CONVERTER_CLASSES`.  Everything else derives
+   from the catalog: `FORMATS_BY_TYPE`, the provider tables, the SSE,
+   error-envelope and usage-shape maps, the detection order, and the
+   model-type descriptor format lists and chat routes.  The registry's
+   import-time check refuses a catalog entry with no converter binding.
+   Add the name to the `ProviderType` literal in `auto_detect.py`.
 5. **Provider shim** — create `shims/providers/<name>/provider.yaml` with
    `model_type: llm` and `format: <format>`.  The loader validates the
    `(model_type, format)` pair against the converter registry; `base:` is the

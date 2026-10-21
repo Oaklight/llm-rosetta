@@ -10,6 +10,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from llm_rosetta.formats import FORMAT_SPECS
+
 
 # ---------------------------------------------------------------------------
 # Per-provider SSE formatters
@@ -49,15 +51,23 @@ def _format_sse_google_interactions(chunk: dict[str, Any]) -> str:
     return f"event: {event_type}\ndata: {json.dumps(chunk, ensure_ascii=False)}\n\n"
 
 
-SSE_FORMATTERS: dict[str, Any] = {
+_SSE_BY_KEY: dict[str, Any] = {
     "chat_completions": _format_sse_chat_completions,
-    "openai_responses": _format_sse_open_responses,
     "open_responses": _format_sse_open_responses,
     "messages": _format_sse_messages,
     "google": _format_sse_google,
-    "google_generate": _format_sse_google,
     "google_interactions": _format_sse_google_interactions,
 }
+
+# Derived from the format catalog.  The two legacy keys are historical route
+# spellings kept until #919 removes them; they are not separate formats.
+SSE_FORMATTERS: dict[str, Any] = {
+    spec.format: _SSE_BY_KEY[spec.sse]
+    for spec in FORMAT_SPECS
+    if spec.model_type == "llm" and spec.sse is not None
+}
+SSE_FORMATTERS["openai_responses"] = _SSE_BY_KEY["open_responses"]
+SSE_FORMATTERS["google"] = _SSE_BY_KEY["google"]
 
 
 # ---------------------------------------------------------------------------

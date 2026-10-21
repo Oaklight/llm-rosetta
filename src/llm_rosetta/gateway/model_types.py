@@ -14,10 +14,11 @@ handler by ``source_format``, so the chat path list exists only here.
 Non-LLM types (embedding, rerank) point to their dedicated pipeline-handler
 callables.
 
-The non-LLM descriptors take their format list from the converter registries
-(``EMBEDDING_FORMATS``, ``RERANK_FORMATS``, ``DECISION_FORMATS``) rather than
-restating it, so a new converter is offered everywhere — config validation,
-the admin payload and the provider card — without a second edit.
+Every descriptor takes its format list from the format catalog
+(:mod:`llm_rosetta.formats`), and the LLM route list from each format's
+``route_path``, rather than restating either — so one catalog record offers a
+new format everywhere: config validation, the admin payload, the provider card
+and the chat routes.
 """
 
 from __future__ import annotations
@@ -189,13 +190,36 @@ def _rerank_pipeline() -> Callable[..., Any]:
     return handle_rerank
 
 
+def _default_paths(model_type: str) -> dict[str, str]:
+    """Per-format upstream path *overrides*, derived from the format catalog.
+
+    A format whose path equals the type's own ``default_path`` is not an
+    override and is left out, so the admin payload lists only the differences.
+    """
+    from llm_rosetta.formats import FORMAT_SPECS
+    from llm_rosetta.formats.catalog import default_path
+
+    base = default_path(model_type)
+    return {
+        spec.format: spec.default_path
+        for spec in FORMAT_SPECS
+        if spec.model_type == model_type
+        and spec.default_path
+        and spec.default_path != base
+    }
+
+
 def _register_builtins() -> None:
     """Register the built-in model types: llm, embedding, rerank."""
 
-    # The converter registry is the single source of truth for formats.
-    from llm_rosetta.converters.registry import CONVERTER_REGISTRY
+    # The format catalog is the single source of truth for formats and their
+    # routes; the converter registry supplies the class each one binds to.
+    from llm_rosetta.formats.catalog import FORMAT_SPECS
 
     from .source_formats import detect_embedding_source, detect_rerank_source
+
+    def formats_of(model_type: str) -> list[str]:
+        return [spec.format for spec in FORMAT_SPECS if spec.model_type == model_type]
 
     # --- LLM ---
     # LLM uses the full converter pipeline via _proxy_handler in app.py, so
@@ -205,16 +229,11 @@ def _register_builtins() -> None:
         ModelTypeDescriptor(
             name="llm",
             routes=[
-                RouteSpec("/v1/chat/completions", source_format="chat_completions"),
-                RouteSpec("/v1/messages", source_format="messages"),
-                RouteSpec("/v1/responses", source_format="open_responses"),
-                RouteSpec(
-                    "/v1beta/models/<path:model_path>",
-                    source_format="google_generate",
-                ),
-                RouteSpec("/v1beta/interactions", source_format="google_interactions"),
+                RouteSpec(spec.route_path, source_format=spec.format)
+                for spec in FORMAT_SPECS
+                if spec.model_type == "llm" and spec.route_path
             ],
-            formats=list(CONVERTER_REGISTRY["llm"]),
+            formats=formats_of("llm"),
             pipeline=None,
             supports_streaming=True,
             badge_class="cap-badge-llm",
@@ -236,7 +255,7 @@ def _register_builtins() -> None:
             routes=[
                 RouteSpec("/v1/embeddings"),
             ],
-            formats=list(CONVERTER_REGISTRY["embedding"]),
+            formats=formats_of("embedding"),
             pipeline=_embedding_pipeline,
             supports_streaming=False,
             badge_class="cap-badge-embedding",
@@ -245,10 +264,7 @@ def _register_builtins() -> None:
             config_shim_key="embedding_shim",
             default_format="openai",
             default_path="/v1/embeddings",
-            default_paths={
-                "cohere": "/v2/embed",
-                "google_generate": "/v1beta/models/{model}:embedContent",
-            },
+            default_paths=_default_paths("embedding"),
             detect_source_format=detect_embedding_source,
             icon_svg=(
                 '<svg viewBox="0 0 16 16" fill="currentColor">'
@@ -272,7 +288,7 @@ def _register_builtins() -> None:
                 RouteSpec("/v1/rerank"),
                 RouteSpec("/v2/rerank"),
             ],
-            formats=list(CONVERTER_REGISTRY["rerank"]),
+            formats=formats_of("rerank"),
             pipeline=_rerank_pipeline,
             supports_streaming=False,
             badge_class="cap-badge-rerank",
@@ -281,7 +297,7 @@ def _register_builtins() -> None:
             config_shim_key="rerank_shim",
             default_format="jina",
             default_path="/v1/rerank",
-            default_paths={"cohere": "/v2/rerank"},
+            default_paths=_default_paths("rerank"),
             detect_source_format=detect_rerank_source,
             icon_svg=(
                 '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor"'
@@ -311,9 +327,12 @@ def _register_decision() -> None:
     LLM-backed decision (via structured output) uses the chat pipeline, not
     this route.
     """
-    from llm_rosetta.converters.registry import CONVERTER_REGISTRY
+    from llm_rosetta.formats.catalog import FORMAT_SPECS
 
     from .source_formats import detect_decision_source
+
+    def formats_of(model_type: str) -> list[str]:
+        return [spec.format for spec in FORMAT_SPECS if spec.model_type == model_type]
 
     register_model_type(
         ModelTypeDescriptor(
@@ -323,7 +342,7 @@ def _register_decision() -> None:
                 RouteSpec("/v1/decisions"),
                 RouteSpec("/v1/systemone"),
             ],
-            formats=list(CONVERTER_REGISTRY["decision"]),
+            formats=formats_of("decision"),
             pipeline=_decision_pipeline,
             supports_streaming=False,
             badge_class="cap-badge-decision",
@@ -332,7 +351,7 @@ def _register_decision() -> None:
             config_shim_key="decision_shim",
             default_format="systemone",
             default_path="/v1/systemone",
-            default_paths={"openai_decisions": "/v1/decisions"},
+            default_paths=_default_paths("decision"),
             detect_source_format=detect_decision_source,
             icon_svg=(
                 '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor"'

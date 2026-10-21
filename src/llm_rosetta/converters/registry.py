@@ -47,9 +47,11 @@ __all__ = [
     "get_converter_class",
 ]
 
-#: ``model_type → format → converter class``.  Insertion order is the display
-#: order the admin payload and the model-type descriptors use.
-CONVERTER_REGISTRY: dict[str, dict[str, type]] = {
+#: ``model_type → format → converter class``.  The binding lives here because
+#: only this module names the classes; the format *order* is the catalog's, so
+#: the admin payload and the model-type descriptors list formats in the same
+#: order everywhere.  The check below refuses a catalog entry with no binding.
+_CONVERTER_CLASSES: dict[str, dict[str, type]] = {
     "llm": {
         "chat_completions": ChatCompletionsConverter,
         "messages": MessagesConverter,
@@ -60,6 +62,16 @@ CONVERTER_REGISTRY: dict[str, dict[str, type]] = {
     "embedding": cast(dict[str, type], _EMBEDDING_CONVERTERS),
     "rerank": cast(dict[str, type], _RERANK_CONVERTERS),
     "decision": cast(dict[str, type], _DECISION_CONVERTERS),
+}
+
+#: ``model_type → format → converter class``, in catalog (display) order.
+CONVERTER_REGISTRY: dict[str, dict[str, type]] = {
+    model_type: {
+        fmt: _CONVERTER_CLASSES[model_type][fmt]
+        for fmt in _DECLARED_FORMATS[model_type]
+        if fmt in _CONVERTER_CLASSES[model_type]
+    }
+    for model_type in MODEL_TYPES
 }
 
 #: Membership sets, derived from :data:`CONVERTER_REGISTRY`.  Use

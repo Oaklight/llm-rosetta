@@ -38,6 +38,8 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+
+from llm_rosetta.formats import FORMAT_SPECS
 from types import MappingProxyType
 from typing import Any
 
@@ -140,16 +142,29 @@ USAGE_SHAPES: tuple[UsageShape, ...] = (
 #: three shapes (it uses ``total_input_tokens`` / ``total_thought_tokens``) and
 #: is read by its own converter.  Nothing here claims to know its cache
 #: semantics, so nothing derives a total for it.
+_SHAPES_BY_KEY: Mapping[str, UsageShape] = MappingProxyType(
+    {
+        "openai_details": OPENAI_DETAILS,
+        "messages_fields": MESSAGES_FIELDS,
+        "google_metadata": GOOGLE_METADATA,
+    }
+)
+
+#: API standard -> the shape its usage payload takes, derived from the format
+#: catalog.  The legacy spellings below are rows written by older versions;
+#: the repair that reads this table works on rows written years apart, so they
+#: stay until #919 removes them.
 STANDARD_SHAPES: Mapping[str, UsageShape] = MappingProxyType(
     {
-        "chat_completions": OPENAI_DETAILS,
-        "openai_chat": OPENAI_DETAILS,  # legacy spelling
-        "open_responses": OPENAI_DETAILS,
-        "openai_responses": OPENAI_DETAILS,  # legacy spelling
-        "messages": MESSAGES_FIELDS,
-        "anthropic": MESSAGES_FIELDS,  # legacy spelling
-        "google_generate": GOOGLE_METADATA,
-        "google": GOOGLE_METADATA,  # legacy spelling
+        **{
+            spec.format: _SHAPES_BY_KEY[spec.usage_shape]
+            for spec in FORMAT_SPECS
+            if spec.model_type == "llm" and spec.usage_shape is not None
+        },
+        "openai_chat": OPENAI_DETAILS,
+        "openai_responses": OPENAI_DETAILS,
+        "anthropic": MESSAGES_FIELDS,
+        "google": GOOGLE_METADATA,
     }
 )
 

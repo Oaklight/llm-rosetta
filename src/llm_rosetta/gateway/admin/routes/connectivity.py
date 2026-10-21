@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from llm_rosetta._vendor.httpserver import JSONResponse, Response
+from llm_rosetta.gateway.providers import default_models_path
 from llm_rosetta.gateway.transport.provider_info import _VERSION_SUFFIXES
 
 from ._shared import _resolve_models_path
@@ -95,12 +96,8 @@ async def test_provider_connectivity(request: Any, name: str) -> Response:
                 models_url = explicit_path
             else:
                 models_url = f"{base_url}{explicit_path}"
-        elif ptype in ("google", "google_generate"):
-            models_url = f"{base_url}/v1beta/models"
-        elif ptype == "messages":
-            models_url = f"{base_url}/v1/models"
         else:
-            models_url = f"{base_url}/models"
+            models_url = f"{base_url}{default_models_path(ptype)}"
         if auth_ready:
             try:
                 resp = await client.get(models_url, headers=auth_headers)

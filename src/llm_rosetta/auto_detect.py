@@ -5,8 +5,9 @@ LLM Provider Auto-Detection
 Utility functions for auto-detecting LLM provider request body formats
 """
 
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
+from .formats.detect import detect_format as _detect_body
 from .provider_names import (
     canonical_provider_name,
     warn_legacy_provider_names,
@@ -78,120 +79,6 @@ def _legacy_shim_boundary_names(*names: str | None) -> list[str]:
     return out
 
 
-_RESPONSES_ITEM_TYPES = frozenset(
-    {
-        "message",
-        "function_call",
-        "function_call_output",
-        "mcp_call",
-        "mcp_call_output",
-        "reasoning",
-        "system_event",
-        "input_text",
-        "output_text",
-    }
-)
-
-_ANTHROPIC_CONTENT_TYPES = frozenset(
-    {"image", "tool_use", "tool_result", "thinking", "document"}
-)
-
-
-_INTERACTIONS_STEP_TYPES = frozenset(
-    {"user_input", "model_output", "thought", "function_call", "function_result"}
-)
-
-
-# Wire-format type names (not IR names — the IR calls the "noul" wire type "assertion")
-_DECISION_QUESTION_TYPES = frozenset({"noul", "choice", "score"})
-
-
-def _is_decision_format(body: dict[str, Any]) -> bool:
-    """Check if body matches the System One decision format: state + questions."""
-    if "state" not in body or "questions" not in body:
-        return False
-    questions = body["questions"]
-    if not isinstance(questions, dict) or not questions:
-        return False
-    first_q = next(iter(questions.values()))
-    return isinstance(first_q, dict) and first_q.get("type") in _DECISION_QUESTION_TYPES
-
-
-def _is_google_interactions_format(body: dict[str, Any]) -> bool:
-    """Check if body matches Google Interactions API format.
-
-    Interactions API uses ``input`` (string, Content list, or Step list)
-    without Responses API item types (``message``, ``function_call_output``, etc.).
-    """
-    inp = body.get("input")
-    if inp is None:
-        return False
-    if isinstance(inp, str):
-        return "contents" not in body and "messages" not in body
-    if isinstance(inp, list) and inp:
-        first = inp[0]
-        if isinstance(first, dict):
-            ftype = first.get("type", "")
-            if ftype in _INTERACTIONS_STEP_TYPES:
-                return True
-            if ftype in ("text", "image", "audio", "document", "video"):
-                return "contents" not in body and "messages" not in body
-    return False
-
-
-def _is_google_format(body: dict[str, Any]) -> bool:
-    """Check if body matches Google GenAI format (contents with parts)."""
-    contents = body.get("contents")
-    if not isinstance(contents, list) or len(contents) == 0:
-        return False
-    first = contents[0]
-    return isinstance(first, dict) and "parts" in first
-
-
-def _is_responses_format(body: dict[str, Any]) -> bool:
-    """Check if body matches OpenAI Responses API format (input/output with typed items)."""
-    items = body.get("input") or body.get("output")
-    if not isinstance(items, list) or len(items) == 0:
-        return False
-    first = items[0]
-    return isinstance(first, dict) and first.get("type") in _RESPONSES_ITEM_TYPES
-
-
-def _has_anthropic_content_blocks(content: list[Any]) -> bool:
-    """Check if any content block in a message uses Anthropic-specific types."""
-    for part in content:
-        if isinstance(part, dict) and part.get("type") in _ANTHROPIC_CONTENT_TYPES:
-            return True
-    return False
-
-
-def _is_anthropic_messages(body: dict[str, Any]) -> bool:
-    """Check if a messages-based body is Anthropic rather than OpenAI Chat.
-
-    Both Anthropic and OpenAI Chat use ``messages``, so this inspects
-    top-level fields and content-block types to disambiguate.
-    """
-    # Anthropic-specific top-level fields
-    if "system" in body and isinstance(body["system"], (str, list)):
-        return True
-    if "anthropic_version" in body or "max_tokens_to_sample" in body:
-        return True
-
-    messages = body.get("messages")
-    if not isinstance(messages, list) or len(messages) == 0:
-        return False
-
-    first_message = messages[0]
-    if not isinstance(first_message, dict):
-        return False
-
-    content = first_message.get("content")
-    if not isinstance(content, list) or len(content) == 0:
-        return False
-
-    return _has_anthropic_content_blocks(content)
-
-
 def detect_provider(body: dict[str, Any]) -> ProviderType | None:
     """Auto-detect provider type from request body structure.
 
@@ -211,36 +98,9 @@ def detect_provider(body: dict[str, Any]) -> ProviderType | None:
         >>> detect_provider({"contents": [{"role": "user", "parts": [{"text": "Hi"}]}]})
         'google_generate'
     """
-    if not isinstance(body, dict):
-        return None
-
-    if _is_decision_format(body):
-        return "decision"
-
-    if _is_google_format(body):
-        return "google_generate"
-
-    if ("input" in body or "output" in body) and _is_responses_format(body):
-        return "open_responses"
-
-    if _is_google_interactions_format(body):
-        return "google_interactions"
-
-    if "messages" not in body:
-        return None
-
-    if _is_anthropic_messages(body):
-        return "messages"
-
-    # Check for OpenAI-specific tool_calls in message history
-    messages = body.get("messages")
-    if isinstance(messages, list):
-        for msg in messages:
-            if isinstance(msg, dict) and "tool_calls" in msg:
-                return "chat_completions"
-
-    # Default: OpenAI Chat is the most common messages-based format
-    return "chat_completions"
+    # Detection order (and each predicate) lives in the format catalog; a new
+    # format joins it by adding one ``FormatSpec`` there.
+    return cast("ProviderType | None", _detect_body(body))
 
 
 _converter_cache: dict[str, Any] = {}

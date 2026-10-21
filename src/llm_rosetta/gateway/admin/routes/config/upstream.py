@@ -9,6 +9,7 @@ from llm_rosetta._vendor.httpclient import AsyncClient, Response as HttpResponse
 from llm_rosetta._vendor.httpserver import JSONResponse, Response
 from llm_rosetta.shims import get_shim
 
+from ....providers import default_models_path
 from .._shared import (
     _resolve_models_path,
 )
@@ -135,12 +136,8 @@ async def fetch_upstream_models(request: Any, **kwargs: Any) -> Response:
             models_url = explicit_path
         else:
             models_url = f"{pinfo.base_url}{explicit_path}"
-    elif ptype in ("google", "google_generate"):
-        models_url = f"{pinfo.base_url}/v1beta/models"
-    elif ptype == "messages":
-        models_url = f"{pinfo.base_url}/v1/models"
     else:
-        models_url = f"{pinfo.base_url}/models"
+        models_url = f"{pinfo.base_url}{default_models_path(ptype)}"
 
     headers = {**pinfo.extra_headers, **pinfo.auth_headers()}
 
