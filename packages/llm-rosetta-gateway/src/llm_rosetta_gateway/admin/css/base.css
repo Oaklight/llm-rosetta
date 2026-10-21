@@ -383,7 +383,13 @@ a { color: var(--accent); text-decoration: none; }
    switches text from subpixel to greyscale antialiasing in a scheme that had
    no such layer.  `display: none` on the pseudo-element is a strict no-op —
    no box, no paint, no layer — so a scheme without a texture renders exactly
-   as it did before the layer existed. */
+   as it did before the layer existed.
+
+   That leaves minimal with its subpixel text back and emerald, which does
+   declare a texture, with the greyscale rendering the layer imposes: a
+   deliberate trade of text rendering for texture, and the reason the two
+   schemes can look different in a way no other token explains.  The gate is a
+   token rather than a `@media` query so the theme-contract test can see it. */
 body::before {
   content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
   display: var(--page-texture-display, none);
