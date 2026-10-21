@@ -14,6 +14,7 @@ import logging
 import os
 import re
 import sys
+import threading
 from collections.abc import AsyncGenerator, Generator
 from contextlib import asynccontextmanager, contextmanager, suppress
 from typing import Any, Protocol, runtime_checkable
@@ -37,6 +38,54 @@ def _lock_exclusive(f: Any) -> None:
         fcntl.flock(f, fcntl.LOCK_EX)
 
 
+#: Lock files this process currently holds, as a count per real path.
+#:
+#: ``flock``/``msvcrt.locking`` are per open-file-description, so acquiring the
+#: same sidecar twice in one process blocks on itself.  A config mutation takes
+#: the lock and then loads the document; when a load-time migration has work to
+#: do, it writes the document back and would take the lock again — on the event
+#: loop thread, where the block freezes the gateway.  The counter makes the lock
+#: re-entrant within the process while leaving cross-process exclusion to the
+#: file lock.
+_held_lock_paths: dict[str, list[int]] = {}
+_held_lock_guard = threading.Lock()
+
+
+def _note_held(lock_path: str) -> bool:
+    """Count one acquisition; return False when *this thread* already held it.
+
+    The owner is the thread, not the process: a nested acquisition from the
+    thread that took the lock must not re-enter ``flock``, while another
+    thread has to wait for it.
+    """
+    with _held_lock_guard:
+        held = _held_lock_paths.get(lock_path)
+        if held is not None and held[0] == threading.get_ident():
+            held[1] += 1
+            return False
+        if held is not None:
+            return True
+        _held_lock_paths[lock_path] = [threading.get_ident(), 1]
+        return True
+
+
+def _claim_held(lock_path: str) -> None:
+    """Record that the current thread holds *lock_path* (after taking flock)."""
+    with _held_lock_guard:
+        _held_lock_paths[lock_path] = [threading.get_ident(), 1]
+
+
+def _release_held(lock_path: str) -> None:
+    """Drop one acquisition of *lock_path*."""
+    with _held_lock_guard:
+        held = _held_lock_paths.get(lock_path)
+        if held is None:
+            return
+        held[1] -= 1
+        if held[1] <= 0:
+            _held_lock_paths.pop(lock_path, None)
+
+
 @contextmanager
 def config_lock(path: str) -> Generator[None, None, None]:
     """Serialize read-modify-write cycles on the same config file.
@@ -48,13 +97,25 @@ def config_lock(path: str) -> Generator[None, None, None]:
     Uses a ``.lock`` sidecar file with ``fcntl.flock`` (Unix) or
     ``msvcrt.locking`` (Windows) for cross-process mutual exclusion.
     This protects against multiple gateway instances sharing the same
-    config file (e.g. dev + prod on the same host).
+    config file (e.g. dev + prod on the same host).  Re-entrant within
+    the process: a nested acquisition of a lock this process already
+    holds yields without touching the file, so the migration write-back
+    inside a mutation cannot deadlock.
     """
     lock_path = os.path.realpath(path) + ".lock"
-    os.makedirs(os.path.dirname(lock_path) or ".", exist_ok=True)
-    with open(lock_path, "a+") as lf:
-        _lock_exclusive(lf)
-        yield
+    if not _note_held(lock_path):
+        try:
+            yield
+        finally:
+            _release_held(lock_path)
+        return
+    try:
+        os.makedirs(os.path.dirname(lock_path) or ".", exist_ok=True)
+        with open(lock_path, "a+") as lf:
+            _lock_exclusive(lf)
+            yield
+    finally:
+        _release_held(lock_path)
 
 
 def _get_async_lock(path: str) -> asyncio.Lock:
@@ -84,11 +145,16 @@ async def async_config_lock(path: str) -> AsyncGenerator[None, None]:
         lock_path = os.path.realpath(path) + ".lock"
         os.makedirs(os.path.dirname(lock_path) or ".", exist_ok=True)
         lf = open(lock_path, "a+")  # noqa: SIM115
+        held = False
         try:
             loop = asyncio.get_running_loop()
             await loop.run_in_executor(None, _lock_exclusive, lf)
+            _claim_held(lock_path)
+            held = True
             yield
         finally:
+            if held:
+                _release_held(lock_path)
             lf.close()
 
 
