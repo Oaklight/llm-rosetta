@@ -48,14 +48,20 @@ Converters stay format-generic; shims declare provider-specific differences (e.g
 
 To add support for a new API standard:
 
-1. Create a converter directory under `src/llm_rosetta/converters/<name>/`
+1. Create a converter directory under `src/llm_rosetta/converters/llm/<name>/`
 2. Subclass `BaseConverter` and implement all abstract methods
 3. Create ops classes following the pattern above
-4. Add a shim under `src/llm_rosetta/shims/providers/<name>/`
-5. Add tests under `tests/converters/`
-6. Submit a PR
+4. Add one `FormatSpec` to `src/llm_rosetta/formats/catalog.py` and register
+   its body detector in `formats/detect.py`, then bind the converter class in
+   `converters/registry.py`
+5. Add a shim under `src/llm_rosetta/shims/providers/<name>/`
+6. Add tests under `tests/converters/`
+7. Submit a PR
 
-See existing converters for reference.
+The catalog record is what makes the format visible: the model vocabulary, the
+gateway's provider tables, the SSE / error-envelope / usage-shape maps,
+auto-detection, the admin picker and the chat routes all derive from it, so no
+other file needs a per-format edit.  See existing converters for reference.
 
 ## Provider-Specific Data Preservation
 
