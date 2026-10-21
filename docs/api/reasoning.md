@@ -136,6 +136,25 @@ reasoning:
 
 每个模型覆盖会从 provider 级别配置继承未设置的字段。
 
+### 模型家族
+
+键与**上游模型 ID** 匹配：精确键优先，其余按键的声明顺序作为 shell 通配模式（`fnmatch`）依次尝试。`*` 也能匹配 `/`，因此一条规则即可覆盖带 vendor 前缀的整个家族：
+
+```yaml
+reasoning:
+  effort_field: reasoning_effort
+  effort_range: [minimal, high]
+  model_overrides:
+    # 精确 ID：优先于下面的家族规则
+    deepseek-v4.1-flash:
+      effort_range: [low, high]
+    # 家族：deepseek-v4.1-flash-free、deepseek-v9、deepseek/deepseek-v3 等
+    deepseek*:
+      replay_missing: fill_empty
+```
+
+代理多个模型家族的厂商正是这样只为其中一个家族声明要求：`opencode--chat_completions` 使用 `deepseek*`，其 Claude、GPT、Gemini 模型仍保持 provider 级默认值。
+
 ## API 参考
 
 ::: llm_rosetta.shims.provider_shim.ReasoningCapability
