@@ -370,7 +370,12 @@ Releases are triggered manually via GitHub Actions, not by tag push.
 
 1. **Bump version** in `packages/llm-rosetta/src/llm_rosetta/__init__.py`
    (and `packages/llm-rosetta-gateway/src/llm_rosetta_gateway/__init__.py`; the
-   release workflow verifies both)
+   release workflow verifies both against the tag). On a new **minor**, also
+   raise the gateway's dependency range in
+   `packages/llm-rosetta-gateway/pyproject.toml` (`llm-rosetta>=X.Y.0.dev0,<X.(Y+1)`).
+   The `.dev0` lower bound is what lets a dev pair on TestPyPI resolve; when
+   the **final** `X.Y.0` ships, drop it (`llm-rosetta>=X.Y.0,<X.(Y+1)`), or a
+   released gateway can pull a development core from PyPI.
 2. **Update changelogs** — move `[Unreleased]` entries into a versioned section
    (`## vX.Y.Z — YYYY-MM-DD`) in both `docs_en/docs/changelog.md` and
    `docs_zh/docs/changelog.md`. Commit and push both doc worktrees.

@@ -19,6 +19,19 @@ from ..logging import get_logger
 logger = get_logger()
 
 
+def version_info() -> dict[str, str]:
+    """The gateway and core versions this process runs.
+
+    They are released together (epic #1127) but can drift by a patch when a
+    gateway-only fix ships; exposing both lets an operator confirm the pair.
+    """
+    from llm_rosetta import __version__ as core_version
+
+    from .. import __version__ as gateway_version
+
+    return {"gateway": gateway_version, "core": core_version}
+
+
 async def handle_health(request: Any) -> Response:
     """Return aggregate health status without exposing provider details.
 
@@ -31,7 +44,7 @@ async def handle_health(request: Any) -> Response:
     """
     metrics = getattr(request.app, "metrics", None)
     if metrics is None:
-        return JSONResponse({"status": "ok"})
+        return JSONResponse({"status": "ok", "versions": version_info()})
 
     snap = metrics.snapshot(series_seconds=3600)
     errors_last_hour = sum(
@@ -49,6 +62,7 @@ async def handle_health(request: Any) -> Response:
         "requests_total": snap["total_requests"],
         "errors_last_hour": errors_last_hour,
         "detail_url": "/admin/api/metrics",
+        "versions": version_info(),
     }
     return JSONResponse(payload, status_code=200)
 

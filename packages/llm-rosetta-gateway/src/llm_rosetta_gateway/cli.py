@@ -12,7 +12,9 @@ from typing import TYPE_CHECKING, Any
 
 import asyncio
 
-from llm_rosetta import __version__
+from llm_rosetta import __version__ as _core_version
+
+from . import __version__ as _gateway_version
 from .shims import ShimSourceError
 
 if TYPE_CHECKING:
@@ -611,6 +613,7 @@ def main() -> None:  # noqa: C901
     from .app import create_app
 
     parser = argparse.ArgumentParser(
+        prog="llm-rosetta-gateway",
         description="llm-rosetta Gateway — cross-provider LLM proxy",
     )
     parser.add_argument(
@@ -623,7 +626,7 @@ def main() -> None:  # noqa: C901
         "--version",
         "-V",
         action="version",
-        version=f"%(prog)s {__version__}",
+        version=(f"%(prog)s {_gateway_version} (llm-rosetta {_core_version})"),
     )
     parser.add_argument(
         "--no-banner",

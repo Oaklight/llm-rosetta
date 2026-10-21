@@ -110,7 +110,17 @@ def _get_gateway_config(request: Any) -> GatewayConfig | None:
 
 
 def _get_version() -> str:
-    """Return the llm-rosetta package version."""
+    """Return the gateway package version (the panel's own)."""
+    try:
+        from llm_rosetta_gateway import __version__
+
+        return __version__
+    except Exception:
+        return "unknown"
+
+
+def _get_core_version() -> str:
+    """Return the conversion core's version, which the gateway depends on."""
     try:
         from llm_rosetta import __version__
 
@@ -329,6 +339,7 @@ async def get_config(request: Any) -> Response:
             "has_admin_password": bool(request.app.auth_state.admin_password),
             "api_keys_db": config.api_keys_db,
             "version": _get_version(),
+            "core_version": _get_core_version(),
             "known_provider_types": known_provider_types(),
             "base_formats": _base_formats_payload(),
             "registered_shims": [

@@ -17,9 +17,16 @@ function openSettings() {
   if (ms) ms.value = S.currentMode;
   const ls = document.getElementById('settingsLangSelect');
   if (ls) ls.value = S.currentLang;
-  // Version
+  // Version — the gateway's own, plus the core when they differ (they are
+  // released together but may drift by a patch).
   const ver = document.getElementById('settingsVersion');
-  if (ver) ver.textContent = S.configData?.version ? 'v' + S.configData.version : '';
+  if (ver) {
+    const gw = S.configData?.version;
+    const core = S.configData?.core_version;
+    ver.textContent = gw
+      ? ('v' + gw + (core && core !== gw ? ' · core v' + core : ''))
+      : '';
+  }
   // Sync log level
   const ll = document.getElementById('settingsLogLevel');
   if (ll && S.configData?.server) {

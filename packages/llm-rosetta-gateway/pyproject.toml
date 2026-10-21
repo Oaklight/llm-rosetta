@@ -20,7 +20,9 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Topic :: Internet :: Proxy Servers",
 ]
-dependencies = ["llm-rosetta"]
+# Same-minor compatibility: core patch releases are accepted without a
+# gateway release; a new core minor requires a matching gateway.
+dependencies = ["llm-rosetta>=0.14.0.dev0,<0.15"]
 
 [project.urls]
 Documentation = "https://llm-rosetta.readthedocs.io"
