@@ -65,6 +65,11 @@ jobs:
       - name: Run pre-commit checks
         uses: pre-commit/action@v3.0.1
 
+      - name: Run import boundary tests
+        run: |
+          python -m pytest tests/test_core_import_boundary.py \
+                           tests/observability/test_import_boundary.py -q
+
       - name: Run admin UI tests
         run: node --test tests/js/*.test.mjs
 
