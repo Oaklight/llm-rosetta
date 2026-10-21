@@ -1,0 +1,239 @@
+{
+  "generated": "2026-10-21 08:16 UTC",
+  "providers": {
+    "google_genai": {
+      "collisions": [
+        "FunctionResponsePart"
+      ],
+      "drift": {
+        "Candidate": [
+          "url_context_metadata"
+        ],
+        "CodeExecutionResult": [
+          "id"
+        ],
+        "ExecutableCode": [
+          "id"
+        ],
+        "FunctionCall": [
+          "partial_args",
+          "will_continue"
+        ],
+        "FunctionDeclaration": [
+          "behavior"
+        ],
+        "FunctionResponse": [
+          "parts",
+          "scheduling",
+          "will_continue"
+        ],
+        "GenerateContentConfig": [
+          "automatic_function_calling",
+          "enable_enhanced_civic_answers",
+          "http_options",
+          "image_config",
+          "labels",
+          "model_armor_config",
+          "model_selection_config",
+          "routing_config",
+          "service_tier",
+          "should_return_http_response"
+        ],
+        "GenerateContentResponse": [
+          "automatic_function_calling_history",
+          "model_status",
+          "parsed",
+          "sdk_http_response"
+        ],
+        "Part": [
+          "media_resolution",
+          "part_metadata",
+          "tool_call",
+          "tool_response",
+          "video_metadata"
+        ],
+        "SafetyRating": [
+          "overwritten_threshold"
+        ],
+        "Schema": [
+          "additional_properties",
+          "any_of",
+          "default",
+          "defs",
+          "max_length",
+          "max_properties",
+          "min_length",
+          "min_properties",
+          "pattern",
+          "property_ordering",
+          "ref"
+        ],
+        "Tool": [
+          "computer_use",
+          "enterprise_web_search",
+          "exa_ai_search",
+          "file_search",
+          "google_maps",
+          "mcp_servers",
+          "parallel_ai_search",
+          "retrieval",
+          "url_context"
+        ]
+      }
+    },
+    "messages": {
+      "collisions": [],
+      "drift": {
+        "CacheControlEphemeralParam": [
+          "ttl"
+        ],
+        "Message": [
+          "container",
+          "stop_details"
+        ],
+        "MessageCreateParamsBase": [
+          "cache_control",
+          "container",
+          "inference_geo",
+          "output_config",
+          "user_profile_id"
+        ],
+        "MessageCreateParamsNonStreaming": [
+          "cache_control",
+          "container",
+          "inference_geo",
+          "output_config",
+          "user_profile_id"
+        ],
+        "MessageCreateParamsStreaming": [
+          "cache_control",
+          "container",
+          "inference_geo",
+          "output_config",
+          "user_profile_id"
+        ],
+        "ThinkingConfigEnabledParam": [
+          "display"
+        ],
+        "ToolParam": [
+          "allowed_callers",
+          "defer_loading",
+          "eager_input_streaming",
+          "input_examples",
+          "strict"
+        ],
+        "ToolUseBlock": [
+          "caller"
+        ],
+        "Usage": [
+          "inference_geo",
+          "output_tokens_details"
+        ]
+      }
+    },
+    "openai_chat": {
+      "collisions": [
+        "Function"
+      ],
+      "drift": {
+        "ChatCompletion": [
+          "moderation"
+        ],
+        "ChatCompletionAssistantMessageParam": [
+          "audio"
+        ],
+        "ChatCompletionContentPartImageParam": [
+          "prompt_cache_breakpoint"
+        ],
+        "ChatCompletionContentPartInputAudioParam": [
+          "prompt_cache_breakpoint"
+        ],
+        "ChatCompletionContentPartTextParam": [
+          "prompt_cache_breakpoint"
+        ],
+        "ChatCompletionMessageCustomToolCall": [
+          "custom"
+        ],
+        "ChatCompletionStreamOptionsParam": [
+          "include_obfuscation"
+        ]
+      }
+    },
+    "openai_responses": {
+      "collisions": [
+        "FunctionToolParam"
+      ],
+      "drift": {
+        "Response": [
+          "completed_at",
+          "moderation",
+          "prompt_cache_options"
+        ],
+        "ResponseApplyPatchToolCall": [
+          "call_id",
+          "caller",
+          "created_by",
+          "operation"
+        ],
+        "ResponseApplyPatchToolCallOutput": [
+          "caller",
+          "created_by",
+          "id",
+          "output",
+          "status"
+        ],
+        "ResponseCompactionItem": [
+          "created_by",
+          "encrypted_content"
+        ],
+        "ResponseComputerToolCall": [
+          "actions",
+          "call_id",
+          "pending_safety_checks"
+        ],
+        "ResponseCustomToolCall": [
+          "caller",
+          "namespace"
+        ],
+        "ResponseFileSearchToolCall": [
+          "queries"
+        ],
+        "ResponseFunctionShellToolCall": [
+          "action",
+          "call_id",
+          "caller",
+          "created_by",
+          "environment"
+        ],
+        "ResponseFunctionShellToolCallOutput": [
+          "caller",
+          "created_by",
+          "id",
+          "max_output_length",
+          "status"
+        ],
+        "ResponseFunctionToolCall": [
+          "caller",
+          "namespace"
+        ],
+        "ResponseOutputMessage": [
+          "phase"
+        ],
+        "ResponsePromptParam": [
+          "variables"
+        ],
+        "ResponseTextConfigParam": [
+          "format",
+          "verbosity"
+        ]
+      }
+    }
+  },
+  "schema_version": 1,
+  "sdk_versions": {
+    "anthropic": "0.116.0",
+    "google-genai": "2.12.0",
+    "openai": "2.45.0"
+  },
+  "suite": "drift"
+}
