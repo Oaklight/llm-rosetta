@@ -205,6 +205,8 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### 修复
 
+- **服务方卡片会显示降级的端点**（issue [#1106](https://github.com/Oaklight/llm-rosetta/issues/1106)、PR [#1162](https://github.com/Oaklight/llm-rosetta/pull/1162)）：当一个服务方同时提供多种模型类型时，其中一个端点解析失败不会影响其它端点（#1150），但面板从未显示这一点——标记写在运行时解析结果上，而 `GET /admin/api/config` 读取的是磁盘文档，因此 `_auto_disabled_endpoints` 从未进入 payload，卡片只能画整体禁用标记。现在 payload 会叠加运行时标记（只保留 reason 与 category，与 `_auto_disabled` 相同的脱敏形状），卡片为每个降级端点渲染一个标签，标明模型类型与失败类别，完整校验原因放在 tooltip 中；卡片边框只做轻微警示，因为该服务方的其它端点仍在服务。
+
 - **加载期迁移有实际改动时，保存配置不再死锁**（issue [#1106](https://github.com/Oaklight/llm-rosetta/issues/1106)、PR [#1150](https://github.com/Oaklight/llm-rosetta/pull/1150)）：admin 变更先取 `async_config_lock`，再加载配置文档；若加载期迁移修改了内容，它会写回文档，而写回会在同一线程、同一 sidecar 文件上再取一次 `config_lock`。`flock` 是按打开文件描述计数的，于是第二次获取永久阻塞——而且阻塞在事件循环线程上，在响应构造之前就把网关冻住。任何对未版本化或旧版本配置的保存都会命中：日志打出 `config: applying migration v0 -> v1`，然后再无响应。现在锁会记录持有者线程，同一线程的嵌套获取直接放行、不碰文件；其他线程仍会在 `flock` 上等待，跨线程与跨进程互斥不变。此问题是在为 provider 开关响应补运行时覆盖时发现的。
 
 - **emerald 主题的卡片覆盖层不再吞掉点击**（PR [#1149](https://github.com/Oaklight/llm-rosetta/pull/1149)）：该主题用绝对定位的 `::before` 在每个 KPI 卡片上绘制网格，而 `pointer-events: auto` 让这层装饰在命中测试时位于卡片内容之上——于是所有点击都落在卡片本身，Token 卡片的 “详情” 链接在 Firefox 中永远打不开 token 用量弹窗（切到该主题后 Chromium 同样如此）。现在两层装饰性覆盖层都是 `pointer-events: none`。
@@ -304,6 +306,8 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **不完整的工具输出与未解析的流式工具 delta**（issue [#1006](https://github.com/Oaklight/llm-rosetta/issues/1006)、[#1026](https://github.com/Oaklight/llm-rosetta/issues/1026)，PR [#1067](https://github.com/Oaklight/llm-rosetta/pull/1067)）：OpenAI Responses 的 `function_call_output` 带 `status="incomplete"` 时现在映射为 IR `is_error=True`，Anthropic 侧的 `tool_result` 会报告失败，而不是把被截断的结果当作成功；状态同时写入 `provider_metadata`，因此同格式 Responses 往返会回放 `status="incomplete"`，而不是追加 `[Tool error]` 标记并把状态改写为 `completed`。未文档化的 `is_error` 字段不再覆盖原生 `status`（Responses API 会以 `400 Unknown parameter` 拒绝 `is_error`）。流式侧，Chat reader 记录按 choice 隔离的 provider index → call ID 关联，仅重复 index 的 fragment 也能保持身份（包括稀疏 index 和迟到 ID），后续冲突 ID 不会另开一个调用；Messages writer 按注册的 ID 路由，并且只写入打开中的 tool-use 块，因此 `input_json_delta` 不会再落入 text 块、已关闭的块或被复用为 text 的 index。无法解析身份的 fragment 会带警告丢弃，未发出过有身份工具调用的 choice 不再把 `tool_calls` 作为 finish reason。
 
 ### 基础设施
+
+- **管理面板的配色方案只声明取值**（epic [#1154](https://github.com/Oaklight/llm-rosetta/issues/1154)、PR [#1159](https://github.com/Oaklight/llm-rosetta/pull/1159)）：`components.css` 里有六条规则其实是"主题在描述组件"——emerald 的页面纹理与卡片覆盖层、让 minimal 的 KPI 网格无缝相接的两条规则、以及 emerald 的主按钮字重——而其中那个覆盖层正是 #1149 里吞掉 Token 卡片点击的元凶。现在这些取值下沉为 `base.css` 中的 token（`--stats-gap`、`--stats-frame-*`、`--card-*`、`--page-texture*`、`--btn-primary-weight`），组件无条件消费它们，因此 `base.css` 之外不再出现任何 `[data-scheme]` 选择器；装饰层归组件所有，并自带 `pointer-events: none`。`tests/js/theme-contract.test.mjs` 在 CI 中守住这条边界：`base.css` 之外的 scheme 选择器、scheme 块里声明非自定义属性、以及容器上的定位装饰层接收点击，都会让测试失败。页面纹理层由 token 控制是否生成，因为一个铺满视口的 fixed 图层会把 Chromium 的文字渲染从次像素抗锯齿切到灰度抗锯齿——这是实测结果，且没有任何 CSS 取值发生变化。
 
 - **CI 按路径过滤运行 core 与 gateway 分组**（epic [#1127](https://github.com/Oaklight/llm-rosetta/issues/1127)、PR [#1160](https://github.com/Oaklight/llm-rosetta/pull/1160)）：此前任何改动都会跑同一套内容——converter 套件、网关测试、管理面板 UI 测试、完整的 dev-extras 套件以及两个 wheel 的 smoke 测试——无论改的是核心发行包还是只有网关。现在 `changes` job 用 `dorny/paths-filter` 算出两个标记，由依赖方向决定重跑什么：改动 **core** 时两组都跑（网关依赖核心）；只改 **gateway** 时跳过核心套件（网关组仍跑 `tests/gateway` 与管理面板 UI 测试）；推送到 **master** 时始终全跑，合并提交不会被少测。smoke 测试拆成 `smoke-test (core)` 与 `smoke-test (gateway)`，按同样规则门控；修改 `ci.yml` 会刻意同时置位两个标记，CI 自身的改动永远不会只测一半。
 
