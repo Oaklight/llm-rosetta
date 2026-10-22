@@ -440,6 +440,33 @@ from different paths on one key still counts as one account.
 The flag changes only *which* upstream serves a request. Conversion still always runs through IR —
 including in tier 1. See the [Architecture Guide](../contributing/architecture.md).
 
+## Circuit Breaker
+
+An optional, opt-in breaker short-circuits requests to a provider that keeps
+failing, instead of sending each request upstream only to fail again. It is
+disabled by default.
+
+```jsonc
+{
+  "server": {
+    "circuit_breaker": {
+      "enabled": true,
+      "error_threshold": 5,      // consecutive failures that trip CLOSED -> OPEN
+      "cooldown_seconds": 30,    // time in OPEN before a probe is allowed
+      "half_open_max_probes": 1  // concurrent probes allowed in HALF_OPEN
+    }
+  }
+}
+```
+
+Each provider may override any field with its own `circuit_breaker` object.
+The breaker counts consecutive failures per provider: at `error_threshold` the
+circuit opens and requests are rejected locally with `503` and `Retry-After`;
+after `cooldown_seconds` a limited number of probes are let through, and a
+successful probe closes the circuit while a failed one reopens it. The admin
+dashboard reports the state of every enabled breaker. The breaker acts on
+failures; the health metrics continue to report them.
+
 ## Gateway API Keys
 
 Gateway API keys are managed through the **admin panel** — there is no

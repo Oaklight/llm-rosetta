@@ -19,11 +19,12 @@ Per-provider guides covering shim configuration, transforms, authentication, and
 | [Volcengine](volcengine.md) | `volcengine--chat_completions` | `chat_completions` | Field transforms |
 | [OpenRouter](openrouter.md) | `openrouter--chat_completions` | `chat_completions` | Multi-model router |
 | [MiniMax](minimax.md) | `minimax--chat_completions` | `chat_completions` | OpenAI-compatible |
-| [Argo](argo.md) | `argo--*` | `chat_completions` | Standalone package; Argonne internal gateway |
+| [Argo](argo.md) | `argo--*` | multiple | Standalone package; Argonne internal gateway |
 | [AskSage](asksage.md) | `asksage--*` | multiple | Standalone package; multi-format aggregator |
 | [ALCF](alcf.md) | `alcf_<cluster>--chat_completions` | `chat_completions` | Standalone package; Globus OAuth, token_command |
 | [Kilo](kilo.md) | `kilo--chat_completions` | `chat_completions` | Free pool, keyless |
 | [OpenCode](opencode.md) | `opencode--*` | multiple | Go subscription / Zen balance |
+| [Plan (ChatGPT)](openai_chatgpt.md) | `openai_chatgpt--open_responses` | `open_responses` | ChatGPT plan route; sign-in instead of an API key |
 
 The Argo, AskSage and ALCF shims ship as standalone packages — declare their source with `shims.presets` (or **Settings → Shim Sources**) before using their names. See [Standalone shim packages](../shims.md#standalone-shim-packages).
 

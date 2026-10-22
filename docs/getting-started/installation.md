@@ -36,8 +36,12 @@ pip install "llm-rosetta[openai,anthropic,google]"
 ### pip
 
 ```bash
-pip install "llm-rosetta[gateway]"
+pip install llm-rosetta-gateway
 ```
+
+The gateway is published as its own distribution and depends on a compatible
+`llm-rosetta` core. `pip install "llm-rosetta[gateway]"` still works as a
+one-release meta alias that installs both.
 
 The gateway has **zero external runtime dependencies** — it uses vendored stdlib-only modules for HTTP server and client.
 
