@@ -148,6 +148,7 @@ nav:
               - ALCF: guide/providers/alcf.md
               - Kilo: guide/providers/kilo.md
               - OpenCode: guide/providers/opencode.md
+              - ChatGPT 套餐: guide/providers/openai_chatgpt.md
           - 推理 / 思考参数: guide/reasoning.md
           - 提供方推理行为: guide/provider-reasoning.md
       - 示例:
