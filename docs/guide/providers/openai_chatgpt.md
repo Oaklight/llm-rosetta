@@ -6,7 +6,7 @@ title: OpenAI (ChatGPT plan)
 
 The `openai_chatgpt--open_responses` shim serves the ChatGPT **plan** route:
 your Go/Plus/Pro allowance, not Platform API billing. It speaks the same
-[Open Responses](../formats.md) wire format as `openai--open_responses`, so a
+[Open Responses](../api-standards.md) wire format as `openai--open_responses`, so a
 request converts exactly as any other Responses request does. What differs is
 where the credential comes from, which models are visible, and what the route
 refuses.
