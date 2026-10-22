@@ -84,18 +84,26 @@ jobs:
 
   docs-build:
     # The docs live on two orphan branches, and Read the Docs builds them by
-    # copying the source out of this repository into the docs checkout.  That
-    # copy is a hard-coded path, so it silently rots when the layout moves —
-    # which is how a distribution split left both sites failing for weeks.
-    # This job repeats the RTD steps against the branches as they are now, in
-    # a clean environment, so the same breakage fails here instead.
+    # running *their* .readthedocs.yaml: a pre_build that clones this
+    # repository and copies the source into the branch, then a zensical build.
+    # That copy is a hard-coded path, so it silently rots when the layout
+    # moves — which is how a distribution split left both sites failing for
+    # weeks with every local check green.
     #
-    # A PR from a fork does not carry the docs branches, so the checkout below
-    # would fail on something unrelated to the change.
-    if: >-
-      github.event_name != 'pull_request' ||
-      github.event.pull_request.head.repo.full_name == github.repository
+    # This job runs the branch's own steps rather than repeating them, through
+    # scripts/dev/rtd_build.py: a CI job that re-describes the copy keeps
+    # passing while the branch's yaml is broken, which is the failure it
+    # exists to catch.  The clone is redirected at this checkout, so no
+    # network is needed.
+    #
+    # Coverage: a change on master that the docs still reference is caught on
+    # this PR.  A commit to a docs branch is NOT covered until the next PR
+    # here — that would need a workflow on those branches.
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [docs_en, docs_zh]
 
     steps:
       - uses: actions/checkout@v6
@@ -116,29 +124,14 @@ jobs:
           python-version: "3.11"
 
       - name: Install the docs toolchain
-        # Deliberately not the packages: RTD imports the source it copies, and
-        # an editable install here would hide a missing copy.
+        # Deliberately not the packages: RTD imports the source the branch
+        # copies, and an editable install here would hide a missing copy.
         run: |
           python -m pip install --upgrade pip
           pip install -r docs_en/requirements.txt
 
-      - name: Build the English site (as RTD does)
-        run: |
-          mkdir -p docs_en/src
-          cp -r packages/llm-rosetta/src/llm_rosetta docs_en/src/
-          cp -r packages/llm-rosetta-gateway/src/llm_rosetta_gateway docs_en/src/
-          cd docs_en
-          zensical build
-          python scripts/generate_llmstxt.py -c mkdocs.yml -s site -d docs -v
-
-      - name: Build the Chinese site (as RTD does)
-        run: |
-          mkdir -p docs_zh/src
-          cp -r packages/llm-rosetta/src/llm_rosetta docs_zh/src/
-          cp -r packages/llm-rosetta-gateway/src/llm_rosetta_gateway docs_zh/src/
-          cd docs_zh
-          zensical build
-          python scripts/generate_llmstxt.py -c mkdocs.yml -s site -d docs -v
+      - name: Run the branch's own Read the Docs steps
+        run: python scripts/dev/rtd_build.py ${{ matrix.language }}
 
   lint-and-test:
     needs: changes
