@@ -202,6 +202,7 @@ async def read_provider_quota(
             block = provider_cooldown(name, pinfo)
             if block is not None:
                 payload["provider_block"] = block
+            payload["routing"] = routing_facts(pinfo, name)
         return payload
 
     pinfo = config.providers[name]
@@ -231,7 +232,15 @@ async def read_provider_quota(
         "refreshed": refreshed,
         "ttl_seconds": ttl,
         "credentials": QUOTA_STATE.snapshot(probe.id, keys),
+        # The same numbers selection read, so the panel describes the router's
+        # decision rather than re-deriving it.
+        "routing": routing_facts(pinfo, name),
     }
+    # A lane can be readable *and* cooling down; the panel needs both to avoid
+    # painting a live reading on a provider the router is skipping.
+    block = provider_cooldown(name, pinfo)
+    if block is not None:
+        payload["provider_block"] = block
     if payload["credentials"]:
         payload["read_at"] = (
             payload["credentials"][0]["reading"]["read_at"]
@@ -531,6 +540,44 @@ def provider_exhausted_until(pinfo: Any) -> datetime | None:
             return None
         resets.append(moment)
     return min(resets) if resets else None
+
+
+def routing_facts(pinfo: Any, name: str | None = None) -> dict[str, Any]:
+    """What the router concluded about this provider, for the admin panel.
+
+    The panel must not re-derive the rule: the numbers here are the ones
+    selection read, so a card that says "skipped" is describing the same
+    decision that sent the request elsewhere.
+
+    Three facts, because they answer different questions and the panel once
+    conflated them:
+
+    - ``blocked`` — the gateway is skipping this provider right now (an in-band
+      refusal or a spent plan lane put it on a cooldown).  It overrides
+      everything else: a provider can have a healthy reading and still be out.
+    - ``excluded`` — every credential's fresh reading says spent; selection
+      removes the candidate.  ``reason`` is a code the panel translates.
+    - ``headroom`` — the tightest credential's remaining share, and ``weight``
+      — the multiplier the router applies to this provider's configured weight
+      (``0.25 + 0.75 × headroom``, never zero).  They differ exactly when a key
+      ring is mixed: one spent key and one healthy one reads as ``0.0``
+      headroom but still serves at a quarter weight.
+    """
+    from ..routing.select import quota_weight
+
+    headroom = provider_headroom(pinfo)
+    excluded = provider_spent(pinfo)
+    # Derived from the same call the payload's ``provider_block`` comes from,
+    # so the two keys cannot disagree when a provider was built without
+    # ``bind_provider_quota``.
+    blocked = provider_cooldown(name or pinfo.name, pinfo) is not None
+    return {
+        "headroom": headroom,
+        "weight": quota_weight(headroom),
+        "excluded": excluded,
+        "blocked": blocked,
+        "reason": "spent" if excluded else None,
+    }
 
 
 def provider_cooldown(name: str, pinfo: Any) -> dict[str, Any] | None:

@@ -14,6 +14,7 @@ import { initLogoPicker, setLogoPickerValue, getLogoPickerValue } from '../compo
 import { setTypeTree, getSelectedValue, selectValue, onTypeSelect } from '../components/type-picker.js';
 import { buildTypeModel, shimBrand } from '../core/shim-tree.js';
 import { degradedEndpoints, categoryKey } from '../core/provider-endpoints.js';
+import { routingRows, blockRow } from '../core/quota-lines.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
@@ -1465,11 +1466,13 @@ async function showProviderQuota(name) {
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>'; }
   try {
     const r = await api.get(`/admin/api/config/providers/${encodeURIComponent(name)}/quota?refresh=1`);
-    if (!r.supported) {
-      showToast(t('quota.none', {reason: r.reason || r.status || '—'}), 'info');
-      return;
-    }
     const lines = [];
+    const row = ({ tone, text }) => `<div class="conn-row"><span class="conn-${tone}"></span><span class="conn-detail">${esc(text)}</span></div>`;
+    if (!r.supported) {
+      // A lane with no usage endpoint still has a verdict: it is exactly the
+      // lane whose exclusion an operator cannot read off any percentage.
+      lines.push(row({ tone: 'warn', text: t('quota.none', {reason: r.reason || r.status || '—'}) }));
+    }
     for (const entry of (r.credentials || [])) {
       const reading = entry.reading;
       const head = t('quota.credential', {id: entry.credential})
@@ -1492,10 +1495,13 @@ async function showProviderQuota(name) {
         lines.push(`<div class="conn-row"><span class="conn-warn"></span><span class="conn-detail">${esc(t('quota.demoted', {until: new Date(entry.demotion.until).toLocaleString(), reason: entry.demotion.reason}))}</span></div>`);
       }
     }
+    const blocked = blockRow(r.provider_block, t);
+    if (blocked) lines.push(row(blocked));
+    for (const routingRow of routingRows(r.routing, t)) lines.push(row(routingRow));
     if (!lines.length) {
-      lines.push(`<div class="conn-row"><span class="conn-warn"></span><span class="conn-detail">${esc(t('quota.none', {reason: '—'}))}</span></div>`);
+      lines.push(row({ tone: 'warn', text: t('quota.none', { reason: '—' }) }));
     }
-    showToastHtml(lines.join(''), 'success');
+    showToastHtml(lines.join(''), r.supported ? 'success' : 'info');
   } catch (e) {
     showToast(String(e.message || e), 'error');
   } finally {

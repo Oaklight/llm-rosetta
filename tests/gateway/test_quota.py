@@ -778,6 +778,127 @@ class TestInBandOnlyLane:
 
         assert payload["supported"] is False
         assert "in-band" in payload["reason"]
+        # The router's own verdict travels with the reading, so the card
+        # describes the decision instead of re-deriving it.
+        assert payload["routing"]["excluded"] is False
+        assert payload["routing"]["headroom"] is None
+
+
+class TestTheRoutingFacts:
+    """What the panel shows is what selection read."""
+
+    @staticmethod
+    def _pinfo(keys: str = "k1") -> object:
+        from llm_rosetta_gateway.transport.provider_info import ProviderInfo
+
+        pinfo = ProviderInfo(
+            "openai--chat_completions",
+            api_key=keys,
+            base_url="https://api.example.test/v1",
+            auth_header_fn=lambda key: {"Authorization": f"Bearer {key}"},
+            url_template="{base_url}/chat/completions",
+        )
+        pinfo.quota_probe = "p-panel-facts"
+        return pinfo
+
+    def test_a_spent_provider_is_reported_with_its_reason(self):
+        from llm_rosetta_gateway.quota.service import routing_facts
+        from llm_rosetta_gateway.quota.state import QUOTA_STATE
+
+        pinfo = self._pinfo()
+        QUOTA_STATE.put_reading(
+            QuotaReading(
+                probe="p-panel-facts",
+                credential=credential_fingerprint("k1"),
+                windows=[QuotaWindow(name="5h", used_percent=100)],
+            )
+        )
+
+        facts = routing_facts(pinfo)
+
+        assert facts["excluded"] is True
+        assert facts["headroom"] == 0.0
+        assert "spent" in facts["reason"]
+
+    def test_an_unmeasured_provider_claims_nothing(self):
+        from llm_rosetta_gateway.quota.service import routing_facts
+
+        facts = routing_facts(self._pinfo())
+
+        assert facts == {
+            "headroom": None,
+            "weight": 1.0,
+            "excluded": False,
+            "blocked": False,
+            "reason": None,
+        }
+
+    def test_a_mixed_ring_reads_zero_but_serves_a_quarter(self):
+        """One spent key beside a healthy one is not an exclusion.
+
+        The card used to print "0% left" for a provider the router was still
+        serving: the headroom is the tightest credential, the weight is what
+        the router actually applies.
+        """
+        from llm_rosetta_gateway.quota.service import routing_facts
+        from llm_rosetta_gateway.quota.state import QUOTA_STATE
+
+        pinfo = self._pinfo(keys="k1,k2")
+        for key, used in (("k1", 100), ("k2", 15)):
+            QUOTA_STATE.put_reading(
+                QuotaReading(
+                    probe="p-panel-facts",
+                    credential=credential_fingerprint(key),
+                    windows=[QuotaWindow(name="5h", used_percent=used)],
+                )
+            )
+
+        facts = routing_facts(pinfo)
+
+        assert facts["headroom"] == 0.0
+        assert facts["excluded"] is False
+        assert facts["weight"] == 0.25
+
+    def test_a_live_block_wins_over_a_healthy_reading(self):
+        """A lane cooling down is skipped, whatever its windows say."""
+        from llm_rosetta_gateway.quota.service import (
+            bind_provider_quota,
+            routing_facts,
+        )
+        from llm_rosetta_gateway.quota.state import QUOTA_STATE
+        from llm_rosetta_gateway.transport.provider_info import ProviderInfo
+
+        pinfo = ProviderInfo(
+            "openai_chatgpt--open_responses",
+            api_key="plan-token",
+            base_url="https://api.openai.com/v1",
+            auth_header_fn=lambda key: {"Authorization": f"Bearer {key}"},
+            url_template="{base_url}/responses",
+            token_command=["true"],
+        )
+        pinfo.quota_probes = (OpenAICodexProbe(),)
+        pinfo.quota_probe_id = "openai_codex"
+        pinfo.quota_in_band = True
+        pinfo.credential_token = "acct:blocked-panel-test"
+        bind_provider_quota("chatgpt", pinfo)
+        assert pinfo.quota_probe is not None
+        QUOTA_STATE.put_reading(
+            QuotaReading(
+                probe=pinfo.quota_probe,
+                credential=credential_fingerprint("plan-token"),
+                windows=[QuotaWindow(name="5h", used_percent=10)],
+            )
+        )
+        assert routing_facts(pinfo)["blocked"] is False
+
+        QUOTA_STATE.block_provider(
+            "acct:blocked-panel-test", 60, "keyless lane rate limited"
+        )
+
+        facts = routing_facts(pinfo)
+        assert facts["blocked"] is True
+        assert facts["excluded"] is False
+        assert facts["headroom"] == 0.9
 
     def test_a_blocked_lane_shows_its_cooldown_even_with_nothing_to_read(self):
         import asyncio
@@ -812,3 +933,69 @@ class TestInBandOnlyLane:
 
         assert payload["supported"] is False
         assert payload["provider_block"]["reason"] == "usage limit"
+
+
+class TestTheSupportedPayload:
+    """The payload a probe-capable provider's card reads must carry the verdict.
+
+    The in-band-only branch is covered above; this is the other shape, and a
+    regression here would silently drop the row.
+    """
+
+    def test_the_verdict_travels_with_a_readable_quota(self, monkeypatch):
+        import asyncio
+
+        from llm_rosetta_gateway.quota import service as quota_service
+        from llm_rosetta_gateway.quota.state import QUOTA_STATE
+        from llm_rosetta_gateway.transport.provider_info import ProviderInfo
+
+        pinfo = ProviderInfo(
+            "openai--chat_completions",
+            api_key="sk-live",
+            base_url="https://api.example.test/v1",
+            auth_header_fn=lambda key: {"Authorization": f"Bearer {key}"},
+            url_template="{base_url}/chat/completions",
+        )
+        pinfo.quota_probe = "p-supported"
+        QUOTA_STATE.put_reading(
+            QuotaReading(
+                probe="p-supported",
+                credential=credential_fingerprint("sk-live"),
+                windows=[QuotaWindow(name="5h", used_percent=62)],
+            )
+        )
+
+        class _Probe:
+            id = "p-supported"
+
+        monkeypatch.setattr(
+            quota_service,
+            "resolve_provider_probe",
+            lambda config, name: (_Probe(), "https://api.example.test/usage", None),
+        )
+
+        payload = asyncio.run(
+            quota_service.read_provider_quota(
+                SimpleNamespace(providers={"p": pinfo}), "p"
+            )
+        )
+
+        assert payload["supported"] is True
+        assert payload["routing"]["headroom"] == pytest.approx(0.38)
+        assert payload["routing"]["weight"] == pytest.approx(0.25 + 0.75 * 0.38)
+        assert payload["routing"]["excluded"] is False
+        assert payload["routing"]["blocked"] is False
+        assert "provider_block" not in payload
+
+        # A readable lane can still be cooling down, and then the card must
+        # show the block rather than the healthy reading.
+        QUOTA_STATE.block_provider("@p", 60, "keyless lane rate limited")
+
+        blocked = asyncio.run(
+            quota_service.read_provider_quota(
+                SimpleNamespace(providers={"p": pinfo}), "p"
+            )
+        )
+
+        assert blocked["provider_block"]["reason"] == "keyless lane rate limited"
+        assert blocked["routing"]["blocked"] is True
