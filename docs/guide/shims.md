@@ -149,7 +149,8 @@ loopback 回调、基于 discovery JWKS 的 ID token 验签、在排他锁下原
 记录也可以在事后装入：`PUT /admin/api/config/providers/<name>/credential` 把
 在有浏览器的一侧生成的记录交给交换 —— 远端网关因此无需绑定自己的 loopback。交换负责
 校验（OpenAI 模块会验签 ID token，并从验签后的 claims 取 subject），并把记录存到自己
-`credential()` 会读取的位置。
+`credential()` 会读取的位置。记录要尽快粘贴：校验在收到时进行，放了一夜的记录会被拒绝，
+只能重新登录。
 
 一个 shim 只能声明其中一种形式：同时提供 `auth.py` 与 `connection.token_command` 会加载
 失败。提供方自己写的 `token_command` 仍然优先；若交换未声明 `consumes_key`，在同一提供方
