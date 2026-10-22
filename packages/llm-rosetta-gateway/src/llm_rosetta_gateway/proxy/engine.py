@@ -42,7 +42,7 @@ from .errors import (
     _upstream_error_passthrough,
     error_response_for_source,
 )
-from .failover import reselect_after_quota
+from .failover import prepare_failover, record_failover
 from .metadata import (
     ProviderMetadataStore,
     _default_metadata_store,
@@ -114,22 +114,6 @@ def _apply_request_stages(ctx: SelectionContext) -> ProviderInfo:
     return provider_info
 
 
-def _note_failover_route(route: ResolvedRoute) -> None:
-    """Point the request log at the provider that actually served.
-
-    The lifecycle recorded the first choice before the proxy ran; after a
-    failover the row must name the provider whose response the client got,
-    and the profile says where it came from.
-    """
-    from ..lifecycle import current_lifecycle
-
-    ctx = current_lifecycle()
-    if ctx is not None:
-        ctx.note_route(
-            target_format=route.target_provider, provider_name=route.provider_name
-        )
-
-
 async def _failover_response(
     config: Any | None,
     selection: SelectionContext,
@@ -148,37 +132,18 @@ async def _failover_response(
 ) -> tuple[Response, dict[str, Any]] | None:
     """Serve the request from another provider after a quota refusal.
 
-    Spent at most once per request: *attempted* names the provider the first
-    attempt was made on, so the second attempt cannot fail over again.  A
-    different provider is a different prompt cache and possibly a different
-    model build, which is why this is opt-in per model.
-
     Returns:
         The second attempt's response and this request's merged profile, or
-        ``None`` when failover is off for this model, has already happened, or
-        nothing else can serve — in which case the caller reports the
-        upstream's own refusal.
+        ``None`` when there will not be a second attempt — failover is off for
+        this model, has already happened, or nothing else can serve.  The
+        caller then reports the upstream's own refusal.
     """
-    if config is None or attempted is not None:
-        return None
-    if selection.model not in getattr(config, "model_failover_on_quota", {}):
-        return None
-    target = reselect_after_quota(config, selection, exclude=route.provider_name)
-    if target is None:
-        return None
-    new_route, new_pinfo = target
-    reason = getattr(signal, "reason", None) or "quota refusal"
-    logger.warning(
-        "Quota failover for model %s: %s -> %s (%s)",
-        selection.model,
-        route.provider_name,
-        new_route.provider_name,
-        reason,
+    prepared = prepare_failover(
+        config, selection, route, body, signal=signal, attempted=attempted
     )
-    retry_body = dict(body)
-    # The client's model name may have been replaced by the first provider's
-    # upstream alias; the second provider gets its own, or the original name.
-    retry_body["model"] = new_route.upstream_model or selection.model
+    if prepared is None:
+        return None
+    new_route, new_pinfo, retry_body = prepared
     response, sub_profile = await handle_non_streaming(
         new_route,
         new_pinfo,
@@ -193,13 +158,13 @@ async def _failover_response(
         config=config,
         _failover_from=route.provider_name,
     )
-    profile["failover"] = {
-        "from": route.provider_name,
-        "to": new_route.provider_name,
-        "reason": reason,
-        "profile": sub_profile,
-    }
-    _note_failover_route(new_route)
+    record_failover(
+        profile,
+        route=route,
+        new_route=new_route,
+        signal=signal,
+        sub_profile=sub_profile,
+    )
     return response, profile
 
 

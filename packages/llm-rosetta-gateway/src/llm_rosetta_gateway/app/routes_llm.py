@@ -229,6 +229,7 @@ async def _handle_llm(
             preflight_token_count=preflight,
             selection=selection,
             capture_state=capture_state,
+            config=config,
         )
     else:
         response, profile = await handle_non_streaming(

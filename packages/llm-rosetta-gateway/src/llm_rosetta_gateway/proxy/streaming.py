@@ -49,6 +49,7 @@ from .errors import (
     DumpContext,
     error_response_for_source,
 )
+from .failover import prepare_failover, record_failover
 from .metadata import (
     ProviderMetadataStore,
     _default_metadata_store,
@@ -284,7 +285,70 @@ async def _stream_event_generator(
             capture_state.record(capture_record)
 
 
-async def handle_streaming(
+async def _failover_stream(
+    config: Any | None,
+    selection: SelectionContext,
+    route: ResolvedRoute,
+    body: dict[str, Any],
+    *,
+    reported_model: str | None,
+    signal: Any,
+    transport: UpstreamTransport,
+    metadata_store: ProviderMetadataStore | None,
+    extra_headers: dict[str, str] | None,
+    entry_id: str | None,
+    request_log: Any | None,
+    metrics: Any | None,
+    persistence: Any | None,
+    capture_state: CaptureState | None,
+    preflight_token_count: bool,
+    profile: dict[str, Any],
+    attempted: str | None,
+) -> tuple[Response | StreamingResponse, dict[str, Any]] | None:
+    """Serve this stream from another provider, before the first event.
+
+    Reached only while the upstream has refused and nothing has been written
+    to the client, which is what makes the second answer honest.
+
+    Returns:
+        The second attempt's response and this request's merged profile, or
+        ``None`` when there will not be a second attempt.
+    """
+    prepared = prepare_failover(
+        config, selection, route, body, signal=signal, attempted=attempted
+    )
+    if prepared is None:
+        return None
+    new_route, new_pinfo, retry_body = prepared
+    response, sub_profile = await handle_streaming(
+        new_route,
+        new_pinfo,
+        retry_body,
+        reported_model=reported_model,
+        transport=transport,
+        metadata_store=metadata_store,
+        extra_headers=extra_headers,
+        entry_id=entry_id,
+        request_log=request_log,
+        metrics=metrics,
+        persistence=persistence,
+        capture_state=capture_state,
+        preflight_token_count=preflight_token_count,
+        selection=selection,
+        config=config,
+        _failover_from=route.provider_name,
+    )
+    record_failover(
+        profile,
+        route=route,
+        new_route=new_route,
+        signal=signal,
+        sub_profile=sub_profile,
+    )
+    return response, profile
+
+
+async def handle_streaming(  # noqa: C901
     route: ResolvedRoute,
     provider_info: ProviderInfo,
     body: dict[str, Any],
@@ -300,8 +364,15 @@ async def handle_streaming(
     capture_state: CaptureState | None = None,
     preflight_token_count: bool = False,
     selection: SelectionContext,
+    config: Any | None = None,
+    _failover_from: str | None = None,
 ) -> tuple[Response | StreamingResponse, dict[str, Any]]:
     """Streaming proxy: convert -> forward -> stream-convert back -> SSE.
+
+    ``config`` enables cross-provider failover on a quota refusal.  It can only
+    happen here, before the ``StreamingResponse`` exists: once the first event
+    is on the wire the answer cannot be retracted, so a mid-stream failure ends
+    the client's stream with its code (see #1060).
 
     Opens the upstream connection *before* constructing the
     ``StreamingResponse`` so that immediate errors (4xx/5xx from the
@@ -450,16 +521,38 @@ async def handle_streaming(
         )
         if err is not None:
             return err, profile
-        if not retry:
-            # Same-provider retry only.  Failover for a stream belongs to the
-            # window before the first event reaches the client; once bytes are
-            # on the wire the response cannot be taken back.
-            refusal, _signal = _quota_refusal(
-                provider_info, stream_error_code, stream_error_text
+        refusal, signal = (
+            (None, None)
+            if retry
+            else _quota_refusal(provider_info, stream_error_code, stream_error_text)
+        )
+        if retry or refusal is QuotaRefusal.RETRY:
+            continue
+        # Nothing was written to the client yet, so another provider can still
+        # answer — if this model opted in and has one.
+        if refusal is QuotaRefusal.EXHAUSTED:
+            failed_over = await _failover_stream(
+                config,
+                selection,
+                route,
+                body,
+                reported_model=reported_model,
+                signal=signal,
+                transport=transport,
+                metadata_store=store,
+                extra_headers=extra_headers,
+                entry_id=entry_id,
+                request_log=request_log,
+                metrics=metrics,
+                persistence=persistence,
+                capture_state=capture_state,
+                preflight_token_count=preflight_token_count,
+                profile=profile,
+                attempted=_failover_from,
             )
-            retry = refusal is QuotaRefusal.RETRY
-        if not retry:
-            break
+            if failed_over is not None:
+                return failed_over
+        break
 
     # Application-level error — upstream returned a valid HTTP response with
     # a 4xx/5xx status.  Pass the original body through as-is so the client
