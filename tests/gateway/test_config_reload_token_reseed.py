@@ -193,7 +193,7 @@ class TestApplyConfigReload:
         calls = {"n": 0}
         refresher_calls: list[set[str]] = []
 
-        async def _run_token(argv: list[str]) -> str:  # noqa: ARG001
+        async def _run_token(argv: list[str], *, env=None) -> str:  # noqa: ARG001
             calls["n"] += 1
             if calls["n"] == 1:
                 raise RuntimeError("first pass fails")

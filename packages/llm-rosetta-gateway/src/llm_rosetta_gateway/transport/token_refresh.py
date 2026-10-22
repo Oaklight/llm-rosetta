@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import subprocess
 import time
 from datetime import datetime, timezone
@@ -75,7 +76,7 @@ async def force_refresh(pinfo: ProviderInfo) -> bool:
             return True
 
         try:
-            token = await run_token_command(pinfo.token_command)
+            token = await run_token_command(pinfo.token_command, env=command_env(pinfo))
             pinfo.key_ring.refresh(token)
             _reactive_timestamps[pinfo.name] = time.monotonic()
             pinfo.token_status = {
@@ -111,7 +112,25 @@ def reset_reactive_state() -> None:
 # ---------------------------------------------------------------------------
 
 
-def run_token_command_sync(argv: list[str], *, timeout: float = COMMAND_TIMEOUT) -> str:
+def command_env(pinfo: ProviderInfo) -> dict[str, str] | None:
+    """Return the environment to run *pinfo*'s command with, or ``None``.
+
+    A shim whose exchange takes the operator's key passes it under the declared
+    variable; everything else inherits the gateway's environment unchanged.
+    The key is handed over in the environment rather than argv, where the
+    process table would expose it.
+    """
+    if not pinfo.token_command_env or not pinfo.token_input:
+        return None
+    return {**os.environ, pinfo.token_command_env: pinfo.token_input}
+
+
+def run_token_command_sync(
+    argv: list[str],
+    *,
+    timeout: float = COMMAND_TIMEOUT,
+    env: dict[str, str] | None = None,
+) -> str:
     """Run *argv* synchronously and return stripped stdout.
 
     Used at startup (before the event loop is running) to seed the
@@ -122,6 +141,7 @@ def run_token_command_sync(argv: list[str], *, timeout: float = COMMAND_TIMEOUT)
         capture_output=True,
         text=True,
         timeout=timeout,
+        env=env,
     )
     if result.returncode != 0:
         raise RuntimeError(
@@ -135,13 +155,17 @@ def run_token_command_sync(argv: list[str], *, timeout: float = COMMAND_TIMEOUT)
 
 
 async def run_token_command(
-    argv: list[str], *, timeout: float = COMMAND_TIMEOUT
+    argv: list[str],
+    *,
+    timeout: float = COMMAND_TIMEOUT,
+    env: dict[str, str] | None = None,
 ) -> str:
     """Run *argv* asynchronously and return stripped stdout."""
     proc = await asyncio.create_subprocess_exec(
         *argv,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
+        env=env,
     )
     try:
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
@@ -202,7 +226,7 @@ async def _refresh_loop(pinfo: ProviderInfo) -> None:
             continue
 
         try:
-            token = await run_token_command(pinfo.token_command)
+            token = await run_token_command(pinfo.token_command, env=command_env(pinfo))
             old_count = pinfo.key_ring.refresh(token)
             if old_count is not None:
                 logger.warning(

@@ -273,7 +273,7 @@ class TestTokenSeeding:
         app = _FakeApp()
         ds = DeferredStartup(config, app)
 
-        async def _mock_run_token(argv):
+        async def _mock_run_token(argv, *, env=None):
             if argv == ["echo", "good"]:
                 return "good-token"
             raise RuntimeError("bad command")

@@ -216,6 +216,17 @@ class ConnectionConfig:
 
     ``None`` leaves the gateway's default (3600) in place.
     """
+    token_command_env: str | None = None
+    """Environment variable the command reads the operator's key from.
+
+    Some exchanges need the account key as *input* (AskSage mints an access
+    token from it), others read credentials of their own (ALCF's
+    ``~/.globus``).  Declaring the variable name says which: the gateway passes
+    the key the operator configured under that name, and the command's stdout —
+    not the key — becomes the credential sent upstream.  It also lifts the
+    ``api_key`` / ``token_command`` mutual exclusion for this shim, because the
+    key is an input rather than a second credential.
+    """
 
 
 @dataclass(frozen=True)

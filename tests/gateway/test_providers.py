@@ -333,3 +333,77 @@ class TestShimDeclaredTokenCommand:
 
         assert info.token_command == ["python3", "-c", "print('minted')"]
         assert info.key_ring.contains_only(TOKEN_PENDING_SENTINEL)
+
+
+class TestTheCredentialChannel:
+    """A shim whose exchange consumes the operator's key declares the variable.
+
+    AskSage mints an access token from the account key, so the key is the
+    command's *input* — not a second credential — and the pair is legal.
+    """
+
+    @pytest.fixture()
+    def vendor_shim(self):
+        from llm_rosetta.shims.provider_shim import (
+            ConnectionConfig,
+            ProviderShim,
+            register_shim,
+            unregister_shim,
+        )
+
+        register_shim(
+            ProviderShim(
+                name="__test_credential_channel__",
+                format="chat_completions",
+                connection=ConnectionConfig(
+                    base_url="https://vendor.example/v1",
+                    api_key_env="VENDOR_API_KEY",
+                    token_command=("python3", "-c", "print('minted')"),
+                    token_command_env="VENDOR_ACCOUNT_KEY",
+                ),
+            )
+        )
+        yield "__test_credential_channel__"
+        unregister_shim("__test_credential_channel__")
+
+    def test_the_key_is_input_not_a_conflict(self, vendor_shim):
+        info = build_provider_info(
+            "chat_completions",
+            {"api_key": "sk-account"},
+            shim_name=vendor_shim,
+        )
+
+        assert info.token_command == ["python3", "-c", "print('minted')"]
+        assert info.token_command_env == "VENDOR_ACCOUNT_KEY"
+        assert info.token_input == "sk-account"
+        # The key is never sent upstream: the ring holds the command's output.
+        assert info.key_ring.contains_only(TOKEN_PENDING_SENTINEL)
+
+    def test_the_shims_key_variable_feeds_the_channel(self, vendor_shim, monkeypatch):
+        """The operator may leave the key to the shim's env var."""
+        monkeypatch.setenv("VENDOR_API_KEY", "sk-from-the-environment")
+
+        info = build_provider_info("chat_completions", {}, shim_name=vendor_shim)
+
+        assert info.token_input == "sk-from-the-environment"
+
+    def test_a_command_without_the_channel_still_conflicts(self):
+        load_providers()
+
+        with pytest.raises(ValueError, match="mutually exclusive"):
+            build_provider_info(
+                "chat_completions",
+                {"api_key": "sk-x", "token_command": ["echo", "tok"]},
+                shim_name="xai",
+            )
+
+    def test_the_account_is_the_key_not_the_command(self, vendor_shim):
+        """Two accounts on one shim must not share an identity."""
+        first = build_provider_info(
+            "chat_completions", {"api_key": "sk-a"}, shim_name=vendor_shim
+        )
+        second = build_provider_info(
+            "chat_completions", {"api_key": "sk-b"}, shim_name=vendor_shim
+        )
+
+        assert first.credential_token != second.credential_token

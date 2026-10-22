@@ -590,6 +590,7 @@ def _load_single_provider(
                 conn_raw.get("token_command"), provider_dir, cfg.get("name", "")
             ),
             token_refresh_interval=conn_raw.get("token_refresh_interval"),
+            token_command_env=conn_raw.get("token_command_env"),
         )
     else:
         connection = ConnectionConfig(
@@ -609,6 +610,7 @@ def _load_single_provider(
                 cfg.get("token_command"), provider_dir, cfg.get("name", "")
             ),
             token_refresh_interval=cfg.get("token_refresh_interval"),
+            token_command_env=cfg.get("token_command_env"),
         )
 
     # Parse the quota declaration: which probe reads this lane, and how often

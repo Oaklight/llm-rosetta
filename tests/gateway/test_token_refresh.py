@@ -358,3 +358,61 @@ class TestBuildProviderInfoTokenCommand:
         pinfo = build_provider_info("openai_chat", cfg)
         assert pinfo.auth_headers() == {"Authorization": "Bearer static-key"}
         assert pinfo.token_command is None
+
+
+class TestTheCredentialChannelEnvironment:
+    """The operator's key reaches the command, and only the command."""
+
+    def _pinfo(self, *, env: str | None, key: str):
+        from llm_rosetta_gateway.transport.provider_info import ProviderInfo
+        from llm_rosetta_gateway.providers import openai_auth
+
+        return ProviderInfo(
+            name="vendor",
+            api_key="__token_pending__",
+            base_url="https://vendor.example/v1",
+            auth_header_fn=openai_auth,
+            url_template="{base_url}/chat/completions",
+            token_command=["python3", "-c", "print('minted')"],
+            token_command_env=env,
+            token_input=key,
+        )
+
+    def test_the_variable_carries_the_key(self):
+        from llm_rosetta_gateway.transport.token_refresh import command_env
+
+        env = command_env(self._pinfo(env="VENDOR_ACCOUNT_KEY", key="sk-account"))
+
+        assert env is not None
+        assert env["VENDOR_ACCOUNT_KEY"] == "sk-account"
+        # The rest of the environment is inherited, not replaced.
+        assert "PATH" in env
+
+    def test_no_channel_means_no_override(self):
+        from llm_rosetta_gateway.transport.token_refresh import command_env
+
+        assert command_env(self._pinfo(env=None, key="sk-account")) is None
+        assert command_env(self._pinfo(env="VENDOR_ACCOUNT_KEY", key="")) is None
+
+    def test_the_key_is_in_the_environment_not_in_argv(self):
+        """argv is world-readable in the process table; the env is not."""
+        import asyncio
+
+        from llm_rosetta_gateway.transport.token_refresh import (
+            command_env,
+            run_token_command,
+        )
+
+        pinfo = self._pinfo(env="VENDOR_ACCOUNT_KEY", key="sk-account")
+        pinfo.token_command = [
+            "python3",
+            "-c",
+            "import os; print(os.environ['VENDOR_ACCOUNT_KEY'])",
+        ]
+
+        token = asyncio.run(
+            run_token_command(pinfo.token_command, env=command_env(pinfo))
+        )
+
+        assert token == "sk-account"
+        assert "sk-account" not in pinfo.token_command

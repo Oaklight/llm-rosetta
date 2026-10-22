@@ -216,6 +216,8 @@ class ProviderInfo:
         timeout: float | None = None,
         token_command: list[str] | None = None,
         token_refresh_interval: int = 3600,
+        token_command_env: str | None = None,
+        token_input: str = "",
         keyless: bool = False,
         session_header: str | None = None,
         credential_token: str | None = None,
@@ -244,6 +246,11 @@ class ProviderInfo:
         self._affinity_identity: str | None = None
         self.token_command = token_command
         self.token_refresh_interval = token_refresh_interval
+        # When the shim's exchange takes the operator's key as input, the key
+        # is handed to the command under this variable and never sent upstream
+        # itself; ``key_ring`` holds the command's output instead.
+        self.token_command_env = token_command_env
+        self.token_input = token_input
         self.token_status: dict | None = None
         self.keyless = keyless
         # Per-conversation session header (name declared by the shim, value

@@ -271,13 +271,13 @@ class DeferredStartup:
 
     async def _seed_one_provider(self, name: str) -> None:
         """Fetch the initial token for a single provider."""
-        from ..transport.token_refresh import run_token_command
+        from ..transport.token_refresh import command_env, run_token_command
 
         pinfo = self._config.providers[name]
         assert pinfo.token_command is not None
 
         try:
-            token = await run_token_command(pinfo.token_command)
+            token = await run_token_command(pinfo.token_command, env=command_env(pinfo))
             pinfo.key_ring.refresh(token)
             pinfo.token_status = {
                 "enabled": True,

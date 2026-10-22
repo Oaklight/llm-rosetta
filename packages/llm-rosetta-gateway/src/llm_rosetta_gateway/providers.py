@@ -207,11 +207,14 @@ def _resolve_token_command(
             f"Provider '{name}': token_refresh_interval must be "
             f">= 60, got {token_refresh_interval}"
         )
-    # Only a real key conflicts with the command.  An entry that carries
-    # ``"api_key": ""`` says "no static key" — the admin writes that key for a
-    # provider the operator never gave a credential — and treating it as a
-    # second source made every saved command provider unusable on reload.
-    if cfg.get("api_key"):
+    # Only a real key conflicts with the command, and only when the command
+    # does not consume it: ``token_command_env`` marks an exchange that takes
+    # the key as input (AskSage mints a token from it), where the key is not a
+    # second credential.  An entry that carries ``"api_key": ""`` says "no
+    # static key" — the admin writes that key for a provider the operator never
+    # gave a credential — and treating it as a second source made every saved
+    # command provider unusable on reload.
+    if cfg.get("api_key") and cfg.get("token_command_env") is None:
         raise ValueError(
             f"Provider '{name}': token_command and api_key are mutually exclusive"
         )
@@ -248,6 +251,10 @@ def _apply_shim_defaults(cfg: dict[str, Any], shim: Any) -> dict[str, Any]:
     # together — the loader rejects that pair.
     if cfg.get("token_command") is None and shim.connection.token_command:
         cfg = {**cfg, "token_command": list(shim.connection.token_command)}
+    # A command that *takes* the operator's key is not a second credential:
+    # the key is its input, and its output is what goes upstream.
+    if cfg.get("token_command_env") is None and shim.connection.token_command_env:
+        cfg = {**cfg, "token_command_env": shim.connection.token_command_env}
     # The interval is the vendor's token lifetime, so it stays a default even
     # when the operator names their own command.
     if (
@@ -269,7 +276,9 @@ def _apply_shim_defaults(cfg: dict[str, Any], shim: Any) -> dict[str, Any]:
     # ``null`` into an empty key ring.
     if (
         cfg.get("api_key") is None
-        and cfg.get("token_command") is None
+        and (
+            cfg.get("token_command") is None or cfg.get("token_command_env") is not None
+        )
         and shim.connection.api_key_env
     ):
         env_val = os.environ.get(shim.connection.api_key_env, "")
@@ -468,6 +477,7 @@ def build_provider_info(
         shim_quota.url if shim_quota is not None else None
     )
 
+    command_takes_key = bool(token_command and cfg.get("token_command_env"))
     return ProviderInfo(
         name=provider_type,
         api_key=api_key,
@@ -479,9 +489,16 @@ def build_provider_info(
         timeout=float(cfg["timeout"]) if "timeout" in cfg else None,
         token_command=token_command,
         token_refresh_interval=token_refresh_interval,
+        token_command_env=(cfg.get("token_command_env") if token_command else None),
+        token_input=(cfg.get("api_key") or "") if token_command else "",
         keyless=keyless,
+        # When the exchange consumes the operator's key, the account is that
+        # key's account — hashing the command alone would merge every account
+        # of the vendor into one identity.
         credential_token=_credential_token(
-            token_command=token_command, api_key=api_key, keyless=keyless
+            token_command=(None if command_takes_key else token_command),
+            api_key=(cfg.get("api_key") or "") if command_takes_key else api_key,
+            keyless=keyless,
         ),
         session_header=cfg.get("session_header")
         or (shim.connection.session_header if shim is not None else None),

@@ -378,6 +378,9 @@ def _optional_provider_keys() -> list[str]:
         # them and the provider quietly fell back to a static key.
         "token_command",
         "token_refresh_interval",
+        # Names the variable the command reads the operator's key from; part of
+        # the same credential-source block, and just as invisible to the editor.
+        "token_command_env",
     ]
     for desc in all_model_types():
         if desc.is_llm:
@@ -435,7 +438,7 @@ def _credential_fields(
     if api_key or not _credential_command(body, existing):
         fields["api_key"] = api_key
     if existing is not None:
-        for carry in ("token_command", "token_refresh_interval"):
+        for carry in ("token_command", "token_refresh_interval", "token_command_env"):
             if carry not in body and carry in existing:
                 fields[carry] = existing[carry]
     return fields
