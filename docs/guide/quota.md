@@ -187,6 +187,11 @@ The stage is called `quota` in the selection chain and runs before the anchor,
 so it informs the choice rather than making it — the strategies stay what they
 are.
 
+The provider card shows both conclusions — the share, and whether the provider
+is skipped with the reason — from the same functions the router calls, so
+"why is this provider not serving anything" does not have to be inferred from
+percentages.
+
 ## Keyless lanes
 
 The [OpenCode Zen public lane](providers/opencode.md#public-free-lane) has no
