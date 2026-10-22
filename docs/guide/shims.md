@@ -139,10 +139,12 @@ EXCHANGE = Exchange()
 | `describe(ctx)` | `GET …/credential` | return the token-free summary, or `None` |
 | `revoke(ctx)` | `DELETE …/credential` | remove the record, revoking upstream when the vendor allows it |
 
-`login`, `install`, `describe` and `revoke` are optional. An exchange that does
-not implement `install` or `login` says so through `can_install()` /
-`can_login()` (both default to `False`), and the gateway refuses that operation
-rather than calling a stub; `describe` and `revoke` are used when present.
+`login`, `install`, `describe` and `revoke` are optional. Each exists on
+`BaseAuthExchange` and raises, so "has the attribute" is never the question: an
+exchange says what it implements through `can_install()`, `can_login()` and
+`can_revoke()` (all default to `False`), and the gateway refuses that operation
+rather than calling a stub. `describe()` is the exception — it returns `None`
+rather than raising, and `None` is exactly what "nothing to say" means.
 
 `ctx` carries the provider's config key (`ctx.provider`), the credential record's
 directory (`ctx.state_dir` — `server.data_dir` resolved against the config file,
