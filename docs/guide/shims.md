@@ -164,6 +164,13 @@ HTTP is `urllib` on a worker thread — which is the shape a shim module has to
 keep to, since the shim layer loads before the gateway and core has no
 dependencies.
 
+A record can also be installed after the fact: `PUT
+/admin/api/config/providers/<name>/credential` hands the exchange a record
+produced somewhere a browser exists, which is how a remote gateway gets one
+without binding its own loopback. The exchange validates it — the OpenAI
+module verifies the ID token and takes the subject from the verified claims —
+and stores it where its own `credential()` will look.
+
 A shim declares one form or the other: `auth.py` and `connection.token_command`
 together is a load error. A provider's own `token_command` still wins, and an
 `api_key` beside an exchange that does not declare `consumes_key` is rejected —
