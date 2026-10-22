@@ -12,7 +12,12 @@ build:
       # Download the source code from the main repository for mkdocstrings
       - git clone https://github.com/Oaklight/llm-rosetta.git src_repo
       - mkdir -p src
-      - cp -r src_repo/src/llm_rosetta src/
+      # The docs document two distributions: the core, and the gateway's
+      # observability surface.  Both are imported by mkdocstrings from here,
+      # so nothing has to be installed from PyPI at a version that may not
+      # carry the API the docs describe.
+      - cp -r src_repo/packages/llm-rosetta/src/llm_rosetta src/
+      - cp -r src_repo/packages/llm-rosetta-gateway/src/llm_rosetta_gateway src/
       - rm -rf src_repo
     install:
       - pip install -r requirements.txt
