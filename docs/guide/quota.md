@@ -160,6 +160,13 @@ Two properties worth knowing:
 - Client affinity still hashes first. The headroom only affects the choice
   among providers, never whether a conversation stays where its cache is.
 
+A provider is **removed** rather than down-weighted when a *fresh* reading says
+every one of its credentials is spent. The rule is deliberately narrow: a
+reading older than fifteen minutes is not a statement about now (a refusal five
+minutes ago must not cost a provider an hour), one credential with room keeps
+the provider, and a lane nothing has measured or a probe cannot read is never
+excluded for being unmeasured.
+
 The stage is called `quota` in the selection chain and runs before the anchor,
 so it informs the choice rather than making it — the strategies stay what they
 are.
