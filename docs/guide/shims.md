@@ -143,7 +143,9 @@ EXCHANGE = Exchange()
 `BaseAuthExchange` and raises, so "has the attribute" is never the question: an
 exchange says what it implements through `can_install()`, `can_login()` and
 `can_revoke()` (all default to `False`), and the gateway refuses that operation
-rather than calling a stub. `describe()` is the exception — it returns `None`
+rather than calling a stub: a provider that cannot install answers `501` to the
+`PUT`, and one that cannot sign out answers `501` to the `DELETE` rather than a
+`200` that changed nothing. `describe()` is the exception — it returns `None`
 rather than raising, and `None` is exactly what "nothing to say" means.
 
 `ctx` carries the provider's config key (`ctx.provider`), the credential record's
