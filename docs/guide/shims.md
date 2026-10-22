@@ -153,6 +153,17 @@ exchange needs no scheduling of its own. When `credential()` raises
 instead of failing upstream on every request, and it is not retried on the seed
 pass.
 
+The shipped reference implementation is the OpenAI plan route's
+`openai_chatgpt/open_responses/auth.py` (issue
+[#1057](https://github.com/Oaklight/llm-rosetta/issues/1057)): dynamic client
+registration, PKCE, a loopback callback, ID-token verification against the
+discovery JWKS, a `0600` credential record written atomically under an exclusive
+lock, rotating refresh tokens, and a host id that survives re-signing in. It is
+standard library only — RS256 is verified with `hashlib` and integer `pow`, and
+HTTP is `urllib` on a worker thread — which is the shape a shim module has to
+keep to, since the shim layer loads before the gateway and core has no
+dependencies.
+
 A shim declares one form or the other: `auth.py` and `connection.token_command`
 together is a load error. A provider's own `token_command` still wins, and an
 `api_key` beside an exchange that does not declare `consumes_key` is rejected —
