@@ -486,6 +486,128 @@ def _cmd_shims_preset(args: argparse.Namespace) -> None:
             print(f"Shim preset '{args.preset}' is not enabled")
 
 
+def _write_record_file(path: str, text: str) -> None:
+    """Write the record so only its owner can read it.
+
+    The record *is* the credential — an access token, a refresh token and an
+    ID token — so it is written ``0600`` through a temporary file in the same
+    directory, and never left half-written.
+
+    The temporary name must be unpredictable: a fixed one (``.<name>.tmp``)
+    is derivable from the path the operator typed, and ``--out /tmp/…`` is
+    exactly the kind of path used on a shared host.  Someone who can write in
+    that directory could then plant a ``0644`` file at the name — which
+    ``O_CREAT`` does not re-mode — or a symlink, which ``O_CREAT`` follows, and
+    the full credential would land where they chose.  ``mkstemp`` gives a
+    random name created ``O_CREAT|O_EXCL`` at ``0600``, so there is nothing to
+    inherit and nothing to follow; ``os.replace`` then publishes it atomically.
+    """
+    import tempfile
+
+    directory = os.path.dirname(os.path.abspath(path)) or "."
+    base = os.path.basename(path)
+    fd, tmp = tempfile.mkstemp(dir=directory, prefix=f".{base}.", suffix=".tmp")
+    try:
+        # mkstemp already asks for 0600; ask again rather than trust a umask.
+        os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(text + "\n")
+            # The rename can otherwise reach disk before the data, leaving a
+            # correctly named and moded *empty* record after a crash.
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        raise
+
+
+def _cmd_credential(args: argparse.Namespace) -> None:
+    """Run a shim's interactive sign-in and emit its credential record.
+
+    The record has to be produced where a browser exists, and the gateway host
+    is not always that machine.  This command runs the exchange's ``login()``
+    here, prints what it produced, and leaves handing it to the gateway to the
+    operator — the admin API's ``PUT …/credential``.  Nothing is copied to the
+    gateway by this command.
+    """
+    config_path = discover_config(args.config)
+    if config_path is None:
+        print("No config file found. Use --config to specify one.", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        config, report = _load_startup_config(config_path, args)
+    except OSError as exc:
+        # Discovery found a file (or --config named one) that cannot be read.
+        # That is a typing mistake, not a crash report.
+        print(f"Cannot read config file {config_path}: {exc}", file=sys.stderr)
+        sys.exit(1)
+    _report_shim_sources(report)
+
+    name: str = args.provider
+    pinfo = getattr(config, "providers", {}).get(name)
+    if pinfo is None:
+        known = ", ".join(sorted(getattr(config, "providers", {}))) or "(none)"
+        print(
+            f"Unknown provider '{name}'. Configured providers: {known}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    exchange = getattr(pinfo, "auth_exchange", None)
+    if exchange is None:
+        print(
+            f"Provider '{name}' mints no credential of its own: its shim ships "
+            "no auth.py, and a static key or token_command owns the credential.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    can_login = getattr(exchange, "can_login", None)
+    if can_login is not None and not can_login():
+        print(
+            f"Provider '{name}' has no interactive sign-in: its exchange does "
+            "not implement login().",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    try:
+        record = exchange.login(pinfo.auth_context)
+    except Exception as exc:  # noqa: BLE001 - report the exchange's own words
+        # The contract says the record must not appear in the exception, but a
+        # vendor's error body is not under our control and this message is
+        # printed.  Scrub what credential shapes we know on the way out.
+        from .observability.sanitize import scrub_credential_patterns
+
+        print(f"Sign-in failed: {scrub_credential_patterns(str(exc))}", file=sys.stderr)
+        sys.exit(1)
+
+    text = json.dumps(record, indent=2, sort_keys=True)
+    if getattr(args, "out", None):
+        _write_record_file(args.out, text)
+        print(f"Credential record written to {args.out} (mode 0600).")
+    else:
+        print(text)
+
+    print(
+        "Hand this record to the gateway now: admin panel → Providers → "
+        f"'{name}' → Credential, or PUT /admin/api/config/providers/{name}"
+        "/credential. It holds live tokens — do not paste it anywhere else, "
+        "and do not leave it lying around: the ID token is verified on arrival.",
+        file=sys.stderr,
+    )
+    state_dir = getattr(pinfo, "auth_state_dir", None)
+    if state_dir:
+        print(
+            f"The sign-in also stored a copy in this machine's record directory "
+            f"({state_dir}) — delete it there if the gateway is elsewhere.",
+            file=sys.stderr,
+        )
+
+
 def _dispatch_subcommand(args: argparse.Namespace, sub: Any) -> bool:
     """Handle subcommands; return True if one matched."""
     if args.command == "init":
@@ -505,6 +627,9 @@ def _dispatch_subcommand(args: argparse.Namespace, sub: Any) -> bool:
             _cmd_shims_preset(args)
         else:
             sub.choices["shims"].print_help()
+        return True
+    if args.command == "credential":
+        _cmd_credential(args)
         return True
     if args.command == "set-password":
         _cmd_set_password(args)
@@ -717,6 +842,26 @@ def main() -> None:  # noqa: C901
         preset_parser = shim_sub.add_parser(action, help=help_text)
         preset_parser.add_argument("preset", help="Preset name, e.g. argo")
         preset_parser.add_argument("--config", default=None, help="Path to config file")
+
+    # ``credential`` subcommand
+    cred_parser = sub.add_parser(
+        "credential",
+        help="Run a shim's interactive sign-in and print its credential record",
+    )
+    cred_parser.add_argument("provider", help="Configured provider name")
+    cred_parser.add_argument(
+        "--config",
+        "-c",
+        # SUPPRESS, not None: a subparser default would overwrite a --config
+        # given before the subcommand.
+        default=argparse.SUPPRESS,
+        help="Path to config file (auto-discovered if omitted)",
+    )
+    cred_parser.add_argument(
+        "--out",
+        default=None,
+        help="Write the record to this file (mode 0600) instead of stdout",
+    )
 
     # ``set-password`` subcommand
     pw_parser = sub.add_parser(

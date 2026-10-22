@@ -511,6 +511,30 @@ class TestTheExchangeContract:
 
         assert asyncio.run(siwc.EXCHANGE.credential(ctx)) == "access-0"
 
+    def test_the_exchange_offers_the_interactive_run(self, siwc, ctx, monkeypatch):
+        """``login()`` is how the record gets produced off the gateway host."""
+        assert siwc.EXCHANGE.can_login() is True
+
+        seen = {}
+
+        def fake_login(inner_ctx):
+            seen["ctx"] = inner_ctx
+            return {"access_token": "a"}
+
+        monkeypatch.setattr(siwc, "login", fake_login)
+
+        assert siwc.EXCHANGE.login(ctx) == {"access_token": "a"}
+        assert seen["ctx"] is ctx
+
+    def test_the_base_class_offers_neither_half_of_the_browser_flow(self):
+        """Presence is not the question: both members exist and refuse."""
+        from llm_rosetta.shims.auth_exchange import BaseAuthExchange
+
+        exchange = BaseAuthExchange()
+
+        assert exchange.can_install() is False
+        assert exchange.can_login() is False
+
 
 # ---------------------------------------------------------------------------
 # The interactive run

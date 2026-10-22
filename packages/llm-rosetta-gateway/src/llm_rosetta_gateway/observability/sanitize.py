@@ -24,6 +24,11 @@ _CREDENTIAL_PATTERNS = re.compile(
             r"sk-ant-[A-Za-z0-9_-]{20,}",
             r"sk-[A-Za-z0-9_-]{20,}",
             r"AIza[A-Za-z0-9_-]{30,}",
+            # A JWT: three base64url segments, the first always decoding to
+            # ``{"`` — hence the ``eyJ`` prefix.  OAuth access and ID tokens
+            # are shaped this way, so the pattern a bearer-token upstream is
+            # most likely to echo was the one shape the others missed.
+            r"eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}",
         ]
     )
 )

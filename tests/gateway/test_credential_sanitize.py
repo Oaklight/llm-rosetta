@@ -71,6 +71,21 @@ class TestScrubCredentialPatterns:
         assert "sk-ant-api03" not in result
         assert "[REDACTED]" in result
 
+    def test_scrubs_a_jwt(self):
+        """OAuth access and ID tokens are JWTs, not ``sk-`` keys."""
+        # Assembled from its segments so no scanner mistakes the fixture for a
+        # real token; the shape is what is under test, not the value.
+        token = ".".join(
+            ("eyJhbGciOiJub25lIn0", "eyJzdWIiOiJjYW5hcnkifQ", "c2lnbmF0dXJl")
+        )
+        text = f"the issuer rejected id_token={token}"
+        result = scrub_credential_patterns(text)
+
+        assert token not in result
+        assert "[REDACTED]" in result
+        # The words around it survive.
+        assert result.startswith("the issuer rejected id_token=")
+
     def test_scrubs_google_key(self):
         text = "x-goog-api-key: AIzaSyB1234567890abcdefghijklmnopqrst"
         result = scrub_credential_patterns(text)

@@ -934,6 +934,15 @@ class SignInWithChatGPT(BaseAuthExchange):
             return None
         return _summary(record)
 
+    def login(self, ctx: AuthContext) -> dict[str, Any]:
+        """Run the sign-in here, where the operator and their browser are.
+
+        The module-level run this forwards to is the whole flow — loopback
+        listener, authorize URL, code exchange, verification, store — and its
+        return value is the record the admin API accepts.
+        """
+        return login(ctx)
+
     def install(self, ctx: AuthContext, record: Any) -> dict[str, Any]:
         """Adopt a record produced on a machine that had a browser.
 

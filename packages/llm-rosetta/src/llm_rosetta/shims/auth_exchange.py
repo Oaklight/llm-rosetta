@@ -168,6 +168,32 @@ class AuthExchange(Protocol):
         """
         ...
 
+    def login(self, ctx: AuthContext) -> Mapping[str, Any]:
+        """Run the interactive sign-in and return the finished record.
+
+        The other half of :meth:`install`: a record has to be *produced*
+        somewhere a browser exists, and that is not the gateway host.  This
+        call is blocking and needs an operator watching — a browser opens and
+        a loopback listener waits — so the gateway never calls it; the CLI
+        does, on the operator's machine, and what it returns is what the admin
+        API accepts.
+
+        Optional, like :meth:`install`: an exchange with no browser flow does
+        not implement it.
+
+        Returns:
+            The record, token-free only if the vendor's flow allows it — it
+            *is* the credential.  The caller hands it straight to
+            :meth:`install` and must not log it.
+
+        Raises:
+            AuthExchangeError: The sign-in failed, was refused, or timed out.
+                The message is shown to the operator, so it must never carry
+                the record — a vendor's error body is not under our control,
+                and a message is a much easier thing to leak than a file.
+        """
+        ...
+
 
 class BaseAuthExchange:
     """Defaults for the optional half of :class:`AuthExchange`.
@@ -198,9 +224,21 @@ class BaseAuthExchange:
         """Refuse: this exchange cannot adopt a record from elsewhere."""
         raise NotImplementedError
 
+    def login(self, ctx: AuthContext) -> Mapping[str, Any]:  # pragma: no cover
+        """Refuse: this exchange has no browser sign-in."""
+        raise NotImplementedError
+
     def can_install(self) -> bool:
-        """Whether :meth:`install` is implemented."""
+        """Whether :meth:`install` was overridden.
+
+        ``install`` exists on this class and raises, so "has the attribute" is
+        the wrong question; this is the one to ask.
+        """
         return type(self).install is not BaseAuthExchange.install
+
+    def can_login(self) -> bool:
+        """Whether :meth:`login` was overridden."""
+        return type(self).login is not BaseAuthExchange.login
 
     async def credential(self, ctx: AuthContext) -> str:  # pragma: no cover
         """Mint a credential.  Every exchange must implement this."""
