@@ -73,21 +73,14 @@ All three clusters also export a `model_list_transform` that normalizes the mode
 
 ALCF uses Globus OAuth for authentication. Access tokens are short-lived (~48 hours) and must be refreshed periodically. The refresh token itself expires after **30 days** due to ALCF's session policy — after that, interactive re-login is required.
 
-The repository includes `scripts/alcf-token.py`, a zero-dependency (stdlib only) helper that handles the full login and refresh lifecycle.
-
-**Standalone download** — if you don't have the full repository (e.g. Docker-only deployments):
-
-```bash
-curl -fsSL -o alcf-token.py https://raw.githubusercontent.com/Oaklight/llm-rosetta/master/scripts/alcf-token.py
-chmod +x alcf-token.py
-```
+The Globus exchange ships **inside the shim package**: `llm-rosetta-shim-alcf` carries the zero-dependency (stdlib only) helper at `llm_rosetta_shim_alcf.providers.alcf.token`, and every `alcf_<cluster>--chat_completions` shim declares it as its `connection.token_command`. There is nothing to download and no `token_command` to write in your config — the gateway runs the exchange at startup, on the shim's interval and after an upstream 401.
 
 ### Initial login
 
 Run on any machine with a browser (or copy the URL to a machine that has one):
 
 ```bash
-python3 alcf-token.py --login
+python3 -m llm_rosetta_shim_alcf.providers.alcf.token --login
 ```
 
 This opens a Globus authorization URL, prompts you to paste the authorization code, and saves the token to `~/.globus/app/<client_id>/inference_app/tokens.json`.
@@ -96,30 +89,43 @@ This opens a Globus authorization URL, prompts you to paste the authorization co
 
 ```bash
 # Print a fresh access token (auto-refreshes if expired):
-python3 scripts/alcf-token.py
+python3 -m llm_rosetta_shim_alcf.providers.alcf.token
 
 # Check token status and remaining lifetime:
-python3 scripts/alcf-token.py --status
+python3 -m llm_rosetta_shim_alcf.providers.alcf.token --status
 
 # Verify the token works against a cluster:
-python3 scripts/alcf-token.py --probe sophia
+python3 -m llm_rosetta_shim_alcf.providers.alcf.token --probe sophia
 
 # Force a refresh even if not expired:
-python3 scripts/alcf-token.py --force
+python3 -m llm_rosetta_shim_alcf.providers.alcf.token --force
 ```
 
 ### Multi-user token pooling
 
-Multiple ALCF users can pool their tokens for round-robin key rotation:
+Multiple ALCF users can pool their tokens for round-robin key rotation. The gateway runs the shipped command without arguments, so pooling needs one override — point `token_command` at `--tokens-dir`:
 
 ```bash
 # Each user logs in to their own file:
-python3 scripts/alcf-token.py --login --token-file /shared/alcf-tokens/alice.json
-python3 scripts/alcf-token.py --login --token-file /shared/alcf-tokens/bob.json
-
-# Gateway reads all of them (comma-separated output):
-python3 scripts/alcf-token.py --tokens-dir /shared/alcf-tokens/
+python3 -m llm_rosetta_shim_alcf.providers.alcf.token --login --token-file /shared/alcf-tokens/alice.json
+python3 -m llm_rosetta_shim_alcf.providers.alcf.token --login --token-file /shared/alcf-tokens/bob.json
 ```
+
+```jsonc
+{
+  "providers": {
+    "alcf-sophia": {
+      "shim": "alcf_sophia--chat_completions",
+      "token_command": [
+        "python3", "-m", "llm_rosetta_shim_alcf.providers.alcf.token",
+        "--tokens-dir", "/shared/alcf-tokens/"
+      ]
+    }
+  }
+}
+```
+
+The command prints one comma-separated string for all files; the gateway uses it as a key ring.
 
 ### 30-day session expiry
 
@@ -137,7 +143,7 @@ python3 scripts/alcf-token.py --tokens-dir /shared/alcf-tokens/
     Obtain a token manually and set it as an environment variable:
 
     ```bash
-    export ALCF_API_KEY=$(python3 scripts/alcf-token.py)
+    export ALCF_API_KEY=$(python3 -m llm_rosetta_shim_alcf.providers.alcf.token)
     ```
 
     ```jsonc
@@ -153,27 +159,41 @@ python3 scripts/alcf-token.py --tokens-dir /shared/alcf-tokens/
 
     This requires restarting the gateway when the token expires.
 
-=== "Token Command (recommended)"
+=== "Shipped exchange (recommended)"
 
-    Let the gateway refresh the token automatically:
+    Nothing to wire up — the shim declares the exchange, so the provider is just its shim:
+
+    ```jsonc
+    {
+      "providers": {
+        "alcf-sophia": {
+          "shim": "alcf_sophia--chat_completions"
+        }
+      }
+    }
+    ```
+
+    The gateway runs the command at startup, on the shim's declared interval and after an upstream 401 response. To change the interval without replacing the command, set `token_refresh_interval` on the provider.
+
+=== "Override the command"
+
+    A provider that names its own `token_command` replaces the shipped one — the multi-user pooling setup above, or a script of your own:
 
     ```jsonc
     {
       "providers": {
         "alcf-sophia": {
           "shim": "alcf_sophia--chat_completions",
-          "token_command": ["python3", "scripts/alcf-token.py"],
+          "token_command": ["python3", "/opt/alcf/token-from-vault.py"],
           "token_refresh_interval": 1800
         }
       }
     }
     ```
 
-    The gateway runs the command at startup, then every `token_refresh_interval` seconds. On upstream 401 responses, an immediate out-of-cycle refresh is triggered.
-
 ### Docker deployment
 
-When running the gateway in Docker, the token file and refresh script must be mounted into the container:
+The refresh script lives inside the package, which the image installs, so only the token file needs mounting:
 
 ```yaml
 # docker-compose.yaml
@@ -183,18 +203,13 @@ services:
     volumes:
       - ./config:/config
       - ~/.globus:/home/appuser/.globus              # Globus token file (rw for refresh)
-      - ./alcf-token.py:/scripts/alcf-token.py:ro    # Refresh script (standalone download)
 ```
 
 Setup steps:
 
-1. **Download the script**: `curl -fsSL -o alcf-token.py https://raw.githubusercontent.com/Oaklight/llm-rosetta/master/scripts/alcf-token.py`
-2. **Login on the host** (one-time): `python3 alcf-token.py --login`
-3. **Start the container** with the volume mounts above
-4. **Add the provider** via admin panel or `config.jsonc` with:
-    ```jsonc
-    "token_command": ["python3", "/scripts/alcf-token.py"]
-    ```
+1. **Login on the host** (one-time): `python3 -m llm_rosetta_shim_alcf.providers.alcf.token --login`
+2. **Start the container** with the volume mount above
+3. **Add the provider** through the admin panel or `config.jsonc` — no `token_command`
 
 The container's `appuser` (uid 1000) needs read-write access to `~/.globus` so the refresh token can be updated in place. If your host uid differs, set `PUID`/`PGID` in the compose file or `chown 1000:1000` the `.globus` directory.
 

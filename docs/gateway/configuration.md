@@ -234,12 +234,14 @@ API keys support `${ENV_VAR}` syntax — values are read from environment variab
 For providers that use short-lived tokens (e.g. ALCF Inference Service with Globus OAuth), the gateway can run an external command to obtain and periodically refresh the API key:
 
 ```jsonc
-"my-alcf": {
-  "shim": "alcf_sophia--chat_completions",
-  "token_command": ["python3", "/scripts/alcf-token.py"],
+"my-lane": {
+  "shim": "vendor_lane--chat_completions",
+  "token_command": ["python3", "/opt/vendor/token.py"],
   "token_refresh_interval": 3600
 }
 ```
+
+A shim can declare that command itself — `connection.token_command` in its `provider.yaml` — and then a provider needs no `token_command` at all. ALCF and AskSage ship theirs, so their providers are just `{"shim": "..."}`; a `token_command` you write on the provider still wins.
 
 The provider type comes from `shim` — `type`, and then the provider's own key, are the
 fallbacks. (`provider` is not a config key; a provider entry spelled that way never
@@ -262,21 +264,20 @@ When `token_command` is set:
 
 #### ALCF example with Docker
 
-ALCF providers use Globus OAuth tokens managed by `scripts/alcf-token.py`. When running in Docker, mount the token file and script into the container:
+ALCF providers use Globus OAuth tokens, and the exchange ships inside `llm-rosetta-shim-alcf` — which the image installs — so only the token file needs mounting:
 
 ```yaml
 # docker-compose.yaml
 volumes:
   - ./config:/config
   - ~/.globus:/home/appuser/.globus              # Globus token file (rw for refresh)
-  - ./scripts/alcf-token.py:/scripts/alcf-token.py:ro  # Refresh script
 ```
 
 Setup:
 
-1. **Login on the host** (one-time): `python3 scripts/alcf-token.py --login`
-2. **Start the container** with the volume mounts above
-3. **Add the provider** via the admin panel or `config.jsonc` with `token_command: ["python3", "/scripts/alcf-token.py"]`
+1. **Login on the host** (one-time): `python3 -m llm_rosetta_shim_alcf.providers.alcf.token --login`
+2. **Start the container** with the volume mount above
+3. **Add the provider** via the admin panel or `config.jsonc` — no `token_command` needed
 
 The container's `appuser` (uid 1000) needs read-write access to `~/.globus` so the refresh token can be updated in place.
 
