@@ -10,6 +10,8 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### 新增
 
+- **shim 的交换可以把运维填写的 key 当作输入**（issue [#946](https://github.com/Oaklight/llm-rosetta/issues/946)）：`connection.token_command_env` 指定命令从哪个变量读取该 key。AskSage 正是这种情形 —— 它用账号 key **换出** access token，因此 key 是输入而不是凭据：网关通过环境变量传给命令（绝不放进 argv，进程表会暴露它），把命令的 stdout 作为发往上游的凭据，并为该 shim 解除 `api_key` 与 `token_command` 的互斥。shim 的 `api_key_env` 提供同一个槽位的值，提供方的账号身份也取自这把 key，因此同一 shim 下的两个账号不会被合并。未声明该项的命令保持原有行为，需要自己取得凭据（例如 ALCF 的 `~/.globus`）。
+
 - **shim 可以自己声明凭据交换**（issue [#946](https://github.com/Oaklight/llm-rosetta/issues/946)）：有些上游的推理端点不接受账号 API key —— AskSage 接受由 key 换来的短期 access token，ALCF 接受会过期的 Globus bearer token —— 因此此前每个部署都要手写 `token_command`。现在 `connection.token_command` 与 `connection.token_refresh_interval` 让 shim 把交换逻辑随 `provider.yaml` 一起发布：网关在启动时、按声明的间隔、以及上游返回 401 之后运行该命令，并把 stdout 作为凭据。参数中指向 shim 自身目录内文件的相对路径会解析为绝对路径，因此把脚本放在声明旁边即可写 `[python3, token.py]`；`python3` 之类裸命令名与各种参数保持原样；声明格式错误时只记录警告并忽略，不会让 shim 加载失败。提供方自己声明的命令仍然优先；当命令掌管凭据时，shim 的 `api_key_env` 不再被注入为静态密钥。命令尚未拿到运维填写的 key —— 它只使用自己能够读到的凭据 —— 那是该 issue 的下一片。
 
 

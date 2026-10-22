@@ -75,9 +75,21 @@ connection:
 自己声明的 `token_command` 仍然优先；当命令掌管凭据时，shim 的 `api_key_env` 不会被当作
 静态密钥使用。
 
-命令在网关自身的环境中运行：它能读到什么凭据就使用什么（例如 ALCF 的 `~/.globus`）。
-把运维填写的 key 交给命令是 [#946](https://github.com/Oaklight/llm-rosetta/issues/946)
-的下一步，目前尚未实现 —— 现阶段需要账号 key 的交换必须由脚本自行从环境读取。
+**需要读取运维所填 key 的交换**再声明一个变量名，网关据此把 key 递进去：
+
+```yaml
+connection:
+  base_url: https://api.vendor.example/v1
+  api_key_env: VENDOR_API_KEY
+  token_command: [python3, token.py]
+  token_command_env: VENDOR_ACCOUNT_KEY
+```
+
+设置 `token_command_env` 后，运维配置的 key（或由 `api_key_env` 提供的那份）会以该变量名
+传给命令 —— 绝不放进 argv，因为进程表会把它暴露给机器上的其他进程 —— 而发往上游的是命令的
+stdout，不是这个 key。它同时解除了该 shim 上 `api_key` 与 `token_command` 的互斥：这里的 key
+是**输入**，不是第二个凭据。不声明它时，命令在网关自身的环境中运行、自行取得凭据，这正是
+ALCF 的情形（`~/.globus`）。
 
 **管理台如何分组 shim。** 提供方类型选择器分两级：顶层（*group*）以及其下每个 shim
 一行。两个字符串都可以声明，因为它们并非总能从名称推导出来：
