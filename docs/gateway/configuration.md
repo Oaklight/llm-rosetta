@@ -235,6 +235,21 @@ shim 可以自己声明这条命令 —— `provider.yaml` 里的 `connection.to
 !!! note "`token_command` 和 `api_key` 互斥"
     如果在同一个提供方条目里同时指定两者，网关拒绝启动。只能使用其中之一。shim 的 `api_key_env` 不算“指定了密钥”：它只是默认凭据，配置了命令时便由命令取代——因此在 `token_command` 提供方旁边导出 `ALCF_API_KEY` 是允许的。
 
+#### 需要写代码的交换（`auth.py`）
+
+`token_command` 适合用一条程序就能表达的交换。OAuth 配置不行：首次登录是交互式的，refresh
+token 每次使用都会轮换，而交换保存下来的是一个记录而不是一个字符串。这类 shim 在
+`provider.yaml` 旁边附带 `auth.py`，网关改为调用它而不是命令 —— 同样在启动时填充、同样按
+后台间隔刷新、同样在上游 `401` 后被动刷新。提供方配置不需要任何改动，因此 shim 附带
+`auth.py` 的提供方依然只写 `{"shim": "..."}`。
+
+两种形式互斥：shim 只声明其一，而在提供方上写的 `token_command` 优先级高于任一形式。模块
+契约见 [提供方 Shim](../guide/shims.md)。
+
+在交换能产出凭据之前 —— 对 Sign in with ChatGPT 而言，就是人工完成登录之前 —— 提供方会在
+`token_status` 中被标记为需要交互式登录，且不会向上游发出请求，而不是让每个请求都收到
+`401`。
+
 #### Docker 中使用 ALCF 的示例
 
 ALCF 提供方使用 Globus OAuth 令牌，其交换逻辑随 `llm-rosetta-shim-alcf` 发布（镜像已安装该包），因此只需要挂载令牌文件：

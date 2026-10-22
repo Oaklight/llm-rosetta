@@ -18,15 +18,27 @@ title: Shims
 
 ::: llm_rosetta.shims.provider_shim.resolve_base
 
+## Credential Exchange
+
+::: llm_rosetta.shims.auth_exchange.AuthExchange
+
+::: llm_rosetta.shims.auth_exchange.AuthContext
+
+::: llm_rosetta.shims.auth_exchange.BaseAuthExchange
+
+::: llm_rosetta.shims.auth_exchange.AuthExchangeError
+
+::: llm_rosetta.shims.auth_exchange.InteractiveSetupRequired
+
 ## External Shim Sources
 
 ::: llm_rosetta_gateway.shims.sources.rebuild_shims
 
-::: llm_rosetta.shims.sources.resolve_remote
+::: llm_rosetta_gateway.shims.sources.resolve_remote
 
-::: llm_rosetta.shims.sources.ShimLoadReport
+::: llm_rosetta_gateway.shims.sources.ShimLoadReport
 
-::: llm_rosetta.shims.sources.ShimSourceStatus
+::: llm_rosetta_gateway.shims.sources.ShimSourceStatus
 
 ## Transforms
 

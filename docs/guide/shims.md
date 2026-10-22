@@ -91,6 +91,54 @@ stdout，不是这个 key。它同时解除了该 shim 上 `api_key` 与 `token_
 是**输入**，不是第二个凭据。不声明它时，命令在网关自身的环境中运行、自行取得凭据，这正是
 ALCF 的情形（`~/.globus`）。
 
+**需要写代码的交换。** `token_command` 描述的是能用一条命令表达的交换。Sign in with
+ChatGPT 不行：它有交互式首次登录、每次使用都会轮换的 refresh token，保存下来的是一个凭据
+记录而不是一个字符串。这类 shim 在 `provider.yaml` 旁边附带 `auth.py` —— 与 `transforms.py`、
+`quota.py` 同级同信任，走同一条加载路径 —— 并导出 `EXCHANGE`：
+
+```python
+# auth.py
+from llm_rosetta.shims.auth_exchange import BaseAuthExchange
+
+
+class Exchange(BaseAuthExchange):
+    kind = "oauth"
+
+    def needs_interactive_setup(self, ctx):
+        return not (ctx.state_dir and os.path.exists(_record_path(ctx)))
+
+    async def credential(self, ctx):
+        return await _refresh_or_load(ctx)  # 需要登录时抛 InteractiveSetupRequired
+
+    def account_id(self, ctx):
+        return _subject(ctx)  # 不透明；网关会做哈希
+
+
+EXCHANGE = Exchange()
+```
+
+| 成员 | 调用时机 | 要求 |
+|------|----------|------|
+| `credential(ctx)` | 启动填充、定时刷新、上游 `401` 后各一次 | 返回发往上游的字符串；网络 I/O 可以 `await` |
+| `needs_interactive_setup(ctx)` | 构建配置时、任何请求之前 | 只读本地状态 |
+| `account_id(ctx)` | 构建配置时 | 返回不透明的账号身份，或 `None` |
+| `kind` | 报告用途 | 短标签，例如 `"oauth"` |
+| `consumes_key` | 构建配置时 | 说明 `ctx.input_key` 是否为输入 |
+
+`ctx` 携带提供方的配置键（`ctx.provider`）、凭据记录目录（`ctx.state_dir`，网关未配置
+数据目录时为 `None`），以及 `consumes_key` 为真时运维填写的 key（`ctx.input_key`）。只有
+一个 `credential()` 而没有分开的 seed 与 refresh：网关从不区分这两件事 —— 凭据要么现在
+可用，要么不可用。
+
+两种形式由同一套机制驱动 —— `/health/ready` 之下的启动填充、后台刷新器、以及 `401` 后的
+被动重试 —— 因此交换本身不需要自己安排调度。当 `credential()` 抛出
+`InteractiveSetupRequired` 时，提供方会被标记为“需要交互式登录”，不参与启动重试，也不会
+让每个请求都在上游失败。
+
+一个 shim 只能声明其中一种形式：同时提供 `auth.py` 与 `connection.token_command` 会加载
+失败。提供方自己写的 `token_command` 仍然优先；若交换未声明 `consumes_key`，在同一提供方
+再配置 `api_key` 会被拒绝 —— 两者是同一个凭据的两种来源。
+
 **管理台如何分组 shim。** 提供方类型选择器分两级：顶层（*group*）以及其下每个 shim
 一行。两个字符串都可以声明，因为它们并非总能从名称推导出来：
 
