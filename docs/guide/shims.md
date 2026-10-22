@@ -616,6 +616,7 @@ Transforms are pure `dict → dict` functions that bridge the gap between a prov
 | `strip_fields(*keys)` | Remove unsupported fields from the body | `strip_fields("logprobs", "top_logprobs")` |
 | `rename_field(old, new)` | Rename a top-level field | `rename_field("max_tokens", "max_length")` |
 | `set_defaults(**kv)` | Set fields only when absent (idempotent) | `set_defaults(temperature=0.7)` |
+| `force_fields(**kv)` | Set fields unconditionally — for a value the upstream refuses | `force_fields(store=False)` |
 | `default_tool_description(text)` | Inject a placeholder description for tools with empty descriptions | `default_tool_description("No description provided")` |
 
 ### Response Body Transforms
