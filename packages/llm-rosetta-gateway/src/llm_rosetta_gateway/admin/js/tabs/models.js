@@ -5,8 +5,11 @@ import { api, showToast, closeModal, esc, inlineConfirm, closeMenus, openMenu, i
 import { syncAriaSort } from '../core/sort.js';
 import { syncChipState } from '../core/chips.js';
 import { initLogoSelect, setLogoSelectOptions } from '../components/logo-select.js';
+import { mergeReasoningOverride } from '../core/reasoning-override.js';
 
 // ── helpers (module-private) ──
+
+let _loadedReasoningOverride = {};
 
 function _activateSegChild(el) {
   el.parentElement.querySelectorAll(':scope > div').forEach(s => {
@@ -240,6 +243,9 @@ function openModelModal(model, provider, capabilities, upstreamModel, sourceMode
   const info = lookupName && S.configData ? S.configData.models[lookupName] : null;
   const reasoning = (info && info.reasoning) || {};
   const configOverride = (info && info.reasoning_override) || {};
+  // What to merge the form's edits onto when saving: the stored override, which
+  // may carry fields these four controls cannot express.
+  _loadedReasoningOverride = configOverride;
   const srcBadge = document.getElementById('reasoningSourceBadge');
   srcBadge.textContent = reasoning.source || 'none';
   srcBadge.className = 'badge badge-sm' + (reasoning.source === 'config' ? ' badge-cap-tools' : reasoning.source === 'model_override' ? ' badge-cap-reasoning' : '');
@@ -257,8 +263,46 @@ function openModelModal(model, provider, capabilities, upstreamModel, sourceMode
   document.getElementById('reasoningThinkingType').value = configOverride.thinking_type || '';
   document.getElementById('reasoningBudgetRatio').value = configOverride.budget_ratio != null ? configOverride.budget_ratio : '';
   document.getElementById('reasoningDisabled').value = configOverride.disabled || '';
+  document.getElementById('reasoningReplayMissing').value = configOverride.replay_missing || '';
+  _renderReasoningEffective(reasoning, configOverride);
 
   openModal('modelModal');
+}
+
+/**
+ * Show the resolved capability fields the form does not edit.
+ *
+ * The override the operator saves is merged onto the shim's capability, so the
+ * values that actually reach the request come from two places at once.  Reading
+ * them here answers "why did this model send `high`?" without opening the shim
+ * YAML.  A field overridden on this model is marked, and a field the shim never
+ * declares reads "—" rather than a plausible-looking default.
+ */
+function _renderReasoningEffective(reasoning, override) {
+  const box = document.getElementById('reasoningEffective');
+  if (!box) return;
+  const fmt = (v) => {
+    if (v == null || v === '') return '—';
+    if (Array.isArray(v)) return v.length ? v.join(' / ') : '—';
+    if (typeof v === 'object') {
+      const parts = Object.entries(v).filter(([, x]) => x != null).map(([k, x]) => `${k}: ${x}`);
+      return parts.length ? parts.join(' · ') : '—';
+    }
+    return String(v);
+  };
+  const rows = [
+    ['effortField', 'effort_field', override.effort_field],
+    ['effortRange', 'effort_range', override.effort_range],
+    ['visibilityModes', 'visibility_modes', override.visibility_modes],
+    ['unsignedBlocks', 'unsigned_blocks', override.unsigned_blocks],
+    ['replayMissing', 'replay_missing', override.replay_missing],
+  ];
+  box.innerHTML = rows.map(([key, field, overridden]) => {
+    const value = fmt(overridden != null ? overridden : reasoning[field]);
+    const mark = overridden != null ? ' · ' + t('label.overriddenHere', 'overridden here') : '';
+    return `<div><span style="min-width:140px;display:inline-block">${esc(t('label.' + key))}</span>` +
+      `<code style="${overridden != null ? 'color:var(--accent)' : ''}">${esc(value + mark)}</code></div>`;
+  }).join('');
 }
 
 function onModelTypeChange() {
@@ -703,11 +747,16 @@ async function saveModel() {
     const thinkingType = document.getElementById('reasoningThinkingType').value || null;
     const budgetRatioStr = document.getElementById('reasoningBudgetRatio').value;
     const disabledStrategy = document.getElementById('reasoningDisabled').value || null;
-    const override = {};
-    if (thinkingType) override.thinking_type = thinkingType;
-    if (budgetRatioStr !== '') override.budget_ratio = parseFloat(budgetRatioStr);
-    if (disabledStrategy) override.disabled = disabledStrategy;
-    if (Object.keys(override).length > 0) body.reasoning_override = override;
+    const replayMissing = document.getElementById('reasoningReplayMissing').value || null;
+    // Merge onto what was loaded rather than rebuilding: clearing a control
+    // must delete its key (an omitted key means "leave it" to the backend), and
+    // fields the card shows but cannot edit must survive an unrelated save.
+    body.reasoning_override = mergeReasoningOverride(_loadedReasoningOverride, {
+      thinking_type: thinkingType,
+      budget_ratio: budgetRatioStr === '' ? null : parseFloat(budgetRatioStr),
+      disabled: disabledStrategy,
+      replay_missing: replayMissing,
+    });
   }
   // URL template overrides
   const urlTpl = document.getElementById('modelUrlTemplate').value.trim();

@@ -177,6 +177,7 @@ def _resolve_model_reasoning(
         "budget_ratio": cap.budget_ratio,
         "visibility_modes": cap.visibility_modes,
         "replay_missing": cap.replay_missing,
+        "unsigned_blocks": cap.unsigned_blocks,
         "config_override": config_override,
     }
 

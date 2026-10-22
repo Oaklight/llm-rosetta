@@ -1091,6 +1091,15 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
               <option value="thinking_budget_zero">thinking_budget_zero</option>
             </select>
           </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <label style="min-width:140px;margin:0;font-size:0.85em;color:var(--text-dim);text-transform:none;letter-spacing:0" data-i18n="label.replayMissing">Replayed Reasoning</label>
+            <select id="reasoningReplayMissing" style="flex:1">
+              <option value="" data-i18n="label.inheritProvider">(inherit from provider)</option>
+              <option value="as_is">as_is</option>
+              <option value="fill_empty">fill_empty</option>
+            </select>
+          </div>
+          <div id="reasoningEffective" style="display:flex;flex-direction:column;gap:4px;font-size:0.85em;color:var(--text-dim)"></div>
         </div>
       </div>
     </div>
