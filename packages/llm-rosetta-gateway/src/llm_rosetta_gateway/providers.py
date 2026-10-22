@@ -198,7 +198,7 @@ def _resolve_token_command(
     if isinstance(token_command, str):
         raise ValueError(
             f"Provider '{name}': token_command must be an array, "
-            f'not a string (e.g., ["python3", "scripts/alcf-token.py"])'
+            f'not a string (e.g., ["python3", "token.py"])'
         )
     if not isinstance(token_command, list) or not token_command:
         raise ValueError(f"Provider '{name}': token_command must be a non-empty array")

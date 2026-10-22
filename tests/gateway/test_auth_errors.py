@@ -47,7 +47,7 @@ class TestClassifyAuthError:
 class TestRewriteSessionPolicyError:
     def test_mentions_alcf_token_login(self):
         msg = rewrite_session_policy_error()
-        assert "alcf-token.py --login" in msg
+        assert "alcf.token --login" in msg
 
     def test_mentions_globus_logout(self):
         msg = rewrite_session_policy_error()

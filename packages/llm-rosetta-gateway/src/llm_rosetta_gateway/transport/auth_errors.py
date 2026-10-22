@@ -45,5 +45,5 @@ def rewrite_session_policy_error() -> str:
         "Token refresh will not help — you must re-authenticate interactively. "
         "Steps: "
         "1) Visit https://app.globus.org/logout to end your Globus session. "
-        "2) Re-run: python3 scripts/alcf-token.py --login"
+        "2) Re-run: python3 -m llm_rosetta_shim_alcf.providers.alcf.token --login"
     )

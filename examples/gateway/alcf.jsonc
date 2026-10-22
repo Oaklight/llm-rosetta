@@ -8,15 +8,19 @@
   // pip install and no image rebuild.  Settings → Shim Sources offers the same
   // entry as a one-click preset.
   //
-  // First-time setup:
-  //   python3 scripts/alcf-token.py --login
+  // First-time setup (once per user):
+  //   python3 -m llm_rosetta_shim_alcf.providers.alcf.token --login
   //
-  // The gateway auto-refreshes tokens via token_command — no cron or
-  // restarts needed. The three providers share the default token file, so
-  // the commands may refresh concurrently near expiry; atomic writes keep
-  // the file valid, but an external shared refresh process can avoid
-  // redundant Globus calls. For static key fallback, replace token_command
-  // with: "api_key": "${ALCF_API_KEY}"
+  // The package ships the Globus exchange too: each shim declares
+  // `connection.token_command` and its refresh interval, so the providers
+  // below need no credential wiring at all.  The gateway runs the exchange at
+  // startup, on the declared interval and after an upstream 401 — no cron or
+  // restarts.  A provider that names its own `token_command` still wins, and a
+  // static key is still accepted: "api_key": "${ALCF_API_KEY}".
+  //
+  // The three providers share the default token file, so the commands may
+  // refresh concurrently near expiry; atomic writes keep the file valid, but
+  // an external shared refresh process can avoid redundant Globus calls.
   "shims": {
     "remotes": [
       {
@@ -27,19 +31,13 @@
   },
   "providers": {
     "alcf-sophia": {
-      "shim": "alcf_sophia--chat_completions",
-      "token_command": ["python3", "scripts/alcf-token.py"],
-      "token_refresh_interval": 3600
+      "shim": "alcf_sophia--chat_completions"
     },
     "alcf-metis": {
-      "shim": "alcf_metis--chat_completions",
-      "token_command": ["python3", "scripts/alcf-token.py"],
-      "token_refresh_interval": 3600
+      "shim": "alcf_metis--chat_completions"
     },
     "alcf-minerva": {
-      "shim": "alcf_minerva--chat_completions",
-      "token_command": ["python3", "scripts/alcf-token.py"],
-      "token_refresh_interval": 3600
+      "shim": "alcf_minerva--chat_completions"
     }
   },
 

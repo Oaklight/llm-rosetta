@@ -281,7 +281,7 @@ class TestProxyRetryOn401:
         resp = asyncio.run(_run())
         assert resp.status_code == 401
         body = json.loads(resp.body)
-        assert "alcf-token.py --login" in body["error"]["message"]
+        assert "alcf.token --login" in body["error"]["message"]
         # Should NOT have retried
         assert transport.send.await_count == 1
         _reset()

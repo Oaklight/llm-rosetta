@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from llm_rosetta_gateway.admin.routes._shared import _build_provider_entry
 
-COMMAND = ["python3", "scripts/alcf-token.py"]
+COMMAND = ["python3", "token.py"]
 
 
 def _save(body: dict, existing: dict | None = None, name: str = "alcf") -> dict:

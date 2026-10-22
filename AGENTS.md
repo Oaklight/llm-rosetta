@@ -242,7 +242,6 @@ tests/
 └── test_tool_ops.py
 
 scripts/
-├── alcf-token.py                 # ALCF token management
 ├── bench_pipeline.py             # Conversion pipeline benchmarks
 ├── rosetta-test-*.sh             # Agent integration test runners
 ├── run_gateway_integration.sh    # Gateway integration test runner
