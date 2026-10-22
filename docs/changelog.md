@@ -9,6 +9,8 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 ## [未发布]
 
 ### 新增
+- **没有用量端点的通道改为 in-band 降级**（issue [#1068](https://github.com/Oaklight/llm-rosetta/issues/1068)，epic [#1003](https://github.com/Oaklight/llm-rosetta/issues/1003)）：ChatGPT 套餐通道按 5 小时窗口与按应用的周上限计量，而厂商从不向应用暴露这些数字，因此没有可轮询的东西。shim 现在可以把探针声明为 `in_band: true` —— 只保留其拒绝分类器，从不轮询 —— 收到 `subscription_sharing_usage_limit_exceeded` 时把该凭据降级 60 秒，而不是臆造一个重置时间。提供方卡片会报告“没有可读的配额”并给出原因，而不是报错。
+
 
 - **由 shim 声明的凭据**（issue [#946](https://github.com/Oaklight/llm-rosetta/issues/946)、[#1056](https://github.com/Oaklight/llm-rosetta/issues/1056)、[#1183](https://github.com/Oaklight/llm-rosetta/issues/1183)）：shim 现在可以把凭据交换写成代码——在 `provider.yaml` 旁提供导出 `EXCHANGE` 的 `auth.py`——以支持无法塞进一条 `token_command` 的 OAuth 流程，也可以把运维填写的 key 作为输入。网关用同一条通道驱动两种形式：启动时取种、定时刷新，以及上游返回 `401` 后按需重试。`llm-rosetta-gateway credential <provider>` 在有浏览器的一侧运行交互式登录并输出生成的记录，供网关在别处运行时使用（[CLI 参考](gateway/cli.md#credential-provider)）。
 - **Sign in with ChatGPT**（epic [#1055](https://github.com/Oaklight/llm-rosetta/issues/1055)；issue [#1057](https://github.com/Oaklight/llm-rosetta/issues/1057)、[#1058](https://github.com/Oaklight/llm-rosetta/issues/1058)、[#1059](https://github.com/Oaklight/llm-rosetta/issues/1059)、[#1063](https://github.com/Oaklight/llm-rosetta/issues/1063)）：`openai_chatgpt--open_responses` shim 用登录得到的凭据接入 ChatGPT 套餐通道，而不再依赖 API key。该 profile 把 Responses 请求面收窄到通道实际接受的范围——去掉 `temperature`、`max_output_tokens`、`metadata` 等字段，强制 `store: false`，并要求流式——模型列表也按通道自己的格式读取。参见 [OpenAI（ChatGPT 套餐）](guide/providers/openai_chatgpt.md)。

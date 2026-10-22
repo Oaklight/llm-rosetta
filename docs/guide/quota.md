@@ -126,3 +126,23 @@ quota:
 
 [OpenCode Zen 公共通道](providers/opencode.md#public-free-lane)没有凭据，因此没有按 key
 的额度。它返回 429 时，会给整个 provider 一个短暂冷却，而不是降级某个 key。
+
+## 没有用量端点的通道
+
+有些通道的额度厂商从不向应用暴露：[ChatGPT 套餐通道](providers/openai_chatgpt.md) 按
+5 小时窗口与按应用的周上限计量，而这些都在账号自己的设置里。通道唯一给出的信号是一次
+拒绝，并指明耗尽的窗口 —— `subscription_sharing_usage_limit_exceeded`，可能出现在响应里，
+也可能在流中以 `response.failed` 出现 —— 因此没有任何可轮询的东西。
+
+这类 shim 把探针声明为**仅 in-band**：
+
+```yaml
+quota:
+  probe: openai_codex
+  in_band: true
+```
+
+探针只为其 `inband()` 分类器保留，从不轮询。拒绝到达时，该凭据被降级一段很短且有界的
+冷却时间 —— 60 秒 —— 而不是等到一个厂商并未给出的重置时间：与其他地方一致，读取失败
+从不降级，而错误从不臆造窗口。提供方卡片会报告**没有可读的配额**并给出原因，而不是报错；
+它的 **管理用量** 链接指向厂商的设置页，那是唯一能看到额度的地方。
