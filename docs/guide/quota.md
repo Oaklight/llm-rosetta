@@ -131,6 +131,39 @@ demotion and its reason.
 window whose status is not `ok` (OpenCode's `rate-limited`) is exhausted even
 when its share is below 100.
 
+## How a reading reaches the router
+
+A reading used to matter only at its extremes: a spent window demoted the
+credential (or blocked the provider), and until then the quota layer was
+invisible to routing. Two providers both "ready" split the traffic evenly even
+when one of them was at 96%.
+
+Now every selection weighs the candidates by their remaining allowance. The
+selector takes the **smallest remaining share** across a provider's credentials
+and scales its configured weight:
+
+```
+weight × (0.25 + 0.75 × headroom)
+```
+
+So an untouched provider keeps its weight, a nearly spent one serves about a
+quarter of its share, and **nothing is scaled to zero** — a provider is removed
+by the quota state (a spent window, a live block), never by this factor. A
+provider nothing has measured keeps its configured weight: being unmeasured is
+not the same as being spent.
+
+Two properties worth knowing:
+
+- The **configured weight is still the operator's statement**. The ratio only
+  scales it, so a provider configured at `weight: 3` remains three times as
+  attractive as its peer at the same headroom.
+- Client affinity still hashes first. The headroom only affects the choice
+  among providers, never whether a conversation stays where its cache is.
+
+The stage is called `quota` in the selection chain and runs before the anchor,
+so it informs the choice rather than making it — the strategies stay what they
+are.
+
 ## Keyless lanes
 
 The [OpenCode Zen public lane](providers/opencode.md#public-free-lane) has no
