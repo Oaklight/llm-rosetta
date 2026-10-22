@@ -138,6 +138,14 @@ shim 下的两个提供方是两个账号，因此自行决定 `state_dir` 默�
 `InteractiveSetupRequired` 时，提供方会被标记为“需要交互式登录”，不参与启动重试，也不会
 让每个请求都在上游失败。
 
+已随包发布的参考实现是 OpenAI 套餐通道的
+`openai_chatgpt/open_responses/auth.py`（issue
+[#1057](https://github.com/Oaklight/llm-rosetta/issues/1057)）：动态客户端注册、PKCE、
+loopback 回调、基于 discovery JWKS 的 ID token 验签、在排他锁下原子写入的 `0600`
+凭据记录、轮换的 refresh token，以及跨重新登录保留的 host id。它只用标准库 —— RS256
+用 `hashlib` 与大整数 `pow` 验签，HTTP 用工作线程上的 `urllib` —— 这也是 shim 模块必须
+遵守的形态：shim 层先于网关加载，而核心没有任何依赖。
+
 一个 shim 只能声明其中一种形式：同时提供 `auth.py` 与 `connection.token_command` 会加载
 失败。提供方自己写的 `token_command` 仍然优先；若交换未声明 `consumes_key`，在同一提供方
 再配置 `api_key` 会被拒绝 —— 两者是同一个凭据的两种来源。
