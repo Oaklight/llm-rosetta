@@ -410,7 +410,7 @@ llm-rosetta-gateway --socket /run/user/$(id -u)/rosetta.sock
 }
 ```
 
-触发条件刻意很窄：必须是 provider 的 shim 归类为配额拒绝的上游 `429`（部分 shim 也会归类 `403`），且该 provider 已没有凭据能服务这次请求。普通的 `5xx`、`401`，以及网关无法归类的 `429`，都照旧原样返回。预算只有**一次**：拒绝的 provider 在本次请求余下部分被排除，改试另一个 provider；如果它也拒绝，客户端收到的就是它这次的拒绝。
+触发条件刻意很窄：必须是 provider 的 shim 归类为配额拒绝的上游 `429`（部分 shim 也会归类 `403`），且该 provider 已没有凭据能服务这次请求。普通的 `5xx`、`401`，以及网关无法归类的 `429`，都照旧原样返回。预算是**一次故障转移** —— 不是一次上游调用：如果同一 provider 还有一个可用凭据，会先花掉原有的同 provider 重试，只有整个 provider 都用尽才会转移。拒绝的 provider 在本次请求余下部分被排除，改试另一个 provider；如果它也拒绝，客户端收到的就是它这次的拒绝。
 
 默认关闭，是因为它真的有所取舍：换一个 provider 就是换一份 prompt 缓存、换一个限流桶，甚至可能是另一个模型构建。真的发生时，请求的 profile 会记录 `failover: {from, to, reason}`，请求日志行也指向实际服务的 provider。
 
