@@ -15,4 +15,4 @@ title: API Reference
 ## Gateway API
 
 - [Admin API](admin.md) — gateway admin panel REST API endpoints
-- [Observability](observability.md) — reusable metrics, request logging, persistence, and profiling
+- [Observability](observability.md) — the gateway's telemetry stack (metrics, request logging, persistence, profiling) and the core's usage metering

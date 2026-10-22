@@ -4,14 +4,23 @@ title: Observability
 
 # Observability API Reference
 
-The `llm_rosetta.observability` package provides reusable, framework-agnostic
-building blocks for metrics collection, request logging, SQLite persistence,
-and on-demand profiling.  Any HTTP proxy built on top of `llm-rosetta` can
-import from this package directly — no dependency on the gateway's config
+The observability layer has two halves, in two distributions (epic #1127):
+
+- **`llm_rosetta_gateway.observability`** — the telemetry stack: metrics,
+  request logging, SQLite persistence, the ops log, error dumps, capture,
+  maintenance, retention, header sanitizing and on-demand profiling.  Every
+  consumer is a proxy server, so it ships with the gateway.
+- **`llm_rosetta.observability.usage`** — what a usage report *means*: the
+  ledger, the per-model-type normalization and the rolling-window report.
+  `pipeline.chat` reads it, so it stays in the core and needs no store.
+
+A library that only converts imports the usage half and needs nothing else;
+anything that writes a database imports from the gateway.  The blocks below
+are framework-agnostic either way — no dependency on the gateway's config
 system or HTTP server.
 
 ```python
-from llm_rosetta.observability import (
+from llm_rosetta_gateway.observability import (
     MetricsCollector,
     PersistenceManager,
     ProfilerState,
@@ -213,7 +222,7 @@ It delegates to SQLite persistence when available and falls back to an
 in-memory ring buffer otherwise.
 
 ```python
-from llm_rosetta.observability import OpsLog, OpsLogEntry
+from llm_rosetta_gateway.observability import OpsLog, OpsLogEntry
 ```
 
 ### OpsLogEntry Fields
@@ -322,7 +331,7 @@ The primary entry point for recording error context.  Returns the dump ID on
 success, or `None` when persistence is disabled or an exception occurs.
 
 ```python
-from llm_rosetta.observability import dump_error
+from llm_rosetta_gateway.observability import dump_error
 
 dump_id = dump_error(
     persistence,
@@ -366,7 +375,7 @@ Replace inline base64 image data URIs with SHA256 digest placeholders.
 Returns a deep copy — the original body is not mutated.
 
 ```python
-from llm_rosetta.observability import offload_images
+from llm_rosetta_gateway.observability import offload_images
 
 cleaned = offload_images(request_body)
 # base64 data → "[image image/png sha256:abc123… 450KB]"
@@ -384,7 +393,7 @@ a human-readable placeholder.
 SHA256 of canonicalized JSON (sorted keys, no whitespace).
 
 ```python
-from llm_rosetta.observability import compute_body_hash
+from llm_rosetta_gateway.observability import compute_body_hash
 
 h = compute_body_hash({"model": "gpt-4o", "messages": []})
 # "e3b0c44298fc1c149afb..."
@@ -401,7 +410,7 @@ h = compute_body_hash({"model": "gpt-4o", "messages": []})
 JSON-serialize and zlib-compress a body dict.
 
 ```python
-from llm_rosetta.observability import compress_body
+from llm_rosetta_gateway.observability import compress_body
 
 compressed, original_size = compress_body(request_body)
 ```
@@ -418,7 +427,7 @@ Decompress a zlib-compressed JSON body back to a dict.  Inverse of
 `compress_body`.
 
 ```python
-from llm_rosetta.observability import decompress_body
+from llm_rosetta_gateway.observability import decompress_body
 
 body = decompress_body(compressed)
 ```
@@ -433,7 +442,8 @@ body = decompress_body(compressed)
 
 ## Usage
 
-`llm_rosetta.observability.usage` owns what "how many tokens did we move, and
+This half is the core's: it stays in `llm_rosetta.observability` (no store, no
+gateway).  `llm_rosetta.observability.usage` owns what "how many tokens did we move, and
 for whom" means.  It has no HTTP, no configuration and no credentials: a
 library user records usage and reads a report without any of that, and the
 gateway is one consumer of it, supplying credential subjects and SQLite
@@ -573,7 +583,8 @@ token's rows and any reader that groups them name one thing once.
 ### The `llm-rosetta-usage` command
 
 The gateway renders this report in its admin panel and a library gets it from
-`UsageReport.build`; the third reader is a shell:
+`UsageReport.build`; the third reader is a shell.  The command ships with the
+**gateway** distribution, because it reads the store only the gateway writes:
 
 ```console
 $ llm-rosetta-usage --db /var/lib/llm-rosetta --window 24h
@@ -658,4 +669,18 @@ from llm_rosetta_gateway.admin.persistence import PersistenceManager
 from llm_rosetta_gateway.admin.routes.profiling import ProfilerState
 ```
 
-New code should import from `llm_rosetta.observability` directly.
+The telemetry modules' old `llm_rosetta.observability.*` paths moved with them
+in #1161 and keep working until 0.16.0 (#919): importing one warns and returns
+the *same* module object as its gateway counterpart, so a store is never
+opened twice.
+
+```python
+import warnings
+
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore", DeprecationWarning)
+    from llm_rosetta.observability.metrics import MetricsCollector  # same object
+```
+
+New code imports from `llm_rosetta_gateway.observability` for telemetry, and
+from `llm_rosetta.observability.usage` for metering.

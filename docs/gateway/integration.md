@@ -146,7 +146,7 @@ After each proxy call, record the result:
 
 ```python
 import time
-from llm_rosetta.observability import MetricsCollector, RequestLog, RequestLogEntry
+from llm_rosetta_gateway.observability import MetricsCollector, RequestLog, RequestLogEntry
 
 # These are set up by setup_admin() and attached to app
 metrics: MetricsCollector = app.metrics
@@ -290,7 +290,7 @@ class OpsCustomAction(OpsBase):
 ```
 
 Add the corresponding event type constant to your project's constants
-module (not to `llm_rosetta.observability.ops_log` directly).
+module (not to `llm_rosetta_gateway.observability.ops_log` directly).
 
 ## Branding Customization
 
