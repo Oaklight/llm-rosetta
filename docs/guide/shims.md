@@ -48,13 +48,36 @@ packages/llm-rosetta/src/llm_rosetta/shims/providers/
 
 每个提供方子目录包含：
 
-- **`provider.yaml`**（必需）—— 声明 `name`、`model_type`、`format`、连接设置（`connection.base_url`、`connection.api_key_env`、`connection.auth_header`、`connection.keyless`、`connection.models_path`、`connection.default_path`），以及可选的 `logo`、`display_name`、`free_source`。`base` 是 `format` 的弃用别名；loader 会校验 `(model_type, format)` 对。使用 `format` 时必须同时声明 `model_type` —— 只有声明 `base` 且不写 `format` 的 shim 可以省略。非 chat shim 用 `connection.default_path` 声明它服务的端点（例如 `/v1/embeddings`），提供方可以通过 `embedding_shim` / `rerank_shim` / `decision_shim` 指向它，而不必写裸格式。
+- **`provider.yaml`**（必需）—— 声明 `name`、`model_type`、`format`、连接设置（`connection.base_url`、`connection.api_key_env`、`connection.auth_header`、`connection.keyless`、`connection.models_path`、`connection.default_path`、`connection.token_command`），以及可选的 `logo`、`display_name`、`free_source`。`base` 是 `format` 的弃用别名；loader 会校验 `(model_type, format)` 对。使用 `format` 时必须同时声明 `model_type` —— 只有声明 `base` 且不写 `format` 的 shim 可以省略。非 chat shim 用 `connection.default_path` 声明它服务的端点（例如 `/v1/embeddings`），提供方可以通过 `embedding_shim` / `rerank_shim` / `decision_shim` 指向它，而不必写裸格式。
 - **`transforms.py`**（可选）—— 导出 `post_ir_transforms` 和/或 `pre_ir_transforms` 元组（旧名 `to_transforms` / `from_transforms` 也可用）
 
 `connection.keyless` 表示该上游无需凭据即可访问：未配置 `api_key` 时不发送任何鉴权头，
 配置了则回退到基础类型的鉴权方式。`free_source: true` 表示该 shim 的网关提供免费模型池
 —— 管理台会把它的 keyless 条目归入 "Free Resource" 分区，并命名为
 `<display_name> (Free)`。
+
+**凭据交换（Credential exchange）。** 有些上游的推理端点不接受账号 API key —— AskSage
+接受由账号 key 换来的短期 access token，ALCF 接受会过期的 Globus bearer token 并需要
+定时刷新。这个交换是厂商的事实，因此可以由 shim 自己声明，而不是让每个运维各写一遍：
+
+```yaml
+connection:
+  base_url: https://api.vendor.example/v1
+  api_key_env: VENDOR_API_KEY
+  token_command: [python3, token.py]
+  token_refresh_interval: 7200
+```
+
+网关在启动时运行该命令，之后每 `token_refresh_interval` 秒再运行一次（shim 与提供方都
+未声明时为 `3600`，最小 `60`），并在上游返回 `401` 后立即重跑；命令的 stdout 就是发往
+上游的凭据。参数中指向 shim 自身目录内文件的相对路径会被解析为绝对路径，因此 shim 可以
+把脚本与 `provider.yaml` 放在一起；`python3` 之类的裸命令名与各种参数保持原样。提供方
+自己声明的 `token_command` 仍然优先；当命令掌管凭据时，shim 的 `api_key_env` 不会被当作
+静态密钥使用。
+
+命令在网关自身的环境中运行：它能读到什么凭据就使用什么（例如 ALCF 的 `~/.globus`）。
+把运维填写的 key 交给命令是 [#946](https://github.com/Oaklight/llm-rosetta/issues/946)
+的下一步，目前尚未实现 —— 现阶段需要账号 key 的交换必须由脚本自行从环境读取。
 
 **管理台如何分组 shim。** 提供方类型选择器分两级：顶层（*group*）以及其下每个 shim
 一行。两个字符串都可以声明，因为它们并非总能从名称推导出来：

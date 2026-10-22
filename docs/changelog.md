@@ -10,6 +10,9 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### 新增
 
+- **shim 可以自己声明凭据交换**（issue [#946](https://github.com/Oaklight/llm-rosetta/issues/946)）：有些上游的推理端点不接受账号 API key —— AskSage 接受由 key 换来的短期 access token，ALCF 接受会过期的 Globus bearer token —— 因此此前每个部署都要手写 `token_command`。现在 `connection.token_command` 与 `connection.token_refresh_interval` 让 shim 把交换逻辑随 `provider.yaml` 一起发布：网关在启动时、按声明的间隔、以及上游返回 401 之后运行该命令，并把 stdout 作为凭据。参数中指向 shim 自身目录内文件的相对路径会解析为绝对路径，因此把脚本放在声明旁边即可写 `[python3, token.py]`；`python3` 之类裸命令名与各种参数保持原样；声明格式错误时只记录警告并忽略，不会让 shim 加载失败。提供方自己声明的命令仍然优先；当命令掌管凭据时，shim 的 `api_key_env` 不再被注入为静态密钥。命令尚未拿到运维填写的 key —— 它只使用自己能够读到的凭据 —— 那是该 issue 的下一片。
+
+
 - **所有分页视图都能直接跳转到指定页**（PR [#1149](https://github.com/Oaklight/llm-rosetta/pull/1149)）：只有 Prev/Next 时远端页面几乎不可达——Request Log 有数十万行（每页 30 条即 8943 页），Error Dumps 也有几十页。Request Log、Server Ops Log 与 Error Dumps 三个分页控件现在都在 Prev/Next 旁增加了页码输入框与 Go 按钮，在输入框内按 Enter 等效。超出范围的数字会收敛到第一页/最后一页，输入为空或非数字时保持当前页不变，只有一页时输入框禁用。页码运算放在无 DOM 依赖的 `core/pagination.js` 中，由 `tests/js/pagination.test.mjs` 固定；输入框里的半成品数字能扛过日志每 3 秒的自动刷新——只有当它的值与上次同步的页码一致时才会跟随页面更新。
 
 - **Dashboard 页的调试面板可折叠**（PR [#1081](https://github.com/Oaklight/llm-rosetta/pull/1081)）：Profiling 与 Content Capture 是按需开启的调试工具，但两者都把完整表格直接铺在页面上——即使 profiling 未开启，Error Dumps 及其后的内容也被推到很下面。现在两个区块都是 `<details>`，摘要行保留 ON/OFF 徽标，折叠时也能看到当前状态；面板按需展开，展开/折叠状态跨刷新保留。键盘操作与箭头样式都由 `<details>` 提供，与 Server Settings 区块一致。
