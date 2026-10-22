@@ -48,7 +48,7 @@ packages/llm-rosetta/src/llm_rosetta/shims/providers/
 
 Each provider subdirectory contains:
 
-- **`provider.yaml`** (required) — declares `name`, `model_type`, `format`, connection settings (`connection.base_url`, `connection.api_key_env`, `connection.auth_header`, `connection.keyless`, `connection.models_path`, `connection.default_path`), plus optional `logo`, `display_name`, and `free_source`.  `base` is the deprecated alias for `format`; the loader validates the `(model_type, format)` pair against the converter registry.  `model_type` is required whenever `format` is used — only a shim that declares `base` and no `format` may omit it.  A non-chat shim declares `connection.default_path` for the endpoint it serves (e.g. `/v1/embeddings`), and a provider can name it through `embedding_shim` / `rerank_shim` / `decision_shim` instead of a bare format.
+- **`provider.yaml`** (required) — declares `name`, `model_type`, `format`, connection settings (`connection.base_url`, `connection.api_key_env`, `connection.auth_header`, `connection.keyless`, `connection.models_path`, `connection.default_path`, `connection.token_command`), plus optional `logo`, `display_name`, and `free_source`.  `base` is the deprecated alias for `format`; the loader validates the `(model_type, format)` pair against the converter registry.  `model_type` is required whenever `format` is used — only a shim that declares `base` and no `format` may omit it.  A non-chat shim declares `connection.default_path` for the endpoint it serves (e.g. `/v1/embeddings`), and a provider can name it through `embedding_shim` / `rerank_shim` / `decision_shim` instead of a bare format.
 - **`transforms.py`** (optional) — exports `post_ir_transforms` and/or `pre_ir_transforms` tuples (the old names `to_transforms` / `from_transforms` also work)
 
 `connection.keyless` marks an upstream that accepts requests with no credential: the
@@ -56,6 +56,35 @@ provider sends no auth header while no `api_key` is configured, and falls back t
 base type's auth when one is supplied. `free_source: true` marks a shim whose gateway
 serves a free model pool — the admin UI groups its keyless entry under a "Free
 Resource" section and titles it `<display_name> (Free)`.
+
+**Credential exchange.** Some upstreams do not accept an account API key on their
+inference endpoints — AskSage takes a short-lived access token minted from the
+account key, ALCF a Globus bearer token that expires and has to be refreshed. The
+exchange is a fact about the vendor, so a shim can declare it instead of leaving
+every operator to write it:
+
+```yaml
+connection:
+  base_url: https://api.vendor.example/v1
+  api_key_env: VENDOR_API_KEY
+  token_command: [python3, token.py]
+  token_refresh_interval: 7200
+```
+
+The gateway runs the command at startup, again every `token_refresh_interval`
+seconds (`3600` when the shim and the provider both stay silent, minimum `60`),
+and immediately after an upstream `401`; its stdout becomes the credential sent
+upstream. A relative argument that names a file in the shim's own directory is
+resolved to its absolute path, so the shim ships the script beside its
+`provider.yaml` — `python3` and any flag stay as written. A provider that names
+its own `token_command` still wins, and while a command owns the credential the
+shim's `api_key_env` is not used as a static key.
+
+The command runs with the gateway's environment: it reads whatever credentials it
+can reach itself (ALCF's `~/.globus`, for instance). Handing it the key the
+operator typed is [#946](https://github.com/Oaklight/llm-rosetta/issues/946)'s
+next step and does not exist yet — a shim whose exchange needs the account key
+must read it from its own environment for now.
 
 **How the admin panel groups shims.** The provider-type picker has two levels: a
 top level (the *group*) and one row per shim under it. Both strings can be
