@@ -19,11 +19,12 @@ title: 提供方参考
 | [Volcengine](volcengine.md) | `volcengine--chat_completions` | `chat_completions` | 字段转换 |
 | [OpenRouter](openrouter.md) | `openrouter--chat_completions` | `chat_completions` | 多模型路由 |
 | [MiniMax](minimax.md) | `minimax--chat_completions` | `chat_completions` | OpenAI 兼容 |
-| [Argo](argo.md) | `argo--*` | `chat_completions` | 独立包；阿贡内部网关 |
+| [Argo](argo.md) | `argo--*` | 多种 | 独立包；阿贡内部网关 |
 | [AskSage](asksage.md) | `asksage--*` | 多种 | 独立包；多格式聚合器 |
 | [ALCF](alcf.md) | `alcf_<cluster>--chat_completions` | `chat_completions` | 独立包；Globus OAuth, token_command |
 | [Kilo](kilo.md) | `kilo--chat_completions` | `chat_completions` | 免费池，keyless |
 | [OpenCode](opencode.md) | `opencode--*` | 多种 | Go 订阅 / Zen 余额 |
+| [Plan (ChatGPT)](openai_chatgpt.md) | `openai_chatgpt--open_responses` | `open_responses` | ChatGPT 套餐通道；登录而非 API key |
 
 Argo、AskSage 与 ALCF 的 shim 作为独立包发布 —— 在使用其名称之前，请通过 `shims.presets`（或 **Settings → Shim Sources**）声明对应源。参见[独立 Shim 包](../shims.md#standalone-shim-packages)。
 

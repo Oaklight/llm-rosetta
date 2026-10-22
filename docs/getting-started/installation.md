@@ -36,8 +36,11 @@ pip install "llm-rosetta[openai,anthropic,google]"
 ### pip
 
 ```bash
-pip install "llm-rosetta[gateway]"
+pip install llm-rosetta-gateway
 ```
+
+网关作为独立发行版发布，并依赖一个兼容的 `llm-rosetta` 核心版本。
+`pip install "llm-rosetta[gateway]"` 仍可作为一次性元别名使用，会同时安装两者。
 
 网关**零外部运行时依赖** — 使用内置的纯标准库 HTTP 服务器和客户端模块。
 

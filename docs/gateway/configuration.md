@@ -397,6 +397,28 @@ llm-rosetta-gateway --socket /run/user/$(id -u)/rosetta.sock
 
 该开关只改变*由哪个*上游来服务请求。转换依然始终经过 IR——包括第 1 层的情况。参见[架构指南](../contributing/architecture.md)。
 
+## 熔断器 { #circuit-breaker }
+
+可选的熔断器会在提供方持续失败时直接短路请求，而不是把每个请求都发到上游再失败一次。默认关闭。
+
+```jsonc
+{
+  "server": {
+    "circuit_breaker": {
+      "enabled": true,
+      "error_threshold": 5,      // 连续失败多少次后 CLOSED -> OPEN
+      "cooldown_seconds": 30,    // OPEN 状态等待多久后允许探测
+      "half_open_max_probes": 1  // HALF_OPEN 状态允许的并发探测数
+    }
+  }
+}
+```
+
+每个提供方都可以用自己的 `circuit_breaker` 对象覆盖任意字段。熔断器按提供方统计连续失败：
+达到 `error_threshold` 后打开，请求在本地以 `503` 与 `Retry-After` 拒绝；经过
+`cooldown_seconds` 后放行少量探测，探测成功则关闭，失败则重新打开。管理台仪表盘会报告每个
+已启用熔断器的状态。熔断器负责“处置”失败，健康指标仍继续“报告”失败。
+
 ## 网关 API Key { #gateway-api-keys }
 
 网关 API Key 通过**管理面板**管理——配置文件中不再设置 API Key。

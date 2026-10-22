@@ -129,8 +129,9 @@ EXCHANGE = Exchange()
 | `describe(ctx)` | `GET …/credential` | 返回不含令牌的摘要，或 `None` |
 | `revoke(ctx)` | `DELETE …/credential` | 删除记录，厂商允许时同时在上游撤销 |
 
-后四个成员是可选的：未实现的交换通过 `can_install()` / `can_login()`（两者默认 `False`）
-表明这一点，网关会拒绝该操作，而不是去调用一个空实现。
+`login`、`install`、`describe` 与 `revoke` 都是可选的。未实现 `install` 或 `login` 的交换通过
+`can_install()` / `can_login()`（两者默认 `False`）表明这一点，网关会拒绝该操作，而不是去调用
+一个空实现；`describe` 与 `revoke` 则在存在时使用。
 
 `ctx` 携带提供方的配置键（`ctx.provider`）、凭据记录目录（`ctx.state_dir` —— 即
 `server.data_dir` 相对配置文件解析后的路径再加 `/shim-auth/<provider>`；只有程序化调用方
