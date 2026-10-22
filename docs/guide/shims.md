@@ -572,6 +572,7 @@ multimodal_tool_result: false
 | `strip_fields(*keys)` | 从请求体中移除不支持的字段 | `strip_fields("logprobs", "top_logprobs")` |
 | `rename_field(old, new)` | 重命名顶层字段 | `rename_field("max_tokens", "max_length")` |
 | `set_defaults(**kv)` | 仅在字段不存在时设置（幂等） | `set_defaults(temperature=0.7)` |
+| `force_fields(**kv)` | 无条件设置字段 —— 用于上游拒绝的取值 | `force_fields(store=False)` |
 | `default_tool_description(text)` | 为描述为空的工具注入占位描述 | `default_tool_description("No description provided")` |
 
 ### 响应体变换

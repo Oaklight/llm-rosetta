@@ -51,3 +51,5 @@ title: Shims
 ::: llm_rosetta.transforms.rename_field
 
 ::: llm_rosetta.transforms.set_defaults
+
+::: llm_rosetta.transforms.force_fields
