@@ -19,14 +19,21 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass, field
 from typing import Protocol
+from collections.abc import Mapping
 
 
 @dataclass(slots=True)
 class ProviderEntry:
-    """A provider candidate with an associated weight."""
+    """A provider candidate with an associated weight.
+
+    ``weight`` is a ratio, not a count: a request-time factor (an allowance
+    headroom, say) scales it, and rounding a scaled weight back to an integer
+    would erase the difference between "untouched" and "nearly spent" for the
+    default of ``1``.
+    """
 
     name: str
-    weight: int = 1
+    weight: float = 1.0
     upstream_model: str | None = None
 
 
@@ -67,7 +74,7 @@ class WeightedRoundRobinStrategy:
     """
 
     def __init__(self) -> None:
-        self._current_weights: dict[str, list[int]] = {}
+        self._current_weights: dict[str, list[float]] = {}
 
     def select(
         self,
@@ -84,12 +91,12 @@ class WeightedRoundRobinStrategy:
 
         weights = self._current_weights.get(route_id)
         if weights is None or len(weights) != n:
-            weights = [0] * n
+            weights = [0.0] * n
             self._current_weights[route_id] = weights
 
         total = sum(p.weight for p in providers)
         best_idx = 0
-        best_weight = -1
+        best_weight = float("-inf")
         for i, p in enumerate(providers):
             weights[i] += p.weight
             if weights[i] > best_weight:
@@ -180,25 +187,58 @@ class ModelRoute:
     def __post_init__(self) -> None:
         self._entry_by_name = {p.name: p for p in self.providers}
 
-    def select(self, *, identity: str | None = None) -> str:
+    def _candidates(self, weights: Mapping[str, float] | None) -> list[ProviderEntry]:
+        """The entries the strategy sees, with this request's weights applied.
+
+        The configured weight is the operator's statement of preference; a
+        request-time factor only scales it, and never to zero — a live provider
+        with a nearly spent window still serves its share.
+        """
+        if not weights:
+            return self.providers
+        return [
+            ProviderEntry(
+                name=p.name,
+                # Never zero: a provider with a spent window is still a
+                # candidate — the quota state, not this factor, removes one.
+                weight=max(0.05, p.weight * weights.get(p.name, 1.0)),
+                upstream_model=p.upstream_model,
+            )
+            for p in self.providers
+        ]
+
+    def select(
+        self,
+        *,
+        identity: str | None = None,
+        weights: Mapping[str, float] | None = None,
+    ) -> str:
         """Pick the next provider according to the strategy.
 
         Args:
             identity: Optional client identity for affinity routing.
+            weights: Optional per-provider multiplier for this selection, e.g.
+                an allowance headroom.  Absent means the configured weights.
         """
         return self.strategy.select(
-            self.providers, route_id=self.route_id, identity=identity
+            self._candidates(weights), route_id=self.route_id, identity=identity
         )
 
-    def select_entry(self, *, identity: str | None = None) -> ProviderEntry:
+    def select_entry(
+        self,
+        *,
+        identity: str | None = None,
+        weights: Mapping[str, float] | None = None,
+    ) -> ProviderEntry:
         """Pick the next provider and return the full entry.
 
         Args:
             identity: Optional client identity for affinity routing.
+            weights: Optional per-provider multiplier, as in :meth:`select`.
         """
         return self._entry_by_name[
             self.strategy.select(
-                self.providers, route_id=self.route_id, identity=identity
+                self._candidates(weights), route_id=self.route_id, identity=identity
             )
         ]
 

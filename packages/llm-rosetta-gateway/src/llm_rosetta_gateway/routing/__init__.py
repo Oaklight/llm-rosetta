@@ -19,6 +19,7 @@ from __future__ import annotations
 from .context import Identity, SelectionContext
 from .key import ProviderKeyAffinity
 from .prefix import compute_affinity_identity, extract_prefix_from_ir
+from .quota import QuotaStage
 from .same_format import SameFormatStage, shim_group_key
 from .session import SessionHeaderAffinity
 from .select import AnchorStage, select_ready_entry
@@ -41,6 +42,7 @@ __all__ = [
     "ModelRoute",
     "ProviderEntry",
     "ProviderKeyAffinity",
+    "QuotaStage",
     "RoutingChain",
     "RoutingStage",
     "RoutingStrategy",

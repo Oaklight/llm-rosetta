@@ -17,6 +17,7 @@ from llm_rosetta.routing import ResolvedRoute
 from ..providers import build_provider_info
 from ..routing import (
     AnchorStage,
+    QuotaStage,
     RoutingChain,
     RoutingStage,
     SameFormatStage,
@@ -286,7 +287,7 @@ class GatewayConfig:
         # The order is checked when the chain is built, so a stage added later
         # fails at construction rather than on the first request.
         self._same_format = SameFormatStage()
-        stages: list[RoutingStage] = [AnchorStage()]
+        stages: list[RoutingStage] = [QuotaStage(), AnchorStage()]
         if self.prefer_same_format:
             stages.append(self._same_format)
         self._selection = RoutingChain(stages)

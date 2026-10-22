@@ -32,6 +32,7 @@ from ..providers import BASE_FORMATS, build_provider_info
 from ..routing import (
     DEFAULT_STRATEGY,
     AnchorStage,
+    QuotaStage,
     ModelRoute,
     ProviderEntry,
     RoutingChain,
@@ -59,6 +60,7 @@ __all__ = [
     "DEFAULT_STRATEGY",
     "PATHS_TO_TRY",
     "AnchorStage",
+    "QuotaStage",
     "ConfigIO",
     "GatewayConfig",
     "JsoncConfigIO",

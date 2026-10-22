@@ -414,6 +414,34 @@ def resolve_provider_probe_for_info(
     return match.probe, match.url, None
 
 
+def provider_headroom(pinfo: Any) -> float | None:
+    """The smallest remaining share across this provider's credentials.
+
+    ``1.0`` is untouched, ``0.0`` is spent, ``None`` means no reading is known
+    — which is not the same as "plenty": a lane nothing has probed must keep
+    its configured weight rather than be punished for being unmeasured.
+
+    The reading is per credential and already cached by the probe layer, so
+    this is a lookup, not a call.  A window that reports no share (a vendor
+    that only says "rate-limited") contributes nothing here; that case is what
+    the demotion state is for.
+    """
+    probe = getattr(pinfo, "quota_probe", None)
+    ring = getattr(pinfo, "key_ring", None)
+    if not probe or ring is None:
+        return None
+    shares: list[float] = []
+    for key in ring.keys():
+        reading = QUOTA_STATE.get_reading(probe, credential_fingerprint(key))
+        if reading is None:
+            continue
+        for window in reading.windows:
+            if window.used_percent is None:
+                continue
+            shares.append(max(0.0, 100.0 - float(window.used_percent)) / 100.0)
+    return min(shares) if shares else None
+
+
 def provider_cooldown(name: str, pinfo: Any) -> dict[str, Any] | None:
     """Return a provider-wide quota block, for the admin surface.
 
