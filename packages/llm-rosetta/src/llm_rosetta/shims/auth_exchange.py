@@ -168,6 +168,41 @@ class AuthExchange(Protocol):
         """
         ...
 
+    def revoke(self, ctx: AuthContext) -> bool:
+        """Sign out: remove the record, revoking upstream when the vendor allows.
+
+        The other side of :meth:`login`.  A vendor that issues revocable
+        tokens should call its revocation endpoint before dropping the record;
+        one that does not simply forgets it.  What must not happen is a record
+        removed locally while the grant stays live upstream, which is why this
+        returns whether the vendor side was actually revoked — a caller can say
+        "signed out" or "forgotten locally" and mean it.
+
+        Implementations must remove the record **before** attempting the
+        network call, and under whatever lock protects it from a concurrent
+        refresh: a refresh that read the old record just before a delete would
+        otherwise write it back afterwards, leaving a signed-out provider
+        holding a live grant.  Removal must happen even when the network call
+        fails — the operator asked for it gone.
+
+        ``needs_interactive_setup()`` is how the gateway decides whether a
+        sign-out removed anything (`removed` in the response).  An exchange
+        whose record bookkeeping it does not reflect should override it
+        alongside this member; otherwise the endpoint under-reports a
+        successful sign-out as "nothing removed".
+
+        Optional, like :meth:`install`: an exchange that keeps no record of its
+        own does not implement it.
+
+        Returns:
+            ``True`` when the grant was revoked upstream, ``False`` when only
+            local state was removed.
+
+        Raises:
+            AuthExchangeError: The record could not be removed at all.
+        """
+        ...
+
     def login(self, ctx: AuthContext) -> Mapping[str, Any]:
         """Run the interactive sign-in and return the finished record.
 
@@ -228,6 +263,10 @@ class BaseAuthExchange:
         """Refuse: this exchange has no browser sign-in."""
         raise NotImplementedError
 
+    def revoke(self, ctx: AuthContext) -> bool:  # pragma: no cover
+        """Refuse: this exchange keeps no record to revoke."""
+        raise NotImplementedError
+
     def can_install(self) -> bool:
         """Whether :meth:`install` was overridden.
 
@@ -239,6 +278,10 @@ class BaseAuthExchange:
     def can_login(self) -> bool:
         """Whether :meth:`login` was overridden."""
         return type(self).login is not BaseAuthExchange.login
+
+    def can_revoke(self) -> bool:
+        """Whether :meth:`revoke` was overridden."""
+        return type(self).revoke is not BaseAuthExchange.revoke
 
     async def credential(self, ctx: AuthContext) -> str:  # pragma: no cover
         """Mint a credential.  Every exchange must implement this."""

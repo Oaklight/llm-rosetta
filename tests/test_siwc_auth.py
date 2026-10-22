@@ -526,14 +526,18 @@ class TestTheExchangeContract:
         assert siwc.EXCHANGE.login(ctx) == {"access_token": "a"}
         assert seen["ctx"] is ctx
 
-    def test_the_base_class_offers_neither_half_of_the_browser_flow(self):
-        """Presence is not the question: both members exist and refuse."""
+    def test_the_base_class_offers_none_of_the_optional_half(self):
+        """Presence is not the question: the members exist and refuse."""
         from llm_rosetta.shims.auth_exchange import BaseAuthExchange
 
         exchange = BaseAuthExchange()
 
         assert exchange.can_install() is False
         assert exchange.can_login() is False
+        assert exchange.can_revoke() is False
+
+    def test_the_exchange_can_sign_out(self, siwc):
+        assert siwc.EXCHANGE.can_revoke() is True
 
 
 # ---------------------------------------------------------------------------
@@ -716,3 +720,51 @@ class TestInstallingARecord:
 
         assert not (Path(ctx.state_dir) / "credential.json").exists()
         assert issuer.revoked and issuer.revoked[0]["token"] == "refresh-uploaded"
+
+    def test_the_record_is_gone_before_the_issuer_is_asked(self, siwc, ctx, issuer):
+        """A refresh interleaved into the revoke must not resurrect the record.
+
+        The unlink happens under the record lock and before the network call:
+        otherwise a refresh that read the old record just before the unlink
+        writes it back afterwards, and a provider the operator signed out keeps
+        a live grant.
+        """
+        siwc.EXCHANGE.install(ctx, self._record())
+        seen: dict[str, Any] = {}
+        original = siwc._request
+
+        def watching(url, **kw):  # noqa: ANN001
+            if url.endswith("/revoke"):
+                # The revocation call is the last thing that runs; at this
+                # point the record must already be unreachable.
+                seen["record_present"] = (
+                    Path(ctx.state_dir) / "credential.json"
+                ).exists()
+                seen["needs_setup"] = siwc.EXCHANGE.needs_interactive_setup(ctx)
+            return original(url, **kw)
+
+        siwc._request = watching
+        try:
+            assert siwc.EXCHANGE.revoke(ctx) is True
+        finally:
+            siwc._request = original
+
+        assert seen == {"record_present": False, "needs_setup": True}
+
+    def test_the_record_goes_even_when_the_issuer_refuses(self, siwc, ctx, issuer):
+        siwc.EXCHANGE.install(ctx, self._record())
+        original = siwc._request
+
+        def refuse(url, **kw):  # noqa: ANN001
+            if url.endswith("/revoke"):
+                raise siwc.AuthExchangeError("the issuer is unreachable")
+            return original(url, **kw)
+
+        siwc._request = refuse
+        try:
+            assert siwc.EXCHANGE.revoke(ctx) is False
+        finally:
+            siwc._request = original
+
+        assert not (Path(ctx.state_dir) / "credential.json").exists()
+        assert siwc.EXCHANGE.needs_interactive_setup(ctx) is True

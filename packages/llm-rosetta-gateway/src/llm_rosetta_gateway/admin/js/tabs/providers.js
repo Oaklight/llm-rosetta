@@ -302,8 +302,11 @@ async function signOutProviderCredential() {
   if (!confirm(_credentialText('label.confirmSignOut',
     'Sign out of this account? Requests will fail until a new record is installed.'))) return;
   try {
-    await api.del(`/admin/api/config/providers/${encodeURIComponent(name)}/credential`);
+    const res = await api.del(`/admin/api/config/providers/${encodeURIComponent(name)}/credential`);
     await loadProviderCredential(name);
+    // 501 when the exchange cannot remove its own record: say so rather than
+    // re-render a "Connected" card and let the operator think it worked.
+    if (res && res.error) _setCredentialError(res.error);
   } catch (err) {
     _setCredentialError(String(err && err.message || err));
   }

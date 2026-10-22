@@ -641,32 +641,49 @@ def revoke(ctx: AuthContext) -> bool:
     Returns ``True`` when the issuer accepted the revocation.  The record is
     removed either way — a credential the operator asked to be rid of must not
     stay on disk because the network was down.
+
+    The removal happens *under the record lock and before the network call*.
+    Both halves matter: a refresh that read the old record just before the
+    unlink would otherwise write it back after it, leaving a signed-out
+    provider holding a live grant (``needs_interactive_setup`` false, record
+    gone, then present again); and taking the network call outside the lock
+    would let a refresh rotate the refresh token while it is being revoked.
     """
     try:
-        record = _read_record(ctx)
-    except (InteractiveSetupRequired, AuthExchangeError):
-        return False
+        # One critical section: read what to revoke, then drop the record, so
+        # no refresh can interleave between the two.
+        with _record_lock(ctx):
+            try:
+                record = _read_record(ctx)
+            except (InteractiveSetupRequired, AuthExchangeError):
+                return False
+            try:
+                _record_path(ctx).unlink()
+            except FileNotFoundError:
+                pass
+    except OSError as exc:  # pragma: no cover - an unusable state directory
+        logger.warning("Removing the Sign in with ChatGPT record failed: %s", exc)
+        raise AuthExchangeError(f"the credential record could not be removed: {exc}")
+
     client_id = record.get("client_id")
-    accepted = False
     endpoint = _discover().get("revocation_endpoint")
-    if isinstance(endpoint, str) and endpoint and isinstance(client_id, str):
-        try:
-            _request(
-                endpoint,
-                data={
-                    "token": record.get("refresh_token", ""),
-                    "token_type_hint": "refresh_token",
-                    "client_id": client_id,
-                },
-            )
-            accepted = True
-        except AuthExchangeError as exc:
-            logger.warning("Revoking the Sign in with ChatGPT grant failed: %s", exc)
+    if not (isinstance(endpoint, str) and endpoint and isinstance(client_id, str)):
+        return False
     try:
-        _record_path(ctx).unlink()
-    except FileNotFoundError:
-        pass
-    return accepted
+        _request(
+            endpoint,
+            data={
+                "token": record.get("refresh_token", ""),
+                "token_type_hint": "refresh_token",
+                "client_id": client_id,
+            },
+        )
+    except AuthExchangeError as exc:
+        # The record is already gone, which is what the operator asked for;
+        # the issuer simply did not confirm the revocation.
+        logger.warning("Revoking the Sign in with ChatGPT grant failed: %s", exc)
+        return False
+    return True
 
 
 # ---------------------------------------------------------------------------

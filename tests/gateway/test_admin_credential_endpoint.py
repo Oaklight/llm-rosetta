@@ -285,6 +285,49 @@ class TestPut:
         assert response.status_code == 409
 
 
+class TestDeleteWithoutRevoke:
+    """``revoke`` exists on the base class and raises; presence is not the
+    question, so a base-only exchange must not be called at all."""
+
+    @staticmethod
+    def _base_only(path):
+        from llm_rosetta.shims.auth_exchange import BaseAuthExchange
+
+        class _BaseOnly(BaseAuthExchange):
+            def needs_interactive_setup(self, ctx):
+                return not path.exists()
+
+            async def credential(self, ctx):
+                raise AuthExchangeError("nothing installed")
+
+        return _BaseOnly()
+
+    def test_nothing_installed_is_an_idempotent_success(self, tmp_path):
+        pinfo = _pinfo(self._base_only(tmp_path / "rec.json"), key="live-token")
+        request = _Request(SimpleNamespace(providers={"chatgpt": pinfo}))
+
+        response = _call(delete_provider_credential, request)
+        payload = json.loads(response.body)
+
+        assert response.status_code == 200
+        assert payload == {"provider": "chatgpt", "removed": True, "revoked": False}
+        assert pinfo.key_ring.contains_only(TOKEN_PENDING_SENTINEL)
+
+    def test_a_record_it_cannot_remove_is_not_a_sign_out(self, tmp_path):
+        """200 with ``removed: false`` would make "signed out" and "did
+        nothing" look alike; the 501 says which one happened."""
+        record = tmp_path / "rec.json"
+        record.write_text("{}")
+        pinfo = _pinfo(self._base_only(record), key="live-token")
+        request = _Request(SimpleNamespace(providers={"chatgpt": pinfo}))
+
+        response = _call(delete_provider_credential, request)
+
+        assert response.status_code == 501
+        assert b"cannot sign out" in response.body
+        assert record.exists()
+
+
 class TestDelete:
     def test_sign_out_takes_the_live_token_out_of_use(self):
         """The ring must not keep sending a token the operator just revoked."""

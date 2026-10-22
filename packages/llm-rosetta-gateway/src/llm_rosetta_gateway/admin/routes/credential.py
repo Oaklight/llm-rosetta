@@ -179,9 +179,14 @@ async def delete_provider_credential(request: Any, name: str) -> Response:
         return _error(exc)
 
     revoke = getattr(exchange, "revoke", None)
+    can_revoke = getattr(exchange, "can_revoke", None)
+    # ``BaseAuthExchange.revoke`` raises, so presence is not the question —
+    # whether the exchange overrode it is.  ``callable`` because a shim could
+    # expose the name as a property, and a TypeError here would be a 500.
+    revocable = revoke is not None and (can_revoke() if callable(can_revoke) else True)
     revoked = False
     error = None
-    if revoke is not None:
+    if revocable:
         try:
             revoked = bool(await _off_loop(revoke, pinfo.auth_context))
         except Exception as exc:  # noqa: BLE001 - the record is removed regardless
@@ -192,11 +197,19 @@ async def delete_provider_credential(request: Any, name: str) -> Response:
     # that still sends the revoked token until it expires is the one thing this
     # endpoint must not do.
     await _reseed(pinfo)
-    payload = {
-        "provider": name,
-        "removed": bool(exchange.needs_interactive_setup(pinfo.auth_context)),
-        "revoked": revoked,
-    }
+    removed = bool(exchange.needs_interactive_setup(pinfo.auth_context))
+    if not removed and not revocable:
+        # "Sign out" and "did nothing" must not look alike: the record is still
+        # there because this exchange has no way to remove it.  Same split as
+        # install's 501.
+        return JSONResponse(
+            {
+                "error": f"Provider '{name}' cannot sign out: its exchange does not "
+                "implement revoke(), so the credential is still installed"
+            },
+            status_code=501,
+        )
+    payload = {"provider": name, "removed": removed, "revoked": revoked}
     if error is not None:
         payload["error"] = error
     return JSONResponse(payload)
