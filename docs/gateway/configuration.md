@@ -258,7 +258,7 @@ When `token_command` is set:
 4. The command's stdout is used as the new key — comma-separated output is supported for multi-key round-robin
 
 !!! note "`token_command` and `api_key` are mutually exclusive"
-    If both are specified, the gateway refuses to start. Use one or the other.
+    If both are specified in the same provider entry, the gateway refuses to start. Use one or the other. A shim's `api_key_env` does not count as specifying a key: it is a *default* credential, and a configured command takes its place — so exporting `ALCF_API_KEY` next to a `token_command` provider is fine.
 
 #### ALCF example with Docker
 
