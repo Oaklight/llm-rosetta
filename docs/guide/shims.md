@@ -137,7 +137,10 @@ EXCHANGE = Exchange()
 
 `ctx` carries the provider's config key (`ctx.provider`), the credential record's
 directory (`ctx.state_dir`, `None` when the gateway has no data directory), and
-the operator's key (`ctx.input_key`) when `consumes_key` is set. There is one
+the operator's key (`ctx.input_key`) when `consumes_key` is set. Two providers of
+one shim are two accounts, so an exchange that picks its own default for
+`state_dir` must namespace it by `ctx.provider`; that directory is the only thing
+keeping their records apart. There is one
 `credential()` rather than a separate seed and refresh because the gateway never
 distinguishes the two: a credential is usable now or it is not.
 
