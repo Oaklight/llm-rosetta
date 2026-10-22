@@ -24,9 +24,9 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, cast
 
-from llm_rosetta._vendor.httpserver import Response, StreamingResponse
+from llm_rosetta_gateway._vendor.httpserver import Response, StreamingResponse
 from llm_rosetta.auto_detect import ProviderType
-from llm_rosetta.observability.error_dump import dump_error
+from llm_rosetta_gateway.observability.error_dump import dump_error
 from llm_rosetta.observability.usage.normalize import DEFAULT_MODEL_TYPE
 
 from .logging import get_logger

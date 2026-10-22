@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from llm_rosetta._vendor.httpserver import JSONResponse, Response
+from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
 
 from ....shim_sources import apply_shim_sources, resolve_source_config, shims_signature
 from .._shared import (

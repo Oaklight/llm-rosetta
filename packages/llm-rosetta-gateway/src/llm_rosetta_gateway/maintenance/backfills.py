@@ -8,8 +8,8 @@ error dump.  They used to run under a single ``try``, so the first failure
 skipped the other four — and the two an operator would look for first are the
 last two.
 
-Each is a :class:`~llm_rosetta.observability.maintenance.Step` in one
-:attr:`~llm_rosetta.observability.maintenance.Policy.DEFERRED` registry: a
+Each is a :class:`~llm_rosetta_gateway.observability.maintenance.Step` in one
+:attr:`~llm_rosetta_gateway.observability.maintenance.Policy.DEFERRED` registry: a
 failure is recorded against the step that failed and the rest still run, and
 the results are readable afterwards — the log line, the operator's
 ``/health/ready`` and ``/admin/api/maintenance``.
@@ -26,13 +26,13 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from llm_rosetta.observability.maintenance import (
+from llm_rosetta_gateway.observability.maintenance import (
     Policy,
     Registry,
     Step,
     StepContext,
 )
-from llm_rosetta.observability.persistence import _DB_FILENAME as GATEWAY_DB
+from llm_rosetta_gateway.observability.persistence import _DB_FILENAME as GATEWAY_DB
 
 logger = logging.getLogger(__name__)
 

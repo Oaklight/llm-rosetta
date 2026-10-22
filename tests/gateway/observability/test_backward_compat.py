@@ -5,23 +5,23 @@ import sys
 
 import pytest
 
-import llm_rosetta.observability as obs
+import llm_rosetta_gateway.observability as obs
 from llm_rosetta_gateway.admin.routes.profiling import ProfilerState
 
 _ADMIN_REEXPORTS = [
     (
         "llm_rosetta_gateway.admin.metrics",
-        "llm_rosetta.observability.metrics",
+        "llm_rosetta_gateway.observability.metrics",
         ["MetricsCollector", "_RollingWindow"],
     ),
     (
         "llm_rosetta_gateway.admin.persistence",
-        "llm_rosetta.observability.persistence",
+        "llm_rosetta_gateway.observability.persistence",
         ["PersistenceManager", "DEFAULT_SUCCESS_MAX"],
     ),
     (
         "llm_rosetta_gateway.admin.request_log",
-        "llm_rosetta.observability.request_log",
+        "llm_rosetta_gateway.observability.request_log",
         ["RequestLog", "RequestLogEntry"],
     ),
 ]

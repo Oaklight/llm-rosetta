@@ -7,7 +7,7 @@ import os
 from typing import TYPE_CHECKING, Any
 from llm_rosetta._compat import sync_compat
 
-from llm_rosetta.observability import (
+from llm_rosetta_gateway.observability import (
     DEFAULT_SUCCESS_MAX,
     EVENT_ADMIN_SETUP,
     MetricsCollector,
@@ -228,12 +228,12 @@ async def setup_admin(
     ops_log = OpsLog(persistence=persistence)
 
     # On-demand deep profiling state
-    from llm_rosetta.observability import ProfilerState
+    from llm_rosetta_gateway.observability import ProfilerState
 
     profiler_state = ProfilerState()
 
     # In-memory content capture state
-    from llm_rosetta.observability import CaptureState
+    from llm_rosetta_gateway.observability import CaptureState
 
     capture_state = CaptureState()
 

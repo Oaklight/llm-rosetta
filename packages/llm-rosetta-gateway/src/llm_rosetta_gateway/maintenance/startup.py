@@ -23,7 +23,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
-from llm_rosetta.observability.maintenance import Registry, StepContext
+from llm_rosetta_gateway.observability.maintenance import Registry, StepContext
 
 from .backfills import build_registry
 
@@ -390,7 +390,7 @@ class DeferredStartup:
 
     async def _rebuild_counters(self) -> None:
         """Rebuild metrics counters from the async persistence layer."""
-        from llm_rosetta.observability import MetricsCollector
+        from llm_rosetta_gateway.observability import MetricsCollector
 
         metrics = getattr(self._app, "metrics", None)
         persistence = getattr(self._app, "persistence", None)
@@ -425,7 +425,7 @@ class DeferredStartup:
 
         The steps are the five repairs in
         :mod:`~llm_rosetta_gateway.maintenance.backfills`, under
-        :attr:`Policy.DEFERRED <llm_rosetta.observability.maintenance.Policy.DEFERRED>`:
+        :attr:`Policy.DEFERRED <llm_rosetta_gateway.observability.maintenance.Policy.DEFERRED>`:
         one failing is logged, recorded against its own name, and the steps
         behind it still run.  They used to share one ``try``, which meant a
         failure in the first skipped the rest — including the two that repair

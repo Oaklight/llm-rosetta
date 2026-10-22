@@ -29,12 +29,12 @@ import math
 import re
 from typing import TYPE_CHECKING, Any
 
-from llm_rosetta._vendor.httpserver import Response
+from llm_rosetta_gateway._vendor.httpserver import Response
 
 from .error_format import detect_api_format, format_error_response, is_admin_path
 from .request_context import request_context_var
 
-from llm_rosetta._vendor.ratelimit import (
+from llm_rosetta_gateway._vendor.ratelimit import (
     CompositeLimiter,
     FixedWindowLimiter,
     GCRALimiter,

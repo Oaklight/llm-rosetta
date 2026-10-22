@@ -24,7 +24,7 @@ from llm_rosetta_gateway.pipelines.decision import handle_decision
 from llm_rosetta_gateway.pipelines.embeddings import handle_embeddings
 from llm_rosetta_gateway.pipelines.rerank import handle_rerank
 from llm_rosetta_gateway.transport._base import UpstreamResponse
-from llm_rosetta.observability import PersistenceManager, RequestLog
+from llm_rosetta_gateway.observability import PersistenceManager, RequestLog
 
 
 class _FakeTransport:

@@ -1,13 +1,13 @@
 """HTTP client pool — manages :class:`AsyncClient` instances.
 
-Thin wrapper over :mod:`llm_rosetta._vendor.httpclient` that pools
+Thin wrapper over :mod:`llm_rosetta_gateway._vendor.httpclient` that pools
 ``AsyncClient`` instances by proxy URL so multiple requests to the
 same upstream reuse the same connection pool.
 """
 
 from __future__ import annotations
 
-from llm_rosetta._vendor.httpclient import AsyncClient
+from llm_rosetta_gateway._vendor.httpclient import AsyncClient
 
 
 class HttpClientPool:

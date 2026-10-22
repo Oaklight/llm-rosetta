@@ -28,24 +28,32 @@ jobs:
       - name: Install zerodep CLI
         run: pip install 'zerodep>=2026.9.9'
 
+      # Each distribution owns its own _vendor tree and its own
+      # [tool.zerodep] section (epic #1127), so both are checked and updated.
       - name: Check for outdated modules
         id: check
         run: |
-          output=$(zerodep outdated --json)
-          echo "$output"
-          count=$(echo "$output" | python3 -c "import sys,json; d=json.load(sys.stdin); print(sum(1 for m in d['modules'] if m['status']=='outdated'))")
-          if [ "$count" -gt 0 ]; then
-            echo "has_updates=true" >> "$GITHUB_OUTPUT"
-            modules=$(echo "$output" | python3 -c "
+          total=0
+          modules=""
+          for dir in . packages/llm-rosetta-gateway; do
+            echo "== $dir"
+            output=$(cd "$dir" && zerodep outdated --json)
+            echo "$output"
+            count=$(echo "$output" | python3 -c "import sys,json; d=json.load(sys.stdin); print(sum(1 for m in d['modules'] if m['status']=='outdated'))")
+            total=$((total + count))
+            modules+=$(echo "$output" | python3 -c "
           import sys, json
           d = json.load(sys.stdin)
           for m in d['modules']:
               s = m['status']
               if s == 'outdated':
-                  print(f\"- {m['name']}: {m['local_version']} -> {m['latest_version']}\")
+                  print(f\\"- {m['name']}: {m['local_version']} -> {m['latest_version']}\\")
               elif s != 'up-to-date':
-                  print(f\"- {m['name']}: {s} (manual migration needed)\")
-          ")
+                  print(f\\"- {m['name']}: {s} (manual migration needed)\\")
+          " | sed "s|\$|  [$dir]|")
+          done
+          if [ "$total" -gt 0 ]; then
+            echo "has_updates=true" >> "$GITHUB_OUTPUT"
             echo "modules<<EOF" >> "$GITHUB_OUTPUT"
             echo "$modules" >> "$GITHUB_OUTPUT"
             echo "EOF" >> "$GITHUB_OUTPUT"
@@ -53,7 +61,9 @@ jobs:
 
       - name: Update outdated modules
         if: steps.check.outputs.has_updates == 'true'
-        run: zerodep update --all
+        run: |
+          zerodep update --all
+          (cd packages/llm-rosetta-gateway && zerodep update --all)
 
       - name: Create or update Pull Request
         if: steps.check.outputs.has_updates == 'true'

@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from typing import Any, overload
 from collections.abc import AsyncGenerator
 
-from llm_rosetta._vendor.httpserver import JSONResponse, Response
+from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
 
 from ...config import ConfigIO, GatewayConfig, async_config_lock
 
@@ -307,7 +307,7 @@ async def _reload_gateway_config(
     # Record config reload event
     ops_log = getattr(request.app, "ops_log", None)
     if ops_log is not None:
-        from llm_rosetta.observability.ops_log import (
+        from llm_rosetta_gateway.observability.ops_log import (
             EVENT_CONFIG_RELOAD,
             OpsLogEntry,
             SEVERITY_INFO,

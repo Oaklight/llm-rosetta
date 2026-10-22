@@ -2,7 +2,7 @@
 
 import pytest
 
-from llm_rosetta.observability import RequestLog, RequestLogEntry
+from llm_rosetta_gateway.observability import RequestLog, RequestLogEntry
 
 
 class TestRequestLogEntry:

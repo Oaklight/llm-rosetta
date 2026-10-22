@@ -7,15 +7,15 @@ import time
 from collections.abc import AsyncIterator
 from typing import Any
 
-from llm_rosetta._vendor.httpserver import Response, StreamingResponse
+from llm_rosetta_gateway._vendor.httpserver import Response, StreamingResponse
 
 from llm_rosetta.auto_detect import ProviderType
 from llm_rosetta.pipeline import ConversionError, ConversionPipeline
 from llm_rosetta.routing import ResolvedRoute
 from llm_rosetta.shims.provider_shim import SoftErrorPattern
 
-from llm_rosetta.observability.capture import CapturedRequest, CaptureState
-from llm_rosetta.observability.error_dump import dump_error
+from llm_rosetta_gateway.observability.capture import CapturedRequest, CaptureState
+from llm_rosetta_gateway.observability.error_dump import dump_error
 from llm_rosetta.observability.usage import usage_columns
 
 from ..logging import (

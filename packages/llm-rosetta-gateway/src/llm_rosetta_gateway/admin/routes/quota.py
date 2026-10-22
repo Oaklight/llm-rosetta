@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from llm_rosetta._vendor.httpserver import JSONResponse, Response
-from llm_rosetta.observability.sanitize import scrub_credential_patterns
+from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
+from llm_rosetta_gateway.observability.sanitize import scrub_credential_patterns
 
 from ._shared import _qp
 from .config.payload import _get_gateway_config

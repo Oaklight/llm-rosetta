@@ -6,7 +6,7 @@ import hmac
 import time
 from typing import Any
 
-from llm_rosetta._vendor.httpserver import JSONResponse, Response
+from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
 
 from llm_rosetta_gateway.middleware.auth import ADMIN_COOKIE_NAME
 

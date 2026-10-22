@@ -5,8 +5,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from llm_rosetta._vendor.httpclient import AsyncClient, Response as HttpResponse
-from llm_rosetta._vendor.httpserver import JSONResponse, Response
+from llm_rosetta_gateway._vendor.httpclient import AsyncClient, Response as HttpResponse
+from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
 from llm_rosetta.shims import get_shim
 
 from ....providers import default_models_path

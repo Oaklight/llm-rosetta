@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any, ClassVar
 
-from llm_rosetta.observability.ops_log import (
+from llm_rosetta_gateway.observability.ops_log import (
     EVENT_DATA_CLEARED,
     EVENT_DATA_CLEANUP,
     EVENT_DATA_REBUILT,

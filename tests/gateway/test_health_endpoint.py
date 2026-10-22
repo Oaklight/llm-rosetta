@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 
-from llm_rosetta.observability.metrics import MetricsCollector, _ProviderStats
+from llm_rosetta_gateway.observability.metrics import MetricsCollector, _ProviderStats
 
 
 # ---------------------------------------------------------------------------

@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 
 import llm_rosetta_gateway.app as app_module
 from llm_rosetta_gateway.app import _state
-from llm_rosetta._vendor.httpserver import JSONResponse
+from llm_rosetta_gateway._vendor.httpserver import JSONResponse
 from llm_rosetta_gateway.middleware.headers import build_upstream_extra_headers
 from llm_rosetta.routing import ResolvedRoute
 from llm_rosetta_gateway.routing import SelectionContext

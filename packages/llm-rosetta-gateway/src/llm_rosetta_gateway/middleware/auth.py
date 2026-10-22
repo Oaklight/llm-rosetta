@@ -24,7 +24,7 @@ import secrets
 import time
 from typing import Any
 
-from llm_rosetta._vendor.httpserver import JSONResponse, Response
+from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
 
 from .error_format import (
     detect_api_format,

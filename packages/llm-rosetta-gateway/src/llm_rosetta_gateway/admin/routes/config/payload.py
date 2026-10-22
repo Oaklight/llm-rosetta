@@ -6,7 +6,7 @@ import logging
 import os
 from typing import Any
 
-from llm_rosetta._vendor.httpserver import JSONResponse, Response
+from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
 from llm_rosetta.shims import get_shim, list_shims
 from llm_rosetta.shims.provider_shim import match_model_reasoning
 

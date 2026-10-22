@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from llm_rosetta._vendor.httpserver import JSONResponse, Response
+from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
 
 from .._shared import (
     config_mutate,

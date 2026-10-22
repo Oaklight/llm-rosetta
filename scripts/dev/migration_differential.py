@@ -254,15 +254,33 @@ def _fingerprint() -> str:
     the paths cannot tell us: two exports of the same ref live in different
     directories.  The bytes can.
     """
-    import llm_rosetta.observability as package
+    import importlib
+
+    package = importlib.import_module(_persistence_package())
 
     return _hash_tree(Path(package.__file__).parent)
 
 
+def _persistence_package() -> str:
+    """Where this tree keeps the store: the gateway in split trees, core before.
+
+    The comparison spans the 0.15 split (epic #1127), so one side of a run may
+    not have ``llm_rosetta_gateway`` at all.
+    """
+    import importlib.util
+
+    if importlib.util.find_spec("llm_rosetta_gateway.observability") is not None:
+        return "llm_rosetta_gateway.observability"
+    return "llm_rosetta.observability"
+
+
 async def _probe(store_root: Path) -> dict[str, Any]:
     """Observe every state, using whichever tree ``PYTHONPATH`` selects."""
-    from llm_rosetta import __file__ as package_file
-    from llm_rosetta.observability import PersistenceManager
+    import importlib
+
+    package = importlib.import_module(_persistence_package())
+    PersistenceManager = package.PersistenceManager
+    package_file = package.__file__
 
     current = max(
         version for version, _description, _sql in PersistenceManager._MIGRATIONS

@@ -163,7 +163,7 @@ class TestStreamingProfilerDefer:
     async def test_streaming_sets_background_and_clears_profiler(self):
         from unittest.mock import MagicMock
 
-        from llm_rosetta._vendor.httpserver import StreamingResponse
+        from llm_rosetta_gateway._vendor.httpserver import StreamingResponse
         from llm_rosetta_gateway.lifecycle import try_stop_profiler
 
         state = ProfilerState()
@@ -208,7 +208,7 @@ class TestStreamingProfilerDefer:
 
     @pytest.mark.asyncio
     async def test_non_streaming_does_not_set_background(self):
-        from llm_rosetta._vendor.httpserver import Response
+        from llm_rosetta_gateway._vendor.httpserver import Response
 
         response = Response(body=b'{"result": "ok"}', content_type="application/json")
         assert not hasattr(response, "background") or not getattr(
@@ -221,7 +221,7 @@ class TestRequestLogProfile:
 
     @pytest.mark.asyncio
     async def test_create_with_profile(self):
-        from llm_rosetta.observability.request_log import RequestLogEntry
+        from llm_rosetta_gateway.observability.request_log import RequestLogEntry
 
         profile = {"request_conversion_ms": 2.45, "upstream_ms": 150.3}
         entry = RequestLogEntry.create(
@@ -237,7 +237,7 @@ class TestRequestLogProfile:
 
     @pytest.mark.asyncio
     async def test_create_without_profile(self):
-        from llm_rosetta.observability.request_log import RequestLogEntry
+        from llm_rosetta_gateway.observability.request_log import RequestLogEntry
 
         entry = RequestLogEntry.create(
             model="gpt-4o",
@@ -251,7 +251,7 @@ class TestRequestLogProfile:
 
     @pytest.mark.asyncio
     async def test_to_dict_includes_profile(self):
-        from llm_rosetta.observability.request_log import RequestLogEntry
+        from llm_rosetta_gateway.observability.request_log import RequestLogEntry
 
         profile = {"request_conversion_ms": 2.45}
         entry = RequestLogEntry.create(
@@ -268,7 +268,7 @@ class TestRequestLogProfile:
 
     @pytest.mark.asyncio
     async def test_to_dict_omits_none_profile(self):
-        from llm_rosetta.observability.request_log import RequestLogEntry
+        from llm_rosetta_gateway.observability.request_log import RequestLogEntry
 
         entry = RequestLogEntry.create(
             model="gpt-4o",
@@ -283,7 +283,10 @@ class TestRequestLogProfile:
 
     @pytest.mark.asyncio
     async def test_update_profile_in_memory(self):
-        from llm_rosetta.observability.request_log import RequestLog, RequestLogEntry
+        from llm_rosetta_gateway.observability.request_log import (
+            RequestLog,
+            RequestLogEntry,
+        )
 
         log = RequestLog()
         entry = RequestLogEntry.create(
@@ -316,7 +319,7 @@ class TestPersistenceProfile:
 
     @pytest.mark.asyncio
     async def test_insert_and_query_with_profile(self, tmp_path):
-        from llm_rosetta.observability.persistence import PersistenceManager
+        from llm_rosetta_gateway.observability.persistence import PersistenceManager
 
         pm = await PersistenceManager.create(str(tmp_path))
         profile = {"request_conversion_ms": 2.45, "upstream_ms": 150.3}
@@ -343,7 +346,7 @@ class TestPersistenceProfile:
 
     @pytest.mark.asyncio
     async def test_insert_without_profile(self, tmp_path):
-        from llm_rosetta.observability.persistence import PersistenceManager
+        from llm_rosetta_gateway.observability.persistence import PersistenceManager
 
         pm = await PersistenceManager.create(str(tmp_path))
         await pm.insert_log_entries(
@@ -368,7 +371,7 @@ class TestPersistenceProfile:
 
     @pytest.mark.asyncio
     async def test_update_entry_profile(self, tmp_path):
-        from llm_rosetta.observability.persistence import PersistenceManager
+        from llm_rosetta_gateway.observability.persistence import PersistenceManager
 
         pm = await PersistenceManager.create(str(tmp_path))
         await pm.insert_log_entries(
@@ -403,7 +406,7 @@ class TestPersistenceProfile:
     @pytest.mark.asyncio
     async def test_update_entry_profile_nonexistent(self, tmp_path):
         """Updating a non-existent entry is a no-op."""
-        from llm_rosetta.observability.persistence import PersistenceManager
+        from llm_rosetta_gateway.observability.persistence import PersistenceManager
 
         pm = await PersistenceManager.create(str(tmp_path))
         await pm.update_entry_profile("nonexistent", {"foo": 1})
@@ -437,7 +440,7 @@ class TestPersistenceProfile:
         conn.close()
 
         # PersistenceManager should add the profile column via migration
-        from llm_rosetta.observability.persistence import PersistenceManager
+        from llm_rosetta_gateway.observability.persistence import PersistenceManager
 
         pm = await PersistenceManager.create(str(tmp_path))
         cursor = await pm._conn.execute("PRAGMA table_info(request_log)")

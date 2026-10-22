@@ -20,10 +20,10 @@ SRC = REPO_ROOT / "packages" / "llm-rosetta" / "src" / "llm_rosetta"
 #: re-exported by a package that *is* compared.
 NO_ALL_REEXPORTED = {
     "llm_rosetta.auto_detect": "re-exported from llm_rosetta",
-    "llm_rosetta.observability.metrics": "re-exported from llm_rosetta.observability",
-    "llm_rosetta.observability.persistence": "re-exported from llm_rosetta.observability",
-    "llm_rosetta.observability.request_log": "re-exported from llm_rosetta.observability",
-    "llm_rosetta.observability.ops_log": "re-exported from llm_rosetta.observability",
+    "llm_rosetta_gateway.observability.metrics": "re-exported from llm_rosetta_gateway.observability",
+    "llm_rosetta_gateway.observability.persistence": "re-exported from llm_rosetta_gateway.observability",
+    "llm_rosetta_gateway.observability.request_log": "re-exported from llm_rosetta_gateway.observability",
+    "llm_rosetta_gateway.observability.ops_log": "re-exported from llm_rosetta_gateway.observability",
 }
 
 #: Top-level modules that declare ``__all__`` but are implementation detail.
@@ -299,9 +299,9 @@ def test_inferred_surface_sees_constants_and_intra_package_reexports(tmp_path):
 
 def test_inferred_surface_keeps_data_constants_of_a_real_module():
     """Deleting ``ALL_EVENT_TYPES`` must be visible to the checker."""
-    module = importlib.import_module("llm_rosetta.observability.ops_log")
+    module = importlib.import_module("llm_rosetta_gateway.observability.ops_log")
     assert getattr(module, "__all__", None) is None
-    names = api._inferred_names(module, "llm_rosetta.observability.ops_log")
+    names = api._inferred_names(module, "llm_rosetta_gateway.observability.ops_log")
     assert "ALL_EVENT_TYPES" in names
     assert "ALL_SEVERITIES" in names
 

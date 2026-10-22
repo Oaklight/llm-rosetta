@@ -16,8 +16,8 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
-from llm_rosetta._vendor.httpclient import AsyncClient, Response as HttpResponse
-from llm_rosetta.observability.sanitize import scrub_credential_patterns
+from llm_rosetta_gateway._vendor.httpclient import AsyncClient, Response as HttpResponse
+from llm_rosetta_gateway.observability.sanitize import scrub_credential_patterns
 
 from .models import (
     STATUS_ERROR,

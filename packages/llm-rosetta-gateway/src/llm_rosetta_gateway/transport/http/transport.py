@@ -16,14 +16,14 @@ import logging
 from collections.abc import AsyncIterator
 from typing import Any
 
-from llm_rosetta._vendor.httpclient import (
+from llm_rosetta_gateway._vendor.httpclient import (
     HttpClientError,
     HttpTimeoutError,
     Response as HttpResponse,
     StreamingResponse as HttpStreamingResponse,
     TooManyRedirects,
 )
-from llm_rosetta._vendor.sse import AsyncEventSource
+from llm_rosetta_gateway._vendor.sse import AsyncEventSource
 
 from .._base import (
     UpstreamConnectionError,

@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from llm_rosetta.observability.maintenance import Registry
+from llm_rosetta_gateway.observability.maintenance import Registry
 from llm_rosetta.routing import ResolvedRoute
 
 from ..providers import build_provider_info

@@ -66,9 +66,6 @@ Documentation = "https://llm-rosetta.readthedocs.io"
 Repository = "https://github.com/Oaklight/llm-rosetta"
 Issues = "https://github.com/Oaklight/llm-rosetta/issues"
 
-[project.scripts]
-llm-rosetta-usage = "llm_rosetta.observability.usage.cli:main"
-
 [tool.setuptools.packages.find]
 where = ["src"]
 

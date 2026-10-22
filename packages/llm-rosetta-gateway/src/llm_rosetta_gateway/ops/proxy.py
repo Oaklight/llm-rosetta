@@ -16,7 +16,7 @@ from collections.abc import Mapping
 from dataclasses import replace as _dc_replace
 from typing import Any, ClassVar
 
-from llm_rosetta.observability.request_log import RequestLogEntry
+from llm_rosetta_gateway.observability.request_log import RequestLogEntry
 from llm_rosetta.observability.usage import usage_columns
 from llm_rosetta.observability.usage.normalize import DEFAULT_MODEL_TYPE
 

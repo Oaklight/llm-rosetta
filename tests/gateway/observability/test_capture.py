@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from llm_rosetta.observability.capture import CapturedRequest, CaptureState
+from llm_rosetta_gateway.observability.capture import CapturedRequest, CaptureState
 
 
 def _dummy(label: str = "") -> CapturedRequest:

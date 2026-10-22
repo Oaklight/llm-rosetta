@@ -18,8 +18,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from llm_rosetta._vendor import aiosqlite
-from llm_rosetta.observability.maintenance import Registry, StepContext
+from llm_rosetta_gateway._vendor import aiosqlite
+from llm_rosetta_gateway.observability.maintenance import Registry, StepContext
 from llm_rosetta.observability.usage import INTERNAL_LABEL, INTERNAL_SUBJECT
 
 from .maintenance.keystore import build_registry

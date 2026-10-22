@@ -17,8 +17,8 @@ from pathlib import Path
 
 import pytest
 
-from llm_rosetta.observability import PersistenceManager
-from llm_rosetta.observability.maintenance import (
+from llm_rosetta_gateway.observability import PersistenceManager
+from llm_rosetta_gateway.observability.maintenance import (
     Policy,
     Registry,
     Step,

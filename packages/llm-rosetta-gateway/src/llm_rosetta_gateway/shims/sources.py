@@ -989,7 +989,7 @@ def _default_http_get(
     default getter rather than a post-hoc sanity check.  (An injected
     ``http_get`` still only gets the backstop check in :func:`_fetch_remote`.)
     """
-    from llm_rosetta._vendor.httpclient import Client, Response
+    from llm_rosetta_gateway._vendor.httpclient import Client, Response
 
     chunk_size = 64 * 1024
     with Client(headers=headers, timeout=timeout, proxy=proxy) as client:

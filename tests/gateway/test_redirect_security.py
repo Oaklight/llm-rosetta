@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
-from llm_rosetta._vendor.httpclient import TooManyRedirects
+from llm_rosetta_gateway._vendor.httpclient import TooManyRedirects
 from llm_rosetta_gateway.transport.http.client_pool import HttpClientPool
 from llm_rosetta_gateway.transport.http.transport import HttpTransport
 from llm_rosetta_gateway.transport._base import UpstreamConnectionError

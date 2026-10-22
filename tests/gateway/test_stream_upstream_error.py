@@ -146,7 +146,7 @@ def test_stream_chunk_error_persists_tool_collisions(tmp_path):
     front, the way a corrected lifecycle would.
     """
     from llm_rosetta_gateway.proxy import DumpContext
-    from llm_rosetta.observability.persistence import PersistenceManager
+    from llm_rosetta_gateway.observability.persistence import PersistenceManager
 
     async def run():
         pm = await PersistenceManager.create(str(tmp_path))

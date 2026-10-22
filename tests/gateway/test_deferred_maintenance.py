@@ -18,7 +18,7 @@ from unittest.mock import AsyncMock, MagicMock
 from llm_rosetta_gateway.maintenance.backfills import build_registry
 from llm_rosetta_gateway.maintenance.startup import DeferredStartup
 from llm_rosetta_gateway.routing import ModelRoute, ProviderEntry
-from llm_rosetta.observability.maintenance import Policy, StepContext
+from llm_rosetta_gateway.observability.maintenance import Policy, StepContext
 
 _ALL_STEPS = [
     "request_log.backfill_provider_names",
@@ -379,7 +379,7 @@ class TestTheReadinessProbe:
         import json
 
         from llm_rosetta_gateway.app import handle_health_ready
-        from llm_rosetta.observability import MetricsCollector
+        from llm_rosetta_gateway.observability import MetricsCollector
 
         persistence, key_store = _stores()
         persistence.backfill_total_tokens = AsyncMock(
@@ -405,7 +405,7 @@ class TestTheReadinessProbe:
         import json
 
         from llm_rosetta_gateway.app import handle_health_ready
-        from llm_rosetta.observability import MetricsCollector
+        from llm_rosetta_gateway.observability import MetricsCollector
 
         persistence, key_store = _stores()
         app = _App(persistence=persistence, keystore=key_store)

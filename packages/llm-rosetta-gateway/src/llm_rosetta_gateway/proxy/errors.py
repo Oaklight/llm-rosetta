@@ -6,14 +6,14 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
-from llm_rosetta._vendor.httpserver import Response
+from llm_rosetta_gateway._vendor.httpserver import Response
 
 from llm_rosetta.auto_detect import ProviderType
 from llm_rosetta.routing import ResolvedRoute
 from llm_rosetta.shims.provider_shim import SoftErrorPattern
 
-from llm_rosetta.observability.capture import CapturedRequest, CaptureState
-from llm_rosetta.observability.error_dump import dump_error
+from llm_rosetta_gateway.observability.capture import CapturedRequest, CaptureState
+from llm_rosetta_gateway.observability.error_dump import dump_error
 
 from ..middleware.error_annotate import annotate_tool_collisions
 from ..middleware.error_format import (
@@ -24,7 +24,7 @@ from ..logging import (
     get_logger,
     log_upstream_error,
 )
-from llm_rosetta.observability.sanitize import sanitize_upstream_error
+from llm_rosetta_gateway.observability.sanitize import sanitize_upstream_error
 from ..transport import (
     ProviderInfo,
     UpstreamConnectionError,

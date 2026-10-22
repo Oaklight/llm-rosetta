@@ -20,7 +20,7 @@ from pathlib import Path
 
 import pytest
 
-from llm_rosetta.observability import PersistenceManager
+from llm_rosetta_gateway.observability import PersistenceManager
 from llm_rosetta.observability.usage import (
     INTERNAL_LABEL,
     INTERNAL_SUBJECT,
@@ -111,12 +111,16 @@ async def store(tmp_path: Path) -> Path:
 
 def _run(store: Path | str, *args: str) -> subprocess.CompletedProcess[str]:
     """Run the CLI the way a shell would, from the source tree."""
-    src = str(Path(__file__).resolve().parents[2] / "packages" / "llm-rosetta" / "src")
+    root = Path(__file__).resolve().parents[3]
+    src = os.pathsep.join(
+        str(root / "packages" / pkg / "src")
+        for pkg in ("llm-rosetta", "llm-rosetta-gateway")
+    )
     return subprocess.run(
         [
             sys.executable,
             "-m",
-            "llm_rosetta.observability.usage.cli",
+            "llm_rosetta_gateway.observability.usage.cli",
             "--db",
             str(store),
             *args,
@@ -529,8 +533,8 @@ class TestItsEdges:
         ``asyncio.run``, which cannot be called from inside this test's own
         event loop.  The gate itself is what the finding was about.
         """
-        from llm_rosetta.observability import persistence as persistence_module
-        from llm_rosetta.observability.usage import cli
+        from llm_rosetta_gateway.observability import persistence as persistence_module
+        from llm_rosetta_gateway.observability.usage import cli
 
         async def _unwanted(self):
             raise AssertionError("the model aggregate was read unasked")
@@ -562,12 +566,13 @@ class TestItIsWiredUp:
     def test_the_console_script_points_at_main(self):
         """The entry point is what a shell runs; a rename here breaks it."""
         pyproject = (
-            Path(__file__).resolve().parents[2]
+            Path(__file__).resolve().parents[3]
             / "packages"
-            / "llm-rosetta"
+            / "llm-rosetta-gateway"
             / "pyproject.toml"
         )
         text = pyproject.read_text()
         assert (
-            'llm-rosetta-usage = "llm_rosetta.observability.usage.cli:main"' in text
+            'llm-rosetta-usage = "llm_rosetta_gateway.observability.usage.cli:main"'
+            in text
         ), "the console script must keep pointing at the module's main()"

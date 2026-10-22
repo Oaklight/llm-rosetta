@@ -36,7 +36,9 @@ def test_fetch_image_returns_the_body_and_content_type(monkeypatch):
                 content=b"\x89PNG",
             )
 
-    monkeypatch.setattr("llm_rosetta._vendor.httpclient.Client", _Client, raising=True)
+    monkeypatch.setattr(
+        "llm_rosetta_gateway._vendor.httpclient.Client", _Client, raising=True
+    )
 
     assert fetch_image("https://example.com/a.png") == (
         b"\x89PNG",
@@ -60,7 +62,9 @@ def test_fetch_image_raises_on_an_error_status(monkeypatch):
         def get(self, url, **kwargs):
             return SimpleNamespace(status_code=404, headers={}, content=b"")
 
-    monkeypatch.setattr("llm_rosetta._vendor.httpclient.Client", _Client, raising=True)
+    monkeypatch.setattr(
+        "llm_rosetta_gateway._vendor.httpclient.Client", _Client, raising=True
+    )
 
     with pytest.raises(RuntimeError, match="404"):
         fetch_image("https://example.com/missing.png")

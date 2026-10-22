@@ -2,7 +2,7 @@
 
 Provides admin API handlers for enabling/disabling profiling and
 retrieving results.  The data-layer :class:`ProfilerState` lives in
-:mod:`llm_rosetta.observability.profiling` and is re-exported here
+:mod:`llm_rosetta_gateway.observability.profiling` and is re-exported here
 for backward compatibility.
 
 The :class:`ProfilerState` is instantiated in :func:`~admin.setup_admin`
@@ -15,8 +15,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from llm_rosetta._vendor.httpserver import JSONResponse, Response
-from llm_rosetta.observability.profiling import ProfilerState  # noqa: F401 (re-exported)
+from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
+from llm_rosetta_gateway.observability.profiling import ProfilerState  # noqa: F401 (re-exported)
 
 from ._shared import _qp
 

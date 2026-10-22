@@ -16,7 +16,7 @@ import pytest
 
 import llm_rosetta_gateway.app as app_module
 from llm_rosetta_gateway.app import _state
-from llm_rosetta._vendor.httpserver import App, JSONResponse
+from llm_rosetta_gateway._vendor.httpserver import App, JSONResponse
 from llm_rosetta_gateway.config import GatewayConfig
 from llm_rosetta_gateway.lifecycle import begin_typed, finish_typed
 from llm_rosetta_gateway.model_types import (
@@ -26,7 +26,7 @@ from llm_rosetta_gateway.model_types import (
     register_model_type,
 )
 from llm_rosetta_gateway.ops import OpsContext
-from llm_rosetta.observability import PersistenceManager, RequestLog
+from llm_rosetta_gateway.observability import PersistenceManager, RequestLog
 from llm_rosetta.observability.usage.normalize import MODEL_TYPE_FIELDS
 
 FAKE_TYPE = "fake"

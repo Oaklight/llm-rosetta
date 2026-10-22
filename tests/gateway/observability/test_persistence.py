@@ -2,7 +2,7 @@
 
 import pytest
 
-from llm_rosetta.observability import PersistenceManager, RequestLogEntry
+from llm_rosetta_gateway.observability import PersistenceManager, RequestLogEntry
 
 
 @pytest.fixture
@@ -186,7 +186,7 @@ class TestSchemaVersioning:
 
     async def test_bootstrap_detects_old_style_migration(self, tmp_path):
         """Databases that had _migrate_add_columns should get v1 auto-detected."""
-        from llm_rosetta._vendor import aiosqlite
+        from llm_rosetta_gateway._vendor import aiosqlite
 
         db_path = tmp_path / "gateway.db"
         # Simulate old database: create tables manually without schema_version data

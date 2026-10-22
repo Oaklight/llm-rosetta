@@ -282,7 +282,7 @@ def _resolve_data_dir(config_path: str, args: argparse.Namespace) -> str:
 
 def _cmd_db_cleanup(args: argparse.Namespace) -> None:
     """Run age-based database cleanup."""
-    from llm_rosetta.observability import PersistenceManager
+    from llm_rosetta_gateway.observability import PersistenceManager
 
     config_path = discover_config(args.config)
     if config_path is None:
@@ -329,7 +329,7 @@ def _cmd_db_cleanup(args: argparse.Namespace) -> None:
 
 def _cmd_db_cleanup_logs(args: argparse.Namespace) -> None:
     """Run age-based request log cleanup."""
-    from llm_rosetta.observability import PersistenceManager
+    from llm_rosetta_gateway.observability import PersistenceManager
 
     config_path = discover_config(args.config)
     if config_path is None:
@@ -370,7 +370,7 @@ def _cmd_db_cleanup_logs(args: argparse.Namespace) -> None:
 
 def _cmd_db_cleanup_errors(args: argparse.Namespace) -> None:
     """Run age-based error dump cleanup."""
-    from llm_rosetta.observability import PersistenceManager
+    from llm_rosetta_gateway.observability import PersistenceManager
 
     config_path = discover_config(args.config)
     if config_path is None:
@@ -412,7 +412,7 @@ def _cmd_db_cleanup_errors(args: argparse.Namespace) -> None:
 
 def _cmd_db_export_errors(args: argparse.Namespace) -> None:
     """Export error dumps to a tar.gz file."""
-    from llm_rosetta.observability import PersistenceManager
+    from llm_rosetta_gateway.observability import PersistenceManager
 
     config_path = discover_config(args.config)
     if config_path is None:

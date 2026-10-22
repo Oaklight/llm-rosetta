@@ -128,6 +128,7 @@ supported format and forwards them to any configured upstream provider.
 | `gateway/config/` | Config package: JSONC loading, locking, parsing, resolution |
 | `gateway/providers.py` | Provider info, auth headers, key rotation |
 | `gateway/admin/` | Admin UI, metrics, request logging, persistence |
+| `gateway/observability/` | Telemetry: metrics, request log, SQLite persistence, ops log, error dumps, capture, maintenance, retention, sanitizing, profiler state |
 | `gateway/ops/` | Unified operations audit layer (OpsBase + typed operation subclasses) |
 | `gateway/routing/` | Candidate selection: the route container plus the pluggable strategies (weighted round-robin, affinity) |
 | `gateway/middleware/` | Auth, rate limiting, error format, hop limit, headers, etc. |
@@ -189,9 +190,10 @@ packages/
 │       │   └── ir/                  # IR dataclasses (messages, parts, tools, stream)
 │       ├── transforms/              # Facade over ir.primitives (compat)
 │       ├── capabilities/            # Facade over ir.passes (compat)
+│       ├── observability/usage/     # The meaning of a usage report (no store)
 │       ├── gateway/                 # Deprecated shim: aliases llm_rosetta_gateway,
 │       │                            #   removed in 0.16.0 (#919)
-│       └── _vendor/                 # Vendored dependencies (DO NOT EDIT)
+│       └── _vendor/                 # validate, yaml, profiler (DO NOT EDIT)
 └── llm-rosetta-gateway/     # gateway distribution (import root `llm_rosetta_gateway`)
     ├── pyproject.toml
     └── src/llm_rosetta_gateway/
@@ -216,10 +218,16 @@ packages/
         │   ├── data.py          # Data mutation ops
         │   ├── security.py      # Auth/session ops
         │   └── keys.py          # API key management ops
-        └── admin/               # Admin panel (metrics, request log, persistence)
-            └── routes/          # one module per resource; routes/config/ is
-                                 #   split into payload/providers/models/
-                                 #   model_providers/settings/shims/upstream/bulk
+        ├── observability/       # Telemetry: metrics, request log, persistence,
+        │                        #   ops log, error dumps, capture, maintenance,
+        │                        #   retention, sanitize, profiling
+        │   └── usage/cli.py     # The llm-rosetta-usage console script
+        ├── admin/               # Admin panel over the observability layer
+        │   └── routes/          # one module per resource; routes/config/ is
+        │                        #   split into payload/providers/models/
+        │                        #   model_providers/settings/shims/upstream/bulk
+        └── _vendor/             # httpserver, httpclient, sse, ratelimit,
+                                 #   aiosqlite, jsonx (DO NOT EDIT)
 
 tests/
 ├── converters/              # Per-converter test suites
@@ -508,7 +516,8 @@ gate — missing any item means the converter is not fully integrated.
 
 ## Files to never edit
 
-- `packages/llm-rosetta/src/llm_rosetta/_vendor/**` — vendored dependencies, managed externally
+- `packages/*/src/*/_vendor/**` — vendored dependencies, managed externally
+  (`zerodep`; each distribution has its own `[tool.zerodep]` section)
 - `docs_en/`, `docs_zh/` — separate git branches, edit inside the worktree only
 
 ## Adding a new model type (checklist)
@@ -583,7 +592,8 @@ below must be completed.
    not write to `ops_log` (e.g. `OpsProxyRequest` writes to
    `request_log` + `metrics` instead).
 4. **Add event constant** — add an `EVENT_*` constant to
-   `observability/ops_log.py` and include it in `ALL_EVENT_TYPES`.
+   `llm_rosetta_gateway/observability/ops_log.py` and include it in
+   `ALL_EVENT_TYPES`.
 5. **Wire into route handler** — construct the Ops subclass with
    `OpsContext` and `await op.execute()`.
 6. **Export** — add the class to `gateway/ops/__init__.py` `__all__`.

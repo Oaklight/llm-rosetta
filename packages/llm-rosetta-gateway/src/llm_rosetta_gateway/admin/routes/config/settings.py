@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from llm_rosetta._vendor.httpserver import JSONResponse, Response
+from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
 
 from .._shared import (
     _sanitize_server_section,

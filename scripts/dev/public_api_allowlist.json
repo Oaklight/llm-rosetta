@@ -58,10 +58,6 @@
       "reason": "0.14.0 renamed it to BaselineStreamProcessor (PR #793): 'passthrough' implied a production path that skips IR, which the mode does not provide. Landed before this check existed."
     },
     {
-      "key": "llm_rosetta.observability.persistence::PersistenceManager::removed-parameter::error_max",
-      "reason": "0.14.0 renamed it to dump_max as part of the retention policy. Landed before this check existed."
-    },
-    {
       "key": "llm_rosetta.pipeline::enforce_custom_tools::removed",
       "reason": "0.14.0 moved the capability passes to llm_rosetta.capabilities (re-exported there and under llm_rosetta.ir.passes); pipeline only imported them for internal use. Tracked by #1115."
     },
@@ -136,10 +132,6 @@
     {
       "key": "llm_rosetta.tool_ops::ToolResultPart::removed",
       "reason": "0.14.0 moved the IR tool types to llm_rosetta.types.ir (and the top-level package); tool_ops imports them for signatures only. Tracked by #1116."
-    },
-    {
-      "key": "llm_rosetta.observability.persistence::DEFAULT_ERROR_MAX::removed",
-      "reason": "0.14.0 replaced the request-log error_max cap with the error-dump cap (9b218c9c8e); no equivalent constant remains, and the docs line is tracked separately."
     }
   ]
 }

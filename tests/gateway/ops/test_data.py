@@ -17,7 +17,7 @@ from llm_rosetta_gateway.ops.data import (
     OpsTrimData,
     OpsVacuum,
 )
-from llm_rosetta.observability.ops_log import (
+from llm_rosetta_gateway.observability.ops_log import (
     EVENT_DATA_CLEARED,
     EVENT_DATA_CLEANUP,
     EVENT_DATA_REBUILT,

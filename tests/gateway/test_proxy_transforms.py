@@ -456,7 +456,7 @@ class TestToolCollisionDump:
     """
 
     def test_collisions_recorded_in_error_dump(self, tmp_path):
-        from llm_rosetta.observability.persistence import PersistenceManager
+        from llm_rosetta_gateway.observability.persistence import PersistenceManager
 
         async def run():
             pm = await PersistenceManager.create(str(tmp_path))
@@ -531,7 +531,7 @@ class TestStreamUsageModelName:
 
     def test_usage_lands_under_the_reported_model(self):
         from llm_rosetta_gateway.proxy import _stream_event_generator
-        from llm_rosetta.observability.metrics import MetricsCollector
+        from llm_rosetta_gateway.observability.metrics import MetricsCollector
 
         metrics = MetricsCollector()
         processor = MagicMock()
@@ -570,7 +570,7 @@ class TestStreamUsageModelName:
         """A caller with no client name still reports the model it has, and
         the total is filled in from the parts when the upstream omits one."""
         from llm_rosetta_gateway.proxy import _stream_event_generator
-        from llm_rosetta.observability.metrics import MetricsCollector
+        from llm_rosetta_gateway.observability.metrics import MetricsCollector
 
         metrics = MetricsCollector()
         processor = MagicMock()

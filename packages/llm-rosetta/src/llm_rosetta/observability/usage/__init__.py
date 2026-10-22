@@ -51,9 +51,9 @@ be attributed, and where the rows are stored::
     )
     report.to_payload({bucket: key_id for ...})
 
-The package also carries the entry point a shell user runs instead of writing
-any of the above: ``llm-rosetta-usage`` (:mod:`~llm_rosetta.observability.usage.cli`)
-reads one store and prints the same report — see its module docstring.
+The shell entry point that reads one store and prints the same report —
+``llm-rosetta-usage`` — ships with the gateway distribution, because only the
+gateway writes that store: :mod:`llm_rosetta_gateway.observability.usage.cli`.
 """
 
 from __future__ import annotations

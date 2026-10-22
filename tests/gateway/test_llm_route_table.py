@@ -13,8 +13,8 @@ from typing import Any, cast
 import pytest
 
 import llm_rosetta_gateway.app as app_module
-from llm_rosetta._vendor.httpserver import App
-from llm_rosetta._vendor.httpserver import JSONResponse
+from llm_rosetta_gateway._vendor.httpserver import App
+from llm_rosetta_gateway._vendor.httpserver import JSONResponse
 from llm_rosetta_gateway.config import GatewayConfig
 from llm_rosetta_gateway.model_types import get_model_type
 

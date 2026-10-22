@@ -10,7 +10,7 @@ from llm_rosetta._compat import sync_compat as _sync_compat
 if TYPE_CHECKING:
     pass
 
-from llm_rosetta._vendor.httpserver import (
+from llm_rosetta_gateway._vendor.httpserver import (
     App,
 )
 
@@ -118,7 +118,7 @@ async def _flush_now(app: App) -> None:
     # Record shutdown event (skip pruning to avoid latency before close)
     ops_log = getattr(app, "ops_log", None)
     if ops_log is not None:
-        from llm_rosetta.observability.ops_log import (
+        from llm_rosetta_gateway.observability.ops_log import (
             EVENT_SHUTDOWN,
             OpsLogEntry,
             SEVERITY_INFO,

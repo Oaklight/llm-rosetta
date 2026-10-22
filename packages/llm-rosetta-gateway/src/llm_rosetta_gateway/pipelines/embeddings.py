@@ -23,7 +23,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from llm_rosetta._vendor.httpserver import Response
+from llm_rosetta_gateway._vendor.httpserver import Response
 from llm_rosetta.converters.embedding.pipeline import (
     EmbeddingConversionPipeline,
     response_usage,

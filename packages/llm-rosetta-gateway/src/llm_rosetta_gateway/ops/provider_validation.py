@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, ClassVar
 
-from llm_rosetta.observability.ops_log import (
+from llm_rosetta_gateway.observability.ops_log import (
     EVENT_PROVIDER_VALIDATION,
     SEVERITY_WARNING,
     SOURCE_CONFIG,

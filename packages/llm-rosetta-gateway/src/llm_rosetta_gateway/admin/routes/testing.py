@@ -7,8 +7,8 @@ import time
 import uuid
 from typing import Any
 
-from llm_rosetta._vendor.httpclient import AsyncClient, Response as HttpResponse
-from llm_rosetta._vendor.httpserver import JSONResponse, Response
+from llm_rosetta_gateway._vendor.httpclient import AsyncClient, Response as HttpResponse
+from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
 
 from ...config import GatewayConfig
 from ._shared import parse_json_body

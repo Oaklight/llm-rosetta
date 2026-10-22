@@ -1,6 +1,9 @@
 """Tests for the unified retention module."""
 
-from llm_rosetta.observability.retention import RetentionPolicy, RetentionTracker
+from llm_rosetta_gateway.observability.retention import (
+    RetentionPolicy,
+    RetentionTracker,
+)
 
 
 class TestRetentionPolicy:

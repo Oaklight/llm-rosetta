@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 
 import llm_rosetta.observability as observability
-from llm_rosetta.observability import PersistenceManager
+from llm_rosetta_gateway.observability import PersistenceManager
 from llm_rosetta.observability.usage import (
     ADDITIVE_CACHE_STANDARDS,
     GOOGLE_METADATA,

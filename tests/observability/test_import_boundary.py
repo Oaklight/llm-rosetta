@@ -1,4 +1,9 @@
-"""The observability layer must not import the gateway, at any depth."""
+"""The core's observability half must not import the gateway, at any depth.
+
+The telemetry stack moved to ``llm_rosetta_gateway.observability`` (#1161);
+what remains here is the usage meter, and it has to stand alone so a library
+user can total tokens without the gateway installed.
+"""
 
 from __future__ import annotations
 
@@ -111,8 +116,8 @@ def test_observability_sources_never_import_the_gateway():
 
 def test_guard_catches_absolute_relative_and_from_import():
     """The guard has teeth for the shapes a reviewer would actually write."""
-    top = _OBSERVABILITY / "error_dump.py"
-    nested = _OBSERVABILITY / "usage" / "cli.py"
+    top = _OBSERVABILITY / "__init__.py"
+    nested = _OBSERVABILITY / "usage" / "normalize.py"
 
     assert _gateway_imports(top, "from llm_rosetta_gateway import x")
     assert _gateway_imports(top, "from ..gateway.middleware import sanitize")
@@ -130,10 +135,11 @@ def test_guard_catches_absolute_relative_and_from_import():
     assert _gateway_imports(top, clean) == []
 
 
-def test_error_dump_import_does_not_load_gateway():
-    """Importing an observability module must not pull the gateway in."""
+def test_importing_the_core_half_does_not_load_the_gateway():
+    """Metering tokens must work with no gateway installed, even transitively."""
     code = (
-        "import sys; import llm_rosetta.observability.error_dump; "
+        "import sys; import llm_rosetta.observability as o; "
+        "o.token_total({'prompt_tokens': 1}); "
         "print(int(any(m.startswith('llm_rosetta_gateway') for m in sys.modules)))"
     )
     out = subprocess.check_output([sys.executable, "-c", code], text=True).strip()
@@ -144,7 +150,7 @@ def test_scrub_is_identical_through_both_paths():
     from llm_rosetta_gateway.middleware.sanitize import (
         scrub_credential_patterns as legacy,
     )
-    from llm_rosetta.observability.sanitize import (
+    from llm_rosetta_gateway.observability.sanitize import (
         scrub_credential_patterns as canonical,
     )
 

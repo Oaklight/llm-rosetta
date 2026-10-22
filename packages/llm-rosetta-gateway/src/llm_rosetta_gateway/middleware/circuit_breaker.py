@@ -3,7 +3,7 @@
 Implements a three-state circuit breaker (CLOSED / OPEN / HALF_OPEN) that
 short-circuits requests to providers experiencing sustained failures.
 This is complementary to the observational health tracking in
-:class:`~llm_rosetta.observability.metrics.MetricsCollector` — the circuit
+:class:`~llm_rosetta_gateway.observability.metrics.MetricsCollector` — the circuit
 breaker *acts* on failure patterns rather than merely reporting them.
 
 Thread-safety: each :class:`CircuitBreaker` instance uses a

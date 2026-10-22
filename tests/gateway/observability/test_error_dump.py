@@ -7,14 +7,14 @@ import zlib
 
 import pytest
 
-from llm_rosetta.observability.error_dump import (
+from llm_rosetta_gateway.observability.error_dump import (
     compress_body,
     compute_body_hash,
     decompress_body,
     dump_error,
     offload_images,
 )
-from llm_rosetta.observability.persistence import PersistenceManager
+from llm_rosetta_gateway.observability.persistence import PersistenceManager
 
 
 # ------------------------------------------------------------------
@@ -410,7 +410,7 @@ class TestPersistenceErrorDumps:
 
     @pytest.mark.asyncio
     async def test_request_log_id_stored(self, persistence: PersistenceManager) -> None:
-        from llm_rosetta.observability import RequestLogEntry
+        from llm_rosetta_gateway.observability import RequestLogEntry
 
         log_entry = RequestLogEntry.create(
             model="test-model",

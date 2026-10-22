@@ -22,7 +22,7 @@ from llm_rosetta_gateway.transport.provider_info import (
     ProviderInfo,
     openai_auth,
 )
-from llm_rosetta.observability.metrics import MetricsCollector
+from llm_rosetta_gateway.observability.metrics import MetricsCollector
 from llm_rosetta_gateway.routing import SelectionContext
 
 
@@ -709,7 +709,7 @@ class TestResolveSkipsUnready:
 
 class TestResolveOrError:
     def test_returns_503_for_pending(self):
-        from llm_rosetta._vendor.httpserver import Response
+        from llm_rosetta_gateway._vendor.httpserver import Response
         from llm_rosetta_gateway.app import _resolve_or_error
 
         mock_config = MagicMock()
@@ -723,7 +723,7 @@ class TestResolveOrError:
         assert result.headers.get("Retry-After") == "5"
 
     def test_returns_502_for_failed(self):
-        from llm_rosetta._vendor.httpserver import Response
+        from llm_rosetta_gateway._vendor.httpserver import Response
         from llm_rosetta_gateway.app import _resolve_or_error
 
         mock_config = MagicMock()
@@ -737,7 +737,7 @@ class TestResolveOrError:
         assert "Retry-After" not in result.headers
 
     def test_returns_404_for_unknown_model(self):
-        from llm_rosetta._vendor.httpserver import Response
+        from llm_rosetta_gateway._vendor.httpserver import Response
         from llm_rosetta_gateway.app import _resolve_or_error
 
         mock_config = MagicMock()

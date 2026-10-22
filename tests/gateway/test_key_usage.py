@@ -20,7 +20,7 @@ from llm_rosetta_gateway.keystore import (
 from llm_rosetta_gateway.middleware.auth import api_key_context_var
 from llm_rosetta_gateway.ops.base import OpsContext
 from llm_rosetta_gateway.ops.proxy import OpsProxyRequest
-from llm_rosetta.observability import PersistenceManager, RequestLog
+from llm_rosetta_gateway.observability import PersistenceManager, RequestLog
 
 
 def bucket_of(raw_key: str) -> str:

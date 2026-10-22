@@ -23,8 +23,8 @@ from llm_rosetta_gateway.keystore import KeyStore
 from llm_rosetta_gateway.maintenance.keystore import (
     build_registry as keystore_registry,
 )
-from llm_rosetta.observability import PersistenceManager
-from llm_rosetta.observability.maintenance import Policy, StepContext
+from llm_rosetta_gateway.observability import PersistenceManager
+from llm_rosetta_gateway.observability.maintenance import Policy, StepContext
 
 #: What this file asserts the property for, by registry name.
 _COVERED = {"request_log", "api_keys", "config"}

@@ -1,9 +1,9 @@
 """Gateway maintenance steps: bring existing state up to what the code expects.
 
-The vocabulary (:class:`~llm_rosetta.observability.maintenance.Policy`,
-:class:`~llm_rosetta.observability.maintenance.Registry`,
-:class:`~llm_rosetta.observability.maintenance.Step`) lives in
-:mod:`llm_rosetta.observability.maintenance`; this package owns only the steps
+The vocabulary (:class:`~llm_rosetta_gateway.observability.maintenance.Policy`,
+:class:`~llm_rosetta_gateway.observability.maintenance.Registry`,
+:class:`~llm_rosetta_gateway.observability.maintenance.Step`) lives in
+:mod:`llm_rosetta_gateway.observability.maintenance`; this package owns only the steps
 and the deferred-startup runner.
 
 Each store keeps its own ledger:

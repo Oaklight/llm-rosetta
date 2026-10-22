@@ -406,7 +406,9 @@ def test_connectivity_skips_every_authenticated_probe_when_not_ready():
     request.app.gateway_config = config
 
     _PROBES.clear()
-    with patch("llm_rosetta._vendor.httpclient.AsyncClient", new=_FakeUpstreamClient):
+    with patch(
+        "llm_rosetta_gateway._vendor.httpclient.AsyncClient", new=_FakeUpstreamClient
+    ):
         resp = asyncio.run(_provider_connectivity(request, "alcf"))
 
     body = json.loads(resp.body)

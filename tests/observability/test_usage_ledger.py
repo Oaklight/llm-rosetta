@@ -14,7 +14,7 @@ from typing import Any
 
 import pytest
 
-from llm_rosetta.observability import PersistenceManager
+from llm_rosetta_gateway.observability import PersistenceManager
 from llm_rosetta.observability.usage import (
     LEDGER_COLUMNS,
     USAGE_WINDOW_LABELS,

@@ -15,10 +15,10 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
-from .usage.normalize import DEFAULT_MODEL_TYPE
+from llm_rosetta.observability.usage.normalize import DEFAULT_MODEL_TYPE
 
 if TYPE_CHECKING:
-    from llm_rosetta.observability.persistence import PersistenceManager
+    from .persistence import PersistenceManager
 
 
 @dataclass(frozen=True)

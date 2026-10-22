@@ -12,7 +12,7 @@ This module is used by ``proxy.py``, ``auth.py``, ``ratelimit.py``, and
 
 from __future__ import annotations
 
-from llm_rosetta._vendor.httpserver import JSONResponse, Response
+from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
 
 from llm_rosetta.formats import FORMAT_SPECS
 from llm_rosetta.provider_names import canonical_provider_name

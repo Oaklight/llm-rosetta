@@ -258,7 +258,7 @@ class TestCorsHeaders:
         assert "Access-Control-Allow-Origin" not in resp.headers
 
     def test_apply_cors_headers_standalone(self):
-        from llm_rosetta._vendor.httpserver import Response
+        from llm_rosetta_gateway._vendor.httpserver import Response
 
         resp = Response(body=b"", status_code=200)
         apply_cors_headers(resp)

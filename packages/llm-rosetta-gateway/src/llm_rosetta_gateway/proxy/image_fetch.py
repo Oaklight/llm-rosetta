@@ -28,7 +28,7 @@ def fetch_image(url: str) -> tuple[bytes, str] | None:
             converter logs it and drops the part, the same result as a failed
             ``urllib`` fetch.
     """
-    from llm_rosetta._vendor import httpclient
+    from llm_rosetta_gateway._vendor import httpclient
 
     proxy = os.environ.get("HTTPS_PROXY") or os.environ.get("HTTP_PROXY")
     with httpclient.Client(timeout=30.0, proxy=proxy) as client:

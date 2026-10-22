@@ -2,12 +2,12 @@
 
 import pytest
 
-from llm_rosetta.observability import (
+from llm_rosetta_gateway.observability import (
     OpsLog,
     OpsLogEntry,
     PersistenceManager,
 )
-from llm_rosetta.observability.ops_log import (
+from llm_rosetta_gateway.observability.ops_log import (
     ALL_EVENT_TYPES,
     ALL_SEVERITIES,
     ALL_SOURCES,

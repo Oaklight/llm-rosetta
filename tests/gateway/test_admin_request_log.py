@@ -4,7 +4,7 @@ from dataclasses import replace
 
 import pytest
 
-from llm_rosetta.observability.request_log import RequestLog, RequestLogEntry
+from llm_rosetta_gateway.observability.request_log import RequestLog, RequestLogEntry
 from llm_rosetta_gateway.admin.routes.observability import (
     _bounded_int,
     _normalise_time_bound,

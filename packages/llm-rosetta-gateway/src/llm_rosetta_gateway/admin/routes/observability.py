@@ -5,8 +5,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from llm_rosetta._vendor.httpclient import AsyncClient, Response as HttpResponse
-from llm_rosetta._vendor.httpserver import JSONResponse, Response
+from llm_rosetta_gateway._vendor.httpclient import AsyncClient, Response as HttpResponse
+from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
 
 from ...config import GatewayConfig
 from ._shared import _qp, parse_json_body
@@ -430,7 +430,7 @@ async def get_error_dump_detail(request: Any, **kwargs: Any) -> Response:
     if entry is None:
         return JSONResponse({"error": "Not found"}, status_code=404)
 
-    from llm_rosetta.observability.error_dump import decompress_body
+    from llm_rosetta_gateway.observability.error_dump import decompress_body
 
     # Decompress request body if present
     if "body_hash" in entry:
@@ -653,14 +653,14 @@ async def clear_ops_log(request: Any) -> Response:
 
 async def get_ops_log_event_types(request: Any) -> Response:
     """Return the list of known ops log event types."""
-    from llm_rosetta.observability.ops_log import ALL_EVENT_TYPES
+    from llm_rosetta_gateway.observability.ops_log import ALL_EVENT_TYPES
 
     return JSONResponse({"event_types": ALL_EVENT_TYPES})
 
 
 async def get_ops_log_sources(request: Any) -> Response:
     """Return the list of known ops log source subsystems."""
-    from llm_rosetta.observability.ops_log import ALL_SOURCES
+    from llm_rosetta_gateway.observability.ops_log import ALL_SOURCES
 
     return JSONResponse({"sources": ALL_SOURCES})
 

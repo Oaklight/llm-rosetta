@@ -19,8 +19,8 @@ from collections.abc import AsyncGenerator, Generator
 from contextlib import asynccontextmanager, contextmanager, suppress
 from typing import Any, Protocol, runtime_checkable
 
-from llm_rosetta._vendor import jsonx
-from llm_rosetta.observability.maintenance import Registry
+from llm_rosetta_gateway._vendor import jsonx
+from llm_rosetta_gateway.observability.maintenance import Registry
 
 logger = logging.getLogger("llm-rosetta-gateway")
 
@@ -222,7 +222,7 @@ class JsoncConfigIO:
 
         The steps are the versioned structure migrations and the name
         correction, in that order, under
-        :attr:`Policy.LOAD_TIME <llm_rosetta.observability.maintenance.Policy>`;
+        :attr:`Policy.LOAD_TIME <llm_rosetta_gateway.observability.maintenance.Policy>`;
         the registry that ran is kept on this reader, which is what read the
         document, and is handed to the config built from it.
         """

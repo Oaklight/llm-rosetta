@@ -35,7 +35,7 @@ from datetime import datetime, timezone
 from functools import partial
 from typing import Any
 
-from llm_rosetta.observability.maintenance import (
+from llm_rosetta_gateway.observability.maintenance import (
     Policy,
     Registry,
     Step,

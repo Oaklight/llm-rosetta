@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from llm_rosetta._vendor.httpserver import JSONResponse, Response
+from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
 from llm_rosetta_gateway.providers import default_models_path
 from llm_rosetta_gateway.transport.provider_info import _VERSION_SUFFIXES
 
@@ -46,7 +46,7 @@ async def test_provider_connectivity(request: Any, name: str) -> Response:
             {"error": "Provider has no base_url configured"}, status_code=400
         )
 
-    from llm_rosetta._vendor.httpclient import AsyncClient
+    from llm_rosetta_gateway._vendor.httpclient import AsyncClient
 
     proxy = provider_cfg.get("proxy") or getattr(config, "proxy", None)
     timeout = float(provider_cfg.get("timeout", 10))

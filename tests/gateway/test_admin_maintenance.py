@@ -316,7 +316,7 @@ class TestTheLoadTimeSteps:
         from llm_rosetta_gateway.maintenance.keystore import (
             build_registry as keystore_steps,
         )
-        from llm_rosetta.observability.persistence import PersistenceManager
+        from llm_rosetta_gateway.observability.persistence import PersistenceManager
 
         app = self._app_with_a_real_load(tmp_path)
         app.persistence.maintenance = PersistenceManager.migration_registry()

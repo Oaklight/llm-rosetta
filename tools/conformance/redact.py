@@ -10,7 +10,7 @@ Three mechanisms, strongest first:
    ``authorization``, ``token`` …) is redacted regardless of its value, which
    covers headers echoed back as a dict.
 3. **Patterns.**  The credential patterns shared with
-   :func:`llm_rosetta.observability.sanitize.scrub_credential_patterns` plus
+   :func:`llm_rosetta_gateway.observability.sanitize.scrub_credential_patterns` plus
    URL userinfo and ``key=value`` parameters.
 """
 
@@ -20,7 +20,7 @@ import re
 from collections.abc import Iterable
 from typing import Any
 
-from llm_rosetta.observability.sanitize import scrub_credential_patterns
+from llm_rosetta_gateway.observability.sanitize import scrub_credential_patterns
 
 #: Mapping keys whose value is a credential, matched case-insensitively.
 _SENSITIVE_KEYS = frozenset(

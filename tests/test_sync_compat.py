@@ -72,21 +72,21 @@ class TestDumpErrorSync:
     """dump_error() sync/async compatibility."""
 
     def test_sync_noop_when_persistence_is_none(self):
-        from llm_rosetta.observability.error_dump import dump_error
+        from llm_rosetta_gateway.observability.error_dump import dump_error
 
         result = dump_error(None, request_body=None)
         assert result is None
 
     @pytest.mark.asyncio
     async def test_async_noop_when_persistence_is_none(self):
-        from llm_rosetta.observability.error_dump import dump_error
+        from llm_rosetta_gateway.observability.error_dump import dump_error
 
         result = await dump_error(None, request_body=None)
         assert result is None
 
     @pytest.mark.asyncio
     async def test_async_returns_awaitable(self):
-        from llm_rosetta.observability.error_dump import dump_error
+        from llm_rosetta_gateway.observability.error_dump import dump_error
 
         result = dump_error(None, request_body=None)
         # In async context, returns a Task

@@ -5,14 +5,14 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from llm_rosetta._vendor.httpserver import JSONResponse, Response
+from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
 
 from llm_rosetta.auto_detect import ProviderType
 from llm_rosetta.pipeline import ConversionError, ConversionPipeline
 from llm_rosetta.routing import ResolvedRoute
 
-from llm_rosetta.observability.capture import CapturedRequest, CaptureState
-from llm_rosetta.observability.error_dump import dump_error
+from llm_rosetta_gateway.observability.capture import CapturedRequest, CaptureState
+from llm_rosetta_gateway.observability.error_dump import dump_error
 
 from ..logging import (
     get_logger,

@@ -15,7 +15,7 @@ from ._state import set_config
 if TYPE_CHECKING:
     from ..shims import ShimLoadReport
 
-from llm_rosetta._vendor.httpserver import (
+from llm_rosetta_gateway._vendor.httpserver import (
     App,
     JSONResponse,
     Response,
@@ -498,7 +498,7 @@ async def run_gateway(
     # Record startup event
     ops_log = getattr(app, "ops_log", None)
     if ops_log is not None:
-        from llm_rosetta.observability.ops_log import (
+        from llm_rosetta_gateway.observability.ops_log import (
             EVENT_STARTUP,
             OpsLogEntry,
             SEVERITY_INFO,

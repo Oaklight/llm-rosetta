@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from llm_rosetta._vendor.httpserver import JSONResponse, Response
+from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
 from llm_rosetta.observability.usage import UsageReport
 
 from ...keystore import INTERNAL_LABEL, INTERNAL_USAGE_BUCKET, KeyStore

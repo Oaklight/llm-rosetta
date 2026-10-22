@@ -1,7 +1,7 @@
 """The maintenance surface: what the deferred steps did, and re-running one.
 
 The five repairs that run after the socket is open each report a
-:class:`~llm_rosetta.observability.maintenance.StepResult` — what changed, how
+:class:`~llm_rosetta_gateway.observability.maintenance.StepResult` — what changed, how
 long it took, and why it failed if it did — and those results are what this
 serves, so "did the backfills run" is a request rather than a log search.
 
@@ -17,8 +17,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from llm_rosetta._vendor.httpserver import JSONResponse, Response
-from llm_rosetta.observability.maintenance import (
+from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
+from llm_rosetta_gateway.observability.maintenance import (
     Policy,
     Registry,
     StepContext,

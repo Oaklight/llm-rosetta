@@ -18,12 +18,12 @@ import pytest
 import llm_rosetta_gateway.app as app_module
 from llm_rosetta_gateway.app import _state
 import llm_rosetta_gateway.lifecycle as lifecycle_module
-from llm_rosetta._vendor.httpserver import JSONResponse
+from llm_rosetta_gateway._vendor.httpserver import JSONResponse
 from llm_rosetta_gateway.maintenance.dumps import DeferredDumpStore
 from llm_rosetta_gateway.ops import OpsContext
-from llm_rosetta.observability.error_dump import dump_error
-from llm_rosetta.observability.persistence import PersistenceManager
-from llm_rosetta.observability.request_log import RequestLog
+from llm_rosetta_gateway.observability.error_dump import dump_error
+from llm_rosetta_gateway.observability.persistence import PersistenceManager
+from llm_rosetta_gateway.observability.request_log import RequestLog
 from llm_rosetta.routing import ResolvedRoute
 from llm_rosetta_gateway.routing import SelectionContext
 

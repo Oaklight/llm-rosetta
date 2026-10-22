@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from llm_rosetta.observability.metrics import MetricsCollector
-from llm_rosetta.observability.request_log import RequestLog, RequestLogEntry
+from llm_rosetta_gateway.observability.metrics import MetricsCollector
+from llm_rosetta_gateway.observability.request_log import RequestLog, RequestLogEntry
 
 
 class TestRequestLogEntryTokenFields:
@@ -283,7 +283,7 @@ class TestMetricsCollectorTokenTracking:
 class TestPersistenceTokenColumns:
     @pytest.fixture
     async def pm(self, tmp_path):
-        from llm_rosetta.observability.persistence import PersistenceManager
+        from llm_rosetta_gateway.observability.persistence import PersistenceManager
 
         return await PersistenceManager.create(data_dir=tmp_path)
 
@@ -375,7 +375,7 @@ class TestPersistenceTokenColumns:
         """)
         conn.close()
 
-        from llm_rosetta.observability.persistence import PersistenceManager
+        from llm_rosetta_gateway.observability.persistence import PersistenceManager
 
         pm = await PersistenceManager.create(data_dir=tmp_path)
 
@@ -912,7 +912,7 @@ class TestMetricsExtendedTokens:
 class TestPersistenceExtendedTokenColumns:
     @pytest.fixture
     async def pm(self, tmp_path):
-        from llm_rosetta.observability.persistence import PersistenceManager
+        from llm_rosetta_gateway.observability.persistence import PersistenceManager
 
         return await PersistenceManager.create(str(tmp_path / "test.db"))
 
@@ -1018,7 +1018,7 @@ class TestPersistenceExtendedTokenColumns:
         """)
         conn.close()
 
-        from llm_rosetta.observability.persistence import PersistenceManager
+        from llm_rosetta_gateway.observability.persistence import PersistenceManager
 
         pm = await PersistenceManager.create(data_dir=tmp_path)
         cursor = await pm._conn.execute("PRAGMA table_info(request_log)")

@@ -20,7 +20,7 @@ import pytest
 
 from llm_rosetta_gateway.keystore import VERSIONS, KeyStore, key_bucket
 from llm_rosetta_gateway.maintenance.keystore import COLUMN_OF, build_registry
-from llm_rosetta.observability.maintenance import Policy
+from llm_rosetta_gateway.observability.maintenance import Policy
 
 _STEPS = [
     "api_keys.adopt_pre_registry_schema",

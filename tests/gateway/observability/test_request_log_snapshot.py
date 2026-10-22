@@ -31,7 +31,7 @@ from typing import Any
 
 import pytest
 
-HARNESS = Path(__file__).parents[2] / "scripts" / "dev" / "migration_differential.py"
+HARNESS = Path(__file__).parents[3] / "scripts" / "dev" / "migration_differential.py"
 SNAPSHOT = Path(__file__).with_name("request_log_snapshot.json")
 
 #: One test per state, taken from the snapshot itself: a state the snapshot does
@@ -137,7 +137,7 @@ def main(argv: list[str]) -> int:
 
 
 def _module_path() -> str:
-    import llm_rosetta.observability.persistence as module
+    import llm_rosetta_gateway.observability.persistence as module
 
     return module.__file__ or "?"
 

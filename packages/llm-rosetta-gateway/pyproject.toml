@@ -29,6 +29,8 @@ Issues = "https://github.com/Oaklight/llm-rosetta/issues"
 
 [project.scripts]
 llm-rosetta-gateway = "llm_rosetta_gateway:main"
+# Reads the gateway's own database, so it ships with the gateway (#1161).
+llm-rosetta-usage = "llm_rosetta_gateway.observability.usage.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -38,3 +40,6 @@ where = ["src"]
 
 [tool.setuptools.dynamic]
 version = { attr = "llm_rosetta_gateway.__version__" }
+
+[tool.zerodep]
+vendor-dir = "src/llm_rosetta_gateway/_vendor"

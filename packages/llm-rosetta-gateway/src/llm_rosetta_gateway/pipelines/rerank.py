@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from llm_rosetta._vendor.httpserver import Response
+from llm_rosetta_gateway._vendor.httpserver import Response
 from llm_rosetta.converters.rerank.pipeline import (
     RerankConversionPipeline,
     response_usage,

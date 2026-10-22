@@ -11,7 +11,7 @@ than a second rendering of it that could disagree with the panel.
     llm-rosetta-usage --db ./data --by subject,type,model --json
 
 The store is opened through
-:class:`~llm_rosetta.observability.persistence.PersistenceManager` — the
+:class:`~llm_rosetta_gateway.observability.persistence.PersistenceManager` — the
 gateway's own reader — but **without writing to it**: no backup, no table
 creation, no migrations.  A lookup should not leave a copy of the database in
 the data directory, and it should not take a write lock on a store another
@@ -42,7 +42,7 @@ from pathlib import Path
 from typing import Any
 
 from llm_rosetta import __version__
-from llm_rosetta.observability.persistence import PersistenceManager
+from ..persistence import PersistenceManager
 from llm_rosetta.observability.usage.report import (
     INTERNAL_LABEL,
     INTERNAL_SUBJECT,
@@ -595,5 +595,5 @@ def main(argv: Sequence[str] | None = None) -> int:
     return 0
 
 
-if __name__ == "__main__":  # python -m llm_rosetta.observability.usage.cli
+if __name__ == "__main__":  # python -m llm_rosetta_gateway.observability.usage.cli
     raise SystemExit(main())

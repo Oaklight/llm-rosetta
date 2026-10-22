@@ -8,13 +8,13 @@ import time
 import pytest
 from typing import Any
 
-from llm_rosetta._vendor.httpserver import State
+from llm_rosetta_gateway._vendor.httpserver import State
 from llm_rosetta_gateway.middleware.request_context import (
     RequestContext,
     request_context_var,
 )
-from llm_rosetta.observability import MetricsCollector
-from llm_rosetta.observability.request_log import RequestLog
+from llm_rosetta_gateway.observability import MetricsCollector
+from llm_rosetta_gateway.observability.request_log import RequestLog
 
 
 # ---------------------------------------------------------------------------
@@ -154,7 +154,7 @@ class TestOnResponseCompleted:
         capture = _build_hooks()
         handler = capture.on_response_completed_handlers[0]
 
-        from llm_rosetta.observability.request_log import RequestLogEntry
+        from llm_rosetta_gateway.observability.request_log import RequestLogEntry
 
         entry = RequestLogEntry.create(
             model="gpt-4o",
@@ -230,7 +230,7 @@ class TestOnClientDisconnect:
         capture = _build_hooks()
         handler = capture.on_client_disconnect_handlers[0]
 
-        from llm_rosetta.observability.request_log import RequestLogEntry
+        from llm_rosetta_gateway.observability.request_log import RequestLogEntry
 
         entry = RequestLogEntry.create(
             model="gpt-4o",

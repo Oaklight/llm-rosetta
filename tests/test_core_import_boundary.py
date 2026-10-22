@@ -27,6 +27,27 @@ _GATEWAY_ALIAS = "llm_rosetta.gateway"
 # ``pipeline.chat`` reads its semantics.  The HTTP client is gateway-side
 # too — the external shim-source loader lives in ``gateway.shims``.
 _GATEWAY_SIDE = {
+    "llm_rosetta_gateway.observability.capture",
+    "llm_rosetta_gateway.observability.error_dump",
+    "llm_rosetta_gateway.observability.maintenance",
+    "llm_rosetta_gateway.observability.metrics",
+    "llm_rosetta_gateway.observability.ops_log",
+    "llm_rosetta_gateway.observability.persistence",
+    "llm_rosetta_gateway.observability.profiling",
+    "llm_rosetta_gateway.observability.request_log",
+    "llm_rosetta_gateway.observability.retention",
+    "llm_rosetta_gateway._vendor.httpclient",
+    # The loader modules themselves: eager re-imports from ``shims`` would
+    # bring them back, and the HTTP client is only reached from inside one.
+    "llm_rosetta.shims.sources",
+    "llm_rosetta.shims.removals",
+    "llm_rosetta.shims.catalog",
+}
+
+#: The telemetry modules' old paths.  They still import through a deprecation
+#: alias that resolves to the gateway package (#1161), so a core module
+#: reaching for one is the same regression as importing the gateway directly.
+_GATEWAY_TELEMETRY_ALIASES = {
     "llm_rosetta.observability.capture",
     "llm_rosetta.observability.error_dump",
     "llm_rosetta.observability.maintenance",
@@ -36,12 +57,7 @@ _GATEWAY_SIDE = {
     "llm_rosetta.observability.profiling",
     "llm_rosetta.observability.request_log",
     "llm_rosetta.observability.retention",
-    "llm_rosetta._vendor.httpclient",
-    # The loader modules themselves: eager re-imports from ``shims`` would
-    # bring them back, and the HTTP client is only reached from inside one.
-    "llm_rosetta.shims.sources",
-    "llm_rosetta.shims.removals",
-    "llm_rosetta.shims.catalog",
+    "llm_rosetta.observability.sanitize",
 }
 
 
@@ -57,8 +73,13 @@ def _absolute_module(path: Path, node: ast.ImportFrom) -> str:
 
 
 def _is_gateway(name: str) -> bool:
-    return name in (_GATEWAY, _GATEWAY_ALIAS) or name.startswith(
+    if name in (_GATEWAY, _GATEWAY_ALIAS) or name.startswith(
         (_GATEWAY + ".", _GATEWAY_ALIAS + ".")
+    ):
+        return True
+    return any(
+        name == moved or name.startswith(moved + ".")
+        for moved in _GATEWAY_TELEMETRY_ALIASES
     )
 
 
@@ -161,6 +182,11 @@ def test_observability_facade_still_exposes_every_public_name():
         name for name in observability.__all__ if not hasattr(observability, name)
     ]
     assert missing == []
+
+    # The literal ``__all__`` and the two resolution maps must agree; a name
+    # added to one and not the other is invisible until someone imports it.
+    declared = set(observability._LAZY) | set(observability._MOVED)
+    assert set(observability.__all__) == declared
 
     try:
         observability.__getattr__("does_not_exist")

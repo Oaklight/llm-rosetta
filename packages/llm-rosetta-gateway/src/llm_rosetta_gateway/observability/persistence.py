@@ -26,13 +26,13 @@ from functools import partial
 from pathlib import Path
 from typing import Any
 
-from llm_rosetta._vendor import aiosqlite
+from .._vendor import aiosqlite
 
 from .maintenance import Policy, Registry, Step, StepContext
 from .retention import RetentionPolicy, RetentionTracker
-from .usage.normalize import DEFAULT_MODEL_TYPE, LEDGER_COLUMNS
-from .usage.report import USAGE_WINDOWS
-from .usage.semantics import ADDITIVE_CACHE_STANDARDS
+from llm_rosetta.observability.usage.normalize import DEFAULT_MODEL_TYPE, LEDGER_COLUMNS
+from llm_rosetta.observability.usage.report import USAGE_WINDOWS
+from llm_rosetta.observability.usage.semantics import ADDITIVE_CACHE_STANDARDS
 
 logger = logging.getLogger("llm-rosetta.observability")
 
@@ -414,7 +414,7 @@ class PersistenceManager:
     async def _run_migrations(self) -> None:
         """Apply pending versioned migrations, through the maintenance registry.
 
-        Every migration is a :class:`~llm_rosetta.observability.maintenance.Step`
+        Every migration is a :class:`~llm_rosetta_gateway.observability.maintenance.Step`
         under ``Policy.MANDATORY``: the SQL, the order and the
         ``schema_version`` bookkeeping are what they were, and a step that fails
         still raises out of :meth:`create`, which is what aborts a startup that

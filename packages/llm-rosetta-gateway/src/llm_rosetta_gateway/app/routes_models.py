@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     pass
 
-from llm_rosetta._vendor.httpserver import (
+from llm_rosetta_gateway._vendor.httpserver import (
     JSONResponse,
     Response,
 )
