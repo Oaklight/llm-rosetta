@@ -180,8 +180,13 @@ jobs:
         # Discovered rather than listed, so a new one cannot be forgotten.
         if: needs.changes.outputs.gateway == 'true'
         run: |
+          # `tests/integration/` is excluded on purpose: these are live tests
+          # that need credentials and reach the network (the shim presets one
+          # calls the GitHub API), and `make test` excludes them too.  A PR
+          # that touches `tests/` used to run them here, so a rate limit on
+          # api.github.com could fail a change that never touched a shim.
           mapfile -t files < <(grep -rl "llm_rosetta_gateway" tests --include=*.py \
-            | grep -v -e '^tests/gateway/' -e '^tests/js/')
+            | grep -v -e '^tests/gateway/' -e '^tests/js/' -e '^tests/integration/')
           python -m pytest "${files[@]}" -q
 
       - name: Run converter tests

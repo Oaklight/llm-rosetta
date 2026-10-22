@@ -148,3 +148,88 @@ class TestTheChainOrder:
         from llm_rosetta_gateway.routing import RoutingChain
 
         RoutingChain([QuotaStage(), AnchorStage()])
+
+
+class TestExclusionByReading:
+    """A fresh reading that says "spent" removes the candidate, not just weight."""
+
+    def _spent_provider(self, probe: str, *, age: float = 0.0) -> Any:
+        from datetime import datetime, timedelta, timezone
+
+        from llm_rosetta_gateway.quota.models import credential_fingerprint
+
+        pinfo = _pinfo("spent", keys="k1", probe=probe)
+        QUOTA_STATE.put_reading(
+            QuotaReading(
+                probe=probe,
+                credential=credential_fingerprint("k1"),
+                windows=[QuotaWindow(name="5h", used_percent=100, span_seconds=18000)],
+                read_at=datetime.now(timezone.utc) - timedelta(seconds=age),
+            )
+        )
+        return pinfo
+
+    def test_a_fresh_exhausted_reading_excludes_the_provider(self):
+        from llm_rosetta_gateway.quota.service import provider_spent
+
+        probe = "p-exclude-fresh"
+        assert provider_spent(self._spent_provider(probe)) is True
+
+    def test_a_stale_reading_is_not_a_statement_about_now(self):
+        from llm_rosetta_gateway.quota.service import (
+            READING_MAX_AGE_SECONDS,
+            provider_spent,
+        )
+
+        pinfo = self._spent_provider(
+            "p-exclude-stale", age=READING_MAX_AGE_SECONDS + 60
+        )
+
+        assert provider_spent(pinfo) is False
+
+    def test_an_unmeasured_provider_is_not_spent(self):
+        from llm_rosetta_gateway.quota.service import provider_spent
+
+        assert provider_spent(_pinfo("unmeasured", probe="p-exclude-none")) is False
+
+    def test_one_credential_with_room_keeps_the_provider(self):
+        from llm_rosetta_gateway.quota.models import credential_fingerprint
+        from llm_rosetta_gateway.quota.service import provider_spent
+
+        probe = "p-exclude-mixed"
+        pinfo = _pinfo("mixed", keys="k1,k2", probe=probe)
+        QUOTA_STATE.put_reading(
+            QuotaReading(
+                probe=probe,
+                credential=credential_fingerprint("k1"),
+                windows=[QuotaWindow(name="5h", used_percent=100)],
+            )
+        )
+        QUOTA_STATE.put_reading(
+            QuotaReading(
+                probe=probe,
+                credential=credential_fingerprint("k2"),
+                windows=[QuotaWindow(name="5h", used_percent=20)],
+            )
+        )
+
+        assert provider_spent(pinfo) is False
+
+    def test_a_spent_provider_is_not_chosen_even_with_an_even_split(self):
+        route = ModelRoute(
+            providers=[ProviderEntry(name="spent"), ProviderEntry(name="fresh")],
+            route_id="r-exclude-split",
+            strategy=create_strategy("weighted_round_robin"),
+        )
+
+        picks = set()
+        for _ in range(20):
+            entry = select_ready_entry(
+                route,
+                is_ready=lambda name: True,
+                excluded=frozenset({"spent"}),
+            )
+            assert entry is not None
+            picks.add(entry.name)
+
+        assert picks == {"fresh"}

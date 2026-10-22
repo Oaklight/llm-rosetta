@@ -72,6 +72,7 @@ class SelectionContext:
         "provider_info",
         "ir_request",
         "quota_headroom",
+        "quota_excluded",
         "key_affinity",
         "upstream_session_id",
     )
@@ -103,6 +104,9 @@ class SelectionContext:
         # Smallest remaining share per provider, 0..1; absent means "not
         # measured", which is deliberately not the same as "spent".
         self.quota_headroom: Mapping[str, float] = {}
+        # Providers whose every fresh reading says the allowance is spent.
+        # Distinct from a provider block: this is a reading, not a decision.
+        self.quota_excluded: frozenset[str] = frozenset()
         self.key_affinity = True
         self.upstream_session_id: str | None = None
 
@@ -156,9 +160,14 @@ class SelectionContext:
         """Record the transport configuration the request will be sent with."""
         self.provider_info = provider_info
 
-    def with_quota_headroom(self, headroom: Mapping[str, float]) -> None:
-        """Record how much allowance each provider has left."""
+    def with_quota_headroom(
+        self,
+        headroom: Mapping[str, float],
+        excluded: frozenset[str] = frozenset(),
+    ) -> None:
+        """Record how much allowance each provider has left, and who has none."""
         self.quota_headroom = dict(headroom)
+        self.quota_excluded = excluded
 
     def with_ir_request(self, ir_request: dict[str, Any]) -> None:
         """Record the converted request, once the pipeline has produced one.

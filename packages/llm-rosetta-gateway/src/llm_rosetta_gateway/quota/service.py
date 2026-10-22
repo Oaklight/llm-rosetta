@@ -442,6 +442,48 @@ def provider_headroom(pinfo: Any) -> float | None:
     return min(shares) if shares else None
 
 
+#: A reading older than this is not evidence about right now.  A vendor that
+#: refuses for five minutes should not have a provider removed from rotation
+#: for an hour on the strength of a reading taken before that.
+READING_MAX_AGE_SECONDS = 900
+
+
+def provider_spent(pinfo: Any) -> bool:
+    """Whether every *fresh* reading of this provider says it is spent.
+
+    ``True`` only when at least one reading is fresh and none of the fresh
+    ones leaves room: a provider nothing has measured, or whose readings are
+    all stale, is **not** spent — being unmeasured is not the same as being
+    empty, and a stale reading is not a statement about now.
+
+    This is the exclusion counterpart of :func:`provider_headroom`: the
+    weighting reduces a share, this removes the candidate.  A live provider
+    block is the gateway's own decision and is already part of ``ready``.
+    """
+    probe = getattr(pinfo, "quota_probe", None)
+    ring = getattr(pinfo, "key_ring", None)
+    if not probe or ring is None:
+        return False
+    keys = list(ring.keys())
+    if not keys:
+        return False
+    fresh = 0
+    for key in keys:
+        reading = QUOTA_STATE.get_reading(probe, credential_fingerprint(key))
+        if reading is None:
+            continue
+        if QUOTA_STATE.reading_age(reading) > READING_MAX_AGE_SECONDS:
+            continue
+        if not reading.windows:
+            # Nothing decoded is not an exhaustion; the probe reports
+            # ``unsupported`` for lanes it cannot read at all.
+            continue
+        fresh += 1
+        if any(not window.exhausted for window in reading.windows):
+            return False
+    return fresh > 0
+
+
 def provider_cooldown(name: str, pinfo: Any) -> dict[str, Any] | None:
     """Return a provider-wide quota block, for the admin surface.
 

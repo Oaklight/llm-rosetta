@@ -29,15 +29,21 @@ class QuotaStage(RoutingStage):
 
     name = "quota"
     requires = frozenset({"model_route", "providers"})
-    provides = frozenset({"quota_headroom"})
+    provides = frozenset({"quota_headroom", "quota_excluded"})
 
     def run(self, ctx: SelectionContext) -> None:
         """Fill ``ctx.quota_headroom`` for every candidate."""
-        from ..quota.service import provider_headroom
+        from ..quota.service import provider_headroom, provider_spent
 
         headroom: dict[str, float] = {}
+        excluded: set[str] = set()
         for entry in ctx.candidates:
             pinfo = ctx.providers.get(entry.name)
-            share = provider_headroom(pinfo) if pinfo is not None else None
+            if pinfo is None:
+                headroom[entry.name] = 1.0
+                continue
+            if provider_spent(pinfo):
+                excluded.add(entry.name)
+            share = provider_headroom(pinfo)
             headroom[entry.name] = 1.0 if share is None else share
-        ctx.with_quota_headroom(headroom)
+        ctx.with_quota_headroom(headroom, frozenset(excluded))

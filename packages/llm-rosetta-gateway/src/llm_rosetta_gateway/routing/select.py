@@ -47,6 +47,7 @@ def select_ready_entry(
     is_ready: Callable[[str], bool],
     identity: str | None = None,
     headroom: Mapping[str, float] | None = None,
+    excluded: frozenset[str] = frozenset(),
 ) -> ProviderEntry | None:
     """Pick a ready provider from *model_route*, or ``None`` when none is.
 
@@ -60,6 +61,9 @@ def select_ready_entry(
         identity: Optional client identity for affinity routing.
 
         headroom: Per-provider remaining share (see :func:`quota_weight`).
+        excluded: Providers whose allowance is spent by a fresh reading.  They
+            are not candidates at all — unlike a low headroom, which only
+            reduces a share.
 
     Returns:
         The chosen entry, or ``None`` when no candidate is ready.
@@ -70,10 +74,10 @@ def select_ready_entry(
         else None
     )
     entry = model_route.select_entry(identity=identity, weights=weights)
-    if is_ready(entry.name):
+    if entry.name not in excluded and is_ready(entry.name):
         return entry
     for alt in model_route.providers:
-        if alt.name != entry.name and is_ready(alt.name):
+        if alt.name != entry.name and alt.name not in excluded and is_ready(alt.name):
             return alt
     return None
 
@@ -97,7 +101,9 @@ class AnchorStage(RoutingStage):
     # ``quota_headroom`` is read (it weights the candidates) and not seeded, so
     # declaring it is what makes a chain that puts this stage first refuse to
     # build — otherwise a reversed order would silently weight nothing.
-    requires = frozenset({"model_route", "providers", "identity", "quota_headroom"})
+    requires = frozenset(
+        {"model_route", "providers", "identity", "quota_headroom", "quota_excluded"}
+    )
     provides = frozenset({"chosen"})
 
     def run(self, ctx: SelectionContext) -> None:
@@ -108,6 +114,7 @@ class AnchorStage(RoutingStage):
             is_ready=ctx.is_ready,
             identity=ctx.identity.client,
             headroom=ctx.quota_headroom or None,
+            excluded=ctx.quota_excluded,
         )
         if entry is not None:
             ctx.choose(entry)
