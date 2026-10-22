@@ -102,6 +102,11 @@ from .profiling import (
     get_profiling_status,
 )
 from .connectivity import test_provider_connectivity
+from .credential import (
+    delete_provider_credential,
+    get_provider_credential,
+    put_provider_credential,
+)
 from .quota import get_provider_quota
 from .testing import (
     cancel_test,
@@ -223,6 +228,16 @@ def register_admin_routes(app: Any) -> None:
     # Provider quota reading (one entry per credential)
     app.route("/admin/api/config/providers/<name>/quota", methods=["GET"])(
         get_provider_quota
+    )
+    # Shim-declared credentials: read, install a record, sign out
+    app.route("/admin/api/config/providers/<name>/credential", methods=["GET"])(
+        get_provider_credential
+    )
+    app.route("/admin/api/config/providers/<name>/credential", methods=["PUT"])(
+        put_provider_credential
+    )
+    app.route("/admin/api/config/providers/<name>/credential", methods=["DELETE"])(
+        delete_provider_credential
     )
     # Content capture (dashboard tab)
     app.route("/admin/api/capture/status", methods=["GET"])(

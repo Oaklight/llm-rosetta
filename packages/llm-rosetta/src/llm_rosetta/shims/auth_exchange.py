@@ -138,6 +138,36 @@ class AuthExchange(Protocol):
         """
         ...
 
+    def install(self, ctx: AuthContext, record: Mapping[str, Any]) -> Mapping[str, Any]:
+        """Adopt a credential record produced somewhere else.
+
+        The interactive run cannot always happen on the gateway host: an
+        operator signing in on their own machine has a browser and the
+        gateway's loopback listener does not.  So the gateway accepts the
+        finished record over its authenticated admin API and hands it to the
+        exchange, which alone knows the record's shape and where it lives.
+
+        Implementations must validate what they are given and must never
+        return a token.  This is optional: an exchange that cannot be handed a
+        record simply does not implement it, and the gateway refuses for it.
+
+        Returns:
+            A summary safe to render in a UI — identity, expiry, scopes — and
+            never the credential.
+
+        Raises:
+            AuthExchangeError: The record is malformed or was refused.
+        """
+        ...
+
+    def describe(self, ctx: AuthContext) -> Mapping[str, Any] | None:
+        """Return the stored credential's token-free summary, or ``None``.
+
+        Optional, like :meth:`install`.  What an admin panel can show without
+        touching the credential: who is signed in, and until when.
+        """
+        ...
+
 
 class BaseAuthExchange:
     """Defaults for the optional half of :class:`AuthExchange`.
@@ -157,6 +187,20 @@ class BaseAuthExchange:
     def account_id(self, ctx: AuthContext) -> str | None:
         """Return ``None``; override for a provider with an account identity."""
         return None
+
+    def describe(self, ctx: AuthContext) -> Mapping[str, Any] | None:
+        """Return ``None``; override to show who is signed in."""
+        return None
+
+    def install(
+        self, ctx: AuthContext, record: Mapping[str, Any]
+    ) -> Mapping[str, Any]:  # pragma: no cover
+        """Refuse: this exchange cannot adopt a record from elsewhere."""
+        raise NotImplementedError
+
+    def can_install(self) -> bool:
+        """Whether :meth:`install` is implemented."""
+        return type(self).install is not BaseAuthExchange.install
 
     async def credential(self, ctx: AuthContext) -> str:  # pragma: no cover
         """Mint a credential.  Every exchange must implement this."""

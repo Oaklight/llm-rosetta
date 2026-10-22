@@ -603,3 +603,92 @@ def test_the_shim_loader_loads_the_shipped_exchange():
     assert exchange is not None
     assert exchange.kind == "oauth"
     assert callable(exchange.credential)
+
+
+class TestInstallingARecord:
+    """A record produced on a machine with a browser, handed to the gateway."""
+
+    def _record(self, **overrides: Any) -> dict[str, Any]:
+        record = {
+            "client_id": "oaiapp_test",
+            "access_token": "access-uploaded",
+            "refresh_token": "refresh-uploaded",
+            "id_token": id_token(),
+            "token_type": "Bearer",
+            "expires_in": 3600,
+            "scopes": ["openid", "offline_access"],
+        }
+        record.update(overrides)
+        return record
+
+    def test_a_verified_record_is_stored(self, siwc, ctx, issuer):
+        summary = siwc.EXCHANGE.install(ctx, self._record())
+
+        stored = json.loads((Path(ctx.state_dir) / "credential.json").read_text())
+        assert stored["access_token"] == "access-uploaded"
+        assert stored["refresh_token"] == "refresh-uploaded"
+        assert stored["subject"] == "user-1"
+        assert stored["expires_at"] > time.time()
+        assert summary["connected"] is True
+        assert summary["subject"] == "user-1"
+
+    def test_the_summary_carries_no_token(self, siwc, ctx, issuer):
+        summary = siwc.EXCHANGE.install(ctx, self._record())
+
+        rendered = json.dumps(summary)
+        assert "access-uploaded" not in rendered
+        assert "refresh-uploaded" not in rendered
+
+    def test_the_installed_record_is_usable_and_private(self, siwc, ctx, issuer):
+        siwc.EXCHANGE.install(ctx, self._record())
+
+        assert siwc._credential(ctx) == "access-uploaded"
+        assert issuer.token_calls() == []
+        mode = stat.S_IMODE(os.stat(Path(ctx.state_dir) / "credential.json").st_mode)
+        assert mode == 0o600
+
+    def test_the_subject_is_the_verified_one(self, siwc, ctx, issuer):
+        """A caller cannot claim to be someone else by putting a subject in."""
+        siwc.EXCHANGE.install(
+            ctx,
+            self._record(subject="someone-else", id_token=id_token({"sub": "user-9"})),
+        )
+
+        assert siwc.EXCHANGE.account_id(ctx) == "user-9"
+
+    @pytest.mark.parametrize(
+        ("overrides", "message"),
+        [
+            ({"id_token": ""}, "no id_token"),
+            ({"refresh_token": ""}, "no refresh token"),
+            ({"access_token": ""}, "no access token"),
+            ({"client_id": "dynamic_agent_client"}, "client id the issuer granted"),
+            ({"client_id": ""}, "client id the issuer granted"),
+            ({"id_token": id_token({"aud": "someone-else"})}, "different client"),
+            ({"id_token": id_token(tamper=True)}, "signature"),
+        ],
+    )
+    def test_a_record_that_does_not_verify_is_refused(
+        self, siwc, ctx, issuer, overrides, message
+    ):
+        with pytest.raises(siwc.AuthExchangeError, match=message):
+            siwc.EXCHANGE.install(ctx, self._record(**overrides))
+        assert not (Path(ctx.state_dir) / "credential.json").exists()
+
+    def test_describe_reports_the_signed_in_account(self, siwc, ctx, issuer):
+        assert siwc.EXCHANGE.describe(ctx) is None
+
+        siwc.EXCHANGE.install(ctx, self._record())
+
+        described = siwc.EXCHANGE.describe(ctx)
+        assert described["connected"] is True
+        assert described["subject"] == "user-1"
+        assert described["expires_at"] > time.time()
+
+    def test_revoke_removes_the_record(self, siwc, ctx, issuer):
+        siwc.EXCHANGE.install(ctx, self._record())
+
+        assert siwc.EXCHANGE.revoke(ctx) is True
+
+        assert not (Path(ctx.state_dir) / "credential.json").exists()
+        assert issuer.revoked and issuer.revoked[0]["token"] == "refresh-uploaded"

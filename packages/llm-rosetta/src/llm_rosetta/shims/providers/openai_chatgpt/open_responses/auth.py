@@ -883,6 +883,17 @@ def _credential(ctx: AuthContext) -> str:
         return _refresh_record(ctx, record)["access_token"]
 
 
+def _summary(record: dict[str, Any]) -> dict[str, Any]:
+    """Return the token-free part of a record, for a UI to render."""
+    return {
+        "connected": True,
+        "subject": record.get("subject"),
+        "expires_at": record.get("expires_at"),
+        "scopes": record.get("scopes") or [],
+        "saved_at": record.get("saved_at"),
+    }
+
+
 class SignInWithChatGPT(BaseAuthExchange):
     """The plan route's credential exchange, as the gateway sees it."""
 
@@ -914,6 +925,87 @@ class SignInWithChatGPT(BaseAuthExchange):
             return None
         subject = record.get("subject")
         return subject if isinstance(subject, str) and subject else None
+
+    def describe(self, ctx: AuthContext) -> dict[str, Any] | None:
+        """Return who is signed in and until when, never the tokens."""
+        try:
+            record = _read_record(ctx)
+        except (InteractiveSetupRequired, AuthExchangeError):
+            return None
+        return _summary(record)
+
+    def install(self, ctx: AuthContext, record: Any) -> dict[str, Any]:
+        """Adopt a record produced on a machine that had a browser.
+
+        The record is verified before it is stored: its ``id_token`` must
+        verify against the issuer's JWKS and belong to the client id it names,
+        which is what lets the subject be trusted rather than taken on the
+        caller's word.  A record without one is refused — an admin channel is
+        authenticated, but the credential it carries still should not be
+        believed about *whom* it belongs to.
+        """
+        if not isinstance(record, dict):
+            raise AuthExchangeError("a credential record must be an object")
+        token = record.get("id_token")
+        if not isinstance(token, str) or not token:
+            raise AuthExchangeError(
+                "the record carries no id_token, so its identity cannot be verified"
+            )
+        client_id = record.get("client_id")
+        if (
+            not isinstance(client_id, str)
+            or not client_id
+            or client_id == DYNAMIC_CLIENT
+        ):
+            raise AuthExchangeError(
+                "the record does not name the client id the issuer granted"
+            )
+        doc = _discover()
+        claims = _verify_id_token(
+            token,
+            jwks_uri=doc["jwks_uri"],
+            issuer=doc["issuer"],
+            client_id=client_id,
+        )
+        access = record.get("access_token")
+        refresh = record.get("refresh_token")
+        if not isinstance(access, str) or not access:
+            raise AuthExchangeError("the record carries no access token")
+        if not isinstance(refresh, str) or not refresh:
+            # Without a refresh token the profile dies at the first expiry and
+            # the operator has to sign in again; refusing now says so.
+            raise AuthExchangeError(
+                "the record carries no refresh token, so it could not be renewed"
+            )
+
+        now = time.time()
+        expires_at = record.get("expires_at")
+        if not isinstance(expires_at, (int, float)):
+            lifetime = record.get("expires_in")
+            lifetime = lifetime if isinstance(lifetime, (int, float)) else 3600.0
+            expires_at = now + float(lifetime)
+        scopes = record.get("scopes")
+        stored = {
+            "issuer": doc["issuer"],
+            "subject": claims["sub"],
+            "client_id": client_id,
+            "ext_agent_host_id": record.get("ext_agent_host_id") or _host_id(ctx),
+            "id_token": token,
+            "access_token": access,
+            "refresh_token": refresh,
+            "token_type": record.get("token_type") or "Bearer",
+            "expires_in": int(record.get("expires_in") or 3600),
+            "expires_at": float(expires_at),
+            "earliest_refresh_at": min(float(expires_at), now + 2880.0),
+            "scopes": scopes if isinstance(scopes, list) else SCOPES.split(),
+            "saved_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now)),
+        }
+        _save_record(ctx, stored)
+        return _summary(stored)
+
+    def revoke(self, ctx: AuthContext) -> bool:
+        """Sign out: revoke the grant upstream and delete the record."""
+        return revoke(ctx)
 
 
 EXCHANGE = SignInWithChatGPT()

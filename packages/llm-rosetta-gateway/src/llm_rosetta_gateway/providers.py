@@ -344,6 +344,20 @@ def _auth_context(provider: str, cfg: dict[str, Any], state_dir: str | None) -> 
     )
 
 
+def _account_token_for(account_id: str | None) -> str | None:
+    """Return the opaque form of a shim exchange's account identity.
+
+    The subject an exchange reports is an identity a panel may want to show;
+    it is not something to publish in a log line or a metrics label.  Every
+    account identity the gateway keeps is this digest, so two surfaces naming
+    the same account name it the same way and no surface carries the raw
+    subject.  ``None`` means the exchange names no account.
+    """
+    if not account_id:
+        return None
+    return "acct:" + hashlib.sha256(str(account_id).encode()).hexdigest()
+
+
 def _credential_token(
     *,
     token_command: list[str] | None,
@@ -380,7 +394,7 @@ def _credential_token(
         # A shim exchange names its own account identity (the signed-in
         # subject, not the bearer that subject currently holds — the access
         # token rotates, the account does not).
-        return "acct:" + hashlib.sha256(str(account_id).encode()).hexdigest()
+        return _account_token_for(account_id)
     if exchange:
         # An exchange with no account identity is one provider per identity,
         # exactly like a provider with no credential.
