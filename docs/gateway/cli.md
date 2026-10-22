@@ -86,6 +86,12 @@ contacted — hand the record over in the panel.
 The record holds live tokens (access, refresh and ID token).  Paste it into
 the panel promptly: the ID token is verified when it arrives, so a record left
 lying around expires into a refusal and the sign-in has to be repeated.  The
+sign-in also stores a copy in this machine's record directory
+(`<data_dir>/shim-auth/<provider>`); when the gateway is elsewhere, delete it
+there once the record has been handed over.  `--out` writes through a
+randomly named temporary file that is created `0600` exclusively and fsynced
+before the rename, so a file or symlink planted at a predictable name in a
+shared directory cannot capture the record.  The
 command refuses a provider whose shim ships no `auth.py` (`mints no credential
 of its own`) and one whose exchange has no browser flow (`does not implement
 login()`).
