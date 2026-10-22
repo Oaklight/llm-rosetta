@@ -208,12 +208,14 @@ API 密钥支持 `${ENV_VAR}` 语法 — 启动时从环境变量读取：
 对于使用短期令牌的提供方（如 ALCF 推理服务的 Globus OAuth），网关可以运行外部命令来获取并定期刷新 API 密钥：
 
 ```jsonc
-"my-alcf": {
-  "shim": "alcf_sophia--chat_completions",
-  "token_command": ["python3", "/scripts/alcf-token.py"],
+"my-lane": {
+  "shim": "vendor_lane--chat_completions",
+  "token_command": ["python3", "/opt/vendor/token.py"],
   "token_refresh_interval": 3600
 }
 ```
+
+shim 可以自己声明这条命令 —— `provider.yaml` 里的 `connection.token_command` —— 此时提供方完全不必写 `token_command`。ALCF 与 AskSage 的 shim 都随包发布了该命令，因此它们的提供方只需要 `{"shim": "..."}`；在提供方上自己写的 `token_command` 仍然优先。
 
 提供方类型取自 `shim`；`type`，然后是提供方自身的键名，依次作为兜底。（`provider`
 并不是配置键 —— 以这种拼写写出的提供方条目从未能解析到它的 shim。）
@@ -235,21 +237,20 @@ API 密钥支持 `${ENV_VAR}` 语法 — 启动时从环境变量读取：
 
 #### Docker 中使用 ALCF 的示例
 
-ALCF 提供方使用由 `scripts/alcf-token.py` 管理的 Globus OAuth 令牌。在 Docker 中运行时，需要将令牌文件和脚本挂载到容器中：
+ALCF 提供方使用 Globus OAuth 令牌，其交换逻辑随 `llm-rosetta-shim-alcf` 发布（镜像已安装该包），因此只需要挂载令牌文件：
 
 ```yaml
 # docker-compose.yaml
 volumes:
   - ./config:/config
   - ~/.globus:/home/appuser/.globus              # Globus 令牌文件（需读写权限以刷新）
-  - ./scripts/alcf-token.py:/scripts/alcf-token.py:ro  # 令牌刷新脚本
 ```
 
 操作步骤：
 
-1. **在宿主机上登录**（仅需一次）：`python3 scripts/alcf-token.py --login`
+1. **在宿主机上登录**（仅需一次）：`python3 -m llm_rosetta_shim_alcf.providers.alcf.token --login`
 2. 使用上述 volume 挂载**启动容器**
-3. 通过管理面板或 `config.jsonc` **添加提供方**，设置 `token_command: ["python3", "/scripts/alcf-token.py"]`
+3. 通过管理面板或 `config.jsonc` **添加提供方** —— 不需要 `token_command`
 
 容器内的 `appuser`（uid 1000）需要对 `~/.globus` 目录有读写权限，以便就地更新刷新令牌。
 

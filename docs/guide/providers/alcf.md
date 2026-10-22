@@ -69,21 +69,14 @@ Metis 和 Minerva 目前没有支持推理的模型。
 
 ALCF 使用 Globus OAuth 进行认证。访问令牌的有效期较短（约 48 小时），需要定期刷新。刷新令牌本身在 **30 天**后因 ALCF 的会话策略过期 — 届时需要交互式重新登录。
 
-项目包含 `scripts/alcf-token.py`，一个零依赖（仅标准库）的辅助脚本，处理完整的登录和刷新生命周期。
-
-**独立下载** — 如果没有完整仓库（如纯 Docker 部署）：
-
-```bash
-curl -fsSL -o alcf-token.py https://raw.githubusercontent.com/Oaklight/llm-rosetta/master/scripts/alcf-token.py
-chmod +x alcf-token.py
-```
+Globus 交换随 **shim 包一起发布**：`llm-rosetta-shim-alcf` 内含这个零依赖（仅标准库）的辅助脚本，模块路径为 `llm_rosetta_shim_alcf.providers.alcf.token`，每个 `alcf_<cluster>--chat_completions` shim 都把它声明为自己的 `connection.token_command`。因此无需下载脚本，配置里也不必写 `token_command` —— 网关会在启动时、按 shim 声明的间隔、以及收到上游 401 之后运行它。
 
 ### 初始登录
 
 在有浏览器的机器上运行（或将 URL 复制到有浏览器的机器上）：
 
 ```bash
-python3 alcf-token.py --login
+python3 -m llm_rosetta_shim_alcf.providers.alcf.token --login
 ```
 
 这会打开一个 Globus 授权 URL，提示你粘贴授权码，并将令牌保存到 `~/.globus/app/<client_id>/inference_app/tokens.json`。
@@ -92,30 +85,46 @@ python3 alcf-token.py --login
 
 ```bash
 # 打印新的访问令牌（过期时自动刷新）：
-python3 scripts/alcf-token.py
+python3 -m llm_rosetta_shim_alcf.providers.alcf.token
 
 # 检查令牌状态和剩余有效期：
-python3 scripts/alcf-token.py --status
+python3 -m llm_rosetta_shim_alcf.providers.alcf.token --status
 
 # 验证令牌对某个集群是否可用：
-python3 scripts/alcf-token.py --probe sophia
+python3 -m llm_rosetta_shim_alcf.providers.alcf.token --probe sophia
 
 # 强制刷新（即使未过期）：
-python3 scripts/alcf-token.py --force
+python3 -m llm_rosetta_shim_alcf.providers.alcf.token --force
 ```
 
 ### 多用户令牌池
 
-多个 ALCF 用户可以汇集令牌用于轮转：
+多个 ALCF 用户可以汇集令牌用于轮转。网关运行的是 shim 声明的命令（不带参数），因此池化需要一处覆盖 —— 把 `token_command` 指向 `--tokens-dir`：
 
 ```bash
 # 每个用户登录到自己的文件：
-python3 scripts/alcf-token.py --login --token-file /shared/alcf-tokens/alice.json
-python3 scripts/alcf-token.py --login --token-file /shared/alcf-tokens/bob.json
+python3 -m llm_rosetta_shim_alcf.providers.alcf.token --login --token-file /shared/alcf-tokens/alice.json
+python3 -m llm_rosetta_shim_alcf.providers.alcf.token --login --token-file /shared/alcf-tokens/bob.json
 
-# 网关读取所有令牌（逗号分隔输出）：
-python3 scripts/alcf-token.py --tokens-dir /shared/alcf-tokens/
+# 手动查看所有令牌（逗号分隔输出）：
+python3 -m llm_rosetta_shim_alcf.providers.alcf.token --tokens-dir /shared/alcf-tokens/
 ```
+
+```jsonc
+{
+  "providers": {
+    "alcf-sophia": {
+      "shim": "alcf_sophia--chat_completions",
+      "token_command": [
+        "python3", "-m", "llm_rosetta_shim_alcf.providers.alcf.token",
+        "--tokens-dir", "/shared/alcf-tokens/"
+      ]
+    }
+  }
+}
+```
+
+命令会为所有文件输出一个逗号分隔的字符串，网关把它当作 key ring。
 
 ### 30 天会话过期
 
@@ -133,7 +142,7 @@ python3 scripts/alcf-token.py --tokens-dir /shared/alcf-tokens/
     手动获取令牌并设置为环境变量：
 
     ```bash
-    export ALCF_API_KEY=$(python3 scripts/alcf-token.py)
+    export ALCF_API_KEY=$(python3 -m llm_rosetta_shim_alcf.providers.alcf.token)
     ```
 
     ```jsonc
@@ -149,27 +158,41 @@ python3 scripts/alcf-token.py --tokens-dir /shared/alcf-tokens/
 
     令牌过期时需要重启网关。
 
-=== "Token 命令（推荐）"
+=== "随包发布的交换（推荐）"
 
-    让网关自动刷新令牌：
+    无需接线 —— shim 已经声明了交换，提供方只需要写 shim：
+
+    ```jsonc
+    {
+      "providers": {
+        "alcf-sophia": {
+          "shim": "alcf_sophia--chat_completions"
+        }
+      }
+    }
+    ```
+
+    网关在启动时运行命令，按 shim 声明的间隔重新运行，并在收到上游 401 响应时立即触发一次非周期性刷新。只想改间隔而不替换命令时，在提供方上设置 `token_refresh_interval` 即可。
+
+=== "覆盖命令"
+
+    提供方自己声明的 `token_command` 会替换随包发布的那个 —— 即上面的多用户池化，或你自己的脚本：
 
     ```jsonc
     {
       "providers": {
         "alcf-sophia": {
           "shim": "alcf_sophia--chat_completions",
-          "token_command": ["python3", "scripts/alcf-token.py"],
+          "token_command": ["python3", "/opt/alcf/token-from-vault.py"],
           "token_refresh_interval": 1800
         }
       }
     }
     ```
 
-    网关在启动时运行命令，然后每隔 `token_refresh_interval` 秒重新运行。收到上游 401 响应时，会立即触发非周期性刷新。
-
 ### Docker 部署
 
-在 Docker 中运行网关时，需要将令牌文件和刷新脚本挂载到容器中：
+刷新脚本随包发布，镜像已安装该包，因此只需要挂载令牌文件：
 
 ```yaml
 # docker-compose.yaml
@@ -179,18 +202,13 @@ services:
     volumes:
       - ./config:/config
       - ~/.globus:/home/appuser/.globus              # Globus 令牌文件（需读写权限以刷新）
-      - ./alcf-token.py:/scripts/alcf-token.py:ro    # 刷新脚本（独立下载）
 ```
 
 操作步骤：
 
-1. **下载脚本**：`curl -fsSL -o alcf-token.py https://raw.githubusercontent.com/Oaklight/llm-rosetta/master/scripts/alcf-token.py`
-2. **在宿主机上登录**（仅需一次）：`python3 alcf-token.py --login`
-3. 使用上述 volume 挂载**启动容器**
-4. 通过管理面板或 `config.jsonc` **添加提供方**：
-    ```jsonc
-    "token_command": ["python3", "/scripts/alcf-token.py"]
-    ```
+1. **在宿主机上登录**（仅需一次）：`python3 -m llm_rosetta_shim_alcf.providers.alcf.token --login`
+2. 使用上述 volume 挂载**启动容器**
+3. 通过管理面板或 `config.jsonc` **添加提供方** —— 不需要 `token_command`
 
 容器内的 `appuser`（uid 1000）需要对 `~/.globus` 目录有读写权限，以便就地更新刷新令牌。如果宿主机 uid 不同，请在 compose 文件中设置 `PUID`/`PGID`，或执行 `chown 1000:1000 .globus` 目录。
 
