@@ -6,7 +6,7 @@ title: OpenAI（ChatGPT 套餐）
 
 `openai_chatgpt--open_responses` shim 对接的是 ChatGPT 的**套餐**通道：消耗
 Go/Plus/Pro 套餐额度，而不是 Platform API 计费。它使用与 `openai--open_responses`
-相同的 [Open Responses](../formats.md) 传输格式，因此请求的转换与其他 Responses
+相同的 [Open Responses](../api-standards.md) 传输格式，因此请求的转换与其他 Responses
 请求完全一致；不同的只是凭据从哪来、能看到哪些模型，以及这条通道拒绝什么。
 
 !!! warning "它不是 API Key 的替代品"
