@@ -161,11 +161,27 @@ Two properties worth knowing:
   among providers, never whether a conversation stays where its cache is.
 
 A provider is **removed** rather than down-weighted when a *fresh* reading says
-every one of its credentials is spent. The rule is deliberately narrow: a
-reading older than fifteen minutes is not a statement about now (a refusal five
-minutes ago must not cost a provider an hour), one credential with room keeps
-the provider, and a lane nothing has measured or a probe cannot read is never
-excluded for being unmeasured.
+every one of its credentials is spent. The rule is deliberately narrow, and
+all-or-nothing across the key ring, because an exclusion cannot correct itself:
+nothing routes to a provider that is out, so a credential the probe never read
+would stay unread, and the provider would remain out for a whole freshness
+window. Down-weighting has no such trap — traffic keeps flowing, the credential
+gets read, and the weight recovers. Exclusion therefore requires complete
+evidence: every credential in the ring has a reading, that reading is fresh, it
+decoded a window, and every window it decoded is exhausted. A reading older
+than fifteen minutes — or older than the provider's own `quota.interval`, when
+that is longer, so a slow poll never makes every reading stale on arrival —
+says nothing about now, and a lane with no probe at all is never excluded for
+being unmeasured.
+
+The exclusion expires at the vendor's own reset as well as with the reading's
+age, and it applies before the strategy counts the candidates, so the surviving
+providers split the traffic rather than one of them absorbing the turns the
+excluded provider would have taken. When readings leave a model with no
+provider at all, the client gets a `503` that says the allowance is spent — with
+the reset in `Retry-After` when the vendor named one — rather than the
+"initializing" message, which would send it looking for a startup problem that
+does not exist.
 
 The stage is called `quota` in the selection chain and runs before the anchor,
 so it informs the choice rather than making it — the strategies stay what they
