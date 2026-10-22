@@ -136,7 +136,9 @@ EXCHANGE = Exchange()
 | `consumes_key` | config build | say whether `ctx.input_key` is an input |
 
 `ctx` carries the provider's config key (`ctx.provider`), the credential record's
-directory (`ctx.state_dir`, `None` when the gateway has no data directory), and
+directory (`ctx.state_dir` — `server.data_dir` resolved against the config file,
+then `/shim-auth/<provider>`; `None` only when a programmatic caller supplies no
+data directory), and
 the operator's key (`ctx.input_key`) when `consumes_key` is set. Two providers of
 one shim are two accounts, so an exchange that picks its own default for
 `state_dir` must namespace it by `ctx.provider`; that directory is the only thing
