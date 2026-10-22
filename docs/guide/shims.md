@@ -124,6 +124,13 @@ EXCHANGE = Exchange()
 | `account_id(ctx)` | 构建配置时 | 返回不透明的账号身份，或 `None` |
 | `kind` | 报告用途 | 短标签，例如 `"oauth"` |
 | `consumes_key` | 构建配置时 | 说明 `ctx.input_key` 是否为输入 |
+| `login(ctx)` | CLI，在有浏览器的一侧 | 运行交互式登录并返回记录；阻塞调用，网关从不调用它 |
+| `install(ctx, record)` | `PUT …/credential` | 校验交来的记录并存储；返回摘要，绝不返回令牌 |
+| `describe(ctx)` | `GET …/credential` | 返回不含令牌的摘要，或 `None` |
+| `revoke(ctx)` | `DELETE …/credential` | 删除记录，厂商允许时同时在上游撤销 |
+
+后四个成员是可选的：未实现的交换通过 `can_install()` / `can_login()`（两者默认 `False`）
+表明这一点，网关会拒绝该操作，而不是去调用一个空实现。
 
 `ctx` 携带提供方的配置键（`ctx.provider`）、凭据记录目录（`ctx.state_dir` —— 即
 `server.data_dir` 相对配置文件解析后的路径再加 `/shim-auth/<provider>`；只有程序化调用方
@@ -146,8 +153,9 @@ loopback 回调、基于 discovery JWKS 的 ID token 验签、在排他锁下原
 用 `hashlib` 与大整数 `pow` 验签，HTTP 用工作线程上的 `urllib` —— 这也是 shim 模块必须
 遵守的形态：shim 层先于网关加载，而核心没有任何依赖。
 
-记录也可以在事后装入：`PUT /admin/api/config/providers/<name>/credential` 把
-在有浏览器的一侧生成的记录交给交换 —— 远端网关因此无需绑定自己的 loopback。交换负责
+记录也可以在事后装入：`llm-rosetta-gateway credential <name>` 在有浏览器的一侧运行
+`login()`，而 `PUT /admin/api/config/providers/<name>/credential` 把它打印出的记录交给
+交换 —— 远端网关因此无需绑定自己的 loopback。命令不联系网关；记录本身就是交接的全部。交换负责
 校验（OpenAI 模块会验签 ID token，并从验签后的 claims 取 subject），并把记录存到自己
 `credential()` 会读取的位置。记录要尽快粘贴：校验在收到时进行，放了一夜的记录会被拒绝，
 只能重新登录。

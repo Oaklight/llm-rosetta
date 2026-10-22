@@ -62,6 +62,29 @@ llm-rosetta-gateway add model gemini-2.0-flash --provider my-google
 |------|------|
 | `--provider` NAME | 目标提供方名称 |
 
+### `credential <provider>`
+
+在本机运行 shim 的交互式登录，输出它生成的凭据记录：
+
+```bash
+llm-rosetta-gateway credential chatgpt --out record.json
+```
+
+shim 随包提供 `auth.py` 的提供方没有可填的密钥 —— 交换通过需要浏览器的 OAuth 登录
+生成凭据。网关跑在别处时，登录要在有浏览器的一侧完成，本命令就是那一半：它运行交换的
+`login()`，返回的内容正是管理 API `PUT
+/admin/api/config/providers/<name>/credential` 接收的记录。命令不联系网关 —— 记录在管理台
+里交过去。
+
+| 参数 | 说明 |
+|------|------|
+| `--out` FILE | 把记录写入 `FILE`（权限 `0600`），而不是输出到标准输出 |
+
+记录里是有效令牌（access、refresh 与 ID token）。请尽快粘贴到管理台：ID token 在收到时
+即刻验签，放置过久的记录会被拒绝，只能重新登录。命令会拒绝两种提供方：shim 没有
+`auth.py` 的（`mints no credential of its own`），以及交换没有浏览器流程的（`does not
+implement login()`）。
+
 ## 配置文件自动发现
 
 未指定 `--config` 时，网关按以下顺序搜索配置文件：
