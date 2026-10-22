@@ -73,6 +73,7 @@ class SelectionContext:
         "ir_request",
         "quota_headroom",
         "quota_excluded",
+        "failover_excluded",
         "key_affinity",
         "upstream_session_id",
     )
@@ -107,6 +108,10 @@ class SelectionContext:
         # Providers whose every fresh reading says the allowance is spent.
         # Distinct from a provider block: this is a reading, not a decision.
         self.quota_excluded: frozenset[str] = frozenset()
+        # Providers this request has already been refused by.  They are out
+        # for the rest of *this* request only — a failed-over request must not
+        # bounce back to the provider that just said no.
+        self.failover_excluded: frozenset[str] = frozenset()
         self.key_affinity = True
         self.upstream_session_id: str | None = None
 
@@ -168,6 +173,21 @@ class SelectionContext:
         """Record how much allowance each provider has left, and who has none."""
         self.quota_headroom = dict(headroom)
         self.quota_excluded = excluded
+
+    def with_failover_excluded(self, names: frozenset[str] | set[str]) -> None:
+        """Record providers this request must not be served by again.
+
+        The previous choice is voided along with it: the caller is about to
+        re-run selection, and a stage that finds nothing must not leave the
+        refused provider standing.
+        """
+        self.failover_excluded = frozenset(names)
+        self.chosen = None
+        self.provider_info = None
+
+    def excluded_providers(self) -> frozenset[str]:
+        """Every provider selection must skip: spent readings plus failovers."""
+        return self.quota_excluded | self.failover_excluded
 
     def with_ir_request(self, ir_request: dict[str, Any]) -> None:
         """Record the converted request, once the pipeline has produced one.

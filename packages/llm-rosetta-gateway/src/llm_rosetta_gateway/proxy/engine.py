@@ -33,14 +33,16 @@ from ..transport import (
 )
 from .image_fetch import fetch_image
 from .errors import (
+    QuotaRefusal,
     _connection_error_response,
     _detect_stream_chunk_error,
     _handle_401,
-    _retry_after_quota_signal,
+    _quota_refusal,
     _soft_error_response,
     _upstream_error_passthrough,
     error_response_for_source,
 )
+from .failover import reselect_after_quota
 from .metadata import (
     ProviderMetadataStore,
     _default_metadata_store,
@@ -110,6 +112,95 @@ def _apply_request_stages(ctx: SelectionContext) -> ProviderInfo:
     provider_info = ctx.provider_info
     assert provider_info is not None  # the caller sets it before running these
     return provider_info
+
+
+def _note_failover_route(route: ResolvedRoute) -> None:
+    """Point the request log at the provider that actually served.
+
+    The lifecycle recorded the first choice before the proxy ran; after a
+    failover the row must name the provider whose response the client got,
+    and the profile says where it came from.
+    """
+    from ..lifecycle import current_lifecycle
+
+    ctx = current_lifecycle()
+    if ctx is not None:
+        ctx.note_route(
+            target_format=route.target_provider, provider_name=route.provider_name
+        )
+
+
+async def _failover_response(
+    config: Any | None,
+    selection: SelectionContext,
+    route: ResolvedRoute,
+    body: dict[str, Any],
+    *,
+    signal: Any,
+    transport: UpstreamTransport,
+    metadata_store: ProviderMetadataStore | None,
+    extra_headers: dict[str, str] | None,
+    persistence: Any | None,
+    capture_state: CaptureState | None,
+    entry_id: str | None,
+    profile: dict[str, Any],
+    attempted: str | None,
+) -> tuple[Response, dict[str, Any]] | None:
+    """Serve the request from another provider after a quota refusal.
+
+    Spent at most once per request: *attempted* names the provider the first
+    attempt was made on, so the second attempt cannot fail over again.  A
+    different provider is a different prompt cache and possibly a different
+    model build, which is why this is opt-in per model.
+
+    Returns:
+        The second attempt's response and this request's merged profile, or
+        ``None`` when failover is off for this model, has already happened, or
+        nothing else can serve — in which case the caller reports the
+        upstream's own refusal.
+    """
+    if config is None or attempted is not None:
+        return None
+    if selection.model not in getattr(config, "model_failover_on_quota", {}):
+        return None
+    target = reselect_after_quota(config, selection, exclude=route.provider_name)
+    if target is None:
+        return None
+    new_route, new_pinfo = target
+    reason = getattr(signal, "reason", None) or "quota refusal"
+    logger.warning(
+        "Quota failover for model %s: %s -> %s (%s)",
+        selection.model,
+        route.provider_name,
+        new_route.provider_name,
+        reason,
+    )
+    retry_body = dict(body)
+    # The client's model name may have been replaced by the first provider's
+    # upstream alias; the second provider gets its own, or the original name.
+    retry_body["model"] = new_route.upstream_model or selection.model
+    response, sub_profile = await handle_non_streaming(
+        new_route,
+        new_pinfo,
+        retry_body,
+        transport=transport,
+        metadata_store=metadata_store,
+        extra_headers=extra_headers,
+        persistence=persistence,
+        capture_state=capture_state,
+        entry_id=entry_id,
+        selection=selection,
+        config=config,
+        _failover_from=route.provider_name,
+    )
+    profile["failover"] = {
+        "from": route.provider_name,
+        "to": new_route.provider_name,
+        "reason": reason,
+        "profile": sub_profile,
+    }
+    _note_failover_route(new_route)
+    return response, profile
 
 
 def _log_response_warnings(pipeline: Any | None, first_new: int) -> None:
@@ -278,8 +369,17 @@ async def handle_non_streaming(  # noqa: C901
     capture_state: CaptureState | None = None,
     entry_id: str | None = None,
     selection: SelectionContext,
+    config: Any | None = None,
+    _failover_from: str | None = None,
 ) -> tuple[Response, dict[str, Any]]:
     """Non-streaming proxy: convert -> forward -> convert back -> respond.
+
+    Args:
+        config: The live config, when the caller has one.  ``None`` disables
+            cross-provider failover, which is what a bare handler call (a
+            test, an embedder) gets.
+        _failover_from: The provider a failover is already coming from.  Set
+            on the second attempt so the retry budget cannot be exceeded.
 
     Returns:
         A ``(response, profile)`` tuple.  The profile dict contains
@@ -412,12 +512,35 @@ async def handle_non_streaming(  # noqa: C901
         )
         if err is not None:
             return err, profile
-        if not retry:
-            retry = _retry_after_quota_signal(
-                provider_info, resp.status_code, resp.error_text
+        refusal, signal = (
+            (None, None)
+            if retry
+            else _quota_refusal(provider_info, resp.status_code, resp.error_text)
+        )
+        if retry or refusal is QuotaRefusal.RETRY:
+            continue
+        # No credential of this provider can serve the request any more.  A
+        # second provider is a different prompt cache, so trying one is the
+        # model's opt-in, and the budget is one.
+        if refusal is QuotaRefusal.EXHAUSTED:
+            failed_over = await _failover_response(
+                config,
+                selection,
+                route,
+                body,
+                signal=signal,
+                transport=transport,
+                metadata_store=store,
+                extra_headers=extra_headers,
+                persistence=persistence,
+                capture_state=capture_state,
+                entry_id=entry_id,
+                profile=profile,
+                attempted=_failover_from,
             )
-        if not retry:
-            break
+            if failed_over is not None:
+                return failed_over
+        break
 
     assert resp is not None
 

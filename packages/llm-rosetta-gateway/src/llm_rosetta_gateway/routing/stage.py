@@ -77,6 +77,9 @@ class RoutingChain:
             "provider_types",
             "provider_shim_names",
             "provider_account_tokens",
+            # Seeded by the proxy, which seeds ``provider_info`` too: a
+            # failover attempt starts with a set of providers already refused.
+            "failover_excluded",
         }
     )
 

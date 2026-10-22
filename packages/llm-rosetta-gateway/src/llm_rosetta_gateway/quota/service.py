@@ -274,6 +274,11 @@ def note_upstream_quota_error(
         if status_code == 429:
             identity = getattr(pinfo, "quota_identity", None) or f"@{pinfo.name}"
             QUOTA_STATE.block_provider(identity, 60, "keyless lane rate limited")
+            # Returned so the proxy can treat this as a quota-class refusal:
+            # there is no key to demote, but there is another provider to try.
+            from llm_rosetta.shims.quota_probe import InBandSignal
+
+            return InBandSignal(cooldown_seconds=60, reason="keyless lane rate limited")
         return None
 
     probe = getattr(pinfo, "quota_probe_impl", None)

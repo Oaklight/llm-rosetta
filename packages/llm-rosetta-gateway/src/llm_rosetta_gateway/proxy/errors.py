@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from enum import Enum
 from typing import Any
 
 from llm_rosetta_gateway._vendor.httpserver import Response
@@ -203,24 +204,43 @@ async def _handle_401(
     return False, None
 
 
-def _retry_after_quota_signal(
+class QuotaRefusal(str, Enum):
+    """What an in-band quota refusal leaves the retry budget.
+
+    ``RETRY`` means this provider still has a usable credential, so the same
+    upstream may be tried again.  ``EXHAUSTED`` means it has none, and nothing
+    this provider does for the rest of the request can succeed.
+    """
+
+    RETRY = "retry"
+    EXHAUSTED = "exhausted"
+
+
+def _quota_refusal(
     provider_info: ProviderInfo,
     status_code: int,
     error_text: str,
-) -> bool:
-    """Demote the serving credential after a quota refusal and retry, if useful.
+) -> tuple[QuotaRefusal | None, Any]:
+    """Demote the serving credential after a quota refusal and classify it.
 
     The signal parser belongs to the vendor probe, so a provider that names the
     exhausted window is demoted immediately rather than at the next poll.  A
-    retry is only worth it when the ring holds another usable credential; the
-    already-demoted key is skipped by :meth:`KeyRing.next`.
+    same-provider retry is only worth it when the ring holds another usable
+    credential; the already-demoted key is skipped by :meth:`KeyRing.next`.
+
+    Returns:
+        ``(refusal, signal)`` — ``(None, None)`` when the error was not a
+        quota refusal this gateway can classify, otherwise what the refusal
+        leaves this provider able to do, and the signal to explain it.
     """
     from ..quota.service import has_usable_alternative, note_upstream_quota_error
 
     signal = note_upstream_quota_error(provider_info, status_code, error_text)
     if signal is None:
-        return False
-    return has_usable_alternative(provider_info)
+        return None, None
+    if has_usable_alternative(provider_info):
+        return QuotaRefusal.RETRY, signal
+    return QuotaRefusal.EXHAUSTED, signal
 
 
 def _check_soft_errors(

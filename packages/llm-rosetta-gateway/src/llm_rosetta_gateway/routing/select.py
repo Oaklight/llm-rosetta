@@ -109,7 +109,14 @@ class AnchorStage(RoutingStage):
     # declaring it is what makes a chain that puts this stage first refuse to
     # build — otherwise a reversed order would silently weight nothing.
     requires = frozenset(
-        {"model_route", "providers", "identity", "quota_headroom", "quota_excluded"}
+        {
+            "model_route",
+            "providers",
+            "identity",
+            "quota_headroom",
+            "quota_excluded",
+            "failover_excluded",
+        }
     )
     provides = frozenset({"chosen"})
 
@@ -121,7 +128,7 @@ class AnchorStage(RoutingStage):
             is_ready=ctx.is_ready,
             identity=ctx.identity.client,
             headroom=ctx.quota_headroom or None,
-            excluded=ctx.quota_excluded,
+            excluded=ctx.excluded_providers(),
         )
         if entry is not None:
             ctx.choose(entry)

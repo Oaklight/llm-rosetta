@@ -40,10 +40,11 @@ from ..transport.sse_format import (
 )
 from .image_fetch import fetch_image
 from .errors import (
+    QuotaRefusal,
     _connection_error_response,
     _detect_stream_chunk_error,
     _handle_401,
-    _retry_after_quota_signal,
+    _quota_refusal,
     _upstream_error_passthrough,
     DumpContext,
     error_response_for_source,
@@ -450,9 +451,13 @@ async def handle_streaming(
         if err is not None:
             return err, profile
         if not retry:
-            retry = _retry_after_quota_signal(
+            # Same-provider retry only.  Failover for a stream belongs to the
+            # window before the first event reaches the client; once bytes are
+            # on the wire the response cannot be taken back.
+            refusal, _signal = _quota_refusal(
                 provider_info, stream_error_code, stream_error_text
             )
+            retry = refusal is QuotaRefusal.RETRY
         if not retry:
             break
 

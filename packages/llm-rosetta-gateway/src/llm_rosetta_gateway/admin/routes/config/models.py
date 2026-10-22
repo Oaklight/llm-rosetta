@@ -101,12 +101,20 @@ async def bulk_update_models(request: Any) -> Response:
     )
 
 
-def _build_model_entry(body: dict[str, Any], provider: str) -> dict[str, Any]:
+def _build_model_entry(
+    body: dict[str, Any],
+    provider: str,
+    existing: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Build a model config entry from request body.
 
     The model type is validated against the model type registry so that
     new types registered via :func:`~model_types.register_model_type`
     are automatically accepted without code changes here.
+
+    ``existing`` is the entry being replaced: an option the editor does not
+    render (yet) is carried over rather than silently dropped by a save that
+    never knew about it.
     """
     from ....model_types import registered_type_names
 
@@ -134,7 +142,24 @@ def _build_model_entry(body: dict[str, Any], provider: str) -> dict[str, Any]:
         cleaned = {k: v for k, v in reasoning_override.items() if v is not None}
         if cleaned:
             entry["reasoning_override"] = cleaned
+    if body.get("failover_on_quota") is not None:
+        entry["failover_on_quota"] = bool(body["failover_on_quota"])
+    elif existing and existing.get("failover_on_quota"):
+        entry["failover_on_quota"] = existing["failover_on_quota"]
     return entry
+
+
+def _carry_flag(existing: dict[str, Any], body: dict[str, Any], key: str) -> None:
+    """Carry an optional boolean the editor may not render.
+
+    The model editor does not show every key the config accepts.  A save that
+    never knew about one must not drop it; a body that sets it explicitly
+    wins, and an explicit ``None`` clears it.
+    """
+    if body.get(key) is not None:
+        existing[key] = bool(body[key])
+    elif key in body and key in existing:
+        del existing[key]
 
 
 def _update_multi_provider_entry(
@@ -166,6 +191,7 @@ def _update_multi_provider_entry(
             existing["reasoning_override"] = cleaned
         elif "reasoning_override" in existing:
             del existing["reasoning_override"]
+    _carry_flag(existing, body, "failover_on_quota")
     if body.get("enabled") is not None:
         existing["enabled"] = body["enabled"]
 
@@ -227,7 +253,9 @@ async def put_model(request: Any, **kwargs: Any) -> Response:
             ):
                 _update_multi_provider_entry(existing, body)
             else:
-                models_section[name] = _build_model_entry(body, provider)
+                models_section[name] = _build_model_entry(
+                    body, provider, existing if isinstance(existing, dict) else None
+                )
             ctx.commit()
 
     if ctx.error:

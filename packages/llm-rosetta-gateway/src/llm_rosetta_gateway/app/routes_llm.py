@@ -242,6 +242,7 @@ async def _handle_llm(
             entry_id=ctx.entry_id,
             selection=selection,
             capture_state=capture_state,
+            config=config,
         )
     ctx.profile = profile
     return response

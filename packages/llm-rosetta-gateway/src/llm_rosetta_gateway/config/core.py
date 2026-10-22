@@ -29,6 +29,7 @@ from .parse import (
 )
 from .parse import (
     distribute_typed_models,
+    parse_model_failover,
     parse_model_overrides,
     parse_models,
 )
@@ -95,6 +96,7 @@ class GatewayConfig:
     log_format: str
     maintenance: Registry | None
     model_capabilities: Any
+    model_failover_on_quota: Any
     model_flatten_system: Any
     model_max_tool_description_length: Any
     model_reasoning_overrides: Any
@@ -243,6 +245,7 @@ class GatewayConfig:
             self.model_timeouts,
             self.model_max_tool_description_length,
         ) = parse_model_overrides(raw_models)
+        self.model_failover_on_quota = parse_model_failover(raw_models)
 
         _server = raw.get("server", {})
         apply_server_settings(self, _server)

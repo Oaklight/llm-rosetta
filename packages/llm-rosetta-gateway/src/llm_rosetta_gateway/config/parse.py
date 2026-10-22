@@ -226,6 +226,26 @@ def parse_model_overrides(
     )
 
 
+def parse_model_failover(raw_models: dict[str, Any]) -> dict[str, bool]:
+    """Read the per-model ``failover_on_quota`` flags.
+
+    Only models that turn it on appear in the result.  The default is off
+    because a failover trades a warm upstream prompt cache for a served
+    request: it is a choice an operator makes per model, not a global one.
+
+    Args:
+        raw_models: The ``models`` mapping as it appears in the config.
+
+    Returns:
+        ``{model: True}`` for models that opt in.
+    """
+    return {
+        name: True
+        for name, value in raw_models.items()
+        if isinstance(value, dict) and value.get("failover_on_quota")
+    }
+
+
 def distribute_typed_models(config: GatewayConfig, raw_models: dict[str, Any]) -> None:
     """Move models with non-LLM ``type`` from the main models pool
     into the corresponding specialized models dicts.

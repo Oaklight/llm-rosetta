@@ -204,6 +204,7 @@ def _normalize_model_entry(value: Any) -> dict[str, Any]:
         "upstream_model",
         "reasoning_override",
         "flatten_system",
+        "failover_on_quota",
         "url_template",
         "stream_url_template",
     ):

@@ -103,6 +103,7 @@ class SameFormatStage(RoutingStage):
             "provider_account_tokens",
             "quota_headroom",
             "quota_excluded",
+            "failover_excluded",
         }
     )
     provides = frozenset({"chosen"})
@@ -197,7 +198,7 @@ class SameFormatStage(RoutingStage):
                 is_ready=ctx.is_ready,
                 identity=ctx.identity.client,
                 headroom=ctx.quota_headroom or None,
-                excluded=ctx.quota_excluded,
+                excluded=ctx.excluded_providers(),
             )
             if entry is not None:
                 return entry
