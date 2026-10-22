@@ -169,7 +169,9 @@ A record can also be installed after the fact: `PUT
 produced somewhere a browser exists, which is how a remote gateway gets one
 without binding its own loopback. The exchange validates it — the OpenAI
 module verifies the ID token and takes the subject from the verified claims —
-and stores it where its own `credential()` will look.
+and stores it where its own `credential()` will look. Paste the record promptly:
+verification happens on arrival, so a record left lying around overnight is
+refused and the sign-in has to be repeated.
 
 A shim declares one form or the other: `auth.py` and `connection.token_command`
 together is a load error. A provider's own `token_command` still wins, and an
