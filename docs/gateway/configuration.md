@@ -262,6 +262,25 @@ When `token_command` is set:
 !!! note "`token_command` and `api_key` are mutually exclusive"
     If both are specified in the same provider entry, the gateway refuses to start. Use one or the other. A shim's `api_key_env` does not count as specifying a key: it is a *default* credential, and a configured command takes its place — so exporting `ALCF_API_KEY` next to a `token_command` provider is fine.
 
+#### Exchanges that need code (`auth.py`)
+
+`token_command` fits an exchange that is one program away. An OAuth profile does
+not: the first sign-in is interactive, the refresh token rotates on every use,
+and what the exchange keeps is a record rather than a string. A shim in that
+position ships `auth.py` beside its `provider.yaml` and the gateway calls it
+instead of a command — same startup seed, same background interval, same
+reactive refresh after a `401`. Nothing changes in the provider config, so a
+provider whose shim ships `auth.py` is still just `{"shim": "..."}`.
+
+The two forms are alternatives: a shim declares one, and a `token_command` you
+write on the provider outranks either. See
+[Provider Shims](../guide/shims.md) for the module contract.
+
+Until the exchange can produce a credential — for Sign in with ChatGPT, until a
+human has signed in — the provider is reported as needing interactive setup in
+its `token_status` and never sends a request upstream, rather than failing each
+one with a `401`.
+
 #### ALCF example with Docker
 
 ALCF providers use Globus OAuth tokens, and the exchange ships inside `llm-rosetta-shim-alcf` — which the image installs — so only the token file needs mounting:

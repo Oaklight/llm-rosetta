@@ -99,6 +99,60 @@ this shim: the key is an *input*, not a second credential. Without it the
 command runs with the gateway's environment and must find its own credentials,
 which is the ALCF case (`~/.globus`).
 
+**An exchange that needs code.** `token_command` describes an exchange that fits
+in an argv. Sign in with ChatGPT does not: it has an interactive first run, a
+refresh token that rotates on every use, and a credential record rather than one
+string. A shim in that position ships `auth.py` beside its `provider.yaml` — the
+same trust level and loading path as `transforms.py` and `quota.py` — and exports
+`EXCHANGE`:
+
+```python
+# auth.py
+from llm_rosetta.shims.auth_exchange import BaseAuthExchange
+
+
+class Exchange(BaseAuthExchange):
+    kind = "oauth"
+
+    def needs_interactive_setup(self, ctx):
+        return not (ctx.state_dir and os.path.exists(_record_path(ctx)))
+
+    async def credential(self, ctx):
+        return await _refresh_or_load(ctx)  # raise InteractiveSetupRequired
+
+    def account_id(self, ctx):
+        return _subject(ctx)  # opaque; the gateway hashes it
+
+
+EXCHANGE = Exchange()
+```
+
+| Member | Called | Must |
+|--------|--------|------|
+| `credential(ctx)` | startup seed, scheduled refresh, once after an upstream `401` | return the string to send upstream; `await` network I/O |
+| `needs_interactive_setup(ctx)` | config build, before any request | read local state only |
+| `account_id(ctx)` | config build | return an opaque account identity, or `None` |
+| `kind` | reporting | be a short label such as `"oauth"` |
+| `consumes_key` | config build | say whether `ctx.input_key` is an input |
+
+`ctx` carries the provider's config key (`ctx.provider`), the credential record's
+directory (`ctx.state_dir`, `None` when the gateway has no data directory), and
+the operator's key (`ctx.input_key`) when `consumes_key` is set. There is one
+`credential()` rather than a separate seed and refresh because the gateway never
+distinguishes the two: a credential is usable now or it is not.
+
+The gateway drives the same machinery for both forms — startup seeding under
+`/health/ready`, the background refresher, and the reactive `401` retry — so an
+exchange needs no scheduling of its own. When `credential()` raises
+`InteractiveSetupRequired`, the provider is reported as needing a sign-in
+instead of failing upstream on every request, and it is not retried on the seed
+pass.
+
+A shim declares one form or the other: `auth.py` and `connection.token_command`
+together is a load error. A provider's own `token_command` still wins, and an
+`api_key` beside an exchange that does not declare `consumes_key` is rejected —
+the two are alternative sources for one credential.
+
 **How the admin panel groups shims.** The provider-type picker has two levels: a
 top level (the *group*) and one row per shim under it. Both strings can be
 declared, because they are not always derivable from the name:
