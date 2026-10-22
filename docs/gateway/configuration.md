@@ -458,10 +458,12 @@ provider with no usable credential:
 The trigger is narrow. It must be an upstream `429` that the provider's shim
 classifies as a quota refusal — some shims also classify a `403` — at a point
 where no credential of that provider can serve the request. A generic `5xx`, a
-`401`, or a `429` the gateway cannot classify is passed through as before. The
-budget is **one** retry: the refusing provider is excluded for the rest of the
-request, one other provider is tried, and if it refuses too the client receives
-that refusal.
+`401`, or a `429` the gateway cannot classify is passed through as before. The budget is
+**one failover** — not one upstream call: a refusal that leaves another
+credential of the same provider usable spends the ordinary same-provider retry
+first, and only a provider with nothing left fails over. The refusing provider
+is excluded for the rest of the request, one other provider is tried, and if it
+refuses too the client receives that refusal.
 
 It is off by default because it trades something real: another provider is
 another prompt cache, another rate-limit bucket and possibly another model
