@@ -132,7 +132,8 @@ EXCHANGE = Exchange()
 `login`、`install`、`describe` 与 `revoke` 都是可选的。它们都定义在 `BaseAuthExchange` 上
 且直接抛错，所以“有没有这个属性”从来不是问题：交换通过 `can_install()`、`can_login()` 与
 `can_revoke()`（三者默认 `False`）说明自己实现了什么，网关会拒绝该操作，而不是去调用一个
-空实现。`describe()` 是例外 —— 它返回 `None` 而不抛错，而 `None` 正是“无话可说”的含义。
+空实现：无法安装记录的提供方对 `PUT` 返回 `501`，无法退出的对 `DELETE` 返回 `501`
+（而不是一个什么都没做的 `200`），无法登录的则由 CLI 拒绝。`describe()` 是例外 —— 它返回 `None` 而不抛错，而 `None` 正是“无话可说”的含义。
 
 `ctx` 携带提供方的配置键（`ctx.provider`）、凭据记录目录（`ctx.state_dir` —— 即
 `server.data_dir` 相对配置文件解析后的路径再加 `/shim-auth/<provider>`；只有程序化调用方
