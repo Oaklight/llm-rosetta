@@ -407,3 +407,209 @@ class TestTheCredentialChannel:
         )
 
         assert first.credential_token != second.credential_token
+
+
+class TestShimAuthExchange:
+    """A shim that ships ``auth.py`` mints the credential itself.
+
+    The module form exists for a vendor whose credential is not one argv away
+    — an OAuth profile with an interactive first run, a rotating refresh token
+    and a stored record.  The gateway only has to know *when* to call it.
+    """
+
+    @pytest.fixture()
+    def shims(self):
+        from llm_rosetta.shims.auth_exchange import (
+            AuthContext,
+            InteractiveSetupRequired,
+        )
+        from llm_rosetta.shims.provider_shim import (
+            ConnectionConfig,
+            ProviderShim,
+            register_shim,
+            unregister_shim,
+        )
+
+        class Exchange:
+            kind = "oauth"
+            consumes_key = False
+
+            def __init__(self, account_id: str | None = "acct-1") -> None:
+                self._account_id = account_id
+                self.calls = 0
+
+            def needs_interactive_setup(self, ctx: AuthContext) -> bool:
+                return False
+
+            async def credential(self, ctx: AuthContext) -> str:
+                self.calls += 1
+                return "access-token"
+
+            def account_id(self, ctx: AuthContext) -> str | None:
+                return self._account_id
+
+        class KeyExchange(Exchange):
+            consumes_key = True
+
+        def make(prefix: str, exchange: object) -> str:
+            name = f"__test_{prefix}__"
+            register_shim(
+                ProviderShim(
+                    name=name,
+                    format="chat_completions",
+                    connection=ConnectionConfig(
+                        base_url="https://vendor.example/v1",
+                        api_key_env="VENDOR_API_KEY",
+                        token_refresh_interval=1800,
+                    ),
+                    auth=exchange,
+                )
+            )
+            return name
+
+        made = [
+            make("oauth", Exchange()),
+            make("oauth_other", Exchange(account_id="acct-2")),
+            make("oauth_none", Exchange(account_id=None)),
+            make("key_exchange", KeyExchange()),
+        ]
+        yield made
+        for name in made:
+            unregister_shim(name)
+        assert InteractiveSetupRequired  # imported for the fixture's peers
+
+    def test_the_exchange_is_attached_and_the_ring_is_pending(self, shims):
+        name, *_ = shims
+
+        info = build_provider_info("chat_completions", {}, shim_name=name)
+
+        assert info.auth_exchange is not None
+        assert info.token_command is None
+        assert info.mints_credential is True
+        assert info.token_refresh_interval == 1800
+        assert info.key_ring.contains_only(TOKEN_PENDING_SENTINEL)
+        assert info.ready is False
+
+    def test_the_providers_own_command_wins(self, shims):
+        name, *_ = shims
+
+        info = build_provider_info(
+            "chat_completions",
+            {"token_command": ["acme-token", "--json"]},
+            shim_name=name,
+        )
+
+        assert info.auth_exchange is None
+        assert info.token_command == ["acme-token", "--json"]
+
+    def test_the_shims_key_variable_is_not_injected(self, shims, monkeypatch):
+        """The exchange owns the credential; the env default must stay out."""
+        name, *_ = shims
+        monkeypatch.setenv("VENDOR_API_KEY", "sk-from-the-environment")
+
+        info = build_provider_info("chat_completions", {}, shim_name=name)
+
+        assert info.key_ring.contains_only(TOKEN_PENDING_SENTINEL)
+
+    def test_a_key_beside_a_non_consuming_exchange_is_rejected(self, shims):
+        name, *_ = shims
+
+        with pytest.raises(ValueError, match="mutually exclusive"):
+            build_provider_info("chat_completions", {"api_key": "sk-x"}, shim_name=name)
+
+    def test_a_consuming_exchange_takes_the_key_as_input(self, shims, monkeypatch):
+        """The key is the exchange's *input*, not a second credential."""
+        name = shims[3]
+        monkeypatch.setenv("VENDOR_API_KEY", "sk-from-the-environment")
+
+        info = build_provider_info("chat_completions", {}, shim_name=name)
+
+        assert info.token_input == "sk-from-the-environment"
+        assert info.key_ring.contains_only(TOKEN_PENDING_SENTINEL)
+
+    def test_the_account_identity_comes_from_the_exchange(self, shims):
+        first, second, ungroupable, *_ = shims
+
+        a = build_provider_info("chat_completions", {}, shim_name=first)
+        b = build_provider_info("chat_completions", {}, shim_name=second)
+        c = build_provider_info("chat_completions", {}, shim_name=ungroupable)
+
+        assert a.credential_token is not None
+        assert a.credential_token != b.credential_token
+        # No identity means the provider never groups with another.
+        assert c.credential_token is None
+        assert c.account_token("cfg-name") == "@cfg-name"
+
+    def test_the_state_directory_comes_from_the_data_dir(self, shims, tmp_path):
+        name, *_ = shims
+
+        info = build_provider_info(
+            "chat_completions", {}, shim_name=name, data_dir=str(tmp_path)
+        )
+
+        assert info.auth_state_dir == str(tmp_path / "shim-auth" / name)
+
+    def test_no_data_dir_leaves_the_state_directory_to_the_shim(self, shims):
+        name, *_ = shims
+
+        info = build_provider_info("chat_completions", {}, shim_name=name)
+
+        assert info.auth_state_dir is None
+
+
+class TestExchangePerConfiguredProvider:
+    """Two providers of one shim are two accounts, not one."""
+
+    @pytest.fixture()
+    def shim(self):
+        from llm_rosetta.shims.provider_shim import (
+            ConnectionConfig,
+            ProviderShim,
+            register_shim,
+            unregister_shim,
+        )
+
+        class Exchange:
+            kind = "oauth"
+            consumes_key = False
+
+            async def credential(self, ctx):
+                return "access-token"
+
+            def account_id(self, ctx):
+                return ctx.provider
+
+            def needs_interactive_setup(self, ctx):
+                return False
+
+        register_shim(
+            ProviderShim(
+                name="__test_per_provider__",
+                format="chat_completions",
+                connection=ConnectionConfig(base_url="https://vendor.example/v1"),
+                auth=Exchange(),
+            )
+        )
+        yield "__test_per_provider__"
+        unregister_shim("__test_per_provider__")
+
+    def test_the_config_key_separates_records_and_identities(self, shim, tmp_path):
+        personal = build_provider_info(
+            "chat_completions",
+            {},
+            shim_name=shim,
+            config_name="chatgpt-personal",
+            data_dir=str(tmp_path),
+        )
+        work = build_provider_info(
+            "chat_completions",
+            {},
+            shim_name=shim,
+            config_name="chatgpt-work",
+            data_dir=str(tmp_path),
+        )
+
+        assert personal.auth_context is not None
+        assert personal.auth_context.provider == "chatgpt-personal"
+        assert personal.auth_state_dir != work.auth_state_dir
+        assert personal.credential_token != work.credential_token

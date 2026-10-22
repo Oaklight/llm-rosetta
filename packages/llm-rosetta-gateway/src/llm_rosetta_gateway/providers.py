@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
+import re
 from typing import Any
 
 from .transport.provider_info import (
@@ -234,31 +236,48 @@ def _resolve_token_command(
     return TOKEN_PENDING_SENTINEL, token_command, token_refresh_interval
 
 
-def _apply_shim_defaults(cfg: dict[str, Any], shim: Any) -> dict[str, Any]:
-    """Fill base_url / api_key from the shim when the config omits them.
+def _exchange_consumes_key(exchange: Any) -> bool:
+    """Whether a shim exchange takes the operator's key as its *input*."""
+    return bool(getattr(exchange, "consumes_key", False))
+
+
+def _apply_shim_defaults(
+    cfg: dict[str, Any], shim: Any, exchange: Any | None = None
+) -> dict[str, Any]:
+    """Fill base_url / credential defaults from the shim when absent.
 
     An empty string counts as omitted: the admin writes ``""`` keys, and an
     empty base_url must fall back to the shim rather than reach ProviderInfo,
     which would raise on a URL that doesn't start with http.
-    """
-    import os
 
+    A shim has two ways to declare a credential exchange — the argv
+    ``connection.token_command`` and the module form ``auth.py`` — and the
+    provider's own ``token_command`` overrides either.  Both own the same slot,
+    so only one default is ever installed; the loader already rejects a shim
+    that ships both.  *exchange* is the shim's ``auth.py`` object already
+    resolved by the caller, or ``None``.
+    """
     if not cfg.get("base_url") and shim.connection.base_url:
         cfg = {**cfg, "base_url": shim.connection.base_url}
-    # A shim that declares the exchange ships its default credential source;
-    # a ``token_command`` in the provider config still wins.  Installing it
-    # before the static-key default below keeps the two from ever being set
-    # together — the loader rejects that pair.
-    if cfg.get("token_command") is None and shim.connection.token_command:
+
+    # Does the provider name its own command?  Asked before the shim default
+    # is installed, so a shim's declaration cannot read as the operator's.
+    provider_owns_command = cfg.get("token_command") is not None
+
+    # A shim that declares the exchange ships its default credential source.
+    # Installing it before the static-key default below keeps the two from
+    # ever being set together — the loader rejects that pair.
+    if exchange is None and not provider_owns_command and shim.connection.token_command:
         cfg = {**cfg, "token_command": list(shim.connection.token_command)}
+    command_slot_taken = cfg.get("token_command") is not None or exchange is not None
     # A command that *takes* the operator's key is not a second credential:
     # the key is its input, and its output is what goes upstream.
     if cfg.get("token_command_env") is None and shim.connection.token_command_env:
         cfg = {**cfg, "token_command_env": shim.connection.token_command_env}
-    # The interval is the vendor's token lifetime, so it stays a default even
-    # when the operator names their own command.
+    # The interval is the vendor's credential lifetime, so it stays a default
+    # even when the operator names their own command.
     if (
-        cfg.get("token_command") is not None
+        (cfg.get("token_command") is not None or exchange is not None)
         and cfg.get("token_refresh_interval") is None
         and shim.connection.token_refresh_interval is not None
     ):
@@ -266,19 +285,22 @@ def _apply_shim_defaults(cfg: dict[str, Any], shim: Any) -> dict[str, Any]:
             **cfg,
             "token_refresh_interval": shim.connection.token_refresh_interval,
         }
-    # A shim's ``api_key_env`` is a *default* credential, and ``token_command``
-    # is a different source for the same slot: injecting here would hand
+    # A shim's ``api_key_env`` is a *default* credential, and the command slot
+    # above is a different source for the same slot: injecting here would hand
     # ``_resolve_token_command`` an ``api_key`` it has to reject on sight, so a
     # config that names a command (e.g. the documented ALCF setup) would fail
-    # merely because the shim's variable happened to be exported.  ``is None``
-    # rather than a falsy test: an explicit ``""``/``null`` is the operator
-    # saying "no static key", and ``"not in cfg"`` would turn an explicit
-    # ``null`` into an empty key ring.
+    # merely because the shim's variable happened to be exported.  The one
+    # exception is an exchange whose key is an *input* — AskSage mints a token
+    # from the account key — where the key is not a second credential.
+    # ``is None`` rather than a falsy test: an explicit ``""``/``null`` is the
+    # operator saying "no static key", and ``"not in cfg"`` would turn an
+    # explicit ``null`` into an empty key ring.
+    key_is_input = cfg.get("token_command_env") is not None or (
+        exchange is not None and _exchange_consumes_key(exchange)
+    )
     if (
         cfg.get("api_key") is None
-        and (
-            cfg.get("token_command") is None or cfg.get("token_command_env") is not None
-        )
+        and (not command_slot_taken or key_is_input)
         and shim.connection.api_key_env
     ):
         env_val = os.environ.get(shim.connection.api_key_env, "")
@@ -287,11 +309,48 @@ def _apply_shim_defaults(cfg: dict[str, Any], shim: Any) -> dict[str, Any]:
     return cfg
 
 
+def _auth_state_dir(data_dir: str | None, provider: str) -> str | None:
+    """Return the directory a shim exchange may persist its record in.
+
+    One directory per configured provider, under the gateway's data dir.
+    *data_dir* must already be resolved: a relative value would be read against
+    the process's working directory, which is not where the gateway keeps its
+    state.  ``None`` leaves the location to the exchange's own default
+    (typically under ``~/.config/llm-rosetta``).
+    """
+    if not data_dir:
+        return None
+    # Readable rather than opaque: an operator looking for a credential
+    # record should find it under the provider name they configured.  Only
+    # characters a path cannot carry are replaced, and a leading dot is
+    # dropped so the directory is never hidden.
+    slug = re.sub(r"[^A-Za-z0-9._-]+", "_", provider).lstrip(".") or "provider"
+    return os.path.join(data_dir, "shim-auth", slug)
+
+
+def _auth_context(provider: str, cfg: dict[str, Any], state_dir: str | None) -> Any:
+    """Build the context an exchange is handed.
+
+    The operator's key travels in ``input_key`` rather than in ``config``, so
+    the secret lives in exactly one place even though the exchange is trusted.
+    """
+    from llm_rosetta.shims.auth_exchange import AuthContext
+
+    return AuthContext(
+        provider=provider,
+        config={k: v for k, v in cfg.items() if k != "api_key"},
+        state_dir=state_dir,
+        input_key=cfg.get("api_key") or "",
+    )
+
+
 def _credential_token(
     *,
     token_command: list[str] | None,
     api_key: str,
     keyless: bool,
+    exchange: bool = False,
+    account_id: str | None = None,
 ) -> str | None:
     """Derive an opaque, non-secret account identity for a provider.
 
@@ -317,6 +376,15 @@ def _credential_token(
     """
     if keyless:
         return None
+    if account_id:
+        # A shim exchange names its own account identity (the signed-in
+        # subject, not the bearer that subject currently holds — the access
+        # token rotates, the account does not).
+        return "acct:" + hashlib.sha256(str(account_id).encode()).hexdigest()
+    if exchange:
+        # An exchange with no account identity is one provider per identity,
+        # exactly like a provider with no credential.
+        return None
     if token_command is not None:
         return "cmd:" + hashlib.sha256("\x00".join(token_command).encode()).hexdigest()
     keys = sorted(k.strip() for k in api_key.split(",") if k.strip())
@@ -325,12 +393,111 @@ def _credential_token(
     return "key:" + hashlib.sha256("\x00".join(keys).encode()).hexdigest()
 
 
+def _is_keyless(keyless_shim: bool, exchange: Any | None, cfg: dict[str, Any]) -> bool:
+    """Whether the provider sends no credential at all.
+
+    A free public gateway: keyless while no ``api_key`` and no credential
+    source is configured.  Asked only after every ``api_key`` source (config,
+    shim env) has been applied, so a key resolved from the environment still
+    disables keyless — and an exchange, which always mints one, disables it
+    too.
+    """
+    return bool(
+        keyless_shim
+        and exchange is None
+        and not cfg.get("api_key")
+        and not cfg.get("token_command")
+    )
+
+
+def _resolve_credential(
+    name: str,
+    cfg: dict[str, Any],
+    exchange: Any | None,
+    *,
+    keyless: bool,
+) -> tuple[str, list[str] | None, int, bool]:
+    """Decide where the provider's credential comes from.
+
+    Returns ``(api_key, token_command, refresh_interval, exchange_takes_key)``:
+    a static key, an argv command to run, or a key-ring placeholder the shim's
+    exchange fills in after the event loop starts.
+
+    Raises:
+        ValueError: An ``api_key`` sits beside an exchange that does not take
+            it as input, or an exchange's interval is below the minimum.
+    """
+    exchange_takes_key = bool(exchange is not None and _exchange_consumes_key(exchange))
+    if exchange is not None and cfg.get("api_key") and not exchange_takes_key:
+        raise ValueError(
+            f"Provider '{name}': a shim-declared credential exchange and "
+            "api_key are mutually exclusive; remove api_key, or have the shim "
+            "declare consumes_key if the key is the exchange's input"
+        )
+
+    if keyless:
+        # No credential source, so no refresher is ever scheduled and the
+        # interval is inert — 0 rather than the 3600 default, so it cannot read
+        # as "refreshes hourly".  (It skips _resolve_token_command's >= 60
+        # check, which only guards the command path.)
+        return "", None, 0, False
+    if exchange is not None:
+        from .transport.provider_info import TOKEN_PENDING_SENTINEL
+
+        interval = int(cfg.get("token_refresh_interval") or 3600)
+        if interval < 60:
+            raise ValueError(
+                f"Provider '{name}': token_refresh_interval must be >= 60, "
+                f"got {interval}"
+            )
+        logger.info(
+            "Provider '%s' mints its credential in the shim's auth.py — "
+            "credential will be fetched asynchronously after startup",
+            name,
+        )
+        # Until the deferred seed runs, the ring holds the pending sentinel and
+        # the provider is not ready.
+        return TOKEN_PENDING_SENTINEL, None, interval, exchange_takes_key
+
+    api_key, token_command, interval = _resolve_token_command(name, cfg)
+    return api_key, token_command, interval, exchange_takes_key
+
+
+def _bind_auth_exchange(
+    provider_key: str,
+    cfg: dict[str, Any],
+    exchange: Any | None,
+    data_dir: str | None,
+) -> tuple[Any | None, str | None]:
+    """Build an exchange's context and read the account identity it implies.
+
+    Returns ``(context, account_id)``; both ``None`` without an exchange.  A
+    record the exchange cannot read costs the provider its account identity,
+    not its configuration — the credential may yet be minted.
+    """
+    if exchange is None:
+        return None, None
+    context = _auth_context(provider_key, cfg, _auth_state_dir(data_dir, provider_key))
+    try:
+        return context, exchange.account_id(context)
+    except Exception as exc:  # noqa: BLE001 - a broken record must not abort config
+        logger.warning(
+            "Provider '%s': credential exchange could not read its account "
+            "identity: %s",
+            provider_key,
+            exc,
+        )
+        return context, None
+
+
 def build_provider_info(
     provider_type: str,
     cfg: dict[str, Any],
     *,
     global_proxy: str | None = None,
     shim_name: str | None = None,
+    data_dir: str | None = None,
+    config_name: str | None = None,
 ) -> ProviderInfo:
     """Create a :class:`ProviderInfo` from a provider config dict.
 
@@ -353,6 +520,16 @@ def build_provider_info(
     *global_proxy* is the server-level proxy URL (from ``server.proxy``).
     A per-provider ``"proxy"`` key in *cfg* takes precedence.
 
+    *data_dir* is the gateway's data directory, already resolved to an
+    absolute path.  A shim-declared credential exchange persists its record
+    under it, one directory per provider; ``None`` (the default) leaves the
+    location to the exchange's own default.
+
+    *config_name* is the provider's key in the config (``"chatgpt-personal"``),
+    as opposed to *provider_type* (the format, ``"open_responses"``).  A shim
+    that mints its own credential needs it to tell two configured providers of
+    the same shim apart — they are two accounts, not one.
+
     For known provider types the auth and URL logic is looked up from the
     registry.  Unknown types fall back to Bearer-token auth and a simple
     ``{base_url}/`` URL template.
@@ -371,10 +548,18 @@ def build_provider_info(
 
     # Resolve through shim registry for defaults
     shim = get_shim(shim_name or provider_type)
+    # A provider-level ``token_command`` is the operator's own exchange and
+    # outranks the shim's, whichever form the shim declared.
+    provider_owns_command = cfg.get("token_command") is not None
+    exchange = (
+        getattr(shim, "auth", None)
+        if shim is not None and not provider_owns_command
+        else None
+    )
     if shim is not None:
         base_type = shim.format
         # Apply shim defaults where the config value is missing *or empty*.
-        cfg = _apply_shim_defaults(cfg, shim)
+        cfg = _apply_shim_defaults(cfg, shim, exchange)
     else:
         base_type = provider_type
 
@@ -423,31 +608,20 @@ def build_provider_info(
     if "stream_url_template" in cfg:
         stream_tpl = cfg["stream_url_template"]
 
-    # Keyless upstream (a free public gateway): send no credential while no
-    # api_key and no token_command is configured.  Computed only after every
-    # api_key source (config, shim env) so a key resolved from the environment
-    # still disables keyless.  Supplying a key or a token_command switches back
-    # to the base type's auth, so a paid account can use the same shim.
-    keyless = bool(
-        keyless_shim and not cfg.get("api_key") and not cfg.get("token_command")
-    )
+    # Keyless upstream (a free public gateway).  Supplying a key or a
+    # credential source switches back to the base type's auth, so a paid
+    # account can use the same shim.
+    keyless = _is_keyless(keyless_shim, exchange, cfg)
     if keyless:
         auth_fn = no_auth
 
     # Per-provider proxy overrides global proxy
     proxy_url = cfg.get("proxy") or global_proxy or None
 
-    # -- token_command: dynamic key refresh ------------------------------------
-    if keyless:
-        # No token_command, so no refresher is ever scheduled and the interval
-        # is inert — 0 rather than the 3600 default, so it cannot read as
-        # "refreshes hourly".  (It skips _resolve_token_command's >= 60 check,
-        # which only guards the command path.)
-        api_key, token_command, token_refresh_interval = "", None, 0
-    else:
-        api_key, token_command, token_refresh_interval = _resolve_token_command(
-            shim_name or provider_type, cfg
-        )
+    # -- the credential: static key, command, or shim exchange -----------------
+    api_key, token_command, token_refresh_interval, exchange_takes_key = (
+        _resolve_credential(shim_name or provider_type, cfg, exchange, keyless=keyless)
+    )
 
     if not cfg.get("base_url"):
         message = (
@@ -478,6 +652,14 @@ def build_provider_info(
     )
 
     command_takes_key = bool(token_command and cfg.get("token_command_env"))
+
+    # The config key, when the caller has one: two providers of the same shim
+    # are two accounts, and the exchange must be able to tell them apart.
+    provider_key = config_name or shim_name or provider_type
+    auth_context, auth_account_id = _bind_auth_exchange(
+        provider_key, cfg, exchange, data_dir
+    )
+
     return ProviderInfo(
         name=provider_type,
         api_key=api_key,
@@ -490,7 +672,16 @@ def build_provider_info(
         token_command=token_command,
         token_refresh_interval=token_refresh_interval,
         token_command_env=(cfg.get("token_command_env") if token_command else None),
-        token_input=(cfg.get("api_key") or "") if token_command else "",
+        # The operator's key, when a credential source consumes it as input
+        # (the command's environment channel, or an exchange that declares
+        # ``consumes_key``).  It is never sent upstream itself.
+        token_input=(
+            (cfg.get("api_key") or "")
+            if (token_command and cfg.get("token_command_env")) or exchange_takes_key
+            else ""
+        ),
+        auth_exchange=exchange,
+        auth_context=auth_context,
         keyless=keyless,
         # When the exchange consumes the operator's key, the account is that
         # key's account — hashing the command alone would merge every account
@@ -499,6 +690,8 @@ def build_provider_info(
             token_command=(None if command_takes_key else token_command),
             api_key=(cfg.get("api_key") or "") if command_takes_key else api_key,
             keyless=keyless,
+            exchange=exchange is not None,
+            account_id=auth_account_id,
         ),
         session_header=cfg.get("session_header")
         or (shim.connection.session_header if shim is not None else None),

@@ -180,9 +180,10 @@ async def _handle_401(
     Returns ``(should_retry, error_response)``:
     - ``(True, None)`` — token refreshed successfully, caller should retry.
     - ``(False, Response)`` — session-policy error, return this to client.
-    - ``(False, None)`` — not a 401, no token_command, or refresh failed.
+    - ``(False, None)`` — not a 401, the provider mints no credential, or the
+      refresh failed.
     """
-    if status_code != 401 or not provider_info.token_command:
+    if status_code != 401 or not provider_info.mints_credential:
         return False, None
     kind = classify_auth_error(status_code, error_text)
     if kind == AuthErrorKind.SESSION_POLICY_401:

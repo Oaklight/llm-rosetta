@@ -11,6 +11,7 @@ from llm_rosetta.shims import get_shim
 from .._shared import (
     _build_provider_entry,
     _handle_provider_rename,
+    _shim_ships_credential_exchange,
     config_mutate,
     parse_json_body,
 )
@@ -56,6 +57,9 @@ async def put_provider(request: Any, **kwargs: Any) -> Response:
             shims.append(get_shim(body.get(desc.config_shim_key) or ""))
         shim_base = any(s is not None and s.connection.base_url for s in shims)
         keyless_ok = any(s is not None and s.connection.keyless for s in shims)
+        # A shim that ships ``auth.py`` mints the credential itself, so the
+        # operator has no key to type here either.
+        shim_exchange_ok = any(_shim_ships_credential_exchange(s) for s in shims)
         # A provider that mints its credential from a command stores no key —
         # the two sources are mutually exclusive, so demanding one here made
         # every ``token_command`` provider unsaveable from the panel: the editor
@@ -66,7 +70,12 @@ async def put_provider(request: Any, **kwargs: Any) -> Response:
         missing = []
         if not base_url and not shim_base:
             missing.append("base_url")
-        if not api_key and not keyless_ok and not token_command:
+        if (
+            not api_key
+            and not keyless_ok
+            and not token_command
+            and not shim_exchange_ok
+        ):
             missing.append("api_key")
         if missing:
             return JSONResponse(

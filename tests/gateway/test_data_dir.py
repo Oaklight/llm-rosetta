@@ -303,3 +303,111 @@ class TestKeysDbDataDir:
         config = GatewayConfig(raw)
         result = _resolve_data_dir_for_app(config, config_path)
         assert result == "/absolute/path"
+
+
+class TestTheExchangeRecordDirectory:
+    """A shim that mints its credential keeps its record under the data dir.
+
+    The directory is resolved while the config is built — before the app
+    factory knows where the config file lives — so ``server.data_dir`` has to
+    be anchored at that point, not later.  A relative value resolves beside
+    the config file, which is what the persistence layer has always done.
+    """
+
+    @pytest.fixture()
+    def shim(self):
+        from llm_rosetta.shims.provider_shim import (
+            ConnectionConfig,
+            ProviderShim,
+            register_shim,
+            unregister_shim,
+        )
+
+        class Exchange:
+            kind = "oauth"
+            consumes_key = False
+
+            async def credential(self, ctx):
+                return "access-token"
+
+            def account_id(self, ctx):
+                return ctx.provider
+
+            def needs_interactive_setup(self, ctx):
+                return False
+
+        register_shim(
+            ProviderShim(
+                name="__test_data_dir__",
+                format="chat_completions",
+                connection=ConnectionConfig(base_url="https://vendor.example/v1"),
+                auth=Exchange(),
+            )
+        )
+        yield "__test_data_dir__"
+        unregister_shim("__test_data_dir__")
+
+    def _config(self, shim: str, server: dict | None = None, **kw) -> Any:
+        from llm_rosetta_gateway.config import GatewayConfig
+
+        return GatewayConfig(
+            {
+                "providers": {"team-a": {"type": shim}},
+                "models": {},
+                "server": server or {},
+            },
+            **kw,
+        )
+
+    def test_a_relative_data_dir_resolves_beside_the_config(self, shim, tmp_path):
+        config_path = str(tmp_path / "gateway.jsonc")
+
+        config = self._config(shim, {"data_dir": "my-data"}, config_path=config_path)
+
+        assert config.data_dir == str(tmp_path / "my-data")
+        assert config.providers["team-a"].auth_state_dir == str(
+            tmp_path / "my-data" / "shim-auth" / "team-a"
+        )
+
+    def test_the_default_data_dir_is_used(self, shim, tmp_path):
+        config_path = str(tmp_path / "gateway.jsonc")
+
+        config = self._config(shim, config_path=config_path)
+
+        assert config.providers["team-a"].auth_state_dir == str(
+            tmp_path / "data" / "shim-auth" / "team-a"
+        )
+
+    def test_without_a_config_path_the_shim_chooses(self, shim):
+        config = self._config(shim)
+
+        assert config.data_dir is None
+        assert config.providers["team-a"].auth_state_dir is None
+
+    def test_an_absolute_value_is_left_alone(self, shim, tmp_path):
+        config_path = str(tmp_path / "gateway.jsonc")
+
+        config = self._config(shim, {"data_dir": "/srv/data"}, config_path=config_path)
+
+        assert config.providers["team-a"].auth_state_dir == "/srv/data/shim-auth/team-a"
+
+    def test_the_reader_carries_the_path_it_read_from(self, shim, tmp_path):
+        """The shipped path: the CLI's reader, not a hand-built config."""
+        from llm_rosetta_gateway.config import load_gateway_config
+
+        path = tmp_path / "gateway.jsonc"
+        path.write_text(
+            json.dumps(
+                {
+                    "providers": {"team-a": {"type": shim}},
+                    "models": {},
+                    "server": {},
+                }
+            )
+        )
+
+        config = load_gateway_config(str(path))
+
+        assert config.providers["team-a"].auth_state_dir == str(
+            tmp_path / "data" / "shim-auth" / "team-a"
+        )

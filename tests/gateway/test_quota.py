@@ -428,6 +428,7 @@ class TestInBandDemotion:
             quota_probe_impl=OpenCodeGoProbe(),
             quota_identity=None,
             token_command=None,
+            mints_credential=False,
             active_key=lambda: key,
         )
         signal = note_upstream_quota_error(
@@ -454,6 +455,7 @@ class TestInBandDemotion:
             quota_probe_impl=OpenCodeGoProbe(),
             quota_identity=identity,
             token_command=["true"],
+            mints_credential=True,
             active_key=lambda: "sk-rotating",
         )
         signal = note_upstream_quota_error(pinfo, 429, "{}")

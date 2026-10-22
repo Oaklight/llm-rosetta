@@ -23,6 +23,34 @@ logger = logging.getLogger("llm-rosetta-gateway")
 _VALID_RL_ALGORITHMS = frozenset({"token_bucket", "sliding_window", "fixed_window"})
 
 
+def resolve_data_dir(configured: str | None, config_path: str | None) -> str | None:
+    """Resolve the gateway's data directory, anchoring relative paths.
+
+    ``server.data_dir`` is written by hand, so it may be relative — and a
+    relative path means "beside the config file", not "beside the working
+    directory the gateway happened to start in".  With nothing configured the
+    default is ``<config dir>/data``, which is what the persistence layer has
+    always used.
+
+    Args:
+        configured: The value in ``server.data_dir``, or ``None``.
+        config_path: Path of the config document, when the caller has one.
+            Without it a relative value is returned as written — the caller
+            has no anchor to resolve against.
+
+    Returns:
+        An absolute path, or ``None`` when there is neither a configured value
+        nor a config path.
+    """
+    if configured:
+        if config_path and not os.path.isabs(configured):
+            return os.path.join(os.path.dirname(config_path), configured)
+        return configured
+    if config_path:
+        return os.path.join(os.path.dirname(config_path), "data")
+    return None
+
+
 def apply_server_settings(config: GatewayConfig, _server: dict[str, Any]) -> None:
     """Parse server section: host, port, proxy, timeouts, CORS, etc."""
     config.host = _server.get("host", "0.0.0.0")
@@ -71,7 +99,10 @@ def apply_server_settings(config: GatewayConfig, _server: dict[str, Any]) -> Non
     # Request-log retention knobs (consumed by setup_admin).
     config.request_log = _server.get("request_log", {}) or {}
     config.ops_log = _server.get("ops_log", {}) or {}
-    config.data_dir = _server.get("data_dir")
+    # Resolved here rather than at the point of use: a provider that mints its
+    # own credential needs its record directory while the config is being
+    # built, and the persistence layer needs the same answer later.
+    config.data_dir = resolve_data_dir(_server.get("data_dir"), config.config_path)
 
     # TLS termination: paths to PEM cert/key files.
     config.tls_cert = _server.get("tls_cert")

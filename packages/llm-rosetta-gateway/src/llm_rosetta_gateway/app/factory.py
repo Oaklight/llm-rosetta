@@ -68,16 +68,15 @@ logger = get_logger()
 def _resolve_data_dir_for_app(
     config: GatewayConfig, config_path: str | None
 ) -> str | None:
-    """Resolve data directory from config, anchoring relative paths to config dir."""
-    import os
+    """Resolve data directory from config, anchoring relative paths to config dir.
 
-    if config.data_dir:
-        if config_path and not os.path.isabs(config.data_dir):
-            return os.path.join(os.path.dirname(config_path), config.data_dir)
-        return config.data_dir
-    if config_path:
-        return os.path.join(os.path.dirname(config_path), "data")
-    return None
+    The rule lives in :func:`llm_rosetta_gateway.config.settings.resolve_data_dir`
+    — the config build needs the same answer for its providers' credential
+    records — and is idempotent on an already-resolved value.
+    """
+    from ..config.settings import resolve_data_dir
+
+    return resolve_data_dir(config.data_dir, config_path or config.config_path)
 
 
 async def _setup_auth(
@@ -546,14 +545,14 @@ async def run_gateway(
         setattr(config, "_deferred_startup", deferred)
         await deferred.start()
 
-    # Start background refresh loops for providers WITHOUT token_command
-    # (those with token_command are handled by DeferredStartup.seed_tokens)
+    # Start background refresh loops for providers that do NOT mint their own
+    # credential (those are handled by DeferredStartup.seed_tokens).
     from ..transport.token_refresh import start_token_refreshers
 
     static_providers = {
         name: pinfo
         for name, pinfo in (config.providers.items() if config else {})
-        if pinfo.token_command is None
+        if not pinfo.mints_credential
     }
     refresh_tasks = await start_token_refreshers(static_providers)
 

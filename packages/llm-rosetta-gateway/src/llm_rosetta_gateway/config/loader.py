@@ -75,4 +75,4 @@ def load_gateway_config(path: str) -> GatewayConfig:
     """
     reader = JsoncConfigIO()
     raw = reader.load(path)
-    return GatewayConfig(raw, maintenance=reader.last_load_registry)
+    return GatewayConfig(raw, maintenance=reader.last_load_registry, config_path=path)

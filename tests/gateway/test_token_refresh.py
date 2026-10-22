@@ -416,3 +416,153 @@ class TestTheCredentialChannelEnvironment:
 
         assert token == "sk-account"
         assert "sk-account" not in pinfo.token_command
+
+
+class _FakeExchange:
+    """A shim-shipped exchange: one call, and it may demand a sign-in."""
+
+    kind = "oauth"
+    consumes_key = False
+
+    def __init__(self, *, token: str = "minted", interactive: bool = False):
+        self.token = token
+        self.interactive = interactive
+        self.calls = 0
+        self.contexts: list[Any] = []
+
+    def needs_interactive_setup(self, ctx: Any) -> bool:
+        return self.interactive
+
+    async def credential(self, ctx: Any) -> str:
+        from llm_rosetta.shims.auth_exchange import InteractiveSetupRequired
+
+        self.calls += 1
+        self.contexts.append(ctx)
+        if self.interactive:
+            raise InteractiveSetupRequired("sign in to the vendor first")
+        return self.token
+
+    def account_id(self, ctx: Any) -> str | None:
+        return None
+
+
+def _exchange_pinfo(exchange: _FakeExchange, **kw: Any) -> ProviderInfo:
+    from llm_rosetta.shims.auth_exchange import AuthContext
+    from llm_rosetta_gateway.transport.provider_info import TOKEN_PENDING_SENTINEL
+
+    return ProviderInfo(
+        name="vendor",
+        api_key=TOKEN_PENDING_SENTINEL,
+        base_url="https://vendor.example/v1",
+        auth_header_fn=openai_auth,
+        url_template="{base_url}/chat/completions",
+        auth_exchange=exchange,
+        auth_context=AuthContext(provider="vendor", state_dir=kw.get("state_dir")),
+        keyless=False,
+    )
+
+
+class TestMintCredential:
+    """The one seam startup, the refresher and the 401 retry all use."""
+
+    def test_a_command_is_run(self):
+        from llm_rosetta_gateway.transport.token_refresh import mint_credential
+
+        pinfo = _make_provider_info(token_command=["echo", "cmd-token"])
+
+        assert asyncio.run(mint_credential(pinfo)) == "cmd-token"
+
+    def test_an_exchange_is_awaited_with_the_state_dir(self):
+        from llm_rosetta_gateway.transport.token_refresh import mint_credential
+
+        exchange = _FakeExchange(token="oauth-token")
+        pinfo = _exchange_pinfo(exchange, state_dir="/tmp/vendor-state")
+
+        assert asyncio.run(mint_credential(pinfo)) == "oauth-token"
+        assert exchange.contexts[0].state_dir == "/tmp/vendor-state"
+        assert exchange.contexts[0].provider == "vendor"
+
+    def test_a_provider_with_no_source_is_an_error_not_an_empty_key(self):
+        from llm_rosetta_gateway.transport.token_refresh import mint_credential
+
+        with pytest.raises(RuntimeError, match="mints no credential"):
+            asyncio.run(mint_credential(_make_provider_info()))
+
+
+class TestForceRefreshAcrossForms:
+    """The reactive 401 retry does not care which form declared the source."""
+
+    def setup_method(self):
+        from llm_rosetta_gateway.transport.token_refresh import reset_reactive_state
+
+        reset_reactive_state()
+
+    def test_an_exchange_is_refreshed(self):
+        from llm_rosetta_gateway.transport.token_refresh import force_refresh
+
+        exchange = _FakeExchange(token="fresh")
+        pinfo = _exchange_pinfo(exchange)
+
+        assert asyncio.run(force_refresh(pinfo)) is True
+        assert pinfo.key_ring.next() == "fresh"
+        assert (pinfo.token_status or {})["consecutive_failures"] == 0
+
+    def test_a_concurrent_burst_mints_once(self):
+        """One rotating refresh token must not be spent by parallel 401s."""
+        from llm_rosetta_gateway.transport.token_refresh import force_refresh
+
+        exchange = _FakeExchange(token="fresh")
+        pinfo = _exchange_pinfo(exchange)
+
+        async def _burst():
+            return await asyncio.gather(*(force_refresh(pinfo) for _ in range(5)))
+
+        assert all(asyncio.run(_burst()))
+        assert exchange.calls == 1
+
+    def test_interactive_setup_is_reported_not_retried(self):
+        from llm_rosetta_gateway.transport.token_refresh import force_refresh
+
+        exchange = _FakeExchange(interactive=True)
+        pinfo = _exchange_pinfo(exchange)
+
+        assert asyncio.run(force_refresh(pinfo)) is False
+        status = pinfo.token_status or {}
+        assert status["interactive_setup_required"] is True
+        assert "sign in" in status["last_error"]
+
+    def test_a_provider_without_a_source_is_not_refreshed(self):
+        from llm_rosetta_gateway.transport.token_refresh import force_refresh
+
+        assert asyncio.run(force_refresh(_make_provider_info())) is False
+
+
+class TestRefresherSchedulingAcrossForms:
+    def test_an_exchange_provider_gets_a_loop(self):
+        async def _run():
+            pinfo = _exchange_pinfo(_FakeExchange())
+            tasks = await start_token_refreshers({"p": pinfo})
+            assert len(tasks) == 1
+            for t in tasks:
+                t.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await t
+
+        asyncio.run(_run())
+
+    def test_the_loop_mints_through_the_exchange(self):
+        async def _run():
+            exchange = _FakeExchange(token="rotated")
+            pinfo = _exchange_pinfo(exchange)
+            pinfo.token_refresh_interval = 0
+
+            task = asyncio.create_task(_refresh_loop(pinfo))
+            await asyncio.sleep(0.1)
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+
+            assert exchange.calls >= 1
+            assert pinfo.key_ring.next() == "rotated"
+
+        asyncio.run(_run())

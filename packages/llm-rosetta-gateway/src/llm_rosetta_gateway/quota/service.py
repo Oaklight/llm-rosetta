@@ -276,7 +276,7 @@ def note_upstream_quota_error(
         # No cooldown and no reset time: do not guess a window length, but do
         # stop sending at this credential for a short period.
         seconds = 60
-    if getattr(pinfo, "token_command", None) is not None:
+    if pinfo.mints_credential:
         # A rotating token is a new key every refresh, so demoting today's
         # fingerprint would forget the refusal at the first rotation.  The
         # upstream account is the stable identity here.

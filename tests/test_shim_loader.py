@@ -905,3 +905,109 @@ class TestConnectionTokenCommand:
 
         assert shim.connection.token_command is None
         assert shim.connection.token_refresh_interval is None
+
+
+class TestAuthExchange:
+    """A shim can ship its credential exchange as code, not as an argv.
+
+    An OAuth profile does not fit in ``connection.token_command``: it has an
+    interactive first run, a rotating refresh token and a stored record.  The
+    module form is the same declaration, so a shim ships one or the other.
+    """
+
+    def _write(self, tmp_path: Path, yaml_body: str, auth: str | None = None):
+        d = tmp_path / "vendor"
+        d.mkdir(exist_ok=True)
+        if auth is not None:
+            (d / "auth.py").write_text(textwrap.dedent(auth))
+        (d / "provider.yaml").write_text(yaml_body)
+
+    def test_a_shipped_exchange_is_attached(self, tmp_path):
+        self._write(
+            tmp_path,
+            "name: vendor\nbase: openai_chat\n"
+            "connection:\n  base_url: https://vendor.example/v1\n"
+            "  token_refresh_interval: 1800\n",
+            """
+            from llm_rosetta.shims.auth_exchange import BaseAuthExchange
+
+            class Exchange(BaseAuthExchange):
+                kind = "oauth"
+
+                async def credential(self, ctx):
+                    return "access-token"
+
+            EXCHANGE = Exchange()
+            """,
+        )
+
+        shims = load_providers_from_dir(tmp_path)
+
+        assert len(shims) == 1
+        assert shims[0].auth is not None
+        assert shims[0].auth.kind == "oauth"
+        assert shims[0].connection.token_refresh_interval == 1800
+
+    def test_a_shim_without_a_module_attaches_nothing(self, tmp_path):
+        self._write(
+            tmp_path,
+            "name: vendor\nbase: openai_chat\n"
+            "connection:\n  base_url: https://vendor.example/v1\n",
+        )
+
+        assert load_providers_from_dir(tmp_path)[0].auth is None
+
+    def test_a_module_without_an_exchange_attaches_nothing(self, tmp_path):
+        self._write(
+            tmp_path,
+            "name: vendor\nbase: openai_chat\n"
+            "connection:\n  base_url: https://vendor.example/v1\n",
+            "HELPERS = ()\n",
+        )
+
+        assert load_providers_from_dir(tmp_path)[0].auth is None
+
+    def test_an_exchange_without_credential_is_rejected(self, tmp_path):
+        self._write(
+            tmp_path,
+            "name: vendor\nbase: openai_chat\n"
+            "connection:\n  base_url: https://vendor.example/v1\n",
+            "EXCHANGE = object()\n",
+        )
+
+        with pytest.raises(ValueError, match="must implement credential"):
+            load_providers_from_dir(tmp_path)
+
+    def test_both_forms_at_once_is_rejected(self, tmp_path):
+        """One slot, one declaration: the loader refuses to pick a winner."""
+        self._write(
+            tmp_path,
+            "name: vendor\nbase: openai_chat\n"
+            "connection:\n  base_url: https://vendor.example/v1\n"
+            "  token_command: [token-helper]\n",
+            """
+            class Exchange:
+                kind = "oauth"
+
+                async def credential(self, ctx):
+                    return "access-token"
+
+            EXCHANGE = Exchange()
+            """,
+        )
+
+        with pytest.raises(
+            ValueError, match="both auth.py and connection.token_command"
+        ):
+            load_providers_from_dir(tmp_path)
+
+    def test_a_broken_module_is_not_fatal_for_a_tolerant_scan(self, tmp_path):
+        """An external source degrades to a warning, like a broken transforms.py."""
+        self._write(
+            tmp_path,
+            "name: vendor\nbase: openai_chat\n"
+            "connection:\n  base_url: https://vendor.example/v1\n",
+            "raise RuntimeError('boom')\n",
+        )
+
+        assert load_providers_from_dir(tmp_path, on_error="warn") == []

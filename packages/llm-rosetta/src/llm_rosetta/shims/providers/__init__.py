@@ -309,6 +309,54 @@ def _load_quota_probes(path: Path) -> tuple[Any, ...]:
     return tuple(probes)
 
 
+def _load_auth_exchange(path: Path) -> Any | None:
+    """Execute a shim's ``auth.py`` and return the object it exports.
+
+    A shim whose credential is more than one argv ships the exchange beside
+    its ``provider.yaml``: the OAuth profile needs an interactive first run, a
+    rotating refresh token and a stored record, and only the vendor knows how
+    those work.  The module may import the standard library and
+    :mod:`llm_rosetta.shims.auth_exchange` at module scope; it must not import
+    ``gateway`` — the shim layer loads before the gateway, and the core
+    boundary forbids it.
+
+    Args:
+        path: The ``auth.py`` to execute.  A missing file yields ``None``.
+
+    Returns:
+        The module's ``EXCHANGE`` object, or ``None`` when the shim declares
+        no exchange.
+
+    Raises:
+        ValueError: The module exports an object without ``credential()``.
+        Exception: Whatever the module raised while executing (the caller
+            decides whether a broken shim is fatal).
+    """
+    if not path.exists():
+        return None
+    digest = hashlib.sha1(str(path.resolve()).encode()).hexdigest()[:12]
+    module_name = f"_llm_rosetta_shim_auth_{digest}"
+    spec = importlib.util.spec_from_file_location(module_name, path)
+    if spec is None or spec.loader is None:
+        raise ValueError(f"Could not load {path}")
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = mod
+    try:
+        spec.loader.exec_module(mod)
+    except BaseException:
+        sys.modules.pop(module_name, None)
+        raise
+    exchange = getattr(mod, "EXCHANGE", None)
+    if exchange is None:
+        return None
+    if not callable(getattr(exchange, "credential", None)):
+        raise ValueError(
+            f"{path}: EXCHANGE must implement credential(); "
+            "see llm_rosetta.shims.auth_exchange.AuthExchange"
+        )
+    return exchange
+
+
 def _load_transforms(
     provider_dir: Path,
     *,
@@ -549,6 +597,12 @@ def _load_single_provider(
     leaf_quota_probes = _load_quota_probes(provider_dir / "quota.py")
     all_quota_probes = tuple(quota_probes) + leaf_quota_probes
 
+    # A credential exchange that does not fit in an argv.  It is the module
+    # form of the same declaration as ``connection.token_command``, so a shim
+    # that ships both leaves the loader with no single answer: reject it here
+    # rather than let one silently shadow the other.
+    exchange = _load_auth_exchange(provider_dir / "auth.py")
+
     # Parse optional reasoning capability config from YAML.
     reasoning_cfg = cfg.get("reasoning")
     reasoning_cap: ReasoningCapability | None = None
@@ -613,6 +667,12 @@ def _load_single_provider(
             token_command_env=cfg.get("token_command_env"),
         )
 
+    if exchange is not None and connection.token_command:
+        raise ValueError(
+            f"{yaml_path}: declares both auth.py and connection.token_command; "
+            f"a shim ships one form of its credential exchange"
+        )
+
     # Parse the quota declaration: which probe reads this lane, and how often
     # the gateway should read it.  Parsers live in the gateway; the shim only
     # names one.
@@ -673,6 +733,7 @@ def _load_single_provider(
         group_label=cfg.get("group_label"),
         free_source=cfg.get("free_source", False),
         connection=connection,
+        auth=exchange,
         quota=quota_decl,
         quota_probes=all_quota_probes,
         tools=tools,

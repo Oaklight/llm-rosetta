@@ -333,7 +333,7 @@ async def get_config(request: Any) -> Response:
             pinfo = gateway_config.providers.get(name)
             if pinfo is not None and pinfo.token_status is not None:
                 masked["token_status"] = pinfo.token_status
-            elif pinfo is not None and pinfo.token_command is not None:
+            elif pinfo is not None and pinfo.mints_credential:
                 masked["token_status"] = {
                     "enabled": True,
                     "last_refresh": None,

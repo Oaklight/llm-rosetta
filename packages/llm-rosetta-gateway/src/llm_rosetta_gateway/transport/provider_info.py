@@ -218,6 +218,8 @@ class ProviderInfo:
         token_refresh_interval: int = 3600,
         token_command_env: str | None = None,
         token_input: str = "",
+        auth_exchange: Any | None = None,
+        auth_context: Any | None = None,
         keyless: bool = False,
         session_header: str | None = None,
         credential_token: str | None = None,
@@ -251,6 +253,14 @@ class ProviderInfo:
         # itself; ``key_ring`` holds the command's output instead.
         self.token_command_env = token_command_env
         self.token_input = token_input
+        # The shim-shipped credential exchange, for a vendor whose credential
+        # is not one argv away (an OAuth profile).  Mutually exclusive with
+        # ``token_command``: a provider-level command wins, and the builder
+        # attaches only one of the two.  The context is built once, from the
+        # provider's config, and handed to the exchange both when its account
+        # identity is read at config time and when the credential is minted.
+        self.auth_exchange = auth_exchange
+        self.auth_context = auth_context
         self.token_status: dict | None = None
         self.keyless = keyless
         # Per-conversation session header (name declared by the shim, value
@@ -291,6 +301,23 @@ class ProviderInfo:
         self.quota_provider_blocked: Callable[[], bool] | None = None
 
     # -- readiness ----------------------------------------------------------
+
+    @property
+    def auth_state_dir(self) -> str | None:
+        """Directory the shim's exchange may persist its record in, if any."""
+        return getattr(self.auth_context, "state_dir", None)
+
+    @property
+    def mints_credential(self) -> bool:
+        """Whether the gateway must obtain this provider's credential itself.
+
+        True for either form of the declaration: the argv ``token_command``
+        and the shim's ``auth.py`` exchange.  Every caller that used to test
+        ``token_command is not None`` means this question — startup seeding,
+        the background refresher, the reactive 401 retry, and the admin
+        fallbacks that render a provider as "waiting for its token".
+        """
+        return self.token_command is not None or self.auth_exchange is not None
 
     @property
     def ready(self) -> bool:

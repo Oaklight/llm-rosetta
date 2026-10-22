@@ -418,6 +418,9 @@ class ProviderShim:
             third-party disclosure.
         connection: Upstream connection config (URL, API key env,
             models endpoint, model ID field).
+        auth: Credential exchange the shim ships in ``auth.py``, for a vendor
+            whose credential is not one argv away (an OAuth profile).  See
+            :class:`~llm_rosetta.shims.auth_exchange.AuthExchange`.
         tools: Tool handling config (custom tools, description length,
             search mode, multimodal tool results).
         pre_ir_transforms: Body-level transforms applied BEFORE IR
@@ -466,6 +469,15 @@ class ProviderShim:
     decoder and the error wording.  The gateway only holds the contract and
     the runtime state; it resolves the probe named by ``quota.probe`` against
     this tuple.
+    """
+    auth: Any | None = None
+    """Credential exchange the shim ships in ``auth.py``.
+
+    An exchange that does not fit in an argv (an OAuth profile with an
+    interactive first run, a rotating refresh token and a stored record)
+    implements :class:`~llm_rosetta.shims.auth_exchange.AuthExchange` and is
+    attached here.  A provider-level ``token_command`` still wins; a shim
+    declares this form or ``connection.token_command``, never both.
     """
     tools: ToolsConfig = ToolsConfig()
     pre_ir_transforms: tuple[Transform, ...] = ()
@@ -563,6 +575,7 @@ class ProviderShim:
             "connection": ConnectionConfig(),
             "quota": None,
             "quota_probes": (),
+            "auth": None,
             "tools": ToolsConfig(),
             "pre_ir_transforms": (),
             "post_ir_transforms": (),

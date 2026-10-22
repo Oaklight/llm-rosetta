@@ -83,10 +83,11 @@ class DeferredStartup:
         self._seed_task: asyncio.Task[None] | None = None
         self._seed_generation = 0
 
-        # Provider readiness: only providers with token_command need tracking
+        # Provider readiness: only providers that mint their own credential
+        # (a ``token_command`` or a shim's ``auth.py`` exchange) need tracking
         self._provider_states: dict[str, ProviderInitState] = {}
         for name, pinfo in config.providers.items():
-            if pinfo.token_command is not None:
+            if pinfo.mints_credential:
                 self._provider_states[name] = ProviderInitState.PENDING
 
         # Task-level completion tracking
@@ -252,7 +253,7 @@ class DeferredStartup:
         self._provider_states = {
             name: ProviderInitState.PENDING
             for name, pinfo in new_config.providers.items()
-            if pinfo.token_command is not None
+            if pinfo.mints_credential
         }
         self._pending_tasks.discard("token_seed")
         if not self._provider_states:
@@ -270,14 +271,15 @@ class DeferredStartup:
     # -- Token seeding (parallel async) -------------------------------------
 
     async def _seed_one_provider(self, name: str) -> None:
-        """Fetch the initial token for a single provider."""
-        from ..transport.token_refresh import command_env, run_token_command
+        """Fetch the initial credential for a single provider."""
+        from ..transport.token_refresh import mint_credential
+        from llm_rosetta.shims.auth_exchange import InteractiveSetupRequired
 
         pinfo = self._config.providers[name]
-        assert pinfo.token_command is not None
+        assert pinfo.mints_credential
 
         try:
-            token = await run_token_command(pinfo.token_command, env=command_env(pinfo))
+            token = await mint_credential(pinfo)
             pinfo.key_ring.refresh(token)
             pinfo.token_status = {
                 "enabled": True,
@@ -286,7 +288,23 @@ class DeferredStartup:
                 "last_error": None,
             }
             self._provider_states[name] = ProviderInitState.READY
-            logger.info("Seeded API key for '%s' via token_command", name)
+            logger.info("Seeded credential for '%s'", name)
+        except InteractiveSetupRequired as exc:
+            # A sign-in is not a transient failure: report what is needed and
+            # let the scheduled refresher pick up the record once it exists.
+            self._provider_states[name] = ProviderInitState.FAILED
+            pinfo.token_status = {
+                "enabled": True,
+                "last_refresh": None,
+                "consecutive_failures": 0,
+                "last_error": str(exc),
+                "interactive_setup_required": True,
+            }
+            logger.warning(
+                "Provider '%s' needs an interactive sign-in before it can be used: %s",
+                name,
+                exc,
+            )
         except Exception as exc:
             self._provider_states[name] = ProviderInitState.FAILED
             pinfo.token_status = {
@@ -295,10 +313,10 @@ class DeferredStartup:
                 "consecutive_failures": 1,
                 "last_error": str(exc),
             }
-            logger.error("Failed to seed API key for '%s': %s", name, exc)
+            logger.error("Failed to seed credential for '%s': %s", name, exc)
 
     async def _seed_tokens(self) -> None:
-        """Seed all token_command providers in parallel, then start refresh loops.
+        """Seed all self-minting providers in parallel, then start refreshers.
 
         Failed providers get a single delayed retry before being marked
         permanently FAILED — this handles transient failures (network
@@ -325,11 +343,16 @@ class DeferredStartup:
         if generation != self._seed_generation:
             return
 
-        # Retry failed providers once after a delay
+        # Retry failed providers once after a delay.  A provider waiting for an
+        # interactive sign-in is not retried: nothing changes in 30 seconds,
+        # and the scheduled refresher picks the record up when a human signs in.
         failed = [
             name
             for name in pending
             if self._provider_states.get(name) == ProviderInitState.FAILED
+            and not (self._config.providers[name].token_status or {}).get(
+                "interactive_setup_required"
+            )
         ]
         if failed:
             logger.info(
@@ -354,7 +377,7 @@ class DeferredStartup:
             name: pinfo
             for name, pinfo in self._config.providers.items()
             if (
-                pinfo.token_command is not None
+                pinfo.mints_credential
                 and self._provider_states.get(name) == ProviderInitState.READY
             )
         }

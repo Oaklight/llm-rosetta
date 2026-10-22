@@ -254,7 +254,7 @@ async def _reload_gateway_config(
     )
     recovery_result = await recovery.execute()
     request.app.provider_validation_warnings = recovery_result.get("disabled", [])
-    new_config = GatewayConfig(raw, maintenance=maintenance)
+    new_config = GatewayConfig(raw, maintenance=maintenance, config_path=config_path)
     _app_state._config = new_config
     request.app.gateway_config = new_config
 
@@ -330,11 +330,11 @@ async def _reload_gateway_config(
             )
         )
 
-    # Re-seed token_command providers.  The rebuild above replaced every
-    # ProviderInfo, so each token_command provider is back on the pending
-    # sentinel with no refresh loop.  Seeding otherwise runs only at process
-    # start, so without this the provider never obtains a token and every
-    # request to it is rejected until the process restarts.
+    # Re-seed credential-minting providers.  The rebuild above replaced every
+    # ProviderInfo, so each of them is back on the pending sentinel with no
+    # refresh loop.  Seeding otherwise runs only at process start, so without
+    # this the provider never obtains a credential and every request to it is
+    # rejected until the process restarts.
     deferred = getattr(request.app, "deferred_startup", None)
     if deferred is not None:
         await deferred.apply_config_reload(new_config)
@@ -408,6 +408,15 @@ def _apply_optional_provider_fields(
             entry[opt_key] = val
         elif opt_key in body:
             entry.pop(opt_key, None)
+
+
+def _shim_ships_credential_exchange(shim: Any) -> bool:
+    """Whether *shim* mints the upstream credential itself in ``auth.py``.
+
+    Such a provider has no key to type into the editor, exactly like a
+    ``token_command`` one, so the save path must not demand one.
+    """
+    return shim is not None and getattr(shim, "auth", None) is not None
 
 
 def _credential_command(body: dict[str, Any], existing: dict[str, Any] | None) -> Any:

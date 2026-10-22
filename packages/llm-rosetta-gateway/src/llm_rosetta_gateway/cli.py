@@ -604,7 +604,9 @@ def _load_startup_config(
     recovery_result = asyncio.run(recovery.execute())
     if recovery_result.get("disabled"):
         logger.warning("Provider recovery disabled: %s", recovery_result["disabled"])
-    config = GatewayConfig(raw_config, maintenance=reader.last_load_registry)
+    config = GatewayConfig(
+        raw_config, maintenance=reader.last_load_registry, config_path=config_path
+    )
     return config, shim_source_report
 
 

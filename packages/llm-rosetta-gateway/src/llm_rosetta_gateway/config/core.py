@@ -164,13 +164,21 @@ class GatewayConfig:
         return resolve(self, ctx)
 
     def __init__(
-        self, raw: dict[str, Any], *, maintenance: Registry | None = None
+        self,
+        raw: dict[str, Any],
+        *,
+        maintenance: Registry | None = None,
+        config_path: str | None = None,
     ) -> None:
         # What the load of *this* document ran, when a reader ran it: the
         # load-time steps' results, for the surface that reports them.  Passed
         # in by the caller that read the document rather than claimed from a
         # slot, so a config built from a literal reports nothing.
         self.maintenance: Registry | None = maintenance
+        # Where this document lives, when the caller read it from a file: the
+        # anchor a relative ``server.data_dir`` resolves against, and with it
+        # every provider's credential-record directory.
+        self.config_path: str | None = config_path
 
         # Declarative external shim sources (see gateway/shim_sources.py).
         # Kept verbatim so create_app can apply them for programmatic callers
@@ -252,6 +260,8 @@ class GatewayConfig:
                 cfg,
                 global_proxy=self.proxy,
                 shim_name=self.provider_shim_names.get(name),
+                config_name=name,
+                data_dir=self.data_dir,
             )
             for name, cfg in self._raw_providers.items()
         }

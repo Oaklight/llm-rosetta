@@ -1,12 +1,16 @@
-"""Background token refresh for providers with ``token_command``.
+"""Background credential refresh for providers that mint their own.
 
-When a provider config specifies ``token_command`` (an argv list), the
-gateway shells out to it at startup to seed the API key, then re-runs it
-every ``token_refresh_interval`` seconds in a background asyncio task.
+A provider mints its credential when it names a ``token_command`` (an argv
+list) or when its shim ships an ``auth.py`` exchange.  Either way the gateway
+obtains the credential at startup, re-obtains it every
+``token_refresh_interval`` seconds in a background asyncio task, and retries
+once on an upstream 401.
 
-The command's stdout is captured as the new API key (comma-separated for
-multi-key round-robin).  On failure the old key is kept; after 5
-consecutive failures the log level escalates from WARNING to ERROR.
+The minted credential replaces the API key (comma-separated for multi-key
+round-robin).  On failure the old key is kept; after 5 consecutive failures
+the log level escalates from WARNING to ERROR.  An exchange that reports it
+needs an interactive sign-in is not a failure to retry on a schedule — it is
+reported as such until an operator signs in.
 
 Reactive refresh
 ~~~~~~~~~~~~~~~~
@@ -26,6 +30,11 @@ import subprocess
 import time
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
+
+from llm_rosetta.shims.auth_exchange import (
+    AuthContext,
+    InteractiveSetupRequired,
+)
 
 if TYPE_CHECKING:
     from .provider_info import ProviderInfo
@@ -59,13 +68,14 @@ def _get_lock(name: str) -> asyncio.Lock:
 
 
 async def force_refresh(pinfo: ProviderInfo) -> bool:
-    """Reactively refresh the token for *pinfo* via its ``token_command``.
+    """Reactively re-mint the credential for *pinfo*.
 
     Called by the proxy on upstream 401.  Returns ``True`` if a fresh
-    token was obtained (or a very recent refresh already covered it),
-    ``False`` if no ``token_command`` is configured or the refresh failed.
+    credential was obtained (or a very recent refresh already covered it),
+    ``False`` if the provider mints no credential of its own or the refresh
+    failed.
     """
-    if pinfo.token_command is None:
+    if not pinfo.mints_credential:
         return False
 
     lock = _get_lock(pinfo.name)
@@ -76,7 +86,7 @@ async def force_refresh(pinfo: ProviderInfo) -> bool:
             return True
 
         try:
-            token = await run_token_command(pinfo.token_command, env=command_env(pinfo))
+            token = await mint_credential(pinfo)
             pinfo.key_ring.refresh(token)
             _reactive_timestamps[pinfo.name] = time.monotonic()
             pinfo.token_status = {
@@ -85,11 +95,12 @@ async def force_refresh(pinfo: ProviderInfo) -> bool:
                 "consecutive_failures": 0,
                 "last_error": None,
             }
-            logger.info("Reactive token refresh for '%s' succeeded", pinfo.name)
+            logger.info("Reactive credential refresh for '%s' succeeded", pinfo.name)
             return True
         except Exception as exc:
+            interactive = isinstance(exc, InteractiveSetupRequired)
             logger.warning(
-                "Reactive token refresh for '%s' failed: %s", pinfo.name, exc
+                "Reactive credential refresh for '%s' failed: %s", pinfo.name, exc
             )
             prev = pinfo.token_status or {}
             pinfo.token_status = {
@@ -97,6 +108,7 @@ async def force_refresh(pinfo: ProviderInfo) -> bool:
                 "last_refresh": prev.get("last_refresh"),
                 "consecutive_failures": prev.get("consecutive_failures", 0) + 1,
                 "last_error": str(exc),
+                "interactive_setup_required": interactive,
             }
             return False
 
@@ -110,6 +122,28 @@ def reset_reactive_state() -> None:
 # ---------------------------------------------------------------------------
 # Token command runners
 # ---------------------------------------------------------------------------
+
+
+async def mint_credential(pinfo: ProviderInfo) -> str:
+    """Obtain a usable credential for *pinfo*.
+
+    The single seam every caller uses — startup seeding, the scheduled
+    refresher and the reactive 401 retry — so a provider's credential form
+    never leaks into the caller.  A provider-level ``token_command`` and a
+    shim-shipped ``auth.py`` are mutually exclusive by construction; the
+    builder attaches exactly one.
+
+    Raises:
+        RuntimeError: No credential source, or the command failed.
+        InteractiveSetupRequired: The exchange needs a human to sign in.
+        AuthExchangeError: The exchange failed for another reason.
+    """
+    if pinfo.auth_exchange is not None:
+        ctx = pinfo.auth_context or AuthContext(provider=pinfo.name)
+        return await pinfo.auth_exchange.credential(ctx)
+    if pinfo.token_command is not None:
+        return await run_token_command(pinfo.token_command, env=command_env(pinfo))
+    raise RuntimeError(f"Provider '{pinfo.name}' mints no credential")
 
 
 def command_env(pinfo: ProviderInfo) -> dict[str, str] | None:
@@ -192,10 +226,10 @@ async def run_token_command(
 async def start_token_refreshers(
     providers: dict[str, ProviderInfo],
 ) -> list[asyncio.Task]:
-    """Create background refresh tasks for all providers with ``token_command``."""
+    """Create background refresh tasks for every provider that mints its own."""
     tasks: list[asyncio.Task] = []
     for name, pinfo in providers.items():
-        if pinfo.token_command:
+        if pinfo.mints_credential:
             task = asyncio.create_task(
                 _refresh_loop(pinfo), name=f"token-refresh-{name}"
             )
@@ -209,7 +243,7 @@ async def start_token_refreshers(
 
 
 async def _refresh_loop(pinfo: ProviderInfo) -> None:
-    if pinfo.token_command is None:
+    if not pinfo.mints_credential:
         return
     consecutive_failures = 0
     while True:
@@ -226,11 +260,11 @@ async def _refresh_loop(pinfo: ProviderInfo) -> None:
             continue
 
         try:
-            token = await run_token_command(pinfo.token_command, env=command_env(pinfo))
+            token = await mint_credential(pinfo)
             old_count = pinfo.key_ring.refresh(token)
             if old_count is not None:
                 logger.warning(
-                    "token_command for '%s': key count changed %d -> %d, "
+                    "credential source for '%s': key count changed %d -> %d, "
                     "affinity mappings may shift",
                     pinfo.name,
                     old_count,
@@ -245,17 +279,20 @@ async def _refresh_loop(pinfo: ProviderInfo) -> None:
                 "consecutive_failures": 0,
                 "last_error": None,
             }
-            logger.info("Refreshed token for provider '%s'", pinfo.name)
+            logger.info("Refreshed credential for provider '%s'", pinfo.name)
         except Exception as exc:
+            interactive = isinstance(exc, InteractiveSetupRequired)
             consecutive_failures += 1
-            level = (
-                logging.ERROR
-                if consecutive_failures >= FAILURE_ESCALATION_THRESHOLD
-                else logging.WARNING
+            # Waiting for a human is not a failure that escalates: the loop
+            # keeps its interval, the status says what is needed, and the
+            # operator sees it in the panel rather than an ERROR per cycle.
+            escalated = (
+                not interactive and consecutive_failures >= FAILURE_ESCALATION_THRESHOLD
             )
+            level = logging.ERROR if escalated else logging.WARNING
             logger.log(
                 level,
-                "token_command for '%s' failed (attempt %d): %s",
+                "credential source for '%s' failed (attempt %d): %s",
                 pinfo.name,
                 consecutive_failures,
                 exc,
@@ -265,4 +302,5 @@ async def _refresh_loop(pinfo: ProviderInfo) -> None:
                 "last_refresh": (pinfo.token_status or {}).get("last_refresh"),
                 "consecutive_failures": consecutive_failures,
                 "last_error": str(exc),
+                "interactive_setup_required": interactive,
             }

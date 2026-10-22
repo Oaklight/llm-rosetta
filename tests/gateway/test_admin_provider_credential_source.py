@@ -76,3 +76,16 @@ def test_an_empty_key_is_still_stored_for_an_ordinary_provider():
     entry = _save({"base_url": "https://api.example/v1", "type": "chat_completions"})
 
     assert entry["api_key"] == ""
+
+
+def test_a_shim_that_ships_an_exchange_needs_no_key():
+    """``auth.py`` mints the credential, so the editor has nothing to demand."""
+    from types import SimpleNamespace
+
+    from llm_rosetta_gateway.admin.routes._shared import (
+        _shim_ships_credential_exchange,
+    )
+
+    assert _shim_ships_credential_exchange(SimpleNamespace(auth=object())) is True
+    assert _shim_ships_credential_exchange(SimpleNamespace(auth=None)) is False
+    assert _shim_ships_credential_exchange(None) is False

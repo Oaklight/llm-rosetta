@@ -793,3 +793,91 @@ class TestDeferredStartupLifecycle:
             assert all(t.done() or t.cancelled() for t in ds._tasks)
 
         asyncio.run(_run())
+
+
+class _Exchange:
+    """A shim-shipped credential exchange, with the two outcomes that matter."""
+
+    kind = "oauth"
+    consumes_key = False
+
+    def __init__(self, *, token: str = "minted", interactive: bool = False) -> None:
+        self.token = token
+        self.interactive = interactive
+        self.calls = 0
+
+    def needs_interactive_setup(self, ctx: Any) -> bool:
+        return self.interactive
+
+    async def credential(self, ctx: Any) -> str:
+        from llm_rosetta.shims.auth_exchange import InteractiveSetupRequired
+
+        self.calls += 1
+        if self.interactive:
+            raise InteractiveSetupRequired("sign in to the vendor first")
+        return self.token
+
+    def account_id(self, ctx: Any) -> str | None:
+        return None
+
+
+def _make_exchange_pinfo(name: str, exchange: _Exchange) -> ProviderInfo:
+    return ProviderInfo(
+        name=name,
+        api_key=TOKEN_PENDING_SENTINEL,
+        base_url="https://example.com/v1",
+        auth_header_fn=openai_auth,
+        url_template="{base_url}/chat/completions",
+        auth_exchange=exchange,
+    )
+
+
+class TestExchangeSeeding:
+    """A shim's ``auth.py`` is seeded by the same deferred pass."""
+
+    def test_the_provider_is_tracked_and_seeded(self):
+        exchange = _Exchange(token="access-token")
+        pinfo = _make_exchange_pinfo("chatgpt", exchange)
+        ds = DeferredStartup(_FakeConfig({"chatgpt": pinfo}), _FakeApp())
+
+        assert ds.provider_state("chatgpt") == ProviderInitState.PENDING
+
+        async def _run():
+            with patch(
+                "llm_rosetta_gateway.transport.token_refresh.start_token_refreshers",
+                new_callable=AsyncMock,
+                return_value=[],
+            ):
+                await ds._seed_tokens()
+
+        asyncio.run(_run())
+
+        assert ds.provider_state("chatgpt") == ProviderInitState.READY
+        assert pinfo.ready is True
+        assert pinfo.key_ring.next() == "access-token"
+
+    def test_a_sign_in_requirement_is_reported_and_not_retried(self):
+        """Retrying in 30s cannot help; the operator has to act."""
+        exchange = _Exchange(interactive=True)
+        pinfo = _make_exchange_pinfo("chatgpt", exchange)
+        ds = DeferredStartup(_FakeConfig({"chatgpt": pinfo}), _FakeApp())
+        ds._RETRY_DELAY = 0
+
+        async def _run():
+            with patch(
+                "llm_rosetta_gateway.transport.token_refresh.start_token_refreshers",
+                new_callable=AsyncMock,
+                return_value=[],
+            ):
+                await ds._seed_tokens()
+
+        asyncio.run(_run())
+
+        assert ds.provider_state("chatgpt") == ProviderInitState.FAILED
+        status = pinfo.token_status or {}
+        assert status["interactive_setup_required"] is True
+        assert status["consecutive_failures"] == 0
+        # The initial fetch plus no retry.
+        assert exchange.calls == 1
+        # Not registered as ready, so no refresh loop was started for it.
+        assert ds.is_fully_ready() is False

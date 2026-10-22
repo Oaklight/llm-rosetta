@@ -112,6 +112,8 @@ declare the differences.
 | Component | File | Purpose |
 |-----------|------|---------|
 | `ProviderShim` / `ModelShim` | `shims/provider_shim.py` | Data classes + registry |
+| `AuthExchange` | `shims/auth_exchange.py` | Credential-exchange contract a shim ships in `auth.py` |
+| `QuotaProbe` | `shims/quota_probe.py` | Allowance-probe contract a shim ships in `quota.py` |
 | `Transform` primitives | `shims/transforms.py` | `strip_fields`, `rename_field`, `set_defaults` |
 | Built-in shims | `shims/providers/<name>/provider.yaml` | One shim per vendor/format pair (33 built in) |
 | External shim sources | `llm_rosetta_gateway/shims/` | Directory/archive loaders, standalone catalog, scheduled removals |
@@ -183,6 +185,8 @@ packages/
 │       │   └── decision/            # Decision paradigm (TypeSafe System One)
 │       ├── shims/                   # Provider/model identity cards + transforms
 │       │   ├── provider_shim.py
+│       │   ├── auth_exchange.py     # shim-shipped credential exchange (auth.py)
+│       │   ├── quota_probe.py       # shim-shipped allowance probe (quota.py)
 │       │   ├── transforms.py
 │       │   └── providers/           # One provider.yaml per vendor/format pair
 │       ├── ir/                      # IR logic: primitives/, tools/, passes/
