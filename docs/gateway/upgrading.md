@@ -16,6 +16,9 @@ version number, so "which versions go together" has one answer: the same one.
 - **Same-minor compatibility.** The gateway declares
   `llm-rosetta>=0.14.0.dev0,<0.15`: core patch releases are accepted without a
   new gateway, while a new core minor line requires a matching gateway release.
+  The `.dev0` lower bound exists so a dev pair on TestPyPI resolves; the final
+  `0.14.0` release drops it (`>=0.14.0,<0.15`), so a released gateway cannot
+  pull a development core from PyPI.
 - **Dev builds** (`0.14.0.devN`) go to TestPyPI and the Docker `-dev` tags.
   They are for testing the release line, not for production.
 
