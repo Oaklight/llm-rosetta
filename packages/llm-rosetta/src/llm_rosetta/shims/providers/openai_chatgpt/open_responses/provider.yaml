@@ -1,0 +1,41 @@
+# The ChatGPT *plan* route: the same Open Responses wire format as
+# ``openai--open_responses``, reached with a credential the operator signs in
+# for rather than an API key.  It is a profile, not a different format, so a
+# request converts exactly as any other Responses request does; what differs is
+# where the credential comes from, which models are visible, and what the
+# preview route refuses.
+name: openai_chatgpt--open_responses
+# The picker files this under the ``openai_chatgpt`` group its name already
+# implies; the title is declared because the fallback is the mangled key
+# (``Openai_chatgpt``) and this one is read by operators.
+group_label: OpenAI (ChatGPT plan)
+model_type: llm
+format: open_responses
+logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/openai.svg
+
+connection:
+  base_url: https://api.openai.com/v1
+  # Deliberately no ``api_key_env``: the credential is minted by this shim's
+  # ``auth.py``.  Inheriting OPENAI_API_KEY here would hand the loader a static
+  # key beside an exchange, which it refuses — and an API key is not what this
+  # lane authenticates with.
+  models_path: /models
+
+tools:
+  custom_tools: true
+  # The plan route takes namespaced tool containers; the converter renders
+  # ``{"type": "namespace", ...}`` from an IR group.
+  tool_groups: true
+  # Only the hosted tool the preview route still serves.  code_interpreter,
+  # file_search, image generation, computer use, hosted MCP and tool_search are
+  # all rejected there, so declaring them would advertise a capability the
+  # upstream refuses.
+  intrinsic_tools:
+    - web_search
+
+# The plan route is stateless: a response is not stored server-side, so the
+# echo says so.  (The request-side ``store: false`` the route requires is
+# forced by the plan-mode transform.)
+store_default: false
+hoist_system_messages: true
+response_id_prefix: "resp_"

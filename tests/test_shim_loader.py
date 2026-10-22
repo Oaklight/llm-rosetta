@@ -136,6 +136,7 @@ class TestLoadProviders:
             "openai--chat_completions",
             "openai--openai_decisions",
             "openai--open_responses",
+            "openai_chatgpt--open_responses",
             "openrouter--messages",
             "openrouter--chat_completions",
             "openrouter--open_responses",
@@ -325,6 +326,7 @@ class TestLoadProviders:
         expected = {
             "openai--chat_completions": "chat_completions",
             "openai--open_responses": "open_responses",
+            "openai_chatgpt--open_responses": "open_responses",
             "openrouter--chat_completions": "chat_completions",
             "openrouter--messages": "messages",
             "openrouter--open_responses": "open_responses",
@@ -722,22 +724,41 @@ class TestDeclaredGrouping:
         shims = load_providers()
         assert {s.name for s in shims if s.group} == set()
 
-    def test_only_kilo_titles_its_group(self):
-        """A vendor may declare a title without declaring a key (Kilo)."""
+    def test_a_vendor_may_title_its_group(self):
+        """A title can be declared without a group key, and it is what renders.
+
+        Kilo titles its group because its key is lower-case; the ChatGPT plan
+        profile titles its own because the fallback would be the mangled key
+        (``Openai_chatgpt``).  Neither declares ``group`` — the name split
+        already puts each shim where it belongs.
+
+        Deliberately not a whitelist: the set of titled shims is not pinned,
+        so a new vendor adding one does not have to edit this test.  What is
+        pinned is that a title never comes with a ``group`` key it does not
+        need, and that these two render exactly as intended.
+        """
         shims = load_providers()
         titled = {s.name: s for s in shims if s.group_label}
-        assert set(titled) == {"kilo--chat_completions"}
+
+        assert "openai_chatgpt--open_responses" in titled
+        assert all(s.group is None for s in titled.values())
         assert titled["kilo--chat_completions"].group_label == "Kilo"
+        assert (
+            titled["openai_chatgpt--open_responses"].group_label
+            == "OpenAI (ChatGPT plan)"
+        )
         # The shim keeps no label of its own, so its row reads as the base.
         assert titled["kilo--chat_completions"].display_name is None
         assert titled["kilo--chat_completions"].group is None
 
     def test_undeclared_shims_leave_both_fields_none(self):
+        """A shim that declares neither renders from its name alone."""
+        titled = {"kilo--chat_completions", "openai_chatgpt--open_responses"}
         shims = load_providers()
         assert all(
             s.group is None and s.group_label is None
             for s in shims
-            if s.name != "kilo--chat_completions"
+            if s.name not in titled
         )
 
 

@@ -93,7 +93,12 @@ def _extract_model_ids(
             )
 
     model_ids = [m for m in model_ids if m]
-    model_ids.sort()
+    if mlt is None:
+        # The sort is here to give an upstream's unordered ``data`` a stable
+        # shape.  A shim that ships a hook has an opinion about the order —
+        # the ChatGPT plan route lists newest capability first — and the hook
+        # is where that opinion belongs, so its order is kept.
+        model_ids.sort()
     return model_ids, upstream_map
 
 
