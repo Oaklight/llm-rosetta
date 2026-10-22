@@ -369,7 +369,16 @@ def _optional_provider_keys() -> list[str]:
     """
     from ...model_types import all_model_types
 
-    keys: list[str] = ["models_path", "logo", "quota"]
+    keys: list[str] = [
+        "models_path",
+        "logo",
+        "quota",
+        # The credential source, for providers that mint it from a command
+        # (ALCF, AskSage).  Without these a save rewrote the entry without
+        # them and the provider quietly fell back to a static key.
+        "token_command",
+        "token_refresh_interval",
+    ]
     for desc in all_model_types():
         if desc.is_llm:
             continue
@@ -398,6 +407,40 @@ def _apply_optional_provider_fields(
             entry.pop(opt_key, None)
 
 
+def _credential_command(body: dict[str, Any], existing: dict[str, Any] | None) -> Any:
+    """Return the command that owns the credential after this save, if any.
+
+    The body wins; an absent key means "keep what is stored", which is how the
+    provider editor behaves (it has no field for the command).
+    """
+    command = body.get("token_command")
+    if command is None and existing:
+        command = existing.get("token_command")
+    return command
+
+
+def _credential_fields(
+    body: dict[str, Any], api_key: str, existing: dict[str, Any] | None
+) -> dict[str, Any]:
+    """The credential slots of a provider entry.
+
+    A command owns the credential when there is one, so an empty key is not a
+    key: storing ``"api_key": ""`` beside ``token_command`` gives the loader two
+    credential sources where it accepts one, and the provider comes back
+    unusable.  The command itself is not something the editor can express, so
+    an absent key in *body* means "keep what is stored"; a caller that wants to
+    clear it sends the key with an empty value.
+    """
+    fields: dict[str, Any] = {}
+    if api_key or not _credential_command(body, existing):
+        fields["api_key"] = api_key
+    if existing is not None:
+        for carry in ("token_command", "token_refresh_interval"):
+            if carry not in body and carry in existing:
+                fields[carry] = existing[carry]
+    return fields
+
+
 def _build_provider_entry(
     body: dict[str, Any],
     api_key: str,
@@ -409,7 +452,10 @@ def _build_provider_entry(
     if "***" in api_key and resolve_name in existing_providers:
         api_key = existing_providers[resolve_name].get("api_key", api_key)
 
-    entry: dict[str, Any] = {"api_key": api_key, "base_url": base_url}
+    entry: dict[str, Any] = {"base_url": base_url}
+    entry.update(
+        _credential_fields(body, api_key, existing_providers.get(resolve_name))
+    )
 
     provider_type = body.get("type")
     if provider_type:

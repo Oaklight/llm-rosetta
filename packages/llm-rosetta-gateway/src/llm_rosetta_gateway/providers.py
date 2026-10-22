@@ -165,9 +165,13 @@ BASE_FORMATS: tuple[str, ...] = tuple(
 
 
 def _resolve_token_command(
-    provider_type: str, cfg: dict[str, Any]
+    name: str, cfg: dict[str, Any]
 ) -> tuple[str, list[str] | None, int]:
     """Resolve token_command config into (api_key, token_command, interval).
+
+    *name* is what the operator wrote — the shim name when there is one — so
+    the messages below name the provider they can actually find in the config
+    rather than its base format.
 
     Returns the initial API key (either from static config or by running the
     command), the command list (or None), and the refresh interval.
@@ -193,35 +197,36 @@ def _resolve_token_command(
 
     if isinstance(token_command, str):
         raise ValueError(
-            f"Provider '{provider_type}': token_command must be an array, "
+            f"Provider '{name}': token_command must be an array, "
             f'not a string (e.g., ["python3", "scripts/alcf-token.py"])'
         )
     if not isinstance(token_command, list) or not token_command:
-        raise ValueError(
-            f"Provider '{provider_type}': token_command must be a non-empty array"
-        )
+        raise ValueError(f"Provider '{name}': token_command must be a non-empty array")
     if token_refresh_interval < 60:
         raise ValueError(
-            f"Provider '{provider_type}': token_refresh_interval must be "
+            f"Provider '{name}': token_refresh_interval must be "
             f">= 60, got {token_refresh_interval}"
         )
-    if "api_key" in cfg:
+    # Only a real key conflicts with the command.  An entry that carries
+    # ``"api_key": ""`` says "no static key" — the admin writes that key for a
+    # provider the operator never gave a credential — and treating it as a
+    # second source made every saved command provider unusable on reload.
+    if cfg.get("api_key"):
         raise ValueError(
-            f"Provider '{provider_type}': token_command and api_key are "
-            f"mutually exclusive"
+            f"Provider '{name}': token_command and api_key are mutually exclusive"
         )
     if shutil.which(token_command[0]) is None:
         logger.warning(
             "Provider '%s': token_command executable '%s' not found on "
             "PATH — the command may still work if the binary is available "
             "at runtime (e.g. via volume mount)",
-            provider_type,
+            name,
             token_command[0],
         )
     logger.info(
         "Provider '%s' uses token_command — token will be fetched "
         "asynchronously after startup",
-        provider_type,
+        name,
     )
     return TOKEN_PENDING_SENTINEL, token_command, token_refresh_interval
 
@@ -237,7 +242,19 @@ def _apply_shim_defaults(cfg: dict[str, Any], shim: Any) -> dict[str, Any]:
 
     if not cfg.get("base_url") and shim.connection.base_url:
         cfg = {**cfg, "base_url": shim.connection.base_url}
-    if cfg.get("api_key") is None and shim.connection.api_key_env:
+    # A shim's ``api_key_env`` is a *default* credential, and ``token_command``
+    # is a different source for the same slot: injecting here would hand
+    # ``_resolve_token_command`` an ``api_key`` it has to reject on sight, so a
+    # config that names a command (e.g. the documented ALCF setup) would fail
+    # merely because the shim's variable happened to be exported.  ``is None``
+    # rather than a falsy test: an explicit ``""``/``null`` is the operator
+    # saying "no static key", and ``"not in cfg"`` would turn an explicit
+    # ``null`` into an empty key ring.
+    if (
+        cfg.get("api_key") is None
+        and cfg.get("token_command") is None
+        and shim.connection.api_key_env
+    ):
         env_val = os.environ.get(shim.connection.api_key_env, "")
         if env_val:
             cfg = {**cfg, "api_key": env_val}
@@ -403,7 +420,7 @@ def build_provider_info(
         api_key, token_command, token_refresh_interval = "", None, 0
     else:
         api_key, token_command, token_refresh_interval = _resolve_token_command(
-            provider_type, cfg
+            shim_name or provider_type, cfg
         )
 
     if not cfg.get("base_url"):

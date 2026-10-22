@@ -56,10 +56,17 @@ async def put_provider(request: Any, **kwargs: Any) -> Response:
             shims.append(get_shim(body.get(desc.config_shim_key) or ""))
         shim_base = any(s is not None and s.connection.base_url for s in shims)
         keyless_ok = any(s is not None and s.connection.keyless for s in shims)
+        # A provider that mints its credential from a command stores no key —
+        # the two sources are mutually exclusive, so demanding one here made
+        # every ``token_command`` provider unsaveable from the panel: the editor
+        # legitimately sends an empty key and the save came back 400.
+        token_command = body.get("token_command")
+        if token_command is None and resolve_name in existing_providers:
+            token_command = existing_providers[resolve_name].get("token_command")
         missing = []
         if not base_url and not shim_base:
             missing.append("base_url")
-        if not api_key and not keyless_ok:
+        if not api_key and not keyless_ok and not token_command:
             missing.append("api_key")
         if missing:
             return JSONResponse(

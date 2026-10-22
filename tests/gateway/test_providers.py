@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from llm_rosetta_gateway.providers import build_provider_info
+from llm_rosetta_gateway.transport.provider_info import TOKEN_PENDING_SENTINEL
 from llm_rosetta.shims.providers import load_providers
 
 
@@ -118,6 +119,56 @@ class TestKeylessProvider:
 
         assert info.keyless is False
         assert info.token_command == ["echo", "tok"]
+
+    def test_token_command_is_not_shadowed_by_the_shims_env_var(self, monkeypatch):
+        """Exporting the shim's key variable must not break a command provider.
+
+        The shim's ``api_key_env`` is a *default* credential and the command is
+        a different source for the same slot.  The env value used to be
+        injected first, and the pair is then rejected as mutually exclusive —
+        so the documented setup (``export ALCF_API_KEY=...`` next to
+        ``token_command``) failed to start.
+        """
+        load_providers()
+        monkeypatch.setenv("XAI_API_KEY", "sk-from-the-environment")
+
+        info = build_provider_info(
+            "chat_completions",
+            {"token_command": ["echo", "tok"]},
+            shim_name="xai",
+        )
+
+        assert info.token_command == ["echo", "tok"]
+        assert info.key_ring.contains_only(TOKEN_PENDING_SENTINEL)
+
+    def test_an_empty_stored_key_is_not_a_second_source(self):
+        """``"api_key": ""`` beside a command is the admin's "no key", not a conflict.
+
+        The provider editor always sends the key field; a command provider's is
+        empty, and the save therefore stores ``""``.  Rejecting that made every
+        saved command provider come back auto-disabled.
+        """
+        load_providers()
+
+        info = build_provider_info(
+            "chat_completions",
+            {"api_key": "", "token_command": ["echo", "tok"]},
+            shim_name="xai",
+        )
+
+        assert info.token_command == ["echo", "tok"]
+        assert info.key_ring.contains_only(TOKEN_PENDING_SENTINEL)
+
+    def test_mutual_exclusion_names_the_shim_the_operator_wrote(self):
+        """The error must name a key the config actually contains."""
+        load_providers()
+
+        with pytest.raises(ValueError, match=r"Provider 'xai'"):
+            build_provider_info(
+                "chat_completions",
+                {"api_key": "sk-x", "token_command": ["echo", "tok"]},
+                shim_name="xai",
+            )
 
     def test_empty_base_url_falls_back_to_shim_default(self):
         """An empty base_url string must not shadow the shim's default."""

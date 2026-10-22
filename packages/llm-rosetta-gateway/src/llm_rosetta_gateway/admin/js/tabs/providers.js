@@ -1027,8 +1027,17 @@ function editProvider(name) {
   const shims = S.configData.registered_shims || [];
   const shim = shims.find(s => s.name === providerTypeName(cfg, name)) || {};
   const baseUrl = cfg.base_url || shim.default_base_url || '';
-  const apiKey = cfg.api_key || (cfg.token_command ? 'token_command' : '') || '';
+  // A ``token_command`` provider has no stored key — the gateway mints it — so
+  // the editor must carry an empty value.  Handing it the marker string made
+  // "open, then save" write the literal word ``token_command`` as the
+  // credential, which is exactly the value the backend rejects.
+  const apiKey = cfg.api_key || '';
   openProviderModal(name, baseUrl, apiKey, cfg.proxy, providerTypeName(cfg, name));
+  if (cfg.token_command) {
+    const keyInput = document.getElementById('provApiKey');
+    keyInput.value = '';
+    keyInput.placeholder = t('label.keyFromCommand', 'Credential is produced by token_command');
+  }
 }
 
 function copyProviderEntry(name) {
