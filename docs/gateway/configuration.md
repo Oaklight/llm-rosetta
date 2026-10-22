@@ -469,8 +469,11 @@ build. When it happens, the request's profile records
 `failover: {from, to, reason}` and the log row names the provider that actually
 served.
 
-Streaming requests are not failed over yet — once bytes have reached the client
-the response cannot be replayed. This applies to non-streaming requests.
+Streaming requests fail over too, but only before the first event: the handler
+opens the upstream connection before writing anything, so a refusal at that
+point can still be answered from elsewhere. Once bytes have reached the client
+the response cannot be replayed, and a mid-stream failure ends the client's
+stream with its code.
 
 ## Circuit Breaker
 
