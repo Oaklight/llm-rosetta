@@ -440,6 +440,38 @@ from different paths on one key still counts as one account.
 The flag changes only *which* upstream serves a request. Conversion still always runs through IR —
 including in tier 1. See the [Architecture Guide](../contributing/architecture.md).
 
+### Quota Failover
+
+`failover_on_quota` (per model, default `false`) serves a request from another
+provider of the same model when an in-band quota refusal leaves the serving
+provider with no usable credential:
+
+```jsonc
+"models": {
+  "gpt-5": {
+    "providers": ["openai-prod", "azure-backup"],
+    "failover_on_quota": true
+  }
+}
+```
+
+The trigger is narrow. It must be an upstream `429` that the provider's shim
+classifies as a quota refusal — some shims also classify a `403` — at a point
+where no credential of that provider can serve the request. A generic `5xx`, a
+`401`, or a `429` the gateway cannot classify is passed through as before. The
+budget is **one** retry: the refusing provider is excluded for the rest of the
+request, one other provider is tried, and if it refuses too the client receives
+that refusal.
+
+It is off by default because it trades something real: another provider is
+another prompt cache, another rate-limit bucket and possibly another model
+build. When it happens, the request's profile records
+`failover: {from, to, reason}` and the log row names the provider that actually
+served.
+
+Streaming requests are not failed over yet — once bytes have reached the client
+the response cannot be replayed. This applies to non-streaming requests.
+
 ## Circuit Breaker
 
 An optional, opt-in breaker short-circuits requests to a provider that keeps
