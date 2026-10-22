@@ -125,8 +125,9 @@ EXCHANGE = Exchange()
 | `kind` | 报告用途 | 短标签，例如 `"oauth"` |
 | `consumes_key` | 构建配置时 | 说明 `ctx.input_key` 是否为输入 |
 
-`ctx` 携带提供方的配置键（`ctx.provider`）、凭据记录目录（`ctx.state_dir`，网关未配置
-数据目录时为 `None`），以及 `consumes_key` 为真时运维填写的 key（`ctx.input_key`）。同一
+`ctx` 携带提供方的配置键（`ctx.provider`）、凭据记录目录（`ctx.state_dir` —— 即
+`server.data_dir` 相对配置文件解析后的路径再加 `/shim-auth/<provider>`；只有程序化调用方
+未提供数据目录时才为 `None`），以及 `consumes_key` 为真时运维填写的 key（`ctx.input_key`）。同一
 shim 下的两个提供方是两个账号，因此自行决定 `state_dir` 默认值的交换必须按 `ctx.provider`
 分目录 —— 只有这个目录能把它们的凭据记录区分开。只有
 一个 `credential()` 而没有分开的 seed 与 refresh：网关从不区分这两件事 —— 凭据要么现在
