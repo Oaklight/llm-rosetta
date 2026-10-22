@@ -80,11 +80,24 @@ resolved to its absolute path, so the shim ships the script beside its
 its own `token_command` still wins, and while a command owns the credential the
 shim's `api_key_env` is not used as a static key.
 
-The command runs with the gateway's environment: it reads whatever credentials it
-can reach itself (ALCF's `~/.globus`, for instance). Handing it the key the
-operator typed is [#946](https://github.com/Oaklight/llm-rosetta/issues/946)'s
-next step and does not exist yet — a shim whose exchange needs the account key
-must read it from its own environment for now.
+**An exchange that consumes the operator's key** declares the variable to hand
+it over in:
+
+```yaml
+connection:
+  base_url: https://api.vendor.example/v1
+  api_key_env: VENDOR_API_KEY
+  token_command: [python3, token.py]
+  token_command_env: VENDOR_ACCOUNT_KEY
+```
+
+With `token_command_env` set, the key the operator configured (or `api_key_env`
+supplied) is passed to the command under that name — never in argv, where the
+process table would expose it — and the command's stdout, not the key, is what
+goes upstream. It also lifts the `api_key`/`token_command` mutual exclusion for
+this shim: the key is an *input*, not a second credential. Without it the
+command runs with the gateway's environment and must find its own credentials,
+which is the ALCF case (`~/.globus`).
 
 **How the admin panel groups shims.** The provider-type picker has two levels: a
 top level (the *group*) and one row per shim under it. Both strings can be
