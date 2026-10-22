@@ -134,6 +134,14 @@ EXCHANGE = Exchange()
 | `account_id(ctx)` | config build | return an opaque account identity, or `None` |
 | `kind` | reporting | be a short label such as `"oauth"` |
 | `consumes_key` | config build | say whether `ctx.input_key` is an input |
+| `login(ctx)` | the CLI, on a machine with a browser | run the interactive sign-in and return the record; blocking, never called by the gateway |
+| `install(ctx, record)` | `PUT …/credential` | validate what it is handed and store it; return a summary, never a token |
+| `describe(ctx)` | `GET …/credential` | return the token-free summary, or `None` |
+| `revoke(ctx)` | `DELETE …/credential` | remove the record, revoking upstream when the vendor allows it |
+
+The last four are optional: an exchange that does not implement them says so
+through `can_install()` / `can_login()` (both default to `False`), and the
+gateway refuses the operation rather than calling a stub.
 
 `ctx` carries the provider's config key (`ctx.provider`), the credential record's
 directory (`ctx.state_dir` — `server.data_dir` resolved against the config file,
@@ -164,10 +172,12 @@ HTTP is `urllib` on a worker thread — which is the shape a shim module has to
 keep to, since the shim layer loads before the gateway and core has no
 dependencies.
 
-A record can also be installed after the fact: `PUT
-/admin/api/config/providers/<name>/credential` hands the exchange a record
-produced somewhere a browser exists, which is how a remote gateway gets one
-without binding its own loopback. The exchange validates it — the OpenAI
+A record can also be installed after the fact: `llm-rosetta-gateway credential
+<name>` runs `login()` on a machine that has a browser, and `PUT
+/admin/api/config/providers/<name>/credential` hands the exchange the record it
+printed — which is how a remote gateway gets one without binding its own
+loopback.  The command never contacts the gateway; the record is the whole
+handover. The exchange validates it — the OpenAI
 module verifies the ID token and takes the subject from the verified claims —
 and stores it where its own `credential()` will look. Paste the record promptly:
 verification happens on arrival, so a record left lying around overnight is

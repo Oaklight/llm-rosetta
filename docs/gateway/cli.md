@@ -62,6 +62,34 @@ llm-rosetta-gateway add model gemini-2.0-flash --provider my-google
 |------|-------------|
 | `--provider` NAME | Target provider name |
 
+### `credential <provider>`
+
+Run a shim's interactive sign-in on this machine and emit the credential
+record it produces:
+
+```bash
+llm-rosetta-gateway credential chatgpt --out record.json
+```
+
+A provider whose shim ships `auth.py` has no key to type in — the exchange
+mints its credential through an OAuth sign-in that needs a browser.  When the
+gateway runs somewhere else, the sign-in happens where the browser is, and
+this command is that half: it runs the exchange's `login()`, and what comes
+back is the record the admin API's `PUT
+/admin/api/config/providers/<name>/credential` accepts.  The gateway is not
+contacted — hand the record over in the panel.
+
+| Flag | Description |
+|------|-------------|
+| `--out` FILE | Write the record to `FILE` with mode `0600` instead of stdout |
+
+The record holds live tokens (access, refresh and ID token).  Paste it into
+the panel promptly: the ID token is verified when it arrives, so a record left
+lying around expires into a refusal and the sign-in has to be repeated.  The
+command refuses a provider whose shim ships no `auth.py` (`mints no credential
+of its own`) and one whose exchange has no browser flow (`does not implement
+login()`).
+
 ## Config Auto-Discovery
 
 When `--config` is not specified, the gateway searches these paths in order:
