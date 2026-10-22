@@ -8,10 +8,10 @@ title: Architecture Guide
 
 LLM-Rosetta uses a hub-and-spoke architecture where each converter handles bidirectional conversion between a specific API format and the shared IR (Intermediate Representation).
 
-Every converter lives under `packages/llm-rosetta/src/llm_rosetta/converters/<name>/` and extends `BaseConverter`. The base class uses a **composition pattern** — subclasses declare ops classes for each concern:
+Every chat converter lives under `packages/llm-rosetta/src/llm_rosetta/converters/llm/<name>/`; embedding, rerank and decision converters live under `converters/embedding/`, `converters/rerank/` and `converters/decision/`. All extend `BaseConverter`. The base class uses a **composition pattern** — subclasses declare ops classes for each concern:
 
 ```
-converters/<name>/
+converters/llm/<name>/
 ├── converter.py      # Main converter class (extends BaseConverter)
 ├── content_ops.py    # Content part conversion (text, images, refusal, etc.)
 ├── message_ops.py    # Message-level conversion (roles, multi-turn)
