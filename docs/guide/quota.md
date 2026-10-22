@@ -136,3 +136,28 @@ when its share is below 100.
 The [OpenCode Zen public lane](providers/opencode.md#public-free-lane) has no
 credential, so it has no per-key allowance. A 429 there puts the provider on a
 short cooldown instead of demoting a key.
+
+## Lanes with no usage endpoint
+
+Some lanes have an allowance the vendor never exposes to the application: the
+[ChatGPT plan route](providers/openai_chatgpt.md) is metered in a 5-hour window
+and a per-app weekly cap that live in the account's own settings. The only
+signal the route gives is a refusal naming the exhausted window —
+`subscription_sharing_usage_limit_exceeded`, on the response or mid-stream as
+`response.failed` — so there is nothing to poll.
+
+Such a shim declares its probe **in-band only**:
+
+```yaml
+quota:
+  probe: openai_codex
+  in_band: true
+```
+
+The probe is kept for its `inband()` classifier and never polled. When the
+refusal arrives, the credential is demoted for a short bounded cooldown — 60
+seconds — rather than until a reset time the vendor did not give: the same rule
+as everywhere else, that a failed reading never demotes, and an error never
+invents a window. The provider card reports **no readable quota** with that
+reason rather than an error, and its **Manage usage** link points at the
+vendor's settings page, which is the only place the cap is visible.
