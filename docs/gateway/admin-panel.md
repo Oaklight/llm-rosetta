@@ -68,6 +68,18 @@ Each provider card shows its name, API standard type (or shim name), base URL, m
 
 When editing, API keys are shown as a password field with a visibility toggle and copy button. Masked keys displayed on cards are never written back to the config file.
 
+#### Signing in to a Shim-Declared Credential
+
+A provider whose shim ships `auth.py` has no key to type in — the exchange mints the credential through a sign-in that needs a browser. Editing such a provider replaces the API-key box with a **Credential** section that reads `GET /admin/api/config/providers/<name>/credential`:
+
+| State | What the panel shows |
+|-------|----------------------|
+| connected | the account the exchange's summary names, the access token's expiry, **Manage usage** (when the shim declares a page) and **Sign out** |
+| needs setup | no credential yet — **Install a record** |
+| unreadable | a record exists but cannot be read — install a replacement or sign out |
+
+**Install a record** takes the JSON the CLI prints (`llm-rosetta-gateway credential <provider>`, see the [CLI reference](cli.md#credential-provider)) and hands it to the exchange over `PUT …/credential`; a record that does not verify is refused with the exchange's own message. **Sign out** calls `DELETE`, which revokes the grant upstream when the vendor allows it and takes the token out of the gateway's key ring immediately. The panel never renders a token: only the subject and expiry the exchange chooses to expose.
+
 #### API Key Multi-Entry
 
 The API key field auto-detects comma-separated values and switches to a multi-entry list with individual password inputs, one per key. An **+ Add key** button is always visible to append additional keys. Each row has an eye toggle and copy button; the modal footer provides combined view-all and copy-all actions for the full comma-separated value.
