@@ -233,3 +233,256 @@ class TestExclusionByReading:
             picks.add(entry.name)
 
         assert picks == {"fresh"}
+
+
+class TestExclusionNeedsCompleteEvidence:
+    """Every credential read, and every one spent.
+
+    An exclusion cannot correct itself: nothing routes to a provider that is
+    out, so an unread credential is never read, and the provider would stay
+    out until its reading aged past the freshness window.  Down-weighting
+    self-heals; excluding must therefore demand complete evidence.
+    """
+
+    def _provider(self, probe: str, keys: str) -> Any:
+        return _pinfo("p", keys=keys, probe=probe)
+
+    def test_a_spent_key_beside_an_unread_one_is_not_spent(self):
+        from llm_rosetta_gateway.quota.service import provider_spent
+
+        probe = "p-evidence-unread"
+        pinfo = self._provider(probe, "k1,k2")
+        QUOTA_STATE.put_reading(
+            QuotaReading(
+                probe=probe,
+                credential=__import__(
+                    "llm_rosetta_gateway.quota.models", fromlist=["x"]
+                ).credential_fingerprint("k1"),
+                windows=[QuotaWindow(name="5h", used_percent=100)],
+            )
+        )
+
+        assert provider_spent(pinfo) is False
+
+    def test_a_key_that_decoded_no_window_is_not_agreement(self):
+        from llm_rosetta_gateway.quota.models import credential_fingerprint
+        from llm_rosetta_gateway.quota.service import provider_spent
+
+        probe = "p-evidence-undecoded"
+        pinfo = self._provider(probe, "k1,k2")
+        for key, windows in (
+            ("k1", [QuotaWindow(name="5h", used_percent=100)]),
+            ("k2", []),
+        ):
+            QUOTA_STATE.put_reading(
+                QuotaReading(
+                    probe=probe,
+                    credential=credential_fingerprint(key),
+                    windows=windows,
+                )
+            )
+
+        assert provider_spent(pinfo) is False
+
+    def test_every_key_spent_is_spent(self):
+        from llm_rosetta_gateway.quota.models import credential_fingerprint
+        from llm_rosetta_gateway.quota.service import provider_spent
+
+        probe = "p-evidence-all"
+        pinfo = self._provider(probe, "k1,k2")
+        for key in ("k1", "k2"):
+            QUOTA_STATE.put_reading(
+                QuotaReading(
+                    probe=probe,
+                    credential=credential_fingerprint(key),
+                    windows=[QuotaWindow(name="5h", used_percent=100)],
+                )
+            )
+
+        assert provider_spent(pinfo) is True
+
+    def test_a_poll_slower_than_the_baseline_still_counts(self):
+        """A reading cannot be stale on arrival because the operator polls slowly."""
+        from datetime import datetime, timedelta, timezone
+
+        from llm_rosetta_gateway.quota.models import credential_fingerprint
+        from llm_rosetta_gateway.quota.service import (
+            READING_MAX_AGE_SECONDS,
+            provider_spent,
+        )
+
+        probe = "p-evidence-interval"
+        pinfo = self._provider(probe, "k1")
+        pinfo.quota_interval = READING_MAX_AGE_SECONDS * 2
+        QUOTA_STATE.put_reading(
+            QuotaReading(
+                probe=probe,
+                credential=credential_fingerprint("k1"),
+                windows=[QuotaWindow(name="5h", used_percent=100)],
+                read_at=datetime.now(timezone.utc)
+                - timedelta(seconds=READING_MAX_AGE_SECONDS + 300),
+            )
+        )
+
+        assert provider_spent(pinfo) is True
+
+
+class TestTheChainEndToEnd:
+    """The stage's output must be what selection actually consumes.
+
+    Testing ``provider_spent`` and ``select_ready_entry`` separately leaves the
+    wire between them untested: a stage that never adds to ``excluded``, or an
+    anchor that drops the set before selecting, passes both.
+    """
+
+    def _chain_ctx(
+        self, providers: dict[str, Any], names: list[str]
+    ) -> SelectionContext:
+        from llm_rosetta_gateway.routing import RoutingChain
+
+        ctx = SelectionContext("m", "chat_completions")
+        ctx.providers = providers
+        ctx.model_route = ModelRoute(
+            providers=[ProviderEntry(name=n) for n in names],
+            route_id="r-chain",
+            strategy=create_strategy("weighted_round_robin"),
+        )
+        self._chain = RoutingChain([QuotaStage(), AnchorStage()])
+        return ctx
+
+    def test_a_spent_provider_never_serves_beside_an_unmeasured_one(self):
+        from llm_rosetta_gateway.quota.models import credential_fingerprint
+
+        probe = "p-chain-exclude"
+        spent = _pinfo("spent", keys="k1", probe=probe)
+        QUOTA_STATE.put_reading(
+            QuotaReading(
+                probe=probe,
+                credential=credential_fingerprint("k1"),
+                windows=[QuotaWindow(name="5h", used_percent=100)],
+            )
+        )
+        ctx = self._chain_ctx(
+            {"spent": spent, "unmeasured": _pinfo("unmeasured")},
+            ["spent", "unmeasured"],
+        )
+
+        picks = {"spent": 0, "unmeasured": 0}
+        for _ in range(40):
+            ctx.chosen = None
+            self._chain.run(ctx)
+            assert ctx.chosen is not None
+            picks[ctx.chosen.name] += 1
+
+        assert picks == {"spent": 0, "unmeasured": 40}
+        assert ctx.quota_excluded == frozenset({"spent"})
+
+    def test_the_survivors_split_evenly(self):
+        """An excluded provider must not consume turns of the round-robin.
+
+        Taking its pick and falling through would hand extra turns to
+        whichever survivor comes first in route order.
+        """
+        from llm_rosetta_gateway.quota.models import credential_fingerprint
+
+        probe = "p-chain-skew"
+        spent = _pinfo("spent", keys="k1", probe=probe)
+        QUOTA_STATE.put_reading(
+            QuotaReading(
+                probe=probe,
+                credential=credential_fingerprint("k1"),
+                windows=[QuotaWindow(name="5h", used_percent=100)],
+            )
+        )
+        ctx = self._chain_ctx(
+            {"spent": spent, "a": _pinfo("a"), "b": _pinfo("b")},
+            ["spent", "a", "b"],
+        )
+
+        picks = {"a": 0, "b": 0}
+        for _ in range(60):
+            ctx.chosen = None
+            self._chain.run(ctx)
+            assert ctx.chosen is not None
+            picks[ctx.chosen.name] += 1
+
+        assert picks == {"a": 30, "b": 30}
+
+
+class TestEveryProviderSpent:
+    """The client is told "out of allowance", not "initializing".
+
+    A reading knows when its window resets — the same fact #1188 made
+    ``Retry-After`` carry for provider blocks.  Saying "initializing" sends a
+    client looking for a startup problem that does not exist.
+    """
+
+    def _config(self, *, reset_in: int | None) -> Any:
+        from datetime import datetime, timedelta, timezone
+
+        from llm_rosetta_gateway.config import GatewayConfig
+        from llm_rosetta_gateway.quota.models import credential_fingerprint
+
+        config = GatewayConfig(
+            {
+                "providers": {
+                    "a": {
+                        "type": "chat_completions",
+                        "api_key": "k",
+                        "base_url": "https://example.test",
+                    }
+                },
+                "models": {"m": "a"},
+            }
+        )
+        pinfo = config.providers["a"]
+        pinfo.quota_probe = "p-all-spent"
+        QUOTA_STATE.put_reading(
+            QuotaReading(
+                probe="p-all-spent",
+                credential=credential_fingerprint("k"),
+                windows=[
+                    QuotaWindow(
+                        name="5h",
+                        used_percent=100,
+                        resets_at=(
+                            None
+                            if reset_in is None
+                            else datetime.now(timezone.utc)
+                            + timedelta(seconds=reset_in)
+                        ),
+                    )
+                ],
+            )
+        )
+        return config
+
+    def test_the_answered_reset_is_the_retry_after(self):
+        from llm_rosetta_gateway._vendor.httpserver import Response
+        from llm_rosetta_gateway.app.routes_llm import _resolve_or_error
+
+        config = self._config(reset_in=600)
+        selection = config.selection_context("m", "chat_completions")
+
+        resp = _resolve_or_error(config, selection, "req-1")
+
+        assert isinstance(resp, Response)
+        assert resp.status_code == 503
+        assert 540 <= int(resp.headers["Retry-After"]) <= 600
+        assert b"spent their allowance" in resp.body
+        assert b"initializing" not in resp.body
+
+    def test_an_unknown_reset_is_not_invented(self):
+        from llm_rosetta_gateway._vendor.httpserver import Response
+        from llm_rosetta_gateway.app.routes_llm import _resolve_or_error
+
+        config = self._config(reset_in=None)
+        selection = config.selection_context("m", "chat_completions")
+
+        resp = _resolve_or_error(config, selection, "req-2")
+
+        assert isinstance(resp, Response)
+        assert resp.status_code == 503
+        assert b"no reset time is known" in resp.body
+        # The startup-shaped default still applies, but the reason does not.
+        assert resp.headers["Retry-After"] == "5"

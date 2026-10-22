@@ -272,8 +272,12 @@ class GatewayConfig:
         # config reload, so it is bound here rather than owned by the config.
         from ..quota.service import bind_provider_quota
 
+        from ..quota.service import quota_intervals
+
+        intervals = quota_intervals(self)
         for provider_name, provider_info in self.providers.items():
             bind_provider_quota(provider_name, provider_info)
+            provider_info.quota_interval = intervals.get(provider_name, 0)
 
         # Upstream-account identity per provider, derived from the credential
         # source at build time.  Two providers sharing a token front one

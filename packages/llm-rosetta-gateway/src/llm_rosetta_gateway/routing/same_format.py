@@ -101,6 +101,8 @@ class SameFormatStage(RoutingStage):
             "provider_types",
             "provider_shim_names",
             "provider_account_tokens",
+            "quota_headroom",
+            "quota_excluded",
         }
     )
     provides = frozenset({"chosen"})
@@ -191,7 +193,11 @@ class SameFormatStage(RoutingStage):
             if route is None:
                 continue
             entry = select_ready_entry(
-                route, is_ready=ctx.is_ready, identity=ctx.identity.client
+                route,
+                is_ready=ctx.is_ready,
+                identity=ctx.identity.client,
+                headroom=ctx.quota_headroom or None,
+                excluded=ctx.quota_excluded,
             )
             if entry is not None:
                 return entry

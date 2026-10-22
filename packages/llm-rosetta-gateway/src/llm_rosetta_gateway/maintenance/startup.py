@@ -46,10 +46,11 @@ class ProviderInitState(Enum):
 class ProviderNotReady(Exception):
     """Raised when every provider for a model is unavailable right now.
 
-    Three states reach here, and a client should be told which: the providers
-    are still initializing after startup, they failed to initialize, or they
-    are in a quota block with a known end.  The last one is not "initializing"
-    — saying so sends a client that just received an allowance refusal looking
+    Four states reach here, and a client should be told which: the providers
+    are still initializing after startup, they failed to initialize, they are
+    in a quota block with a known end, or every one of them has a reading that
+    says its allowance is spent.  Neither quota state is "initializing" —
+    saying so sends a client that just received an allowance refusal looking
     for a startup problem.
     """
 
@@ -59,15 +60,39 @@ class ProviderNotReady(Exception):
         *,
         failed: bool = False,
         blocked_until: datetime | None = None,
+        exhausted_until: datetime | None = None,
+        exhausted: bool = False,
         now: datetime | None = None,
     ) -> None:
         self.model = model
         self.failed = failed
+        #: Whether the reason is a spent allowance rather than startup state.
+        self.exhausted = False
         #: Seconds the caller should wait before retrying, when the state has
-        #: a known end (a quota block does; startup does not).
+        #: a known end (a quota block or a spent window does; startup does not).
         self.retry_after: int | None = None
+        moment = now or datetime.now(timezone.utc)
+        if exhausted_until is not None:
+            self.exhausted = True
+            self.retry_after = max(1, int((exhausted_until - moment).total_seconds()))
+            rendered = exhausted_until.astimezone(timezone.utc).strftime(
+                "%Y-%m-%dT%H:%M:%SZ"
+            )
+            super().__init__(
+                f"All providers for model '{model}' have spent their allowance "
+                f"until {rendered}; please retry after that"
+            )
+            return
+        if exhausted:
+            # Excluded by a reading, but the vendor named no reset: refuse to
+            # invent one, and say only what is known.
+            self.exhausted = True
+            super().__init__(
+                f"All providers for model '{model}' have spent their allowance "
+                "and no reset time is known; please retry later"
+            )
+            return
         if blocked_until is not None:
-            moment = now or datetime.now(timezone.utc)
             self.retry_after = max(1, int((blocked_until - moment).total_seconds()))
             rendered = blocked_until.astimezone(timezone.utc).strftime(
                 "%Y-%m-%dT%H:%M:%SZ"

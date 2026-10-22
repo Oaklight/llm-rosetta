@@ -448,13 +448,38 @@ def provider_headroom(pinfo: Any) -> float | None:
 READING_MAX_AGE_SECONDS = 900
 
 
-def provider_spent(pinfo: Any) -> bool:
-    """Whether every *fresh* reading of this provider says it is spent.
+def reading_max_age(pinfo: Any) -> float:
+    """How old a reading may be and still be evidence about this provider.
 
-    ``True`` only when at least one reading is fresh and none of the fresh
-    ones leaves room: a provider nothing has measured, or whose readings are
-    all stale, is **not** spent — being unmeasured is not the same as being
-    empty, and a stale reading is not a statement about now.
+    The baseline is :data:`READING_MAX_AGE_SECONDS`, raised to the provider's
+    declared poll interval when that is longer: a lane polled every half hour
+    would otherwise have every reading stale on arrival, and the exclusion
+    that depends on freshness would silently never fire.
+    """
+    interval = getattr(pinfo, "quota_interval", 0) or 0
+    return max(float(READING_MAX_AGE_SECONDS), float(interval))
+
+
+def provider_spent(pinfo: Any) -> bool:
+    """Whether *every* credential of this provider is measured and spent.
+
+    The rule is all-or-nothing per provider: each credential in the ring must
+    have a fresh reading that decoded a window, and every one of those windows
+    must be exhausted.  Silence is not agreement —
+
+    - a credential that has never been read may well have room, and the
+      gateway does not know that it does not;
+    - a reading too old to speak about now, or one that decoded no window
+      at all (the probe reports ``unsupported`` for lanes it cannot read), is
+      equally not evidence;
+    - and a provider nothing has measured is not empty.
+
+    Exclusion cannot correct itself: nothing routes to a provider that is out,
+    so an unread credential would never be read and the provider would stay
+    out until a reading aged past the freshness window.  Down-weighting
+    (:func:`provider_headroom`) self-heals — traffic keeps flowing, the
+    credential gets read, the weight recovers.  That asymmetry is why this
+    predicate demands complete evidence.
 
     This is the exclusion counterpart of :func:`provider_headroom`: the
     weighting reduces a share, this removes the candidate.  A live provider
@@ -467,21 +492,40 @@ def provider_spent(pinfo: Any) -> bool:
     keys = list(ring.keys())
     if not keys:
         return False
-    fresh = 0
+    max_age = reading_max_age(pinfo)
     for key in keys:
         reading = QUOTA_STATE.get_reading(probe, credential_fingerprint(key))
-        if reading is None:
-            continue
-        if QUOTA_STATE.reading_age(reading) > READING_MAX_AGE_SECONDS:
-            continue
+        if reading is None or QUOTA_STATE.reading_age(reading) > max_age:
+            return False
         if not reading.windows:
-            # Nothing decoded is not an exhaustion; the probe reports
-            # ``unsupported`` for lanes it cannot read at all.
-            continue
-        fresh += 1
+            return False
         if any(not window.exhausted for window in reading.windows):
             return False
-    return fresh > 0
+    return True
+
+
+def provider_exhausted_until(pinfo: Any) -> datetime | None:
+    """When this provider could serve again, from its spent readings.
+
+    The earliest reset among its credentials — one credential coming back is
+    enough — or ``None`` when the vendor gave no reset, in which case the
+    gateway will not invent one.  Only meaningful for a provider that
+    :func:`provider_spent` reports as spent.
+    """
+    probe = getattr(pinfo, "quota_probe", None)
+    ring = getattr(pinfo, "key_ring", None)
+    if not probe or ring is None:
+        return None
+    resets: list[datetime] = []
+    for key in ring.keys():
+        reading = QUOTA_STATE.get_reading(probe, credential_fingerprint(key))
+        if reading is None:
+            return None
+        moment = reading.exhausted_until
+        if moment is None:
+            return None
+        resets.append(moment)
+    return min(resets) if resets else None
 
 
 def provider_cooldown(name: str, pinfo: Any) -> dict[str, Any] | None:

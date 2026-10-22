@@ -268,6 +268,29 @@ def _quota_blocked_until(unready: list[Any]) -> datetime | None:
     return max(ends) if ends else None
 
 
+def _quota_exhausted_until(
+    config: GatewayConfig, ctx: SelectionContext
+) -> datetime | None:
+    """The end of a spent allowance covering every provider, if one is known.
+
+    The route is unavailable until the **last** provider comes back, so this is
+    the latest of their earliest serve times; any provider whose vendor named
+    no reset makes the end unknown, and the gateway will not invent one.
+    """
+    from ..quota.service import provider_exhausted_until
+
+    ends: list[datetime] = []
+    for entry in ctx.candidates:
+        pinfo = config.providers.get(entry.name)
+        if pinfo is None:
+            return None
+        moment = provider_exhausted_until(pinfo)
+        if moment is None:
+            return None
+        ends.append(moment)
+    return max(ends) if ends else None
+
+
 def resolve(
     config: GatewayConfig, ctx: SelectionContext
 ) -> tuple[ResolvedRoute, ProviderInfo]:
@@ -316,6 +339,16 @@ def resolve(
         blocked_until = _quota_blocked_until(unready)
         if blocked_until is not None and len(unready) == len(model_route.providers):
             raise ProviderNotReady(model, blocked_until=blocked_until)
+        # Every candidate removed by a reading rather than by readiness.  A
+        # reading knows when its window resets, which is exactly what
+        # ``Retry-After`` is for; "initializing" would send the client looking
+        # for a startup problem that does not exist.
+        route_names = {p.name for p in model_route.providers}
+        if route_names and route_names <= set(ctx.quota_excluded):
+            until = _quota_exhausted_until(config, ctx)
+            raise ProviderNotReady(
+                model, exhausted_until=until, exhausted=until is None
+            )
         deferred = getattr(config, "_deferred_startup", None)
         all_failed = deferred is not None and all(
             deferred.provider_state(p.name) == ProviderInitState.FAILED for p in unready

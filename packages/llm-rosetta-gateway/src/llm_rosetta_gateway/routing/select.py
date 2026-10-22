@@ -68,13 +68,20 @@ def select_ready_entry(
     Returns:
         The chosen entry, or ``None`` when no candidate is ready.
     """
+    if all(p.name in excluded for p in model_route.providers):
+        return None
     weights = (
         {name: quota_weight(share) for name, share in headroom.items()}
         if headroom
         else None
     )
-    entry = model_route.select_entry(identity=identity, weights=weights)
-    if entry.name not in excluded and is_ready(entry.name):
+    # Exclusions are applied inside the strategy call, so an excluded provider
+    # never consumes a turn of the round-robin; what is left to check here is
+    # readiness.
+    entry = model_route.select_entry(
+        identity=identity, weights=weights, excluded=excluded
+    )
+    if is_ready(entry.name):
         return entry
     for alt in model_route.providers:
         if alt.name != entry.name and alt.name not in excluded and is_ready(alt.name):

@@ -300,6 +300,10 @@ class ProviderInfo:
         self.quota_usage_url: str | None = None
         self.quota_unsupported: str | None = None
         self.quota_identity = credential_token
+        # Seconds between background polls, as the operator declared it.  Zero
+        # means "on demand only".  The router reads it to keep a reading's
+        # freshness window from being shorter than the poll that produces it.
+        self.quota_interval = 0
         # Set by ``gateway.quota.service.bind_provider_quota``: says whether
         # the provider (not one key) is cooling down.
         self.quota_provider_blocked: Callable[[], bool] | None = None

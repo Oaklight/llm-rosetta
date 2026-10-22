@@ -187,15 +187,27 @@ class ModelRoute:
     def __post_init__(self) -> None:
         self._entry_by_name = {p.name: p for p in self.providers}
 
-    def _candidates(self, weights: Mapping[str, float] | None) -> list[ProviderEntry]:
+    def _candidates(
+        self,
+        weights: Mapping[str, float] | None,
+        excluded: frozenset[str] = frozenset(),
+    ) -> list[ProviderEntry]:
         """The entries the strategy sees, with this request's weights applied.
+
+        ``excluded`` removes candidates *before* the strategy counts them.
+        Letting a strategy pick one and discarding the pick afterwards would
+        leave the excluded provider consuming turns, so the survivors would
+        not get the share the weights promise.
 
         The configured weight is the operator's statement of preference; a
         request-time factor only scales it, and never to zero — a live provider
         with a nearly spent window still serves its share.
         """
+        entries = self.providers
+        if excluded:
+            entries = [p for p in entries if p.name not in excluded]
         if not weights:
-            return self.providers
+            return entries
         return [
             ProviderEntry(
                 name=p.name,
@@ -204,7 +216,7 @@ class ModelRoute:
                 weight=max(0.05, p.weight * weights.get(p.name, 1.0)),
                 upstream_model=p.upstream_model,
             )
-            for p in self.providers
+            for p in entries
         ]
 
     def select(
@@ -212,6 +224,7 @@ class ModelRoute:
         *,
         identity: str | None = None,
         weights: Mapping[str, float] | None = None,
+        excluded: frozenset[str] = frozenset(),
     ) -> str:
         """Pick the next provider according to the strategy.
 
@@ -219,9 +232,12 @@ class ModelRoute:
             identity: Optional client identity for affinity routing.
             weights: Optional per-provider multiplier for this selection, e.g.
                 an allowance headroom.  Absent means the configured weights.
+            excluded: Providers that are not candidates at all this time.
         """
         return self.strategy.select(
-            self._candidates(weights), route_id=self.route_id, identity=identity
+            self._candidates(weights, excluded),
+            route_id=self.route_id,
+            identity=identity,
         )
 
     def select_entry(
@@ -229,16 +245,20 @@ class ModelRoute:
         *,
         identity: str | None = None,
         weights: Mapping[str, float] | None = None,
+        excluded: frozenset[str] = frozenset(),
     ) -> ProviderEntry:
         """Pick the next provider and return the full entry.
 
         Args:
             identity: Optional client identity for affinity routing.
             weights: Optional per-provider multiplier, as in :meth:`select`.
+            excluded: Providers that are not candidates at all this time.
         """
         return self._entry_by_name[
             self.strategy.select(
-                self._candidates(weights), route_id=self.route_id, identity=identity
+                self._candidates(weights, excluded),
+                route_id=self.route_id,
+                identity=identity,
             )
         ]
 
