@@ -132,39 +132,73 @@ class TestMigrationAdvice:
         assert source_package_advice(name) == ""
 
 
+class _CollectingHandler(logging.Handler):
+    """Collect the gateway logger's records without going through caplog."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.records: list[logging.LogRecord] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.records.append(record)
+
+
+@pytest.fixture()
+def gateway_warnings():
+    """Records the gateway logger emits during the test.
+
+    That logger is created with ``propagate = False`` — in the server it owns
+    its handler — so caplog, which listens on the root logger, only saw these
+    warnings while ``llm_rosetta_gateway.logging`` had not been imported yet in
+    the process.  Whether it had been is decided by the rest of the run, which
+    is why these three tests passed alone and failed in a full run.
+
+    ``caplog.at_level(logger=...)`` does not settle it either: pytest 9 attaches
+    the capturing handler to the named logger and pytest 8 does not, so forcing
+    propagation on to reach root counts the record twice on 9.  A handler of our
+    own, on the logger that emits, is one path under both.
+    """
+    logger = logging.getLogger("llm-rosetta-gateway")
+    handler = _CollectingHandler()
+    logger.addHandler(handler)
+    try:
+        yield handler.records
+    finally:
+        logger.removeHandler(handler)
+
+
 class TestWarningPath:
     """A stranded shim that still loads must say what to fix."""
 
-    def _build(self, provider_type, shim_name, caplog):
-        with caplog.at_level(logging.WARNING, logger="llm-rosetta-gateway"):
-            build_provider_info(
-                provider_type,
-                {"base_url": "https://example.test", "api_key": "k"},
-                shim_name=shim_name,
-            )
+    def _build(self, provider_type, shim_name):
+        build_provider_info(
+            provider_type,
+            {"base_url": "https://example.test", "api_key": "k"},
+            shim_name=shim_name,
+        )
 
-    def test_legacy_spelling_warns_with_the_canonical_name(self, caplog):
-        self._build("alcf--sophia", "alcf--sophia", caplog)
-        warning = _warning_text(caplog)
+    def test_legacy_spelling_warns_with_the_canonical_name(self, gateway_warnings):
+        self._build("alcf--sophia", "alcf--sophia")
+        warning = _warning_text(gateway_warnings)
         assert "alcf_sophia--chat_completions" in warning
         assert "shims.presets: ['alcf']" in warning
 
-    def test_unregistered_canonical_name_warns_with_its_preset(self, caplog):
-        self._build("asksage--messages", "asksage--messages", caplog)
-        warning = _warning_text(caplog)
+    def test_unregistered_canonical_name_warns_with_its_preset(self, gateway_warnings):
+        self._build("asksage--messages", "asksage--messages")
+        warning = _warning_text(gateway_warnings)
         assert "shims.presets: ['asksage']" in warning
 
-    def test_unknown_name_warns_without_advice(self, caplog):
-        self._build("not-a-provider", None, caplog)
-        warning = _warning_text(caplog)
+    def test_unknown_name_warns_without_advice(self, gateway_warnings):
+        self._build("not-a-provider", None)
+        warning = _warning_text(gateway_warnings)
         assert "generic URL template" in warning
         assert "shims.presets" not in warning
 
 
-def _warning_text(caplog) -> str:
-    records = [r for r in caplog.records if "Unknown provider type" in r.getMessage()]
-    assert len(records) == 1, [r.getMessage() for r in caplog.records]
-    return records[0].getMessage()
+def _warning_text(records) -> str:
+    matching = [r for r in records if "Unknown provider type" in r.getMessage()]
+    assert len(matching) == 1, [r.getMessage() for r in records]
+    return matching[0].getMessage()
 
 
 class TestUnknownShimField:
