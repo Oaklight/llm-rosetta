@@ -896,6 +896,23 @@
         <a href="#" onclick="revealProviderKey();return false;" data-i18n="btn.useOwnKey">Use my own key</a>
       </div>
     </div>
+    <div class="form-group" id="provCredentialGroup" style="display:none">
+      <label data-i18n="label.credential">Credential</label>
+      <div id="provCredentialState" class="prov-credential-state" style="font-size:0.88em;line-height:1.5"></div>
+      <div id="provCredentialActions" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px"></div>
+      <div id="provCredentialBox" style="display:none;margin-top:6px">
+        <textarea id="provCredentialRecord" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder='{"access_token": "...", "refresh_token": "...", "id_token": "..."}' style="width:100%;min-height:96px;font-family:var(--mono,monospace);font-size:0.78em"></textarea>
+        <div style="display:flex;gap:6px;margin-top:4px">
+          <button type="button" class="btn btn-sm btn-primary" data-i18n="btn.installCredential" onclick="installProviderCredential()">Install record</button>
+          <button type="button" class="btn btn-sm" data-i18n="btn.cancel" onclick="toggleProviderCredentialBox(false)">Cancel</button>
+        </div>
+      </div>
+      <div id="provCredentialError" style="display:none;color:var(--red);font-size:0.82em;margin-top:4px"></div>
+      <div id="provCredentialHint" style="font-size:0.82em;color:var(--text-dim);margin-top:4px">
+        <span data-i18n="label.credentialHint">This provider signs in rather than stores a key. Produce the record where a browser is —</span>
+        <code>llm-rosetta-gateway credential &lt;provider&gt;</code> — <span data-i18n="label.credentialHint2">and paste it here promptly.</span>
+      </div>
+    </div>
     <div class="form-row align-end">
       <div class="form-group" style="flex:0 0 69%">
         <label data-i18n="label.baseUrl">Base URL<span class="hint-icon">?<span class="hint-popup" data-i18n="hint.docker">In Docker, "localhost" refers to the container itself. Use "host.docker.internal" (macOS/Windows) or "172.17.0.1" (Linux) to reach the host machine.</span></span></label>

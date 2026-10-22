@@ -342,6 +342,9 @@ async def get_config(request: Any) -> Response:
                 }
             if pinfo is not None:
                 masked["keyless"] = pinfo.keyless
+                # The provider editor shows a credential section instead of a
+                # key box for a provider that mints its own.
+                masked["mints_credential"] = pinfo.mints_credential
         masked_providers[name] = masked
 
     # Normalize models to dict format for consistent admin UI
@@ -393,6 +396,9 @@ async def get_config(request: Any) -> Response:
                     "group_label": s.group_label,
                     "free_source": s.free_source,
                     "keyless": s.connection.keyless,
+                    "mints_credential": s.auth is not None,
+                    "credential_kind": getattr(s.auth, "kind", None),
+                    "manage_usage_url": s.connection.manage_usage_url,
                     "default_base_url": s.connection.base_url,
                     "default_api_key_env": s.connection.api_key_env,
                     "default_path": s.connection.default_path,

@@ -9,6 +9,7 @@
 import { S, _CAP_ICONS, populateCapIcons } from '../core/state.js';
 import { t } from '../core/i18n.js';
 import { api, showToast, showToastHtml, closeModal, esc, copyText, inlineConfirm, isFreeEntry, freeEntryLabel, providerTypeName } from '../core/utils.js';
+import { safeLinkUrl, parseRecord } from '../core/credential.js';
 import { initLogoPicker, setLogoPickerValue, getLogoPickerValue } from '../components/logo-picker.js';
 import { setTypeTree, getSelectedValue, selectValue, onTypeSelect } from '../components/type-picker.js';
 import { buildTypeModel, shimBrand } from '../core/shim-tree.js';
@@ -77,6 +78,237 @@ function revealProviderKey() {
   _syncKeylessUI();
 }
 
+// ── Shim-declared credentials ──────────────────────────────────────
+// A provider whose shim ships `auth.py` has no key to type in: the exchange
+// mints the credential through a sign-in that needs a browser.  The editor
+// shows its state instead of the key box, and installs a record produced
+// elsewhere over the admin API (#1062).
+
+let _credentialFor = null;   // provider name whose credential is on screen
+let _credentialData = null;  // last GET /credential response
+
+function _selectedShim() {
+  const typeSel = document.getElementById('provType');
+  if (!typeSel) return null;
+  return (S.configData?.registered_shims || []).find(s => s.name === typeSel.value) || null;
+}
+
+/** True when the provider being edited mints its credential via the shim. */
+function _credentialShim() {
+  const shim = _selectedShim();
+  if (shim && shim.mints_credential) return shim;
+  const cfg = _editingProviderName && S.configData
+    ? S.configData.providers[_editingProviderName] : null;
+  if (cfg && cfg.mints_credential) {
+    const type = cfg.type || _editingProviderName;
+    return (S.configData?.registered_shims || []).find(s => s.name === type) || { manage_usage_url: null };
+  }
+  return null;
+}
+
+function _credentialText(key, fallback) {
+  return (typeof t === 'function' ? t(key, fallback) : fallback);
+}
+
+/** Render the section: key box hidden, state and actions in its place. */
+function _syncCredentialUI() {
+  const group = document.getElementById('provCredentialGroup');
+  const keyGroup = document.getElementById('provApiKeyGroup');
+  if (!group) return;
+  const shim = _credentialShim();
+  const on = !!shim;
+  group.style.display = on ? '' : 'none';
+  if (keyGroup) keyGroup.style.display = on ? 'none' : '';
+  if (!on) {
+    _credentialFor = null;
+    _resetCredentialBox();
+    return;
+  }
+  const name = _editingProviderName;
+  // A new provider has no endpoint to read until it is saved.
+  if (!name) {
+    _credentialFor = null;
+    _credentialData = null;
+    _resetCredentialBox();
+    _renderCredentialState();
+    return;
+  }
+  if (_credentialFor !== name) {
+    _credentialFor = name;
+    _credentialData = null;
+    // A record pasted for the *previous* provider must not be installable into
+    // this one: two providers of one shim share a client id, so the exchange
+    // would accept it and sign this provider in as the other account.
+    _resetCredentialBox();
+    _renderCredentialState();
+    loadProviderCredential(name);
+  }
+}
+
+async function loadProviderCredential(name) {
+  try {
+    const res = await api.get(`/admin/api/config/providers/${encodeURIComponent(name)}/credential`);
+    if (_credentialFor !== name) return;  // the editor moved on
+    _credentialData = res;
+  } catch (err) {
+    if (_credentialFor !== name) return;
+    _credentialData = { state: 'error', error: String(err && err.message || err) };
+  }
+  _renderCredentialState();
+}
+
+function _setCredentialError(message) {
+  const box = document.getElementById('provCredentialError');
+  if (!box) return;
+  box.textContent = message || '';
+  box.style.display = message ? '' : 'none';
+}
+
+function _renderCredentialState() {
+  const host = document.getElementById('provCredentialState');
+  const actions = document.getElementById('provCredentialActions');
+  const hint = document.getElementById('provCredentialHint');
+  if (!host || !actions) return;
+  host.textContent = '';
+  actions.textContent = '';
+  _setCredentialError('');
+  const data = _credentialData;
+  const shim = _credentialShim() || {};
+  // A shim is trusted code, but this href lives in the admin origin: keep a
+  // `javascript:` value out of it even so.
+  const manage = safeLinkUrl(shim.manage_usage_url);
+
+  const line = (text, muted) => {
+    const div = document.createElement('div');
+    div.textContent = text;
+    if (muted) div.className = 'text-muted';
+    host.appendChild(div);
+    return div;
+  };
+
+  if (!_editingProviderName) {
+    line(_credentialText('label.credentialSaveFirst',
+      'Save this provider, then come back to sign in.'), true);
+    if (hint) hint.style.display = 'none';
+    return;
+  }
+  if (!data) {
+    line(_credentialText('label.loading', 'Loading…'), true);
+    return;
+  }
+  if (hint) hint.style.display = data.state === 'connected' ? 'none' : '';
+
+  const actions_ = [];
+  if (data.state === 'connected') {
+    const summary = data.summary || {};
+    // ``data.account`` is a digest, not a name — only the exchange's own
+    // summary can say which account this is.
+    const who = summary.subject || _credentialText('label.thisAccount', 'this account');
+    line(_credentialText('label.credentialConnected', 'Connected as') + ' ' + who);
+    if (summary.expires_at) {
+      line(_credentialText('label.credentialExpires', 'Access token expires') + ' ' + summary.expires_at, true);
+    }
+    if (manage) {
+      actions_.push({ label: _credentialText('btn.manageUsage', 'Manage usage'), kind: 'link', href: manage });
+    }
+    actions_.push({ label: _credentialText('btn.signOut', 'Sign out'), kind: 'danger', fn: 'signOutProviderCredential()' });
+  } else if (data.state === 'needs_setup') {
+    line(_credentialText('label.credentialNeedsSetup', 'No credential yet — a sign-in is needed.'));
+    if (manage) {
+      actions_.push({ label: _credentialText('btn.manageUsage', 'Manage usage'), kind: 'link', href: manage });
+    }
+    actions_.push({ label: _credentialText('btn.installRecord', 'Install a record'), kind: 'primary', fn: 'toggleProviderCredentialBox(true)' });
+  } else if (data.state === 'unreadable') {
+    line(_credentialText('label.credentialUnreadable',
+      'A record exists but cannot be read. Sign in again to replace it.'), true);
+    actions_.push({ label: _credentialText('btn.installRecord', 'Install a record'), kind: 'primary', fn: 'toggleProviderCredentialBox(true)' });
+    actions_.push({ label: _credentialText('btn.signOut', 'Sign out'), kind: 'danger', fn: 'signOutProviderCredential()' });
+  } else {
+    line(_credentialText('label.credentialError', 'Could not read the credential:') + ' ' + (data.error || ''), true);
+  }
+
+  for (const a of actions_) {
+    let el;
+    if (a.kind === 'link') {
+      el = document.createElement('a');
+      el.href = a.href;
+      el.target = '_blank';
+      el.rel = 'noopener noreferrer';
+      el.className = 'btn btn-sm';
+    } else {
+      el = document.createElement('button');
+      el.type = 'button';
+      el.className = 'btn btn-sm' + (a.kind === 'primary' ? ' btn-primary' : '');
+      el.setAttribute('onclick', a.fn);
+    }
+    el.textContent = a.label;
+    actions.appendChild(el);
+  }
+}
+
+/** Close the paste box and forget what was in it. */
+function _resetCredentialBox() {
+  const box = document.getElementById('provCredentialBox');
+  const ta = document.getElementById('provCredentialRecord');
+  if (ta) ta.value = '';
+  if (box) box.style.display = 'none';
+  _setCredentialError('');
+}
+
+function toggleProviderCredentialBox(show) {
+  const box = document.getElementById('provCredentialBox');
+  if (!box) return;
+  const open = show === undefined ? box.style.display === 'none' : show;
+  box.style.display = open ? '' : 'none';
+  _setCredentialError('');
+  if (open) {
+    const ta = document.getElementById('provCredentialRecord');
+    if (ta) { ta.value = ''; ta.focus(); }
+  }
+}
+
+async function installProviderCredential() {
+  const name = _credentialFor;
+  const ta = document.getElementById('provCredentialRecord');
+  if (!name || !ta) return;
+  // Belt and braces: the box is reset when the editor moves on, and the name
+  // that installs must still be the one on screen.
+  if (_credentialFor !== _editingProviderName) return;
+  const record = parseRecord(ta.value);
+  if (!record) {
+    _setCredentialError(_credentialText('label.credentialBadJson', 'That is not valid JSON.'));
+    return;
+  }
+  try {
+    const res = await api.put(`/admin/api/config/providers/${encodeURIComponent(name)}/credential`, record);
+    // The record is no longer needed once the request has been made — and if
+    // the install half-worked (`installed: true` with `error`), leaving a live
+    // credential in the DOM is the one thing to avoid.
+    ta.value = '';
+    toggleProviderCredentialBox(false);
+    // `api.put` does not throw on 4xx; both refusals and a stored-but-unused
+    // record are reported in `error`, and the GET is what says which.
+    await loadProviderCredential(name);
+    if (res && res.error) { _setCredentialError(res.error); return; }
+    showToast?.(_credentialText('label.credentialInstalled', 'Credential installed'), 'success');
+  } catch (err) {
+    _setCredentialError(String(err && err.message || err));
+  }
+}
+
+async function signOutProviderCredential() {
+  const name = _credentialFor;
+  if (!name) return;
+  if (!confirm(_credentialText('label.confirmSignOut',
+    'Sign out of this account? Requests will fail until a new record is installed.'))) return;
+  try {
+    await api.del(`/admin/api/config/providers/${encodeURIComponent(name)}/credential`);
+    await loadProviderCredential(name);
+  } catch (err) {
+    _setCredentialError(String(err && err.message || err));
+  }
+}
+
 /** Collapse the API-key field when the selected shim needs no credential. */
 function _syncKeylessUI() {
   const typeSel = document.getElementById('provType');
@@ -97,6 +329,7 @@ function _syncKeylessUI() {
     const multiBox = document.getElementById('provApiKeyMultiBox');
     if (multiBox) multiBox.style.display = 'none';
   }
+  _syncCredentialUI();
 }
 
 /** Render one preset button per free-source shim, labelled "<Brand> (Free)". */
@@ -1150,6 +1383,7 @@ Object.assign(window, {
   saveServerSettings, runNetDiag, loadConfig,
   goToModelsForProvider, goToProviderFromModel, testProviderConnectivity,
   showProviderQuota,
+  installProviderCredential, signOutProviderCredential, toggleProviderCredentialBox,
   _activateSegChild,
   openFreeProvider, refreshFreeModels, revealProviderKey,
 });

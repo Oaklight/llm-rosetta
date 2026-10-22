@@ -645,6 +645,7 @@ def _load_single_provider(
             ),
             token_refresh_interval=conn_raw.get("token_refresh_interval"),
             token_command_env=conn_raw.get("token_command_env"),
+            manage_usage_url=conn_raw.get("manage_usage_url"),
         )
     else:
         connection = ConnectionConfig(
@@ -665,6 +666,7 @@ def _load_single_provider(
             ),
             token_refresh_interval=cfg.get("token_refresh_interval"),
             token_command_env=cfg.get("token_command_env"),
+            manage_usage_url=cfg.get("manage_usage_url"),
         )
 
     if exchange is not None and connection.token_command:

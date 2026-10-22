@@ -211,6 +211,14 @@ class ConnectionConfig:
     a shim can ship the script beside its ``provider.yaml``.  A bare name that
     is not a file there (``python3``) stays a normal ``PATH`` lookup.
     """
+    manage_usage_url: str | None = None
+    """Where the operator changes this account's plan usage, if the vendor has
+    a page for it.
+
+    A plan's per-app cap lives in the vendor's own settings, not behind an
+    API, so the admin panel can only link to it.  Declaring the URL here keeps
+    the vendor fact in the shim rather than in the panel's JavaScript.
+    """
     token_refresh_interval: int | None = None
     """Scheduled refresh interval for :attr:`token_command`, in seconds.
 

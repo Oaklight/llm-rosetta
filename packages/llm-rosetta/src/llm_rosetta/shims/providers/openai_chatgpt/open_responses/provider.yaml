@@ -25,6 +25,7 @@ connection:
   # a source format the gateway cannot yet reassemble (aggregation for
   # Responses is #1061) rather than returning something broken or empty.
   stream_required: true
+  manage_usage_url: https://chatgpt.com/settings/usage
 
 tools:
   custom_tools: true
