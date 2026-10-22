@@ -71,6 +71,25 @@ def strip_fields(*keys: str) -> Transform:
     return _NamedTransform(_strip, f"strip_fields({', '.join(repr(k) for k in keys)})")
 
 
+def force_fields(**values: Any) -> Transform:
+    """Return a transform that sets fields unconditionally.
+
+    ``set_defaults`` fills a gap; this closes one.  An upstream that refuses a
+    value the client may legitimately send (the ChatGPT plan route rejects
+    ``store: true``) needs the field *overwritten*, and doing that with a
+    ``strip_fields`` + ``set_defaults`` pair would be two transforms whose
+    order matters.
+    """
+
+    def _force(body: dict[str, Any]) -> dict[str, Any]:
+        body.update(values)
+        return body
+
+    return _NamedTransform(
+        _force, f"force_fields({', '.join(f'{k}={v!r}' for k, v in values.items())})"
+    )
+
+
 def rename_field(old: str, new: str, *, pattern: str | None = None) -> Transform:
     """Return a transform that renames a top-level field.
 

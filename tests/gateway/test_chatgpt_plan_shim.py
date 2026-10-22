@@ -13,6 +13,7 @@ import pytest
 
 from llm_rosetta.shims import get_shim
 from llm_rosetta.shims.providers import get_model_list_transform, load_providers
+from llm_rosetta_gateway.providers import build_provider_info
 
 SHIM = "openai_chatgpt--open_responses"
 
@@ -107,6 +108,148 @@ def transform():
     return hook
 
 
+class TestTheRequestSurface:
+    """What the route refuses, and what the shim does about it."""
+
+    def _apply(self, body: dict) -> dict:
+        for transform in shim().post_ir_transforms:
+            body = transform(body)
+        return body
+
+    @pytest.mark.parametrize(
+        "field",
+        [
+            "background",
+            "conversation",
+            "max_output_tokens",
+            "max_tool_calls",
+            "metadata",
+            "moderation",
+            "multi_agent",
+            "prompt",
+            "prompt_cache_retention",
+            "safety_identifier",
+            "temperature",
+            "top_logprobs",
+            "top_p",
+            "truncation",
+            "user",
+        ],
+    )
+    def test_a_refused_field_is_stripped(self, field):
+        """The client is entitled to send it; the route refuses the request."""
+        out = self._apply({"model": "m", "input": [], field: "anything"})
+
+        assert field not in out
+
+    def test_the_declared_list_is_the_documented_one(self):
+        """A guard against the strip list drifting from the docs."""
+        from llm_rosetta.shims.providers.openai_chatgpt.open_responses.transforms import (
+            UNSUPPORTED_FIELDS,
+        )
+
+        assert set(UNSUPPORTED_FIELDS) == {
+            "background",
+            "conversation",
+            "max_output_tokens",
+            "max_tool_calls",
+            "metadata",
+            "moderation",
+            "multi_agent",
+            "prompt",
+            "prompt_cache_retention",
+            "safety_identifier",
+            "temperature",
+            "top_logprobs",
+            "top_p",
+            "truncation",
+            "user",
+            "previous_response_id",
+        }
+
+    def test_store_is_forced_false(self):
+        """`true` is a valid Responses value and an omitted one is refused too."""
+        assert self._apply({"model": "m", "store": True})["store"] is False
+        assert self._apply({"model": "m"})["store"] is False
+
+    def test_the_history_pointer_is_dropped_but_the_history_is_not(self):
+        """The route keeps no server-side state, so `input` must carry it."""
+        out = self._apply(
+            {
+                "model": "m",
+                "previous_response_id": "resp_abc",
+                "input": [{"type": "message", "role": "user", "content": "hi"}],
+            }
+        )
+
+        assert "previous_response_id" not in out
+        assert out["input"] == [{"type": "message", "role": "user", "content": "hi"}]
+
+    def test_nothing_else_is_touched(self):
+        body = {
+            "model": "m",
+            "input": [{"type": "message", "role": "user", "content": "hi"}],
+            "tools": [{"type": "function", "name": "f"}],
+            "instructions": "be brief",
+            "reasoning": {"effort": "low"},
+        }
+
+        assert self._apply(dict(body)) == {**body, "store": False}
+
+
+class TestStreamingIsRequired:
+    def test_the_shim_declares_it(self):
+        """The route answers SSE only."""
+        assert shim().connection.stream_required is True
+        assert (
+            build_provider_info("open_responses", {}, shim_name=SHIM).stream_required
+            is True
+        )
+
+    def test_a_non_streaming_responses_client_is_refused_clearly(self):
+        """Not silently broken or empty: the gateway says what to do.
+
+        Reassembly exists for Chat Completions sources only, so a Responses
+        client that did not ask to stream is told to ask again rather than
+        handed a synthesised body the gateway would have to guess at.
+        """
+        import asyncio
+
+        from llm_rosetta.routing import ResolvedRoute
+        from llm_rosetta_gateway.proxy.engine import _non_streaming_from_stream
+
+        route = ResolvedRoute(
+            source_provider="open_responses",
+            target_provider="open_responses",
+            provider_name="chatgpt",
+            shim_name=SHIM,
+            upstream_model="gpt-5.1",
+        )
+        response, _ = asyncio.run(
+            _non_streaming_from_stream(
+                route=route,
+                provider_info=build_provider_info("open_responses", {}, shim_name=SHIM),
+                # The refusal happens before either is touched, which is the
+                # point: nothing is sent upstream for a client that cannot be
+                # served.
+                pipeline=None,  # ty: ignore[invalid-argument-type]
+                target_body={},
+                body={},
+                model="m",
+                transport=None,  # ty: ignore[invalid-argument-type]
+                metadata_store=None,
+                extra_headers=None,
+                persistence=None,
+                capture_state=None,
+                entry_id=None,
+                profile={},
+            )
+        )
+
+        assert response.status_code == 400
+        assert b"stream=true" in response.body
+
+
 class TestTheModelList:
     def test_only_visible_models_are_offered(self):
         ids, upstream = transform()(MODELS_BODY["models"])
@@ -158,3 +301,34 @@ class TestTheModelList:
         )
 
         assert ids == []
+
+
+class TestDroppedFieldsAreReported:
+    """A drop the operator cannot see looks like it worked.
+
+    Refusing the request instead would make the lane unusable — most clients
+    send ``temperature`` unconditionally — so the drop is logged, and only
+    when something was actually dropped.
+    """
+
+    def _apply(self, body: dict) -> dict:
+        for transform in shim().post_ir_transforms:
+            body = transform(body)
+        return body
+
+    def test_a_dropped_field_is_named_in_the_log(self, caplog):
+        import logging
+
+        with caplog.at_level(logging.INFO, logger="llm_rosetta.shims.providers"):
+            self._apply({"model": "m", "max_output_tokens": 100, "temperature": 0.2})
+
+        assert "max_output_tokens" in caplog.text
+        assert "temperature" in caplog.text
+
+    def test_a_clean_request_logs_nothing(self, caplog):
+        import logging
+
+        with caplog.at_level(logging.INFO, logger="llm_rosetta.shims.providers"):
+            self._apply({"model": "m", "input": []})
+
+        assert "dropped field" not in caplog.text

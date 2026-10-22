@@ -51,6 +51,7 @@ from .shims import (
     resolve_base,
     resolve_format,
     resolve_model_type,
+    force_fields,
     set_defaults,
     strip_fields,
     unregister_shim,
@@ -137,6 +138,7 @@ __all__ = [
     # Transforms
     "Transform",
     "apply_transforms",
+    "force_fields",
     "strip_fields",
     "rename_field",
     "set_defaults",

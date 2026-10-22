@@ -15,6 +15,7 @@ from llm_rosetta.transforms import (
     default_message_field,
     rename_field,
     replace_message_field,
+    force_fields,
     set_defaults,
     strip_fields,
     strip_fields_for_model,
@@ -107,6 +108,29 @@ class TestSetDefaults:
         t = set_defaults()
         body = {"a": 1}
         assert t(body) == {"a": 1}
+
+
+class TestForceFields:
+    """The counterpart of ``set_defaults``: a value that must not survive."""
+
+    def test_it_overwrites_an_existing_value(self):
+        t = force_fields(store=False)
+
+        assert t({"store": True}) == {"store": False}
+
+    def test_it_sets_an_absent_field(self):
+        t = force_fields(store=False)
+
+        assert t({"model": "m"}) == {"model": "m", "store": False}
+
+    def test_it_leaves_everything_else_alone(self):
+        t = force_fields(store=False)
+        body = {"model": "m", "input": [1, 2], "temperature": 0.5}
+
+        assert t(dict(body)) == {**body, "store": False}
+
+    def test_it_carries_a_name_for_the_applied_transform_list(self):
+        assert repr(force_fields(store=False)) == "force_fields(store=False)"
 
 
 # ---------------------------------------------------------------------------

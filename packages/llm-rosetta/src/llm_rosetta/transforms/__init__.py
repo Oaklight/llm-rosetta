@@ -22,6 +22,7 @@ from llm_rosetta.ir.primitives.body import (  # noqa: F401
     default_message_field,
     default_tool_description,
     flatten_system_content,
+    force_fields,
     rename_field,
     replace_message_field,
     rewrite_harmony_tool_calls,

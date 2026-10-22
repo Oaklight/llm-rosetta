@@ -20,6 +20,11 @@ connection:
   # key beside an exchange, which it refuses — and an API key is not what this
   # lane authenticates with.
   models_path: /models
+  # The route answers SSE only.  Declaring it forces `stream: true` upstream on
+  # the streaming path, and makes the non-streaming path answer a clear 400 for
+  # a source format the gateway cannot yet reassemble (aggregation for
+  # Responses is #1061) rather than returning something broken or empty.
+  stream_required: true
 
 tools:
   custom_tools: true

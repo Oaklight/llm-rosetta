@@ -78,6 +78,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             # Transforms
             "Transform",
             "apply_transforms",
+            "force_fields",
             "strip_fields",
             "rename_field",
             "set_defaults",

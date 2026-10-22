@@ -38,6 +38,7 @@ from llm_rosetta.transforms import (
     apply_transforms,
     default_message_field,
     default_tool_description,
+    force_fields,
     rewrite_harmony_tool_calls,
     rename_field,
     replace_message_field,
@@ -68,6 +69,7 @@ __all__ = [
     # Transforms
     "Transform",
     "apply_transforms",
+    "force_fields",
     "strip_fields",
     "rename_field",
     "set_defaults",
