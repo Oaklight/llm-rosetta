@@ -74,18 +74,25 @@ jobs:
       - name: Wait for Test PyPI availability
         run: |
           VERSION="${{ steps.meta.outputs.version }}"
-          echo "Waiting for llm-rosetta==$VERSION on Test PyPI (pip-installable)..."
+          echo "Waiting for llm-rosetta==$VERSION and llm-rosetta-gateway==$VERSION on Test PyPI (pip-installable)..."
+          # The image installs both, so both have to be there.  Checking only
+          # the core let a dev run fail later, in the Dockerfile, when the
+          # gateway package had not landed yet.
           for i in $(seq 1 30); do
-            if pip install --dry-run --no-deps \
-                --extra-index-url https://test.pypi.org/simple/ \
-                "llm-rosetta==$VERSION" 2>/dev/null; then
-              echo "Installable on Test PyPI (attempt $i)"
+            missing=""
+            for pkg in llm-rosetta llm-rosetta-gateway; do
+              pip install --dry-run --no-deps \
+                  --extra-index-url https://test.pypi.org/simple/ \
+                  "$pkg==$VERSION" >/dev/null 2>&1 || missing="$missing $pkg"
+            done
+            if [ -z "$missing" ]; then
+              echo "Both packages installable on Test PyPI (attempt $i)"
               exit 0
             fi
-            echo "  Attempt $i/30: waiting 20s..."
+            echo "  Attempt $i/30: still missing:$missing"
             sleep 20
           done
-          echo "::error::Not pip-installable from Test PyPI after 10 minutes"
+          echo "::error::Not pip-installable from Test PyPI after 10 minutes:$missing"
           exit 1
 
       - uses: docker/login-action@v3
