@@ -9,24 +9,44 @@ migration is visible.
 from __future__ import annotations
 
 import importlib
+import os
 import subprocess
 import sys
-import warnings
 
 from pathlib import Path
 
 
 def test_importing_the_old_root_warns() -> None:
-    for name in [n for n in sys.modules if n == "llm_rosetta.gateway"]:
-        sys.modules.pop(name)
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
-        importlib.import_module("llm_rosetta.gateway")
+    """A fresh interpreter importing the old root is warned.
 
-    messages = [
-        str(w.message) for w in caught if issubclass(w.category, DeprecationWarning)
-    ]
-    assert any("llm_rosetta_gateway" in message for message in messages)
+    In-process is not testable: the shim installs a meta-path finder on its
+    first import, and from then on any re-import of ``llm_rosetta.gateway``
+    is resolved *by that finder* — no module body, no warning.  That is the
+    right behaviour (one warning per process, as an import-time warning
+    should be), but it means popping ``sys.modules`` and importing again
+    observes nothing, and the outcome then depends on what else the suite
+    imported first.  A subprocess has no finder yet, which is exactly the
+    user's situation.
+    """
+    code = (
+        "import warnings\n"
+        "with warnings.catch_warnings(record=True) as caught:\n"
+        "    warnings.simplefilter('always')\n"
+        "    import llm_rosetta.gateway\n"
+        "print(int(any('llm_rosetta_gateway' in str(w.message) for w in caught)))\n"
+    )
+    root = Path(__file__).parents[1]
+    env = {
+        **os.environ,
+        "PYTHONPATH": os.pathsep.join(
+            str(root / "packages" / pkg / "src")
+            for pkg in ("llm-rosetta", "llm-rosetta-gateway")
+        ),
+    }
+    out = subprocess.check_output(
+        [sys.executable, "-c", code], text=True, env=env
+    ).strip()
+    assert out == "1", "importing llm_rosetta.gateway must warn about the new root"
 
 
 def test_old_submodules_are_the_same_objects() -> None:
