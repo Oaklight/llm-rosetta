@@ -232,7 +232,9 @@ async def _non_streaming_from_stream(
             )
             if stream_error is not None:
                 return (
-                    error_response_for_source(route.source_provider, 502, stream_error),
+                    error_response_for_source(
+                        route.source_provider, 502, stream_error.message
+                    ),
                     profile,
                 )
             events.extend(processor.process_chunk(chunk))

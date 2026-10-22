@@ -8,6 +8,7 @@ lines that are written to the client response stream.
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from typing import Any
 
 from llm_rosetta.formats import FORMAT_SPECS
@@ -83,6 +84,8 @@ def build_stream_error_events(
     *,
     response_id: str = "",
     sequence_number: int | None = None,
+    code: str | None = None,
+    request_id: str = "",
 ) -> list[dict[str, Any]]:
     """Build terminal events announcing that a stream failed mid-flight.
 
@@ -95,6 +98,11 @@ def build_stream_error_events(
         reason: Short description of the upstream failure.
         response_id: Response ID already advertised to the client, if any.
         sequence_number: Next sequence number for Responses events.
+        code: The upstream's machine-readable code, when it named one.  It
+            replaces the generic ``server_error`` so the client can branch on
+            it (a plan-usage 429 and a transient 503 recover differently).
+        request_id: The upstream request id, used when no response id was
+            advertised yet.
 
     Returns:
         Event dicts to format and yield. Empty for formats with no terminal
@@ -104,10 +112,10 @@ def build_stream_error_events(
 
     if source_provider in ("openai_responses", "open_responses"):
         response: dict[str, Any] = {
-            "id": response_id,
+            "id": response_id or request_id,
             "object": "response",
             "status": "failed",
-            "error": {"code": "server_error", "message": message},
+            "error": {"code": code or "server_error", "message": message},
         }
         event: dict[str, Any] = {"type": "response.failed", "response": response}
         if sequence_number is not None:
@@ -115,10 +123,23 @@ def build_stream_error_events(
         return [event]
 
     if source_provider == "chat_completions":
-        return [{"error": {"message": message, "type": "server_error", "code": None}}]
+        return [
+            {
+                "error": {
+                    "message": message,
+                    "type": code or "server_error",
+                    "code": code,
+                }
+            }
+        ]
 
     if source_provider == "messages":
-        return [{"type": "error", "error": {"type": "api_error", "message": message}}]
+        return [
+            {
+                "type": "error",
+                "error": {"type": code or "api_error", "message": message},
+            }
+        ]
 
     if source_provider in ("google", "google_generate"):
         return [{"error": {"code": 500, "message": message, "status": "INTERNAL"}}]
@@ -143,25 +164,85 @@ def build_stream_error_events(
 # ---------------------------------------------------------------------------
 
 
-def is_upstream_error_chunk(chunk: Any) -> bool:
-    """True if *chunk* is an in-band upstream error rather than content.
+@dataclass(frozen=True)
+class UpstreamStreamError:
+    """An error an upstream reported *inside* a 200 SSE stream.
 
-    Some upstreams report request errors inside a 200 SSE stream rather than
-    by HTTP status.  Such a chunk converts to zero source events, leaving the
-    client a successful but empty response.
-
-    Only treats a chunk as an error when it carries no payload of its own, so
-    a provider that legitimately ships an ``error`` field alongside content is
-    left alone.
+    ``code`` is the provider's machine-readable code when it named one; two
+    failures with the same HTTP status can need opposite recovery (a plan
+    usage limit must not be retried, a transient 503 should be), so the code
+    is carried to the client rather than flattened into a generic message.
     """
-    if not isinstance(chunk, dict) or not chunk.get("error"):
-        return False
-    return not any(k in chunk for k in ("choices", "delta", "candidates", "type"))
+
+    message: str
+    code: str | None = None
+    request_id: str | None = None
+    status: int | None = None
+
+
+def classify_upstream_error(chunk: Any) -> UpstreamStreamError | None:
+    """Return the error *chunk* carries, or ``None`` when it is content.
+
+    Recognised shapes:
+
+    * ``{"type": "response.failed", "response": {"error": {...}}}`` — the
+      Responses terminal failure, which carries the code the client needs;
+    * ``{"type": "error", "code": ..., "message": ...}`` — the Responses
+      in-stream error event;
+    * a top-level ``error`` envelope with no payload of its own, which is how
+      most Chat-compatible upstreams report a rejected request.
+
+    A chunk that carries content *and* an ``error`` field is left alone: that
+    is a provider echoing something, not a failure.
+    """
+    if not isinstance(chunk, dict):
+        return None
+
+    chunk_type = chunk.get("type")
+
+    if chunk_type == "response.failed":
+        response = chunk.get("response")
+        response = response if isinstance(response, dict) else {}
+        err = response.get("error")
+        err = err if isinstance(err, dict) else {}
+        message = str(err.get("message") or err or "response failed")
+        code = err.get("code")
+        return UpstreamStreamError(
+            message=message,
+            code=str(code) if code else None,
+            request_id=str(response.get("id") or chunk.get("response_id") or "")
+            or None,
+        )
+
+    if chunk_type == "error":
+        code = chunk.get("code")
+        message = str(chunk.get("message") or code or "stream error")
+        return UpstreamStreamError(
+            message=message,
+            code=str(code) if code else None,
+            request_id=str(chunk.get("request_id") or "") or None,
+        )
+
+    err = chunk.get("error")
+    if not err:
+        return None
+    if any(k in chunk for k in ("choices", "delta", "candidates", "type")):
+        return None
+    if isinstance(err, dict):
+        code = err.get("code")
+        return UpstreamStreamError(
+            message=str(err.get("message") or err),
+            code=str(code) if code else None,
+        )
+    return UpstreamStreamError(message=str(err))
+
+
+def is_upstream_error_chunk(chunk: Any) -> bool:
+    """True if *chunk* is an in-band upstream error rather than content."""
+    return classify_upstream_error(chunk) is not None
 
 
 def extract_upstream_error_message(chunk: dict[str, Any]) -> str:
     """Pull a human-readable message out of an upstream error envelope."""
-    err = chunk.get("error")
-    if isinstance(err, dict):
-        return str(err.get("message") or err)
-    return str(err)
+    classified = classify_upstream_error(chunk)
+    return classified.message if classified is not None else ""

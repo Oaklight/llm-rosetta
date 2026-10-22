@@ -34,6 +34,7 @@ from ..transport import (
 )
 from ..transport.sse_format import (
     SSE_FORMATTERS,
+    UpstreamStreamError,
     build_stream_error_events,
     format_sse_done,
 )
@@ -188,7 +189,7 @@ async def _stream_event_generator(
     reported_model = reported_model or model
     chunk_count = 0
     t0 = time.monotonic()
-    stream_error: str | None = None
+    stream_error: UpstreamStreamError | None = None
     ttfb_ms: float | None = None
     t_stream_open = time.perf_counter()
     upstream_chunks: list[dict[str, Any]] | None = (
@@ -214,7 +215,10 @@ async def _stream_event_generator(
                 )
                 if stream_error is not None:
                     for event in build_stream_error_events(
-                        source_provider, stream_error
+                        source_provider,
+                        stream_error.message,
+                        code=stream_error.code,
+                        request_id=stream_error.request_id or "",
                     ):
                         yield format_sse(event)
                     break
@@ -235,7 +239,7 @@ async def _stream_event_generator(
             chunk_count=chunk_count,
         )
     except Exception as exc:
-        stream_error = str(exc)
+        stream_error = UpstreamStreamError(message=str(exc))
         for sse_text in _terminal_error_sse(
             source_provider, processor, format_sse, exc
         ):
@@ -257,7 +261,7 @@ async def _stream_event_generator(
             if ttfb_ms is not None:
                 stream_profile["stream_ttfb_ms"] = ttfb_ms
             if stream_error is not None:
-                stream_profile["stream_error"] = stream_error[:500]
+                stream_profile["stream_error"] = stream_error.message[:500]
             try:
                 await request_log.update_profile(entry_id, stream_profile)
             except Exception:

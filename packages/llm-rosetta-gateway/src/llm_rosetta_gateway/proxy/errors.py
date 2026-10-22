@@ -36,8 +36,8 @@ from ..transport.auth_errors import (
 )
 from ..transport.token_refresh import force_refresh
 from ..transport.sse_format import (
-    extract_upstream_error_message,
-    is_upstream_error_chunk,
+    classify_upstream_error,
+    UpstreamStreamError,
 )
 
 logger = get_logger()
@@ -283,20 +283,31 @@ async def _detect_stream_chunk_error(
     model: str,
     dump_ctx: DumpContext | None,
     entry_id: str | None,
-) -> str | None:
+) -> UpstreamStreamError | None:
     """Check a stream chunk for soft-errors and upstream error events.
 
-    Returns the error message string if an error is detected, ``None`` otherwise.
+    Returns the classified error if there is one, ``None`` otherwise.  The
+    classification keeps the upstream's code and request id, which the
+    terminal event needs: a generic message makes a plan-usage failure
+    indistinguishable from a transient one.
     """
     soft_match = _check_soft_errors(soft_error_patterns, chunk)
     if soft_match:
         logger.warning("Soft-error detected in stream chunk: %s", soft_match.pattern)
-        error_msg = soft_match.message
-        error_status = soft_match.status_code
+        stream_error = UpstreamStreamError(
+            message=soft_match.message, status=soft_match.status_code
+        )
         error_phase = "soft_error"
-    elif is_upstream_error_chunk(chunk):
-        error_msg = extract_upstream_error_message(chunk)
-        error_status = stream_status
+    else:
+        classified = classify_upstream_error(chunk)
+        if classified is None:
+            return None
+        stream_error = UpstreamStreamError(
+            message=classified.message,
+            code=classified.code,
+            request_id=classified.request_id,
+            status=stream_status,
+        )
         error_phase = "stream_chunk"
         log_upstream_error(
             stream_status,
@@ -304,8 +315,8 @@ async def _detect_stream_chunk_error(
             endpoint=model,
             is_streaming=True,
         )
-    else:
-        return None
+
+    error_status = stream_error.status or stream_status
 
     _dc = dump_ctx or DumpContext()
     await dump_error(
@@ -323,7 +334,7 @@ async def _detect_stream_chunk_error(
         request_log_id=entry_id,
         tool_name_collisions=_dc.tool_name_collisions,
     )
-    return error_msg
+    return stream_error
 
 
 @dataclass

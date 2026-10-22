@@ -15,6 +15,7 @@ import pytest
 from llm_rosetta_gateway.proxy import _stream_event_generator
 from llm_rosetta_gateway.transport.sse_format import (
     build_stream_error_events,
+    classify_upstream_error,
     is_upstream_error_chunk,
 )
 
@@ -109,6 +110,78 @@ def test_error_event_uses_source_envelope():
         build_stream_error_events("openai_responses", "boom")[0]["type"]
         == "response.failed"
     )
+
+
+# ---------------------------------------------------------------------------
+# response.failed carries the code the client branches on (#1060)
+# ---------------------------------------------------------------------------
+
+FAILED_EVENT = {
+    "type": "response.failed",
+    "sequence_number": 12,
+    "response": {
+        "id": "resp_chatgpt_plan_1",
+        "object": "response",
+        "status": "failed",
+        "error": {
+            "code": "subscription_sharing_usage_limit_exceeded",
+            "message": "You have reached your plan's usage limit.",
+        },
+    },
+}
+
+
+def test_a_response_failed_event_is_an_error():
+    assert is_upstream_error_chunk(FAILED_EVENT)
+    classified = classify_upstream_error(FAILED_EVENT)
+    assert classified is not None
+    assert classified.code == "subscription_sharing_usage_limit_exceeded"
+    assert "usage limit" in classified.message
+    assert classified.request_id == "resp_chatgpt_plan_1"
+
+
+def test_a_responses_error_event_is_an_error():
+    classified = classify_upstream_error(
+        {"type": "error", "code": "server_error", "message": "boom"}
+    )
+    assert classified is not None
+    assert classified.code == "server_error"
+    assert classified.message == "boom"
+
+
+def test_the_terminal_event_keeps_the_upstream_code_and_request_id():
+    events = build_stream_error_events(
+        "openai_responses",
+        "plan limit",
+        code="subscription_sharing_usage_limit_exceeded",
+        request_id="resp_chatgpt_plan_1",
+    )
+    error = events[0]["response"]["error"]
+    assert error["code"] == "subscription_sharing_usage_limit_exceeded"
+    assert events[0]["response"]["id"] == "resp_chatgpt_plan_1"
+
+    # Without a code, the previous generic shape is unchanged.
+    generic = build_stream_error_events("openai_responses", "boom")
+    assert generic[0]["response"]["error"]["code"] == "server_error"
+
+
+def test_the_code_reaches_a_chat_client_as_the_error_type():
+    event = build_stream_error_events(
+        "chat_completions", "boom", code="subscription_sharing_user_not_eligible"
+    )[0]
+    assert event["error"]["type"] == "subscription_sharing_user_not_eligible"
+    assert event["error"]["code"] == "subscription_sharing_user_not_eligible"
+
+
+def test_a_failed_event_terminates_the_downstream_stream():
+    out = asyncio.run(_collect([FAILED_EVENT]))
+    payload = json.loads(out[0].removeprefix("data: ").strip())
+    assert payload["type"] == "response.failed"
+    assert (
+        payload["response"]["error"]["code"]
+        == "subscription_sharing_usage_limit_exceeded"
+    )
+    assert payload["response"]["id"] == "resp_chatgpt_plan_1"
 
 
 # ---------------------------------------------------------------------------
