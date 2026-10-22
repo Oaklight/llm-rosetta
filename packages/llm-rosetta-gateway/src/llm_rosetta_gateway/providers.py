@@ -242,6 +242,23 @@ def _apply_shim_defaults(cfg: dict[str, Any], shim: Any) -> dict[str, Any]:
 
     if not cfg.get("base_url") and shim.connection.base_url:
         cfg = {**cfg, "base_url": shim.connection.base_url}
+    # A shim that declares the exchange ships its default credential source;
+    # a ``token_command`` in the provider config still wins.  Installing it
+    # before the static-key default below keeps the two from ever being set
+    # together — the loader rejects that pair.
+    if cfg.get("token_command") is None and shim.connection.token_command:
+        cfg = {**cfg, "token_command": list(shim.connection.token_command)}
+    # The interval is the vendor's token lifetime, so it stays a default even
+    # when the operator names their own command.
+    if (
+        cfg.get("token_command") is not None
+        and cfg.get("token_refresh_interval") is None
+        and shim.connection.token_refresh_interval is not None
+    ):
+        cfg = {
+            **cfg,
+            "token_refresh_interval": shim.connection.token_refresh_interval,
+        }
     # A shim's ``api_key_env`` is a *default* credential, and ``token_command``
     # is a different source for the same slot: injecting here would hand
     # ``_resolve_token_command`` an ``api_key`` it has to reject on sight, so a

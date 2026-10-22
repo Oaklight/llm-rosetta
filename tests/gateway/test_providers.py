@@ -270,3 +270,66 @@ class TestSessionHeader:
         assert info.session_header is None
         assert info.session_headers() == {}
         assert info.with_session("abc") is info
+
+
+class TestShimDeclaredTokenCommand:
+    """A shim ships its credential exchange; the provider's own command wins."""
+
+    @pytest.fixture()
+    def vendor_shim(self):
+        from llm_rosetta.shims.provider_shim import (
+            ConnectionConfig,
+            ProviderShim,
+            register_shim,
+            unregister_shim,
+        )
+
+        register_shim(
+            ProviderShim(
+                name="__test_credential_command__",
+                format="chat_completions",
+                connection=ConnectionConfig(
+                    base_url="https://vendor.example/v1",
+                    api_key_env="VENDOR_API_KEY",
+                    token_command=("python3", "-c", "print('minted')"),
+                    token_refresh_interval=7200,
+                ),
+            )
+        )
+        yield "__test_credential_command__"
+        unregister_shim("__test_credential_command__")
+
+    def test_the_declared_command_is_the_default(self, vendor_shim):
+        """A provider needs no token_command of its own to use the shim's."""
+        info = build_provider_info("openai_chat", {}, shim_name=vendor_shim)
+
+        assert info.token_command == ["python3", "-c", "print('minted')"]
+        assert info.token_refresh_interval == 7200
+        assert info.key_ring.contains_only(TOKEN_PENDING_SENTINEL)
+
+    def test_the_providers_own_command_wins(self, vendor_shim):
+        info = build_provider_info(
+            "openai_chat",
+            {"token_command": ["acme-token", "--json"]},
+            shim_name=vendor_shim,
+        )
+
+        assert info.token_command == ["acme-token", "--json"]
+        # The interval is the vendor's token lifetime, so it still applies.
+        assert info.token_refresh_interval == 7200
+
+    def test_the_interval_can_be_overridden(self, vendor_shim):
+        info = build_provider_info(
+            "openai_chat", {"token_refresh_interval": 120}, shim_name=vendor_shim
+        )
+
+        assert info.token_refresh_interval == 120
+
+    def test_the_shims_key_variable_is_not_injected(self, vendor_shim, monkeypatch):
+        """The command owns the credential, so the env default must stay out."""
+        monkeypatch.setenv("VENDOR_API_KEY", "sk-from-the-environment")
+
+        info = build_provider_info("openai_chat", {}, shim_name=vendor_shim)
+
+        assert info.token_command == ["python3", "-c", "print('minted')"]
+        assert info.key_ring.contains_only(TOKEN_PENDING_SENTINEL)

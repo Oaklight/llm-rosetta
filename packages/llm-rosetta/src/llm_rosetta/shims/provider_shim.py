@@ -165,6 +165,14 @@ class ConnectionConfig:
     auth_header: str | None = None
     keyless: bool = False
     session_header: str | None = None
+    """Name of a per-conversation session header the gateway must add.
+
+    Some upstreams (e.g. OpenCode Go) require a stable session identifier on
+    every inference request for routing and prompt-cache locality.  When set,
+    the gateway injects this header with a value derived per conversation
+    (see ``gateway.proxy``); a client-supplied value is passed through
+    verbatim.  ``None`` means the provider needs no session header.
+    """
     headers: dict[str, str] | None = None
     """Static headers this upstream requires on every request.
 
@@ -189,13 +197,24 @@ class ConnectionConfig:
     If set, the gateway forces ``stream: true`` upstream and reassembles the
     SSE reply for a client that asked for a non-streaming response.
     """
-    """Name of a per-conversation session header the gateway must add.
+    token_command: tuple[str, ...] | None = None
+    """Command that mints the upstream credential, declared by the shim.
 
-    Some upstreams (e.g. OpenCode Go) require a stable session identifier on
-    every inference request for routing and prompt-cache locality.  When set,
-    the gateway injects this header with a value derived per conversation
-    (see ``gateway.proxy``); a client-supplied value is passed through
-    verbatim.  ``None`` means the provider needs no session header.
+    Some upstreams do not accept an account API key on their inference
+    endpoints — AskSage takes a short-lived access token, ALCF a Globus bearer
+    token — and the exchange is a fact about the provider, not about each
+    deployment.  A shim that declares the command here is usable without any
+    ``token_command`` in the operator's config; a provider that names its own
+    command still wins.
+
+    A relative first argument is resolved against the shim's own directory, so
+    a shim can ship the script beside its ``provider.yaml``.  A bare name that
+    is not a file there (``python3``) stays a normal ``PATH`` lookup.
+    """
+    token_refresh_interval: int | None = None
+    """Scheduled refresh interval for :attr:`token_command`, in seconds.
+
+    ``None`` leaves the gateway's default (3600) in place.
     """
 
 

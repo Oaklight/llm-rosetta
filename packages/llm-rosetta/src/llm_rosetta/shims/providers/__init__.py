@@ -464,6 +464,48 @@ def _resolve_shim_pair(cfg: dict[str, Any], yaml_path: Path) -> tuple[str, str]:
     return fmt, model_type
 
 
+def _parse_connection_token_command(
+    raw: Any, provider_dir: Path, name: str
+) -> tuple[str, ...] | None:
+    """Parse ``connection.token_command`` from a shim declaration.
+
+    A relative argument that names a file in the shim's own directory is
+    rewritten to its absolute path, so a shim can ship the exchange beside its
+    ``provider.yaml``; anything else (``python3``, a flag, an absolute path) is
+    left for the gateway, which resolves bare names on ``PATH``.
+
+    A malformed declaration is ignored with a warning rather than rejected:
+    the shim's other facts are still usable, and a broken command must not
+    stop the gateway from loading an otherwise valid config.
+    """
+    if raw is None:
+        return None
+    if (
+        not isinstance(raw, list)
+        or not raw
+        or not all(isinstance(part, str) and part for part in raw)
+    ):
+        logger.warning(
+            "Shim %s: connection.token_command must be a non-empty list of "
+            "strings; ignoring it",
+            name,
+        )
+        return None
+    # Resolve every argument that names a file in the shim's directory — both
+    # ``[token.py]`` and the more common ``[python3, token.py]`` ship a script
+    # beside the declaration.  A bare binary name (``python3``) and any flag
+    # are left untouched, since no such file exists here.
+    argv = []
+    for part in raw:
+        candidate = provider_dir / part
+        argv.append(
+            str(candidate.resolve())
+            if not Path(part).is_absolute() and candidate.is_file()
+            else part
+        )
+    return tuple(argv)
+
+
 def _load_single_provider(
     provider_dir: Path,
     *,
@@ -544,6 +586,10 @@ def _load_single_provider(
             session_id_format=conn_raw.get("session_id_format"),
             request_id_format=conn_raw.get("request_id_format"),
             stream_required=bool(conn_raw.get("stream_required", False)),
+            token_command=_parse_connection_token_command(
+                conn_raw.get("token_command"), provider_dir, cfg.get("name", "")
+            ),
+            token_refresh_interval=conn_raw.get("token_refresh_interval"),
         )
     else:
         connection = ConnectionConfig(
@@ -559,6 +605,10 @@ def _load_single_provider(
             session_id_format=cfg.get("session_id_format"),
             request_id_format=cfg.get("request_id_format"),
             stream_required=bool(cfg.get("stream_required", False)),
+            token_command=_parse_connection_token_command(
+                cfg.get("token_command"), provider_dir, cfg.get("name", "")
+            ),
+            token_refresh_interval=cfg.get("token_refresh_interval"),
         )
 
     # Parse the quota declaration: which probe reads this lane, and how often

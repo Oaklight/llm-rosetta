@@ -827,3 +827,81 @@ class TestShimPair:
             assert shim.format, shim.name
             assert shim.model_type in FORMATS_BY_TYPE, shim.name
             assert shim.format in FORMATS_BY_TYPE[shim.model_type], shim.name
+
+
+class TestConnectionTokenCommand:
+    """A shim can declare how it turns a stored credential into the upstream one.
+
+    The exchange is a vendor fact (AskSage mints an access token from the
+    account key, ALCF refreshes a Globus bearer token), so a shim that ships it
+    is usable without the operator wiring ``token_command`` by hand.
+    """
+
+    def _load(self, tmp_path: Path, connection: str, extra: dict | None = None):
+        d = tmp_path / "vendor"
+        d.mkdir(exist_ok=True)
+        for filename, content in (extra or {}).items():
+            (d / filename).write_text(content)
+        (d / "provider.yaml").write_text(
+            f"name: vendor\nbase: openai_chat\nconnection:\n{connection}"
+        )
+        shims = load_providers_from_dir(tmp_path)
+        assert len(shims) == 1
+        return shims[0]
+
+    def test_a_shipped_script_resolves_against_the_shim_directory(self, tmp_path):
+        shim = self._load(
+            tmp_path,
+            "  base_url: https://vendor.example/v1\n"
+            "  token_command: [python3, token.py]\n",
+            extra={"token.py": "print('tok')\n"},
+        )
+
+        assert shim.connection.token_command == (
+            "python3",
+            str((tmp_path / "vendor" / "token.py").resolve()),
+        )
+
+    def test_a_bare_name_that_is_not_shipped_stays_a_path_lookup(self, tmp_path):
+        shim = self._load(
+            tmp_path,
+            "  base_url: https://vendor.example/v1\n"
+            "  token_command: [token-helper, --flag]\n",
+        )
+
+        assert shim.connection.token_command == ("token-helper", "--flag")
+
+    def test_an_absolute_first_argument_is_left_alone(self, tmp_path):
+        shim = self._load(
+            tmp_path,
+            "  base_url: https://vendor.example/v1\n"
+            "  token_command: [/opt/bin/token, --flag]\n",
+        )
+
+        assert shim.connection.token_command == ("/opt/bin/token", "--flag")
+
+    @pytest.mark.parametrize("declaration", ["not-a-list", "[]", "[1, 2]", "['']"])
+    def test_a_malformed_declaration_is_ignored(self, tmp_path, declaration):
+        """The shim's other facts stay usable; a broken command is not fatal."""
+        shim = self._load(
+            tmp_path,
+            f"  base_url: https://vendor.example/v1\n  token_command: {declaration}\n",
+        )
+
+        assert shim.connection.token_command is None
+
+    def test_the_refresh_interval_is_parsed(self, tmp_path):
+        shim = self._load(
+            tmp_path,
+            "  base_url: https://vendor.example/v1\n"
+            "  token_command: [token-helper]\n"
+            "  token_refresh_interval: 7200\n",
+        )
+
+        assert shim.connection.token_refresh_interval == 7200
+
+    def test_a_shim_without_a_command_declares_nothing(self, tmp_path):
+        shim = self._load(tmp_path, "  base_url: https://vendor.example/v1\n")
+
+        assert shim.connection.token_command is None
+        assert shim.connection.token_refresh_interval is None
