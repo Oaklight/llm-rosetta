@@ -397,6 +397,25 @@ llm-rosetta-gateway --socket /run/user/$(id -u)/rosetta.sock
 
 该开关只改变*由哪个*上游来服务请求。转换依然始终经过 IR——包括第 1 层的情况。参见[架构指南](../contributing/architecture.md)。
 
+### 配额故障转移 { #quota-failover }
+
+`failover_on_quota`（按模型配置，默认 `false`）让请求在服务方因 in-band 配额拒绝而没有任何可用凭据时，改由同一模型的另一个 provider 来服务：
+
+```jsonc
+"models": {
+  "gpt-5": {
+    "providers": ["openai-prod", "azure-backup"],
+    "failover_on_quota": true
+  }
+}
+```
+
+触发条件刻意很窄：必须是 provider 的 shim 归类为配额拒绝的上游 `429`（部分 shim 也会归类 `403`），且该 provider 已没有凭据能服务这次请求。普通的 `5xx`、`401`，以及网关无法归类的 `429`，都照旧原样返回。预算只有**一次**：拒绝的 provider 在本次请求余下部分被排除，改试另一个 provider；如果它也拒绝，客户端收到的就是它这次的拒绝。
+
+默认关闭，是因为它真的有所取舍：换一个 provider 就是换一份 prompt 缓存、换一个限流桶，甚至可能是另一个模型构建。真的发生时，请求的 profile 会记录 `failover: {from, to, reason}`，请求日志行也指向实际服务的 provider。
+
+流式请求暂不故障转移——字节一旦发给客户端，响应就无法重放。此选项作用于非流式请求。
+
 ## 熔断器 { #circuit-breaker }
 
 可选的熔断器会在提供方持续失败时直接短路请求，而不是把每个请求都发到上游再失败一次。默认关闭。
