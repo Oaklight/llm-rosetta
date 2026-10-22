@@ -15,4 +15,4 @@ title: API 参考
 ## 网关 API
 
 - [Admin API](admin.md) — 网关管理面板 REST API 端点
-- [可观测性](observability.md) — 可复用的指标收集、请求日志、持久化和性能分析
+- [可观测性](observability.md) — 网关的遥测栈（指标、请求日志、持久化、性能分析）与核心的用量计量

@@ -4,12 +4,19 @@ title: 可观测性
 
 # 可观测性 API 参考
 
-`llm_rosetta.observability` 包提供了可复用的、与框架无关的构建模块，用于指标
-收集、请求日志记录、SQLite 持久化和按需性能分析。任何基于 `llm-rosetta` 构建
-的 HTTP 代理都可以直接导入此包——无需依赖网关的配置系统或 HTTP 服务器。
+可观测性层分为两半，分属两个发行包（epic #1127）：
+
+- **`llm_rosetta_gateway.observability`**——遥测栈：指标、请求日志、SQLite 持久化、
+  操作日志、错误转储、捕获、维护、保留策略、请求头脱敏与按需性能分析。它的
+  消费者都是代理服务器，因此随网关发行。
+- **`llm_rosetta.observability.usage`**——用量报告的**语义**：台账、按模型类型的
+  归一化与滚动窗口报告。`pipeline.chat` 会读取它，因此留在核心里，且不需要存储。
+
+只做转换的库只需导入用量这一半；任何写数据库的东西都从网关导入。下面的模块
+两边都与框架无关——不依赖网关的配置系统或 HTTP 服务器。
 
 ```python
-from llm_rosetta.observability import (
+from llm_rosetta_gateway.observability import (
     MetricsCollector,
     PersistenceManager,
     ProfilerState,
@@ -207,7 +214,7 @@ if state.should_profile():
 否则回退到内存环形缓冲区。
 
 ```python
-from llm_rosetta.observability import OpsLog, OpsLogEntry
+from llm_rosetta_gateway.observability import OpsLog, OpsLogEntry
 ```
 
 ### OpsLogEntry 字段
@@ -314,7 +321,7 @@ app.ops_ctx = ctx
 记录错误上下文的主入口。成功时返回转储 ID，持久化禁用或发生异常时返回 `None`。
 
 ```python
-from llm_rosetta.observability import dump_error
+from llm_rosetta_gateway.observability import dump_error
 
 dump_id = dump_error(
     persistence,
@@ -357,7 +364,7 @@ dump_id = dump_error(
 body 不会被修改。
 
 ```python
-from llm_rosetta.observability import offload_images
+from llm_rosetta_gateway.observability import offload_images
 
 cleaned = offload_images(request_body)
 # base64 数据 → "[image image/png sha256:abc123… 450KB]"
@@ -374,7 +381,7 @@ cleaned = offload_images(request_body)
 对规范化 JSON（键排序、无空白）计算 SHA256 哈希。
 
 ```python
-from llm_rosetta.observability import compute_body_hash
+from llm_rosetta_gateway.observability import compute_body_hash
 
 h = compute_body_hash({"model": "gpt-4o", "messages": []})
 # "e3b0c44298fc1c149afb..."
@@ -391,7 +398,7 @@ h = compute_body_hash({"model": "gpt-4o", "messages": []})
 将 body 字典进行 JSON 序列化并 zlib 压缩。
 
 ```python
-from llm_rosetta.observability import compress_body
+from llm_rosetta_gateway.observability import compress_body
 
 compressed, original_size = compress_body(request_body)
 ```
@@ -407,7 +414,7 @@ compressed, original_size = compress_body(request_body)
 将 zlib 压缩的 JSON body 解压还原为字典。是 `compress_body` 的逆操作。
 
 ```python
-from llm_rosetta.observability import decompress_body
+from llm_rosetta_gateway.observability import decompress_body
 
 body = decompress_body(compressed)
 ```
@@ -422,6 +429,7 @@ body = decompress_body(compressed)
 
 ## 用量（Usage） {: #usage }
 
+这一半属于核心：它留在 `llm_rosetta.observability`（无存储、无网关）。
 `llm_rosetta.observability.usage` 负责界定"我们搬了多少 token、算在谁头上"。
 它不涉及 HTTP、配置和凭据：库的使用者不需要这些东西就能记录用量并读取报告；
 网关只是它的一个消费者，额外提供凭据主体（subject）和 SQLite 存储。
@@ -544,7 +552,7 @@ report.total("24h")
 ### `llm-rosetta-usage` 命令 { #the-llm-rosetta-usage-command }
 
 网关在管理面板里渲染这份报告，库通过 `UsageReport.build` 拿到它；第三个读取方
-是 shell：
+是 shell——该命令随**网关**发行包提供，因为它读的库只有网关会写：
 
 ```console
 $ llm-rosetta-usage --db /var/lib/llm-rosetta --window 24h
@@ -617,4 +625,17 @@ from llm_rosetta_gateway.admin.persistence import PersistenceManager
 from llm_rosetta_gateway.admin.routes.profiling import ProfilerState
 ```
 
-新代码应直接从 `llm_rosetta.observability` 导入。
+遥测模块旧的 `llm_rosetta.observability.*` 路径随 #1161 一并迁移，并保留到
+0.16.0 的移除窗口（#919）：导入时会发出警告，并返回与网关侧**同一个**模块
+对象，因此同一个存储不会被打开两次。
+
+```python
+import warnings
+
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore", DeprecationWarning)
+    from llm_rosetta.observability.metrics import MetricsCollector  # 同一个对象
+```
+
+新代码：遥测从 `llm_rosetta_gateway.observability` 导入，计量从
+`llm_rosetta.observability.usage` 导入。

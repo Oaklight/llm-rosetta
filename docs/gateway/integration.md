@@ -145,7 +145,7 @@ setup_admin(
 
 ```python
 import time
-from llm_rosetta.observability import MetricsCollector, RequestLog, RequestLogEntry
+from llm_rosetta_gateway.observability import MetricsCollector, RequestLog, RequestLogEntry
 
 # 这些由 setup_admin() 创建并挂载到 app 上
 metrics: MetricsCollector = app.metrics
@@ -284,7 +284,7 @@ class OpsCustomAction(OpsBase):
 ```
 
 将对应的事件类型常量添加到你自己项目的常量模块中（不要直接修改
-`llm_rosetta.observability.ops_log`）。
+`llm_rosetta_gateway.observability.ops_log`）。
 
 ## 品牌定制
 
