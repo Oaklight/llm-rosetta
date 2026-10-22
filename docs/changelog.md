@@ -209,6 +209,11 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### 修复
 
+- **当 shim 的密钥环境变量存在时，`token_command` 提供方不再启动失败；管理面板也不再改写它的凭据**（issue [#946](https://github.com/Oaklight/llm-rosetta/issues/946)）：shim 的 `connection.api_key_env` 只是**默认**凭据，但它会在读取 `token_command` 之前被注入 provider 配置，而两者互斥——因此文档里的 ALCF 配置（在 `token_command` 旁边导出 `ALCF_API_KEY`）会在启动时报 "token_command and api_key are mutually exclusive"。现在只要配置了命令，就不再注入该环境变量；真正冲突时报错会指名运维人员写下的 shim，而不是它的基础格式。管理面板存在与之配套的两个缺陷：`PUT /admin/api/config/providers/<name>` 按一份不含 `token_command` 与 `token_refresh_interval` 的白名单重建条目，于是任何一次普通编辑都会丢掉命令，把提供方变成静态密钥模式；编辑器还会把 API 密钥框预填成字面量 `token_command`，打开再保存就把这个词写成了凭据。现在这两个字段在保存后都会保留——请求体不带该键表示“保持”，发送 `token_command: []` 表示清除——编辑器则让密钥框保持为空，并提示凭据由命令生成。
+
+
+- **流内失败保留上游的错误码**（issue [#1060](https://github.com/Oaklight/llm-rosetta/issues/1060)、epic [#1055](https://github.com/Oaklight/llm-rosetta/issues/1055)）：发生在 **200 SSE 流内部**的失败此前会被抹平。`is_upstream_error_chunk` 只看顶层 `error`，并显式跳过任何带 `type` 的 chunk，因此 Responses 的 `response.failed`——携带 `subscription_sharing_usage_limit_exceeded` 及其同类码的那个事件——从未被当作错误，客户端只得到一个不说原因的结束。现在 `response.failed` 与 `{"type": "error"}` 事件都被判定为流内终止错误，错误码、消息与请求 id 会带进客户端收到的终止事件：Responses 客户端的 `response.failed` 保留上游的 `error.code`（而不是笼统的 `server_error`），并复用上游的 response id；Chat 客户端则在 `error.type` 里拿到该码。没有错误码的失败仍产出原来的通用形状，普通 envelope 的行为不变。不引入自动重试：计划用量类失败不应重试。
+
 - **只安装核心时，错误会指向网关包**（epic [#1127](https://github.com/Oaklight/llm-rosetta/issues/1127)、PR [#1165](https://github.com/Oaklight/llm-rosetta/pull/1165)）：在只装了 `llm-rosetta` 的环境里执行 `import llm_rosetta.gateway`，此前抛出的是裸的 `ModuleNotFoundError: No module named 'llm_rosetta_gateway'`；又因为弃用警告先触发，`-W error` 下只看到警告，真正的缺失被掩盖。现在 shim 先导入目标包，缺失时抛出 `ImportError` 并指名要安装的发行包（`pip install llm-rosetta-gateway`）；成功导入时仍按原样发出警告。
 
 - **服务方卡片会显示降级的端点**（issue [#1106](https://github.com/Oaklight/llm-rosetta/issues/1106)、PR [#1162](https://github.com/Oaklight/llm-rosetta/pull/1162)）：当一个服务方同时提供多种模型类型时，其中一个端点解析失败不会影响其它端点（#1150），但面板从未显示这一点——标记写在运行时解析结果上，而 `GET /admin/api/config` 读取的是磁盘文档，因此 `_auto_disabled_endpoints` 从未进入 payload，卡片只能画整体禁用标记。现在 payload 会叠加运行时标记（只保留 reason 与 category，与 `_auto_disabled` 相同的脱敏形状），卡片为每个降级端点渲染一个标签，标明模型类型与失败类别，完整校验原因放在 tooltip 中；卡片边框只做轻微警示，因为该服务方的其它端点仍在服务。
