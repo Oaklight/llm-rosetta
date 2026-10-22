@@ -112,17 +112,20 @@ class TestPresetsLoad:
 class TestProviderResolvesLive:
     """A provider on a preset shim must build, under both spellings."""
 
+    # ALCF and AskSage declare their credential exchange in the shim, so a
+    # provider on them carries no key — adding one is the mutual exclusion the
+    # loader enforces.  Argo takes the key directly.
     @pytest.mark.parametrize(
-        "shim_name",
+        "shim_name,credential",
         [
-            "alcf_sophia--chat_completions",
-            "asksage--messages",
-            "argo--open_responses",
+            ("alcf_sophia--chat_completions", {}),
+            ("asksage--messages", {}),
+            ("argo--open_responses", {"api_key": "k"}),
         ],
     )
-    def test_canonical_shim_name_resolves(self, shim_name):
+    def test_canonical_shim_name_resolves(self, shim_name, credential):
         raw = {
-            "providers": {"p": {"shim": shim_name, "api_key": "k"}},
+            "providers": {"p": {"shim": shim_name, **credential}},
             "models": {"m": "p"},
         }
         config = GatewayConfig(raw)
@@ -132,7 +135,7 @@ class TestProviderResolvesLive:
     def test_legacy_alcf_spelling_resolves_through_the_preset(self):
         """The migration path this issue asked for, end to end."""
         raw = {
-            "providers": {"p": {"type": "alcf--sophia", "api_key": "k"}},
+            "providers": {"p": {"type": "alcf--sophia"}},
             "models": {"m": "p"},
         }
         config = GatewayConfig(raw)
