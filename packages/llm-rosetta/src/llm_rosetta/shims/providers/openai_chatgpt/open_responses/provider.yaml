@@ -27,6 +27,14 @@ connection:
   stream_required: true
   manage_usage_url: https://chatgpt.com/settings/usage
 
+# The plan lane exposes no usage endpoint to the application: the per-app cap
+# and the 5-hour window live in ChatGPT's own settings, and the only signal the
+# route gives is a refusal naming the exhausted window.  So the probe is
+# declared in-band only — kept for its ``inband()`` classifier, never polled.
+quota:
+  probe: openai_codex
+  in_band: true
+
 tools:
   custom_tools: true
   # The plan route takes namespaced tool containers; the converter renders

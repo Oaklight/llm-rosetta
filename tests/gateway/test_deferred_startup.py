@@ -881,3 +881,60 @@ class TestExchangeSeeding:
         assert exchange.calls == 1
         # Not registered as ready, so no refresh loop was started for it.
         assert ds.is_fully_ready() is False
+
+
+class TestProviderNotReadyForAQuotaBlock:
+    """A quota block is not startup: it has a known end, and says so."""
+
+    def test_the_message_names_the_block_and_the_end(self):
+        from datetime import datetime, timedelta, timezone
+
+        now = datetime(2026, 10, 22, 12, 0, tzinfo=timezone.utc)
+        exc = ProviderNotReady(
+            "gpt-4o", blocked_until=now + timedelta(seconds=42), now=now
+        )
+
+        assert "quota block" in str(exc)
+        assert "2026-10-22T12:00:42Z" in str(exc)
+        assert "initializing" not in str(exc)
+        assert exc.retry_after == 42
+        assert exc.failed is False
+
+    def test_startup_carries_no_retry_after_of_its_own(self):
+        assert ProviderNotReady("gpt-4o").retry_after is None
+
+
+class TestAQuotaBlockedRoute:
+    def test_every_provider_blocked_reports_the_block_not_startup(self):
+        """The client that just got a plan refusal is not told we are booting."""
+        from llm_rosetta_gateway.config.resolve import _quota_blocked_until
+        from llm_rosetta_gateway.quota.state import QUOTA_STATE
+        from llm_rosetta_gateway.transport.provider_info import ProviderInfo
+
+        pinfo = ProviderInfo(
+            "p",
+            api_key="k",
+            base_url="https://example.test",
+            auth_header_fn=lambda key: {},
+            url_template="{base_url}/x",
+        )
+        identity = "@quota-block-route"
+        pinfo.quota_identity = identity
+        pinfo.quota_provider_blocked = lambda: (
+            QUOTA_STATE.provider_block(identity) is not None
+        )
+        QUOTA_STATE.block_provider(identity, 30, "usage limit")
+
+        assert _quota_blocked_until([pinfo]) is not None
+
+        # An unblocked sibling means the route's unavailability is not (only)
+        # a quota story, so the helper declines.
+        other = ProviderInfo(
+            "q",
+            api_key="k",
+            base_url="https://example.test",
+            auth_header_fn=lambda key: {},
+            url_template="{base_url}/x",
+        )
+        other.quota_provider_blocked = lambda: False
+        assert _quota_blocked_until([pinfo, other]) is None

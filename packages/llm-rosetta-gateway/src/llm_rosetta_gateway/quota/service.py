@@ -89,6 +89,10 @@ def resolve_provider_probe(
             getattr(pinfo, "quota_unsupported", None)
             or "no quota probe is declared by this shim",
         )
+    if pinfo.quota_usage_url is None:
+        # The probe is bound for its in-band classifier only: say so, rather
+        # than reporting a readable quota with no endpoint.
+        return probe, None, pinfo.quota_unsupported or "no quota endpoint"
     return probe, pinfo.quota_usage_url, None
 
 
@@ -183,13 +187,22 @@ async def read_provider_quota(
     """
     probe, url, unsupported = resolve_provider_probe(config, name)
     if probe is None or url is None:
-        return {
+        payload: dict[str, Any] = {
             "provider": name,
             "supported": False,
             "status": STATUS_UNSUPPORTED,
             "reason": unsupported,
             "credentials": [],
         }
+        # A blocked lane has something to say even with nothing to read: an
+        # in-band provider is out of rotation for a bounded time, and this is
+        # the only place the operator can see it.
+        pinfo = getattr(config, "providers", {}).get(name)
+        if pinfo is not None:
+            block = provider_cooldown(name, pinfo)
+            if block is not None:
+                payload["provider_block"] = block
+        return payload
 
     pinfo = config.providers[name]
     declaration = _quota_declaration(config, name)
@@ -294,7 +307,8 @@ def note_upstream_quota_error(
             window=signal.window,
         )
     logger.warning(
-        "Quota: demoted a %s credential for %ss (%s)",
+        "Quota: %s %s for %ss (%s)",
+        "blocked the provider" if pinfo.mints_credential else "demoted a credential",
         probe_id,
         seconds,
         signal.reason,
@@ -343,6 +357,11 @@ def bind_provider_quota(name: str, pinfo: Any) -> None:
     The provider keeps only predicates and an identifier: it never holds the
     state object, so a config reload cannot create a second source of truth.
     """
+    # A provider that mints its credential has no ``credential_token`` until a
+    # record exists, so the identity falls back to ``@<name>`` and becomes
+    # ``acct:<digest>`` on the reload after sign-in.  Both are stable per
+    # provider — which is what a block needs — but neither follows the account
+    # to another provider entry.
     identity = getattr(pinfo, "credential_token", None) or f"@{name}"
     pinfo.quota_identity = identity
     # A keyless lane has no per-key allowance but can still be cooling down
@@ -376,6 +395,7 @@ def resolve_provider_probe_for_info(
             probes=pinfo.quota_probes,
             probe_id=pinfo.quota_probe_id,
             url=pinfo.quota_url,
+            in_band=bool(getattr(pinfo, "quota_in_band", False)),
         )
     except ValueError as exc:
         pinfo.quota_unsupported = str(exc)
@@ -384,6 +404,9 @@ def resolve_provider_probe_for_info(
         pinfo.quota_unsupported = "no quota probe is declared by this shim"
         return None, None, pinfo.quota_unsupported
     if match.url is None:
+        # Nothing to poll, but the probe stays bound: its ``inband()`` is the
+        # only signal this lane gives, and demoting on it is the point.
+        pinfo.quota_probe_impl = match.probe
         pinfo.quota_unsupported = match.unsupported or "no quota endpoint"
         return match.probe, None, pinfo.quota_unsupported
     pinfo.quota_probe_impl = match.probe
@@ -392,7 +415,13 @@ def resolve_provider_probe_for_info(
 
 
 def provider_cooldown(name: str, pinfo: Any) -> dict[str, Any] | None:
-    """Return a keyless provider's cooldown, for the admin surface."""
+    """Return a provider-wide quota block, for the admin surface.
+
+    Two lanes land here: a keyless one, whose 429 has no key to demote, and a
+    provider that mints its credential, whose rotating token cannot carry a
+    per-key demotion across a refresh.  In both cases the block is what keeps
+    the provider out of rotation, so it is also what the operator needs to see.
+    """
     identity = getattr(pinfo, "quota_identity", None) or f"@{name}"
     block = QUOTA_STATE.provider_block(identity)
     return block.describe() if block else None

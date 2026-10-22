@@ -61,7 +61,11 @@ def _resolve_or_error(
         status = 502 if exc.failed else 503
         resp = error_response_for_source(source_provider, status, str(exc))
         resp.headers["x-request-id"] = request_id
-        if not exc.failed:
+        if exc.retry_after is not None:
+            # A quota block has a known end, which is exactly what this header
+            # is for; startup does not, so it keeps the short default.
+            resp.headers["Retry-After"] = str(exc.retry_after)
+        elif not exc.failed:
             resp.headers["Retry-After"] = "5"
         return resp
     except KeyError:

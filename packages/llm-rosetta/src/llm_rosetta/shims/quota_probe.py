@@ -228,12 +228,16 @@ def probe_ids(probes: tuple[QuotaProbe, ...]) -> list[str]:
     return [probe.id for probe in probes]
 
 
+_IN_BAND_ONLY = "in-band signals only: this lane exposes no usage endpoint"
+
+
 def resolve_probe(
     base_url: str,
     *,
     probes: tuple[QuotaProbe, ...],
     probe_id: str | None = None,
     url: str | None = None,
+    in_band: bool = False,
 ) -> ProbeMatch | None:
     """Resolve which of *probes* reads *base_url* and where.
 
@@ -256,6 +260,10 @@ def resolve_probe(
             raise ValueError(
                 f"Unknown quota probe {probe_id!r}; this shim provides: {known}"
             )
+        if in_band:
+            # No endpoint to read: the probe is kept for its ``inband()``
+            # classifier, and nothing polls it.
+            return ProbeMatch(probe=probe, url=None, unsupported=_IN_BAND_ONLY)
         if url:
             return ProbeMatch(probe=probe, url=url)
         matched = probe.match(base_url)
@@ -279,6 +287,8 @@ def resolve_probe(
         return ProbeMatch(probe=probe, url=matched)
 
     for probe in probes:
+        if in_band:
+            return ProbeMatch(probe=probe, url=None, unsupported=_IN_BAND_ONLY)
         matched = probe.match(base_url)
         if matched == "":
             return ProbeMatch(

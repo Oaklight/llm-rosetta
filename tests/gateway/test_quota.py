@@ -614,3 +614,201 @@ class TestDeferredQuotaPolling:
 
         assert "quota-poller" not in [task.get_name() for task in startup._tasks]
         await startup.shutdown()
+
+
+class TestInBandOnlyLane:
+    """A lane with no usage endpoint: the probe exists only for its classifier.
+
+    The ChatGPT plan route is the case — the app can be told "this window is
+    spent" and can never ask "how much is left".
+    """
+
+    def _config(self, monkeypatch):
+        from llm_rosetta_gateway.quota.service import resolve_provider_probe_for_info
+        from llm_rosetta.shims.providers import load_providers
+
+        load_providers()
+        pinfo = SimpleNamespace(
+            name="openai_chatgpt--open_responses",
+            keyless=False,
+            base_url="https://api.openai.com/v1",
+            quota_probes=(OpenAICodexProbe(),),
+            quota_probe_id="openai_codex",
+            quota_probe="openai_codex",
+            quota_url=None,
+            quota_usage_url=None,
+            quota_in_band=True,
+            quota_unsupported=None,
+            key_ring=KeyRing("plan-token"),
+        )
+        return resolve_provider_probe_for_info("chatgpt", pinfo), pinfo
+
+    def test_the_probe_resolves_through_the_real_loader(self, tmp_path):
+        """The hand-built provider in the other tests supplies the probe the
+        loader might not — this one goes through `load_gateway_config`."""
+        from llm_rosetta_gateway.config import load_gateway_config
+        from llm_rosetta.shims.providers import load_providers
+
+        load_providers()
+        config_path = tmp_path / "config.jsonc"
+        config_path.write_text(
+            json.dumps(
+                {
+                    "providers": {
+                        "chatgpt": {
+                            "type": "openai_chatgpt--open_responses",
+                            "base_url": "https://api.openai.com/v1",
+                        }
+                    },
+                    "models": {},
+                }
+            )
+        )
+
+        config = load_gateway_config(str(config_path))
+        pinfo = config.providers["chatgpt"]
+
+        assert pinfo.quota_probe_impl is not None
+        assert pinfo.quota_in_band is True
+        assert pinfo.quota_usage_url is None
+        assert pinfo.quota_unsupported and "in-band" in pinfo.quota_unsupported
+
+    def test_the_plan_shim_declares_it_in_band(self):
+        from llm_rosetta.shims.providers import load_providers
+
+        shim = {s.name: s for s in load_providers()}["openai_chatgpt--open_responses"]
+
+        assert shim.quota is not None
+        assert shim.quota.probe == "openai_codex"
+        assert shim.quota.in_band is True
+        assert shim.quota.url is None
+
+    def test_resolution_keeps_the_probe_but_offers_no_url(self):
+        (probe, url, reason), _ = self._config(None)
+
+        assert url is None
+        assert probe is not None
+        assert "in-band" in (reason or "")
+
+    def test_the_probe_stays_bound_for_the_classifier(self):
+        """Without the binding, `note_upstream_quota_error` returns early and
+        the lane never learns its window is spent."""
+        _, pinfo = self._config(None)
+
+        assert pinfo.quota_probe_impl is not None
+        assert pinfo.quota_usage_url is None
+
+    def test_a_429_demotes_the_plan_credential(self):
+        from llm_rosetta_gateway.quota.service import note_upstream_quota_error
+        from llm_rosetta_gateway.quota.state import QUOTA_STATE
+
+        _, pinfo = self._config(None)
+        identity = "acct:inband-only-plan"
+        pinfo.quota_identity = identity
+        pinfo.mints_credential = True
+        pinfo.active_key = lambda: "plan-token"
+
+        signal = note_upstream_quota_error(
+            pinfo,
+            429,
+            json.dumps(
+                {"error": {"code": "subscription_sharing_usage_limit_exceeded"}}
+            ),
+        )
+
+        assert signal is not None
+        block = QUOTA_STATE.provider_block(identity)
+        assert block is not None
+        # Bounded and short: the vendor says nothing about a reset, so the
+        # gateway must not invent one.
+        left = (block.until - datetime.now(timezone.utc)).total_seconds()
+        assert 0 < left <= 61
+
+    def test_a_blocked_plan_provider_is_not_ready(self):
+        """The block is the only remedy this lane has — nothing polls it.
+
+        A minting provider cannot carry a per-key demotion (a rotating token
+        is a new fingerprint every refresh), so if ``ready`` ignored the
+        provider block the refusal would be recorded and the next request
+        would go back to the same exhausted account.
+        """
+        from llm_rosetta_gateway.quota.service import bind_provider_quota
+        from llm_rosetta_gateway.quota.state import QUOTA_STATE
+        from llm_rosetta_gateway.transport.provider_info import ProviderInfo
+
+        pinfo = ProviderInfo(
+            "openai_chatgpt--open_responses",
+            api_key="plan-token",
+            base_url="https://api.openai.com/v1",
+            auth_header_fn=lambda key: {"Authorization": f"Bearer {key}"},
+            url_template="{base_url}/responses",
+            # A minting provider: the credential comes from the gateway, so a
+            # per-key demotion cannot survive a refresh.
+            token_command=["true"],
+        )
+        pinfo.quota_probes = (OpenAICodexProbe(),)
+        pinfo.quota_probe_id = "openai_codex"
+        pinfo.quota_in_band = True
+        pinfo.credential_token = "acct:inband-ready-test"
+        bind_provider_quota("chatgpt", pinfo)
+
+        assert pinfo.ready is True
+
+        QUOTA_STATE.block_provider(
+            "acct:inband-ready-test", 60, "ChatGPT plan usage limit exceeded"
+        )
+
+        assert pinfo.ready is False
+        # And the admin surface can say why.
+        from llm_rosetta_gateway.quota.service import provider_cooldown
+
+        cooldown = provider_cooldown("chatgpt", pinfo)
+        assert cooldown is not None
+        assert "plan usage" in cooldown["reason"]
+
+    def test_the_panel_reports_no_endpoint_rather_than_an_error(self):
+        import asyncio
+
+        from llm_rosetta_gateway.quota.service import read_provider_quota
+
+        _, pinfo = self._config(None)
+        config = SimpleNamespace(providers={"chatgpt": pinfo})
+
+        payload = asyncio.run(read_provider_quota(config, "chatgpt"))
+
+        assert payload["supported"] is False
+        assert "in-band" in payload["reason"]
+
+    def test_a_blocked_lane_shows_its_cooldown_even_with_nothing_to_read(self):
+        import asyncio
+
+        from llm_rosetta_gateway.quota.service import (
+            bind_provider_quota,
+            read_provider_quota,
+        )
+        from llm_rosetta_gateway.quota.state import QUOTA_STATE
+        from llm_rosetta_gateway.transport.provider_info import ProviderInfo
+
+        pinfo = ProviderInfo(
+            "openai_chatgpt--open_responses",
+            api_key="plan-token",
+            base_url="https://api.openai.com/v1",
+            auth_header_fn=lambda key: {"Authorization": f"Bearer {key}"},
+            url_template="{base_url}/responses",
+            token_command=["true"],
+        )
+        pinfo.quota_probes = (OpenAICodexProbe(),)
+        pinfo.quota_probe_id = "openai_codex"
+        pinfo.quota_in_band = True
+        pinfo.credential_token = "acct:inband-panel-test"
+        bind_provider_quota("chatgpt", pinfo)
+        QUOTA_STATE.block_provider("acct:inband-panel-test", 60, "usage limit")
+
+        payload = asyncio.run(
+            read_provider_quota(
+                SimpleNamespace(providers={"chatgpt": pinfo}), "chatgpt"
+            )
+        )
+
+        assert payload["supported"] is False
+        assert payload["provider_block"]["reason"] == "usage limit"

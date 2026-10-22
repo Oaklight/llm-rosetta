@@ -251,12 +251,19 @@ class QuotaDeclaration:
             reads on demand only.
         demote_at: Used share at which a window demotes the credential.
             ``100`` keeps the vendor's own exhaustion rule.
+        in_band: Declare that this lane has **no** usage endpoint to read —
+            its allowance is known only from what an upstream refusal says, and
+            the probe is used for that classifier rather than for polling.
+            A plan lane whose per-app cap lives in the vendor's own settings is
+            the case: the app can be told the window is spent, and can never
+            see how much of it is left.
     """
 
     probe: str | None = None
     url: str | None = None
     interval: int = 0
     demote_at: float = 100.0
+    in_band: bool = False
 
     def as_dict(self) -> dict[str, Any]:
         """Return the non-``None`` fields as a plain dict."""
@@ -265,6 +272,8 @@ class QuotaDeclaration:
             out["probe"] = self.probe
         if self.url:
             out["url"] = self.url
+        if self.in_band:
+            out["in_band"] = True
         return out
 
 

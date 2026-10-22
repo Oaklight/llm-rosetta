@@ -230,6 +230,7 @@ class ProviderInfo:
         stream_required: bool = False,
         quota_probe_id: str | None = None,
         quota_url: str | None = None,
+        quota_in_band: bool = False,
         quota_probes: tuple[Any, ...] = (),
     ) -> None:
         if not base_url.startswith(("http://", "https://")):
@@ -290,6 +291,9 @@ class ProviderInfo:
         # ``quota_probe_impl`` / ``quota_usage_url`` (or records why not).
         self.quota_probe_id = quota_probe_id
         self.quota_url = quota_url
+        # True for a lane that exposes no usage endpoint: the probe is bound
+        # for its in-band classifier only.
+        self.quota_in_band = quota_in_band
         self.quota_probes = tuple(quota_probes)
         self.quota_probe: str | None = None
         self.quota_probe_impl: Any | None = None
@@ -323,15 +327,19 @@ class ProviderInfo:
     def ready(self) -> bool:
         """Whether this provider can accept traffic.
 
-        Returns ``False`` when the key ring contains only the deferred
-        token-command sentinel, meaning the initial token fetch has not
-        yet completed, and when a keyless upstream is in a quota cooldown.
+        Returns ``False`` when the provider as a whole is in a quota block, or
+        when the key ring contains only the deferred token-command sentinel
+        (the initial fetch has not completed).
+
+        The block is consulted for **every** provider, not only a keyless one.
+        A provider that mints its credential has no per-key demotion available
+        — a rotating token is a new fingerprint on every refresh — so a block
+        on the account identity is the only thing that can take it out of
+        rotation, and reading it only for keyless lanes meant an exhausted plan
+        account recorded the refusal and kept serving.
         """
-        if self.keyless:
-            return not (
-                self.quota_provider_blocked is not None
-                and self.quota_provider_blocked()
-            )
+        if self.quota_provider_blocked is not None and self.quota_provider_blocked():
+            return False
         if self.key_ring.contains_only(TOKEN_PENDING_SENTINEL):
             return False
         return True

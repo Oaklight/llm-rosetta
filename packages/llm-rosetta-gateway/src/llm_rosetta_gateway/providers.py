@@ -664,6 +664,12 @@ def build_provider_info(
     quota_url = quota_cfg.get("url") or (
         shim_quota.url if shim_quota is not None else None
     )
+    # A lane with no usage endpoint: the probe is kept for its in-band
+    # classifier, and nothing polls it.
+    quota_in_band = bool(
+        quota_cfg.get("in_band", False)
+        or (shim_quota.in_band if shim_quota is not None else False)
+    )
 
     command_takes_key = bool(token_command and cfg.get("token_command_env"))
 
@@ -720,5 +726,6 @@ def build_provider_info(
         stream_required=bool(shim.connection.stream_required if shim else False),
         quota_probe_id=quota_probe,
         quota_url=quota_url,
+        quota_in_band=quota_in_band,
         quota_probes=(shim.quota_probes if shim is not None else ()),
     )

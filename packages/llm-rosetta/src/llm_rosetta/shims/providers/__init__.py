@@ -686,6 +686,7 @@ def _load_single_provider(
             url=quota_raw.get("url"),
             interval=int(quota_raw.get("interval", 0) or 0),
             demote_at=float(quota_raw.get("demote_at", 100.0)),
+            in_band=bool(quota_raw.get("in_band", False)),
         )
 
     # Parse tools config (grouped or flat fallback).

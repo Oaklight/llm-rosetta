@@ -6,6 +6,8 @@ it, plus the identity map the admin panel and the ops layer read.
 
 from __future__ import annotations
 
+from datetime import datetime
+
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -245,6 +247,27 @@ def selection_context(
     return ctx
 
 
+def _quota_blocked_until(unready: list[Any]) -> datetime | None:
+    """The end of a quota block covering every unready provider, if any.
+
+    Returns the **latest** end, because the route is unavailable until the last
+    of its providers is back.
+    """
+    from ..quota.state import QUOTA_STATE
+
+    ends: list[datetime] = []
+    for pinfo in unready:
+        blocked = getattr(pinfo, "quota_provider_blocked", None)
+        if blocked is None or not blocked():
+            return None
+        identity = getattr(pinfo, "quota_identity", None) or f"@{pinfo.name}"
+        block = QUOTA_STATE.provider_block(identity)
+        if block is None:
+            return None
+        ends.append(block.until)
+    return max(ends) if ends else None
+
+
 def resolve(
     config: GatewayConfig, ctx: SelectionContext
 ) -> tuple[ResolvedRoute, ProviderInfo]:
@@ -283,11 +306,19 @@ def resolve(
     model_route = ctx.model_route
     assert model_route is not None  # install_route() put it there
     if ctx.chosen is None:
-        deferred = getattr(config, "_deferred_startup", None)
-        all_failed = deferred is not None and all(
-            deferred.provider_state(p.name) == ProviderInitState.FAILED
+        unready = [
+            config.providers[p.name]
             for p in model_route.providers
             if not config.providers[p.name].ready
+        ]
+        # Every route is out because of a quota block: that has a known end,
+        # and telling the client "initializing" would be a different story.
+        blocked_until = _quota_blocked_until(unready)
+        if blocked_until is not None and len(unready) == len(model_route.providers):
+            raise ProviderNotReady(model, blocked_until=blocked_until)
+        deferred = getattr(config, "_deferred_startup", None)
+        all_failed = deferred is not None and all(
+            deferred.provider_state(p.name) == ProviderInitState.FAILED for p in unready
         )
         raise ProviderNotReady(model, failed=all_failed)
 

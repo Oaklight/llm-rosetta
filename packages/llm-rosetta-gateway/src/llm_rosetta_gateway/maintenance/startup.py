@@ -44,11 +44,39 @@ class ProviderInitState(Enum):
 
 
 class ProviderNotReady(Exception):
-    """Raised when all providers for a model are still initializing or have failed."""
+    """Raised when every provider for a model is unavailable right now.
 
-    def __init__(self, model: str, *, failed: bool = False) -> None:
+    Three states reach here, and a client should be told which: the providers
+    are still initializing after startup, they failed to initialize, or they
+    are in a quota block with a known end.  The last one is not "initializing"
+    — saying so sends a client that just received an allowance refusal looking
+    for a startup problem.
+    """
+
+    def __init__(
+        self,
+        model: str,
+        *,
+        failed: bool = False,
+        blocked_until: datetime | None = None,
+        now: datetime | None = None,
+    ) -> None:
         self.model = model
         self.failed = failed
+        #: Seconds the caller should wait before retrying, when the state has
+        #: a known end (a quota block does; startup does not).
+        self.retry_after: int | None = None
+        if blocked_until is not None:
+            moment = now or datetime.now(timezone.utc)
+            self.retry_after = max(1, int((blocked_until - moment).total_seconds()))
+            rendered = blocked_until.astimezone(timezone.utc).strftime(
+                "%Y-%m-%dT%H:%M:%SZ"
+            )
+            super().__init__(
+                f"All providers for model '{model}' are in a quota block until "
+                f"{rendered}; please retry after that"
+            )
+            return
         state = "failed" if failed else "initializing"
         super().__init__(
             f"All providers for model '{model}' are {state}; please retry shortly"
