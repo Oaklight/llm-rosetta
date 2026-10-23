@@ -194,9 +194,9 @@ def test_sse_finish_reason_preserves_terminal_status(
     assert [
         choice["finish_reason"] for choice in choices if choice.get("finish_reason")
     ] == [expected]
-    usage = processor.get_accumulated_usage()
-    assert usage is not None
-    assert usage["total_tokens"] == 5
+    assert [
+        chunk["usage"]["total_tokens"] for chunk in chunks if chunk.get("usage")
+    ] == [5]
     if kind in {"function", "custom"}:
         calls = [
             call for choice in choices for call in choice["delta"].get("tool_calls", [])
