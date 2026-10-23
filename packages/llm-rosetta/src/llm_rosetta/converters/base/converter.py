@@ -897,11 +897,16 @@ class BaseConverter(ABC):
 
         return ir_tools
 
-    def _get_cached_ir_tools_to_p(self, ir_tools: list[Any]) -> list[Any]:
+    def _get_cached_ir_tools_to_p(
+        self, ir_tools: list[Any], *, warnings: Any = None
+    ) -> list[Any]:
         """Per-entry IR→provider tool conversion with caching.
 
         Looks up each IR tool individually.  On miss, converts and
-        caches.
+        caches — unless the conversion declined the tool, in which case
+        nothing is cached: a drop is the cheapest thing here to redo, and
+        caching it would let the *report* of the drop happen once per
+        process while the tool kept disappearing.
 
         .. warning::
             Returned dicts are **shared references** into the cache.
@@ -909,6 +914,8 @@ class BaseConverter(ABC):
 
         Args:
             ir_tools: IR tool definition list.
+            warnings: The conversion's sink, handed to the converter so a
+                declined tool is reported where the caller can see it.
 
         Returns:
             Provider-format tool definition list.
@@ -923,11 +930,13 @@ class BaseConverter(ABC):
             if cached is not _SENTINEL:
                 converted = cached
             else:
-                converted = self.tool_ops.ir_tool_definition_to_p(t)
-                put_cached_tool(tag, t, converted)
-            # A falsy result means the target cannot express this tool (e.g. an
-            # intrinsic tool on a provider without server tools).  Check it on
-            # both branches — the cache stores the falsy result too.
+                converted = self.tool_ops.ir_tool_definition_to_p(t, warnings=warnings)
+                # A falsy result means the target cannot express this tool (e.g.
+                # an intrinsic tool on a provider without server tools).  It is
+                # not cached: the conversion declines the tool every time, and
+                # its report has to be recorded every time too.
+                if converted:
+                    put_cached_tool(tag, t, converted)
             if converted:
                 results.append(converted)
 

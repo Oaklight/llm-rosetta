@@ -1062,14 +1062,18 @@ class OpenResponsesConverter(BaseConverter):
         discarded.
         """
         if not ctx.options.get("tool_groups"):
-            return self._get_cached_ir_tools_to_p(tools)
+            return self._get_cached_ir_tools_to_p(tools, warnings=ctx.warnings)
 
         rendered: list[Any] = []
         for entry in group_tools(tools, carries_groups=True):
             if not isinstance(entry, ToolGroup):
-                rendered.extend(self._get_cached_ir_tools_to_p([entry]))
+                rendered.extend(
+                    self._get_cached_ir_tools_to_p([entry], warnings=ctx.warnings)
+                )
                 continue
-            children = self._get_cached_ir_tools_to_p(list(entry.tools))
+            children = self._get_cached_ir_tools_to_p(
+                list(entry.tools), warnings=ctx.warnings
+            )
             # A group whose every member this target declined is not a group: a
             # childless container is what every upstream that accepts one
             # rejects.  The list conversion drops each declined entry on its

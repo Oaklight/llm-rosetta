@@ -980,7 +980,9 @@ class GoogleGenerateConverter(BaseConverter):
         config = result.setdefault("config", {})
         tools = ir_request.get("tools")
         if tools:
-            config["tools"] = self._get_cached_ir_tools_to_p(tools)
+            config["tools"] = self._get_cached_ir_tools_to_p(
+                tools, warnings=ctx.warnings
+            )
 
         tool_choice = ir_request.get("tool_choice")
         if tool_choice:

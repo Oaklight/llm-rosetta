@@ -64,11 +64,27 @@ _RESPONSES_NATIVE_TYPE_TO_KIND: dict[str, str] = {
     "web_search_preview": "web_search",
     "code_interpreter": "code_interpreter",
     "file_search": "file_search",
+    "image_generation": "image_generation",
 }
 
+#: Kinds this wire can be handed from another format — the native tool each is
+#: written as.  Only kinds whose payload can be built without client-supplied
+#: configuration are here; measured against the live API:
+#:
+#:   image_generation     200 with ``{"type": "image_generation"}``
+#:   code_interpreter     needs ``container``; synthesised as ``{"type": "auto"}``
+#:   file_search          needs ``vector_store_ids``
+#:   mcp                  needs ``server_label``
+#:   computer_use_preview needs ``environment``
+#:   shell, tool_search   model-gated (400 "not supported with <model>")
+#:
+#: A kind in the second group would be *invented* rather than translated, so it
+#: stays source-only: recognised on the way in and restored same-format from
+#: its preserved native payload.
 _RESPONSES_INTRINSIC_TOOLS: dict[str, dict[str, Any]] = {
     "web_search": {"type": "web_search"},
     "code_interpreter": {"type": "code_interpreter", "container": {"type": "auto"}},
+    "image_generation": {"type": "image_generation"},
 }
 
 #: Responses input item type that carries tool definitions inline (Codex).

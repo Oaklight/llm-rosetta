@@ -14,14 +14,18 @@ connection:
   api_key_env: OPENAI_API_KEY
 
 tools:
-  # Kinds this provider can accept from cross-format translation.  A bare
-  # `file_search` requires `vector_store_ids`, which cannot be synthesised
-  # from a foreign request, so it is not listed here (it is still recognised
-  # on the source side and round-trips same-format via the preserved native
-  # payload).
+  # Kinds this provider can accept from cross-format translation.  Measured
+  # against the live API: `image_generation` needs no configuration and is
+  # accepted bare, `code_interpreter` takes a synthesised `container: auto`.
+  # The rest stay source-only because a foreign request carries nothing to
+  # build them from — `file_search` needs `vector_store_ids`, `mcp` needs
+  # `server_label`, `computer_use_preview` needs `environment`, and `shell` /
+  # `tool_search` are model-gated.  They are still recognised on the source
+  # side and round-trip same-format via the preserved native payload.
   intrinsic_tools:
     - web_search
     - code_interpreter
+    - image_generation
   custom_tools: true
   search_mode: native
 response_id_prefix: "resp_"

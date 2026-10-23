@@ -284,7 +284,9 @@ class ChatCompletionsConverter(BaseConverter):
         """Apply tools, tool_choice, and tool_config to provider request."""
         tools = ir_request.get("tools")
         if tools:
-            result["tools"] = self._get_cached_ir_tools_to_p(tools)
+            result["tools"] = self._get_cached_ir_tools_to_p(
+                tools, warnings=ctx.warnings
+            )
         tool_choice = ir_request.get("tool_choice")
         if tool_choice:
             result["tool_choice"] = self.tool_ops.ir_tool_choice_to_p(

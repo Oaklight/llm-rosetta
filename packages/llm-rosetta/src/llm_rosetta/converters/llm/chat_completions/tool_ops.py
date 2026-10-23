@@ -24,8 +24,10 @@ from ....types.ir import (
 )
 from ....types.ir.tools import ToolCallConfig
 from ...base import BaseToolOps
+from llm_rosetta.conversion_warnings import report_drop
 from ...base.helpers.opaque import CARRIER_KEY
 from ...base.tools import (
+    intrinsic_kind_of,
     ir_strict,
     log_orphan_warnings,
     make_intrinsic_tool_definition,
@@ -221,8 +223,17 @@ class ChatCompletionsToolOps(BaseToolOps):
         metadata = ir_tool.get("metadata") or {}
 
         # OpenAI Chat has no native server tools: drop client-declared
-        # intrinsic definitions (they cannot be expressed here).
+        # intrinsic definitions (they cannot be expressed here), and say so —
+        # a tool the caller asked for disappearing from the body without a
+        # word is the silent-loss class the warning sink exists to end.
         if tool_type == "intrinsic":
+            kind = intrinsic_kind_of(ir_tool)
+            report_drop(
+                f"Chat Completions has no server tool for intrinsic kind "
+                f"{kind!r}; dropping",
+                subject=kind,
+                warnings=kwargs.get("warnings"),
+            )
             return {}
 
         if tool_type == "custom" or metadata.get("provider_type") == "custom":

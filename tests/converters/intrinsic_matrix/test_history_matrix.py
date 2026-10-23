@@ -114,15 +114,63 @@ def test_unknown_definition_is_logged_then_dropped(caplog):
         assert any(UNKNOWN_KIND in rec.getMessage() for rec in caplog.records)
 
 
-def test_unknown_definition_chat_is_silent(caplog):
-    """chat_completions drops an intrinsic definition with no log line."""
-    with caplog.at_level(logging.WARNING):
-        caplog.clear()
-        out = ChatCompletionsConverter().tool_ops.ir_tool_definition_to_p(
-            intrinsic_definition(UNKNOWN_KIND)
-        )
-    assert out == {}
-    assert caplog.records == []
+def test_unknown_definition_chat_is_reported():
+    """chat_completions drops an intrinsic definition — and says so.
+
+    A tool the caller asked for vanishing from the body without a word is
+    the silent-loss class the conversion-warning sink exists to end.  The
+    sink is the assertion, not the log: a call that installs no ambient sink
+    still has to hand the caller the loss.
+    """
+    from llm_rosetta.converters.base.context import ConversionContext
+
+    converter = ChatCompletionsConverter()
+    ctx = ConversionContext()
+
+    body, _ = converter.request_to_provider(
+        cast(
+            IRRequest,
+            {
+                "model": "m",
+                "messages": [
+                    {"role": "user", "content": [{"type": "text", "text": "x"}]}
+                ],
+                "tools": [intrinsic_definition(UNKNOWN_KIND)],
+            },
+        ),
+        context=ctx,
+    )
+
+    assert body.get("tools", []) == []
+    assert any("has no server tool for intrinsic kind" in str(w) for w in ctx.warnings)
+
+
+def test_a_declined_definition_is_reported_every_time():
+    """The conversion cache must not swallow the second report.
+
+    The cache used to store the empty result, so the writer ran once per
+    process: the request that created the entry heard about the drop and
+    every later one lost the tool in silence.
+    """
+    from llm_rosetta.converters.base.context import ConversionContext
+
+    converter = ChatCompletionsConverter()
+    request = cast(
+        IRRequest,
+        {
+            "model": "m",
+            "messages": [{"role": "user", "content": [{"type": "text", "text": "x"}]}],
+            "tools": [intrinsic_definition(UNKNOWN_KIND)],
+        },
+    )
+
+    reports = []
+    for _ in range(3):
+        ctx = ConversionContext()
+        converter.request_to_provider(cast(IRRequest, dict(request)), context=ctx)
+        reports.append([str(w) for w in ctx.warnings])
+
+    assert all("has no server tool" in report[0] for report in reports)
 
 
 # ---------------------------------------------------------------------------

@@ -19,6 +19,7 @@ from ..tools.intrinsic import (
 
 from llm_rosetta.converters.base.context import ConversionContext
 from ..primitives.image_limit import strip_images_for_non_vision
+from llm_rosetta.conversion_warnings import report_drop
 from llm_rosetta.shims.provider_shim import (
     ProviderShim,
     ReasoningCapability,
@@ -301,6 +302,7 @@ def resolve_intrinsic_tools(
     same_format: bool = False,
     allow_name_promotion: bool = False,
     request_id: str = "-",
+    warnings: Any = None,
 ) -> dict[str, Any]:
     """Reconcile intrinsic tool definitions with the target provider's shim.
 
@@ -318,6 +320,9 @@ def resolve_intrinsic_tools(
     conversions are left untouched (a provider always understands its own
     native declarations).  ``shim`` accepts a name as well as an object, like
     the sibling gates; a name that does not resolve is treated as no shim.
+
+    ``warnings`` is the conversion's sink, when the caller has one: a dropped
+    definition is reported there rather than only counted in the log line.
     """
     if same_format:
         return ir_request
@@ -344,6 +349,15 @@ def resolve_intrinsic_tools(
             if kind in supported:
                 new_tools.append(t)
             else:
+                # ``request_id`` defaults to ``-``: only a real one is worth
+                # spending the message's prefix on.
+                where = f"[{request_id}] " if request_id not in ("", "-") else ""
+                report_drop(
+                    f"{where}target does not support intrinsic kind "
+                    f"{kind!r}; dropping the definition",
+                    subject=kind,
+                    warnings=warnings,
+                )
                 dropped += 1
             continue
         if allow_name_promotion and ttype == "function" and t.get("name") in supported:

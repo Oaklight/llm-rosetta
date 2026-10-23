@@ -797,6 +797,7 @@ class ConversionPipeline:
             # format, not of the literal provider name.
             allow_name_promotion=not self._source_converter._SUPPORTS_NATIVE_SERVER_TOOLS,
             request_id=request_id,
+            warnings=ctx.warnings,
         )
 
         # Capability enforcement: intrinsic *history*.  A history part is
