@@ -2,8 +2,7 @@
 Google GenAI ToolOps unit tests.
 """
 
-import pytest
-
+from llm_rosetta.conversion_warnings import WarningSink, recording_to
 from llm_rosetta.converters.llm.google_generate.tool_ops import GoogleGenerateToolOps
 from typing import cast
 
@@ -427,10 +426,12 @@ class TestGoogleGenerateToolOps:
             tool_call_id="nonexistent",
             result="data",
         )
-        with pytest.warns(UserWarning, match="Could not find corresponding tool call"):
+        sink = WarningSink()
+        with recording_to(sink):
             result = GoogleGenerateToolOps.ir_tool_result_to_p_with_context(
                 ir_tr, ir_input
             )
+        assert any("Could not find corresponding tool call" in w for w in sink)
         assert result["functionResponse"]["name"] == "nonexistent"
 
     def test_ir_tool_result_to_p_includes_id(self):

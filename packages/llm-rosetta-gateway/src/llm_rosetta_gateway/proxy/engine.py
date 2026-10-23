@@ -174,17 +174,6 @@ async def _failover_response(
     return response, profile
 
 
-def _log_response_warnings(pipeline: Any | None, first_new: int) -> None:
-    """Log warnings the response leg added, after the request-leg log ran.
-
-    Tolerates a missing pipeline so callers on the streaming path can hand
-    over whatever they have without branching.
-    """
-    new_warnings = pipeline.warnings[first_new:] if pipeline is not None else []
-    if new_warnings:
-        logger.warning("Response conversion warnings: %s", new_warnings)
-
-
 async def close_resources(
     *,
     transport: UpstreamTransport | None = None,
@@ -403,8 +392,6 @@ async def handle_non_streaming(  # noqa: C901
     )
 
     log_original_request(pipeline.ir_request)
-    if pipeline.warnings:
-        logger.warning("Conversion warnings: %s", pipeline.warnings)
 
     # Per-model system message flattening (gateway config override)
     if route.flatten_system:
@@ -561,11 +548,6 @@ async def handle_non_streaming(  # noqa: C901
         if u:
             ir_usage.update(u)
 
-    # Warnings logged above cover the request leg only; the response leg adds
-    # its own (a provider call the name map cannot attribute, for one), and
-    # they land on the same list after this point.
-    warnings_before = len(pipeline.warnings)
-
     try:
         source_response = pipeline.convert_response(resp.body, on_ir_ready=_capture_ir)
     except ConversionError as exc:
@@ -599,8 +581,6 @@ async def handle_non_streaming(  # noqa: C901
         persistence,
         entry_id,
     )
-
-    _log_response_warnings(pipeline, warnings_before)
 
     # Content capture (non-streaming): record all three stages
     if capture_state is not None:

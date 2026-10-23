@@ -101,10 +101,14 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "BaseEmbeddingConverter",
             "BaseDecisionConverter",
             "ConversionContext",
+            "ConversionWarning",
             "MetadataMode",
             "StreamContext",
+            "WarningSink",
+            "current_sink",
+            "report_drop",
         ],
-        "max_count": 9,
+        "max_count": 13,
     },
     "llm_rosetta.observability.usage": {
         "items": [

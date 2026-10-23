@@ -5,7 +5,6 @@ Bidirectional conversion between Interactions API Content types
 (TextContent, ImageContent, etc.) and IR content parts.
 """
 
-import logging
 from typing import Any
 
 from ....types.ir import (
@@ -17,6 +16,7 @@ from ....types.ir import (
 )
 from ....types.ir.parts import ContentPart
 from ...base import BaseContentOps
+from llm_rosetta.conversion_warnings import report_drop
 from ...base.helpers.citations import (
     CITATION_TYPE_URL,
     citation_end_index,
@@ -35,8 +35,6 @@ from ...base.helpers.opaque import (
     set_google_thought_signature,
     set_opaque_origin,
 )
-
-logger = logging.getLogger(__name__)
 
 
 class GoogleInteractionsContentOps(BaseContentOps):
@@ -161,22 +159,34 @@ class GoogleInteractionsContentOps(BaseContentOps):
 
     @staticmethod
     def ir_file_to_p(ir_file: Any, **kwargs: Any) -> Any:
-        logger.warning("File content not yet supported by Interactions converter")
+        report_drop(
+            "File content not yet supported by Interactions converter",
+            subject="file",
+        )
         return {}
 
     @staticmethod
     def p_file_to_ir(provider_file: Any, **kwargs: Any) -> Any:
-        logger.warning("File content not yet supported by Interactions converter")
+        report_drop(
+            "File content not yet supported by Interactions converter",
+            subject="file",
+        )
         return {"type": "file"}
 
     @staticmethod
     def ir_audio_to_p(ir_audio: Any, **kwargs: Any) -> Any:
-        logger.warning("Audio content not yet supported by Interactions converter")
+        report_drop(
+            "Audio content not yet supported by Interactions converter",
+            subject="audio",
+        )
         return {}
 
     @staticmethod
     def p_audio_to_ir(provider_audio: Any, **kwargs: Any) -> Any:
-        logger.warning("Audio content not yet supported by Interactions converter")
+        report_drop(
+            "Audio content not yet supported by Interactions converter",
+            subject="audio",
+        )
         return {"type": "audio"}
 
     @staticmethod
@@ -189,12 +199,18 @@ class GoogleInteractionsContentOps(BaseContentOps):
 
     @staticmethod
     def ir_refusal_to_p(ir_refusal: Any, **kwargs: Any) -> Any:
-        logger.warning("Refusal content not yet supported by Interactions converter")
+        report_drop(
+            "Refusal content not yet supported by Interactions converter",
+            subject="refusal",
+        )
         return {}
 
     @staticmethod
     def p_refusal_to_ir(provider_refusal: Any, **kwargs: Any) -> Any:
-        logger.warning("Refusal content not yet supported by Interactions converter")
+        report_drop(
+            "Refusal content not yet supported by Interactions converter",
+            subject="refusal",
+        )
         return {"type": "refusal", "refusal": ""}
 
     @staticmethod

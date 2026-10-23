@@ -18,9 +18,9 @@ reach the converters:
 
 from __future__ import annotations
 
-import warnings
 from typing import Any, cast
 
+from llm_rosetta.conversion_warnings import DOWNGRADED, FAILED, report_drop
 from llm_rosetta.shims.provider_shim import ReasoningCapability
 from llm_rosetta.types.ir.reasoning import ReasoningConfig
 
@@ -209,9 +209,10 @@ def _serialize_effort(
         return {"output_config": {"effort": provider_effort}}
     if effort_field == "thinking_level":
         return {"thinking_config": {"thinking_level": provider_effort}}
-    warnings.warn(
-        f"Unknown effort_field '{effort_field}', using as flat key",
-        stacklevel=3,
+    report_drop(
+        f"Unknown effort_field {effort_field!r}; using it as a flat key",
+        code=FAILED,
+        subject=effort_field,
     )
     return {effort_field: provider_effort}
 
@@ -352,9 +353,9 @@ def _apply_open_responses_extras(
     Reasoning is controlled via ``reasoning.effort`` + ``reasoning.summary``.
     """
     if budget_tokens is not None:
-        warnings.warn(
-            "OpenAI Responses API does not support reasoning budget_tokens, ignored",
-            stacklevel=2,
+        report_drop(
+            "OpenAI Responses API does not support reasoning budget_tokens; ignored",
+            subject="budget_tokens",
         )
 
     _apply_visibility(ir, result, cap)
@@ -410,10 +411,11 @@ def _build_anthropic_thinking(
         cap.thinking_modes.get("auto") if cap and cap.thinking_modes else "adaptive"
     )
     if fallback:
-        warnings.warn(
-            f"Anthropic 'enabled' thinking requires budget_tokens, "
-            f"falling back to '{fallback}'",
-            stacklevel=2,
+        report_drop(
+            "Anthropic 'enabled' thinking requires budget_tokens; falling back "
+            f"to {fallback!r}",
+            code=DOWNGRADED,
+            subject="budget_tokens",
         )
     return {"type": fallback or thinking_type}
 

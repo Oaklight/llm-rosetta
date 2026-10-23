@@ -18,6 +18,13 @@ Provides abstract base classes for converters and functional domain organization
 - BaseConfigOps: Configuration conversion operations abstract base class
 """
 
+from llm_rosetta.conversion_warnings import (  # noqa: F401
+    ConversionWarning,
+    WarningSink,
+    current_sink,
+    report_drop,
+)
+
 from .configs import BaseConfigOps  # noqa: F401
 from .content import BaseContentOps  # noqa: F401
 from .context import ConversionContext, MetadataMode, StreamContext
@@ -45,4 +52,9 @@ __all__ = [
     "ConversionContext",
     "MetadataMode",
     "StreamContext",
+    # 转换告警 Conversion warnings
+    "ConversionWarning",
+    "WarningSink",
+    "current_sink",
+    "report_drop",
 ]

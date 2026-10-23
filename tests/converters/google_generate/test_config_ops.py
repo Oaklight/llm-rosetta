@@ -4,8 +4,8 @@ Google GenAI ConfigOps unit tests.
 
 from typing import cast
 
-import pytest
 
+from llm_rosetta.conversion_warnings import WarningSink, recording_to
 from llm_rosetta.converters.llm.google_generate.config_ops import (
     GoogleGenerateConfigOps,
 )
@@ -80,17 +80,21 @@ class TestGoogleGenerateConfigOps:
 
     def test_ir_generation_config_logit_bias_warning(self):
         """Test logit_bias produces warning."""
-        with pytest.warns(UserWarning, match="logit_bias"):
+        sink = WarningSink()
+        with recording_to(sink):
             GoogleGenerateConfigOps.ir_generation_config_to_p(
                 cast(GenerationConfig, {"logit_bias": {1: 0.5}})
             )
+        assert any("logit_bias" in warning for warning in sink)
 
     def test_ir_generation_config_logprobs_warning(self):
         """Test logprobs produces warning."""
-        with pytest.warns(UserWarning, match="logprobs"):
+        sink = WarningSink()
+        with recording_to(sink):
             GoogleGenerateConfigOps.ir_generation_config_to_p(
                 cast(GenerationConfig, {"logprobs": True})
             )
+        assert any("logprobs" in warning for warning in sink)
 
     def test_p_generation_config_to_ir(self):
         """Test Google generation params → IR GenerationConfig."""
@@ -419,11 +423,13 @@ class TestGoogleGenerateConfigOps:
 
     def test_ir_cache_config_retention_warning(self):
         """Test cache retention produces warning."""
-        with pytest.warns(UserWarning, match="retention"):
+        sink = WarningSink()
+        with recording_to(sink):
             result = GoogleGenerateConfigOps.ir_cache_config_to_p(
                 cast(CacheConfig, {"key": "cache-1", "retention": "24h"})
             )
         assert result["cached_content"] == "cache-1"
+        assert any("retention" in warning for warning in sink)
 
     def test_ir_cache_config_empty(self):
         """Test empty cache config → empty result."""

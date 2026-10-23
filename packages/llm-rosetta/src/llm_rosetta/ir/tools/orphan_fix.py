@@ -230,7 +230,9 @@ def strip_orphaned_tool_config(ir_request: IRRequest) -> list[str]:
         ir_request: IR request dict (mutated in-place).
 
     Returns:
-        List of warning strings for each stripped field.
+        One warning per stripped field.  The caller records them — the
+        converters append them to their context's sink, which is what logs
+        them — so this function is deliberately silent.
     """
     tools = ir_request.get("tools")
     has_tools = bool(tools)
@@ -248,12 +250,8 @@ def strip_orphaned_tool_config(ir_request: IRRequest) -> list[str]:
             value = request_dict.pop(field)
             warnings.append(
                 f"Stripped orphaned '{field}' (value: {value!r}) — "
-                "no tool definitions present in request"
-            )
-            logger.warning(
-                "Stripped orphaned '%s' from IR request — "
-                "no tool definitions present (Codex context compaction workaround)",
-                field,
+                "no tool definitions present in request (Codex context "
+                "compaction workaround)"
             )
 
     return warnings

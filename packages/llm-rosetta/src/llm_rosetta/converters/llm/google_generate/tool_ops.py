@@ -14,8 +14,6 @@ Google-specific:
 - Tool choice uses ToolConfig → FunctionCallingConfig (mode: NONE/AUTO/ANY)
 """
 
-import logging
-import warnings
 from collections.abc import Mapping
 from typing import Any, cast
 
@@ -27,6 +25,7 @@ from ....types.ir import (
 )
 from ....types.ir.tools import ToolCallConfig
 from ...base import BaseToolOps, IntrinsicLeg
+from llm_rosetta.conversion_warnings import DOWNGRADED, report_drop
 from ...base.helpers.opaque import CARRIER_KEY
 from ...base.tools import (
     allowed_tool_names,
@@ -44,7 +43,6 @@ from ...base.tools.intrinsic import (
 )
 from ._constants import generate_tool_call_id
 
-logger = logging.getLogger(__name__)
 
 #: The one intrinsic kind Google has inline content parts for (an
 #: ``executableCode`` call and its ``codeExecutionResult`` answer).
@@ -152,19 +150,15 @@ def _warn_intrinsic_dropped(kwargs: Mapping[str, Any], message: str) -> None:
     """Report a server part Google has no inline form for.
 
     The conversion paths that own a warnings list (the request converter) hand
-    it down in ``warnings``; a caller with no sink (the streaming writer, which
-    builds its part on the spot) gets the stdlib warning instead, so the drop
-    is still visible rather than silent.
+    it down in ``warnings``; a caller with none still reaches the conversion
+    in progress, or the log, through :func:`report_drop` — so the drop is
+    never silent.
 
     Args:
         kwargs: The keyword arguments the write template was called with.
         message: The warning text.
     """
-    sink = kwargs.get("warnings")
-    if isinstance(sink, list):
-        sink.append(message)
-    else:
-        warnings.warn(message)
+    report_drop(message, code=DOWNGRADED, warnings=kwargs.get("warnings"))
 
 
 class GoogleGenerateToolOps(BaseToolOps):
@@ -196,10 +190,10 @@ class GoogleGenerateToolOps(BaseToolOps):
             kind = intrinsic_kind_of(ir_tool)
             key = _INTRINSIC_TOOL_KEYS.get(kind)
             if key is None:
-                logger.warning(
-                    "Google Generate has no server tool for intrinsic kind %r;"
-                    " dropping",
-                    kind,
+                report_drop(
+                    f"Google Generate has no server tool for intrinsic kind "
+                    f"{kind!r}; dropping",
+                    subject=kind,
                 )
                 return {}
             # Server-tool config is provider-defined; the client's function
@@ -579,10 +573,12 @@ class GoogleGenerateToolOps(BaseToolOps):
                 break
 
         if not tool_name:
-            warnings.warn(
+            report_drop(
                 f"Could not find corresponding tool call for tool_call_id "
                 f"'{tool_call_id}'. Using tool_call_id as function name, "
-                f"which may cause issues with Google GenAI."
+                f"which may cause issues with Google GenAI.",
+                code=DOWNGRADED,
+                subject=tool_call_id,
             )
             tool_name = tool_call_id
 

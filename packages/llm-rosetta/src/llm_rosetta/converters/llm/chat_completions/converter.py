@@ -35,6 +35,7 @@ from ....types.ir.stream import (
     UsageEvent,
 )
 from ...base import BaseConverter
+from llm_rosetta.conversion_warnings import report_drop
 from ...base.helpers.citations import (
     citation_warning_sink,
     report_dropped_citation,
@@ -939,11 +940,11 @@ class ChatCompletionsConverter(BaseConverter):
         if tc_input and not effective_tc_id:
             # Nothing the client was told identifies this fragment; writing it
             # would ask the target to open a tool block with no identity.
-            logger.warning(
+            report_drop(
                 "Dropping Chat Completions tool-call delta with unresolved "
-                "identity (choice_index=%s, tool_call_index=%s)",
-                choice_index,
-                provider_index,
+                f"identity (choice_index={choice_index}, "
+                f"tool_call_index={provider_index})",
+                warnings=getattr(context, "warnings", None),
             )
         elif tc_input:
             delta_event = ToolCallDeltaEvent(

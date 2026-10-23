@@ -11,7 +11,6 @@ Self-contained: does not depend on utils/FieldMapper or utils/ToolCallConverter.
 import base64
 import logging
 import mimetypes
-import warnings
 from typing import Any, cast
 
 import urllib.request
@@ -29,6 +28,7 @@ from ....types.ir import (
 )
 from ....types.ir.parts import ContentPart
 from ...base import BaseContentOps
+from llm_rosetta.conversion_warnings import report_drop
 from ...base.helpers.opaque import (
     CARRIER_KEY,
     get_opaque_origin,
@@ -225,7 +225,11 @@ class GoogleGenerateContentOps(BaseContentOps):
 
         # URL-based files not supported
         if "file_url" in ir_file:
-            warnings.warn("Google GenAI不直接支持文件URL，需要先上传文件。")
+            report_drop(
+                "Google GenAI cannot take a file URL; the file has to be "
+                "uploaded first",
+                subject="file",
+            )
             return None
 
         return None
@@ -274,7 +278,7 @@ class GoogleGenerateContentOps(BaseContentOps):
                 }
             }
 
-        warnings.warn("不支持的音频格式")
+        report_drop("Unsupported audio format", subject="audio")
         return None
 
     @staticmethod
@@ -415,9 +419,9 @@ class GoogleGenerateContentOps(BaseContentOps):
         Returns:
             None (citations are not supported as content parts).
         """
-        warnings.warn(
-            "Google GenAI does not support citations as content parts, ignored",
-            stacklevel=2,
+        report_drop(
+            "Google GenAI does not support citations as content parts",
+            subject="citation",
         )
         return None
 

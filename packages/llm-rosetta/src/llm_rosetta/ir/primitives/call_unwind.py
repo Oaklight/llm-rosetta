@@ -19,6 +19,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from llm_rosetta.conversion_warnings import DOWNGRADED, report_drop
 from llm_rosetta.types.ir import (
     is_message,
     is_tool_call_part,
@@ -118,10 +119,9 @@ def _find_matching_result(
         )
         return tool_messages[index]
 
-    logger.warning(
-        "Unwind: no matching result for tool_call_id=%s (index %d)",
-        tool_call_id,
-        index,
+    report_drop(
+        f"Unwind: no matching result for tool_call_id={tool_call_id} (index {index})",
+        subject=tool_call_id,
     )
     return None
 
@@ -222,11 +222,10 @@ def unwind_parallel_tool_calls_ir(
             tool_messages, next_index = _collect_tool_result_messages(messages, i + 1)
 
             if len(tool_messages) != n_calls:
-                logger.warning(
-                    "Unwind: mismatch — %d tool calls but %d tool results, "
-                    "skipping reorder",
-                    n_calls,
-                    len(tool_messages),
+                report_drop(
+                    f"Unwind: mismatch — {n_calls} tool calls but "
+                    f"{len(tool_messages)} tool results; skipping reorder",
+                    code=DOWNGRADED,
                 )
                 transformed.append(msg)
                 i += 1

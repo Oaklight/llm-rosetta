@@ -4,8 +4,8 @@ Anthropic ConfigOps unit tests.
 
 from typing import cast
 
-import pytest
 
+from llm_rosetta.conversion_warnings import WarningSink, recording_to
 from llm_rosetta.converters.llm.messages.config_ops import MessagesConfigOps
 from llm_rosetta.types.ir import GenerationConfig, ReasoningConfig
 
@@ -59,8 +59,10 @@ class TestMessagesConfigOps:
                 "seed": 42,
             },
         )
-        with pytest.warns(UserWarning):
+        sink = WarningSink()
+        with recording_to(sink):
             result = MessagesConfigOps.ir_generation_config_to_p(ir_config)
+        assert any("does not support" in warning for warning in sink)
         # Unsupported fields should not be in result
         assert "frequency_penalty" not in result
         assert "presence_penalty" not in result
@@ -96,8 +98,10 @@ class TestMessagesConfigOps:
 
     def test_ir_response_format_warning(self):
         """Test response format produces warning."""
-        with pytest.warns(UserWarning, match="does not support response_format"):
+        sink = WarningSink()
+        with recording_to(sink):
             result = MessagesConfigOps.ir_response_format_to_p({"type": "json_object"})
+        assert any("response_format" in warning for warning in sink)
         assert result == {}
 
     def test_p_response_format_to_ir(self):
@@ -119,10 +123,12 @@ class TestMessagesConfigOps:
 
     def test_ir_stream_config_include_usage_warning(self):
         """Test include_usage produces warning."""
-        with pytest.warns(UserWarning, match="always includes usage"):
+        sink = WarningSink()
+        with recording_to(sink):
             result = MessagesConfigOps.ir_stream_config_to_p(
                 {"enabled": True, "include_usage": True}
             )
+        assert any("include_usage" in warning for warning in sink)
         assert result["stream"] is True
 
     def test_p_stream_config_to_ir(self):
@@ -151,8 +157,10 @@ class TestMessagesConfigOps:
         'adaptive' to produce a valid Anthropic request.
         """
         ir_reasoning = cast(ReasoningConfig, {"mode": "enabled"})
-        with pytest.warns(UserWarning, match="budget_tokens"):
+        sink = WarningSink()
+        with recording_to(sink):
             result = MessagesConfigOps.ir_reasoning_config_to_p(ir_reasoning)
+        assert any("budget_tokens" in warning for warning in sink)
         assert result["thinking"]["type"] == "adaptive"
         assert "budget_tokens" not in result["thinking"]
 
@@ -345,8 +353,10 @@ class TestMessagesConfigOps:
 
     def test_ir_cache_config_warning(self):
         """Test cache config produces warning."""
-        with pytest.warns(UserWarning, match="block-level"):
+        sink = WarningSink()
+        with recording_to(sink):
             result = MessagesConfigOps.ir_cache_config_to_p({"key": "test"})
+        assert any("block-level" in warning for warning in sink)
         assert result == {}
 
     def test_p_cache_config_to_ir(self):

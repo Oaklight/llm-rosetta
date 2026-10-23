@@ -298,13 +298,6 @@ async def handle_typed_request(
     finally:
         duration_ms = (time.monotonic() - t0) * 1000
         if handler.log_conversion:
-            if pipeline.warnings:
-                logger.info(
-                    "%s: conversion warnings for %s: %s",
-                    handler.model_type,
-                    model,
-                    "; ".join(pipeline.warnings),
-                )
             logger.info(
                 "%s: %s → %s (%s→%s) %dms status=%d",
                 handler.model_type,

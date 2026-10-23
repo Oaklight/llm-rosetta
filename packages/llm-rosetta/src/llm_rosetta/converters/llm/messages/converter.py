@@ -14,7 +14,6 @@ Key Anthropic differences from OpenAI:
 - Thinking/reasoning with ``signature`` field
 """
 
-import logging
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -47,6 +46,7 @@ from ....types.ir.stream import (
     UsageEvent,
 )
 from ...base import BaseConverter
+from llm_rosetta.conversion_warnings import report_drop
 from ...base.context import (
     ConversionContext,
     StreamContext,
@@ -81,8 +81,6 @@ from .config_ops import MessagesConfigOps
 from .content_ops import MessagesContentOps
 from .message_ops import MessagesMessageOps
 from .tool_ops import MessagesToolOps, canonical_server_tool_kind
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -1417,10 +1415,11 @@ class MessagesConverter(BaseConverter):
         if event.get("tool_type", "function") == "intrinsic":
             kind = intrinsic_kind_of(event)
             if not self.tool_ops.intrinsic_renderable(kind, {}, leg="response"):
-                logger.warning(
-                    "Server tool call of kind %r has no Anthropic server tool; "
-                    "dropped from the streamed response",
-                    kind,
+                report_drop(
+                    f"Server tool call of kind {kind!r} has no Anthropic "
+                    "server tool; dropped from the streamed response",
+                    subject=kind,
+                    warnings=getattr(context, "warnings", None),
                 )
                 if context is not None:
                     dropped = context.metadata.setdefault(
@@ -1494,7 +1493,7 @@ class MessagesConverter(BaseConverter):
         if context is None:
             # Stateless conversion: an explicit block index is all we have.
             if explicit_idx is None:
-                logger.warning(
+                report_drop(
                     "Dropping Messages tool-call delta without a context or "
                     "an explicit block index"
                 )
@@ -1525,12 +1524,11 @@ class MessagesConverter(BaseConverter):
         if registered_index is not None:
             index = registered_index
             if explicit_idx is not None and explicit_idx != registered_index:
-                logger.warning(
-                    "Messages tool-call delta block_index=%s disagrees with the "
-                    "registered index %s for %s; using the registered index",
-                    explicit_idx,
-                    registered_index,
-                    tool_call_id,
+                report_drop(
+                    f"Messages tool-call delta block_index={explicit_idx} "
+                    f"disagrees with the registered index {registered_index} "
+                    f"for {tool_call_id}; using the registered index",
+                    warnings=context.warnings,
                 )
         elif explicit_idx is not None:
             index = explicit_idx
@@ -1546,9 +1544,10 @@ class MessagesConverter(BaseConverter):
                 and context.current_block_type in (None, "tool_use", "server_tool_use")
             ):
                 if len(state.open_indices) > 1:
-                    logger.warning(
-                        "Dropping ambiguous tool-call argument delta for %s",
-                        event.get("tool_call_id") or "<unknown>",
+                    report_drop(
+                        "Dropping ambiguous tool-call argument delta for "
+                        f"{event.get('tool_call_id') or '<unknown>'}",
+                        warnings=context.warnings,
                     )
                     return {}
                 index = context.current_block_index
@@ -1559,12 +1558,11 @@ class MessagesConverter(BaseConverter):
             or index not in state.open_indices
             or block_type not in ("tool_use", "server_tool_use")
         ):
-            logger.warning(
+            report_drop(
                 "Dropping Messages tool-call delta for an unregistered, closed, "
-                "or non-tool block (tool_call_id=%s, block_index=%s, index=%s)",
-                tool_call_id,
-                explicit_idx,
-                index,
+                f"or non-tool block (tool_call_id={tool_call_id}, "
+                f"block_index={explicit_idx}, index={index})",
+                warnings=context.warnings,
             )
             return {}
 
@@ -1601,10 +1599,11 @@ class MessagesConverter(BaseConverter):
                 intrinsic_kind_of(event), None, leg="response"
             )
         ):
-            logger.warning(
-                "Server tool result of kind %r has no Anthropic server tool; "
-                "dropped from the streamed response",
-                intrinsic_kind_of(event),
+            report_drop(
+                f"Server tool result of kind {intrinsic_kind_of(event)!r} has no "
+                "Anthropic server tool; dropped from the streamed response",
+                subject=intrinsic_kind_of(event),
+                warnings=getattr(context, "warnings", None),
             )
             return {}
         content_block = self._ir_tool_result_block(event)

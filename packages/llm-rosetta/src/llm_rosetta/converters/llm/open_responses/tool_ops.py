@@ -29,6 +29,7 @@ from ....types.ir import (
 )
 from ....types.ir.tools import ToolCallConfig
 from ...base import BaseToolOps, IntrinsicLeg
+from llm_rosetta.conversion_warnings import report_drop
 from ...base.helpers.opaque import CARRIER_KEY
 from ...base.helpers.tool_group import (
     GENERATED_GROUP_MARKER,
@@ -245,22 +246,17 @@ def _flattened_child(
     prohibits hierarchical separators.
     """
     if not isinstance(child, dict):
-        logger.warning(
-            "Skipping non-dict child at index %d in group %r", index, group_name
-        )
+        report_drop(f"Skipping non-dict child at index {index} in group {group_name!r}")
         return None
     if child.get("type", "function") == "namespace":
-        logger.warning(
-            "Skipping nested namespace %r inside %r — only one level of "
-            "nesting is supported",
-            child.get("name", ""),
-            group_name,
+        report_drop(
+            f"Skipping nested namespace {child.get('name', '')!r} inside "
+            f"{group_name!r} — only one level of nesting is supported",
+            subject=str(child.get("name", "")),
         )
         return None
     if not _declared_child_name(child):
-        logger.warning(
-            "Skipping unnamed child at index %d in group %r", index, group_name
-        )
+        report_drop(f"Skipping unnamed child at index {index} in group {group_name!r}")
         return None
     converted = OpenResponsesToolOps.p_tool_definition_to_ir(child)
     if converted is None:
@@ -868,10 +864,10 @@ class OpenResponsesToolOps(BaseToolOps):
             kind = intrinsic_kind_of(ir_tool)
             native = _RESPONSES_INTRINSIC_TOOLS.get(kind)
             if native is None:
-                logger.warning(
-                    "OpenAI Responses has no server tool for intrinsic kind %r;"
-                    " dropping",
-                    kind,
+                report_drop(
+                    f"OpenAI Responses has no server tool for intrinsic kind "
+                    f"{kind!r}; dropping",
+                    subject=kind,
                 )
                 return {}
             return dict(native)

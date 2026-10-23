@@ -17,6 +17,8 @@ from dataclasses import dataclass, field
 from collections.abc import Callable, Mapping
 from typing import Any, Literal
 
+from llm_rosetta.conversion_warnings import WarningSink
+
 MetadataMode = Literal["strip", "preserve"]
 
 #: Synchronous image downloader: ``url -> (bytes, content_type) | None``.
@@ -35,13 +37,17 @@ class ConversionContext:
     and threaded through converter methods to carry shared state.
 
     Attributes:
-        warnings: Accumulated warnings from conversion steps.
+        warnings: Accumulated warnings from conversion steps.  A
+            :class:`~.conversion_warnings.WarningSink`, so a plain
+            ``append("...")`` still works and gains its provenance on the
+            way in; see that module for why there is one sink and who
+            reads it.
         options: Structured conversion options (e.g., ``output_format``,
             ``metadata_mode``).
         metadata: Opaque store for debugging and provider-specific state.
     """
 
-    warnings: list[str] = field(default_factory=list)
+    warnings: WarningSink = field(default_factory=WarningSink)
     options: dict[str, Any] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
     #: Downloader for URL images the target format needs as inline bytes.
@@ -125,6 +131,12 @@ class StreamContext(ConversionContext):
             chunk (e.g. Google GenAI) so that it can be merged into the
             finish event and avoid inflating the output event count.
     """
+
+    #: A stream context's losses belong to the stream leg, even when no
+    #: pipeline lent it its sink (a converter used on its own).
+    warnings: WarningSink = field(
+        default_factory=lambda: WarningSink(leg="stream"),
+    )
 
     # Session-level metadata
     response_id: str = ""

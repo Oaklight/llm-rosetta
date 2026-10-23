@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING, Any
+from llm_rosetta.conversion_warnings import FAILED, report_drop
 
 if TYPE_CHECKING:
     from ..content import BaseContentOps
@@ -137,7 +138,7 @@ def _ir_block_to_p(
             result = content_ops_class.ir_image_to_p(block)
             return {**result} if result is not None else None
         except (ValueError, KeyError, NotImplementedError):
-            logger.warning("Failed to convert IR image block: %s", block)
+            report_drop(f"Failed to convert IR image block: {block}", code=FAILED)
             return None
 
     # IR file
@@ -146,7 +147,7 @@ def _ir_block_to_p(
             result = content_ops_class.ir_file_to_p(block)
             return {**result} if result is not None else None
         except (ValueError, KeyError, NotImplementedError):
-            logger.warning("Failed to convert IR file block: %s", block)
+            report_drop(f"Failed to convert IR file block: {block}", code=FAILED)
             return None
 
     # Unknown — pass through as-is

@@ -4,8 +4,8 @@ OpenAI Responses ConfigOps unit tests.
 
 from typing import Any, cast
 
-import pytest
 
+from llm_rosetta.conversion_warnings import WarningSink, recording_to
 from llm_rosetta.converters.llm.open_responses.config_ops import (
     OpenAIResponsesConfigOps,
 )
@@ -55,10 +55,12 @@ class TestOpenAIResponsesConfigOps:
 
     def test_ir_generation_config_top_k_warning(self):
         """Test top_k produces warning."""
-        with pytest.warns(UserWarning, match="top_k"):
+        sink = WarningSink()
+        with recording_to(sink):
             OpenAIResponsesConfigOps.ir_generation_config_to_p(
                 cast(GenerationConfig, {"top_k": 40})
             )
+        assert any("top_k" in warning for warning in sink)
 
     def test_ir_generation_config_frequency_penalty(self):
         """Test frequency_penalty direct mapping."""
@@ -76,31 +78,39 @@ class TestOpenAIResponsesConfigOps:
 
     def test_ir_generation_config_logit_bias_warning(self):
         """Test logit_bias produces warning."""
-        with pytest.warns(UserWarning, match="logit_bias"):
+        sink = WarningSink()
+        with recording_to(sink):
             OpenAIResponsesConfigOps.ir_generation_config_to_p(
                 cast(Any, {"logit_bias": {100: 10}})
             )
+        assert any("logit_bias" in warning for warning in sink)
 
     def test_ir_generation_config_seed_warning(self):
         """Test seed produces warning."""
-        with pytest.warns(UserWarning, match="seed"):
+        sink = WarningSink()
+        with recording_to(sink):
             OpenAIResponsesConfigOps.ir_generation_config_to_p(
                 cast(GenerationConfig, {"seed": 42})
             )
+        assert any("seed" in warning for warning in sink)
 
     def test_ir_generation_config_n_warning(self):
         """Test n produces warning."""
-        with pytest.warns(UserWarning, match="\\bn\\b"):
+        sink = WarningSink()
+        with recording_to(sink):
             OpenAIResponsesConfigOps.ir_generation_config_to_p(
                 cast(GenerationConfig, {"n": 2})
             )
+        assert any(" n" in warning for warning in sink)
 
     def test_ir_generation_config_stop_sequences_warning(self):
         """Test stop_sequences produces warning."""
-        with pytest.warns(UserWarning, match="stop_sequences"):
+        sink = WarningSink()
+        with recording_to(sink):
             OpenAIResponsesConfigOps.ir_generation_config_to_p(
                 cast(GenerationConfig, {"stop_sequences": ["END"]})
             )
+        assert any("stop_sequences" in warning for warning in sink)
 
     def test_ir_generation_config_empty(self):
         """Test empty config returns empty dict."""
@@ -340,10 +350,12 @@ class TestOpenAIResponsesConfigOps:
 
     def test_ir_reasoning_config_budget_warning(self):
         """Test budget_tokens produces warning."""
-        with pytest.warns(UserWarning, match="budget_tokens"):
+        sink = WarningSink()
+        with recording_to(sink):
             OpenAIResponsesConfigOps.ir_reasoning_config_to_p(
                 cast(ReasoningConfig, {"budget_tokens": 1000})
             )
+        assert any("budget_tokens" in warning for warning in sink)
 
     def test_ir_reasoning_config_empty(self):
         """Test empty reasoning config returns empty dict."""

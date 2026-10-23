@@ -17,13 +17,12 @@ fallback recognises by the nested key it was written into, not by guessing.
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Iterable
 from typing import Any
 
 from ....types.ir import CitationPart
+from llm_rosetta.conversion_warnings import report_drop
 
-logger = logging.getLogger(__name__)
 
 #: A source on the web, addressed by URL.  OpenAI chat/Responses annotations,
 #: Google's grounding and Interactions annotations, and Anthropic's
@@ -222,18 +221,15 @@ def report_dropped_citation(
 ) -> str:
     """Report a citation the target has no form for, and return the message.
 
-    Same contract as the intrinsic drop report: a caller's ``warnings`` sink is
-    preferred, and the log line is written either way, so a library caller that
-    has no sink still sees the loss.
+    Same contract as the intrinsic drop report: the caller's sink is preferred,
+    then the conversion in progress, and only a library caller with neither
+    gets the log line — so the loss is reported once, wherever it was noticed.
     """
     kind = citation_type_of(part) or "untyped"
     message = f"Citation of type {kind!r} has no form in this target; dropped"
     if why:
         message = f"{message} ({why})"
-    if isinstance(warnings, list):
-        warnings.append(message)
-    else:
-        logger.warning("%s", message)
+    report_drop(message, subject=kind, warnings=warnings)
     return message
 
 

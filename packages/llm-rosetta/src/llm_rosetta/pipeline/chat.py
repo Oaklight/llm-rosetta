@@ -48,6 +48,7 @@ from llm_rosetta.capabilities import (
     unwrap_custom_tool_input,
 )
 from llm_rosetta.converters.base.context import ConversionContext, ImageFetcher
+from llm_rosetta.conversion_warnings import WarningSink, recording_to
 from llm_rosetta.observability.usage.semantics import GOOGLE_METADATA, USAGE_SHAPES
 from llm_rosetta.provider_names import (
     canonical_provider_name,
@@ -466,6 +467,12 @@ class ConversionPipeline:
 
         # Set after convert_request()
         self._ctx: ConversionContext | None = None
+        # The sink `warnings` hands out before a conversion has started.  It
+        # is one object, not a fresh one per access, so a caller that keeps
+        # the property's value is not looking at a list nothing writes to;
+        # it is still not the conversion's sink — that one is created by
+        # convert_request() — and it does not log.
+        self._idle_warnings = WarningSink(log=False)
         self._ir_request: dict[str, Any] | None = None
         # Built once from the final IR request; the response and streaming
         # legs must translate names through the same map the request leg
@@ -540,14 +547,28 @@ class ConversionPipeline:
         return self._ir_request
 
     @property
-    def warnings(self) -> list[str]:
+    def warnings(self) -> WarningSink:
         """Conversion warnings accumulated during the pipeline.
 
-        Returns an empty list if :meth:`convert_request` hasn't been called.
+        One sink for the whole conversion: the request and response legs
+        append to it, and a stream processor created from this pipeline
+        reports the losses it sees into it too — so a caller that inspects
+        only this misses nothing.  Each entry is a
+        :class:`~llm_rosetta.conversion_warnings.ConversionWarning`, which is
+        still the message string it always was.
+
+        Returns an empty sink if :meth:`convert_request` hasn't been called.
+        That sink is read-only in effect: it is not the conversion's, so
+        nothing appends to it — record through :meth:`convert_request` instead.
         """
         if self._ctx is None:
-            return []
+            return self._idle_warnings
         return self._ctx.warnings
+
+    @property
+    def _conversion_label(self) -> str:
+        """The conversion a warning belongs to, as ``<source>-><target>``."""
+        return f"{self._source_provider}->{self._target_provider}"
 
     @property
     def tool_name_collisions(self) -> dict[str, int]:
@@ -597,12 +618,21 @@ class ConversionPipeline:
         try:
             ctx = ConversionContext(image_fetcher=self._image_fetcher)
             ctx.options["metadata_mode"] = "preserve"
-            if direction == "request":
-                ir = self._source_converter.request_from_provider(body, context=ctx)
-                rt, _ = self._target_converter.request_to_provider(ir, context=ctx)
-            else:
-                ir = self._target_converter.response_from_provider(body, context=ctx)
-                rt = self._source_converter.response_to_provider(ir, context=ctx)
+            # A shadow round trip is a diagnostic: what it loses is not what
+            # the request lost, so it neither logs nor joins the sink.
+            ctx.warnings.log = False
+            # Convert under the shadow's own silent sink: a report made by a
+            # helper with no context in hand must not fall through to the
+            # request's sink, which would log a loss the request never had.
+            with recording_to(ctx.warnings):
+                if direction == "request":
+                    ir = self._source_converter.request_from_provider(body, context=ctx)
+                    rt, _ = self._target_converter.request_to_provider(ir, context=ctx)
+                else:
+                    ir = self._target_converter.response_from_provider(
+                        body, context=ctx
+                    )
+                    rt = self._source_converter.response_to_provider(ir, context=ctx)
             diffs = self._fidelity.compare(body, rt, direction=direction)
             if diffs:
                 logger.warning(
@@ -649,6 +679,10 @@ class ConversionPipeline:
         # Setup context
         ctx = ConversionContext(image_fetcher=self._image_fetcher)
         self._ctx = ctx
+        # Provenance for everything this conversion loses: which leg noticed,
+        # and which pair it was converting between.
+        ctx.warnings.leg = "request"
+        ctx.warnings.converter = self._conversion_label
 
         # Baseline mode: skip IR round-trip, apply only shim body-level
         # transforms.  Used for fidelity shadow-testing (diffing against
@@ -706,7 +740,10 @@ class ConversionPipeline:
         # Phase 1: Source → IR
         t0 = time.perf_counter()
         try:
-            ir_request = self._source_converter.request_from_provider(body, context=ctx)
+            with recording_to(ctx.warnings):
+                ir_request = self._source_converter.request_from_provider(
+                    body, context=ctx
+                )
         except Exception as exc:
             raise ConversionError(
                 f"Failed to parse request: {exc}", phase="source_to_ir"
@@ -861,9 +898,10 @@ class ConversionPipeline:
         # Phase 2b: IR → Target
         t0 = time.perf_counter()
         try:
-            target_body, _ = self._target_converter.request_to_provider(
-                ir_request, context=ctx
-            )
+            with recording_to(ctx.warnings):
+                target_body, _ = self._target_converter.request_to_provider(
+                    ir_request, context=ctx
+                )
         except Exception as exc:
             raise ConversionError(
                 f"Conversion error: {exc}", phase="ir_to_target"
@@ -935,6 +973,10 @@ class ConversionPipeline:
 
         t_total = time.perf_counter()
 
+        # The response leg reports into the same sink as the request leg, so
+        # a loss while reading the upstream is not a second list to inspect.
+        ctx.warnings.leg = "response"
+
         # Phase 4a: Response body transforms (e.g. harmony tool-call rewrite)
         response = upstream_response
         if self._target_response_body_transforms:
@@ -950,9 +992,10 @@ class ConversionPipeline:
         ctx.options["preserve_fields"] = self._target_preserve_fields
         ctx.options["store_default"] = self._target_store_default
         try:
-            ir_response = self._target_converter.response_from_provider(
-                response, context=ctx
-            )
+            with recording_to(ctx.warnings):
+                ir_response = self._target_converter.response_from_provider(
+                    response, context=ctx
+                )
         except Exception as exc:
             raise ConversionError(
                 f"Failed to parse upstream response: {exc}",
@@ -986,9 +1029,10 @@ class ConversionPipeline:
         ctx.options["preserve_fields"] = self._source_preserve_fields
         ctx.options["store_default"] = self._source_store_default
         try:
-            source_response = self._source_converter.response_to_provider(
-                ir_response, context=ctx
-            )
+            with recording_to(ctx.warnings):
+                source_response = self._source_converter.response_to_provider(
+                    ir_response, context=ctx
+                )
         except Exception as exc:
             raise ConversionError(
                 f"Failed to convert response: {exc}", phase="ir_to_source"
@@ -1044,6 +1088,15 @@ class ConversionPipeline:
 
         from_ctx = self._target_converter.create_stream_context()
         to_ctx = self._source_converter.create_stream_context()
+
+        # One sink for the whole conversion, including both halves of the
+        # stream: a drop noticed while converting a chunk used to die with
+        # that chunk's context, and the caller's ``pipeline.warnings`` never
+        # heard about it.  The leg moves to ``stream`` for the processor's
+        # lifetime — a streamed response never runs ``convert_response``.
+        ctx.warnings.leg = "stream"
+        from_ctx.warnings = ctx.warnings
+        to_ctx.warnings = ctx.warnings
 
         # Bridge preserve-mode metadata and shim-driven prefix
         to_ctx.image_fetcher = self._image_fetcher
@@ -1340,16 +1393,18 @@ class StreamProcessor:
         to emit any ``StreamEndEvent`` that was held back while
         waiting for a usage chunk that never arrived.
         """
-        ir_events = self._target_converter.stream_response_from_provider(
-            None, context=self._from_ctx
-        )
+        with recording_to(self._from_ctx.warnings):
+            ir_events = self._target_converter.stream_response_from_provider(
+                None, context=self._from_ctx
+            )
         result: list[dict[str, Any]] = []
         for ir_event in ir_events:
             if self._on_ir_event is not None:
                 self._on_ir_event(ir_event)
-            source_chunks = self._source_converter.stream_response_to_provider(
-                ir_event, context=self._to_ctx
-            )
+            with recording_to(self._to_ctx.warnings):
+                source_chunks = self._source_converter.stream_response_to_provider(
+                    ir_event, context=self._to_ctx
+                )
             if isinstance(source_chunks, list):
                 result.extend(sc for sc in source_chunks if sc)
             elif source_chunks:
@@ -1385,9 +1440,10 @@ class StreamProcessor:
             chunk = apply_transforms(self._pre_ir_transforms, chunk)
 
         # Target → IR events
-        ir_events = self._target_converter.stream_response_from_provider(
-            chunk, context=self._from_ctx
-        )
+        with recording_to(self._from_ctx.warnings):
+            ir_events = self._target_converter.stream_response_from_provider(
+                chunk, context=self._from_ctx
+            )
 
         # Bridge response extras
         if "_response_extras" in self._from_ctx.metadata:
@@ -1416,9 +1472,10 @@ class StreamProcessor:
             if self._on_ir_event is not None:
                 self._on_ir_event(ir_event)
 
-            source_chunks = self._source_converter.stream_response_to_provider(
-                ir_event, context=self._to_ctx
-            )
+            with recording_to(self._to_ctx.warnings):
+                source_chunks = self._source_converter.stream_response_to_provider(
+                    ir_event, context=self._to_ctx
+                )
             if isinstance(source_chunks, list):
                 result.extend(sc for sc in source_chunks if sc)
             elif source_chunks:

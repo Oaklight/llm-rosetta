@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import copy
-import logging
 from typing import Any, cast
 
 from llm_rosetta.types.ir.type_guards import is_image_part, is_tool_result_part
+from llm_rosetta.conversion_warnings import DOWNGRADED, DROPPED, report_drop
 
-logger = logging.getLogger(__name__)
 
 # Placeholders for different image removal scenarios.
 _PLACEHOLDER_NO_VISION = {"type": "text", "text": "[image not available]"}
@@ -110,12 +109,11 @@ def truncate_images(
 
     # Keep the last max_images, truncate the rest (oldest first)
     to_replace = image_positions[: total - max_images]
-    logger.warning(
-        "[%s] truncated %d images to %d (provider limit of %d)",
-        request_id,
-        total,
-        max_images,
-        max_images,
+    report_drop(
+        f"[{request_id}] truncated {total} images to {max_images} "
+        f"(provider limit of {max_images})",
+        code=DOWNGRADED,
+        subject="image",
     )
 
     return _replace_images(ir_request, to_replace, _PLACEHOLDER_LIMIT)
@@ -147,11 +145,11 @@ def strip_images_for_non_vision(
     if not image_positions:
         return ir_request
 
-    logger.warning(
-        "[%s] stripped %d images: model %s does not have vision capability",
-        request_id,
-        len(image_positions),
-        model,
+    report_drop(
+        f"[{request_id}] stripped {len(image_positions)} images: model {model} "
+        "does not have vision capability",
+        code=DROPPED,
+        subject="image",
     )
 
     return _replace_images(ir_request, image_positions, _PLACEHOLDER_NO_VISION)

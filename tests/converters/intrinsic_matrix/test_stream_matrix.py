@@ -654,20 +654,25 @@ def test_google_generate_drops_foreign_streamed_call_at_finish():
 
 def test_google_generate_stream_result_drop_warns():
     """A dropped server result is reported, not silent."""
-    with pytest.warns(UserWarning, match="Unsupported intrinsic kind"):
-        GoogleGenerateConverter().stream_response_to_provider(
-            cast(
-                ToolResultEvent,
-                {
-                    "type": "tool_result",
-                    "tool_call_id": "c1",
-                    "result": "R",
-                    "tool_type": "intrinsic",
-                    "provider_metadata": {"intrinsic_kind": "web_search"},
-                },
-            ),
-            GoogleGenerateConverter().create_stream_context(),
-        )
+    context = GoogleGenerateConverter().create_stream_context()
+
+    GoogleGenerateConverter().stream_response_to_provider(
+        cast(
+            ToolResultEvent,
+            {
+                "type": "tool_result",
+                "tool_call_id": "c1",
+                "result": "R",
+                "tool_type": "intrinsic",
+                "provider_metadata": {"intrinsic_kind": "web_search"},
+            },
+        ),
+        context,
+    )
+
+    [warning] = context.warnings
+    assert "Unsupported intrinsic kind" in warning
+    assert warning.leg == "stream"
 
 
 def test_open_responses_drops_foreign_call_start_with_its_delta():

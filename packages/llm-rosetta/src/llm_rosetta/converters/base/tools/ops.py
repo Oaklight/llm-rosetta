@@ -12,7 +12,6 @@ native rendering in the ``ir_intrinsic_*_to_p`` hooks and its kind↔native
 tables, and nothing else.
 """
 
-import logging
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from typing import Any, Literal, cast
@@ -24,9 +23,9 @@ from ....types.ir import (
     ToolResultPart,
 )
 from ....types.ir.tools import ToolCallConfig
+from llm_rosetta.conversion_warnings import report_drop
 from llm_rosetta.ir.tools.intrinsic import intrinsic_kind_of, is_intrinsic_part
 
-logger = logging.getLogger(__name__)
 
 #: Which leg of a conversion an intrinsic part is being written on.
 #:
@@ -44,21 +43,18 @@ _INTRINSIC_LEGS: tuple[str, ...] = ("history", "response")
 def _report_dropped_intrinsic(part: Any, kwargs: dict[str, Any]) -> None:
     """Report a response-leg intrinsic drop.
 
-    A library caller has no conversion ``warnings`` sink, and the per-converter
-    code this replaced logged unconditionally, so silence here would make a
-    drop invisible to anyone not going through the pipeline.  The sink is
-    preferred when there is one; the log line is always written.
+    The conversion's sink is preferred when the caller named one, then the
+    conversion in progress; only a library caller that reached this helper on
+    its own — no context, no pipeline — gets the log line instead, so a drop
+    stays visible either way.  See
+    :mod:`llm_rosetta.conversion_warnings`.
     """
     kind = intrinsic_kind_of(part)
     message = (
         f"Server tool {'result' if part.get('type') == 'tool_result' else 'call'} "
         f"of kind {kind!r} has no form in this target; dropped from the response"
     )
-    warnings = kwargs.get("warnings")
-    if isinstance(warnings, list):
-        warnings.append(message)
-    else:
-        logger.warning("%s", message)
+    report_drop(message, subject=kind, warnings=kwargs.get("warnings"))
 
 
 class BaseToolOps(ABC):

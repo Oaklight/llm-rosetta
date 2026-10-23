@@ -14,7 +14,6 @@ Key Anthropic differences:
 - Reasoning uses ``thinking`` with ``type`` and ``budget_tokens``
 """
 
-import warnings
 from typing import Any, cast
 
 from ....types.ir.configs import (
@@ -24,6 +23,7 @@ from ....types.ir.configs import (
     ResponseFormatConfig,
     StreamConfig,
 )
+from llm_rosetta.conversion_warnings import report_drop
 from ...base import BaseConfigOps
 from ...base.helpers.reasoning import DEFAULT_REASONING_CAPS, apply_reasoning_config
 
@@ -92,9 +92,10 @@ class MessagesConfigOps(BaseConfigOps):
         unsupported_found = [f for f in _UNSUPPORTED if f in ir_config]
         if unsupported_found:
             for field in unsupported_found:
-                warnings.warn(
-                    f"Anthropic does not support {field}, ignored",
-                    stacklevel=2,
+                report_drop(
+                    f"Anthropic does not support {field}; ignored",
+                    subject=field,
+                    warnings=kwargs.get("warnings"),
                 )
 
         return result
@@ -150,10 +151,11 @@ class MessagesConfigOps(BaseConfigOps):
         Returns:
             Empty dict (not supported).
         """
-        warnings.warn(
-            "Anthropic does not support response_format, "
-            "use system instructions or tools instead",
-            stacklevel=2,
+        report_drop(
+            "Anthropic does not support response_format; use system "
+            "instructions or tools instead",
+            subject="response_format",
+            warnings=kwargs.get("warnings"),
         )
         return {}
 
@@ -196,10 +198,10 @@ class MessagesConfigOps(BaseConfigOps):
             result["stream"] = ir_stream["enabled"]
 
         if ir_stream.get("include_usage"):
-            warnings.warn(
-                "Anthropic always includes usage in responses, "
-                "include_usage option ignored",
-                stacklevel=2,
+            report_drop(
+                "Anthropic always includes usage in responses; include_usage ignored",
+                subject="include_usage",
+                warnings=kwargs.get("warnings"),
             )
 
         return result
@@ -323,10 +325,11 @@ class MessagesConfigOps(BaseConfigOps):
         Returns:
             Empty dict (block-level cache not handled here).
         """
-        warnings.warn(
-            "Anthropic cache control is block-level, "
-            "request-level cache config ignored",
-            stacklevel=2,
+        report_drop(
+            "Anthropic cache control is block-level; request-level cache "
+            "config ignored",
+            subject="cache",
+            warnings=kwargs.get("warnings"),
         )
         return {}
 

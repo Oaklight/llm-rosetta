@@ -28,6 +28,7 @@ from ....types.ir import (
 )
 from ....types.ir.tools import ToolCallConfig
 from ...base import BaseToolOps, IntrinsicLeg
+from llm_rosetta.conversion_warnings import report_drop
 from ...base.helpers.opaque import CARRIER_KEY
 from ...base.tools import (
     convert_nullable_to_type_array,
@@ -269,9 +270,10 @@ class MessagesToolOps(BaseToolOps):
             kind = intrinsic_kind_of(ir_tool)
             native = _ANTHROPIC_INTRINSIC_TOOLS.get(kind)
             if native is None:
-                logger.warning(
-                    "Anthropic has no server tool for intrinsic kind %r; dropping",
-                    kind,
+                report_drop(
+                    f"Anthropic has no server tool for intrinsic kind {kind!r};"
+                    " dropping",
+                    subject=kind,
                 )
                 return {}
             return dict(native)
@@ -548,14 +550,12 @@ class MessagesToolOps(BaseToolOps):
         """
         if leg == "response":
             kind = intrinsic_kind_of(ir_tool_call)
-            warnings = kwargs.get("warnings")
-            message = (
+            report_drop(
                 f"Server tool call of kind {kind!r} has no Anthropic server "
-                "tool; dropped from the response"
+                "tool; dropped from the response",
+                subject=kind,
+                warnings=kwargs.get("warnings"),
             )
-            if isinstance(warnings, list):
-                warnings.append(message)
-            logger.warning(message)
             return {}
         return cast(
             dict[str, Any],

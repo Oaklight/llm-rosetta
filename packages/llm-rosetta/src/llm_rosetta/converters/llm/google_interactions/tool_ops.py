@@ -6,12 +6,12 @@ and IR ToolDefinition/ToolCallPart/ToolResultPart.
 """
 
 import json
-import logging
 from typing import Any, cast
 
 from ....types.ir import ToolCallPart, ToolResultPart
 from ....types.ir.tools import ToolChoice, ToolDefinition
 from ...base import BaseToolOps, IntrinsicLeg
+from llm_rosetta.conversion_warnings import DOWNGRADED, report_drop
 from ...base.tools import (
     allowed_tool_names,
     allowed_tool_refs,
@@ -23,9 +23,6 @@ from ...base.tools.intrinsic import (
     make_intrinsic_tool_call,
     make_intrinsic_tool_result,
 )
-
-
-logger = logging.getLogger(__name__)
 
 
 SERVER_CALL_TYPES: dict[str, str] = {
@@ -103,10 +100,10 @@ class GoogleInteractionsToolOps(BaseToolOps):
             kind = intrinsic_kind_of(ir_tool)
             native = _GI_INTRINSIC_TOOLS.get(kind)
             if native is None:
-                logger.warning(
-                    "Google Interactions has no server tool for intrinsic kind"
-                    " %r; dropping",
-                    kind,
+                report_drop(
+                    f"Google Interactions has no server tool for intrinsic "
+                    f"kind {kind!r}; dropping",
+                    subject=kind,
                 )
                 return {}
             return dict(native)
@@ -450,10 +447,11 @@ class GoogleInteractionsToolOps(BaseToolOps):
                     " found in the history"
                 )
             tool_name = call_id
-            logger.warning(
-                "Could not resolve tool name for function_result %r; using the"
-                " call_id as the function name",
-                call_id,
+            report_drop(
+                f"Could not resolve tool name for function_result {call_id!r}; "
+                "using the call_id as the function name",
+                code=DOWNGRADED,
+                subject=call_id,
             )
         result["name"] = tool_name
         if ir_part.get("is_error"):

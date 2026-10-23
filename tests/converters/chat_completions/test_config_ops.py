@@ -2,10 +2,9 @@
 OpenAI Chat ConfigOps unit tests.
 """
 
-import pytest
-
 from typing import cast
 
+from llm_rosetta.conversion_warnings import WarningSink, recording_to
 from llm_rosetta.converters.llm.chat_completions.config_ops import (
     ChatCompletionsConfigOps,
 )
@@ -64,8 +63,10 @@ class TestChatCompletionsConfigOps:
 
     def test_ir_generation_config_top_k_warning(self):
         """Test top_k produces warning."""
-        with pytest.warns(UserWarning, match="top_k"):
+        sink = WarningSink()
+        with recording_to(sink):
             ChatCompletionsConfigOps.ir_generation_config_to_p({"top_k": 40})
+        assert any("top_k" in warning for warning in sink)
 
     def test_p_generation_config_to_ir(self):
         """Test OpenAI generation params → IR GenerationConfig."""

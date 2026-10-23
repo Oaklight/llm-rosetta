@@ -4,8 +4,8 @@ Google GenAI ContentOps unit tests.
 
 from typing import cast
 
-import pytest
 
+from llm_rosetta.conversion_warnings import WarningSink, recording_to
 from llm_rosetta.converters.llm.google_generate.content_ops import (
     GoogleGenerateContentOps,
 )
@@ -197,8 +197,10 @@ class TestGoogleGenerateContentOps:
         ir_file = cast(
             FilePart, {"type": "file", "file_url": "https://example.com/doc.pdf"}
         )
-        with pytest.warns(UserWarning, match="不直接支持文件URL"):
+        sink = WarningSink()
+        with recording_to(sink):
             result = GoogleGenerateContentOps.ir_file_to_p(ir_file)
+        assert any("file URL" in warning for warning in sink)
         assert result is None
 
     def test_p_file_to_ir(self):
@@ -225,8 +227,10 @@ class TestGoogleGenerateContentOps:
     def test_ir_audio_to_p_unsupported_warns(self):
         """Test IR AudioPart without data emits warning."""
         ir_audio = cast(AudioPart, {"type": "audio"})
-        with pytest.warns(UserWarning, match="不支持的音频格式"):
+        sink = WarningSink()
+        with recording_to(sink):
             result = GoogleGenerateContentOps.ir_audio_to_p(ir_audio)
+        assert any("Unsupported audio format" in warning for warning in sink)
         assert result is None
 
     def test_p_audio_to_ir_inline(self):

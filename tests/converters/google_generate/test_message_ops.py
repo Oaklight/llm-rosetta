@@ -4,8 +4,8 @@ Google GenAI MessageOps unit tests.
 
 from typing import Any, Union, cast
 
-import pytest
 
+from llm_rosetta.conversion_warnings import WarningSink, recording_to
 from llm_rosetta.converters.llm.google_generate.content_ops import (
     GoogleGenerateContentOps,
 )
@@ -205,8 +205,10 @@ class TestGoogleGenerateMessageOps:
                 }
             ],
         )
-        with pytest.warns(UserWarning, match="不支持的内容类型"):
+        sink = WarningSink()
+        with recording_to(sink):
             result, warnings = self.message_ops.ir_messages_to_p(ir_messages)
+        assert any("Unsupported content type" in warning for warning in sink)
         assert len(result) == 1
         # The unsupported part should be skipped (None filtered out)
         assert len(result[0]["parts"]) == 0

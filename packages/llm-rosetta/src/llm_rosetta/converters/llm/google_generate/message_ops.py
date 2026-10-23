@@ -13,7 +13,6 @@ Google-specific:
 - All content is represented as Part objects in a flat list
 """
 
-import warnings
 from collections.abc import Sequence
 from typing import Any, cast
 
@@ -33,6 +32,7 @@ from ....types.ir import (
     is_tool_result_part,
 )
 from ...base import BaseMessageOps
+from llm_rosetta.conversion_warnings import report_drop
 from ...base.helpers.opaque import inject_google_function_call_signature
 from ...base.tools.batch import assign_tool_batch_ids, merge_tool_messages
 from ...base.tools.intrinsic import intrinsic_kind_of, is_intrinsic_part
@@ -187,7 +187,10 @@ class GoogleGenerateMessageOps(BaseMessageOps):
                 )
             else:
                 # Unknown item type, skip
-                warnings.warn("Unknown item type in ir_messages, will be ignored")
+                report_drop(
+                    "Unknown item type in ir_messages, will be ignored",
+                    subject=str(item.get("type", "")),
+                )
 
         return contents, warnings_list
 
@@ -284,7 +287,10 @@ class GoogleGenerateMessageOps(BaseMessageOps):
                 content_part, warnings=warnings_list
             )
         else:
-            warnings.warn(f"不支持的内容类型: {content_part.get('type')}")
+            report_drop(
+                f"Unsupported content type: {content_part.get('type')}",
+                subject=str(content_part.get("type", "")),
+            )
             return None
 
     # ==================== Provider → IR ====================
@@ -462,7 +468,10 @@ class GoogleGenerateMessageOps(BaseMessageOps):
                 ignorable_keys = {"thoughtSignature", "thought_signature"}
                 unknown_keys = set(part.keys()) - ignorable_keys
                 if unknown_keys:
-                    warnings.warn(f"不支持的Part类型: {list(unknown_keys)}")
+                    report_drop(
+                        f"Unsupported Part type(s): {sorted(unknown_keys)}",
+                        subject=",".join(sorted(unknown_keys)),
+                    )
 
         if not content_parts and not tool_result_parts:
             return None

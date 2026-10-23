@@ -4,6 +4,7 @@ Anthropic ContentOps unit tests.
 
 import pytest
 
+from llm_rosetta.conversion_warnings import WarningSink, recording_to
 from llm_rosetta.converters.llm.messages.content_ops import MessagesContentOps
 
 # Note: ir_refusal_to_p returns dict | None; tests assert result is not None before subscript
@@ -256,10 +257,12 @@ class TestMessagesContentOps:
 
     def test_ir_refusal_to_p(self):
         """Test IR RefusalPart → Anthropic text block (with warning)."""
-        with pytest.warns(UserWarning, match="does not have a dedicated refusal"):
+        sink = WarningSink()
+        with recording_to(sink):
             result = MessagesContentOps.ir_refusal_to_p(
                 {"type": "refusal", "refusal": "I cannot do that"}
             )
+        assert any("dedicated refusal" in warning for warning in sink)
         assert result is not None
         assert result["type"] == "text"
         assert "I cannot do that" in result["text"]

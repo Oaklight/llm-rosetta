@@ -15,7 +15,6 @@ Google-specific:
 
 import json
 import time
-import warnings
 from collections.abc import Mapping
 from typing import Any, cast
 
@@ -46,6 +45,7 @@ from ....types.ir.stream import (
     UsageEvent,
 )
 from ...base import BaseConverter
+from llm_rosetta.conversion_warnings import report_drop
 from ...base.context import (
     ConversionContext,
     StreamContext,
@@ -1744,10 +1744,11 @@ class GoogleGenerateConverter(BaseConverter):
             return {}
         kind = intrinsic_kind_of(event)
         if not self.tool_ops.intrinsic_renderable(kind, None, leg="response"):
-            warnings.warn(
+            report_drop(
                 f"Unsupported intrinsic kind {kind!r} for Google Generate "
-                f"stream result — dropping",
-                stacklevel=2,
+                "stream result — dropping",
+                subject=kind,
+                warnings=getattr(context, "warnings", None),
             )
             return {}
         native = self._native_code_execution_result(event.get("provider_metadata"))
@@ -1856,10 +1857,10 @@ class GoogleGenerateConverter(BaseConverter):
             return None
         if not self.tool_ops.intrinsic_renderable(kind, None, leg="response"):
             if kind:
-                warnings.warn(
+                report_drop(
                     f"Unsupported intrinsic kind {kind!r} for Google Generate "
-                    f"stream call — dropping",
-                    stacklevel=2,
+                    "stream call — dropping",
+                    subject=kind,
                 )
             return None
         if not args_str.strip():

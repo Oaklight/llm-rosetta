@@ -13,7 +13,6 @@ Google-specific:
 - Stream is handled by client method choice (generate_content vs generate_content_stream)
 """
 
-import warnings
 from typing import Any, cast
 
 from ....types.ir.configs import (
@@ -24,6 +23,7 @@ from ....types.ir.configs import (
     StreamConfig,
 )
 from ...base import BaseConfigOps
+from llm_rosetta.conversion_warnings import report_drop
 from ...base.helpers.reasoning import DEFAULT_REASONING_CAPS, apply_reasoning_config
 
 
@@ -82,14 +82,14 @@ class GoogleGenerateConfigOps(BaseConfigOps):
 
         # Unsupported fields
         if "logit_bias" in ir_config:
-            warnings.warn(
-                "Google GenAI does not support logit_bias, ignored",
-                stacklevel=2,
+            report_drop(
+                "Google GenAI does not support logit_bias; ignored",
+                subject="logit_bias",
             )
         if "logprobs" in ir_config:
-            warnings.warn(
-                "Google GenAI does not support logprobs, ignored",
-                stacklevel=2,
+            report_drop(
+                "Google GenAI does not support logprobs; ignored",
+                subject="logprobs",
             )
 
         return result
@@ -363,10 +363,10 @@ class GoogleGenerateConfigOps(BaseConfigOps):
             result["cached_content"] = ir_cache["key"]
 
         if "retention" in ir_cache:
-            warnings.warn(
+            report_drop(
                 "Google GenAI cache retention is managed at the CachedContent "
-                "resource level, not per-request. Ignored.",
-                stacklevel=2,
+                "resource level, not per-request; ignored",
+                subject="retention",
             )
 
         return result

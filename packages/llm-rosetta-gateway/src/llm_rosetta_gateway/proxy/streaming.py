@@ -61,7 +61,6 @@ from .fidelity import (
 from .engine import (
     _apply_request_stages,
     _inject_stream_flags,
-    _log_response_warnings,
 )
 from .preflight import (
     _run_preflight,
@@ -176,8 +175,6 @@ async def _stream_event_generator(
     capture_record: CapturedRequest | None = None,
     capture_state: CaptureState | None = None,
     dump_ctx: DumpContext | None = None,
-    pipeline: Any | None = None,
-    warnings_before: int = 0,
     soft_error_patterns: tuple[SoftErrorPattern, ...] = (),
 ) -> AsyncIterator[str]:
     """Stream SSE events from an already-opened upstream stream.
@@ -248,11 +245,6 @@ async def _stream_event_generator(
             yield sse_text
         raise
     finally:
-        # The caller logged the request leg's warnings before the stream was
-        # opened; anything the chunks added lands here.  In the finally so a
-        # stream that died partway still reports what it managed to find.
-        _log_response_warnings(pipeline, warnings_before)
-
         # Write back stream profile to request log entry
         if entry_id and request_log is not None:
             stream_profile: dict[str, Any] = {
@@ -439,8 +431,6 @@ async def handle_streaming(  # noqa: C901
         route, body, target_body, "request", profile, model, persistence, entry_id
     )
     log_original_request(pipeline.ir_request)
-    if pipeline.warnings:
-        logger.warning("Conversion warnings: %s", pipeline.warnings)
 
     # Per-model system message flattening (gateway config override)
     if route.flatten_system:
@@ -641,8 +631,6 @@ async def handle_streaming(  # noqa: C901
                     upstream_url=str(provider_info.base_url),
                     tool_name_collisions=pipeline.tool_name_collisions,
                 ),
-                pipeline=pipeline,
-                warnings_before=len(pipeline.warnings),
                 soft_error_patterns=route.soft_error_patterns,
             ),
             content_type="text/event-stream",
