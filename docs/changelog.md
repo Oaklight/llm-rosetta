@@ -36,6 +36,7 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### 变更
 
+- **被去掉的图片现在是一条记录下来的损失**（issue [#990](https://github.com/Oaklight/llm-rosetta/issues/990)）：`enforce_vision` 通过转换的 warning sink 上报（`code="dropped"`、`subject="image"`），因此 `ConversionPipeline.warnings` 会列出为不支持视觉的模型去掉的图片，而不只是写进日志。日志行本身不变——由 sink 负责写。
 - **转换告警只有一种类型、一个汇点**（issue [#1009](https://github.com/Oaklight/llm-rosetta/issues/1009)）：一次转换里的丢失 —— 目标格式没有对应形式的内容块、规范未定义的字段、无法声明的工具、模型看不见的图片 —— 过去通过三条互不相干的通道抵达调用方：请求上下文里的自由字符串、发现问题的那个转换器自己写的 `logger.warning`，以及标准库 `warnings`。只读取列表的调用方会漏掉另外两条通道里的全部内容，而流式一侧根本没有通往该列表的路。现在它们是 `ConversionWarning` 记录 —— 仍然是字符串，因此现有消费方不受影响 —— 携带类别、所属一侧与所属转换，收进由一条请求的请求侧、响应侧与流式侧共享的同一个 `WarningSink`。记录即是动作：日志由汇点写出，因此转换器只上报、不再另行记日志，网关原先单独的“Conversion warnings”汇总也随之移除。由此有两点需要注意：原先按 `Conversion warnings:` 过滤日志的配置，现在匹配的是每次丢失一行，每行都带 `(leg, code)`；想只收集、不打日志的调用方应传入普通 `list`（或 `log=False` 构造的汇点），而不是直接往汇点里追加。
 
 - **网关成为独立发行版**（epic [#1127](https://github.com/Oaklight/llm-rosetta/issues/1127)；issue [#1157](https://github.com/Oaklight/llm-rosetta/issues/1157)、[#1161](https://github.com/Oaklight/llm-rosetta/issues/1161)）：仓库现在分别发布 `llm-rosetta`（转换核心）与 `llm-rosetta-gateway`；遥测栈与 `llm-rosetta-usage` 命令随网关迁移。`llm_rosetta.gateway` 作为弃用别名保留到 0.16.0。网关锁定兼容的核心次版本，`--version`、`/health` 与管理台页脚会同时显示两个版本（[升级](gateway/upgrading.md)）。
@@ -43,6 +44,7 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### 变更（**破坏性变更**）
 
+- **（破坏性）视觉策略只剩一处**（issue [#990](https://github.com/Oaklight/llm-rosetta/issues/990)）：移除 `llm_rosetta.transforms.strip_non_vision_images()`。它与 `llm_rosetta.capabilities.enforce_vision()` 是同一策略的两份实现——空操作条件相同、实现相同——且没有任何 shim 声明过它。当目标模型未声明 `vision` 且能力已知时，图片在 shim 自身的变换运行之前就已被管线替换。若某个 shim 在 `ir_transforms` 中列过该工厂，请删掉它：它想要的行为本来就已生效。
 - **Embedding 流量不再回退到 chat 提供方**（issue [#926](https://github.com/Oaklight/llm-rosetta/issues/926)）：没有 embedding 端点的模型现在返回 `404`，不再被转发给它的 chat 提供方。请声明 `embedding_format` / `embedding_shim`，或添加 `embedding_models` 条目。
 - **格式与 shim 重命名**（issue [#909](https://github.com/Oaklight/llm-rosetta/issues/909)、[#910](https://github.com/Oaklight/llm-rosetta/issues/910)、[#921](https://github.com/Oaklight/llm-rosetta/issues/921)、[#923](https://github.com/Oaklight/llm-rosetta/issues/923)）：`openai_chat` 改为 `chat_completions`，`anthropic` 改为 `messages`，Responses 合并为单一的 `open_responses` 基础格式，shim 统一使用 `<vendor>--<format>` 规范名。旧配置拼写会在启动时迁移一次；弃用的导入路径仍可解析。
 - **Google SDK 形状把 `system_instruction` 移入 `config`**（issue [#936](https://github.com/Oaklight/llm-rosetta/issues/936)）：直接构造 Google `GenerateContentConfig` 的调用方需要移动该字段。
