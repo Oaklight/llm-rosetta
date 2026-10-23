@@ -445,6 +445,14 @@ class ConversionPipeline:
             if resolved_target_for_prefix
             else None
         )
+        # Request-bound fields the *target* accepts beyond its base format.
+        # The reader forwards a client's value only when the target declares
+        # it, so a neutral upstream never receives a field its spec omits.
+        self._target_request_fields = (
+            resolved_target_for_prefix.request_fields
+            if resolved_target_for_prefix
+            else ()
+        )
         self._source_preserve_fields = (
             resolved_source_for_prefix.preserve_fields
             if resolved_source_for_prefix
@@ -669,6 +677,7 @@ class ConversionPipeline:
         # request (see the converter's ``request_from_provider``).
         ctx.options["preserve_fields"] = self._source_preserve_fields
         ctx.options["store_default"] = self._source_store_default
+        ctx.options["request_fields"] = self._target_request_fields
         if resolve_format(self._target_provider) in _GOOGLE_GENERATE_PROVIDERS:
             ctx.options["output_format"] = self._google_output_format
 

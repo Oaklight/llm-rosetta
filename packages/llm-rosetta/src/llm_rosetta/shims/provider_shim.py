@@ -460,6 +460,12 @@ class ProviderShim:
             fields ``access_programs``, ``billing``, ``content_filters``,
             ``moderation``, ``tool_usage``).  Additive; the base format's
             spec-level set always applies.
+        request_fields: Request-bound fields this provider accepts beyond
+            the base format's own set (e.g. the OpenAI-only ``logit_bias``,
+            ``prompt_cache_options``, ``moderation``, ``access_programs``).
+            A reader forwards a client's value for one of these only when the
+            **target** declares it, so a neutral upstream never receives a
+            field its spec does not define.
         store_default: Value for the ``store`` field injected into a
             response resource when the upstream echo omits it.  ``None``
             (default) leaves the base format's spec behavior (no forced
@@ -505,6 +511,7 @@ class ProviderShim:
     model_reasoning: dict[str, ReasoningCapability] | None = None
     response_id_prefix: str = ""
     preserve_fields: tuple[str, ...] = ()
+    request_fields: tuple[str, ...] = ()
     store_default: bool | None = None
     hoist_system_messages: bool = True
     soft_error_patterns: tuple[SoftErrorPattern, ...] = ()
@@ -602,6 +609,7 @@ class ProviderShim:
             "model_reasoning": None,
             "response_id_prefix": "",
             "preserve_fields": (),
+            "request_fields": (),
             "store_default": None,
             "hoist_system_messages": True,
             "soft_error_patterns": (),

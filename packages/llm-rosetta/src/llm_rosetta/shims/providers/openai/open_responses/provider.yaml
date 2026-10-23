@@ -32,6 +32,18 @@ preserve_fields:
   - content_filters
   - moderation
   - tool_usage
+# Request-bound fields OpenAI accepts beyond the neutral spec.  A client's
+# value is forwarded only when the target is a provider that declares it;
+# measured against the live API, `moderation` is accepted and
+# `prompt_cache_options` is model-gated, while `logit_bias` and
+# `access_programs` are rejected in their common shapes — they are declared
+# anyway, because forwarding the client's own request reproduces the vendor's
+# own answer instead of sampling a silently different one.
+request_fields:
+  - logit_bias
+  - prompt_cache_options
+  - moderation
+  - access_programs
 # OpenAI stores responses server-side by default; the spec is stateless.
 store_default: true
 reasoning:

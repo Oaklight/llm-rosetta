@@ -45,7 +45,7 @@ from ....types.ir.stream import (
 from ...base import BaseConverter
 from ...base.context import ConversionContext, StreamContext
 from ...base.helpers.citations import report_dropped_citation
-from ...base.helpers.extensions import wire_extensions
+from ...base.helpers.extensions import extension_loss_warning, wire_extensions
 from ...base.helpers.opaque import (
     get_opaque_origin,
     is_own_origin,
@@ -144,17 +144,22 @@ _PASSTHROUGH_REQUEST_FIELDS = (
     "include",
     "conversation",
     "context_management",
-    # OpenAI-profile-only request knobs.  Measured against the live Responses
-    # API: ``moderation`` is accepted, ``prompt_cache_options`` is known but
-    # model-gated, ``access_programs`` must be an object, and ``logit_bias``
-    # is not a Responses parameter at all (``400 unknown_parameter``).  They
-    # ride here because this is the *client's own* request being written back
-    # to a same-format upstream: forwarding it preserves what talking to the
-    # vendor directly would do — including the vendor's own 400 — while
-    # dropping it answers from a differently sampled request.  The opposite
-    # direction (a chat client's ``logit_bias`` converted towards Responses)
-    # still drops with a warning, because there the target genuinely has no
-    # such field.
+)
+
+#: Request-bound fields an OpenAI *profile* may accept beyond the neutral
+#: spec.  The reader records them whenever the client sends them, so a writer
+#: of another format can name them in its loss report; the Responses writer
+#: emits one only when the **target** declares it (``request_fields`` in the
+#: shim's ``provider.yaml``, threaded through ``context.options``), and
+#: reports it otherwise.  Recording is not sending: a neutral upstream never
+#: receives a field its spec does not define.
+#:
+#: Measured against the live Responses API: ``moderation`` is accepted,
+#: ``prompt_cache_options`` is known but model-gated, ``access_programs`` must
+#: be an object, and ``logit_bias`` is not a Responses parameter at all — the
+#: OpenAI shim declares it anyway, because forwarding the client's own request
+#: reproduces the vendor's answer instead of sampling a different one.
+_PROFILE_REQUEST_FIELDS: tuple[str, ...] = (
     "logit_bias",
     "prompt_cache_options",
     "moderation",
@@ -168,9 +173,12 @@ def _forward_passthrough_request_fields(
     """Forward Responses-specific request fields via ``provider_extensions``.
 
     These fields have no IR equivalent but must reach the upstream in
-    same-format round-trips so the client's values are honoured.
+    same-format round-trips so the client's values are honoured.  The
+    profile-only ones are recorded here too — recording is what lets a writer
+    of another format report them as dropped; whether the target may receive
+    one is decided by the writer, against the target's declaration.
     """
-    for field in _PASSTHROUGH_REQUEST_FIELDS:
+    for field in (*_PASSTHROUGH_REQUEST_FIELDS, *_PROFILE_REQUEST_FIELDS):
         val = provider_request.get(field)
         if val is not None:
             ir_request.setdefault("provider_extensions", {})[field] = val
@@ -389,7 +397,24 @@ class OpenResponsesConverter(BaseConverter):
             # ``tool_choice`` by ``_apply_tool_config``) never leaks as a
             # top-level field.  A legacy top-level ``allowed_tools`` is a plain
             # key and still passes through.
-            result.update(wire_extensions(ir_request, self._CONVERTER_TAG))
+            merged = wire_extensions(ir_request, self._CONVERTER_TAG)
+            # A profile-only field reaches this body only when the target
+            # declares it; otherwise it is reported, because a neutral
+            # upstream answering 400 to a field it never defined is a failure
+            # this gateway caused.
+            declared = frozenset(ctx.options.get("request_fields") or ())
+            withheld = {
+                key
+                for key in merged
+                if key in _PROFILE_REQUEST_FIELDS and key not in declared
+            }
+            for key in withheld:
+                merged.pop(key)
+            if withheld:
+                ctx.warnings.append(
+                    extension_loss_warning(withheld, self._CONVERTER_TAG)
+                )
+            result.update(merged)
 
         return result
 
@@ -503,10 +528,10 @@ class OpenResponsesConverter(BaseConverter):
             )
 
         # 13. Responses-specific request fields not modelled in IR.
+        ctx = context if context is not None else ConversionContext()
         _forward_passthrough_request_fields(provider_request, ir_request)
 
         # Preserve mode: capture request fields for echo-back in response
-        ctx = context if context is not None else ConversionContext()
         if ctx.metadata_mode == "preserve":
             preserve = self._get_preserve_fields(ctx)
             echo = {k: v for k, v in provider_request.items() if k in preserve}

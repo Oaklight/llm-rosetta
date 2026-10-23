@@ -150,8 +150,14 @@ OPENAI_ONLY_REQUEST = {
 }
 
 
-def test_openai_only_request_knobs_survive_a_same_format_round_trip() -> None:
-    pipe = ConversionPipeline("open_responses", "open_responses")
+#: The OpenAI profile that declares those request knobs.
+OPENAI_PROFILE = "openai--open_responses"
+
+
+def test_the_profile_forwards_the_knobs_it_declares() -> None:
+    pipe = ConversionPipeline(
+        "open_responses", "open_responses", target_shim=OPENAI_PROFILE
+    )
     body = pipe.convert_request(
         {"model": "test-model", "input": "hello", **OPENAI_ONLY_REQUEST}
     )
@@ -161,14 +167,36 @@ def test_openai_only_request_knobs_survive_a_same_format_round_trip() -> None:
     assert pipe.warnings == []
 
 
-def test_another_format_reports_the_same_knobs_as_dropped() -> None:
-    pipe = ConversionPipeline("open_responses", "chat_completions")
+def test_a_neutral_upstream_never_receives_them_but_hears_about_them() -> None:
+    """The base format's spec does not define these, so it does not send them.
+
+    The gate is the *target's* declaration.  Recording and sending are
+    separate steps — the reader records what the client sent so the loss can
+    be reported, and the writer emits only what the target declares — which
+    keeps a conforming neutral upstream from answering 400 to a parameter it
+    never defined *and* keeps the caller informed.
+    """
+    for shim in (None, "open_responses"):
+        pipe = ConversionPipeline("open_responses", "open_responses", target_shim=shim)
+        body = pipe.convert_request(
+            {"model": "test-model", "input": "hello", **OPENAI_ONLY_REQUEST}
+        )
+        for key in OPENAI_ONLY_REQUEST:
+            assert key not in body, f"{key} reached a neutral upstream ({shim!r})"
+        dropped = " ".join(pipe.warnings)
+        for key in OPENAI_ONLY_REQUEST:
+            assert key in dropped, f"{key} was lost silently ({shim!r})"
+
+
+@pytest.mark.parametrize("target", ["chat_completions", "messages"])
+def test_another_format_reports_the_same_knobs_as_dropped(target: str) -> None:
+    pipe = ConversionPipeline("open_responses", target, target_shim=OPENAI_PROFILE)
     body = pipe.convert_request(
         {"model": "test-model", "input": "hello", **OPENAI_ONLY_REQUEST}
     )
 
     for key in OPENAI_ONLY_REQUEST:
-        assert key not in body, f"{key} reached the chat_completions body"
+        assert key not in body, f"{key} reached the {target} body"
     dropped = " ".join(pipe.warnings)
     for key in OPENAI_ONLY_REQUEST:
         assert key in dropped, f"{key} was not named in the loss report"
