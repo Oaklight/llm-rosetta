@@ -8,6 +8,8 @@ Functions follow the ``enforce_*`` naming convention for the enforcement passes:
 - :func:`enforce_custom_tools` — downgrade custom tools for non-supporting providers
 - :func:`degrade_intrinsic_history` — degrade intrinsic history the target cannot replay
 - :func:`dedupe_tool_definitions` — collapse duplicate tool definitions (post-IR)
+- :func:`drop_nameless_tools` — drop tool definitions the target could only
+  reject (post-IR)
 
 Split by concern: :mod:`.enforcement` for the capability passes, :mod:`.tool_names`
 for tool identity and naming, :mod:`.description_limit` for oversized descriptions.
@@ -16,6 +18,7 @@ for tool identity and naming, :mod:`.description_limit` for oversized descriptio
 from llm_rosetta.ir.passes.description_limit import relocate_oversized_tool_descriptions
 from llm_rosetta.ir.passes.enforcement import (
     backfill_reasoning_replay,
+    drop_nameless_tools,
     enforce_reasoning,
     strip_reasoning_for_non_reasoning,
     enforce_vision,
@@ -40,6 +43,7 @@ from llm_rosetta.ir.passes.tool_names import (
 __all__ = [
     "MAX_TOOL_NAME_LEN",
     "backfill_reasoning_replay",
+    "drop_nameless_tools",
     "enforce_reasoning",
     "strip_reasoning_for_non_reasoning",
     "enforce_vision",

@@ -392,6 +392,83 @@ def resolve_intrinsic_tools(
     return ir_request
 
 
+def drop_nameless_tools(
+    ir_request: dict[str, Any],
+    *,
+    request_id: str = "-",
+    warnings: Any = None,
+) -> dict[str, Any]:
+    """Drop tool definitions that carry no name.
+
+    Every dialect identifies a tool by its name, so a nameless definition can
+    only be sent as an empty string — and both measured upstreams reject that:
+    Chat Completions answers ``400 Invalid 'tools[0].function.name': empty
+    string`` and Messages ``400 tools.0.custom.name: String should have at
+    least 1 character`` (measured 2026-10-23).  A nameless definition is what
+    an IR request carries when a client body holds a tool *type* the source
+    reader does not know and no name to fall back on; dropping it here and
+    saying so is a better answer than an upstream 400 that names a position in
+    a body the client did not write.
+
+    Args:
+        ir_request: The IR request dict — **always use the return value**.
+        request_id: Request identifier for the report's prefix.
+        warnings: The conversion's sink, when the caller has one.
+
+    Returns:
+        The IR request without its nameless tool definitions, or the original
+        request when every tool has a name.
+    """
+    tools = ir_request.get("tools")
+    if not tools:
+        return ir_request
+
+    kept: list[Any] = []
+    dropped: list[str] = []
+    for index, tool in enumerate(tools):
+        if isinstance(tool, dict):
+            name = tool.get("name")
+            if not (isinstance(name, str) and name.strip()):
+                # The definition has no name to identify it by, so the report
+                # names its position and the type it declared.
+                dropped.append(f"tools[{index}] (type {tool.get('type')!r})")
+                continue
+        kept.append(tool)
+
+    if not dropped:
+        return ir_request
+
+    where = f"[{request_id}] " if request_id not in ("", "-") else ""
+    trimmed: dict[str, Any] = {**ir_request, "tools": kept}
+
+    # A private choice that forces the tool by name has nothing left to name
+    # once the only tool it could mean was the nameless one.  Only the empty
+    # name is handled here: a choice naming a tool that is absent for another
+    # reason (an ambiguous namespace, say) is deliberately left as sent and
+    # reported elsewhere, so stripping it here would contradict that.
+    choice = trimmed.get("tool_choice")
+    orphaned_choice = False
+    if isinstance(choice, dict) and choice.get("mode") == "tool":
+        forced = choice.get("tool_name")
+        if not (isinstance(forced, str) and forced.strip()):
+            trimmed.pop("tool_choice", None)
+            orphaned_choice = True
+
+    report_drop(
+        f"{where}dropped {len(dropped)} tool definition(s) with no name: "
+        f"{', '.join(dropped)}; every wire format identifies a tool by its "
+        "name, and an empty one is rejected"
+        + (
+            ", so the 'tool_choice' forcing it was removed as well"
+            if orphaned_choice
+            else ""
+        ),
+        subject="tools",
+        warnings=warnings,
+    )
+    return trimmed
+
+
 def enforce_custom_tools(
     ir_request: dict[str, Any],
     *,

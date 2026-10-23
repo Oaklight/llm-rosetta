@@ -32,6 +32,7 @@ from llm_rosetta.capabilities import (
     dedupe_tool_definitions,
     qualify_tool_names,
     degrade_intrinsic_history,
+    drop_nameless_tools,
     enforce_custom_tools,
     resolve_intrinsic_tools,
     relocate_oversized_tool_descriptions,
@@ -797,6 +798,17 @@ class ConversionPipeline:
             # tool natively, so it is a property of the source converter's
             # format, not of the literal provider name.
             allow_name_promotion=not self._source_converter._SUPPORTS_NATIVE_SERVER_TOOLS,
+            request_id=request_id,
+            warnings=ctx.warnings,
+        )
+
+        # Tool definitions must be addressable.  A nameless one can only go
+        # out as an empty string, which every upstream rejects with a 400 that
+        # names a position in a body the client never wrote; drop it here and
+        # say why.  Runs after the intrinsic pass so a promoted definition
+        # (which always carries a name) is not re-examined.
+        ir_request = drop_nameless_tools(
+            ir_request,
             request_id=request_id,
             warnings=ctx.warnings,
         )

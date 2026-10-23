@@ -12,6 +12,7 @@ from __future__ import annotations
 from .description_limit import relocate_oversized_tool_descriptions  # noqa: F401
 from .enforcement import (  # noqa: F401
     backfill_reasoning_replay,
+    drop_nameless_tools,
     enforce_custom_tools,
     enforce_reasoning,
     enforce_vision,
@@ -43,6 +44,7 @@ __all__ = [
     "degrade_intrinsic_history",
     "enforce_custom_tools",
     "enforce_reasoning",
+    "drop_nameless_tools",
     "enforce_vision",
     "get_custom_tool_names",
     "qualify_tool_names",
