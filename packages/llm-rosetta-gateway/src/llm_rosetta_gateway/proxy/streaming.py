@@ -320,31 +320,36 @@ async def _failover_stream(
     if prepared is None:
         return None
     new_route, new_pinfo, retry_body = prepared
-    response, sub_profile = await handle_streaming(
-        new_route,
-        new_pinfo,
-        retry_body,
-        reported_model=reported_model,
-        transport=transport,
-        metadata_store=metadata_store,
-        extra_headers=extra_headers,
-        entry_id=entry_id,
-        request_log=request_log,
-        metrics=metrics,
-        persistence=persistence,
-        capture_state=capture_state,
-        preflight_token_count=preflight_token_count,
-        selection=selection,
-        config=config,
-        _failover_from=route.provider_name,
-    )
-    record_failover(
-        profile,
-        route=route,
-        new_route=new_route,
-        signal=signal,
-        sub_profile=sub_profile,
-    )
+    sub_profile: dict[str, Any] = {}
+    try:
+        response, sub_profile = await handle_streaming(
+            new_route,
+            new_pinfo,
+            retry_body,
+            reported_model=reported_model,
+            transport=transport,
+            metadata_store=metadata_store,
+            extra_headers=extra_headers,
+            entry_id=entry_id,
+            request_log=request_log,
+            metrics=metrics,
+            persistence=persistence,
+            capture_state=capture_state,
+            preflight_token_count=preflight_token_count,
+            selection=selection,
+            config=config,
+            _failover_from=route.provider_name,
+        )
+    finally:
+        # Same rule as the non-streaming path: whichever provider ran owns
+        # the outcome, including a failure.
+        record_failover(
+            profile,
+            route=route,
+            new_route=new_route,
+            signal=signal,
+            sub_profile=sub_profile,
+        )
     return response, profile
 
 

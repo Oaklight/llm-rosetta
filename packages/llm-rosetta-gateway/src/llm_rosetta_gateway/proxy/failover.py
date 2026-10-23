@@ -120,16 +120,23 @@ def record_failover(
     the provider whose response the client actually received.
     """
     from ..lifecycle import current_lifecycle
+    from ..logging import get_logger
 
-    profile["failover"] = {
-        "from": route.provider_name,
-        "to": new_route.provider_name,
-        "reason": getattr(signal, "reason", None) or "quota refusal",
-        "profile": sub_profile,
-    }
-    ctx = current_lifecycle()
-    if ctx is not None:
-        ctx.note_route(
-            target_format=new_route.target_provider,
-            provider_name=new_route.provider_name,
-        )
+    try:
+        profile["failover"] = {
+            "from": route.provider_name,
+            "to": new_route.provider_name,
+            "reason": getattr(signal, "reason", None) or "quota refusal",
+            "profile": sub_profile,
+        }
+        ctx = current_lifecycle()
+        if ctx is not None:
+            ctx.note_route(
+                target_format=new_route.target_provider,
+                provider_name=new_route.provider_name,
+            )
+    except Exception:  # noqa: BLE001 - bookkeeping must not mask the outcome
+        # This runs from a ``finally`` on the failure path, where an exception
+        # here would replace the client's error with a bookkeeping one.  The
+        # answer always wins; the record is best-effort.
+        get_logger().warning("Could not record the quota failover", exc_info=True)

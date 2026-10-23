@@ -144,27 +144,33 @@ async def _failover_response(
     if prepared is None:
         return None
     new_route, new_pinfo, retry_body = prepared
-    response, sub_profile = await handle_non_streaming(
-        new_route,
-        new_pinfo,
-        retry_body,
-        transport=transport,
-        metadata_store=metadata_store,
-        extra_headers=extra_headers,
-        persistence=persistence,
-        capture_state=capture_state,
-        entry_id=entry_id,
-        selection=selection,
-        config=config,
-        _failover_from=route.provider_name,
-    )
-    record_failover(
-        profile,
-        route=route,
-        new_route=new_route,
-        signal=signal,
-        sub_profile=sub_profile,
-    )
+    sub_profile: dict[str, Any] = {}
+    try:
+        response, sub_profile = await handle_non_streaming(
+            new_route,
+            new_pinfo,
+            retry_body,
+            transport=transport,
+            metadata_store=metadata_store,
+            extra_headers=extra_headers,
+            persistence=persistence,
+            capture_state=capture_state,
+            entry_id=entry_id,
+            selection=selection,
+            config=config,
+            _failover_from=route.provider_name,
+        )
+    finally:
+        # Recorded even when the second attempt raises: a failure produced by
+        # the provider that actually ran must not be attributed to the one
+        # that refused.
+        record_failover(
+            profile,
+            route=route,
+            new_route=new_route,
+            signal=signal,
+            sub_profile=sub_profile,
+        )
     return response, profile
 
 

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -656,3 +656,175 @@ async def _empty_body() -> Any:
     """An SSE body that yields nothing."""
     return
     yield  # pragma: no cover - makes this an async generator
+
+
+class _ExplodingTransport(_Transport):
+    """Fails the second attempt the way an unexpected error would."""
+
+    def __init__(self, *responses: Any) -> None:
+        super().__init__(*responses)
+        self._remaining = len(responses)
+
+    async def send(self, provider_info: Any, url: str, body: Any, **kw: Any) -> Any:
+        if self.calls:
+            provider_info.auth_headers()
+            self.calls.append(provider_info.base_url)
+            raise RuntimeError("upstream exploded")
+        return await super().send(provider_info, url, body, **kw)
+
+
+class _ExplodingStreamTransport(_StreamTransport):
+    """Fails the second streaming attempt the way an unexpected error would."""
+
+    async def send_streaming(
+        self, provider_info: Any, url: str, body: Any, **kw: Any
+    ) -> Any:
+        if self.calls:
+            provider_info.auth_headers()
+            self.calls.append(provider_info.base_url)
+            raise RuntimeError("upstream exploded")
+        return await super().send_streaming(provider_info, url, body, **kw)
+
+
+class TestTheFailurePath:
+    """A failure produced by the provider that ran belongs to it.
+
+    The row used to keep the refused provider when the second attempt raised,
+    so a 500 from B was attributed to A — the one place the "row names the
+    server" invariant did not hold.
+    """
+
+    def test_a_raising_second_attempt_still_moves_the_log(self):
+        from llm_rosetta_gateway import lifecycle
+
+        config = _config()
+        selection = config.selection_context("m", "chat_completions")
+        route, pinfo = config.resolve(selection)
+        ctx = lifecycle.LifecycleContext(
+            config=config,
+            app=None,
+            request_id="req-raise",
+            entry_id="entry-raise",
+            model_type="llm",
+            body=dict(_REQUEST),
+        )
+        ctx.note_route(provider_name=route.provider_name)
+        token = lifecycle._lifecycle_var.set(ctx)
+        transport = _ExplodingTransport(_refused())
+        try:
+
+            async def _go():
+                return await handle_non_streaming(
+                    route,
+                    pinfo,
+                    dict(_REQUEST),
+                    selection=selection,
+                    transport=transport,
+                    metadata_store=ProviderMetadataStore(),
+                    config=config,
+                )
+
+            try:
+                asyncio.run(_go())
+            except RuntimeError:
+                pass
+            else:  # pragma: no cover - the failure this test exists for
+                raise AssertionError("the second attempt was expected to raise")
+        finally:
+            lifecycle._lifecycle_var.reset(token)
+
+        assert transport.calls[-1] == "https://b.test"
+        assert ctx.provider_name == "b"
+
+    def test_a_raising_stream_attempt_still_moves_the_log(self):
+        """The streaming twin: same failure, same obligation."""
+        from llm_rosetta_gateway import lifecycle
+
+        config = _config()
+        selection = config.selection_context("m", "chat_completions")
+        route, pinfo = config.resolve(selection)
+        ctx = lifecycle.LifecycleContext(
+            config=config,
+            app=None,
+            request_id="req-stream-raise",
+            entry_id="entry-stream-raise",
+            model_type="llm",
+            body=dict(_REQUEST),
+        )
+        ctx.note_route(provider_name=route.provider_name)
+        token = lifecycle._lifecycle_var.set(ctx)
+        transport = _ExplodingStreamTransport(_stream_refused())
+        try:
+
+            async def _go():
+                return await handle_streaming(
+                    route,
+                    pinfo,
+                    {**_REQUEST, "stream": True},
+                    reported_model="m",
+                    selection=selection,
+                    transport=transport,
+                    metadata_store=ProviderMetadataStore(),
+                    config=config,
+                )
+
+            try:
+                asyncio.run(_go())
+            except RuntimeError:
+                pass
+            else:  # pragma: no cover - the failure this test exists for
+                raise AssertionError("the second attempt was expected to raise")
+        finally:
+            lifecycle._lifecycle_var.reset(token)
+
+        assert transport.calls[-1] == "https://b.test"
+        assert ctx.provider_name == "b"
+
+    def test_a_bookkeeping_failure_does_not_replace_the_client_error(self):
+        """The record is best-effort: the answer always wins.
+
+        `record_failover` runs from a `finally` on the failure path, so an
+        exception of its own would otherwise become the error the client sees.
+        """
+        from llm_rosetta_gateway import lifecycle
+
+        config = _config()
+        selection = config.selection_context("m", "chat_completions")
+        route, pinfo = config.resolve(selection)
+        ctx = lifecycle.LifecycleContext(
+            config=config,
+            app=None,
+            request_id="req-bookkeeping",
+            entry_id="entry-bookkeeping",
+            model_type="llm",
+            body=dict(_REQUEST),
+        )
+
+        def _boom(**kwargs: Any) -> None:
+            raise ValueError("bookkeeping exploded")
+
+        # An instance attribute shadows the method: only the failover's own
+        # note is made to fail, not the selection that ran before it.  Cast
+        # because the attribute's declared type is the bound method.
+        cast(Any, ctx).note_route = _boom
+        token = lifecycle._lifecycle_var.set(ctx)
+        transport = _ExplodingTransport(_refused())
+        try:
+
+            async def _go():
+                return await handle_non_streaming(
+                    route,
+                    pinfo,
+                    dict(_REQUEST),
+                    selection=selection,
+                    transport=transport,
+                    metadata_store=ProviderMetadataStore(),
+                    config=config,
+                )
+
+            with pytest.raises(RuntimeError, match="upstream exploded"):
+                asyncio.run(_go())
+        finally:
+            lifecycle._lifecycle_var.reset(token)
+
+        assert transport.calls[-1] == "https://b.test"
