@@ -28,6 +28,7 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **外部 shim 包**（epic [#927](https://github.com/Oaklight/llm-rosetta/issues/927)；issue [#666](https://github.com/Oaklight/llm-rosetta/issues/666)、[#1130](https://github.com/Oaklight/llm-rosetta/issues/1130)）：shim 可以从配置的目录或归档加载，`shims.presets` 按名称预载独立包，ALCF 与 AskSage 已移出核心。新增 OpenCode 与 Kilo shim；Argo shim 已排入移除计划，网关会给出提示。
 - **网关路由与容错**（PR [#664](https://github.com/Oaklight/llm-rosetta/pull/664)、[#727](https://github.com/Oaklight/llm-rosetta/pull/727)、[#784](https://github.com/Oaklight/llm-rosetta/pull/784)、[#906](https://github.com/Oaklight/llm-rosetta/pull/906)）：多提供方模型支持加权与亲和策略，以及分层同格式偏好；选择流程合并为一条有序管线；可选的逐提供方[熔断器](gateway/configuration.md#circuit-breaker)会用 `503` 与 `Retry-After` 短路持续失败的上游。
 - **管理面板**（PR [#1070](https://github.com/Oaklight/llm-rosetta/pull/1070)、[#1074](https://github.com/Oaklight/llm-rosetta/pull/1074)、[#1078](https://github.com/Oaklight/llm-rosetta/pull/1078)、[#1081](https://github.com/Oaklight/llm-rosetta/pull/1081)、[#1149](https://github.com/Oaklight/llm-rosetta/pull/1149)）：面板适配手机，模型与日志改用卡片布局并提供底部导航；表格可按任意列排序，分页视图可直接跳页，日志可按时间窗筛选并暂停刷新，密钥可搜索和重命名，显示每个密钥的 token 用量，提供方类型选择器提供基础格式，提供方编辑器展示解析后的完整推理能力且每个字段都可覆盖。
+- **OpenAI Responses profile 保留自己的请求参数**（issue [#1037](https://github.com/Oaklight/llm-rosetta/issues/1037)）：`logit_bias`、`prompt_cache_options`、`moderation`、`access_programs` 即使在 `open_responses` → `open_responses` 往返中也会丢失，因为它们不在中立的规范字段表里，也没有任何读取方记录它们。现在它们作为 provider-bound 扩展传输：同格式写出方会放回，其它格式会报告为已丢弃。
 
 ### 变更
 
