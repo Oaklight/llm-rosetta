@@ -32,6 +32,8 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### 变更
 
+- **转换告警只有一种类型、一个汇点**（issue [#1009](https://github.com/Oaklight/llm-rosetta/issues/1009)）：一次转换里的丢失 —— 目标格式没有对应形式的内容块、规范未定义的字段、无法声明的工具、模型看不见的图片 —— 过去通过三条互不相干的通道抵达调用方：请求上下文里的自由字符串、发现问题的那个转换器自己写的 `logger.warning`，以及标准库 `warnings`。只读取列表的调用方会漏掉另外两条通道里的全部内容，而流式一侧根本没有通往该列表的路。现在它们是 `ConversionWarning` 记录 —— 仍然是字符串，因此现有消费方不受影响 —— 携带类别、所属一侧与所属转换，收进由一条请求的请求侧、响应侧与流式侧共享的同一个 `WarningSink`。记录即是动作：日志由汇点写出，因此转换器只上报、不再另行记日志，网关原先单独的“Conversion warnings”汇总也随之移除。
+
 - **网关成为独立发行版**（epic [#1127](https://github.com/Oaklight/llm-rosetta/issues/1127)；issue [#1157](https://github.com/Oaklight/llm-rosetta/issues/1157)、[#1161](https://github.com/Oaklight/llm-rosetta/issues/1161)）：仓库现在分别发布 `llm-rosetta`（转换核心）与 `llm-rosetta-gateway`；遥测栈与 `llm-rosetta-usage` 命令随网关迁移。`llm_rosetta.gateway` 作为弃用别名保留到 0.16.0。网关锁定兼容的核心次版本，`--version`、`/health` 与管理台页脚会同时显示两个版本（[升级](gateway/upgrading.md)）。
 - **同格式的非 chat 请求也经过 IR**（issue [#926](https://github.com/Oaklight/llm-rosetta/issues/926)）：embedding、rerank 与 decision 流量即使格式相同，也会按 source → IR → target 规范化，因此未知字段会被丢弃，无法解析的请求体返回 `400`。
 

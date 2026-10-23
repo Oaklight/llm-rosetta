@@ -23,6 +23,14 @@ title: Converters
 
 ::: llm_rosetta.converters.base.context.StreamContext
 
+## 转换警告
+
+::: llm_rosetta.conversion_warnings.ConversionWarning
+
+::: llm_rosetta.conversion_warnings.WarningSink
+
+::: llm_rosetta.conversion_warnings.report_drop
+
 ## Conversion Pipeline
 
 ::: llm_rosetta.pipeline.ConversionPipeline

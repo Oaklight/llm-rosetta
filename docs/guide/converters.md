@@ -311,6 +311,21 @@ ir_request = openai_conv.request_from_provider(openai_request, context=ctx)
 print(ctx.warnings)  # list[str]
 ```
 
+### 一个汇点，带来源信息
+
+每条警告是一个 `ConversionWarning` —— 它仍然是 `str`，但同时携带这次丢失的来源，因此按消息拼接、格式化或比较警告的既有代码不受影响：
+
+```python
+for w in ctx.warnings:
+    print(w.code, w.leg, w.converter, w.subject, "—", w)
+# dropped request open_responses->messages previous_response_id — ...
+# downgraded stream chat_completions->messages budget_tokens — ...
+```
+
+`code` 取 `dropped`、`downgraded` 或 `failed`；`leg` 是 `request`、`response` 或 `stream`；`converter` 是本次转换的方向；`subject` 在报告方知道时给出具体条目。`w.as_dict()` 以普通字典返回同样的字段。
+
+这个列表是一个 `WarningSink`。一个 `ConversionPipeline` 全程只有**一个**汇点：请求侧、响应侧，以及 `create_stream_processor()` 产出的处理器转换的每个 chunk 都上报到它，因此即使丢失发生在流中途，`pipeline.warnings` 也是完整的。记录警告本身就是写日志，所以每条丢失只出现一次 —— 转换器只上报，不再另行记日志。
+
 ## 另请参阅
 
 - [流式处理](streaming.md) — 使用 `StreamContext` 转换流式数据块
