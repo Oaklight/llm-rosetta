@@ -9,6 +9,7 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 ## [未发布]
 
 ### 新增
+- **线格式一致性套件对每种 chat 格式做往返**（epic [#1128](https://github.com/Oaklight/llm-rosetta/issues/1128)）：`python -m tools.conformance run --suite wire` 把同一条标准请求 —— 系统指令、一轮用户消息、一个函数工具、自动工具选择以及各格式都接受的采样参数 —— 分别写成五种 chat 格式再读回，比较两份 IR。往返丢掉了什么会写进报告；只有**没有任何转换告警提到**的丢失才会让用例失败 —— 因此有文档记录的格式限制只是数据，静默丢弃才是红项。第一次运行就发现了一处：Google Interactions 上游接受 `temperature`、`top_p` 与 `top_k`，但请求写入时三者都被静默丢弃，现在已映射（已对真实接口实测）。
 - **提供方的剩余额度现在会影响它的流量份额**（epic [#1190](https://github.com/Oaklight/llm-rosetta/issues/1190)）：路由过去只在两端看到配额 —— 凭据耗尽时被降级，在那之前两个“可用”的提供方平分流量，无论其中一个多空。新增的 `quota` 阶段记录每个候选的最小剩余份额，选择器按 `0.25 + 0.75 × headroom` 缩放其配置权重。任何权重都不会被缩到零：提供方通过配额状态而不是这个系数退出轮转，未测量的提供方保持原权重。只有在 key 环中每个凭据都有一份新鲜且解出了窗口的耗尽读数时，提供方才被直接移除 —— 绝不凭部分证据排除，因为没有流量会发往被排除的提供方，未读的凭据就永远读不到。当读数让某个模型一个可用提供方都不剩时，`503` 会说明额度已耗尽，并在 `Retry-After` 中给出重置时间，而不是报告一个启动问题。
 - **耗尽的提供方可以故障转移到另一个**（epic [#1190](https://github.com/Oaklight/llm-rosetta/issues/1190)）：模型条目设置 `failover_on_quota: true` 后，当 in-band 配额拒绝让服务方没有任何可用凭据时，请求改由同一模型的另一个 provider 服务。触发条件限于 shim 归类为配额拒绝的上游 `429`，绝不是普通错误；预算是一次故障转移，拒绝的 provider 在本次请求余下部分被排除，请求 profile 记录 `from → to`。默认关闭 —— 换 provider 就是换缓存。流式请求也会故障转移，但只在第一个事件到达客户端之前。参见[配额故障转移](gateway/configuration.md#quota-failover)。
 - **提供方卡片显示路由的结论**（epic [#1190](https://github.com/Oaklight/llm-rosetta/issues/1190)）：额度对话框新增路由的结论 —— 正在冷却、被排除（原因已翻译），或它实际服务的权重与最紧凭据的剩余份额 —— 用的就是选择时读取的同一组数字，没有用量端点的通道同样适用，因此不出流量的提供方无需再从百分比里推断。
