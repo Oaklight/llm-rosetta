@@ -6,6 +6,7 @@ Composes ContentOps, ToolOps, MessageOps, and ConfigOps for full bidirectional
 conversion between IR and OpenAI Chat Completions API format.
 """
 
+import json
 import logging
 from collections.abc import Mapping
 from typing import Any, cast
@@ -55,6 +56,16 @@ from .message_ops import ChatCompletionsMessageOps, restore_reasoning_details
 from .tool_ops import ChatCompletionsToolOps
 
 logger = logging.getLogger(__name__)
+
+
+def _chat_finish_reason(reason: str, payload: Mapping[str, Any]) -> str:
+    """Reject terminal failures that Chat cannot express as a finish reason."""
+    if reason in {"error", "cancelled"}:
+        raise ValueError(
+            f"Chat Completions cannot represent a response ending with {reason!r}: "
+            f"{json.dumps(payload, ensure_ascii=False)}"
+        )
+    return OPENAI_CHAT_REASON_TO_PROVIDER.get(reason, "stop")
 
 
 def _synthetic_tool_call_id(choice_index: int, tool_call_index: int) -> str:
@@ -376,7 +387,7 @@ class ChatCompletionsConverter(BaseConverter):
         openai_choice: dict[str, Any] = {
             "index": choice.get("index", 0),
             "message": openai_message,
-            "finish_reason": OPENAI_CHAT_REASON_TO_PROVIDER.get(reason, "stop"),
+            "finish_reason": _chat_finish_reason(reason, choice),
             "logprobs": choice.get("logprobs"),
         }
 
@@ -1406,7 +1417,7 @@ class ChatCompletionsConverter(BaseConverter):
                 {
                     "index": choice_index,
                     "delta": {},
-                    "finish_reason": OPENAI_CHAT_REASON_TO_PROVIDER.get(reason, "stop"),
+                    "finish_reason": _chat_finish_reason(reason, event),
                 }
             ]
         }

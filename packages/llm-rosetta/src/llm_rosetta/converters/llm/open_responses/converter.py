@@ -104,6 +104,22 @@ _SERVER_ITEM_INTRINSIC_KINDS: frozenset[str] = frozenset(_ITEM_TO_INTRINSIC_KIND
 _SERVER_RESULT_ITEM_TYPES: frozenset[str] = frozenset(_INTRINSIC_RESULT_TYPES)
 
 
+def _response_finish_reason(response: dict[str, Any]) -> str:
+    """Use the same terminal semantics for JSON and streamed responses."""
+    status = response.get("status", "completed")
+    if status == "incomplete":
+        details = response.get("incomplete_details")
+        reason = details.get("reason", "") if isinstance(details, dict) else ""
+        return RESPONSES_INCOMPLETE_REASON_TO_IR.get(reason, "stop")
+    if status == "completed" and any(
+        isinstance(item, dict)
+        and item.get("type") in {"function_call", "custom_tool_call"}
+        for item in response.get("output", [])
+    ):
+        return "tool_calls"
+    return RESPONSES_STATUS_TO_REASON.get(status or "", "stop")
+
+
 def _capture_item_metadata(item: dict[str, Any]) -> dict[str, Any]:
     """Extract per-output-item metadata for lossless round-trip."""
     meta: dict[str, Any] = {}
@@ -551,20 +567,7 @@ class OpenResponsesConverter(BaseConverter):
         choices = []
         output_items = provider_response.get("output", [])
 
-        # Determine finish reason from status
-        status = provider_response.get("status")
-        if status == "incomplete":
-            incomplete_details = provider_response.get("incomplete_details", {})
-            inc_reason = (
-                incomplete_details.get("reason", "")
-                if isinstance(incomplete_details, dict)
-                else ""
-            )
-            finish_reason_val = RESPONSES_INCOMPLETE_REASON_TO_IR.get(
-                inc_reason, "stop"
-            )
-        else:
-            finish_reason_val = RESPONSES_STATUS_TO_REASON.get(status or "", "stop")
+        finish_reason_val = _response_finish_reason(provider_response)
 
         # Convert output items to IR message content.  Unlike the request leg,
         # no ``provider=`` is passed: non-portable response items (e.g.
@@ -575,7 +578,14 @@ class OpenResponsesConverter(BaseConverter):
         # Collect all content parts into a single assistant message
         message_content, message_metadata = self._flatten_message_items(ir_items)
 
-        if message_content:
+        if finish_reason_val in {"error", "cancelled"}:
+            message_metadata = {
+                **message_metadata,
+                "responses_response": dict(provider_response),
+            }
+
+        # A failure with no output still needs a choice carrying its status.
+        if message_content or finish_reason_val in {"error", "cancelled"}:
             ir_msg: dict[str, Any] = {
                 "role": "assistant",
                 "content": message_content,
@@ -742,6 +752,12 @@ class OpenResponsesConverter(BaseConverter):
             finish_reason = choice.get("finish_reason", {}).get("reason", "stop")
             status = RESPONSES_REASON_TO_STATUS.get(finish_reason, "completed")
             provider_response["status"] = status
+            if finish_reason in {"error", "cancelled"}:
+                source_response = (message.get("provider_metadata") or {}).get(
+                    "responses_response", {}
+                )
+                if source_response.get("error") is not None:
+                    provider_response["error"] = source_response["error"]
             incomplete_reason = RESPONSES_REASON_TO_INCOMPLETE_REASON.get(finish_reason)
             if incomplete_reason:
                 provider_response["incomplete_details"] = {"reason": incomplete_reason}
@@ -1791,26 +1807,7 @@ class OpenResponsesConverter(BaseConverter):
     ) -> None:
         response = chunk.get("response", chunk)
 
-        # Determine finish reason from status
-        status = response.get("status", "completed")
-        if status == "incomplete":
-            incomplete_details = response.get("incomplete_details", {})
-            inc_reason = (
-                incomplete_details.get("reason", "")
-                if isinstance(incomplete_details, dict)
-                else ""
-            )
-            reason = RESPONSES_INCOMPLETE_REASON_TO_IR.get(inc_reason, "stop")
-        else:
-            reason = RESPONSES_STATUS_TO_REASON.get(status, "stop")
-
-        # Check if any output item is a function_call to set tool_calls reason
-        output_items = response.get("output", [])
-        if isinstance(output_items, list):
-            for item in output_items:
-                if isinstance(item, dict) and item.get("type") == "function_call":
-                    reason = "tool_calls"
-                    break
+        reason = _response_finish_reason(response)
 
         # Emit UsageEvent before FinishEvent so that downstream
         # converters can store usage in context.pending_usage before
@@ -1824,12 +1821,13 @@ class OpenResponsesConverter(BaseConverter):
                 )
             )
 
-        events.append(
-            FinishEvent(
-                type="finish",
-                finish_reason={"reason": reason},  # ty: ignore[invalid-argument-type]
-            )
+        finish = FinishEvent(
+            type="finish",
+            finish_reason={"reason": reason},  # ty: ignore[invalid-argument-type]
         )
+        if reason in {"error", "cancelled"}:
+            finish["provider_metadata"] = {"responses_response": dict(response)}
+        events.append(finish)
 
         # Emit StreamEndEvent after other events
         if context is not None:
@@ -1867,10 +1865,13 @@ class OpenResponsesConverter(BaseConverter):
         finish: FinishEvent = FinishEvent(
             type="finish",
             finish_reason={"reason": "error"},
+            provider_metadata={
+                "responses_response": dict(chunk.get("response", chunk))
+            },
         )
         error = self._p_failure_error(chunk)
         if error is not None:
-            finish["provider_metadata"] = {"responses_error": error}
+            finish["provider_metadata"]["responses_error"] = error
         events.append(finish)
 
         # Emit StreamEndEvent after FinishEvent

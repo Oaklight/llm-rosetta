@@ -336,11 +336,13 @@ class TestStreamResponseFromProvider:
         }
 
     def test_response_failed_without_an_error_object(self):
-        """A bare failure carries no envelope rather than an invented one."""
+        """A bare failure retains its response without inventing an error."""
         event = {"type": "response.failed", "response": {"status": "failed"}}
         events = cast(list[Any], self.converter.stream_response_from_provider(event))
         assert events[0]["type"] == "finish"
-        assert "provider_metadata" not in events[0]
+        assert events[0]["provider_metadata"] == {
+            "responses_response": {"status": "failed"}
+        }
 
     def test_response_incomplete_is_a_terminal_event(self):
         """The third terminal event closes the turn like response.completed."""
