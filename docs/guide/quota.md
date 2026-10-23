@@ -187,10 +187,13 @@ The stage is called `quota` in the selection chain and runs before the anchor,
 so it informs the choice rather than making it — the strategies stay what they
 are.
 
-The provider card shows both conclusions — the share, and whether the provider
-is skipped with the reason — from the same functions the router calls, so
-"why is this provider not serving anything" does not have to be inferred from
-percentages.
+The provider card shows what the router concluded — a live cooldown, an
+exclusion with the reason, or the weight the provider serves at alongside the
+tightest credential's remaining share — from the same functions the router
+calls. A lane with no usage endpoint gets the same verdict, which matters most
+there: its exclusion cannot be read off any percentage. A provider with one
+spent key and one healthy one reads as `0%` of its tightest credential while
+still serving at a quarter of its configured weight, and the card says both.
 
 ## Keyless lanes
 
