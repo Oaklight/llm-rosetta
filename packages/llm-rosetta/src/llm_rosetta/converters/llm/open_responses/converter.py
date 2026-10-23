@@ -120,6 +120,16 @@ def _response_finish_reason(response: dict[str, Any]) -> str:
     return RESPONSES_STATUS_TO_REASON.get(status or "", "stop")
 
 
+def _response_failure_metadata(
+    response: dict[str, Any], context: ConversionContext | None
+) -> dict[str, Any]:
+    """Keep the response in context and carry only its error through the IR."""
+    if context is not None:
+        context.metadata["responses_response"] = dict(response)
+    error = response.get("error")
+    return {"responses_error": dict(error)} if isinstance(error, dict) else {}
+
+
 def _capture_item_metadata(item: dict[str, Any]) -> dict[str, Any]:
     """Extract per-output-item metadata for lossless round-trip."""
     meta: dict[str, Any] = {}
@@ -581,11 +591,16 @@ class OpenResponsesConverter(BaseConverter):
         if finish_reason_val in {"error", "cancelled"}:
             message_metadata = {
                 **message_metadata,
-                "responses_response": dict(provider_response),
+                **_response_failure_metadata(provider_response, context),
             }
 
-        # A failure with no output still needs a choice carrying its status.
-        if message_content or finish_reason_val in {"error", "cancelled"}:
+        # Empty output still needs a choice carrying its terminal condition.
+        if message_content or finish_reason_val in {
+            "error",
+            "cancelled",
+            "length",
+            "content_filter",
+        }:
             ir_msg: dict[str, Any] = {
                 "role": "assistant",
                 "content": message_content,
@@ -753,11 +768,11 @@ class OpenResponsesConverter(BaseConverter):
             status = RESPONSES_REASON_TO_STATUS.get(finish_reason, "completed")
             provider_response["status"] = status
             if finish_reason in {"error", "cancelled"}:
-                source_response = (message.get("provider_metadata") or {}).get(
-                    "responses_response", {}
+                source_error = (message.get("provider_metadata") or {}).get(
+                    "responses_error"
                 )
-                if source_response.get("error") is not None:
-                    provider_response["error"] = source_response["error"]
+                if source_error is not None:
+                    provider_response["error"] = source_error
             incomplete_reason = RESPONSES_REASON_TO_INCOMPLETE_REASON.get(finish_reason)
             if incomplete_reason:
                 provider_response["incomplete_details"] = {"reason": incomplete_reason}
@@ -1826,35 +1841,15 @@ class OpenResponsesConverter(BaseConverter):
             finish_reason={"reason": reason},  # ty: ignore[invalid-argument-type]
         )
         if reason in {"error", "cancelled"}:
-            finish["provider_metadata"] = {"responses_response": dict(response)}
+            metadata = _response_failure_metadata(response, context)
+            if metadata:
+                finish["provider_metadata"] = metadata
         events.append(finish)
 
         # Emit StreamEndEvent after other events
         if context is not None:
             context.mark_ended()
             events.append(StreamEndEvent(type="stream_end"))
-
-    @staticmethod
-    def _p_failure_error(chunk: dict[str, Any]) -> dict[str, Any] | None:
-        """Return the ``{code, message}`` envelope of a failed turn, if any.
-
-        Upstreams that fail a turn usually ship an error object on it.  It is
-        carried through the IR so the target leg can put a real code and
-        message in its own error event and ``response.error`` rather than a
-        placeholder.
-        """
-        response = chunk.get("response", chunk)
-        error = response.get("error") if isinstance(response, dict) else None
-        if not isinstance(error, dict):
-            return None
-        code = error.get("code")
-        message = error.get("message")
-        if not isinstance(code, str) and not isinstance(message, str):
-            return None
-        return {
-            "code": code if isinstance(code, str) and code else "server_error",
-            "message": message if isinstance(message, str) else "",
-        }
 
     def _handle_p_response_failed_to_ir(
         self,
@@ -1865,13 +1860,10 @@ class OpenResponsesConverter(BaseConverter):
         finish: FinishEvent = FinishEvent(
             type="finish",
             finish_reason={"reason": "error"},
-            provider_metadata={
-                "responses_response": dict(chunk.get("response", chunk))
-            },
         )
-        error = self._p_failure_error(chunk)
-        if error is not None:
-            finish["provider_metadata"]["responses_error"] = error
+        metadata = _response_failure_metadata(chunk.get("response", chunk), context)
+        if metadata:
+            finish["provider_metadata"] = metadata
         events.append(finish)
 
         # Emit StreamEndEvent after FinishEvent

@@ -58,12 +58,14 @@ from .tool_ops import ChatCompletionsToolOps
 logger = logging.getLogger(__name__)
 
 
-def _chat_finish_reason(reason: str, payload: Mapping[str, Any]) -> str:
+def _chat_finish_reason(
+    reason: str, response_id: str, metadata: Mapping[str, Any] | None
+) -> str:
     """Reject terminal failures that Chat cannot express as a finish reason."""
     if reason in {"error", "cancelled"}:
         raise ValueError(
             f"Chat Completions cannot represent a response ending with {reason!r}: "
-            f"{json.dumps(payload, ensure_ascii=False)}"
+            f"{json.dumps({'response_id': response_id, 'provider_metadata': metadata}, ensure_ascii=False)}"
         )
     return OPENAI_CHAT_REASON_TO_PROVIDER.get(reason, "stop")
 
@@ -327,6 +329,7 @@ class ChatCompletionsConverter(BaseConverter):
         choice: dict[str, Any],
         *,
         warnings: list[str] | None = None,
+        response_id: str = "",
     ) -> dict[str, Any] | None:
         """Build a single OpenAI Chat choice dict from an IR choice."""
         message = choice.get("message")
@@ -387,7 +390,9 @@ class ChatCompletionsConverter(BaseConverter):
         openai_choice: dict[str, Any] = {
             "index": choice.get("index", 0),
             "message": openai_message,
-            "finish_reason": _chat_finish_reason(reason, choice),
+            "finish_reason": _chat_finish_reason(
+                reason, response_id, message.get("provider_metadata")
+            ),
             "logprobs": choice.get("logprobs"),
         }
 
@@ -592,6 +597,7 @@ class ChatCompletionsConverter(BaseConverter):
             openai_choice = self._build_ir_choice_to_p(  # ty: ignore[invalid-argument-type]
                 choice,  # ty: ignore[invalid-argument-type]
                 warnings=citation_warning_sink(kwargs, context),
+                response_id=ir_response.get("id", ""),
             )
             if openai_choice is not None:
                 provider_response["choices"].append(openai_choice)
@@ -1417,7 +1423,11 @@ class ChatCompletionsConverter(BaseConverter):
                 {
                     "index": choice_index,
                     "delta": {},
-                    "finish_reason": _chat_finish_reason(reason, event),
+                    "finish_reason": _chat_finish_reason(
+                        reason,
+                        context.response_id if context is not None else "",
+                        event.get("provider_metadata"),
+                    ),
                 }
             ]
         }

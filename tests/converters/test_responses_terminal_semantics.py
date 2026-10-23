@@ -6,6 +6,7 @@ from typing import Any, cast
 import pytest
 
 from llm_rosetta.converters.llm.open_responses import OpenResponsesConverter
+from llm_rosetta.converters.base.context import ConversionContext
 from llm_rosetta.pipeline import ConversionError, ConversionPipeline
 from llm_rosetta.types.ir import FinishEvent
 
@@ -180,6 +181,19 @@ def test_json_finish_reason_preserves_terminal_status(
         assert choice["message"]["content"] == "Example output"
 
 
+@pytest.mark.parametrize(
+    "incomplete_reason,expected",
+    [("max_output_tokens", "length"), ("content_filter", "content_filter")],
+)
+def test_empty_json_incomplete_preserves_terminal_reason(incomplete_reason, expected):
+    response = _response(
+        "incomplete", incomplete_reason=incomplete_reason, has_output=False
+    )
+    choice = _pipeline().convert_response(response)["choices"][0]
+    assert choice["finish_reason"] == expected
+    assert choice["message"]["content"] == ""
+
+
 @pytest.mark.parametrize("status,kind,incomplete_reason,expected", FINISH_CASES)
 def test_sse_finish_reason_preserves_terminal_status(
     status, kind, incomplete_reason, expected
@@ -212,10 +226,13 @@ def test_sse_finish_reason_preserves_terminal_status(
 @pytest.mark.parametrize("has_output", [True, False], ids=["partial", "empty"])
 def test_json_failure_raises_with_original_response(status, has_output):
     response = _response(status, has_output=has_output)
+    response["instructions"] = "Example internal instructions"
     with pytest.raises(ConversionError) as error:
         _pipeline().convert_response(response)
     assert response["id"] in str(error.value)
     assert status in str(error.value)
+    assert response["instructions"] not in str(error.value)
+    assert "Example output" not in str(error.value)
     if status == "failed":
         for key in ("type", "code", "message"):
             assert response["error"][key] in str(error.value)
@@ -226,6 +243,7 @@ def test_json_failure_raises_with_original_response(status, has_output):
 @pytest.mark.parametrize("has_output", [True, False], ids=["partial", "empty"])
 def test_sse_failure_raises_without_successful_finish(status, has_output):
     response = _response(status, has_output=has_output)
+    response["instructions"] = "Example internal instructions"
     processor = _pipeline().create_stream_processor()
     chunks = []
     with pytest.raises(ValueError) as error:
@@ -233,6 +251,8 @@ def test_sse_failure_raises_without_successful_finish(status, has_output):
             chunks.extend(processor.process_chunk(event))
     assert response["id"] in str(error.value)
     assert status in str(error.value)
+    assert response["instructions"] not in str(error.value)
+    assert "Example output" not in str(error.value)
     assert not any(
         choice.get("finish_reason")
         for chunk in chunks
@@ -256,20 +276,35 @@ def test_native_json_failure_round_trip(status, has_output):
     assert bool(converted["output"]) is has_output
 
 
+@pytest.mark.parametrize("metadata_mode", ["strip", "preserve"])
+def test_failure_response_stays_in_context(metadata_mode):
+    converter = OpenResponsesConverter()
+    response = _response("failed")
+    response["instructions"] = "Example internal instructions"
+    context = ConversionContext(options={"metadata_mode": metadata_mode})
+    ir_response = converter.response_from_provider(response, context=context)
+    metadata = ir_response["choices"][0]["message"]["provider_metadata"]
+    assert metadata["responses_error"] == response["error"]
+    assert "responses_response" not in metadata
+    assert context.metadata["responses_response"] == response
+
+
 def test_native_sse_failure_keeps_its_error_envelope():
     converter = OpenResponsesConverter()
     response = _response("failed", has_output=False)
+    context = converter.create_stream_context()
     events = cast(
         list[dict[str, Any]],
         converter.stream_response_from_provider(
-            {"type": "response.failed", "response": response}
+            {"type": "response.failed", "response": response}, context=context
         ),
     )
-    assert events[0]["provider_metadata"]["responses_response"] == response
+    finish = next(event for event in events if event["type"] == "finish")
+    assert finish["provider_metadata"] == {"responses_error": response["error"]}
+    assert context.metadata["responses_response"] == response
     chunks = cast(
         list[dict[str, Any]],
-        converter.stream_response_to_provider(cast(FinishEvent, events[0])),
+        converter.stream_response_to_provider(cast(FinishEvent, finish)),
     )
     failed = next(chunk for chunk in chunks if chunk["type"] == "response.failed")
-    assert failed["response"]["error"]["code"] == response["error"]["code"]
-    assert failed["response"]["error"]["message"] == response["error"]["message"]
+    assert failed["response"]["error"] == response["error"]
