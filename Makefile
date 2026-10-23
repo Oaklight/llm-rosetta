@@ -55,6 +55,14 @@ test-js:
 	fi
 
 
+# Render the admin panel for every scheme x mode x width, assert the
+# render-level contract and save screenshots under theme-matrix-out/.
+# Needs Playwright: pip install playwright && python -m playwright install chromium
+theme-matrix:
+	@echo "Rendering the admin theme matrix..."
+	python -m tools.theme_matrix --out theme-matrix-out
+
+
 # ──────────────────────────────────────────────
 # Scheduled shim removals
 # ──────────────────────────────────────────────
@@ -449,4 +457,4 @@ help:
 	@echo ""
 	@echo "Detected version: $(VERSION)"
 
-.PHONY: all lint bench lint-fix test test-js test-integration test-gateway check-shim-removals check-public-api build-package build-wheel push-package clean-package build push clean build-binary build-binary-musl clean-binary clean-binary-all build-docker-alpine build-docker-glibc build-docker-python build-docker push-docker clean-docker deploy-dev help
+.PHONY: all lint bench lint-fix test test-js theme-matrix test-integration test-gateway check-shim-removals check-public-api build-package build-wheel push-package clean-package build push clean build-binary build-binary-musl clean-binary clean-binary-all build-docker-alpine build-docker-glibc build-docker-python build-docker push-docker clean-docker deploy-dev help

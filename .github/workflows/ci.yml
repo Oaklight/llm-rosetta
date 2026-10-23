@@ -46,6 +46,7 @@ jobs:
               - 'packages/llm-rosetta-gateway/**'
               - 'tests/gateway/**'
               - 'tests/js/**'
+              - 'tools/theme_matrix/**'
               - '.github/workflows/ci.yml'
 
   shim-removal-check:
@@ -235,6 +236,43 @@ jobs:
           # A run that produced no report is not a run: the default warning
           # would let this step look green on an install failure.
           if-no-files-found: error
+
+  theme-matrix:
+    # The contract test reads the CSS and says what a scheme may declare; this
+    # renders the panel and says what came out.  The probes gate the job (the
+    # Token card's details link must be clickable in every scheme), and the
+    # screenshots ship as an artifact for review.  No pixel baseline, so the
+    # job is not sensitive to fonts or the runner image.
+    needs: changes
+    if: needs.changes.outputs.gateway == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e packages/llm-rosetta -e packages/llm-rosetta-gateway
+          pip install "playwright>=1.40,<2"
+          python -m playwright install --with-deps chromium
+
+      - name: Render the theme matrix
+        run: python -m tools.theme_matrix --out theme-matrix-out
+
+      - name: Upload the report and screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: theme-matrix
+          path: theme-matrix-out/
+          if-no-files-found: error
+
 
   dev-extras-test:
     needs: changes
