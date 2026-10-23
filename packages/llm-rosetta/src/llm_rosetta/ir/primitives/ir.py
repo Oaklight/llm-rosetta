@@ -20,7 +20,6 @@ from typing import Any
 
 from .cache_breakpoints import inject_cache_breakpoints
 from .call_unwind import unwind_parallel_tool_calls_ir
-from .image_limit import strip_images_for_non_vision
 from .image_limit import truncate_images as _truncate_impl
 from .system_message_hoist import hoist_late_system_messages_ir
 
@@ -30,13 +29,17 @@ class TransformContext:
     """Context available to IR-level transforms.
 
     Carries route-level information that body-level transforms don't
-    need but IR transforms do (e.g. model capabilities for vision
-    stripping).
+    need but IR transforms do (e.g. the upstream model for a pattern
+    match).
 
     Attributes:
         model: Upstream model identifier (post-alias).
         model_capabilities: Declared capabilities of the model
-            (e.g. ``["text", "vision"]``).  ``None`` means unknown.
+            (e.g. ``["text", "vision"]``).  ``None`` means unknown.  Kept for
+            shim-declared transforms outside this repository that make their
+            own capability decisions: nothing here reads it, because the
+            library's capability passes run before shim transforms and take
+            the list directly.
         request_id: Request identifier for logging.
         hoist_system_messages: Whether to hoist late system messages
             into user-role envelopes for cache prefix stability.
@@ -85,24 +88,6 @@ def apply_ir_transforms(
 # ---------------------------------------------------------------------------
 # IR-level factory functions
 # ---------------------------------------------------------------------------
-
-
-def strip_non_vision_images() -> IRTransform:
-    """Return an IR transform that replaces all images with text placeholders
-    when the model lacks ``"vision"`` capability.
-
-    No-op if ``model_capabilities`` is ``None`` (unknown) or includes
-    ``"vision"`` (idempotent).
-    """
-
-    def _strip(body: dict[str, Any], context: TransformContext) -> dict[str, Any]:
-        if context.model_capabilities is None or "vision" in context.model_capabilities:
-            return body
-        return strip_images_for_non_vision(
-            body, model=context.model, request_id=context.request_id
-        )
-
-    return _NamedIRTransform(_strip, "strip_non_vision_images()")
 
 
 def truncate_images(max_images: int, pattern: str | None = None) -> IRTransform:

@@ -19,7 +19,7 @@ from ..tools.intrinsic import (
 
 from llm_rosetta.converters.base.context import ConversionContext
 from ..primitives.image_limit import strip_images_for_non_vision
-from llm_rosetta.conversion_warnings import report_drop
+from llm_rosetta.conversion_warnings import WarningSink, report_drop
 from llm_rosetta.shims.provider_shim import (
     ProviderShim,
     ReasoningCapability,
@@ -254,6 +254,7 @@ def enforce_vision(
     model_capabilities: list[str] | None = None,
     model: str = "",
     request_id: str = "-",
+    warnings: WarningSink | None = None,
 ) -> dict[str, Any]:
     """Strip images from the IR request if the model lacks vision capability.
 
@@ -268,6 +269,8 @@ def enforce_vision(
         model_capabilities: Declared capabilities of the model.
         model: Upstream model identifier (for logging).
         request_id: Request identifier (for logging).
+        warnings: Sink that receives the report, so a stripped image is a
+            recorded loss rather than only a log line.
 
     Returns:
         The IR request with images replaced by text placeholders, or
@@ -276,7 +279,9 @@ def enforce_vision(
     if model_capabilities is None or "vision" in model_capabilities:
         return ir_request
 
-    return strip_images_for_non_vision(ir_request, model=model, request_id=request_id)
+    return strip_images_for_non_vision(
+        ir_request, model=model, request_id=request_id, warnings=warnings
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -763,6 +763,7 @@ class ConversionPipeline:
             model_capabilities=self._model_capabilities,
             model=self._upstream_model or body.get("model") or "",
             request_id=request_id,
+            warnings=ctx.warnings,
         )
 
         # Capability enforcement: reasoning (post-IR)

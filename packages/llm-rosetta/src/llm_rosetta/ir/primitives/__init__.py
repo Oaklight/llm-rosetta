@@ -37,7 +37,6 @@ from .ir import (  # noqa: F401
     apply_ir_transforms,
     auto_cache_breakpoints,
     hoist_late_system_messages,
-    strip_non_vision_images,
     truncate_images,
     unwind_parallel_tool_calls,
 )
@@ -81,7 +80,6 @@ __all__ = [
     "strip_fields",
     "strip_fields_for_model",
     "strip_images_for_non_vision",
-    "strip_non_vision_images",
     "tool_call_group",
     "truncate_images",
     "truncate_images_impl",

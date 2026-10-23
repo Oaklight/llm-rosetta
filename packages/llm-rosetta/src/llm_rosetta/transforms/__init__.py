@@ -37,7 +37,6 @@ from llm_rosetta.ir.primitives.ir import (  # noqa: F401
     apply_ir_transforms,
     auto_cache_breakpoints,
     hoist_late_system_messages,
-    strip_non_vision_images,
     truncate_images,
     unwind_parallel_tool_calls,
 )

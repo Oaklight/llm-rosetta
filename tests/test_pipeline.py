@@ -26,7 +26,6 @@ from llm_rosetta.shims.provider_shim import (
 )
 from llm_rosetta.transforms import (
     auto_cache_breakpoints,
-    strip_non_vision_images,
     truncate_images as truncate_images_transform,
     unwind_parallel_tool_calls as unwind_transform,
 )
@@ -239,36 +238,6 @@ class TestApplyIrTransforms:
         original = copy.deepcopy(ir)
         shim = _make_shim()
         result = apply_ir_transforms(ir, shim)
-        assert result == original
-
-    def test_strip_non_vision_when_no_vision_cap(self):
-        """Images should be stripped when model lacks vision capability."""
-        ir = _simple_ir_request(n_images=3)
-        shim = _make_shim(ir_transforms=(strip_non_vision_images(),))
-        result = apply_ir_transforms(
-            ir, shim, model_capabilities=["text"], upstream_model="deepseek-chat"
-        )
-        # Images should be replaced with text placeholders
-        content = result["messages"][0]["content"]
-        image_parts = [p for p in content if p.get("type") == "image"]
-        assert len(image_parts) == 0
-
-    def test_no_strip_when_vision_cap(self):
-        """Images should NOT be stripped when model has vision capability."""
-        ir = _simple_ir_request(n_images=3)
-        original = copy.deepcopy(ir)
-        shim = _make_shim(ir_transforms=(strip_non_vision_images(),))
-        result = apply_ir_transforms(
-            ir, shim, model_capabilities=["text", "vision"], upstream_model="gpt-4o"
-        )
-        assert result == original
-
-    def test_no_strip_when_caps_none(self):
-        """Images should NOT be stripped when model_capabilities is None."""
-        ir = _simple_ir_request(n_images=3)
-        original = copy.deepcopy(ir)
-        shim = _make_shim(ir_transforms=(strip_non_vision_images(),))
-        result = apply_ir_transforms(ir, shim, model_capabilities=None)
         assert result == original
 
     def test_image_limit_enforced(self):

@@ -6,7 +6,12 @@ import copy
 from typing import Any, cast
 
 from llm_rosetta.types.ir.type_guards import is_image_part, is_tool_result_part
-from llm_rosetta.conversion_warnings import DOWNGRADED, DROPPED, report_drop
+from llm_rosetta.conversion_warnings import (
+    DOWNGRADED,
+    DROPPED,
+    WarningSink,
+    report_drop,
+)
 
 
 # Placeholders for different image removal scenarios.
@@ -124,6 +129,7 @@ def strip_images_for_non_vision(
     *,
     model: str = "",
     request_id: str = "-",
+    warnings: WarningSink | None = None,
 ) -> dict[str, Any]:
     """Strip ALL images from an IR request for a non-vision model.
 
@@ -134,6 +140,8 @@ def strip_images_for_non_vision(
         ir_request: The IR request dict to inspect/modify.
         model: Model name for log messages.
         request_id: Used in log messages for traceability.
+        warnings: Sink that receives the report.  ``None`` falls back to the
+            conversion in progress, then to the log.
 
     Returns:
         The original dict if no images found, otherwise a new dict
@@ -145,11 +153,15 @@ def strip_images_for_non_vision(
     if not image_positions:
         return ir_request
 
+    # ``request_id`` defaults to ``-``: only a real one is worth the prefix,
+    # now that the message is a record a caller reads rather than a log line.
+    where = f"[{request_id}] " if request_id not in ("", "-") else ""
     report_drop(
-        f"[{request_id}] stripped {len(image_positions)} images: model {model} "
+        f"{where}stripped {len(image_positions)} images: model {model} "
         "does not have vision capability",
         code=DROPPED,
         subject="image",
+        warnings=warnings,
     )
 
     return _replace_images(ir_request, image_positions, _PLACEHOLDER_NO_VISION)
