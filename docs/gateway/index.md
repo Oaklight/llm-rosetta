@@ -27,6 +27,7 @@ New here? Start with the [Gateway Quick Start](../getting-started/gateway-quicks
 | `POST /v1/chat/completions` | OpenAI Chat | Drop-in for OpenAI SDK |
 | `POST /v1/messages` | Anthropic | Drop-in for Anthropic SDK |
 | `POST /v1/responses` | OpenAI Responses | Drop-in for OpenAI Responses SDK |
+| `POST /v1/responses/compact` | OpenAI Responses | Context compaction, relayed unchanged; needs an `open_responses` upstream (`501` otherwise) |
 | `POST /v1/embeddings` | OpenAI Embeddings | Cross-format conversion via IR (OpenAI, Cohere, Jina, Voyage) |
 | `POST /v1/rerank` | Rerank (Jina default) | Cross-format conversion via IR (Jina, Cohere, Voyage) |
 | `POST /v2/rerank` | Rerank (Cohere) | Auto-detected Cohere format; same handler as `/v1/rerank` |
