@@ -61,6 +61,7 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### 新增
 
+- **网关支持上下文压缩**（issue [#421](https://github.com/Oaklight/llm-rosetta/issues/421)）：新增 `POST /v1/responses/compact`。请求体与返回的不透明 `compaction` 项都没有中立表示——只有铸造它的上游才能读懂——因此该路由把它们原样转发（`x-rosetta-conversion: passthrough`）到 `open_responses` 上游；若解析出的目标说的是其他格式，则返回 `501`，而不是转发一个必被拒绝的请求体。响应中的计数会记入用量账本。
 - **Google Interactions API 转换器** (Issue [#581](https://github.com/Oaklight/llm-rosetta/issues/581))：新增 `converters/google_interactions/` 模块，完整支持 Google Interactions API (`/v1beta/interactions`) 的双向格式转换。支持类型化步骤（user_input、model_output、thought、function_call、function_result）、`thinking_level` ↔ IR effort 映射、Interactions SSE 流式生命周期事件（`interaction.created/completed`、`step.start/delta/stop`）以及 MCP server 工具定义。连续的 assistant 角色步骤自动合并为单个 `AssistantMessage`。无需修改 IR 类型系统。
 - **重命名 `google_genai` → `google_generate`** (PR [#641](https://github.com/Oaklight/llm-rosetta/pull/641))：generateContent 转换器的模块、类和 shim base 重命名，避免与同时覆盖两套 API 的 `google-genai` SDK 名称混淆。`GoogleGenAIConverter` 和 `from llm_rosetta.converters.google_genai` 保留为弃用别名。
 - **Google Interactions gateway 路由** (PR [#647](https://github.com/Oaklight/llm-rosetta/pull/647))：注册 `POST /v1beta/interactions` 端点。`GoogleInteractionsConverter` 从顶层包导出。

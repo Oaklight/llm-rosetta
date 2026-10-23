@@ -27,6 +27,7 @@ graph LR
 | `POST /v1/chat/completions` | OpenAI Chat | 兼容 OpenAI SDK |
 | `POST /v1/messages` | Anthropic | 兼容 Anthropic SDK |
 | `POST /v1/responses` | OpenAI Responses | 兼容 OpenAI Responses SDK |
+| `POST /v1/responses/compact` | OpenAI Responses | 上下文压缩，原样转发；需要 `open_responses` 上游（否则返回 `501`） |
 | `POST /v1/embeddings` | OpenAI Embeddings | 通过 IR 跨格式转换（OpenAI、Cohere、Jina、Voyage） |
 | `POST /v1/rerank` | Rerank（默认 Jina） | 通过 IR 跨格式转换（Jina、Cohere、Voyage） |
 | `POST /v2/rerank` | Rerank（Cohere） | 自动检测 Cohere 格式；与 `/v1/rerank` 共用处理器 |
