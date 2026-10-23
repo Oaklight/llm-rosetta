@@ -230,7 +230,8 @@ def test_json_failure_raises_with_original_response(status, has_output):
     with pytest.raises(ConversionError) as error:
         _pipeline().convert_response(response)
     assert response["id"] in str(error.value)
-    assert status in str(error.value)
+    expected_reason = "error" if status == "failed" else "cancelled"
+    assert f"ending with {expected_reason!r}" in str(error.value)
     assert response["instructions"] not in str(error.value)
     assert "Example output" not in str(error.value)
     if status == "failed":
@@ -250,7 +251,8 @@ def test_sse_failure_raises_without_successful_finish(status, has_output):
         for event in _stream(response):
             chunks.extend(processor.process_chunk(event))
     assert response["id"] in str(error.value)
-    assert status in str(error.value)
+    expected_reason = "error" if status == "failed" else "cancelled"
+    assert f"ending with {expected_reason!r}" in str(error.value)
     assert response["instructions"] not in str(error.value)
     assert "Example output" not in str(error.value)
     assert not any(
