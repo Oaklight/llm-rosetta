@@ -28,6 +28,8 @@ credentialled run the epic plans.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any
 
 from llm_rosetta import get_converter_for_provider
@@ -97,6 +99,11 @@ CASES: tuple[tuple[str, dict[str, Any]], ...] = (
     ("request", CANONICAL_REQUEST),
     ("sampling", SAMPLING_REQUEST),
 )
+
+#: Committed snapshots of what each case loses.  A loss that appears here and
+#: not in the baseline is a regression; one that disappears is an improvement
+#: to re-baseline, reported but not a failure.
+_BASELINE = Path(__file__).resolve().parents[1] / "baselines/wire.json"
 
 #: Values a writer's own defaults materialise on the way back.  A reader that
 #: fills in ``tool_name: ""`` or ``metadata: {}`` has lost nothing, so the
@@ -229,15 +236,71 @@ def _warnings_data(warnings: list[Any], leg: str) -> list[dict[str, str]]:
     ]
 
 
+def read_baseline() -> dict[str, Any]:
+    """Return the committed baseline, or an empty one when it is absent."""
+    if not _BASELINE.exists():
+        return {}
+    return json.loads(_BASELINE.read_text())
+
+
+def compare_to_baseline(
+    lost: list[str], expected: dict[str, Any] | None
+) -> tuple[list[str], list[str]]:
+    """Return ``(new losses, restored losses)`` relative to *expected*.
+
+    A *new* loss is what fails a case: behaviour changed and the baseline has
+    to be refreshed deliberately.  A *restored* one is reported so a fix is
+    visible, but it is not a regression.
+    """
+    known = list((expected or {}).get("lost", []))
+    return (
+        [loss for loss in lost if loss not in known],
+        [loss for loss in known if loss not in lost],
+    )
+
+
+class _BaselineCoverageProbe:
+    """The baseline may not name a case that no longer runs.
+
+    A renamed or retired case would otherwise leave an entry in the file that
+    nothing checks — a claim that silently stops being verified.  Refreshing
+    with :func:`write_baseline` drops it; this is what asks you to.
+    """
+
+    name = "baseline/coverage"
+
+    def __init__(self, baseline: dict[str, Any], live: set[str]) -> None:
+        self._baseline = baseline
+        self._live = live
+
+    def run(self) -> dict[str, Any]:
+        names = set(self._baseline.get("cases", {}))
+        stale = sorted(names - self._live)
+        if stale:
+            raise ProbeFailure(
+                "the baseline names cases that no longer run: "
+                + ", ".join(stale)
+                + " (re-baseline with `python -c 'from "
+                "tools.conformance.suites.wire import write_baseline; "
+                "write_baseline()'`)"
+            )
+        return {"cases": len(names)}
+
+
 class _RoundTripProbe:
     """One format's canonical round trip."""
 
     def __init__(
-        self, provider: str, request: dict[str, Any], case: str = "request"
+        self,
+        provider: str,
+        request: dict[str, Any],
+        case: str = "request",
+        baseline: dict[str, Any] | None = None,
     ) -> None:
         self.name = f"{case}/{provider}"
         self._provider = provider
         self._request = request
+        self._baseline = baseline
 
     def run(self) -> dict[str, Any]:
         converter = get_converter_for_provider(self._provider)
@@ -268,14 +331,53 @@ class _RoundTripProbe:
                 f"{self._provider} round trip loses {len(silent)} "
                 f"field(s) without a warning: " + "; ".join(silent)
             )
+        if self._baseline is not None:
+            added, restored = compare_to_baseline(
+                lost, self._baseline.get("cases", {}).get(self.name)
+            )
+            data["restored"] = restored
+            if added:
+                raise ProbeFailure(
+                    "behaviour changed since the baseline: "
+                    + "; ".join(added)
+                    + " (re-baseline with `python -c 'from "
+                    "tools.conformance.suites.wire import write_baseline; "
+                    "write_baseline()'`)"
+                )
         return data
 
 
 def build() -> tuple[list[Probe], dict[str, Any]]:
-    """Build the suite: every case, in every chat format."""
+    """Build the suite: every case, in every chat format, against the baseline."""
+    baseline = read_baseline()
+    live = {f"{case}/{provider}" for case, _ in CASES for provider in FORMATS}
     probes: list[Probe] = [
-        _RoundTripProbe(provider, request, case)
+        _RoundTripProbe(provider, request, case, baseline)
         for case, request in CASES
         for provider in FORMATS
     ]
+    if baseline:
+        probes.append(_BaselineCoverageProbe(baseline, live))
     return probes, {"formats": list(FORMATS), "cases": [case for case, _ in CASES]}
+
+
+def write_baseline() -> Path:
+    """Regenerate the committed baseline from the current behaviour."""
+    cases: dict[str, Any] = {}
+    for case, request in CASES:
+        for provider in FORMATS:
+            probe = _RoundTripProbe(provider, request, case)
+            try:
+                data = probe.run()
+            except ProbeFailure as exc:
+                raise SystemExit(f"cannot baseline {probe.name}: {exc}") from exc
+            cases[probe.name] = {"lost": data["lost"]}
+    payload = {
+        "schema_version": 1,
+        "suite": "wire",
+        "formats": list(FORMATS),
+        "cases": cases,
+    }
+    _BASELINE.parent.mkdir(parents=True, exist_ok=True)
+    _BASELINE.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    return _BASELINE

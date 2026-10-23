@@ -16,14 +16,18 @@ from tools.conformance import ProbeFailure
 from tools.conformance.suites import SUITES
 from tools.conformance.suites.wire import (
     CANONICAL_REQUEST,
+    CASES,
     FORMATS,
     SAMPLING_REQUEST,
+    _BaselineCoverageProbe,
     _RoundTripProbe,
     build,
+    compare_to_baseline,
     differences,
     explained,
     normalize,
     project,
+    read_baseline,
 )
 
 
@@ -138,9 +142,10 @@ class TestTheSuite:
     def test_every_case_runs_in_every_format(self):
         probes, environment = build()
 
-        assert len(probes) == 2 * len(FORMATS)
-        assert environment["formats"] == list(FORMATS)
         assert environment["cases"] == ["request", "sampling"]
+        assert environment["formats"] == list(FORMATS)
+        assert len(probes) == 2 * len(FORMATS) + 1
+        assert probes[-1].name == "baseline/coverage"
 
     def test_the_registry_exposes_it(self):
         assert SUITES["wire"] is build
@@ -178,6 +183,69 @@ class TestTheSuite:
 
         with pytest.raises(ProbeFailure, match="without a warning"):
             _RoundTripProbe("messages", request).run()
+
+    def test_the_committed_baseline_matches_the_current_behaviour(self):
+        """A rotted baseline would make the PR job lie, so it cannot rot."""
+        probes, _ = build()
+
+        for probe in probes:
+            probe.run()
+
+    def test_a_new_loss_against_the_baseline_fails(self):
+        request = {**CANONICAL_REQUEST, "generation": {"top_k": 20}}
+        baseline = {"cases": {"request/chat_completions": {"lost": []}}}
+
+        with pytest.raises(ProbeFailure, match="behaviour changed since the baseline"):
+            _RoundTripProbe("chat_completions", request, baseline=baseline).run()
+
+    def test_a_restored_loss_is_reported_but_not_a_failure(self):
+        baseline = {"cases": {"request/chat_completions": {"lost": ["gone: lost"]}}}
+
+        data = _RoundTripProbe(
+            "chat_completions", CANONICAL_REQUEST, baseline=baseline
+        ).run()
+
+        assert data["restored"] == ["gone: lost"]
+
+    def test_no_baseline_makes_every_loss_new(self):
+        """A deleted baseline cannot pass quietly (clementine's case D)."""
+        request = {**CANONICAL_REQUEST, "generation": {"top_k": 20}}
+
+        with pytest.raises(ProbeFailure, match="behaviour changed"):
+            _RoundTripProbe("chat_completions", request, baseline={}).run()
+
+    def test_the_baseline_may_not_name_a_retired_case(self):
+        baseline = {"cases": {"sampling/retired_format": {"lost": []}}}
+
+        with pytest.raises(ProbeFailure, match="no longer run"):
+            _BaselineCoverageProbe(baseline, {"request/messages"}).run()
+
+    def test_a_baseline_that_covers_the_live_cases_passes(self):
+        baseline = {"cases": {"request/messages": {"lost": []}}}
+
+        assert _BaselineCoverageProbe(baseline, {"request/messages"}).run() == {
+            "cases": 1
+        }
+
+
+class TestTheBaseline:
+    def test_a_new_loss_is_the_difference(self):
+        added, restored = compare_to_baseline(
+            ["a: lost", "b: lost"], {"lost": ["b: lost"]}
+        )
+
+        assert added == ["a: lost"]
+        assert restored == []
+
+    def test_a_missing_baseline_has_no_expectations(self):
+        assert compare_to_baseline(["a: lost"], None) == (["a: lost"], [])
+
+    def test_the_committed_baseline_covers_every_case(self):
+        baseline = read_baseline()
+
+        assert set(baseline["cases"]) == {
+            f"{case}/{provider}" for case, _ in CASES for provider in FORMATS
+        }
 
     def test_a_reported_loss_is_data_not_a_failure(self, monkeypatch):
         from llm_rosetta.converters.llm import messages as messages_module

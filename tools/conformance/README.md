@@ -74,3 +74,19 @@ that the request asked for an extension.  The suite is offline and
 deterministic; upstream wire behaviour (what a vendor accepts and echoes) is
 the next family of cases and needs the scheduled, credentialled run the epic
 plans.
+
+`baselines/wire.json` records what each case loses today.  A loss that appears
+and is not in the baseline fails the case with the path that changed; a loss
+that disappears is reported as `restored` and does not.  After reviewing a
+change deliberately:
+
+```bash
+python -c "from tools.conformance.suites.wire import write_baseline; write_baseline()"
+```
+
+Adding a case is a two-step change: with no entry in the baseline, every loss
+it reports is "new" and the case fails on its first run — which is the point,
+since a case has to be reviewed rather than trusted. Run it once, decide the
+losses are the ones you meant, then re-baseline.
+
+CI runs this suite on every PR that touches the core, and uploads the report.

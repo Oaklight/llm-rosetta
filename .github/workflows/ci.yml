@@ -197,6 +197,45 @@ jobs:
         if: needs.changes.outputs.core == 'true'
         run: python -m pytest tests/test_types/ -v
 
+  conformance:
+    # The wire suite is offline and deterministic, so it can gate every PR:
+    # its committed baseline turns a conversion behaviour change into a named
+    # diff (`generation.top_k: lost`) rather than a flaky red build.  Upstream
+    # probing — what a vendor accepts and echoes — needs credentials and stays
+    # out of PR CI until the scheduled group lands (epic #1128).
+    needs: changes
+    if: needs.changes.outputs.core == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        # `[all]` pulls the `gateway` extra, which names `llm-rosetta-gateway` by
+        # distribution; the gateway is not on PyPI, so its local path has to be
+        # installed beside it (and `tools/conformance/redact.py` imports it).
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e "packages/llm-rosetta[all]" -e packages/llm-rosetta-gateway
+
+      - name: Run the wire suite against its baseline
+        run: python -m tools.conformance run --suite wire --out wire-report.json
+
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: conformance-wire
+          path: wire-report.json
+          # A run that produced no report is not a run: the default warning
+          # would let this step look green on an install failure.
+          if-no-files-found: error
+
   dev-extras-test:
     needs: changes
     # The full suite is the cross-package safety net: it runs when the core

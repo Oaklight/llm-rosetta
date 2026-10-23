@@ -1,0 +1,60 @@
+{
+  "cases": {
+    "request/chat_completions": {
+      "lost": []
+    },
+    "request/google_generate": {
+      "lost": []
+    },
+    "request/google_interactions": {
+      "lost": []
+    },
+    "request/messages": {
+      "lost": []
+    },
+    "request/open_responses": {
+      "lost": []
+    },
+    "sampling/chat_completions": {
+      "lost": [
+        "generation.top_k: lost"
+      ]
+    },
+    "sampling/google_generate": {
+      "lost": [
+        "generation.logprobs: lost",
+        "generation.top_logprobs: lost"
+      ]
+    },
+    "sampling/google_interactions": {
+      "lost": [
+        "generation.logprobs: lost",
+        "generation.top_logprobs: lost"
+      ]
+    },
+    "sampling/messages": {
+      "lost": [
+        "generation.logprobs: lost",
+        "generation.seed: lost",
+        "generation.top_logprobs: lost"
+      ]
+    },
+    "sampling/open_responses": {
+      "lost": [
+        "generation.logprobs: lost",
+        "generation.seed: lost",
+        "generation.stop_sequences: 1 \u2192 0 items",
+        "generation.top_k: lost"
+      ]
+    }
+  },
+  "formats": [
+    "chat_completions",
+    "open_responses",
+    "messages",
+    "google_generate",
+    "google_interactions"
+  ],
+  "schema_version": 1,
+  "suite": "wire"
+}
