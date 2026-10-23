@@ -312,6 +312,21 @@ ir_request = openai_conv.request_from_provider(openai_request, context=ctx)
 print(ctx.warnings)  # list[str]
 ```
 
+### One sink, with provenance
+
+A warning is a `ConversionWarning` — a `str` that also carries where the loss came from, so existing code that joins, formats or compares warnings by message keeps working:
+
+```python
+for w in ctx.warnings:
+    print(w.code, w.leg, w.converter, w.subject, "—", w)
+# dropped request open_responses->messages previous_response_id — ...
+# downgraded stream chat_completions->messages budget_tokens — ...
+```
+
+`code` is `dropped`, `downgraded` or `failed`; `leg` is `request`, `response` or `stream`; `converter` is the pair being converted; `subject` names the item when the reporter knows it. `w.as_dict()` returns the same fields as a plain dict.
+
+The list is a `WarningSink`. A `ConversionPipeline` keeps **one** sink for its whole life: the request leg, the response leg, and every chunk a `create_stream_processor()` processor converts report into it, so `pipeline.warnings` is complete even when the drop happened mid-stream. Recording a warning is also what logs it, so each loss appears once in the log — a converter reports and does not log separately.
+
 ## See Also
 
 - [Streaming](streaming.md) — convert streaming chunks with `StreamContext`
