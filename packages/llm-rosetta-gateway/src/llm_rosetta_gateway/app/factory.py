@@ -38,6 +38,9 @@ from ..proxy import (
     ProviderMetadataStore,
     close_resources,
 )
+from .routes_compact import (
+    route_responses_compact,
+)
 from .routes_llm import (
     _register_llm_routes,
 )
@@ -385,6 +388,10 @@ async def create_app(
 
         # Non-LLM routes: registered from the model type registry
         _register_non_llm_routes(app, config)
+
+        # Context compaction: an open_responses-family operation with no
+        # neutral form, so it is relayed rather than converted (see the module).
+        app.route("/v1/responses/compact", methods=["POST"])(route_responses_compact)
 
         # Utility / listing / health routes
         app.route("/v1/models", methods=["GET"])(handle_list_models)
