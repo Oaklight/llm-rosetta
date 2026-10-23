@@ -7,6 +7,20 @@ logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/minima
 connection:
   base_url: https://api.minimaxi.com/anthropic
   api_key_env: MINIMAX_API_KEY
+
+tools:
+  # Measured live 2026-10-23: declaring
+  # `{"type": "web_search_20250305", "name": "web_search"}` makes this lane run
+  # the search on the provider side — the response carries `server_tool_use`
+  # and `web_search_tool_result` blocks with real queries and results.
+  # `code_execution_20250522` and `bash_20250124` are rejected with
+  # `invalid params, function parameters is empty` (the lane treats an unknown
+  # server tool as a function that needs a schema), so code execution is not
+  # declared.  Declaring `bash_20250124` would change nothing even if the lane
+  # accepted it: the messages reader reads that type as a plain function named
+  # `bash`, so it never becomes an intrinsic kind to keep or drop.
+  intrinsic_tools:
+    - web_search
 reasoning:
   thinking_modes:
     auto: adaptive

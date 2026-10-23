@@ -16,6 +16,12 @@ reasoning:
   effort_range: [minimal, max]
 tools:
   tool_groups: true
+  # No `intrinsic_tools` on purpose.  Measured live 2026-10-23: the wire
+  # *accepts* `{"type": "web_search"}`, but a request that actually invokes it
+  # answers 404 `ToolNotOpen` ("Your account has not activated web search",
+  # https://console.volcengine.com/common-buy/CC_content_plugin).  Declaring a
+  # kind would make the pipeline keep a server tool whose use fails upstream,
+  # so ARK exposes none until the capability is account-level.
 # Volcengine returns "resp_"-prefixed response ids, so the prefix is stripped
 # on the way in and re-added on the way out.  Verified live 2026-10-12 (#899).
 response_id_prefix: "resp_"

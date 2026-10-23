@@ -350,6 +350,50 @@ class TestPipeline:
         tools = body.get("tools") or body.get("config", {}).get("tools") or []
         assert all("web_search" not in str(t) for t in tools)
 
+    def test_minimax_lane_keeps_and_emits_web_search(self):
+        """The declaration is load-bearing on the wire, not only in the yaml.
+
+        ``minimax--messages`` declares ``web_search``, so the pass keeps it and
+        the messages writer emits the server-tool shape without a warning.  A
+        test that only asserted the yaml value would stay green if the pass or
+        the writer stopped honouring it.
+        """
+        pipe = ConversionPipeline(
+            "open_responses", "messages", target_shim="minimax--messages"
+        )
+        body = pipe.convert_request(
+            {
+                "model": "m",
+                "max_tokens": 10,
+                "input": "hi",
+                "tools": [{"type": "web_search"}],
+            }
+        )
+
+        assert {"type": "web_search_20250305", "name": "web_search"} in body["tools"]
+        assert pipe.warnings == []
+
+    def test_ark_lane_drops_and_reports_web_search(self):
+        """The same request against the undeclared lane loses the tool loudly."""
+        # Source and target must differ: a same-format conversion keeps its own
+        # native declarations untouched, which would hide the gate.
+        pipe = ConversionPipeline(
+            "messages",
+            "open_responses",
+            target_shim="volcengine--open_responses",
+        )
+        body = pipe.convert_request(
+            {
+                "model": "m",
+                "max_tokens": 10,
+                "messages": [{"role": "user", "content": "hi"}],
+                "tools": [{"type": "web_search_20250305", "name": "web_search"}],
+            }
+        )
+
+        assert not any("web_search" in str(t) for t in body.get("tools") or [])
+        assert any("web_search" in warning for warning in pipe.warnings)
+
     def test_promotion_follows_the_source_converter_flag(self, monkeypatch):
         """Promotion is read off the source converter, not the format name.
 
@@ -419,10 +463,17 @@ class TestShimEmitConsistency:
     """
 
     def _shim_kinds(self, name):
+        """The kinds a shim declares, by its registered name.
+
+        An absent name is a failure, not an empty declaration: a subset check
+        against ``set()`` passes on absence, so a shim that stops loading or
+        gets renamed would satisfy every test in this class.
+        """
         from llm_rosetta.shims.providers import load_providers
 
         shims = {s.name: s for s in load_providers()}
-        return set(shims[name].tools.intrinsic_tools) if name in shims else set()
+        assert name in shims, f"{name} is not a loaded shim: {sorted(shims)}"
+        return set(shims[name].tools.intrinsic_tools)
 
     def test_anthropic(self):
         from llm_rosetta.converters.llm.messages.tool_ops import (
@@ -438,21 +489,51 @@ class TestShimEmitConsistency:
             _RESPONSES_INTRINSIC_TOOLS,
         )
 
-        assert self._shim_kinds("openai_responses") <= set(_RESPONSES_INTRINSIC_TOOLS)
+        assert self._shim_kinds("openai--open_responses") <= set(
+            _RESPONSES_INTRINSIC_TOOLS
+        )
+
+    def test_minimax_messages(self):
+        """MiniMax's Anthropic lane runs web search; code execution is not declared.
+
+        Measured live 2026-10-23: a `web_search_20250305` declaration comes
+        back with `server_tool_use` + `web_search_tool_result` blocks, while
+        `code_execution_20250522` is rejected for having no schema.
+        """
+        from llm_rosetta.converters.llm.messages.tool_ops import (
+            _ANTHROPIC_INTRINSIC_TOOLS,
+        )
+
+        declared = self._shim_kinds("minimax--messages")
+        assert declared == {"web_search"}
+        assert declared <= set(_ANTHROPIC_INTRINSIC_TOOLS)
+
+    def test_volcengine_declares_none(self):
+        """The ARK account gate, not the wire shape, decides this one.
+
+        Measured live 2026-10-23: the declaration is accepted, but a request
+        that invokes the tool answers 404 `ToolNotOpen` until web search is
+        activated on the account.
+        """
+        assert self._shim_kinds("volcengine--open_responses") == set()
 
     def test_google(self):
         from llm_rosetta.converters.llm.google_generate.tool_ops import (
             _INTRINSIC_TOOL_KEYS,
         )
 
-        assert self._shim_kinds("google") <= set(_INTRINSIC_TOOL_KEYS.values())
+        assert self._shim_kinds("google--google_generate") <= set(
+            _INTRINSIC_TOOL_KEYS.values()
+        )
 
     def test_google_interactions(self):
         from llm_rosetta.converters.llm.google_interactions.tool_ops import (
             _GI_INTRINSIC_TOOLS,
         )
 
-        assert self._shim_kinds("google_interactions") <= set(_GI_INTRINSIC_TOOLS)
+        assert self._shim_kinds("google--google_interactions") <= set(
+            _GI_INTRINSIC_TOOLS
+        )
 
 
 class TestUnsupportedKindNotCachedAsEmpty:
