@@ -261,6 +261,12 @@ scripts/
     ├── test_roundtrip_inflation.py
     └── test_roundtrip_live.py
 
+tools/conformance/           # Developer-only probe harness (never shipped in a wheel)
+├── runner.py, model.py, redact.py   # Bounded concurrency, report schema, redaction
+├── suites/drift.py            # SDK type drift against a committed baseline
+├── suites/wire.py             # Canonical request round-tripped through every chat format
+└── baselines/                 # Committed snapshots; a diff means behaviour changed
+
 docs_en/, docs_zh/           # Documentation (git worktrees, orphan branches)
 docker/                      # Dockerfile for gateway image
 examples/                    # Usage examples

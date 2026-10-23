@@ -31,6 +31,20 @@ class TestGenerationConfig:
         assert back["max_tokens"] == 512
         assert back["seed"] == 99
 
+    def test_sampling_knobs_round_trip(self):
+        """``temperature``, ``top_p`` and ``top_k`` are accepted upstream.
+
+        Measured against the live route: each answers 200 on its own and
+        together.  They used to be dropped from the request without a
+        warning — the wire suite's canonical round trip found it.
+        """
+        ir = {"temperature": 0.2, "top_p": 0.9, "top_k": 20}
+
+        provider = GoogleInteractionsConfigOps.ir_generation_config_to_p(ir)  # ty: ignore
+
+        assert provider == {"temperature": 0.2, "top_p": 0.9, "top_k": 20}
+        assert GoogleInteractionsConfigOps.p_generation_config_to_ir(provider) == ir
+
 
 class TestReasoningConfig:
     def test_thinking_level_to_ir(self):

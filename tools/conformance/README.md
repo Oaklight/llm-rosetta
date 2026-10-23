@@ -40,3 +40,37 @@ Refresh the baseline after reviewing the new drift:
 ```bash
 python -c "from tools.conformance.suites.drift import write_baseline; write_baseline()"
 ```
+
+### `wire`
+
+One canonical request, round-tripped through each of the five chat formats
+(`IR → target body → IR`), in two cases per format:
+
+```bash
+python -m tools.conformance run --suite wire --out /tmp/wire-report.json
+```
+
+| case | request |
+| --- | --- |
+| `request/<format>` | instructions, a user turn, a function tool, `tool_choice: auto`, `temperature`/`top_p`/`max_tokens` |
+| `sampling/<format>` | the same, plus every other `GenerationConfig` knob — `top_k`, `stop_sequences`, `seed`, `logprobs`, `top_logprobs` |
+
+These are **identity** round trips (format → its own body → back), not the 25
+ordered format pairs; cross-format translation is what the converter test
+suites cover.  Each case reports what the round trip lost and which
+conversion warnings named it.
+
+A case **fails** only when it loses a field no conversion warning accounts
+for.  "Accounts for" is decided on the warning's `subject`: it must name the
+field (or the container that held it).  Prose is a fallback only for
+reporters with no subject yet, and only for a value that vanished — a
+*changed* value needs a warning that names it.  That keeps the suite to the
+one assertion it can make without knowing each vendor's surface: a loss the
+caller is told about is data, a silent one is a red case.
+
+The canonical request is deliberately inside the shared core, so a
+difference means the format is not carrying something it should, rather than
+that the request asked for an extension.  The suite is offline and
+deterministic; upstream wire behaviour (what a vendor accepts and echoes) is
+the next family of cases and needs the scheduled, credentialled run the epic
+plans.

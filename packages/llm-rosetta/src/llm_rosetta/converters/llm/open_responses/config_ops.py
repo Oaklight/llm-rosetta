@@ -86,6 +86,7 @@ class OpenResponsesConfigOps(BaseConfigOps):
             "seed",
             "n",
             "stop_sequences",
+            "logprobs",
         ]
         for field in _UNSUPPORTED:
             if field in ir_config:

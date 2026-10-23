@@ -16,6 +16,7 @@ from ....types.ir.configs import (
 )
 from ....types.ir.reasoning import IREffort, IRVisibility
 from ...base import BaseConfigOps
+from llm_rosetta.conversion_warnings import report_drop
 
 # Interactions thinking_level ↔ IR effort (nearly 1:1)
 _THINKING_LEVEL_TO_IR: dict[str, IREffort] = {
@@ -33,6 +34,20 @@ _IR_EFFORT_TO_THINKING_LEVEL["xhigh"] = "high"
 _IR_EFFORT_TO_THINKING_LEVEL["max"] = "high"
 
 
+#: ``GenerationConfig`` keys the generation writer maps.  The rest are
+#: reported as ignored, so a field never disappears silently.
+_GENERATION_FIELDS_MAPPED = frozenset(
+    {
+        "max_tokens",
+        "stop_sequences",
+        "seed",
+        "temperature",
+        "top_p",
+        "top_k",
+    }
+)
+
+
 class GoogleInteractionsConfigOps(BaseConfigOps):
     """Google Interactions API config conversion operations."""
 
@@ -47,6 +62,24 @@ class GoogleInteractionsConfigOps(BaseConfigOps):
             result["stop_sequences"] = ir_config["stop_sequences"]
         if "seed" in ir_config:
             result["seed"] = ir_config["seed"]
+        # The sampling knobs the route accepts under ``generation_config``.
+        # Measured against the live route: ``temperature``, ``top_p`` and
+        # ``top_k`` each answer 200 on their own and together; they were
+        # simply never mapped, so a request lost them without a warning.
+        if "temperature" in ir_config:
+            result["temperature"] = ir_config["temperature"]
+        if "top_p" in ir_config:
+            result["top_p"] = ir_config["top_p"]
+        if "top_k" in ir_config:
+            result["top_k"] = ir_config["top_k"]
+        # Everything else in ``GenerationConfig`` has no place on this wire;
+        # report it rather than dropping it in silence.
+        for field in sorted(set(ir_config) - _GENERATION_FIELDS_MAPPED):
+            report_drop(
+                f"Google Interactions does not support {field}; ignored",
+                subject=field,
+                warnings=kwargs.get("warnings"),
+            )
         return result
 
     @staticmethod
@@ -62,6 +95,12 @@ class GoogleInteractionsConfigOps(BaseConfigOps):
             result["stop_sequences"] = provider_config["stop_sequences"]
         if "seed" in provider_config:
             result["seed"] = provider_config["seed"]
+        if "temperature" in provider_config:
+            result["temperature"] = provider_config["temperature"]
+        if "top_p" in provider_config:
+            result["top_p"] = provider_config["top_p"]
+        if "top_k" in provider_config:
+            result["top_k"] = provider_config["top_k"]
         return result
 
     # ── Reasoning config ───────────────────────────────────────────

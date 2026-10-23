@@ -91,6 +91,11 @@ class GoogleGenerateConfigOps(BaseConfigOps):
                 "Google GenAI does not support logprobs; ignored",
                 subject="logprobs",
             )
+        if "top_logprobs" in ir_config:
+            report_drop(
+                "Google GenAI does not support top_logprobs; ignored",
+                subject="top_logprobs",
+            )
 
         return result
 
