@@ -144,6 +144,21 @@ _PASSTHROUGH_REQUEST_FIELDS = (
     "include",
     "conversation",
     "context_management",
+    # OpenAI-profile-only request knobs.  Measured against the live Responses
+    # API: ``moderation`` is accepted, ``prompt_cache_options`` is known but
+    # model-gated, ``access_programs`` must be an object, and ``logit_bias``
+    # is not a Responses parameter at all (``400 unknown_parameter``).  They
+    # ride here because this is the *client's own* request being written back
+    # to a same-format upstream: forwarding it preserves what talking to the
+    # vendor directly would do — including the vendor's own 400 — while
+    # dropping it answers from a differently sampled request.  The opposite
+    # direction (a chat client's ``logit_bias`` converted towards Responses)
+    # still drops with a warning, because there the target genuinely has no
+    # such field.
+    "logit_bias",
+    "prompt_cache_options",
+    "moderation",
+    "access_programs",
 )
 
 

@@ -137,3 +137,38 @@ def test_the_fields_no_reader_read_are_contained_too() -> None:
     for key in ("include", "conversation", "context_management"):
         assert key not in body
     assert any("dropped for chat_completions" in w for w in warnings)
+
+
+#: Request knobs the OpenAI profile accepts but the vendor-neutral spec does
+#: not define.  They still belong to the client's request and must survive a
+#: same-format round trip; another format reports them as dropped.
+OPENAI_ONLY_REQUEST = {
+    "logit_bias": {"50256": -100},
+    "prompt_cache_options": {"mode": "explicit"},
+    "moderation": {"model": "omni-moderation-latest"},
+    "access_programs": {"program-a": True},
+}
+
+
+def test_openai_only_request_knobs_survive_a_same_format_round_trip() -> None:
+    pipe = ConversionPipeline("open_responses", "open_responses")
+    body = pipe.convert_request(
+        {"model": "test-model", "input": "hello", **OPENAI_ONLY_REQUEST}
+    )
+
+    for key, value in OPENAI_ONLY_REQUEST.items():
+        assert body.get(key) == value, f"{key} was lost on the round trip"
+    assert pipe.warnings == []
+
+
+def test_another_format_reports_the_same_knobs_as_dropped() -> None:
+    pipe = ConversionPipeline("open_responses", "chat_completions")
+    body = pipe.convert_request(
+        {"model": "test-model", "input": "hello", **OPENAI_ONLY_REQUEST}
+    )
+
+    for key in OPENAI_ONLY_REQUEST:
+        assert key not in body, f"{key} reached the chat_completions body"
+    dropped = " ".join(pipe.warnings)
+    for key in OPENAI_ONLY_REQUEST:
+        assert key in dropped, f"{key} was not named in the loss report"
