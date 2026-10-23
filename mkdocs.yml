@@ -187,5 +187,6 @@ nav:
           - 风格指南: contributing/style-guide.md
           - 架构指南: contributing/architecture.md
           - 命名约定: contributing/naming-conventions.md
+          - 管理面板主题: contributing/admin-themes.md
       - 路线图: roadmap.md
       - 更新日志: changelog.md

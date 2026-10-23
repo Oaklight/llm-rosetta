@@ -265,20 +265,9 @@ Embedding 模型显示单一的 Test 按钮（无下拉菜单），因为只有�
 
 ## 主题
 
-管理面板提供 8 种主题，可通过右上角的下拉菜单切换：
+管理面板提供两种配色方案：**Minimal** 与 **Emerald**，各自有浅色和深色两种模式。在**设置 → 外观与显示**里选择（**配色方案**与**模式**两个下拉框）。选择按浏览器配置保存在 `localStorage`（`llm-rosetta-scheme` 与 `llm-rosetta-mode`），并在首次绘制前应用，因此已保存的方案不会先闪一下默认方案。
 
-| 主题 | 风格 |
-|------|------|
-| Light | 默认，简洁白色背景 |
-| Indigo Dark | 深色，靛蓝色调 |
-| Dracula | 经典深色主题 |
-| Nord | 北极风格的柔和色调 |
-| Solarized | Ethan Schoonover 配色方案 |
-| Osaka Jade | 深色，翡翠绿色调 |
-| One Dark | Atom 编辑器深色主题 |
-| Rosé Pine | 柔和的玫瑰与松木色调 |
-
-主题选择存储在 `localStorage` 中，浏览器关闭后依然保留。
+配色方案只声明 token 值，由组件决定这些值落在哪里。如果要新增方案，见[管理面板主题](../contributing/admin-themes.md)：契约由 `make test-js` 强制执行，`make theme-matrix` 会对真实运行的面板渲染每个方案 × 模式 × 宽度并保存截图。
 
 ## 认证
 
