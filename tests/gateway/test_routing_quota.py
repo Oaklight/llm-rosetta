@@ -486,3 +486,98 @@ class TestEveryProviderSpent:
         assert b"no reset time is known" in resp.body
         # The startup-shaped default still applies, but the reason does not.
         assert resp.headers["Retry-After"] == "5"
+
+
+class TestTheRealignment:
+    """`prefer_same_format` must not undo what the quota stage decided.
+
+    The tiers pick among the providers that already speak the client's format,
+    which is a second selection — and it read neither headroom nor exclusions
+    until #1194/#1196.  A spent provider taking the realigned request is a
+    silent failure: the status is still 200 as long as the other one serves.
+    """
+
+    @staticmethod
+    def _config(*, readings: dict[str, float]) -> Any:
+        from llm_rosetta_gateway.config import GatewayConfig
+        from llm_rosetta_gateway.quota.models import credential_fingerprint
+
+        config = GatewayConfig(
+            {
+                "providers": {
+                    "a": {
+                        "type": "messages",
+                        "api_key": "sk-a",
+                        "base_url": "https://a.test",
+                    },
+                    "b": {
+                        "type": "chat_completions",
+                        "api_key": "sk-b",
+                        "base_url": "https://b.test",
+                    },
+                    "c": {
+                        "type": "chat_completions",
+                        "api_key": "sk-c",
+                        "base_url": "https://c.test",
+                    },
+                },
+                "models": {"m": {"providers": ["a", "b", "c"]}},
+                "server": {"prefer_same_format": True},
+            }
+        )
+        for name, used in readings.items():
+            pinfo = config.providers[name]
+            pinfo.quota_probe = "p-real"
+            QUOTA_STATE.put_reading(
+                QuotaReading(
+                    probe="p-real",
+                    credential=credential_fingerprint(f"sk-{name}"),
+                    windows=[QuotaWindow(name="5h", used_percent=used)],
+                )
+            )
+        return config
+
+    @staticmethod
+    def _served(config: Any, rounds: int = 24) -> dict[str, int]:
+        served: dict[str, int] = {}
+        for _ in range(rounds):
+            selection = config.selection_context("m", "chat_completions")
+            config.resolve(selection)
+            assert selection.chosen is not None
+            served[selection.chosen.name] = served.get(selection.chosen.name, 0) + 1
+        return served
+
+    def test_a_spent_same_format_provider_is_never_realigned_onto(self):
+        config = self._config(readings={"b": 100})
+
+        served = self._served(config)
+
+        assert "b" not in served, served
+        assert served == {"c": 24}
+
+    def test_the_nearly_spent_sibling_gets_less_of_the_realigned_traffic(self):
+        config = self._config(readings={"b": 96, "c": 10})
+
+        served = self._served(config, rounds=40)
+
+        assert served.get("c", 0) > served.get("b", 0) * 2, served
+
+    def test_a_failover_excluded_provider_is_not_realigned_onto(self):
+        """The provider that just refused must not come back through a tier.
+
+        Only ``b`` is excluded, so the anchor still lands on ``a`` half the
+        time — and from there the realignment is the only thing that could
+        hand the request back to ``b``.
+        """
+        config = self._config(readings={})
+
+        served: dict[str, int] = {}
+        for _ in range(24):
+            selection = config.selection_context("m", "chat_completions")
+            selection.with_failover_excluded({"b"})
+            config.resolve(selection)
+            assert selection.chosen is not None
+            served[selection.chosen.name] = served.get(selection.chosen.name, 0) + 1
+
+        assert "b" not in served, served
+        assert served.get("c", 0) > 0, served
