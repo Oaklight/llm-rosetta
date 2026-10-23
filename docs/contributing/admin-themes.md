@@ -91,9 +91,10 @@ difference between modes rather than schemes.
 
 ## Adding a scheme
 
-The matrix defaults to the two schemes that ship, so a new one is opt-in with
-`--schemes` until it is ready. The checklist below is the whole surface; every
-item is something the panel reads.
+The matrix's default scheme axis is every scheme `base.css` declares, so new
+blocks are covered the next time it runs; `--schemes` narrows the matrix while
+you are iterating on one. The checklist below is the whole surface; every item
+is something the panel reads.
 
 1. **Declare the values in `base.css`.** Add a structural block
    (`[data-scheme="<name>"]`) and one block per mode
@@ -128,7 +129,7 @@ item is something the panel reads.
 | Check | Command | Covers | Does not cover |
 |-------|---------|--------|----------------|
 | Contract test | `make test-js` | which selectors and declarations a scheme may use; decorative pseudo-elements taking clicks; at-rule nesting | whether a value renders legibly, or whether a token is missing at runtime |
-| Theme matrix | `make theme-matrix` | every scheme × mode × width against a live panel: scheme applied, every scheme token resolved, no sideways scroll, the Token card's details link clickable; screenshots of the Dashboard and Providers tabs | regressions outside the captured tabs; pixel-level changes |
+| Theme matrix | `make theme-matrix` | every scheme × mode × width against a live panel: scheme applied, every scheme token resolved, each tab does not scroll sideways, the Token card's details link clickable, and schemes/modes render differently; screenshots of the Dashboard and Providers tabs | regressions outside the captured tabs; pixel-level changes |
 
 The matrix runs in CI (`theme-matrix` job) whenever the gateway package, the
 JS tests or the harness itself change. It has no pixel baseline, so it is not
