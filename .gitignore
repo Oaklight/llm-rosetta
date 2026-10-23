@@ -229,6 +229,9 @@ docs_zh/
 .complexipy_cache/
 .playwright-mcp/
 
+# Theme matrix artifacts (tools/theme_matrix)
+theme-matrix-out/
+
 # Temporary notes
 REVIEW_*
 TEMP_*
