@@ -51,6 +51,7 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### 修复
 
+- **没有名字的工具定义**（issue [#1212](https://github.com/Oaklight/llm-rosetta/issues/1212)）：过去它会以空名字发到上游并被拒绝——Chat Completions 返回 `400 Invalid 'tools[0].function.name': empty string`，Messages 返回 `400 tools.0.custom.name: String should have at least 1 character`（两者均已实测）。现在管线会丢弃这种定义并通过转换告警上报，调用方因此能知道发生了什么，而不是收到一个指向自己从未写过的请求体位置的 400。当客户端请求体里的工具 *type* 是源读取器不认识的、又没有名字可回退时，就会产生这种定义。
 - **服务端工具往返**（issue [#963](https://github.com/Oaklight/llm-rosetta/issues/963)、[#972](https://github.com/Oaklight/llm-rosetta/issues/972)、[#974](https://github.com/Oaklight/llm-rosetta/issues/974)、[#985](https://github.com/Oaklight/llm-rosetta/issues/985)、[#986](https://github.com/Oaklight/llm-rosetta/issues/986)、[#996](https://github.com/Oaklight/llm-rosetta/issues/996)）：intrinsic（服务端工具）调用与结果在 Responses、Google Generate、Google Interactions 的各条路径上、流式与非流式下都能保留；流式服务端工具调用不再被改写成客户端工具调用，结果不再丢失或因校验失败被丢弃。
 - **推理重放与签名**（issue [#881](https://github.com/Oaklight/llm-rosetta/issues/881)、[#939](https://github.com/Oaklight/llm-rosetta/issues/939)、[#948](https://github.com/Oaklight/llm-rosetta/issues/948)、[#950](https://github.com/Oaklight/llm-rosetta/issues/950)、[#1143](https://github.com/Oaklight/llm-rosetta/issues/1143)）：不透明推理与 thought signature 可跨格式和流式传递，DeepSeek thinking 模式在启用工具后会在每个 assistant 轮次拿到所需的推理内容，重放按模型能力而不是厂商变换处理。
 - **流式**（issue [#838](https://github.com/Oaklight/llm-rosetta/issues/838)、[#1060](https://github.com/Oaklight/llm-rosetta/issues/1060)）：终止事件会发出，并行工具调用的索引正确绑定，上游的带内错误会保留其错误码。
