@@ -187,5 +187,6 @@ nav:
           - Style Guide: contributing/style-guide.md
           - Architecture Guide: contributing/architecture.md
           - Naming Conventions: contributing/naming-conventions.md
+          - Admin Themes: contributing/admin-themes.md
       - Roadmap: roadmap.md
       - Changelog: changelog.md

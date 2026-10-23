@@ -277,20 +277,16 @@ Both thresholds apply independently — whichever triggers first wins.
 
 ## Themes
 
-The admin panel ships with 8 themes, selectable from the dropdown in the top-right corner:
+The panel ships two colour schemes, **Minimal** and **Emerald**, each in a
+light and a dark mode. Choose them under **Settings → Appearance & Display**
+(the **Scheme** and **Mode** selects). The choice is stored per browser profile
+in `localStorage` (`llm-rosetta-scheme` and `llm-rosetta-mode`) and applied
+before the first paint, so a stored scheme does not flash the default.
 
-| Theme | Style |
-|-------|-------|
-| Light | Default, clean white background |
-| Indigo Dark | Dark with indigo accents |
-| Dracula | Popular dark theme |
-| Nord | Arctic-inspired pastel palette |
-| Solarized | Ethan Schoonover's color scheme |
-| Osaka Jade | Dark with jade green accents |
-| One Dark | Atom editor's dark theme |
-| Rose Pine | Muted rose and pine tones |
-
-Theme selection is stored in `localStorage` and persists across browser sessions.
+A scheme declares token values only; the components decide where those values
+land. If you are adding a scheme, see [Admin Themes](../contributing/admin-themes.md):
+the contract is enforced by `make test-js`, and `make theme-matrix` renders
+every scheme × mode × width against a live panel and saves screenshots.
 
 ## Authentication
 
