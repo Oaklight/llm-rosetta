@@ -7,6 +7,7 @@ without importing the gateway.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 
 _AUTH_HEADER_NAMES = frozenset(
     {
@@ -32,6 +33,53 @@ _CREDENTIAL_PATTERNS = re.compile(
         ]
     )
 )
+
+
+# A credential-named field in JSON, a form or a header-ish line.  Matching the
+# text rather than a parsed document is the point: the body it is applied to
+# is one that failed to parse.  The name must stand alone (``max_tokens`` is
+# not ``token``), and the value is a quoted string or a bare run.
+_SECRET_FIELD = re.compile(
+    r"""(?P<name>(?<![A-Za-z0-9_-])["']?
+        (?:x-)?(?:api[_-]?key|apikey|authorization|access[_-]?token|
+        refresh[_-]?token|id[_-]?token|auth[_-]?token|token|secret|
+        client[_-]?secret|password|passwd|credentials?|
+        (?:set-)?cookie|session[_-]?id)
+        ["']?\s*[:=]\s*)
+        (?P<value>"(?:[^"\\]|\\.)*"?|'[^']*'?|
+        (?:(?:bearer|basic|digest|negotiate|token)[ \t]+)?[^\s,;&}\]]+)""",
+    re.IGNORECASE | re.VERBOSE,
+)
+
+# A cookie header line carries several ``name=value`` pairs after one name, so
+# it is redacted to the end of the line rather than to the first separator.
+_COOKIE_LINE = re.compile(r"(?im)^(?P<name>[ \t]*(?:set-)?cookie[ \t]*:[ \t]*)[^\r\n]+")
+
+
+def scrub_body_text(text: str, secrets: Iterable[str] = ()) -> str:
+    """Redact credentials from the text of a request body that did not parse.
+
+    Three layers, each catching what the others miss: the value of any field
+    named like a credential (``api_key``, ``authorization``, ``token``,
+    ``secret``, ``password``, ``cookie``…, with an auth scheme such as
+    ``Bearer`` or ``Basic`` taken as part of the value), every string in *secrets* verbatim (the keys the
+    gateway itself holds, whatever shape the vendor gave them), and the
+    vendor-shaped patterns of :func:`scrub_credential_patterns`.  A credential
+    that is none of these — an arbitrary string under an arbitrary field name,
+    not configured here — is not recognised.
+    """
+    text = _SECRET_FIELD.sub(
+        lambda m: (
+            m.group("name") + '"[REDACTED]"'
+            if m.group("value")[:1] in "\"'"
+            else m.group("name") + "[REDACTED]"
+        ),
+        text,
+    )
+    text = _COOKIE_LINE.sub(lambda m: m.group("name") + "[REDACTED]", text)
+    for secret in sorted({s for s in secrets if s}, key=len, reverse=True):
+        text = text.replace(secret, "[REDACTED]")
+    return scrub_credential_patterns(text)
 
 
 def sanitize_headers(headers: dict[str, str]) -> dict[str, str]:

@@ -17,9 +17,11 @@ without changing its public ``(request, config)`` signature.
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import time
 import uuid
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Iterable, Mapping
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, cast
@@ -27,6 +29,7 @@ from typing import TYPE_CHECKING, Any, cast
 from llm_rosetta_gateway._vendor.httpserver import Response, StreamingResponse
 from llm_rosetta.auto_detect import ProviderType
 from llm_rosetta_gateway.observability.error_dump import dump_error
+from llm_rosetta_gateway.observability.sanitize import scrub_body_text
 from llm_rosetta.observability.usage.normalize import DEFAULT_MODEL_TYPE
 
 from .logging import get_logger
@@ -76,6 +79,7 @@ class LifecycleContext:
     usage: Mapping[str, Any] | None = None
     profile: dict[str, Any] | None = None
     dump_store: DeferredDumpStore | None = None
+    body_failure: BodyFailure | None = None
     _breaker: CircuitBreaker | None = field(default=None, repr=False)
     _breaker_rejected: bool = field(default=False, repr=False)
 
@@ -355,7 +359,7 @@ async def instrumented_handler(
     app = request.app
     rctx = request_context_var.get()
     request_id = rctx.request_id if rctx else get_request_id(request)
-    body = _request_body(request)
+    body, body_failure = _read_body(request)
     ctx = LifecycleContext(
         config=config,
         app=app,
@@ -363,6 +367,7 @@ async def instrumented_handler(
         entry_id=uuid.uuid4().hex,
         model_type=model_type,
         body=body,
+        body_failure=body_failure,
         model=_body_model(body),
         source_format=source_format,
         target_format=source_format,
@@ -381,6 +386,8 @@ async def instrumented_handler(
         response = await handler(request, config)
         ctx.status_code = response.status_code
         if response.status_code >= 400:
+            if ctx.body_failure is not None:
+                await _record_body_failure(ctx)
             ctx.error_detail = ctx.error_detail or _response_error_text(response)
         response.headers["x-request-id"] = request_id
         logger.info("[%s] response status=%s", request_id, ctx.status_code)
@@ -409,6 +416,7 @@ async def instrumented_handler(
                 profile=ctx.profile,
                 usage=ctx.usage,
                 entry_id_override=ctx.entry_id,
+                request_id=ctx.request_id,
             )
         finally:
             # The log row exists now, so dumps queued during handling can be
@@ -465,13 +473,121 @@ def _record_breaker_outcome(ctx: LifecycleContext) -> None:
         ctx._breaker.record_success()
 
 
-def _request_body(request: Any) -> dict[str, Any] | None:
-    """Parse the request body, returning ``None`` when it is not a dict."""
+@dataclass(frozen=True)
+class BodyFailure:
+    """Why a complete request body did not parse, and what the gateway received.
+
+    The whole body is kept, like any other error dump's, so a body corrupted in
+    the middle, which neither end shows, can be compared with what the client
+    says it sent (#1217).  A body the server could not finish reading never gets
+    here: that refusal is recorded from the read phase, with the byte count but
+    not the bytes.
+    """
+
+    cause: str
+    content_length: str | None
+    content_type: str | None
+    content_encoding: str | None
+    transfer_encoding: str | None
+    bytes_received: int
+    sha256: str
+    body: bytes
+
+    def summary(self) -> str:
+        """One line for ``request_log.error_detail``."""
+        return (
+            f"{self.cause} (Content-Length={self.content_length}, "
+            f"Transfer-Encoding={self.transfer_encoding}, "
+            f"received={self.bytes_received} bytes, "
+            f"sha256={self.sha256[:16]}, "
+            f"Content-Type={self.content_type}, "
+            f"Content-Encoding={self.content_encoding})"
+        )
+
+    def dump_body(self, secrets: Iterable[str] = ()) -> dict[str, Any]:
+        """The received body as an error dump's request body.
+
+        The dump store holds JSON, so the bytes travel as text when they are
+        valid UTF-8 and as base64 when they are not; a corrupted body is
+        exactly the one that may not be, and replacing its bad bytes would
+        erase the evidence.  Credentials are redacted either way, because the
+        admin API serves a dump's body: a client that pastes a key into a
+        request and breaks it must not leave the key behind.  What is caught
+        is the value of a credential-named field, any of *secrets* (the keys
+        the gateway holds) and the vendor-shaped strings; an unconfigured key
+        of another shape under another name is not.  The digest is of the
+        original bytes.
+        """
+        record: dict[str, Any] = {
+            "cause": self.cause,
+            "content_length": self.content_length,
+            "content_type": self.content_type,
+            "content_encoding": self.content_encoding,
+            "transfer_encoding": self.transfer_encoding,
+            "bytes_received": self.bytes_received,
+            "sha256": self.sha256,
+        }
+        try:
+            record["text"] = scrub_body_text(self.body.decode("utf-8"), secrets)
+        except UnicodeDecodeError:
+            # latin-1 maps every byte to one character and back, so the
+            # patterns can be applied without disturbing the other bytes.
+            scrubbed = scrub_body_text(self.body.decode("latin-1"), secrets)
+            record["base64"] = base64.b64encode(scrubbed.encode("latin-1")).decode(
+                "ascii"
+            )
+        return {"_unparsed_body": record}
+
+
+def _describe_body_failure(request: Any, cause: str) -> BodyFailure:
+    """Capture what *request* carried when its body failed to parse."""
+    raw = request.body if isinstance(request.body, bytes) else b""
+    headers = request.headers
+    return BodyFailure(
+        cause=cause,
+        content_length=headers.get("content-length"),
+        content_type=headers.get("content-type"),
+        content_encoding=headers.get("content-encoding"),
+        transfer_encoding=headers.get("transfer-encoding"),
+        bytes_received=len(raw),
+        sha256=hashlib.sha256(raw).hexdigest(),
+        body=raw,
+    )
+
+
+def _read_body(request: Any) -> tuple[dict[str, Any] | None, BodyFailure | None]:
+    """Parse the request body into ``(body, failure)``.
+
+    Exactly one is ``None``: *failure* says why the body is not a JSON object,
+    so the route's generic "Invalid JSON body" no longer has to stand alone.
+    """
     try:
         body = request.json()
-    except Exception:
-        return None
-    return body if isinstance(body, dict) else None
+    except Exception as exc:
+        return None, _describe_body_failure(request, f"{type(exc).__name__}: {exc}")
+    if not isinstance(body, dict):
+        return None, _describe_body_failure(
+            request, f"JSON value is a {type(body).__name__}, not an object"
+        )
+    return body, None
+
+
+async def _record_body_failure(ctx: LifecycleContext) -> None:
+    """Name the parse failure in the log row, the container log and a dump."""
+    failure = ctx.body_failure
+    if failure is None:
+        return
+    ctx.error_detail = f"Invalid JSON body: {failure.summary()}"
+    logger.warning("[%s] unreadable request body: %s", ctx.request_id, ctx.error_detail)
+    await dump_error(
+        ctx.dump_store,
+        request_body=failure.dump_body(ctx.config.configured_secrets()),
+        response_text=ctx.error_detail,
+        source_provider=ctx.source_format or None,
+        status_code=ctx.status_code,
+        error_phase="body_parse",
+        request_log_id=ctx.entry_id,
+    )
 
 
 def _body_model(body: dict[str, Any] | None) -> str:

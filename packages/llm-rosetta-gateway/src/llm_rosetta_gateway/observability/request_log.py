@@ -49,6 +49,9 @@ class RequestLogEntry:
     #: ``decision``, the names ``gateway.model_types`` registers.  Defaults to
     #: chat, which is what a row written before the column existed means.
     model_type: str = DEFAULT_MODEL_TYPE
+    #: The id the client saw in ``X-Request-Id``.  ``id`` is the entry id, so
+    #: without this a client-visible id cannot be looked up (#1217).
+    request_id: str | None = None
 
     @classmethod
     def create(
@@ -73,6 +76,7 @@ class RequestLogEntry:
         reasoning_tokens: int | None = None,
         api_key_bucket: str | None = None,
         model_type: str = DEFAULT_MODEL_TYPE,
+        request_id: str | None = None,
     ) -> RequestLogEntry:
         """Factory with auto-generated id and timestamp."""
         return cls(
@@ -97,6 +101,7 @@ class RequestLogEntry:
             reasoning_tokens=reasoning_tokens,
             api_key_bucket=api_key_bucket,
             model_type=model_type,
+            request_id=request_id,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -138,6 +143,8 @@ class RequestLogEntry:
             d["reasoning_tokens"] = self.reasoning_tokens
         if self.api_key_bucket is not None:
             d["api_key_bucket"] = self.api_key_bucket
+        if self.request_id is not None:
+            d["request_id"] = self.request_id
         return d
 
 

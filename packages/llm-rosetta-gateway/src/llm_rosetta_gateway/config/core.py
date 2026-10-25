@@ -348,6 +348,24 @@ class GatewayConfig:
 
     # ---- Unified endpoint extraction ------------------------------------
 
+    def configured_secrets(self) -> frozenset[str]:
+        """Every credential the gateway holds for its upstream providers.
+
+        Read at call time, so keys refreshed or minted since startup are
+        included.  For scrubbing text that may echo one, never for display.
+        """
+        pools = [self.providers]
+        pools += [
+            getattr(self, f"{d.name}_provider_infos") for d in _typed_descriptors()
+        ]
+        found: set[str] = set()
+        for pool in pools:
+            for info in pool.values():
+                found.update(info.key_ring.keys())
+                if info.token_input:
+                    found.add(info.token_input)
+        return frozenset(found)
+
     def typed_pool(
         self, type_name: str
     ) -> tuple[dict[str, dict[str, Any]], dict[str, ProviderInfo], dict[str, str]]:

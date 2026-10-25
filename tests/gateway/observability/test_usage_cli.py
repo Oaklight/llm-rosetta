@@ -185,7 +185,10 @@ def _make_stale(store: Path) -> None:
     """Leave the store one migration behind, as an older release would."""
     conn = sqlite3.connect(store / "gateway.db")
     try:
-        conn.execute("DELETE FROM schema_version WHERE version = ?", (6,))
+        conn.execute(
+            "DELETE FROM schema_version WHERE version = ?",
+            (PersistenceManager.expected_schema_version(),),
+        )
         conn.commit()
     finally:
         conn.close()
@@ -351,10 +354,11 @@ class TestItsEdges:
         _make_stale(store)
         result = _run(store, "--by", "subject")
         assert result.returncode == 1
-        assert "schema version 5" in result.stderr, result.stderr
+        behind = PersistenceManager.expected_schema_version() - 1
+        assert f"schema version {behind}" in result.stderr, result.stderr
         assert "--migrate" in result.stderr
         # Nothing was written: the store is still behind and has no backup.
-        assert _schema_version(store) == 5
+        assert _schema_version(store) == behind
         assert not (store / "backups").exists()
 
     async def test_a_store_whose_wal_cannot_be_attached_is_not_called_stale(
@@ -478,7 +482,8 @@ class TestItsEdges:
             serving.close()
 
         assert stale.returncode == 1
-        assert "schema version 5" in stale.stderr, stale.stderr
+        behind = PersistenceManager.expected_schema_version() - 1
+        assert f"schema version {behind}" in stale.stderr, stale.stderr
         assert "readonly database" not in stale.stderr, stale.stderr
         assert migrating.returncode == 1
         assert "could not migrate the store" in migrating.stderr, migrating.stderr
