@@ -32,6 +32,7 @@ from ..middleware.error_format import (
 )
 from ..keystore import KeyStore
 from ..middleware.request_context import request_context_var, setup_request_context
+from ..ops.rejected import record_read_rejection, record_unrecorded_rejection
 from ..logging import get_logger
 
 from ..proxy import (
@@ -257,6 +258,25 @@ def _install_rate_limiting(app: App, config: GatewayConfig) -> None:
     app.before_request(create_rate_limit_hook(rate_limit_state))
     app.rate_limit_state = rate_limit_state  # type: ignore
     app.after_request(create_rate_limit_after_hook())
+
+
+def _install_rejection_recording(app: App, config: GatewayConfig) -> None:
+    """Log the requests refused before any route handler saw them (#1217).
+
+    Two signals cover the two places that happens: the response signal sees
+    every error answered after dispatch began (auth, rate limit, no route), and
+    the rejection signal sees the reads the server refused before a request
+    existed.
+    """
+    trust_proxy = config.rate_limit_trust_proxy
+
+    @app.on_response_started
+    async def _record_rejection(request: Any, response: Any) -> None:
+        await record_unrecorded_rejection(request, response)
+
+    @app.on_request_rejected
+    async def _record_read_rejection(rejection: Any) -> None:
+        await record_read_rejection(app, rejection, trust_proxy=trust_proxy)
 
 
 def _install_lifecycle_hooks(app: App) -> None:
@@ -485,6 +505,7 @@ async def create_app(
 
     # --- Response lifecycle hooks (httpserver 0.5.0+) ---
     _install_lifecycle_hooks(app)
+    _install_rejection_recording(app, config)
 
     return app
 

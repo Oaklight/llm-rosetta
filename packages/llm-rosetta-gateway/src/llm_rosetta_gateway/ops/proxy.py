@@ -50,6 +50,8 @@ class OpsProxyRequest(OpsBase):
         "model_type",
         "usage",
         "entry_id_override",
+        "request_id",
+        "client_ip",
         "_entry_id",
     )
 
@@ -69,6 +71,8 @@ class OpsProxyRequest(OpsBase):
         model_type: str = DEFAULT_MODEL_TYPE,
         usage: Mapping[str, Any] | None = None,
         entry_id_override: str | None = None,
+        request_id: str | None = None,
+        client_ip: str | None = None,
     ) -> None:
         super().__init__(ctx)
         self.model = model
@@ -83,6 +87,8 @@ class OpsProxyRequest(OpsBase):
         self.model_type = model_type
         self.usage = usage
         self.entry_id_override = entry_id_override
+        self.request_id = request_id
+        self.client_ip = client_ip
         self._entry_id: str | None = None
 
     @property
@@ -125,6 +131,10 @@ class OpsProxyRequest(OpsBase):
                 **_columns,
             )
 
+        await self._write_log_row(_columns)
+
+    async def _write_log_row(self, columns: Mapping[str, Any]) -> None:
+        """Write this request's ``request_log`` row, the one place a row is built."""
         request_log = self._ctx.request_log
         if request_log is not None:
             _kctx = api_key_context_var.get()
@@ -139,12 +149,12 @@ class OpsProxyRequest(OpsBase):
                 error_detail=self.error_detail,
                 api_key_label=_kctx.label if _kctx else None,
                 api_key_bucket=_kctx.usage_bucket if _kctx else None,
-                client_ip=(
-                    _rctx.client_ip if (_rctx := request_context_var.get()) else None
-                ),
+                client_ip=self.client_ip
+                or (_rctx.client_ip if (_rctx := request_context_var.get()) else None),
                 profile=self.profile,
                 model_type=self.model_type,
-                **_columns,
+                request_id=self.request_id,
+                **columns,
             )
             if self.entry_id_override:
                 entry = _dc_replace(entry, id=self.entry_id_override)
@@ -173,6 +183,8 @@ async def record_proxy_request(
     profile: dict[str, Any] | None = None,
     usage: Mapping[str, Any] | None = None,
     entry_id_override: str | None = None,
+    request_id: str | None = None,
+    client_ip: str | None = None,
 ) -> None:
     """Record one proxy request against the app's ops context.
 
@@ -203,5 +215,7 @@ async def record_proxy_request(
         model_type=model_type,
         usage=usage,
         entry_id_override=entry_id_override,
+        request_id=request_id,
+        client_ip=client_ip,
     )
     await op.execute()

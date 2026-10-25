@@ -409,6 +409,18 @@ class PersistenceManager:
                 "ALTER TABLE request_log ADD COLUMN model_type TEXT DEFAULT 'llm'",
             ],
         ),
+        (
+            7,
+            "add request_log.request_id so an X-Request-Id resolves to a row",
+            [
+                # ``id`` is the entry id, not the id the client sees in
+                # ``X-Request-Id``; without this column the only way to find a
+                # failing request was grepping the container log (#1217).
+                "ALTER TABLE request_log ADD COLUMN request_id TEXT",
+                "CREATE INDEX IF NOT EXISTS idx_rl_request_id "
+                "ON request_log(request_id)",
+            ],
+        ),
     ]
 
     async def _run_migrations(self) -> None:
@@ -576,6 +588,7 @@ class PersistenceManager:
         "reasoning_tokens",
         "api_key_bucket",
         "model_type",
+        "request_id",
     ]
 
     async def insert_log_entries(self, entries: list[dict[str, Any]]) -> None:
@@ -589,8 +602,8 @@ class PersistenceManager:
             "target_provider_name, client_ip, profile, "
             "input_tokens, output_tokens, total_tokens, "
             "cache_read_tokens, cache_creation_tokens, reasoning_tokens, "
-            "api_key_bucket, model_type) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "api_key_bucket, model_type, request_id) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 (
                     e["id"],
@@ -618,6 +631,7 @@ class PersistenceManager:
                     # that no breakdown counts is a row the report cannot
                     # reconcile.
                     e.get("model_type") or DEFAULT_MODEL_TYPE,
+                    e.get("request_id"),
                 )
                 for e in entries
             ],
@@ -2293,6 +2307,7 @@ class PersistenceManager:
                     "cache_creation_tokens",
                     "reasoning_tokens",
                     "api_key_bucket",
+                    "request_id",
                 )
                 and val is None
             ):
