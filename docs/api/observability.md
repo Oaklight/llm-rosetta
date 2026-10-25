@@ -100,6 +100,7 @@ entry = RequestLogEntry.create(
 | `target_provider_name` | `str \| None` | 提供方显示名称 |
 | `client_ip` | `str \| None` | 客户端 IP 地址 |
 | `profile` | `dict \| None` | 性能分析数据 |
+| `request_id` | `str \| None` | `X-Request-Id` 中返回的 id，客户端看到的 id 因此能对应到一行 |
 
 ---
 
