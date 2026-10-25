@@ -84,8 +84,8 @@ class TestChatCompletionsMessageOps:
         assert isinstance(result[0]["content"], list)
         assert len(result[0]["content"]) == 2
 
-    def test_user_message_with_tool_result_split(self):
-        """Test user message with ToolResultPart splits into tool role message."""
+    def test_user_message_drops_orphan_tool_result(self):
+        """An unpaired tool result cannot be emitted as a wire tool message."""
         messages = cast(
             list[Message],
             [
@@ -103,14 +103,13 @@ class TestChatCompletionsMessageOps:
             ],
         )
         result, warnings = self.message_ops.ir_messages_to_p(messages)
-        assert len(result) == 2
+        assert len(result) == 1
         assert result[0]["role"] == "user"
         assert result[0]["content"] == "Here's the result"
-        assert result[1]["role"] == "tool"
-        assert result[1]["tool_call_id"] == "call_1"
+        assert any("no preceding assistant" in warning for warning in warnings)
 
     def test_user_message_only_tool_result(self):
-        """Test user message with only ToolResultPart → only tool message."""
+        """A user message containing only an orphan tool result is dropped."""
         messages = cast(
             list[Message],
             [
@@ -127,8 +126,8 @@ class TestChatCompletionsMessageOps:
             ],
         )
         result, warnings = self.message_ops.ir_messages_to_p(messages)
-        assert len(result) == 1
-        assert result[0]["role"] == "tool"
+        assert result == []
+        assert any("no preceding assistant" in warning for warning in warnings)
 
     def test_assistant_text_message_to_p(self):
         """Test IR assistant text message → OpenAI assistant message."""
@@ -240,7 +239,7 @@ class TestChatCompletionsMessageOps:
         validate(ir, Message)
 
     def test_tool_message_to_p(self):
-        """Test IR tool message → OpenAI tool role message."""
+        """A tool message without an assistant declaration is dropped."""
         messages = cast(
             list[Message],
             [
@@ -257,10 +256,8 @@ class TestChatCompletionsMessageOps:
             ],
         )
         result, warnings = self.message_ops.ir_messages_to_p(messages)
-        assert len(result) == 1
-        assert result[0]["role"] == "tool"
-        assert result[0]["tool_call_id"] == "call_1"
-        assert result[0]["content"] == "Result data"
+        assert result == []
+        assert any("no preceding assistant" in warning for warning in warnings)
 
     def test_extension_items_handling(self):
         """Test extension items produce warnings."""
@@ -522,6 +519,222 @@ class TestChatCompletionsMessageOps:
 
         assert [m["role"] for m in result] == ["assistant", "tool", "user"]
         assert not any("Reordered" in w for w in warnings)
+
+    def test_reorder_reused_tool_call_ids_consumes_results_once(self):
+        """Reused IDs get distinct wire IDs and each result is emitted once."""
+
+        def tool_call(call_id: str, name: str) -> ToolCallPart:
+            return ToolCallPart(
+                type="tool_call",
+                tool_call_id=call_id,
+                tool_name=name,
+                tool_input={},
+            )
+
+        messages = cast(
+            list[Message],
+            [
+                {
+                    "role": "assistant",
+                    "content": [
+                        tool_call("call_shared", "first_shared"),
+                        tool_call("call_other", "first_other"),
+                    ],
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "interleaved"},
+                        ToolResultPart(
+                            type="tool_result",
+                            tool_call_id="call_shared",
+                            result="first shared result",
+                        ),
+                        ToolResultPart(
+                            type="tool_result",
+                            tool_call_id="call_other",
+                            result="first other result",
+                        ),
+                    ],
+                },
+                {
+                    "role": "assistant",
+                    "content": [
+                        tool_call("call_shared", "second_shared"),
+                        tool_call("call_other", "second_other"),
+                    ],
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "second interleaving"},
+                        ToolResultPart(
+                            type="tool_result",
+                            tool_call_id="call_shared",
+                            result="second shared result",
+                        ),
+                        ToolResultPart(
+                            type="tool_result",
+                            tool_call_id="call_other",
+                            result="second other result",
+                        ),
+                    ],
+                },
+            ],
+        )
+
+        result, warnings = self.message_ops.ir_messages_to_p(messages)
+
+        assistants = [m for m in result if m["role"] == "assistant"]
+        tools = [m for m in result if m["role"] == "tool"]
+        declared_ids = [
+            call["id"] for assistant in assistants for call in assistant["tool_calls"]
+        ]
+        result_ids = [tool["tool_call_id"] for tool in tools]
+        assert len(result_ids) == 4
+        assert len(result_ids) == len(set(result_ids))
+        assert result_ids == declared_ids
+        assert [tool["content"] for tool in tools] == [
+            "first shared result",
+            "first other result",
+            "second shared result",
+            "second other result",
+        ]
+        assert assistants[0]["tool_calls"][0]["id"] == "call_shared"
+        assert assistants[1]["tool_calls"][0]["id"] != "call_shared"
+        assert any("Renamed duplicate tool_call_id" in w for w in warnings)
+        assert any("Reordered tool messages" in w for w in warnings)
+
+    def test_reorder_ambiguous_reused_id_uses_nearest_pending_call(self):
+        """Ambiguous results bind to the nearest call and report the policy."""
+        messages = cast(
+            list[Message],
+            [
+                {
+                    "role": "assistant",
+                    "content": [
+                        ToolCallPart(
+                            type="tool_call",
+                            tool_call_id="call_repeat",
+                            tool_name="first",
+                            tool_input={},
+                        )
+                    ],
+                },
+                {
+                    "role": "assistant",
+                    "content": [
+                        ToolCallPart(
+                            type="tool_call",
+                            tool_call_id="call_repeat",
+                            tool_name="second",
+                            tool_input={},
+                        )
+                    ],
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        ToolResultPart(
+                            type="tool_result",
+                            tool_call_id="call_repeat",
+                            result="first result in input order",
+                        ),
+                        ToolResultPart(
+                            type="tool_result",
+                            tool_call_id="call_repeat",
+                            result="second result in input order",
+                        ),
+                    ],
+                },
+            ],
+        )
+
+        result, warnings = self.message_ops.ir_messages_to_p(messages)
+
+        assistants = [m for m in result if m["role"] == "assistant"]
+        tools = [m for m in result if m["role"] == "tool"]
+        assert len(tools) == 2
+        assert tools[0]["tool_call_id"] == assistants[0]["tool_calls"][0]["id"]
+        assert tools[0]["content"] == "second result in input order"
+        assert tools[1]["tool_call_id"] == assistants[1]["tool_calls"][0]["id"]
+        assert tools[1]["content"] == "first result in input order"
+        assert any("Ambiguous tool result" in w for w in warnings)
+
+    def test_reorder_reused_id_adds_placeholder_for_unanswered_occurrence(self):
+        """The IR set-based orphan check cannot fill a repeated ID occurrence."""
+        messages = cast(
+            list[Message],
+            [
+                {
+                    "role": "assistant",
+                    "content": [
+                        ToolCallPart(
+                            type="tool_call",
+                            tool_call_id="call_repeat",
+                            tool_name="first",
+                            tool_input={},
+                        )
+                    ],
+                },
+                {
+                    "role": "assistant",
+                    "content": [
+                        ToolCallPart(
+                            type="tool_call",
+                            tool_call_id="call_repeat",
+                            tool_name="second",
+                            tool_input={},
+                        )
+                    ],
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        ToolResultPart(
+                            type="tool_result",
+                            tool_call_id="call_repeat",
+                            result="second result",
+                        )
+                    ],
+                },
+            ],
+        )
+
+        result, warnings = self.message_ops.ir_messages_to_p(messages)
+
+        assistants = [m for m in result if m["role"] == "assistant"]
+        tools = [m for m in result if m["role"] == "tool"]
+        assert len(tools) == 2
+        assert tools[0]["tool_call_id"] == assistants[0]["tool_calls"][0]["id"]
+        assert tools[0]["content"] == "[No output available yet]"
+        assert tools[1]["tool_call_id"] == assistants[1]["tool_calls"][0]["id"]
+        assert tools[1]["content"] == "second result"
+        assert len({tool["tool_call_id"] for tool in tools}) == 2
+        assert any("unanswered duplicate tool_call_id" in w for w in warnings)
+
+    def test_reorder_drops_orphan_tool_result_with_warning(self):
+        """A result without a matching call cannot remain invalid wire data."""
+        messages = cast(
+            list[Message],
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        ToolResultPart(
+                            type="tool_result",
+                            tool_call_id="call_missing",
+                            result="orphan result",
+                        )
+                    ],
+                }
+            ],
+        )
+
+        result, warnings = self.message_ops.ir_messages_to_p(messages)
+
+        assert result == []
+        assert any("no preceding assistant" in w for w in warnings)
 
     # ==================== Provider → IR ====================
 
