@@ -26,6 +26,10 @@ from ..config import GatewayConfig
 from ..routing import SelectionContext
 from ..lifecycle import current_lifecycle, instrumented_handler
 from ..transport import ProviderInfo
+from ..middleware.error_format import (
+    detect_api_format_from_provider,
+    format_error_response,
+)
 from ..middleware.headers import (
     build_upstream_extra_headers,
     get_preflight_tokens_override,
@@ -45,6 +49,34 @@ from ..maintenance.startup import ProviderNotReady
 from . import _state
 
 logger = get_logger()
+
+
+def _unknown_model_response(
+    config: GatewayConfig,
+    source_provider: ProviderType,
+    model: str,
+    request_id: str,
+) -> Response:
+    """The 404 for a model the gateway does not serve, in the client's own format.
+
+    Each wire has its own spelling for "no such model": OpenAI's formats carry
+    ``code: model_not_found``, Anthropic's type is ``not_found_error`` and
+    Google's status is ``NOT_FOUND``.
+    """
+    api_format = detect_api_format_from_provider(source_provider)
+    configured = ", ".join(sorted(config.models.keys()))
+    resp = format_error_response(
+        api_format,
+        404,
+        f"Unknown model: '{model}'. Configured models: {configured}",
+        error_type="not_found_error"
+        if api_format == "anthropic"
+        else "invalid_request_error",
+        error_code="model_not_found",
+        google_status="NOT_FOUND",
+    )
+    resp.headers["x-request-id"] = request_id
+    return resp
 
 
 def _resolve_or_error(
@@ -69,14 +101,7 @@ def _resolve_or_error(
             resp.headers["Retry-After"] = "5"
         return resp
     except KeyError:
-        configured = ", ".join(sorted(config.models.keys()))
-        resp = error_response_for_source(
-            source_provider,
-            404,
-            f"Unknown model: '{model}'. Configured models: {configured}",
-        )
-        resp.headers["x-request-id"] = request_id
-        return resp
+        return _unknown_model_response(config, source_provider, model, request_id)
 
 
 async def _proxy_handler(
@@ -143,6 +168,8 @@ async def _handle_llm(
     # provider selection needs it now, and the upstream credential and session
     # identity will need it again once the request has been converted.
     _kctx = api_key_context_var.get()
+    if model not in config.models:
+        return _unknown_model_response(config, source_provider, model, ctx.request_id)
     selection = config.selection_context(model, source_provider)
     selection.with_client(_kctx.key_hash if _kctx else None)
 
