@@ -105,6 +105,7 @@ entry = RequestLogEntry.create(
 | `target_provider_name` | `str \| None` | Provider display name |
 | `client_ip` | `str \| None` | Client IP address |
 | `profile` | `dict \| None` | Profiling data |
+| `request_id` | `str \| None` | The id returned in `X-Request-Id`, so a client-visible id resolves to a row |
 
 ---
 
