@@ -549,9 +549,24 @@ class TestCredentialBoundary:
                 "deadbeefcafe1234",
             ),
             (
+                'Authorization: Digest username="u", uri="/a?b=1&c=2", '
+                'response="deadbeefcafe1234"',
+                "deadbeefcafe1234",
+            ),
+            (
+                "Authorization: Digest username=u, uri=/a?b=1&c=2, "
+                "response=deadbeefcafe1234",
+                "deadbeefcafe1234",
+            ),
+            (
                 "Proxy-Authorization: AWS4-HMAC-SHA256 "
                 "Credential=a/20260101/x, Signature=abc123def456",
                 "abc123def456",
+            ),
+            (
+                'authorization="Digest username="u", nonce="n", '
+                'response="feedface1234",',
+                "feedface1234",
             ),
             ("Set-Cookie: sid=qwerty987654; HttpOnly", "qwerty987654"),
             ('{"cookie": "sid=qwerty987654; a=b"', "qwerty987654"),
@@ -577,9 +592,29 @@ class TestCredentialBoundary:
                 "Authorization: [REDACTED]",
             ),
             (
+                # A Digest ``uri`` carries the query string, so a ``&`` in a
+                # pasted header line is part of the credential, not a boundary.
+                'Authorization: Digest username="u", uri="/a?b=1&c=2", '
+                'response="deadbeef"',
+                "Authorization: [REDACTED]",
+            ),
+            (
+                "Authorization: Digest username=u, uri=/a?b=1&c=2, response=deadbeef",
+                "Authorization: [REDACTED]",
+            ),
+            (
                 "Proxy-Authorization: AWS4-HMAC-SHA256 Credential=a/x, "
                 "Signature=abc123",
                 "Proxy-Authorization: [REDACTED]",
+            ),
+            (
+                "authorization=Bearer+tok&model=gpt-4&stream=true",
+                "authorization=[REDACTED]&model=gpt-4&stream=true",
+            ),
+            (
+                '{"model":"m","authorization":"Digest username="u", '
+                'response="deadbeef","messages":[',
+                '{"model":"m","authorization":"[REDACTED]"',
             ),
             (f"authorization=Bearer+{_OPAQUE}", "authorization=[REDACTED]"),
             ("Cookie: session=abc123; Path=/", "Cookie: [REDACTED]"),

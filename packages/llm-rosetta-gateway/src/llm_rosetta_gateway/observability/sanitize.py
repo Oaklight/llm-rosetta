@@ -59,15 +59,24 @@ _COOKIE_LINE = re.compile(r"(?im)^(?P<name>[ \t]*(?:set-)?cookie[ \t]*:[ \t]*)[^
 # The same holds for ``Authorization``: a Digest or AWS4-HMAC-SHA256 credential
 # is a list of comma-separated parameters, and stopping at the first comma left
 # the proof parameter (``response=``, ``Signature=``) in the stored body.  A
-# quoted value is taken whole; an unquoted one — a header line pasted into a
-# body, or a form field — is taken to the end of its line, because where one
-# parameter ends cannot be told without parsing the scheme.
+# quoted value is taken whole; an unquoted one is taken to the end of its line,
+# because where one parameter ends cannot be told without parsing the scheme.
+# The separator decides what follows: only a ``name=value`` field is also
+# bounded by ``&``, and only there — a pasted ``Authorization:`` line is a
+# header, and a Digest ``uri`` parameter carries a query string of its own.
 _AUTH_VALUE = re.compile(
     r"""(?im)
-    (?P<name>(?<![A-Za-z0-9_-])["']?(?:proxy-)?authorization["']?[ \t]*[:=][ \t]*)
+    (?P<name>(?<![A-Za-z0-9_-])["']?(?:proxy-)?authorization["']?[ \t]*(?P<sep>[:=])[ \t]*)
     (?P<value>
+        # A "quoted" value whose line still holds another field: the quotes are
+        # already broken (that is why the body did not parse), so the tidy
+        # string ends early and the rest of the line belongs to the credential.
+        "(?:[^"\\]|\\.)*"(?=[^\r\n]*=)[^\r\n]*
+      | # A well-formed quoted value.
         "(?:[^"\\]|\\.)*"
-      | [^\r\n]+
+      | # Unquoted: to the end of the line; the caller trims a form field at
+        # its ``&``, where the next field starts.
+        [^\r\n]+
     )""",
     re.VERBOSE,
 )
@@ -76,7 +85,14 @@ _AUTH_VALUE = re.compile(
 def _redact_auth(match: re.Match[str]) -> str:
     """Keep the field name; replace its value, quoting it if it was quoted."""
     value = match.group("value")
-    return match.group("name") + ('"[REDACTED]"' if value[:1] == '"' else "[REDACTED]")
+    if value[:1] == '"':
+        return match.group("name") + '"[REDACTED]"'
+    if match.group("sep") == "=":
+        # A form field ends at ``&``, which cannot appear unescaped in a value;
+        # whatever follows it is a different field, not part of the credential.
+        head, amp, rest = value.partition("&")
+        return match.group("name") + "[REDACTED]" + amp + rest
+    return match.group("name") + "[REDACTED]"
 
 
 def scrub_body_text(text: str, secrets: Iterable[str] = ()) -> str:
