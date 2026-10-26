@@ -10,6 +10,7 @@
 
 <p align="center">
   <a href="https://pypi.org/project/llm-rosetta/"><img src="https://img.shields.io/pypi/v/llm-rosetta?color=green" alt="PyPI"></a>
+  <a href="https://test.pypi.org/project/llm-rosetta/"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Ftest.pypi.org%2Fpypi%2Fllm-rosetta%2Fjson&query=%24.info.version&label=TestPyPI&color=blue" alt="TestPyPI"></a>
   <a href="https://github.com/Oaklight/llm-rosetta/releases/latest"><img src="https://img.shields.io/github/v/release/Oaklight/llm-rosetta?color=green" alt="Release"></a>
   <a href="https://hub.docker.com/r/oaklight/llm-rosetta-gateway"><img src="https://img.shields.io/docker/v/oaklight/llm-rosetta-gateway?label=Docker&color=blue" alt="Docker"></a>
   <a href="https://github.com/Oaklight/llm-rosetta/actions/workflows/ci.yml"><img src="https://github.com/Oaklight/llm-rosetta/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
