@@ -64,6 +64,9 @@ from ...base.tools import (
     sanitize_tool_call_id,
     strip_orphaned_tool_config,
 )
+from llm_rosetta.ir.primitives.finish_reason import (
+    reason_for_completed_turn,
+)
 from .stream_context import MessageItemState, OpenResponsesStreamContext
 from ._constants import (
     OPEN_RESPONSES_PRESERVE_FIELDS,
@@ -111,13 +114,16 @@ def _response_finish_reason(response: dict[str, Any]) -> str:
         details = response.get("incomplete_details")
         reason = details.get("reason", "") if isinstance(details, dict) else ""
         return RESPONSES_INCOMPLETE_REASON_TO_IR.get(reason, "stop")
-    if status == "completed" and any(
+    # ``status: completed`` says nothing about tool calls; the output items do.
+    calls_the_client = status == "completed" and any(
         isinstance(item, dict)
         and item.get("type") in {"function_call", "custom_tool_call"}
         for item in response.get("output", [])
-    ):
-        return "tool_calls"
-    return RESPONSES_STATUS_TO_REASON.get(status or "", "stop")
+    )
+    return reason_for_completed_turn(
+        RESPONSES_STATUS_TO_REASON.get(status or "", "stop"),
+        calls_the_client,
+    )
 
 
 def _response_failure_metadata(

@@ -48,6 +48,10 @@ from ...base.helpers.opaque import (
     set_opaque_origin,
 )
 from llm_rosetta.ir.primitives.system_message_hoist import hoist_system_in_converter
+from llm_rosetta.ir.primitives.finish_reason import (
+    client_tool_calls_in,
+    reason_for_completed_turn,
+)
 from ...base.tools import is_intrinsic_part
 from ...base.tools.intrinsic import intrinsic_kind_of
 from ....transforms.ir import hoist_late_system_messages
@@ -377,8 +381,14 @@ class GoogleInteractionsConverter(BaseConverter):
         }
 
         status = resp.get("status", "completed")
-        reason_str = _STATUS_TO_FINISH_REASON.get(status, "stop")
-        finish_reason: Any = {"reason": reason_str}
+        # ``completed`` says nothing about tool calls; the steps do.  The API
+        # normally reports ``requires_action`` for them, but not always.
+        finish_reason: Any = {
+            "reason": reason_for_completed_turn(
+                _STATUS_TO_FINISH_REASON.get(status, "stop"),
+                client_tool_calls_in(combined_parts),
+            )
+        }
 
         choice: Any = {
             "index": 0,
