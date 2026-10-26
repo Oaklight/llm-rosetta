@@ -13,7 +13,7 @@ import logging
 from collections.abc import Sequence
 from typing import Any, cast
 
-from llm_rosetta.types.ir import IRInputItem, is_message
+from llm_rosetta.types.ir import IRInputItem, is_message, is_tool_result_part
 from llm_rosetta.types.ir.request import IRRequest
 from .intrinsic import is_intrinsic_part
 
@@ -110,7 +110,7 @@ def _collect_ir_tool_ids(
     for msg in messages:
         if not is_message(msg):
             continue
-        content = msg.get("content", [])
+        content = msg.get("content") or []
         answered_ids |= extract_part_ids(content, "tool_result", "tool_call_id")
         if msg.get("role") != "assistant":
             continue
@@ -179,14 +179,31 @@ def fix_orphaned_tool_calls_ir(
             patched.append(msg)
             continue
         role = msg.get("role")
-        content = msg.get("content", [])
+        content = msg.get("content") or []
 
-        # Remove orphaned tool results (result without preceding tool_call)
-        if role == "tool":
-            result_ids = extract_part_ids(content, "tool_result", "tool_call_id")
-            if result_ids and result_ids.isdisjoint(known_call_ids):
-                orphaned_result_ids.extend(result_ids)
-                continue
+        # Remove orphaned tool results (result without preceding tool_call).
+        # A result rides in a ``role: "tool"`` message in some dialects and in
+        # a user turn in others, so the parts are checked wherever they appear;
+        # only the orphan parts go, and the rest of the message is kept.
+        if isinstance(content, list):
+            orphan_ids = (
+                extract_part_ids(content, "tool_result", "tool_call_id")
+                - known_call_ids
+            )
+            if orphan_ids:
+                orphaned_result_ids.extend(sorted(orphan_ids))
+                kept = [
+                    part
+                    for part in content
+                    if not (
+                        is_tool_result_part(part)
+                        and part.get("tool_call_id") in orphan_ids
+                    )
+                ]
+                if not kept:
+                    continue
+                msg = cast(IRInputItem, {**msg, "content": kept})
+                content = kept
 
         patched.append(msg)
 
