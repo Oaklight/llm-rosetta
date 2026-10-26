@@ -543,6 +543,16 @@ class TestCredentialBoundary:
             (f"Authorization: Basic {_PAIR}", _PAIR),
             ("authorization: opaque-internal-token-77", "opaque-internal-token-77"),
             ("Cookie: session=abcdef123456ghijkl; Path=/", "abcdef123456ghijkl"),
+            (
+                'Authorization: Digest username="u", nonce="n", '
+                'response="deadbeefcafe1234"',
+                "deadbeefcafe1234",
+            ),
+            (
+                "Proxy-Authorization: AWS4-HMAC-SHA256 "
+                "Credential=a/20260101/x, Signature=abc123def456",
+                "abc123def456",
+            ),
             ("Set-Cookie: sid=qwerty987654; HttpOnly", "qwerty987654"),
             ('{"cookie": "sid=qwerty987654; a=b"', "qwerty987654"),
         ],
@@ -562,6 +572,15 @@ class TestCredentialBoundary:
         ("text", "expected"),
         [
             (f"Authorization: Bearer {_OPAQUE}", "Authorization: [REDACTED]"),
+            (
+                'Authorization: Digest username="u", response="deadbeef"',
+                "Authorization: [REDACTED]",
+            ),
+            (
+                "Proxy-Authorization: AWS4-HMAC-SHA256 Credential=a/x, "
+                "Signature=abc123",
+                "Proxy-Authorization: [REDACTED]",
+            ),
             (f"authorization=Bearer+{_OPAQUE}", "authorization=[REDACTED]"),
             ("Cookie: session=abc123; Path=/", "Cookie: [REDACTED]"),
             (
@@ -572,6 +591,11 @@ class TestCredentialBoundary:
     )
     def test_the_scrub_output_is_exact(self, text, expected):
         assert scrub_body_text(text) == expected
+
+    def test_the_scrub_leaves_a_similarly_named_header_alone(self):
+        text = '{"X-Authorization-Id": "7", "authorization_note": "draft"}'
+
+        assert scrub_body_text(text) == text
 
     async def test_an_unquoted_value_is_redacted_too(self, served):
         await served.send("POST", "/v1/chat/completions", b"api_key=short-1234&x=")
