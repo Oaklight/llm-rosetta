@@ -36,6 +36,7 @@ from .intrinsic import (  # noqa: F401
     make_intrinsic_tool_result,
 )
 from .orphan_fix import (  # noqa: F401
+    UNANSWERED_TOOL_CALL,
     extract_part_ids,
     fix_orphaned_tool_calls_ir,
     log_orphan_warnings,
@@ -45,6 +46,7 @@ from .strict_mode import ir_strict, write_ir_strict  # noqa: F401
 
 __all__ = [
     "TOOL_ERROR_MARKER",
+    "UNANSWERED_TOOL_CALL",
     "allowed_tool_names",
     "allowed_tool_refs",
     "assign_tool_batch_ids",

@@ -30,6 +30,7 @@ from llm_rosetta.capabilities import degrade_intrinsic_history
 from llm_rosetta.converters.base.context import ConversionContext
 from llm_rosetta.converters.llm.chat_completions import ChatCompletionsConverter
 from llm_rosetta.converters.llm.google_generate import GoogleGenerateConverter
+from llm_rosetta.ir.tools.orphan_fix import UNANSWERED_TOOL_CALL
 from llm_rosetta.converters.llm.google_interactions import GoogleInteractionsConverter
 from llm_rosetta.converters.llm.messages import MessagesConverter
 from llm_rosetta.converters.llm.open_responses import OpenAIResponsesConverter
@@ -480,7 +481,7 @@ def test_a_degraded_pair_is_answered_once():
 
     An IR whose result rides in a ``role:"user"`` turn (as a cross-format hop
     or a hand-built request can produce) used to look unanswered once the pair
-    was degraded, and the fixer injected ``[No output available yet]`` *beside*
+    was degraded, and the fixer injected ``[llm-rosetta: no tool output was recorded for this call]`` *beside*
     the real result, under the same call id.
     """
     request: dict[str, Any] = {
@@ -529,4 +530,4 @@ def test_a_degraded_pair_is_answered_once():
     ]
     assert len(results) == 1
     assert results[0]["content"] == "RESULT"
-    assert "No output available yet" not in json.dumps(body)
+    assert UNANSWERED_TOOL_CALL not in json.dumps(body)

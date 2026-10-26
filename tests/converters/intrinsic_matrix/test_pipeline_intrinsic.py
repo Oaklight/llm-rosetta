@@ -23,6 +23,7 @@ from llm_rosetta.capabilities.tool_names import (
 )
 from llm_rosetta.converters.base.tools.intrinsic import make_intrinsic_tool_call
 from llm_rosetta.pipeline import ConversionPipeline
+from llm_rosetta.ir.tools.orphan_fix import UNANSWERED_TOOL_CALL
 from llm_rosetta.shims.provider_shim import ProviderShim, ToolsConfig
 
 from .conftest import ir_history
@@ -406,14 +407,14 @@ def test_orphan_fix_does_not_placeholder_a_server_call():
     out, _ = ChatCompletionsConverter().request_to_provider(cast(Any, _orphan_ir()))
     roles = [m["role"] for m in out["messages"]]
     assert "tool" not in roles
-    assert "[No output available yet]" not in json.dumps(out)
+    assert UNANSWERED_TOOL_CALL not in json.dumps(out)
 
 
 def test_orphan_fix_placeholder_does_not_reach_google_generate():
     from llm_rosetta.converters.llm.google_generate import GoogleGenerateConverter
 
     out, _ = GoogleGenerateConverter().request_to_provider(cast(Any, _orphan_ir()))
-    assert "[No output available yet]" not in json.dumps(out)
+    assert UNANSWERED_TOOL_CALL not in json.dumps(out)
 
 
 def test_orphan_fix_still_placeholders_an_unanswered_client_call():
@@ -442,7 +443,7 @@ def test_orphan_fix_still_placeholders_an_unanswered_client_call():
     ir["messages"][1]["content"][0]["tool_type"] = "function"
     ir["messages"][1]["content"][0]["intrinsic_kind"] = ""
     out, _ = ChatCompletionsConverter().request_to_provider(cast(Any, ir))
-    assert "[No output available yet]" in json.dumps(out)
+    assert UNANSWERED_TOOL_CALL in json.dumps(out)
 
 
 def test_orphan_fix_leaves_an_answered_intrinsic_call_alone():
@@ -450,7 +451,7 @@ def test_orphan_fix_leaves_an_answered_intrinsic_call_alone():
 
     ir = ir_history("web_search")
     out, _ = ChatCompletionsConverter().request_to_provider(cast(Any, ir))
-    assert "[No output available yet]" not in json.dumps(out)
+    assert UNANSWERED_TOOL_CALL not in json.dumps(out)
 
 
 # ---------------------------------------------------------------------------

@@ -20,6 +20,12 @@ from .intrinsic import is_intrinsic_part
 logger = logging.getLogger(__name__)
 
 
+# Content of the synthetic ``tool`` result the fixers emit for a call nothing
+# answered. It is content this library invents, so it names its own provenance
+# instead of reading as something the tool returned.
+UNANSWERED_TOOL_CALL = "[llm-rosetta: no tool output was recorded for this call]"
+
+
 # ==================== Shared Helpers ====================
 
 
@@ -121,7 +127,7 @@ def _collect_ir_tool_ids(
 def fix_orphaned_tool_calls_ir(
     messages: Sequence[IRInputItem],
     *,
-    placeholder: str = "[No output available yet]",
+    placeholder: str = UNANSWERED_TOOL_CALL,
 ) -> list[IRInputItem]:
     """Fix mismatched tool_calls and tool results at IR level.
 

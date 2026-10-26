@@ -28,6 +28,7 @@ from ....types.ir import (
     ToolResultPart,
 )
 from ....types.ir.tools import ToolCallConfig
+from ....ir.tools.orphan_fix import UNANSWERED_TOOL_CALL
 from ...base import BaseToolOps, IntrinsicLeg
 from llm_rosetta.conversion_warnings import report_drop
 from ...base.helpers.opaque import CARRIER_KEY
@@ -111,7 +112,7 @@ _INTRINSIC_RESULT_TYPES: dict[str, str] = {
 def fix_orphaned_tool_calls(
     items: list[dict[str, Any]],
     *,
-    placeholder: str = "[No output available yet]",
+    placeholder: str = UNANSWERED_TOOL_CALL,
 ) -> list[dict[str, Any]]:
     """Fix mismatched function_calls and outputs in OpenAI Responses format.
 
