@@ -14,6 +14,7 @@ from llm_rosetta.converters.base.tools.multimodal_patch import (
 from llm_rosetta.converters.llm.chat_completions.content_ops import (
     ChatCompletionsContentOps,
 )
+from llm_rosetta.ir.tools.orphan_fix import UNANSWERED_TOOL_CALL
 from llm_rosetta.converters.llm.chat_completions.message_ops import (
     ChatCompletionsMessageOps,
 )
@@ -707,7 +708,7 @@ class TestChatCompletionsMessageOps:
         tools = [m for m in result if m["role"] == "tool"]
         assert len(tools) == 2
         assert tools[0]["tool_call_id"] == assistants[0]["tool_calls"][0]["id"]
-        assert tools[0]["content"] == "[No output available yet]"
+        assert tools[0]["content"] == UNANSWERED_TOOL_CALL
         assert tools[1]["tool_call_id"] == assistants[1]["tool_calls"][0]["id"]
         assert tools[1]["content"] == "second result"
         assert len({tool["tool_call_id"] for tool in tools}) == 2

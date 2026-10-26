@@ -35,6 +35,7 @@ from ....types.ir import (
 )
 from ...base import BaseMessageOps
 from ...base.tools import sanitize_tool_call_id
+from ....ir.tools.orphan_fix import UNANSWERED_TOOL_CALL
 from ...base.helpers.citations import report_dropped_citation
 from ...base.helpers.opaque import (
     set_opaque_origin,
@@ -353,7 +354,7 @@ class ChatCompletionsMessageOps(BaseMessageOps):
                     tool_message = {
                         "role": "tool",
                         "tool_call_id": call_ref.wire_id,
-                        "content": "[No output available yet]",
+                        "content": UNANSWERED_TOOL_CALL,
                     }
                     warnings.append(
                         "Inserted placeholder for unanswered duplicate "
