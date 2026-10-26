@@ -47,7 +47,8 @@ _SECRET_FIELD = re.compile(
         (?:set-)?cookie|session[_-]?id)
         ["']?\s*[:=]\s*)
         (?P<value>"(?:[^"\\]|\\.)*"?|'[^']*'?|
-        (?:(?:bearer|basic|digest|negotiate|token)[ \t]+)?[^\s,;&}\]]+)""",
+        (?:(?:bearer|basic|digest|negotiate|token)[ \t]+)?
+        (?!\[REDACTED\])[^\s,;&}\]]+)""",
     re.IGNORECASE | re.VERBOSE,
 )
 
@@ -55,19 +56,44 @@ _SECRET_FIELD = re.compile(
 # it is redacted to the end of the line rather than to the first separator.
 _COOKIE_LINE = re.compile(r"(?im)^(?P<name>[ \t]*(?:set-)?cookie[ \t]*:[ \t]*)[^\r\n]+")
 
+# The same holds for ``Authorization``: a Digest or AWS4-HMAC-SHA256 credential
+# is a list of comma-separated parameters, and stopping at the first comma left
+# the proof parameter (``response=``, ``Signature=``) in the stored body.  A
+# quoted value is taken whole; an unquoted one — a header line pasted into a
+# body, or a form field — is taken to the end of its line, because where one
+# parameter ends cannot be told without parsing the scheme.
+_AUTH_VALUE = re.compile(
+    r"""(?im)
+    (?P<name>(?<![A-Za-z0-9_-])["']?(?:proxy-)?authorization["']?[ \t]*[:=][ \t]*)
+    (?P<value>
+        "(?:[^"\\]|\\.)*"
+      | [^\r\n]+
+    )""",
+    re.VERBOSE,
+)
+
+
+def _redact_auth(match: re.Match[str]) -> str:
+    """Keep the field name; replace its value, quoting it if it was quoted."""
+    value = match.group("value")
+    return match.group("name") + ('"[REDACTED]"' if value[:1] == '"' else "[REDACTED]")
+
 
 def scrub_body_text(text: str, secrets: Iterable[str] = ()) -> str:
     """Redact credentials from the text of a request body that did not parse.
 
-    Three layers, each catching what the others miss: the value of any field
-    named like a credential (``api_key``, ``authorization``, ``token``,
-    ``secret``, ``password``, ``cookie``…, with an auth scheme such as
-    ``Bearer`` or ``Basic`` taken as part of the value), every string in *secrets* verbatim (the keys the
-    gateway itself holds, whatever shape the vendor gave them), and the
-    vendor-shaped patterns of :func:`scrub_credential_patterns`.  A credential
-    that is none of these — an arbitrary string under an arbitrary field name,
-    not configured here — is not recognised.
+    Three layers, each catching what the others miss: an ``Authorization``,
+    ``Proxy-Authorization`` or cookie line redacted whole, because a Digest or
+    signature credential is a list of parameters rather than one token; the
+    value of any field named like a credential (``api_key``, ``token``,
+    ``secret``, ``password``…, with an auth scheme such as ``Bearer`` or
+    ``Basic`` taken as part of the value); every string in *secrets* verbatim
+    (the keys the gateway itself holds, whatever shape the vendor gave them);
+    and the vendor-shaped patterns of :func:`scrub_credential_patterns`.  A
+    credential that is none of these — an arbitrary string under an arbitrary
+    field name, not configured here — is not recognised.
     """
+    text = _AUTH_VALUE.sub(_redact_auth, text)
     text = _SECRET_FIELD.sub(
         lambda m: (
             m.group("name") + '"[REDACTED]"'
