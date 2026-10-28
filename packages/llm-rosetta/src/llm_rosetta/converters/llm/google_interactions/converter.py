@@ -435,12 +435,14 @@ class GoogleInteractionsConverter(BaseConverter):
                 [assistant_msg], warnings=citation_warning_sink(kwargs, context)
             )
 
-        # Override status when steps contain function_call but finish_reason
-        # was "stop" (Google generateContent returns STOP for tool calls)
-        if status == "completed" and any(
-            s.get("type") == "function_call" for s in steps
-        ):
-            status = "requires_action"
+        # The status follows the IR finish reason alone.  It used to be
+        # forced to ``requires_action`` whenever a step was a function call,
+        # compensating for the reader that mapped ``completed`` to ``stop``;
+        # the reader now decides a completed client-call turn is
+        # ``tool_calls`` (``reason_for_completed_turn``), so forcing it here
+        # would override a correct reason — and would turn a provider-hosted
+        # call, which is ``stop`` by design, into a request for the client to
+        # act on it.
 
         created_ts = ir_response.get("created", int(time.time()))
         created_iso = datetime.fromtimestamp(created_ts, tz=timezone.utc).isoformat()
