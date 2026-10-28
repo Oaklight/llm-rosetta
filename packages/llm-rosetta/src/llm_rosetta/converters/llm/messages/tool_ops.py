@@ -5,10 +5,6 @@ Anthropic Messages API tool conversion operations.
 Handles bidirectional conversion of tool definitions, calls, results,
 choice strategies, and call configurations.
 
-Also provides ``fix_orphaned_tool_calls`` — a module-level utility that
-fixes bidirectional mismatches between tool_use and tool_result blocks
-(Anthropic rejects both orphaned calls and orphaned results with 400).
-
 Self-contained: does not depend on utils/ToolCallConverter or utils/ToolConverter.
 """
 
@@ -27,18 +23,15 @@ from ....types.ir import (
     ToolResultPart,
 )
 from ....types.ir.tools import ToolCallConfig
-from ....ir.tools.orphan_fix import UNANSWERED_TOOL_CALL
 from ...base import BaseToolOps, IntrinsicLeg
 from llm_rosetta.conversion_warnings import report_drop
 from ...base.helpers.opaque import CARRIER_KEY
 from ...base.tools import (
     convert_nullable_to_type_array,
-    extract_part_ids,
     get_native_definition,
     intrinsic_kind_of,
     ir_strict,
     make_intrinsic_tool_definition,
-    log_orphan_warnings,
     prefixed_tool_call_id,
     sanitize_schema,
     sanitize_tool_call_id,
@@ -111,112 +104,6 @@ def canonical_server_tool_kind(name: str) -> str:
 
 
 # ==================== Orphaned Tool Call Fix ====================
-
-
-def _collect_anthropic_tool_ids(
-    messages: list[dict[str, Any]],
-) -> tuple[set[str], set[str]]:
-    """Collect all tool_use IDs and answered (tool_result) IDs."""
-    known_use_ids: set[str] = set()
-    answered_ids: set[str] = set()
-    for msg in messages:
-        content = msg.get("content", [])
-        if not isinstance(content, list):
-            continue
-        known_use_ids |= extract_part_ids(content, "tool_use", "id")
-        answered_ids |= extract_part_ids(content, "tool_result", "tool_use_id")
-    return known_use_ids, answered_ids
-
-
-def fix_orphaned_tool_calls(
-    messages: list[dict[str, Any]],
-    *,
-    placeholder: str = UNANSWERED_TOOL_CALL,
-) -> list[dict[str, Any]]:
-    """Fix mismatched tool_use and tool_result blocks in Anthropic format.
-
-    The Anthropic Messages API **strictly requires** bidirectional pairing
-    between ``tool_use`` (in assistant messages) and ``tool_result`` (in user
-    messages):
-
-    1. Every ``tool_use`` block must have a corresponding ``tool_result``
-       block with the same ``id`` / ``tool_use_id`` (**orphaned tool_use**).
-    2. Every ``tool_result`` block must reference a preceding ``tool_use``
-       block (**orphaned tool_result**).
-
-    Violations of either rule cause a 400 error.  Only Google Gemini is
-    lenient about both cases.
-
-    This function handles both directions:
-
-    - **Orphaned tool_use**: injects a synthetic ``tool_result`` block with
-      *placeholder* content into the next user message (or creates one).
-    - **Orphaned tool_result**: removes ``tool_result`` blocks whose
-      ``tool_use_id`` does not appear in any preceding ``tool_use`` block.
-
-    The original list is **not** modified; a new list is returned.
-
-    Args:
-        messages: Anthropic Messages format messages list.
-        placeholder: Content string for injected synthetic tool results.
-
-    Returns:
-        A new messages list with orphaned tool_use/results fixed.
-    """
-    known_use_ids, answered_ids = _collect_anthropic_tool_ids(messages)
-
-    if not known_use_ids and not answered_ids:
-        return messages
-
-    patched: list[dict[str, Any]] = []
-    orphaned_use_ids: list[str] = []
-    orphaned_result_ids: list[str] = []
-
-    for msg in messages:
-        msg_role = msg.get("role")
-        content = msg.get("content", [])
-
-        # Filter orphaned tool_result blocks from user messages
-        if msg_role == "user" and isinstance(content, list):
-            orphaned = (
-                extract_part_ids(content, "tool_result", "tool_use_id") - known_use_ids
-            )
-            if orphaned:
-                orphaned_result_ids.extend(orphaned)
-                filtered = [
-                    b
-                    for b in content
-                    if not (isinstance(b, dict) and b.get("tool_use_id") in orphaned)
-                ]
-                if not filtered:
-                    continue  # entire message was orphaned
-                msg = {**msg, "content": filtered}
-
-        patched.append(msg)
-
-        # Inject synthetic results for orphaned tool_use in assistant messages
-        if msg_role == "assistant" and isinstance(content, list):
-            unanswered = extract_part_ids(content, "tool_use", "id") - answered_ids
-            if unanswered:
-                orphaned_use_ids.extend(unanswered)
-                patched.append(
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "tool_result",
-                                "tool_use_id": uid,
-                                "content": placeholder,
-                            }
-                            for uid in unanswered
-                        ],
-                    }
-                )
-
-    log_orphan_warnings(
-        logger, orphaned_use_ids, orphaned_result_ids, "tool_use", "tool_result"
-    )
-    return patched
 
 
 def _server_result_content(kind: str, result: Any) -> Any:

@@ -5,10 +5,6 @@ OpenAI Chat Completions API tool conversion operations.
 Handles bidirectional conversion of tool definitions, calls, results,
 choice strategies, and call configurations.
 
-Also provides ``fix_orphaned_tool_calls`` — a module-level utility that
-fixes bidirectional mismatches between tool_calls and tool results
-(OpenAI Chat API rejects both orphaned calls and orphaned results with 400).
-
 Self-contained: does not depend on utils/ToolCallConverter or utils/ToolConverter.
 """
 
@@ -24,13 +20,11 @@ from ....types.ir import (
 )
 from ....types.ir.tools import ToolCallConfig
 from ...base import BaseToolOps
-from ....ir.tools.orphan_fix import UNANSWERED_TOOL_CALL
 from llm_rosetta.conversion_warnings import report_drop
 from ...base.helpers.opaque import CARRIER_KEY
 from ...base.tools import (
     intrinsic_kind_of,
     ir_strict,
-    log_orphan_warnings,
     make_intrinsic_tool_definition,
     mark_tool_error,
     mark_tool_error_text,
@@ -105,96 +99,6 @@ def _custom_format_to_ir(fmt: Any) -> Any:
 
 
 # ==================== Orphaned Tool Call Fix ====================
-
-
-def _collect_openai_tool_ids(
-    messages: list[dict[str, Any]],
-) -> tuple[set[str], set[str]]:
-    """Collect tool_call_ids from assistant messages and answered ids from tool messages.
-
-    Returns:
-        Tuple of (known_call_ids, answered_ids).
-    """
-    known_call_ids: set[str] = set()
-    answered_ids: set[str] = set()
-    for msg in messages:
-        role = msg.get("role")
-        if role == "assistant":
-            for tc in msg.get("tool_calls") or []:
-                if isinstance(tc, dict) and tc.get("id"):
-                    known_call_ids.add(tc["id"])
-        elif role == "tool" and msg.get("tool_call_id"):
-            answered_ids.add(msg["tool_call_id"])
-    return known_call_ids, answered_ids
-
-
-def fix_orphaned_tool_calls(
-    messages: list[dict[str, Any]],
-    *,
-    placeholder: str = UNANSWERED_TOOL_CALL,
-) -> list[dict[str, Any]]:
-    """Fix mismatched tool_calls and tool results in OpenAI Chat format.
-
-    The OpenAI Chat Completions API **strictly requires** bidirectional
-    pairing between tool calls and tool results:
-
-    1. Every ``tool_call_id`` in an assistant message must have a matching
-       ``role: "tool"`` result message (**orphaned tool_call**).
-    2. Every ``role: "tool"`` result message must have a preceding assistant
-       message containing the matching ``tool_call_id`` (**orphaned tool_result**).
-
-    Violations of either rule cause a 400 error.  Anthropic enforces the same
-    strict pairing.  Only Google Gemini is lenient about both cases.
-
-    This function handles both directions:
-
-    - **Orphaned tool_calls**: injects a synthetic ``role: "tool"`` message
-      with *placeholder* content immediately after the assistant message.
-    - **Orphaned tool_results**: removes ``role: "tool"`` messages whose
-      ``tool_call_id`` does not appear in any preceding assistant
-      ``tool_calls``.
-
-    The original list is **not** modified; a new list is returned.
-
-    Args:
-        messages: OpenAI Chat format messages list.
-        placeholder: Content string for injected synthetic tool results.
-
-    Returns:
-        A new messages list with orphaned tool_calls/results fixed.
-    """
-    known_call_ids, answered_ids = _collect_openai_tool_ids(messages)
-
-    if not known_call_ids and not answered_ids:
-        return messages
-
-    patched: list[dict[str, Any]] = []
-    orphaned_call_ids: list[str] = []
-    orphaned_result_ids: list[str] = []
-
-    for msg in messages:
-        role = msg.get("role")
-
-        # Remove orphaned tool results
-        if role == "tool":
-            tc_id = msg.get("tool_call_id")
-            if tc_id and tc_id not in known_call_ids:
-                orphaned_result_ids.append(tc_id)
-                continue
-        patched.append(msg)
-
-        # Inject synthetic results for orphaned tool_calls
-        if role == "assistant":
-            for tc in msg.get("tool_calls") or []:
-                tc_id = tc.get("id") if isinstance(tc, dict) else None
-                if tc_id and tc_id not in answered_ids:
-                    orphaned_call_ids.append(tc_id)
-                    patched.append(
-                        {"role": "tool", "tool_call_id": tc_id, "content": placeholder}
-                    )
-
-    log_orphan_warnings(logger, orphaned_call_ids, orphaned_result_ids)
-    return patched
 
 
 class ChatCompletionsToolOps(BaseToolOps):

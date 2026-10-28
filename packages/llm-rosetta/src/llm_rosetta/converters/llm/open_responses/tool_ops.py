@@ -28,7 +28,6 @@ from ....types.ir import (
     ToolResultPart,
 )
 from ....types.ir.tools import ToolCallConfig
-from ....ir.tools.orphan_fix import UNANSWERED_TOOL_CALL
 from ...base import BaseToolOps, IntrinsicLeg
 from llm_rosetta.conversion_warnings import report_drop
 from ...base.helpers.opaque import CARRIER_KEY
@@ -39,12 +38,10 @@ from ...base.helpers.tool_group import (
 )
 from ...base.tools import (
     allowed_tool_names,
-    extract_part_ids,
     get_native_definition,
     intrinsic_kind_of,
     ir_strict,
     make_intrinsic_tool_definition,
-    log_orphan_warnings,
     make_intrinsic_tool_call,
     mark_tool_error,
     provider_allowed_tools_to_ir,
@@ -107,86 +104,6 @@ _INTRINSIC_RESULT_TYPES: dict[str, str] = {
 
 
 # ==================== Orphaned Tool Call Fix ====================
-
-
-def fix_orphaned_tool_calls(
-    items: list[dict[str, Any]],
-    *,
-    placeholder: str = UNANSWERED_TOOL_CALL,
-) -> list[dict[str, Any]]:
-    """Fix mismatched function_calls and outputs in OpenAI Responses format.
-
-    The OpenAI Responses API **strictly requires** bidirectional pairing
-    between function_call and function_call_output items:
-
-    1. Every ``function_call`` item (identified by ``call_id``) must have a
-       matching ``function_call_output`` (**orphaned function_call**).
-    2. Every ``function_call_output`` must have a preceding ``function_call``
-       with the same ``call_id`` (**orphaned function_call_output**).
-
-    Violations of either rule cause a 400 error.  Anthropic enforces the same
-    strict pairing.  Only Google Gemini is lenient about both cases.
-
-    This function handles both directions:
-
-    - **Orphaned function_calls**: injects a synthetic
-      ``function_call_output`` with *placeholder* content.
-    - **Orphaned function_call_outputs**: removes output items whose
-      ``call_id`` does not appear in any ``function_call`` item.
-
-    The original list is **not** modified; a new list is returned.
-
-    Args:
-        items: OpenAI Responses format input items list.
-        placeholder: Output string for injected synthetic results.
-
-    Returns:
-        A new items list with orphaned function_calls/outputs fixed.
-    """
-    known_call_ids = extract_part_ids(items, "function_call", "call_id")
-    answered_ids = extract_part_ids(items, "function_call_output", "call_id")
-
-    if not known_call_ids and not answered_ids:
-        return items
-
-    patched: list[dict[str, Any]] = []
-    orphaned_call_ids: list[str] = []
-    orphaned_output_ids: list[str] = []
-
-    for item in items:
-        itype = item.get("type")
-        call_id = item.get("call_id")
-
-        # Remove orphaned outputs
-        if (
-            itype == "function_call_output"
-            and call_id
-            and call_id not in known_call_ids
-        ):
-            orphaned_output_ids.append(call_id)
-            continue
-
-        patched.append(item)
-
-        # Inject synthetic outputs for orphaned function_calls
-        if itype == "function_call" and call_id and call_id not in answered_ids:
-            orphaned_call_ids.append(call_id)
-            patched.append(
-                {
-                    "type": "function_call_output",
-                    "call_id": call_id,
-                    "output": placeholder,
-                }
-            )
-
-    log_orphan_warnings(
-        logger,
-        orphaned_call_ids,
-        orphaned_output_ids,
-        "function_call",
-        "function_call_output",
-    )
-    return patched
 
 
 def _synthesize_passthrough_tool(
