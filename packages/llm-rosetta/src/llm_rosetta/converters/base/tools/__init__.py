@@ -32,9 +32,11 @@ from llm_rosetta.ir.tools.call_id import prefixed_tool_call_id, sanitize_tool_ca
 
 # -- Orphan fix --
 from llm_rosetta.ir.tools.orphan_fix import (
+    UnrepairableToolHistory,
     extract_part_ids,
     fix_orphaned_tool_calls_ir,
     log_orphan_warnings,
+    normalize_tool_pairing,
     strip_orphaned_tool_config,
 )
 
@@ -104,9 +106,11 @@ __all__ = [
     "prefixed_tool_call_id",
     "sanitize_tool_call_id",
     # orphan_fix
+    "UnrepairableToolHistory",
     "extract_part_ids",
     "fix_orphaned_tool_calls_ir",
     "log_orphan_warnings",
+    "normalize_tool_pairing",
     "strip_orphaned_tool_config",
     # call_unwind
     "unwind_parallel_tool_calls_ir",

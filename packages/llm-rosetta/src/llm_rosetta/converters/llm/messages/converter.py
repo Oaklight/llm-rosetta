@@ -54,7 +54,6 @@ from ...base.context import (
 )
 from ...base.tools import (
     assign_tool_batch_ids,
-    fix_orphaned_tool_calls_ir,
     intrinsic_kind_of,
     prefixed_tool_call_id,
     sanitize_tool_call_id,
@@ -193,9 +192,9 @@ class MessagesConverter(BaseConverter):
         if system_parts:
             result["system"] = self.message_ops._ir_system_to_p(system_parts)
 
-        # 2. Messages — fix orphaned tool_calls/results at IR level before
-        #    conversion.  Anthropic strictly requires bidirectional pairing.
-        ir_messages = fix_orphaned_tool_calls_ir(ir_request.get("messages", []))
+        # 2. Messages — the pairing repair already ran at the converter
+        #    boundary, so every target sees the same repaired history.
+        ir_messages = ir_request.get("messages", [])
         # Assign batch_ids over the full list before message_ops runs, so
         # per-format merge_tool_messages can group parallel tool results.
         ir_messages = assign_tool_batch_ids(ir_messages)

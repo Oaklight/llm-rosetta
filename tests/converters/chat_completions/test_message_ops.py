@@ -4,6 +4,10 @@ OpenAI Chat MessageOps unit tests.
 
 from typing import Any, Union, cast
 
+import pytest
+
+from llm_rosetta.conversion_warnings import WarningSink
+
 from llm_rosetta.converters.llm.chat_completions import ChatCompletionsConverter
 
 from llm_rosetta._vendor.validate import validate
@@ -14,13 +18,25 @@ from llm_rosetta.converters.base.tools.multimodal_patch import (
 from llm_rosetta.converters.llm.chat_completions.content_ops import (
     ChatCompletionsContentOps,
 )
-from llm_rosetta.ir.tools.orphan_fix import UNANSWERED_TOOL_CALL
+from llm_rosetta.ir.tools.orphan_fix import (
+    UNANSWERED_TOOL_CALL,
+    UnrepairableToolHistory,
+    normalize_tool_pairing,
+)
 from llm_rosetta.converters.llm.chat_completions.message_ops import (
     ChatCompletionsMessageOps,
 )
 from llm_rosetta.converters.llm.chat_completions.tool_ops import ChatCompletionsToolOps
 from llm_rosetta.types.ir import Message, ToolCallPart, ToolResultPart
 from llm_rosetta.types.ir.extensions_experimental import ExtensionItem
+
+
+def _write(messages, message_ops):
+    """Repair at the request boundary, then write — the production order."""
+    sink = WarningSink()
+    repaired = normalize_tool_pairing(messages, warnings=sink)
+    result, warnings = message_ops.ir_messages_to_p(repaired)
+    return result, [str(warning) for warning in sink] + warnings
 
 
 class TestChatCompletionsMessageOps:
@@ -103,11 +119,11 @@ class TestChatCompletionsMessageOps:
                 }
             ],
         )
-        result, warnings = self.message_ops.ir_messages_to_p(messages)
+        result, warnings = _write(messages, self.message_ops)
         assert len(result) == 1
         assert result[0]["role"] == "user"
         assert result[0]["content"] == "Here's the result"
-        assert any("no preceding assistant" in warning for warning in warnings)
+        assert any("no tool call declares it" in warning for warning in warnings)
 
     def test_user_message_only_tool_result(self):
         """A user message containing only an orphan tool result is dropped."""
@@ -126,9 +142,10 @@ class TestChatCompletionsMessageOps:
                 }
             ],
         )
-        result, warnings = self.message_ops.ir_messages_to_p(messages)
-        assert result == []
-        assert any("no preceding assistant" in warning for warning in warnings)
+        with pytest.raises(UnrepairableToolHistory) as raised:
+            _write(messages, self.message_ops)
+
+        assert "call_1" in str(raised.value)
 
     def test_assistant_text_message_to_p(self):
         """Test IR assistant text message → OpenAI assistant message."""
@@ -256,9 +273,10 @@ class TestChatCompletionsMessageOps:
                 }
             ],
         )
-        result, warnings = self.message_ops.ir_messages_to_p(messages)
-        assert result == []
-        assert any("no preceding assistant" in warning for warning in warnings)
+        with pytest.raises(UnrepairableToolHistory) as raised:
+            _write(messages, self.message_ops)
+
+        assert "call_1" in str(raised.value)
 
     def test_extension_items_handling(self):
         """Test extension items produce warnings."""
@@ -584,7 +602,7 @@ class TestChatCompletionsMessageOps:
             ],
         )
 
-        result, warnings = self.message_ops.ir_messages_to_p(messages)
+        result, warnings = _write(messages, self.message_ops)
 
         assistants = [m for m in result if m["role"] == "assistant"]
         tools = [m for m in result if m["role"] == "tool"]
@@ -606,8 +624,8 @@ class TestChatCompletionsMessageOps:
         assert any("Renamed duplicate tool_call_id" in w for w in warnings)
         assert any("Reordered tool messages" in w for w in warnings)
 
-    def test_reorder_ambiguous_reused_id_uses_nearest_pending_call(self):
-        """Ambiguous results bind to the nearest call and report the policy."""
+    def test_reorder_ambiguous_reused_id_keeps_the_client_order(self):
+        """Ambiguous results bind in the order the client sent them."""
         messages = cast(
             list[Message],
             [
@@ -651,16 +669,16 @@ class TestChatCompletionsMessageOps:
             ],
         )
 
-        result, warnings = self.message_ops.ir_messages_to_p(messages)
+        result, warnings = _write(messages, self.message_ops)
 
         assistants = [m for m in result if m["role"] == "assistant"]
         tools = [m for m in result if m["role"] == "tool"]
         assert len(tools) == 2
         assert tools[0]["tool_call_id"] == assistants[0]["tool_calls"][0]["id"]
-        assert tools[0]["content"] == "second result in input order"
+        assert tools[0]["content"] == "first result in input order"
         assert tools[1]["tool_call_id"] == assistants[1]["tool_calls"][0]["id"]
-        assert tools[1]["content"] == "first result in input order"
-        assert any("Ambiguous tool result" in w for w in warnings)
+        assert tools[1]["content"] == "second result in input order"
+        assert any("Renamed duplicate tool_call_id" in w for w in warnings)
 
     def test_reorder_reused_id_adds_placeholder_for_unanswered_occurrence(self):
         """The IR set-based orphan check cannot fill a repeated ID occurrence."""
@@ -702,17 +720,19 @@ class TestChatCompletionsMessageOps:
             ],
         )
 
-        result, warnings = self.message_ops.ir_messages_to_p(messages)
+        result, warnings = _write(messages, self.message_ops)
 
         assistants = [m for m in result if m["role"] == "assistant"]
         tools = [m for m in result if m["role"] == "tool"]
         assert len(tools) == 2
         assert tools[0]["tool_call_id"] == assistants[0]["tool_calls"][0]["id"]
-        assert tools[0]["content"] == UNANSWERED_TOOL_CALL
+        assert tools[0]["content"] == "second result"
         assert tools[1]["tool_call_id"] == assistants[1]["tool_calls"][0]["id"]
-        assert tools[1]["content"] == "second result"
+        assert tools[1]["content"] == UNANSWERED_TOOL_CALL
         assert len({tool["tool_call_id"] for tool in tools}) == 2
-        assert any("unanswered duplicate tool_call_id" in w for w in warnings)
+        assert any(
+            "Inserted placeholder for unanswered tool_call_id" in w for w in warnings
+        )
 
     def test_reorder_drops_orphan_tool_result_with_warning(self):
         """A result without a matching call cannot remain invalid wire data."""
@@ -732,10 +752,10 @@ class TestChatCompletionsMessageOps:
             ],
         )
 
-        result, warnings = self.message_ops.ir_messages_to_p(messages)
+        with pytest.raises(UnrepairableToolHistory) as raised:
+            _write(messages, self.message_ops)
 
-        assert result == []
-        assert any("no preceding assistant" in w for w in warnings)
+        assert "call_missing" in str(raised.value)
 
     # ==================== Provider → IR ====================
 

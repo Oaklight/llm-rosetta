@@ -20,6 +20,7 @@ from ...types.ir.validation import (
     validate_tools,
 )
 from .context import ConversionContext, StreamContext
+from ...ir.tools.orphan_fix import UnrepairableToolHistory, normalize_tool_pairing
 from .helpers import strip_internal_metadata
 from .helpers.citations import report_dropped_citation
 from .helpers.extensions import (
@@ -156,12 +157,54 @@ class BaseConverter(ABC):
         returns ``(result, ctx.warnings)``.
         """
         ctx = context if context is not None else ConversionContext()
+        messages = ir_request.get("messages")
+        if messages is not None:
+            # Repair the tool pairing once, here, before any dialect writes
+            # it.  A repair in one writer is not a repair: the same history
+            # reaches every target, and the second, occurrence-aware copy
+            # the Chat writer used to keep is gone.
+            ir_request["messages"] = self._normalize_tool_pairing(messages, ctx)
         result = self._do_request_to_provider(ir_request, context=ctx, **kwargs)
         strip_internal_metadata(result)
         dropped = unowned_extensions(ir_request, self._CONVERTER_TAG)
         if dropped:
             ctx.warnings.append(extension_loss_warning(dropped, self._CONVERTER_TAG))
         return result, ctx.warnings
+
+    def _normalize_tool_pairing(
+        self,
+        messages: Sequence[IRInputItem],
+        context: ConversionContext | None,
+    ) -> list[IRInputItem]:
+        """Repair tool call/result pairing before a dialect writes it.
+
+        The repair is target-independent, so it happens once at this
+        boundary rather than in each writer (see
+        :func:`~llm_rosetta.ir.tools.orphan_fix.normalize_tool_pairing`).
+        Running it here also covers callers that reach a converter directly
+        instead of going through ``ConversionPipeline``.
+
+        Args:
+            messages: IR messages about to be written.
+            context: The conversion context whose sink records the repairs.
+
+        Returns:
+            The repaired messages.
+
+        Raises:
+            ConversionError: When the history cannot be repaired — dropping
+                its orphans would leave no message to send.
+        """
+        try:
+            return normalize_tool_pairing(
+                messages, warnings=context.warnings if context is not None else None
+            )
+        except UnrepairableToolHistory as exc:
+            # Imported here on purpose: the pipeline imports the converters,
+            # so a module-level import would close the cycle.
+            from ...pipeline.chat import ConversionError
+
+            raise ConversionError(str(exc), phase="ir_to_target") from exc
 
     def request_from_provider(
         self,
@@ -250,6 +293,11 @@ class BaseConverter(ABC):
         then strips the internal ``_llm_rosetta_provider_metadata`` carrier so the result
         is wire-ready.  Override if the converter needs custom pre/post
         processing.
+
+        The request-level pairing repair does **not** run here: it needs the
+        whole history to pair occurrences, and this method is also used to
+        convert one message at a time.  A caller assembling a full request
+        should go through :meth:`request_to_provider`, which repairs first.
         """
         kwargs["target_provider"] = self._CONVERTER_TAG
         kwargs.setdefault(

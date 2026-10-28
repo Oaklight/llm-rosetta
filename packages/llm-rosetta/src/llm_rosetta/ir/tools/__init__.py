@@ -37,9 +37,11 @@ from .intrinsic import (  # noqa: F401
 )
 from .orphan_fix import (  # noqa: F401
     UNANSWERED_TOOL_CALL,
+    UnrepairableToolHistory,
     extract_part_ids,
     fix_orphaned_tool_calls_ir,
     log_orphan_warnings,
+    normalize_tool_pairing,
     strip_orphaned_tool_config,
 )
 from .strict_mode import ir_strict, write_ir_strict  # noqa: F401
@@ -47,6 +49,7 @@ from .strict_mode import ir_strict, write_ir_strict  # noqa: F401
 __all__ = [
     "TOOL_ERROR_MARKER",
     "UNANSWERED_TOOL_CALL",
+    "UnrepairableToolHistory",
     "allowed_tool_names",
     "allowed_tool_refs",
     "assign_tool_batch_ids",
@@ -67,6 +70,7 @@ __all__ = [
     "mark_tool_error",
     "mark_tool_error_text",
     "merge_tool_messages",
+    "normalize_tool_pairing",
     "prefixed_tool_call_id",
     "provider_allowed_tools_to_ir",
     "sanitize_tool_call_id",

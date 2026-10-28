@@ -59,7 +59,6 @@ from ...base.helpers.tool_group import (
 )
 from ...base.tools import (
     assign_tool_batch_ids,
-    fix_orphaned_tool_calls_ir,
     intrinsic_kind_of,
     sanitize_tool_call_id,
     strip_orphaned_tool_config,
@@ -360,10 +359,9 @@ class OpenResponsesConverter(BaseConverter):
                 p["text"] for p in system_parts if is_text_part(p)
             )
 
-        # 2. Messages → input items — fix orphaned tool_calls at IR level
-        # before conversion.  OpenAI Responses API strictly requires every
-        # function_call to have a matching function_call_output.
-        ir_messages = fix_orphaned_tool_calls_ir(ir_request.get("messages", []))
+        # 2. Messages → input items — the pairing repair already ran at the
+        # converter boundary, so every target sees the same repaired history.
+        ir_messages = ir_request.get("messages", [])
         # Assign batch_ids over the full list before message_ops runs, so
         # per-format merge_tool_messages can group parallel tool results.
         ir_messages = assign_tool_batch_ids(ir_messages)

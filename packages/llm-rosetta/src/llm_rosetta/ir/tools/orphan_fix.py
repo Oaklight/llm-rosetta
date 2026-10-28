@@ -1,8 +1,30 @@
-"""Orphaned tool call/result fix utilities (IR level).
+"""Tool call/result pairing, repaired once for every target dialect.
 
-Shared helpers that fix mismatches between tool calls and tool results
-in IR messages.  Used by all 4 provider converters to ensure
-bidirectional pairing before downstream conversion.
+A request history can reach this library in a state no provider accepts: a
+tool call nothing answered, a result whose declaration is missing, two
+declarations sharing one id.  The repairs are the same for every target — a
+repair in one writer is not a repair — so they happen here, once, on the IR,
+before any dialect writes it.
+
+The pairing is **positional and occurrence-aware**:
+
+* a result answers the earliest *preceding* declaration it shares an id
+  with that no result has answered yet — both lists keep the client's order;
+* a result with no preceding declaration is dropped (an id nothing declares
+  and an id declared later are different mistakes, and the warning says
+  which);
+* duplicate ids are renamed deterministically, first occurrence keeping the
+  id the client used;
+* every declaration still unanswered gets one synthetic result whose content
+  names this library as its source.
+
+A set of ids cannot express any of this: two declarations of ``q1`` are
+"answered" by one ``q1`` result under set semantics, which is why the Chat
+writer used to carry a second, occurrence-aware copy of the repair.  That
+copy is gone; :meth:`BaseConverter.request_to_provider` runs this pass.
+
+Intrinsic (provider-hosted) calls are answered by themselves: the provider ran
+them, no client owes a result, and a synthetic one would fabricate a turn.
 
 Also provides ``strip_orphaned_tool_config`` which removes ``tool_choice``
 / ``tool_config`` when no tool definitions are present (Codex CLI context
@@ -11,10 +33,18 @@ compaction workaround).
 
 import logging
 from collections.abc import Sequence
+from dataclasses import dataclass, field
 from typing import Any, cast
 
-from llm_rosetta.types.ir import IRInputItem, is_message, is_tool_result_part
+from llm_rosetta.conversion_warnings import report_drop
+from llm_rosetta.types.ir import (
+    IRInputItem,
+    is_message,
+    is_tool_call_part,
+    is_tool_result_part,
+)
 from llm_rosetta.types.ir.request import IRRequest
+from .call_id import sanitize_tool_call_id
 from .intrinsic import is_intrinsic_part
 
 logger = logging.getLogger(__name__)
@@ -24,6 +54,23 @@ logger = logging.getLogger(__name__)
 # answered. It is content this library invents, so it names its own provenance
 # instead of reading as something the tool returned.
 UNANSWERED_TOOL_CALL = "[llm-rosetta: no tool output was recorded for this call]"
+
+
+class UnrepairableToolHistory(ValueError):
+    """A tool history that cannot be repaired without inventing a turn.
+
+    Raised when dropping the orphans leaves no message at all: forwarding an
+    empty ``messages`` array tells the client nothing, while naming the
+    orphaned id says what is wrong with its history.  The converter boundary
+    turns this into the conversion error a gateway answers with a 400.
+
+    Attributes:
+        orphaned_ids: The ids whose results were dropped.
+    """
+
+    def __init__(self, message: str, *, orphaned_ids: Sequence[str] = ()) -> None:
+        self.orphaned_ids = tuple(orphaned_ids)
+        super().__init__(message)
 
 
 # ==================== Shared Helpers ====================
@@ -59,7 +106,7 @@ def log_orphan_warnings(
 ) -> None:
     """Log warnings for orphaned tool calls and results.
 
-    Shared by all per-format ``fix_orphaned_tool_calls`` functions.
+    Shared by the legacy per-format ``fix_orphaned_tool_calls`` functions.
 
     Args:
         log: Logger instance to emit warnings on.
@@ -85,43 +132,397 @@ def log_orphan_warnings(
         )
 
 
-# ==================== IR-Level Orphan Fix ====================
+# ==================== IR-Level Pairing Normalisation ====================
 
 
-def _collect_ir_tool_ids(
-    messages: Sequence[IRInputItem],
-) -> tuple[set[str], set[str]]:
-    """Collect all tool_call IDs and answered (tool_result) IDs from IR messages.
+@dataclass
+class _Declaration:
+    """One tool-call part, as an occurrence in the request.
 
-    A ``tool_result`` answers its call whatever message carries it.  A client
-    result usually sits in a ``role: "tool"`` message, a server tool's result
-    rides inline in the assistant turn that ran it (#965), and IR assembled by
-    hand — or degraded from one of those shapes — may hold it in a user turn.
-    Missing any of them makes the fixer see the call as unanswered and inject a
-    synthetic placeholder *beside* the real result.
-
-    A *server* call (``tool_type == "intrinsic"``) counts as answered by
-    itself: the provider ran it, so no client ever owes it a result and no
-    placeholder belongs beside it.  Its id stays a known call id, though, so a
-    ``tool_result`` that does answer it is not mistaken for an orphan.
+    Occurrence identity is the whole point: two parts sharing an id are two
+    declarations, and a result answers exactly one of them.  The message and
+    the part are held by reference so neither pruning nor renaming has to
+    track an index that a removal elsewhere would invalidate.
     """
-    known_call_ids: set[str] = set()
-    answered_ids: set[str] = set()
-    for msg in messages:
-        if not is_message(msg):
-            continue
-        content = msg.get("content") or []
-        answered_ids |= extract_part_ids(content, "tool_result", "tool_call_id")
-        if msg.get("role") != "assistant":
-            continue
-        known_call_ids |= extract_part_ids(content, "tool_call", "tool_call_id")
-        for part in content:
-            if not is_intrinsic_part(part):
+
+    message: Any
+    part: Any
+    original_id: str
+    wire_id: str
+    intrinsic: bool
+    answered: bool = False
+    result_part: Any = None
+
+    @property
+    def label(self) -> str:
+        """The id to name in a warning."""
+        return self.original_id or self.wire_id
+
+
+@dataclass
+class _Pairing:
+    """What one walk over the history found."""
+
+    declarations: list[_Declaration] = field(default_factory=list)
+    #: ``(id, declared_later)`` per dropped client result.
+    dropped: list[tuple[str, bool]] = field(default_factory=list)
+    #: Messages that held nothing but the dropped results.
+    emptied: list[Any] = field(default_factory=list)
+
+
+def _content_list(message: Any) -> list[Any] | None:
+    """Return the message's content list, or ``None`` when there is none."""
+    if not is_message(message):
+        return None
+    content = message.get("content")
+    return content if isinstance(content, list) else None
+
+
+def _is_client_result(part: Any) -> bool:
+    """Whether *part* is a tool result a client is expected to have sent."""
+    return is_tool_result_part(part) and not is_intrinsic_part(part)
+
+
+def _copy_messages(messages: Sequence[IRInputItem]) -> list[IRInputItem]:
+    """Shallow-copy every message that carries a content list.
+
+    The pass promises not to modify the caller's IR.  Parts are shared until
+    one of them has to change; a changed part is replaced by a copy inside
+    its message.
+    """
+    copied: list[IRInputItem] = []
+    for message in messages:
+        content = _content_list(message)
+        if content is None:
+            copied.append(message)
+        else:
+            copied.append(cast(IRInputItem, {**message, "content": list(content)}))
+    return copied
+
+
+def _replace_part_in(message: Any, old: Any, new: Any) -> None:
+    """Swap *old* for *new* inside *message*'s content, by identity."""
+    content = _content_list(message)
+    if content is None:
+        return
+    for index, part in enumerate(content):
+        if part is old:
+            content[index] = new
+            return
+
+
+def _reserve_ids(messages: Sequence[IRInputItem]) -> set[str]:
+    """Collect every tool-call id the request already uses.
+
+    A generated id must collide with none of them — declarations *and*
+    results — including ids whose declaration this pass has not reached yet.
+    """
+    reserved: set[str] = set()
+    for message in messages:
+        for part in _content_list(message) or ():
+            if not isinstance(part, dict):
                 continue
-            intrinsic_call = cast(dict[str, Any], part)
-            if intrinsic_call.get("tool_call_id"):
-                answered_ids.add(intrinsic_call["tool_call_id"])
-    return known_call_ids, answered_ids
+            if part.get("type") not in ("tool_call", "tool_result"):
+                continue
+            call_id = part.get("tool_call_id")
+            if isinstance(call_id, str) and call_id:
+                reserved.add(call_id)
+    return reserved
+
+
+def _collect_declared_ids(messages: Sequence[IRInputItem]) -> set[str]:
+    """Every tool-call id the request declares anywhere."""
+    declared: set[str] = set()
+    for message in messages:
+        if not is_message(message) or message.get("role") != "assistant":
+            continue
+        for part in _content_list(message) or ():
+            if is_tool_call_part(part):
+                call_id = part.get("tool_call_id")
+                if isinstance(call_id, str) and call_id:
+                    declared.add(call_id)
+    return declared
+
+
+def _answer_intrinsic(part: Any, pending: dict[str, list[_Declaration]]) -> None:
+    """Mark the intrinsic declaration a server result belongs to as answered."""
+    call_id = part.get("tool_call_id")
+    stack = pending.get(call_id) if isinstance(call_id, str) and call_id else None
+    if not stack:
+        return
+    for declaration in reversed(stack):
+        if declaration.intrinsic and not declaration.answered:
+            declaration.answered = True
+            return
+
+
+def _bind_declaration(
+    message: Any,
+    part: Any,
+    pending: dict[str, list[_Declaration]],
+    pairing: _Pairing,
+) -> None:
+    """Record one declaration occurrence, in message order."""
+    call_id = part.get("tool_call_id")
+    intrinsic = is_intrinsic_part(part)
+    declaration = _Declaration(
+        message=message,
+        part=part,
+        original_id=call_id if isinstance(call_id, str) else "",
+        wire_id=call_id if isinstance(call_id, str) else "",
+        intrinsic=intrinsic,
+        # A provider-hosted call is answered by the provider.
+        answered=intrinsic,
+    )
+    pairing.declarations.append(declaration)
+    if declaration.original_id:
+        pending.setdefault(declaration.original_id, []).append(declaration)
+
+
+def _bind_result(
+    part: Any,
+    pending: dict[str, list[_Declaration]],
+    pairing: _Pairing,
+    declared_later: set[str],
+) -> tuple[bool, bool]:
+    """Pair or drop one result part.
+
+    Returns:
+        ``(keep, client)`` — whether the part stays in its message, and
+        whether it was a client result rather than a server one.
+    """
+    if not _is_client_result(part):
+        # A server result answers its own call and is never an orphan:
+        # nothing on the client side would declare it.
+        _answer_intrinsic(part, pending)
+        return True, False
+
+    call_id = part.get("tool_call_id")
+    stack = pending.get(call_id) if isinstance(call_id, str) and call_id else None
+    if stack:
+        # First in, first answered: when two declarations share an id, the
+        # order of the results is the only signal left, and it is the order
+        # the client sent them in.
+        declaration = stack.pop(0)
+        declaration.answered = True
+        declaration.result_part = part
+        return True, True
+
+    pairing.dropped.append(
+        (
+            call_id if isinstance(call_id, str) else "",
+            isinstance(call_id, str) and call_id in declared_later,
+        )
+    )
+    return False, True
+
+
+def _pair_message(
+    message: Any,
+    pending: dict[str, list[_Declaration]],
+    pairing: _Pairing,
+    declared_later: set[str],
+) -> None:
+    """Pair one message's parts, pruning the results that pair with nothing."""
+    content = _content_list(message)
+    if content is None:
+        return
+    kept: list[Any] = []
+    had_client_result = False
+    for part in content:
+        if is_tool_call_part(part):
+            _bind_declaration(message, part, pending, pairing)
+            kept.append(part)
+            continue
+        if is_tool_result_part(part):
+            keep, client = _bind_result(part, pending, pairing, declared_later)
+            had_client_result = had_client_result or client
+            if keep:
+                kept.append(part)
+            continue
+        kept.append(part)
+    if had_client_result and not kept:
+        pairing.emptied.append(message)
+    if len(kept) != len(content):
+        content[:] = kept
+
+
+def _pair_results(messages: list[IRInputItem]) -> _Pairing:
+    """Pair every client result with the nearest preceding declaration."""
+    pairing = _Pairing()
+    pending: dict[str, list[_Declaration]] = {}
+    declared_later = _collect_declared_ids(messages)
+    for message in messages:
+        _pair_message(message, pending, pairing, declared_later)
+    return pairing
+
+
+def _rename_duplicates(
+    messages: Sequence[IRInputItem],
+    declarations: Sequence[_Declaration],
+    warnings: Any,
+) -> None:
+    """Give every repeated declaration after the first its own wire id.
+
+    Deterministic: the second occurrence of ``q1`` is ``q1_duplicate_2``
+    unless that id is already in the request.  The result paired with an
+    occurrence is renamed with it, so a client replay keeps working.
+    """
+    reserved = _reserve_ids(messages)
+    seen: dict[str, int] = {}
+    for declaration in declarations:
+        original = declaration.original_id
+        if not original:
+            continue
+        occurrence = seen.get(original, 0) + 1
+        seen[original] = occurrence
+        if occurrence == 1:
+            continue
+
+        suffix = occurrence
+        while True:
+            candidate = sanitize_tool_call_id(f"{original}_duplicate_{suffix}")
+            if candidate not in reserved:
+                break
+            suffix += 1
+        reserved.add(candidate)
+        declaration.wire_id = candidate
+
+        renamed = cast(dict[str, Any], {**declaration.part, "tool_call_id": candidate})
+        _replace_part_in(declaration.message, declaration.part, renamed)
+        declaration.part = renamed
+        if declaration.result_part is not None:
+            renamed_result = cast(
+                dict[str, Any],
+                {**declaration.result_part, "tool_call_id": candidate},
+            )
+            for message in messages:
+                content = _content_list(message)
+                if content is not None and any(
+                    part is declaration.result_part for part in content
+                ):
+                    _replace_part_in(message, declaration.result_part, renamed_result)
+                    break
+            declaration.result_part = renamed_result
+
+        report_drop(
+            f"Renamed duplicate tool_call_id='{original}' to '{candidate}'",
+            warnings=warnings,
+            subject=original,
+        )
+
+
+def normalize_tool_pairing(
+    messages: Sequence[IRInputItem],
+    *,
+    warnings: Any = None,
+    placeholder: str = UNANSWERED_TOOL_CALL,
+) -> list[IRInputItem]:
+    """Repair tool call/result pairing once, for every target dialect.
+
+    The repairs, in the order they have to happen:
+
+    1. **Pair.**  A client result answers the nearest *preceding* declaration
+       with the same id, in the order both appear.  A result with no such
+       declaration is dropped — an
+       id nothing declares and one declared later are both unrepresentable,
+       and the warning names which mistake it was.
+    2. **Rename.**  Repeated declarations keep the client's id on the first
+       occurrence; later ones get a deterministic, collision-free id, and the
+       result paired with them is renamed along.
+    3. **Fill.**  Every remaining unanswered client declaration gets one
+       synthetic ``tool`` result carrying :data:`UNANSWERED_TOOL_CALL`.
+       Intrinsic calls are skipped: the provider ran them, so a synthetic
+       result would fabricate a turn the client never owed.
+
+    The pass is idempotent — a second run finds every declaration answered
+    and every id unique — and never modifies the caller's IR.
+
+    Args:
+        messages: IR messages to repair.
+        warnings: Where repairs are recorded; a
+            :class:`~llm_rosetta.conversion_warnings.WarningSink` (the
+            conversion's own list) when a caller has one.
+        placeholder: Content for the synthetic result.
+
+    Returns:
+        A new messages list with the pairing repaired.
+
+    Raises:
+        UnrepairableToolHistory: When dropping orphans leaves no message at
+            all.  An empty ``messages`` array is not a repair.
+    """
+    work = _copy_messages(messages)
+    if not work:
+        return work
+
+    pairing = _pair_results(work)
+
+    for call_id, declared_later in pairing.dropped:
+        reason = (
+            "it arrives before its declaration"
+            if declared_later
+            else "no tool call declares it"
+        )
+        report_drop(
+            f"Dropped tool result id={call_id!r}: {reason}",
+            warnings=warnings,
+            subject=call_id,
+        )
+
+    emptied = set(map(id, pairing.emptied))
+    kept_messages = [message for message in work if id(message) not in emptied]
+    if pairing.dropped and not kept_messages:
+        orphaned = ", ".join(sorted({call_id for call_id, _ in pairing.dropped}))
+        raise UnrepairableToolHistory(
+            "Tool history has no message left after dropping orphaned tool "
+            f"result(s): {orphaned}. Each tool_result needs a tool_call in a "
+            "preceding message.",
+            orphaned_ids=[call_id for call_id, _ in pairing.dropped],
+        )
+
+    _rename_duplicates(kept_messages, pairing.declarations, warnings)
+
+    by_message: dict[int, list[_Declaration]] = {}
+    for declaration in pairing.declarations:
+        if declaration.answered or declaration.intrinsic or not declaration.wire_id:
+            continue
+        by_message.setdefault(id(declaration.message), []).append(declaration)
+
+    filled: list[IRInputItem] = []
+    for message in kept_messages:
+        filled.append(message)
+        content = _content_list(message)
+        if content is None:
+            continue
+        for declaration in by_message.get(id(message), ()):
+            if not any(part is declaration.part for part in content):
+                # Its message survived without the declaration; nothing to
+                # answer on this turn.
+                continue
+            filled.append(
+                cast(
+                    IRInputItem,
+                    {
+                        "role": "tool",
+                        "content": [
+                            {
+                                "type": "tool_result",
+                                "tool_call_id": declaration.wire_id,
+                                "result": placeholder,
+                            }
+                        ],
+                    },
+                )
+            )
+            report_drop(
+                "Inserted placeholder for unanswered tool_call_id="
+                f"'{declaration.label}'",
+                warnings=warnings,
+                subject=declaration.label,
+            )
+
+    return filled
 
 
 def fix_orphaned_tool_calls_ir(
@@ -129,106 +530,19 @@ def fix_orphaned_tool_calls_ir(
     *,
     placeholder: str = UNANSWERED_TOOL_CALL,
 ) -> list[IRInputItem]:
-    """Fix mismatched tool_calls and tool results at IR level.
+    """Deprecated alias of :func:`normalize_tool_pairing`.
 
-    Both the OpenAI Chat Completions API and the Responses API **strictly
-    require** bidirectional pairing between tool calls and tool results:
-
-    1. Every ``tool_call_id`` in an assistant message must have a matching
-       ``role: "tool"`` result message (**orphaned tool_call**).
-    2. Every ``role: "tool"`` result message must have a preceding assistant
-       message containing the matching ``tool_call_id``
-       (**orphaned tool_result**).
-
-    Anthropic enforces the same strict pairing; only Google Gemini is
-    lenient.  This function patches IR messages so that downstream
-    converters produce valid output for any target provider.
-
-    This function handles both directions:
-
-    - **Orphaned tool_calls**: injects a synthetic ``role: "tool"`` IR
-      message with *placeholder* content immediately after the assistant
-      message.
-    - **Orphaned tool_results**: removes ``role: "tool"`` messages whose
-      ``tool_call_id`` does not appear in any preceding assistant
-      ``tool_call`` content part.
-
-    The original iterable is **not** modified; a new list is returned.
+    Kept for callers that name the old repair; it now performs the whole
+    occurrence-aware normalisation, not only the set-difference one.
 
     Args:
         messages: IR messages (any iterable of Message dicts).
         placeholder: Content string for injected synthetic tool results.
 
     Returns:
-        A new messages list with orphaned tool_calls/results fixed.
+        A new messages list with the pairing repaired.
     """
-    msg_list = list(messages)
-
-    known_call_ids, answered_ids = _collect_ir_tool_ids(msg_list)
-
-    # Fast path: nothing to fix
-    if not known_call_ids and not answered_ids:
-        return msg_list
-
-    patched: list[IRInputItem] = []
-    orphaned_call_ids: list[str] = []
-    orphaned_result_ids: list[str] = []
-
-    for msg in msg_list:
-        if not is_message(msg):
-            patched.append(msg)
-            continue
-        role = msg.get("role")
-        content = msg.get("content") or []
-
-        # Remove orphaned tool results (result without preceding tool_call).
-        # A result rides in a ``role: "tool"`` message in some dialects and in
-        # a user turn in others, so the parts are checked wherever they appear;
-        # only the orphan parts go, and the rest of the message is kept.
-        if isinstance(content, list):
-            orphan_ids = (
-                extract_part_ids(content, "tool_result", "tool_call_id")
-                - known_call_ids
-            )
-            if orphan_ids:
-                orphaned_result_ids.extend(sorted(orphan_ids))
-                kept = [
-                    part
-                    for part in content
-                    if not (
-                        is_tool_result_part(part)
-                        and part.get("tool_call_id") in orphan_ids
-                    )
-                ]
-                if not kept:
-                    continue
-                msg = cast(IRInputItem, {**msg, "content": kept})
-                content = kept
-
-        patched.append(msg)
-
-        # Inject synthetic results for orphaned tool_calls
-        if role == "assistant":
-            unanswered = (
-                extract_part_ids(content, "tool_call", "tool_call_id") - answered_ids
-            )
-            for tc_id in unanswered:
-                orphaned_call_ids.append(tc_id)
-                patched.append(
-                    {
-                        "role": "tool",
-                        "content": [
-                            {
-                                "type": "tool_result",
-                                "tool_call_id": tc_id,
-                                "result": placeholder,
-                            }
-                        ],
-                    }
-                )
-
-    log_orphan_warnings(logger, orphaned_call_ids, orphaned_result_ids)
-    return patched
+    return normalize_tool_pairing(messages, placeholder=placeholder)
 
 
 # ==================== Orphaned Tool Config Fix (IR level) ====================
@@ -243,8 +557,8 @@ def strip_orphaned_tool_config(ir_request: IRRequest) -> list[str]:
     but no tools are provided"*.
 
     This is part of the same problem family as
-    :func:`fix_orphaned_tool_calls_ir` (orphaned tool_call/result pairing)
-    and ``_reorder_tool_messages`` (tool message ordering) — all stem from
+    :func:`normalize_tool_pairing` (orphaned tool_call/result pairing) and
+    ``_reorder_tool_messages`` (tool message ordering) — all stem from
     Codex context compaction breaking request structural integrity.
 
     The request dict is modified **in-place**.
@@ -268,11 +582,11 @@ def strip_orphaned_tool_config(ir_request: IRRequest) -> list[str]:
     request_dict = cast(dict[str, Any], ir_request)
 
     warnings: list[str] = []
-    for field in ("tool_choice", "tool_config"):
-        if field in request_dict:
-            value = request_dict.pop(field)
+    for name in ("tool_choice", "tool_config"):
+        if name in request_dict:
+            value = request_dict.pop(name)
             warnings.append(
-                f"Stripped orphaned '{field}' (value: {value!r}) — "
+                f"Stripped orphaned '{name}' (value: {value!r}) — "
                 "no tool definitions present in request (Codex context "
                 "compaction workaround)"
             )
