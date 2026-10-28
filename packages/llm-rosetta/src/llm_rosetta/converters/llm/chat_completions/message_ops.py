@@ -10,7 +10,6 @@ Also handles multimodal tool result packing/unpacking (Phase 2 dual encoding).
 
 import logging
 from collections.abc import Sequence
-from dataclasses import dataclass
 from typing import Any, cast
 
 from ....types.ir import (
@@ -34,8 +33,6 @@ from ....types.ir import (
     is_tool_result_part,
 )
 from ...base import BaseMessageOps
-from ...base.tools import sanitize_tool_call_id
-from ....ir.tools.orphan_fix import UNANSWERED_TOOL_CALL
 from ...base.helpers.citations import report_dropped_citation
 from ...base.helpers.opaque import (
     set_opaque_origin,
@@ -52,14 +49,6 @@ from .content_ops import ChatCompletionsContentOps
 from .tool_ops import ChatCompletionsToolOps
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class _ToolCallOccurrence:
-    original_id: str
-    wire_id: str
-    result: dict[str, Any] | None = None
-    result_source_index: int | None = None
 
 
 def restore_reasoning_details(
@@ -161,7 +150,7 @@ class ChatCompletionsMessageOps(BaseMessageOps):
     def _reorder_tool_messages(
         messages: list[dict[str, Any]], warnings: list[str]
     ) -> list[dict[str, Any]]:
-        """Reorder tool messages so each sits right after the assistant that called it.
+        """Place each tool message right after the assistant that called it.
 
         The Chat Completions API requires ``role: "tool"`` messages to appear
         immediately after the ``role: "assistant"`` message whose ``tool_calls``
@@ -171,6 +160,11 @@ class ChatCompletionsMessageOps(BaseMessageOps):
         messages can end up separated from their assistant message, causing
         upstream 400 errors.
 
+        Pairing, renaming and placeholder injection are not done here.  The
+        request-level repair runs before any writer
+        (``BaseConverter.request_to_provider``), so every target sees the same
+        repaired history and this method only moves messages.
+
         Args:
             messages: Flat list of converted OpenAI Chat messages.
             warnings: Warning list to append reorder notices to.
@@ -178,198 +172,34 @@ class ChatCompletionsMessageOps(BaseMessageOps):
         Returns:
             Reordered message list.
         """
-        prepared = ChatCompletionsMessageOps._copy_tool_messages(messages)
-        reserved_ids = ChatCompletionsMessageOps._collect_tool_call_ids(prepared)
-        calls_by_message, duplicate_ids = (
-            ChatCompletionsMessageOps._pair_tool_call_occurrences(
-                prepared, reserved_ids, warnings
-            )
-        )
-        return ChatCompletionsMessageOps._rebuild_tool_messages(
-            prepared,
-            calls_by_message,
-            duplicate_ids,
-            warnings,
-        )
-
-    @staticmethod
-    def _copy_tool_messages(
-        messages: list[dict[str, Any]],
-    ) -> list[dict[str, Any]]:
-        prepared: list[dict[str, Any]] = []
+        by_id: dict[Any, list[dict[str, Any]]] = {}
         for message in messages:
-            if message.get("role") == "assistant" and isinstance(
-                message.get("tool_calls"), list
-            ):
-                prepared.append(
-                    {
-                        **message,
-                        "tool_calls": [dict(call) for call in message["tool_calls"]],
-                    }
-                )
-            elif message.get("role") == "tool":
-                prepared.append(dict(message))
-            else:
-                prepared.append(message)
-        return prepared
-
-    @staticmethod
-    def _collect_tool_call_ids(messages: list[dict[str, Any]]) -> set[str]:
-        reserved_ids: set[str] = set()
-        for message in messages:
-            if message.get("role") == "assistant":
-                for call in message.get("tool_calls") or []:
-                    call_id = call.get("id")
-                    if isinstance(call_id, str) and call_id:
-                        reserved_ids.add(call_id)
-            elif message.get("role") == "tool":
-                call_id = message.get("tool_call_id")
-                if isinstance(call_id, str) and call_id:
-                    reserved_ids.add(call_id)
-        return reserved_ids
-
-    @staticmethod
-    def _pair_tool_call_occurrences(
-        messages: list[dict[str, Any]],
-        reserved_ids: set[str],
-        warnings: list[str],
-    ) -> tuple[
-        dict[int, list[_ToolCallOccurrence]],
-        set[str],
-    ]:
-        pending_by_id: dict[str, list[_ToolCallOccurrence]] = {}
-        calls_by_message: dict[int, list[_ToolCallOccurrence]] = {}
-        occurrence_counts: dict[str, int] = {}
-        duplicate_ids: set[str] = set()
-
-        # Pair each result to one preceding call occurrence before moving it.
-        for source_index, message in enumerate(messages):
-            if message.get("role") == "assistant":
-                for call in message.get("tool_calls") or []:
-                    original_id = call.get("id")
-                    if not isinstance(original_id, str) or not original_id:
-                        continue
-                    occurrence = occurrence_counts.get(original_id, 0) + 1
-                    occurrence_counts[original_id] = occurrence
-                    if occurrence > 1:
-                        duplicate_ids.add(original_id)
-                    wire_id = ChatCompletionsMessageOps._register_tool_call(
-                        call,
-                        original_id,
-                        occurrence,
-                        reserved_ids,
-                        warnings,
-                    )
-                    call_ref = _ToolCallOccurrence(original_id, wire_id)
-                    calls_by_message.setdefault(source_index, []).append(call_ref)
-                    pending_by_id.setdefault(original_id, []).append(call_ref)
-            elif message.get("role") == "tool":
-                ChatCompletionsMessageOps._pair_tool_result(
-                    message,
-                    source_index,
-                    pending_by_id,
-                    warnings,
-                )
-        return calls_by_message, duplicate_ids
-
-    @staticmethod
-    def _register_tool_call(
-        call: dict[str, Any],
-        original_id: str,
-        occurrence: int,
-        reserved_ids: set[str],
-        warnings: list[str],
-    ) -> str:
-        if occurrence == 1:
-            return original_id
-
-        suffix = occurrence
-        while True:
-            wire_id = sanitize_tool_call_id(f"{original_id}_duplicate_{suffix}")
-            if wire_id not in reserved_ids:
-                break
-            suffix += 1
-        reserved_ids.add(wire_id)
-        call["id"] = wire_id
-        warnings.append(
-            f"Renamed duplicate tool_call_id='{original_id}' to "
-            f"'{wire_id}' for Chat Completions"
-        )
-        return wire_id
-
-    @staticmethod
-    def _pair_tool_result(
-        message: dict[str, Any],
-        source_index: int,
-        pending_by_id: dict[str, list[_ToolCallOccurrence]],
-        warnings: list[str],
-    ) -> None:
-        original_id = message.get("tool_call_id")
-        pending = (
-            pending_by_id.get(original_id)
-            if isinstance(original_id, str) and original_id
-            else None
-        )
-        if not pending:
-            warnings.append(
-                f"Tool message with tool_call_id='{original_id}' has no "
-                "preceding assistant tool_calls entry; dropped"
-            )
-            return
-        if len(pending) > 1:
-            warnings.append(
-                f"Ambiguous tool result for repeated tool_call_id="
-                f"'{original_id}'; paired with nearest preceding "
-                "unmatched call"
-            )
-        call_ref = pending.pop()
-        if original_id != call_ref.wire_id:
-            message["tool_call_id"] = call_ref.wire_id
-        call_ref.result = message
-        call_ref.result_source_index = source_index
-
-    @staticmethod
-    def _rebuild_tool_messages(
-        messages: list[dict[str, Any]],
-        calls_by_message: dict[int, list[_ToolCallOccurrence]],
-        duplicate_ids: set[str],
-        warnings: list[str],
-    ) -> list[dict[str, Any]]:
+            if message.get("role") == "tool":
+                by_id.setdefault(message.get("tool_call_id"), []).append(message)
 
         result: list[dict[str, Any]] = []
-        reordered = False
-        for source_index, message in enumerate(messages):
+        for message in messages:
             if message.get("role") == "tool":
                 continue
-
             result.append(message)
             if message.get("role") != "assistant":
                 continue
+            for call in message.get("tool_calls") or []:
+                call_id = call.get("id")
+                if call_id:
+                    result.extend(by_id.pop(call_id, ()))
 
-            for call_ref in calls_by_message.get(source_index, []):
-                tool_message = call_ref.result
-                if tool_message is None:
-                    if call_ref.original_id not in duplicate_ids:
-                        continue
-                    tool_message = {
-                        "role": "tool",
-                        "tool_call_id": call_ref.wire_id,
-                        "content": UNANSWERED_TOOL_CALL,
-                    }
-                    warnings.append(
-                        "Inserted placeholder for unanswered duplicate "
-                        f"tool_call_id='{call_ref.original_id}' occurrence"
-                    )
-                elif call_ref.result_source_index != len(result):
-                    reordered = True
-                result.append(tool_message)
+        # A tool message that pairs with nothing keeps its original relative
+        # order rather than vanishing: the IR repair already removed the ones
+        # it could identify.
+        for bucket in by_id.values():
+            result.extend(bucket)
 
-        if reordered:
+        if result != messages:
             warnings.append(
                 "Reordered tool messages to follow assistant tool_calls "
                 "(workaround for Codex CLI item ordering)"
             )
-
         return result
 
     def _ir_message_to_p(

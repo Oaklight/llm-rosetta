@@ -53,7 +53,6 @@ from ...base.context import (
 )
 from ...base.tools import (
     assign_tool_batch_ids,
-    fix_orphaned_tool_calls_ir,
     sanitize_tool_call_id,
     strip_orphaned_tool_config,
 )
@@ -652,9 +651,9 @@ class GoogleGenerateConverter(BaseConverter):
         # 1. Handle system_instruction
         system_instruction = self._build_system_instruction(ir_request)
 
-        # 2. Handle messages — fix orphaned tool_calls/results and strip
-        #    orphaned tool_choice/tool_config at IR level before conversion.
-        ir_messages = fix_orphaned_tool_calls_ir(ir_request.get("messages", []))
+        # 2. Handle messages — the pairing repair already ran at the
+        #    converter boundary; tool_choice/tool_config are stripped here.
+        ir_messages = ir_request.get("messages", [])
         # Assign batch_ids over the full list before message_ops runs, so
         # per-format merge_tool_messages can group parallel tool results.
         ir_messages = assign_tool_batch_ids(ir_messages)
