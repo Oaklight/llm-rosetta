@@ -14,12 +14,19 @@ Provides the context hierarchy for conversion pipelines:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from typing import Any, Literal
 
 from llm_rosetta.conversion_warnings import WarningSink
 
 MetadataMode = Literal["strip", "preserve"]
+
+#: Where the request leg records the tool vocabulary it handed upstream.
+#:
+#: The response leg treats a provider-hosted call differently from a client
+#: call of the same name, and only the request knows which one the upstream
+#: was told to run.  See :meth:`ConversionContext.record_request_tool_vocabulary`.
+_REQUEST_TOOL_VOCABULARY_KEY = "_request_tool_vocabulary"
 
 #: Synchronous image downloader: ``url -> (bytes, content_type) | None``.
 #:
@@ -105,6 +112,68 @@ class ConversionContext:
             List of metadata dicts, or empty list if none stored.
         """
         return self.metadata.get("_output_items_meta", [])
+
+    def record_request_tool_vocabulary(
+        self,
+        *,
+        intrinsic_kinds: Iterable[str],
+        function_names: Iterable[str],
+    ) -> None:
+        """Record the tool vocabulary the request handed to the upstream.
+
+        A provider-hosted (intrinsic) call and a client function call can look
+        identical on the wire, so a response reader cannot classify one from
+        the call alone.  The request leg knows what it sent, so it states it
+        once here and the response leg asks.
+
+        Args:
+            intrinsic_kinds: Canonical intrinsic kinds the request enabled
+                upstream (possibly empty).
+            function_names: Names of the ordinary tools the request declared.
+                A call under one of these names is the client's, even when it
+                also matches a hosted tool (see the response reader).
+        """
+        self.metadata[_REQUEST_TOOL_VOCABULARY_KEY] = {
+            "intrinsic_kinds": frozenset(intrinsic_kinds),
+            "function_names": frozenset(function_names),
+        }
+
+    def request_tool_vocabulary(
+        self,
+    ) -> tuple[frozenset[str] | None, frozenset[str]]:
+        """Return the request's tool vocabulary as recorded by the request leg.
+
+        Returns:
+            ``(intrinsic_kinds, function_names)``.  ``intrinsic_kinds`` is
+            ``None`` when no request leg ran on this context — a response
+            converted on its own, where the reader has nothing but the wire to
+            go on.  An empty frozenset means the request leg did run and
+            enabled no hosted tool, which is a *different* answer.
+        """
+        vocabulary = self.metadata.get(_REQUEST_TOOL_VOCABULARY_KEY)
+        if not isinstance(vocabulary, Mapping):
+            return None, frozenset()
+        kinds = vocabulary.get("intrinsic_kinds")
+        names = vocabulary.get("function_names")
+        return (
+            frozenset(kinds) if kinds is not None else frozenset(),
+            frozenset(names) if names is not None else frozenset(),
+        )
+
+    def bridge_request_tool_vocabulary(self, target: ConversionContext) -> None:
+        """Copy the recorded request vocabulary onto another context.
+
+        A stream processor starts each direction from a fresh
+        :class:`StreamContext`; the request vocabulary belongs to the
+        conversion, not to either direction, so it is handed to the context
+        that reads the upstream stream.
+
+        Args:
+            target: The context the vocabulary is copied to.
+        """
+        vocabulary = self.metadata.get(_REQUEST_TOOL_VOCABULARY_KEY)
+        if isinstance(vocabulary, Mapping):
+            target.metadata[_REQUEST_TOOL_VOCABULARY_KEY] = dict(vocabulary)
 
 
 @dataclass

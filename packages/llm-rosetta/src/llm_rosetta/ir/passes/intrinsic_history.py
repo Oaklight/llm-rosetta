@@ -39,7 +39,6 @@ import copy
 import json
 import logging
 import re
-from collections.abc import Mapping
 from typing import Any, cast
 
 from ..tools.intrinsic import intrinsic_kind_of, is_intrinsic_part
@@ -195,11 +194,9 @@ def _decide(
         if part.get("type") != "tool_call" or not is_intrinsic_part(part):
             continue
         kind = intrinsic_kind_of(part)
-        fields = part.get("tool_input")
         reason = _degrade_reason(
             part,
             kind,
-            fields,
             target_tool_ops,
             answered,
             is_anonymous=key != (part.get("tool_call_id") or ""),
@@ -220,7 +217,6 @@ def _decide(
 def _degrade_reason(
     part: Any,
     kind: str,
-    fields: Any,
     target_tool_ops: Any,
     answered: set[Any],
     *,
@@ -234,10 +230,14 @@ def _degrade_reason(
     carry (the same kind is written natively when it arrives in a dialect that
     fills that field), and a turn this target requires a paired result in.
 
+    The question is asked with :meth:`BaseToolOps.intrinsic_renderable_part`,
+    which sees the whole part: a dialect can sometimes replay a part it
+    produced itself even when the canonical kind has no general inline form
+    (Google's hosted search arrives as a ``functionCall``).
+
     Args:
         part: The IR intrinsic tool call part.
         kind: Its canonical kind (``""`` when the part carries none).
-        fields: Its ``tool_input``.
         target_tool_ops: The target converter's tool operations.
         answered: Every ``tool_call_id`` a result in this history answers.
         is_anonymous: Whether the part has no ``tool_call_id``.
@@ -251,9 +251,7 @@ def _degrade_reason(
         is_anonymous or part.get("tool_call_id") not in answered
     ):
         return f"the target needs a result for its {kind!r} call and this turn has none"
-    if target_tool_ops.intrinsic_renderable(
-        kind, fields if isinstance(fields, Mapping) else {}, leg="history"
-    ):
+    if target_tool_ops.intrinsic_renderable_part(part, leg="history"):
         return None
     # Two different situations land here and a reader has to know which to
     # look at: a kind the target has no form for at all, and a kind it does
