@@ -463,6 +463,12 @@ class GoogleGenerateToolOps(BaseToolOps):
         Supports both SDK naming (``function_call``) and REST API naming
         (``functionCall``).
 
+        The part is read as a *client* call.  A ``functionCall`` may name a
+        provider-hosted tool, which only the request can tell apart from a
+        client function of the same name; the response readers reclassify it
+        after parsing, once the request's own record is consulted (see
+        ``GoogleGenerateConverter._classify_hosted_calls``).
+
         Args:
             provider_tool_call: Google Part dict with function_call.
 
@@ -676,6 +682,64 @@ class GoogleGenerateToolOps(BaseToolOps):
 
     # ==================== Intrinsic Tool Parts ====================
 
+    @staticmethod
+    def native_function_call(part: Any) -> dict[str, Any] | None:
+        """The ``functionCall`` body a Google-origin hosted call arrived as.
+
+        Google delivers a hosted tool's call as a ``functionCall`` part (see
+        :meth:`p_function_call_intrinsic_kind`), and a reader that promotes
+        such a part records the native part it came from under
+        ``provider_metadata["_native"]`` — the same carrier the stream reader
+        uses for ``executableCode``.
+
+        Only a Google origin counts.  The same canonical kind read from another
+        dialect (a Responses ``web_search_call``, say) has no Google
+        ``functionCall`` behind it, and writing one would ask a Google client
+        to run a tool it never declared.
+
+        Args:
+            part: IR intrinsic tool call part (or any dict carrying
+                ``provider_metadata``).
+
+        Returns:
+            A copy of the native ``functionCall`` body, or ``None`` when the
+            part did not come from Google's own ``functionCall`` wire.
+        """
+        if not isinstance(part, Mapping):
+            return None
+        metadata = part.get("provider_metadata")
+        if not isinstance(metadata, Mapping):
+            return None
+        native = metadata.get("_native")
+        if not isinstance(native, Mapping) or native.get("base") != "google_generate":
+            return None
+        native_part = native.get("part")
+        if not isinstance(native_part, Mapping):
+            return None
+        func_call = native_part.get("functionCall") or native_part.get("function_call")
+        return dict(func_call) if isinstance(func_call, Mapping) else None
+
+    @classmethod
+    def intrinsic_renderable_part(cls, part: Any, *, leg: IntrinsicLeg) -> bool:
+        """Whether Google can replay this intrinsic part as it stands.
+
+        A Google-origin hosted call is written back as the ``functionCall``
+        part it arrived as, on both legs.  Any other ``google_search`` part has
+        no Google inline form (genuine grounding surfaces in
+        ``groundingMetadata``, never as a content part), so it keeps the
+        existing drop/degrade behaviour.
+
+        Args:
+            part: IR intrinsic tool call part.
+            leg: Which leg the part would be written on.
+
+        Returns:
+            True when the part can be written natively.
+        """
+        if cls.native_function_call(part) is not None:
+            return True
+        return super().intrinsic_renderable_part(part, leg=leg)
+
     @classmethod
     def intrinsic_renderable(cls, kind: str, fields: Any, *, leg: IntrinsicLeg) -> bool:
         """Whether Google has an inline content part for *kind*.
@@ -707,6 +771,14 @@ class GoogleGenerateToolOps(BaseToolOps):
     ) -> dict[str, Any] | None:
         """IR intrinsic ToolCallPart → Google ``executableCode`` part.
 
+        A hosted call Google itself delivered as a ``functionCall`` is written
+        back as the same ``functionCall`` part on **both** legs: the response
+        returns the turn it received, and a replayed history turn keeps the
+        shape master replayed (name, args, id, and the thought signature
+        carried in ``provider_metadata``).  The part stays intrinsic in the IR;
+        this restores only its wire form.  A ``google_search`` part from any
+        other origin has no Google form and is dropped exactly as before.
+
         Args:
             ir_tool_call: IR tool call part with ``tool_type == "intrinsic"``.
             leg: Which leg the part is written on.
@@ -718,6 +790,8 @@ class GoogleGenerateToolOps(BaseToolOps):
             :meth:`non_native_intrinsic_call_to_p`).  An unrenderable kind
             warns: it is a server call on its way out, not a client call.
         """
+        if cls.native_function_call(ir_tool_call) is not None:
+            return cls.ir_client_call_to_p(ir_tool_call, **kwargs)
         kind = intrinsic_kind_of(ir_tool_call)
         if cls.intrinsic_renderable(kind, ir_tool_call.get("tool_input"), leg=leg):
             tool_input = ir_tool_call.get("tool_input", {})
@@ -881,6 +955,86 @@ class GoogleGenerateToolOps(BaseToolOps):
         return None
 
     # ==================== Tool Config ====================
+
+    @staticmethod
+    def wire_tool_vocabulary(
+        tools: Any,
+    ) -> tuple[frozenset[str], frozenset[str]]:
+        """Read a request body's tool declarations for call classification.
+
+        The history has no conversion context, but the body a client sends
+        carries the same decision the request leg records for the response
+        leg: a hosted tool key enables its kind, and a ``functionDeclarations``
+        name belongs to the client and wins over the hosted table.
+
+        Args:
+            tools: The wire ``tools`` list (REST or SDK spelling), or ``None``.
+
+        Returns:
+            ``(intrinsic_kinds, function_names)``.
+        """
+        kinds: set[str] = set()
+        names: set[str] = set()
+        for tool in tools or ():
+            if not isinstance(tool, dict):
+                continue
+            for key, kind in _INTRINSIC_TOOL_KEYS.items():
+                if key in tool:
+                    kinds.add(kind)
+            declarations = tool.get("functionDeclarations") or tool.get(
+                "function_declarations"
+            )
+            for declaration in declarations or ():
+                if not isinstance(declaration, dict):
+                    continue
+                name = declaration.get("name")
+                if isinstance(name, str) and name:
+                    names.add(name)
+        return frozenset(kinds), frozenset(names)
+
+    @staticmethod
+    def p_function_call_intrinsic_kind(
+        tool_name: str,
+        *,
+        enabled_kinds: frozenset[str] | None,
+        client_function_names: frozenset[str] = frozenset(),
+    ) -> str:
+        """The intrinsic kind a Google ``functionCall`` name denotes, or ``""``.
+
+        Google delivers a hosted (server-side) tool's call through the same
+        ``functionCall`` part a client tool uses, named after the tool
+        (``googleSearch``).  The name alone cannot decide the two apart: a
+        client may legitimately declare an ordinary function called
+        ``googleSearch``.  The decision therefore comes from what the request
+        enabled upstream, recorded by the request leg:
+
+        * the name's kind must be one of the request's intrinsic kinds, and
+        * an ordinary function the client *did* declare under the exact same
+          name wins.  The client asked for that tool, and a call it can answer
+          is never worse than a server call it cannot.
+
+        When ``enabled_kinds`` is ``None`` no request leg recorded anything (a
+        response converted on its own), so the name table is the only evidence
+        available and is used as a fallback.  That fallback cannot tell a
+        hosted ``googleSearch`` from a client function of the same name; a
+        caller that needs the distinction must convert the request through the
+        same context first.
+
+        Args:
+            tool_name: The ``functionCall`` name as it appears on the wire.
+            enabled_kinds: Intrinsic kinds the request enabled upstream, or
+                ``None`` when no request leg is known.
+            client_function_names: Ordinary tool names the request declared.
+
+        Returns:
+            The canonical intrinsic kind, or ``""`` for a client call.
+        """
+        kind = _INTRINSIC_TOOL_KEYS.get(tool_name, "")
+        if not kind or tool_name in client_function_names:
+            return ""
+        if enabled_kinds is None:
+            return kind
+        return kind if kind in enabled_kinds else ""
 
     @staticmethod
     def ir_tool_config_to_p(ir_tool_config: ToolCallConfig, **kwargs: Any) -> dict:

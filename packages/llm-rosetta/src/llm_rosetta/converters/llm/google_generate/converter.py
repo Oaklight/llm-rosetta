@@ -632,6 +632,11 @@ class GoogleGenerateConverter(BaseConverter):
         **kwargs: Any,
     ) -> dict[str, Any]:
         ctx = context
+        # State what this request hands upstream before writing it: hosted
+        # calls and client function calls share one wire shape, so the response
+        # reader can only tell them apart from this record.  See
+        # ``p_function_call_intrinsic_kind``.
+        self._record_request_tool_vocabulary(ir_request.get("tools"), ctx)
         # The default is the SDK shape because this converter's callers consume
         # the result as ``google.genai`` client arguments (see the converters
         # guide).  ``ConversionPipeline`` defaults to ``"rest"`` instead, since
@@ -767,6 +772,13 @@ class GoogleGenerateConverter(BaseConverter):
         tools = config.get("tools") or provider_request.get("tools")
         if tools:
             ir_request["tools"] = self._get_cached_p_tools_to_ir(tools)
+            # A client replays the model turn it received, where a hosted
+            # tool's call is the same ``functionCall`` part a client function
+            # uses.  The history has no recorded vocabulary to consult, but
+            # the body carries one: classify from the tools it declares, or
+            # the pairing pass answers a finished server call with a
+            # synthetic result.
+            self._classify_hosted_history_calls(ir_messages, tools)
 
         # Tool choice — check SDK/REST snake_case/camelCase
         tool_config = (
@@ -852,6 +864,10 @@ class GoogleGenerateConverter(BaseConverter):
             # Fallback for empty candidates (e.g. thinking consumed all tokens)
             if message is None:
                 message = {"role": "assistant", "content": []}
+            # A hosted tool's call arrives as a plain ``functionCall``, the
+            # same part a client function uses; promote the ones this request
+            # enabled before the parts decide the turn's finish reason.
+            self._classify_hosted_calls(message, context)
             grounding = p_candidate.get("grounding_metadata") or p_candidate.get(
                 "groundingMetadata"
             )
@@ -1024,6 +1040,167 @@ class GoogleGenerateConverter(BaseConverter):
             tc_p = self.tool_ops.ir_tool_choice_to_p(tool_choice, warnings=ctx.warnings)
             if tc_p:
                 config["tool_config"] = tc_p
+
+    @staticmethod
+    def _record_request_tool_vocabulary(tools: Any, context: ConversionContext) -> None:
+        """Record which server tools and client functions this request enabled.
+
+        Google delivers a hosted tool's call and a client function's call
+        through the same ``functionCall`` part, so the response reader needs to
+        know what the request asked for.  The request leg is the only leg that
+        knows, so it records the two sets on the context for the response leg
+        (non-streaming: the same context; streaming: bridged by the pipeline).
+
+        Args:
+            tools: The IR request's ``tools`` list (may be ``None``).
+            context: The request leg's conversion context.
+        """
+        kinds: set[str] = set()
+        names: set[str] = set()
+        for tool in tools or ():
+            if not isinstance(tool, dict):
+                continue
+            if tool.get("type") == "intrinsic":
+                kind = intrinsic_kind_of(tool)
+                if kind:
+                    kinds.add(kind)
+                continue
+            name = tool.get("name")
+            if isinstance(name, str) and name:
+                names.add(name)
+        context.record_request_tool_vocabulary(
+            intrinsic_kinds=kinds, function_names=names
+        )
+
+    def _classify_hosted_history_calls(self, messages: list[Any], tools: Any) -> None:
+        """Promote replayed ``functionCall`` parts to hosted calls.
+
+        The response readers consult the vocabulary the request leg recorded;
+        a request *body* being read has no such record, but it declares the
+        same tools.  A hosted key enables the kind; a client function declared
+        under the same name wins, as it does on the response leg.
+
+        Args:
+            messages: IR messages parsed from the body's ``contents``.
+            tools: The wire ``tools`` list from the same body.
+        """
+        enabled_kinds, function_names = self.tool_ops.wire_tool_vocabulary(tools)
+        for message in messages:
+            content = message.get("content")
+            if not isinstance(content, list):
+                continue
+            for part in content:
+                if not isinstance(part, dict):
+                    continue
+                if part.get("type") != "tool_call":
+                    continue
+                if part.get("tool_type") == "intrinsic":
+                    continue
+                kind = self.tool_ops.p_function_call_intrinsic_kind(
+                    part.get("tool_name", ""),
+                    enabled_kinds=enabled_kinds,
+                    client_function_names=function_names,
+                )
+                if kind:
+                    self._promote_to_hosted(part, kind)
+
+    def _hosted_call_kind(
+        self,
+        tool_name: str,
+        context: ConversionContext | StreamContext | None,
+    ) -> str:
+        """Classify a ``functionCall`` name against what the request enabled.
+
+        With no context, or a context no request leg recorded on (a response
+        converted on its own), the name table is the only evidence available;
+        :meth:`GoogleGenerateToolOps.p_function_call_intrinsic_kind` states
+        that fallback and its limitation.
+
+        Args:
+            tool_name: The ``functionCall`` name as it appears on the wire.
+            context: The conversion context, or ``None``.
+
+        Returns:
+            The canonical intrinsic kind, or ``""`` for a client call.
+        """
+        if context is None:
+            return self.tool_ops.p_function_call_intrinsic_kind(
+                tool_name, enabled_kinds=None
+            )
+        kinds, client_names = context.request_tool_vocabulary()
+        return self.tool_ops.p_function_call_intrinsic_kind(
+            tool_name, enabled_kinds=kinds, client_function_names=client_names
+        )
+
+    def _classify_hosted_calls(
+        self,
+        message: dict[str, Any],
+        context: ConversionContext | StreamContext | None,
+    ) -> None:
+        """Promote ``functionCall`` parts the request enabled to hosted calls.
+
+        The message parser cannot tell a hosted call from a client function:
+        both arrive as ``functionCall``.  The request recorded what it enabled
+        (or did not), so a part matching that record is rewritten in place to
+        ``tool_type="intrinsic"`` with its canonical kind.  The finish reason
+        then reads the turn as complete rather than as owing the client a
+        result.
+
+        The native part it arrived as is recorded under
+        ``provider_metadata["_native"]``, so a Google target can write the call
+        back as the same ``functionCall`` (see
+        :meth:`GoogleGenerateToolOps.native_function_call`) while every other
+        target still treats it as a server call it has no form for.
+
+        Args:
+            message: The IR message parsed from one candidate.
+            context: The conversion context the request leg recorded on.
+        """
+        content = message.get("content")
+        if not isinstance(content, list):
+            return
+        for part in content:
+            if not isinstance(part, dict) or part.get("type") != "tool_call":
+                continue
+            if part.get("tool_type") == "intrinsic":
+                continue
+            kind = self._hosted_call_kind(part.get("tool_name", ""), context)
+            if kind:
+                self._promote_to_hosted(part, kind)
+
+    def _promote_to_hosted(self, part: dict[str, Any], kind: str) -> None:
+        """Mark *part* as a hosted call and keep the form it arrived as.
+
+        Both readers promote the same way: the native ``functionCall`` is
+        recorded under ``provider_metadata["_native"]`` so a Google target can
+        write the call back as it came (see
+        :meth:`GoogleGenerateToolOps.native_function_call`), while every other
+        target still treats it as a server call it has no form for.
+
+        Args:
+            part: The IR ``tool_call`` part to promote, rewritten in place.
+            kind: The canonical intrinsic kind the call denotes.
+        """
+        part["tool_type"] = "intrinsic"
+        part["intrinsic_kind"] = kind
+        native_call: dict[str, Any] = {
+            "name": part.get("tool_name", ""),
+            "args": part.get("tool_input", {}),
+        }
+        call_id = part.get("tool_call_id")
+        if isinstance(call_id, str) and call_id:
+            native_call["id"] = call_id
+        metadata = part.get("provider_metadata")
+        if not isinstance(metadata, dict):
+            metadata = {}
+            part["provider_metadata"] = metadata
+        native_part: dict[str, Any] = {"functionCall": native_call}
+        signature = google_thought_signature({"provider_metadata": metadata})
+        if signature:
+            native_part["thoughtSignature"] = signature
+        metadata.setdefault(
+            "_native", {"base": self._CONVERTER_TAG, "part": native_part}
+        )
 
     @staticmethod
     def _build_p_usage_to_ir(p_usage: dict[str, Any]) -> UsageInfo:
@@ -1530,13 +1707,42 @@ class GoogleGenerateConverter(BaseConverter):
         context: StreamContext | None,
         events: list[IRStreamEvent],
     ) -> None:
-        """Process a function_call part into ToolCallStart + ToolCallDelta events."""
+        """Process a function_call part into ToolCallStart + ToolCallDelta events.
+
+        A ``functionCall`` may name a hosted tool the request enabled, which
+        Google delivers through the same part as a client function.  Such a
+        call is registered and emitted as intrinsic, exactly like the dialect's
+        own server parts, so the finish event reads the turn as complete and no
+        client is asked to run a search it cannot run.
+        """
         tool_call_id = func_call.get("id") or generate_tool_call_id()
         tool_name = func_call.get("name", "")
         args = func_call.get("args", {})
+        intrinsic_kind = self._hosted_call_kind(tool_name, context)
+        thought_sig = part.get("thoughtSignature") or part.get("thought_signature")
+
+        # The native part travels with an intrinsic call so a Google target can
+        # write the same ``functionCall`` back on either leg (the counterpart of
+        # the ``executableCode`` native part below).
+        provider_metadata: dict[str, Any] = {}
+        if intrinsic_kind:
+            provider_metadata["_native"] = {
+                "base": self._CONVERTER_TAG,
+                "part": dict(part),
+            }
+        if thought_sig:
+            provider_metadata.setdefault("google", {})["thought_signature"] = (
+                thought_sig
+            )
 
         if context is not None:
-            context.register_tool_call(tool_call_id, tool_name)
+            context.register_tool_call(
+                tool_call_id,
+                tool_name,
+                tool_type="intrinsic" if intrinsic_kind else "function",
+                provider_metadata=provider_metadata or None,
+                intrinsic_kind=intrinsic_kind,
+            )
 
         tc_index = context.tool_call_count - 1 if context is not None else 0
         start_event: dict[str, Any] = {
@@ -1546,11 +1752,14 @@ class GoogleGenerateConverter(BaseConverter):
             "choice_index": choice_index,
             "tool_call_index": tc_index,
         }
+        if intrinsic_kind:
+            start_event["tool_type"] = "intrinsic"
+            start_event["intrinsic_kind"] = intrinsic_kind
 
-        thought_sig = part.get("thoughtSignature") or part.get("thought_signature")
-        if thought_sig:
+        if provider_metadata:
             start_event["provider_metadata"] = {
-                "google": {"thought_signature": thought_sig}
+                key: dict(value) if isinstance(value, dict) else value
+                for key, value in provider_metadata.items()
             }
 
         events.append(cast(ToolCallStartEvent, start_event))
@@ -1563,6 +1772,11 @@ class GoogleGenerateConverter(BaseConverter):
             choice_index=choice_index,
         )
         delta_evt["tool_call_index"] = tc_index
+        if intrinsic_kind:
+            # The fragment repeats the call's canonical kind, as the dialect's
+            # own server call does, so a reader that sees only the delta does
+            # not fall back to the tool name.
+            delta_evt["intrinsic_kind"] = intrinsic_kind
         events.append(delta_evt)
 
         if context is not None:
@@ -1888,14 +2102,45 @@ class GoogleGenerateConverter(BaseConverter):
         kind: str,
         provider_metadata: Mapping[str, Any],
         args_str: str,
+        *,
+        tool_name: str = "",
+        tool_call_id: str = "",
     ) -> dict[str, Any] | None:
         """Build the finish part for a pending intrinsic call, or ``None``.
 
+        A Google-origin hosted call is flushed as the ``functionCall`` it
+        arrived as — name, accumulated args, id and thought signature — which
+        is the shape a client call takes and the shape master replayed.  It
+        stays intrinsic in the IR; only the wire form is restored.
+
         ``None`` means nothing is written here: the call was already written on
-        its start event (it carried a native part), or Google cannot render the
-        kind.  Either way a server call is never downgraded to a client
-        ``functionCall``.  (#986)
+        its start event (it carried a native ``executableCode``), or Google
+        cannot render the kind.  Either way a server call is never downgraded
+        to a client ``functionCall``.  (#986)
         """
+        native_call = self.tool_ops.native_function_call(
+            {"provider_metadata": provider_metadata}
+        )
+        if native_call is not None:
+            try:
+                args = json.loads(args_str) if args_str.strip() else {}
+            except (json.JSONDecodeError, TypeError):
+                args = {}
+            if not isinstance(args, dict):
+                args = {}
+            func_call: dict[str, Any] = {
+                "name": tool_name or native_call.get("name", ""),
+                "args": args,
+            }
+            if tool_call_id:
+                func_call["id"] = sanitize_tool_call_id(tool_call_id)
+            function_part: dict[str, Any] = {"functionCall": func_call}
+            thought_sig = google_thought_signature(
+                {"provider_metadata": provider_metadata}
+            )
+            if thought_sig:
+                function_part["thoughtSignature"] = thought_sig
+            return function_part
         if self._native_executable_code(provider_metadata) is not None:
             return None
         if not self.tool_ops.intrinsic_renderable(kind, None, leg="response"):
@@ -2005,6 +2250,8 @@ class GoogleGenerateConverter(BaseConverter):
                     context.get_tool_call_intrinsic_kind(call_id),
                     provider_metadata,
                     args_str,
+                    tool_name=tool_name,
+                    tool_call_id=call_id,
                 )
                 if intrinsic_part is not None:
                     parts.append(intrinsic_part)

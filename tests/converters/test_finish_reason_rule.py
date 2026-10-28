@@ -227,3 +227,53 @@ def test_an_interactions_requires_action_is_unchanged():
     ir = GoogleInteractionsConverter().response_from_provider(cast(Any, response))
 
     assert ir["choices"][0]["finish_reason"]["reason"] == "tool_calls"
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        # A hosted call the provider ran itself completes the turn; the same
+        # exchange without request context falls back to the name table.
+        ("googleSearch", "stop"),
+        ("f", "tool_calls"),
+    ],
+    ids=["hosted-call", "client-call"],
+)
+def test_a_google_exchange_finishes_the_same_way_in_json_and_stream(name, expected):
+    """The same logical exchange, read from either Google dialect.
+
+    generateContent answers in one JSON body and as a chunk stream; the two
+    readers must not disagree about a turn, which is the defect family here
+    (#1227).  No request leg is recorded, so both take the same name-table
+    fallback.
+    """
+    ir = GoogleGenerateConverter().response_from_provider(
+        cast(Any, _google_response({"functionCall": {"name": name, "args": {}}}))
+    )
+    assert ir["choices"][0]["finish_reason"]["reason"] == expected
+
+    events = _run_google_stream(
+        {
+            "candidates": [
+                {
+                    "content": {
+                        "role": "model",
+                        "parts": [{"functionCall": {"name": name, "args": {}}}],
+                    },
+                    "index": 0,
+                }
+            ]
+        },
+        {
+            "candidates": [
+                {
+                    "content": {"role": "model", "parts": []},
+                    "finishReason": "STOP",
+                    "index": 0,
+                }
+            ]
+        },
+    )
+
+    finishes = [event for event in events if event["type"] == "finish"]
+    assert finishes and finishes[-1]["finish_reason"]["reason"] == expected

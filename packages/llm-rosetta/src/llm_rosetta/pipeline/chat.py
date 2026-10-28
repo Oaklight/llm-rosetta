@@ -1125,6 +1125,11 @@ class ConversionPipeline:
         to_ctx.options["store_default"] = self._source_store_default
         if "_request_echo" in ctx.metadata:
             to_ctx.metadata["_request_echo"] = ctx.metadata["_request_echo"]
+        # What the request enabled upstream is what lets the stream reader tell
+        # a hosted tool's call from a client function of the same name; the
+        # request vocabulary belongs to the conversion, not to either
+        # direction, so it is handed to the context that reads the stream.
+        ctx.bridge_request_tool_vocabulary(from_ctx)
 
         # Custom tool names downgraded by enforce_custom_tools
         custom_names = (

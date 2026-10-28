@@ -138,6 +138,34 @@ class BaseToolOps(ABC):
         return False
 
     @classmethod
+    def intrinsic_renderable_part(cls, part: Any, *, leg: IntrinsicLeg) -> bool:
+        """Whether this dialect can replay this intrinsic part as it stands.
+
+        :meth:`intrinsic_renderable` answers from the canonical kind and the
+        call's payload.  A part may additionally carry the native form it came
+        from; a dialect that can write that form back — even for a kind with
+        no general inline part — says so here.  The history pass asks this
+        predicate, so such a part is left native instead of being degraded
+        into a client function call.
+
+        The default ignores the native form and defers to
+        :meth:`intrinsic_renderable`.
+
+        Args:
+            part: The IR intrinsic tool call part.
+            leg: Which leg the part would be written on.
+
+        Returns:
+            True when the part can be written natively.
+        """
+        fields = part.get("tool_input") if isinstance(part, Mapping) else None
+        return cls.intrinsic_renderable(
+            intrinsic_kind_of(part),
+            fields if isinstance(fields, Mapping) else {},
+            leg=leg,
+        )
+
+    @classmethod
     def intrinsic_requires_result(cls, kind: str) -> bool:
         """Whether a replayed server call of *kind* must be followed by its result.
 
