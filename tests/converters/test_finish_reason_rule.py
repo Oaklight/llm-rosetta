@@ -277,3 +277,43 @@ def test_a_google_exchange_finishes_the_same_way_in_json_and_stream(name, expect
 
     finishes = [event for event in events if event["type"] == "finish"]
     assert finishes and finishes[-1]["finish_reason"]["reason"] == expected
+
+
+def test_an_interactions_status_follows_the_ir_reason():
+    """A ``stop`` turn keeps ``completed`` even with a function-call step.
+
+    The writer used to force ``requires_action`` from the steps, which would
+    overturn a correct reason — including a provider-hosted call, which is
+    ``stop`` by design and must not ask the client to run it.
+    """
+    from llm_rosetta.converters.llm.google_interactions import (
+        GoogleInteractionsConverter,
+    )
+
+    ir = {
+        "id": "int_3",
+        "object": "response",
+        "created": 0,
+        "model": "m",
+        "choices": [
+            {
+                "index": 0,
+                "message": {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "tool_call",
+                            "tool_call_id": "c1",
+                            "tool_name": "googleSearch",
+                            "tool_input": {},
+                        }
+                    ],
+                },
+                "finish_reason": {"reason": "stop"},
+            }
+        ],
+    }
+
+    out = GoogleInteractionsConverter().response_to_provider(cast(Any, ir))
+
+    assert out["status"] == "completed"
