@@ -8,6 +8,7 @@ from typing import Any
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
 
 from llm_rosetta.auto_detect import ProviderType
+from llm_rosetta.converters.base.errors import UnrepresentableFinishReason
 from llm_rosetta.pipeline import ConversionError, ConversionPipeline
 from llm_rosetta.routing import ResolvedRoute
 
@@ -550,12 +551,23 @@ async def handle_non_streaming(  # noqa: C901
 
     try:
         source_response = pipeline.convert_response(resp.body, on_ir_ready=_capture_ir)
-    except ConversionError as exc:
+    except (ConversionError, UnrepresentableFinishReason) as exc:
         profile.update(pipeline.profile)
+        # The turn ended in a terminal state the client's dialect has no
+        # finish reason for.  Dump the payload the exception carries so an
+        # operator can see *which* upstream response it was, and answer 502:
+        # the upstream produced something this gateway cannot represent.
+        detail = str(exc)
+        reason = getattr(exc, "reason", "")
+        if reason:
+            detail = (
+                f"{detail} (reason={reason!r}, "
+                f"provider_metadata={getattr(exc, 'provider_metadata', {})!r})"
+            )
         await dump_error(
             persistence,
             request_body=body,
-            response_text=str(exc),
+            response_text=detail,
             converted_body=target_body,
             model=model,
             source_provider=route.source_provider,

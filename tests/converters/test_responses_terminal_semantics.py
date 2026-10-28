@@ -5,6 +5,7 @@ from typing import Any, cast
 
 import pytest
 
+from llm_rosetta.converters.base.errors import UnrepresentableFinishReason
 from llm_rosetta.converters.llm.open_responses import OpenResponsesConverter
 from llm_rosetta.converters.base.context import ConversionContext
 from llm_rosetta.pipeline import ConversionError, ConversionPipeline
@@ -235,9 +236,12 @@ def test_json_failure_raises_with_original_response(status, has_output):
     assert response["instructions"] not in str(error.value)
     assert "Example output" not in str(error.value)
     if status == "failed":
+        # The error payload rides on the exception, not inside its message:
+        # a caller dumps it structurally instead of parsing a string.
+        payload = json.dumps(error.value.provider_metadata)
         for key in ("type", "code", "message"):
-            assert response["error"][key] in str(error.value)
-        assert '"attempt": 1' in str(error.value)
+            assert response["error"][key] in payload
+        assert '"attempt": 1' in payload
 
 
 @pytest.mark.parametrize("status", ["failed", "cancelled"])
@@ -247,7 +251,7 @@ def test_sse_failure_raises_without_successful_finish(status, has_output):
     response["instructions"] = "Example internal instructions"
     processor = _pipeline().create_stream_processor()
     chunks = []
-    with pytest.raises(ValueError) as error:
+    with pytest.raises(UnrepresentableFinishReason) as error:
         for event in _stream(response):
             chunks.extend(processor.process_chunk(event))
     assert response["id"] in str(error.value)
@@ -261,8 +265,9 @@ def test_sse_failure_raises_without_successful_finish(status, has_output):
         for choice in chunk.get("choices", [])
     )
     if status == "failed":
-        assert response["error"]["message"] in str(error.value)
-        assert '"attempt": 1' in str(error.value)
+        payload = json.dumps(error.value.provider_metadata)
+        assert response["error"]["message"] in payload
+        assert '"attempt": 1' in payload
 
 
 @pytest.mark.parametrize("status", ["failed", "cancelled"])

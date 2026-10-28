@@ -6,7 +6,6 @@ Composes ContentOps, ToolOps, MessageOps, and ConfigOps for full bidirectional
 conversion between IR and OpenAI Chat Completions API format.
 """
 
-import json
 import logging
 from collections.abc import Mapping
 from typing import Any, cast
@@ -36,6 +35,7 @@ from ....types.ir.stream import (
     UsageEvent,
 )
 from ...base import BaseConverter
+from ...base.errors import UnrepresentableFinishReason
 from llm_rosetta.conversion_warnings import report_drop
 from ...base.helpers.citations import (
     citation_warning_sink,
@@ -60,11 +60,21 @@ logger = logging.getLogger(__name__)
 def _chat_finish_reason(
     reason: str, response_id: str, metadata: Mapping[str, Any] | None
 ) -> str:
-    """Reject terminal failures that Chat cannot express as a finish reason."""
+    """Reject terminal failures that Chat cannot express as a finish reason.
+
+    Raises:
+        UnrepresentableFinishReason: When the turn ended in an error or was
+            cancelled.  The reason, response id and provider metadata ride on
+            the exception, so a gateway can dump and map them without parsing
+            the message.
+    """
     if reason in {"error", "cancelled"}:
-        raise ValueError(
-            f"Chat Completions cannot represent a response ending with {reason!r}: "
-            f"{json.dumps({'response_id': response_id, 'provider_metadata': metadata}, ensure_ascii=False)}"
+        raise UnrepresentableFinishReason(
+            f"Chat Completions cannot represent a response ending with {reason!r} "
+            f"(response_id={response_id!r})",
+            reason=reason,
+            response_id=response_id,
+            provider_metadata=metadata,
         )
     return OPENAI_CHAT_REASON_TO_PROVIDER.get(reason, "stop")
 

@@ -373,8 +373,40 @@ class DumpContext:
 
 
 def error_response_for_source(
-    source_provider: ProviderType, status_code: int, message: str
+    source_provider: ProviderType,
+    status_code: int,
+    message: str,
+    *,
+    error_type: str | None = None,
+    google_status: str | None = None,
 ) -> Response:
-    """Return an error response formatted for the source provider's envelope."""
+    """Return an error response formatted for the source provider's envelope.
+
+    A 5xx says the upstream produced something this gateway could not turn
+    into a reply — the client's request was well formed — so its default type
+    is ``api_error`` (Google: ``UNAVAILABLE``) rather than telling the client
+    to go fix a request that was fine.  A 4xx keeps
+    ``invalid_request_error``.
+
+    Args:
+        source_provider: The client's format, which picks the envelope.
+        status_code: HTTP status code.
+        message: Human-readable message.
+        error_type: Override for the OpenAI / Anthropic ``type`` field.
+        google_status: Override for the Google ``status`` field.
+
+    Returns:
+        The formatted error response.
+    """
     api_format = detect_api_format_from_provider(source_provider)
-    return format_error_response(api_format, status_code, message)
+    if error_type is None:
+        error_type = "api_error" if status_code >= 500 else "invalid_request_error"
+    if google_status is None:
+        google_status = "UNAVAILABLE" if status_code >= 500 else "INVALID_ARGUMENT"
+    return format_error_response(
+        api_format,
+        status_code,
+        message,
+        error_type=error_type,
+        google_status=google_status,
+    )
