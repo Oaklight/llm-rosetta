@@ -58,10 +58,8 @@ from ...base.helpers.tool_group import (
     tool_call_group,
 )
 from ...base.tools import (
-    assign_tool_batch_ids,
     intrinsic_kind_of,
     sanitize_tool_call_id,
-    strip_orphaned_tool_config,
 )
 from llm_rosetta.ir.primitives.finish_reason import (
     reason_for_completed_turn,
@@ -362,10 +360,8 @@ class OpenResponsesConverter(BaseConverter):
         # 2. Messages → input items — the pairing repair already ran at the
         # converter boundary, so every target sees the same repaired history.
         ir_messages = ir_request.get("messages", [])
-        # Assign batch_ids over the full list before message_ops runs, so
-        # per-format merge_tool_messages can group parallel tool results.
-        ir_messages = assign_tool_batch_ids(ir_messages)
-        ctx.warnings.extend(strip_orphaned_tool_config(ir_request))
+        # Batch ids and the stripped tool config were applied at the
+        # converter boundary, over the same repaired list.
         items, msg_warnings = self.message_ops.ir_messages_to_p(
             ir_messages, target_provider=self._CONVERTER_TAG
         )

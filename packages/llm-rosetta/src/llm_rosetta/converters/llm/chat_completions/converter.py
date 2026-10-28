@@ -36,6 +36,11 @@ from ....types.ir.stream import (
 )
 from ...base import BaseConverter
 from ...base.errors import UnrepresentableFinishReason
+from ...base.helpers.stream import stream_opened_client_call
+from ....ir.primitives.finish_reason import (
+    client_tool_calls_in,
+    reason_for_completed_turn,
+)
 from llm_rosetta.conversion_warnings import report_drop
 from ...base.helpers.citations import (
     citation_warning_sink,
@@ -44,9 +49,7 @@ from ...base.helpers.citations import (
 from ...base.helpers.extensions import wire_extensions
 from ...base.context import ConversionContext, StreamContext
 from ...base.tools import (
-    assign_tool_batch_ids,
     sanitize_tool_call_id,
-    strip_orphaned_tool_config,
 )
 from ._constants import OPENAI_CHAT_REASON_FROM_PROVIDER, OPENAI_CHAT_REASON_TO_PROVIDER
 from .config_ops import ChatCompletionsConfigOps
@@ -199,10 +202,8 @@ class ChatCompletionsConverter(BaseConverter):
         # 2. Messages — the pairing repair already ran at the converter
         # boundary, so every target sees the same repaired history.
         ir_messages = ir_request.get("messages", [])
-        # Assign batch_ids over the full list before message_ops runs, so
-        # per-format merge_tool_messages can group parallel tool results.
-        ir_messages = assign_tool_batch_ids(ir_messages)
-        ctx.warnings.extend(strip_orphaned_tool_config(ir_request))
+        # Batch ids and the stripped tool config were applied at the
+        # converter boundary, over the same repaired list.
         converted_msgs, msg_warnings = self.message_ops.ir_messages_to_p(
             ir_messages,
             target_provider=self._CONVERTER_TAG,
@@ -543,13 +544,17 @@ class ChatCompletionsConverter(BaseConverter):
             )
 
             finish_reason_val = p_choice.get("finish_reason")
+            reason = OPENAI_CHAT_REASON_FROM_PROVIDER.get(finish_reason_val, "stop")
 
             choice_info: dict[str, Any] = {
                 "index": p_choice.get("index", 0),
                 "message": message,
                 "finish_reason": {
-                    "reason": OPENAI_CHAT_REASON_FROM_PROVIDER.get(
-                        finish_reason_val, "stop"
+                    # A normal stop that carries client calls is a tool turn;
+                    # the provider's own word is not enough (see
+                    # ``reason_for_completed_turn``).
+                    "reason": reason_for_completed_turn(
+                        reason, client_tool_calls_in(message.get("content") or [])
                     )
                 },
             }
@@ -849,12 +854,12 @@ class ChatCompletionsConverter(BaseConverter):
                 if mapped_id is None:
                     provider_map[index_key] = tc_id
                 elif mapped_id != tc_id:
-                    logger.warning(
+                    report_drop(
                         "Conflicting Chat Completions tool IDs for "
-                        "choice_index=%s, tool_call_index=%s; keeping %r",
-                        choice_index,
-                        provider_index,
-                        mapped_id,
+                        f"choice_index={choice_index}, "
+                        f"tool_call_index={provider_index}; keeping {mapped_id!r}",
+                        warnings=context.warnings,
+                        subject=mapped_id,
                     )
                     effective_tc_id = mapped_id
             else:
@@ -1031,15 +1036,21 @@ class ChatCompletionsConverter(BaseConverter):
             )
 
         reason = OPENAI_CHAT_REASON_FROM_PROVIDER.get(finish_reason, "stop")
-        if (
-            context is not None
-            and reason == "tool_calls"
-            and choice_index
-            not in context.metadata.get("_chat_completions_tool_choices", set())
-        ):
+        # Whether *this choice* opened a call the client owes an answer to.
+        # The provider's own word is not enough in either direction: a normal
+        # stop that opened one is a tool turn, and a ``tool_calls`` reason
+        # with no identified call is not.
+        if context is not None:
+            emitted_client_call = choice_index in context.metadata.get(
+                "_chat_completions_tool_choices", set()
+            )
+        else:
+            emitted_client_call = stream_opened_client_call(None, events, 0)
+        if context is not None and reason == "tool_calls" and not emitted_client_call:
             # A provider finish reason cannot ask the client to run a tool when
             # this choice emitted no identified ToolCallStartEvent.
             reason = "stop"
+        reason = reason_for_completed_turn(reason, emitted_client_call)
         # If refusal text accumulated from streaming deltas, mark as refusal
         refusal_text = (
             context.metadata.get("_refusal_text") if context is not None else None

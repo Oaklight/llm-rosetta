@@ -52,9 +52,7 @@ from ...base.context import (
     carry_registered_call_identity,
 )
 from ...base.tools import (
-    assign_tool_batch_ids,
     sanitize_tool_call_id,
-    strip_orphaned_tool_config,
 )
 from ...base.tools.intrinsic import (
     intrinsic_kind_of,
@@ -85,6 +83,7 @@ from llm_rosetta.ir.primitives.finish_reason import (
     client_tool_calls_in,
     reason_for_completed_turn,
 )
+from ...base.helpers.stream import stream_opened_client_call
 from ....transforms.ir import hoist_late_system_messages
 from ._constants import (
     GOOGLE_REASON_FROM_PROVIDER,
@@ -413,33 +412,6 @@ def _take_search_metadata(context: StreamContext | None) -> dict[str, Any]:
     return dict(stashed) if isinstance(stashed, dict) else {}
 
 
-def _stream_opened_client_call(context: Any, events: list[Any], since: int) -> bool:
-    """Whether the stream has opened a tool call the client owes an answer to.
-
-    Google finishes in a chunk with no content, so the call that makes the turn
-    a tool-call turn arrived in an earlier chunk: the stream context knows every
-    call the response has opened. Without one, only the events produced since
-    *since* are visible.
-
-    Args:
-        context: The stream context, or ``None`` when the caller keeps none.
-        events: Events emitted so far.
-        since: Index in *events* where the current chunk's parts start.
-
-    Returns:
-        ``True`` when at least one non-intrinsic call was opened.
-    """
-    if context is not None:
-        return any(
-            not context.get_tool_call_intrinsic_kind(call_id)
-            for call_id in context.tool_call_ids
-        )
-    return any(
-        ev.get("type") == "tool_call_start" and ev.get("tool_type") != "intrinsic"
-        for ev in events[since:]
-    )
-
-
 def _grounding_citations(metadata: dict[str, Any]) -> list[CitationPart]:
     """Convert Gemini grounding metadata into IR URL citations."""
     sources = _grounding_sources(metadata)
@@ -654,10 +626,8 @@ class GoogleGenerateConverter(BaseConverter):
         # 2. Handle messages — the pairing repair already ran at the
         #    converter boundary; tool_choice/tool_config are stripped here.
         ir_messages = ir_request.get("messages", [])
-        # Assign batch_ids over the full list before message_ops runs, so
-        # per-format merge_tool_messages can group parallel tool results.
-        ir_messages = assign_tool_batch_ids(ir_messages)
-        ctx.warnings.extend(strip_orphaned_tool_config(ir_request))
+        # Batch ids and the stripped tool config were applied at the
+        # converter boundary, over the same repaired list.
 
         # Hoist mid-conversation system messages and extract leading ones.
         ir_messages, system_instruction = _hoist_and_extract_system(
@@ -1454,7 +1424,7 @@ class GoogleGenerateConverter(BaseConverter):
             # Google finishes in a chunk with no content, so the call that
             # makes this a tool-call turn arrived in an earlier one: ask the
             # context for every call the response has opened, not this chunk.
-            client_calls = _stream_opened_client_call(context, events, pre_parts_len)
+            client_calls = stream_opened_client_call(context, events, pre_parts_len)
             finish_reason_ir = reason_for_completed_turn(
                 GOOGLE_REASON_FROM_PROVIDER.get(finish_reason, "stop"),  # ty: ignore[invalid-argument-type]
                 client_calls,

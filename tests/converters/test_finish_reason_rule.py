@@ -14,6 +14,7 @@ from llm_rosetta.converters.base import StreamContext
 from llm_rosetta.converters.llm.chat_completions import ChatCompletionsConverter
 from llm_rosetta.converters.llm.google_generate import GoogleGenerateConverter
 from llm_rosetta.converters.llm.google_interactions import GoogleInteractionsConverter
+from llm_rosetta.converters.llm.messages import MessagesConverter
 from llm_rosetta.converters.llm.open_responses import OpenResponsesConverter
 from llm_rosetta.ir.primitives.finish_reason import (
     client_tool_calls_in,
@@ -317,3 +318,198 @@ def test_an_interactions_status_follows_the_ir_reason():
     out = GoogleInteractionsConverter().response_to_provider(cast(Any, ir))
 
     assert out["status"] == "completed"
+
+
+# ==================== Chat and Messages: the same rule, both legs ====================
+
+
+def test_a_chat_stop_with_client_calls_is_a_tool_call_turn():
+    """A compatible Chat upstream may answer ``stop`` with tool calls."""
+    response = {
+        "id": "c1",
+        "object": "chat.completion",
+        "created": 0,
+        "model": "m",
+        "choices": [
+            {
+                "index": 0,
+                "finish_reason": "stop",
+                "message": {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "call_1",
+                            "type": "function",
+                            "function": {"name": "f", "arguments": "{}"},
+                        }
+                    ],
+                },
+            }
+        ],
+    }
+
+    ir = ChatCompletionsConverter().response_from_provider(cast(Any, response))
+
+    assert ir["choices"][0]["finish_reason"]["reason"] == "tool_calls"
+
+
+def test_a_chat_stream_stop_after_a_client_call_is_a_tool_call_turn():
+    converter = ChatCompletionsConverter()
+    context = StreamContext()
+    converter.stream_response_from_provider(
+        {
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {
+                        "tool_calls": [
+                            {
+                                "id": "call_1",
+                                "type": "function",
+                                "index": 0,
+                                "function": {"name": "f", "arguments": "{}"},
+                            }
+                        ]
+                    },
+                }
+            ]
+        },
+        context,
+    )
+
+    events = converter.stream_response_from_provider(
+        {"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]},
+        context,
+    )
+
+    finishes = [event for event in events if event["type"] == "finish"]
+    assert finishes and finishes[-1]["finish_reason"]["reason"] == "tool_calls"
+
+
+def test_a_messages_end_turn_with_tool_use_is_a_tool_call_turn():
+    """A compatible Anthropic upstream may answer ``end_turn`` with tool_use."""
+    response = {
+        "id": "m1",
+        "type": "message",
+        "role": "assistant",
+        "model": "m",
+        "content": [{"type": "tool_use", "id": "toolu_1", "name": "f", "input": {}}],
+        "stop_reason": "end_turn",
+        "usage": {"input_tokens": 1, "output_tokens": 1},
+    }
+
+    ir = MessagesConverter().response_from_provider(cast(Any, response))
+
+    assert ir["choices"][0]["finish_reason"]["reason"] == "tool_calls"
+
+
+def test_a_messages_server_tool_use_keeps_stop():
+    """A provider-hosted call is finished, not waiting on the client."""
+    response = {
+        "id": "m2",
+        "type": "message",
+        "role": "assistant",
+        "model": "m",
+        "content": [
+            {
+                "type": "server_tool_use",
+                "id": "srvtoolu_1",
+                "name": "web_search",
+                "input": {},
+            }
+        ],
+        "stop_reason": "end_turn",
+        "usage": {"input_tokens": 1, "output_tokens": 1},
+    }
+
+    ir = MessagesConverter().response_from_provider(cast(Any, response))
+
+    assert ir["choices"][0]["finish_reason"]["reason"] == "stop"
+
+
+def test_a_messages_stream_end_turn_after_tool_use_is_a_tool_call_turn():
+    converter = MessagesConverter()
+    context = StreamContext()
+    converter.stream_response_from_provider(
+        {
+            "type": "content_block_start",
+            "index": 0,
+            "content_block": {
+                "type": "tool_use",
+                "id": "toolu_1",
+                "name": "f",
+                "input": {},
+            },
+        },
+        context,
+    )
+
+    events = converter.stream_response_from_provider(
+        {"type": "message_delta", "delta": {"stop_reason": "end_turn"}},
+        context,
+    )
+
+    finishes = [event for event in events if event["type"] == "finish"]
+    assert finishes and finishes[-1]["finish_reason"]["reason"] == "tool_calls"
+
+
+def test_a_chat_stream_decides_the_reason_per_choice():
+    """One choice's call must not make another choice a tool turn."""
+    converter = ChatCompletionsConverter()
+    context = StreamContext()
+    converter.stream_response_from_provider(
+        {
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {
+                        "tool_calls": [
+                            {
+                                "id": "call_0",
+                                "type": "function",
+                                "index": 0,
+                                "function": {"name": "f", "arguments": "{}"},
+                            }
+                        ]
+                    },
+                },
+                {"index": 1, "delta": {"content": "hi"}},
+            ]
+        },
+        context,
+    )
+
+    events = converter.stream_response_from_provider(
+        {
+            "choices": [
+                {"index": 0, "delta": {}, "finish_reason": "stop"},
+                {"index": 1, "delta": {}, "finish_reason": "stop"},
+            ]
+        },
+        context,
+    )
+
+    finishes = {
+        (event["choice_index"], event["finish_reason"]["reason"])
+        for event in events
+        if event["type"] == "finish"
+    }
+    assert finishes == {(0, "tool_calls"), (1, "stop")}
+
+
+def test_an_interactions_stream_status_follows_the_ir_reason():
+    """The stream twin of the JSON status mapping, pinned on its own."""
+    converter = GoogleInteractionsConverter()
+    context = StreamContext()
+    converter._handle_ir_stream_start_to_p(
+        {"type": "stream_start", "response_id": "i1", "model": "m", "created": 0},
+        context,
+    )
+    converter._handle_ir_finish_to_p(
+        {"type": "finish", "finish_reason": {"reason": "tool_calls"}}, context
+    )
+
+    event = converter._handle_ir_stream_end_to_p({"type": "stream_end"}, context)
+
+    assert event["interaction"]["status"] == "requires_action"

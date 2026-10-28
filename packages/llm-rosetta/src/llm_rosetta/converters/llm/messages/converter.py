@@ -46,6 +46,11 @@ from ....types.ir.stream import (
     UsageEvent,
 )
 from ...base import BaseConverter
+from ...base.helpers.stream import stream_opened_client_call
+from ....ir.primitives.finish_reason import (
+    client_tool_calls_in,
+    reason_for_completed_turn,
+)
 from llm_rosetta.conversion_warnings import report_drop
 from ...base.context import (
     ConversionContext,
@@ -53,11 +58,9 @@ from ...base.context import (
     carry_registered_call_identity,
 )
 from ...base.tools import (
-    assign_tool_batch_ids,
     intrinsic_kind_of,
     prefixed_tool_call_id,
     sanitize_tool_call_id,
-    strip_orphaned_tool_config,
 )
 from ...base.helpers.citations import (
     citation_warning_sink,
@@ -195,10 +198,8 @@ class MessagesConverter(BaseConverter):
         # 2. Messages — the pairing repair already ran at the converter
         #    boundary, so every target sees the same repaired history.
         ir_messages = ir_request.get("messages", [])
-        # Assign batch_ids over the full list before message_ops runs, so
-        # per-format merge_tool_messages can group parallel tool results.
-        ir_messages = assign_tool_batch_ids(ir_messages)
-        ctx.warnings.extend(strip_orphaned_tool_config(ir_request))
+        # Batch ids and the stripped tool config were applied at the
+        # converter boundary, over the same repaired list.
 
         # Defense-in-depth: idempotent with pipeline's intrinsic transform.
         ir_messages, hoisted_si = hoist_system_in_converter(ir_messages, ir_request)
@@ -373,6 +374,12 @@ class MessagesConverter(BaseConverter):
             ANTHROPIC_REASON_FROM_PROVIDER.get(str(stop_reason_val), "stop")
             if stop_reason_val
             else "stop"
+        )
+        # Anthropic has an explicit ``tool_use`` reason, but a compatible
+        # upstream may answer ``end_turn`` with ``tool_use`` blocks; the rule
+        # only upgrades a normal stop, so it is applied defensively here too.
+        finish_reason = reason_for_completed_turn(
+            finish_reason, client_tool_calls_in(ir_message.get("content") or [])
         )
         choice_info: dict[str, Any] = {
             "index": 0,
@@ -1079,7 +1086,10 @@ class MessagesConverter(BaseConverter):
             )
 
         if stop_reason:
-            reason = ANTHROPIC_REASON_FROM_PROVIDER.get(stop_reason, "stop")
+            reason = reason_for_completed_turn(
+                ANTHROPIC_REASON_FROM_PROVIDER.get(stop_reason, "stop"),
+                stream_opened_client_call(context, events, 0),
+            )
             finish: dict[str, Any] = {
                 "type": "finish",
                 "finish_reason": {"reason": reason},
