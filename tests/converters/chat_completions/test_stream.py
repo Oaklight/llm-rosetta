@@ -1939,3 +1939,54 @@ class TestIterStreamFromProvider:
         types = [e["type"] for e in events]
         assert "finish" in types
         assert len(events) > 0
+
+
+def test_a_conflicting_tool_id_is_recorded_in_the_warning_sink():
+    """The fragment is rerouted, and the caller can see that it was."""
+    converter = ChatCompletionsConverter()
+    context = StreamContext()
+    converter.stream_response_from_provider(
+        {
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {
+                        "tool_calls": [
+                            {
+                                "id": "call_a",
+                                "type": "function",
+                                "index": 0,
+                                "function": {"name": "f", "arguments": ""},
+                            }
+                        ]
+                    },
+                }
+            ]
+        },
+        context,
+    )
+
+    converter.stream_response_from_provider(
+        {
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {
+                        "tool_calls": [
+                            {
+                                "id": "call_b",
+                                "type": "function",
+                                "index": 0,
+                                "function": {"arguments": "{}"},
+                            }
+                        ]
+                    },
+                }
+            ]
+        },
+        context,
+    )
+
+    assert any(
+        "Conflicting Chat Completions tool IDs" in str(w) for w in context.warnings
+    )

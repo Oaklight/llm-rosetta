@@ -20,6 +20,7 @@ from ...types.ir.validation import (
     validate_tools,
 )
 from .context import ConversionContext, StreamContext
+from .tools import assign_tool_batch_ids, strip_orphaned_tool_config
 from ...ir.tools.orphan_fix import UnrepairableToolHistory, normalize_tool_pairing
 from .helpers import strip_internal_metadata
 from .helpers.citations import report_dropped_citation
@@ -164,6 +165,11 @@ class BaseConverter(ABC):
             # reaches every target, and the second, occurrence-aware copy
             # the Chat writer used to keep is gone.
             ir_request["messages"] = self._normalize_tool_pairing(messages, ctx)
+            # The other two request-level repairs were called by four
+            # converters and forgotten by the fifth; they are
+            # target-independent, so they run here as well.
+            ctx.warnings.extend(strip_orphaned_tool_config(ir_request))
+            ir_request["messages"] = assign_tool_batch_ids(ir_request["messages"])
         result = self._do_request_to_provider(ir_request, context=ctx, **kwargs)
         strip_internal_metadata(result)
         dropped = unowned_extensions(ir_request, self._CONVERTER_TAG)
