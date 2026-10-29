@@ -14,6 +14,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from ...ir.primitives.finish_reason import FAILURE_REASONS
+
 
 class UnrepresentableFinishReason(ValueError):
     """A terminal turn this dialect has no way to express.
@@ -77,3 +79,33 @@ def unrepresentable_finish_reason(
         response_id=response_id,
         provider_metadata=provider_metadata,
     )
+
+
+def require_representable_finish_reason(
+    dialect: str,
+    reason: str,
+    *,
+    response_id: str = "",
+    provider_metadata: Mapping[str, Any] | None = None,
+) -> None:
+    """Raise when *reason* is a terminal failure the dialect cannot express.
+
+    Every writer that has no wire form for a failed or cancelled turn uses
+    this instead of keeping its own copy of the check.
+
+    Args:
+        dialect: The target dialect, e.g. ``"Chat Completions"``.
+        reason: The IR finish reason to write.
+        response_id: The response the reason belongs to.
+        provider_metadata: Upstream metadata recorded with the reason.
+
+    Raises:
+        UnrepresentableFinishReason: For ``error`` and ``cancelled``.
+    """
+    if reason in FAILURE_REASONS:
+        raise unrepresentable_finish_reason(
+            dialect,
+            reason,
+            response_id=response_id,
+            provider_metadata=provider_metadata,
+        )

@@ -45,7 +45,7 @@ from ....types.ir.stream import (
     UsageEvent,
 )
 from ...base import BaseConverter
-from ...base.errors import unrepresentable_finish_reason
+from ...base.errors import require_representable_finish_reason
 from llm_rosetta.conversion_warnings import report_drop
 from ...base.context import (
     ConversionContext,
@@ -82,10 +82,7 @@ from ...base.helpers.opaque import (
 from llm_rosetta.ir.primitives.system_message_hoist import hoist_system_in_converter
 from llm_rosetta.ir.primitives.finish_reason import (
     FAILURE_REASONS,
-    client_tool_calls_in,
-    reason_for_completed_turn,
 )
-from ...base.helpers.stream import stream_opened_client_call
 from ....transforms.ir import hoist_late_system_messages
 from ._constants import (
     GOOGLE_NATIVE_FINISH_REASON,
@@ -501,13 +498,12 @@ def _google_finish_reason(
         native_reason = native.get("reason")
         if isinstance(native_reason, str) and native_reason:
             return native_reason
-    if reason in FAILURE_REASONS:
-        raise unrepresentable_finish_reason(
-            "Google generateContent",
-            reason,
-            response_id=response_id,
-            provider_metadata=metadata,
-        )
+    require_representable_finish_reason(
+        "Google generateContent",
+        reason,
+        response_id=response_id,
+        provider_metadata=metadata,
+    )
     return GOOGLE_REASON_TO_PROVIDER.get(reason, "STOP")
 
 
@@ -979,12 +975,7 @@ class GoogleGenerateConverter(BaseConverter):
             finish_reason_val = p_candidate.get("finish_reason") or p_candidate.get(
                 "finishReason"
             )
-            # ``finishReason`` is ``STOP`` for a turn that calls a tool, so the
-            # parts decide whether the client is being asked to run something.
-            reason = reason_for_completed_turn(
-                GOOGLE_REASON_FROM_PROVIDER.get(finish_reason_val, "stop"),
-                client_tool_calls_in(message.get("content") or []),
-            )
+            reason = GOOGLE_REASON_FROM_PROVIDER.get(finish_reason_val, "stop")
             # A Google word the IR has no room for is recorded where a Google
             # target can write it back; without it ``error`` is ambiguous
             # between Google's own odd stop and a foreign failure.
@@ -1538,7 +1529,7 @@ class GoogleGenerateConverter(BaseConverter):
             context.mark_ended()
             events.append(StreamEndEvent(type="stream_end"))
 
-        return events
+        return self.finalize_stream_finish(events, context)
 
     def _process_stream_candidate(
         self,
@@ -1599,11 +1590,7 @@ class GoogleGenerateConverter(BaseConverter):
             # Google finishes in a chunk with no content, so the call that
             # makes this a tool-call turn arrived in an earlier one: ask the
             # context for every call the response has opened, not this chunk.
-            client_calls = stream_opened_client_call(context, events, pre_parts_len)
-            finish_reason_ir = reason_for_completed_turn(
-                GOOGLE_REASON_FROM_PROVIDER.get(finish_reason, "stop"),  # ty: ignore[invalid-argument-type]
-                client_calls,
-            )
+            finish_reason_ir = GOOGLE_REASON_FROM_PROVIDER.get(finish_reason, "stop")  # ty: ignore[invalid-argument-type]
             finish_event = FinishEvent(
                 type="finish",
                 finish_reason={"reason": finish_reason_ir},  # ty: ignore[invalid-argument-type]

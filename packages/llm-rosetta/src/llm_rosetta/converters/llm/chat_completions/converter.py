@@ -35,13 +35,8 @@ from ....types.ir.stream import (
     UsageEvent,
 )
 from ...base import BaseConverter
-from ...base.errors import unrepresentable_finish_reason
+from ...base.errors import require_representable_finish_reason
 from ...base.helpers.stream import stream_opened_client_call
-from ....ir.primitives.finish_reason import (
-    FAILURE_REASONS,
-    client_tool_calls_in,
-    reason_for_completed_turn,
-)
 from llm_rosetta.conversion_warnings import report_drop
 from ...base.helpers.citations import (
     citation_warning_sink,
@@ -72,13 +67,12 @@ def _chat_finish_reason(
             the exception, so a gateway can dump and map them without parsing
             the message.
     """
-    if reason in FAILURE_REASONS:
-        raise unrepresentable_finish_reason(
-            "Chat Completions",
-            reason,
-            response_id=response_id,
-            provider_metadata=metadata,
-        )
+    require_representable_finish_reason(
+        "Chat Completions",
+        reason,
+        response_id=response_id,
+        provider_metadata=metadata,
+    )
     return OPENAI_CHAT_REASON_TO_PROVIDER.get(reason, "stop")
 
 
@@ -549,14 +543,7 @@ class ChatCompletionsConverter(BaseConverter):
             choice_info: dict[str, Any] = {
                 "index": p_choice.get("index", 0),
                 "message": message,
-                "finish_reason": {
-                    # A normal stop that carries client calls is a tool turn;
-                    # the provider's own word is not enough (see
-                    # ``reason_for_completed_turn``).
-                    "reason": reason_for_completed_turn(
-                        reason, client_tool_calls_in(message.get("content") or [])
-                    )
-                },
+                "finish_reason": {"reason": reason},
             }
 
             if "logprobs" in p_choice:
@@ -713,7 +700,7 @@ class ChatCompletionsConverter(BaseConverter):
 
         self._handle_p_stream_end_to_ir(choices, events, usage, context)
 
-        return events
+        return self.finalize_stream_finish(events, context)
 
     def _handle_p_stream_start_to_ir(
         self,
@@ -1050,7 +1037,6 @@ class ChatCompletionsConverter(BaseConverter):
             # A provider finish reason cannot ask the client to run a tool when
             # this choice emitted no identified ToolCallStartEvent.
             reason = "stop"
-        reason = reason_for_completed_turn(reason, emitted_client_call)
         # If refusal text accumulated from streaming deltas, mark as refusal
         refusal_text = (
             context.metadata.get("_refusal_text") if context is not None else None

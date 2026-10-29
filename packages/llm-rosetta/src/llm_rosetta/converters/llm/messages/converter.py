@@ -46,13 +46,7 @@ from ....types.ir.stream import (
     UsageEvent,
 )
 from ...base import BaseConverter
-from ...base.errors import unrepresentable_finish_reason
-from ...base.helpers.stream import stream_opened_client_call
-from ....ir.primitives.finish_reason import (
-    FAILURE_REASONS,
-    client_tool_calls_in,
-    reason_for_completed_turn,
-)
+from ...base.errors import require_representable_finish_reason
 from llm_rosetta.conversion_warnings import report_drop
 from ...base.context import (
     ConversionContext,
@@ -175,13 +169,12 @@ def _anthropic_stop_reason(
     Raises:
         UnrepresentableFinishReason: For ``error`` and ``cancelled``.
     """
-    if reason in FAILURE_REASONS:
-        raise unrepresentable_finish_reason(
-            "The Messages API",
-            reason,
-            response_id=response_id,
-            provider_metadata=metadata,
-        )
+    require_representable_finish_reason(
+        "The Messages API",
+        reason,
+        response_id=response_id,
+        provider_metadata=metadata,
+    )
     return ANTHROPIC_REASON_TO_PROVIDER.get(reason, "end_turn")
 
 
@@ -408,12 +401,6 @@ class MessagesConverter(BaseConverter):
             ANTHROPIC_REASON_FROM_PROVIDER.get(str(stop_reason_val), "stop")
             if stop_reason_val
             else "stop"
-        )
-        # Anthropic has an explicit ``tool_use`` reason, but a compatible
-        # upstream may answer ``end_turn`` with ``tool_use`` blocks; the rule
-        # only upgrades a normal stop, so it is applied defensively here too.
-        finish_reason = reason_for_completed_turn(
-            finish_reason, client_tool_calls_in(ir_message.get("content") or [])
         )
         choice_info: dict[str, Any] = {
             "index": 0,
@@ -852,7 +839,7 @@ class MessagesConverter(BaseConverter):
         if handler_name is not None:
             getattr(self, handler_name)(chunk, context, events)
 
-        return events
+        return self.finalize_stream_finish(events, context)
 
     def _handle_p_message_start_to_ir(
         self,
@@ -1122,10 +1109,7 @@ class MessagesConverter(BaseConverter):
             )
 
         if stop_reason:
-            reason = reason_for_completed_turn(
-                ANTHROPIC_REASON_FROM_PROVIDER.get(stop_reason, "stop"),
-                stream_opened_client_call(context, events, 0),
-            )
+            reason = ANTHROPIC_REASON_FROM_PROVIDER.get(stop_reason, "stop")
             finish: dict[str, Any] = {
                 "type": "finish",
                 "finish_reason": {"reason": reason},

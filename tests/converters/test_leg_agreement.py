@@ -20,9 +20,9 @@ in a body are declared below and not asserted; provider-level field equality is
 the conformance wire baseline's job (``tools/conformance``).
 
 Epic: #1238.  The harness is the regression net for the finish-reason rule
-(#1240), so each known divergence and the one shared loss are pinned as strict
-xfails rather than excluded: fixing them turns the marker into a failure and
-forces the pin out in the same change.
+(#1240).  The one remaining shared loss and the stop-sequence value gap are
+pinned as strict xfails rather than excluded: fixing them turns the marker into
+a failure and forces the pin out in the same change.
 """
 
 from __future__ import annotations
@@ -179,16 +179,6 @@ EXPECTED_CALL_KINDS: dict[tuple[str, str], tuple[str, ...]] = {
     ("chat_completions", "intrinsic"): (),
     ("google_generate", "intrinsic"): (),
     ("google_interactions", "intrinsic"): (),
-}
-
-#: (dialect, case) pairs whose stream leg still disagrees.  Each entry is a
-#: strict xfail below, so fixing it turns the test into a failure and forces
-#: the marker to be removed in the same change.
-KNOWN_DIVERGENCES = {
-    ("google_interactions", "stop_with_call"): (
-        "the JSON reader upgrades a completed turn that carries a client call; "
-        "the stream reader reads status only (#1240)"
-    ),
 }
 
 #: (dialect, case) pairs where both legs agree on the wrong answer.  Equality
@@ -643,9 +633,10 @@ def test_the_two_legs_answer_the_same_turn(
     capable_reason: str,
 ) -> None:
     """Same IR turn in, same content out, whichever leg wrote it."""
-    for known in (KNOWN_DIVERGENCES, KNOWN_SHARED_LOSSES):
-        if (dialect, case_id) in known:
-            pytest.skip("pinned as a strict xfail below: " + known[(dialect, case_id)])
+    if (dialect, case_id) in KNOWN_SHARED_LOSSES:
+        pytest.skip(
+            "pinned as a strict xfail below: " + KNOWN_SHARED_LOSSES[(dialect, case_id)]
+        )
 
     converter = factory()
     body = _body_leg(converter, turn)
@@ -681,25 +672,6 @@ def test_the_two_legs_answer_the_same_turn(
             turn.usage["completion_tokens"],
             turn.usage["total_tokens"],
         ), f"{dialect} usage on {case_id}"
-
-
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "the JSON reader upgrades a completed turn that carries a client call; "
-        "the stream reader reads status only (#1240 fixes this by moving the "
-        "rule to the shared finalizer)"
-    ),
-)
-def test_the_known_interactions_divergence() -> None:
-    """Pin the one divergence the harness found, so fixing it is visible."""
-    converter = DIALECTS["google_interactions"]()
-    turn = Turn(text="let me", calls=(FUNCTION_CALL,), finish="stop")
-    body = _body_leg(converter, turn)
-    stream = _stream_leg(converter, turn)
-
-    assert isinstance(body, TurnView) and isinstance(stream, TurnView)
-    assert body.reason == stream.reason == "tool_calls"
 
 
 @pytest.mark.xfail(

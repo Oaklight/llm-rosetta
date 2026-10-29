@@ -21,6 +21,10 @@ from ...types.ir.validation import (
 )
 from .context import ConversionContext, StreamContext
 from .tools import assign_tool_batch_ids, strip_orphaned_tool_config
+from ...ir.primitives.finish_reason import (
+    client_tool_calls_in,
+    reason_for_completed_turn,
+)
 from ...ir.tools.orphan_fix import UnrepairableToolHistory, normalize_tool_pairing
 from .helpers import strip_internal_metadata
 from .helpers.citations import report_dropped_citation
@@ -251,6 +255,7 @@ class BaseConverter(ABC):
         ir_response = self._do_response_from_provider(
             provider_response, context=ctx, **kwargs
         )
+        self._finalize_completed_turn(cast(IRResponse, ir_response))
         if getattr(ctx, "metadata_mode", None) == "preserve":
             self._capture_preserve_metadata(provider_response, ir_response, ctx)
         return self._validate_ir_response(ir_response)
@@ -391,6 +396,64 @@ class BaseConverter(ABC):
         ...
 
     # ==================== Preserve-mode hooks (override in subclass) ====================
+
+    def _finalize_completed_turn(self, ir_response: IRResponse) -> None:
+        """Apply the tool-call meaning to every choice's terminal reason.
+
+        A dialect that reports a normal stop for a turn that carries a client
+        tool call says, literally, that the model finished talking.  The IR
+        decides from the parts, in one place, for every body reader.
+        """
+        for choice in ir_response.get("choices", []):
+            message = choice.get("message") or {}
+            finish_reason = choice.get("finish_reason") or {}
+            reason = finish_reason.get("reason")
+            if reason is None:
+                continue
+            finish_reason["reason"] = reason_for_completed_turn(
+                reason, client_tool_calls_in(message.get("content") or [])
+            )
+
+    def finalize_stream_finish(
+        self,
+        events: list[IRStreamEvent],
+        context: StreamContext | None,
+    ) -> list[IRStreamEvent]:
+        """Apply the tool-call meaning to a chunk's terminal reason.
+
+        The stream context remembers every client call the response opened, so
+        a finish that arrives in a chunk of its own still knows the turn is a
+        tool turn.  A call with no choice attribution matches any finish;
+        Chat's per-choice calls only match their own choice.
+
+        Args:
+            events: The events this chunk produced.
+            context: The stream context, or ``None`` when the caller keeps none.
+
+        Returns:
+            The same list, with any ``stop`` finish upgraded where it applies.
+        """
+        opened: set[int | None] = set()
+        if context is not None:
+            stored = context.metadata.get("_opened_client_calls")
+            if not isinstance(stored, set):
+                stored = set()
+                context.metadata["_opened_client_calls"] = stored
+            opened = stored
+        for raw_event in events:
+            event = cast(dict[str, Any], raw_event)
+            event_type = event.get("type")
+            if event_type == "tool_call_start":
+                if event.get("tool_type") != "intrinsic":
+                    opened.add(event.get("choice_index"))
+            elif event_type == "finish":
+                reason = (event.get("finish_reason") or {}).get("reason")
+                if reason != "stop":
+                    continue
+                choice = event.get("choice_index")
+                if None in opened or (choice is None and opened) or choice in opened:
+                    event["finish_reason"]["reason"] = "tool_calls"
+        return events
 
     def _capture_preserve_metadata(
         self,

@@ -44,6 +44,7 @@ from ....types.ir.stream import (
 )
 from ...base import BaseConverter
 from ...base.context import ConversionContext, StreamContext
+from ....ir.primitives.finish_reason import reason_for_completed_turn
 from ...base.helpers.citations import report_dropped_citation
 from ...base.helpers.extensions import extension_loss_warning, wire_extensions
 from ...base.helpers.opaque import (
@@ -60,9 +61,6 @@ from ...base.helpers.tool_group import (
 from ...base.tools import (
     intrinsic_kind_of,
     sanitize_tool_call_id,
-)
-from llm_rosetta.ir.primitives.finish_reason import (
-    reason_for_completed_turn,
 )
 from .stream_context import MessageItemState, OpenResponsesStreamContext
 from ._constants import (
@@ -112,6 +110,9 @@ def _response_finish_reason(response: dict[str, Any]) -> str:
         reason = details.get("reason", "") if isinstance(details, dict) else ""
         return RESPONSES_INCOMPLETE_REASON_TO_IR.get(reason, "stop")
     # ``status: completed`` says nothing about tool calls; the output items do.
+    # A ``response.completed`` stream event carries the same output list, so
+    # this reader can decide from its own payload; the base stream finalizer
+    # covers the dialects whose finish chunk is empty.
     calls_the_client = status == "completed" and any(
         isinstance(item, dict)
         and item.get("type") in {"function_call", "custom_tool_call"}
@@ -1319,7 +1320,7 @@ class OpenResponsesConverter(BaseConverter):
         # is redundant with response.created and is re-synthesised by
         # _handle_ir_stream_start_to_p on the to_provider side.
 
-        return events
+        return self.finalize_stream_finish(events, context)
 
     # --- from_provider handlers ---
 
