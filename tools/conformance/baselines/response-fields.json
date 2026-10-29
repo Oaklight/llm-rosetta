@@ -1,0 +1,1365 @@
+{
+  "formats": {
+    "chat_completions": {
+      "fields": {
+        "choices": {
+          "class": "content",
+          "reason": ""
+        },
+        "choices[].finish_reason": {
+          "class": "terminal",
+          "reason": ""
+        },
+        "choices[].index": {
+          "class": "envelope",
+          "reason": ""
+        },
+        "choices[].logprobs": {
+          "class": "provider_only",
+          "reason": "per-token logprobs have no streamed counterpart"
+        },
+        "choices[].logprobs.content": {
+          "class": "provider_only",
+          "reason": "provider-specific metadata; not part of the turn content"
+        },
+        "choices[].logprobs.content[].bytes": {
+          "class": "provider_only",
+          "reason": "provider-specific metadata; not part of the turn content"
+        },
+        "choices[].logprobs.content[].logprob": {
+          "class": "provider_only",
+          "reason": "provider-specific metadata; not part of the turn content"
+        },
+        "choices[].logprobs.content[].token": {
+          "class": "provider_only",
+          "reason": "provider-specific metadata; not part of the turn content"
+        },
+        "choices[].logprobs.content[].top_logprobs": {
+          "class": "provider_only",
+          "reason": "provider-specific metadata; not part of the turn content"
+        },
+        "choices[].logprobs.content[].top_logprobs[].bytes": {
+          "class": "provider_only",
+          "reason": "provider-specific metadata; not part of the turn content"
+        },
+        "choices[].logprobs.content[].top_logprobs[].logprob": {
+          "class": "provider_only",
+          "reason": "provider-specific metadata; not part of the turn content"
+        },
+        "choices[].logprobs.content[].top_logprobs[].token": {
+          "class": "provider_only",
+          "reason": "provider-specific metadata; not part of the turn content"
+        },
+        "choices[].logprobs.refusal": {
+          "class": "provider_only",
+          "reason": "provider-specific metadata; not part of the turn content"
+        },
+        "choices[].message": {
+          "class": "content",
+          "reason": ""
+        },
+        "choices[].message.annotations": {
+          "class": "provider_only",
+          "reason": "annotations is not part of the translated turn"
+        },
+        "choices[].message.audio": {
+          "class": "provider_only",
+          "reason": "provider-specific metadata; not part of the turn content"
+        },
+        "choices[].message.audio.data": {
+          "class": "content",
+          "reason": ""
+        },
+        "choices[].message.audio.expires_at": {
+          "class": "content",
+          "reason": ""
+        },
+        "choices[].message.audio.id": {
+          "class": "envelope",
+          "reason": ""
+        },
+        "choices[].message.audio.transcript": {
+          "class": "content",
+          "reason": ""
+        },
+        "choices[].message.content": {
+          "class": "content",
+          "reason": ""
+        },
+        "choices[].message.function_call": {
+          "class": "content",
+          "reason": ""
+        },
+        "choices[].message.function_call.arguments": {
+          "class": "content",
+          "reason": ""
+        },
+        "choices[].message.function_call.name": {
+          "class": "content",
+          "reason": ""
+        },
+        "choices[].message.refusal": {
+          "class": "content",
+          "reason": ""
+        },
+        "choices[].message.role": {
+          "class": "envelope",
+          "reason": ""
+        },
+        "choices[].message.tool_calls": {
+          "class": "content",
+          "reason": ""
+        },
+        "choices[].message.tool_calls[].custom": {
+          "class": "content",
+          "reason": ""
+        },
+        "choices[].message.tool_calls[].custom.input": {
+          "class": "content",
+          "reason": ""
+        },
+        "choices[].message.tool_calls[].custom.name": {
+          "class": "content",
+          "reason": ""
+        },
+        "choices[].message.tool_calls[].function": {
+          "class": "content",
+          "reason": ""
+        },
+        "choices[].message.tool_calls[].function.arguments": {
+          "class": "content",
+          "reason": ""
+        },
+        "choices[].message.tool_calls[].function.name": {
+          "class": "content",
+          "reason": ""
+        },
+        "choices[].message.tool_calls[].id": {
+          "class": "envelope",
+          "reason": ""
+        },
+        "choices[].message.tool_calls[].type": {
+          "class": "envelope",
+          "reason": ""
+        },
+        "created": {
+          "class": "envelope",
+          "reason": ""
+        },
+        "id": {
+          "class": "envelope",
+          "reason": ""
+        },
+        "model": {
+          "class": "envelope",
+          "reason": ""
+        },
+        "moderation": {
+          "class": "provider_only",
+          "reason": "moderation is not part of the translated turn"
+        },
+        "object": {
+          "class": "envelope",
+          "reason": ""
+        },
+        "service_tier": {
+          "class": "provider_only",
+          "reason": "response-level service tier has no streamed counterpart"
+        },
+        "system_fingerprint": {
+          "class": "provider_only",
+          "reason": "response-level system fingerprint has no streamed counterpart"
+        },
+        "usage": {
+          "class": "usage",
+          "reason": ""
+        },
+        "usage.completion_tokens": {
+          "class": "usage",
+          "reason": ""
+        },
+        "usage.completion_tokens_details": {
+          "class": "usage",
+          "reason": ""
+        },
+        "usage.completion_tokens_details.accepted_prediction_tokens": {
+          "class": "usage",
+          "reason": ""
+        },
+        "usage.completion_tokens_details.audio_tokens": {
+          "class": "usage",
+          "reason": ""
+        },
+        "usage.completion_tokens_details.reasoning_tokens": {
+          "class": "usage",
+          "reason": ""
+        },
+        "usage.completion_tokens_details.rejected_prediction_tokens": {
+          "class": "usage",
+          "reason": ""
+        },
+        "usage.prompt_tokens": {
+          "class": "usage",
+          "reason": ""
+        },
+        "usage.prompt_tokens_details": {
+          "class": "usage",
+          "reason": ""
+        },
+        "usage.prompt_tokens_details.audio_tokens": {
+          "class": "usage",
+          "reason": ""
+        },
+        "usage.prompt_tokens_details.cache_write_tokens": {
+          "class": "usage",
+          "reason": ""
+        },
+        "usage.prompt_tokens_details.cached_tokens": {
+          "class": "usage",
+          "reason": ""
+        },
+        "usage.total_tokens": {
+          "class": "usage",
+          "reason": ""
+        }
+      },
+      "variants": {
+        "choices[].message.tool_calls[]": {
+          "ChatCompletionMessageCustomToolCall": {
+            "class": "content",
+            "reason": ""
+          },
+          "ChatCompletionMessageFunctionToolCall": {
+            "class": "content",
+            "reason": ""
+          }
+        }
+      }
+    },
+    "google_generate": {
+      "fields": {
+        "automatic_function_calling_history": {
+          "class": "not_on_wire",
+          "reason": "SDK-only helper; never appears on the wire"
+        },
+        "candidates": {
+          "class": "content",
+          "reason": ""
+        },
+        "candidates[].avg_logprobs": {
+          "class": "content",
+          "reason": ""
+        },
+        "candidates[].citation_metadata": {
+          "class": "provider_only",
+          "reason": "citation_metadata is not part of the translated turn"
+        },
+        "candidates[].content": {
+          "class": "content",
+          "reason": ""
+        },
+        "candidates[].content.parts": {
+          "class": "content",
+          "reason": ""
+        },
+        "candidates[].content.parts[].code_execution_result": {
+          "class": "content",
+          "reason": ""
+        },
+        "candidates[].content.parts[].code_execution_result.id": {
+          "class": "envelope",
+          "reason": ""
+        },
+        "candidates[].content.parts[].code_execution_result.outcome": {
+          "class": "content",
+          "reason": ""
+        },
+        "candidates[].content.parts[].code_execution_result.output": {
+          "class": "content",
+          "reason": ""
+        },
+        "candidates[].content.parts[].executable_code": {
+          "class": "content",
+          "reason": ""
+        },
+        "candidates[].content.parts[].executable_code.code": {
+          "class": "content",
+          "reason": ""
+        },
+        "candidates[].content.parts[].executable_code.id": {
+          "class": "envelope",
+          "reason": ""
+        },
+        "candidates[].content.parts[].executable_code.language": {
+          "class": "content",
+          "reason": ""
+        },
+        "candidates[].content.parts[].file_data": {
+          "class": "content",
+          "reason": ""
+        },
+        "candidates[].content.parts[].file_data.display_name": {
+          "class": "content",
+          "reason": ""
+        },
+        "candidates[].content.parts[].file_data.file_uri": {
+          "class": "content",
+          "reason": ""
+        },
+        "candidates[].content.parts[].file_data.mime_type": {
+          "class": "content",
+          "reason": ""
+        },
+        "candidates[].content.parts[].function_call": {
+          "class": "content",
+          "reason": ""
+        },
+        "candidates[].content.parts[].function_call.args": {
+          "class": "content",
+          "reason": ""
+        },
+        "candidates[].content.parts[].function_call.id": {
+          "class": "envelope",
+          "reason": ""
+        },
+        "candidates[].content.parts[].function_call.name": {
+          "class": "content",
+          "reason": ""
+        },
+        "candidates[].content.parts[].function_call.partial_args": {
+          "class": "content",
+          "reason": ""
+        },
+        "candidates[].content.parts[].function_call.will_continue": {
+          "class": "content",
+          "reason": ""
+        },
+        "candidates[].content.parts[].function_response": {
+          "class": "content",
+          "reason": ""
+        },
+        "candidates[].content.parts[].function_response.id": {
+          "class": "envelope",
+          "reason": ""
+        },
+        "candidates[].content.parts[].function_response.name": {
+          "class": "content",
+          "reason": ""
+        },
+        "candidates[].content.parts[].function_response.parts": {
+          "class": "content",
+          "reason": ""
+        },
+        "candidates[].content.parts[].function_response.response": {
+          "class": "content",
+          "reason": ""
+        },
+        "candidates[].content.parts[].function_response.scheduling": {
+          "class": "content",
+          "reason": ""
+        },
+        "candidates[].content.parts[].function_response.will_continue": {
+          "class": "content",
+          "reason": ""
+        },
+        "candidates[].content.parts[].inline_data": {
+          "class": "content",
+          "reason": ""
+        },
+        "candidates[].content.parts[].inline_data.data": {
+          "class": "content",
+          "reason": ""
+        },
+        "candidates[].content.parts[].inline_data.display_name": {
+          "class": "content",
+          "reason": ""
+        },
+        "candidates[].content.parts[].inline_data.mime_type": {
+          "class": "content",
+          "reason": ""
+        },
+        "candidates[].content.parts[].media_resolution": {
+          "class": "provider_only",
+          "reason": "media_resolution is not part of the translated turn"
+        },
+        "candidates[].content.parts[].part_metadata": {
+          "class": "provider_only",
+          "reason": "part_metadata is not part of the translated turn"
+        },
+        "candidates[].content.parts[].text": {
+          "class": "content",
+          "reason": ""
+        },
+        "candidates[].content.parts[].thought": {
+          "class": "content",
+          "reason": ""
+        },
+        "candidates[].content.parts[].thought_signature": {
+          "class": "provider_only",
+          "reason": "opaque Google signature; not comparable across legs"
+        },
+        "candidates[].content.parts[].tool_call": {
+          "class": "content",
+          "reason": ""
+        },
+        "candidates[].content.parts[].tool_call.args": {
+          "class": "content",
+          "reason": ""
+        },
+        "candidates[].content.parts[].tool_call.id": {
+          "class": "envelope",
+          "reason": ""
+        },
+        "candidates[].content.parts[].tool_call.tool_type": {
+          "class": "content",
+          "reason": ""
+        },
+        "candidates[].content.parts[].tool_response": {
+          "class": "content",
+          "reason": ""
+        },
+        "candidates[].content.parts[].tool_response.id": {
+          "class": "envelope",
+          "reason": ""
+        },
+        "candidates[].content.parts[].tool_response.response": {
+          "class": "content",
+          "reason": ""
+        },
+        "candidates[].content.parts[].tool_response.tool_type": {
+          "class": "content",
+          "reason": ""
+        },
+        "candidates[].content.parts[].video_metadata": {
+          "class": "provider_only",
+          "reason": "video_metadata is not part of the translated turn"
+        },
+        "candidates[].content.role": {
+          "class": "envelope",
+          "reason": ""
+        },
+        "candidates[].finish_message": {
+          "class": "content",
+          "reason": ""
+        },
+        "candidates[].finish_reason": {
+          "class": "terminal",
+          "reason": ""
+        },
+        "candidates[].grounding_metadata": {
+          "class": "provider_only",
+          "reason": "grounding_metadata is not part of the translated turn"
+        },
+        "candidates[].index": {
+          "class": "envelope",
+          "reason": ""
+        },
+        "candidates[].logprobs_result": {
+          "class": "provider_only",
+          "reason": "logprobs_result is not part of the translated turn"
+        },
+        "candidates[].safety_ratings": {
+          "class": "provider_only",
+          "reason": "safety_ratings is not part of the translated turn"
+        },
+        "candidates[].token_count": {
+          "class": "content",
+          "reason": ""
+        },
+        "candidates[].url_context_metadata": {
+          "class": "provider_only",
+          "reason": "url_context_metadata is not part of the translated turn"
+        },
+        "create_time": {
+          "class": "content",
+          "reason": ""
+        },
+        "model_status": {
+          "class": "content",
+          "reason": ""
+        },
+        "model_status.message": {
+          "class": "content",
+          "reason": ""
+        },
+        "model_status.model_stage": {
+          "class": "content",
+          "reason": ""
+        },
+        "model_status.retirement_time": {
+          "class": "content",
+          "reason": ""
+        },
+        "model_version": {
+          "class": "content",
+          "reason": ""
+        },
+        "parsed": {
+          "class": "not_on_wire",
+          "reason": "SDK-only helper; never appears on the wire"
+        },
+        "prompt_feedback": {
+          "class": "content",
+          "reason": ""
+        },
+        "prompt_feedback.block_reason": {
+          "class": "terminal",
+          "reason": ""
+        },
+        "prompt_feedback.block_reason_message": {
+          "class": "content",
+          "reason": ""
+        },
+        "prompt_feedback.safety_ratings": {
+          "class": "provider_only",
+          "reason": "safety_ratings is not part of the translated turn"
+        },
+        "response_id": {
+          "class": "content",
+          "reason": ""
+        },
+        "sdk_http_response": {
+          "class": "not_on_wire",
+          "reason": "SDK-only helper; never appears on the wire"
+        },
+        "usage_metadata": {
+          "class": "usage",
+          "reason": ""
+        },
+        "usage_metadata.cache_tokens_details": {
+          "class": "usage",
+          "reason": "cache_tokens_details is not part of the translated turn"
+        },
+        "usage_metadata.cached_content_token_count": {
+          "class": "usage",
+          "reason": ""
+        },
+        "usage_metadata.candidates_token_count": {
+          "class": "usage",
+          "reason": ""
+        },
+        "usage_metadata.candidates_tokens_details": {
+          "class": "usage",
+          "reason": "candidates_tokens_details is not part of the translated turn"
+        },
+        "usage_metadata.prompt_token_count": {
+          "class": "usage",
+          "reason": ""
+        },
+        "usage_metadata.prompt_tokens_details": {
+          "class": "usage",
+          "reason": "prompt_tokens_details is not part of the translated turn"
+        },
+        "usage_metadata.thoughts_token_count": {
+          "class": "usage",
+          "reason": ""
+        },
+        "usage_metadata.tool_use_prompt_token_count": {
+          "class": "usage",
+          "reason": ""
+        },
+        "usage_metadata.tool_use_prompt_tokens_details": {
+          "class": "usage",
+          "reason": "tool_use_prompt_tokens_details is not part of the translated turn"
+        },
+        "usage_metadata.total_token_count": {
+          "class": "usage",
+          "reason": ""
+        },
+        "usage_metadata.traffic_type": {
+          "class": "usage",
+          "reason": ""
+        }
+      },
+      "variants": {}
+    },
+    "google_interactions": {
+      "fields": {
+        "created": {
+          "class": "envelope",
+          "reason": ""
+        },
+        "id": {
+          "class": "envelope",
+          "reason": ""
+        },
+        "model": {
+          "class": "envelope",
+          "reason": ""
+        },
+        "object": {
+          "class": "envelope",
+          "reason": ""
+        },
+        "status": {
+          "class": "terminal",
+          "reason": ""
+        },
+        "steps[]": {
+          "class": "content",
+          "reason": ""
+        },
+        "steps[].arguments": {
+          "class": "content",
+          "reason": ""
+        },
+        "steps[].call_id": {
+          "class": "envelope",
+          "reason": ""
+        },
+        "steps[].content[]": {
+          "class": "content",
+          "reason": ""
+        },
+        "steps[].content[].text": {
+          "class": "content",
+          "reason": ""
+        },
+        "steps[].content[].type": {
+          "class": "envelope",
+          "reason": ""
+        },
+        "steps[].id": {
+          "class": "envelope",
+          "reason": ""
+        },
+        "steps[].is_error": {
+          "class": "content",
+          "reason": ""
+        },
+        "steps[].name": {
+          "class": "content",
+          "reason": ""
+        },
+        "steps[].result": {
+          "class": "content",
+          "reason": ""
+        },
+        "steps[].signature": {
+          "class": "provider_only",
+          "reason": "opaque provider signature; not comparable across legs"
+        },
+        "steps[].summary[]": {
+          "class": "content",
+          "reason": ""
+        },
+        "steps[].summary[].text": {
+          "class": "content",
+          "reason": ""
+        },
+        "steps[].summary[].type": {
+          "class": "envelope",
+          "reason": ""
+        },
+        "steps[].type": {
+          "class": "envelope",
+          "reason": ""
+        },
+        "updated": {
+          "class": "envelope",
+          "reason": ""
+        },
+        "usage": {
+          "class": "usage",
+          "reason": ""
+        },
+        "usage.total_input_tokens": {
+          "class": "usage",
+          "reason": ""
+        },
+        "usage.total_output_tokens": {
+          "class": "usage",
+          "reason": ""
+        },
+        "usage.total_tokens": {
+          "class": "usage",
+          "reason": ""
+        }
+      },
+      "variants": {}
+    },
+    "messages": {
+      "fields": {
+        "container": {
+          "class": "provider_only",
+          "reason": "container is not part of the translated turn"
+        },
+        "content": {
+          "class": "content",
+          "reason": ""
+        },
+        "content[].caller": {
+          "class": "envelope",
+          "reason": "caller is not part of the translated turn"
+        },
+        "content[].citations": {
+          "class": "provider_only",
+          "reason": "citations is not part of the translated turn"
+        },
+        "content[].data": {
+          "class": "content",
+          "reason": ""
+        },
+        "content[].id": {
+          "class": "envelope",
+          "reason": ""
+        },
+        "content[].input": {
+          "class": "content",
+          "reason": ""
+        },
+        "content[].name": {
+          "class": "content",
+          "reason": ""
+        },
+        "content[].signature": {
+          "class": "provider_only",
+          "reason": "opaque provider signature; not comparable across legs"
+        },
+        "content[].text": {
+          "class": "content",
+          "reason": ""
+        },
+        "content[].thinking": {
+          "class": "content",
+          "reason": ""
+        },
+        "content[].type": {
+          "class": "envelope",
+          "reason": ""
+        },
+        "id": {
+          "class": "envelope",
+          "reason": ""
+        },
+        "model": {
+          "class": "envelope",
+          "reason": ""
+        },
+        "role": {
+          "class": "envelope",
+          "reason": ""
+        },
+        "stop_details": {
+          "class": "terminal",
+          "reason": ""
+        },
+        "stop_details.category": {
+          "class": "content",
+          "reason": ""
+        },
+        "stop_details.explanation": {
+          "class": "content",
+          "reason": ""
+        },
+        "stop_details.type": {
+          "class": "envelope",
+          "reason": ""
+        },
+        "stop_reason": {
+          "class": "terminal",
+          "reason": ""
+        },
+        "stop_sequence": {
+          "class": "terminal",
+          "reason": ""
+        },
+        "type": {
+          "class": "envelope",
+          "reason": ""
+        },
+        "usage": {
+          "class": "usage",
+          "reason": ""
+        },
+        "usage.cache_creation": {
+          "class": "usage",
+          "reason": ""
+        },
+        "usage.cache_creation.ephemeral_1h_input_tokens": {
+          "class": "usage",
+          "reason": ""
+        },
+        "usage.cache_creation.ephemeral_5m_input_tokens": {
+          "class": "usage",
+          "reason": ""
+        },
+        "usage.cache_creation_input_tokens": {
+          "class": "usage",
+          "reason": ""
+        },
+        "usage.cache_read_input_tokens": {
+          "class": "usage",
+          "reason": ""
+        },
+        "usage.inference_geo": {
+          "class": "usage",
+          "reason": ""
+        },
+        "usage.input_tokens": {
+          "class": "usage",
+          "reason": ""
+        },
+        "usage.output_tokens": {
+          "class": "usage",
+          "reason": ""
+        },
+        "usage.output_tokens_details": {
+          "class": "usage",
+          "reason": ""
+        },
+        "usage.output_tokens_details.thinking_tokens": {
+          "class": "usage",
+          "reason": ""
+        },
+        "usage.server_tool_use": {
+          "class": "usage",
+          "reason": ""
+        },
+        "usage.server_tool_use.web_fetch_requests": {
+          "class": "usage",
+          "reason": ""
+        },
+        "usage.server_tool_use.web_search_requests": {
+          "class": "usage",
+          "reason": ""
+        },
+        "usage.service_tier": {
+          "class": "usage",
+          "reason": ""
+        }
+      },
+      "variants": {
+        "content[]": {
+          "BashCodeExecutionToolResultBlock": {
+            "class": "not_compared",
+            "reason": "variant not exercised by the leg-agreement harness; its IR mapping is not asserted"
+          },
+          "CodeExecutionToolResultBlock": {
+            "class": "not_compared",
+            "reason": "variant not exercised by the leg-agreement harness; its IR mapping is not asserted"
+          },
+          "ContainerUploadBlock": {
+            "class": "not_compared",
+            "reason": "variant not exercised by the leg-agreement harness; its IR mapping is not asserted"
+          },
+          "RedactedThinkingBlock": {
+            "class": "content",
+            "reason": ""
+          },
+          "ServerToolUseBlock": {
+            "class": "content",
+            "reason": ""
+          },
+          "TextBlock": {
+            "class": "content",
+            "reason": ""
+          },
+          "TextEditorCodeExecutionToolResultBlock": {
+            "class": "not_compared",
+            "reason": "variant not exercised by the leg-agreement harness; its IR mapping is not asserted"
+          },
+          "ThinkingBlock": {
+            "class": "content",
+            "reason": ""
+          },
+          "ToolSearchToolResultBlock": {
+            "class": "not_compared",
+            "reason": "variant not exercised by the leg-agreement harness; its IR mapping is not asserted"
+          },
+          "ToolUseBlock": {
+            "class": "content",
+            "reason": ""
+          },
+          "WebFetchToolResultBlock": {
+            "class": "not_compared",
+            "reason": "variant not exercised by the leg-agreement harness; its IR mapping is not asserted"
+          },
+          "WebSearchToolResultBlock": {
+            "class": "not_compared",
+            "reason": "variant not exercised by the leg-agreement harness; its IR mapping is not asserted"
+          }
+        }
+      }
+    },
+    "open_responses": {
+      "fields": {
+        "background": {
+          "class": "echoed_request",
+          "reason": "the Responses API echoes the request configuration; it is not a translated output field"
+        },
+        "completed_at": {
+          "class": "envelope",
+          "reason": ""
+        },
+        "conversation": {
+          "class": "echoed_request",
+          "reason": "the Responses API echoes the request configuration; it is not a translated output field"
+        },
+        "created_at": {
+          "class": "envelope",
+          "reason": ""
+        },
+        "error": {
+          "class": "terminal",
+          "reason": ""
+        },
+        "error.code": {
+          "class": "content",
+          "reason": ""
+        },
+        "error.message": {
+          "class": "content",
+          "reason": ""
+        },
+        "id": {
+          "class": "envelope",
+          "reason": ""
+        },
+        "incomplete_details": {
+          "class": "terminal",
+          "reason": ""
+        },
+        "incomplete_details.reason": {
+          "class": "content",
+          "reason": ""
+        },
+        "instructions": {
+          "class": "echoed_request",
+          "reason": "the Responses API echoes the request configuration; it is not a translated output field"
+        },
+        "max_output_tokens": {
+          "class": "echoed_request",
+          "reason": "the Responses API echoes the request configuration; it is not a translated output field"
+        },
+        "max_tool_calls": {
+          "class": "echoed_request",
+          "reason": "the Responses API echoes the request configuration; it is not a translated output field"
+        },
+        "metadata": {
+          "class": "provider_only",
+          "reason": "metadata is not part of the translated turn"
+        },
+        "model": {
+          "class": "envelope",
+          "reason": ""
+        },
+        "moderation": {
+          "class": "provider_only",
+          "reason": "moderation is not part of the translated turn"
+        },
+        "object": {
+          "class": "envelope",
+          "reason": ""
+        },
+        "output": {
+          "class": "content",
+          "reason": ""
+        },
+        "output[].action": {
+          "class": "content",
+          "reason": ""
+        },
+        "output[].action.pattern": {
+          "class": "content",
+          "reason": ""
+        },
+        "output[].action.queries": {
+          "class": "content",
+          "reason": ""
+        },
+        "output[].action.query": {
+          "class": "content",
+          "reason": ""
+        },
+        "output[].action.sources": {
+          "class": "content",
+          "reason": ""
+        },
+        "output[].action.sources[].type": {
+          "class": "envelope",
+          "reason": ""
+        },
+        "output[].action.sources[].url": {
+          "class": "content",
+          "reason": ""
+        },
+        "output[].action.type": {
+          "class": "envelope",
+          "reason": ""
+        },
+        "output[].action.url": {
+          "class": "content",
+          "reason": ""
+        },
+        "output[].arguments": {
+          "class": "content",
+          "reason": ""
+        },
+        "output[].call_id": {
+          "class": "envelope",
+          "reason": ""
+        },
+        "output[].caller": {
+          "class": "envelope",
+          "reason": "caller is not part of the translated turn"
+        },
+        "output[].content": {
+          "class": "content",
+          "reason": ""
+        },
+        "output[].content[].annotations": {
+          "class": "provider_only",
+          "reason": "annotations is not part of the translated turn"
+        },
+        "output[].content[].logprobs": {
+          "class": "provider_only",
+          "reason": "per-token logprobs have no streamed counterpart"
+        },
+        "output[].content[].logprobs[].bytes": {
+          "class": "content",
+          "reason": ""
+        },
+        "output[].content[].logprobs[].logprob": {
+          "class": "content",
+          "reason": ""
+        },
+        "output[].content[].logprobs[].token": {
+          "class": "usage",
+          "reason": ""
+        },
+        "output[].content[].logprobs[].top_logprobs": {
+          "class": "content",
+          "reason": ""
+        },
+        "output[].content[].logprobs[].top_logprobs[].bytes": {
+          "class": "content",
+          "reason": ""
+        },
+        "output[].content[].logprobs[].top_logprobs[].logprob": {
+          "class": "content",
+          "reason": ""
+        },
+        "output[].content[].logprobs[].top_logprobs[].token": {
+          "class": "usage",
+          "reason": ""
+        },
+        "output[].content[].refusal": {
+          "class": "content",
+          "reason": ""
+        },
+        "output[].content[].text": {
+          "class": "content",
+          "reason": ""
+        },
+        "output[].content[].type": {
+          "class": "envelope",
+          "reason": ""
+        },
+        "output[].encrypted_content": {
+          "class": "content",
+          "reason": ""
+        },
+        "output[].id": {
+          "class": "envelope",
+          "reason": ""
+        },
+        "output[].input": {
+          "class": "content",
+          "reason": ""
+        },
+        "output[].name": {
+          "class": "content",
+          "reason": ""
+        },
+        "output[].namespace": {
+          "class": "content",
+          "reason": ""
+        },
+        "output[].phase": {
+          "class": "content",
+          "reason": ""
+        },
+        "output[].role": {
+          "class": "envelope",
+          "reason": ""
+        },
+        "output[].status": {
+          "class": "terminal",
+          "reason": ""
+        },
+        "output[].summary": {
+          "class": "content",
+          "reason": ""
+        },
+        "output[].summary[].text": {
+          "class": "content",
+          "reason": ""
+        },
+        "output[].summary[].type": {
+          "class": "envelope",
+          "reason": ""
+        },
+        "output[].type": {
+          "class": "envelope",
+          "reason": ""
+        },
+        "parallel_tool_calls": {
+          "class": "echoed_request",
+          "reason": "the Responses API echoes the request configuration; it is not a translated output field"
+        },
+        "previous_response_id": {
+          "class": "echoed_request",
+          "reason": "the Responses API echoes the request configuration; it is not a translated output field"
+        },
+        "prompt": {
+          "class": "echoed_request",
+          "reason": "the Responses API echoes the request configuration; it is not a translated output field"
+        },
+        "prompt_cache_key": {
+          "class": "echoed_request",
+          "reason": "the Responses API echoes the request configuration; it is not a translated output field"
+        },
+        "prompt_cache_options": {
+          "class": "echoed_request",
+          "reason": "the Responses API echoes the request configuration; it is not a translated output field"
+        },
+        "prompt_cache_retention": {
+          "class": "echoed_request",
+          "reason": "the Responses API echoes the request configuration; it is not a translated output field"
+        },
+        "reasoning": {
+          "class": "echoed_request",
+          "reason": "the Responses API echoes the request configuration; it is not a translated output field"
+        },
+        "safety_identifier": {
+          "class": "echoed_request",
+          "reason": "the Responses API echoes the request configuration; it is not a translated output field"
+        },
+        "service_tier": {
+          "class": "provider_only",
+          "reason": "service_tier is not part of the translated turn"
+        },
+        "status": {
+          "class": "terminal",
+          "reason": ""
+        },
+        "temperature": {
+          "class": "echoed_request",
+          "reason": "the Responses API echoes the request configuration; it is not a translated output field"
+        },
+        "text": {
+          "class": "echoed_request",
+          "reason": "the Responses API echoes the request configuration; it is not a translated output field"
+        },
+        "tool_choice": {
+          "class": "echoed_request",
+          "reason": "the Responses API echoes the request configuration; it is not a translated output field"
+        },
+        "tools": {
+          "class": "echoed_request",
+          "reason": "the Responses API echoes the request configuration; it is not a translated output field"
+        },
+        "top_logprobs": {
+          "class": "echoed_request",
+          "reason": "the Responses API echoes the request configuration; it is not a translated output field"
+        },
+        "top_p": {
+          "class": "echoed_request",
+          "reason": "the Responses API echoes the request configuration; it is not a translated output field"
+        },
+        "truncation": {
+          "class": "echoed_request",
+          "reason": "the Responses API echoes the request configuration; it is not a translated output field"
+        },
+        "usage": {
+          "class": "usage",
+          "reason": ""
+        },
+        "usage.input_tokens": {
+          "class": "usage",
+          "reason": ""
+        },
+        "usage.input_tokens_details": {
+          "class": "usage",
+          "reason": ""
+        },
+        "usage.input_tokens_details.cache_write_tokens": {
+          "class": "usage",
+          "reason": ""
+        },
+        "usage.input_tokens_details.cached_tokens": {
+          "class": "usage",
+          "reason": ""
+        },
+        "usage.output_tokens": {
+          "class": "usage",
+          "reason": ""
+        },
+        "usage.output_tokens_details": {
+          "class": "usage",
+          "reason": ""
+        },
+        "usage.output_tokens_details.reasoning_tokens": {
+          "class": "usage",
+          "reason": ""
+        },
+        "usage.total_tokens": {
+          "class": "usage",
+          "reason": ""
+        },
+        "user": {
+          "class": "echoed_request",
+          "reason": "the Responses API echoes the request configuration; it is not a translated output field"
+        }
+      },
+      "variants": {
+        "output[]": {
+          "AdditionalTools": {
+            "class": "not_compared",
+            "reason": "variant not exercised by the leg-agreement harness; its IR mapping is not asserted"
+          },
+          "ImageGenerationCall": {
+            "class": "not_compared",
+            "reason": "variant not exercised by the leg-agreement harness; its IR mapping is not asserted"
+          },
+          "LocalShellCall": {
+            "class": "not_compared",
+            "reason": "variant not exercised by the leg-agreement harness; its IR mapping is not asserted"
+          },
+          "LocalShellCallOutput": {
+            "class": "not_compared",
+            "reason": "variant not exercised by the leg-agreement harness; its IR mapping is not asserted"
+          },
+          "McpApprovalRequest": {
+            "class": "not_compared",
+            "reason": "variant not exercised by the leg-agreement harness; its IR mapping is not asserted"
+          },
+          "McpApprovalResponse": {
+            "class": "not_compared",
+            "reason": "variant not exercised by the leg-agreement harness; its IR mapping is not asserted"
+          },
+          "McpCall": {
+            "class": "not_compared",
+            "reason": "variant not exercised by the leg-agreement harness; its IR mapping is not asserted"
+          },
+          "McpListTools": {
+            "class": "not_compared",
+            "reason": "variant not exercised by the leg-agreement harness; its IR mapping is not asserted"
+          },
+          "Program": {
+            "class": "not_compared",
+            "reason": "variant not exercised by the leg-agreement harness; its IR mapping is not asserted"
+          },
+          "ProgramOutput": {
+            "class": "not_compared",
+            "reason": "variant not exercised by the leg-agreement harness; its IR mapping is not asserted"
+          },
+          "ResponseApplyPatchToolCall": {
+            "class": "not_compared",
+            "reason": "variant not exercised by the leg-agreement harness; its IR mapping is not asserted"
+          },
+          "ResponseApplyPatchToolCallOutput": {
+            "class": "not_compared",
+            "reason": "variant not exercised by the leg-agreement harness; its IR mapping is not asserted"
+          },
+          "ResponseCodeInterpreterToolCall": {
+            "class": "not_compared",
+            "reason": "variant not exercised by the leg-agreement harness; its IR mapping is not asserted"
+          },
+          "ResponseCompactionItem": {
+            "class": "not_compared",
+            "reason": "variant not exercised by the leg-agreement harness; its IR mapping is not asserted"
+          },
+          "ResponseComputerToolCall": {
+            "class": "not_compared",
+            "reason": "variant not exercised by the leg-agreement harness; its IR mapping is not asserted"
+          },
+          "ResponseComputerToolCallOutputItem": {
+            "class": "not_compared",
+            "reason": "variant not exercised by the leg-agreement harness; its IR mapping is not asserted"
+          },
+          "ResponseCustomToolCall": {
+            "class": "content",
+            "reason": ""
+          },
+          "ResponseCustomToolCallOutputItem": {
+            "class": "not_compared",
+            "reason": "variant not exercised by the leg-agreement harness; its IR mapping is not asserted"
+          },
+          "ResponseFileSearchToolCall": {
+            "class": "not_compared",
+            "reason": "variant not exercised by the leg-agreement harness; its IR mapping is not asserted"
+          },
+          "ResponseFunctionShellToolCall": {
+            "class": "not_compared",
+            "reason": "variant not exercised by the leg-agreement harness; its IR mapping is not asserted"
+          },
+          "ResponseFunctionShellToolCallOutput": {
+            "class": "not_compared",
+            "reason": "variant not exercised by the leg-agreement harness; its IR mapping is not asserted"
+          },
+          "ResponseFunctionToolCall": {
+            "class": "content",
+            "reason": ""
+          },
+          "ResponseFunctionToolCallOutputItem": {
+            "class": "not_compared",
+            "reason": "variant not exercised by the leg-agreement harness; its IR mapping is not asserted"
+          },
+          "ResponseFunctionWebSearch": {
+            "class": "content",
+            "reason": ""
+          },
+          "ResponseOutputMessage": {
+            "class": "content",
+            "reason": ""
+          },
+          "ResponseReasoningItem": {
+            "class": "content",
+            "reason": ""
+          },
+          "ResponseToolSearchCall": {
+            "class": "not_compared",
+            "reason": "variant not exercised by the leg-agreement harness; its IR mapping is not asserted"
+          },
+          "ResponseToolSearchOutputItem": {
+            "class": "not_compared",
+            "reason": "variant not exercised by the leg-agreement harness; its IR mapping is not asserted"
+          }
+        },
+        "output[].action": {
+          "ActionFind": {
+            "class": "content",
+            "reason": ""
+          },
+          "ActionOpenPage": {
+            "class": "content",
+            "reason": ""
+          },
+          "ActionSearch": {
+            "class": "content",
+            "reason": ""
+          }
+        },
+        "output[].content[]": {
+          "ResponseOutputRefusal": {
+            "class": "content",
+            "reason": ""
+          },
+          "ResponseOutputText": {
+            "class": "content",
+            "reason": ""
+          }
+        }
+      }
+    }
+  },
+  "schema_version": 1,
+  "sdk_versions": {
+    "anthropic": "0.116.0",
+    "google-genai": "2.12.0",
+    "openai": "2.45.0"
+  },
+  "suite": "fields"
+}
