@@ -41,6 +41,44 @@ Refresh the baseline after reviewing the new drift:
 python -c "from tools.conformance.suites.drift import write_baseline; write_baseline()"
 ```
 
+### `fields`
+
+Every response field of each chat format, taken from the provider SDK type
+(`openai.types.chat.ChatCompletion`, `openai.types.responses.Response`,
+`anthropic.types.Message`, `google.genai.types.GenerateContentResponse`) or, for
+the Interactions API, from a hand-authored schema. Each field path is recorded in
+`baselines/response-fields.json` with a classification:
+
+| class | meaning |
+| --- | --- |
+| `content` | part of the comparable turn content |
+| `envelope` | id/model/type/index metadata |
+| `terminal` | why the turn ended |
+| `usage` | token accounting |
+| `provider_only` | provider metadata that is not compared (needs a reason) |
+| `echoed_request` | Responses echoes the request configuration (needs a reason) |
+| `not_on_wire` | SDK-only helper (needs a reason) |
+| `not_compared` | a union variant the harness does not exercise (needs a reason) |
+
+A field the SDK declares and the ledger does not have fails the case; a field the
+ledger has and the SDK no longer declares is reported, not failed. Union variants
+are classified the same way, so a new output item or content block is visible
+without enumerating every deep field of a type the harness does not exercise.
+
+```bash
+python -m tools.conformance run --suite fields --out /tmp/fields-report.json
+```
+
+Refresh the ledger after reviewing a change:
+
+```bash
+python -c "from tools.conformance.suites.fields import write_baseline; write_baseline()"
+```
+
+New fields are added as `unclassified`, so the suite keeps failing until they are
+classified. `write_baseline(seed=True)` fills them with a heuristic classification
+instead; use it only when seeding the ledger for the first time.
+
 ### `wire`
 
 One canonical request, round-tripped through each of the five chat formats
