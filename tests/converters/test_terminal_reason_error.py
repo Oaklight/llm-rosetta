@@ -85,16 +85,19 @@ def test_google_writes_its_own_word_back():
     assert result["candidates"][0]["finishReason"] == "MALFORMED_FUNCTION_CALL"
 
 
-def test_google_ignores_another_dialects_record():
-    """Only Google's own record explains a Google word."""
+@pytest.mark.parametrize("base", ["chat_completions", "open_responses", "messages"])
+def test_google_ignores_another_dialects_record(base):
+    """Only Google's own record explains a Google word.
+
+    The Google converter is the only writer of ``_native_finish_reason``
+    today, so a foreign failure reaches the writer with no record at all — the
+    refusal comes from the record's absence.  This is the guard for a record
+    another reader might write later, and it is what makes the origin tag on
+    the existing one mean something.
+    """
     ir = _ir(
         "error",
-        metadata={
-            "_native_finish_reason": {
-                "base": "chat_completions",
-                "reason": "content_filter",
-            }
-        },
+        metadata={"_native_finish_reason": {"base": base, "reason": "SAFETY"}},
     )
 
     with pytest.raises(UnrepresentableFinishReason):
@@ -124,12 +127,14 @@ def test_a_google_upstream_round_trips_through_the_ir():
     assert written_back["candidates"][0]["finishReason"] == "OTHER"
 
 
-def test_a_blocked_google_prompt_keeps_its_word():
-    """A block reason the IR files under ``error`` is still Google's own.
+def test_a_blocked_google_prompt_keeps_its_prompt_feedback():
+    """A blocked prompt has no candidate; the field itself is the answer.
 
-    ``LANGUAGE`` maps to ``error``, so only the record the reader leaves keeps
-    the turn writeable; without it a Google client would get a 502 for a
-    prompt its own API blocked.
+    ``LANGUAGE`` maps to the IR's ``error`` and there is no candidate to carry
+    a ``finishReason``, so only the record the reader leaves keeps the turn
+    writeable — without it a Google client would get a 502 for a prompt its own
+    API blocked, and with a candidate written instead it would get a turn the
+    model never made.
     """
     converter = GoogleGenerateConverter()
     provider_response = {
@@ -142,10 +147,11 @@ def test_a_blocked_google_prompt_keeps_its_word():
 
     written_back = converter.response_to_provider(cast(Any, ir))
 
-    assert written_back["candidates"][0]["finishReason"] == "LANGUAGE"
+    assert written_back["candidates"] == []
+    assert written_back["promptFeedback"] == {"blockReason": "LANGUAGE"}
 
 
-def test_a_blocked_google_prompt_keeps_its_word_on_the_stream():
+def test_a_blocked_google_prompt_keeps_its_feedback_on_the_stream():
     """The stream reader leaves the same record, for the same reason."""
     converter = GoogleGenerateConverter()
     chunk = {"candidates": [], "promptFeedback": {"blockReason": "LANGUAGE"}}
@@ -156,4 +162,124 @@ def test_a_blocked_google_prompt_keeps_its_word_on_the_stream():
 
     chunks = cast(list[dict[str, Any]], converter.stream_response_to_provider(finish))
 
-    assert chunks[-1]["candidates"][0]["finishReason"] == "LANGUAGE"
+    assert "candidates" not in chunks[-1]
+    assert chunks[-1]["promptFeedback"] == {"blockReason": "LANGUAGE"}
+
+
+@pytest.mark.parametrize(
+    "word", ["RECITATION", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII"]
+)
+def test_a_google_filter_word_round_trips(word):
+    """The filtered family keeps Google's word instead of collapsing to SAFETY."""
+    converter = GoogleGenerateConverter()
+    provider_response = {
+        "candidates": [
+            {
+                "index": 0,
+                "content": {"role": "model", "parts": [{"text": "partial"}]},
+                "finishReason": word,
+            }
+        ],
+        "responseId": "g1",
+        "modelVersion": "gemini-2.5-flash",
+    }
+
+    ir = converter.response_from_provider(cast(Any, provider_response))
+    assert ir["choices"][0]["finish_reason"]["reason"] == "content_filter"
+
+    written_back = converter.response_to_provider(cast(Any, ir))
+
+    assert written_back["candidates"][0]["finishReason"] == word
+
+
+def test_a_google_word_the_mapping_preserves_is_not_recorded():
+    """Only a word the IR would lose is carried; STOP needs no record."""
+    converter = GoogleGenerateConverter()
+    provider_response = {
+        "candidates": [
+            {
+                "index": 0,
+                "content": {"role": "model", "parts": [{"text": "done"}]},
+                "finishReason": "STOP",
+            }
+        ],
+        "responseId": "g1",
+        "modelVersion": "gemini-2.5-flash",
+    }
+
+    ir = converter.response_from_provider(cast(Any, provider_response))
+
+    message = cast(dict[str, Any], ir["choices"][0]["message"])
+    assert "_native_finish_reason" not in (message.get("provider_metadata") or {})
+
+
+def test_a_google_filter_word_survives_the_stream():
+    """Same record on the stream leg: the finish event carries it back."""
+    converter = GoogleGenerateConverter()
+    chunk = {
+        "candidates": [
+            {
+                "index": 0,
+                "content": {"role": "model", "parts": [{"text": "partial"}]},
+                "finishReason": "RECITATION",
+            }
+        ]
+    }
+
+    events = converter.stream_response_from_provider(chunk)
+    finish = next(e for e in events if e["type"] == "finish")
+    assert finish["finish_reason"]["reason"] == "content_filter"
+
+    chunks = cast(list[dict[str, Any]], converter.stream_response_to_provider(finish))
+
+    assert chunks[-1]["candidates"][0]["finishReason"] == "RECITATION"
+
+
+@pytest.mark.parametrize("word", ["MALFORMED_FUNCTION_CALL", "LANGUAGE", "OTHER"])
+def test_a_google_failure_word_survives_the_stream(word):
+    """The stream reader records the word too, not just the JSON one.
+
+    Without it the failure reaches a Google target with no record, and a Google
+    client is refused a word its own API said.
+    """
+    converter = GoogleGenerateConverter()
+    chunk = {
+        "candidates": [
+            {
+                "index": 0,
+                "content": {"role": "model", "parts": [{"text": "partial"}]},
+                "finishReason": word,
+            }
+        ]
+    }
+
+    events = converter.stream_response_from_provider(chunk)
+    finish = next(e for e in events if e["type"] == "finish")
+    assert finish["finish_reason"]["reason"] == "error"
+
+    chunks = cast(list[dict[str, Any]], converter.stream_response_to_provider(finish))
+
+    assert chunks[-1]["candidates"][0]["finishReason"] == word
+
+
+def test_google_ignores_another_dialects_prompt_feedback():
+    """Only Google's own record lets the writer omit a candidate.
+
+    The guardian of the blocked-prompt shape: a record another dialect wrote
+    must not make Google answer with ``promptFeedback`` and no candidate for a
+    turn it produced normally.
+    """
+    ir = _ir(
+        "content_filter",
+        metadata={
+            "_native_prompt_feedback": {
+                "base": "chat_completions",
+                "prompt_feedback": {"blockReason": "SAFETY"},
+            }
+        },
+    )
+
+    result = GoogleGenerateConverter().response_to_provider(ir)
+
+    assert "promptFeedback" not in result
+    assert result["candidates"][0]["finishReason"] == "SAFETY"

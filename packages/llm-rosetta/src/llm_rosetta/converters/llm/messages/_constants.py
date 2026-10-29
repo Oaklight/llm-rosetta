@@ -14,7 +14,11 @@ ANTHROPIC_REASON_TO_PROVIDER: dict[str, str] = {
     "stop": "end_turn",
     "length": "max_tokens",
     "tool_calls": "tool_use",
-    "content_filter": "end_turn",
+    # A filtered turn is the closest thing Anthropic has to a refusal, and it
+    # has the word: `end_turn` would tell the client the model finished
+    # talking (#1236).  Anthropic has no finer distinction here — the
+    # filtered family (`SAFETY`, `RECITATION`, …) all arrive as this.
+    "content_filter": "refusal",
     "refusal": "refusal",
 }
 
