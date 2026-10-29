@@ -12,11 +12,17 @@ from typing import Any
 
 import pytest
 
+# The suite reads provider SDK types.  `dev-extras-test` installs the `[dev]`
+# extra alone, so the SDKs are absent there; the `conformance` job installs
+# `[all]` and is where this file actually runs.
+pytest.importorskip("openai")
+pytest.importorskip("anthropic")
+pytest.importorskip("google.genai")
+
 from tools.conformance import ProbeFailure
 from tools.conformance.suites import SUITES
 from tools.conformance.suites.fields import (
     _FieldsProbe,
-    _sdk_versions,
     build,
     inventory,
     read_baseline,
@@ -32,7 +38,7 @@ def _probe(
     baseline: dict[str, Any],
     format_name: str = "chat_completions",
 ) -> _FieldsProbe:
-    return _FieldsProbe(format_name, current, baseline, _sdk_versions())
+    return _FieldsProbe(format_name, current, baseline)
 
 
 class TestTheCommittedLedger:
@@ -138,6 +144,30 @@ class TestDetectingChange:
 
         with pytest.raises(ProbeFailure, match="new variants"):
             _probe(current, baseline, "open_responses").run()
+
+
+def test_a_missing_ledger_fails():
+    """A repository state, not an environment property: never a skip."""
+    current = inventory()["chat_completions"]
+
+    with pytest.raises(ProbeFailure, match="no ledger"):
+        _FieldsProbe("chat_completions", current, {}).run()
+
+
+def test_a_format_missing_from_the_ledger_fails():
+    current = inventory()["chat_completions"]
+    baseline = read_baseline()
+    baseline = {
+        **baseline,
+        "formats": {
+            name: data
+            for name, data in baseline["formats"].items()
+            if name != "chat_completions"
+        },
+    }
+
+    with pytest.raises(ProbeFailure, match="format missing"):
+        _probe(current, baseline).run()
 
 
 def test_the_cli_registers_the_suite():

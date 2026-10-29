@@ -79,6 +79,13 @@ New fields are added as `unclassified`, so the suite keeps failing until they ar
 classified. `write_baseline(seed=True)` fills them with a heuristic classification
 instead; use it only when seeding the ledger for the first time.
 
+The ledger records the SDK versions it was generated against, but they are
+provenance rather than a gate: the field set is compared regardless of version, so
+an upstream release that adds a field is a named failure with a reviewable diff.
+A format whose SDK is not installed skips; a missing or renamed ledger fails,
+because that is a repository state rather than an environment property. The suite
+runs in the `conformance` CI job, which installs `[all]`.
+
 ### `wire`
 
 One canonical request, round-tripped through each of the five chat formats

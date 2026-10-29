@@ -92,6 +92,8 @@ _ENVELOPE = frozenset(
         "event_type",
         "role",
         "call_id",
+        "toolset_name",
+        "async_",
     }
 )
 _TERMINAL = frozenset(
@@ -114,6 +116,7 @@ _RESPONSES_ECHOED = frozenset(
         "instructions",
         "tools",
         "tool_choice",
+        "access_programs",
         "text",
         "reasoning",
         "temperature",
@@ -311,6 +314,11 @@ def _provider_only_reason(leaf: str) -> str:
         "thought_signature": "opaque Google signature; not comparable across legs",
         "safety_ratings": "provider safety metadata; not part of the turn content",
         "grounding_metadata": "provider grounding metadata; not part of the turn content",
+        "audio_transcription": "provider audio transcription; not compared by the harness",
+        "media_processing": "provider media-processing metadata; not compared",
+        "speech_metadata": "provider speech metadata; not compared",
+        "diagnostics": "provider cache diagnostics; not part of the turn content",
+        "prompt_cache_diagnostics": "provider cache diagnostics; not part of the turn content",
     }
     return reasons.get(leaf, "provider-specific metadata; not part of the turn content")
 
@@ -347,108 +355,145 @@ def _interactions_inventory() -> tuple[dict[str, str], dict[str, list[str]]]:
     return fields, {}
 
 
-def _schema_definitions() -> dict[str, FormatSchema]:
-    """Load the SDK response roots and the union variants to walk."""
-    from anthropic.types import Message
-    from google.genai.types import GenerateContentResponse
+def _chat_schema() -> FormatSchema:
+    """The Chat Completions response root."""
     from openai.types.chat import ChatCompletion
+
+    return FormatSchema(
+        name="chat_completions",
+        root=ChatCompletion,
+        expand={
+            "choices[].message.tool_calls[]": frozenset(
+                {
+                    "ChatCompletionMessageFunctionToolCall",
+                    "ChatCompletionMessageCustomToolCall",
+                }
+            )
+        },
+        skip={
+            "moderation": "provider_only",
+            "choices[].message.annotations": "provider_only",
+        },
+    )
+
+
+def _responses_schema() -> FormatSchema:
+    """The Responses response root, output items only."""
     from openai.types.responses import Response
 
-    return {
-        "chat_completions": FormatSchema(
-            name="chat_completions",
-            root=ChatCompletion,
-            expand={
-                "choices[].message.tool_calls[]": frozenset(
-                    {
-                        "ChatCompletionMessageFunctionToolCall",
-                        "ChatCompletionMessageCustomToolCall",
-                    }
-                )
-            },
-            skip={
-                "moderation": "provider_only",
-                "choices[].message.annotations": "provider_only",
-            },
-        ),
-        "open_responses": FormatSchema(
-            name="open_responses",
-            root=Response,
-            expand={
-                "output[]": frozenset(
-                    {
-                        "ResponseOutputMessage",
-                        "ResponseFunctionToolCall",
-                        "ResponseCustomToolCall",
-                        "ResponseReasoningItem",
-                        "ResponseFunctionWebSearch",
-                    }
-                ),
-                "output[].content[]": frozenset(
-                    {"ResponseOutputText", "ResponseOutputRefusal", "Content"}
-                ),
-                "output[].summary[]": frozenset({"Summary"}),
-                "output[].action": frozenset(
-                    {"ActionSearch", "ActionOpenPage", "ActionFind"}
-                ),
-            },
-            skip={
-                **{name: "echoed_request" for name in _RESPONSES_ECHOED},
-                "moderation": "provider_only",
-                "service_tier": "provider_only",
-                "metadata": "provider_only",
-                "output[].content[].annotations": "provider_only",
-                "output[].caller": "envelope",
-            },
-        ),
-        "messages": FormatSchema(
-            name="messages",
-            root=Message,
-            expand={
-                "content[]": frozenset(
-                    {
-                        "TextBlock",
-                        "ThinkingBlock",
-                        "RedactedThinkingBlock",
-                        "ToolUseBlock",
-                        "ServerToolUseBlock",
-                    }
-                )
-            },
-            skip={
-                "container": "provider_only",
-                "content[].citations": "provider_only",
-                "content[].caller": "envelope",
-            },
-        ),
-        "google_generate": FormatSchema(
-            name="google_generate",
-            root=GenerateContentResponse,
-            expand={},
-            skip={
-                **{name: "not_on_wire" for name in _GOOGLE_SDK_ONLY},
-                "candidates[].citation_metadata": "provider_only",
-                "candidates[].grounding_metadata": "provider_only",
-                "candidates[].safety_ratings": "provider_only",
-                "candidates[].logprobs_result": "provider_only",
-                "candidates[].url_context_metadata": "provider_only",
-                "candidates[].content.parts[].media_resolution": "provider_only",
-                "candidates[].content.parts[].video_metadata": "provider_only",
-                "candidates[].content.parts[].part_metadata": "provider_only",
-                "prompt_feedback.safety_ratings": "provider_only",
-                "usage_metadata.cache_tokens_details": "usage",
-                "usage_metadata.candidates_tokens_details": "usage",
-                "usage_metadata.prompt_tokens_details": "usage",
-                "usage_metadata.tool_use_prompt_tokens_details": "usage",
-            },
-        ),
+    return FormatSchema(
+        name="open_responses",
+        root=Response,
+        expand={
+            "output[]": frozenset(
+                {
+                    "ResponseOutputMessage",
+                    "ResponseFunctionToolCall",
+                    "ResponseCustomToolCall",
+                    "ResponseReasoningItem",
+                    "ResponseFunctionWebSearch",
+                }
+            ),
+            "output[].content[]": frozenset(
+                {"ResponseOutputText", "ResponseOutputRefusal", "Content"}
+            ),
+            "output[].summary[]": frozenset({"Summary"}),
+            "output[].action": frozenset(
+                {"ActionSearch", "ActionOpenPage", "ActionFind"}
+            ),
+        },
+        skip={
+            **{name: "echoed_request" for name in _RESPONSES_ECHOED},
+            "moderation": "provider_only",
+            "service_tier": "provider_only",
+            "metadata": "provider_only",
+            "output[].content[].annotations": "provider_only",
+            "output[].caller": "envelope",
+            "prompt_cache_diagnostics": "provider_only",
+        },
+    )
+
+
+def _messages_schema() -> FormatSchema:
+    """The Messages response root."""
+    from anthropic.types import Message
+
+    return FormatSchema(
+        name="messages",
+        root=Message,
+        expand={
+            "content[]": frozenset(
+                {
+                    "TextBlock",
+                    "ThinkingBlock",
+                    "RedactedThinkingBlock",
+                    "ToolUseBlock",
+                    "ServerToolUseBlock",
+                }
+            )
+        },
+        skip={
+            "container": "provider_only",
+            "content[].citations": "provider_only",
+            "content[].caller": "envelope",
+            "diagnostics": "provider_only",
+        },
+    )
+
+
+def _google_schema() -> FormatSchema:
+    """The Google generateContent response root."""
+    from google.genai.types import GenerateContentResponse
+
+    return FormatSchema(
+        name="google_generate",
+        root=GenerateContentResponse,
+        expand={},
+        skip={
+            **{name: "not_on_wire" for name in _GOOGLE_SDK_ONLY},
+            "candidates[].citation_metadata": "provider_only",
+            "candidates[].grounding_metadata": "provider_only",
+            "candidates[].safety_ratings": "provider_only",
+            "candidates[].logprobs_result": "provider_only",
+            "candidates[].url_context_metadata": "provider_only",
+            "candidates[].content.parts[].media_resolution": "provider_only",
+            "candidates[].content.parts[].video_metadata": "provider_only",
+            "candidates[].content.parts[].part_metadata": "provider_only",
+            "candidates[].content.parts[].audio_transcription": "provider_only",
+            "candidates[].content.parts[].media_processing": "provider_only",
+            "candidates[].content.parts[].speech_metadata": "provider_only",
+            "prompt_feedback.safety_ratings": "provider_only",
+            "usage_metadata.cache_tokens_details": "usage",
+            "usage_metadata.candidates_tokens_details": "usage",
+            "usage_metadata.prompt_tokens_details": "usage",
+            "usage_metadata.tool_use_prompt_tokens_details": "usage",
+        },
+    )
+
+
+def _load_schemas() -> tuple[dict[str, FormatSchema], dict[str, str]]:
+    """Load the SDK response roots; a missing SDK is a skip, not an error."""
+    builders = {
+        "chat_completions": _chat_schema,
+        "open_responses": _responses_schema,
+        "messages": _messages_schema,
+        "google_generate": _google_schema,
     }
+    schemas: dict[str, FormatSchema] = {}
+    missing: dict[str, str] = {}
+    for name, builder in builders.items():
+        try:
+            schemas[name] = builder()
+        except ModuleNotFoundError as exc:
+            missing[name] = exc.name or "the provider SDK"
+    return schemas, missing
 
 
-def inventory() -> dict[str, dict[str, Any]]:
-    """Build the current response inventory for every format."""
+def inventory_and_missing() -> tuple[dict[str, dict[str, Any]], dict[str, str]]:
+    """Build the response inventory and name the SDKs that are absent."""
+    schemas, missing = _load_schemas()
     formats: dict[str, dict[str, Any]] = {}
-    for name, schema in _schema_definitions().items():
+    for name, schema in schemas.items():
         fields, variants = _walk(schema.root, expand=schema.expand, skip=schema.skip)
         formats[name] = {
             "source": schema.source,
@@ -463,12 +508,19 @@ def inventory() -> dict[str, dict[str, Any]]:
         "variants": variants,
         "skip": {},
     }
+    return formats, missing
+
+
+def inventory() -> dict[str, dict[str, Any]]:
+    """Build the response inventory for every format whose SDK is installed."""
+    formats, _missing = inventory_and_missing()
     return formats
 
 
 def _expanded_variants(format_name: str, path: str) -> frozenset[str]:
     """Return the variant names the walker expands for a format/path."""
-    schema = _schema_definitions().get(format_name)
+    schemas, _missing = _load_schemas()
+    schema = schemas.get(format_name)
     if schema is None:
         return frozenset()
     return schema.expand.get(path, frozenset())
@@ -501,35 +553,29 @@ class _FieldsProbe:
         name: str,
         current: dict[str, Any],
         baseline: dict[str, Any],
-        sdk_versions: dict[str, str],
     ) -> None:
         self.name = name
         self._current = current
         self._baseline = baseline
-        self._sdk_versions = sdk_versions
 
     def run(self) -> dict[str, Any]:
         if not self._baseline:
-            raise ProbeSkip("no ledger committed yet")
+            raise ProbeFailure(
+                "no ledger committed; run write_baseline() and classify the diff"
+            )
         recorded = self._baseline.get("formats", {}).get(self.name)
         if recorded is None:
-            raise ProbeSkip("format not in the ledger; regenerate it")
-        if (
-            self._current["source"] == "sdk"
-            and self._baseline.get("sdk_versions") != self._sdk_versions
-        ):
-            raise ProbeSkip(
-                "SDK versions changed since the ledger; refresh it with "
-                "`python -c 'from tools.conformance.suites.fields import "
-                "write_baseline; write_baseline(seed=True)'`"
-            )
+            raise ProbeFailure("format missing from the ledger; regenerate it")
 
         current_fields = set(self._current["fields"])
         recorded_fields = set(recorded.get("fields", {}))
         added = sorted(current_fields - recorded_fields)
         removed = sorted(recorded_fields - current_fields)
         if added:
-            raise ProbeFailure(f"new fields not in the ledger: {added}")
+            raise ProbeFailure(
+                f"new fields not in the ledger: {added}; regenerate with "
+                "write_baseline() and classify the diff"
+            )
 
         for path, entry in recorded.get("fields", {}).items():
             classification = entry.get("class")
@@ -568,6 +614,17 @@ class _FieldsProbe:
         }
 
 
+class _MissingSdkProbe:
+    """A format whose provider SDK is not installed here."""
+
+    def __init__(self, name: str, package: str) -> None:
+        self.name = name
+        self._package = package
+
+    def run(self) -> None:
+        raise ProbeSkip(f"SDK not installed: {self._package}")
+
+
 class _BrokenProbe:
     name = "inventory"
 
@@ -580,15 +637,17 @@ class _BrokenProbe:
 
 def build() -> tuple[list[Probe], dict[str, Any]]:
     try:
-        current = inventory()
+        current, missing = inventory_and_missing()
     except Exception as exc:  # noqa: BLE001 - reported as an error case
         return [_BrokenProbe(exc)], {"sdk_versions": {}}
     baseline = read_baseline()
-    versions = _sdk_versions()
     probes: list[Probe] = [
-        _FieldsProbe(name, data, baseline, versions) for name, data in current.items()
+        _FieldsProbe(name, data, baseline) for name, data in current.items()
     ]
-    return probes, {"sdk_versions": versions}
+    probes.extend(
+        _MissingSdkProbe(name, package) for name, package in sorted(missing.items())
+    )
+    return probes, {"sdk_versions": _sdk_versions(), "missing": missing}
 
 
 def write_baseline(*, seed: bool = False) -> Path:
@@ -601,10 +660,14 @@ def write_baseline(*, seed: bool = False) -> Path:
     """
     import json
 
-    current = inventory()
+    current, missing = inventory_and_missing()
     old = read_baseline()
     old_formats = old.get("formats", {})
-    formats: dict[str, Any] = {}
+    # A format whose SDK is absent keeps its committed ledger; regenerating
+    # here must not silently drop it.
+    formats: dict[str, Any] = {
+        name: data for name, data in old_formats.items() if name in missing
+    }
     for name, data in current.items():
         old_fields = old_formats.get(name, {}).get("fields", {})
         fields: dict[str, Any] = {}
