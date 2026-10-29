@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import json
+from typing import Any, cast
+
+import pytest
 
 from llm_rosetta_gateway.middleware.error_format import (
     apply_cors_headers,
@@ -11,6 +14,8 @@ from llm_rosetta_gateway.middleware.error_format import (
     format_error_response,
     is_admin_path,
 )
+from llm_rosetta_gateway.proxy.errors import error_response_for_source
+from llm_rosetta_gateway.transport.sse_format import build_stream_error_events
 
 
 # ---------------------------------------------------------------------------
@@ -474,3 +479,47 @@ class TestRateLimitParity:
             cors=False,
         )
         assert "Access-Control-Allow-Origin" not in resp.headers
+
+
+class TestErrorClassification:
+    """The type follows each vendor's own vocabulary, on both legs (#1237).
+
+    A proxy ``502`` says the upstream produced what the gateway could not
+    carry; a ``500`` says the gateway itself broke.  Chat and Google have a
+    different word for their own fault than for the upstream's; Anthropic has
+    only one 5xx word (``api_error``), so Messages keeps it at 500 too.  The
+    in-band SSE envelope must say the same thing as the JSON one, or a client
+    learns something different by asking with ``stream: true``.
+    """
+
+    _EXPECTED: dict[tuple[str, int], tuple[str, str]] = {
+        ("chat_completions", 500): ("type", "server_error"),
+        ("chat_completions", 502): ("type", "api_error"),
+        ("messages", 500): ("type", "api_error"),
+        ("messages", 502): ("type", "api_error"),
+        ("google_generate", 500): ("status", "INTERNAL"),
+        ("google_generate", 502): ("status", "UNAVAILABLE"),
+    }
+
+    @pytest.mark.parametrize(("source", "status"), sorted(_EXPECTED))
+    def test_the_json_envelope(self, source, status):
+        field, value = self._EXPECTED[(source, status)]
+        resp = error_response_for_source(cast(Any, source), status, "boom")
+        assert json.loads(resp.body)["error"][field] == value
+
+    @pytest.mark.parametrize(("source", "status"), sorted(_EXPECTED))
+    def test_the_stream_envelope_agrees(self, source, status):
+        """The refusal passes 502/UNAVAILABLE; a fault takes the defaults."""
+        field, value = self._EXPECTED[(source, status)]
+        kwargs = (
+            {"status": 502, "google_status": "UNAVAILABLE"} if status == 502 else {}
+        )
+        event = build_stream_error_events(source, "boom", **kwargs)[0]
+        if field == "status":
+            assert event["error"]["status"] == value
+        else:
+            assert event["error"]["type"] == value
+
+    def test_a_4xx_still_asks_the_client_to_fix_it(self):
+        resp = error_response_for_source(cast(Any, "chat_completions"), 400, "boom")
+        assert json.loads(resp.body)["error"]["type"] == "invalid_request_error"

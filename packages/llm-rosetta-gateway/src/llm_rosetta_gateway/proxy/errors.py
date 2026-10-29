@@ -382,11 +382,15 @@ def error_response_for_source(
 ) -> Response:
     """Return an error response formatted for the source provider's envelope.
 
-    A 5xx says the upstream produced something this gateway could not turn
-    into a reply — the client's request was well formed — so its default type
-    is ``api_error`` (Google: ``UNAVAILABLE``) rather than telling the client
-    to go fix a request that was fine.  A 4xx keeps
-    ``invalid_request_error``.
+    The type follows the same split the streaming envelope uses, so a client
+    gets one verdict whether it asked with ``stream: true`` or not:
+
+    - ``>= 502``: the upstream produced something this gateway could not turn
+      into a reply — ``api_error`` (Google: ``UNAVAILABLE``).  The client's
+      request was fine, so it must not be told to go fix it.
+    - ``500``: the gateway itself broke — ``server_error`` (Google:
+      ``INTERNAL``), the word both vendors use for their own fault.
+    - ``4xx``: ``invalid_request_error`` (Google: ``INVALID_ARGUMENT``).
 
     Args:
         source_provider: The client's format, which picks the envelope.
@@ -400,9 +404,23 @@ def error_response_for_source(
     """
     api_format = detect_api_format_from_provider(source_provider)
     if error_type is None:
-        error_type = "api_error" if status_code >= 500 else "invalid_request_error"
+        if status_code < 500:
+            error_type = "invalid_request_error"
+        elif status_code < 502 and api_format == "openai":
+            # OpenAI distinguishes its own fault from the upstream's; Anthropic
+            # has no `server_error` at all — every 5xx is `api_error`, "an
+            # unexpected error has occurred internal to Anthropic's systems" —
+            # so Messages keeps that word at 500 too.
+            error_type = "server_error"
+        else:
+            error_type = "api_error"
     if google_status is None:
-        google_status = "UNAVAILABLE" if status_code >= 500 else "INVALID_ARGUMENT"
+        if status_code < 500:
+            google_status = "INVALID_ARGUMENT"
+        elif status_code < 502:
+            google_status = "INTERNAL"
+        else:
+            google_status = "UNAVAILABLE"
     return format_error_response(
         api_format,
         status_code,
