@@ -89,6 +89,7 @@ from ...base.helpers.stream import stream_opened_client_call
 from ....transforms.ir import hoist_late_system_messages
 from ._constants import (
     GOOGLE_NATIVE_FINISH_REASON,
+    GOOGLE_NATIVE_PROMPT_FEEDBACK,
     GOOGLE_REASON_FROM_PROVIDER,
     GOOGLE_REASON_TO_PROVIDER,
     generate_tool_call_id,
@@ -460,18 +461,27 @@ def _google_finish_reason(
     response_id: str,
     metadata: Mapping[str, Any] | None,
 ) -> str:
-    """Map an IR reason to a ``finishReason``, refusing a foreign failure.
+    """Map an IR reason to a ``finishReason``, restoring Google's own word.
 
-    Google can *say* a turn stopped oddly — ``MALFORMED_FUNCTION_CALL``, a
-    blocked prompt, ``OTHER`` — and those three values all collapse into the
-    IR's ``error``.  For a Google target the word is still on hand (the reader
-    recorded it under :data:`GOOGLE_NATIVE_FINISH_REASON`), so the same
-    response survives a Google→Google round trip instead of failing.
+    Google's vocabulary is finer than the IR's on both sides of the failure
+    line.  ``MALFORMED_FUNCTION_CALL``, ``LANGUAGE`` and a blocked ``OTHER``
+    collapse into ``error``, and the filtered family (``RECITATION``,
+    ``BLOCKLIST``, ``PROHIBITED_CONTENT``, ``SPII``) collapses into
+    ``content_filter``.  The reader records the word it read under
+    :data:`GOOGLE_NATIVE_FINISH_REASON` whenever the mapping would lose it, so
+    a Google→Google round trip answers what Google said rather than a coarser
+    word — or, for a failure, a 502.
 
     What Google cannot express is a *foreign* failure: an upstream that
-    reported ``status: "failed"`` or a cancelled generation.  ``OTHER`` would
-    be Google's catch-all for a turn it produced, not a translation of
-    "the request did not succeed", so the writer raises instead.
+    reported ``status: "failed"`` or a cancelled generation.  Such a turn
+    arrives with no record at all, and ``OTHER`` would be Google's catch-all
+    for a turn it produced, not a translation of "the request did not
+    succeed", so the writer raises.
+
+    The origin check is what makes the record mean something rather than being
+    a lookup by shape.  This converter is the record's only writer today, so it
+    is also defence in depth: a reader another dialect grows later cannot make
+    Google speak a word Google never said.
 
     Args:
         reason: The IR finish reason.
@@ -487,18 +497,57 @@ def _google_finish_reason(
         UnrepresentableFinishReason: A failure reason no Google-origin record
             explains.
     """
-    if reason not in FAILURE_REASONS:
-        return GOOGLE_REASON_TO_PROVIDER.get(reason, "STOP")
     if isinstance(native, Mapping) and native.get("base") == base:
         native_reason = native.get("reason")
         if isinstance(native_reason, str) and native_reason:
             return native_reason
-    raise unrepresentable_finish_reason(
-        "Google generateContent",
-        reason,
-        response_id=response_id,
-        provider_metadata=metadata,
-    )
+    if reason in FAILURE_REASONS:
+        raise unrepresentable_finish_reason(
+            "Google generateContent",
+            reason,
+            response_id=response_id,
+            provider_metadata=metadata,
+        )
+    return GOOGLE_REASON_TO_PROVIDER.get(reason, "STOP")
+
+
+def _native_word_lost(reason: str, native: Any) -> bool:
+    """Whether the IR mapping would drop the word Google reported.
+
+    Args:
+        reason: The IR reason the candidate mapped to.
+        native: The raw value Google reported, if any.
+
+    Returns:
+        ``True`` when the word must be recorded to survive a Google round
+        trip: any value at all for a failure (the record is also what says the
+        turn came from Google), and otherwise only a word the mapping would
+        replace with a coarser one.
+    """
+    if not isinstance(native, str) or not native:
+        return False
+    return reason in FAILURE_REASONS or GOOGLE_REASON_TO_PROVIDER.get(reason) != native
+
+
+def _native_prompt_feedback(
+    metadata: Mapping[str, Any], base: str
+) -> dict[str, Any] | None:
+    """Return the blocked prompt's ``promptFeedback``, if this is its turn.
+
+    Args:
+        metadata: The IR message's (or finish event's) ``provider_metadata``.
+        base: This converter's tag, checked against the record's origin.
+
+    Returns:
+        The verbatim ``promptFeedback`` dict, or ``None`` when the turn is not
+        a Google blocked prompt.
+    """
+    record = metadata.get(GOOGLE_NATIVE_PROMPT_FEEDBACK)
+    if isinstance(record, Mapping) and record.get("base") == base:
+        feedback = record.get("prompt_feedback")
+        if isinstance(feedback, Mapping):
+            return dict(feedback)
+    return None
 
 
 class GoogleGenerateConverter(BaseConverter):
@@ -862,20 +911,25 @@ class GoogleGenerateConverter(BaseConverter):
     def _record_native_finish_reason(
         self, message: dict[str, Any], reason: str, native: Any
     ) -> None:
-        """Keep Google's own word when the IR has none for it.
+        """Keep Google's own word when the IR would lose it.
 
-        ``LANGUAGE``, ``MALFORMED_FUNCTION_CALL`` and ``OTHER`` all map to the
-        IR's ``error``, so without this record a Google target cannot tell the
-        stop it produced from a foreign failure, and the word is lost on a
-        same-format round trip.  A blocked prompt's ``blockReason`` is recorded
-        the same way, because the writer has only a candidate to write it on.
+        The IR has one reason for what Google distinguishes several ways:
+        ``LANGUAGE``, ``MALFORMED_FUNCTION_CALL`` and ``OTHER`` all become
+        ``error``, and ``RECITATION``, ``BLOCKLIST``, ``PROHIBITED_CONTENT`` and
+        ``SPII`` all become ``content_filter``.  A word the mapping would drop
+        is recorded, so a Google target writes back what Google said instead of
+        the coarser IR reason; a failure reason is always recorded, because the
+        record is also what tells the writer this turn came from Google rather
+        than from an upstream that failed.  A blocked prompt's ``blockReason``
+        is recorded the same way, because the writer has only a candidate to
+        write it on.
 
         Args:
             message: The IR message the reason belongs to.
             reason: The IR reason the candidate mapped to.
             native: The raw value Google reported, if any.
         """
-        if reason not in FAILURE_REASONS or not isinstance(native, str):
+        if not _native_word_lost(reason, native):
             return
         metadata = message.get("provider_metadata")
         if not isinstance(metadata, dict):
@@ -962,12 +1016,17 @@ class GoogleGenerateConverter(BaseConverter):
                     "role": "assistant",
                     "content": [],
                 }
-                # A block reason can be one the IR files under ``error``
-                # (``LANGUAGE``, ``OTHER``); keep Google's own word for the
-                # same round-trip reason as a candidate's ``finishReason``.
-                self._record_native_finish_reason(
-                    blocked_message, block_ir_reason, block_reason
-                )
+                # A blocked prompt has no candidate at all: the reason is the
+                # ``promptFeedback`` field, which the IR has no form for, so
+                # keep it verbatim for the writer that can send it back.  The
+                # field carries the block reason itself, which is why no
+                # separate finish-reason record is needed here.
+                blocked_message.setdefault("provider_metadata", {})[
+                    GOOGLE_NATIVE_PROMPT_FEEDBACK
+                ] = {
+                    "base": self._CONVERTER_TAG,
+                    "prompt_feedback": dict(prompt_feedback),
+                }
                 choices.append(
                     {
                         "index": 0,
@@ -1020,6 +1079,17 @@ class GoogleGenerateConverter(BaseConverter):
             if not message:
                 continue
 
+            message_metadata = message.get("provider_metadata") or {}
+            # A blocked prompt is the one turn Google answers without a
+            # candidate: the reason is the ``promptFeedback`` field, so writing
+            # a candidate would hand the client a turn the model never made.
+            prompt_feedback = _native_prompt_feedback(
+                message_metadata, self._CONVERTER_TAG
+            )
+            if prompt_feedback is not None:
+                provider_response["promptFeedback"] = prompt_feedback
+                continue
+
             # Convert message back to Google Content format
             google_role = "model" if message.get("role") == "assistant" else "user"
             parts: list[dict[str, Any]] = []
@@ -1057,7 +1127,6 @@ class GoogleGenerateConverter(BaseConverter):
 
             finish_reason = choice.get("finish_reason", {})
             reason = finish_reason.get("reason", "stop")
-            message_metadata = message.get("provider_metadata") or {}
 
             candidate: dict[str, Any] = {
                 "index": choice.get("index", 0),
@@ -1453,13 +1522,12 @@ class GoogleGenerateConverter(BaseConverter):
                     type="finish",
                     finish_reason={"reason": block_ir_reason},  # ty: ignore[invalid-argument-type]
                 )
-                if block_ir_reason in FAILURE_REASONS and isinstance(block_reason, str):
-                    deferred_finish["provider_metadata"] = {
-                        GOOGLE_NATIVE_FINISH_REASON: {
-                            "base": self._CONVERTER_TAG,
-                            "reason": block_reason,
-                        }
+                deferred_finish["provider_metadata"] = {
+                    GOOGLE_NATIVE_PROMPT_FEEDBACK: {
+                        "base": self._CONVERTER_TAG,
+                        "prompt_feedback": dict(prompt_feedback),
                     }
+                }
 
         self._handle_p_usage_to_ir(chunk, events)
 
@@ -1552,7 +1620,7 @@ class GoogleGenerateConverter(BaseConverter):
             # Same record the JSON reader leaves: the word Google used for a
             # stop the IR has no room for, so a Google target can write it back
             # and only a *foreign* failure raises.
-            if finish_reason_ir in FAILURE_REASONS and isinstance(finish_reason, str):
+            if _native_word_lost(finish_reason_ir, finish_reason):
                 finish_metadata[GOOGLE_NATIVE_FINISH_REASON] = {
                     "base": self._CONVERTER_TAG,
                     "reason": finish_reason,
@@ -2266,6 +2334,19 @@ class GoogleGenerateConverter(BaseConverter):
         """Handle FinishEvent → flush tool calls + finish chunk."""
         choice_index = event.get("choice_index", 0)
         reason = event["finish_reason"]["reason"]
+
+        # A blocked prompt streams as the field Google sent, with no candidate:
+        # there is no model turn to write.
+        blocked = _native_prompt_feedback(
+            event.get("provider_metadata") or {}, self._CONVERTER_TAG
+        )
+        if blocked is not None:
+            chunk: dict[str, Any] = {"promptFeedback": blocked}
+            if context is not None:
+                usage = context.pop_pending_usage()
+                if usage is not None:
+                    chunk["usageMetadata"] = self._build_stream_usage_metadata(usage)
+            return [self._inject_stream_metadata(chunk, context)]
 
         chunks: list[dict[str, Any]] = []
 

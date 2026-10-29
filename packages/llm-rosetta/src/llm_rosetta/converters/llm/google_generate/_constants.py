@@ -35,6 +35,13 @@ GOOGLE_REASON_TO_PROVIDER: dict[str, str] = {
 #: cannot express.  The reader records the word, the writer restores it.
 GOOGLE_NATIVE_FINISH_REASON = "_native_finish_reason"
 
+#: ``provider_metadata`` key holding a blocked prompt's ``promptFeedback``.  A
+#: prompt Google blocked has no candidate at all: the reason lives in
+#: ``promptFeedback.blockReason``.  The IR has only a choice to put it on, so
+#: the reader keeps the field verbatim here and a Google target writes it back
+#: as ``promptFeedback`` with no candidates, which is what Google itself sends.
+GOOGLE_NATIVE_PROMPT_FEEDBACK = "_native_prompt_feedback"
+
 
 # --- Output formats ---
 

@@ -491,7 +491,7 @@ class TestMessagesConverter:
             "stop": "end_turn",
             "length": "max_tokens",
             "tool_calls": "tool_use",
-            "content_filter": "end_turn",
+            "content_filter": "refusal",
             "refusal": "refusal",
         }
         for ir_reason, anthropic_reason in reason_map.items():

@@ -541,13 +541,13 @@ class TestStreamResponseToProvider:
         assert result["delta"]["stop_reason"] == "tool_use"
 
     def test_finish_event_content_filter(self):
-        """FinishEvent with 'content_filter' → message_delta with 'end_turn'."""
+        """FinishEvent with 'content_filter' → message_delta with 'refusal'."""
         event = cast(
             FinishEvent,
             {"type": "finish", "finish_reason": {"reason": "content_filter"}},
         )
         result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
-        assert result["delta"]["stop_reason"] == "end_turn"
+        assert result["delta"]["stop_reason"] == "refusal"
 
     def test_finish_event_error_raises(self):
         """A failed turn is not an ``end_turn`` on the stream either (#1234)."""
