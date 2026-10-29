@@ -20,6 +20,11 @@ ROOT = Path(__file__).resolve().parents[2]
 TEST = ROOT / "tests/converters/test_leg_agreement.py"
 TARGET = ROOT / "tests/converters/leg_agreement_fields.json"
 
+# Resolve the package from this checkout, not from whichever editable install
+# happens to be first on sys.path.  A stale install would write a ledger from
+# the wrong code and the diff would look like a writer change.
+sys.path.insert(0, str(ROOT / "packages/llm-rosetta/src"))
+
 
 def main() -> None:
     spec = importlib.util.spec_from_file_location("test_leg_agreement", TEST)
@@ -27,6 +32,9 @@ def main() -> None:
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
+
+    package = importlib.import_module("llm_rosetta")
+    print(f"llm_rosetta: {package.__file__}")
 
     ledger = module.build_field_ledger()
     TARGET.write_text(json.dumps(ledger, indent=2, sort_keys=True) + "\n")
