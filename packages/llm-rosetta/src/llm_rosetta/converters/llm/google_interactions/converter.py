@@ -48,10 +48,6 @@ from ...base.helpers.opaque import (
     set_opaque_origin,
 )
 from llm_rosetta.ir.primitives.system_message_hoist import hoist_system_in_converter
-from llm_rosetta.ir.primitives.finish_reason import (
-    client_tool_calls_in,
-    reason_for_completed_turn,
-)
 from ...base.tools import is_intrinsic_part
 from ...base.tools.intrinsic import intrinsic_kind_of
 from ....transforms.ir import hoist_late_system_messages
@@ -383,12 +379,7 @@ class GoogleInteractionsConverter(BaseConverter):
         status = resp.get("status", "completed")
         # ``completed`` says nothing about tool calls; the steps do.  The API
         # normally reports ``requires_action`` for them, but not always.
-        finish_reason: Any = {
-            "reason": reason_for_completed_turn(
-                _STATUS_TO_FINISH_REASON.get(status, "stop"),
-                client_tool_calls_in(combined_parts),
-            )
-        }
+        finish_reason: Any = {"reason": _STATUS_TO_FINISH_REASON.get(status, "stop")}
 
         choice: Any = {
             "index": 0,
@@ -438,8 +429,9 @@ class GoogleInteractionsConverter(BaseConverter):
         # The status follows the IR finish reason alone.  It used to be
         # forced to ``requires_action`` whenever a step was a function call,
         # compensating for the reader that mapped ``completed`` to ``stop``;
-        # the reader now decides a completed client-call turn is
-        # ``tool_calls`` (``reason_for_completed_turn``), so forcing it here
+        # the IR reason decides a completed client-call turn is
+        # ``tool_calls`` (``reason_for_completed_turn``, applied by the base
+        # finalizers), so forcing it here
         # would override a correct reason — and would turn a provider-hosted
         # call, which is ``stop`` by design, into a request for the client to
         # act on it.
@@ -536,7 +528,8 @@ class GoogleInteractionsConverter(BaseConverter):
             "step.stop": self._stream_step_stop,
             "interaction.completed": self._stream_interaction_completed,
         }.get(data.get("event_type", ""))
-        return handler(data, context) if handler else []
+        result = handler(data, context) if handler else []
+        return self.finalize_stream_finish(result, context)
 
     def _stream_interaction_created(
         self, data: dict, context: StreamContext | None = None
