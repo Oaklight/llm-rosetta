@@ -150,6 +150,10 @@
           "class": "envelope",
           "reason": ""
         },
+        "metadata": {
+          "class": "provider_only",
+          "reason": "provider-specific metadata; not part of the turn content"
+        },
         "model": {
           "class": "envelope",
           "reason": ""
@@ -198,6 +202,10 @@
           "class": "usage",
           "reason": ""
         },
+        "usage.completion_tokens_details.text_tokens": {
+          "class": "usage",
+          "reason": ""
+        },
         "usage.prompt_tokens": {
           "class": "usage",
           "reason": ""
@@ -215,6 +223,14 @@
           "reason": ""
         },
         "usage.prompt_tokens_details.cached_tokens": {
+          "class": "usage",
+          "reason": ""
+        },
+        "usage.prompt_tokens_details.image_tokens": {
+          "class": "usage",
+          "reason": ""
+        },
+        "usage.prompt_tokens_details.text_tokens": {
           "class": "usage",
           "reason": ""
         },
@@ -261,6 +277,10 @@
         "candidates[].content.parts": {
           "class": "content",
           "reason": ""
+        },
+        "candidates[].content.parts[].audio_transcription": {
+          "class": "provider_only",
+          "reason": "audio_transcription is not part of the translated turn"
         },
         "candidates[].content.parts[].code_execution_result": {
           "class": "content",
@@ -378,6 +398,10 @@
           "class": "content",
           "reason": ""
         },
+        "candidates[].content.parts[].media_processing": {
+          "class": "provider_only",
+          "reason": "media_processing is not part of the translated turn"
+        },
         "candidates[].content.parts[].media_resolution": {
           "class": "provider_only",
           "reason": "media_resolution is not part of the translated turn"
@@ -385,6 +409,10 @@
         "candidates[].content.parts[].part_metadata": {
           "class": "provider_only",
           "reason": "part_metadata is not part of the translated turn"
+        },
+        "candidates[].content.parts[].speech_metadata": {
+          "class": "provider_only",
+          "reason": "speech_metadata is not part of the translated turn"
         },
         "candidates[].content.parts[].text": {
           "class": "content",
@@ -436,6 +464,10 @@
         },
         "candidates[].content.role": {
           "class": "envelope",
+          "reason": ""
+        },
+        "candidates[].continuation_token": {
+          "class": "usage",
           "reason": ""
         },
         "candidates[].finish_message": {
@@ -724,9 +756,17 @@
           "class": "content",
           "reason": ""
         },
+        "content[].toolset_name": {
+          "class": "envelope",
+          "reason": ""
+        },
         "content[].type": {
           "class": "envelope",
           "reason": ""
+        },
+        "diagnostics": {
+          "class": "provider_only",
+          "reason": "diagnostics is not part of the translated turn"
         },
         "id": {
           "class": "envelope",
@@ -827,6 +867,10 @@
         "usage.service_tier": {
           "class": "usage",
           "reason": ""
+        },
+        "usage.speed": {
+          "class": "usage",
+          "reason": ""
         }
       },
       "variants": {
@@ -884,6 +928,10 @@
     },
     "open_responses": {
       "fields": {
+        "access_programs": {
+          "class": "echoed_request",
+          "reason": "the Responses API echoes the request configuration; it is not a translated output field"
+        },
         "background": {
           "class": "echoed_request",
           "reason": "the Responses API echoes the request configuration; it is not a translated output field"
@@ -910,6 +958,38 @@
         },
         "error.message": {
           "class": "content",
+          "reason": ""
+        },
+        "error.misalignment": {
+          "class": "content",
+          "reason": ""
+        },
+        "error.misalignment.detailed_explanation": {
+          "class": "content",
+          "reason": ""
+        },
+        "error.misalignment.error_type": {
+          "class": "content",
+          "reason": ""
+        },
+        "error.misalignment.review_target": {
+          "class": "content",
+          "reason": ""
+        },
+        "error.misalignment.steer": {
+          "class": "content",
+          "reason": ""
+        },
+        "error.misalignment.steer.message": {
+          "class": "content",
+          "reason": ""
+        },
+        "error.param": {
+          "class": "content",
+          "reason": ""
+        },
+        "error.type": {
+          "class": "envelope",
           "reason": ""
         },
         "id": {
@@ -994,6 +1074,10 @@
         },
         "output[].arguments": {
           "class": "content",
+          "reason": ""
+        },
+        "output[].async_": {
+          "class": "envelope",
           "reason": ""
         },
         "output[].call_id": {
@@ -1116,6 +1200,10 @@
           "class": "echoed_request",
           "reason": "the Responses API echoes the request configuration; it is not a translated output field"
         },
+        "prompt_cache_diagnostics": {
+          "class": "provider_only",
+          "reason": "prompt_cache_diagnostics is not part of the translated turn"
+        },
         "prompt_cache_key": {
           "class": "echoed_request",
           "reason": "the Responses API echoes the request configuration; it is not a translated output field"
@@ -1155,6 +1243,74 @@
         "tool_choice": {
           "class": "echoed_request",
           "reason": "the Responses API echoes the request configuration; it is not a translated output field"
+        },
+        "tool_usage": {
+          "class": "usage",
+          "reason": ""
+        },
+        "tool_usage.image_gen": {
+          "class": "usage",
+          "reason": ""
+        },
+        "tool_usage.image_gen.cached_tokens": {
+          "class": "usage",
+          "reason": ""
+        },
+        "tool_usage.image_gen.cached_tokens_details": {
+          "class": "usage",
+          "reason": ""
+        },
+        "tool_usage.image_gen.cached_tokens_details.cached_image_tokens": {
+          "class": "usage",
+          "reason": ""
+        },
+        "tool_usage.image_gen.cached_tokens_details.cached_text_tokens": {
+          "class": "usage",
+          "reason": ""
+        },
+        "tool_usage.image_gen.input_tokens": {
+          "class": "usage",
+          "reason": ""
+        },
+        "tool_usage.image_gen.input_tokens_details": {
+          "class": "usage",
+          "reason": ""
+        },
+        "tool_usage.image_gen.input_tokens_details.image_tokens": {
+          "class": "usage",
+          "reason": ""
+        },
+        "tool_usage.image_gen.input_tokens_details.text_tokens": {
+          "class": "usage",
+          "reason": ""
+        },
+        "tool_usage.image_gen.output_tokens": {
+          "class": "usage",
+          "reason": ""
+        },
+        "tool_usage.image_gen.output_tokens_details": {
+          "class": "usage",
+          "reason": ""
+        },
+        "tool_usage.image_gen.output_tokens_details.image_tokens": {
+          "class": "usage",
+          "reason": ""
+        },
+        "tool_usage.image_gen.output_tokens_details.text_tokens": {
+          "class": "usage",
+          "reason": ""
+        },
+        "tool_usage.image_gen.total_tokens": {
+          "class": "usage",
+          "reason": ""
+        },
+        "tool_usage.web_search": {
+          "class": "usage",
+          "reason": ""
+        },
+        "tool_usage.web_search.num_requests": {
+          "class": "usage",
+          "reason": ""
         },
         "tools": {
           "class": "echoed_request",
@@ -1357,9 +1513,9 @@
   },
   "schema_version": 1,
   "sdk_versions": {
-    "anthropic": "0.116.0",
-    "google-genai": "2.12.0",
-    "openai": "2.45.0"
+    "anthropic": "2.3.0",
+    "google-genai": "2.34.0",
+    "openai": "3.41.0"
   },
   "suite": "fields"
 }
