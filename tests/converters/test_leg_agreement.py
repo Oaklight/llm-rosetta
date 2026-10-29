@@ -32,7 +32,7 @@ import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -91,6 +91,7 @@ class Turn:
     calls: tuple[dict[str, Any], ...] = ()
     finish: str = "stop"
     stop_sequence: str | None = None
+    native_finish_reason: str | None = None
     usage: dict[str, int] | None = None
 
 
@@ -209,6 +210,14 @@ def _ir_response(turn: Turn) -> dict[str, Any]:
     if turn.text:
         content.append({"type": "text", "text": turn.text})
     content.extend(copy.deepcopy(turn.calls))
+    message: dict[str, Any] = {"role": "assistant", "content": content}
+    if turn.native_finish_reason is not None:
+        message["provider_metadata"] = {
+            "_native_finish_reason": {
+                "base": "google_generate",
+                "reason": turn.native_finish_reason,
+            }
+        }
     response: dict[str, Any] = {
         "id": "turn1",
         "object": "response",
@@ -217,7 +226,7 @@ def _ir_response(turn: Turn) -> dict[str, Any]:
         "choices": [
             {
                 "index": 0,
-                "message": {"role": "assistant", "content": content},
+                "message": message,
                 "finish_reason": {
                     "reason": turn.finish,
                     **(
@@ -266,7 +275,15 @@ def _ir_events(turn: Turn) -> list[dict[str, Any]]:
     finish_reason: dict[str, Any] = {"reason": turn.finish}
     if turn.stop_sequence is not None:
         finish_reason["stop_sequence"] = turn.stop_sequence
-    events.append({"type": "finish", "finish_reason": finish_reason})
+    finish: dict[str, Any] = {"type": "finish", "finish_reason": finish_reason}
+    if turn.native_finish_reason is not None:
+        finish["provider_metadata"] = {
+            "_native_finish_reason": {
+                "base": "google_generate",
+                "reason": turn.native_finish_reason,
+            }
+        }
+    events.append(finish)
     events.append({"type": "stream_end"})
     return events
 
@@ -287,14 +304,20 @@ def _body_leg(converter: Any, turn: Turn) -> TurnView | Refused:
     return _view_of_body(converter.response_from_provider(body))
 
 
-def _raw_stream_events(converter: Any, turn: Turn) -> list[dict[str, Any]]:
-    """Write the turn as a stream and read the chunks back as IR events."""
+def _raw_stream_chunks(converter: Any, turn: Turn) -> list[dict[str, Any]]:
+    """Write the turn as a stream and return the provider chunks."""
     to_context = converter.create_stream_context()
     chunks: list[dict[str, Any]] = []
     for event in _ir_events(turn):
         chunks.extend(
             _as_dicts(converter.stream_response_to_provider(event, context=to_context))
         )
+    return chunks
+
+
+def _raw_stream_events(converter: Any, turn: Turn) -> list[dict[str, Any]]:
+    """Write the turn as a stream and read the chunks back as IR events."""
+    chunks = _raw_stream_chunks(converter, turn)
     from_context = converter.create_stream_context()
     return list(converter.iter_stream_from_provider(chunks, context=from_context))
 
@@ -708,6 +731,32 @@ def test_a_messages_stop_sequence_survives_both_legs() -> None:
     turn = Turn(text="hi", finish="stop", stop_sequence="END")
 
     assert _stop_sequence(MessagesConverter(), turn) == ("END", "END")
+
+
+def test_a_google_native_word_survives_both_legs() -> None:
+    """A Google failure the IR cannot name keeps Google's own word on both legs."""
+    converter = GoogleGenerateConverter()
+    turn = Turn(
+        text="hi", finish="error", native_finish_reason="MALFORMED_FUNCTION_CALL"
+    )
+
+    body = _body_leg(converter, turn)
+    stream = _stream_leg(converter, turn)
+
+    assert body == stream
+    assert isinstance(body, TurnView)
+    assert body.reason == "error"
+
+    body_payload = converter.response_to_provider(cast(Any, _ir_response(turn)))
+    assert body_payload["candidates"][0]["finishReason"] == "MALFORMED_FUNCTION_CALL"
+
+    stream_reasons = [
+        candidate["finishReason"]
+        for chunk in _raw_stream_chunks(converter, turn)
+        for candidate in chunk.get("candidates", [])
+        if candidate.get("finishReason")
+    ]
+    assert stream_reasons == ["MALFORMED_FUNCTION_CALL"]
 
 
 @pytest.mark.parametrize("dialect", DIALECTS)
