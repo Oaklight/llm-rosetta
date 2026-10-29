@@ -86,6 +86,8 @@ def build_stream_error_events(
     sequence_number: int | None = None,
     code: str | None = None,
     request_id: str = "",
+    status: int = 500,
+    google_status: str = "INTERNAL",
 ) -> list[dict[str, Any]]:
     """Build terminal events announcing that a stream failed mid-flight.
 
@@ -103,6 +105,13 @@ def build_stream_error_events(
             it (a plan-usage 429 and a transient 503 recover differently).
         request_id: The upstream request id, used when no response id was
             advertised yet.
+        status: The HTTP status this failure would have carried as a JSON
+            response, for dialects whose in-band envelope repeats it.  A
+            proxy's ``502`` ("the upstream produced something I cannot carry")
+            and a gateway fault's ``500`` read differently to a client's retry
+            logic, and before this parameter the Google envelope always said
+            ``500 INTERNAL`` whatever the JSON leg said.
+        google_status: The Google ``error.status`` that goes with *status*.
 
     Returns:
         Event dicts to format and yield. Empty for formats with no terminal
@@ -123,11 +132,17 @@ def build_stream_error_events(
         return [event]
 
     if source_provider == "chat_completions":
+        # The in-band type mirrors the JSON envelope's classification rather
+        # than a single generic word: a 502 says the upstream produced what the
+        # proxy could not carry (``api_error``, as `error_response_for_source`
+        # writes it), while a gateway fault keeps OpenAI's stream default.  A
+        # client that retries on one and surfaces the other should not get a
+        # different answer for asking with `stream: true`.
         return [
             {
                 "error": {
                     "message": message,
-                    "type": code or "server_error",
+                    "type": code or ("api_error" if status != 500 else "server_error"),
                     "code": code,
                 }
             }
@@ -142,7 +157,9 @@ def build_stream_error_events(
         ]
 
     if source_provider in ("google", "google_generate"):
-        return [{"error": {"code": 500, "message": message, "status": "INTERNAL"}}]
+        return [
+            {"error": {"code": status, "message": message, "status": google_status}}
+        ]
 
     if source_provider == "google_interactions":
         return [
