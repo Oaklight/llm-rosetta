@@ -4,8 +4,11 @@ Anthropic Messages API stream converter unit tests.
 
 from typing import Any, cast
 
+import pytest
+
 from llm_rosetta.converters.llm.messages import MessagesConverter
 from llm_rosetta.converters.base.context import StreamContext
+from llm_rosetta.converters.base.errors import UnrepresentableFinishReason
 from llm_rosetta.types.ir.stream import (
     ContentBlockEndEvent,
     ContentBlockStartEvent,
@@ -545,6 +548,20 @@ class TestStreamResponseToProvider:
         )
         result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         assert result["delta"]["stop_reason"] == "end_turn"
+
+    def test_finish_event_error_raises(self):
+        """A failed turn is not an ``end_turn`` on the stream either (#1234)."""
+        event = cast(
+            FinishEvent,
+            {
+                "type": "finish",
+                "finish_reason": {"reason": "error"},
+                "provider_metadata": {"responses_error": {"type": "server_error"}},
+            },
+        )
+        with pytest.raises(UnrepresentableFinishReason) as raised:
+            self.converter.stream_response_to_provider(event)
+        assert raised.value.reason == "error"
 
     def test_usage_event(self):
         """UsageEvent → Anthropic message_delta with usage."""

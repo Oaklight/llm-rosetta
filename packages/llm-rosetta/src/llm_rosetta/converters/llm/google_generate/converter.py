@@ -45,6 +45,7 @@ from ....types.ir.stream import (
     UsageEvent,
 )
 from ...base import BaseConverter
+from ...base.errors import unrepresentable_finish_reason
 from llm_rosetta.conversion_warnings import report_drop
 from ...base.context import (
     ConversionContext,
@@ -80,12 +81,14 @@ from ...base.helpers.opaque import (
 )
 from llm_rosetta.ir.primitives.system_message_hoist import hoist_system_in_converter
 from llm_rosetta.ir.primitives.finish_reason import (
+    FAILURE_REASONS,
     client_tool_calls_in,
     reason_for_completed_turn,
 )
 from ...base.helpers.stream import stream_opened_client_call
 from ....transforms.ir import hoist_late_system_messages
 from ._constants import (
+    GOOGLE_NATIVE_FINISH_REASON,
     GOOGLE_REASON_FROM_PROVIDER,
     GOOGLE_REASON_TO_PROVIDER,
     generate_tool_call_id,
@@ -449,6 +452,55 @@ def _grounding_citations(metadata: dict[str, Any]) -> list[CitationPart]:
     ]
 
 
+def _google_finish_reason(
+    reason: str,
+    *,
+    native: Any,
+    base: str,
+    response_id: str,
+    metadata: Mapping[str, Any] | None,
+) -> str:
+    """Map an IR reason to a ``finishReason``, refusing a foreign failure.
+
+    Google can *say* a turn stopped oddly — ``MALFORMED_FUNCTION_CALL``, a
+    blocked prompt, ``OTHER`` — and those three values all collapse into the
+    IR's ``error``.  For a Google target the word is still on hand (the reader
+    recorded it under :data:`GOOGLE_NATIVE_FINISH_REASON`), so the same
+    response survives a Google→Google round trip instead of failing.
+
+    What Google cannot express is a *foreign* failure: an upstream that
+    reported ``status: "failed"`` or a cancelled generation.  ``OTHER`` would
+    be Google's catch-all for a turn it produced, not a translation of
+    "the request did not succeed", so the writer raises instead.
+
+    Args:
+        reason: The IR finish reason.
+        native: The record the source reader left in ``provider_metadata``.
+        base: This converter's tag, checked against the record's origin.
+        response_id: The response the reason belongs to.
+        metadata: Upstream metadata recorded with the reason.
+
+    Returns:
+        The Google ``finishReason``.
+
+    Raises:
+        UnrepresentableFinishReason: A failure reason no Google-origin record
+            explains.
+    """
+    if reason not in FAILURE_REASONS:
+        return GOOGLE_REASON_TO_PROVIDER.get(reason, "STOP")
+    if isinstance(native, Mapping) and native.get("base") == base:
+        native_reason = native.get("reason")
+        if isinstance(native_reason, str) and native_reason:
+            return native_reason
+    raise unrepresentable_finish_reason(
+        "Google generateContent",
+        reason,
+        response_id=response_id,
+        provider_metadata=metadata,
+    )
+
+
 class GoogleGenerateConverter(BaseConverter):
     """Google GenAI API converter.
 
@@ -807,6 +859,33 @@ class GoogleGenerateConverter(BaseConverter):
                 return prefix
         return self._RESPONSE_ID_PREFIX
 
+    def _record_native_finish_reason(
+        self, message: dict[str, Any], reason: str, native: Any
+    ) -> None:
+        """Keep Google's own word when the IR has none for it.
+
+        ``LANGUAGE``, ``MALFORMED_FUNCTION_CALL`` and ``OTHER`` all map to the
+        IR's ``error``, so without this record a Google target cannot tell the
+        stop it produced from a foreign failure, and the word is lost on a
+        same-format round trip.  A blocked prompt's ``blockReason`` is recorded
+        the same way, because the writer has only a candidate to write it on.
+
+        Args:
+            message: The IR message the reason belongs to.
+            reason: The IR reason the candidate mapped to.
+            native: The raw value Google reported, if any.
+        """
+        if reason not in FAILURE_REASONS or not isinstance(native, str):
+            return
+        metadata = message.get("provider_metadata")
+        if not isinstance(metadata, dict):
+            metadata = {}
+            message["provider_metadata"] = metadata
+        metadata[GOOGLE_NATIVE_FINISH_REASON] = {
+            "base": self._CONVERTER_TAG,
+            "reason": native,
+        }
+
     def _do_response_from_provider(
         self,
         provider_response: dict[str, Any],
@@ -852,6 +931,12 @@ class GoogleGenerateConverter(BaseConverter):
                 GOOGLE_REASON_FROM_PROVIDER.get(finish_reason_val, "stop"),
                 client_tool_calls_in(message.get("content") or []),
             )
+            # A Google word the IR has no room for is recorded where a Google
+            # target can write it back; without it ``error`` is ambiguous
+            # between Google's own odd stop and a foreign failure.
+            self._record_native_finish_reason(
+                cast(dict[str, Any], message), reason, finish_reason_val
+            )
             choice_info: dict[str, Any] = {
                 "index": p_candidate.get("index", 0),
                 "message": message,
@@ -870,15 +955,24 @@ class GoogleGenerateConverter(BaseConverter):
                 "blockReason"
             )
             if block_reason:
+                block_ir_reason = GOOGLE_REASON_FROM_PROVIDER.get(
+                    block_reason, "content_filter"
+                )
+                blocked_message: dict[str, Any] = {
+                    "role": "assistant",
+                    "content": [],
+                }
+                # A block reason can be one the IR files under ``error``
+                # (``LANGUAGE``, ``OTHER``); keep Google's own word for the
+                # same round-trip reason as a candidate's ``finishReason``.
+                self._record_native_finish_reason(
+                    blocked_message, block_ir_reason, block_reason
+                )
                 choices.append(
                     {
                         "index": 0,
-                        "message": {"role": "assistant", "content": []},
-                        "finish_reason": {
-                            "reason": GOOGLE_REASON_FROM_PROVIDER.get(
-                                block_reason, "content_filter"
-                            )
-                        },
+                        "message": blocked_message,
+                        "finish_reason": {"reason": block_ir_reason},
                     }
                 )
 
@@ -963,11 +1057,18 @@ class GoogleGenerateConverter(BaseConverter):
 
             finish_reason = choice.get("finish_reason", {})
             reason = finish_reason.get("reason", "stop")
+            message_metadata = message.get("provider_metadata") or {}
 
             candidate: dict[str, Any] = {
                 "index": choice.get("index", 0),
                 "content": {"role": google_role, "parts": parts},
-                "finishReason": GOOGLE_REASON_TO_PROVIDER.get(reason, "STOP"),
+                "finishReason": _google_finish_reason(
+                    reason,
+                    native=message_metadata.get(GOOGLE_NATIVE_FINISH_REASON),
+                    base=self._CONVERTER_TAG,
+                    response_id=ir_response.get("id", ""),
+                    metadata=message_metadata,
+                ),
             }
             if grounding_citations:
                 grounding = _grounding_metadata_from_ir(
@@ -1345,14 +1446,20 @@ class GoogleGenerateConverter(BaseConverter):
             )
             if block_reason:
                 has_finish_reason = True
+                block_ir_reason = GOOGLE_REASON_FROM_PROVIDER.get(
+                    block_reason, "content_filter"
+                )
                 deferred_finish = FinishEvent(
                     type="finish",
-                    finish_reason={
-                        "reason": GOOGLE_REASON_FROM_PROVIDER.get(
-                            block_reason, "content_filter"
-                        )  # ty: ignore[invalid-argument-type]
-                    },
+                    finish_reason={"reason": block_ir_reason},  # ty: ignore[invalid-argument-type]
                 )
+                if block_ir_reason in FAILURE_REASONS and isinstance(block_reason, str):
+                    deferred_finish["provider_metadata"] = {
+                        GOOGLE_NATIVE_FINISH_REASON: {
+                            "base": self._CONVERTER_TAG,
+                            "reason": block_reason,
+                        }
+                    }
 
         self._handle_p_usage_to_ir(chunk, events)
 
@@ -1438,9 +1545,20 @@ class GoogleGenerateConverter(BaseConverter):
             # entry point) is not a citation and has no event of its own; it
             # rides the finish, which every reader receives.  The citations
             # themselves were emitted as ``citation_delta`` where they arrived.
+            finish_metadata: dict[str, Any] = {}
             search = _take_search_metadata(context)
             if search:
-                finish_event["provider_metadata"] = {"google": search}
+                finish_metadata["google"] = search
+            # Same record the JSON reader leaves: the word Google used for a
+            # stop the IR has no room for, so a Google target can write it back
+            # and only a *foreign* failure raises.
+            if finish_reason_ir in FAILURE_REASONS and isinstance(finish_reason, str):
+                finish_metadata[GOOGLE_NATIVE_FINISH_REASON] = {
+                    "base": self._CONVERTER_TAG,
+                    "reason": finish_reason,
+                }
+            if finish_metadata:
+                finish_event["provider_metadata"] = finish_metadata
             return finish_event
         return None
 
@@ -2166,10 +2284,17 @@ class GoogleGenerateConverter(BaseConverter):
         # history; inject the documented dummy when the real one is absent.
         inject_google_function_call_signature(parts)
 
+        event_metadata = event.get("provider_metadata") or {}
         candidate: dict[str, Any] = {
             "index": choice_index,
             "content": {"role": "model", "parts": parts},
-            "finishReason": GOOGLE_REASON_TO_PROVIDER.get(reason, "STOP"),
+            "finishReason": _google_finish_reason(
+                reason,
+                native=event_metadata.get(GOOGLE_NATIVE_FINISH_REASON),
+                base=self._CONVERTER_TAG,
+                response_id=context.response_id if context is not None else "",
+                metadata=event_metadata,
+            ),
         }
         if context is not None:
             self._attach_stream_grounding(candidate, context)

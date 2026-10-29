@@ -20,8 +20,9 @@ class UnrepresentableFinishReason(ValueError):
 
     Chat Completions, for instance, has no finish reason for a generation
     that ended in an error or was cancelled.  The alternatives to raising are
-    equally wrong: ``stop`` hides a failed request, and inventing a reason
-    would put a word on the wire the vendor never sends.
+    equally wrong: ``stop`` hides a failed request, ``end_turn`` says the model
+    finished, and inventing a reason would put a word on the wire the vendor
+    never sends.
 
     The payload rides as attributes so a gateway can dump it and choose a
     status code without ``json.loads`` on a string.
@@ -45,3 +46,34 @@ class UnrepresentableFinishReason(ValueError):
         self.response_id = response_id
         self.provider_metadata = dict(provider_metadata or {})
         super().__init__(message)
+
+
+def unrepresentable_finish_reason(
+    dialect: str,
+    reason: str,
+    *,
+    response_id: str = "",
+    provider_metadata: Mapping[str, Any] | None = None,
+) -> UnrepresentableFinishReason:
+    """Build the error a writer raises for a reason its wire cannot carry.
+
+    Shared by every dialect so the refusal is worded and shaped the same way
+    wherever it comes from, and a caller can match on ``cannot represent``
+    without knowing which writer refused.
+
+    Args:
+        dialect: The target dialect, e.g. ``"Chat Completions"``.
+        reason: The IR finish reason that has no wire form there.
+        response_id: The response the reason belongs to.
+        provider_metadata: Upstream metadata recorded with the reason.
+
+    Returns:
+        The error, ready to raise.
+    """
+    return UnrepresentableFinishReason(
+        f"{dialect} cannot represent a response ending with {reason!r} "
+        f"(response_id={response_id!r})",
+        reason=reason,
+        response_id=response_id,
+        provider_metadata=provider_metadata,
+    )

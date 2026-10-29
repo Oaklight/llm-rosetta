@@ -5,7 +5,10 @@ Google GenAI stream converter unit tests.
 import json
 from typing import Any, cast
 
+import pytest
+
 from llm_rosetta.converters.base.context import StreamContext
+from llm_rosetta.converters.base.errors import UnrepresentableFinishReason
 from llm_rosetta.converters.llm.google_generate import GoogleGenerateConverter
 from llm_rosetta.types.ir.stream import (
     ContentBlockEndEvent,
@@ -800,21 +803,42 @@ class TestStreamResponseToProvider:
         )
         assert result[-1]["candidates"][0]["finishReason"] == "SAFETY"
 
-    def test_finish_event_error(self):
-        """FinishEvent with 'error' → [finish_chunk] with OTHER."""
+    def test_finish_event_error_without_a_google_word_raises(self):
+        """A failure the source was not Google for has no Google reason (#1234)."""
         event = cast(
             FinishEvent,
             {
                 "type": "finish",
                 "finish_reason": {"reason": "error"},
                 "choice_index": 0,
+                "provider_metadata": {"responses_error": {"type": "server_error"}},
+            },
+        )
+        with pytest.raises(UnrepresentableFinishReason) as raised:
+            self.converter.stream_response_to_provider(event)
+        assert raised.value.reason == "error"
+
+    def test_finish_event_error_restores_the_google_word(self):
+        """Google's own odd stop keeps the word the reader recorded."""
+        event = cast(
+            FinishEvent,
+            {
+                "type": "finish",
+                "finish_reason": {"reason": "error"},
+                "choice_index": 0,
+                "provider_metadata": {
+                    "_native_finish_reason": {
+                        "base": "google_generate",
+                        "reason": "MALFORMED_FUNCTION_CALL",
+                    }
+                },
             },
         )
         result = cast(
             list[dict[str, Any]],
             self.converter.stream_response_to_provider(event),
         )
-        assert result[-1]["candidates"][0]["finishReason"] == "OTHER"
+        assert result[-1]["candidates"][0]["finishReason"] == "MALFORMED_FUNCTION_CALL"
 
     def test_usage_event(self):
         """UsageEvent → Google usage_metadata."""
