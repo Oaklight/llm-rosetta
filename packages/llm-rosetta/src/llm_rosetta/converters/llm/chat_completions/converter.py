@@ -35,9 +35,10 @@ from ....types.ir.stream import (
     UsageEvent,
 )
 from ...base import BaseConverter
-from ...base.errors import UnrepresentableFinishReason
+from ...base.errors import unrepresentable_finish_reason
 from ...base.helpers.stream import stream_opened_client_call
 from ....ir.primitives.finish_reason import (
+    FAILURE_REASONS,
     client_tool_calls_in,
     reason_for_completed_turn,
 )
@@ -71,11 +72,10 @@ def _chat_finish_reason(
             the exception, so a gateway can dump and map them without parsing
             the message.
     """
-    if reason in {"error", "cancelled"}:
-        raise UnrepresentableFinishReason(
-            f"Chat Completions cannot represent a response ending with {reason!r} "
-            f"(response_id={response_id!r})",
-            reason=reason,
+    if reason in FAILURE_REASONS:
+        raise unrepresentable_finish_reason(
+            "Chat Completions",
+            reason,
             response_id=response_id,
             provider_metadata=metadata,
         )

@@ -25,6 +25,14 @@ from ..tools.intrinsic import is_intrinsic_part
 
 ReasonT = TypeVar("ReasonT", bound=str)
 
+#: The IR reasons that say the turn did not finish: the upstream failed, or the
+#: generation was cancelled.  Two dialects carry them on their own wire —
+#: Responses (``status: "failed"`` / ``"cancelled"``) and Interactions (``status:
+#: "failed"`` / ``"cancelled"``).  A dialect with no form for them must raise
+#: rather than write a normal stop, or the client reads a failure as a reply
+#: (``UnrepresentableFinishReason`` in ``converters.base.errors``).
+FAILURE_REASONS: frozenset[str] = frozenset({"error", "cancelled"})
+
 
 def client_tool_calls_in(parts: Iterable[Any]) -> bool:
     """Return whether *parts* hold a tool call the client has to answer.

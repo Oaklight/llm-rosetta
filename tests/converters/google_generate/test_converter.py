@@ -1050,13 +1050,16 @@ class TestGoogleGenerateConverter:
         assert "REASONING" not in modalities
 
     def test_response_to_provider_finish_reasons(self):
-        """Test finish reason mapping to provider."""
+        """Test finish reason mapping to provider.
+
+        ``error`` is not in the table: Google has no generic failure reason, so
+        the writer raises unless the source recorded Google's own word (#1234).
+        """
         reason_map = {
             "stop": "STOP",
             "length": "MAX_TOKENS",
             "content_filter": "SAFETY",
             "tool_calls": "STOP",
-            "error": "OTHER",
         }
         for ir_reason, google_reason in reason_map.items():
             ir_response = cast(

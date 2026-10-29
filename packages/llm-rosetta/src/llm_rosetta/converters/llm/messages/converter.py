@@ -46,8 +46,10 @@ from ....types.ir.stream import (
     UsageEvent,
 )
 from ...base import BaseConverter
+from ...base.errors import unrepresentable_finish_reason
 from ...base.helpers.stream import stream_opened_client_call
 from ....ir.primitives.finish_reason import (
+    FAILURE_REASONS,
     client_tool_calls_in,
     reason_for_completed_turn,
 )
@@ -149,6 +151,38 @@ def _close_content_blocks(context: StreamContext) -> list[dict[str, Any]]:
     context.current_block_index = -1
     context.current_block_type = None
     return events
+
+
+def _anthropic_stop_reason(
+    reason: str, response_id: str, metadata: Mapping[str, Any] | None
+) -> str:
+    """Map an IR reason to a ``stop_reason``, refusing the failures.
+
+    Anthropic's ``stop_reason`` vocabulary is a model of a *finished* turn —
+    ``end_turn``, ``max_tokens``, ``tool_use``, ``stop_sequence``, ``refusal``.
+    It has no value for an upstream that failed or a generation that was
+    cancelled, and defaulting those to ``end_turn`` tells the client the model
+    replied normally when nothing was generated.
+
+    Args:
+        reason: The IR finish reason.
+        response_id: The response the reason belongs to.
+        metadata: Upstream metadata recorded with the reason.
+
+    Returns:
+        The Anthropic ``stop_reason``.
+
+    Raises:
+        UnrepresentableFinishReason: For ``error`` and ``cancelled``.
+    """
+    if reason in FAILURE_REASONS:
+        raise unrepresentable_finish_reason(
+            "The Messages API",
+            reason,
+            response_id=response_id,
+            provider_metadata=metadata,
+        )
+    return ANTHROPIC_REASON_TO_PROVIDER.get(reason, "end_turn")
 
 
 class MessagesConverter(BaseConverter):
@@ -532,8 +566,10 @@ class MessagesConverter(BaseConverter):
             # Map finish_reason back to stop_reason
             finish_reason = choice.get("finish_reason", {})
             reason = finish_reason.get("reason", "stop")
-            provider_response["stop_reason"] = ANTHROPIC_REASON_TO_PROVIDER.get(
-                reason, "end_turn"
+            provider_response["stop_reason"] = _anthropic_stop_reason(
+                reason,
+                ir_response.get("id", ""),
+                (message or {}).get("provider_metadata"),
             )
 
             if "stop_sequence" in finish_reason:
@@ -1665,12 +1701,16 @@ class MessagesConverter(BaseConverter):
     ) -> dict[str, Any] | list[dict[str, Any]]:
         """Handle FinishEvent → buffered message_delta + optional content_block_stop."""
         reason = event["finish_reason"]["reason"]
-        stop_reason = ANTHROPIC_REASON_TO_PROVIDER.get(reason, "end_turn")
+        pm = event.get("provider_metadata") or {}
+        stop_reason = _anthropic_stop_reason(
+            reason,
+            context.response_id if context is not None else "",
+            pm,
+        )
 
         # Build stop_details for structured refusal
         stop_details = None
         if reason == "refusal":
-            pm = event.get("provider_metadata") or {}
             stop_details = {
                 "type": "refusal",
                 "category": pm.get("anthropic_refusal_category"),
