@@ -20,8 +20,9 @@ in a body are declared below and not asserted; provider-level field equality is
 the conformance wire baseline's job (``tools/conformance``).
 
 Epic: #1238.  The harness is the regression net for the finish-reason rule
-(#1240), so the one known divergence is pinned as a strict xfail rather than
-excluded.
+(#1240), so each known divergence and the one shared loss are pinned as strict
+xfails rather than excluded: fixing them turns the marker into a failure and
+forces the pin out in the same change.
 """
 
 from __future__ import annotations
@@ -52,20 +53,9 @@ DIALECTS: dict[str, ConverterFactory] = {
     "google_interactions": GoogleInteractionsConverter,
 }
 
-#: Fields a whole body carries and a stream has no event for.  They are kept
-#: out of the comparison by declaring them, not by silently ignoring them.
-#: ``finish_reason.stop_sequence`` is a live cross-leg gap, not a wire limit:
-#: the Messages body keeps it and the stream writer writes ``null``.  It is
-#: excluded here so P0 stays a harness; it gets its own change once the
-#: finish-reason rule has one home.
-BODY_ONLY_FIELDS = (
-    "logprobs",
-    "service_tier",
-    "system_fingerprint",
-    "finish_reason.stop_sequence",
-    "whole-block citations",
-    "encrypted_content",
-)
+#: The compared surface is ``TurnView``; everything else is out of scope by
+#: construction.  The emitted-field ledger below records the fields the writers
+#: actually produce, so a field nobody modelled is still visible as a path.
 
 USAGE = {"prompt_tokens": 3, "completion_tokens": 2, "total_tokens": 5}
 
@@ -100,6 +90,7 @@ class Turn:
     reasoning: str = ""
     calls: tuple[dict[str, Any], ...] = ()
     finish: str = "stop"
+    stop_sequence: str | None = None
     usage: dict[str, int] | None = None
 
 
@@ -120,7 +111,6 @@ class TurnView:
     reason: str
     text: str
     reasoning: str
-    refusal: str
     calls: tuple[CallView, ...]
     usage: tuple[int, int, int] | None
 
@@ -166,7 +156,6 @@ CASES = [
 #: expected value here does not.
 EXPECTED_REASON: dict[tuple[str, str], str] = {
     ("messages", "filter"): "refusal",
-    ("google_interactions", "filter"): "stop",
 }
 
 #: Dialects whose writers refuse the turn instead of writing it.
@@ -201,6 +190,16 @@ KNOWN_DIVERGENCES = {
     ),
 }
 
+#: (dialect, case) pairs where both legs agree on the wrong answer.  Equality
+#: cannot see these; the dedicated strict xfail below is the pin.  The fix is
+#: a writer change, not a leg reconciliation.
+KNOWN_SHARED_LOSSES = {
+    ("google_interactions", "filter"): (
+        "the Interactions writer maps a filtered turn to status completed, so "
+        "both legs agree it finished normally (#1244)"
+    ),
+}
+
 
 def _ir_response(turn: Turn) -> dict[str, Any]:
     """Render *turn* as an IR response body."""
@@ -219,7 +218,14 @@ def _ir_response(turn: Turn) -> dict[str, Any]:
             {
                 "index": 0,
                 "message": {"role": "assistant", "content": content},
-                "finish_reason": {"reason": turn.finish},
+                "finish_reason": {
+                    "reason": turn.finish,
+                    **(
+                        {"stop_sequence": turn.stop_sequence}
+                        if turn.stop_sequence is not None
+                        else {}
+                    ),
+                },
             }
         ],
     }
@@ -257,7 +263,10 @@ def _ir_events(turn: Turn) -> list[dict[str, Any]]:
         )
     if turn.usage is not None:
         events.append({"type": "usage", "usage": dict(turn.usage)})
-    events.append({"type": "finish", "finish_reason": {"reason": turn.finish}})
+    finish_reason: dict[str, Any] = {"reason": turn.finish}
+    if turn.stop_sequence is not None:
+        finish_reason["stop_sequence"] = turn.stop_sequence
+    events.append({"type": "finish", "finish_reason": finish_reason})
     events.append({"type": "stream_end"})
     return events
 
@@ -278,22 +287,36 @@ def _body_leg(converter: Any, turn: Turn) -> TurnView | Refused:
     return _view_of_body(converter.response_from_provider(body))
 
 
-def _stream_leg(converter: Any, turn: Turn) -> TurnView | Refused:
-    """Write the turn as a stream and read it back."""
+def _raw_stream_events(converter: Any, turn: Turn) -> list[dict[str, Any]]:
+    """Write the turn as a stream and read the chunks back as IR events."""
     to_context = converter.create_stream_context()
     chunks: list[dict[str, Any]] = []
+    for event in _ir_events(turn):
+        chunks.extend(
+            _as_dicts(converter.stream_response_to_provider(event, context=to_context))
+        )
+    from_context = converter.create_stream_context()
+    return list(converter.iter_stream_from_provider(chunks, context=from_context))
+
+
+def _stream_leg(converter: Any, turn: Turn) -> TurnView | Refused:
+    """Write the turn as a stream and read it back."""
     try:
-        for event in _ir_events(turn):
-            chunks.extend(
-                _as_dicts(
-                    converter.stream_response_to_provider(event, context=to_context)
-                )
-            )
+        events = _raw_stream_events(converter, turn)
     except UnrepresentableFinishReason as exc:
         return Refused(reason=exc.reason)
-    from_context = converter.create_stream_context()
-    events = list(converter.iter_stream_from_provider(chunks, context=from_context))
     return _view_of_events(events)
+
+
+def _stop_sequence(converter: Any, turn: Turn) -> tuple[str | None, str | None]:
+    """Return the stop sequence each leg carries after read-back."""
+    body = converter.response_from_provider(
+        converter.response_to_provider(_ir_response(turn))
+    )
+    stream = _raw_stream_events(converter, turn)
+    body_sequence = body["choices"][0]["finish_reason"].get("stop_sequence")
+    finish = next(event for event in stream if event.get("type") == "finish")
+    return body_sequence, (finish.get("finish_reason") or {}).get("stop_sequence")
 
 
 def _call_view(
@@ -337,9 +360,6 @@ def _view_of_body(ir_response: dict[str, Any]) -> TurnView:
     reasoning = "".join(
         part.get("reasoning", "") for part in parts if part.get("type") == "reasoning"
     )
-    refusal = "".join(
-        part.get("refusal", "") for part in parts if part.get("type") == "refusal"
-    )
     calls = tuple(
         sorted(
             (
@@ -360,7 +380,6 @@ def _view_of_body(ir_response: dict[str, Any]) -> TurnView:
         reason=(choice.get("finish_reason") or {}).get("reason", ""),
         text=text,
         reasoning=reasoning,
-        refusal=refusal,
         calls=calls,
         usage=_usage_view(ir_response.get("usage")),
     )
@@ -370,7 +389,6 @@ def _view_of_events(events: list[dict[str, Any]]) -> TurnView:
     """Compare a read-back stream by folding its events into one turn."""
     text = ""
     reasoning = ""
-    refusal = ""
     reason = ""
     usage: dict[str, int] = {}
     calls: dict[str, dict[str, Any]] = {}
@@ -394,7 +412,6 @@ def _view_of_events(events: list[dict[str, Any]]) -> TurnView:
                 call["arguments"] += event.get("arguments_delta") or ""
         elif event_type == "finish":
             reason = (event.get("finish_reason") or {}).get("reason", "")
-            refusal = (event.get("provider_metadata") or {}).get("refusal_text", "")
         elif event_type == "usage":
             for key, value in (event.get("usage") or {}).items():
                 if value:
@@ -418,7 +435,6 @@ def _view_of_events(events: list[dict[str, Any]]) -> TurnView:
         reason=reason,
         text=text,
         reasoning=reasoning,
-        refusal=refusal,
         calls=call_views,
         usage=_usage_view(usage),
     )
@@ -490,6 +506,7 @@ _ENVELOPE_LEAVES = frozenset(
         "item_id",
         "event_type",
         "role",
+        "call_id",
     }
 )
 _TERMINAL_LEAVES = frozenset(
@@ -603,10 +620,9 @@ def test_the_two_legs_answer_the_same_turn(
     capable_reason: str,
 ) -> None:
     """Same IR turn in, same content out, whichever leg wrote it."""
-    if (dialect, case_id) in KNOWN_DIVERGENCES:
-        pytest.skip(
-            "pinned as a strict xfail below: " + KNOWN_DIVERGENCES[(dialect, case_id)]
-        )
+    for known in (KNOWN_DIVERGENCES, KNOWN_SHARED_LOSSES):
+        if (dialect, case_id) in known:
+            pytest.skip("pinned as a strict xfail below: " + known[(dialect, case_id)])
 
     converter = factory()
     body = _body_leg(converter, turn)
@@ -663,6 +679,37 @@ def test_the_known_interactions_divergence() -> None:
     assert body.reason == stream.reason == "tool_calls"
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "the Interactions writer maps a filtered turn to status completed, so "
+        "both legs agree it finished normally (#1244)"
+    ),
+)
+def test_the_known_interactions_shared_loss() -> None:
+    """Pin the shared loss equality cannot see, so fixing it is visible."""
+    body = _body_leg(
+        DIALECTS["google_interactions"](), Turn(text="hi", finish="content_filter")
+    )
+
+    assert isinstance(body, TurnView)
+    assert body.reason == "content_filter"
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "the Messages stream writer drops finish_reason.stop_sequence; the body "
+        "keeps it (#1245)"
+    ),
+)
+def test_a_messages_stop_sequence_survives_both_legs() -> None:
+    """Pin the value gap a path ledger cannot see."""
+    turn = Turn(text="hi", finish="stop", stop_sequence="END")
+
+    assert _stop_sequence(MessagesConverter(), turn) == ("END", "END")
+
+
 @pytest.mark.parametrize("dialect", DIALECTS)
 def test_every_emitted_field_is_accounted_for(dialect: str) -> None:
     """A new or vanished field is a behaviour change, not a passing test."""
@@ -680,6 +727,9 @@ def test_every_emitted_field_is_accounted_for(dialect: str) -> None:
         )
         for path, kind in recorded[leg].items():
             assert kind in _CLASSIFICATIONS, f"{dialect} {leg} {path}: {kind}"
+            assert kind == _classify_path(path), (
+                f"{dialect} {leg} {path}: {kind} != {_classify_path(path)}"
+            )
 
 
 def test_every_provider_only_field_says_why() -> None:
