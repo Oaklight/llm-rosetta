@@ -44,7 +44,9 @@ class TestGoogleExecutableCodeToIR:
                 }
             ],
         }
-        result = cast(dict[str, Any], ops._p_message_to_ir(provider_msg))
+        result = cast(
+            dict[str, Any], ops._p_message_to_ir(provider_msg, leg="response")
+        )
         assert result["role"] == "assistant"
         tc = result["content"][0]
         assert tc["type"] == "tool_call"
@@ -67,7 +69,9 @@ class TestGoogleExecutableCodeToIR:
                 }
             ],
         }
-        result = cast(dict[str, Any], ops._p_message_to_ir(provider_msg))
+        result = cast(
+            dict[str, Any], ops._p_message_to_ir(provider_msg, leg="response")
+        )
         tc = result["content"][0]
         assert tc["tool_type"] == "intrinsic"
         assert tc["tool_input"]["code"] == "x = 1"
@@ -89,7 +93,9 @@ class TestGoogleCodeExecutionResultToIR:
                 }
             ],
         }
-        result = cast(dict[str, Any], ops._p_message_to_ir(provider_msg))
+        result = cast(
+            dict[str, Any], ops._p_message_to_ir(provider_msg, leg="response")
+        )
         # A server result belongs to the model turn that produced it, so it
         # stays inline (a ``role:"tool"`` message is only for a *client*
         # result, which a model message cannot carry).  (#965, #986)
@@ -114,7 +120,9 @@ class TestGoogleCodeExecutionResultToIR:
                 }
             ],
         }
-        result = cast(dict[str, Any], ops._p_message_to_ir(provider_msg))
+        result = cast(
+            dict[str, Any], ops._p_message_to_ir(provider_msg, leg="response")
+        )
         tr = result["content"][0]
         assert tr["is_error"] is True
 
@@ -293,7 +301,9 @@ class TestCodeExecutionRoundTrip:
             }
         }
         provider_msg = {"role": "model", "parts": [original_part]}
-        ir_msg = cast(dict[str, Any], ops._p_message_to_ir(provider_msg))
+        ir_msg = cast(
+            dict[str, Any], ops._p_message_to_ir(provider_msg, leg="response")
+        )
         tc = ir_msg["content"][0]
         restored = GoogleGenerateToolOps.ir_intrinsic_call_to_p(tc)
         assert restored is not None

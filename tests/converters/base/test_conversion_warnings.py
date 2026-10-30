@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import copy
 import logging
-from typing import Any
+from typing import Any, cast
 
 from llm_rosetta import ConversionPipeline
 from llm_rosetta.conversion_warnings import (
@@ -498,6 +498,124 @@ class TestTheSinkBeatsALegacyList:
         assert [(w.code, w.subject, w.leg) for w in incoming] == [
             ("downgraded", "tool_choice.allowed_tools", "request")
         ]
+
+    def test_google_generate_losses_reach_the_caller_with_their_leg(self):
+        """The leg is named by the site, on all three legs and both read paths."""
+        from llm_rosetta.converters.llm.google_generate import (
+            GoogleGenerateConverter,
+        )
+
+        converter = GoogleGenerateConverter()
+
+        def read(call):
+            caller = self._caller()
+            with recording_to(caller):
+                call()
+            return [(w.code, w.subject, w.leg) for w in caller]
+
+        ir: Any = {
+            "model": "m",
+            "messages": [{"role": "user", "content": [{"type": "text", "text": "hi"}]}],
+            # A server tool Google has no inline form for, and a
+            # restriction it can only state with mode ANY.
+            "tools": [
+                {
+                    "type": "intrinsic",
+                    "name": "mystery",
+                    "intrinsic_kind": "mystery_kind",
+                }
+            ],
+            "tool_choice": {
+                "mode": "auto",
+                "allowed_tools": [{"name": "mystery"}],
+            },
+        }
+        outgoing = read(lambda: converter.request_to_provider(ir))
+        assert outgoing == [
+            ("dropped", "mystery_kind", "request"),
+            ("downgraded", "allowed_tools", "request"),
+        ]
+
+        # The reader serves both legs, so the leg is a parameter, not a constant.
+        request_read = read(
+            lambda: converter.request_from_provider(
+                {
+                    "model": "m",
+                    "contents": [{"role": "user", "parts": [{"unknownPart": {}}]}],
+                }
+            )
+        )
+        assert request_read == [("dropped", "unknownPart", "request")]
+
+        response_read = read(
+            lambda: converter.response_from_provider(
+                {
+                    "candidates": [
+                        {
+                            "content": {
+                                "role": "model",
+                                "parts": [{"unknownPart": {}}],
+                            },
+                            "finishReason": "STOP",
+                        }
+                    ]
+                }
+            )
+        )
+        assert response_read == [("dropped", "unknownPart", "response")]
+
+        # A replayed server call is history, not the turn being returned: the
+        # writer has to say so, or the template takes its response default —
+        # which drops the call from the request body and labels the loss with
+        # the wrong leg.
+        history = read(
+            lambda: converter.request_to_provider(
+                cast(
+                    Any,
+                    {
+                        "model": "m",
+                        "messages": [
+                            {
+                                "role": "user",
+                                "content": [{"type": "text", "text": "hi"}],
+                            },
+                            {
+                                "role": "assistant",
+                                "content": [
+                                    {
+                                        "type": "tool_call",
+                                        "tool_call_id": "c1",
+                                        "tool_name": "mystery_search",
+                                        "tool_input": {},
+                                        "tool_type": "intrinsic",
+                                        "intrinsic_kind": "mystery_search",
+                                    }
+                                ],
+                            },
+                        ],
+                    },
+                )
+            )
+        )
+        assert history == [("dropped", "mystery_search", "request")]
+
+        # No context: the sink is the only place the loss can land, so the
+        # site's own word is the only thing that says which leg it was.
+        stream_read = read(
+            lambda: converter.stream_response_to_provider(
+                cast(
+                    Any,
+                    {
+                        "type": "tool_result",
+                        "tool_call_id": "c1",
+                        "result": "R",
+                        "tool_type": "intrinsic",
+                        "provider_metadata": {"intrinsic_kind": "web_search"},
+                    },
+                )
+            )
+        )
+        assert stream_read == [("dropped", "web_search", "stream")]
 
     def test_an_explicit_sink_still_wins(self):
         """A sink is the conversion's own answer to where losses go."""

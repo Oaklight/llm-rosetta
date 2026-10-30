@@ -28,12 +28,7 @@
       "top_logprobs"
     ],
     [
-      "response",
-      "downgraded",
-      ""
-    ],
-    [
-      "response",
+      "request",
       "dropped",
       "web_search"
     ]

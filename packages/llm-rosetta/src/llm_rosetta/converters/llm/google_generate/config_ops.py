@@ -23,7 +23,7 @@ from ....types.ir.configs import (
     StreamConfig,
 )
 from ...base import BaseConfigOps
-from llm_rosetta.conversion_warnings import report_drop
+from llm_rosetta.conversion_warnings import report_loss
 from ...base.helpers.reasoning import DEFAULT_REASONING_CAPS, apply_reasoning_config
 
 
@@ -82,19 +82,22 @@ class GoogleGenerateConfigOps(BaseConfigOps):
 
         # Unsupported fields
         if "logit_bias" in ir_config:
-            report_drop(
+            report_loss(
                 "Google GenAI does not support logit_bias; ignored",
                 subject="logit_bias",
+                leg="request",
             )
         if "logprobs" in ir_config:
-            report_drop(
+            report_loss(
                 "Google GenAI does not support logprobs; ignored",
                 subject="logprobs",
+                leg="request",
             )
         if "top_logprobs" in ir_config:
-            report_drop(
+            report_loss(
                 "Google GenAI does not support top_logprobs; ignored",
                 subject="top_logprobs",
+                leg="request",
             )
 
         return result
@@ -368,10 +371,11 @@ class GoogleGenerateConfigOps(BaseConfigOps):
             result["cached_content"] = ir_cache["key"]
 
         if "retention" in ir_cache:
-            report_drop(
+            report_loss(
                 "Google GenAI cache retention is managed at the CachedContent "
                 "resource level, not per-request; ignored",
                 subject="retention",
+                leg="request",
             )
 
         return result

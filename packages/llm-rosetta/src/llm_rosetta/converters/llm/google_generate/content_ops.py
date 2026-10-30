@@ -28,7 +28,7 @@ from ....types.ir import (
 )
 from ....types.ir.parts import ContentPart
 from ...base import BaseContentOps
-from llm_rosetta.conversion_warnings import report_drop
+from llm_rosetta.conversion_warnings import report_loss
 from ...base.helpers.opaque import (
     CARRIER_KEY,
     get_opaque_origin,
@@ -225,10 +225,11 @@ class GoogleGenerateContentOps(BaseContentOps):
 
         # URL-based files not supported
         if "file_url" in ir_file:
-            report_drop(
+            report_loss(
                 "Google GenAI cannot take a file URL; the file has to be "
                 "uploaded first",
                 subject="file",
+                leg="request",
             )
             return None
 
@@ -278,7 +279,7 @@ class GoogleGenerateContentOps(BaseContentOps):
                 }
             }
 
-        report_drop("Unsupported audio format", subject="audio")
+        report_loss("Unsupported audio format", subject="audio", leg="request")
         return None
 
     @staticmethod
@@ -419,9 +420,10 @@ class GoogleGenerateContentOps(BaseContentOps):
         Returns:
             None (citations are not supported as content parts).
         """
-        report_drop(
+        report_loss(
             "Google GenAI does not support citations as content parts",
             subject="citation",
+            leg="request",
         )
         return None
 

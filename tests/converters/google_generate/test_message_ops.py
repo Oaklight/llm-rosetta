@@ -227,7 +227,7 @@ class TestGoogleGenerateMessageOps:
         )
         result, warnings = self.message_ops.ir_messages_to_p(ir_messages)
         assert len(result) == 0
-        assert any("不支持扩展项类型" in w for w in warnings)
+        assert any("does not support extension item type" in w for w in warnings)
 
     def test_ir_tool_result_with_context(self):
         """Test IR tool result with context lookup for function name."""
