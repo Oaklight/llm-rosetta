@@ -491,6 +491,33 @@ class TestTheBaseStreamDefaults:
         assert sink[0].code == DROPPED
         assert "no form in this target" in sink[0]
 
+    def test_a_messages_allowed_tools_loss_reaches_the_caller(self):
+        """The Messages writer stopped handing its context sink to the helper.
+
+        Anthropic has no allow-list tool choice, so the choice is widened to
+        "any declared tool".  That loss used to travel through an explicit
+        ``warnings=ctx.warnings`` argument; a caller with its own sink heard
+        nothing.
+        """
+        from llm_rosetta.converters.base.context import ConversionContext
+        from llm_rosetta.converters.llm.messages import MessagesConverter
+
+        caller = WarningSink(leg="caller")
+        ctx = ConversionContext()
+        ir: Any = {
+            "model": "m",
+            "messages": [{"role": "user", "content": [{"type": "text", "text": "hi"}]}],
+            "tools": [{"type": "function", "name": "declared", "parameters": {}}],
+            "tool_choice": {"mode": "auto", "allowed_tools": [{"name": "declared"}]},
+        }
+
+        with recording_to(caller):
+            MessagesConverter().request_to_provider(ir, context=ctx)
+
+        assert [w.subject for w in caller] == ["allowed_tools"]
+        assert caller[0].code == DOWNGRADED
+        assert ctx.warnings == []
+
 
 class TestTheEntryPointsNameTheirLeg:
     """The act knows its leg; it does not wait for the driver to say."""
