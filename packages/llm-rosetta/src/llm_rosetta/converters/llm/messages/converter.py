@@ -1110,9 +1110,16 @@ class MessagesConverter(BaseConverter):
 
         if stop_reason:
             reason = ANTHROPIC_REASON_FROM_PROVIDER.get(stop_reason, "stop")
+            finish_reason: dict[str, Any] = {"reason": reason}
+            # The body carries the matched sequence beside ``stop_reason``;
+            # the stream's ``message_delta`` is where it rides, so read it back
+            # the same way or the two legs disagree on the value (#1245).
+            stop_sequence = delta.get("stop_sequence")
+            if stop_sequence:
+                finish_reason["stop_sequence"] = stop_sequence
             finish: dict[str, Any] = {
                 "type": "finish",
-                "finish_reason": {"reason": reason},
+                "finish_reason": finish_reason,
             }
             # Structured refusal: extract explanation and category
             if stop_reason == "refusal":
@@ -1692,6 +1699,11 @@ class MessagesConverter(BaseConverter):
             pm,
         )
 
+        # The sequence the model actually stopped on, when it stopped on one.
+        # Anthropic puts it on the same delta as ``stop_reason``; dropping it
+        # left the stream saying ``null`` while the body carried the word.
+        stop_sequence = event["finish_reason"].get("stop_sequence")
+
         # Build stop_details for structured refusal
         stop_details = None
         if reason == "refusal":
@@ -1708,7 +1720,7 @@ class MessagesConverter(BaseConverter):
                 delta_payload: dict[str, Any] = {"stop_reason": stop_reason}
                 if stop_details:
                     delta_payload["stop_details"] = stop_details
-                delta_payload.setdefault("stop_sequence", None)
+                delta_payload.setdefault("stop_sequence", stop_sequence)
                 delta_payload.setdefault("stop_details", None)
                 delta_payload.setdefault("container", None)
                 results.append(
@@ -1723,7 +1735,7 @@ class MessagesConverter(BaseConverter):
                 finish_delta: dict[str, Any] = {"stop_reason": stop_reason}
                 if stop_details:
                     finish_delta["stop_details"] = stop_details
-                finish_delta.setdefault("stop_sequence", None)
+                finish_delta.setdefault("stop_sequence", stop_sequence)
                 finish_delta.setdefault("stop_details", None)
                 finish_delta.setdefault("container", None)
                 context.buffer_finish(finish_delta)
@@ -1732,7 +1744,7 @@ class MessagesConverter(BaseConverter):
             "type": AnthropicEventType.MESSAGE_DELTA,
             "delta": {
                 "stop_reason": stop_reason,
-                "stop_sequence": None,
+                "stop_sequence": stop_sequence,
                 "stop_details": None,
                 "container": None,
             },
