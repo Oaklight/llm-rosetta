@@ -26,6 +26,7 @@ from ..logging import (
     log_upstream_error,
 )
 from llm_rosetta_gateway.observability.sanitize import sanitize_upstream_error
+from ..transport.error_class import classify_status
 from ..transport import (
     ProviderInfo,
     UpstreamConnectionError,
@@ -403,24 +404,17 @@ def error_response_for_source(
         The formatted error response.
     """
     api_format = detect_api_format_from_provider(source_provider)
+    terminal = classify_status(status_code)
     if error_type is None:
-        if status_code < 500:
-            error_type = "invalid_request_error"
-        elif status_code < 502 and api_format == "openai":
-            # OpenAI distinguishes its own fault from the upstream's; Anthropic
-            # has no `server_error` at all — every 5xx is `api_error`, "an
-            # unexpected error has occurred internal to Anthropic's systems" —
-            # so Messages keeps that word at 500 too.
-            error_type = "server_error"
-        else:
-            error_type = "api_error"
+        # OpenAI distinguishes its own fault from the upstream's; Anthropic
+        # has no `server_error` at all — every 5xx is `api_error`, "an
+        # unexpected error has occurred internal to Anthropic's systems" —
+        # so Messages keeps that word at 500 too.  The table owns the words.
+        error_type = (
+            terminal.openai_type if api_format == "openai" else terminal.anthropic_type
+        )
     if google_status is None:
-        if status_code < 500:
-            google_status = "INVALID_ARGUMENT"
-        elif status_code < 502:
-            google_status = "INTERNAL"
-        else:
-            google_status = "UNAVAILABLE"
+        google_status = terminal.google_status
     return format_error_response(
         api_format,
         status_code,

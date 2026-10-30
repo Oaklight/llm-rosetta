@@ -108,14 +108,16 @@ def _terminal_error_sse(
             return []
 
         response_id = getattr(ctx, "outbound_response_id", "") or ""
-        status, google_status = 500, "INTERNAL"
+        status = 500
         message: str | None = None
         if getattr(exc, "reason", ""):
             # Not a gateway fault: the upstream produced a terminal state the
             # client's dialect has no finish reason for, so the JSON leg would
             # have answered 502.  Say the same in-band (#1237), carrying the id
             # the converter knew rather than the one the stream never learned.
-            status, google_status = 502, "UNAVAILABLE"
+            # The words for the status come from the shared classification
+            # table, so this leg cannot drift from the JSON envelope.
+            status = 502
             response_id = getattr(exc, "response_id", "") or response_id
             # The stream did not die: the turn arrived complete and the
             # gateway has no word for how it ended.  Saying "the upstream
@@ -128,7 +130,6 @@ def _terminal_error_sse(
             response_id=response_id,
             sequence_number=getattr(ctx, "next_sequence_number", None),
             status=status,
-            google_status=google_status,
             message=message,
         )
         out = [format_sse(event) for event in events]
