@@ -35,6 +35,7 @@ from ....types.ir.stream import (
     UsageEvent,
 )
 from ...base import BaseConverter
+from ...base.errors import unrepresentable_finish_reason
 from ...base.helpers.citations import (
     citation_warning_sink,
     report_dropped_citation,
@@ -78,6 +79,46 @@ _FINISH_REASON_TO_STATUS: dict[str, str] = {
     "error": "failed",
     "cancelled": "cancelled",
 }
+
+
+def _interaction_status(
+    reason: str,
+    *,
+    response_id: str = "",
+    provider_metadata: Mapping[str, Any] | None = None,
+) -> str:
+    """Map an IR reason to the interaction status, refusing a filtered turn.
+
+    ``completed`` says the model finished talking, which a turn cut off by a
+    filter did not.  The other candidates lose the reason outright: the reader
+    maps ``incomplete`` and ``budget_exceeded`` to ``length``, and ``failed``
+    to ``error``, and the interaction object models no field to carry the real
+    one — so every status available would rewrite *why* the turn ended.  The
+    writer therefore refuses a terminal state it cannot express, as the other
+    dialects do (#1233, #1234), rather than pick a near-word: a filtered turn
+    is exactly the case where "finished normally" is the wrong thing to tell a
+    client.
+
+    Args:
+        reason: The IR finish reason.
+        response_id: The response the reason belongs to.
+        provider_metadata: Upstream metadata recorded with the reason.
+
+    Returns:
+        The interaction status.
+
+    Raises:
+        UnrepresentableFinishReason: For ``content_filter``.
+    """
+    if reason == "content_filter":
+        raise unrepresentable_finish_reason(
+            "Google Interactions",
+            reason,
+            response_id=response_id,
+            provider_metadata=provider_metadata,
+        )
+    return _FINISH_REASON_TO_STATUS.get(reason, "completed")
+
 
 logger = logging.getLogger(__name__)
 
@@ -418,7 +459,11 @@ class GoogleInteractionsConverter(BaseConverter):
             finish_reason = choice.get("finish_reason", {}).get("reason", "stop")
             assistant_msg = choice.get("message")
 
-        status = _FINISH_REASON_TO_STATUS.get(finish_reason, "completed")
+        status = _interaction_status(
+            finish_reason,
+            response_id=ir_response.get("id", ""),
+            provider_metadata=(assistant_msg or {}).get("provider_metadata"),
+        )
 
         steps: list[dict] = []
         if assistant_msg:
@@ -819,7 +864,15 @@ class GoogleInteractionsConverter(BaseConverter):
             stashed = context.metadata.get("_interactions_usage")
             if stashed:
                 interaction["usage"] = stashed
-        interaction["status"] = _FINISH_REASON_TO_STATUS.get(reason, "completed")
+        interaction["status"] = _interaction_status(
+            reason,
+            response_id=getattr(context, "response_id", ""),
+            provider_metadata=(
+                context.metadata.get("_interactions_finish_metadata")
+                if context is not None
+                else None
+            ),
+        )
         return {
             "event_type": "interaction.completed",
             "interaction": interaction,
@@ -1077,6 +1130,9 @@ class GoogleInteractionsConverter(BaseConverter):
         reason = event["finish_reason"]["reason"]
         if context:
             context.metadata["_interactions_finish_reason"] = reason
+            metadata = event.get("provider_metadata")
+            if metadata:
+                context.metadata["_interactions_finish_metadata"] = metadata
         return {}
 
     def _handle_ir_usage_to_p(

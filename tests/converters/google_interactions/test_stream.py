@@ -1,5 +1,8 @@
 """Tests for Google Interactions streaming conversion."""
 
+import pytest
+
+from llm_rosetta.converters.base.errors import UnrepresentableFinishReason
 from llm_rosetta.converters.llm.google_interactions import GoogleInteractionsConverter
 from llm_rosetta.converters.base.context import StreamContext
 from typing import cast
@@ -11,6 +14,7 @@ from llm_rosetta.types.ir.stream import (
     ReasoningDeltaEvent,
     TextDeltaEvent,
     ToolCallDeltaEvent,
+    StreamEndEvent,
     ToolCallStartEvent,
 )
 
@@ -335,6 +339,34 @@ class TestStreamChunkToIR:
         assert signed[0]["step"]["signature"] == "sig_rt"
         assert signed[0]["step"]["id"] == "call_rt"
         assert signed[0]["step"]["name"] == "fn"
+
+    def test_a_filtered_finish_is_refused_at_the_end(self):
+        """The stream stashes the reason, so the refusal lands on ``stream_end``.
+
+        Same rule as the JSON leg (#1244): the interaction status has no word
+        for a filtered turn, and neither ``completed`` nor ``incomplete`` is
+        true of one.
+        """
+        ctx = StreamContext()
+        self.converter.stream_response_to_provider(
+            cast(
+                FinishEvent,
+                {
+                    "type": "finish",
+                    "finish_reason": {"reason": "content_filter"},
+                    "provider_metadata": {"blocked": "SAFETY"},
+                },
+            ),
+            ctx,
+        )
+        with pytest.raises(UnrepresentableFinishReason) as exc:
+            self.converter.stream_response_to_provider(
+                cast(StreamEndEvent, {"type": "stream_end"}), ctx
+            )
+        assert exc.value.reason == "content_filter"
+        # The payload the JSON leg carries: the stream stashes the finish
+        # event's metadata, so its refusal is not emptier than the body's.
+        assert exc.value.provider_metadata == {"blocked": "SAFETY"}
 
     def test_interaction_completed_requires_action(self):
         chunk = {

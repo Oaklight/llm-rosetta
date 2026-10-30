@@ -68,6 +68,13 @@ from .preflight import (
 
 logger = get_logger()
 
+#: What an in-band notice says when the converter refused a complete turn
+#: (a terminal state the client's dialect cannot express): the upstream
+#: finished, and blaming the stream would misdiagnose it.
+_REFUSAL_MESSAGE = (
+    "The upstream response ended in a state this endpoint cannot express: {reason}"
+)
+
 
 def _terminal_error_sse(
     source_provider: ProviderType,
@@ -102,6 +109,7 @@ def _terminal_error_sse(
 
         response_id = getattr(ctx, "outbound_response_id", "") or ""
         status, google_status = 500, "INTERNAL"
+        message: str | None = None
         if getattr(exc, "reason", ""):
             # Not a gateway fault: the upstream produced a terminal state the
             # client's dialect has no finish reason for, so the JSON leg would
@@ -109,6 +117,10 @@ def _terminal_error_sse(
             # the converter knew rather than the one the stream never learned.
             status, google_status = 502, "UNAVAILABLE"
             response_id = getattr(exc, "response_id", "") or response_id
+            # The stream did not die: the turn arrived complete and the
+            # gateway has no word for how it ended.  Saying "the upstream
+            # stream ended before completion" would blame the wrong party.
+            message = _REFUSAL_MESSAGE.format(reason=str(exc))
 
         events = build_stream_error_events(
             source_provider,
@@ -117,6 +129,7 @@ def _terminal_error_sse(
             sequence_number=getattr(ctx, "next_sequence_number", None),
             status=status,
             google_status=google_status,
+            message=message,
         )
         out = [format_sse(event) for event in events]
         if source_provider in (

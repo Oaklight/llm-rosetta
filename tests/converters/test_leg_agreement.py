@@ -20,9 +20,9 @@ in a body are declared below and not asserted; provider-level field equality is
 the conformance wire baseline's job (``tools/conformance``).
 
 Epic: #1238.  The harness is the regression net for the finish-reason rule
-(#1240).  The one remaining shared loss and the stop-sequence value gap are
-pinned as strict xfails rather than excluded: fixing them turns the marker into
-a failure and forces the pin out in the same change.
+(#1240).  What a dialect cannot say is asserted by value, never left to
+equality: a shared loss is a matching pair of wrong answers, so ``EXPECTED_REASON``
+and ``REFUSED_REASON`` say what each dialect should produce instead.
 """
 
 from __future__ import annotations
@@ -169,6 +169,9 @@ REFUSED_REASON = {
     "chat_completions": {"error", "cancelled"},
     "messages": {"error", "cancelled"},
     "google_generate": {"error", "cancelled"},
+    # The interaction status vocabulary has no word for a filtered turn;
+    # ``completed`` claims success and ``incomplete`` reads back as length.
+    "google_interactions": {"filter"},
 }
 
 #: Call kinds a dialect keeps, per case.  A case absent here has no call, or
@@ -184,16 +187,6 @@ EXPECTED_CALL_KINDS: dict[tuple[str, str], tuple[str, ...]] = {
     ("chat_completions", "intrinsic"): (),
     ("google_generate", "intrinsic"): (),
     ("google_interactions", "intrinsic"): (),
-}
-
-#: (dialect, case) pairs where both legs agree on the wrong answer.  Equality
-#: cannot see these; the dedicated strict xfail below is the pin.  The fix is
-#: a writer change, not a leg reconciliation.
-KNOWN_SHARED_LOSSES = {
-    ("google_interactions", "filter"): (
-        "the Interactions writer maps a filtered turn to status completed, so "
-        "both legs agree it finished normally (#1244)"
-    ),
 }
 
 
@@ -638,11 +631,6 @@ def test_the_two_legs_answer_the_same_turn(
     capable_reason: str,
 ) -> None:
     """Same IR turn in, same content out, whichever leg wrote it."""
-    if (dialect, case_id) in KNOWN_SHARED_LOSSES:
-        pytest.skip(
-            "pinned as a strict xfail below: " + KNOWN_SHARED_LOSSES[(dialect, case_id)]
-        )
-
     converter = factory()
     body = _body_leg(converter, turn)
     stream = _stream_leg(converter, turn)
@@ -677,23 +665,6 @@ def test_the_two_legs_answer_the_same_turn(
             turn.usage["completion_tokens"],
             turn.usage["total_tokens"],
         ), f"{dialect} usage on {case_id}"
-
-
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "the Interactions writer maps a filtered turn to status completed, so "
-        "both legs agree it finished normally (#1244)"
-    ),
-)
-def test_the_known_interactions_shared_loss() -> None:
-    """Pin the shared loss equality cannot see, so fixing it is visible."""
-    body = _body_leg(
-        DIALECTS["google_interactions"](), Turn(text="hi", finish="content_filter")
-    )
-
-    assert isinstance(body, TurnView)
-    assert body.reason == "content_filter"
 
 
 def test_a_messages_stop_sequence_survives_both_legs() -> None:
