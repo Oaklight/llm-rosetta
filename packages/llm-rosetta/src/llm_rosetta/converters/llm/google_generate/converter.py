@@ -38,6 +38,7 @@ from ....types.ir.stream import (
     ReasoningDeltaEvent,
     StreamEndEvent,
     StreamStartEvent,
+    RefusalDeltaEvent,
     TextDeltaEvent,
     ToolCallDeltaEvent,
     ToolCallStartEvent,
@@ -569,6 +570,7 @@ class GoogleGenerateConverter(BaseConverter):
     _IR_TO_P_DISPATCH: dict[str, str] = {
         **BaseConverter._IR_TO_P_DISPATCH,
         "tool_result": "_handle_ir_tool_result_to_p",
+        "refusal_delta": "_handle_ir_refusal_delta_to_p",
     }
 
     def __init__(self):
@@ -2060,6 +2062,36 @@ class GoogleGenerateConverter(BaseConverter):
                         "content": {
                             "role": "model",
                             "parts": [{"text": event["text"]}],
+                        },
+                    }
+                ]
+            },
+            context,
+        )
+
+    def _handle_ir_refusal_delta_to_p(
+        self, event: RefusalDeltaEvent, context: StreamContext | None
+    ) -> dict[str, Any]:
+        """Handle RefusalDeltaEvent → a text part chunk.
+
+        Google has no refusal part and its stream carries no field for one:
+        a real ``streamGenerateContent`` probe (2026-10-30, gemini-3.7-flash)
+        showed part keys of ``text`` and ``thoughtSignature`` only, on a
+        normal turn and on one the model declined.  The body writer already
+        folds a refusal part into a text part, so the stream does the same and
+        the words survive both legs.
+        """
+        if not event["refusal"]:
+            return {}
+        choice_index = event.get("choice_index", 0)
+        return self._inject_stream_metadata(
+            {
+                "candidates": [
+                    {
+                        "index": choice_index,
+                        "content": {
+                            "role": "model",
+                            "parts": [{"text": event["refusal"]}],
                         },
                     }
                 ]

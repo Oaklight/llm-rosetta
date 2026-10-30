@@ -26,6 +26,7 @@ from ....types.ir.stream import (
     FinishEvent,
     IRStreamEvent,
     ReasoningDeltaEvent,
+    RefusalDeltaEvent,
     StreamEndEvent,
     StreamStartEvent,
     TextDeltaEvent,
@@ -834,7 +835,22 @@ class GoogleInteractionsConverter(BaseConverter):
     _IR_TO_P_DISPATCH: dict[str, str] = {
         **BaseConverter._IR_TO_P_DISPATCH,
         "tool_result": "_handle_ir_tool_result_to_p",
+        "refusal_delta": "_handle_ir_refusal_delta_to_p",
     }
+
+    def _handle_ir_refusal_delta_to_p(
+        self, event: RefusalDeltaEvent, context: StreamContext | None
+    ) -> dict[str, Any]:
+        """Handle RefusalDeltaEvent → the step delta its text would use.
+
+        The interaction has no refusal step; a refusal is a completed turn in
+        which the model declined, so the words travel as model output — the
+        same fold the body leg does with a refusal part.
+        """
+        return self._handle_ir_text_delta_to_p(
+            TextDeltaEvent(type="text_delta", text=event["refusal"]),
+            context,
+        )
 
     def _handle_ir_stream_start_to_p(
         self, event: StreamStartEvent, context: StreamContext | None

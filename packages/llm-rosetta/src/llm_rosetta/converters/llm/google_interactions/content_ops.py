@@ -199,11 +199,16 @@ class GoogleInteractionsContentOps(BaseContentOps):
 
     @staticmethod
     def ir_refusal_to_p(ir_refusal: Any, **kwargs: Any) -> Any:
-        report_drop(
-            "Refusal content not yet supported by Interactions converter",
-            subject="refusal",
-        )
-        return {}
+        """IR RefusalPart → a text content item.
+
+        The interaction models no refusal: its content types are text, image
+        and so on, and its statuses are ``completed``/``incomplete``/``failed``.
+        A refusal is a completed turn in which the model declined, so the
+        words travel as ordinary model output — folded, the way the Google
+        generate dialect folds them — rather than dropped, which used to lose
+        both the content and the fact that it was a refusal.
+        """
+        return {"type": "text", "text": ir_refusal.get("refusal", "")}
 
     @staticmethod
     def p_refusal_to_ir(provider_refusal: Any, **kwargs: Any) -> Any:

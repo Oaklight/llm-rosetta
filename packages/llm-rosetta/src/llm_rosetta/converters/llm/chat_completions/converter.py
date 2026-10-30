@@ -29,6 +29,7 @@ from ....types.ir.stream import (
     ReasoningDeltaEvent,
     StreamEndEvent,
     StreamStartEvent,
+    RefusalDeltaEvent,
     TextDeltaEvent,
     ToolCallDeltaEvent,
     ToolCallStartEvent,
@@ -539,6 +540,16 @@ class ChatCompletionsConverter(BaseConverter):
 
             finish_reason_val = p_choice.get("finish_reason")
             reason = OPENAI_CHAT_REASON_FROM_PROVIDER.get(finish_reason_val, "stop")
+            # Chat has no word for a refusal, so the writer marks one with the
+            # words alone (``message.refusal``).  The stream reader recovers
+            # the reason from the ``delta.refusal`` it accumulated — the same
+            # information on the other leg — and the body reader must read it
+            # back the same way, or the two legs answer one turn differently
+            # (#1238).
+            if isinstance(message, dict) and any(
+                is_refusal_part(part) for part in message.get("content") or []
+            ):
+                reason = "refusal"
 
             choice_info: dict[str, Any] = {
                 "index": p_choice.get("index", 0),
@@ -1248,6 +1259,27 @@ class ChatCompletionsConverter(BaseConverter):
         if chunk.get("choices"):
             chunk["choices"][0].setdefault("delta", {})["role"] = "assistant"
         return chunk
+
+    def _handle_ir_refusal_delta_to_p(
+        self, event: RefusalDeltaEvent, context: StreamContext | None
+    ) -> dict[str, Any]:
+        """Handle RefusalDeltaEvent → a refusal delta on the choice.
+
+        The body writer puts the words in ``message.refusal`` and the reader
+        accumulates them from ``delta.refusal``; without this the stream had
+        no way to carry them, so the two legs disagreed about a turn that
+        said why it declined.
+        """
+        if not event["refusal"]:
+            return {}
+        return {
+            "choices": [
+                {
+                    "index": event.get("choice_index", 0),
+                    "delta": {"refusal": event["refusal"]},
+                }
+            ]
+        }
 
     def _handle_ir_text_delta_to_p(
         self, event: TextDeltaEvent, context: StreamContext | None

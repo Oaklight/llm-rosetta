@@ -568,6 +568,42 @@ class TestStreamResponseToProvider:
         assert len(deltas) == 1
         assert deltas[0]["delta"]["stop_sequence"] == "END"
 
+    def test_finish_event_refusal_without_words_has_no_details(self):
+        """A refusal reason alone says the model declined, not why.
+
+        The body writer sets ``stop_details`` only for a refusal part; the
+        stream writer used to invent ``{'type': 'refusal', 'explanation': ''}``
+        from the reason alone, so the two legs disagreed about a turn nobody
+        wrote words for.
+        """
+        event = cast(
+            FinishEvent,
+            {"type": "finish", "finish_reason": {"reason": "refusal"}},
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
+        assert result["delta"]["stop_reason"] == "refusal"
+        assert result["delta"]["stop_details"] is None
+
+    def test_finish_event_refusal_keeps_the_words(self):
+        """When the turn does carry them, they ride the delta whole."""
+        event = cast(
+            FinishEvent,
+            {
+                "type": "finish",
+                "finish_reason": {"reason": "refusal"},
+                "provider_metadata": {
+                    "refusal_text": "I can't help with that.",
+                    "anthropic_refusal_category": "cyber",
+                },
+            },
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
+        assert result["delta"]["stop_details"] == {
+            "type": "refusal",
+            "category": "cyber",
+            "explanation": "I can't help with that.",
+        }
+
     def test_finish_event_length(self):
         """FinishEvent with 'length' → message_delta with 'max_tokens'."""
         event = cast(

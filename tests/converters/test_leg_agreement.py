@@ -91,6 +91,9 @@ class Turn:
     calls: tuple[dict[str, Any], ...] = ()
     finish: str = "stop"
     stop_sequence: str | None = None
+    #: A refusal the turn carries as a part on the body leg and as a
+    #: ``refusal_delta`` on the stream leg.
+    refusal: str | None = None
     native_finish_reason: str | None = None
     usage: dict[str, int] | None = None
 
@@ -112,6 +115,7 @@ class TurnView:
     reason: str
     text: str
     reasoning: str
+    refusal: str
     calls: tuple[CallView, ...]
     usage: tuple[int, int, int] | None
 
@@ -147,6 +151,12 @@ CASE_TABLE: list[tuple[str, Turn, str]] = [
         "length",
     ),
     ("filter", Turn(text="hi", finish="content_filter"), "content_filter"),
+    ("refusal", Turn(text="hi", finish="refusal"), "refusal"),
+    (
+        "refusal_with_words",
+        Turn(finish="refusal", refusal="I can't help with that."),
+        "refusal",
+    ),
     ("error", Turn(text="hi", finish="error"), "error"),
     ("cancelled", Turn(text="hi", finish="cancelled"), "cancelled"),
 ]
@@ -160,9 +170,35 @@ CASES = [
 #: table is the assertion that stops a shared loss from counting as agreement:
 #: if both legs drop the same thing, the two views still match, but the
 #: expected value here does not.
+#:
+#: The four ``stop`` rows are a decision, not a backlog.  A refusal is a turn
+#: the model *finished*: it declined and stopped, which is why a filtered turn
+#: is not the same case (that one was interrupted, and calling it ``completed``
+#: would be a lie — #1252).  Only Anthropic has a stop reason for the
+#: distinction; the others write a refusal as an ordinary completion, so
+#: ``stop`` is what their own reader can recover, on both legs.  Chat goes one
+#: step further: having no word for it, it marks the refusal with the words
+#: alone (``message.refusal`` / ``delta.refusal``), and its reader takes the
+#: reason back from them — so a Chat refusal that carries words reads back as
+#: ``refusal`` on both legs while a wordless one reads back as ``stop``.
 EXPECTED_REASON: dict[tuple[str, str], str] = {
     ("messages", "filter"): "refusal",
+    # Only Messages has the word; the other four write a refusal as an
+    # ordinary stop, so both of their legs read it back as one.
+    ("chat_completions", "refusal"): "stop",
+    ("open_responses", "refusal"): "stop",
+    ("google_generate", "refusal"): "stop",
+    ("google_interactions", "refusal"): "stop",
+    ("chat_completions", "refusal_with_words"): "refusal",
+    ("open_responses", "refusal_with_words"): "stop",
+    ("google_generate", "refusal_with_words"): "stop",
+    ("google_interactions", "refusal_with_words"): "stop",
 }
+
+#: Dialects that keep the refusal words as their own content.  The rest have
+#: no refusal form on the wire and fold the words into ordinary text, which
+#: the body and stream legs must then agree about, word for word.
+KEEPS_REFUSAL_WORDS = frozenset({"chat_completions", "open_responses", "messages"})
 
 #: Dialects whose writers refuse the turn instead of writing it.
 REFUSED_REASON = {
@@ -198,6 +234,8 @@ def _ir_response(turn: Turn) -> dict[str, Any]:
     if turn.text:
         content.append({"type": "text", "text": turn.text})
     content.extend(copy.deepcopy(turn.calls))
+    if turn.refusal is not None:
+        content.append({"type": "refusal", "refusal": turn.refusal})
     message: dict[str, Any] = {"role": "assistant", "content": content}
     if turn.native_finish_reason is not None:
         message["provider_metadata"] = {
@@ -258,19 +296,22 @@ def _ir_events(turn: Turn) -> list[dict[str, Any]]:
                 "arguments_delta": json.dumps(call["tool_input"]),
             }
         )
+    if turn.refusal is not None:
+        events.append({"type": "refusal_delta", "refusal": turn.refusal})
     if turn.usage is not None:
         events.append({"type": "usage", "usage": dict(turn.usage)})
     finish_reason: dict[str, Any] = {"reason": turn.finish}
     if turn.stop_sequence is not None:
         finish_reason["stop_sequence"] = turn.stop_sequence
     finish: dict[str, Any] = {"type": "finish", "finish_reason": finish_reason}
+    finish_metadata: dict[str, Any] = {}
     if turn.native_finish_reason is not None:
-        finish["provider_metadata"] = {
-            "_native_finish_reason": {
-                "base": "google_generate",
-                "reason": turn.native_finish_reason,
-            }
+        finish_metadata["_native_finish_reason"] = {
+            "base": "google_generate",
+            "reason": turn.native_finish_reason,
         }
+    if finish_metadata:
+        finish["provider_metadata"] = finish_metadata
     events.append(finish)
     events.append({"type": "stream_end"})
     return events
@@ -371,6 +412,9 @@ def _view_of_body(ir_response: dict[str, Any]) -> TurnView:
     reasoning = "".join(
         part.get("reasoning", "") for part in parts if part.get("type") == "reasoning"
     )
+    refusal = "".join(
+        part.get("refusal", "") for part in parts if part.get("type") == "refusal"
+    )
     calls = tuple(
         sorted(
             (
@@ -391,6 +435,7 @@ def _view_of_body(ir_response: dict[str, Any]) -> TurnView:
         reason=(choice.get("finish_reason") or {}).get("reason", ""),
         text=text,
         reasoning=reasoning,
+        refusal=refusal,
         calls=calls,
         usage=_usage_view(ir_response.get("usage")),
     )
@@ -400,6 +445,7 @@ def _view_of_events(events: list[dict[str, Any]]) -> TurnView:
     """Compare a read-back stream by folding its events into one turn."""
     text = ""
     reasoning = ""
+    refusal = ""
     reason = ""
     usage: dict[str, int] = {}
     calls: dict[str, dict[str, Any]] = {}
@@ -409,6 +455,8 @@ def _view_of_events(events: list[dict[str, Any]]) -> TurnView:
             text += event.get("text", "")
         elif event_type == "reasoning_delta":
             reasoning += event.get("reasoning", "")
+        elif event_type == "refusal_delta":
+            refusal += event.get("refusal", "")
         elif event_type == "tool_call_start":
             call_id = event.get("tool_call_id", "")
             calls[call_id] = {
@@ -423,6 +471,13 @@ def _view_of_events(events: list[dict[str, Any]]) -> TurnView:
                 call["arguments"] += event.get("arguments_delta") or ""
         elif event_type == "finish":
             reason = (event.get("finish_reason") or {}).get("reason", "")
+            # A dialect with no refusal delta on the wire (Chat, Messages)
+            # still recovers the words, and puts them beside the terminal
+            # reason.  Read both spellings, so the words are compared rather
+            # than assumed equal.
+            refusal = refusal or (event.get("provider_metadata") or {}).get(
+                "refusal_text", ""
+            )
         elif event_type == "usage":
             for key, value in (event.get("usage") or {}).items():
                 if value:
@@ -446,6 +501,7 @@ def _view_of_events(events: list[dict[str, Any]]) -> TurnView:
         reason=reason,
         text=text,
         reasoning=reasoning,
+        refusal=refusal,
         calls=call_views,
         usage=_usage_view(usage),
     )
@@ -554,6 +610,13 @@ def _payload_paths(value: Any, prefix: str = "") -> set[str]:
 def _classify_path(path: str) -> str:
     """Classify one emitted path for the ledger."""
     leaf = path.rsplit(".", 1)[-1].replace("[]", "")
+    if "stop_details" in path.split("."):
+        # The structured refusal that goes with a terminal reason: its leaves
+        # are ``type``, ``category`` and ``explanation``, each of which the
+        # leaf rules below would otherwise read as envelope or content.
+        # Anchored on the segment, not a substring, so a future
+        # ``stop_details_count`` is not swept in with it.
+        return "terminal"
     if leaf in _ENVELOPE_LEAVES:
         return "envelope"
     if leaf in _TERMINAL_LEAVES:
@@ -657,6 +720,19 @@ def test_the_two_legs_answer_the_same_turn(
 
     if turn.text:
         assert body.text == turn.text, f"{dialect} text on {case_id}"
+    if turn.refusal is not None:
+        # The words the model actually said, compared by value.  A dialect
+        # that cannot carry a refusal as its own content folds them into
+        # text; one that can must hand them back unchanged — a reader that
+        # invented a sentence would fail here, not merely differ.
+        if dialect in KEEPS_REFUSAL_WORDS:
+            assert body.refusal == turn.refusal, f"{dialect} refusal on {case_id}"
+            assert body.text == turn.text, f"{dialect} text on {case_id}"
+        else:
+            assert body.refusal == "", f"{dialect} refusal on {case_id}"
+            assert body.text == turn.refusal, (
+                f"{dialect} folds the refusal into text on {case_id}"
+            )
     if turn.reasoning:
         assert body.reasoning == turn.reasoning, f"{dialect} reasoning on {case_id}"
     if turn.usage is not None:
@@ -676,6 +752,44 @@ def test_a_messages_stop_sequence_survives_both_legs() -> None:
     turn = Turn(text="hi", finish="stop", stop_sequence="END")
 
     assert _stop_sequence(MessagesConverter(), turn) == ("END", "END")
+
+
+def _stop_details(converter: Any, turn: Turn) -> tuple[Any, Any]:
+    """Return the structured refusal each writer puts beside the stop reason."""
+    body = converter.response_to_provider(_ir_response(turn))
+    details = None
+    for chunk in _raw_stream_chunks(converter, turn):
+        if chunk.get("type") == "message_delta":
+            details = (chunk.get("delta") or {}).get("stop_details")
+    return body.get("stop_details"), details
+
+
+def test_a_messages_refusal_writes_the_same_details_on_both_legs() -> None:
+    """``stop_details`` is a value, so both writers must answer the same one.
+
+    ``TurnView`` compares the refusal *words*, which is what the IR models; the
+    object around them is Messages' own, so it is asked of the two writers
+    directly.  A refusal part with neither words nor a category is not a
+    structured refusal — answering one would claim an explanation nobody gave
+    — and a part that carries words must answer them on both legs.
+    """
+    converter = MessagesConverter()
+
+    spoke = Turn(finish="refusal", refusal="I can't help with that.")
+    silent = Turn(finish="refusal", refusal="")
+
+    assert (
+        _stop_details(converter, spoke)
+        == (
+            {
+                "type": "refusal",
+                "category": None,
+                "explanation": "I can't help with that.",
+            },
+        )
+        * 2
+    )
+    assert _stop_details(converter, silent) == (None, None)
 
 
 def test_a_google_native_word_survives_both_legs() -> None:

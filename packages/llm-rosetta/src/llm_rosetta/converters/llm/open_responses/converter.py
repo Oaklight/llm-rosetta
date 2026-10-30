@@ -2293,15 +2293,16 @@ class OpenResponsesConverter(BaseConverter):
     def _handle_ir_refusal_delta_to_p(
         self,
         event: RefusalDeltaEvent,
-        context: OpenResponsesStreamContext | None,
+        context: StreamContext | None,
     ) -> dict[str, Any] | list[dict[str, Any]]:
         refusal = event["refusal"]
+        ctx = context if isinstance(context, OpenResponsesStreamContext) else None
 
         preamble: list[dict[str, Any]] = []
-        if context is not None and context.current_message_item is None:
-            preamble = build_message_preamble_events(context, "refusal")
+        if ctx is not None and ctx.current_message_item is None:
+            preamble = build_message_preamble_events(ctx, "refusal")
 
-        item = context.current_message_item if context is not None else None
+        item = ctx.current_message_item if ctx is not None else None
         if item is not None:
             item.accumulated_refusal += refusal
 
