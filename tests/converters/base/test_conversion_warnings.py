@@ -290,6 +290,178 @@ class TestACallersOwnSinkWins:
         assert [w.subject for w in caller] == ["max_tool_calls"]
         assert ctx.warnings == []
 
+    def test_a_tool_choice_loss_reaches_the_caller_too(self):
+        """The Responses writer stopped handing its context sink to the helper.
+
+        The undeclared-name report lives in a tool-choice helper that has no
+        context.  It used to be reachable only through an explicit
+        ``warnings=ctx.warnings`` argument, so a caller that installed its own
+        sink heard nothing; the entry point's sink is now the one it lands in.
+        """
+        from llm_rosetta.converters.base.context import ConversionContext
+        from llm_rosetta.converters.llm.open_responses import OpenResponsesConverter
+
+        caller = WarningSink(leg="caller")
+        ctx = ConversionContext()
+        ir: Any = {
+            "model": "m",
+            "messages": [{"role": "user", "content": [{"type": "text", "text": "hi"}]}],
+            "tools": [{"type": "function", "name": "declared", "parameters": {}}],
+            "tool_choice": {
+                "mode": "auto",
+                "allowed_tools": [{"name": "declared"}, {"name": "missing"}],
+            },
+        }
+
+        with recording_to(caller):
+            OpenResponsesConverter().request_to_provider(ir, context=ctx)
+
+        assert [w.subject for w in caller] == ["allowed_tools"]
+        assert caller[0].code == DOWNGRADED
+        assert ctx.warnings == []
+
+
+class TestTheSinkBeatsALegacyList:
+    """A list a helper builds no longer outranks the conversion in progress.
+
+    Helpers that predate the sink appended to a ``list[str]`` and their caller
+    extended the conversion's sink with it.  That silently delivered nothing to
+    a caller that installed its own sink: the list was filled, the caller's
+    sink was not, and the conversion threw the list away.  Each probe below is
+    a site where that used to happen.
+    """
+
+    def _caller(self):
+        return WarningSink(leg="caller")
+
+    @staticmethod
+    def _request(messages: list) -> Any:
+        return {"model": "m", "messages": messages}
+
+    def test_an_unknown_part_reaches_the_caller(self):
+        from llm_rosetta.converters.llm.open_responses import OpenResponsesConverter
+
+        caller = self._caller()
+        ir = self._request([{"role": "user", "content": [{"type": "mystery"}]}])
+
+        with recording_to(caller):
+            OpenResponsesConverter().request_to_provider(ir)
+
+        assert [(w.code, w.subject) for w in caller] == [("dropped", "mystery")]
+
+    def test_an_unknown_part_in_an_assistant_turn_reaches_the_caller(self):
+        from llm_rosetta.converters.llm.open_responses import OpenResponsesConverter
+
+        caller = self._caller()
+        ir = self._request(
+            [
+                {"role": "user", "content": [{"type": "text", "text": "hi"}]},
+                {"role": "assistant", "content": [{"type": "mystery"}]},
+            ]
+        )
+
+        with recording_to(caller):
+            OpenResponsesConverter().request_to_provider(ir)
+
+        assert [(w.code, w.subject) for w in caller] == [("dropped", "mystery")]
+
+    def test_a_harvested_additional_tools_loss_reaches_the_caller(self):
+        """The harvest helper took the context's sink positionally."""
+        from llm_rosetta.converters.llm.open_responses import OpenResponsesConverter
+
+        caller = self._caller()
+        provider_request = {
+            "model": "m",
+            "input": [{"type": "additional_tools", "tools": ["not a tool"]}],
+        }
+
+        with recording_to(caller):
+            OpenResponsesConverter().request_from_provider(provider_request)
+
+        assert [w.subject for w in caller] == ["additional_tools"]
+
+    def test_an_unrenderable_server_result_reaches_the_caller(self):
+        """The response leg handed the context's sink to the tool writer."""
+        from llm_rosetta.converters.llm.open_responses import OpenResponsesConverter
+
+        caller = self._caller()
+        ir: Any = {
+            "id": "r",
+            "object": "response",
+            "created": 1,
+            "model": "m",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": [
+                            {
+                                "type": "tool_result",
+                                "tool_call_id": "c1",
+                                "tool_result": "x",
+                                "tool_type": "intrinsic",
+                                "intrinsic_kind": "mystery_search",
+                            }
+                        ],
+                    },
+                    "finish_reason": {"reason": "stop"},
+                }
+            ],
+        }
+
+        with recording_to(caller):
+            OpenResponsesConverter().response_to_provider(ir)
+
+        assert [w.subject for w in caller] == ["mystery_search"]
+        # The caller's sink keeps its own leg cursor, so a site that does not
+        # name its leg reports a response loss as a request one.
+        assert caller[0].leg == "response"
+
+    def test_a_read_side_allow_list_loss_reaches_the_caller(self):
+        """The shared helper in ``ir/tools`` had no ambient route at all."""
+        from llm_rosetta.converters.llm.open_responses import OpenResponsesConverter
+
+        caller = self._caller()
+        provider_request = {
+            "model": "m",
+            "input": "hi",
+            "tool_choice": {
+                "type": "allowed_tools",
+                "mode": "auto",
+                "tools": [{"type": "function"}],
+            },
+        }
+
+        with recording_to(caller):
+            OpenResponsesConverter().request_from_provider(provider_request)
+
+        assert [(w.code, w.subject) for w in caller] == [
+            ("downgraded", "tool_choice.allowed_tools")
+        ]
+
+    def test_a_list_does_not_outrank_the_conversion_in_progress(self):
+        """Directly: the rule the five probes above depend on."""
+        sink = WarningSink(leg="response")
+        legacy: list[str] = []
+
+        with recording_to(sink):
+            report_loss("a part was dropped", subject="part", warnings=legacy)
+
+        assert [w.subject for w in sink] == ["part"]
+        assert legacy == [], "the list the caller handed in stays empty"
+
+    def test_an_explicit_sink_still_wins(self):
+        """A sink is the conversion's own answer to where losses go."""
+        conversion = WarningSink(leg="request")
+        other = WarningSink(leg="caller")
+
+        with recording_to(other):
+            report_loss("a part was dropped", subject="part", warnings=conversion)
+
+        assert [w.subject for w in conversion] == ["part"]
+        assert other == []
+
 
 class TestTheEntryPointsNameTheirLeg:
     """The act knows its leg; it does not wait for the driver to say."""

@@ -47,6 +47,7 @@ from ...base.context import ConversionContext, StreamContext
 from ....ir.primitives.finish_reason import reason_for_completed_turn
 from ...base.helpers.citations import report_dropped_citation
 from ...base.helpers.extensions import extension_loss_warning, wire_extensions
+from llm_rosetta.conversion_warnings import DOWNGRADED, report_loss
 from ...base.helpers.opaque import (
     get_opaque_origin,
     is_own_origin,
@@ -445,8 +446,9 @@ class OpenResponsesConverter(BaseConverter):
             for key in withheld:
                 merged.pop(key)
             if withheld:
-                ctx.warnings.append(
-                    extension_loss_warning(withheld, self._CONVERTER_TAG)
+                report_loss(
+                    extension_loss_warning(withheld, self._CONVERTER_TAG),
+                    subject=",".join(sorted(withheld)),
                 )
             result.update(merged)
 
@@ -488,9 +490,7 @@ class OpenResponsesConverter(BaseConverter):
         # content-less assistant message, which the Chat converter emits as
         # `{"role": "assistant", "content": ""}`.
         top_level_tools = list(provider_request.get("tools") or [])
-        nested_tools, input_items = harvest_additional_tools(
-            input_items, context.warnings
-        )
+        nested_tools, input_items = harvest_additional_tools(input_items)
 
         if isinstance(input_items, list):
             ir_messages = self.message_ops.p_messages_to_ir(
@@ -512,13 +512,11 @@ class OpenResponsesConverter(BaseConverter):
                 if ir_tools:
                     # Naming is the target's call and happens there; this
                     # leg only reports the containers that arrived unnamed.
-                    self._report_generated_groups(ir_tools, context.warnings)
+                    self._report_generated_groups(ir_tools)
                     ir_request["tools"] = ir_tools
 
         # 4-5. Tool choice + tool config
-        self._convert_p_tool_config_to_ir(
-            provider_request, ir_request, warnings=context.warnings
-        )
+        self._convert_p_tool_config_to_ir(provider_request, ir_request)
 
         # 6. Generation config
         gen_config = self.config_ops.p_generation_config_to_ir(provider_request)
@@ -842,7 +840,7 @@ class OpenResponsesConverter(BaseConverter):
         return getattr(context, "warnings", None)
 
     @staticmethod
-    def _report_generated_groups(ir_tools: list[Any], warnings: list[str]) -> None:
+    def _report_generated_groups(ir_tools: list[Any]) -> None:
         """Report each group whose name had to be invented.
 
         A container the client left unnamed is malformed input at every
@@ -865,12 +863,14 @@ class OpenResponsesConverter(BaseConverter):
             if not isinstance(group, str) or group in reported:
                 continue
             reported.add(group)
-            warnings.append(
+            report_loss(
                 "A tool container arrived with no name of its own, so its "
                 f"tools are addressed under the generated group {group!r}.  "
                 "Calls route correctly, but the model reads a less meaningful "
                 "group than a named container would have given it; name the "
-                "container to fix that"
+                "container to fix that",
+                code=DOWNGRADED,
+                subject=group,
             )
 
     @staticmethod
@@ -907,12 +907,10 @@ class OpenResponsesConverter(BaseConverter):
 
         Args:
             part: IR tool call part.
-            context: Conversion context (its warnings list takes the report).
+            context: Conversion context (the entry point put its sink in scope).
             output: The response's ``output`` list, extended in place.
         """
-        item = self.tool_ops.ir_tool_call_to_p(
-            part, leg="response", warnings=context.warnings
-        )
+        item = self.tool_ops.ir_tool_call_to_p(part, leg="response")
         if item:
             output.append(item)
 
@@ -930,12 +928,10 @@ class OpenResponsesConverter(BaseConverter):
 
         Args:
             part: IR tool result part.
-            context: Conversion context (its warnings list takes the report).
+            context: Conversion context (the entry point put its sink in scope).
             output: The response's ``output`` list, extended in place.
         """
-        item = self.tool_ops.ir_tool_result_to_p(
-            part, leg="response", warnings=context.warnings
-        )
+        item = self.tool_ops.ir_tool_result_to_p(part, leg="response")
         if item:
             output.append(item)
 
@@ -1068,7 +1064,6 @@ class OpenResponsesConverter(BaseConverter):
                 tool_choice,
                 allowed_tools=allowed_tools,
                 tool_types=_declared_tool_types(tools),
-                warnings=ctx.warnings,
             )
         tool_config = ir_request.get("tool_config")
         if tool_config:
@@ -1101,18 +1096,14 @@ class OpenResponsesConverter(BaseConverter):
         discarded.
         """
         if not ctx.options.get("tool_groups"):
-            return self._get_cached_ir_tools_to_p(tools, warnings=ctx.warnings)
+            return self._get_cached_ir_tools_to_p(tools)
 
         rendered: list[Any] = []
         for entry in group_tools(tools, carries_groups=True):
             if not isinstance(entry, ToolGroup):
-                rendered.extend(
-                    self._get_cached_ir_tools_to_p([entry], warnings=ctx.warnings)
-                )
+                rendered.extend(self._get_cached_ir_tools_to_p([entry]))
                 continue
-            children = self._get_cached_ir_tools_to_p(
-                list(entry.tools), warnings=ctx.warnings
-            )
+            children = self._get_cached_ir_tools_to_p(list(entry.tools))
             # A group whose every member this target declined is not a group: a
             # childless container is what every upstream that accepts one
             # rejects.  The list conversion drops each declined entry on its
@@ -1145,16 +1136,12 @@ class OpenResponsesConverter(BaseConverter):
         self,
         provider_request: dict[str, Any],
         ir_request: dict[str, Any],
-        *,
-        warnings: list[str] | None = None,
     ) -> None:
         """Extract tool_choice and tool_config from provider request into IR.
 
         Args:
             provider_request: Responses request body.
             ir_request: IR request under construction.
-            warnings: Optional warning sink for lossy conversions.  A namespace
-                ``tool_choice`` has no IR equivalent and is reported there.
         """
         tool_choice = provider_request.get("tool_choice")
         if tool_choice is not None:
@@ -1162,7 +1149,7 @@ class OpenResponsesConverter(BaseConverter):
             # not created when the tool choice carries no provider-bound object.
             extensions: dict[str, Any] = {}
             ir_request["tool_choice"] = self.tool_ops.p_tool_choice_to_ir(
-                tool_choice, extensions=extensions, warnings=warnings
+                tool_choice, extensions=extensions
             )
             if extensions:
                 ir_request.setdefault("provider_extensions", {}).update(extensions)

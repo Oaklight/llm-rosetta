@@ -25,6 +25,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any, cast
 
+from llm_rosetta.conversion_warnings import DOWNGRADED, report_loss
 from llm_rosetta.types.ir.tools import ToolChoice, ToolRef
 
 __all__ = [
@@ -120,13 +121,18 @@ def allowed_tool_refs(
     for entry in entries:
         ref = _entry_to_ref(entry)
         if ref is None:
-            if warnings is not None:
-                warnings.append(
-                    f"{selector} lists {_describe_entry(entry)}, which names no "
-                    "tool this library can restrict to, so the entry was "
-                    "dropped and the restriction is wider than the source asked "
-                    "for"
-                )
+            # Reported through the conversion in progress when no sink was
+            # named: a caller that installed its own must hear this too, and
+            # the entry point is the one place that says where losses go.
+            report_loss(
+                f"{selector} lists {_describe_entry(entry)}, which names no "
+                "tool this library can restrict to, so the entry was "
+                "dropped and the restriction is wider than the source asked "
+                "for",
+                code=DOWNGRADED,
+                subject=selector,
+                warnings=warnings,
+            )
             continue
         refs.append(ref)
     return refs
@@ -143,11 +149,13 @@ def _wire_mode_to_ir(
     """
     ir_mode = _ALLOWED_MODE_TO_IR.get(wire_mode)
     if ir_mode is None:
-        if warnings is not None:
-            warnings.append(
-                f"{selector} carried an unrecognized mode {wire_mode!r}; it was "
-                "read as 'auto', which lets the model call any declared tool"
-            )
+        report_loss(
+            f"{selector} carried an unrecognized mode {wire_mode!r}; it was "
+            "read as 'auto', which lets the model call any declared tool",
+            code=DOWNGRADED,
+            subject=selector,
+            warnings=warnings,
+        )
         return "auto"
     return ir_mode
 

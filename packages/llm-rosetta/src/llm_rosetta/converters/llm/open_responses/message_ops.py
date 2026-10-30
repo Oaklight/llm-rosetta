@@ -35,6 +35,7 @@ from ....types.ir.messages import MessageMetadata
 from ....types.ir.passthrough import ProviderPassthroughItem
 from ...base import BaseMessageOps
 from ...base.helpers.citations import report_dropped_citation
+from llm_rosetta.conversion_warnings import DOWNGRADED, report_loss
 from ...base.tools import sanitize_tool_call_id
 from ...base.tools.batch import assign_tool_batch_ids
 from ...base.tools.intrinsic import history_native_calls
@@ -216,8 +217,10 @@ class OpenResponsesMessageOps(BaseMessageOps):
                 if reasoning_item is not None:
                     extra_items.append(reasoning_item)
             else:
-                warnings.append(
-                    f"Unsupported content part type in {role} message: {part.get('type')}"
+                report_loss(
+                    f"Unsupported content part type in {role} message: {part.get('type')}",
+                    subject=str(part.get("type", "")),
+                    warnings=warnings,
                 )
 
         result_items: list[dict[str, Any]] = []
@@ -298,9 +301,11 @@ class OpenResponsesMessageOps(BaseMessageOps):
                 if reasoning_item is not None:
                     reasoning_items.append(reasoning_item)
             else:
-                warnings.append(
+                report_loss(
                     f"Unsupported content part type in assistant message: "
-                    f"{part.get('type')}"
+                    f"{part.get('type')}",
+                    subject=str(part.get("type", "")),
+                    warnings=warnings,
                 )
 
         result_items: list[dict[str, Any]] = []
@@ -397,12 +402,21 @@ class OpenResponsesMessageOps(BaseMessageOps):
                 }
             )
         elif extension_type == "tool_chain_node":
-            warnings.append("Tool chain converted to sequential calls")
+            report_loss(
+                "Tool chain converted to sequential calls",
+                code=DOWNGRADED,
+                subject="tool_chain_node",
+                warnings=warnings,
+            )
             tool_call = item.get("tool_call")
             if tool_call:
                 items.append(self.tool_ops.ir_tool_call_to_p(tool_call))
         elif extension_type in ("batch_marker", "session_control"):
-            warnings.append(f"Extension item ignored: {extension_type}")
+            report_loss(
+                f"Extension item ignored: {extension_type}",
+                subject=str(extension_type),
+                warnings=warnings,
+            )
 
         return warnings
 

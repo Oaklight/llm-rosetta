@@ -20,7 +20,7 @@ from ....types.ir.configs import (
     ResponseFormatConfig,
     StreamConfig,
 )
-from llm_rosetta.conversion_warnings import report_drop
+from llm_rosetta.conversion_warnings import report_loss
 from ...base import BaseConfigOps
 from ...base.helpers.reasoning import DEFAULT_REASONING_CAPS, apply_reasoning_config
 
@@ -90,7 +90,7 @@ class OpenResponsesConfigOps(BaseConfigOps):
         ]
         for field in _UNSUPPORTED:
             if field in ir_config:
-                report_drop(
+                report_loss(
                     f"OpenAI Responses API does not support {field}; ignored",
                     subject=field,
                 )
