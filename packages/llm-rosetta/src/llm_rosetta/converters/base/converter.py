@@ -34,6 +34,7 @@ from .helpers.extensions import (
     unowned_extensions,
 )
 from .passthrough import merge_provider_output_items
+from ...conversion_warnings import records_on_leg
 
 
 class BaseConverter(ABC):
@@ -146,6 +147,7 @@ class BaseConverter(ABC):
 
     # ==================== Template methods (public API) ====================
 
+    @records_on_leg("request")
     def request_to_provider(
         self,
         ir_request: IRRequest,
@@ -216,6 +218,7 @@ class BaseConverter(ABC):
 
             raise ConversionError(str(exc), phase="ir_to_target") from exc
 
+    @records_on_leg("request")
     def request_from_provider(
         self,
         provider_request: dict[str, Any],
@@ -237,6 +240,7 @@ class BaseConverter(ABC):
         own_extensions(ir_request, self._CONVERTER_TAG)
         return self._validate_ir_request(ir_request)
 
+    @records_on_leg("response")
     def response_from_provider(
         self,
         provider_response: dict[str, Any],
@@ -260,6 +264,7 @@ class BaseConverter(ABC):
             self._capture_preserve_metadata(provider_response, ir_response, ctx)
         return self._validate_ir_response(ir_response)
 
+    @records_on_leg("response")
     def response_to_provider(
         self,
         ir_response: IRResponse,

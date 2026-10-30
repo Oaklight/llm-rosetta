@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import copy
 import logging
+from typing import Any
 
 from llm_rosetta import ConversionPipeline
 from llm_rosetta.conversion_warnings import (
@@ -21,7 +22,9 @@ from llm_rosetta.conversion_warnings import (
     FAILED,
     ConversionWarning,
     WarningSink,
+    recording_to,
     report_drop,
+    report_loss,
     use_sink,
 )
 
@@ -189,6 +192,126 @@ class TestReportDrop:
 
         assert collected == ["for a caller that collects its own"]
         assert [r for r in caplog.records if r.name == "llm_rosetta"] == []
+
+
+class TestReportLoss:
+    """One API for all three kinds of loss, and a leg it can name."""
+
+    def test_it_records_the_code_and_subject(self):
+        sink = WarningSink(leg="request", converter="a->b")
+        warning = report_loss(
+            "a field was dropped", code=DOWNGRADED, subject="field", warnings=sink
+        )
+        assert warning.code == DOWNGRADED
+        assert warning.subject == "field"
+        assert sink == [warning]
+
+    def test_the_leg_override_leaves_the_cursor_alone(self):
+        """One warning on another leg must not mislabel the next one."""
+        sink = WarningSink(leg="request")
+        on_stream = report_loss("stream loss", leg="stream", warnings=sink)
+        after = report_loss("request loss", warnings=sink)
+
+        assert on_stream.leg == "stream"
+        assert after.leg == "request"
+        assert sink.leg == "request"
+
+    def test_without_a_leg_it_takes_the_sinks(self):
+        sink = WarningSink(leg="response")
+        warning = report_loss("a loss", warnings=sink)
+        assert warning.leg == "response"
+
+    def test_the_alias_records_through_the_same_route(self, monkeypatch):
+        import llm_rosetta.conversion_warnings as warnings_module
+
+        calls: list[tuple[str, dict]] = []
+
+        def _spy(message, **kwargs):
+            calls.append((message, kwargs))
+            return ConversionWarning(message)
+
+        monkeypatch.setattr(warnings_module, "report_loss", _spy)
+        report_drop("old spelling", code=DROPPED, subject="s")
+        assert calls == [
+            ("old spelling", {"code": DROPPED, "subject": "s", "warnings": None})
+        ]
+
+
+class TestACallersOwnSinkWins:
+    """A sink the caller installed keeps receiving; the entry point backs off."""
+
+    def test_an_installed_sink_is_not_stolen(self):
+        from llm_rosetta.converters.base.context import ConversionContext
+        from llm_rosetta.converters.llm.chat_completions import (
+            ChatCompletionsConverter,
+        )
+
+        caller = WarningSink(leg="caller")
+        ctx = ConversionContext()
+        ir: Any = {
+            "model": "m",
+            "messages": [{"role": "user", "content": [{"type": "text", "text": "hi"}]}],
+            "generation": {"top_k": 5},
+        }
+
+        with recording_to(caller):
+            ChatCompletionsConverter().request_to_provider(ir, context=ctx)
+
+        assert [w.subject for w in caller] == ["top_k"]
+        assert caller.leg == "caller", "the caller's cursor must not move"
+        assert ctx.warnings == [], "the entry point must not install its own sink"
+
+
+class TestTheEntryPointsNameTheirLeg:
+    """The act knows its leg; it does not wait for the driver to say."""
+
+    def test_a_response_read_on_a_fresh_context_is_a_response(self, monkeypatch):
+        from llm_rosetta.converters.base.context import ConversionContext
+        from llm_rosetta.converters.llm.messages import MessagesConverter
+
+        def _read(self, provider_response, *, context, **kwargs):
+            report_loss("lost while reading", subject="x", warnings=context.warnings)
+            return {
+                "id": "msg_1",
+                "object": "response",
+                "created": 0,
+                "model": "m",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {"role": "assistant", "content": []},
+                        "finish_reason": {"reason": "stop"},
+                    }
+                ],
+            }
+
+        monkeypatch.setattr(MessagesConverter, "_do_response_from_provider", _read)
+        ctx = ConversionContext()
+        assert ctx.warnings.leg == "request"
+
+        MessagesConverter().response_from_provider({"id": "msg_1"}, context=ctx)
+
+        [warning] = ctx.warnings
+        assert warning.leg == "response"
+
+    def test_a_request_write_on_a_response_leg_sink_is_a_request(self, monkeypatch):
+        from llm_rosetta.converters.base.context import ConversionContext
+        from llm_rosetta.converters.llm.messages import MessagesConverter
+
+        def _write(self, ir_request, *, context, **kwargs):
+            report_loss("lost while writing", subject="y", warnings=context.warnings)
+            return {"model": "m", "messages": []}
+
+        monkeypatch.setattr(MessagesConverter, "_do_request_to_provider", _write)
+        ctx = ConversionContext()
+        ctx.warnings.leg = "response"
+
+        MessagesConverter().request_to_provider(
+            {"model": "m", "messages": []}, context=ctx
+        )
+
+        [warning] = ctx.warnings
+        assert warning.leg == "request"
 
 
 class TestThePipelineSink:
