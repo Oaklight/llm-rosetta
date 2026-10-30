@@ -47,7 +47,7 @@ from ....types.ir.stream import (
 )
 from ...base import BaseConverter
 from ...base.errors import require_representable_finish_reason
-from llm_rosetta.conversion_warnings import report_drop
+from llm_rosetta.conversion_warnings import report_drop, report_loss
 from ...base.context import (
     ConversionContext,
     StreamContext,
@@ -637,8 +637,9 @@ class MessagesConverter(BaseConverter):
                     result["tool_choice"] = {"type": "auto"}
                 result["tool_choice"].update(tc_fields)
             if "max_calls" in tool_config:
-                ctx.warnings.append(
-                    "Anthropic does not support max_tool_calls, ignored"
+                report_loss(
+                    "Anthropic does not support max_tool_calls, ignored",
+                    subject="max_tool_calls",
                 )
 
     @staticmethod

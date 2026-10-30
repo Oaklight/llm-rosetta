@@ -16,7 +16,7 @@ from ....types.ir.configs import (
     StreamConfig,
 )
 from ...base import BaseConfigOps
-from llm_rosetta.conversion_warnings import report_drop
+from llm_rosetta.conversion_warnings import report_loss
 from ...base.helpers.reasoning import DEFAULT_REASONING_CAPS, apply_reasoning_config
 
 
@@ -84,7 +84,7 @@ class ChatCompletionsConfigOps(BaseConfigOps):
 
         # Unsupported fields
         if "top_k" in ir_config:
-            report_drop(
+            report_loss(
                 "OpenAI Chat does not support top_k; ignored",
                 subject="top_k",
             )

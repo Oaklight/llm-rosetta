@@ -57,6 +57,7 @@ def _request() -> dict[str, Any]:
             "seed": 1,
             "stop_sequences": ["END"],
         },
+        "tool_config": {"max_calls": 3},
         "tools": [
             {
                 "type": "custom",

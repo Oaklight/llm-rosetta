@@ -37,7 +37,7 @@ from ....types.ir.stream import (
 from ...base import BaseConverter
 from ...base.errors import require_representable_finish_reason
 from ...base.helpers.stream import stream_opened_client_call
-from llm_rosetta.conversion_warnings import report_drop
+from llm_rosetta.conversion_warnings import report_loss
 from ...base.helpers.citations import (
     citation_warning_sink,
     report_dropped_citation,
@@ -298,21 +298,21 @@ class ChatCompletionsConverter(BaseConverter):
         """Apply tools, tool_choice, and tool_config to provider request."""
         tools = ir_request.get("tools")
         if tools:
-            result["tools"] = self._get_cached_ir_tools_to_p(
-                tools, warnings=ctx.warnings
-            )
+            # No sink is handed over: the entry point installed this
+            # conversion's sink and its leg, and a site that names its own
+            # would keep the old routing rule alive beside it.
+            result["tools"] = self._get_cached_ir_tools_to_p(tools)
         tool_choice = ir_request.get("tool_choice")
         if tool_choice:
-            result["tool_choice"] = self.tool_ops.ir_tool_choice_to_p(
-                tool_choice, warnings=ctx.warnings
-            )
+            result["tool_choice"] = self.tool_ops.ir_tool_choice_to_p(tool_choice)
         tool_config = ir_request.get("tool_config")
         if tool_config:
             tc_fields = self.tool_ops.ir_tool_config_to_p(tool_config)
             result.update(tc_fields)
             if "max_calls" in tool_config:
-                ctx.warnings.append(
-                    "OpenAI Chat does not support max_tool_calls, ignored"
+                report_loss(
+                    "OpenAI Chat does not support max_tool_calls, ignored",
+                    subject="max_tool_calls",
                 )
 
     def _get_response_id_prefix(
@@ -469,9 +469,7 @@ class ChatCompletionsConverter(BaseConverter):
         # 3. Tool choice
         tool_choice = provider_request.get("tool_choice")
         if tool_choice is not None:
-            ir_request["tool_choice"] = self.tool_ops.p_tool_choice_to_ir(
-                tool_choice, warnings=context.warnings
-            )
+            ir_request["tool_choice"] = self.tool_ops.p_tool_choice_to_ir(tool_choice)
 
         # 4. Tool config (parallel_tool_calls)
         parallel_tool_calls = provider_request.get("parallel_tool_calls")
@@ -841,7 +839,7 @@ class ChatCompletionsConverter(BaseConverter):
                 if mapped_id is None:
                     provider_map[index_key] = tc_id
                 elif mapped_id != tc_id:
-                    report_drop(
+                    report_loss(
                         "Conflicting Chat Completions tool IDs for "
                         f"choice_index={choice_index}, "
                         f"tool_call_index={provider_index}; keeping {mapped_id!r}",
@@ -957,7 +955,7 @@ class ChatCompletionsConverter(BaseConverter):
         if tc_input and not effective_tc_id:
             # Nothing the client was told identifies this fragment; writing it
             # would ask the target to open a tool block with no identity.
-            report_drop(
+            report_loss(
                 "Dropping Chat Completions tool-call delta with unresolved "
                 f"identity (choice_index={choice_index}, "
                 f"tool_call_index={provider_index})",

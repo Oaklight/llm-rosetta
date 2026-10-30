@@ -261,6 +261,35 @@ class TestACallersOwnSinkWins:
         assert caller.leg == "caller", "the caller's cursor must not move"
         assert ctx.warnings == [], "the entry point must not install its own sink"
 
+    def test_a_tool_config_loss_also_reaches_the_caller(self):
+        """The site that was missed: an append straight onto the context.
+
+        A loss that writes to ``ctx.warnings`` itself bypasses the sink the
+        caller installed, so one request could deliver two losses to two
+        different lists.
+        """
+        from llm_rosetta.converters.base.context import ConversionContext
+        from llm_rosetta.converters.llm.chat_completions import (
+            ChatCompletionsConverter,
+        )
+
+        caller = WarningSink(leg="caller")
+        ctx = ConversionContext()
+        ir: Any = {
+            "model": "m",
+            "messages": [{"role": "user", "content": [{"type": "text", "text": "hi"}]}],
+            # A tool definition keeps the request-level repair from stripping
+            # the tool_config as orphaned before the writer sees it.
+            "tools": [{"type": "function", "name": "fn", "parameters": {}}],
+            "tool_config": {"max_calls": 3},
+        }
+
+        with recording_to(caller):
+            ChatCompletionsConverter().request_to_provider(ir, context=ctx)
+
+        assert [w.subject for w in caller] == ["max_tool_calls"]
+        assert ctx.warnings == []
+
 
 class TestTheEntryPointsNameTheirLeg:
     """The act knows its leg; it does not wait for the driver to say."""
