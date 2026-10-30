@@ -23,7 +23,7 @@ from ....types.ir import (
     ToolResultPart,
 )
 from ....types.ir.tools import ToolCallConfig
-from llm_rosetta.conversion_warnings import report_drop
+from llm_rosetta.conversion_warnings import report_loss
 from llm_rosetta.ir.tools.intrinsic import intrinsic_kind_of, is_intrinsic_part
 
 
@@ -40,7 +40,9 @@ IntrinsicLeg = Literal["history", "response"]
 _INTRINSIC_LEGS: tuple[str, ...] = ("history", "response")
 
 
-def _report_dropped_intrinsic(part: Any, kwargs: dict[str, Any]) -> None:
+def _report_dropped_intrinsic(
+    part: Any, kwargs: dict[str, Any], *, leg: IntrinsicLeg
+) -> None:
     """Report a response-leg intrinsic drop.
 
     The conversion's sink is preferred when the caller named one, then the
@@ -48,13 +50,29 @@ def _report_dropped_intrinsic(part: Any, kwargs: dict[str, Any]) -> None:
     its own — no context, no pipeline — gets the log line instead, so a drop
     stays visible either way.  See
     :mod:`llm_rosetta.conversion_warnings`.
+
+    The leg is named here rather than left to the sink's cursor: a caller that
+    installed its own sink keeps its own leg, so without this a response loss
+    would be reported as a request one.  ``history`` is the request leg replaying
+    a call the provider already ran; ``response`` is the turn just returned.
+
+    Args:
+        part: IR tool call or result part being dropped.
+        kwargs: The caller's keyword arguments; a ``warnings`` list or sink is
+            where the report goes when one is named.
+        leg: Which leg the part is written on.
     """
     kind = intrinsic_kind_of(part)
     message = (
         f"Server tool {'result' if part.get('type') == 'tool_result' else 'call'} "
         f"of kind {kind!r} has no form in this target; dropped from the response"
     )
-    report_drop(message, subject=kind, warnings=kwargs.get("warnings"))
+    report_loss(
+        message,
+        subject=kind,
+        leg="request" if leg == "history" else "response",
+        warnings=kwargs.get("warnings"),
+    )
 
 
 class BaseToolOps(ABC):
@@ -287,7 +305,7 @@ class BaseToolOps(ABC):
         Returns:
             ``{}`` — nothing is written.
         """
-        _report_dropped_intrinsic(ir_tool_call, kwargs)
+        _report_dropped_intrinsic(ir_tool_call, kwargs, leg=leg)
         return {}
 
     @classmethod
@@ -306,7 +324,7 @@ class BaseToolOps(ABC):
         Returns:
             ``{}`` — nothing is written.
         """
-        _report_dropped_intrinsic(ir_tool_result, kwargs)
+        _report_dropped_intrinsic(ir_tool_result, kwargs, leg=leg)
         return {}
 
     @classmethod

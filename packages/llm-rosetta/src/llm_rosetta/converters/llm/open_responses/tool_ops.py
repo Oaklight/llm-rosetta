@@ -29,7 +29,7 @@ from ....types.ir import (
 )
 from ....types.ir.tools import ToolCallConfig
 from ...base import BaseToolOps, IntrinsicLeg
-from llm_rosetta.conversion_warnings import report_drop
+from llm_rosetta.conversion_warnings import DOWNGRADED, report_loss
 from ...base.helpers.opaque import CARRIER_KEY
 from ...base.helpers.tool_group import (
     GENERATED_GROUP_MARKER,
@@ -180,17 +180,23 @@ def _flattened_child(
     prohibits hierarchical separators.
     """
     if not isinstance(child, dict):
-        report_drop(f"Skipping non-dict child at index {index} in group {group_name!r}")
+        report_loss(
+            f"Skipping non-dict child at index {index} in group {group_name!r}",
+            subject=group_name,
+        )
         return None
     if child.get("type", "function") == "namespace":
-        report_drop(
+        report_loss(
             f"Skipping nested namespace {child.get('name', '')!r} inside "
             f"{group_name!r} — only one level of nesting is supported",
             subject=str(child.get("name", "")),
         )
         return None
     if not _declared_child_name(child):
-        report_drop(f"Skipping unnamed child at index {index} in group {group_name!r}")
+        report_loss(
+            f"Skipping unnamed child at index {index} in group {group_name!r}",
+            subject=group_name,
+        )
         return None
     converted = OpenResponsesToolOps.p_tool_definition_to_ir(child)
     if converted is None:
@@ -696,6 +702,7 @@ def _custom_tool_call_to_ir(provider_tool_call: dict[str, Any]) -> ToolCallPart:
 
 def _collect_additional_tools(
     input_items: list[Any],
+    warnings: list[str] | None = None,
 ) -> tuple[list[dict[str, Any]], list[str]]:
     """Collect raw tool dicts from ``additional_tools`` input items.
 
@@ -703,9 +710,17 @@ def _collect_additional_tools(
     containers and name collisions are handled downstream by
     ``p_tool_definition_to_ir`` (namespace flattening) and
     :func:`~llm_rosetta.capabilities.qualify_tool_names` (collision resolution).
+
+    Args:
+        input_items: The raw Responses ``input`` value.
+        warnings: A list to collect the losses in, for a caller outside a
+            conversion; inside one they go to its sink.
+
+    Returns:
+        A ``(tools, warnings)`` pair.
     """
     tools: list[dict[str, Any]] = []
-    warnings: list[str] = []
+    collected: list[str] = []
 
     for item in input_items:
         if not isinstance(item, dict):
@@ -714,11 +729,17 @@ def _collect_additional_tools(
             continue
         for entry in item.get("tools") or []:
             if not isinstance(entry, dict):
-                warnings.append("Non-dict entry in additional_tools — skipped")
+                collected.append(
+                    report_loss(
+                        "Non-dict entry in additional_tools — skipped",
+                        subject="additional_tools",
+                        warnings=warnings,
+                    )
+                )
                 continue
             tools.append(entry)
 
-    return tools, warnings
+    return tools, collected
 
 
 def strip_additional_tools_items(input_items: list[Any]) -> list[Any]:
@@ -739,7 +760,7 @@ def strip_additional_tools_items(input_items: list[Any]) -> list[Any]:
 
 def harvest_additional_tools(
     input_items: Any,
-    warnings: list[str],
+    warnings: list[str] | None = None,
 ) -> tuple[list[dict[str, Any]], Any]:
     """Extract ``additional_tools`` definitions and drop the spent items.
 
@@ -749,7 +770,9 @@ def harvest_additional_tools(
 
     Args:
         input_items: The raw Responses ``input`` value (list or otherwise).
-        warnings: Conversion warning sink, extended in place.
+        warnings: A list to collect the losses in, for a caller outside a
+            conversion.  Inside one the report goes to the conversion's sink,
+            which is where a caller that installed its own expects it.
 
     Returns:
         A ``(tools, input_items)`` pair.
@@ -761,8 +784,8 @@ def harvest_additional_tools(
     if len(stripped) == len(input_items):
         return [], input_items
 
-    nested_tools, nested_warnings = _collect_additional_tools(input_items)
-    warnings.extend(nested_warnings)
+    nested_tools, nested_warnings = _collect_additional_tools(input_items, warnings)
+    return nested_tools, stripped
     return nested_tools, stripped
 
 
@@ -798,7 +821,7 @@ class OpenResponsesToolOps(BaseToolOps):
             kind = intrinsic_kind_of(ir_tool)
             native = _RESPONSES_INTRINSIC_TOOLS.get(kind)
             if native is None:
-                report_drop(
+                report_loss(
                     f"OpenAI Responses has no server tool for intrinsic kind "
                     f"{kind!r}; dropping",
                     subject=kind,
@@ -1007,7 +1030,7 @@ class OpenResponsesToolOps(BaseToolOps):
         if names:
             declared_types = tool_types or {}
             warnings = kwargs.get("warnings")
-            if warnings is not None and tool_types is not None:
+            if tool_types is not None:
                 # The upstream refuses a restriction naming a tool it was not
                 # sent ("Tool choice 'x' not found in 'tools' parameter"), so
                 # the client is told here as well as by the naming pass — a
@@ -1015,11 +1038,14 @@ class OpenResponsesToolOps(BaseToolOps):
                 # pass to hear it from.
                 undeclared = [n for n in names if n not in declared_types]
                 if undeclared:
-                    warnings.append(
+                    report_loss(
                         "tool_choice.allowed_tools names "
                         f"{', '.join(repr(n) for n in undeclared)}, which the "
                         "request does not declare; the provider rejects a "
-                        "restriction naming a tool it was not sent"
+                        "restriction naming a tool it was not sent",
+                        code=DOWNGRADED,
+                        subject="allowed_tools",
+                        warnings=warnings,
                     )
             return {
                 "type": "allowed_tools",
@@ -1127,12 +1153,14 @@ class OpenResponsesToolOps(BaseToolOps):
                     tool_name = func.get("name", "")
                 return cast(ToolChoice, {"mode": "tool", "tool_name": tool_name})
             if provider_tool_choice.get("type") == "namespace":
-                if warnings is not None:
-                    warnings.append(
-                        "Dropped a namespace tool_choice the IR cannot "
-                        "represent; fell back to 'auto', so the call is no "
-                        "longer forced."
-                    )
+                report_loss(
+                    "Dropped a namespace tool_choice the IR cannot "
+                    "represent; fell back to 'auto', so the call is no "
+                    "longer forced.",
+                    code=DOWNGRADED,
+                    subject="tool_choice",
+                    warnings=warnings,
+                )
                 return cast(ToolChoice, {"mode": "auto", "tool_name": ""})
 
         return cast(ToolChoice, {"mode": "auto", "tool_name": ""})
@@ -1433,13 +1461,14 @@ class OpenResponsesToolOps(BaseToolOps):
             return {}
         if leg != "history":
             _warn_dropped_intrinsic_result(ir_tool_result, kwargs)
-            warnings = kwargs.get("warnings")
-            if isinstance(warnings, list):
-                warnings.append(
-                    f"OpenAI Responses has no server result item for kind "
-                    f"{kind!r}; dropped the result of tool_call_id "
-                    f"{ir_tool_result.get('tool_call_id')!r}"
-                )
+            report_loss(
+                f"OpenAI Responses has no server result item for kind "
+                f"{kind!r}; dropped the result of tool_call_id "
+                f"{ir_tool_result.get('tool_call_id')!r}",
+                subject=kind,
+                leg="response",
+                warnings=kwargs.get("warnings"),
+            )
             return {}
         degraded = kwargs.get("degraded_intrinsic_calls")
         call_id = sanitize_tool_call_id(ir_tool_result.get("tool_call_id", ""))

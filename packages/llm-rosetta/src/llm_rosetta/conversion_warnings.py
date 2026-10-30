@@ -388,11 +388,19 @@ def report_loss(
     the name says "loss" because all three are losses.  :func:`report_drop`
     remains as an alias for the sites that have not migrated yet.
 
-    Prefers the sink the caller names, then the conversion in progress, and
-    only when neither exists writes the log line itself — so a library caller
-    that reached a helper with no pipeline behind it still learns what was
-    lost, and a caller inside a pipeline gets it in the list instead of in
-    the log twice.
+    Prefers the sink the caller names, then the conversion in progress, then
+    a plain list, and only when none exists writes the log line itself — so a
+    library caller that reached a helper with no pipeline behind it still
+    learns what was lost, and a caller inside a pipeline gets it in the list
+    instead of in the log twice.
+
+    A **plain list** ranks below the conversion in progress on purpose.  The
+    list channel came first: a helper built a ``list[str]``, appended to it,
+    and its caller extended the conversion's sink with the result.  That works
+    until someone else owns the sink — a caller that installed its own — and
+    then the loss lands in a list the conversion throws away while the caller
+    hears nothing.  A conversion in progress already knows where its losses
+    go; the list is only for a caller outside one.
 
     Args:
         message: What was lost, in words the caller can act on.
@@ -400,24 +408,24 @@ def report_loss(
         subject: The item the loss is about, when it is known.
         leg: The leg the loss belongs to when the call site knows better than
             the sink's cursor.  ``None`` takes the sink's current leg.
-        warnings: An explicit sink or plain list to append to.  A plain list
-            is appended to without logging — it is the caller's, not this
-            conversion's.
+        warnings: An explicit sink or plain list to append to.  A sink wins
+            over everything; a plain list is appended to without logging, and
+            only when no conversion is in progress.
 
     Returns:
         The warning as recorded (or as logged, when there was no sink).
     """
     if isinstance(warnings, WarningSink):
         return warnings.report_loss(message, code=code, subject=subject, leg=leg)
+    sink = _CURRENT.get()
+    if sink is not None:
+        return sink.report_loss(message, code=code, subject=subject, leg=leg)
     if isinstance(warnings, list):
         warning = ConversionWarning(
             str(message), code=code, leg=leg or "", subject=subject
         )
         warnings.append(warning)
         return warning
-    sink = _CURRENT.get()
-    if sink is not None:
-        return sink.report_loss(message, code=code, subject=subject, leg=leg)
     warning = ConversionWarning(str(message), code=code, leg=leg or "", subject=subject)
     log_warning(warning)
     return warning
