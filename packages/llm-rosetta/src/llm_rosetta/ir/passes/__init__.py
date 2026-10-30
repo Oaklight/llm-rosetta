@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from .description_limit import relocate_oversized_tool_descriptions  # noqa: F401
 from .enforcement import (  # noqa: F401
+    CustomToolRestorer,
     backfill_reasoning_replay,
     drop_nameless_tools,
     enforce_custom_tools,
@@ -36,6 +37,7 @@ from .tool_names import (  # noqa: F401
 
 __all__ = [
     "MAX_TOOL_NAME_LEN",
+    "CustomToolRestorer",
     "ToolNameMap",
     "apply_upstream_tool_names",
     "backfill_reasoning_replay",

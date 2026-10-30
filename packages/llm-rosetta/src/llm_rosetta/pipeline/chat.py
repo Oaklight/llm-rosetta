@@ -43,11 +43,10 @@ from llm_rosetta.capabilities import (
     apply_upstream_tool_names,
     build_tool_name_map,
     get_custom_tool_names,
-    restore_client_tool_name_events,
     restore_client_tool_names,
+    CustomToolRestorer,
     restore_custom_tool_calls,
     strip_reasoning_for_non_reasoning,
-    unwrap_custom_tool_input,
 )
 from llm_rosetta.converters.base.context import ConversionContext, ImageFetcher
 from llm_rosetta.conversion_warnings import WarningSink, recording_to
@@ -1364,7 +1363,7 @@ class StreamProcessor:
         to_ctx: StreamContext for IR→source conversion.
         pre_ir_transforms: Shim pre_ir_transforms to apply before conversion.
         custom_tool_names: Names of tools downgraded from custom to
-            function by :func:.
+            function by :func:`~llm_rosetta.capabilities.enforce_custom_tools`.
         name_map: Bidirectional map for tools renamed on the request leg
             (namespace flattening, collision qualification).
         on_ir_event: Optional callback for each IR event.
@@ -1391,9 +1390,8 @@ class StreamProcessor:
         self._response_body_transforms = response_body_transforms
         self._pre_ir_transforms = pre_ir_transforms
         self._post_ir_transforms = post_ir_transforms
-        self._custom_tool_names = custom_tool_names
+        self._custom_tools = CustomToolRestorer(custom_tool_names, context=from_ctx)
         self._name_map = name_map or ToolNameMap()
-        self._custom_arg_buffers: dict[str, str] = {}
         self._on_ir_event = on_ir_event
         self._usage: dict[str, int] | None = None
 
@@ -1497,14 +1495,10 @@ class StreamProcessor:
             ]
 
         # Restore custom tool types for downgraded tools
-        if self._custom_tool_names:
-            ir_events = self._restore_custom_tool_events(ir_events)
+        ir_events = self._custom_tools.restore_events(ir_events)
 
         # Undo any request-leg tool renaming before events reach the client
-        restore_client_tool_name_events(
-            ir_events,
-            name_map=self._name_map,
-        )
+        restore_client_tool_names(ir_events, name_map=self._name_map)
 
         # IR → Source events
         result: list[dict[str, Any]] = []
@@ -1553,57 +1547,3 @@ class StreamProcessor:
         for chunk in chunks:
             yield from self.process_chunk(chunk)
         yield from self.process_chunk(None)
-
-    def _restore_custom_tool_events(
-        self, ir_events: list[dict[str, Any]]
-    ) -> list[dict[str, Any]]:
-        """Re-tag streamed tool calls that were downgraded from custom.
-
-        - tool_call_start: set tool_type to "custom" and
-          fix the from_ctx registration.
-        - tool_call_delta: buffer JSON argument fragments for
-          custom tool calls (they contain JSON wrapping that needs to
-          be unwrapped before the client sees them).
-        - finish: flush buffered arguments as a single unwrapped
-          delta before emitting the finish event.
-        """
-        staged: list[dict[str, Any]] = []
-        for event in ir_events:
-            if not isinstance(event, dict):
-                staged.append(event)
-                continue
-            etype = event.get("type")
-
-            if (
-                etype == "tool_call_start"
-                and event.get("tool_name") in self._custom_tool_names
-            ):
-                event["tool_type"] = "custom"
-                call_id = event.get("tool_call_id", "")
-                if call_id:
-                    self._custom_arg_buffers[call_id] = ""
-                    self._from_ctx.set_tool_call_type(call_id, "custom")
-                staged.append(event)
-                continue
-
-            if (
-                etype == "tool_call_delta"
-                and event.get("tool_call_id") in self._custom_arg_buffers
-            ):
-                call_id = event["tool_call_id"]
-                self._custom_arg_buffers[call_id] += event.get("arguments_delta") or ""
-                continue
-
-            if etype == "finish" and self._custom_arg_buffers:
-                for call_id, raw in list(self._custom_arg_buffers.items()):
-                    staged.append(
-                        {
-                            "type": "tool_call_delta",
-                            "tool_call_id": call_id,
-                            "arguments_delta": unwrap_custom_tool_input(raw),
-                        }
-                    )
-                self._custom_arg_buffers.clear()
-
-            staged.append(event)
-        return staged

@@ -12,11 +12,13 @@ from typing import Any
 import pytest
 
 from llm_rosetta.capabilities import (
+    CustomToolRestorer,
     enforce_custom_tools,
     get_custom_tool_names,
     restore_custom_tool_calls,
     unwrap_custom_tool_input,
 )
+from llm_rosetta.converters.base.context import StreamContext
 from llm_rosetta.pipeline import ConversionPipeline
 from llm_rosetta.shims.provider_shim import (
     ProviderShim,
@@ -318,6 +320,116 @@ class TestUnwrapCustomToolInput:
     def test_passthrough_non_input_key(self):
         raw = json.dumps({"code": "print(1)"})
         assert unwrap_custom_tool_input(raw) == raw
+
+
+class TestRestoreInMessagesList:
+    """A body may carry calls in its ``messages`` list, not only in choices.
+
+    No response reader builds that shape today, but the walk is public and a
+    caller can hand the pass a body it built itself; this pins the branch so
+    deleting it is a visible choice rather than a silent narrowing.
+    """
+
+    def test_marks_a_call_under_messages(self):
+        ir_response = {
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "tool_call",
+                            "tool_name": "apply_patch",
+                            "tool_type": "function",
+                        }
+                    ],
+                }
+            ]
+        }
+        restore_custom_tool_calls(
+            ir_response, custom_tool_names=frozenset({"apply_patch"})
+        )
+        assert ir_response["messages"][0]["content"][0]["tool_type"] == "custom"
+
+
+class TestCustomToolRestorerEvents:
+    """The stream leg buffers each downgraded call's wrapper and unwraps it."""
+
+    NAMES = frozenset({"apply_patch"})
+
+    @staticmethod
+    def _start(call_id: str = "call_1", name: str = "apply_patch") -> dict[str, Any]:
+        return {
+            "type": "tool_call_start",
+            "tool_call_id": call_id,
+            "tool_name": name,
+            "tool_type": "function",
+        }
+
+    @staticmethod
+    def _delta(fragment: str, call_id: str = "call_1") -> dict[str, Any]:
+        return {
+            "type": "tool_call_delta",
+            "tool_call_id": call_id,
+            "arguments_delta": fragment,
+        }
+
+    def test_start_is_marked_custom_and_registered(self):
+        context = StreamContext()
+        restorer = CustomToolRestorer(self.NAMES, context=context)
+        start = self._start()
+
+        out = restorer.restore_events([start])
+
+        assert out == [start]
+        assert out[0]["tool_type"] == "custom"
+        assert context.get_tool_type("call_1") == "custom"
+
+    def test_unmarked_start_is_left_alone(self):
+        restorer = CustomToolRestorer(self.NAMES)
+        start = self._start(name="get_weather")
+
+        out = restorer.restore_events([start])
+
+        assert out[0]["tool_type"] == "function"
+
+    def test_deltas_are_buffered_until_the_finish(self):
+        restorer = CustomToolRestorer(self.NAMES)
+        raw = json.dumps({"input": PATCH_TEXT})
+        first, second = raw[:10], raw[10:]
+
+        out = restorer.restore_events([self._start()])
+        # A delta is a fragment of the wrapper, not something the client may
+        # see: nothing is emitted for either piece.
+        assert restorer.restore_events([self._delta(first)]) == []
+        assert restorer.restore_events([self._delta(second)]) == []
+
+        finish = {"type": "finish", "finish_reason": {"reason": "tool_calls"}}
+        out = restorer.restore_events([finish])
+
+        assert out[-1] is finish
+        assert out[:-1] == [
+            {
+                "type": "tool_call_delta",
+                "tool_call_id": "call_1",
+                "arguments_delta": PATCH_TEXT,
+            }
+        ]
+
+    def test_delta_of_an_unmarked_call_passes_through(self):
+        restorer = CustomToolRestorer(self.NAMES)
+
+        delta = self._delta("{}", call_id="call_other")
+        out = restorer.restore_events([delta])
+
+        assert out == [delta]
+
+    def test_no_names_is_a_no_op(self):
+        restorer = CustomToolRestorer(frozenset())
+        start = self._start()
+
+        out = restorer.restore_events([start])
+
+        assert out[0]["tool_type"] == "function"
 
 
 # ---------------------------------------------------------------------------

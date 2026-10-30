@@ -17,8 +17,9 @@ from ..tools.intrinsic import (
     make_intrinsic_tool_definition as _make_intrinsic_tool_definition,
 )
 
-from llm_rosetta.converters.base.context import ConversionContext
+from llm_rosetta.converters.base.context import ConversionContext, StreamContext
 from ..primitives.image_limit import strip_images_for_non_vision
+from ..primitives.parts import iter_tool_call_parts
 from llm_rosetta.conversion_warnings import WarningSink, report_drop
 from llm_rosetta.shims.provider_shim import (
     ProviderShim,
@@ -578,49 +579,129 @@ def get_custom_tool_names(ir_request: dict[str, Any]) -> frozenset[str]:
     return frozenset(names)
 
 
+class CustomToolRestorer:
+    """Put back the custom type on calls the request leg downgraded.
+
+    :func:`enforce_custom_tools` gives a custom tool a function shape — a
+    synthetic ``{"input": string}`` schema — so the target answers with an
+    ordinary function call carrying JSON-wrapped text.  The response leg has
+    to re-tag that call and recover the raw text.
+
+    The two legs are shaped differently: a body carries each call whole, a
+    stream carries it as JSON fragments that must not reach the client
+    half-parsed.  One object owns both so the per-call mark is written once;
+    the stream leg is why it holds state rather than being a function.
+    """
+
+    def __init__(
+        self,
+        custom_tool_names: frozenset[str],
+        *,
+        context: StreamContext | None = None,
+    ) -> None:
+        """Build a restorer for the names the request leg downgraded.
+
+        Args:
+            custom_tool_names: The names :func:`enforce_custom_tools` turned
+                into functions.  Empty means nothing was downgraded.
+            context: The stream context whose tool-call registration follows
+                the type; ``None`` on the body leg, which has no context.
+        """
+        self._names = custom_tool_names
+        self._context = context
+        self._buffers: dict[str, str] = {}
+
+    def _marks(self, name: Any) -> bool:
+        """Whether *name* is one the request leg downgraded."""
+        return isinstance(name, str) and name in self._names
+
+    def restore_calls(self, ir_response: dict[str, Any]) -> None:
+        """Re-tag every downgraded call in a response body.
+
+        Mutates *ir_response* in place.  Extracting the raw text from the
+        ``{"input": ...}`` wrapper is the source converter's job when it
+        serialises a custom call, so the mark is the whole of the body leg.
+
+        Args:
+            ir_response: An IR response body.
+        """
+        if not self._names:
+            return
+        for part in iter_tool_call_parts(ir_response):
+            if self._marks(part.get("tool_name")):
+                part["tool_type"] = "custom"
+
+    def restore_events(self, events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Re-tag downgraded calls in one chunk of stream events.
+
+        A start event is re-tagged and registered with the context, so the
+        source converter reads one type from both.  A delta of a marked call
+        is buffered instead of emitted — it is a fragment of the JSON wrapper
+        — and the finish flushes every buffer as a single unwrapped delta
+        before the finish event itself.
+
+        Args:
+            events: The IR events one upstream chunk produced.
+
+        Returns:
+            The events to emit, in their original order, with each buffered
+            argument delta replaced by its unwrapped form at the finish.
+        """
+        if not self._names:
+            return events
+
+        staged: list[dict[str, Any]] = []
+        for event in events:
+            if not isinstance(event, dict):
+                staged.append(event)
+                continue
+            etype = event.get("type")
+
+            if etype == "tool_call_start" and self._marks(event.get("tool_name")):
+                event["tool_type"] = "custom"
+                call_id = event.get("tool_call_id", "")
+                if call_id:
+                    self._buffers[call_id] = ""
+                    if self._context is not None:
+                        self._context.set_tool_call_type(call_id, "custom")
+                staged.append(event)
+                continue
+
+            if (
+                etype == "tool_call_delta"
+                and event.get("tool_call_id") in self._buffers
+            ):
+                self._buffers[event["tool_call_id"]] += (
+                    event.get("arguments_delta") or ""
+                )
+                continue
+
+            if etype == "finish" and self._buffers:
+                for call_id, raw in list(self._buffers.items()):
+                    staged.append(
+                        {
+                            "type": "tool_call_delta",
+                            "tool_call_id": call_id,
+                            "arguments_delta": unwrap_custom_tool_input(raw),
+                        }
+                    )
+                self._buffers.clear()
+
+            staged.append(event)
+        return staged
+
+
 def restore_custom_tool_calls(
     ir_response: dict[str, Any],
     *,
     custom_tool_names: frozenset[str],
 ) -> None:
-    """Re-tag downgraded tool calls as custom in the IR response.
+    """Re-tag downgraded tool calls as custom in a response body.
 
-    Mutates *ir_response* in place.  For each tool call whose
-    ``tool_name`` is in *custom_tool_names*, sets
-    ``tool_type = "custom"``.  Called on the non-streaming response
-    path after Target → IR conversion.
-
-    Input unwrapping (extracting raw text from the ``{"input": ...}``
-    JSON wrapper) is handled downstream by the source converter's
-    IR → provider serialisation for custom tool calls.
+    The one-shot body spelling of :class:`CustomToolRestorer`, for callers
+    that never see a stream.  Mutates *ir_response* in place.
     """
-    if not custom_tool_names:
-        return
-
-    for choice in ir_response.get("choices") or []:
-        if not isinstance(choice, dict):
-            continue
-        msg = choice.get("message")
-        if not isinstance(msg, dict):
-            continue
-        for part in msg.get("content") or []:
-            if (
-                isinstance(part, dict)
-                and part.get("type") == "tool_call"
-                and part.get("tool_name") in custom_tool_names
-            ):
-                part["tool_type"] = "custom"
-
-    for msg in ir_response.get("messages") or []:
-        if not isinstance(msg, dict):
-            continue
-        for part in msg.get("content") or []:
-            if (
-                isinstance(part, dict)
-                and part.get("type") == "tool_call"
-                and part.get("tool_name") in custom_tool_names
-            ):
-                part["tool_type"] = "custom"
+    CustomToolRestorer(custom_tool_names).restore_calls(ir_response)
 
 
 def unwrap_custom_tool_input(raw: str) -> str:
