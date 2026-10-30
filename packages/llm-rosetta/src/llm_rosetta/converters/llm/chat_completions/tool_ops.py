@@ -20,7 +20,7 @@ from ....types.ir import (
 )
 from ....types.ir.tools import ToolCallConfig
 from ...base import BaseToolOps
-from llm_rosetta.conversion_warnings import report_drop
+from llm_rosetta.conversion_warnings import DOWNGRADED, report_loss
 from ...base.helpers.opaque import CARRIER_KEY
 from ...base.tools import (
     intrinsic_kind_of,
@@ -133,7 +133,7 @@ class ChatCompletionsToolOps(BaseToolOps):
         # word is the silent-loss class the warning sink exists to end.
         if tool_type == "intrinsic":
             kind = intrinsic_kind_of(ir_tool)
-            report_drop(
+            report_loss(
                 f"Chat Completions has no server tool for intrinsic kind "
                 f"{kind!r}; dropping",
                 subject=kind,
@@ -278,14 +278,16 @@ class ChatCompletionsToolOps(BaseToolOps):
             # choice is widened to its bare mode: worth a warning, since a
             # *restriction* going away is not the same as an optional field
             # being dropped.
-            if warnings is not None:
-                warnings.append(
-                    "OpenAI Chat has no allowed_tools tool_choice (Chat "
-                    "upstreams reject the variant), so the choice was widened "
-                    f"past the restriction to {len(ir_tool_choice['allowed_tools'])} "
-                    "tool(s): the model may now call any declared tool, where "
-                    "the source allowed only the listed ones"
-                )
+            report_loss(
+                "OpenAI Chat has no allowed_tools tool_choice (Chat "
+                "upstreams reject the variant), so the choice was widened "
+                f"past the restriction to {len(ir_tool_choice['allowed_tools'])} "
+                "tool(s): the model may now call any declared tool, where "
+                "the source allowed only the listed ones",
+                code=DOWNGRADED,
+                subject="allowed_tools",
+                warnings=warnings,
+            )
 
         if mode == "none":
             return "none"

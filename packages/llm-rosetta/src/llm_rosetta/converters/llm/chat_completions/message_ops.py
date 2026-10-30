@@ -34,6 +34,7 @@ from ....types.ir import (
 )
 from ...base import BaseMessageOps
 from ...base.helpers.citations import report_dropped_citation
+from llm_rosetta.conversion_warnings import DOWNGRADED, report_loss
 from ...base.helpers.opaque import (
     set_opaque_origin,
 )
@@ -196,9 +197,12 @@ class ChatCompletionsMessageOps(BaseMessageOps):
             result.extend(bucket)
 
         if result != messages:
-            warnings.append(
+            report_loss(
                 "Reordered tool messages to follow assistant tool_calls "
-                "(workaround for Codex CLI item ordering)"
+                "(workaround for Codex CLI item ordering)",
+                code=DOWNGRADED,
+                subject="tool_messages",
+                warnings=warnings,
             )
         return result
 
@@ -288,17 +292,23 @@ class ChatCompletionsMessageOps(BaseMessageOps):
                     )
                 )
             elif is_file_part(part):
-                warnings.append(
+                report_loss(
                     "File content not supported in OpenAI Chat Completions, ignored. "
-                    "Use OpenAI Responses API converter for file support."
+                    "Use OpenAI Responses API converter for file support.",
+                    subject="file",
+                    warnings=warnings,
                 )
             elif is_reasoning_part(part):
-                warnings.append(
-                    "Reasoning content not supported in OpenAI Chat Completions, ignored"
+                report_loss(
+                    "Reasoning content not supported in OpenAI Chat Completions, ignored",
+                    subject="reasoning",
+                    warnings=warnings,
                 )
             else:
-                warnings.append(
-                    f"Unsupported content part type in user message: {part.get('type')}"
+                report_loss(
+                    f"Unsupported content part type in user message: {part.get('type')}",
+                    subject=str(part.get("type", "")),
+                    warnings=warnings,
                 )
 
         result_messages: list[dict[str, Any]] = []
@@ -360,8 +370,10 @@ class ChatCompletionsMessageOps(BaseMessageOps):
                 else:
                     annotations.append(annotation)
             else:
-                warnings.append(
-                    f"Unsupported content part type in assistant message: {part.get('type')}"
+                report_loss(
+                    f"Unsupported content part type in assistant message: {part.get('type')}",
+                    subject=str(part.get("type", "")),
+                    warnings=warnings,
                 )
 
         openai_message: dict[str, Any] = {"role": "assistant"}
@@ -442,18 +454,29 @@ class ChatCompletionsMessageOps(BaseMessageOps):
         extension_type = item.get("type")
 
         if extension_type == "system_event":
-            warnings.append(
-                f"System event ignored: {item.get('event_type', 'unknown')}"
+            report_loss(
+                f"System event ignored: {item.get('event_type', 'unknown')}",
+                subject=str(item.get("event_type", "unknown")),
+                warnings=warnings,
             )
         elif extension_type == "tool_chain_node":
-            warnings.append("Tool chain converted to sequential calls")
+            report_loss(
+                "Tool chain converted to sequential calls",
+                code=DOWNGRADED,
+                subject="tool_chain_node",
+                warnings=warnings,
+            )
             tool_call = item.get("tool_call")
             if tool_call:
                 call = self.tool_ops.ir_tool_call_to_p(tool_call, leg="history")
                 if call:
                     messages.append({"role": "assistant", "tool_calls": [call]})
         elif extension_type in ("batch_marker", "session_control"):
-            warnings.append(f"Extension item ignored: {extension_type}")
+            report_loss(
+                f"Extension item ignored: {extension_type}",
+                subject=str(extension_type),
+                warnings=warnings,
+            )
 
         return warnings
 
