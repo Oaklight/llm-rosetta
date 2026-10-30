@@ -395,7 +395,7 @@ class BaseConverter(ABC):
         """
         ...
 
-    # ==================== Preserve-mode hooks (override in subclass) ====================
+    # ==================== Completed-turn semantics (one home) ====================
 
     def _finalize_completed_turn(self, ir_response: IRResponse) -> None:
         """Apply the tool-call meaning to every choice's terminal reason.
@@ -424,7 +424,11 @@ class BaseConverter(ABC):
         The stream context remembers every client call the response opened, so
         a finish that arrives in a chunk of its own still knows the turn is a
         tool turn.  A call with no choice attribution matches any finish;
-        Chat's per-choice calls only match their own choice.
+        Chat's per-choice calls only match their own choice.  An unattributed
+        call is only unambiguous on a single-choice stream, so a multi-choice
+        reader must attribute every call.  Without a context the rule sees
+        only this chunk's events, so a call opened in an earlier chunk cannot
+        upgrade a finish.
 
         Args:
             events: The events this chunk produced.
@@ -448,12 +452,18 @@ class BaseConverter(ABC):
                     opened.add(event.get("choice_index"))
             elif event_type == "finish":
                 reason = (event.get("finish_reason") or {}).get("reason")
-                if reason != "stop":
+                if reason is None:
                     continue
                 choice = event.get("choice_index")
-                if None in opened or (choice is None and opened) or choice in opened:
-                    event["finish_reason"]["reason"] = "tool_calls"
+                matched = bool(
+                    None in opened or (choice is None and opened) or choice in opened
+                )
+                event["finish_reason"]["reason"] = reason_for_completed_turn(
+                    reason, matched
+                )
         return events
+
+    # ==================== Preserve-mode hooks (override in subclass) ====================
 
     def _capture_preserve_metadata(
         self,
