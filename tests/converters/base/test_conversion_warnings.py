@@ -451,6 +451,54 @@ class TestTheSinkBeatsALegacyList:
         assert [w.subject for w in sink] == ["part"]
         assert legacy == [], "the list the caller handed in stays empty"
 
+    def test_google_interactions_losses_reach_the_caller_with_their_leg(self):
+        """Both directions: the definition on the way out, the mode on the way in."""
+        from llm_rosetta.converters.llm.google_interactions import (
+            GoogleInteractionsConverter,
+        )
+
+        converter = GoogleInteractionsConverter()
+
+        outgoing = self._caller()
+        ir: Any = {
+            "model": "m",
+            "messages": [{"role": "user", "content": [{"type": "text", "text": "hi"}]}],
+            "tools": [
+                {
+                    "type": "intrinsic",
+                    "name": "mystery",
+                    "intrinsic_kind": "mystery_kind",
+                }
+            ],
+        }
+        with recording_to(outgoing):
+            converter.request_to_provider(ir)
+
+        incoming = self._caller()
+        provider_request = {
+            "model": "m",
+            "input": "hi",
+            "generation_config": {
+                "tool_choice": {
+                    "allowed_tools": {
+                        "mode": "whenever",
+                        "tools": [{"type": "function", "name": "x"}],
+                    }
+                }
+            },
+        }
+        with recording_to(incoming):
+            converter.request_from_provider(provider_request)
+
+        assert [(w.code, w.subject, w.leg) for w in outgoing] == [
+            ("dropped", "mystery_kind", "request")
+        ]
+        # Reading a provider request is the request leg — the leg is the
+        # payload being converted, not the direction the data flows.
+        assert [(w.code, w.subject, w.leg) for w in incoming] == [
+            ("downgraded", "tool_choice.allowed_tools", "request")
+        ]
+
     def test_an_explicit_sink_still_wins(self):
         """A sink is the conversion's own answer to where losses go."""
         conversion = WarningSink(leg="request")

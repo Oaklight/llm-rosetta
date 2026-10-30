@@ -16,7 +16,7 @@ from ....types.ir import (
 )
 from ....types.ir.parts import ContentPart
 from ...base import BaseContentOps
-from llm_rosetta.conversion_warnings import report_drop
+from llm_rosetta.conversion_warnings import report_loss
 from ...base.helpers.citations import (
     CITATION_TYPE_URL,
     citation_end_index,
@@ -159,33 +159,37 @@ class GoogleInteractionsContentOps(BaseContentOps):
 
     @staticmethod
     def ir_file_to_p(ir_file: Any, **kwargs: Any) -> Any:
-        report_drop(
+        report_loss(
             "File content not yet supported by Interactions converter",
             subject="file",
+            leg=kwargs.get("leg"),
         )
         return {}
 
     @staticmethod
     def p_file_to_ir(provider_file: Any, **kwargs: Any) -> Any:
-        report_drop(
+        report_loss(
             "File content not yet supported by Interactions converter",
             subject="file",
+            leg=kwargs.get("leg"),
         )
         return {"type": "file"}
 
     @staticmethod
     def ir_audio_to_p(ir_audio: Any, **kwargs: Any) -> Any:
-        report_drop(
+        report_loss(
             "Audio content not yet supported by Interactions converter",
             subject="audio",
+            leg=kwargs.get("leg"),
         )
         return {}
 
     @staticmethod
     def p_audio_to_ir(provider_audio: Any, **kwargs: Any) -> Any:
-        report_drop(
+        report_loss(
             "Audio content not yet supported by Interactions converter",
             subject="audio",
+            leg=kwargs.get("leg"),
         )
         return {"type": "audio"}
 
@@ -212,9 +216,10 @@ class GoogleInteractionsContentOps(BaseContentOps):
 
     @staticmethod
     def p_refusal_to_ir(provider_refusal: Any, **kwargs: Any) -> Any:
-        report_drop(
+        report_loss(
             "Refusal content not yet supported by Interactions converter",
             subject="refusal",
+            leg=kwargs.get("leg"),
         )
         return {"type": "refusal", "refusal": ""}
 
