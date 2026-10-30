@@ -192,6 +192,16 @@ class TestStreamResponseFromProvider:
         assert len(finish_events) == 1
         assert finish_events[0]["finish_reason"]["reason"] == "stop"
 
+    def test_finish_keeps_the_matched_sequence(self):
+        """The sequence itself rides the same delta as ``stop_reason``."""
+        event = {
+            "type": "message_delta",
+            "delta": {"stop_reason": "stop_sequence", "stop_sequence": "END"},
+        }
+        events = cast(list[Any], self.converter.stream_response_from_provider(event))
+        finish_events = [e for e in events if e["type"] == "finish"]
+        assert finish_events[0]["finish_reason"]["stop_sequence"] == "END"
+
     # --- Usage event ---
 
     def test_message_start_usage(self):
@@ -521,6 +531,42 @@ class TestStreamResponseToProvider:
         result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         assert result["type"] == "message_delta"
         assert result["delta"]["stop_reason"] == "end_turn"
+
+    def test_finish_event_carries_the_stop_sequence(self):
+        """FinishEvent with a matched sequence → the delta says which one."""
+        event = cast(
+            FinishEvent,
+            {
+                "type": "finish",
+                "finish_reason": {"reason": "stop", "stop_sequence": "END"},
+            },
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
+        assert result["delta"]["stop_sequence"] == "END"
+
+    def test_a_finish_with_usage_keeps_the_stop_sequence(self):
+        """The immediate-emit branch is a second copy of the same delta.
+
+        A real Anthropic end-of-stream carries usage on the finishing chunk,
+        so the delta is built here rather than buffered for the later flush;
+        both copies must carry the sequence.
+        """
+        ctx = StreamContext()
+        ctx.buffer_usage({"prompt_tokens": 3, "completion_tokens": 1})
+        event = cast(
+            FinishEvent,
+            {
+                "type": "finish",
+                "finish_reason": {"reason": "stop", "stop_sequence": "END"},
+            },
+        )
+        result = cast(
+            list[dict[str, Any]],
+            self.converter.stream_response_to_provider(event, ctx),
+        )
+        deltas = [c for c in result if c["type"] == "message_delta"]
+        assert len(deltas) == 1
+        assert deltas[0]["delta"]["stop_sequence"] == "END"
 
     def test_finish_event_length(self):
         """FinishEvent with 'length' → message_delta with 'max_tokens'."""

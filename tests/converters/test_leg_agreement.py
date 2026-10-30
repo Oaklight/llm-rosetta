@@ -696,15 +696,12 @@ def test_the_known_interactions_shared_loss() -> None:
     assert body.reason == "content_filter"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "the Messages stream writer drops finish_reason.stop_sequence; the body "
-        "keeps it (#1245)"
-    ),
-)
 def test_a_messages_stop_sequence_survives_both_legs() -> None:
-    """Pin the value gap a path ledger cannot see."""
+    """A stop sequence is a value, not a path, so both legs must carry it.
+
+    The emitted-field ledger sees ``stop_sequence`` on both legs either way;
+    only reading the value back catches a stream that says ``null``.
+    """
     turn = Turn(text="hi", finish="stop", stop_sequence="END")
 
     assert _stop_sequence(MessagesConverter(), turn) == ("END", "END")
