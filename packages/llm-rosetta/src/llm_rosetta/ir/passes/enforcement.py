@@ -610,6 +610,10 @@ class CustomToolRestorer:
         self._names = custom_tool_names
         self._context = context
         self._buffers: dict[str, str] = {}
+        #: The choice each buffered call opened on.  A finish belongs to one
+        #: choice, and flushing another choice's call there would hand the
+        #: client a half-written wrapper.
+        self._choices: dict[str, Any] = {}
 
     def _marks(self, name: Any) -> bool:
         """Whether *name* is one the request leg downgraded."""
@@ -637,8 +641,20 @@ class CustomToolRestorer:
         A start event is re-tagged and registered with the context, so the
         source converter reads one type from both.  A delta of a marked call
         is buffered instead of emitted — it is a fragment of the JSON wrapper
-        — and the finish flushes every buffer as a single unwrapped delta
-        before the finish event itself.
+        — and the finish flushes the buffers it owns as a single unwrapped
+        delta before the finish event itself.
+
+        "The buffers it owns" matters on a multi-choice stream: a finish
+        carries the choice it terminates, so only that choice's calls are
+        flushed.  A call or a finish with no attribution is ambiguous, and
+        then everything is flushed, which is what a single-choice stream
+        wants anyway.
+
+        A choice whose finish never arrives — a truncated upstream — keeps
+        its buffers to the end of the stream and they are never written.
+        Dropping wrapper fragments is the intended outcome, not an oversight:
+        nothing here knows that call finished.  There is deliberately no
+        end-of-stream flush; one would belong where the stream knows it ended.
 
         Args:
             events: The IR events one upstream chunk produced.
@@ -662,6 +678,7 @@ class CustomToolRestorer:
                 call_id = event.get("tool_call_id", "")
                 if call_id:
                     self._buffers[call_id] = ""
+                    self._choices[call_id] = event.get("choice_index")
                     if self._context is not None:
                         self._context.set_tool_call_type(call_id, "custom")
                 staged.append(event)
@@ -677,7 +694,13 @@ class CustomToolRestorer:
                 continue
 
             if etype == "finish" and self._buffers:
+                choice = event.get("choice_index")
                 for call_id, raw in list(self._buffers.items()):
+                    if choice is not None and self._choices.get(call_id) not in (
+                        None,
+                        choice,
+                    ):
+                        continue
                     staged.append(
                         {
                             "type": "tool_call_delta",
@@ -685,7 +708,8 @@ class CustomToolRestorer:
                             "arguments_delta": unwrap_custom_tool_input(raw),
                         }
                     )
-                self._buffers.clear()
+                    del self._buffers[call_id]
+                    self._choices.pop(call_id, None)
 
             staged.append(event)
         return staged

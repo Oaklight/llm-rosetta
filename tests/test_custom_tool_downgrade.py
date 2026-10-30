@@ -415,6 +415,58 @@ class TestCustomToolRestorerEvents:
             }
         ]
 
+    def test_a_finish_flushes_only_its_own_choice(self):
+        """Two choices, two finishes, in different chunks (#1250).
+
+        The old flush emptied every buffer on any finish, so the second
+        call's wrapper went out raw and split across a finish boundary.
+        """
+        restorer = CustomToolRestorer(self.NAMES)
+        a, b = self._start("call_a"), self._start("call_b")
+        a["choice_index"] = 0
+        b["choice_index"] = 1
+        out = restorer.restore_events([a, b])
+
+        restorer.restore_events(
+            [{**self._delta('{"input":', "call_a"), "choice_index": 0}]
+        )
+        restorer.restore_events(
+            [{**self._delta('{"input":', "call_b"), "choice_index": 1}]
+        )
+        assert out == [a, b]
+
+        finish0 = {
+            "type": "finish",
+            "finish_reason": {"reason": "tool_calls"},
+            "choice_index": 0,
+        }
+        flushed = restorer.restore_events([finish0])
+        assert flushed[:-1] == [
+            {
+                "type": "tool_call_delta",
+                "tool_call_id": "call_a",
+                "arguments_delta": '{"input":',
+            }
+        ]
+        assert flushed[-1] is finish0
+
+        # The second choice's buffer survived the first finish and is
+        # flushed whole by its own.
+        restorer.restore_events([{**self._delta('"B"}', "call_b"), "choice_index": 1}])
+        finish1 = {
+            "type": "finish",
+            "finish_reason": {"reason": "tool_calls"},
+            "choice_index": 1,
+        }
+        flushed = restorer.restore_events([finish1])
+        assert flushed[:-1] == [
+            {
+                "type": "tool_call_delta",
+                "tool_call_id": "call_b",
+                "arguments_delta": "B",
+            }
+        ]
+
     def test_delta_of_an_unmarked_call_passes_through(self):
         restorer = CustomToolRestorer(self.NAMES)
 
