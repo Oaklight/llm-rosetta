@@ -59,6 +59,7 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### 修复
 
+- **Messages 的 stop sequence 在流式腿不再丢失**（epic [#1238](https://github.com/Oaklight/llm-rosetta/issues/1238)，issue [#1245](https://github.com/Oaklight/llm-rosetta/issues/1245)）：body 会带上 `stop_sequence`，流式却把 `message_delta` 写成 `null`，于是读流的客户端无从知道是哪个序列结束了回合，读取方也没有东西可还原。两半都缺：写入器现在把 `finish_reason.stop_sequence` 抄到 delta 上，读取器再把它读回来。stop sequence 是**值**而不是字段，所以 emitted-field 台账两条腿都记着它、什么也看不见；跨腿 harness 改为把值读回来比对。
 - **Google 托管的搜索调用按服务端调用读取，而不是客户端调用**（issue [#1227](https://github.com/Oaklight/llm-rosetta/issues/1227)）：名为 `googleSearch` 的 `functionCall` 过去被硬编码为 `tool_type: "function"`，于是一次已完成的搜索变成 `finish_reason: "tool_calls"`，客户端收到一个自己从未声明、也无法回应的调用，IR 修复甚至会为 provider 已经执行完的调用伪造结果。请求腿现在记录它向上游启用的 intrinsic 种类与声明过的普通函数名，两个 reader 都据此判定 `functionCall`，而同名的客户端函数优先；历史读取器同样按请求体自己声明的工具判定，因此客户端重放收到的回合时不会再被补一条合成结果。没有请求腿的独立响应转换回退到名字表，这一局限写在 docstring 里。同格式保真保留：Google 来源的托管调用原样写回 `functionCall`，其它来源仍按原行为丢弃。
 - **Interactions 写入器不再用 steps 覆盖终态原因**（issue [#1227](https://github.com/Oaklight/llm-rosetta/issues/1227)）：它过去只要 steps 里有 function call 就强制 `requires_action`，以补偿“把 completed 的客户端调用回合映射成 `stop`”的 reader。reader 修正后，这段只可能推翻本来正确的 reason——包括设计上就是 `stop` 的 provider 托管调用——因此状态现在只由 IR 的 reason 决定。
 - **终态规则也覆盖 Chat 与 Messages 的 reader**（审计）：兼容上游用 `stop`（Chat）或 `end_turn`（Messages）回应一个工具调用时，IR 会得到 `stop`，所有目标随即输出“文本已结束”的回合。两个 reader 的两条腿现在都套用共享规则；Google 原先私有的流式判断 helper 改为共享，Chat 流式按 choice 判定。
