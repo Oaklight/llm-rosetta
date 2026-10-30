@@ -13,6 +13,8 @@ from typing import Any
 
 from llm_rosetta.formats import FORMAT_SPECS
 
+from .error_class import classify_status
+
 
 # ---------------------------------------------------------------------------
 # Per-provider SSE formatters
@@ -87,7 +89,7 @@ def build_stream_error_events(
     code: str | None = None,
     request_id: str = "",
     status: int = 500,
-    google_status: str = "INTERNAL",
+    google_status: str | None = None,
     message: str | None = None,
 ) -> list[dict[str, Any]]:
     """Build terminal events announcing that a stream failed mid-flight.
@@ -113,6 +115,7 @@ def build_stream_error_events(
             logic, and before this parameter the Google envelope always said
             ``500 INTERNAL`` whatever the JSON leg said.
         google_status: The Google ``error.status`` that goes with *status*.
+            ``None`` takes the one the classification table gives that status.
         message: The client-facing sentence.  Defaults to "the upstream stream
             ended before completion", which is right for a stream that died
             mid-flight; a converter that *refused* a complete turn is a
@@ -124,12 +127,16 @@ def build_stream_error_events(
     """
     message = message or _TERMINAL_ERROR_MESSAGE.format(reason=reason)
 
+    terminal = classify_status(status)
     if source_provider in ("openai_responses", "open_responses"):
         response: dict[str, Any] = {
             "id": response_id or request_id,
             "object": "response",
             "status": "failed",
-            "error": {"code": code or "server_error", "message": message},
+            # The JSON leg writes ``api_error`` at 502; the in-band code says
+            # the same word so a streamed and a non-streamed answer cannot
+            # disagree about whose fault it was.
+            "error": {"code": code or terminal.openai_type, "message": message},
         }
         event: dict[str, Any] = {"type": "response.failed", "response": response}
         if sequence_number is not None:
@@ -147,7 +154,7 @@ def build_stream_error_events(
             {
                 "error": {
                     "message": message,
-                    "type": code or ("api_error" if status != 500 else "server_error"),
+                    "type": code or terminal.openai_type,
                     "code": code,
                 }
             }
@@ -157,13 +164,19 @@ def build_stream_error_events(
         return [
             {
                 "type": "error",
-                "error": {"type": code or "api_error", "message": message},
+                "error": {"type": code or terminal.anthropic_type, "message": message},
             }
         ]
 
     if source_provider in ("google", "google_generate"):
         return [
-            {"error": {"code": status, "message": message, "status": google_status}}
+            {
+                "error": {
+                    "code": status,
+                    "message": message,
+                    "status": google_status or terminal.google_status,
+                }
+            }
         ]
 
     if source_provider == "google_interactions":
