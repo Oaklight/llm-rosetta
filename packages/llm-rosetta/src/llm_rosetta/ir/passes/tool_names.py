@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 
+from ..primitives.parts import iter_tool_call_parts
 from ..primitives.tool_group import (
     GENERATED_GROUP_MARKER,
     tool_call_group,
@@ -771,37 +772,43 @@ def apply_upstream_tool_names(
 
 
 def restore_client_tool_names(
-    ir_response: dict[str, Any],
+    target: dict[str, Any] | list[dict[str, Any]],
     *,
     name_map: ToolNameMap,
 ) -> None:
-    """Restore client-facing tool names on an IR response.
+    """Restore client-facing tool names on a response body or stream events.
 
-    Mutates *ir_response* in place.  For each tool call whose ``tool_name``
-    was rewritten on the request leg, restores the client's spelling and
-    records any namespace under ``provider_metadata.namespace`` so the source
-    converter can emit it.
+    The request leg may have re-spelled a tool name — a group flattened into
+    the name, a collision qualified — and the client must get its own spelling
+    back.  Both shapes carry the same thing: a dict with ``tool_name``, either
+    a ``tool_call`` part of a response body or a ``tool_call_start`` stream
+    event.  The rewrite is the same, in :func:`_to_client_identity`; this
+    function only decides which shape it was handed.
 
-    Chat Completions cannot represent a namespace, so the provider echoes
-    back only the flat name and the client could not otherwise route the call.
-    Called on the non-streaming path after Target → IR conversion.
+    The group travels in the first-class ``tool_group`` field, matching the
+    definition side; a legacy ``provider_metadata["namespace"]`` echoed by the
+    upstream is read and cleared so the two can never disagree.
+
+    Args:
+        target: An IR response body, or a list of IR stream events.  Mutated
+            in place.
+        name_map: The map the request leg built.  An empty map means the
+            request leg renamed nothing, and the function returns untouched.
     """
     if not name_map:
         return
 
-    def _restore_parts(msg: Any) -> None:
-        if not isinstance(msg, dict):
-            return
-        for part in msg.get("content") or []:
-            if isinstance(part, dict) and part.get("type") == "tool_call":
-                _to_client_identity(part, name_map)
+    # A body and an event are both dicts; only the container tells them
+    # apart.  A bare event passed here is read as a body and walks
+    # nothing, so callers with one event hand over a list.
+    if isinstance(target, dict):
+        for part in iter_tool_call_parts(target):
+            _to_client_identity(part, name_map)
+        return
 
-    for choice in ir_response.get("choices") or []:
-        if isinstance(choice, dict):
-            _restore_parts(choice.get("message"))
-
-    for msg in ir_response.get("messages") or []:
-        _restore_parts(msg)
+    for event in target:
+        if isinstance(event, dict) and event.get("type") == "tool_call_start":
+            _to_client_identity(event, name_map)
 
 
 def restore_client_tool_name_events(
@@ -811,20 +818,11 @@ def restore_client_tool_name_events(
 ) -> None:
     """Restore client-facing tool names on streamed tool calls.
 
-    Mutates the ``tool_call_start`` events in *ir_events* in place.  The
-    source converter reads the namespace back off ``provider_metadata`` and
-    carries it onto the later done/completed items.  The streaming
-    counterpart of :func:`restore_client_tool_names`.
-
-    The streaming counterpart of :func:`restore_client_tool_names`, and unlike
-    it this runs per chunk.
+    The streaming spelling of :func:`restore_client_tool_names`, kept for
+    callers that only ever have events.  It delegates, so the two cannot
+    drift.
     """
-    if not name_map:
-        return
-
-    for event in ir_events:
-        if isinstance(event, dict) and event.get("type") == "tool_call_start":
-            _to_client_identity(event, name_map)
+    restore_client_tool_names(ir_events, name_map=name_map)
 
 
 def dedupe_tool_definitions(

@@ -15,9 +15,11 @@ from llm_rosetta.capabilities import (
     ToolNameMap,
     apply_upstream_tool_names,
     build_tool_name_map,
+    restore_client_tool_name_events,
     restore_client_tool_names,
 )
 from llm_rosetta.converters.base.helpers.tool_group import generated_group_id
+from llm_rosetta.ir.passes import tool_names
 from llm_rosetta.pipeline import ConversionPipeline
 from llm_rosetta.types.ir.request import IRRequest
 from llm_rosetta.shims.provider_shim import (
@@ -537,6 +539,93 @@ class TestRestoreClientToolNames:
         part = ir["choices"][0]["message"]["content"][0]
         assert part["tool_name"] == "other_tool"
         assert "provider_metadata" not in part
+
+
+class TestRestoreClientToolNamesOnEvents:
+    """The same entry point restores a stream's ``tool_call_start`` events.
+
+    The dispatcher only decides which shape it was handed; the rewrite is the
+    one in ``_to_client_identity``.
+    """
+
+    @staticmethod
+    def _start(tool_name: str, call_id: str = "call_1") -> dict[str, Any]:
+        return {
+            "type": "tool_call_start",
+            "tool_call_id": call_id,
+            "tool_name": tool_name,
+            "tool_type": "function",
+        }
+
+    def test_restores_an_event_list(self):
+        events = [self._start("agents_wait")]
+        restore_client_tool_names(
+            events, name_map=_name_map(("agents_wait", "agents", "wait"))
+        )
+        assert events[0]["tool_name"] == "wait"
+        assert events[0]["tool_group"] == "agents"
+
+    def test_leaves_other_event_types_alone(self):
+        events: list[dict[str, Any]] = [
+            {"type": "text_delta", "text": "hi"},
+            self._start("agents_wait"),
+        ]
+        restore_client_tool_names(
+            events, name_map=_name_map(("agents_wait", "agents", "wait"))
+        )
+        assert events[0] == {"type": "text_delta", "text": "hi"}
+        assert events[1]["tool_name"] == "wait"
+
+    def test_noop_when_empty_map(self):
+        events = [self._start("agents_wait")]
+        restore_client_tool_names(events, name_map=ToolNameMap())
+        assert events[0]["tool_name"] == "agents_wait"
+        assert "tool_group" not in events[0]
+
+    def test_the_streaming_alias_delegates(self, monkeypatch):
+        """The alias must *call* the dispatcher, not merely behave like it.
+
+        A reinstated local copy of the walk would pass a behaviour-only
+        assertion while being exactly the drift the alias exists to prevent.
+        """
+        calls: list[Any] = []
+
+        def _spy(target, *, name_map):
+            calls.append((target, name_map))
+
+        monkeypatch.setattr(tool_names, "restore_client_tool_names", _spy)
+        events = [self._start("agents_wait")]
+        restore_client_tool_name_events(
+            events, name_map=_name_map(("agents_wait", "agents", "wait"))
+        )
+        assert calls and calls[0][0] is events
+
+
+class TestRestoreInMessagesList:
+    """A body may carry calls in ``messages``; the walk covers both places."""
+
+    def test_restores_a_call_under_messages(self):
+        ir: dict[str, Any] = {
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "tool_call",
+                            "tool_call_id": "call_1",
+                            "tool_name": "agents_wait",
+                            "tool_input": {},
+                        }
+                    ],
+                }
+            ]
+        }
+        restore_client_tool_names(
+            ir, name_map=_name_map(("agents_wait", "agents", "wait"))
+        )
+        part = ir["messages"][0]["content"][0]
+        assert part["tool_name"] == "wait"
+        assert part["tool_group"] == "agents"
 
 
 class TestRestoreAgainstAGroupedTarget:
