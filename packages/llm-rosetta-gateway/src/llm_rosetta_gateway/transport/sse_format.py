@@ -88,6 +88,7 @@ def build_stream_error_events(
     request_id: str = "",
     status: int = 500,
     google_status: str = "INTERNAL",
+    message: str | None = None,
 ) -> list[dict[str, Any]]:
     """Build terminal events announcing that a stream failed mid-flight.
 
@@ -112,12 +113,16 @@ def build_stream_error_events(
             logic, and before this parameter the Google envelope always said
             ``500 INTERNAL`` whatever the JSON leg said.
         google_status: The Google ``error.status`` that goes with *status*.
+        message: The client-facing sentence.  Defaults to "the upstream stream
+            ended before completion", which is right for a stream that died
+            mid-flight; a converter that *refused* a complete turn is a
+            different diagnosis and passes its own.
 
     Returns:
         Event dicts to format and yield. Empty for formats with no terminal
         event convention.
     """
-    message = _TERMINAL_ERROR_MESSAGE.format(reason=reason)
+    message = message or _TERMINAL_ERROR_MESSAGE.format(reason=reason)
 
     if source_provider in ("openai_responses", "open_responses"):
         response: dict[str, Any] = {

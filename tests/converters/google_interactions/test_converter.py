@@ -1,5 +1,8 @@
 """Tests for Google Interactions Converter (full request/response conversion)."""
 
+import pytest
+
+from llm_rosetta.converters.base.errors import UnrepresentableFinishReason
 from llm_rosetta.converters.llm.google_interactions import GoogleInteractionsConverter
 from llm_rosetta.types.ir import IRRequest, IRResponse
 
@@ -311,6 +314,55 @@ class TestResponseToProvider:
         assert p["status"] == "completed"
         assert p["steps"][0]["type"] == "model_output"
         assert p["usage"]["total_input_tokens"] == 10
+
+    def test_filtered_turn_is_refused(self):
+        """The status vocabulary has no word for it, so the writer refuses.
+
+        ``completed`` claims the model finished talking and ``incomplete``
+        reads back as ``length``; either would tell the client the request
+        succeeded (see #1244).
+        """
+        ir: IRResponse = {
+            "id": "resp_filtered",
+            "object": "response",
+            "created": 1733324505,
+            "model": "gemini-3.6-flash",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": [{"type": "text", "text": "hi"}],
+                    },
+                    "finish_reason": {"reason": "content_filter"},
+                }
+            ],
+        }
+        with pytest.raises(UnrepresentableFinishReason) as exc:
+            self.converter.response_to_provider(ir)
+        assert exc.value.reason == "content_filter"
+        assert exc.value.response_id == "resp_filtered"
+
+    def test_refusal_is_still_written(self):
+        """A refusal is a turn the model finished; it keeps status completed."""
+        ir: IRResponse = {
+            "id": "resp_refusal",
+            "object": "response",
+            "created": 1733324505,
+            "model": "gemini-3.6-flash",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": [{"type": "text", "text": "I can't help."}],
+                    },
+                    "finish_reason": {"reason": "refusal"},
+                }
+            ],
+        }
+        p = self.converter.response_to_provider(ir)
+        assert p["status"] == "completed"
 
     def test_roundtrip_response(self):
         original = {

@@ -216,3 +216,51 @@ def test_the_builder_takes_the_status_from_its_caller():
     )[0]
     assert mapped["error"]["code"] == 502
     assert mapped["error"]["status"] == "UNAVAILABLE"
+
+
+def test_a_refusal_does_not_blame_the_stream():
+    """The in-band notice names the refusal, not a stream that died.
+
+    A converter refuses a turn that arrived *complete*; the generic
+    "upstream stream ended before completion" sentence diagnoses the wrong
+    component.  A real mid-flight failure keeps that sentence.
+    """
+    refusal = UnrepresentableFinishReason(
+        "Google Interactions cannot represent a response ending with "
+        "'content_filter' (response_id='i_x')",
+        reason="content_filter",
+        response_id="i_x",
+    )
+    body = json.loads(
+        "".join(
+            _terminal_error_sse(
+                cast(Any, "google_interactions"),
+                _FakeProcessor(),
+                SSE_FORMATTERS["google_interactions"],
+                refusal,
+            )
+        )
+        .split("data: ", 1)[1]
+        .strip()
+    )
+    message = body["interaction"]["errors"][0]["message"]
+    assert message.startswith(
+        "The upstream response ended in a state this endpoint cannot express:"
+    )
+    assert "cannot represent" in message
+
+    fault = json.loads(
+        "".join(
+            _terminal_error_sse(
+                cast(Any, "google_interactions"),
+                _FakeProcessor(),
+                SSE_FORMATTERS["google_interactions"],
+                ConnectionError("socket closed"),
+            )
+        )
+        .split("data: ", 1)[1]
+        .strip()
+    )
+    assert fault["interaction"]["errors"][0]["message"].startswith(
+        "Upstream stream ended before completion:"
+    )
