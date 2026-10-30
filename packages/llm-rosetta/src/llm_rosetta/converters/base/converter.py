@@ -12,7 +12,11 @@ from typing import Any, cast
 from ...types.ir.passthrough import ProviderPassthroughEvent
 from ...types.ir.request import IRInputItem, IRRequest
 from ...types.ir.response import IRResponse, UsageInfo
-from ...types.ir.stream import CitationDeltaEvent, IRStreamEvent
+from ...types.ir.stream import (
+    CitationDeltaEvent,
+    IRStreamEvent,
+    RefusalDeltaEvent,
+)
 from ...types.ir.validation import (
     validate_ir_request,
     validate_ir_response,
@@ -34,7 +38,7 @@ from .helpers.extensions import (
     unowned_extensions,
 )
 from .passthrough import merge_provider_output_items
-from ...conversion_warnings import records_on_leg
+from ...conversion_warnings import DROPPED, records_on_leg, report_loss
 
 
 class BaseConverter(ABC):
@@ -113,6 +117,7 @@ class BaseConverter(ABC):
         "text_delta": "_handle_ir_text_delta_to_p",
         "reasoning_delta": "_handle_ir_reasoning_delta_to_p",
         "citation_delta": "_handle_ir_citation_delta_to_p",
+        "refusal_delta": "_handle_ir_refusal_delta_to_p",
         "tool_call_start": "_handle_ir_tool_call_start_to_p",
         "tool_call_delta": "_handle_ir_tool_call_delta_to_p",
         "finish": "_handle_ir_finish_to_p",
@@ -616,6 +621,27 @@ class BaseConverter(ABC):
                 payload=dict(chunk),
             )
         )
+
+    def _handle_ir_refusal_delta_to_p(
+        self, event: RefusalDeltaEvent, context: StreamContext | None
+    ) -> Any:
+        """Drop refusal words a dialect has no place for — and report it.
+
+        A dialect that has a place overrides this: Chat writes
+        ``delta.refusal``, Messages buffers the words for the finish delta, the
+        Google dialects fold them into a text part.  The default is for a wire
+        with no refusal form at all, and it reports the loss rather than
+        letting words the model actually said disappear from both the stream
+        and the warnings.
+        """
+        if event.get("refusal"):
+            report_loss(
+                "Refusal on the stream has no form in this target; dropped.",
+                code=DROPPED,
+                subject="refusal",
+                warnings=getattr(context, "warnings", None),
+            )
+        return {}
 
     def _handle_ir_citation_delta_to_p(
         self, event: CitationDeltaEvent, context: StreamContext | None

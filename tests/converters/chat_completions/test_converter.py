@@ -672,3 +672,38 @@ class TestChatCompletionsConverterFullRoundTrip:
             self.converter.stream_response_to_provider(events[0]),
         )
         assert restored["choices"][0]["delta"]["content"] == "Hi"
+
+    def test_a_body_refusal_reads_back_as_a_refusal_turn(self):
+        """``message.refusal`` is the refusal: words and terminal reason both.
+
+        Chat's finish-reason vocabulary has no ``refusal``, so the writer says
+        ``stop`` and puts the words on the message.  The reader must recover
+        the reason from the words — the same rule the stream reader applies to
+        the ``delta.refusal`` it accumulated — or one turn would answer
+        differently depending on which leg wrote it (#1238).
+        """
+        provider_response = {
+            "id": "chatcmpl-123",
+            "object": "chat.completion",
+            "created": 1677652288,
+            "model": "gpt-4o",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": None,
+                        "refusal": "I can't help with that.",
+                    },
+                    "finish_reason": "stop",
+                }
+            ],
+        }
+
+        ir_response = self.converter.response_from_provider(provider_response)
+        choice = ir_response["choices"][0]
+
+        assert choice["finish_reason"]["reason"] == "refusal"
+        assert choice["message"]["content"] == [
+            {"type": "refusal", "refusal": "I can't help with that."}
+        ]

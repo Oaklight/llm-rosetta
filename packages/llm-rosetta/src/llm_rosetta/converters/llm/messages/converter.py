@@ -39,6 +39,7 @@ from ....types.ir.stream import (
     ReasoningDeltaEvent,
     StreamEndEvent,
     StreamStartEvent,
+    RefusalDeltaEvent,
     TextDeltaEvent,
     ToolCallDeltaEvent,
     ToolCallStartEvent,
@@ -416,13 +417,13 @@ class MessagesConverter(BaseConverter):
         # Extract structured refusal into RefusalPart
         if stop_reason_val == "refusal":
             stop_details = provider_response.get("stop_details") or {}
-            explanation = (
-                stop_details.get("explanation", "") or "Request refused by model."
-            )
+            # No canned sentence: a refusal that carried no words came back
+            # with none, rather than with words nobody said.
+            explanation = stop_details.get("explanation", "")
             category = stop_details.get("category")
             refusal_part: dict[str, Any] = {
                 "type": "refusal",
-                "refusal": explanation or "Request refused by model.",
+                "refusal": explanation,
             }
             if category:
                 refusal_part["provider_metadata"] = {
@@ -562,16 +563,23 @@ class MessagesConverter(BaseConverter):
             if "stop_sequence" in finish_reason:
                 provider_response["stop_sequence"] = finish_reason["stop_sequence"]
 
-            # Structured refusal: set stop_reason + stop_details
+            # Structured refusal: the stop reason says the model declined,
+            # ``stop_details`` says why — and only when the turn carries
+            # something to say.  The same rule the stream writer's finish
+            # delta applies: a part with neither words nor a category is not
+            # a structured refusal, and writing one would claim an
+            # explanation nobody gave (#1238 review).
             if refusal_part is not None:
                 provider_response["stop_reason"] = "refusal"
                 pm = refusal_part.get("provider_metadata") or {}
                 category = pm.get("anthropic_refusal_category")
-                provider_response["stop_details"] = {
-                    "type": "refusal",
-                    "category": category,
-                    "explanation": refusal_part.get("refusal", ""),
-                }
+                explanation = refusal_part.get("refusal", "")
+                if category or explanation:
+                    provider_response["stop_details"] = {
+                        "type": "refusal",
+                        "category": category,
+                        "explanation": explanation,
+                    }
 
         # Ensure nullable required fields are always present (spec compliance)
         provider_response.setdefault("stop_sequence", None)
@@ -1125,9 +1133,9 @@ class MessagesConverter(BaseConverter):
             # Structured refusal: extract explanation and category
             if stop_reason == "refusal":
                 stop_details = delta.get("stop_details") or {}
-                explanation = (
-                    stop_details.get("explanation", "") or "Request refused by model."
-                )
+                # No canned sentence: a refusal that carried no words came
+                # back with none, rather than with words nobody said.
+                explanation = stop_details.get("explanation", "")
                 category = stop_details.get("category")
                 pm: dict[str, Any] = {"refusal_text": explanation}
                 if category:
@@ -1159,6 +1167,7 @@ class MessagesConverter(BaseConverter):
     _IR_TO_P_DISPATCH: dict[str, str] = {
         **BaseConverter._IR_TO_P_DISPATCH,
         "tool_result": "_handle_ir_tool_result_to_p",
+        "refusal_delta": "_handle_ir_refusal_delta_to_p",
     }
 
     # --- to_provider ---
@@ -1688,6 +1697,21 @@ class MessagesConverter(BaseConverter):
                 block["cache_control"] = cache_hint
         return block
 
+    def _handle_ir_refusal_delta_to_p(
+        self, event: RefusalDeltaEvent, context: StreamContext | None
+    ) -> dict[str, Any]:
+        """Handle RefusalDeltaEvent → nothing yet; the words ride the finish.
+
+        Anthropic has no refusal *delta*: the refusal is a content block, and
+        the structured ``stop_details`` is answered with the stop reason.  So
+        the words are held until the finish delta, where the body leg puts
+        them too.
+        """
+        if context is not None and event["refusal"]:
+            previous = context.metadata.get("_refusal_text", "")
+            context.metadata["_refusal_text"] = previous + event["refusal"]
+        return {}
+
     def _handle_ir_finish_to_p(
         self, event: FinishEvent, context: StreamContext | None
     ) -> dict[str, Any] | list[dict[str, Any]]:
@@ -1705,14 +1729,23 @@ class MessagesConverter(BaseConverter):
         # left the stream saying ``null`` while the body carried the word.
         stop_sequence = event["finish_reason"].get("stop_sequence")
 
-        # Build stop_details for structured refusal
+        # Structured refusal details, when the turn actually carries them.
+        # A reason of ``refusal`` alone says the model declined, not why; the
+        # body writer sets ``stop_details`` only for a refusal *part*, so
+        # inventing ``{'type': 'refusal', 'explanation': ''}`` here would let
+        # the two legs disagree about a turn nobody wrote words for.
         stop_details = None
         if reason == "refusal":
-            stop_details = {
-                "type": "refusal",
-                "category": pm.get("anthropic_refusal_category"),
-                "explanation": pm.get("refusal_text", ""),
-            }
+            category = pm.get("anthropic_refusal_category")
+            explanation = pm.get("refusal_text", "") or (
+                context.metadata.get("_refusal_text", "") if context is not None else ""
+            )
+            if category or explanation:
+                stop_details = {
+                    "type": "refusal",
+                    "category": category,
+                    "explanation": explanation,
+                }
 
         if context is not None:
             results = _close_content_blocks(context)
@@ -1746,7 +1779,7 @@ class MessagesConverter(BaseConverter):
             "delta": {
                 "stop_reason": stop_reason,
                 "stop_sequence": stop_sequence,
-                "stop_details": None,
+                "stop_details": stop_details,
                 "container": None,
             },
             "usage": self._build_message_delta_usage(),

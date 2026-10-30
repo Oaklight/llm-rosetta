@@ -207,6 +207,16 @@ class GoogleInteractionsMessageOps(BaseMessageOps):
                     report_dropped_citation(
                         part, warnings=warnings, why="no text step to annotate"
                     )
+            elif ptype == "refusal":
+                # The interaction models no refusal; a refusal is a completed
+                # turn in which the model declined, so its words travel as
+                # ordinary model output.
+                steps.append(
+                    {
+                        "type": "model_output",
+                        "content": [self.content_ops.ir_refusal_to_p(part)],
+                    }
+                )
             elif ptype == "tool_result" and is_intrinsic_part(part):
                 # A server result the assistant turn produced rides inline in
                 # this converter's response model (#992).  A client result

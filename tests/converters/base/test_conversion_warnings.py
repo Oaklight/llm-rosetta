@@ -291,6 +291,35 @@ class TestACallersOwnSinkWins:
         assert ctx.warnings == []
 
 
+class TestTheBaseStreamDefaults:
+    """The dispatch table's own handler is the rule for a dialect without a form."""
+
+    def test_a_dialect_with_no_refusal_form_reports_the_words(self):
+        """Base ``refusal_delta`` is unreachable today — and must still report.
+
+        Every dialect in the tree overrides it, so the fallback is what the
+        *next* one inherits: without it, a wire with no refusal slot would
+        drop the words silently, which is the loss class the sink exists for.
+        Called directly, because "every dialect overrides it" is exactly why
+        no conversion can reach it.
+        """
+        from llm_rosetta.converters.base import BaseConverter
+        from llm_rosetta.converters.llm.messages import MessagesConverter
+
+        sink = WarningSink()
+        event: Any = {"type": "refusal_delta", "refusal": "I can't help with that."}
+
+        with recording_to(sink):
+            result = BaseConverter._handle_ir_refusal_delta_to_p(
+                MessagesConverter(), event, None
+            )
+
+        assert result == {}
+        assert [warning.subject for warning in sink] == ["refusal"]
+        assert sink[0].code == DROPPED
+        assert "no form in this target" in sink[0]
+
+
 class TestTheEntryPointsNameTheirLeg:
     """The act knows its leg; it does not wait for the driver to say."""
 
