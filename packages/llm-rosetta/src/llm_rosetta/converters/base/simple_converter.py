@@ -17,6 +17,7 @@ from abc import ABC, abstractmethod
 from typing import Any, ClassVar, Generic, TypeVar
 
 from .context import ConversionContext
+from ...conversion_warnings import records_on_leg
 
 # Type variables for IR request, response, and usage types.
 # Each concrete paradigm (embedding, rerank, decision) binds these to
@@ -73,6 +74,7 @@ class BaseSimpleConverter(ABC, Generic[IRReq, IRResp, IRUsage]):
 
     # ==================== Public template methods ====================
 
+    @records_on_leg("request")
     def request_to_provider(
         self,
         ir_request: IRReq,
@@ -88,6 +90,7 @@ class BaseSimpleConverter(ABC, Generic[IRReq, IRResp, IRUsage]):
         result = self._do_request_to_provider(ir_request, context=ctx)
         return result, ctx.warnings
 
+    @records_on_leg("request")
     def request_from_provider(
         self,
         provider_request: dict[str, Any],
@@ -99,6 +102,7 @@ class BaseSimpleConverter(ABC, Generic[IRReq, IRResp, IRUsage]):
         ctx = context if context is not None else ConversionContext()
         return self._do_request_from_provider(provider_request, context=ctx)
 
+    @records_on_leg("response")
     def response_from_provider(
         self,
         provider_response: dict[str, Any],
@@ -110,6 +114,7 @@ class BaseSimpleConverter(ABC, Generic[IRReq, IRResp, IRUsage]):
         ctx = context if context is not None else ConversionContext()
         return self._do_response_from_provider(provider_response, context=ctx)
 
+    @records_on_leg("response")
     def response_to_provider(
         self,
         ir_response: IRResp,

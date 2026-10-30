@@ -33,11 +33,14 @@ from __future__ import annotations
 import logging
 from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import TYPE_CHECKING, Any
+from functools import wraps
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
     from contextvars import Token
+
+_F = TypeVar("_F", bound="Callable[..., Any]")
 
 logger = logging.getLogger("llm_rosetta")
 
@@ -190,6 +193,41 @@ class WarningSink(list):
         self.append(warning)
         return warning
 
+    def report_loss(
+        self,
+        message: str,
+        *,
+        code: str = DROPPED,
+        subject: str = "",
+        leg: str | None = None,
+    ) -> ConversionWarning:
+        """Record one loss, optionally on a leg other than the current one.
+
+        The sink's ``leg`` is a cursor the pipeline advances as the
+        conversion moves.  A call site that knows which leg *it* is on does
+        not have to move that cursor for everyone after it: it names the leg
+        here and only this warning carries it.
+
+        Args:
+            message: What was lost, in words the caller can act on.
+            code: The kind of loss; see :data:`DROPPED`.
+            subject: The item the loss is about, when it is known.
+            leg: The leg the loss belongs to, or ``None`` for the sink's
+                current one.
+
+        Returns:
+            The warning as recorded.
+        """
+        warning = ConversionWarning(
+            message,
+            code=code,
+            leg=leg if leg is not None else self.leg,
+            converter=self.converter,
+            subject=subject,
+        )
+        self.append(warning)
+        return warning
+
     def append(self, message: str) -> None:
         """Record *message* — lifting it into a warning — and log it."""
         warning = self._lift(message)
@@ -267,6 +305,57 @@ def reset_sink(token: Token) -> None:
     _CURRENT.reset(token)
 
 
+def records_on_leg(leg: str) -> Callable[[_F], _F]:
+    """Record a conversion call's losses on *leg*, into its own context.
+
+    The decorator reads ``context`` from the call.  With one and no sink
+    already installed, its sink is pointed at *leg* for the duration and made
+    the ambient sink — which is how a converter used without a pipeline still
+    records into the context the caller handed it rather than only into the
+    log.
+
+    A sink the caller already installed wins and nothing is touched — not the
+    sink, not even its leg cursor: whoever drove the conversion said where the
+    losses go, and a probe or a caller that keeps its own list must keep
+    receiving them.  With no context the call runs untouched; the losses go to
+    the log, because there is no list the caller could have read.
+
+    The decorated method must take ``context`` **by keyword**; the decorator
+    reads it from ``kwargs`` and cannot see a positional one.  Every entry
+    point in this package declares it keyword-only, and one that did not would
+    keep the very bug this decorator fixes, quietly.
+
+    The leg is restored afterwards, so a caller's cursor survives a call made
+    on another leg.
+
+    Args:
+        leg: ``"request"``, ``"response"`` or ``"stream"``.
+
+    Returns:
+        The decorator.
+    """
+
+    def decorate(fn: _F) -> _F:
+        @wraps(fn)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            ctx = kwargs.get("context")
+            warnings = getattr(ctx, "warnings", None) if ctx is not None else None
+            if not isinstance(warnings, WarningSink) or _CURRENT.get() is not None:
+                return fn(*args, **kwargs)  # type: ignore[call-arg]
+            previous = warnings.leg
+            warnings.leg = leg
+            token = use_sink(warnings)
+            try:
+                return fn(*args, **kwargs)  # type: ignore[call-arg]
+            finally:
+                reset_sink(token)
+                warnings.leg = previous
+
+        return cast(_F, wrapper)
+
+    return decorate
+
+
 @contextmanager
 def recording_to(sink: WarningSink | None) -> Iterator[WarningSink | None]:
     """Run a converter call with *sink* as the conversion in progress.
@@ -285,14 +374,19 @@ def recording_to(sink: WarningSink | None) -> Iterator[WarningSink | None]:
         reset_sink(token)
 
 
-def report_drop(
+def report_loss(
     message: str,
     *,
     code: str = DROPPED,
     subject: str = "",
+    leg: str | None = None,
     warnings: Any = None,
 ) -> ConversionWarning:
     """Record one conversion loss, wherever it was noticed.
+
+    The one reporting API: a loss is a drop, a downgrade or a failure, and
+    the name says "loss" because all three are losses.  :func:`report_drop`
+    remains as an alias for the sites that have not migrated yet.
 
     Prefers the sink the caller names, then the conversion in progress, and
     only when neither exists writes the log line itself — so a library caller
@@ -304,6 +398,8 @@ def report_drop(
         message: What was lost, in words the caller can act on.
         code: The kind of loss; see :data:`DROPPED`.
         subject: The item the loss is about, when it is known.
+        leg: The leg the loss belongs to when the call site knows better than
+            the sink's cursor.  ``None`` takes the sink's current leg.
         warnings: An explicit sink or plain list to append to.  A plain list
             is appended to without logging — it is the caller's, not this
             conversion's.
@@ -312,14 +408,41 @@ def report_drop(
         The warning as recorded (or as logged, when there was no sink).
     """
     if isinstance(warnings, WarningSink):
-        return warnings.warn(message, code=code, subject=subject)
+        return warnings.report_loss(message, code=code, subject=subject, leg=leg)
     if isinstance(warnings, list):
-        warning = ConversionWarning(str(message), code=code, subject=subject)
+        warning = ConversionWarning(
+            str(message), code=code, leg=leg or "", subject=subject
+        )
         warnings.append(warning)
         return warning
     sink = _CURRENT.get()
     if sink is not None:
-        return sink.warn(message, code=code, subject=subject)
-    warning = ConversionWarning(str(message), code=code, subject=subject)
+        return sink.report_loss(message, code=code, subject=subject, leg=leg)
+    warning = ConversionWarning(str(message), code=code, leg=leg or "", subject=subject)
     log_warning(warning)
     return warning
+
+
+def report_drop(
+    message: str,
+    *,
+    code: str = DROPPED,
+    subject: str = "",
+    warnings: Any = None,
+) -> ConversionWarning:
+    """Record one conversion loss.  Alias of :func:`report_loss`.
+
+    Kept because the existing call sites migrate dialect by dialect (P5b,
+    epic #1238); new code calls :func:`report_loss`, whose name covers the
+    drop, downgrade and failure codes alike.
+
+    Args:
+        message: What was lost, in words the caller can act on.
+        code: The kind of loss; see :data:`DROPPED`.
+        subject: The item the loss is about, when it is known.
+        warnings: An explicit sink or plain list to append to.
+
+    Returns:
+        The warning as recorded (or as logged, when there was no sink).
+    """
+    return report_loss(message, code=code, subject=subject, warnings=warnings)
