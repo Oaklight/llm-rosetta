@@ -48,7 +48,7 @@ from ....types.ir.stream import (
 )
 from ...base import BaseConverter
 from ...base.errors import require_representable_finish_reason
-from llm_rosetta.conversion_warnings import report_drop, report_loss
+from llm_rosetta.conversion_warnings import DOWNGRADED, report_loss
 from ...base.context import (
     ConversionContext,
     StreamContext,
@@ -284,9 +284,10 @@ class MessagesConverter(BaseConverter):
         if service_tier == "auto":
             result["service_tier"] = "auto"
         elif service_tier:
-            ctx.warnings.append(
+            report_loss(
                 f"service_tier={service_tier!r} cannot be expressed by the "
-                "Messages API; the request is sent without a tier"
+                "Messages API; the request is sent without a tier",
+                subject="service_tier",
             )
 
         # 12. Provider extensions (pass-through)
@@ -367,9 +368,10 @@ class MessagesConverter(BaseConverter):
         if service_tier == "auto":
             ir_request["service_tier"] = "auto"
         elif service_tier:
-            context.warnings.append(
+            report_loss(
                 f"service_tier={service_tier!r} (Messages) has no equivalent in "
-                "the IR's tier vocabulary; it was not carried"
+                "the IR's tier vocabulary; it was not carried",
+                subject="service_tier",
             )
 
         return ir_request
@@ -625,17 +627,16 @@ class MessagesConverter(BaseConverter):
         ctx: ConversionContext,
     ) -> None:
         """Apply tools, tool_choice, and tool_config to provider request."""
+        # No sink is handed over: the entry point installed this conversion's
+        # sink and its leg, and a site that names its own would keep the old
+        # routing rule alive beside it.
         tools = ir_request.get("tools")
         if tools:
-            result["tools"] = self._get_cached_ir_tools_to_p(
-                tools, warnings=ctx.warnings
-            )
+            result["tools"] = self._get_cached_ir_tools_to_p(tools)
 
         tool_choice = ir_request.get("tool_choice")
         if tool_choice:
-            result["tool_choice"] = self.tool_ops.ir_tool_choice_to_p(
-                tool_choice, warnings=ctx.warnings
-            )
+            result["tool_choice"] = self.tool_ops.ir_tool_choice_to_p(tool_choice)
 
         tool_config = ir_request.get("tool_config")
         if tool_config:
@@ -1463,7 +1464,7 @@ class MessagesConverter(BaseConverter):
         if event.get("tool_type", "function") == "intrinsic":
             kind = intrinsic_kind_of(event)
             if not self.tool_ops.intrinsic_renderable(kind, {}, leg="response"):
-                report_drop(
+                report_loss(
                     f"Server tool call of kind {kind!r} has no Anthropic "
                     "server tool; dropped from the streamed response",
                     subject=kind,
@@ -1541,9 +1542,10 @@ class MessagesConverter(BaseConverter):
         if context is None:
             # Stateless conversion: an explicit block index is all we have.
             if explicit_idx is None:
-                report_drop(
+                report_loss(
                     "Dropping Messages tool-call delta without a context or "
-                    "an explicit block index"
+                    "an explicit block index",
+                    subject="tool_call_delta",
                 )
                 return {}
             return {
@@ -1572,10 +1574,12 @@ class MessagesConverter(BaseConverter):
         if registered_index is not None:
             index = registered_index
             if explicit_idx is not None and explicit_idx != registered_index:
-                report_drop(
+                report_loss(
                     f"Messages tool-call delta block_index={explicit_idx} "
                     f"disagrees with the registered index {registered_index} "
                     f"for {tool_call_id}; using the registered index",
+                    code=DOWNGRADED,
+                    subject=tool_call_id,
                     warnings=context.warnings,
                 )
         elif explicit_idx is not None:
@@ -1592,9 +1596,10 @@ class MessagesConverter(BaseConverter):
                 and context.current_block_type in (None, "tool_use", "server_tool_use")
             ):
                 if len(state.open_indices) > 1:
-                    report_drop(
+                    report_loss(
                         "Dropping ambiguous tool-call argument delta for "
                         f"{event.get('tool_call_id') or '<unknown>'}",
+                        subject=str(event.get("tool_call_id") or ""),
                         warnings=context.warnings,
                     )
                     return {}
@@ -1606,10 +1611,11 @@ class MessagesConverter(BaseConverter):
             or index not in state.open_indices
             or block_type not in ("tool_use", "server_tool_use")
         ):
-            report_drop(
+            report_loss(
                 "Dropping Messages tool-call delta for an unregistered, closed, "
                 f"or non-tool block (tool_call_id={tool_call_id}, "
                 f"block_index={explicit_idx}, index={index})",
+                subject=tool_call_id,
                 warnings=context.warnings,
             )
             return {}
@@ -1647,7 +1653,7 @@ class MessagesConverter(BaseConverter):
                 intrinsic_kind_of(event), None, leg="response"
             )
         ):
-            report_drop(
+            report_loss(
                 f"Server tool result of kind {intrinsic_kind_of(event)!r} has no "
                 "Anthropic server tool; dropped from the streamed response",
                 subject=intrinsic_kind_of(event),

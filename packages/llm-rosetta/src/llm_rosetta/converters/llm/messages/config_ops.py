@@ -23,7 +23,7 @@ from ....types.ir.configs import (
     ResponseFormatConfig,
     StreamConfig,
 )
-from llm_rosetta.conversion_warnings import report_drop
+from llm_rosetta.conversion_warnings import report_loss
 from ...base import BaseConfigOps
 from ...base.helpers.reasoning import DEFAULT_REASONING_CAPS, apply_reasoning_config
 
@@ -92,7 +92,7 @@ class MessagesConfigOps(BaseConfigOps):
         unsupported_found = [f for f in _UNSUPPORTED if f in ir_config]
         if unsupported_found:
             for field in unsupported_found:
-                report_drop(
+                report_loss(
                     f"Anthropic does not support {field}; ignored",
                     subject=field,
                     warnings=kwargs.get("warnings"),
@@ -151,7 +151,7 @@ class MessagesConfigOps(BaseConfigOps):
         Returns:
             Empty dict (not supported).
         """
-        report_drop(
+        report_loss(
             "Anthropic does not support response_format; use system "
             "instructions or tools instead",
             subject="response_format",
@@ -198,7 +198,7 @@ class MessagesConfigOps(BaseConfigOps):
             result["stream"] = ir_stream["enabled"]
 
         if ir_stream.get("include_usage"):
-            report_drop(
+            report_loss(
                 "Anthropic always includes usage in responses; include_usage ignored",
                 subject="include_usage",
                 warnings=kwargs.get("warnings"),
@@ -325,7 +325,7 @@ class MessagesConfigOps(BaseConfigOps):
         Returns:
             Empty dict (block-level cache not handled here).
         """
-        report_drop(
+        report_loss(
             "Anthropic cache control is block-level; request-level cache "
             "config ignored",
             subject="cache",

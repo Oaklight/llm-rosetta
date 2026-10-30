@@ -24,7 +24,7 @@ from ....types.ir import (
 )
 from ....types.ir.tools import ToolCallConfig
 from ...base import BaseToolOps, IntrinsicLeg
-from llm_rosetta.conversion_warnings import report_drop
+from llm_rosetta.conversion_warnings import DOWNGRADED, report_loss
 from ...base.helpers.opaque import CARRIER_KEY
 from ...base.tools import (
     convert_nullable_to_type_array,
@@ -158,7 +158,7 @@ class MessagesToolOps(BaseToolOps):
             kind = intrinsic_kind_of(ir_tool)
             native = _ANTHROPIC_INTRINSIC_TOOLS.get(kind)
             if native is None:
-                report_drop(
+                report_loss(
                     f"Anthropic has no server tool for intrinsic kind {kind!r};"
                     " dropping",
                     subject=kind,
@@ -273,15 +273,16 @@ class MessagesToolOps(BaseToolOps):
         result: dict[str, Any] = {}
 
         if ir_tool_choice.get("allowed_tools"):
-            warnings = kwargs.get("warnings")
-            if warnings is not None:
-                warnings.append(
-                    "Anthropic Messages has no allowed_tools tool_choice, so "
-                    "the choice was widened past the restriction to "
-                    f"{len(ir_tool_choice['allowed_tools'])} tool(s): the model "
-                    "may now call any declared tool, where the source allowed "
-                    "only the listed ones"
-                )
+            report_loss(
+                "Anthropic Messages has no allowed_tools tool_choice, so "
+                "the choice was widened past the restriction to "
+                f"{len(ir_tool_choice['allowed_tools'])} tool(s): the model "
+                "may now call any declared tool, where the source allowed "
+                "only the listed ones",
+                code=DOWNGRADED,
+                subject="allowed_tools",
+                warnings=kwargs.get("warnings"),
+            )
 
         if mode == "none":
             result["type"] = "none"
@@ -438,7 +439,7 @@ class MessagesToolOps(BaseToolOps):
         """
         if leg == "response":
             kind = intrinsic_kind_of(ir_tool_call)
-            report_drop(
+            report_loss(
                 f"Server tool call of kind {kind!r} has no Anthropic server "
                 "tool; dropped from the response",
                 subject=kind,

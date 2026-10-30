@@ -36,6 +36,7 @@ from ....types.ir import (
 )
 from ...base import BaseMessageOps
 from ...base.helpers.citations import report_dropped_citation
+from llm_rosetta.conversion_warnings import DOWNGRADED, report_loss
 from ...base.tools import intrinsic_kind_of, is_intrinsic_part
 from ...base.tools.batch import assign_tool_batch_ids, merge_tool_messages
 from .content_ops import MessagesContentOps
@@ -237,16 +238,22 @@ class MessagesMessageOps(BaseMessageOps):
                     self.tool_ops.ir_tool_result_to_p(part, leg="history")
                 )
             elif is_audio_part(part):
-                warnings.append(
-                    "Audio content not supported in Anthropic Messages API, ignored"
+                report_loss(
+                    "Audio content not supported in Anthropic Messages API, ignored",
+                    subject="audio",
+                    warnings=warnings,
                 )
             elif is_reasoning_part(part):
-                warnings.append(
-                    "Reasoning content in user message not supported, ignored"
+                report_loss(
+                    "Reasoning content in user message not supported, ignored",
+                    subject="reasoning",
+                    warnings=warnings,
                 )
             else:
-                warnings.append(
-                    f"Unsupported content part type in user message: {part.get('type')}"
+                report_loss(
+                    f"Unsupported content part type in user message: {part.get('type')}",
+                    subject=str(part.get("type", "")),
+                    warnings=warnings,
                 )
 
         return {"role": "user", "content": anthropic_content}, warnings
@@ -286,8 +293,11 @@ class MessagesMessageOps(BaseMessageOps):
                 )
                 if unsigned_policy == "preserve" and not part.get("signature"):
                     self._preserve_unsigned_reasoning(part)
-                    warnings.append(
-                        "Unsigned reasoning content in assistant message not supported by target provider, preserved in metadata"
+                    report_loss(
+                        "Unsigned reasoning content in assistant message not supported by target provider, preserved in metadata",
+                        code=DOWNGRADED,
+                        subject="reasoning",
+                        warnings=warnings,
                     )
                     continue
                 reasoning_block = self.content_ops.ir_reasoning_to_p(part)
@@ -303,13 +313,17 @@ class MessagesMessageOps(BaseMessageOps):
             elif is_tool_result_part(part):
                 self._append_assistant_server_result(part, anthropic_content, warnings)
             else:
-                warnings.append(
-                    f"Unsupported content part type in assistant message: {part.get('type')}"
+                report_loss(
+                    f"Unsupported content part type in assistant message: {part.get('type')}",
+                    subject=str(part.get("type", "")),
+                    warnings=warnings,
                 )
 
         if not anthropic_content:
-            warnings.append(
-                "Assistant message has no Anthropic-compatible content, ignored"
+            report_loss(
+                "Assistant message has no Anthropic-compatible content, ignored",
+                subject="assistant_message",
+                warnings=warnings,
             )
             return None, warnings
 
@@ -357,15 +371,19 @@ class MessagesMessageOps(BaseMessageOps):
         if result_block is not None:
             content.append(result_block)
         elif is_intrinsic_part(part):
-            warnings.append(
+            report_loss(
                 "Server tool result of kind "
                 f"{part.get('intrinsic_kind')!r} has no Anthropic server tool; "
-                "dropped from the assistant message"
+                "dropped from the assistant message",
+                subject=str(part.get("intrinsic_kind") or "intrinsic"),
+                warnings=warnings,
             )
         else:
-            warnings.append(
+            report_loss(
                 "Client tool result in assistant message not supported by "
-                "Anthropic, ignored"
+                "Anthropic, ignored",
+                subject="tool_result",
+                warnings=warnings,
             )
 
     @staticmethod
@@ -410,11 +428,18 @@ class MessagesMessageOps(BaseMessageOps):
         extension_type = item.get("type")
 
         if extension_type == "system_event":
-            warnings.append(
-                f"System event ignored: {item.get('event_type', 'unknown')}"
+            report_loss(
+                f"System event ignored: {item.get('event_type', 'unknown')}",
+                subject=str(item.get("event_type", "unknown")),
+                warnings=warnings,
             )
         elif extension_type == "tool_chain_node":
-            warnings.append("Tool chain converted to sequential calls")
+            report_loss(
+                "Tool chain converted to sequential calls",
+                code=DOWNGRADED,
+                subject="tool_chain_node",
+                warnings=warnings,
+            )
             tool_call = item.get("tool_call")
             if tool_call:
                 messages.append(
@@ -424,7 +449,11 @@ class MessagesMessageOps(BaseMessageOps):
                     }
                 )
         elif extension_type in ("batch_marker", "session_control"):
-            warnings.append(f"Extension item ignored: {extension_type}")
+            report_loss(
+                f"Extension item ignored: {extension_type}",
+                subject=str(extension_type),
+                warnings=warnings,
+            )
 
         return warnings
 

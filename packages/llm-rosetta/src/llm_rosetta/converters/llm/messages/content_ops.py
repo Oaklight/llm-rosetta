@@ -20,7 +20,7 @@ from ....types.ir import (
     TextPart,
 )
 from ...base import BaseContentOps
-from llm_rosetta.conversion_warnings import DOWNGRADED, report_drop
+from llm_rosetta.conversion_warnings import DOWNGRADED, report_loss
 from ...base.helpers.citations import (
     CITATION_TYPE_SEARCH_RESULT_LOCATION,
     CITATION_TYPE_WEB_SEARCH_RESULT_LOCATION,
@@ -391,7 +391,7 @@ class MessagesContentOps(BaseContentOps):
         Returns:
             Anthropic text content dict with refusal text.
         """
-        report_drop(
+        report_loss(
             "Anthropic does not have a dedicated refusal type; "
             "converting to a text block",
             code=DOWNGRADED,
