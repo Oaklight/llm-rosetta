@@ -16,7 +16,7 @@ from ....types.ir.configs import (
 )
 from ....types.ir.reasoning import IREffort, IRVisibility
 from ...base import BaseConfigOps
-from llm_rosetta.conversion_warnings import report_drop
+from llm_rosetta.conversion_warnings import report_loss
 
 # Interactions thinking_level ↔ IR effort (nearly 1:1)
 _THINKING_LEVEL_TO_IR: dict[str, IREffort] = {
@@ -75,9 +75,10 @@ class GoogleInteractionsConfigOps(BaseConfigOps):
         # Everything else in ``GenerationConfig`` has no place on this wire;
         # report it rather than dropping it in silence.
         for field in sorted(set(ir_config) - _GENERATION_FIELDS_MAPPED):
-            report_drop(
+            report_loss(
                 f"Google Interactions does not support {field}; ignored",
                 subject=field,
+                leg="request",
                 warnings=kwargs.get("warnings"),
             )
         return result

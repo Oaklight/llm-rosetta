@@ -203,18 +203,14 @@ class GoogleInteractionsConverter(BaseConverter):
         result: dict[str, Any] = {"model": ir_request["model"]}
 
         self._extract_system_instruction(ir_request, result)
-        self._convert_messages_to_input(
-            ir_request, result, warnings=kwargs.get("warnings")
-        )
+        self._convert_messages_to_input(ir_request, result)
 
         tools = ir_request.get("tools")
         if tools:
             converted = [self.tool_ops.ir_tool_to_p(t) for t in tools]
             result["tools"] = [t for t in converted if t]
 
-        self._build_generation_config(
-            ir_request, result, warnings=kwargs.get("warnings")
-        )
+        self._build_generation_config(ir_request, result)
 
         ir_rf = ir_request.get("response_format")
         if ir_rf:
@@ -242,7 +238,6 @@ class GoogleInteractionsConverter(BaseConverter):
         self,
         ir_request: IRRequest,
         result: dict[str, Any],
-        warnings: list[str] | None = None,
     ) -> None:
         messages = list(ir_request.get("messages", []))
 
@@ -271,7 +266,7 @@ class GoogleInteractionsConverter(BaseConverter):
             else:
                 non_system.append(msg)
 
-        steps = self.message_ops.ir_messages_to_p_steps(non_system, warnings=warnings)
+        steps = self.message_ops.ir_messages_to_p_steps(non_system)
         if (
             len(steps) == 1
             and steps[0].get("type") == "user_input"
@@ -286,8 +281,6 @@ class GoogleInteractionsConverter(BaseConverter):
         self,
         ir_request: IRRequest,
         result: dict[str, Any],
-        *,
-        warnings: list[str] | None = None,
     ) -> None:
         gen_config: dict[str, Any] = {}
         ir_gen = ir_request.get("generation")
@@ -298,9 +291,7 @@ class GoogleInteractionsConverter(BaseConverter):
             gen_config.update(self.config_ops.ir_reasoning_to_p(ir_reasoning))
         ir_tc = ir_request.get("tool_choice")
         if ir_tc:
-            gen_config["tool_choice"] = self.tool_ops.ir_tool_choice_to_p(
-                ir_tc, warnings=warnings
-            )
+            gen_config["tool_choice"] = self.tool_ops.ir_tool_choice_to_p(ir_tc)
         if gen_config:
             result["generation_config"] = gen_config
 
@@ -326,7 +317,7 @@ class GoogleInteractionsConverter(BaseConverter):
         if tools:
             ir["tools"] = [self.tool_ops.p_tool_to_ir(t) for t in tools]
 
-        self._parse_generation_config(req, ir, warnings=context.warnings)
+        self._parse_generation_config(req, ir, leg="request")
 
         rf = req.get("response_format")
         if rf:
@@ -368,8 +359,19 @@ class GoogleInteractionsConverter(BaseConverter):
         req: dict[str, Any],
         ir: dict[str, Any],
         *,
-        warnings: list[str] | None = None,
+        leg: str,
     ) -> None:
+        """Read ``generation_config`` into IR.
+
+        Args:
+            req: The provider request body.
+            ir: The IR request under construction.
+            leg: Which leg is being read.  The tool-choice reader reports a
+                loss, and the leg is the payload being converted — a provider
+                *request* is the request leg even though the data flows
+                "from provider" — so the caller names it rather than the
+                helper guessing.
+        """
         gen_cfg = req.get("generation_config", {})
         if not gen_cfg:
             return
@@ -381,7 +383,7 @@ class GoogleInteractionsConverter(BaseConverter):
             ir["reasoning"] = ir_reason
         tc = gen_cfg.get("tool_choice")
         if tc:
-            ir["tool_choice"] = self.tool_ops.p_tool_choice_to_ir(tc, warnings=warnings)
+            ir["tool_choice"] = self.tool_ops.p_tool_choice_to_ir(tc, leg=leg)
 
     # ── _do_response_from_provider ─────────────────────────────────
 

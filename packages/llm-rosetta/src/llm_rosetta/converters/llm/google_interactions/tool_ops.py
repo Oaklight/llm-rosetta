@@ -11,7 +11,7 @@ from typing import Any, cast
 from ....types.ir import ToolCallPart, ToolResultPart
 from ....types.ir.tools import ToolChoice, ToolDefinition
 from ...base import BaseToolOps, IntrinsicLeg
-from llm_rosetta.conversion_warnings import DOWNGRADED, report_drop
+from llm_rosetta.conversion_warnings import DOWNGRADED, report_loss
 from ...base.tools import (
     allowed_tool_names,
     allowed_tool_refs,
@@ -100,10 +100,11 @@ class GoogleInteractionsToolOps(BaseToolOps):
             kind = intrinsic_kind_of(ir_tool)
             native = _GI_INTRINSIC_TOOLS.get(kind)
             if native is None:
-                report_drop(
+                report_loss(
                     f"Google Interactions has no server tool for intrinsic "
                     f"kind {kind!r}; dropping",
                     subject=kind,
+                    leg="request",
                 )
                 return {}
             return dict(native)
@@ -447,11 +448,12 @@ class GoogleInteractionsToolOps(BaseToolOps):
                     " found in the history"
                 )
             tool_name = call_id
-            report_drop(
+            report_loss(
                 f"Could not resolve tool name for function_result {call_id!r}; "
                 "using the call_id as the function name",
                 code=DOWNGRADED,
                 subject=call_id,
+                leg="request",
             )
         result["name"] = tool_name
         if ir_part.get("is_error"):
@@ -537,11 +539,18 @@ class GoogleInteractionsToolOps(BaseToolOps):
             tools = allowed.get("tools", [])
             mode = allowed.get("mode", "auto")
             ir_mode = mode if mode in ("auto", "any", "none") else "auto"
-            if mode not in ("auto", "any", "none") and warnings is not None:
-                warnings.append(
+            if mode not in ("auto", "any", "none"):
+                report_loss(
                     f"tool_choice.allowed_tools carried an unrecognized mode "
                     f"{mode!r}; it was read as 'auto', which lets the model "
-                    "call any declared tool"
+                    "call any declared tool",
+                    code=DOWNGRADED,
+                    subject="tool_choice.allowed_tools",
+                    # The reader serves whichever leg its caller is on; it
+                    # names none itself, so a request read is not filed as a
+                    # response one.
+                    leg=kwargs.get("leg"),
+                    warnings=warnings,
                 )
             refs = allowed_tool_refs(
                 tools, warnings=warnings, selector="tool_choice.allowed_tools"
