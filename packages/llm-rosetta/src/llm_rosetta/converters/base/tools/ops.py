@@ -40,6 +40,22 @@ IntrinsicLeg = Literal["history", "response"]
 _INTRINSIC_LEGS: tuple[str, ...] = ("history", "response")
 
 
+def sink_leg(leg: IntrinsicLeg) -> str:
+    """Map an intrinsic leg onto the leg a warning carries.
+
+    ``history`` is a request body replayed from IR, so a loss on it belongs to
+    the request leg; ``response`` is the turn just returned.  One home, because
+    every dialect that writes a server part needs the same pair.
+
+    Args:
+        leg: Which leg of a conversion the part is being written on.
+
+    Returns:
+        ``"request"`` or ``"response"``.
+    """
+    return "request" if leg == "history" else "response"
+
+
 def _report_dropped_intrinsic(
     part: Any, kwargs: dict[str, Any], *, leg: IntrinsicLeg
 ) -> None:
@@ -70,7 +86,7 @@ def _report_dropped_intrinsic(
     report_loss(
         message,
         subject=kind,
-        leg="request" if leg == "history" else "response",
+        leg=sink_leg(leg),
         warnings=kwargs.get("warnings"),
     )
 

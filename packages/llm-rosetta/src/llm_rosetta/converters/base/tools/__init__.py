@@ -22,7 +22,7 @@ that needs converter internals:
 """
 
 # -- Abstract base class --
-from .ops import BaseToolOps, IntrinsicLeg
+from .ops import BaseToolOps, IntrinsicLeg, sink_leg
 
 # -- Schema --
 from .schema import convert_nullable_to_type_array, sanitize_schema
@@ -99,6 +99,7 @@ __all__ = [
     # ops
     "BaseToolOps",
     "IntrinsicLeg",
+    "sink_leg",
     # schema
     "convert_nullable_to_type_array",
     "sanitize_schema",

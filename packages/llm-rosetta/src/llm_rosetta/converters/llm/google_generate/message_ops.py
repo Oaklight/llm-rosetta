@@ -32,7 +32,7 @@ from ....types.ir import (
     is_tool_result_part,
 )
 from ...base import BaseMessageOps
-from llm_rosetta.conversion_warnings import report_drop
+from llm_rosetta.conversion_warnings import report_loss
 from ...base.helpers.opaque import inject_google_function_call_signature
 from ...base.tools.batch import assign_tool_batch_ids, merge_tool_messages
 from ...base.tools.intrinsic import intrinsic_kind_of, is_intrinsic_part
@@ -180,16 +180,19 @@ class GoogleGenerateMessageOps(BaseMessageOps):
                 if converted:
                     contents.append(converted)
             elif is_extension_item(item):
-                warnings_list.append(
-                    f"Google GenAI不支持扩展项类型 '{item.get('type')}'，将被忽略 "
+                report_loss(
                     f"Google GenAI does not support extension item type "
-                    f"'{item.get('type')}', will be ignored"
+                    f"'{item.get('type')}', will be ignored",
+                    subject=str(item.get("type", "")),
+                    leg="request",
+                    warnings=warnings_list,
                 )
             else:
                 # Unknown item type, skip
-                report_drop(
+                report_loss(
                     "Unknown item type in ir_messages, will be ignored",
                     subject=str(item.get("type", "")),
+                    leg="request",
                 )
 
         return contents, warnings_list
@@ -271,7 +274,14 @@ class GoogleGenerateMessageOps(BaseMessageOps):
             # The tool_ops template owns the intrinsic dispatch: a
             # provider-executed call renders as Google's own server part (or is
             # dropped when Google has none), never as a client function_call.
-            return self.tool_ops.ir_tool_call_to_p(content_part, warnings=warnings_list)
+            # A history replay: the call is context the client already saw,
+            # which is the leg the template must be told.  Its default is the
+            # response leg, where a server call with no native form is dropped
+            # rather than degraded, so leaving it out drops a replayed call and
+            # labels the loss with the wrong leg.
+            return self.tool_ops.ir_tool_call_to_p(
+                content_part, leg="history", warnings=warnings_list
+            )
         elif is_tool_result_part(content_part):
             tool_call_id = content_part.get("tool_call_id")
             tool_name = (
@@ -281,15 +291,16 @@ class GoogleGenerateMessageOps(BaseMessageOps):
             )
             if tool_name is not None:
                 return self.tool_ops.ir_tool_result_to_p_named(
-                    content_part, tool_name, warnings=warnings_list
+                    content_part, tool_name, leg="history", warnings=warnings_list
                 )
             return self.tool_ops.ir_tool_result_to_p(
-                content_part, warnings=warnings_list
+                content_part, leg="history", warnings=warnings_list
             )
         else:
-            report_drop(
+            report_loss(
                 f"Unsupported content type: {content_part.get('type')}",
                 subject=str(content_part.get("type", "")),
+                leg="request",
             )
             return None
 
@@ -318,7 +329,7 @@ class GoogleGenerateMessageOps(BaseMessageOps):
         ir_messages: list[IRInputItem] = []
 
         for msg in provider_messages:
-            converted = self._p_message_to_ir(msg)
+            converted = self._p_message_to_ir(msg, leg="request")
             if converted is None:
                 continue
             if isinstance(converted, list):
@@ -391,7 +402,7 @@ class GoogleGenerateMessageOps(BaseMessageOps):
                     part["tool_call_id"] = ids[idx]
                     consumed[tool_name] = idx + 1
 
-    def _p_message_to_ir(self, provider_message: Any) -> Any | list[Any]:
+    def _p_message_to_ir(self, provider_message: Any, *, leg: str) -> Any | list[Any]:
         """Convert a single Google Content to IR format.
 
         A Google Content dict with ``role: "user"`` may contain a mix of
@@ -403,6 +414,11 @@ class GoogleGenerateMessageOps(BaseMessageOps):
 
         Args:
             provider_message: Google Content dict with role and parts.
+            leg: Which leg is being read — ``"request"`` when replaying a
+                provider request, ``"response"`` when reading a returned
+                candidate.  Named by the caller because the losses reported
+                below belong to different legs, and a caller that installed
+                its own sink keeps its own cursor.
 
         Returns:
             A single IR message dict, a list of IR messages, or None.
@@ -468,9 +484,10 @@ class GoogleGenerateMessageOps(BaseMessageOps):
                 ignorable_keys = {"thoughtSignature", "thought_signature"}
                 unknown_keys = set(part.keys()) - ignorable_keys
                 if unknown_keys:
-                    report_drop(
+                    report_loss(
                         f"Unsupported Part type(s): {sorted(unknown_keys)}",
                         subject=",".join(sorted(unknown_keys)),
+                        leg=leg,
                     )
 
         if not content_parts and not tool_result_parts:

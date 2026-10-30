@@ -47,7 +47,7 @@ from ....types.ir.stream import (
 )
 from ...base import BaseConverter
 from ...base.errors import require_representable_finish_reason
-from llm_rosetta.conversion_warnings import report_drop
+from llm_rosetta.conversion_warnings import report_loss
 from ...base.context import (
     ConversionContext,
     StreamContext,
@@ -855,9 +855,7 @@ class GoogleGenerateConverter(BaseConverter):
             or provider_request.get("toolConfig")
         )
         if tool_config:
-            ir_request["tool_choice"] = self.tool_ops.p_tool_choice_to_ir(
-                tool_config, warnings=context.warnings
-            )
+            ir_request["tool_choice"] = self.tool_ops.p_tool_choice_to_ir(tool_config)
 
         # Generation config — check SDK config first, then REST generationConfig
         gen_source = config
@@ -950,7 +948,11 @@ class GoogleGenerateConverter(BaseConverter):
 
         for p_candidate in candidates:
             content = p_candidate.get("content")
-            message = self.message_ops._p_message_to_ir(content) if content else None
+            message = (
+                self.message_ops._p_message_to_ir(content, leg="response")
+                if content
+                else None
+            )
             # A model turn keeps the parts it owns (a server call, its inline
             # server result, text).  Only a *client* result splits the turn
             # into a list, which ``choices[0].message`` cannot hold and which a
@@ -1136,7 +1138,6 @@ class GoogleGenerateConverter(BaseConverter):
                 grounding = _grounding_metadata_from_ir(
                     grounding_citations,
                     message.get("provider_metadata") or {},
-                    warnings=context.warnings,
                 )
                 if grounding:
                     candidate["groundingMetadata"] = grounding
@@ -1161,15 +1162,16 @@ class GoogleGenerateConverter(BaseConverter):
     ) -> None:
         """Apply tools and tool_choice to provider config dict."""
         config = result.setdefault("config", {})
+        # No sink is handed over: the entry point installed this conversion's
+        # sink and its leg, and a site that names its own would keep the old
+        # routing rule alive beside it.
         tools = ir_request.get("tools")
         if tools:
-            config["tools"] = self._get_cached_ir_tools_to_p(
-                tools, warnings=ctx.warnings
-            )
+            config["tools"] = self._get_cached_ir_tools_to_p(tools)
 
         tool_choice = ir_request.get("tool_choice")
         if tool_choice:
-            tc_p = self.tool_ops.ir_tool_choice_to_p(tool_choice, warnings=ctx.warnings)
+            tc_p = self.tool_ops.ir_tool_choice_to_p(tool_choice)
             if tc_p:
                 config["tool_config"] = tc_p
 
@@ -2175,10 +2177,11 @@ class GoogleGenerateConverter(BaseConverter):
             return {}
         kind = intrinsic_kind_of(event)
         if not self.tool_ops.intrinsic_renderable(kind, None, leg="response"):
-            report_drop(
+            report_loss(
                 f"Unsupported intrinsic kind {kind!r} for Google Generate "
                 "stream result — dropping",
                 subject=kind,
+                leg="stream",
                 warnings=getattr(context, "warnings", None),
             )
             return {}
@@ -2319,10 +2322,11 @@ class GoogleGenerateConverter(BaseConverter):
             return None
         if not self.tool_ops.intrinsic_renderable(kind, None, leg="response"):
             if kind:
-                report_drop(
+                report_loss(
                     f"Unsupported intrinsic kind {kind!r} for Google Generate "
                     "stream call — dropping",
                     subject=kind,
+                    leg="stream",
                 )
             return None
         if not args_str.strip():
