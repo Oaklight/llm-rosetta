@@ -102,25 +102,32 @@ _SERVER_ITEM_INTRINSIC_KINDS: frozenset[str] = frozenset(_ITEM_TO_INTRINSIC_KIND
 _SERVER_RESULT_ITEM_TYPES: frozenset[str] = frozenset(_INTRINSIC_RESULT_TYPES)
 
 
-def _response_finish_reason(response: dict[str, Any]) -> str:
-    """Use the same terminal semantics for JSON and streamed responses."""
+def _response_status_reason(response: dict[str, Any]) -> str:
+    """Map the response status to the IR reason; the parts decide the rest."""
     status = response.get("status", "completed")
     if status == "incomplete":
         details = response.get("incomplete_details")
         reason = details.get("reason", "") if isinstance(details, dict) else ""
         return RESPONSES_INCOMPLETE_REASON_TO_IR.get(reason, "stop")
-    # ``status: completed`` says nothing about tool calls; the output items do.
-    # A ``response.completed`` stream event carries the same output list, so
-    # this reader can decide from its own payload; the base stream finalizer
-    # covers the dialects whose finish chunk is empty.
+    return RESPONSES_STATUS_TO_REASON.get(status or "", "stop")
+
+
+def _stream_finish_reason(response: dict[str, Any]) -> str:
+    """Decide the streamed terminal reason from the partial body it carries.
+
+    A ``response.completed`` event carries the output list, so this reader has
+    the parts the JSON reader has; the other dialects' finish chunks do not,
+    and the base stream finalizer upgrades their ``stop`` from accumulated
+    calls.
+    """
+    status = response.get("status", "completed")
     calls_the_client = status == "completed" and any(
         isinstance(item, dict)
         and item.get("type") in {"function_call", "custom_tool_call"}
         for item in response.get("output", [])
     )
     return reason_for_completed_turn(
-        RESPONSES_STATUS_TO_REASON.get(status or "", "stop"),
-        calls_the_client,
+        _response_status_reason(response), calls_the_client
     )
 
 
@@ -578,7 +585,7 @@ class OpenResponsesConverter(BaseConverter):
         choices = []
         output_items = provider_response.get("output", [])
 
-        finish_reason_val = _response_finish_reason(provider_response)
+        finish_reason_val = _response_status_reason(provider_response)
 
         # Convert output items to IR message content.  Unlike the request leg,
         # no ``provider=`` is passed: non-portable response items (e.g.
@@ -1320,7 +1327,7 @@ class OpenResponsesConverter(BaseConverter):
         # is redundant with response.created and is re-synthesised by
         # _handle_ir_stream_start_to_p on the to_provider side.
 
-        return self.finalize_stream_finish(events, context)
+        return events
 
     # --- from_provider handlers ---
 
@@ -1823,7 +1830,7 @@ class OpenResponsesConverter(BaseConverter):
     ) -> None:
         response = chunk.get("response", chunk)
 
-        reason = _response_finish_reason(response)
+        reason = _stream_finish_reason(response)
 
         # Emit UsageEvent before FinishEvent so that downstream
         # converters can store usage in context.pending_usage before

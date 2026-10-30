@@ -141,6 +141,11 @@ CASE_TABLE: list[tuple[str, Turn, str]] = [
     ("custom", Turn(calls=(CUSTOM_CALL,), finish="tool_calls"), "tool_calls"),
     ("intrinsic", Turn(calls=(INTRINSIC_CALL,), finish="stop"), "stop"),
     ("length", Turn(text="hi", finish="length"), "length"),
+    (
+        "length_with_call",
+        Turn(text="hi", calls=(FUNCTION_CALL,), finish="length"),
+        "length",
+    ),
     ("filter", Turn(text="hi", finish="content_filter"), "content_filter"),
     ("error", Turn(text="hi", finish="error"), "error"),
     ("cancelled", Turn(text="hi", finish="cancelled"), "cancelled"),
