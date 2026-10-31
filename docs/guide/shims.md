@@ -66,7 +66,7 @@ deprecated alias in `model_type:` and in the per-type section name.
 
 Each leaf directory contains:
 
-- **`provider.yaml`** (required) — declares `name`, `model_type`, `format`, connection settings (`connection.base_url`, `connection.api_key_env`, `connection.auth_header`, `connection.keyless`, `connection.models_path`, `connection.default_path`, `connection.token_command`), plus optional `logo`, `display_name`, and `free_source`.  `base` is the deprecated alias for `format`; the loader validates the `(model_type, format)` pair against the converter registry.  `model_type` is required whenever `format` is used — only a shim that declares `base` and no `format` may omit it.  A non-chat shim declares `connection.default_path` for the endpoint it serves (e.g. `/v1/embeddings`), and a provider can name it through `embeddings_shim` / `rerank_shim` / `decision_shim` instead of a bare format.
+- **`provider.yaml`** (required) — declares `name`, `model_type`, `format`, connection settings (`connection.base_url`, `connection.api_key_env`, `connection.auth_header`, `connection.keyless`, `connection.models_path`, `connection.default_path`, `connection.token_command`), plus optional `logo`, `display_name`, and `free_source`.  `base` is the deprecated alias for `format`; the loader validates the `(model_type, format)` pair against the converter registry.  `model_type` is required whenever `format` is used — only a shim that declares `base` and no `format` may omit it.  A non-chat shim declares `connection.default_path` for the endpoint it serves (e.g. `/v1/embeddings`), and a provider can name it through `embeddings_shim` / `rerank_shim` / `decisions_shim` instead of a bare format.
 - **`transforms.py`** (optional) — exports `post_ir_transforms` and/or `pre_ir_transforms` tuples (the old names `to_transforms` / `from_transforms` also work)
 
 **Per-type parameter defaults.** A non-chat shim may declare the request fields its vendor differs on, in a section named after its own model type:
@@ -760,9 +760,10 @@ resolve_format("chat_completions")            # → "chat_completions" (pass-thr
 resolve_format("unknown")                     # → "unknown" (pass-through)
 
 resolve_model_type("deepseek--chat_completions")  # → "llm"
-resolve_model_type("typesafe--systemone")         # → "decision"
-resolve_model_type("typesafe")                    # → "decision" (legacy alias)
+resolve_model_type("typesafe--systemone")         # → "decisions"
+resolve_model_type("typesafe")                    # → "decisions" (legacy alias)
 resolve_model_type("embedding")                    # → "embeddings" (deprecated alias)
+resolve_model_type("decision")                     # → "decisions" (deprecated alias)
 resolve_model_type("openai")                      # → None (ambiguous: vendor and embeddings format)
 ```
 

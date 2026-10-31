@@ -305,7 +305,7 @@ The gateway registers three routes for decision requests:
 - `POST /v1/systemone` — System One-compatible alias
 
 !!! note "Provider routing"
-    The gateway resolves the upstream provider for a decision request from `decision_models` (`GatewayConfig.resolve_decision`).  The `decision` model-type descriptor owns source detection (`gateway/source_formats.py`): it reads the route (`/v1/decisions` → `openai_decisions`, `/v1/systemone` → `systemone`), then the body shape (`input` + list `questions` vs `state` + map `questions`), then `default_decision_format`.  Each format declares its upstream path (`openai_decisions` → `/v1/decisions`, `systemone` → `/v1/systemone`), which an explicit `decision_path` overrides.  The built-in shims are `openai--openai_decisions` and `typesafe--systemone`; the bare names `openai_decisions` and `typesafe` remain aliases.
+    The gateway resolves the upstream provider for a decision request from `decisions_models` (`GatewayConfig.resolve_decision`).  The `decisions` model-type descriptor owns source detection (`gateway/source_formats.py`): it reads the route (`/v1/decisions` → `openai_decisions`, `/v1/systemone` → `systemone`), then the body shape (`input` + list `questions` vs `state` + map `questions`), then `default_decisions_format`.  Each format declares its upstream path (`openai_decisions` → `/v1/decisions`, `systemone` → `/v1/systemone`), which an explicit `decisions_path` overrides.  The built-in shims are `openai--openai_decisions` and `typesafe--systemone`; the bare names `openai_decisions` and `typesafe` remain aliases.
 
 ## Comparison with Chat Structured Output
 

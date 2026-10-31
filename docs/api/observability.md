@@ -480,8 +480,8 @@ strings measures as no usage rather than raising out of the arithmetic.
 
 ### Model types
 
-Every row also carries a **model type** — `llm`, `embedding`, `rerank` or
-`decision`, the names `gateway/model_types.py` registers.  The column does not
+Every row also carries a **model type** — `llm`, `embeddings`, `rerank` or
+`decisions`, the names `gateway/model_types.py` registers.  The column does not
 carry the same IR field name in every family: chat asks the provider for
 `prompt_tokens` and `completion_tokens`, the decision IR already reports
 `input_tokens`/`output_tokens`, the embedding and rerank IR types have no

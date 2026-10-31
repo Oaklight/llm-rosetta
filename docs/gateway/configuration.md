@@ -158,8 +158,8 @@ dialect directly, or name a shim for that capability:
 ```
 
 The endpoint keys are `embeddings_format` / `embeddings_path` / `embeddings_shim`,
-`rerank_format` / `rerank_path` / `rerank_shim`, and `decision_format` /
-`decision_path` / `decision_shim`. Precedence for each endpoint:
+`rerank_format` / `rerank_path` / `rerank_shim`, and `decisions_format` /
+`decisions_path` / `decisions_shim`. Precedence for each endpoint:
 
 1. **shim**: `<type>_shim`; otherwise the provider-wide `shim` or `type` when
    that shim's `model_type` matches the endpoint
@@ -174,17 +174,20 @@ The endpoint keys are `embeddings_format` / `embeddings_path` / `embeddings_shim
 A `<type>_shim` that does not serve that capability is rejected at startup with
 an error naming the shim's category. The gateway records each provider's
 identity as the pair `(model_type, format)`; an LLM model routed to a provider
-whose identity is `embeddings`, `rerank`, or `decision` is rejected.
+whose identity is `embeddings`, `rerank`, or `decisions` is rejected.
 
-The legacy `embeddings_providers` / `rerank_providers` / `decision_providers`
+The legacy `embeddings_providers` / `rerank_providers` / `decisions_providers`
 sections still load and are merged with the unified entries.  The pre-rename
-spelling `embedding_providers` is read as the same section.
+spellings `embedding_providers` and `decision_providers` are read as the same
+sections.
 
-The model type is spelled `embeddings`, like the endpoint it serves.  A config
-written before that rename — `embedding_format`, `embedding_path`,
-`embedding_shim`, `default_embedding_format`, or a model tagged
-`"type": "embedding"` — is rewritten on load and the original is kept beside it
-as `.pre-migration.bak` (the document moves to `config_version` 2).  When the
+The model types are spelled `embeddings` and `decisions`, like the endpoints
+they serve.  A config written before those renames — `embedding_format` /
+`embedding_path` / `embedding_shim`, `default_embedding_format`,
+`decision_format` / `decision_path` / `decision_shim`,
+`default_decision_format`, or a model tagged `"type": "embedding"` /
+`"type": "decision"` — is rewritten on load and the original is kept beside it
+as `.pre-migration.bak` (the document moves to `config_version` 3).  When the
 file cannot be written back (a read-only mount), the old keys are still read.
 
 ### Image Count Limits
@@ -812,27 +815,27 @@ The `/v2/rerank` endpoint auto-detects Cohere source format from the URL path.
 
 ## Decision Providers
 
-The gateway can proxy `/v1/decision` and `/v1/systemone` requests for probabilistic structured decision models. Unified entries use `decision_format` or `decision_shim` (see [Non-LLM Endpoints](#non-llm-endpoints)); the legacy section below remains supported:
+The gateway can proxy `/v1/decision` and `/v1/systemone` requests for probabilistic structured decision models. Unified entries use `decisions_format` or `decisions_shim` (see [Non-LLM Endpoints](#non-llm-endpoints)); the legacy section below remains supported:
 
 ```jsonc
 {
-  "decision_providers": {
+  "decisions_providers": {
     "jev-prod": { "type": "typesafe", "api_key": "${JEV_API_KEY}", "base_url": "https://api.typesafe.ai" }
   },
-  "decision_models": {
+  "decisions_models": {
     "jev-1": "jev-prod"
   },
-  "default_decision_format": "systemone"
+  "default_decisions_format": "systemone"
 }
 ```
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `decision_providers` | `dict` | `{}` | Provider configs for decision upstreams |
-| `decision_models` | `dict` | `{}` | Model → provider mapping for decision requests |
-| `default_decision_format` | `str` | `"systemone"` | Source format fallback |
+| `decisions_providers` | `dict` | `{}` | Provider configs for decision upstreams |
+| `decisions_models` | `dict` | `{}` | Model → provider mapping for decision requests |
+| `default_decisions_format` | `str` | `"systemone"` | Source format fallback |
 
-A legacy entry's `format` or `type` may name a decision format (`systemone`, `openai_decisions`) or a registered decision shim, which supplies its format and connection defaults (e.g. `"type": "typesafe"` → `systemone`). `decision_path` defaults to the format's upstream path (`openai_decisions` → `/v1/decisions`, otherwise `/v1/systemone`).
+A legacy entry's `format` or `type` may name a decision format (`systemone`, `openai_decisions`) or a registered decision shim, which supplies its format and connection defaults (e.g. `"type": "typesafe"` → `systemone`). `decisions_path` defaults to the format's upstream path (`openai_decisions` → `/v1/decisions`, otherwise `/v1/systemone`).
 
 ## Full Example
 
