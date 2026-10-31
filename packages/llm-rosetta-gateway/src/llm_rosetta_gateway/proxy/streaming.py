@@ -10,18 +10,14 @@ from typing import Any
 from llm_rosetta_gateway._vendor.httpserver import Response, StreamingResponse
 
 from llm_rosetta.auto_detect import ProviderType
-from llm_rosetta.pipeline import ConversionError, ConversionPipeline
 from llm_rosetta.routing import ResolvedRoute
 from llm_rosetta.shims.provider_shim import SoftErrorPattern
 
 from llm_rosetta_gateway.observability.capture import CapturedRequest, CaptureState
-from llm_rosetta_gateway.observability.error_dump import dump_error
 from llm_rosetta.observability.usage import usage_columns
 
 from ..logging import (
     get_logger,
-    log_converted_request,
-    log_original_request,
     log_stream_summary,
 )
 from ..routing import (
@@ -38,7 +34,6 @@ from ..transport.sse_format import (
     build_stream_error_events,
     format_sse_done,
 )
-from .image_fetch import fetch_image
 from .errors import (
     QuotaRefusal,
     _connection_error_response,
@@ -47,20 +42,16 @@ from .errors import (
     _quota_refusal,
     _upstream_error_passthrough,
     DumpContext,
-    error_response_for_source,
 )
 from .failover import prepare_failover, record_failover
 from .metadata import (
     ProviderMetadataStore,
     _default_metadata_store,
-    _strip_internal_metadata,
-)
-from .fidelity import (
-    _fidelity_check_and_dump,
 )
 from .engine import (
-    _apply_request_stages,
+    RequestRefused,
     _inject_stream_flags,
+    prepare_request,
 )
 from .preflight import (
     _run_preflight,
@@ -442,62 +433,24 @@ async def handle_streaming(  # noqa: C901
     # the upstream id before calling us.  ``reported_model`` carries the name
     # the client asked for, so usage is grouped under the model the user named
     # rather than under whatever the upstream calls it.
-    model = body.get("model", "")
-    reported_model = reported_model or model
-
-    pipeline = ConversionPipeline(
-        route.source_provider,
-        route.target_provider,
-        target_shim=route.shim_name,
-        upstream_model=model,
-        model_capabilities=route.model_capabilities,
-        reasoning_config_override=route.reasoning_override,
-        supports_custom_tools=route.supports_custom_tools,
-        max_tool_description_length=route.max_tool_description_length,
-        hoist_system_messages=route.hoist_system_messages,
-        image_fetcher=fetch_image,
-    )
-
-    # Phase 1+2: Source → IR → Target
     try:
-        target_body = pipeline.convert_request(
-            body, on_ir_ready=store.inject_into_request
+        prepared = await prepare_request(
+            route,
+            provider_info,
+            body,
+            metadata_store=store,
+            persistence=persistence,
+            entry_id=entry_id,
+            selection=selection,
+            profile=profile,
         )
-    except ConversionError as exc:
-        await dump_error(
-            persistence,
-            request_body=body,
-            response_text=str(exc),
-            model=model,
-            source_provider=route.source_provider,
-            target_provider=route.target_provider,
-            provider_name=route.provider_name,
-            status_code=400,
-            error_phase="conversion",
-            upstream_url=str(provider_info.base_url),
-            request_log_id=entry_id,
-        )
-        return error_response_for_source(route.source_provider, 400, str(exc)), profile
-
-    profile.update(pipeline.profile)
-
-    await _fidelity_check_and_dump(
-        route, body, target_body, "request", profile, model, persistence, entry_id
-    )
-    log_original_request(pipeline.ir_request)
-
-    # Per-model system message flattening (gateway config override)
-    if route.flatten_system:
-        from llm_rosetta.transforms import flatten_system_content
-
-        target_body = flatten_system_content()(target_body)
-
-    log_converted_request(target_body)
-    _strip_internal_metadata(target_body)
-
-    selection.with_provider_info(provider_info)
-    selection.with_ir_request(pipeline.ir_request)
-    provider_info = _apply_request_stages(selection)
+    except RequestRefused as refused:
+        return refused.response, refused.profile
+    pipeline = prepared.pipeline
+    target_body = prepared.target_body
+    provider_info = prepared.provider_info
+    model = prepared.model
+    reported_model = reported_model or model
 
     # Preflight: get exact input_tokens before streaming (opt-in)
     _preflight_input_tokens: int | None = None
