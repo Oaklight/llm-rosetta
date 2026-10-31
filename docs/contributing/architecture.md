@@ -204,6 +204,40 @@ aimed at a dialect that only knows URLs, a citation with no text block to hang
 off — goes through `report_dropped_citation`, which prefers the conversion's
 warning sink and always writes the log line.
 
+## The Response Legs
+
+Every dialect answers a turn twice: once as a whole response body, once as a
+sequence of stream events.  The two are not the same wire shape — Anthropic's
+body is `content: [...]` while its stream is `message_start` →
+`content_block_start` / `delta` / `stop` → `message_delta` → `message_stop` —
+but they carry the same content, and every rule that has to hold in both places
+used to be written twice.
+
+`ir.primitives.expand_response()` turns an IR response into the event sequence a
+stream of it would emit.  A non-streaming writer can then be a **fold** over
+that primitive: drive the converter's own stream writer event by event and read
+the body off what it produced, instead of building the same items a second
+time.  `open_responses` is the one dialect that folds today — its body writer
+built every output item on its own, beside the stream writer that built the same
+items, and the fold removed that duplication.
+
+The other four dialects do not fold, and the reason is measured rather than
+stylistic:
+
+| Dialect | Why its body writer is not a fold |
+| --- | --- |
+| `chat_completions` | The body joins text parts with a space and reasoning parts with a newline; the stream's content-block boundaries are no-ops, so a fold cannot reproduce either join.  `logprobs` and the whole-message `annotations` array have no event at all. |
+| `messages` | The body writes whole-block `citations: null`, `cache_control` and `redacted_thinking`; the stream carries some of those facts in other shapes and some not at all.  The body also preserves one block per IR part, which the stream can represent, but a tail would have to re-add the rest. |
+| `google_generate` | The body writes image, file and audio parts, and `expand_response` has no event for them.  A fold would drop them without a word — the one loss this design must never introduce. |
+| `google_interactions` | The body carries `object` and ISO `created` / `updated`, none of which the stream carries; a refusal part maps to a step type the API does not define. |
+
+The primitive's coverage is pinned.  `tests/test_expand.py` fails when the IR
+declares a part type that is neither given an event nor listed as
+unrepresentable, so a future fold cannot start dropping a part type unnoticed.
+The cross-leg harness (`tests/converters/test_leg_agreement.py`) compares the
+two legs in the IR's vocabulary for every dialect — the invariant the fold was a
+means to.
+
 ## Round-Trip Compatibility
 
 All conversion paths must maintain **round-trip compatibility**. Every change must be tested against these scenarios:
