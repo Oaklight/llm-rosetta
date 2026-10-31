@@ -18,7 +18,7 @@ from typing import Any
 
 logger = logging.getLogger("llm-rosetta-gateway")
 
-CURRENT_VERSION = 2
+CURRENT_VERSION = 3
 
 
 def _migrate_v0_to_v1(raw: dict[str, Any]) -> None:
@@ -181,9 +181,62 @@ def _migrate_v1_to_v2(raw: dict[str, Any]) -> None:
                 cfg["type"] = "embeddings"
 
 
+def _migrate_v2_to_v3(raw: dict[str, Any]) -> None:
+    """Rename the ``decision`` model type to ``decisions``.
+
+    Before (v2):
+        providers.{name}.decision_format / decision_path / decision_shim
+        models.{model}.type = "decision"
+        default_decision_format: str
+        decision_providers / decision_models sections
+
+    After (v3):
+        providers.{name}.decisions_format / decisions_path / decisions_shim
+        models.{model}.type = "decisions"
+        default_decisions_format: str
+        decisions_providers / decisions_models sections
+
+    Same rule as v2: the category is spelled like the endpoint it serves
+    (``/v1/decisions``).  The old spelling is still read at runtime.
+    """
+    renames = {
+        "decision_format": "decisions_format",
+        "decision_path": "decisions_path",
+        "decision_shim": "decisions_shim",
+        "default_decision_format": "default_decisions_format",
+    }
+    for old, new in renames.items():
+        if old in raw:
+            raw.setdefault(new, raw.pop(old))
+
+    # The pool sections carry the same shape under either spelling (the
+    # loader parses ``decisions_providers`` with ``format_key="format"``,
+    # exactly as it parsed ``decision_providers``).  Left behind, they
+    # would keep the old spelling in the document — the admin save
+    # round-trips what it loaded, so the file would say both.
+    _merge_section(raw, "decision_providers", "decisions_providers")
+    _merge_section(raw, "decision_models", "decisions_models")
+
+    providers = raw.get("providers")
+    if isinstance(providers, dict):
+        for cfg in providers.values():
+            if not isinstance(cfg, dict):
+                continue
+            for old, new in renames.items():
+                if old in cfg:
+                    cfg.setdefault(new, cfg.pop(old))
+
+    models = raw.get("models")
+    if isinstance(models, dict):
+        for cfg in models.values():
+            if isinstance(cfg, dict) and cfg.get("type") == "decision":
+                cfg["type"] = "decisions"
+
+
 _MIGRATIONS: list[tuple[int, Any]] = [
     (0, _migrate_v0_to_v1),
     (1, _migrate_v1_to_v2),
+    (2, _migrate_v2_to_v3),
 ]
 
 

@@ -50,7 +50,7 @@ class TestBuiltinRegistration:
         assert "llm" in names
         assert "embeddings" in names
         assert "rerank" in names
-        assert "decision" in names
+        assert "decisions" in names
 
 
 # ---------------------------------------------------------------------------
@@ -211,7 +211,7 @@ class TestDecisionDescriptor:
     def test_decision_registered(self) -> None:
         desc = get_model_type("decision")
         assert desc is not None
-        assert desc.name == "decision"
+        assert desc.name == "decisions"
 
     def test_decision_routes(self) -> None:
         desc = get_model_type("decision")
@@ -221,7 +221,7 @@ class TestDecisionDescriptor:
         assert "/v1/decisions" in paths
         assert "/v1/systemone" in paths
 
-    def test_decision_formats(self) -> None:
+    def test_decisions_formats(self) -> None:
         desc = get_model_type("decision")
         assert desc is not None
         assert "systemone" in desc.formats
@@ -235,11 +235,11 @@ class TestDecisionDescriptor:
     def test_decision_config_keys(self) -> None:
         desc = get_model_type("decision")
         assert desc is not None
-        assert desc.config_format_key == "decision_format"
-        assert desc.config_path_key == "decision_path"
+        assert desc.config_format_key == "decisions_format"
+        assert desc.config_path_key == "decisions_path"
         assert desc.default_path == "/v1/systemone"
 
-    def test_decision_path_follows_the_format(self) -> None:
+    def test_decisions_path_follows_the_format(self) -> None:
         """The OpenAI format is served at its own path, System One at ours."""
         desc = get_model_type("decision")
         assert desc is not None

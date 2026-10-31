@@ -421,7 +421,7 @@ class ProviderShim:
     Attributes:
         name: Canonical provider identifier (e.g. ``"deepseek"``).
         model_type: Capability category this shim serves (``"llm"``,
-            ``"embeddings"``, ``"rerank"``, ``"decision"``).  A format name is
+            ``"embeddings"``, ``"rerank"``, ``"decisions"``).  A format name is
             scoped by this category, so the same spelling may name a chat
             format and an embedding format.
         format: Wire format within :attr:`model_type` (e.g.
@@ -944,7 +944,7 @@ def resolve_model_type(name: str) -> str | None:
     category; this function returns ``None`` for it.
 
     Returns:
-        ``"llm"``, ``"embeddings"``, ``"rerank"`` or ``"decision"``, or
+        ``"llm"``, ``"embeddings"``, ``"rerank"`` or ``"decisions"``, or
         ``None`` when the name does not identify a category.  The legacy
         ``"embedding"`` spelling is canonicalised here.
     """

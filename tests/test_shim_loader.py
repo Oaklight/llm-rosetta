@@ -844,7 +844,7 @@ class TestShimPair:
             tmp_path,
             "name: x\nmodel_type: decision\nbase: decision\nformat: systemone\n",
         )
-        assert shims[0].model_type == "decision"
+        assert shims[0].model_type == "decisions"
         assert shims[0].format == "systemone"
 
     def test_every_builtin_shim_declares_a_valid_pair(self):

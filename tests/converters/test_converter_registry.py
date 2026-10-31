@@ -16,7 +16,7 @@ from llm_rosetta.converters.registry import (
 
 class TestRegistryShape:
     def test_the_four_categories(self) -> None:
-        assert MODEL_TYPES == ("llm", "embeddings", "rerank", "decision")
+        assert MODEL_TYPES == ("llm", "embeddings", "rerank", "decisions")
 
     def test_every_category_has_formats(self) -> None:
         for model_type in MODEL_TYPES:

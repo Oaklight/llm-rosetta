@@ -224,7 +224,7 @@ def _merge_typed_models(raw: dict[str, Any], models: dict[str, Any]) -> None:
     """Merge embeddings/rerank/decision models into the main models dict."""
     from llm_rosetta.formats import legacy_model_type
 
-    for model_type in ("embeddings", "rerank", "decision"):
+    for model_type in ("embeddings", "rerank", "decisions"):
         old = legacy_model_type(model_type)
         section = raw.get(f"{model_type}_models")
         if not section and old is not None:

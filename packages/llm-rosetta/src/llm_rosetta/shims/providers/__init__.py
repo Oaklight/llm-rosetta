@@ -98,7 +98,7 @@ _TYPE_DIRS: dict[str, str] = {
     "llm": "llm",
     "embeddings": "embeddings",
     "rerank": "rerank",
-    "decisions": "decision",
+    "decisions": "decisions",
 }
 
 # Convention-based model list transforms registered by shim transforms modules.

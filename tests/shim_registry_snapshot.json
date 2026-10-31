@@ -205,7 +205,7 @@
   },
   {
     "name": "openai--openai_decisions",
-    "model_type": "decision",
+    "model_type": "decisions",
     "format": "openai_decisions",
     "base_url": "https://api.openai.com",
     "api_key_env": "OPENAI_API_KEY",
@@ -325,7 +325,7 @@
   },
   {
     "name": "typesafe--systemone",
-    "model_type": "decision",
+    "model_type": "decisions",
     "format": "systemone",
     "base_url": "https://api.typesafe.ai",
     "api_key_env": "TYPESAFE_API_KEY",

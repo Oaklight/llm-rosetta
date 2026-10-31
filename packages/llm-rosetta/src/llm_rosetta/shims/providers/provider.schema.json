@@ -33,12 +33,13 @@
     },
     "model_type": {
       "type": "string",
-      "description": "Capability category this shim serves. Required whenever 'format' is declared: a format name is scoped by this category, so the same spelling may name a chat format and an embedding format. Only a shim that declares 'base' and no 'format' may omit it; the base name then identifies the category (or it defaults to 'llm'). 'embedding' is the deprecated spelling of 'embeddings'; the loader rewrites it with a warning.",
+      "description": "Capability category this shim serves. Required whenever 'format' is declared: a format name is scoped by this category, so the same spelling may name a chat format and an embedding format. Only a shim that declares 'base' and no 'format' may omit it; the base name then identifies the category (or it defaults to 'llm'). 'embedding' is the deprecated spelling of 'embeddings' and 'decision' of 'decisions'; the loader rewrites either with a warning.",
       "enum": [
         "llm",
         "embeddings",
         "embedding",
         "rerank",
+        "decisions",
         "decision"
       ],
       "default": "llm"

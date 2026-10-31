@@ -185,7 +185,7 @@ _CRITICAL_REQUEST_BY_TYPE: dict[str, list[str]] = {
         "return_documents",
         "max_chunks_per_doc",
     ],
-    "decision": [
+    "decisions": [
         "state",
         "images",
         "questions.*.type",
@@ -227,7 +227,7 @@ _CRITICAL_RESPONSE_BY_TYPE: dict[str, list[str]] = {
         "meta.billed_units",
         "meta.tokens.input_tokens",
     ],
-    "decision": [
+    "decisions": [
         "object",
         "answers.*.type",
         "answers.*.probability",
@@ -509,7 +509,7 @@ class FidelityChecker:
             checks all formats' paths (slower but safe when format is
             unknown).
         model_type: Capability category.  For a non-LLM type
-            (``embeddings``, ``rerank``, ``decision``) the critical paths
+            (``embeddings``, ``rerank``, ``decisions``) the critical paths
             are the union over that family's dialects, because one route
             serves all of them; *format_name* only labels the warning.
     """

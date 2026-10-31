@@ -16,15 +16,18 @@ from llm_rosetta.formats.spec import FormatSpec
 
 #: Capability categories, in display order.  A category, its shim directory
 #: and its route share one spelling, taken from the endpoint the type serves
-#: (``/v1/embeddings``); ``llm`` keeps its name because chat has no single
-#: endpoint.
-MODEL_TYPES: tuple[str, ...] = ("llm", "embeddings", "rerank", "decision")
+#: (``/v1/embeddings``, ``/v1/decisions``); ``llm`` keeps its name because chat
+#: has no single endpoint.
+MODEL_TYPES: tuple[str, ...] = ("llm", "embeddings", "rerank", "decisions")
 
 #: Spellings an earlier release used for a category.  They are accepted at
 #: every boundary that takes a model type from outside the process — a shim's
 #: ``model_type``, a config key or ``type:`` value, a request parameter — and
 #: rewritten to the canonical name, so the alias never reaches stored state.
-LEGACY_MODEL_TYPES: dict[str, str] = {"embedding": "embeddings"}
+LEGACY_MODEL_TYPES: dict[str, str] = {
+    "embedding": "embeddings",
+    "decision": "decisions",
+}
 
 #: Every format, in display order within its model type.  A pair is unique;
 #: format names are namespaced by the model type (``google_generate`` names
@@ -140,10 +143,12 @@ FORMAT_SPECS: tuple[FormatSpec, ...] = (
     FormatSpec(model_type="rerank", format="jina", default_path="/v1/rerank"),
     FormatSpec(model_type="rerank", format="cohere", default_path="/v2/rerank"),
     FormatSpec(model_type="rerank", format="voyage", default_path="/v1/rerank"),
-    # -- decision -------------------------------------------------------
-    FormatSpec(model_type="decision", format="systemone", default_path="/v1/systemone"),
+    # -- decisions ------------------------------------------------------
     FormatSpec(
-        model_type="decision",
+        model_type="decisions", format="systemone", default_path="/v1/systemone"
+    ),
+    FormatSpec(
+        model_type="decisions",
         format="openai_decisions",
         default_path="/v1/decisions",
     ),

@@ -10,7 +10,7 @@ def _req(path: str = "") -> SimpleNamespace:
     return SimpleNamespace(path=path)
 
 
-_CFG = GatewayConfig({"default_decision_format": "systemone"})
+_CFG = GatewayConfig({"default_decisions_format": "systemone"})
 
 
 class TestDetectDecisionSourceFormat:
@@ -44,7 +44,7 @@ class TestDetectDecisionSourceFormat:
         )
 
     def test_falls_back_to_configured_default(self):
-        cfg = GatewayConfig({"default_decision_format": "openai_decisions"})
+        cfg = GatewayConfig({"default_decisions_format": "openai_decisions"})
         assert (
             _detect_decision_source_format(_req("/v1/decision"), {}, cfg)
             == "openai_decisions"

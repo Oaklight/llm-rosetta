@@ -304,7 +304,7 @@ class TestTheInMemoryLedgerIsTheStoredLedger:
             if rng.random() < 0.5:
                 usage["cache_read_tokens"] = rng.randint(0, 50)
                 usage["reasoning_tokens"] = rng.randint(0, 20)
-            if one_type == "decision":
+            if one_type == "decisions":
                 usage = {
                     "input_tokens": usage.pop("prompt_tokens"),
                     "output_tokens": usage.pop("completion_tokens"),

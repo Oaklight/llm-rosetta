@@ -87,8 +87,9 @@ IR question types: `assertion` (a proposition → P(true) ∈ [0,1]),
 Embedding and rerank each have one converter per wire dialect, all under one
 module per family (their dialects differ in parameters, not in message
 structure).  The model-type vocabulary is `llm`, `embeddings`, `rerank`,
-`decision`; the category follows its endpoint's spelling, and `embedding` is
-accepted as a deprecated alias at every boundary that reads a model type:
+`decisions`; the category follows its endpoint's spelling, and `embedding` is
+accepted as a deprecated alias (`decision` too) at every boundary that reads a
+model type:
 
 | Model type | Formats | Module |
 |-----------|---------|--------|

@@ -214,7 +214,7 @@ class TestFidelityCheckerNonLlm:
 
     def test_decision_response_change_is_detected(self) -> None:
         checker = FidelityChecker(
-            mode="critical", format_name="systemone", model_type="decision"
+            mode="critical", format_name="systemone", model_type="decisions"
         )
         diffs = checker.compare_response(
             {"answers": {"q": {"type": "assertion", "probability": 0.9}}},

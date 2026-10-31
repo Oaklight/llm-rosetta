@@ -67,7 +67,7 @@ def detect_decision_source(request: Any, body: dict[str, Any], config: Any) -> s
     2. ``/v1/systemone`` path → System One
     3. OpenAI-shaped body (``input`` + list ``questions``) → OpenAI Decisions
     4. System One-shaped body (``state`` + map ``questions``) → System One
-    5. Fall back to ``config.default_decision_format``
+    5. Fall back to ``config.default_decisions_format``
 
     The canonical ``/v1/decision`` route predates both conventions, so it
     falls through to body detection (then the configured default).
@@ -82,4 +82,4 @@ def detect_decision_source(request: Any, body: dict[str, Any], config: Any) -> s
         return "openai_decisions"
     if "state" in body and isinstance(questions, dict):
         return "systemone"
-    return canonical_provider_name(config.default_decision_format)
+    return canonical_provider_name(config.default_decisions_format)

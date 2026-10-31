@@ -1,5 +1,5 @@
 name: typesafe--systemone
-model_type: decision
+model_type: decisions
 format: systemone
 
 connection:

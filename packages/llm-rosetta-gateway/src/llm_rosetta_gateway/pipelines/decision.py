@@ -14,7 +14,7 @@ hooks.
 Registered via the model type registry in ``model_types.py``.
 
 Every request that reaches an upstream is recorded in the usage ledger with
-``model_type="decision"``.
+``model_type="decisions"``.
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ def _detect_decision_source_format(
     ``decision`` descriptor; this wrapper keeps the handler-local name used by
     the tests.
     """
-    return detect_source_format(request, body, config, "decision")
+    return detect_source_format(request, body, config, "decisions")
 
 
 def _resolve_route(config: GatewayConfig, model: str) -> TypedRoute | None:
@@ -58,10 +58,10 @@ def _response_post(body: dict[str, Any], model: str) -> None:
 
 
 _DECISION = TypedHandler(
-    model_type="decision",
+    model_type="decisions",
     build_pipeline=DecisionConversionPipeline,
     resolve=_resolve_route,
-    configured_models=lambda config: config.decision_models.keys(),
+    configured_models=lambda config: config.decisions_models.keys(),
     response_usage=response_usage,
     not_found_label="decision model",
     response_post=_response_post,

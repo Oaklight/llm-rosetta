@@ -160,6 +160,10 @@ def _ordered_detectors() -> tuple[tuple[int, str, Detector], ...]:
     put it in the detection order.
     """
     entries: list[tuple[int, str, Detector]] = [
+        # The label names the body shape, not the model-type category: the
+        # category is ``decisions``, but ``detect_provider`` has always
+        # returned ``"decision"`` for a System One body, and that return value
+        # is part of its public contract.
         (_DECISION_PRIORITY, "decision", is_decision_body)
     ]
     for spec in _catalog.FORMAT_SPECS:

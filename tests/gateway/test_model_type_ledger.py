@@ -117,11 +117,11 @@ def _decision_config() -> GatewayConfig:
                 "ts": {
                     "api_key": "k",
                     "base_url": "https://decision.invalid",
-                    "decision_format": "systemone",
+                    "decisions_format": "systemone",
                 }
             },
-            "models": {"sys-one": {"provider": "ts", "type": "decision"}},
-            "default_decision_format": "systemone",
+            "models": {"sys-one": {"provider": "ts", "type": "decisions"}},
+            "default_decisions_format": "systemone",
         }
     )
 
@@ -257,7 +257,7 @@ class TestTheDecisionHandler:
         assert response.status_code == 200
 
         row = await _the_row(pm)
-        assert row["model_type"] == "decision"
+        assert row["model_type"] == "decisions"
         assert row["input_tokens"] == 30
         assert row["output_tokens"] == 4
         # The decision IR declares no total, so the canonical additive rule

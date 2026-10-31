@@ -73,12 +73,12 @@ class GatewayConfig:
     rerank_providers: dict[str, dict[str, Any]]
     rerank_provider_infos: dict[str, ProviderInfo]
     rerank_models: dict[str, str]
-    decision_providers: dict[str, dict[str, Any]]
-    decision_provider_infos: dict[str, ProviderInfo]
-    decision_models: dict[str, str]
+    decisions_providers: dict[str, dict[str, Any]]
+    decisions_provider_infos: dict[str, ProviderInfo]
+    decisions_models: dict[str, str]
     default_embeddings_format: str
     default_rerank_format: str
-    default_decision_format: str
+    default_decisions_format: str
 
     # Runtime state, filled by the parsing and resolution modules.
     _raw_providers: dict[str, dict[str, str]]
@@ -463,6 +463,6 @@ class GatewayConfig:
         """Resolve a decision model to its provider config.
 
         Raises:
-            KeyError: If the model is not in decision_models.
+            KeyError: If the model is not in decisions_models.
         """
-        return self.resolve_typed("decision", model)
+        return self.resolve_typed("decisions", model)
