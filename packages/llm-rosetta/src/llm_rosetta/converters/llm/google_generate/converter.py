@@ -80,14 +80,13 @@ from ...base.helpers.opaque import (
     set_google_thought_signature,
     set_opaque_origin,
 )
+from llm_rosetta.ir.primitives.native import native_record, record_native
 from llm_rosetta.ir.primitives.system_message_hoist import hoist_system_in_converter
 from llm_rosetta.ir.primitives.finish_reason import (
     FAILURE_REASONS,
 )
 from ....transforms.ir import hoist_late_system_messages
 from ._constants import (
-    GOOGLE_NATIVE_FINISH_REASON,
-    GOOGLE_NATIVE_PROMPT_FEEDBACK,
     GOOGLE_REASON_FROM_PROVIDER,
     GOOGLE_REASON_TO_PROVIDER,
     generate_tool_call_id,
@@ -483,7 +482,9 @@ def _google_finish_reason(
 
     Args:
         reason: The IR finish reason.
-        native: The record the source reader left in ``provider_metadata``.
+        native: The ``provider_metadata`` the source reader left the record
+            in.  It is read through :func:`native_record`, so both the current
+            record and the two keys it replaced are understood.
         base: This converter's tag, checked against the record's origin.
         response_id: The response the reason belongs to.
         metadata: Upstream metadata recorded with the reason.
@@ -495,8 +496,9 @@ def _google_finish_reason(
         UnrepresentableFinishReason: A failure reason no Google-origin record
             explains.
     """
-    if isinstance(native, Mapping) and native.get("base") == base:
-        native_reason = native.get("reason")
+    record = native_record(native, origin=base)
+    if record:
+        native_reason = record.get("finish_reason")
         if isinstance(native_reason, str) and native_reason:
             return native_reason
     require_representable_finish_reason(
@@ -539,11 +541,9 @@ def _native_prompt_feedback(
         The verbatim ``promptFeedback`` dict, or ``None`` when the turn is not
         a Google blocked prompt.
     """
-    record = metadata.get(GOOGLE_NATIVE_PROMPT_FEEDBACK)
-    if isinstance(record, Mapping) and record.get("base") == base:
-        feedback = record.get("prompt_feedback")
-        if isinstance(feedback, Mapping):
-            return dict(feedback)
+    feedback = native_record(metadata, origin=base).get("prompt_feedback")
+    if isinstance(feedback, Mapping):
+        return dict(feedback)
     return None
 
 
@@ -931,10 +931,7 @@ class GoogleGenerateConverter(BaseConverter):
         if not isinstance(metadata, dict):
             metadata = {}
             message["provider_metadata"] = metadata
-        metadata[GOOGLE_NATIVE_FINISH_REASON] = {
-            "base": self._CONVERTER_TAG,
-            "reason": native,
-        }
+        record_native(metadata, origin=self._CONVERTER_TAG, finish_reason=native)
 
     def _do_response_from_provider(
         self,
@@ -1016,12 +1013,11 @@ class GoogleGenerateConverter(BaseConverter):
                 # keep it verbatim for the writer that can send it back.  The
                 # field carries the block reason itself, which is why no
                 # separate finish-reason record is needed here.
-                blocked_message.setdefault("provider_metadata", {})[
-                    GOOGLE_NATIVE_PROMPT_FEEDBACK
-                ] = {
-                    "base": self._CONVERTER_TAG,
-                    "prompt_feedback": dict(prompt_feedback),
-                }
+                record_native(
+                    blocked_message.setdefault("provider_metadata", {}),
+                    origin=self._CONVERTER_TAG,
+                    prompt_feedback=prompt_feedback,
+                )
                 choices.append(
                     {
                         "index": 0,
@@ -1128,7 +1124,7 @@ class GoogleGenerateConverter(BaseConverter):
                 "content": {"role": google_role, "parts": parts},
                 "finishReason": _google_finish_reason(
                     reason,
-                    native=message_metadata.get(GOOGLE_NATIVE_FINISH_REASON),
+                    native=message_metadata,
                     base=self._CONVERTER_TAG,
                     response_id=ir_response.get("id", ""),
                     metadata=message_metadata,
@@ -1517,12 +1513,11 @@ class GoogleGenerateConverter(BaseConverter):
                     type="finish",
                     finish_reason={"reason": block_ir_reason},  # ty: ignore[invalid-argument-type]
                 )
-                deferred_finish["provider_metadata"] = {
-                    GOOGLE_NATIVE_PROMPT_FEEDBACK: {
-                        "base": self._CONVERTER_TAG,
-                        "prompt_feedback": dict(prompt_feedback),
-                    }
-                }
+                record_native(
+                    deferred_finish.setdefault("provider_metadata", {}),
+                    origin=self._CONVERTER_TAG,
+                    prompt_feedback=prompt_feedback,
+                )
 
         self._handle_p_usage_to_ir(chunk, events)
 
@@ -1612,10 +1607,11 @@ class GoogleGenerateConverter(BaseConverter):
             # stop the IR has no room for, so a Google target can write it back
             # and only a *foreign* failure raises.
             if _native_word_lost(finish_reason_ir, finish_reason):
-                finish_metadata[GOOGLE_NATIVE_FINISH_REASON] = {
-                    "base": self._CONVERTER_TAG,
-                    "reason": finish_reason,
-                }
+                record_native(
+                    finish_metadata,
+                    origin=self._CONVERTER_TAG,
+                    finish_reason=finish_reason,
+                )
             if finish_metadata:
                 finish_event["provider_metadata"] = finish_metadata
             return finish_event
@@ -2394,7 +2390,7 @@ class GoogleGenerateConverter(BaseConverter):
             "content": {"role": "model", "parts": parts},
             "finishReason": _google_finish_reason(
                 reason,
-                native=event_metadata.get(GOOGLE_NATIVE_FINISH_REASON),
+                native=event_metadata,
                 base=self._CONVERTER_TAG,
                 response_id=context.response_id if context is not None else "",
                 metadata=event_metadata,

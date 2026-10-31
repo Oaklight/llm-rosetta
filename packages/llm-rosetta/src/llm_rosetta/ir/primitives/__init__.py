@@ -26,6 +26,13 @@ from .body import (  # noqa: F401
 )
 from .cache_breakpoints import inject_cache_breakpoints  # noqa: F401
 from .call_unwind import unwind_parallel_tool_calls_ir  # noqa: F401
+from .native import (  # noqa: F401
+    LEGACY_FINISH_REASON_KEY,
+    LEGACY_PROMPT_FEEDBACK_KEY,
+    NATIVE_RESPONSE_KEY,
+    native_record,
+    record_native,
+)
 from .image_limit import (  # noqa: F401
     strip_images_for_non_vision,
     truncate_images as truncate_images_impl,
@@ -55,6 +62,11 @@ from .truncate import truncate_with_digest  # noqa: F401
 
 __all__ = [
     "GENERATED_GROUP_MARKER",
+    "LEGACY_FINISH_REASON_KEY",
+    "LEGACY_PROMPT_FEEDBACK_KEY",
+    "NATIVE_RESPONSE_KEY",
+    "native_record",
+    "record_native",
     "IRTransform",
     "ToolGroup",
     "Transform",
