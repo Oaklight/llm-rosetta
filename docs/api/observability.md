@@ -494,7 +494,7 @@ otherwise the parts are added, and a family with no total of its own always
 takes the additive path.
 
 `UsageReport.by_model_type` reports the same rows cut by type —
-`report.for_model_type("embedding", "24h")` — orthogonally to the classes
+`report.for_model_type("embeddings", "24h")` — orthogonally to the classes
 above, and a group that names no type counts as chat, which is what a row
 written before the column existed means.  The gateway's daily table
 (`GET /admin/api/token-usage`) returns the same split per day and accepts a

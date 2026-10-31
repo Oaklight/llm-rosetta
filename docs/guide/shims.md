@@ -60,18 +60,20 @@ endpoint is spelled: `llm/`, `embeddings/`, `rerank/`, `decisions/`. A chat
 vendor keeps a format level below it because one vendor serves several chat
 dialects; a non-chat vendor normally serves one, so the type directory holds
 the YAML directly. The loader checks the directory against the shim's
-`model_type:` and refuses a shim filed under the wrong type.
+`model_type:` and refuses a shim filed under the wrong type.  The category uses
+the directory's spelling (`embeddings`); `embedding:` is accepted as a
+deprecated alias in `model_type:` and in the per-type section name.
 
 Each leaf directory contains:
 
-- **`provider.yaml`** (required) — declares `name`, `model_type`, `format`, connection settings (`connection.base_url`, `connection.api_key_env`, `connection.auth_header`, `connection.keyless`, `connection.models_path`, `connection.default_path`, `connection.token_command`), plus optional `logo`, `display_name`, and `free_source`.  `base` is the deprecated alias for `format`; the loader validates the `(model_type, format)` pair against the converter registry.  `model_type` is required whenever `format` is used — only a shim that declares `base` and no `format` may omit it.  A non-chat shim declares `connection.default_path` for the endpoint it serves (e.g. `/v1/embeddings`), and a provider can name it through `embedding_shim` / `rerank_shim` / `decision_shim` instead of a bare format.
+- **`provider.yaml`** (required) — declares `name`, `model_type`, `format`, connection settings (`connection.base_url`, `connection.api_key_env`, `connection.auth_header`, `connection.keyless`, `connection.models_path`, `connection.default_path`, `connection.token_command`), plus optional `logo`, `display_name`, and `free_source`.  `base` is the deprecated alias for `format`; the loader validates the `(model_type, format)` pair against the converter registry.  `model_type` is required whenever `format` is used — only a shim that declares `base` and no `format` may omit it.  A non-chat shim declares `connection.default_path` for the endpoint it serves (e.g. `/v1/embeddings`), and a provider can name it through `embeddings_shim` / `rerank_shim` / `decision_shim` instead of a bare format.
 - **`transforms.py`** (optional) — exports `post_ir_transforms` and/or `pre_ir_transforms` tuples (the old names `to_transforms` / `from_transforms` also work)
 
 **Per-type parameter defaults.** A non-chat shim may declare the request fields its vendor differs on, in a section named after its own model type:
 
 ```yaml
 # cohere/embeddings/provider.yaml
-embedding:
+embeddings:
   task_type: retrieval_document
 ```
 
@@ -760,7 +762,8 @@ resolve_format("unknown")                     # → "unknown" (pass-through)
 resolve_model_type("deepseek--chat_completions")  # → "llm"
 resolve_model_type("typesafe--systemone")         # → "decision"
 resolve_model_type("typesafe")                    # → "decision" (legacy alias)
-resolve_model_type("openai")                      # → None (ambiguous: vendor and embedding format)
+resolve_model_type("embedding")                    # → "embeddings" (deprecated alias)
+resolve_model_type("openai")                      # → None (ambiguous: vendor and embeddings format)
 ```
 
 `resolve_base()` is the deprecated alias for `resolve_format()`.

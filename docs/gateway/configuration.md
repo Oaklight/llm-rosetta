@@ -148,16 +148,16 @@ dialect directly, or name a shim for that capability:
   "openai": {
     "type": "openai",
     "api_key": "${OPENAI_API_KEY}",
-    "embedding_format": "openai"
+    "embeddings_format": "openai"
   },
   // Endpoint shim: format, path and connection defaults come from the shim
-  "acme-embed":  { "embedding_shim": "acme--embedding" },
-  "google-embed": { "embedding_shim": "google--embedding" },
+  "acme-embed":  { "embeddings_shim": "acme--embedding" },
+  "google-embed": { "embeddings_shim": "google--embedding" },
   "acme-rerank": { "rerank_shim": "acme--rerank", "rerank_path": "/v1/rerank" }
 }
 ```
 
-The endpoint keys are `embedding_format` / `embedding_path` / `embedding_shim`,
+The endpoint keys are `embeddings_format` / `embeddings_path` / `embeddings_shim`,
 `rerank_format` / `rerank_path` / `rerank_shim`, and `decision_format` /
 `decision_path` / `decision_shim`. Precedence for each endpoint:
 
@@ -174,10 +174,18 @@ The endpoint keys are `embedding_format` / `embedding_path` / `embedding_shim`,
 A `<type>_shim` that does not serve that capability is rejected at startup with
 an error naming the shim's category. The gateway records each provider's
 identity as the pair `(model_type, format)`; an LLM model routed to a provider
-whose identity is `embedding`, `rerank`, or `decision` is rejected.
+whose identity is `embeddings`, `rerank`, or `decision` is rejected.
 
-The legacy `embedding_providers` / `rerank_providers` / `decision_providers`
-sections still load and are merged with the unified entries.
+The legacy `embeddings_providers` / `rerank_providers` / `decision_providers`
+sections still load and are merged with the unified entries.  The pre-rename
+spelling `embedding_providers` is read as the same section.
+
+The model type is spelled `embeddings`, like the endpoint it serves.  A config
+written before that rename — `embedding_format`, `embedding_path`,
+`embedding_shim`, `default_embedding_format`, or a model tagged
+`"type": "embedding"` — is rewritten on load and the original is kept beside it
+as `.pre-migration.bak` (the document moves to `config_version` 2).  When the
+file cannot be written back (a read-only mount), the old keys are still read.
 
 ### Image Count Limits
 
@@ -747,31 +755,31 @@ The `status` field is `"ok"` when all providers are healthy, or `"degraded"` whe
 
 ## Embedding Providers
 
-The gateway can proxy `/v1/embeddings` requests with cross-format IR conversion (OpenAI ↔ Cohere ↔ Jina ↔ Voyage ↔ Google GenAI). A unified provider entry can declare the endpoint with `embedding_format` or `embedding_shim` (see [Non-LLM Endpoints](#non-llm-endpoints)); the legacy section below remains supported. Configure embedding providers and models separately from chat providers:
+The gateway can proxy `/v1/embeddings` requests with cross-format IR conversion (OpenAI ↔ Cohere ↔ Jina ↔ Voyage ↔ Google GenAI). A unified provider entry can declare the endpoint with `embeddings_format` or `embeddings_shim` (see [Non-LLM Endpoints](#non-llm-endpoints)); the legacy section below remains supported. Configure embedding providers and models separately from chat providers:
 
 ```jsonc
 {
-  "embedding_providers": {
+  "embeddings_providers": {
     "jina-embed": { "type": "jina", "api_key": "${JINA_API_KEY}", "base_url": "https://api.jina.ai" },
     "voyage-embed": { "type": "voyage", "api_key": "${VOYAGE_API_KEY}", "base_url": "https://api.voyageai.com" }
   },
-  "embedding_models": {
+  "embeddings_models": {
     "jina-embeddings-v3": "jina-embed",
     "voyage-3-large": "voyage-embed"
   },
-  "default_embedding_format": "openai"  // Source format when auto-detect fails
+  "default_embeddings_format": "openai"  // Source format when auto-detect fails
 }
 ```
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `embedding_providers` | `dict` | `{}` | Provider configs for embedding upstreams (same format as `providers`) |
-| `embedding_models` | `dict` | `{}` | Model → provider mapping for embedding requests |
-| `default_embedding_format` | `str` | `"openai"` | Source format fallback. Options: `openai`, `cohere`, `jina`, `voyage`, `google_generate` |
+| `embeddings_providers` | `dict` | `{}` | Provider configs for embedding upstreams (same format as `providers`) |
+| `embeddings_models` | `dict` | `{}` | Model → provider mapping for embedding requests |
+| `default_embeddings_format` | `str` | `"openai"` | Source format fallback. Options: `openai`, `cohere`, `jina`, `voyage`, `google_generate` |
 
 Embedding traffic is routed **only** through embedding endpoints. A model that
-has no embedding route — either listed in `embedding_models` or tagged
-`"type": "embedding"` on a unified provider — returns `404`; the gateway does
+has no embedding route — either listed in `embeddings_models` or tagged
+`"type": "embeddings"` on a unified provider — returns `404`; the gateway does
 not forward it to a chat provider. A Google endpoint takes the model in the URL
 (`/v1beta/models/{model}:embedContent`) and switches to
 `:batchEmbedContents` when the converted request carries multiple inputs.
