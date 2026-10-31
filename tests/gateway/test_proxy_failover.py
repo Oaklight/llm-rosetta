@@ -93,6 +93,12 @@ def _refused() -> UpstreamResponse:
     return UpstreamResponse(status_code=429, body=None, raw_content=_RATE_LIMITED)
 
 
+def _server_error() -> UpstreamResponse:
+    """A plain upstream failure: no quota signal, nothing to retry."""
+    raw = b'{"error": {"message": "internal error", "type": "server_error"}}'
+    return UpstreamResponse(status_code=500, body=None, raw_content=raw)
+
+
 def _config(
     *,
     providers: tuple[str, ...] = ("a", "b"),
@@ -198,6 +204,22 @@ class TestTheFailover:
         response, profile = _run(config, transport)
 
         assert response.status_code == 429
+        assert transport.calls == ["https://a.test"]
+        assert "failover" not in profile
+
+    def test_a_plain_upstream_error_is_the_answer_after_one_attempt(self):
+        """``BREAK``: report this attempt's error, and do not try again.
+
+        A decision-level test cannot tell ``BREAK`` from a handler that falls
+        out of the loop by accident; what tells them apart is that the client
+        sees the upstream's own 500 and the upstream was asked exactly once.
+        """
+        config = _config()
+        transport = _Transport(_server_error())
+
+        response, profile = _run(config, transport)
+
+        assert response.status_code == 500
         assert transport.calls == ["https://a.test"]
         assert "failover" not in profile
 

@@ -244,6 +244,76 @@ def _quota_refusal(
     return QuotaRefusal.EXHAUSTED, signal
 
 
+class RefusalAction(str, Enum):
+    """What a failed upstream attempt means for the request.
+
+    The two handlers send differently — one a JSON request, one an SSE
+    stream — but a refusal means the same thing to both, so the decision is
+    taken once and each handler acts on it in its own transport.
+    """
+
+    #: The attempt failed in a way that answers the client directly.
+    RETURN = "return"
+    #: The same upstream may be tried again (a refreshed credential, or
+    #: another key in the ring).
+    RETRY = "retry"
+    #: This provider has no usable credential left; another may serve.
+    FAILOVER = "failover"
+    #: Nothing to retry and nothing to fail over to; the caller reports the
+    #: upstream's own refusal.
+    BREAK = "break"
+
+
+@dataclass(frozen=True)
+class RefusalDecision:
+    """The outcome of :func:`decide_on_refusal`."""
+
+    action: RefusalAction
+    #: The answer to return, when ``action`` is ``RETURN``.
+    response: Response | None = None
+    #: The quota signal that explains a ``FAILOVER``.
+    signal: Any = None
+
+
+async def decide_on_refusal(
+    provider_info: ProviderInfo,
+    status_code: int,
+    error_text: str,
+    source_provider: ProviderType,
+) -> RefusalDecision:
+    """Classify a failed upstream attempt into one action.
+
+    The order matters: a ``401`` that a credential refresh can fix is a retry,
+    not a quota refusal, and a session-policy ``401`` answers the client
+    before either is considered.
+
+    Args:
+        provider_info: The provider that just refused.
+        status_code: The upstream's HTTP status.
+        error_text: The upstream's error body, as text.
+        source_provider: The client's dialect, for a direct answer.
+
+    Returns:
+        The action to take, with the response for ``RETURN`` and the signal
+        for ``FAILOVER``.
+    """
+    retry, err = await _handle_401(
+        provider_info, status_code, error_text, source_provider
+    )
+    if err is not None:
+        return RefusalDecision(RefusalAction.RETURN, response=err)
+    refusal, signal = (
+        (None, None)
+        if retry
+        else _quota_refusal(provider_info, status_code, error_text)
+    )
+    if retry or refusal is QuotaRefusal.RETRY:
+        return RefusalDecision(RefusalAction.RETRY)
+    if refusal is QuotaRefusal.EXHAUSTED:
+        return RefusalDecision(RefusalAction.FAILOVER, signal=signal)
+    return RefusalDecision(RefusalAction.BREAK)
+
+
 def _check_soft_errors(
     patterns: tuple[SoftErrorPattern, ...],
     body: Any,
