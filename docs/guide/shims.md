@@ -65,6 +65,16 @@ packages/llm-rosetta/src/llm_rosetta/shims/providers/
 - **`provider.yaml`**（必需）—— 声明 `name`、`model_type`、`format`、连接设置（`connection.base_url`、`connection.api_key_env`、`connection.auth_header`、`connection.keyless`、`connection.models_path`、`connection.default_path`、`connection.token_command`），以及可选的 `logo`、`display_name`、`free_source`。`base` 是 `format` 的弃用别名；loader 会校验 `(model_type, format)` 对。使用 `format` 时必须同时声明 `model_type` —— 只有声明 `base` 且不写 `format` 的 shim 可以省略。非 chat shim 用 `connection.default_path` 声明它服务的端点（例如 `/v1/embeddings`），提供方可以通过 `embedding_shim` / `rerank_shim` / `decision_shim` 指向它，而不必写裸格式。
 - **`transforms.py`**（可选）—— 导出 `post_ir_transforms` 和/或 `pre_ir_transforms` 元组（旧名 `to_transforms` / `from_transforms` 也可用）
 
+**按类型声明的参数默认值。** 非 chat shim 可以在以自身模型类型命名的段里，声明该 vendor 真正有差异的请求字段：
+
+```yaml
+# cohere/embeddings/provider.yaml
+embedding:
+  task_type: retrieval_document
+```
+
+键是 IR 字段名，因此转换器会按 vendor 的方言写出；声明的值是**默认值** —— 只填补客户端省略的字段，绝不覆盖客户端给出的值。白名单是逐一在真实端点上测量过的字段：embedding 为 `task_type`、`dimensions`、`encoding_format`、`truncation`；rerank 为 `top_n`、`return_documents`、`max_tokens_per_doc`、`truncation`；decision 没有。白名单之外的键、或属于另一模型类型的段，会在加载时被拒绝。`cohere--embedding` 声明 `task_type: retrieval_document`，因为 Cohere 会拒绝缺少 `input_type` 的 `/v2/embed` 请求。
+
 `connection.keyless` 表示该上游无需凭据即可访问：未配置 `api_key` 时不发送任何鉴权头，
 配置了则回退到基础类型的鉴权方式。`free_source: true` 表示该 shim 的网关提供免费模型池
 —— 管理台会把它的 keyless 条目归入 "Free Resource" 分区，并命名为
