@@ -288,6 +288,51 @@ def _flatten_namespace_tool(
     return results
 
 
+def function_call_item_id(tool_call_id: str, provider_metadata: Any = None) -> str:
+    """The Responses item id for a function call.
+
+    A body and a stream both name the item, and they must agree: the id the
+    source carried when there is one, otherwise the call id in the Responses
+    API's own ``fc_`` spelling (a ``call_`` prefix is replaced, any other id
+    scheme gets the prefix added).
+
+    Args:
+        tool_call_id: The call id the turn carries.
+        provider_metadata: The IR tool call's provider metadata, which may hold
+            the item id the source response used.
+
+    Returns:
+        The item id.
+    """
+    metadata = provider_metadata if isinstance(provider_metadata, Mapping) else {}
+    item_id = metadata.get("responses_item_id")
+    if item_id:
+        return str(item_id)
+    if tool_call_id.startswith("fc_"):
+        return tool_call_id
+    if tool_call_id.startswith("call_"):
+        return "fc_" + tool_call_id[5:]
+    return "fc_" + tool_call_id
+
+
+def custom_call_input_text(tool_input: Any) -> str:
+    """The plain-text ``input`` a custom tool call carries.
+
+    A custom tool takes text, not JSON, so the IR wraps it as ``{"input": str}``
+    when the text is not itself a JSON object; both the body writer and the
+    stream writer must unwrap it the same way.
+
+    Args:
+        tool_input: The IR tool call's ``tool_input``.
+
+    Returns:
+        The text the wire carries.
+    """
+    if isinstance(tool_input, dict) and list(tool_input.keys()) == ["input"]:
+        return str(tool_input["input"])
+    return json.dumps(tool_input) if isinstance(tool_input, dict) else str(tool_input)
+
+
 def _build_function_call_item(
     ir_tool_call: ToolCallPart,
     tool_call_id: str,
@@ -301,14 +346,7 @@ def _build_function_call_item(
     the prefix for other ID schemes (e.g. Anthropic ``toolu_``).
     """
     metadata = ir_tool_call.get("provider_metadata") or {}
-    item_id = metadata.get("responses_item_id")
-    if not item_id:
-        if tool_call_id and tool_call_id.startswith("fc_"):
-            item_id = tool_call_id
-        elif tool_call_id and tool_call_id.startswith("call_"):
-            item_id = "fc_" + tool_call_id[5:]
-        else:
-            item_id = "fc_" + tool_call_id
+    item_id = function_call_item_id(tool_call_id, metadata)
     item = {
         "type": "function_call",
         "id": item_id,
@@ -1517,16 +1555,8 @@ class OpenResponsesToolOps(BaseToolOps):
             )
         elif tool_type == "custom":
             # Custom tool calls use plain text 'input' instead of JSON
-            # 'arguments'.  If tool_input has a single "input" key, unwrap
-            # it to plain text; otherwise JSON-serialize the dict.
-            if isinstance(tool_input, dict) and list(tool_input.keys()) == ["input"]:
-                input_str = str(tool_input["input"])
-            else:
-                input_str = (
-                    json.dumps(tool_input)
-                    if isinstance(tool_input, dict)
-                    else str(tool_input)
-                )
+            # 'arguments'; one unwrap rule, shared with the body fold.
+            input_str = custom_call_input_text(tool_input)
             item: dict[str, Any] = {
                 "type": "custom_tool_call",
                 "call_id": tool_call_id,

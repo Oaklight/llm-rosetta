@@ -246,6 +246,9 @@
       "body": {
         "completed_at": "envelope",
         "created_at": "envelope",
+        "error": "terminal",
+        "error.code": "content",
+        "error.message": "content",
         "id": "envelope",
         "incomplete_details": "terminal",
         "incomplete_details.reason": "content",
@@ -339,6 +342,7 @@
         "response.output[].arguments": "content",
         "response.output[].call_id": "envelope",
         "response.output[].content": "content",
+        "response.output[].content[].refusal": "content",
         "response.output[].content[].text": "content",
         "response.output[].content[].type": "envelope",
         "response.output[].id": "envelope",

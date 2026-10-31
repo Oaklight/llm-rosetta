@@ -11,7 +11,6 @@ nested messages. The converter handles this structural difference.
 
 import json
 import time
-from collections.abc import Mapping
 from typing import Any, ClassVar, cast
 
 from ....types.ir import (
@@ -21,7 +20,6 @@ from ....types.ir import (
     is_tool_result_part,
     is_reasoning_part,
     is_citation_part,
-    is_refusal_part,
 )
 from ....types.ir.passthrough import ProviderPassthroughEvent, ProviderPassthroughItem
 from ....types.ir.request import IRRequest
@@ -44,6 +42,7 @@ from ....types.ir.stream import (
 )
 from ...base import BaseConverter
 from ...base.context import ConversionContext, StreamContext
+from ....ir.primitives import expand_response
 from ....ir.primitives.finish_reason import reason_for_completed_turn
 from ...base.helpers.citations import report_dropped_citation
 from ...base.helpers.extensions import extension_loss_warning, wire_extensions
@@ -75,6 +74,7 @@ from ._constants import (
     RESPONSES_REQUIRED_DEFAULTS,
     RESPONSES_STATUS_TO_REASON,
     RESPONSES_TERMINAL_EVENT_BY_STATUS,
+    TERMINAL_EVENTS,
     ResponsesEventType,
     generate_message_id,
     generate_reasoning_id,
@@ -83,10 +83,13 @@ from .config_ops import OpenResponsesConfigOps
 from .content_ops import OpenResponsesContentOps
 from .message_ops import OpenResponsesMessageOps
 from .tool_ops import (
+    _INTRINSIC_KIND_TO_ITEM,
     _INTRINSIC_RESULT_TYPES,
     _ITEM_TO_INTRINSIC_KIND,
     _server_item_tool_input,
     OpenResponsesToolOps,
+    custom_call_input_text,
+    function_call_item_id,
     harvest_additional_tools,
 )
 from .utils import build_message_preamble_events, resolve_call_id
@@ -246,6 +249,21 @@ def _declared_tool_types(tools: Any) -> dict[str, str]:
         if isinstance(tool, dict) and isinstance(tool.get("name"), str):
             types[tool["name"]] = str(tool.get("type") or "function")
     return types
+
+
+def _insert_after_call(
+    output: list[dict[str, Any]], call_id: str, item: dict[str, Any]
+) -> None:
+    """Insert *item* right after the output item that answers *call_id*.
+
+    A result follows its call in a body; appending it at the end would put it
+    after the items that came later in the turn.
+    """
+    for index, existing in enumerate(output):
+        if existing.get("call_id") == call_id:
+            output.insert(index + 1, item)
+            return
+    output.append(item)
 
 
 class OpenResponsesConverter(BaseConverter):
@@ -696,138 +714,251 @@ class OpenResponsesConverter(BaseConverter):
         context: ConversionContext,
         **kwargs: Any,
     ) -> dict[str, Any]:
-        response_id_stem = ir_response.get("id", "")
-        provider_response: dict[str, Any] = {
-            "id": self.add_response_id_prefix(
-                response_id_stem,
-                self._get_response_id_prefix(context),
-            ),
-            "object": "response",
-            "created_at": ir_response.get("created", 0),
-            "model": ir_response.get("model", ""),
-            "output": [],
-            "status": "completed",  # may be overwritten by finish_reason below
-        }
+        """Write the turn as a whole body, by folding the stream it would be.
 
-        output = provider_response["output"]
+        A body is not a second content model: it is the event sequence
+        :func:`~llm_rosetta.ir.primitives.expand_response` renders, written by
+        the same per-event code the streaming leg uses, and read back off the
+        terminal event.  What a whole body carries and an event does not — the
+        message's ``status``, a text part's ``annotations`` / ``logprobs``,
+        ``service_tier`` — is applied afterwards by :meth:`_apply_body_shape`.
+        """
+        stream_context = self.create_stream_context()
+        stream_context.options.update(getattr(context, "options", None) or {})
 
-        for choice in ir_response.get("choices", []):
-            message = choice.get("message")
-            if not message:
-                continue
+        choices = ir_response.get("choices") or []
+        body: dict[str, Any] = {}
+        output: list[dict[str, Any]] = []
+        for choice in choices or [None]:
+            # One fold per choice: the events carry no choice on a block, and
+            # a writer that opened a second item would need one.  Folding each
+            # choice on its own gives every choice its own items, which is
+            # what the body has always done.
+            one = cast(IRResponse, dict(ir_response))
+            if choice is not None:
+                one["choices"] = [choice]
+            folded = self._fold_events(one, stream_context)
+            output.extend(folded.get("output") or [])
+            body = folded
+        if choices:
+            body["output"] = output
+            self._renumber_message_items(body, str(ir_response.get("id", "")))
 
-            content_parts = message.get("content", [])
-            # Group the text parts by the item they came from.  The read leg
-            # folds a response's message items into one IR message, so each
-            # part records its own item's phase; writing them all back as a
-            # single item would make a commentary item and a final answer
-            # share one body (#997).
-            text_groups: list[tuple[str, list[dict[str, Any]]]] = []
-            reasoning_index = 0
+        self._apply_body_shape(body, ir_response, context=context, kwargs=kwargs)
+        return body
 
-            for part in content_parts:
-                if is_text_part(part):
-                    self._append_text_part(
-                        text_groups,
-                        {
-                            "type": "output_text",
-                            "text": part["text"],
-                            "annotations": [],
-                            "logprobs": [],
-                        },
-                        self._part_phase(part, message),
-                    )
-                elif is_citation_part(part):
-                    self._attach_annotation_to_text(
-                        part,
-                        text_groups[-1][1] if text_groups else [],
-                        self._citation_warnings(context, kwargs),
-                    )
-                elif is_refusal_part(part):
-                    self._append_text_part(
-                        text_groups,
-                        self.content_ops.ir_refusal_to_p(part),
-                        self._part_phase(part, message),
-                    )
-                # Each of the remaining part types is an item of its own, so
-                # the message text collected so far is written ahead of it and
-                # the response's items keep the order the IR lists them.
-                elif is_reasoning_part(part):
-                    self._flush_message_items(text_groups, output, response_id_stem)
-                    output.append(
-                        self.content_ops.ir_reasoning_to_p(
-                            part,
-                            output_item=True,
-                            response_id=ir_response.get("id", ""),
-                            reasoning_index=reasoning_index,
-                        )
-                    )
-                    reasoning_index += 1
-                elif is_tool_call_part(part) or is_tool_result_part(part):
-                    self._flush_message_items(text_groups, output, response_id_stem)
-                    self._append_tool_item(part, context, output)
+    def _fold_events(
+        self,
+        ir_response: IRResponse,
+        stream_context: OpenResponsesStreamContext,
+    ) -> dict[str, Any]:
+        """Drive the stream writer over *ir_response*'s expansion.
 
-            self._flush_message_items(text_groups, output, response_id_stem)
+        Args:
+            ir_response: The turn to fold.
+            stream_context: The writer context, shared across choices so the
+                response envelope (id, model, created) is built once.
 
-            # Set finish reason
-            finish_reason = choice.get("finish_reason", {}).get("reason", "stop")
-            status = RESPONSES_REASON_TO_STATUS.get(finish_reason, "completed")
-            provider_response["status"] = status
-            if finish_reason in {"error", "cancelled"}:
-                source_error = (message.get("provider_metadata") or {}).get(
-                    "responses_error"
-                )
-                if source_error is not None:
-                    provider_response["error"] = source_error
-            incomplete_reason = RESPONSES_REASON_TO_INCOMPLETE_REASON.get(finish_reason)
-            if incomplete_reason:
-                provider_response["incomplete_details"] = {"reason": incomplete_reason}
+        Returns:
+            The response payload of the terminal event, or ``{}``.
+        """
+        body: dict[str, Any] = {}
+        for event in expand_response(ir_response):
+            result = self.stream_response_to_provider(event, context=stream_context)
+            for chunk in result if isinstance(result, list) else [result]:
+                if isinstance(chunk, dict) and chunk.get("type") in TERMINAL_EVENTS:
+                    body = dict(chunk.get("response") or {})
+        return body
 
-        # Usage
-        ir_usage = ir_response.get("usage")
-        if ir_usage:
-            provider_response["usage"] = self._build_ir_usage_to_p(ir_usage)
+    @staticmethod
+    def _renumber_message_items(body: dict[str, Any], response_id: str) -> None:
+        """Number message items by their place in the output, as a body does.
 
+        Each choice's fold starts its own count, so two choices would name
+        their first item the same; the body numbers them after the items
+        already emitted.
+        """
+        count = 0
+        for item in body.get("output") or []:
+            if item.get("type") == "message":
+                item["id"] = generate_message_id(response_id, count)
+                count += 1
+
+    def _apply_body_shape(
+        self,
+        body: dict[str, Any],
+        ir_response: IRResponse,
+        *,
+        context: ConversionContext,
+        kwargs: dict[str, Any],
+    ) -> None:
+        """Add what a whole body carries and no stream event carries.
+
+        Args:
+            body: The response payload the fold produced; mutated in place.
+            ir_response: The IR response it was folded from.
+            context: The conversion context, for the warning sink.
+            kwargs: The writer's keyword arguments, for the same.
+        """
+        if "created" in ir_response:
+            body["created_at"] = ir_response["created"]
         if "service_tier" in ir_response:
-            provider_response["service_tier"] = ir_response["service_tier"]
+            body["service_tier"] = ir_response["service_tier"]
 
-        # Set completed_at for completed responses
-        if provider_response.get("status") == "completed":
-            provider_response["completed_at"] = self._completion_timestamp()
-        else:
-            provider_response["completed_at"] = None
+        for item in body.get("output") or []:
+            if item.get("type") == "message":
+                item["status"] = "completed"
+                for part in item.get("content") or []:
+                    if part.get("type") == "output_text":
+                        part.setdefault("annotations", [])
+                        part.setdefault("logprobs", [])
+            elif item.get("type") == "function_call" and item.get("id") == item.get(
+                "call_id"
+            ):
+                # The events name the item with the bare call id when the
+                # source carried no item id — that is the stream's own
+                # contract — while a body has always used the API's ``fc_``
+                # spelling.
+                item["id"] = function_call_item_id(str(item.get("call_id", "")))
 
-        return provider_response
+        self._restore_tool_results(body, ir_response, context=context, kwargs=kwargs)
+        self._restore_custom_inputs(body, ir_response)
+        self._attach_reasoning_content(body, ir_response)
+        self._attach_citations(body, ir_response, context=context, kwargs=kwargs)
+
+    def _restore_tool_results(
+        self,
+        body: dict[str, Any],
+        ir_response: IRResponse,
+        *,
+        context: ConversionContext,
+        kwargs: dict[str, Any],
+    ) -> None:
+        """Write the client tool results the events never carry into the body.
+
+        A client result is not a stream item at all: the stream leg writes it
+        on the *request* leg, and a body has always written it after the call
+        it answers.  A server result is the stream's to place — including the
+        report when it has no form — so only client results are restored here.
+
+        Args:
+            body: The folded body, mutated in place.
+            ir_response: The IR response it was folded from.
+            context: The conversion context, for the warning sink.
+            kwargs: The writer's keyword arguments, for the same.
+        """
+        output = body.get("output") or []
+        # Only a result item means the result was written; the call it answers
+        # carries the same call id.
+        present = {
+            item.get("call_id")
+            for item in output
+            if str(item.get("type", "")).endswith("_output")
+        }
+        warnings = self._citation_warnings(context, kwargs)
+        for choice in ir_response.get("choices") or []:
+            for part in (choice.get("message") or {}).get("content") or []:
+                if not is_tool_result_part(part):
+                    continue
+                if part.get("tool_type") == "intrinsic":
+                    continue
+                call_id = part.get("tool_call_id")
+                if call_id in present:
+                    continue
+                item = self.tool_ops.ir_client_result_to_p(
+                    part, leg="response", warnings=warnings
+                )
+                if not item:
+                    continue
+                _insert_after_call(output, str(call_id), item)
+                present.add(call_id)
+
+    @staticmethod
+    def _restore_custom_inputs(body: dict[str, Any], ir_response: IRResponse) -> None:
+        """Give each custom tool call back its plain-text ``input``.
+
+        The events carry a tool call's arguments as JSON; a custom tool takes
+        text, and the IR wraps it as ``{"input": ...}`` when it is not itself
+        a JSON object.  One unwrap rule, the same one the body builder uses.
+        """
+        parts = {
+            part["tool_call_id"]: part
+            for choice in ir_response.get("choices") or []
+            for part in (choice.get("message") or {}).get("content") or []
+            if is_tool_call_part(part) and "tool_call_id" in part
+        }
+        for item in body.get("output") or []:
+            if item.get("type") != "custom_tool_call":
+                continue
+            part = parts.get(item.get("call_id"))
+            if part is not None:
+                item["input"] = custom_call_input_text(part.get("tool_input"))
+
+    @staticmethod
+    def _attach_reasoning_content(
+        body: dict[str, Any], ir_response: IRResponse
+    ) -> None:
+        """Give each reasoning item back the raw ``content`` a body carries.
+
+        The spec's structured ``summary`` is what a stream carries; the raw
+        ``reasoning_text`` content lives on the part in a body, beside it.
+        """
+        reasoning_items = [
+            item for item in body.get("output") or [] if item.get("type") == "reasoning"
+        ]
+        index = -1
+        for choice in ir_response.get("choices") or []:
+            for part in (choice.get("message") or {}).get("content") or []:
+                if not is_reasoning_part(part):
+                    continue
+                index += 1
+                metadata = part.get("provider_metadata") or {}
+                raw = metadata.get("responses_reasoning_content")
+                if raw and 0 <= index < len(reasoning_items):
+                    reasoning_items[index]["content"] = raw
+
+    def _attach_citations(
+        self,
+        body: dict[str, Any],
+        ir_response: IRResponse,
+        *,
+        context: ConversionContext,
+        kwargs: dict[str, Any],
+    ) -> None:
+        """Hang each citation on the text part it annotates.
+
+        The events carry a citation as its own ``citation_delta``; a whole body
+        carries it on the ``output_text`` part of the nearest preceding text,
+        which is the adjacency ``expand_response`` gives the event.
+        """
+        text_parts = [
+            part
+            for item in body.get("output") or []
+            if item.get("type") == "message"
+            for part in item.get("content") or []
+            if part.get("type") == "output_text"
+        ]
+        warnings = self._citation_warnings(context, kwargs)
+        index = -1
+        for choice in ir_response.get("choices") or []:
+            for part in (choice.get("message") or {}).get("content") or []:
+                if is_text_part(part):
+                    if index + 1 < len(text_parts):
+                        index += 1
+                elif is_citation_part(part):
+                    annotation = self.content_ops.ir_citation_to_p(part)
+                    if annotation is None:
+                        report_dropped_citation(part, warnings=warnings)
+                    elif index >= 0:
+                        text_parts[index]["annotations"].append(annotation)
+                    else:
+                        report_dropped_citation(
+                            part, warnings=warnings, why="no text part to annotate"
+                        )
 
     # ------------------------------------------------------------------
     # Cross-provider consistency helpers
     # ------------------------------------------------------------------
-
-    def _append_tool_item(
-        self, part: Any, context: ConversionContext, output: list[dict[str, Any]]
-    ) -> None:
-        """A tool call or result becomes its own output item."""
-        if is_tool_call_part(part):
-            self._append_intrinsic_call_item(part, context, output)
-        else:
-            self._append_intrinsic_result_item(part, context, output)
-
-    def _attach_annotation_to_text(
-        self,
-        part: Any,
-        text_parts: list[dict[str, Any]],
-        warnings: list[str] | None,
-    ) -> None:
-        """Hang a citation on the ``output_text`` part it annotates."""
-        annotation = self.content_ops.ir_citation_to_p(part)
-        if annotation is None:
-            report_dropped_citation(part, warnings=warnings)
-        elif text_parts and text_parts[-1].get("type") == "output_text":
-            text_parts[-1]["annotations"].append(annotation)
-        else:
-            report_dropped_citation(
-                part, warnings=warnings, why="no text part to annotate"
-            )
 
     @staticmethod
     def _citation_warnings(
@@ -891,50 +1022,6 @@ class OpenResponsesConverter(BaseConverter):
                 usage_info["reasoning_tokens"] = p_output_details["reasoning_tokens"]
         return cast(UsageInfo, usage_info)
 
-    def _append_intrinsic_call_item(
-        self,
-        part: Any,
-        context: ConversionContext,
-        output: list[dict[str, Any]],
-    ) -> None:
-        """Append a server call's native item, or drop it with a warning.
-
-        A response is a call the *client* did not run, so a server call this
-        dialect cannot render natively is dropped rather than handed over as a
-        client ``function_call``.  ``dropped_intrinsic_call`` answers ``{}``, so
-        a result that is falsy is not appended — an item with no ``type`` would
-        reach the client instead of the drop the rule intends.
-
-        Args:
-            part: IR tool call part.
-            context: Conversion context (the entry point put its sink in scope).
-            output: The response's ``output`` list, extended in place.
-        """
-        item = self.tool_ops.ir_tool_call_to_p(part, leg="response")
-        if item:
-            output.append(item)
-
-    def _append_intrinsic_result_item(
-        self,
-        part: Any,
-        context: ConversionContext,
-        output: list[dict[str, Any]],
-    ) -> None:
-        """Append a server result's native output item, or drop it with a warning.
-
-        Responses has a native ``*_call_output`` item for some intrinsic kinds;
-        one it has none for is dropped — the client did not run the call, so a
-        client ``function_call_output`` is not a pair it could answer.
-
-        Args:
-            part: IR tool result part.
-            context: Conversion context (the entry point put its sink in scope).
-            output: The response's ``output`` list, extended in place.
-        """
-        item = self.tool_ops.ir_tool_result_to_p(part, leg="response")
-        if item:
-            output.append(item)
-
     @staticmethod
     def _stamp_text_part_phase(part: Any, phase: str) -> None:
         """Record the message item's phase on one of its text parts.
@@ -957,82 +1044,13 @@ class OpenResponsesConverter(BaseConverter):
         metadata["responses_phase"] = phase
 
     @staticmethod
-    def _part_phase(part: Any, message: Mapping[str, Any]) -> str:
-        """Phase of the message item a text part came from.
+    def _build_ir_usage_to_p(ir_usage: Any) -> dict[str, Any]:
+        """Build Responses API usage dict from IR usage.
 
-        The read leg records an item's phase on each of its parts, because a
-        response's several message items collapse into the one IR message a
-        choice can hold.  The message-level phase is the fallback, for IR
-        built by hand or by an older version.
-
-        Args:
-            part: IR content part.
-            message: The IR message the part belongs to.
-
-        Returns:
-            The item's phase, or ``""`` when it has none.
+        The body writer folds its usage out of the events, but the base
+        contract still asks every dialect for this mapping, and a caller may
+        reach it directly.
         """
-        metadata = part.get("provider_metadata") or {}
-        phase = metadata.get("responses_phase")
-        if isinstance(phase, str) and phase:
-            return phase
-        message_phase = (message.get("provider_metadata") or {}).get("responses_phase")
-        return message_phase if isinstance(message_phase, str) else ""
-
-    def _flush_message_items(
-        self,
-        groups: list[tuple[str, list[dict[str, Any]]]],
-        output: list[dict[str, Any]],
-        response_id: str,
-    ) -> None:
-        """Emit the text parts collected so far as message items.
-
-        One item per group, placed where its parts appear in the IR — the
-        response's items keep the order the upstream reported them in — and
-        numbered after the items already emitted, so the ids stay unique
-        across the whole response rather than within one choice (#997).
-
-        Args:
-            groups: ``(phase, parts)`` pairs waiting to be written; emptied.
-            output: The response's ``output`` list, extended in place.
-            response_id: Response the items belong to, for id generation.
-        """
-        for phase, parts in groups:
-            item: dict[str, Any] = {
-                "id": generate_message_id(
-                    response_id, sum(1 for i in output if i.get("type") == "message")
-                ),
-                "type": "message",
-                "role": "assistant",
-                "status": "completed",
-                "content": parts,
-            }
-            if phase:
-                item["phase"] = phase
-            output.append(item)
-        groups.clear()
-
-    @staticmethod
-    def _append_text_part(
-        groups: list[tuple[str, list[dict[str, Any]]]],
-        part: dict[str, Any],
-        phase: str,
-    ) -> None:
-        """Add a text or refusal part to its phase group, opening one if needed.
-
-        Args:
-            groups: ``(phase, parts)`` pairs collected so far, in part order.
-            part: Provider-format content part to file.
-            phase: Phase of the message item the part came from.
-        """
-        if groups and groups[-1][0] == phase:
-            groups[-1][1].append(part)
-        else:
-            groups.append((phase, [part]))
-
-    @staticmethod
-    def _build_ir_usage_to_p(ir_usage: Mapping[str, Any]) -> dict[str, Any]:
-        """Build Responses API usage dict from IR usage."""
         return {
             "input_tokens": ir_usage.get("prompt_tokens") or 0,
             "output_tokens": ir_usage.get("completion_tokens") or 0,
@@ -2553,10 +2571,10 @@ class OpenResponsesConverter(BaseConverter):
         A result read from this same dialect is replayed verbatim from the
         ``_native`` item the reader stored.  Otherwise the item is rebuilt from
         the IR fields for a kind that has its own ``*_call_output`` item; a
-        ``web_search`` result (which rides on the call item) and any kind this
-        dialect cannot render are dropped silently, matching the non-streaming
-        writer.  A server result is never re-encoded as a client
-        ``function_call_output``.
+        ``web_search`` result rides on its call item and needs no item of its
+        own, and a server kind this dialect cannot render at all is reported
+        through the warning sink rather than dropped without a word.  A server
+        result is never re-encoded as a client ``function_call_output``.
         """
         pm = event.get("provider_metadata") or {}
         native = pm.get("_native")
@@ -2571,6 +2589,23 @@ class OpenResponsesConverter(BaseConverter):
             event.get("result", ""),
         )
         if item is None:
+            if (
+                event.get("tool_type") == "intrinsic"
+                and intrinsic_kind_of(event) not in _INTRINSIC_KIND_TO_ITEM
+            ):
+                # A server kind with no item at all is a loss, and the body
+                # leg reports it; a stream that dropped it silently would make
+                # the two legs answer a caller differently.  A client result is
+                # not this writer's to render — a body writes it, a stream
+                # never has.
+                self.tool_ops.dropped_intrinsic_result(
+                    cast(Any, event),
+                    leg="response",
+                    # An empty list is not a sink: naming one would swallow
+                    # the report instead of letting the conversion's own
+                    # sink hear it.
+                    warnings=getattr(context, "warnings", None) or None,
+                )
             return {}
         return self._stream_result_chunk(item, event, context)
 
@@ -2590,6 +2625,9 @@ class OpenResponsesConverter(BaseConverter):
             if output_index is None:
                 output_index = context.next_output_index()
             result["output_index"] = output_index
+            # The item has no deltas to follow it, so the completed response
+            # learns about it here or not at all.
+            context._result_items.append((output_index, item))
         elif output_index is not None:
             result["output_index"] = output_index
         return result
@@ -2710,22 +2748,9 @@ class OpenResponsesConverter(BaseConverter):
             entries.append((item.output_index, reasoning_item))
 
         for item in context._message_items:
-            if not item.accumulated_text:
-                continue
-            msg_item: dict[str, Any] = {
-                "id": item.item_id,
-                "type": "message",
-                "role": "assistant",
-                "content": [{"type": "output_text", "text": item.accumulated_text}],
-            }
-            if item.phase:
-                msg_item["phase"] = item.phase
-            if context.metadata_mode == "preserve":
-                msg_item["status"] = "completed"
-                for part in msg_item.get("content", []):
-                    part.setdefault("annotations", [])
-                    part.setdefault("logprobs", [])
-            entries.append((item.output_index, msg_item))
+            msg_item = self._finish_message_item(item, context)
+            if msg_item is not None:
+                entries.append((item.output_index, msg_item))
 
         for call_id in context.tool_call_ids:
             tool_name = context.get_tool_name(call_id)
@@ -2774,6 +2799,10 @@ class OpenResponsesConverter(BaseConverter):
                     )
                 )
 
+        # Server results are whole items, announced once with no delta to
+        # follow; they carry their own index.
+        entries.extend(context._result_items)
+
         # Only reorder when every item knows its index; otherwise keep the
         # historical reasoning → message → tool-calls order.  sort() is
         # stable, so ties stay as appended.
@@ -2781,6 +2810,46 @@ class OpenResponsesConverter(BaseConverter):
             entries.sort(key=lambda entry: entry[0])
         output.extend(item for _, item in entries)
         return output
+
+    @staticmethod
+    def _finish_message_item(
+        item: MessageItemState, context: OpenResponsesStreamContext
+    ) -> dict[str, Any] | None:
+        """Build one message item for the completed response.
+
+        A message item is the text it accumulated plus, when the turn carried
+        one, its refusal: the item's own ``output_item.done`` announces both,
+        so the completed payload must not be the one place a refusal
+        disappears.
+
+        Args:
+            item: Message item state the stream accumulated.
+            context: The stream context, for the preserve-mode shape.
+
+        Returns:
+            The item, or ``None`` when it holds no content at all.
+        """
+        if not item.accumulated_text and not item.accumulated_refusal:
+            return None
+        parts: list[dict[str, Any]] = []
+        if item.accumulated_text:
+            parts.append({"type": "output_text", "text": item.accumulated_text})
+        if item.accumulated_refusal:
+            parts.append({"type": "refusal", "refusal": item.accumulated_refusal})
+        msg_item: dict[str, Any] = {
+            "id": item.item_id,
+            "type": "message",
+            "role": "assistant",
+            "content": parts,
+        }
+        if item.phase:
+            msg_item["phase"] = item.phase
+        if context.metadata_mode == "preserve":
+            msg_item["status"] = "completed"
+            for part in msg_item["content"]:
+                part.setdefault("annotations", [])
+                part.setdefault("logprobs", [])
+        return msg_item
 
     @staticmethod
     def _build_stream_function_call_item(

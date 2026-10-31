@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 from ...base.context import StreamContext
 
@@ -74,6 +75,14 @@ class OpenResponsesStreamContext(StreamContext):
 
     # Tool call output_index storage (call_id → assigned index)
     _tool_call_output_indices: dict[str, int] = field(default_factory=dict, repr=False)
+
+    # Server tool result items emitted outbound, with the output index each
+    # was announced at.  They are whole items with no deltas, so the completed
+    # response has to be told about them here or it silently omits what the
+    # stream just announced.
+    _result_items: list[tuple[int, dict[str, Any]]] = field(
+        default_factory=list, repr=False
+    )
 
     # Group of each tool call (call_id → group), for tools that were
     # flattened out of a `namespace` container on the request leg.  Recorded
