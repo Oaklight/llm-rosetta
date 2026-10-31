@@ -1179,14 +1179,19 @@ th.sortable:focus-visible { outline:2px solid var(--accent);outline-offset:-2px;
 }
 .login-foot #loginFoot { flex:1;min-width:0; }
 /* The panel's language and light/dark live in localStorage, so they work
-   before sign-in — a login page in the wrong language is otherwise a dead end. */
+   before sign-in — a login page in the wrong language is otherwise a dead end.
+   Borderless like the console rail's controls: a box around two 24px glyphs
+   reads as a form field the card does not have. */
 .login-prefs { display:flex;gap:2px;flex:0 0 auto; }
 .login-pref-btn {
-  width:24px;height:24px;padding:0;border:1px solid var(--border);border-radius:6px;
-  background:transparent;color:var(--text-dim);font-size:10px;font-weight:600;
+  width:24px;height:24px;padding:0;border:0;border-radius:6px;
+  background:transparent;color:var(--text-dim);font-size:11px;font-weight:600;
   cursor:pointer;display:flex;align-items:center;justify-content:center;
 }
-.login-pref-btn:hover { color:var(--text);border-color:var(--accent); }
+/* The theme icon is an inline SVG with no intrinsic size; without this it
+   fills the 24px button and dwarfs the language glyph beside it. */
+.login-pref-btn svg { width:14px;height:14px;display:block; }
+.login-pref-btn:hover { color:var(--text); }
 
 /* Empty states */
 .empty-state {

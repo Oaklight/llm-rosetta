@@ -223,18 +223,19 @@ body.auth-pending > .db-footer { display: none !important; }
 .sb-brand h1 { font-size: 15px; }
 .sb-brand h1 span { display: block; font-size: 11px; margin-top: 2px; }
 .sidebar .tabs {
-  flex-direction: column; align-items: stretch; gap: 2px;
+  flex-direction: column; align-items: stretch; gap: 4px;
   padding: 0; border-bottom: none; overflow: visible; flex: 0 0 auto;
 }
 /* Rail items follow the settings sub-nav: no bubble, an accent bar and an
    accent label for the current section, the background only on hover.  Two
    navigations that looked nothing alike made the panel feel assembled from
-   two designs. */
+   two designs.  Both are 14px with the same 9px vertical rhythm, so the rail
+   and the settings pane beside it read as one column of entries. */
 .sidebar .tab {
   position: relative;
   display: flex; align-items: center; gap: 10px;
-  padding: 7px 8px 7px 12px; border-radius: 6px; border-bottom: none;
-  font-size: 13px; color: var(--text-dim); white-space: normal;
+  padding: 9px 10px 9px 12px; border-radius: 6px; border-bottom: none;
+  font-size: 14px; color: var(--text-dim); white-space: normal;
   transition: color .12s ease, background .12s ease;
 }
 .sidebar .tab:hover { background: var(--bg-hover); color: var(--text); }
@@ -244,7 +245,7 @@ body.auth-pending > .db-footer { display: none !important; }
   box-shadow: none;
 }
 .sidebar .tab.active::before {
-  content: ''; position: absolute; left: 0; top: 6px; bottom: 6px;
+  content: ''; position: absolute; left: 0; top: 8px; bottom: 8px;
   width: 2px; border-radius: 2px; background: var(--accent);
   pointer-events: none;
 }
@@ -258,16 +259,28 @@ body.auth-pending > .db-footer { display: none !important; }
   padding-top: 10px; border-top: 1px solid var(--border);
 }
 .sb-clock { display: flex; flex-direction: column; gap: 2px; padding: 0 10px; font-size: 11px; color: var(--text-dim); }
-.sb-actions { display: flex; gap: 4px; }
-.sb-actions .btn { flex: 1; min-width: 0; display: inline-flex; align-items: center; justify-content: center; }
+.sb-actions { display: flex; gap: 2px; }
+.sb-actions .btn { flex: 1; min-width: 0; height: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
 /* The foot of the rail is icon-only and borderless: a box around each of four
-   40px buttons reads as a toolbar the panel does not have. */
-.sb-icon-btn {
-  padding: 6px 0; font-size: 12px; line-height: 1;
+   40px buttons reads as a toolbar the panel does not have.  The rules are
+   scoped to `.sb-actions` so they outrank the generic `.btn` (loaded after
+   this file), which would otherwise paint a border and a card background. */
+.sb-actions .sb-icon-btn {
+  position: relative; padding: 0; font-size: 12px; line-height: 1;
   border: none; background: transparent; color: var(--text-dim);
 }
-.sb-icon-btn:hover { background: var(--bg-hover); color: var(--text); }
-.sb-icon-btn svg { width: 15px; height: 15px; display: block; margin: 0 auto; }
+.sb-actions .sb-icon-btn:hover { background: transparent; color: var(--text); }
+.sb-actions .sb-icon-btn.sb-icon-danger:hover { color: var(--red); }
+/* Settings lives in the foot, not the tab list, so the gear is what says the
+   panel is open.  The marker is the rail's accent bar turned horizontal: in
+   the minimal scheme `--accent` is the text colour, so a colour change alone
+   would not be visible. */
+.sb-actions .sb-icon-btn.is-active::after {
+  content: ''; position: absolute; left: 12px; right: 12px; bottom: 3px;
+  height: 2px; border-radius: 2px; background: var(--accent);
+  pointer-events: none;
+}
+.sb-actions .sb-icon-btn svg { width: 16px; height: 16px; display: block; margin: 0 auto; }
 .app-main { min-width: 0; }
 /* Language swap: the shell dips out for ~90ms while every string is replaced.
    The login card does the same; it is on screen before the shell exists. */
@@ -332,21 +345,21 @@ a { color: var(--accent); text-decoration: none; }
 }
 .settings-nav {
   position: sticky; top: 8px; align-self: stretch;
-  display: flex; flex-direction: column; gap: 1px;
+  display: flex; flex-direction: column; gap: 4px;
   padding: 0 18px 0 0;
   border-right: 1px solid var(--border);
 }
 .settings-nav-btn {
   position: relative;
   appearance: none; border: 0; background: transparent; color: var(--text-dim);
-  font: inherit; font-size: 13px; text-align: left; cursor: pointer;
-  padding: 6px 8px 6px 12px; border-radius: 6px;
+  font: inherit; font-size: 14px; text-align: left; cursor: pointer;
+  padding: 9px 10px 9px 12px; border-radius: 6px;
   transition: color .12s ease, background .12s ease;
 }
 .settings-nav-btn:hover { background: var(--bg-hover); color: var(--text); }
 .settings-nav-btn.is-active { color: var(--accent); font-weight: 600; }
 .settings-nav-btn.is-active::before {
-  content: ''; position: absolute; left: 0; top: 7px; bottom: 7px; width: 2px;
+  content: ''; position: absolute; left: 0; top: 8px; bottom: 8px; width: 2px;
   border-radius: 2px; background: var(--accent);
   pointer-events: none;
 }

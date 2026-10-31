@@ -94,6 +94,10 @@ function _syncRailPrefs() {
     lang.textContent = S.currentLang === 'zh' ? '\u4E2D' : 'EN';
     lang.title = t('label.language');
   }
+  // Settings has no entry in the tab list, so the gear in the foot is the only
+  // thing that can show the panel is the current one.
+  const settingsBtn = document.getElementById('railSettingsBtn');
+  if (settingsBtn) settingsBtn.classList.toggle('is-active', S.currentTab === 'settings');
 }
 
 function toggleAppMode() {
