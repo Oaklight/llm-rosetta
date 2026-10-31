@@ -206,7 +206,13 @@ async def handle_typed_request(
     same_format = source_format == route.format
     original_body = copy.deepcopy(body) if same_format else None
     try:
-        target_body = pipeline.convert_request(body)
+        # A shim's defaults are passed only when it declares some: a pipeline
+        # that predates them (or a type whose shims declare none) keeps the
+        # one-argument call it has always had.
+        if route.params:
+            target_body = pipeline.convert_request(body, defaults=route.params)
+        else:
+            target_body = pipeline.convert_request(body)
     except Exception as exc:
         logger.warning("%s: request conversion failed: %s", handler.model_type, exc)
         return with_request_id(

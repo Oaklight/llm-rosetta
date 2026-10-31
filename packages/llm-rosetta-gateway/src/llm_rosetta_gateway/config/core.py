@@ -441,6 +441,7 @@ class GatewayConfig:
             format=pcfg["format"],
             path=pcfg[path_key],
             provider_info=infos[provider_name],
+            params=pcfg.get("params") or None,
         )
 
     def resolve_embedding(self, model: str) -> TypedRoute:

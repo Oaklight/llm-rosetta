@@ -245,7 +245,13 @@ def parse_typed_provider(
     wire_format = typed_wire_format(cfg, keys, explicit_format, shim)
     path = typed_path(cfg, keys, descriptor, shim, wire_format)
     info = typed_provider_info(name, cfg, keys, wire_format, path, shim, global_proxy)
-    return {"format": wire_format, keys.path_key: path}, info
+    # The shim's defaults describe its own dialect; an explicit format that
+    # overrides the shim's makes them a guess, so they apply only when the
+    # effective format is the shim's (the same rule ``typed_path`` follows).
+    parsed: dict[str, Any] = {"format": wire_format, keys.path_key: path}
+    if shim is not None and wire_format == shim.format and shim.params:
+        parsed["params"] = dict(shim.params)
+    return parsed, info
 
 
 def typed_wire_format(
