@@ -59,7 +59,8 @@ without installing anything into the gateway image.
   // its remote below; an explicit remote with the same URL overrides the preset.
   "presets": ["alcf"],
 
-  // Scanned for <name>/provider.yaml (flat) or <group>/<leaf>/provider.yaml (grouped).
+  // Scanned for <vendor>/<type>/provider.yaml (the built-in shape), or the older
+  // <name>/provider.yaml (flat) and <group>/<leaf>/provider.yaml (grouped) shapes.
   // Relative entries are anchored to the directory containing this config file.
   "paths": ["./local-shims", "../shared/rosetta-shims"],
 
@@ -82,10 +83,11 @@ without installing anything into the gateway image.
 }
 ```
 
-**Layout.** A directory under `paths` may hold a `provider.yaml` directly
-(`my-provider/provider.yaml`) or group several shims in subdirectories
-(`vendor/messages/provider.yaml`, `vendor/chat_completions/provider.yaml`), the
-same layouts the built-in shims use.
+**Layout.** A directory under `paths` may group by model type
+(`vendor/embeddings/provider.yaml`, `vendor/llm/chat_completions/provider.yaml`),
+the shape the built-in shims use; the older shapes still load unchanged — a
+`provider.yaml` directly in a child (`my-provider/provider.yaml`) or one group
+level (`vendor/messages/provider.yaml`, `vendor/chat_completions/provider.yaml`).
 
 **Remote fetches are git-less.** GitHub repository URLs are rewritten to their
 codeload tarball endpoint; any other host works by giving an explicit archive

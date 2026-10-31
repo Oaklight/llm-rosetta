@@ -34,19 +34,35 @@ Built-in shims are defined as a directory structure under `shims/providers/`:
 
 ```text
 packages/llm-rosetta/src/llm_rosetta/shims/providers/
-├── __init__.py              # Auto-discovery: scans subdirectories
+├── __init__.py                  # Auto-discovery: scans subdirectories
 ├── openai/
-│   └── provider.yaml        # Provider identity (YAML)
-├── deepseek/
-│   ├── provider.yaml        # Provider identity
-│   └── transforms.py        # Field-level transforms
-├── volcengine/
-│   ├── provider.yaml
-│   └── transforms.py
+│   ├── quota.py                 # vendor-level probe, shared by every type
+│   ├── llm/
+│   │   ├── chat_completions/
+│   │   │   ├── provider.yaml    # Provider identity (YAML)
+│   │   │   └── transforms.py    # Field-level transforms
+│   │   └── open_responses/
+│   │       └── provider.yaml
+│   ├── embeddings/
+│   │   └── provider.yaml        # format: openai
+│   └── decisions/
+│       └── provider.yaml        # format: openai_decisions
+├── cohere/
+│   ├── embeddings/
+│   │   └── provider.yaml        # format: cohere
+│   └── rerank/
+│       └── provider.yaml
 └── ...
 ```
 
-Each provider subdirectory contains:
+The first level under a vendor is its **model type**, named the way the
+endpoint is spelled: `llm/`, `embeddings/`, `rerank/`, `decisions/`. A chat
+vendor keeps a format level below it because one vendor serves several chat
+dialects; a non-chat vendor normally serves one, so the type directory holds
+the YAML directly. The loader checks the directory against the shim's
+`model_type:` and refuses a shim filed under the wrong type.
+
+Each leaf directory contains:
 
 - **`provider.yaml`** (required) — declares `name`, `model_type`, `format`, connection settings (`connection.base_url`, `connection.api_key_env`, `connection.auth_header`, `connection.keyless`, `connection.models_path`, `connection.default_path`, `connection.token_command`), plus optional `logo`, `display_name`, and `free_source`.  `base` is the deprecated alias for `format`; the loader validates the `(model_type, format)` pair against the converter registry.  `model_type` is required whenever `format` is used — only a shim that declares `base` and no `format` may omit it.  A non-chat shim declares `connection.default_path` for the endpoint it serves (e.g. `/v1/embeddings`), and a provider can name it through `embedding_shim` / `rerank_shim` / `decision_shim` instead of a bare format.
 - **`transforms.py`** (optional) — exports `post_ir_transforms` and/or `pre_ir_transforms` tuples (the old names `to_transforms` / `from_transforms` also work)
@@ -332,7 +348,7 @@ ships no `pip` and no `git`) and the shims live in their own repository:
 ```jsonc
 "shims": {
   "presets": ["alcf"],                            // shorthand for the catalog remote below
-  "paths": ["/config/shims"],                     // dirs holding <name>/provider.yaml
+  "paths": ["/config/shims"],                     // dirs holding <vendor>/<type>/provider.yaml (or the older flat/grouped shapes)
   "remotes": [
     {
       "url": "https://github.com/Oaklight/llm-rosetta-shim-alcf",
@@ -361,8 +377,8 @@ config file needed) or `llm_rosetta_gateway.apply_shim_sources(raw, config_path)
 
 ## Built-in Shims
 
-LLM-Rosetta ships with 33 built-in provider shims, one directory per shim under
-`packages/llm-rosetta/src/llm_rosetta/shims/providers/`. `list_shims()` prints the live set; this is
+LLM-Rosetta ships with 34 built-in provider shims, one directory per shim under
+`packages/llm-rosetta/src/llm_rosetta/shims/providers/<vendor>/<model-type>/`. `list_shims()` prints the live set; this is
 that set. The ALCF, AskSage and Argo shims ship as standalone packages — see
 [Standalone shim packages](#standalone-shim-packages).
 
@@ -761,7 +777,7 @@ After registration the shim name works everywhere — `get_converter_for_provide
 
 To add a new provider to the built-in registry:
 
-1. Create a directory under `packages/llm-rosetta/src/llm_rosetta/shims/providers/<name>/`
+1. Create a directory under `packages/llm-rosetta/src/llm_rosetta/shims/providers/<vendor>/`: `<vendor>/llm/<format>/` for chat, `<vendor>/<model-type>/` for embedding, rerank or decision.
 2. Add a `provider.yaml` with required fields:
 
     ```yaml

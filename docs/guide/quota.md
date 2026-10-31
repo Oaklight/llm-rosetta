@@ -24,8 +24,9 @@ per-credential state, probe execution and the admin surface. The **contract and
 resolution** — the `QuotaProbe` interface, the window and in-band signal types,
 `resolve_probe` — live in `llm_rosetta.shims.quota_probe`, because a shim's
 `quota.py` implements it and the translation core must never import the
-gateway. It contains no vendor code. A shim **ships its probe** as `quota.py` beside `provider.yaml`
-(group-level for a vendor spanning several formats, leaf-level for a one-off)
+gateway. It contains no vendor code. A shim **ships its probe** as `quota.py` at the
+vendor level — beside the `llm/`, `embeddings/`, … directories, shared by every
+type — or beside its `provider.yaml` for a one-off leaf
 and names it with `quota.probe`. The endpoint, the auth header, the body
 decoder and the error wording are vendor facts and live with the vendor, so a
 vendor that changes its answer is a change to that one shim module.
