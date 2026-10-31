@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from dataclasses import dataclass
 from typing import Any
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
@@ -113,6 +114,137 @@ def _apply_request_stages(ctx: SelectionContext) -> ProviderInfo:
     provider_info = ctx.provider_info
     assert provider_info is not None  # the caller sets it before running these
     return provider_info
+
+
+@dataclass
+class PreparedRequest:
+    """What both request handlers need before their transports diverge.
+
+    Built by :func:`prepare_request`; the two handlers read it and then take
+    their own path — one opens a JSON request, the other an SSE stream.
+    """
+
+    pipeline: ConversionPipeline
+    target_body: dict[str, Any]
+    provider_info: ProviderInfo
+    model: str
+
+
+class RequestRefused(Exception):
+    """The prelude answered the request itself; the caller returns the response.
+
+    A conversion failure is the source dialect's own ``400``, and it is
+    decided in one place instead of once per handler.
+    """
+
+    def __init__(self, response: Response, profile: dict[str, Any]) -> None:
+        super().__init__("the request was refused before it reached an upstream")
+        self.response = response
+        self.profile = profile
+
+
+async def prepare_request(
+    route: ResolvedRoute,
+    provider_info: ProviderInfo,
+    body: dict[str, Any],
+    *,
+    metadata_store: ProviderMetadataStore,
+    persistence: Any | None,
+    entry_id: str | None,
+    selection: SelectionContext,
+    profile: dict[str, Any],
+) -> PreparedRequest:
+    """Build the pipeline and the target body both handlers send.
+
+    The steps here are the same whatever the response mode: build the
+    pipeline, convert the request to the target dialect, report a conversion
+    failure as the source's ``400``, record the request's fidelity, flatten
+    the system message when the model asks for it, strip the gateway's own
+    metadata, and run the request stages that pick the transport config.
+
+    Args:
+        route: The resolved route the request will take.
+        provider_info: The provider's transport config, before the stages.
+        body: The source-format request body.
+        metadata_store: The provider metadata store the conversion writes to.
+        persistence: Request-log persistence, for the failure dump.
+        entry_id: The request-log entry this request is recorded under.
+        selection: The routing context the request stages read and fill.
+        profile: The per-request profile dict, updated in place.
+
+    Returns:
+        The pipeline, the converted body, the provider info the stages chose,
+        and the model the client named.
+
+    Raises:
+        RequestRefused: The conversion failed; ``response`` is the answer and
+            ``profile`` is the dict to return with it.
+    """
+    model = body.get("model", "")
+
+    pipeline = ConversionPipeline(
+        route.source_provider,
+        route.target_provider,
+        target_shim=route.shim_name,
+        upstream_model=model,
+        model_capabilities=route.model_capabilities,
+        reasoning_config_override=route.reasoning_override,
+        supports_custom_tools=route.supports_custom_tools,
+        max_tool_description_length=route.max_tool_description_length,
+        hoist_system_messages=route.hoist_system_messages,
+        image_fetcher=fetch_image,
+    )
+
+    # Phase 1+2: Source → IR → Target
+    try:
+        target_body = pipeline.convert_request(
+            body, on_ir_ready=metadata_store.inject_into_request
+        )
+    except ConversionError as exc:
+        await dump_error(
+            persistence,
+            request_body=body,
+            response_text=str(exc),
+            model=model,
+            source_provider=route.source_provider,
+            target_provider=route.target_provider,
+            provider_name=route.provider_name,
+            status_code=400,
+            error_phase="conversion",
+            upstream_url=str(provider_info.base_url),
+            request_log_id=entry_id,
+        )
+        raise RequestRefused(
+            error_response_for_source(route.source_provider, 400, str(exc)), profile
+        ) from exc
+
+    profile.update(pipeline.profile)
+
+    await _fidelity_check_and_dump(
+        route, body, target_body, "request", profile, model, persistence, entry_id
+    )
+
+    log_original_request(pipeline.ir_request)
+
+    # Per-model system message flattening (gateway config override)
+    if route.flatten_system:
+        from llm_rosetta.transforms import flatten_system_content
+
+        target_body = flatten_system_content()(target_body)
+
+    log_converted_request(target_body)
+    _strip_internal_metadata(target_body)
+
+    selection.with_provider_info(provider_info)
+    selection.with_ir_request(pipeline.ir_request)
+    provider_info = _apply_request_stages(selection)
+
+    return PreparedRequest(
+        pipeline=pipeline,
+        target_body=target_body,
+        provider_info=provider_info,
+        model=model,
+    )
 
 
 async def _failover_response(
@@ -350,62 +482,23 @@ async def handle_non_streaming(  # noqa: C901
     store = metadata_store or _default_metadata_store
     profile: dict[str, Any] = {}
     # model was already injected into body by app.py
-    model = body.get("model", "")
-
-    pipeline = ConversionPipeline(
-        route.source_provider,
-        route.target_provider,
-        target_shim=route.shim_name,
-        upstream_model=model,
-        model_capabilities=route.model_capabilities,
-        reasoning_config_override=route.reasoning_override,
-        supports_custom_tools=route.supports_custom_tools,
-        max_tool_description_length=route.max_tool_description_length,
-        hoist_system_messages=route.hoist_system_messages,
-        image_fetcher=fetch_image,
-    )
-
-    # Phase 1+2: Source → IR → Target
     try:
-        target_body = pipeline.convert_request(
-            body, on_ir_ready=store.inject_into_request
+        prepared = await prepare_request(
+            route,
+            provider_info,
+            body,
+            metadata_store=store,
+            persistence=persistence,
+            entry_id=entry_id,
+            selection=selection,
+            profile=profile,
         )
-    except ConversionError as exc:
-        await dump_error(
-            persistence,
-            request_body=body,
-            response_text=str(exc),
-            model=model,
-            source_provider=route.source_provider,
-            target_provider=route.target_provider,
-            provider_name=route.provider_name,
-            status_code=400,
-            error_phase="conversion",
-            upstream_url=str(provider_info.base_url),
-            request_log_id=entry_id,
-        )
-        return error_response_for_source(route.source_provider, 400, str(exc)), profile
-
-    profile.update(pipeline.profile)
-
-    await _fidelity_check_and_dump(
-        route, body, target_body, "request", profile, model, persistence, entry_id
-    )
-
-    log_original_request(pipeline.ir_request)
-
-    # Per-model system message flattening (gateway config override)
-    if route.flatten_system:
-        from llm_rosetta.transforms import flatten_system_content
-
-        target_body = flatten_system_content()(target_body)
-
-    log_converted_request(target_body)
-    _strip_internal_metadata(target_body)
-
-    selection.with_provider_info(provider_info)
-    selection.with_ir_request(pipeline.ir_request)
-    provider_info = _apply_request_stages(selection)
+    except RequestRefused as refused:
+        return refused.response, refused.profile
+    pipeline = prepared.pipeline
+    target_body = prepared.target_body
+    provider_info = prepared.provider_info
+    model = prepared.model
 
     # ``is True`` rather than truthiness: a mock provider in a test would
     # otherwise present a truthy attribute and divert the request.
