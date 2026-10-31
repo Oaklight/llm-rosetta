@@ -468,6 +468,7 @@ function goToProviderFromModel(provName) {
 /** Return the default test kind for the primary test button. */
 function _defaultTestKind(modelType) {
   if (modelType === 'embeddings') return 'embedding';
+  if (modelType === 'decisions') return 'decision';
   if (modelType === 'rerank') return 'rerank';
   if (modelType === 'llm') return 'text';
   // Unknown types: use the type name as the test kind
@@ -491,6 +492,9 @@ function _testMenuItems(modelType, modelName, {hasTools, hasVision, hasReasoning
     return `
       <div class="test-menu-item" onclick="runTest('${n}','rerank'${pArg})">${t('test.rerank')}</div>
       <div class="test-menu-item" onclick="runTest('${n}','rerank_batch'${pArg})">${t('test.rerankBatch')}</div>`;
+  }
+  if (modelType === 'decisions') {
+    return `<div class="test-menu-item" onclick="runTest('${n}','decision'${pArg})">${t('test.decision')}</div>`;
   }
   if (modelType === 'llm') {
     return `

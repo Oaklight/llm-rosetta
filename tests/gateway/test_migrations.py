@@ -354,6 +354,93 @@ class TestMigrationV1ToV2:
         assert raw["config_version"] == CURRENT_VERSION
 
 
+class TestMigrationV2ToV3:
+    """Migration 003: rename the ``decision`` model type to ``decisions``."""
+
+    def test_provider_endpoint_keys_renamed(self):
+        raw = {
+            "config_version": 2,
+            "providers": {
+                "ts": {
+                    "api_key": "k",
+                    "base_url": "https://x",
+                    "decision_format": "systemone",
+                    "decision_path": "/v1/systemone",
+                    "decision_shim": "typesafe--systemone",
+                }
+            },
+            "models": {},
+        }
+        migrate(raw)
+        prov = raw["providers"]["ts"]
+        assert prov["decisions_format"] == "systemone"
+        assert prov["decisions_path"] == "/v1/systemone"
+        assert prov["decisions_shim"] == "typesafe--systemone"
+        assert "decision_format" not in prov
+
+    def test_model_type_renamed(self):
+        raw = {
+            "config_version": 2,
+            "providers": {},
+            "models": {"sys-one": {"provider": "ts", "type": "decision"}},
+        }
+        migrate(raw)
+        assert raw["models"]["sys-one"]["type"] == "decisions"
+
+    def test_default_format_key_renamed(self):
+        raw = {
+            "config_version": 2,
+            "providers": {},
+            "models": {},
+            "default_decision_format": "systemone",
+        }
+        migrate(raw)
+        assert raw["default_decisions_format"] == "systemone"
+        assert "default_decision_format" not in raw
+
+    def test_pool_sections_renamed(self):
+        """A v2 file that kept its pools says ``decision`` in no place."""
+        raw: dict[str, Any] = {
+            "config_version": 2,
+            "providers": {},
+            "models": {},
+            "decision_providers": {
+                "ts": {
+                    "api_key": "k",
+                    "base_url": "https://x",
+                    "format": "systemone",
+                }
+            },
+            "decision_models": {"sys-one": "ts"},
+        }
+        migrate(raw)
+        assert raw["decisions_providers"]["ts"]["format"] == "systemone"
+        assert raw["decisions_models"] == {"sys-one": "ts"}
+        assert "decision_providers" not in raw
+        assert "decision_models" not in raw
+
+    def test_pool_sections_merge_entry_by_entry(self):
+        """Both spellings present: the canonical entry wins, nothing is lost."""
+        raw: dict[str, Any] = {
+            "config_version": 2,
+            "providers": {},
+            "models": {},
+            "decisions_providers": {"ts": {"format": "systemone", "api_key": "new"}},
+            "decision_providers": {
+                "ts": {"format": "openai_decisions", "api_key": "old"},
+                "oa": {"format": "openai_decisions"},
+            },
+            "decisions_models": {"sys-one": "ts"},
+            "decision_models": {"dec-1": "oa"},
+        }
+        migrate(raw)
+        assert raw["decisions_providers"]["ts"]["api_key"] == "new"
+        assert raw["decisions_providers"]["oa"]["format"] == "openai_decisions"
+        assert raw["decisions_models"] == {"sys-one": "ts", "dec-1": "oa"}
+        assert "decision_providers" not in raw
+        assert "decision_models" not in raw
+
+
 class TestConfigIOIntegration:
     """JsoncConfigIO applies migrations on load and writes back."""
 
@@ -453,6 +540,42 @@ class TestConfigIOIntegration:
         assert on_disk["embeddings_models"] == {"jina-embed": "jina"}
         assert "embedding_providers" not in on_disk
         assert "embedding_models" not in on_disk
+
+    def test_v2_pool_sections_written_back_renamed(self, tmp_path):
+        """A v2 file keeps its pools but stops saying ``decision``.
+
+        The migration reads the section on the way in and writes the
+        canonical spelling out, so a migrated file does not say both.
+        """
+        config_path = str(tmp_path / "config.jsonc")
+        v2_config = {
+            "config_version": 2,
+            "providers": {},
+            "models": {},
+            "decision_providers": {
+                "ts": {
+                    "api_key": "k",
+                    "base_url": "https://x",
+                    "format": "systemone",
+                }
+            },
+            "decision_models": {"sys-one": "ts"},
+        }
+        with open(config_path, "w") as f:
+            json.dump(v2_config, f)
+
+        from llm_rosetta_gateway.config import JsoncConfigIO
+
+        io = JsoncConfigIO()
+        io.load(config_path)
+
+        with open(config_path) as f:
+            on_disk = json.load(f)
+        assert on_disk["config_version"] == CURRENT_VERSION
+        assert on_disk["decisions_providers"]["ts"]["format"] == "systemone"
+        assert on_disk["decisions_models"] == {"sys-one": "ts"}
+        assert "decision_providers" not in on_disk
+        assert "decision_models" not in on_disk
 
     def test_load_does_not_write_substituted_env_vars(self, tmp_path, monkeypatch):
         """Critical: load() must not write substituted secrets back to disk."""

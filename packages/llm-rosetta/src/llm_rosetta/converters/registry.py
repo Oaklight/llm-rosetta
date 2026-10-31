@@ -1,7 +1,7 @@
 """The one converter registry, keyed by ``(model_type, format)``.
 
 A converter is identified by the capability category it serves (``llm``,
-``embeddings``, ``rerank``, ``decision``) and the wire dialect within that
+``embeddings``, ``rerank``, ``decisions``) and the wire dialect within that
 category (``chat_completions``, ``openai``, ``jina``, ``systemone``, …).  The
 pair matters because format names are namespaced by category: for example
 ``google_generate`` names both a chat converter and an embedding converter.
@@ -61,7 +61,7 @@ _CONVERTER_CLASSES: dict[str, dict[str, type]] = {
     },
     "embeddings": cast(dict[str, type], _EMBEDDING_CONVERTERS),
     "rerank": cast(dict[str, type], _RERANK_CONVERTERS),
-    "decision": cast(dict[str, type], _DECISION_CONVERTERS),
+    "decisions": cast(dict[str, type], _DECISION_CONVERTERS),
 }
 
 #: ``model_type → format → converter class``, in catalog (display) order.

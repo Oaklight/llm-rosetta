@@ -1,7 +1,7 @@
 """Model type registry for streamlined new-type onboarding.
 
 Provides a declarative ``ModelTypeDescriptor`` registry where adding a new
-model type (e.g. "decision") requires defining one descriptor plus a
+model type (e.g. "decisions") requires defining one descriptor plus a
 pipeline function — no changes needed in ``app.py``, ``config.py``, or
 admin routes.
 
@@ -343,22 +343,22 @@ def _register_decision() -> None:
 
     register_model_type(
         ModelTypeDescriptor(
-            name="decision",
+            name="decisions",
             routes=[
                 RouteSpec("/v1/decision"),
                 RouteSpec("/v1/decisions"),
                 RouteSpec("/v1/systemone"),
             ],
-            formats=formats_of("decision"),
+            formats=formats_of("decisions"),
             pipeline=_decision_pipeline,
             supports_streaming=False,
             badge_class="cap-badge-decision",
-            config_format_key="decision_format",
-            config_path_key="decision_path",
-            config_shim_key="decision_shim",
+            config_format_key="decisions_format",
+            config_path_key="decisions_path",
+            config_shim_key="decisions_shim",
             default_format="systemone",
             default_path="/v1/systemone",
-            default_paths=_default_paths("decision"),
+            default_paths=_default_paths("decisions"),
             detect_source_format=detect_decision_source,
             icon_svg=(
                 '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor"'

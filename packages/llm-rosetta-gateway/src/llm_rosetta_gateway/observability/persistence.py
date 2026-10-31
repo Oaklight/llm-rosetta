@@ -443,6 +443,14 @@ class PersistenceManager:
                 "WHERE model_type = 'embedding'",
             ],
         ),
+        (
+            10,
+            "rename request_log.model_type 'decision' to 'decisions'",
+            [
+                "UPDATE request_log SET model_type = 'decisions' "
+                "WHERE model_type = 'decision'",
+            ],
+        ),
     ]
 
     async def _run_migrations(self) -> None:

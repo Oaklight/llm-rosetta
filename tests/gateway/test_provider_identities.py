@@ -76,7 +76,7 @@ class TestProviderIdentities:
             ("cohere", "embeddings"),
             ("jina", "embeddings"),
             ("voyage", "embeddings"),
-            ("systemone", "decision"),
+            ("systemone", "decisions"),
         ],
     )
     def test_known_non_chat_format_does_not_default_to_llm(self, fmt, expected):
@@ -101,7 +101,7 @@ class TestProviderIdentities:
         [
             ("embeddings_format", "openai", "embeddings"),
             ("rerank_format", "jina", "rerank"),
-            ("decision_format", "openai_decisions", "decision"),
+            ("decisions_format", "openai_decisions", "decisions"),
         ],
     )
     def test_format_only_provider_takes_the_endpoint_identity(
@@ -136,7 +136,7 @@ class TestProviderIdentities:
                 {
                     "providers": {
                         "d": {
-                            "decision_format": "openai_decisions",
+                            "decisions_format": "openai_decisions",
                             "api_key": "k",
                             "base_url": "https://d.test",
                         }
@@ -439,8 +439,8 @@ class TestAdminMetadata:
         assert meta["rerank"]["default_paths"] == {"cohere": "/v2/rerank"}
         assert meta["rerank"]["config_shim_key"] == "rerank_shim"
         assert meta["rerank"]["default_format"] == "jina"
-        assert meta["decision"]["config_shim_key"] == "decision_shim"
-        assert meta["decision"]["default_paths"] == {
+        assert meta["decisions"]["config_shim_key"] == "decisions_shim"
+        assert meta["decisions"]["default_paths"] == {
             "openai_decisions": "/v1/decisions"
         }
         assert meta["llm"]["config_shim_key"] is None

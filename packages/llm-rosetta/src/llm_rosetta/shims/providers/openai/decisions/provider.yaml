@@ -1,5 +1,5 @@
 name: openai--openai_decisions
-model_type: decision
+model_type: decisions
 format: openai_decisions
 
 connection:

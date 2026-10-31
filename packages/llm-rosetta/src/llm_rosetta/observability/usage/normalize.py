@@ -52,10 +52,10 @@ DEFAULT_MODEL_TYPE = "llm"
 
 #: The model types whose usage this module can normalize, matching the names
 #: ``gateway.model_types`` registers — ``llm``, ``embeddings``, ``rerank``,
-#: ``decision``.  A column value outside this set is a writer's bug, not a
-#: usage shape to guess at.  The legacy ``embedding`` spelling is translated
-#: at the call boundary so rows written before the rename still normalize.
-MODEL_TYPES: tuple[str, ...] = ("llm", "embeddings", "rerank", "decision")
+#: ``decisions``.  A column value outside this set is a writer's bug, not a
+#: usage shape to guess at.  A legacy spelling (``embedding``, ``decision``)
+#: is translated at the call boundary so older rows still normalize.
+MODEL_TYPES: tuple[str, ...] = ("llm", "embeddings", "rerank", "decisions")
 
 #: Ledger column -> the IR usage field behind it, per model type.
 #:
@@ -81,7 +81,7 @@ MODEL_TYPE_FIELDS: Mapping[str, Mapping[str, str]] = {
         "total_tokens": "total_tokens",
         "cache_read_tokens": "cached_tokens",
     },
-    "decision": {
+    "decisions": {
         "input_tokens": "input_tokens",
         "output_tokens": "output_tokens",
     },

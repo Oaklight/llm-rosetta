@@ -75,33 +75,35 @@ class TestUnifiedProviderEmbeddingRerank:
         assert pinfo.name == "rerank:jina"
         assert "api.jina.ai" in pinfo.base_url
 
-    def test_decision_format_creates_decision_provider(self):
+    def test_decisions_format_creates_decision_provider(self):
         raw = _base_config()
         raw["providers"]["typesafe"] = {
             "api_key": "ts-test",
             "base_url": "https://api.typesafe.ai",
-            "decision_format": "systemone",
+            "decisions_format": "systemone",
         }
-        raw["models"]["sys-one"] = {"provider": "typesafe", "type": "decision"}
+        raw["models"]["sys-one"] = {"provider": "typesafe", "type": "decisions"}
         cfg = GatewayConfig(raw)
-        assert cfg.decision_providers["typesafe"]["format"] == "systemone"
-        assert cfg.decision_models["sys-one"] == "typesafe"
+        assert cfg.decisions_providers["typesafe"]["format"] == "systemone"
+        assert cfg.decisions_models["sys-one"] == "typesafe"
 
     def test_decision_default_path_follows_the_format(self):
         """``openai_decisions`` is served at /v1/decisions, not the default."""
         raw = _base_config()
-        raw["providers"]["openai"]["decision_format"] = "openai_decisions"
+        raw["providers"]["openai"]["decisions_format"] = "openai_decisions"
         cfg = GatewayConfig(raw)
-        assert cfg.decision_providers["openai"]["decision_path"] == "/v1/decisions"
-        pinfo = cfg.decision_provider_infos["openai"]
+        assert cfg.decisions_providers["openai"]["decisions_path"] == "/v1/decisions"
+        pinfo = cfg.decisions_provider_infos["openai"]
         assert pinfo.upstream_url("m") == "https://api.openai.com/v1/decisions"
 
     def test_decision_explicit_path_wins(self):
         raw = _base_config()
-        raw["providers"]["openai"]["decision_format"] = "openai_decisions"
-        raw["providers"]["openai"]["decision_path"] = "/custom/decisions"
+        raw["providers"]["openai"]["decisions_format"] = "openai_decisions"
+        raw["providers"]["openai"]["decisions_path"] = "/custom/decisions"
         cfg = GatewayConfig(raw)
-        assert cfg.decision_providers["openai"]["decision_path"] == "/custom/decisions"
+        assert (
+            cfg.decisions_providers["openai"]["decisions_path"] == "/custom/decisions"
+        )
 
 
 class TestLegacyBackwardCompat:
@@ -137,25 +139,25 @@ class TestLegacyBackwardCompat:
         assert "embed-prov" in cfg.embeddings_providers
         assert "text-embed" in cfg.embeddings_models
 
-    def test_legacy_decision_providers(self):
+    def test_legacy_decisions_providers(self):
         raw = _base_config(
-            decision_providers={
+            decisions_providers={
                 "ts": {
                     "api_key": "ts-test",
                     "base_url": "https://api.typesafe.ai",
                     "format": "systemone",
                 }
             },
-            decision_models={"sys-one": "ts"},
+            decisions_models={"sys-one": "ts"},
         )
         cfg = GatewayConfig(raw)
-        assert cfg.decision_providers["ts"]["format"] == "systemone"
-        assert cfg.decision_models["sys-one"] == "ts"
-        assert cfg.decision_provider_infos["ts"].name == "decision:ts"
+        assert cfg.decisions_providers["ts"]["format"] == "systemone"
+        assert cfg.decisions_models["sys-one"] == "ts"
+        assert cfg.decisions_provider_infos["ts"].name == "decisions:ts"
 
-    def test_legacy_decision_path_follows_the_format(self):
+    def test_legacy_decisions_path_follows_the_format(self):
         raw = _base_config(
-            decision_providers={
+            decisions_providers={
                 "oa": {
                     "api_key": "k",
                     "base_url": "https://api.openai.com",
@@ -164,37 +166,37 @@ class TestLegacyBackwardCompat:
             },
         )
         cfg = GatewayConfig(raw)
-        assert cfg.decision_providers["oa"]["format"] == "openai_decisions"
-        assert cfg.decision_providers["oa"]["decision_path"] == "/v1/decisions"
+        assert cfg.decisions_providers["oa"]["format"] == "openai_decisions"
+        assert cfg.decisions_providers["oa"]["decisions_path"] == "/v1/decisions"
 
-    def test_legacy_decision_shim_supplies_connection_defaults(self):
-        """A legacy entry may be just ``decision_shim``."""
+    def test_legacy_decisions_shim_supplies_connection_defaults(self):
+        """A legacy entry may be just ``decisions_shim``."""
         raw = _base_config(
-            decision_providers={"jev": {"decision_shim": "typesafe--systemone"}},
+            decisions_providers={"jev": {"decisions_shim": "typesafe--systemone"}},
         )
         cfg = GatewayConfig(raw)
-        assert cfg.decision_providers["jev"]["format"] == "systemone"
-        assert cfg.decision_providers["jev"]["decision_path"] == "/v1/systemone"
-        assert cfg.decision_provider_infos["jev"].upstream_url("m") == (
+        assert cfg.decisions_providers["jev"]["format"] == "systemone"
+        assert cfg.decisions_providers["jev"]["decisions_path"] == "/v1/systemone"
+        assert cfg.decisions_provider_infos["jev"].upstream_url("m") == (
             "https://api.typesafe.ai/v1/systemone"
         )
 
-    def test_legacy_decision_models_accepts_the_list_form(self):
+    def test_legacy_decisions_models_accepts_the_list_form(self):
         """A failover ``providers`` list still routes a typed model."""
         raw = _base_config(
-            decision_providers={
+            decisions_providers={
                 "ts": {
                     "api_key": "ts-test",
                     "base_url": "https://api.typesafe.ai",
                     "format": "systemone",
                 }
             },
-            decision_models={
+            decisions_models={
                 "sys-one": {"providers": ["missing", {"name": "ts"}]},
             },
         )
         cfg = GatewayConfig(raw)
-        assert cfg.decision_models["sys-one"] == "ts"
+        assert cfg.decisions_models["sys-one"] == "ts"
 
     def test_unified_takes_precedence_over_legacy(self):
         raw = _base_config(

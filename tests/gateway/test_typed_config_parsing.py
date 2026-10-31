@@ -220,26 +220,26 @@ class TestDecisionSection:
     def test_defaults(self) -> None:
         cfg = GatewayConfig(
             {
-                "decision_providers": {
+                "decisions_providers": {
                     "typesafe": {"api_key": "k", "base_url": "https://api.typesafe.ai"}
                 },
-                "decision_models": {"ts-1": "typesafe"},
+                "decisions_models": {"ts-1": "typesafe"},
             }
         )
-        assert cfg.decision_providers["typesafe"] == {
+        assert cfg.decisions_providers["typesafe"] == {
             "format": "systemone",
-            "decision_path": "/v1/systemone",
+            "decisions_path": "/v1/systemone",
         }
         route = cfg.resolve_decision("ts-1")
         assert route.format == "systemone"
         assert route.path == "/v1/systemone"
-        assert route.provider_info.name == "decision:typesafe"
+        assert route.provider_info.name == "decisions:typesafe"
         assert _auth(route.provider_info) == "Authorization"
 
     def test_format_wins_over_type(self) -> None:
         cfg = GatewayConfig(
             {
-                "decision_providers": {
+                "decisions_providers": {
                     "p": {
                         "format": "openai_decisions",
                         "type": "systemone",
@@ -248,30 +248,30 @@ class TestDecisionSection:
                 }
             }
         )
-        assert cfg.decision_providers["p"] == {
+        assert cfg.decisions_providers["p"] == {
             "format": "openai_decisions",
-            "decision_path": "/v1/decisions",
+            "decisions_path": "/v1/decisions",
         }
 
     def test_type_is_honoured_without_format(self) -> None:
         cfg = GatewayConfig(
             {
-                "decision_providers": {
+                "decisions_providers": {
                     "p": {"type": "openai_decisions", "base_url": "https://x"}
                 }
             }
         )
-        assert cfg.decision_providers["p"]["format"] == "openai_decisions"
+        assert cfg.decisions_providers["p"]["format"] == "openai_decisions"
 
     def test_shim_supplies_format_path_and_connection(self) -> None:
         cfg = GatewayConfig(
-            {"decision_providers": {"p": {"decision_shim": "typesafe--systemone"}}}
+            {"decisions_providers": {"p": {"decisions_shim": "typesafe--systemone"}}}
         )
-        assert cfg.decision_providers["p"] == {
+        assert cfg.decisions_providers["p"] == {
             "format": "systemone",
-            "decision_path": "/v1/systemone",
+            "decisions_path": "/v1/systemone",
         }
-        info = cfg.decision_provider_infos["p"]
+        info = cfg.decisions_provider_infos["p"]
         assert info.base_url == "https://api.typesafe.ai"
 
     def test_shim_of_another_type_degrades_that_endpoint_only(self) -> None:
@@ -281,25 +281,25 @@ class TestDecisionSection:
         recorded on its entry for the admin payload (#1106).
         """
         raw: dict[str, Any] = {
-            "decision_providers": {
+            "decisions_providers": {
                 "p": {
-                    "decision_shim": "deepseek--chat_completions",
+                    "decisions_shim": "deepseek--chat_completions",
                     "base_url": "https://x",
                 }
             }
         }
         cfg = GatewayConfig(raw)
 
-        assert "p" not in cfg.decision_providers
-        marker: Any = raw["decision_providers"]["p"]["_auto_disabled_endpoints"]
-        assert marker["decision"]["category"] == "wrong_model_type"
-        assert "serves llm, not decision" in marker["decision"]["reason"]
+        assert "p" not in cfg.decisions_providers
+        marker: Any = raw["decisions_providers"]["p"]["_auto_disabled_endpoints"]
+        assert marker["decisions"]["category"] == "wrong_model_type"
+        assert "serves llm, not decision" in marker["decisions"]["reason"]
 
     def test_a_broken_endpoint_does_not_take_other_providers_down(self) -> None:
         raw: dict[str, Any] = {
-            "decision_providers": {
+            "decisions_providers": {
                 "bad": {
-                    "decision_shim": "nope--decision",
+                    "decisions_shim": "nope--decision",
                     "base_url": "https://x",
                 },
                 "good": {"base_url": "https://y"},
@@ -307,33 +307,33 @@ class TestDecisionSection:
         }
         cfg = GatewayConfig(raw)
 
-        assert "good" in cfg.decision_providers
-        assert "good" not in raw["decision_providers"]["good"].get(
+        assert "good" in cfg.decisions_providers
+        assert "good" not in raw["decisions_providers"]["good"].get(
             "_auto_disabled_endpoints", {}
         )
-        failed: Any = raw["decision_providers"]["bad"]["_auto_disabled_endpoints"]
-        assert failed["decision"]["category"] == "unknown_shim"
+        failed: Any = raw["decisions_providers"]["bad"]["_auto_disabled_endpoints"]
+        assert failed["decisions"]["category"] == "unknown_shim"
 
     def test_disabled_provider_is_skipped(self) -> None:
         cfg = GatewayConfig(
             {
-                "decision_providers": {
+                "decisions_providers": {
                     "p": {"enabled": False, "base_url": "https://x"}
                 },
-                "decision_models": {"m": "p"},
+                "decisions_models": {"m": "p"},
             }
         )
-        assert "p" not in cfg.decision_providers
-        assert "m" not in cfg.decision_models
+        assert "p" not in cfg.decisions_providers
+        assert "m" not in cfg.decisions_models
 
     def test_model_maps_to_the_first_live_provider(self) -> None:
         cfg = GatewayConfig(
             {
-                "decision_providers": {
+                "decisions_providers": {
                     "off": {"enabled": False, "base_url": "https://x"},
                     "on": {"base_url": "https://x"},
                 },
-                "decision_models": {"m": {"providers": ["off", "on"]}},
+                "decisions_models": {"m": {"providers": ["off", "on"]}},
             }
         )
-        assert cfg.decision_models["m"] == "on"
+        assert cfg.decisions_models["m"] == "on"
