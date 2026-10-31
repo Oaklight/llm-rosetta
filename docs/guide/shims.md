@@ -348,7 +348,7 @@ remote；同一 URL 的显式 remote 会合并到预设上（显式键优先）�
 
 ## 内置 Shim
 
-LLM-Rosetta 内置 34 个提供方 shim，每个 shim 对应 `packages/llm-rosetta/src/llm_rosetta/shims/providers/<vendor>/<model-type>/`
+LLM-Rosetta 内置 38 个提供方 shim，每个 shim 对应 `packages/llm-rosetta/src/llm_rosetta/shims/providers/<vendor>/<model-type>/`
 下的一个目录。`list_shims()` 会打印当前实际的集合；下表即是该集合。ALCF、AskSage 与 Argo
 的 shim 作为独立包发布 —— 参见[独立 Shim 包](#standalone-shim-packages)。
 
@@ -378,14 +378,18 @@ LLM-Rosetta 内置 34 个提供方 shim，每个 shim 对应 `packages/llm-roset
 | `openrouter--chat_completions` | `chat_completions` | `https://openrouter.ai/api/v1` | `OPENROUTER_API_KEY` | 重命名 `reasoning` → `reasoning_content` |
 | `openrouter--messages` | `messages` | `https://openrouter.ai/api` | `OPENROUTER_API_KEY` | — |
 | `openrouter--open_responses` | `open_responses` | `https://openrouter.ai/api/v1` | `OPENROUTER_API_KEY` | — |
+| `openrouter--rerank` | `cohere` | `https://openrouter.ai/api/v1` | `OPENROUTER_API_KEY` | — |
 | `qwen` | `chat_completions` | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `DASHSCOPE_API_KEY` | 剥离 `frequency_penalty`、`logit_bias` |
 | `typesafe--systemone` | `systemone` | `https://api.typesafe.ai` | `TYPESAFE_API_KEY` | — |
 | `volcengine--chat_completions` | `chat_completions` | `https://ark.cn-beijing.volces.com/api/v3` | `ARK_API_KEY` | 剥离 `logprobs`、`top_logprobs` |
+| `volcengine--embedding` | `openai` | `https://ark.cn-beijing.volces.com/api/v3` | `ARK_API_KEY` | — |
 | `volcengine--open_responses` | `open_responses` | `https://ark.cn-beijing.volces.com/api/v3` | `ARK_API_KEY` | — |
 | `voyage--embedding` | `voyage` | `https://api.voyageai.com` | `VOYAGE_API_KEY` | — |
 | `voyage--rerank` | `voyage` | `https://api.voyageai.com` | `VOYAGE_API_KEY` | — |
 | `xai` | `chat_completions` | `https://api.x.ai/v1` | `XAI_API_KEY` | 剥离 `logit_bias` |
 | `zhipu` | `chat_completions` | `https://open.bigmodel.cn/api/paas/v4` | `ZHIPU_API_KEY` | 剥离 `n`、penalties、`logprobs`、`logit_bias`、`seed` |
+| `zhipu--embedding` | `openai` | `https://open.bigmodel.cn/api/paas/v4` | `ZHIPU_API_KEY` | — |
+| `zhipu--rerank` | `cohere` | `https://open.bigmodel.cn/api/paas/v4` | `ZHIPU_API_KEY` | — |
 
 本列给出字段级转换规则。`hoist_late_system_messages()` 会改写对话中途的 system/developer
 消息以保持 prompt cache 前缀稳定，多数 `chat_completions` shim 都声明了它，此处不再重复；
