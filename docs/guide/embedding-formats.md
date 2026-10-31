@@ -6,7 +6,7 @@ title: Embedding API 格式
 
 Embedding API 把文本转成稠密向量，用于语义搜索、聚类和分类。虽然 OpenAI 的格式算是**事实标准**，但 Google GenAI 和 Cohere 的差异还是不小。
 
-LLM-Rosetta 识别出 **5 个格式族**，覆盖主流 embedding 提供方。每种格式有专用 converter，通过 IR 做跨提供方转换。
+LLM-Rosetta 识别出 **6 个格式族**，覆盖主流 embedding 提供方。每种格式有专用 converter，通过 IR 做跨提供方转换。
 
 ## 概览
 
@@ -17,6 +17,7 @@ LLM-Rosetta 识别出 **5 个格式族**，覆盖主流 embedding 提供方。�
 | Cohere | `texts` | `input_type` | `output_dimension` | `embeddings.{type}[][]` | `float`, `base64`, `int8`, `uint8`, `binary`, `ubinary` |
 | Voyage | `input` | `input_type` | `output_dimension` | `data[].embedding` | `float`, `base64`, `int8`, `uint8`, `binary`, `ubinary` |
 | Jina | `input` | `task` | `dimensions` | `data[].embedding` | `float`, `base64`, `binary`, `ubinary` |
+| MiniMax | `texts` | `type`（必需） | —（忽略） | `vectors` | 仅 `float` |
 
 ## Provider 族谱
 
@@ -27,6 +28,7 @@ LLM-Rosetta 识别出 **5 个格式族**，覆盖主流 embedding 提供方。�
 | **Cohere** | Cohere（v2 API） |
 | **Voyage** | Voyage AI |
 | **Jina** | Jina AI |
+| **MiniMax** | MiniMax（国内 `api.minimaxi.com`，国际 `api.minimax.io`） |
 
 ## 请求格式
 
@@ -105,14 +107,26 @@ LLM-Rosetta 识别出 **5 个格式族**，覆盖主流 embedding 提供方。�
 }
 ```
 
+### MiniMax
+
+```json
+{
+  "model": "embo-01",
+  "texts": ["hello world", "another text"],
+  "type": "db"
+}
+```
+
+`type` 是必填字段，取值为 `db`（文档）或 `query`；OpenAI 形状的请求体（`input`）会被拒绝，返回 `base_resp.status_code 2013`。
+
 ### 关键请求差异
 
-| 字段 | OpenAI | Google | Cohere | Voyage | Jina |
-|------|--------|--------|--------|--------|------|
-| 输入 | `input: string[]` | `content: {parts}` | `texts: string[]` | `input: string[]` | `input: string[]` |
-| 任务类型 | — | `taskType` | `input_type`（必需） | `input_type` | `task` |
-| 维度 | `dimensions` | `outputDimensionality` | `output_dimension` | `output_dimension` | `dimensions` |
-| 截断 | — | `autoTruncate`（bool） | `truncate`（枚举） | `truncation`（bool） | `truncate`（bool） |
+| 字段 | OpenAI | Google | Cohere | Voyage | Jina | MiniMax |
+|------|--------|--------|--------|--------|------|---------|
+| 输入 | `input: string[]` | `content: {parts}` | `texts: string[]` | `input: string[]` | `input: string[]` | `texts: string[]` |
+| 任务类型 | — | `taskType` | `input_type`（必需） | `input_type` | `task` | `type`（必需） |
+| 维度 | `dimensions` | `outputDimensionality` | `output_dimension` | `output_dimension` | `dimensions` | —（忽略） |
+| 截断 | — | `autoTruncate`（bool） | `truncate`（枚举） | `truncation`（bool） | `truncate`（bool） | — |
 
 ## 响应格式
 
@@ -223,51 +237,70 @@ LLM-Rosetta 识别出 **5 个格式族**，覆盖主流 embedding 提供方。�
 - 支持多向量（ColBERT）输出（`return_multivector`）—— 尚未纳入 IR
 - 有独特的 `late_chunking` 和 `normalized` 选项
 
+### MiniMax 格式
+
+```json
+{
+  "vectors": [[0.018, 0.011, ...], [0.004, -0.021, ...]],
+  "total_tokens": 8,
+  "base_resp": {"status_code": 0, "status_msg": "success"}
+}
+```
+
+**特点：**
+
+- 向量在 `vectors[][]` 中 —— 没有 `object`/`data`/`index` 包装，也不回显模型名
+- token 计数在顶层（`total_tokens`），不在 `usage` 对象下
+- **错误以 HTTP 200 返回**：判定在 `base_resp.status_code` 中（`0` 为成功，`2013` 为参数错误）。网关读取该字段，返回 `502` 且 `error.type` 为 `"upstream_error"`，而不是把空结果当成功返回。
+
 ## 任务类型归一化
 
 各 provider 对相同语义概念使用不同名称。IR 将它们归一化：
 
-| IR 规范值 | OpenAI | Google | Cohere | Voyage | Jina |
-|----------|--------|--------|--------|--------|------|
-| `retrieval_query` | — | `RETRIEVAL_QUERY` | `search_query` | `query` | `retrieval.query` |
-| `retrieval_document` | — | `RETRIEVAL_DOCUMENT` | `search_document` | `document` | `retrieval.passage` |
-| `semantic_similarity` | — | `SEMANTIC_SIMILARITY` | — | — | `text-matching` |
-| `classification` | — | `CLASSIFICATION` | `classification` | — | `classification` |
-| `clustering` | — | `CLUSTERING` | `clustering` | — | `clustering` |
-| `question_answering` | — | `QUESTION_ANSWERING` | — | — | — |
-| `fact_verification` | — | `FACT_VERIFICATION` | — | — | — |
-| `code_retrieval_query` | — | `CODE_RETRIEVAL_QUERY` | — | — | `code.query` |
-| `code_retrieval_document` | — | — | — | — | `code.passage` |
+| IR 规范值 | OpenAI | Google | Cohere | Voyage | Jina | MiniMax |
+|----------|--------|--------|--------|--------|------|---------|
+| `retrieval_query` | — | `RETRIEVAL_QUERY` | `search_query` | `query` | `retrieval.query` | `query` |
+| `retrieval_document` | — | `RETRIEVAL_DOCUMENT` | `search_document` | `document` | `retrieval.passage` | `db` |
+| `semantic_similarity` | — | `SEMANTIC_SIMILARITY` | — | — | `text-matching` | — |
+| `classification` | — | `CLASSIFICATION` | `classification` | — | `classification` | — |
+| `clustering` | — | `CLUSTERING` | `clustering` | — | `clustering` | — |
+| `question_answering` | — | `QUESTION_ANSWERING` | — | — | — | — |
+| `fact_verification` | — | `FACT_VERIFICATION` | — | — | — | — |
+| `code_retrieval_query` | — | `CODE_RETRIEVAL_QUERY` | — | — | `code.query` | — |
+| `code_retrieval_document` | — | — | — | — | `code.passage` | — |
 
 !!! note
     OpenAI 没有任务类型的概念 —— 从/向 OpenAI 格式转换时，该字段直接省略。
 
+!!! note
+    MiniMax 只有两种任务类型，且 `type` 必填。IR 中其余任务类型在 MiniMax 没有对应值，发送时用 `db`（厂商对存储文本的默认值）。
+
 ## 编码格式归一化
 
-| IR 规范值 | OpenAI | Google | Cohere | Voyage | Jina |
-|----------|--------|--------|--------|--------|------|
-| `float` | `float` | （固定） | `float` | `float` | `float` |
-| `base64` | `base64` | — | `base64` | `base64` | `base64` |
-| `int8` | — | — | `int8` | `int8` | — |
-| `uint8` | — | — | `uint8` | `uint8` | — |
-| `binary` | — | — | `binary` | `binary` | `binary` |
-| `ubinary` | — | — | `ubinary` | `ubinary` | `ubinary` |
+| IR 规范值 | OpenAI | Google | Cohere | Voyage | Jina | MiniMax |
+|----------|--------|--------|--------|--------|------|---------|
+| `float` | `float` | （固定） | `float` | `float` | `float` | （固定） |
+| `base64` | `base64` | — | `base64` | `base64` | `base64` | — |
+| `int8` | — | — | `int8` | `int8` | — | — |
+| `uint8` | — | — | `uint8` | `uint8` | — | — |
+| `binary` | — | — | `binary` | `binary` | `binary` | — |
+| `ubinary` | — | — | `ubinary` | `ubinary` | `ubinary` | — |
 
 !!! note
     Voyage 将 `output_dtype`（值的数据类型）与 `encoding_format`（序列化格式）分离。IR 将这两个维度合并为单一的 `encoding_format` 轴。Cohere 支持在一次请求中同时请求多种 embedding 类型，这属于 provider 特有行为，通过 `provider_extensions` 处理。
 
 ## IR 映射
 
-LLM-Rosetta 将五种格式归一化到统一的 IR：
+LLM-Rosetta 将六种格式归一化到统一的 IR：
 
 | Provider 字段 | IR 字段 | 说明 |
 |--------------|--------|------|
 | `input` / `texts` / `content.parts` | `input` | 归一化为 `list[str]` |
-| `taskType` / `input_type` / `task` | `task_type` | 见任务类型归一化表 |
+| `taskType` / `input_type` / `task` / `type` | `task_type` | 见任务类型归一化表 |
 | `dimensions` / `outputDimensionality` / `output_dimension` | `dimensions` | 整数 |
 | `encoding_format` / `embedding_types` / `output_dtype` / `embedding_type` | `encoding_format` | IR 枚举中的单个值 |
 | `truncation` / `truncate` / `autoTruncate` | `truncation` | 简化为布尔值 |
-| `data[].embedding` / `embedding.values` / `embeddings.{type}[][]` | `data[].embedding` | OpenAI 风格的列表 |
+| `data[].embedding` / `embedding.values` / `embeddings.{type}[][]` / `vectors` | `data[].embedding` | OpenAI 风格的列表 |
 
 ### 用量归一化
 
@@ -278,6 +311,7 @@ LLM-Rosetta 将五种格式归一化到统一的 IR：
 | Cohere | `meta.tokens.input_tokens`（推导） | `meta.tokens.input_tokens` | `meta.billed_units.*` |
 | Voyage | `usage.total_tokens` | — | — |
 | Jina | `usage.total_tokens` | `usage.prompt_tokens` | `image_tokens`, `audio_tokens`, `video_tokens` |
+| MiniMax | `total_tokens`（顶层） | `total_tokens`（顶层） | `base_resp` |
 
 ## 跨 Provider 转换
 
@@ -290,6 +324,7 @@ flowchart LR
     IR --> C[Cohere request]
     IR --> D[Voyage request]
     IR --> E[Jina request]
+    IR --> F[MiniMax request]
 ```
 
 信息损失边界：
@@ -297,6 +332,7 @@ flowchart LR
 - **Any → Google**：`encoding_format` 被丢弃（Google 仅支持 float）
 - **Any → OpenAI**：`task_type` 被丢弃（OpenAI 没有任务类型概念）
 - **Cohere 多格式 → IR**：仅选择一种 embedding 类型；其他需要 `provider_extensions`
+- **Any → MiniMax**：`encoding_format` 与 `dimensions` 被丢弃（MiniMax 只返回 float，向量固定 1536 维）；在 `db`/`query` 之外的任务类型发送为 `db`
 - **用量**：Cohere 的 `billed_units` 和 Jina 的多模态 token 细分不保留在 IR 中
 
 ### 库级用法

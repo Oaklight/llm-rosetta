@@ -349,7 +349,7 @@ remote；同一 URL 的显式 remote 会合并到预设上（显式键优先）�
 
 ## 内置 Shim
 
-LLM-Rosetta 内置 38 个提供方 shim，每个 shim 对应 `packages/llm-rosetta/src/llm_rosetta/shims/providers/<vendor>/<model-type>/`
+LLM-Rosetta 内置 39 个提供方 shim，每个 shim 对应 `packages/llm-rosetta/src/llm_rosetta/shims/providers/<vendor>/<model-type>/`
 下的一个目录。`list_shims()` 会打印当前实际的集合；下表即是该集合。ALCF、AskSage 与 Argo
 的 shim 作为独立包发布 —— 参见[独立 Shim 包](#standalone-shim-packages)。
 
@@ -367,6 +367,7 @@ LLM-Rosetta 内置 38 个提供方 shim，每个 shim 对应 `packages/llm-roset
 | `jina--rerank` | `jina` | `https://api.jina.ai` | `JINA_API_KEY` | — |
 | `kilo--chat_completions` | `chat_completions` | `https://api.kilo.ai/api/gateway` | *（keyless）* | — |
 | `minimax--chat_completions` | `chat_completions` | `https://api.minimaxi.com/v1` | `MINIMAX_API_KEY` | 剥离 `logprobs`、`top_logprobs`、`seed`、`stop`；注入 `reasoning_split`；解析 `think` 标签 |
+| `minimax--embedding` | `minimax` | `https://api.minimaxi.com` | `MINIMAX_API_KEY` | — |
 | `minimax--messages` | `messages` | `https://api.minimaxi.com/anthropic` | `MINIMAX_API_KEY` | — |
 | `moonshot` | `chat_completions` | `https://api.moonshot.cn/v1` | `MOONSHOT_API_KEY` | 剥离 `logprobs`、`top_logprobs`、`logit_bias`、`seed` |
 | `openai--chat_completions` | `chat_completions` | `https://api.openai.com/v1` | `OPENAI_API_KEY` | — |

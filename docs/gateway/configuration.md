@@ -695,7 +695,7 @@ soft_error_patterns:
 |------|------|--------|------|
 | `embeddings_providers` | `dict` | `{}` | Embedding 上游的提供方配置（格式同 `providers`） |
 | `embeddings_models` | `dict` | `{}` | 模型 → 提供方映射 |
-| `default_embeddings_format` | `str` | `"openai"` | 源格式兜底。选项：`openai`、`cohere`、`jina`、`voyage`、`google_generate` |
+| `default_embeddings_format` | `str` | `"openai"` | 源格式兜底。选项：`openai`、`cohere`、`jina`、`voyage`、`google_generate`、`minimax` |
 
 Embedding 流量**只**通过 embedding 端点路由。没有 embedding 路由的模型——即未列入
 `embeddings_models`，或统一提供方上没有 `"type": "embeddings"`——会返回 `404`，网关不会
