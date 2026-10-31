@@ -48,7 +48,7 @@ entry's identity (and the key used in the answer's `probabilities`); `descriptio
 is an optional rich rubric (mirrors TypeSafe's `string | object | array`).
 
 `choice` / `score` / `confidence` are optional (derived by
-`converters.decision.derived` when a provider omits them); `abstained` is always
+`converters.decisions.derived` when a provider omits them); `abstained` is always
 derived from `unknown_probability`.
 
 ### State
@@ -283,7 +283,7 @@ response: IRDecisionResponse = {
 ## Using the Converter
 
 ```python
-from llm_rosetta.converters.decision import SystemOneDecisionConverter
+from llm_rosetta.converters.decisions import SystemOneDecisionConverter
 
 converter = SystemOneDecisionConverter()
 

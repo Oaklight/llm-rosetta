@@ -55,15 +55,17 @@ title: Converters
 
 ::: llm_rosetta.converters.base.embedding_converter.BaseEmbeddingConverter
 
-::: llm_rosetta.converters.embedding.openai.OpenAIEmbeddingConverter
+::: llm_rosetta.converters.embeddings.openai.OpenAIEmbeddingConverter
 
-::: llm_rosetta.converters.embedding.jina.JinaEmbeddingConverter
+::: llm_rosetta.converters.embeddings.jina.JinaEmbeddingConverter
 
-::: llm_rosetta.converters.embedding.voyage.VoyageEmbeddingConverter
+::: llm_rosetta.converters.embeddings.voyage.VoyageEmbeddingConverter
 
-::: llm_rosetta.converters.embedding.cohere.CohereEmbeddingConverter
+::: llm_rosetta.converters.embeddings.cohere.CohereEmbeddingConverter
 
-::: llm_rosetta.converters.embedding.google.GoogleEmbeddingConverter
+::: llm_rosetta.converters.embeddings.google.GoogleEmbeddingConverter
+
+::: llm_rosetta.converters.embeddings.minimax.MiniMaxEmbeddingConverter
 
 ## Rerank Converters
 
