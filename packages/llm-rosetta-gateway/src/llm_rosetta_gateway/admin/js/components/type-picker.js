@@ -7,8 +7,13 @@
  * tree view, expands the base/variant children under each root the way the
  * `tree` command does — logos appear on the root row only.
  *
+ * The same widget drives the non-LLM endpoint sections: a typed endpoint has
+ * one dropdown that names the vendor (or a bare format), because a vendor
+ * normally serves one dialect per model type — there is no second level to
+ * pick.  Those instances hide the view toggle.
+ *
  * The chosen value is the shim (or bare base-format) name, written to the
- * hidden `#provType` input so the save path in providers.js is unchanged.
+ * hidden input the owning module names, so the save path is unchanged.
  *
  * Keyboard: the trigger opens on click / Enter / Space / ArrowDown; once the
  * panel is open the rows take roving focus (Up/Down/Home/End) and Enter or
@@ -19,263 +24,335 @@ import { t } from '../core/i18n.js';
 
 const _VIEW_KEY = 'provider-type-view';
 
-let _roots = [];          // [{ name, label, logo, defaultValue, children: [...] }]
-let _byValue = new Map(); // value -> { root, child }
-let _view = localStorage.getItem(_VIEW_KEY) === 'tree' ? 'tree' : 'top';
-let _selected = '';
-let _open = false;
-let _onSelect = null;
+/**
+ * One picker instance over a given set of elements.
+ *
+ * The module used to keep a single set of module-level variables, which was
+ * enough while only the LLM endpoint had one.  A typed endpoint has its own
+ * picker per model type, so the state lives on the instance and the module
+ * keeps exactly one default instance for the LLM endpoint.
+ *
+ * @param {object} cfg
+ * @param {HTMLElement} cfg.wrapper   `.type-picker` container
+ * @param {HTMLElement} cfg.trigger   the button that opens the panel
+ * @param {HTMLElement} cfg.dropdown  the panel
+ * @param {HTMLElement} cfg.list      the rows host
+ * @param {HTMLElement} cfg.label     the trigger's text span
+ * @param {HTMLImageElement} cfg.logo the trigger's logo (may be null)
+ * @param {HTMLElement} [cfg.scroller] scroll container for flip positioning
+ * @param {HTMLInputElement} [cfg.hidden] input that mirrors the value
+ * @param {boolean} [cfg.viewToggle]  draw the top/tree toggle
+ * @param {(value: string) => void} [cfg.onChange]
+ */
+export function createTypePicker(cfg) {
+  const state = {
+    roots: [],
+    byValue: new Map(),
+    selected: '',
+    open: false,
+    view: localStorage.getItem(_VIEW_KEY) === 'tree' ? 'tree' : 'top',
+    onChange: cfg.onChange || null,
+  };
 
-/** Register the selection callback (fired on user and programmatic changes). */
-export function onTypeSelect(cb) { _onSelect = cb; }
+  // ── public surface ────────────────────────────────────────────────
 
-/** Attach trigger / toggle / outside-click handlers.  Idempotent. */
-export function initTypePicker() {
-  const trigger = document.getElementById('typePickerTrigger');
-  if (!trigger || trigger.dataset.bound) return;
-  trigger.dataset.bound = '1';
+  /** Attach the trigger and document-level handlers.  Idempotent. */
+  function init() {
+    if (cfg.trigger.dataset.bound) return;
+    cfg.trigger.dataset.bound = '1';
 
-  trigger.addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (_open) _closePanel(); else _openPanel();
-  });
-  // ArrowDown opens the panel without committing (Enter/Space already click).
-  trigger.addEventListener('keydown', (e) => {
-    if (e.key === 'ArrowDown' && !_open) { e.preventDefault(); _openPanel(); }
-  });
-
-  const toggle = document.getElementById('typePickerDropdown')?.querySelector('.tp-view-toggle');
-  if (toggle) {
-    toggle.addEventListener('click', (e) => {
-      const btn = e.target.closest('button[data-view]');
-      if (!btn) return;
+    cfg.trigger.addEventListener('click', (e) => {
       e.stopPropagation();
-      _setView(btn.dataset.view);
+      if (state.open) _closePanel(); else _openPanel();
     });
-  }
+    cfg.trigger.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowDown' && !state.open) { e.preventDefault(); _openPanel(); }
+    });
 
-  document.getElementById('typePickerList')?.addEventListener('keydown', _onListKeydown);
+    if (cfg.viewToggle) {
+      cfg.dropdown.querySelector('.tp-view-toggle')?.addEventListener('click', (e) => {
+        const btn = e.target.closest('button[data-view]');
+        if (!btn) return;
+        e.stopPropagation();
+        _setView(btn.dataset.view);
+      });
+    }
 
-  // Close when focus leaves the picker entirely (e.g. Tab out of the rows).
-  // Closing on the Tab key itself can drop focus to <body> once the focused
-  // row is hidden.
-  const wrapper = document.getElementById('typePickerWrapper');
-  wrapper?.addEventListener('focusout', (e) => {
-    if (!_open) return;
-    if (e.relatedTarget && wrapper.contains(e.relatedTarget)) return;
-    _closePanel();
-  });
+    cfg.list.addEventListener('keydown', _onListKeydown);
 
-  // The panel is anchored to the trigger; if the modal scrolls or the window
-  // resizes while it is open, close it rather than let it drift.
-  document.querySelector('#providerModal .modal')?.addEventListener(
-    'scroll', () => { if (_open) _closePanel(); }, { passive: true });
-  window.addEventListener('resize', () => { if (_open) _closePanel(); });
-
-  document.addEventListener('click', (e) => {
-    const w = document.getElementById('typePickerWrapper');
-    if (w && !w.contains(e.target)) _closePanel();
-  }, true);
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && _open) {
-      e.preventDefault();
+    // Close when focus leaves the picker entirely (e.g. Tab out of the rows).
+    cfg.wrapper.addEventListener('focusout', (e) => {
+      if (!state.open) return;
+      if (e.relatedTarget && cfg.wrapper.contains(e.relatedTarget)) return;
       _closePanel();
-      document.getElementById('typePickerTrigger')?.focus();
-    }
-  });
-}
+    });
 
-/** Populate the tree and select *value* ('' leaves the picker unselected). */
-export function setTypeTree(roots, value) {
-  _roots = roots || [];
-  _byValue = new Map();
-  for (const root of _roots) {
-    if (!root.children || !root.children.length) {
-      _byValue.set(root.name, { root, child: null });
-    } else {
-      for (const child of root.children) _byValue.set(child.value, { root, child });
-    }
-  }
-  _selected = _byValue.has(value) ? value : '';
-  _syncHidden();
-  _syncTrigger();
-  if (_open) _renderPanel();
-}
+    // The panel is anchored to the trigger; if the modal scrolls or the window
+    // resizes while it is open, close it rather than let it drift.
+    (cfg.scroller || cfg.trigger.closest('.modal'))?.addEventListener(
+      'scroll', () => { if (state.open) _closePanel(); }, { passive: true });
+    window.addEventListener('resize', () => { if (state.open) _closePanel(); });
 
-/** Current backing value (the shim / base-format name). */
-export function getSelectedValue() { return _selected; }
-
-/** Programmatic selection; fires the onTypeSelect callback. */
-export function selectValue(value) {
-  if (!_byValue.has(value)) return;
-  if (value === _selected) { _syncTrigger(); if (_open) _renderPanel(); return; }
-  _commit(value);
-}
-
-// ── Internals ───────────────────────────────────────────────────────
-
-function _setView(view) {
-  _view = view === 'tree' ? 'tree' : 'top';
-  localStorage.setItem(_VIEW_KEY, _view);
-  _renderPanel();
-  // Re-rendering replaces every row, so put focus back on (or next to) the
-  // selected one — otherwise a keyboard user is stranded on the toggle.
-  if (_open) _focusItem();
-}
-
-function _openPanel() {
-  _open = true;
-  document.getElementById('typePickerDropdown')?.classList.add('open');
-  _renderPanel();
-  _positionPanel();
-  _focusItem();
-}
-
-/** Keep the panel inside the modal's scroll box: the modal has
- *  `overflow-y:auto`, so a panel anchored below a low trigger would be
- *  clipped.  Flip above the trigger when there is more room there, and cap
- *  the height to the space actually available. */
-function _positionPanel() {
-  const trigger = document.getElementById('typePickerTrigger');
-  const panel = document.getElementById('typePickerDropdown');
-  if (!trigger || !panel) return;
-  const scroller = trigger.closest('.modal');
-  const tRect = trigger.getBoundingClientRect();
-  const box = (scroller || document.documentElement).getBoundingClientRect();
-  const GAP = 8, MAX = 340, MIN = 120;
-  const below = box.bottom - tRect.bottom - GAP;
-  const above = tRect.top - box.top - GAP;
-  const flip = below < 200 && above > below;
-  panel.classList.toggle('tp-flip-up', flip);
-  panel.style.maxHeight = `${Math.max(MIN, Math.min(MAX, flip ? above : below))}px`;
-}
-
-function _closePanel() {
-  _open = false;
-  document.getElementById('typePickerDropdown')?.classList.remove('open');
-}
-
-function _commit(value) {
-  _selected = value;
-  _syncHidden();
-  _syncTrigger();
-  _closePanel();
-  document.getElementById('typePickerTrigger')?.focus();
-  if (_onSelect) _onSelect(value);
-}
-
-function _syncHidden() {
-  const input = document.getElementById('provType');
-  if (input) input.value = _selected;
-}
-
-function _syncTrigger() {
-  const logoEl = document.getElementById('provTypeLogo');
-  const labelEl = document.getElementById('typePickerLabel');
-  const entry = _byValue.get(_selected);
-  if (labelEl) {
-    labelEl.textContent = entry ? entry.root.label
-      : t('label.selectOne', '— select —');
-    labelEl.classList.toggle('tp-placeholder', !entry);
-  }
-  if (logoEl) {
-    const logo = entry && entry.root.logo;
-    if (logo) { logoEl.src = logo; logoEl.style.display = ''; }
-    else { logoEl.src = ''; logoEl.style.display = 'none'; }
-  }
-}
-
-/** One root row and, in tree view, its children. */
-function _rootHtml(root, selectedRoot) {
-  // A root row stands for the child it currently owns; if the selection is
-  // elsewhere, clicking falls back to the root's default child.  This keeps
-  // the highlighted row meaning the same thing as a click on it.
-  const ownsSelection = !!selectedRoot && selectedRoot === root;
-  const rootValue = ownsSelection ? _selected : root.defaultValue;
-  let html = `<div class="tp-item tp-root${ownsSelection ? ' tp-active' : ''}" role="option" tabindex="-1" aria-selected="${ownsSelection}" data-value="${_esc(rootValue)}">`
-    + _logoHtml(root.logo)
-    + `<span class="tp-name">${_esc(root.label)}</span></div>`;
-  if (_view === 'tree' && root.children && root.children.length) {
-    const last = root.children.length - 1;
-    root.children.forEach((child, i) => {
-      const guide = i === last ? '└─' : '├─';
-      const active = child.value === _selected;
-      const suffix = child.label !== child.base && child.base
-        ? `<span class="tp-base">${_esc(child.base)}</span>` : '';
-      html += `<div class="tp-item tp-child${active ? ' tp-active' : ''}" role="option" tabindex="-1" aria-selected="${active}" data-value="${_esc(child.value)}">`
-        + `<span class="tp-guide">${guide}</span>`
-        + `<span class="tp-name">${_esc(child.label)}</span>${suffix}</div>`;
+    document.addEventListener('click', (e) => {
+      if (!cfg.wrapper.contains(e.target)) _closePanel();
+    }, true);
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && state.open) {
+        e.preventDefault();
+        _closePanel();
+        cfg.trigger.focus();
+      }
     });
   }
-  return html;
-}
 
-/** A labelled section of roots; an empty section renders nothing. */
-function _sectionHtml(label, roots, selectedRoot) {
-  if (!roots.length) return '';
-  return `<div class="tp-group-label" role="presentation">${_esc(label)}</div>`
-    + roots.map((root) => _rootHtml(root, selectedRoot)).join('');
-}
-
-function _renderPanel() {
-  const host = document.getElementById('typePickerList');
-  if (!host) return;
-  // Reflect the active view on the segmented control.
-  const toggle = document.getElementById('typePickerDropdown')?.querySelector('.tp-view-toggle');
-  for (const btn of toggle?.querySelectorAll('button[data-view]') || []) {
-    const on = btn.dataset.view === _view;
-    btn.classList.toggle('active', on);
-    btn.setAttribute('aria-selected', on ? 'true' : 'false');
+  /** Populate the tree and select *value* ('' leaves the picker unselected).
+   *
+   *  A non-empty value the tree does not know is kept, not dropped: it can be
+   *  a dialect this build does not list (a config written by a newer release,
+   *  or an external shim that did not load), and reopening the form must not
+   *  rewrite it to the type default.  The trigger shows it verbatim.
+   */
+  function setTree(roots, value) {
+    state.roots = roots || [];
+    state.byValue = new Map();
+    for (const root of state.roots) {
+      if (!root.children || !root.children.length) {
+        state.byValue.set(root.name, { root, child: null });
+      } else {
+        for (const child of root.children) state.byValue.set(child.value, { root, child });
+      }
+    }
+    state.selected = value || '';
+    _syncHidden();
+    _syncTrigger();
+    if (state.open) _renderPanel();
   }
 
-  const selectedRoot = _byValue.get(_selected)?.root;
-  // Bare base formats and vendor groups are different kinds of choice; the
-  // builder marks them, and the dropdown draws them as two sections.
-  const formatRoots = _roots.filter((root) => root.kind === 'format');
-  const shimRoots = _roots.filter((root) => root.kind !== 'format');
-  const html = _sectionHtml(t('label.baseFormats', 'Base formats'), formatRoots, selectedRoot)
-    + _sectionHtml(t('label.providerShims', 'Provider shims'), shimRoots, selectedRoot);
-  host.innerHTML = html || `<div class="tp-empty">${_esc(t('label.selectOne', '— select —'))}</div>`;
+  /** Current backing value (the shim / base-format name). */
+  function getValue() { return state.selected; }
 
-  for (const el of host.querySelectorAll('.tp-item'))
-    el.addEventListener('click', () => _commit(el.dataset.value));
-}
+  /** Whether the current tree offers *value* as a row. */
+  function has(value) { return state.byValue.has(value); }
 
-/** Focus the selected row, else the first row. */
-function _focusItem() {
-  const items = _items();
-  if (!items.length) return;
-  const target = items.find(el => el.classList.contains('tp-active')) || items[0];
-  target.focus();
-}
-
-function _items() {
-  return [...(document.getElementById('typePickerList')?.querySelectorAll('.tp-item') || [])];
-}
-
-function _onListKeydown(e) {
-  const items = _items();
-  if (!items.length) return;
-  const cur = items.indexOf(document.activeElement);
-  if (e.key === 'ArrowDown') { e.preventDefault(); items[Math.min(cur + 1, items.length - 1)].focus(); }
-  else if (e.key === 'ArrowUp') { e.preventDefault(); items[Math.max(cur - 1, 0)].focus(); }
-  else if (e.key === 'Home') { e.preventDefault(); items[0].focus(); }
-  else if (e.key === 'End') { e.preventDefault(); items[items.length - 1].focus(); }
-  else if (e.key === 'Enter' || e.key === ' ') {
-    e.preventDefault();
-    if (cur >= 0) _commit(items[cur].dataset.value);
+  /** Programmatic selection; fires the onChange callback. */
+  function select(value) {
+    if (!state.byValue.has(value)) return;
+    if (value === state.selected) { _syncTrigger(); if (state.open) _renderPanel(); return; }
+    _commit(value);
   }
-}
 
-function _logoHtml(logo) {
-  // On load failure (e.g. a cross-origin logo blocked by CORP) fall back to the
-  // same dashed placeholder used for logo-less roots.
-  return logo
-    ? `<img class="tp-logo" src="${_esc(logo)}" alt="" loading="lazy" onerror="this.classList.add('tp-logo-empty');this.removeAttribute('src')">`
-    : '<span class="tp-logo tp-logo-empty" aria-hidden="true"></span>';
+  // ── internals ─────────────────────────────────────────────────────
+
+  function _setView(view) {
+    state.view = view === 'tree' ? 'tree' : 'top';
+    localStorage.setItem(_VIEW_KEY, state.view);
+    _renderPanel();
+    // Re-rendering replaces every row, so put focus back on (or next to) the
+    // selected one — otherwise a keyboard user is stranded on the toggle.
+    if (state.open) _focusItem();
+  }
+
+  function _openPanel() {
+    state.open = true;
+    cfg.dropdown.classList.add('open');
+    _renderPanel();
+    _positionPanel();
+    _focusItem();
+  }
+
+  /** Keep the panel inside the modal's scroll box: the modal has
+   *  `overflow-y:auto`, so a panel anchored below a low trigger would be
+   *  clipped.  Flip above the trigger when there is more room there, and cap
+   *  the height to the space actually available. */
+  function _positionPanel() {
+    const scroller = cfg.scroller || cfg.trigger.closest('.modal');
+    const tRect = cfg.trigger.getBoundingClientRect();
+    const box = (scroller || document.documentElement).getBoundingClientRect();
+    const GAP = 8, MAX = 340, MIN = 120;
+    const below = box.bottom - tRect.bottom - GAP;
+    const above = tRect.top - box.top - GAP;
+    const flip = below < 200 && above > below;
+    cfg.dropdown.classList.toggle('tp-flip-up', flip);
+    cfg.dropdown.style.maxHeight = `${Math.max(MIN, Math.min(MAX, flip ? above : below))}px`;
+  }
+
+  function _closePanel() {
+    state.open = false;
+    cfg.dropdown.classList.remove('open');
+  }
+
+  function _commit(value) {
+    state.selected = value;
+    _syncHidden();
+    _syncTrigger();
+    _closePanel();
+    cfg.trigger.focus();
+    if (state.onChange) state.onChange(value);
+  }
+
+  function _syncHidden() {
+    if (cfg.hidden) cfg.hidden.value = state.selected;
+  }
+
+  function _syncTrigger() {
+    const entry = state.byValue.get(state.selected);
+    if (cfg.label) {
+      // An unknown non-empty value (see setTree) is shown as it is, so the
+      // operator can see what the config holds rather than "— select —".
+      cfg.label.textContent = entry ? entry.root.label
+        : (state.selected || t('label.selectOne', '— select —'));
+      cfg.label.classList.toggle('tp-placeholder', !entry && !state.selected);
+    }
+    if (cfg.logo) {
+      const logo = entry && entry.root.logo;
+      if (logo) { cfg.logo.src = logo; cfg.logo.style.display = ''; }
+      else { cfg.logo.src = ''; cfg.logo.style.display = 'none'; }
+    }
+  }
+
+  /** One root row and, in tree view, its children. */
+  function _rootHtml(root, selectedRoot) {
+    // A root row stands for the child it currently owns; if the selection is
+    // elsewhere, clicking falls back to the root's default child.  This keeps
+    // the highlighted row meaning the same thing as a click on it.
+    const ownsSelection = !!selectedRoot && selectedRoot === root;
+    const rootValue = ownsSelection ? state.selected : root.defaultValue;
+    let html = `<div class="tp-item tp-root${ownsSelection ? ' tp-active' : ''}" role="option" tabindex="-1" aria-selected="${ownsSelection}" data-value="${_esc(rootValue)}">`
+      + _logoHtml(root.logo)
+      + `<span class="tp-name">${_esc(root.label)}</span></div>`;
+    if (state.view === 'tree' && root.children && root.children.length) {
+      const last = root.children.length - 1;
+      root.children.forEach((child, i) => {
+        const guide = i === last ? '└─' : '├─';
+        const active = child.value === state.selected;
+        const suffix = child.label !== child.base && child.base
+          ? `<span class="tp-base">${_esc(child.base)}</span>` : '';
+        html += `<div class="tp-item tp-child${active ? ' tp-active' : ''}" role="option" tabindex="-1" aria-selected="${active}" data-value="${_esc(child.value)}">`
+          + `<span class="tp-guide">${guide}</span>`
+          + `<span class="tp-name">${_esc(child.label)}</span>${suffix}</div>`;
+      });
+    }
+    return html;
+  }
+
+  /** A labelled section of roots; an empty section renders nothing. */
+  function _sectionHtml(label, roots, selectedRoot) {
+    if (!roots.length) return '';
+    return `<div class="tp-group-label" role="presentation">${_esc(label)}</div>`
+      + roots.map((root) => _rootHtml(root, selectedRoot)).join('');
+  }
+
+  function _renderPanel() {
+    // Reflect the active view on the segmented control.
+    if (cfg.viewToggle) {
+      for (const btn of cfg.dropdown.querySelectorAll('.tp-view-toggle button[data-view]')) {
+        const on = btn.dataset.view === state.view;
+        btn.classList.toggle('active', on);
+        btn.setAttribute('aria-selected', on ? 'true' : 'false');
+      }
+    }
+
+    const selectedRoot = state.byValue.get(state.selected)?.root;
+    // Bare base formats and vendor groups are different kinds of choice; the
+    // builder marks them, and the dropdown draws them as two sections.
+    const formatRoots = state.roots.filter((root) => root.kind === 'format');
+    const shimRoots = state.roots.filter((root) => root.kind !== 'format');
+    const html = _sectionHtml(t('label.baseFormats', 'Base formats'), formatRoots, selectedRoot)
+      + _sectionHtml(t('label.providerShims', 'Provider shims'), shimRoots, selectedRoot);
+    cfg.list.innerHTML = html || `<div class="tp-empty">${_esc(t('label.selectOne', '— select —'))}</div>`;
+
+    for (const el of cfg.list.querySelectorAll('.tp-item'))
+      el.addEventListener('click', () => _commit(el.dataset.value));
+  }
+
+  /** Focus the selected row, else the first row. */
+  function _focusItem() {
+    const items = _items();
+    if (!items.length) return;
+    const target = items.find(el => el.classList.contains('tp-active')) || items[0];
+    target.focus();
+  }
+
+  function _items() {
+    return [...cfg.list.querySelectorAll('.tp-item')];
+  }
+
+  function _onListKeydown(e) {
+    const items = _items();
+    if (!items.length) return;
+    const cur = items.indexOf(document.activeElement);
+    if (e.key === 'ArrowDown') { e.preventDefault(); items[Math.min(cur + 1, items.length - 1)].focus(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); items[Math.max(cur - 1, 0)].focus(); }
+    else if (e.key === 'Home') { e.preventDefault(); items[0].focus(); }
+    else if (e.key === 'End') { e.preventDefault(); items[items.length - 1].focus(); }
+    else if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      if (cur >= 0) _commit(items[cur].dataset.value);
+    }
+  }
+
+  function _logoHtml(logo) {
+    // On load failure (e.g. a cross-origin logo blocked by CORP) fall back to
+    // the same dashed placeholder used for logo-less roots.
+    return logo
+      ? `<img class="tp-logo" src="${_esc(logo)}" alt="" loading="lazy" onerror="this.classList.add('tp-logo-empty');this.removeAttribute('src')">`
+      : '<span class="tp-logo tp-logo-empty" aria-hidden="true"></span>';
+  }
+
+  return { init, setTree, getValue, has, select };
 }
 
 function _esc(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
     .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
+
+// ── The LLM endpoint's picker ───────────────────────────────────────
+// One instance over the markup in admin.html; the exported names below keep
+// providers.js's existing calls unchanged.
+
+let _llm = null;
+let _llmOnSelect = null;
+
+function _llmPicker() {
+  if (_llm) return _llm;
+  const wrapper = document.getElementById('typePickerWrapper');
+  const trigger = document.getElementById('typePickerTrigger');
+  const dropdown = document.getElementById('typePickerDropdown');
+  const list = document.getElementById('typePickerList');
+  if (!wrapper || !trigger || !dropdown || !list) return null;
+  _llm = createTypePicker({
+    wrapper,
+    trigger,
+    dropdown,
+    list,
+    label: document.getElementById('typePickerLabel'),
+    logo: document.getElementById('provTypeLogo'),
+    hidden: document.getElementById('provType'),
+    viewToggle: true,
+    onChange: (value) => { if (_llmOnSelect) _llmOnSelect(value); },
+  });
+  return _llm;
+}
+
+/** Register the selection callback (fired on user and programmatic changes). */
+export function onTypeSelect(cb) {
+  _llmOnSelect = cb;
+  _llmPicker()?.init();
+}
+
+/** Attach trigger / toggle / outside-click handlers.  Idempotent. */
+export function initTypePicker() {
+  _llmPicker()?.init();
+}
+
+/** Populate the tree and select *value* ('' leaves the picker unselected). */
+export function setTypeTree(roots, value) {
+  _llmPicker()?.setTree(roots, value);
+}
+
+/** Current backing value (the shim / base-format name). */
+export function getSelectedValue() { return _llm ? _llm.getValue() : ''; }
+
+/** Programmatic selection; fires the onTypeSelect callback. */
+export function selectValue(value) { _llm?.select(value); }

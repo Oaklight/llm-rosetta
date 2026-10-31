@@ -11,8 +11,8 @@ import { t, capLabel } from '../core/i18n.js';
 import { api, showToast, showToastHtml, closeModal, esc, copyText, inlineConfirm, isFreeEntry, freeEntryLabel, providerTypeName } from '../core/utils.js';
 import { safeLinkUrl, parseRecord } from '../core/credential.js';
 import { initLogoPicker, setLogoPickerValue, getLogoPickerValue } from '../components/logo-picker.js';
-import { setTypeTree, getSelectedValue, selectValue, onTypeSelect } from '../components/type-picker.js';
-import { buildTypeModel, shimBrand } from '../core/shim-tree.js';
+import { setTypeTree, getSelectedValue, selectValue, onTypeSelect, createTypePicker } from '../components/type-picker.js';
+import { buildTypeModel, buildEndpointTypeModel, endpointChoiceConfig, shimBrand } from '../core/shim-tree.js';
 import { degradedEndpoints, categoryKey } from '../core/provider-endpoints.js';
 import { routingRows, blockRow } from '../core/quota-lines.js';
 
@@ -503,32 +503,34 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
     const chk = document.getElementById(`provCap${_capitalize(desc.name)}`);
     if (chk) chk.checked = provCaps.includes(desc.name);
   }
-  // Generate non-LLM endpoint sections and populate format dropdowns
+  // Generate non-LLM endpoint sections and fill each one's picker.
   _buildProvEndpointSections();
   for (const desc of (S.configData?.model_types || []).filter(d => !d.is_llm)) {
-    const fmtSel = document.getElementById(`provFmt_${desc.name}`);
-    if (fmtSel) {
-      fmtSel.innerHTML = (desc.formats || []).map(f => `<option value="${f}">${f}</option>`).join('');
-    }
+    const picker = _endpointPickers.get(desc.name);
+    if (!picker) continue;
+    const tree = _endpointTree(desc);
+    // The stored shim names the choice; without one, the bare format does.  A
+    // shim this config names but that is no longer registered falls back to
+    // the format it served.
     const shimName = provCfg ? (provCfg[desc.config_shim_key] || '') : '';
-    const shimSel = document.getElementById(`provShim_${desc.name}`);
-    if (shimSel) shimSel.value = shimName;
-    if (provCfg) {
-      if (provCfg[desc.config_format_key] && fmtSel) fmtSel.value = provCfg[desc.config_format_key];
+    const formatName = provCfg ? (provCfg[desc.config_format_key] || '') : '';
+    const preferred = shimName || formatName;
+    picker.setTree(tree.roots, preferred);
+    // The picker keeps a value the tree does not offer (a dialect this build
+    // does not list), so membership is asked explicitly: a shim that no
+    // longer loads still falls back to the format it served.
+    if (preferred && !picker.has(preferred)) picker.setTree(tree.roots, formatName);
+    const pathEl = document.getElementById(`provPath_${desc.name}`);
+    if (pathEl) {
       const shimDef = shimMap[shimName] || {};
-      const pathEl = document.getElementById(`provPath_${desc.name}`);
-      if (pathEl) {
-        const fmt = provCfg[desc.config_format_key] || (fmtSel && fmtSel.value);
-        pathEl.value =
-          provCfg[desc.config_path_key] || shimDef.default_path || _descPathFor(desc, fmt);
-      }
-    } else {
-      const pathEl = document.getElementById(`provPath_${desc.name}`);
-      if (pathEl) pathEl.value = '';
+      const fmt = formatName || shimDef.format || '';
+      // The default this choice produces: a change of choice may replace it,
+      // and nothing else.  A shim's default path need not equal its format's.
+      pathEl.dataset.defaultPath = shimDef.default_path || _descPathFor(desc, fmt);
+      pathEl.value = provCfg
+        ? (provCfg[desc.config_path_key] || pathEl.dataset.defaultPath)
+        : '';
     }
-    // Remember which format the current path value belongs to, so a format
-    // change can replace a default path without touching an operator's own.
-    if (fmtSel) fmtSel.dataset.pathFormat = fmtSel.value;
   }
   toggleProvCapSection();
   // Reveal the key field for a free provider that already carries a key.
@@ -586,55 +588,102 @@ function _buildProvEndpointSections() {
   const container = document.getElementById('provNonLlmSections');
   if (!container) return;
   container.innerHTML = '';
+  _endpointPickers.clear();
   for (const desc of (S.configData?.model_types || []).filter(d => !d.is_llm)) {
     const section = document.createElement('div');
     section.className = 'endpoint-section';
     section.id = `provEndpoint_${desc.name}`;
     const endpointLabel = t('label.' + desc.name + 'Endpoint') || (desc.name.charAt(0).toUpperCase() + desc.name.slice(1) + ' Endpoint');
     const pathLabel = t('label.' + desc.name + 'Path') || (desc.name.charAt(0).toUpperCase() + desc.name.slice(1) + ' Path');
-    const formatLabel = t('label.format') || 'Format';
-    const shimLabel = t('label.shim', 'Shim');
     const dotColor = desc.color || 'var(--border)';
-    // Only this category's shims can drive this endpoint.
-    const shimOptions = (S.configData?.registered_shims || [])
-      .filter(s => s.model_type === desc.name)
-      .map(s => `<option value="${esc(s.name)}">${esc(s.display_name || s.name)}</option>`)
-      .join('');
+    // One dropdown, as on the LLM endpoint: a vendor serves one dialect per
+    // model type, so the shim and the bare format are the same choice at
+    // different levels.  The path is a peer field: with a 58% basis on the
+    // picker it was squeezed to about 140px.
     section.innerHTML = `
       <div class="section-label"><span class="dot" style="background:${dotColor}"></span> <span>${esc(endpointLabel)}</span></div>
       <div class="form-row">
-        <div class="form-group">
-          <label>${esc(shimLabel)}</label>
-          <select id="provShim_${desc.name}">
-            <option value="">${esc(t('label.none', '—'))}</option>
-            ${shimOptions}
-          </select>
+        <div class="form-group" style="flex:1 1 0;min-width:0">
+          <label>${esc(t('label.endpointSource'))}</label>
+          <div class="type-picker" id="provEndpointPicker_${desc.name}">
+            <button type="button" id="provEndpointTrigger_${desc.name}" class="type-picker-trigger">
+              <img id="provEndpointLogo_${desc.name}" class="type-picker-logo" src="" alt="" style="display:none" onerror="this.style.display='none'">
+              <span id="provEndpointLabel_${desc.name}" class="tp-trigger-label tp-placeholder"></span>
+              <svg class="type-picker-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="type-picker-dropdown" id="provEndpointDropdown_${desc.name}">
+              <div class="tp-list" id="provEndpointList_${desc.name}" role="listbox"></div>
+            </div>
+          </div>
+          <div class="field-hint">${esc(t('hint.endpointSource'))}</div>
+          <input type="hidden" id="provShim_${desc.name}">
         </div>
-        <div class="form-group">
-          <label>${esc(formatLabel)}</label>
-          <select id="provFmt_${desc.name}"></select>
-        </div>
-        <div class="form-group">
+        <div class="form-group" style="flex:1 1 0;min-width:0">
           <label>${esc(pathLabel)}</label>
           <input type="text" id="provPath_${desc.name}" placeholder="${esc(_descPathFor(desc, (desc.formats || [])[0]))}">
         </div>
       </div>`;
     container.appendChild(section);
-    section.querySelector(`#provShim_${desc.name}`)
-      .addEventListener('change', () => _applyEndpointShim(desc));
-    section.querySelector(`#provFmt_${desc.name}`)
-      .addEventListener('change', () => {
-        const pathEl = section.querySelector(`#provPath_${desc.name}`);
-        const fmt = document.getElementById(`provFmt_${desc.name}`);
-        if (!pathEl || !fmt) return;
-        // Replace a path that was the previous format's default; keep
-        // anything the operator typed.
-        const previousDefault = _descPathFor(desc, fmt.dataset.pathFormat || '');
-        if (!pathEl.value.trim() || pathEl.value.trim() === previousDefault) {
-          pathEl.value = _descPathFor(desc, fmt.value);
-        }
-        fmt.dataset.pathFormat = fmt.value;
-      });
+    const picker = createTypePicker({
+      wrapper: section.querySelector(`#provEndpointPicker_${desc.name}`),
+      trigger: section.querySelector(`#provEndpointTrigger_${desc.name}`),
+      dropdown: section.querySelector(`#provEndpointDropdown_${desc.name}`),
+      list: section.querySelector(`#provEndpointList_${desc.name}`),
+      label: section.querySelector(`#provEndpointLabel_${desc.name}`),
+      logo: section.querySelector(`#provEndpointLogo_${desc.name}`),
+      hidden: section.querySelector(`#provShim_${desc.name}`),
+      viewToggle: false,
+      onChange: (value) => _applyEndpointChoice(desc, value),
+    });
+    picker.init();
+    _endpointPickers.set(desc.name, picker);
+  }
+}
+
+/** The picker trees of the open provider modal, keyed by model type. */
+const _endpointPickers = new Map();
+
+/** The tree one typed endpoint's picker shows: its bare formats and its own
+ *  shims, in two sections.  See `buildEndpointTypeModel` for why the two
+ *  halves are keyed apart. */
+function _endpointTree(desc) {
+  const shims = (S.configData?.registered_shims || [])
+    .filter(s => s.model_type === desc.name);
+  return buildEndpointTypeModel(shims, desc.formats || []);
+}
+
+/**
+ * Apply a typed endpoint choice: the shim fills the path and connection
+ * defaults, a bare format fills the path.  Only empty fields are filled, so
+ * the operator's own values win.
+ *
+ * The path field remembers the *default value* it currently holds, not the
+ * format it came from: a shim's default path need not equal its format's, so
+ * a format-keyed marker would call a shim default "the operator's own" (and
+ * keep it) or replace a value the operator typed (when it happened to equal
+ * a type default).
+ */
+function _applyEndpointChoice(desc, value) {
+  const shim = (S.configData?.registered_shims || [])
+    .find(s => s.name === value);
+  const format = shim ? shim.format : value;
+  const nextDefault = (shim && shim.default_path) || _descPathFor(desc, format);
+  const pathEl = document.getElementById(`provPath_${desc.name}`);
+  if (pathEl) {
+    // Replace a path that is still the previous choice's default; keep
+    // anything else the operator put there.
+    const previousDefault = pathEl.dataset.defaultPath || '';
+    if (!pathEl.value.trim() || pathEl.value.trim() === previousDefault) {
+      pathEl.value = nextDefault;
+    }
+    pathEl.dataset.defaultPath = nextDefault;
+  }
+  if (!shim) return;
+  const urlInput = document.getElementById('provBaseUrl');
+  if (urlInput && !urlInput.value.trim()) urlInput.value = shim.default_base_url || '';
+  const keyInput = document.getElementById('provApiKey');
+  if (keyInput && !keyInput.value.trim() && shim.default_api_key_env) {
+    keyInput.value = '${' + shim.default_api_key_env + '}';
   }
 }
 
@@ -643,30 +692,6 @@ function _buildProvEndpointSections() {
 function _descPathFor(desc, format) {
   const paths = desc?.default_paths || {};
   return paths[format] || desc?.default_path || '';
-}
-
-/** Apply a non-LLM endpoint shim's defaults to its section and the shared
- *  connection fields.  Only empty fields are filled, so the operator's own
- *  values win. */
-function _applyEndpointShim(desc) {
-  const sel = document.getElementById(`provShim_${desc.name}`);
-  if (!sel) return;
-  const shim = (S.configData?.registered_shims || [])
-    .find(s => s.name === sel.value);
-  if (!shim) return;
-  const fmtSel = document.getElementById(`provFmt_${desc.name}`);
-  if (fmtSel && shim.format) fmtSel.value = shim.format;
-  const pathEl = document.getElementById(`provPath_${desc.name}`);
-  if (pathEl) {
-    pathEl.value = shim.default_path || _descPathFor(desc, shim.format || fmtSel?.value);
-  }
-  if (fmtSel) fmtSel.dataset.pathFormat = fmtSel.value;
-  const urlInput = document.getElementById('provBaseUrl');
-  if (urlInput && !urlInput.value.trim()) urlInput.value = shim.default_base_url || '';
-  const keyInput = document.getElementById('provApiKey');
-  if (keyInput && !keyInput.value.trim() && shim.default_api_key_env) {
-    keyInput.value = '${' + shim.default_api_key_env + '}';
-  }
 }
 
 /**
@@ -1230,13 +1255,19 @@ async function saveProvider() {
   for (const desc of S.configData?.model_types?.filter(d => !d.is_llm) || []) {
     const chk = document.getElementById(`provCap${_capitalize(desc.name)}`);
     if (chk?.checked) {
-      if (desc.config_shim_key) {
-        body[desc.config_shim_key] = document.getElementById(`provShim_${desc.name}`)?.value || '';
-      }
-      body[desc.config_format_key] = document.getElementById(`provFmt_${desc.name}`)?.value || desc.formats[0];
+      // The hidden input is the picker's documented contract, kept in sync by
+      // setTree and every commit.  Reading the instance instead ties the save
+      // to the map's identity, and an instance rebuilt between open and save
+      // would hand back an empty value and rewrite the endpoint.
+      const value = document.getElementById(`provShim_${desc.name}`)?.value || '';
+      const typeShims = (S.configData?.registered_shims || [])
+        .filter(s => s.model_type === desc.name);
+      const choice = endpointChoiceConfig(value, typeShims, desc.formats || []);
+      if (desc.config_shim_key) body[desc.config_shim_key] = choice.shim;
+      body[desc.config_format_key] = choice.format;
       body[desc.config_path_key] =
         document.getElementById(`provPath_${desc.name}`)?.value?.trim()
-        || _descPathFor(desc, body[desc.config_format_key]);
+        || _descPathFor(desc, choice.format);
     } else {
       if (desc.config_shim_key) body[desc.config_shim_key] = '';
       body[desc.config_format_key] = '';
