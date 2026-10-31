@@ -147,6 +147,7 @@ class TestLoadProviders:
             "openrouter--messages",
             "openrouter--chat_completions",
             "openrouter--open_responses",
+            "openrouter--rerank",
             "opencode--chat_completions",
             "opencode--messages",
             "opencode--open_responses",
@@ -154,9 +155,12 @@ class TestLoadProviders:
             "qwen",
             "typesafe--systemone",
             "volcengine--chat_completions",
+            "volcengine--embedding",
             "volcengine--open_responses",
             "xai",
             "zhipu",
+            "zhipu--embedding",
+            "zhipu--rerank",
         }
         assert names == expected, (
             f"Unexpected shim diff: {names.symmetric_difference(expected)}"

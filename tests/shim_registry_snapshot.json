@@ -312,6 +312,18 @@
     "free_source": false
   },
   {
+    "name": "openrouter--rerank",
+    "model_type": "rerank",
+    "format": "cohere",
+    "base_url": "https://openrouter.ai/api/v1",
+    "api_key_env": "OPENROUTER_API_KEY",
+    "default_path": "/rerank",
+    "group": null,
+    "group_label": null,
+    "display_name": null,
+    "free_source": false
+  },
+  {
     "name": "qwen",
     "model_type": "llm",
     "format": "chat_completions",
@@ -342,6 +354,18 @@
     "base_url": "https://ark.cn-beijing.volces.com/api/v3",
     "api_key_env": "ARK_API_KEY",
     "default_path": null,
+    "group": null,
+    "group_label": null,
+    "display_name": null,
+    "free_source": false
+  },
+  {
+    "name": "volcengine--embedding",
+    "model_type": "embeddings",
+    "format": "openai",
+    "base_url": "https://ark.cn-beijing.volces.com/api/v3",
+    "api_key_env": "ARK_API_KEY",
+    "default_path": "/embeddings",
     "group": null,
     "group_label": null,
     "display_name": null,
@@ -402,6 +426,30 @@
     "base_url": "https://open.bigmodel.cn/api/paas/v4",
     "api_key_env": "ZHIPU_API_KEY",
     "default_path": null,
+    "group": null,
+    "group_label": null,
+    "display_name": null,
+    "free_source": false
+  },
+  {
+    "name": "zhipu--embedding",
+    "model_type": "embeddings",
+    "format": "openai",
+    "base_url": "https://open.bigmodel.cn/api/paas/v4",
+    "api_key_env": "ZHIPU_API_KEY",
+    "default_path": "/embeddings",
+    "group": null,
+    "group_label": null,
+    "display_name": null,
+    "free_source": false
+  },
+  {
+    "name": "zhipu--rerank",
+    "model_type": "rerank",
+    "format": "cohere",
+    "base_url": "https://open.bigmodel.cn/api/paas/v4",
+    "api_key_env": "ZHIPU_API_KEY",
+    "default_path": "/rerank",
     "group": null,
     "group_label": null,
     "display_name": null,
