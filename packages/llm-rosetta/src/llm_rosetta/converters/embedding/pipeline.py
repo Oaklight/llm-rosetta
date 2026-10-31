@@ -15,6 +15,7 @@ from llm_rosetta.provider_names import canonical_provider_name
 # Import converter submodules directly (not through __init__) to avoid
 # circular imports — __init__.py re-exports from this module.
 from llm_rosetta.converters.base.context import ConversionContext
+from llm_rosetta.converters.base.defaults import apply_ir_defaults
 from llm_rosetta.converters.base.embedding_converter import BaseEmbeddingConverter
 from llm_rosetta.converters.embedding.cohere import CohereEmbeddingConverter
 from llm_rosetta.converters.embedding.google import GoogleEmbeddingConverter
@@ -115,9 +116,19 @@ class EmbeddingConversionPipeline:
     def warnings(self) -> list[str]:
         return self._ctx.warnings
 
-    def convert_request(self, body: dict[str, Any]) -> dict[str, Any]:
-        """Source format request → IR → target format request."""
+    def convert_request(
+        self,
+        body: dict[str, Any],
+        *,
+        defaults: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Source format request → IR → target format request.
+
+        *defaults* are the shim's declared parameter defaults.  They fill a
+        field the client did not supply and never override one it did.
+        """
         ir = self._source_converter.request_from_provider(body, context=self._ctx)
+        ir = apply_ir_defaults(ir, defaults)
         target_body, _ = self._target_converter.request_to_provider(
             ir, context=self._ctx
         )

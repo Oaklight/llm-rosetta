@@ -74,6 +74,7 @@ from typing import Any
 from llm_rosetta._vendor.yaml import load as yaml_load
 
 from ..provider_shim import (
+    TYPE_PARAM_KEYS,
     ConnectionConfig,
     ProviderShim,
     QuotaDeclaration,
@@ -598,6 +599,66 @@ def _parse_connection_token_command(
     return tuple(argv)
 
 
+def _parse_type_params(
+    cfg: dict[str, Any], model_type: str, yaml_path: Path
+) -> dict[str, Any]:
+    """Return the request-field defaults a shim declares for its own type.
+
+    The section is named after the model type (``embeddings:``, ``rerank:``,
+    ``decisions:``) and its keys are the IR field names the target converter
+    already writes.  A section for another type is a mistake rather than a
+    declaration, so it is refused, as is a key the type does not know.  The
+    pre-rename spelling (``embedding:``) is read as the same section.
+
+    Raises:
+        ValueError: Naming the file, the offending section or key, and what
+            the type accepts.
+    """
+    from llm_rosetta.formats import legacy_model_type
+
+    values = dict(cfg)
+    legacy = legacy_model_type(model_type)
+    if legacy is not None and legacy in values and model_type not in values:
+        warnings.warn(
+            f"{yaml_path}: {legacy}: is deprecated; use {model_type}:",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        values[model_type] = values.pop(legacy)
+    declared = {key for key in TYPE_PARAM_KEYS if key in values}
+    foreign = declared - {model_type}
+    if foreign:
+        raise ValueError(
+            f"{yaml_path}: declares a {', '.join(sorted(foreign))} section but "
+            f"the shim is {model_type}; only its own type's section is read"
+        )
+    raw = values.get(model_type)
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise ValueError(
+            f"{yaml_path}: {model_type} must be a mapping of parameter defaults"
+        )
+    allowed = TYPE_PARAM_KEYS[model_type]
+    unknown = set(raw) - allowed
+    if unknown:
+        raise ValueError(
+            f"{yaml_path}: unknown {model_type} parameter(s) "
+            f"{', '.join(sorted(unknown))}; allowed: "
+            f"{', '.join(sorted(allowed)) or 'none'}"
+        )
+    for key, value in raw.items():
+        if key in {"dimensions", "top_n", "max_tokens_per_doc"}:
+            if not isinstance(value, int) or isinstance(value, bool):
+                raise ValueError(f"{yaml_path}: {model_type}.{key} must be an integer")
+        elif key in {"truncation", "return_documents"}:
+            if not isinstance(value, bool):
+                raise ValueError(f"{yaml_path}: {model_type}.{key} must be a boolean")
+        elif not isinstance(value, str):
+            raise ValueError(f"{yaml_path}: {model_type}.{key} must be a string")
+    return dict(raw)
+
+
 def _load_single_provider(
     provider_dir: Path,
     *,
@@ -640,6 +701,8 @@ def _load_single_provider(
             f"model_type={model_type!r}; move it under the {model_type!r} "
             f"directory or correct the declaration"
         )
+
+    params = _parse_type_params(cfg, model_type, yaml_path)
 
     pre_t, post_t, ir_t, resp_t, transforms_mod = _load_transforms(
         provider_dir, group=group, _builtin=_builtin, root=root
@@ -806,6 +869,7 @@ def _load_single_provider(
         store_default=cfg.get("store_default"),
         hoist_system_messages=cfg.get("hoist_system_messages", True),
         soft_error_patterns=soft_errors,
+        params=params,
     )
     register_shim(shim)
 

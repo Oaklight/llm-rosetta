@@ -402,6 +402,64 @@
           }
         }
       }
+    },
+    "embeddings": {
+      "type": "object",
+      "description": "Default request parameters for an embeddings shim, keyed by IR field name. A default fills only a field the client omitted. Only fields measured against the live endpoint belong here.",
+      "additionalProperties": false,
+      "properties": {
+        "task_type": {
+          "type": "string",
+          "description": "IR task type (e.g. retrieval_document); the converter maps it to the vendor's word."
+        },
+        "dimensions": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Output vector size."
+        },
+        "encoding_format": {
+          "type": "string",
+          "description": "IR encoding format (e.g. float, base64, int8)."
+        },
+        "truncation": {
+          "type": "boolean",
+          "description": "Whether an over-long input is truncated."
+        }
+      }
+    },
+    "embedding": {
+      "$ref": "#/properties/embeddings"
+    },
+    "rerank": {
+      "type": "object",
+      "description": "Default request parameters for a rerank shim, keyed by IR field name. A default fills only a field the client omitted. Only fields measured against the live endpoint belong here.",
+      "additionalProperties": false,
+      "properties": {
+        "top_n": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "How many documents to return."
+        },
+        "return_documents": {
+          "type": "boolean",
+          "description": "Whether the response carries the document text."
+        },
+        "max_tokens_per_doc": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Per-document token cap."
+        },
+        "truncation": {
+          "type": "boolean",
+          "description": "Whether an over-long document is truncated."
+        }
+      }
+    },
+    "decision": {
+      "type": "object",
+      "description": "Default request parameters for a decision shim. No parameter beyond the connection is measured for the decision formats today.",
+      "additionalProperties": false,
+      "properties": {}
     }
   }
 }

@@ -201,7 +201,45 @@ class TestEmbeddingSection:
         assert cfg.embeddings_providers["p"] == {
             "format": "cohere",
             "embeddings_path": "/v2/embed",
+            "params": {"task_type": "retrieval_document"},
         }
+
+    def test_the_shims_declared_defaults_reach_the_route(self) -> None:
+        """A cohere embedding route carries the input_type default Cohere needs."""
+        cfg = GatewayConfig(
+            {
+                "providers": {
+                    "p": {
+                        "embedding_shim": "cohere--embedding",
+                        "api_key": "k",
+                        "base_url": "https://x",
+                    }
+                },
+                "models": {"m": {"providers": ["p"], "type": "embedding"}},
+            }
+        )
+
+        route = cfg.resolve_embedding("m")
+
+        assert route.params == {"task_type": "retrieval_document"}
+
+    def test_an_explicit_format_drops_the_shims_defaults(self) -> None:
+        """A format that overrides the shim's makes the shim's defaults a guess."""
+        cfg = GatewayConfig(
+            {
+                "providers": {
+                    "p": {
+                        "embedding_shim": "cohere--embedding",
+                        "embedding_format": "openai",
+                        "api_key": "k",
+                        "base_url": "https://x",
+                    }
+                },
+                "models": {"m": {"providers": ["p"], "type": "embedding"}},
+            }
+        )
+
+        assert cfg.resolve_embedding("m").params is None
 
     def test_model_maps_to_the_first_live_provider(self) -> None:
         cfg = GatewayConfig(

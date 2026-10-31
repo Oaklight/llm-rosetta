@@ -165,6 +165,75 @@ class TestEmbeddingUpstreamModel:
         args, _ = request.app.transport.send.call_args
         assert args[2]["input"] == ["hello"]
 
+    def test_a_shims_default_reaches_the_upstream_body(self) -> None:
+        """Cohere requires input_type; the shim's default supplies it."""
+        config = GatewayConfig(
+            {
+                "providers": {
+                    "cohere": {
+                        "api_key": "k",
+                        "base_url": "https://api.cohere.com",
+                        "embedding_shim": "cohere--embedding",
+                    }
+                },
+                "models": {"my-embed": {"provider": "cohere", "type": "embeddings"}},
+            }
+        )
+        request = _make_request({"model": "my-embed", "input": "hello"})
+        request.app.transport = MagicMock()
+        request.app.transport.send = AsyncMock(
+            return_value=UpstreamResponse(
+                status_code=200,
+                body={
+                    "embeddings": {"float": [[0.1]]},
+                    "response_type": "embeddings_by_type",
+                },
+                raw_content=b"{}",
+            )
+        )
+
+        asyncio.run(handle_embeddings(request, config))
+
+        args, _ = request.app.transport.send.call_args
+        assert args[2]["input_type"] == "search_document"
+
+    def test_a_client_value_wins_over_the_shims_default(self) -> None:
+        config = GatewayConfig(
+            {
+                "providers": {
+                    "cohere": {
+                        "api_key": "k",
+                        "base_url": "https://api.cohere.com",
+                        "embedding_shim": "cohere--embedding",
+                    }
+                },
+                "models": {"my-embed": {"provider": "cohere", "type": "embeddings"}},
+            }
+        )
+        request = _make_request(
+            {
+                "model": "my-embed",
+                "texts": ["hello"],
+                "input_type": "search_query",
+            }
+        )
+        request.app.transport = MagicMock()
+        request.app.transport.send = AsyncMock(
+            return_value=UpstreamResponse(
+                status_code=200,
+                body={
+                    "embeddings": {"float": [[0.1]]},
+                    "response_type": "embeddings_by_type",
+                },
+                raw_content=b"{}",
+            )
+        )
+
+        asyncio.run(handle_embeddings(request, config))
+
+        args, _ = request.app.transport.send.call_args
+        assert args[2]["input_type"] == "search_query"
+
     def test_same_format_fidelity_check_runs_both_ways(self, monkeypatch) -> None:
         config = _make_config("https://api.example.com")
         request = _make_request({"model": "my-embed", "input": "hello"})

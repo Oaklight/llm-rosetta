@@ -7,3 +7,10 @@ connection:
   base_url: https://api.cohere.com
   api_key_env: COHERE_API_KEY
   default_path: /v2/embed
+
+# Cohere rejects a /v2/embed request without input_type (measured: 400
+# "valid input_type must be provided"), so the shim supplies the document
+# default; a client's own task_type still wins.  Measured: search_document
+# and search_query produce different vectors.
+embeddings:
+  task_type: retrieval_document

@@ -1186,3 +1186,116 @@ class TestModelTypeDirectories:
             assert rel[1] in _TYPE_DIRS, path
             cfg = yaml_load(path.read_text(encoding="utf-8"))
             assert _TYPE_DIRS[rel[1]] == cfg["model_type"], path
+
+
+class TestTypeParams:
+    """A shim may declare its own type's request defaults.
+
+    The keys are IR field names, so the target converter writes them; only
+    fields measured against the live endpoint belong in the whitelist.
+    """
+
+    @staticmethod
+    def _load(tmp_path: Path, body: str):
+        leaf = tmp_path / "leaf"
+        leaf.mkdir()
+        (leaf / "provider.yaml").write_text(textwrap.dedent(body), encoding="utf-8")
+        return load_providers_from_dir(tmp_path)
+
+    def test_defaults_are_parsed(self, tmp_path: Path):
+        (shim,) = self._load(
+            tmp_path,
+            """\
+            name: x
+            model_type: embeddings
+            format: openai
+            embeddings:
+              task_type: retrieval_document
+              dimensions: 64
+              truncation: true
+            """,
+        )
+        assert shim.params == {
+            "task_type": "retrieval_document",
+            "dimensions": 64,
+            "truncation": True,
+        }
+
+    def test_the_legacy_section_spelling_is_read(self, tmp_path: Path):
+        """A shim written before the rename keeps its defaults."""
+        with pytest.warns(DeprecationWarning, match="model_type 'embedding'"):
+            (shim,) = self._load(
+                tmp_path,
+                """\
+                name: x
+                model_type: embedding
+                format: openai
+                embedding:
+                  task_type: retrieval_document
+                """,
+            )
+        assert shim.params == {"task_type": "retrieval_document"}
+
+    def test_an_unknown_parameter_is_refused(self, tmp_path: Path):
+        with pytest.raises(
+            ValueError, match=r"unknown embeddings parameter.*normalize"
+        ):
+            self._load(
+                tmp_path,
+                """\
+                name: x
+                model_type: embeddings
+                format: openai
+                embeddings:
+                  normalize: true
+                """,
+            )
+
+    def test_a_section_for_another_type_is_refused(self, tmp_path: Path):
+        with pytest.raises(
+            ValueError, match=r"rerank section but the shim is embeddings"
+        ):
+            self._load(
+                tmp_path,
+                """\
+                name: x
+                model_type: embeddings
+                format: openai
+                rerank:
+                  top_n: 1
+                """,
+            )
+
+    def test_a_value_of_the_wrong_type_is_refused(self, tmp_path: Path):
+        with pytest.raises(
+            ValueError, match=r"embeddings.dimensions must be an integer"
+        ):
+            self._load(
+                tmp_path,
+                """\
+                name: x
+                model_type: embeddings
+                format: openai
+                embeddings:
+                  dimensions: "64"
+                """,
+            )
+
+    def test_a_decision_shim_declares_nothing(self, tmp_path: Path):
+        with pytest.raises(ValueError, match=r"allowed: none"):
+            self._load(
+                tmp_path,
+                """\
+                name: x
+                model_type: decisions
+                format: systemone
+                decisions:
+                  top_n: 1
+                """,
+            )
+
+    def test_the_cohere_shim_declares_the_input_type_cohere_requires(self):
+        load_providers()
+        shim = get_shim("cohere--embedding")
+        assert shim is not None
+        assert shim.params == {"task_type": "retrieval_document"}
