@@ -58,18 +58,19 @@ packages/llm-rosetta/src/llm_rosetta/shims/providers/
 厂商下的第一层是它的**模型类型**，按端点的拼写命名：`llm/`、`embeddings/`、`rerank/`、
 `decisions/`。chat 厂商在其下保留格式层，因为一家厂商可能提供多种 chat 方言；非 chat 厂商
 通常只提供一种，因此类型目录直接放 YAML。loader 会把目录名与 shim 的 `model_type:` 对照，
-放错类型的 shim 会被拒绝。
+放错类型的 shim 会被拒绝。类别名与目录拼写一致（`embeddings`）；`embedding:`
+作为弃用别名，在 `model_type:` 与按类型段名中仍然接受。
 
 每个叶子目录包含：
 
-- **`provider.yaml`**（必需）—— 声明 `name`、`model_type`、`format`、连接设置（`connection.base_url`、`connection.api_key_env`、`connection.auth_header`、`connection.keyless`、`connection.models_path`、`connection.default_path`、`connection.token_command`），以及可选的 `logo`、`display_name`、`free_source`。`base` 是 `format` 的弃用别名；loader 会校验 `(model_type, format)` 对。使用 `format` 时必须同时声明 `model_type` —— 只有声明 `base` 且不写 `format` 的 shim 可以省略。非 chat shim 用 `connection.default_path` 声明它服务的端点（例如 `/v1/embeddings`），提供方可以通过 `embedding_shim` / `rerank_shim` / `decision_shim` 指向它，而不必写裸格式。
+- **`provider.yaml`**（必需）—— 声明 `name`、`model_type`、`format`、连接设置（`connection.base_url`、`connection.api_key_env`、`connection.auth_header`、`connection.keyless`、`connection.models_path`、`connection.default_path`、`connection.token_command`），以及可选的 `logo`、`display_name`、`free_source`。`base` 是 `format` 的弃用别名；loader 会校验 `(model_type, format)` 对。使用 `format` 时必须同时声明 `model_type` —— 只有声明 `base` 且不写 `format` 的 shim 可以省略。非 chat shim 用 `connection.default_path` 声明它服务的端点（例如 `/v1/embeddings`），提供方可以通过 `embeddings_shim` / `rerank_shim` / `decision_shim` 指向它，而不必写裸格式。
 - **`transforms.py`**（可选）—— 导出 `post_ir_transforms` 和/或 `pre_ir_transforms` 元组（旧名 `to_transforms` / `from_transforms` 也可用）
 
 **按类型声明的参数默认值。** 非 chat shim 可以在以自身模型类型命名的段里，声明该 vendor 真正有差异的请求字段：
 
 ```yaml
 # cohere/embeddings/provider.yaml
-embedding:
+embeddings:
   task_type: retrieval_document
 ```
 
@@ -707,7 +708,8 @@ resolve_format("unknown")                     # → "unknown"（直接透传）
 resolve_model_type("deepseek--chat_completions")  # → "llm"
 resolve_model_type("typesafe--systemone")         # → "decision"
 resolve_model_type("typesafe")                    # → "decision"（旧别名）
-resolve_model_type("openai")                      # → None（歧义：既是厂商名也是 embedding format）
+resolve_model_type("embedding")                    # → "embeddings"（弃用别名）
+resolve_model_type("openai")                      # → None（歧义：既是厂商名也是 embeddings format）
 ```
 
 `resolve_base()` 是 `resolve_format()` 的弃用别名。

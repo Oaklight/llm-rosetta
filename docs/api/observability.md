@@ -473,7 +473,7 @@ IR 本来就报 `input_tokens`/`output_tokens`，embedding 与 rerank 的 IR 类
 部分；自身不提供总量的家族永远走累加路径。
 
 `UsageReport.by_model_type` 把同一批行再按类型切一次——
-`report.for_model_type("embedding", "24h")`——与上面的三类正交；没有给出类型的
+`report.for_model_type("embeddings", "24h")`——与上面的三类正交；没有给出类型的
 分组按 chat 计，因为在**该列出现之前**写入的行就是这个含义。网关的日表
 （`GET /admin/api/token-usage`）按天返回同样的拆分，并接受 `model_type=` 过滤。
 
