@@ -778,7 +778,7 @@ The gateway can proxy `/v1/embeddings` requests with cross-format IR conversion 
 |-------|------|---------|-------------|
 | `embeddings_providers` | `dict` | `{}` | Provider configs for embedding upstreams (same format as `providers`) |
 | `embeddings_models` | `dict` | `{}` | Model → provider mapping for embedding requests |
-| `default_embeddings_format` | `str` | `"openai"` | Source format fallback. Options: `openai`, `cohere`, `jina`, `voyage`, `google_generate` |
+| `default_embeddings_format` | `str` | `"openai"` | Source format fallback. Options: `openai`, `cohere`, `jina`, `voyage`, `google_generate`, `minimax` |
 
 Embedding traffic is routed **only** through embedding endpoints. A model that
 has no embedding route — either listed in `embeddings_models` or tagged

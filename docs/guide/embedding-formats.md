@@ -6,7 +6,7 @@ title: Embedding API Formats
 
 Embedding APIs convert text into dense vector representations for semantic search, clustering, and classification. Unlike rerank APIs where no standard exists, embedding APIs have a **de facto standard** set by OpenAI — but significant divergences remain, especially from Google GenAI and Cohere.
 
-LLM-Rosetta identifies **5 format families** that cover all major embedding providers. Each provider's format is handled by a dedicated converter, enabling cross-provider embedding conversion through the IR.
+LLM-Rosetta identifies **6 format families** that cover all major embedding providers. Each provider's format is handled by a dedicated converter, enabling cross-provider embedding conversion through the IR.
 
 ## Overview
 
@@ -17,6 +17,7 @@ LLM-Rosetta identifies **5 format families** that cover all major embedding prov
 | Cohere | `texts` | `input_type` | `output_dimension` | `embeddings.{type}[][]` | `float`, `base64`, `int8`, `uint8`, `binary`, `ubinary` |
 | Voyage | `input` | `input_type` | `output_dimension` | `data[].embedding` | `float`, `base64`, `int8`, `uint8`, `binary`, `ubinary` |
 | Jina | `input` | `task` | `dimensions` | `data[].embedding` | `float`, `base64`, `binary`, `ubinary` |
+| MiniMax | `texts` | `type` (required) | — (ignored) | `vectors` | `float` only |
 
 ## Provider Lineage
 
@@ -27,6 +28,7 @@ LLM-Rosetta identifies **5 format families** that cover all major embedding prov
 | **Cohere** | Cohere (v2 API) |
 | **Voyage** | Voyage AI |
 | **Jina** | Jina AI |
+| **MiniMax** | MiniMax (`api.minimaxi.com` domestic, `api.minimax.io` international) |
 
 ## Request Format
 
@@ -105,14 +107,27 @@ Batch — `batchEmbedContents`:
 }
 ```
 
+### MiniMax
+
+```json
+{
+  "model": "embo-01",
+  "texts": ["hello world", "another text"],
+  "type": "db"
+}
+```
+
+`type` is required and takes `db` (document) or `query`; an OpenAI-shaped body
+(`input`) is refused with `base_resp.status_code 2013`.
+
 ### Key Request Differences
 
-| Field | OpenAI | Google | Cohere | Voyage | Jina |
-|-------|--------|--------|--------|--------|------|
-| Input | `input: string[]` | `content: {parts}` | `texts: string[]` | `input: string[]` | `input: string[]` |
-| Task type | — | `taskType` | `input_type` (required) | `input_type` | `task` |
-| Dimensions | `dimensions` | `outputDimensionality` | `output_dimension` | `output_dimension` | `dimensions` |
-| Truncation | — | `autoTruncate` (bool) | `truncate` (enum) | `truncation` (bool) | `truncate` (bool) |
+| Field | OpenAI | Google | Cohere | Voyage | Jina | MiniMax |
+|-------|--------|--------|--------|--------|------|---------|
+| Input | `input: string[]` | `content: {parts}` | `texts: string[]` | `input: string[]` | `input: string[]` | `texts: string[]` |
+| Task type | — | `taskType` | `input_type` (required) | `input_type` | `task` | `type` (required) |
+| Dimensions | `dimensions` | `outputDimensionality` | `output_dimension` | `output_dimension` | `dimensions` | — (ignored) |
+| Truncation | — | `autoTruncate` (bool) | `truncate` (enum) | `truncation` (bool) | `truncate` (bool) | — |
 
 ## Response Formats
 
@@ -223,51 +238,75 @@ Batch response:
 - Supports multi-vector (ColBERT) output with `return_multivector` — not yet in IR
 - Has unique `late_chunking` and `normalized` options
 
+### MiniMax Format
+
+```json
+{
+  "vectors": [[0.018, 0.011, ...], [0.004, -0.021, ...]],
+  "total_tokens": 8,
+  "base_resp": {"status_code": 0, "status_msg": "success"}
+}
+```
+
+**Characteristics:**
+
+- Vectors in `vectors[][]` — no `object`/`data`/`index` wrapper and no model echo
+- Token count at the top level (`total_tokens`), not under a `usage` object
+- **Errors arrive as HTTP 200**: `base_resp.status_code` carries the verdict
+  (`0` is success, `2013` is invalid parameters). The gateway reads that field
+  and answers `502` with `error.type: "upstream_error"` instead of returning an
+  empty success.
+
 ## Task Type Normalization
 
 Each provider uses different names for the same semantic concepts. The IR normalizes them:
 
-| IR Canonical | OpenAI | Google | Cohere | Voyage | Jina |
-|-------------|--------|--------|--------|--------|------|
-| `retrieval_query` | — | `RETRIEVAL_QUERY` | `search_query` | `query` | `retrieval.query` |
-| `retrieval_document` | — | `RETRIEVAL_DOCUMENT` | `search_document` | `document` | `retrieval.passage` |
-| `semantic_similarity` | — | `SEMANTIC_SIMILARITY` | — | — | `text-matching` |
-| `classification` | — | `CLASSIFICATION` | `classification` | — | `classification` |
-| `clustering` | — | `CLUSTERING` | `clustering` | — | `clustering` |
-| `question_answering` | — | `QUESTION_ANSWERING` | — | — | — |
-| `fact_verification` | — | `FACT_VERIFICATION` | — | — | — |
-| `code_retrieval_query` | — | `CODE_RETRIEVAL_QUERY` | — | — | `code.query` |
-| `code_retrieval_document` | — | — | — | — | `code.passage` |
+| IR Canonical | OpenAI | Google | Cohere | Voyage | Jina | MiniMax |
+|-------------|--------|--------|--------|--------|------|---------|
+| `retrieval_query` | — | `RETRIEVAL_QUERY` | `search_query` | `query` | `retrieval.query` | `query` |
+| `retrieval_document` | — | `RETRIEVAL_DOCUMENT` | `search_document` | `document` | `retrieval.passage` | `db` |
+| `semantic_similarity` | — | `SEMANTIC_SIMILARITY` | — | — | `text-matching` | — |
+| `classification` | — | `CLASSIFICATION` | `classification` | — | `classification` | — |
+| `clustering` | — | `CLUSTERING` | `clustering` | — | `clustering` | — |
+| `question_answering` | — | `QUESTION_ANSWERING` | — | — | — | — |
+| `fact_verification` | — | `FACT_VERIFICATION` | — | — | — | — |
+| `code_retrieval_query` | — | `CODE_RETRIEVAL_QUERY` | — | — | `code.query` | — |
+| `code_retrieval_document` | — | — | — | — | `code.passage` | — |
 
 !!! note
     OpenAI has no task type concept — the field is simply omitted from the IR when converting from/to OpenAI format.
 
+!!! note
+    MiniMax has only two task types, and `type` is mandatory. A request whose IR
+    task type has no MiniMax equivalent is sent as `db`, the vendor's default for
+    stored text.
+
 ## Encoding Format Normalization
 
-| IR Canonical | OpenAI | Google | Cohere | Voyage | Jina |
-|-------------|--------|--------|--------|--------|------|
-| `float` | `float` | (always) | `float` | `float` | `float` |
-| `base64` | `base64` | — | `base64` | `base64` | `base64` |
-| `int8` | — | — | `int8` | `int8` | — |
-| `uint8` | — | — | `uint8` | `uint8` | — |
-| `binary` | — | — | `binary` | `binary` | `binary` |
-| `ubinary` | — | — | `ubinary` | `ubinary` | `ubinary` |
+| IR Canonical | OpenAI | Google | Cohere | Voyage | Jina | MiniMax |
+|-------------|--------|--------|--------|--------|------|---------|
+| `float` | `float` | (always) | `float` | `float` | `float` | (always) |
+| `base64` | `base64` | — | `base64` | `base64` | `base64` | — |
+| `int8` | — | — | `int8` | `int8` | — | — |
+| `uint8` | — | — | `uint8` | `uint8` | — | — |
+| `binary` | — | — | `binary` | `binary` | `binary` | — |
+| `ubinary` | — | — | `ubinary` | `ubinary` | `ubinary` | — |
 
 !!! note
     Voyage separates `output_dtype` (data type of values) from `encoding_format` (serialization format). The IR merges these into a single `encoding_format` axis. Cohere's ability to request multiple embedding types simultaneously is provider-specific and handled via `provider_extensions`.
 
 ## IR Mapping
 
-LLM-Rosetta normalizes all five formats into a unified IR:
+LLM-Rosetta normalizes all six formats into a unified IR:
 
 | Provider Field | IR Field | Notes |
 |----------------|----------|-------|
 | `input` / `texts` / `content.parts` | `input` | Normalized to `list[str]` |
-| `taskType` / `input_type` / `task` | `task_type` | See task type normalization table |
+| `taskType` / `input_type` / `task` / `type` | `task_type` | See task type normalization table |
 | `dimensions` / `outputDimensionality` / `output_dimension` | `dimensions` | Integer |
 | `encoding_format` / `embedding_types` / `output_dtype` / `embedding_type` | `encoding_format` | Single value from the IR enum |
 | `truncation` / `truncate` / `autoTruncate` | `truncation` | Simplified to boolean |
-| `data[].embedding` / `embedding.values` / `embeddings.{type}[][]` | `data[].embedding` | OpenAI-style list of items |
+| `data[].embedding` / `embedding.values` / `embeddings.{type}[][]` / `vectors` | `data[].embedding` | OpenAI-style list of items |
 
 ### Usage Normalization
 
@@ -278,6 +317,7 @@ LLM-Rosetta normalizes all five formats into a unified IR:
 | Cohere | `meta.tokens.input_tokens` (derived) | `meta.tokens.input_tokens` | `meta.billed_units.*` |
 | Voyage | `usage.total_tokens` | — | — |
 | Jina | `usage.total_tokens` | `usage.prompt_tokens` | `image_tokens`, `audio_tokens`, `video_tokens` |
+| MiniMax | `total_tokens` (top level) | `total_tokens` (top level) | `base_resp` |
 
 ## Cross-Provider Conversion
 
@@ -290,6 +330,7 @@ flowchart LR
     IR --> C[Cohere request]
     IR --> D[Voyage request]
     IR --> E[Jina request]
+    IR --> F[MiniMax request]
 ```
 
 Information loss boundaries:
@@ -297,6 +338,9 @@ Information loss boundaries:
 - **Any → Google**: `encoding_format` dropped (Google only supports float)
 - **Any → OpenAI**: `task_type` dropped (OpenAI has no task type concept)
 - **Cohere multi-type → IR**: only one embedding type selected; others require `provider_extensions`
+- **Any → MiniMax**: `encoding_format` and `dimensions` dropped (MiniMax returns
+  float and a fixed 1536-wide vector); a task type with no `db`/`query`
+  equivalent becomes `db`
 - **Usage**: Cohere's `billed_units` and Jina's per-modality token breakdown are not preserved in IR
 
 ### Library Usage
