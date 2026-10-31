@@ -115,7 +115,7 @@ declare the differences.
 | `AuthExchange` | `shims/auth_exchange.py` | Credential-exchange contract a shim ships in `auth.py` |
 | `QuotaProbe` | `shims/quota_probe.py` | Allowance-probe contract a shim ships in `quota.py` |
 | `Transform` primitives | `shims/transforms.py` | `strip_fields`, `rename_field`, `set_defaults` |
-| Built-in shims | `shims/providers/<name>/provider.yaml` | One shim per vendor/format pair (33 built in) |
+| Built-in shims | `shims/providers/<vendor>/<type>/provider.yaml` | One shim per vendor/format pair, grouped by model type (34 built in) |
 | External shim sources | `llm_rosetta_gateway/shims/` | Directory/archive loaders, standalone catalog, scheduled removals |
 
 ### Gateway
@@ -188,7 +188,7 @@ packages/
 │       │   ├── auth_exchange.py     # shim-shipped credential exchange (auth.py)
 │       │   ├── quota_probe.py       # shim-shipped allowance probe (quota.py)
 │       │   ├── transforms.py
-│       │   └── providers/           # One provider.yaml per vendor/format pair
+│       │   └── providers/           # One provider.yaml per vendor/model-type/[format]
 │       ├── ir/                      # IR logic: primitives/, tools/, passes/
 │       ├── types/                   # Typed IR and provider-specific types
 │       │   └── ir/                  # IR dataclasses (messages, parts, tools, stream)
@@ -493,10 +493,12 @@ gate — missing any item means the converter is not fully integrated.
    model-type descriptor format lists and chat routes.  The registry's
    import-time check refuses a catalog entry with no converter binding.
    Add the name to the `ProviderType` literal in `auto_detect.py`.
-5. **Provider shim** — create `shims/providers/<name>/provider.yaml` with
-   `model_type: llm` and `format: <format>`.  The loader validates the
-   `(model_type, format)` pair against the converter registry; `base:` is the
-   deprecated alias for `format:`.
+5. **Provider shim** — create `shims/providers/<vendor>/llm/<format>/provider.yaml`
+   (chat) or `shims/providers/<vendor>/<type>/provider.yaml` (embedding, rerank,
+   decision) with `model_type: <type>` and `format: <format>`.  The loader
+   validates the `(model_type, format)` pair against the converter registry and
+   the directory name against `model_type`; `base:` is the deprecated alias for
+   `format:`.
 6. **Gateway route** — register a route handler in
    `llm_rosetta_gateway/app/routes_llm.py`.
    Update `llm_rosetta_gateway/proxy/` for error responses, stream detection,

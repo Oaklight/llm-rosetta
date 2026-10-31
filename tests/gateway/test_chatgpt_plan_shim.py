@@ -144,7 +144,7 @@ class TestTheRequestSurface:
 
     def test_the_declared_list_is_the_documented_one(self):
         """A guard against the strip list drifting from the docs."""
-        from llm_rosetta.shims.providers.openai_chatgpt.open_responses.transforms import (
+        from llm_rosetta.shims.providers.openai_chatgpt.llm.open_responses.transforms import (
             UNSUPPORTED_FIELDS,
         )
 

@@ -527,7 +527,11 @@ class TestBuiltinShims:
             / "providers"
         )
         checked = 0
-        for path in sorted(root.glob("*/*/provider.yaml")):
+        # Chat leaves sit one model-type level deeper than the non-chat ones.
+        paths = sorted(root.glob("*/*/provider.yaml")) + sorted(
+            root.glob("*/*/*/provider.yaml")
+        )
+        for path in paths:
             data = yaml_load(path.read_text())
             section = data.get("reasoning")
             if not section or "effort_field" in section:

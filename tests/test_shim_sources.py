@@ -87,6 +87,28 @@ class TestLocalDirs:
             "grp--messages",
         } <= _names()
 
+    def test_model_typed_layout(self, tmp_path: Path):
+        """A declared source may group by model type, like the built-ins."""
+        root = tmp_path / "shims"
+        _write_provider(
+            root, "acme", "llm", "chat_completions", name="acme--chat_completions"
+        )
+        embedding = root / "acme" / "embeddings"
+        embedding.mkdir(parents=True)
+        (embedding / "provider.yaml").write_text(
+            "name: acme--embedding\n"
+            "model_type: embedding\n"
+            "format: openai\n"
+            "connection:\n"
+            "  base_url: https://acme.example/v1\n"
+        )
+
+        report = rebuild_shims(extra_dirs=[root])
+
+        assert report.failures() == []
+        assert report.sources[0].shim_count == 2
+        assert {"acme--chat_completions", "acme--embedding"} <= _names()
+
     def test_missing_dir_is_reported_not_raised(self, tmp_path: Path):
         report = rebuild_shims(extra_dirs=[tmp_path / "nope"])
         assert report.total_shims > 0  # built-ins still load
