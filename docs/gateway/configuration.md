@@ -58,7 +58,8 @@ shim 不必放在包内。顶层 `shims` 段可以让 gateway 额外扫描若干
   // 同一 URL 的显式 remote 会覆盖对应的预设。
   "presets": ["alcf"],
 
-  // 扫描 <name>/provider.yaml（平铺）或 <group>/<leaf>/provider.yaml（分组）。
+  // 扫描 <vendor>/<type>/provider.yaml（内置布局），以及旧的
+  // <name>/provider.yaml（平铺）或 <group>/<leaf>/provider.yaml（分组）。
   // 相对路径以本配置文件所在目录为基准解析。
   "paths": ["./local-shims", "../shared/rosetta-shims"],
 
@@ -81,9 +82,11 @@ shim 不必放在包内。顶层 `shims` 段可以让 gateway 额外扫描若干
 }
 ```
 
-**目录布局。** `paths` 里的目录可以直接放 `provider.yaml`（`my-provider/provider.yaml`），
-也可以用子目录分组多个 shim（`vendor/messages/provider.yaml`、
-`vendor/chat_completions/provider.yaml`），与内置 shim 的两种布局一致。
+**目录布局。** `paths` 里的目录可以按模型类型分组
+（`vendor/embeddings/provider.yaml`、`vendor/llm/chat_completions/provider.yaml`），
+与内置 shim 的布局一致；旧布局仍然原样加载 —— 子目录直接放 `provider.yaml`
+（`my-provider/provider.yaml`），或只分组一层（`vendor/messages/provider.yaml`、
+`vendor/chat_completions/provider.yaml`）。
 
 **远程拉取不依赖 git。** GitHub 仓库 URL 会被改写到 codeload 的 tarball 端点；其它站点
 给出显式归档 URL 即可（可含 `{ref}` 占位符），所以 GitLab 和自建 forge 都不需要按站点

@@ -22,8 +22,9 @@ title: 提供方额度
 管理接口。**契约与解析**——`QuotaProbe` 接口、窗口与带内信号类型、
 `resolve_probe`——位于 `llm_rosetta.shims.quota_probe`，因为 shim 的 `quota.py`
 实现该契约，而翻译核心绝不能导入 gateway。这里不包含任何 vendor 代码。
-Shim **自带 probe**：`quota.py` 与 `provider.yaml` 放在一起（跨多个格式的
-vendor 放组目录，一次性 lane 放叶目录），由 `quota.probe` 按名称选中。端点、
+Shim **自带 probe**：`quota.py` 放在 vendor 目录下（与 `llm/`、`embeddings/` 等
+类型目录并列，该 vendor 的每种类型共用），一次性 lane 则与自己的 `provider.yaml`
+放在一起，由 `quota.probe` 按名称选中。端点、
 认证头、响应解码和报错措辞都是 vendor 事实，留在 vendor 旁边；vendor 改变
 响应格式时只改那一个 shim 模块。
 
@@ -70,7 +71,7 @@ quota:
   interval: 300
 ```
 
-`opencode_go` 实现在 `providers/opencode/quota.py`；shim loader 对组目录执行一次，
+`opencode_go` 实现在 `providers/opencode/quota.py`；shim loader 对 vendor 目录执行一次，
 并把它附加到该组的每个 OpenCode 叶 shim 上——声明只负责按名称选中。
 需要指定 vendor 的 provider 可以显式给出 probe 名和 URL：
 

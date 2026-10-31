@@ -34,19 +34,33 @@ ProviderShim ("deepseek--chat_completions")
 
 ```text
 packages/llm-rosetta/src/llm_rosetta/shims/providers/
-├── __init__.py              # 自动发现：扫描子目录
+├── __init__.py                  # 自动发现：扫描子目录
 ├── openai/
-│   └── provider.yaml        # 提供方身份（YAML）
-├── deepseek/
-│   ├── provider.yaml        # 提供方身份
-│   └── transforms.py        # 字段级转换规则
-├── volcengine/
-│   ├── provider.yaml
-│   └── transforms.py
+│   ├── quota.py                 # 厂商级探针，该厂商每种类型共用
+│   ├── llm/
+│   │   ├── chat_completions/
+│   │   │   ├── provider.yaml    # 提供方身份（YAML）
+│   │   │   └── transforms.py    # 字段级转换规则
+│   │   └── open_responses/
+│   │       └── provider.yaml
+│   ├── embeddings/
+│   │   └── provider.yaml        # format: openai
+│   └── decisions/
+│       └── provider.yaml        # format: openai_decisions
+├── cohere/
+│   ├── embeddings/
+│   │   └── provider.yaml        # format: cohere
+│   └── rerank/
+│       └── provider.yaml
 └── ...
 ```
 
-每个提供方子目录包含：
+厂商下的第一层是它的**模型类型**，按端点的拼写命名：`llm/`、`embeddings/`、`rerank/`、
+`decisions/`。chat 厂商在其下保留格式层，因为一家厂商可能提供多种 chat 方言；非 chat 厂商
+通常只提供一种，因此类型目录直接放 YAML。loader 会把目录名与 shim 的 `model_type:` 对照，
+放错类型的 shim 会被拒绝。
+
+每个叶子目录包含：
 
 - **`provider.yaml`**（必需）—— 声明 `name`、`model_type`、`format`、连接设置（`connection.base_url`、`connection.api_key_env`、`connection.auth_header`、`connection.keyless`、`connection.models_path`、`connection.default_path`、`connection.token_command`），以及可选的 `logo`、`display_name`、`free_source`。`base` 是 `format` 的弃用别名；loader 会校验 `(model_type, format)` 对。使用 `format` 时必须同时声明 `model_type` —— 只有声明 `base` 且不写 `format` 的 shim 可以省略。非 chat shim 用 `connection.default_path` 声明它服务的端点（例如 `/v1/embeddings`），提供方可以通过 `embedding_shim` / `rerank_shim` / `decision_shim` 指向它，而不必写裸格式。
 - **`transforms.py`**（可选）—— 导出 `post_ir_transforms` 和/或 `pre_ir_transforms` 元组（旧名 `to_transforms` / `from_transforms` 也可用）
@@ -299,7 +313,7 @@ def register_shims():
 ```jsonc
 "shims": {
   "presets": ["alcf"],                            // 下方 catalog remote 的简写
-  "paths": ["/config/shims"],                     // 存放 <name>/provider.yaml 的目录
+  "paths": ["/config/shims"],                     // 存放 <vendor>/<type>/provider.yaml 的目录（也接受旧的扁平/分组形状）
   "remotes": [
     {
       "url": "https://github.com/Oaklight/llm-rosetta-shim-alcf",
@@ -324,7 +338,7 @@ remote；同一 URL 的显式 remote 会合并到预设上（显式键优先）�
 
 ## 内置 Shim
 
-LLM-Rosetta 内置 33 个提供方 shim，每个 shim 对应 `packages/llm-rosetta/src/llm_rosetta/shims/providers/`
+LLM-Rosetta 内置 34 个提供方 shim，每个 shim 对应 `packages/llm-rosetta/src/llm_rosetta/shims/providers/<vendor>/<model-type>/`
 下的一个目录。`list_shims()` 会打印当前实际的集合；下表即是该集合。ALCF、AskSage 与 Argo
 的 shim 作为独立包发布 —— 参见[独立 Shim 包](#standalone-shim-packages)。
 
@@ -710,7 +724,7 @@ register_shim(my_shim)
 
 要向内置注册表添加新提供方：
 
-1. 在 `packages/llm-rosetta/src/llm_rosetta/shims/providers/<name>/` 下创建目录
+1. 在 `packages/llm-rosetta/src/llm_rosetta/shims/providers/<vendor>/` 下创建目录：chat 用 `<vendor>/llm/<format>/`，embedding、rerank 或 decision 用 `<vendor>/<model-type>/`
 2. 添加 `provider.yaml`，包含必填字段：
 
     ```yaml
