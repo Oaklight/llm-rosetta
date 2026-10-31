@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -688,6 +689,150 @@ def _ledger_path() -> Path:
 
 def _ledger() -> dict[str, Any]:
     return json.loads(_ledger_path().read_text())
+
+
+#: The conformance suite's schema ledger: every field path each dialect's SDK
+#: schema describes, classified.  The leg ledger above records what the writers
+#: emit; this one records what the schema can express.  They stay separate
+#: files — the cross-check below is a check, not a merge.
+_SCHEMA_LEDGER_PATH = (
+    Path(__file__).parents[2] / "tools/conformance/baselines/response-fields.json"
+)
+
+#: A path under one of these segments is *data*, not a field: the schema
+#: describes the container (``function_call.args``, ``content[].input``), not
+#: the keys a caller's tool input happens to use.  Matched on a whole segment
+#: after normalisation, so ``arguments`` does not also catch a future
+#: ``arguments_count``.
+_FREE_FORM_CONTAINERS: frozenset[str] = frozenset(
+    {"args", "arguments", "input", "response"}
+)
+
+#: Body paths a writer emits that the schema ledger cannot describe, with the
+#: reason each one is not a schema gap.  Keyed by the emitted spelling, and
+#: both the key and the path under test are normalised before they are
+#: compared, so an exclusion covers a field however a dialect spells it.  A
+#: path that is no longer emitted fails
+#: ``test_the_schema_exclusions_are_still_needed``.
+SCHEMA_EXCLUSIONS: dict[str, str] = {
+    "choices[].message.reasoning_content": (
+        "a DeepSeek-style extension the writer relays for Chat-compatible "
+        "upstreams; the OpenAI SDK schema has no such field"
+    ),
+}
+
+
+def _normalised_path(path: str) -> str:
+    """Spell a field path the way both ledgers can compare.
+
+    The wire spells Google's fields in camelCase and the SDK schema in
+    snake_case, and the two ledgers mark a list container differently (the
+    emitted one never writes ``[]`` for the container itself, the schema one
+    does).  Neither difference is a field difference.
+    """
+    snake = re.sub(r"(?<=[a-z0-9])([A-Z])", r"_\1", path).lower()
+    return snake.replace("[]", "")
+
+
+def _under_free_form_container(path: str) -> bool:
+    """Whether *path* names a key inside a free-form JSON container."""
+    segments = _normalised_path(path).split(".")
+    return any(segment in _FREE_FORM_CONTAINERS for segment in segments[:-1])
+
+
+def _schema_fields(dialect: str) -> set[str]:
+    """The schema ledger's field paths for *dialect*, normalised."""
+    ledger = json.loads(_SCHEMA_LEDGER_PATH.read_text())
+    return {_normalised_path(path) for path in ledger["formats"][dialect]["fields"]}
+
+
+def _excluded_paths() -> set[str]:
+    """The exclusion list, spelled the way both ledgers are compared."""
+    return {_normalised_path(path) for path in SCHEMA_EXCLUSIONS}
+
+
+def _is_accounted_for(path: str, described: set[str], excluded: set[str]) -> bool:
+    """Whether the schema describes *path*, or an exclusion names it.
+
+    A free-form key is accounted for by the container the schema does
+    describe; the key itself is data.
+    """
+    normalised = _normalised_path(path)
+    return (
+        normalised in described
+        or normalised in excluded
+        or _under_free_form_container(path)
+    )
+
+
+@pytest.mark.parametrize("dialect", DIALECTS)
+def test_every_emitted_body_field_is_described_by_its_schema(dialect: str) -> None:
+    """A body field the writer emits must exist in the SDK's schema ledger.
+
+    The leg ledger and the schema ledger were reconciled by hand once; this
+    is that audit as a test.  A new body field fails here unless the schema
+    describes it, so the two ledgers cannot drift apart silently.
+
+    Only the body leg is compared: a stream nests under ``delta`` / ``item`` /
+    ``response`` while a schema path describes the body, so a structural
+    comparison would compare two different vocabularies.
+
+    Args:
+        dialect: The format whose writer and schema are compared.
+    """
+    body_paths, _stream_paths = _emitted_field_paths(DIALECTS[dialect]())
+    described = _schema_fields(dialect)
+    excluded = _excluded_paths()
+    missing = sorted(
+        path for path in body_paths if not _is_accounted_for(path, described, excluded)
+    )
+    assert not missing, (
+        f"{dialect} emits body fields its schema ledger does not describe: "
+        f"{missing}.  Add them to tools/conformance/baselines/response-fields.json "
+        f"or to SCHEMA_EXCLUSIONS with a reason."
+    )
+
+
+def test_a_key_inside_a_free_form_container_is_data() -> None:
+    """The container is a field; what a caller put in it is not.
+
+    One path per container in the rule, so dropping one from the set cannot
+    pass unnoticed, plus the boundary cases the rule must not swallow.
+    """
+    assert _under_free_form_container("content[].input.q")
+    assert _under_free_form_container(
+        "candidates[].content.parts[].functionCall.args.q"
+    )
+    assert _under_free_form_container("steps[].arguments.input")
+    assert _under_free_form_container(
+        "candidates[].content.parts[].functionResponse.response.answer"
+    )
+    # The container itself is a field the schema must describe.
+    assert not _under_free_form_container("content[].input")
+    assert not _under_free_form_container(
+        "candidates[].content.parts[].functionResponse.response"
+    )
+    # A segment that merely starts with a container name is not the container.
+    assert not _under_free_form_container("some.arguments_count")
+
+
+def test_every_schema_exclusion_says_why() -> None:
+    """An exclusion without a reason is a gap the audit cannot see."""
+    for path, reason in SCHEMA_EXCLUSIONS.items():
+        assert reason.strip(), f"{path} is excluded with no reason"
+
+
+def test_the_schema_exclusions_are_still_needed() -> None:
+    """A stale exclusion would hide a real gap if the field came back."""
+    emitted = {
+        _normalised_path(path)
+        for dialect in DIALECTS
+        for path in _emitted_field_paths(DIALECTS[dialect]())[0]
+    }
+    for path in SCHEMA_EXCLUSIONS:
+        assert _normalised_path(path) in emitted, (
+            f"{path} is excluded but no longer emitted"
+        )
 
 
 @pytest.mark.parametrize(("dialect", "factory"), DIALECTS.items())
