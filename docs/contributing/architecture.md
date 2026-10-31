@@ -186,6 +186,33 @@ Anthropic 的引用可以流向其他任何 dialect，但没有东西能流回�
 text block 可挂的引用——都走 `report_dropped_citation`：优先写进本次转换的 warning
 sink，同时总是写日志。
 
+## 响应的两条腿
+
+每个 dialect 都要回答一次 turn 两次：一次是完整的响应 body，一次是一串 stream 事件。
+两者的 wire 形状并不相同——Anthropic 的 body 是 `content: [...]`，而它的 stream 是
+`message_start` → `content_block_start` / `delta` / `stop` → `message_delta` →
+`message_stop`——但它们承载同一份内容，而每一条必须在两边都成立的规则，过去都要写两遍。
+
+`ir.primitives.expand_response()` 把一个 IR 响应转成"它的流会发出的事件序列"。于是
+非流式 writer 可以是这个原语之上的**折叠**：逐事件驱动转换器自己的 stream writer，
+再从它产出的东西里读出 body，而不是把同样的 item 再造一遍。今天唯一折叠的 dialect 是
+`open_responses`——它原来的 body writer 自己构建每一个 output item，与构建同样 item 的
+stream writer 并排，折叠去掉了这份重复。
+
+其余四个 dialect 不折叠，理由是量出来的，不是风格偏好：
+
+| Dialect | 它的 body writer 为什么不折叠 |
+| --- | --- |
+| `chat_completions` | body 用空格连接多个 text part、用换行连接多个 reasoning part；而流的内容块边界是空操作，折叠无法复现这两种连接。`logprobs` 和整条消息的 `annotations` 数组根本没有对应事件。 |
+| `messages` | body 写整块的 `citations: null`、`cache_control` 和 `redacted_thinking`；流对其中一些事实换一种形状承载，另一些则完全不承载。body 还保持每个 IR part 一个 block，流可以做到，但 tail 还得把其余部分补回来。 |
+| `google_generate` | body 写 image、file 和 audio part，而 `expand_response` 对它们没有事件。折叠会在无声中丢掉它们——这是本设计绝不能引入的一种丢失。 |
+| `google_interactions` | body 带 `object` 和 ISO 格式的 `created` / `updated`，流一样都不带；refusal part 会映射成 API 没有定义的 step type。 |
+
+原语的覆盖范围被钉住：当 IR 声明了一个既没有被赋予事件、又不在不可表示清单里的 part
+类型时，`tests/test_expand.py` 会失败，因此未来的折叠无法在无人察觉的情况下丢掉一种
+part 类型。跨腿 harness（`tests/converters/test_leg_agreement.py`）对每个 dialect 用 IR
+的词汇比较两条腿——这正是折叠本来要达到的不变量。
+
 ## Round-Trip 兼容性
 
 所有转换路径必须保持 **round-trip 兼容性**。每个变更都必须针对以下场景进行测试：
