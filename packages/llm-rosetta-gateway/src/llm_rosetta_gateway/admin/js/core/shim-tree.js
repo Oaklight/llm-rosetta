@@ -212,3 +212,43 @@ export function buildTypeModel(registeredShims, baseFormats) {
   });
   return { roots, rootOf: (v) => valueRoot.get(v) };
 }
+
+/**
+ * Build the picker tree for one typed (non-LLM) endpoint.
+ *
+ * A typed endpoint needs both halves of the choice in one list: `openai` as a
+ * bare format is how a provider with a custom base URL is configured, while
+ * `openai--embedding` is the hosted default.  `buildTypeModel` merges a bare
+ * format into a vendor group of the same name (right for the LLM endpoint,
+ * where a vendor is reached through its shims), so the vendor roots are keyed
+ * apart here and the two never collide.  A vendor row still commits its first
+ * shim.
+ *
+ * @param {object[]} registeredShims shims already filtered to one model type
+ * @param {string[]} formats         the type's bare formats
+ */
+export function buildEndpointTypeModel(registeredShims, formats) {
+  const vendorRoots = buildTypeModel(registeredShims, []).roots
+    .map((root) => ({ ...root, name: `vendor:${root.name}` }));
+  const formatRoots = (formats || []).map((f) => ({
+    name: f, label: f, logo: '', defaultValue: f, children: [], kind: 'format',
+  }));
+  return { roots: [...formatRoots, ...vendorRoots] };
+}
+
+/**
+ * The config a typed endpoint's picker value stands for.
+ *
+ * A shim name writes the shim key and the format it serves; a bare format
+ * writes the format alone, with the shim key cleared so a stale shim cannot
+ * keep supplying another vendor's path or params.  An empty value falls back
+ * to the type's first format, which is what the endpoint defaulted to before
+ * the picker existed.
+ */
+export function endpointChoiceConfig(value, registeredShims, formats) {
+  const shim = (registeredShims || []).find((s) => s.name === value) || null;
+  return {
+    shim: shim ? shim.name : '',
+    format: shim ? shim.format : (value || (formats || [])[0] || ''),
+  };
+}
