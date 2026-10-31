@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from llm_rosetta.converters.base.defaults import apply_ir_defaults
-from llm_rosetta.converters.decision.pipeline import DecisionConversionPipeline
-from llm_rosetta.converters.embedding.pipeline import EmbeddingConversionPipeline
+from llm_rosetta.converters.decisions.pipeline import DecisionConversionPipeline
+from llm_rosetta.converters.embeddings.pipeline import EmbeddingConversionPipeline
 from llm_rosetta.converters.rerank.pipeline import RerankConversionPipeline
 
 

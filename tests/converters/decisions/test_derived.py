@@ -1,8 +1,8 @@
-"""Tests for derived decision-answer values (``converters.decision.derived``)."""
+"""Tests for derived decision-answer values (``converters.decisions.derived``)."""
 
 import pytest
 
-from llm_rosetta.converters.decision.derived import (
+from llm_rosetta.converters.decisions.derived import (
     abstained,
     choice,
     confidence,

@@ -5,7 +5,7 @@ from typing import Any
 import pytest
 
 from llm_rosetta.converters.base.context import ConversionContext
-from llm_rosetta.converters.decision.embedding import (
+from llm_rosetta.converters.decisions.embedding import (
     EmbeddingDecisionConverter,
     _cosine_similarity,
 )

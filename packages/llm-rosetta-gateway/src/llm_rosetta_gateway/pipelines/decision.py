@@ -5,7 +5,7 @@ decision providers (currently TypeSafe System One).  No streaming —
 decision requests return a single JSON response.
 
 Every request and response is converted through the IR via
-:class:`~llm_rosetta.converters.decision.pipeline.DecisionConversionPipeline`,
+:class:`~llm_rosetta.converters.decisions.pipeline.DecisionConversionPipeline`,
 including when the source format (inferred from the request) and the target
 format (declared on the provider config) are the same.  The request flow is
 the shared one in :mod:`pipelines.typed`; this module supplies the decision
@@ -22,7 +22,7 @@ from __future__ import annotations
 from typing import Any
 
 from llm_rosetta_gateway._vendor.httpserver import Response
-from llm_rosetta.converters.decision.pipeline import (
+from llm_rosetta.converters.decisions.pipeline import (
     DecisionConversionPipeline,
     response_usage,
 )

@@ -2,7 +2,7 @@
 
 import pytest
 
-from llm_rosetta.converters.decision.openai import (
+from llm_rosetta.converters.decisions.openai import (
     OpenAIDecisionsConverter,
     _MARK,
 )

@@ -8,7 +8,7 @@ converter maps them to TypeSafe's per-type criteria shapes.
 import pytest
 
 from llm_rosetta.converters.base.context import ConversionContext
-from llm_rosetta.converters.decision.systemone import SystemOneDecisionConverter
+from llm_rosetta.converters.decisions.systemone import SystemOneDecisionConverter
 
 # ============================================================================
 # Wire format fixtures (TypeSafe native)
@@ -440,7 +440,7 @@ class TestMultimodal:
 class TestSameFormatPipeline:
     def test_every_request_goes_through_the_ir(self):
         """A same-format request is rebuilt from the IR, not passed through."""
-        from llm_rosetta.converters.decision.pipeline import DecisionConversionPipeline
+        from llm_rosetta.converters.decisions.pipeline import DecisionConversionPipeline
 
         pipeline = DecisionConversionPipeline("systemone", "systemone")
         body = dict(TYPESAFE_REQUEST)

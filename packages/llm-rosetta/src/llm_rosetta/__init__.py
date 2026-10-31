@@ -16,8 +16,8 @@ from .auto_detect import (
 )
 from .provider_names import normalize_provider_name
 from .pipeline import ConversionError, ConversionPipeline
-from .converters.decision.pipeline import DecisionConversionPipeline
-from .converters.embedding.pipeline import EmbeddingConversionPipeline
+from .converters.decisions.pipeline import DecisionConversionPipeline
+from .converters.embeddings.pipeline import EmbeddingConversionPipeline
 from .converters.rerank.pipeline import RerankConversionPipeline
 from .converters import (
     BaseConverter,

@@ -53,7 +53,7 @@ class TestLookup:
 
     def test_the_legacy_category_spelling_resolves(self) -> None:
         """A caller that still says ``embedding`` gets the same converters."""
-        from llm_rosetta.converters.embedding.openai import OpenAIEmbeddingConverter
+        from llm_rosetta.converters.embeddings.openai import OpenAIEmbeddingConverter
         from llm_rosetta.formats import LEGACY_MODEL_TYPES
 
         assert get_converter_class("embedding", "openai") is OpenAIEmbeddingConverter
@@ -177,9 +177,9 @@ class TestBasePackage:
         root = Path(spec.origin).parent
         families = (
             "llm_rosetta.converters.llm",
-            "llm_rosetta.converters.embedding",
+            "llm_rosetta.converters.embeddings",
             "llm_rosetta.converters.rerank",
-            "llm_rosetta.converters.decision",
+            "llm_rosetta.converters.decisions",
             "llm_rosetta.converters.registry",
         )
 

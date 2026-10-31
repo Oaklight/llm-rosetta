@@ -25,8 +25,8 @@ from typing import cast
 from llm_rosetta.converters.llm.chat_completions.converter import (
     ChatCompletionsConverter,
 )
-from llm_rosetta.converters.decision.pipeline import _DECISION_CONVERTERS
-from llm_rosetta.converters.embedding.pipeline import _EMBEDDING_CONVERTERS
+from llm_rosetta.converters.decisions.pipeline import _DECISION_CONVERTERS
+from llm_rosetta.converters.embeddings.pipeline import _EMBEDDING_CONVERTERS
 from llm_rosetta.converters.llm.google_generate.converter import (
     GoogleGenerateConverter,
 )
