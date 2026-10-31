@@ -8,7 +8,7 @@ title: 架构指南
 
 LLM-Rosetta 使用轴辐式（hub-and-spoke）架构，每个转换器负责特定 API 格式与共享 IR（Intermediate Representation）之间的双向转换。
 
-每个 chat 转换器位于 `packages/llm-rosetta/src/llm_rosetta/converters/llm/<name>/` 下；embedding、rerank 与 decision 转换器分别位于 `converters/embedding/`、`converters/rerank/` 与 `converters/decision/`。所有转换器都继承 `BaseConverter`。基类使用**组合模式**——子类通过类属性声明各关注点的 ops 类：
+每个 chat 转换器位于 `packages/llm-rosetta/src/llm_rosetta/converters/llm/<name>/` 下；embedding、rerank 与 decision 转换器分别位于 `converters/embeddings/`、`converters/rerank/` 与 `converters/decisions/`。所有转换器都继承 `BaseConverter`。基类使用**组合模式**——子类通过类属性声明各关注点的 ops 类：
 
 ```
 converters/llm/<name>/

@@ -338,8 +338,8 @@ flowchart LR
 ### 库级用法
 
 ```python
-from llm_rosetta.converters.embedding.openai import OpenAIEmbeddingConverter
-from llm_rosetta.converters.embedding.jina import JinaEmbeddingConverter
+from llm_rosetta.converters.embeddings.openai import OpenAIEmbeddingConverter
+from llm_rosetta.converters.embeddings.jina import JinaEmbeddingConverter
 
 openai_conv = OpenAIEmbeddingConverter()
 jina_conv = JinaEmbeddingConverter()

@@ -42,7 +42,7 @@ Decision API 使用类型化的 questions，每种对应固定的答案空间：
 
 `DecisionEntry` 为 `{label: str | bool, description?: Description}`：`label` 是 entry 的标识（也是答案 `probabilities` 的 key）；`description` 是可选的丰富判据（对应 TypeSafe 的 `string | object | array`）。
 
-`choice` / `score` / `confidence` 均为可选（provider 未返回时由 `converters.decision.derived` 推导）；`abstained` 始终由 `unknown_probability` 推导。
+`choice` / `score` / `confidence` 均为可选（provider 未返回时由 `converters.decisions.derived` 推导）；`abstained` 始终由 `unknown_probability` 推导。
 
 ### State
 
@@ -274,7 +274,7 @@ response: IRDecisionResponse = {
 ## 使用 Converter
 
 ```python
-from llm_rosetta.converters.decision import SystemOneDecisionConverter
+from llm_rosetta.converters.decisions import SystemOneDecisionConverter
 
 converter = SystemOneDecisionConverter()
 
