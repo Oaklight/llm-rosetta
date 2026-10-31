@@ -35,13 +35,13 @@ from ..transport import (
 )
 from .image_fetch import fetch_image
 from .errors import (
-    QuotaRefusal,
+    RefusalAction,
     _connection_error_response,
     _detect_stream_chunk_error,
     _handle_401,
-    _quota_refusal,
     _soft_error_response,
     _upstream_error_passthrough,
+    decide_on_refusal,
     error_response_for_source,
 )
 from .failover import prepare_failover, record_failover
@@ -554,33 +554,26 @@ async def handle_non_streaming(  # noqa: C901
         if not resp.is_error:
             break
 
-        # Reactive 401 retry — _handle_401 is a no-op for non-401 errors
-        # and for providers without token_command.
-        retry, err = await _handle_401(
-            provider_info,
-            resp.status_code,
-            resp.error_text,
-            route.source_provider,
+        # One decision for a refused attempt: answer the client, retry the
+        # same upstream, or hand the request to another provider.
+        decision = await decide_on_refusal(
+            provider_info, resp.status_code, resp.error_text, route.source_provider
         )
-        if err is not None:
-            return err, profile
-        refusal, signal = (
-            (None, None)
-            if retry
-            else _quota_refusal(provider_info, resp.status_code, resp.error_text)
-        )
-        if retry or refusal is QuotaRefusal.RETRY:
+        if decision.action is RefusalAction.RETURN:
+            assert decision.response is not None
+            return decision.response, profile
+        if decision.action is RefusalAction.RETRY:
             continue
         # No credential of this provider can serve the request any more.  A
         # second provider is a different prompt cache, so trying one is the
         # model's opt-in, and the budget is one.
-        if refusal is QuotaRefusal.EXHAUSTED:
+        if decision.action is RefusalAction.FAILOVER:
             failed_over = await _failover_response(
                 config,
                 selection,
                 route,
                 body,
-                signal=signal,
+                signal=decision.signal,
                 transport=transport,
                 metadata_store=store,
                 extra_headers=extra_headers,

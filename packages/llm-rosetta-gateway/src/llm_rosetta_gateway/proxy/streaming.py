@@ -35,13 +35,12 @@ from ..transport.sse_format import (
     format_sse_done,
 )
 from .errors import (
-    QuotaRefusal,
+    RefusalAction,
     _connection_error_response,
     _detect_stream_chunk_error,
-    _handle_401,
-    _quota_refusal,
     _upstream_error_passthrough,
     DumpContext,
+    decide_on_refusal,
 )
 from .failover import prepare_failover, record_failover
 from .metadata import (
@@ -515,31 +514,27 @@ async def handle_streaming(  # noqa: C901
         stream_error_code = stream.status_code
         await stream.close()
 
-        retry, err = await _handle_401(
+        decision = await decide_on_refusal(
             provider_info,
             stream_error_code,
             stream_error_text,
             route.source_provider,
         )
-        if err is not None:
-            return err, profile
-        refusal, signal = (
-            (None, None)
-            if retry
-            else _quota_refusal(provider_info, stream_error_code, stream_error_text)
-        )
-        if retry or refusal is QuotaRefusal.RETRY:
+        if decision.action is RefusalAction.RETURN:
+            assert decision.response is not None
+            return decision.response, profile
+        if decision.action is RefusalAction.RETRY:
             continue
         # Nothing was written to the client yet, so another provider can still
         # answer — if this model opted in and has one.
-        if refusal is QuotaRefusal.EXHAUSTED:
+        if decision.action is RefusalAction.FAILOVER:
             failed_over = await _failover_stream(
                 config,
                 selection,
                 route,
                 body,
                 reported_model=reported_model,
-                signal=signal,
+                signal=decision.signal,
                 transport=transport,
                 metadata_store=store,
                 extra_headers=extra_headers,
