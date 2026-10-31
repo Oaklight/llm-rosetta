@@ -26,6 +26,7 @@ from .body import (  # noqa: F401
 )
 from .cache_breakpoints import inject_cache_breakpoints  # noqa: F401
 from .call_unwind import unwind_parallel_tool_calls_ir  # noqa: F401
+from .expand import expand_response  # noqa: F401
 from .native import (  # noqa: F401
     LEGACY_FINISH_REASON_KEY,
     LEGACY_PROMPT_FEEDBACK_KEY,

@@ -37,6 +37,7 @@ from typing import Any, cast
 import pytest
 
 from llm_rosetta.converters.base.errors import UnrepresentableFinishReason
+from llm_rosetta.ir.primitives import expand_response
 from llm_rosetta.converters.llm.chat_completions import ChatCompletionsConverter
 from llm_rosetta.converters.llm.google_generate import GoogleGenerateConverter
 from llm_rosetta.converters.llm.google_interactions import GoogleInteractionsConverter
@@ -333,15 +334,20 @@ def _body_leg(converter: Any, turn: Turn) -> TurnView | Refused:
     return _view_of_body(converter.response_from_provider(body))
 
 
-def _raw_stream_chunks(converter: Any, turn: Turn) -> list[dict[str, Any]]:
-    """Write the turn as a stream and return the provider chunks."""
+def _write_events(converter: Any, events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Drive the stream writer with *events* and return the provider chunks."""
     to_context = converter.create_stream_context()
     chunks: list[dict[str, Any]] = []
-    for event in _ir_events(turn):
+    for event in events:
         chunks.extend(
             _as_dicts(converter.stream_response_to_provider(event, context=to_context))
         )
     return chunks
+
+
+def _raw_stream_chunks(converter: Any, turn: Turn) -> list[dict[str, Any]]:
+    """Write the turn as a stream and return the provider chunks."""
+    return _write_events(converter, _ir_events(turn))
 
 
 def _raw_stream_events(converter: Any, turn: Turn) -> list[dict[str, Any]]:
@@ -741,6 +747,53 @@ def test_the_two_legs_answer_the_same_turn(
             turn.usage["completion_tokens"],
             turn.usage["total_tokens"],
         ), f"{dialect} usage on {case_id}"
+
+
+def _expansion_view(converter: Any, events: list[dict[str, Any]]) -> TurnView | Refused:
+    """Write *events*, read the chunks back, and view the turn either way."""
+    try:
+        chunks = _write_events(converter, events)
+    except UnrepresentableFinishReason as exc:
+        return Refused(reason=exc.reason)
+    from_context = converter.create_stream_context()
+    read_back = list(converter.iter_stream_from_provider(chunks, context=from_context))
+    return _view_of_events(read_back)
+
+
+@pytest.mark.parametrize(("dialect", "factory"), DIALECTS.items())
+@pytest.mark.parametrize(("case_id", "turn", "capable_reason"), CASES)
+def test_expanding_the_body_reproduces_the_stream(
+    dialect: str,
+    factory: ConverterFactory,
+    case_id: str,
+    turn: Turn,
+    capable_reason: str,
+) -> None:
+    """``expand_response`` is the bridge the two legs will share.
+
+    The fixture above renders the same turn twice by hand.  This drives the
+    stream writer with the body's own expansion instead and asks for the same
+    turn back, so the primitive and the hand-written fixture cannot drift apart
+    without one of them going red — and a body writer folded over the primitive
+    later inherits a proven event sequence.
+
+    The comparison is the turn, not the chunks: the fixture never closes a
+    block, while the expansion does, so the two agree on content and terminal
+    state but not on the point in the stream a dialect announces a block's end.
+    That also bounds what this test proves — it cannot see the block
+    bookkeeping (start/end pairing, block indices, item identity on a block),
+    because ``TurnView`` carries none of it; ``tests/test_expand.py`` asserts
+    that directly.
+    """
+    converter = factory()
+
+    expanded = cast(
+        list[dict[str, Any]], expand_response(cast(Any, _ir_response(turn)))
+    )
+    from_body = _expansion_view(converter, expanded)
+    from_fixture = _expansion_view(converter, _ir_events(turn))
+
+    assert from_body == from_fixture, f"{dialect} expansion differs on {case_id}"
 
 
 def test_a_messages_stop_sequence_survives_both_legs() -> None:
