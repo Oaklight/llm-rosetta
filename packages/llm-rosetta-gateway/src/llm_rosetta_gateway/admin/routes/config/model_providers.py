@@ -153,8 +153,20 @@ def _validate_weight(raw: Any) -> tuple[int | None, Response | None]:
     return w, None
 
 
-def _set_provider_weight(plist: list[Any], provider: str, weight: int | None) -> bool:
-    """Find *provider* in *plist* and apply *weight*.  Returns True if found."""
+def _set_provider_attrs(
+    plist: list[Any],
+    provider: str,
+    weight: int | None,
+    enabled: bool | None,
+) -> bool:
+    """Find *provider* in *plist* and apply the given attributes.
+
+    A provider entry turned off keeps its place in the list with
+    ``enabled: false``, so the operator can turn it back on instead of
+    re-adding it.  ``enabled`` true removes the key, which is the default.
+
+    Returns True if *provider* was found.
+    """
     for i, entry in enumerate(plist):
         pname = entry if isinstance(entry, str) else entry.get("name", "")
         if pname != provider:
@@ -168,6 +180,11 @@ def _set_provider_weight(plist: list[Any], provider: str, weight: int | None) ->
                 entry.pop("weight", None)
             else:
                 entry["weight"] = weight
+        if enabled is not None:
+            if enabled:
+                entry.pop("enabled", None)
+            else:
+                entry["enabled"] = False
         return True
     return False
 
@@ -188,6 +205,14 @@ async def update_model_provider(request: Any, **kwargs: Any) -> Response:
     if weight_err:
         return weight_err
 
+    enabled = body.get("enabled")
+    if enabled is not None and not isinstance(enabled, bool):
+        return JSONResponse({"error": "'enabled' must be a boolean"}, status_code=400)
+    if weight is None and enabled is None:
+        return JSONResponse(
+            {"error": "One of 'weight' or 'enabled' is required"}, status_code=400
+        )
+
     async with config_mutate(request) as ctx:
         if ctx.error:
             return ctx.error
@@ -203,7 +228,7 @@ async def update_model_provider(request: Any, **kwargs: Any) -> Response:
                 status_code=400,
             )
 
-        if not _set_provider_weight(existing["providers"], provider, weight):
+        if not _set_provider_attrs(existing["providers"], provider, weight, enabled):
             return JSONResponse(
                 {"error": f"Provider '{provider}' not found on model '{name}'"},
                 status_code=404,
@@ -214,4 +239,12 @@ async def update_model_provider(request: Any, **kwargs: Any) -> Response:
     if ctx.error:
         return ctx.error
 
-    return JSONResponse({"ok": True, "model": name, "provider": provider})
+    return JSONResponse(
+        {
+            "ok": True,
+            "model": name,
+            "provider": provider,
+            "weight": weight,
+            "enabled": enabled,
+        }
+    )

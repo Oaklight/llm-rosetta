@@ -177,35 +177,47 @@ async function populateOpsLogFilters() {
 
 // ===================== View switching =====================
 
+/** The views this panel serves, in rail order.  Requests and Ops are the
+ *  paged logs; the other three are the record-level diagnostic tools that
+ *  used to sit in the dashboard, where a single bad request was hard to find. */
+const LOG_VIEWS = ['requests', 'ops', 'dumps', 'profiling', 'capture'];
+
 function switchLogView(view) {
   if (S._logView === view) return;
   S._logView = view;
 
-  const reqView = document.getElementById('logView-requests');
-  const opsView = document.getElementById('logView-ops');
-  reqView.style.display = view === 'requests' ? '' : 'none';
-  opsView.style.display = view === 'ops' ? '' : 'none';
+  for (const name of LOG_VIEWS) {
+    const el = document.getElementById('logView-' + name);
+    if (el) el.style.display = name === view ? '' : 'none';
+  }
 
-  // Update seg-control active state
   const seg = document.getElementById('logViewSeg');
   if (seg) {
-    const labels = seg.querySelectorAll('label');
-    labels.forEach(l => {
-      const isReq = l.getAttribute('data-i18n') === 'logView.requests';
-      const active = (view === 'requests') === isReq;
+    seg.querySelectorAll('label').forEach(l => {
+      const active = l.dataset.view === view;
       l.classList.toggle('active', active);
       l.setAttribute('aria-checked', String(active));
       l.tabIndex = active ? 0 : -1;
     });
   }
 
-  // Stop both timers, start the active one
+  // Each view owns its loader: the paged ones reset their offset, the
+  // diagnostic ones read the side that changed while they were hidden.
   if (view === 'requests') {
     S.logOffset = 0;
     window.loadLogs();
-  } else {
+  } else if (view === 'ops') {
     S.opsLogOffset = 0;
     loadOpsLog();
+  } else if (view === 'dumps') {
+    window.invalidateDumpCache?.();
+    window.renderDumps?.();
+  } else if (view === 'profiling') {
+    window.loadProfilingStatus?.();
+    window.loadProfilingResults?.();
+  } else if (view === 'capture') {
+    window.loadCaptureStatus?.();
+    window.loadCaptureResults?.();
   }
   // The shared starter respects the pause state and the active view.
   window.startLogTimers?.();

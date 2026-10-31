@@ -7,6 +7,7 @@ from typing import Any
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
 
+from ....config.settings import MAX_ADMIN_CUSTOM_CSS
 from .._shared import (
     _sanitize_server_section,
     config_mutate,
@@ -88,6 +89,55 @@ def _apply_log_retention(body: dict[str, Any], server: dict[str, Any]) -> None:
                 cfg[key] = max(floor, int(src[key]))
 
 
+def _apply_custom_css(server: dict[str, Any], css: Any) -> Response | None:
+    """Validate and apply ``server.admin_custom_css``; return an error or None."""
+    if not isinstance(css, str):
+        return JSONResponse(
+            {"error": "'admin_custom_css' must be a string"}, status_code=400
+        )
+    if len(css) > MAX_ADMIN_CUSTOM_CSS:
+        return JSONResponse(
+            {
+                "error": "'admin_custom_css' is limited to "
+                f"{MAX_ADMIN_CUSTOM_CSS} characters"
+            },
+            status_code=400,
+        )
+    if css.strip():
+        server["admin_custom_css"] = css
+    else:
+        server.pop("admin_custom_css", None)
+    return None
+
+
+_SESSION_FIELDS = ("idle_minutes", "remember_days")
+
+
+def _apply_session_settings(server: dict[str, Any], session: Any) -> Response | None:
+    """Validate and apply ``server.admin_session``; return an error or None."""
+    if not isinstance(session, dict):
+        return JSONResponse(
+            {"error": "'admin_session' must be an object"}, status_code=400
+        )
+    cfg = server.setdefault("admin_session", {})
+    for key in _SESSION_FIELDS:
+        if key not in session:
+            continue
+        try:
+            value = int(session[key])
+        except (TypeError, ValueError):
+            return JSONResponse(
+                {"error": f"'admin_session.{key}' must be an integer"}, status_code=400
+            )
+        if value < 0:
+            return JSONResponse(
+                {"error": f"'admin_session.{key}' must be 0 or greater"},
+                status_code=400,
+            )
+        cfg[key] = value
+    return None
+
+
 async def put_server_settings(request: Any) -> Response:  # noqa: C901
     """Update server settings (e.g. global proxy)."""
     body, err = parse_json_body(request)
@@ -108,6 +158,13 @@ async def put_server_settings(request: Any) -> Response:  # noqa: C901
             else:
                 server.pop("proxy", None)
 
+        # Operator theme override for the admin page: CSS only, injected
+        # after the built-in schemes.  An empty value removes the key.
+        if "admin_custom_css" in body:
+            css_err = _apply_custom_css(server, body["admin_custom_css"])
+            if css_err is not None:
+                return css_err
+
         # Credential visibility toggle
         if "credential_visible" in body:
             want_visible = bool(body["credential_visible"])
@@ -120,6 +177,13 @@ async def put_server_settings(request: Any) -> Response:  # noqa: C901
 
         # Log retention caps (floor prevents accidental wipe)
         _apply_log_retention(body, server)
+
+        # Admin session lifetimes: 0 minutes never idles out, 0 days removes
+        # "stay signed in" from the login page.
+        if "admin_session" in body:
+            sess_err = _apply_session_settings(server, body["admin_session"])
+            if sess_err is not None:
+                return sess_err
 
         # Debug / log level
         debug = ctx.data.setdefault("debug", {})

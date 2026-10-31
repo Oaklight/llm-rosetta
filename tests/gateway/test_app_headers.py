@@ -76,7 +76,7 @@ def test_proxy_handler_forwards_user_agent_to_non_streaming_proxy(monkeypatch):
                 CircuitBreakerConfig(enabled=False)
             )
 
-        def selection_context(self, model, source_format):
+        def selection_context(self, model, source_format, pinned_provider=None):
             return SelectionContext(model, source_format)
 
         def resolve(self, ctx):

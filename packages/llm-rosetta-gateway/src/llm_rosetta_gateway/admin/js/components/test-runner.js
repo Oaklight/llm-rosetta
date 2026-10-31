@@ -142,7 +142,13 @@ function confirmMatryoshka() {
   runTest(S._matryoshkaModel, 'matryoshka', dim);
 }
 
-async function runTest(model, type, extraParam) {
+/** Run one test request.
+ *
+ *  ``provider`` pins the request to one provider of a multi-provider model;
+ *  the gateway honours the pin only for admin-internal requests.  Leaving it
+ *  out lets routing choose, which is what the row's own Test button does.
+ */
+async function runTest(model, type, extraParam, provider) {
   // Close any open dropdown
   closeMenus();
 
@@ -154,8 +160,9 @@ async function runTest(model, type, extraParam) {
   const resBody = document.getElementById('testResBody');
   const imgDetails = document.getElementById('testImageDetails');
   const imgBody = document.getElementById('testImageBody');
-  document.getElementById('testModalTitle').textContent = `Test: ${getTestLabel(type)}`;
-  meta.innerHTML = `<div class="meta-item"><strong>Model:</strong> ${esc(model)}</div>`;
+  document.getElementById('testModalTitle').textContent = t('test.title', {type: getTestLabel(type)});
+  meta.innerHTML = `<div class="meta-item"><strong>${t('col.model')}:</strong> ${esc(model)}</div>` +
+    (provider ? `<div class="meta-item"><strong>${t('col.provider')}:</strong> ${esc(provider)}</div>` : '');
   output.textContent = '';
   output.className = 'test-output';
   reqDetails.removeAttribute('open');
@@ -166,7 +173,7 @@ async function runTest(model, type, extraParam) {
   // Show image preview for vision tests
   if (type === 'vision' || type === 'embed_multimodal') {
     imgDetails.style.display = '';
-    imgBody.innerHTML = `<img src="${TEST_IMAGE_URL}" alt="test image">`;
+    imgBody.innerHTML = `<img src="${TEST_IMAGE_URL}" alt="${t('test.testImage')}">`;
   } else {
     imgDetails.style.display = 'none';
     imgBody.innerHTML = '';
@@ -198,7 +205,8 @@ async function runTest(model, type, extraParam) {
     }, 1000);
     const _stopElapsed = () => { clearInterval(S._testElapsedTimer); S._testElapsedTimer = null; if (cancelBtn) cancelBtn.style.display = 'none'; };
     try {
-      const startResp = await api.post('/admin/api/test', {endpoint, payload});
+      const startBody = provider ? {endpoint, payload, provider} : {endpoint, payload};
+      const startResp = await api.post('/admin/api/test', startBody);
       const taskId = startResp.task_id;
       S._testTaskId = taskId;
 
@@ -232,7 +240,7 @@ async function runTest(model, type, extraParam) {
             }
             if (r.status === 'error') {
               _stopElapsed();
-              reject(new Error(r.error || 'Unknown error'));
+              reject(new Error(r.error || t('error.unknown')));
               return;
             }
 
@@ -247,7 +255,7 @@ async function runTest(model, type, extraParam) {
 
             if (statusCode >= 400) {
               const errMsg = body?.error?.message || JSON.stringify(body?.error || body);
-              output.textContent = `Error ${statusCode}: ${errMsg}`;
+              output.textContent = t('test.errorStatus', {status: statusCode, msg: errMsg});
               meta.innerHTML += `<div class="meta-item"><strong>Time:</strong> ${elapsed}s</div><div class="meta-item"><strong>Status:</strong> <span style="color:var(--red)">${statusCode}</span></div>`;
               resolve();
               return;
@@ -266,7 +274,7 @@ async function runTest(model, type, extraParam) {
               const choice = body?.choices?.[0];
               if (type === 'tools' && choice?.message?.tool_calls) {
                 const tc = choice.message.tool_calls[0];
-                output.textContent = `Tool call: ${tc.function?.name || tc.name || '?'}(${tc.function?.arguments || JSON.stringify(tc.arguments) || '{}'})`;
+                output.textContent = t('test.toolCall', {name: `${tc.function?.name || tc.name || '?'}(${tc.function?.arguments || JSON.stringify(tc.arguments) || '{}'})`});
                 if (choice.message.content) output.textContent += '\n\nContent: ' + choice.message.content;
               } else {
                 const content = choice?.message?.content;
@@ -286,9 +294,9 @@ async function runTest(model, type, extraParam) {
       });
     } catch(e) {
       if (e.name === 'AbortError') {
-        output.textContent = 'Request aborted (timeout or cancelled)';
+        output.textContent = t('test.aborted');
       } else {
-        output.textContent = `Error: ${e.message}`;
+        output.textContent = t('test.error', {msg: e.message});
       }
     }
     return;
@@ -309,7 +317,7 @@ async function runTest(model, type, extraParam) {
     if (!res.ok) {
       const errText = await res.text();
       output.className = 'test-output';
-      output.textContent = `Error ${res.status}: ${errText}`;
+      output.textContent = t('test.errorStatus', {status: res.status, msg: errText});
       meta.innerHTML += `<div class="meta-item"><strong>Time:</strong> ${((performance.now()-t0)/1000).toFixed(2)}s</div><div class="meta-item"><strong>Status:</strong> <span style="color:var(--red)">${res.status}</span></div>`;
       resDetails.style.display = '';
       resBody.textContent = errText;
@@ -349,7 +357,7 @@ async function runTest(model, type, extraParam) {
     resBody.textContent = rawChunks.map(c => c === '[DONE]' ? c : JSON.stringify(JSON.parse(c), null, 2)).join('\n---\n');
   } catch(e) {
     output.className = 'test-output';
-    output.textContent = e.name === 'AbortError' ? 'Request aborted (timeout or cancelled)' : `Network error: ${e.message}`;
+    output.textContent = e.name === 'AbortError' ? 'Request aborted (timeout or cancelled)' : t('test.networkError', {msg: e.message});
   }
 }
 
@@ -381,7 +389,7 @@ registerTestType('rerank', {
   renderResult: (body, outputEl, metaEl) => {
     const results = body?.results || body?.data || [];
     if (results.length > 0) {
-      outputEl.textContent = `Rerank OK — ${results.length} result${results.length !== 1 ? 's' : ''}\n\n` +
+      outputEl.textContent = t('test.rerankOk', {n: results.length}) + '\n\n' +
         results.map((r, i) => `#${i+1} index=${r.index ?? i} score=${(r.relevance_score ?? r.score ?? 0).toFixed(4)}`).join('\n');
     } else {
       outputEl.textContent = t('test.emptyResponse');
@@ -396,12 +404,12 @@ registerTestType('decision', {
   },
   renderResult: (body, outputEl, metaEl) => {
     if (body?.usage) {
-      metaEl.innerHTML += `<div class="meta-item"><strong>Tokens:</strong> ${body.usage.input_tokens || '?'} in / ${body.usage.output_tokens || '?'} out</div>`;
+      metaEl.innerHTML += `<div class="meta-item"><strong>${t('test.tokensLabel')}</strong> ${t('test.tokens', {in: body.usage.input_tokens || '?', out: body.usage.output_tokens || '?'})}</div>`;
     }
     const answers = body?.answers || {};
     const keys = Object.keys(answers);
     if (keys.length > 0) {
-      outputEl.textContent = `Decision OK — ${keys.length} answer${keys.length !== 1 ? 's' : ''}\n\n` +
+      outputEl.textContent = t('test.decisionOk', {n: keys.length}) + '\n\n' +
         keys.map(k => {
           const a = answers[k];
           if (a.type === 'noul') return `${k} (noul): ${a.noul?.toFixed(3)}`;

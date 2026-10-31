@@ -17,6 +17,7 @@ from llm_rosetta_gateway._vendor.httpserver import (
 from llm_rosetta.auto_detect import ProviderType
 from llm_rosetta.provider_names import canonical_provider_name
 
+from ..keystore import INTERNAL_LABEL
 from ..middleware.auth import (
     api_key_context_var,
 )
@@ -49,6 +50,19 @@ from ..maintenance.startup import ProviderNotReady
 from . import _state
 
 logger = get_logger()
+
+
+#: Header an admin test request uses to reach one provider of a multi-provider
+#: model.  Honoured only on requests authenticated with the internal token, so
+#: a client key cannot pick its own provider.
+PINNED_PROVIDER_HEADER = "x-rosetta-provider-pin"
+
+
+def _pinned_provider(request: Any, key_ctx: Any) -> str | None:
+    """The provider this request must be served by, if the caller may pin one."""
+    if key_ctx is None or key_ctx.label != INTERNAL_LABEL:
+        return None
+    return request.headers.get(PINNED_PROVIDER_HEADER) or None
 
 
 def _unknown_model_response(
@@ -170,7 +184,9 @@ async def _handle_llm(
     _kctx = api_key_context_var.get()
     if model not in config.models:
         return _unknown_model_response(config, source_provider, model, ctx.request_id)
-    selection = config.selection_context(model, source_provider)
+    selection = config.selection_context(
+        model, source_provider, pinned_provider=_pinned_provider(request, _kctx)
+    )
     selection.with_client(_kctx.key_hash if _kctx else None)
 
     # Resolve target provider via unified routing

@@ -22,6 +22,36 @@ logger = logging.getLogger("llm-rosetta-gateway")
 #: Rate-limit algorithms the config accepts.
 _VALID_RL_ALGORITHMS = frozenset({"token_bucket", "sliding_window", "fixed_window"})
 
+#: Cap for ``server.admin_custom_css``.  The text is served inside every admin
+#: page, so an unbounded value would bloat each response.
+MAX_ADMIN_CUSTOM_CSS = 64 * 1024
+
+
+def _parse_admin_custom_css(value: Any) -> str:
+    """Validate ``server.admin_custom_css``.
+
+    Args:
+        value: The configured value, or ``None`` when the key is absent.
+
+    Returns:
+        The CSS text with the surrounding whitespace removed; an empty string
+        when unset.
+
+    Raises:
+        ValueError: If the value is not a string, or exceeds
+            :data:`MAX_ADMIN_CUSTOM_CSS`.
+    """
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        raise ValueError("config: 'server.admin_custom_css' must be a string")
+    if len(value) > MAX_ADMIN_CUSTOM_CSS:
+        raise ValueError(
+            "config: 'server.admin_custom_css' is limited to "
+            f"{MAX_ADMIN_CUSTOM_CSS} characters"
+        )
+    return value.strip()
+
 
 def resolve_data_dir(configured: str | None, config_path: str | None) -> str | None:
     """Resolve the gateway's data directory, anchoring relative paths.
@@ -51,6 +81,19 @@ def resolve_data_dir(configured: str | None, config_path: str | None) -> str | N
     return None
 
 
+def _non_negative_int(value: Any, default: int, label: str) -> int:
+    """Parse a session lifetime, rejecting anything below zero."""
+    if value is None or value == "":
+        return default
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"config: {label} must be an integer, got {value!r}") from exc
+    if parsed < 0:
+        raise ValueError(f"config: {label} must be 0 or greater, got {parsed}")
+    return parsed
+
+
 def apply_server_settings(config: GatewayConfig, _server: dict[str, Any]) -> None:
     """Parse server section: host, port, proxy, timeouts, CORS, etc."""
     config.host = _server.get("host", "0.0.0.0")
@@ -58,6 +101,7 @@ def apply_server_settings(config: GatewayConfig, _server: dict[str, Any]) -> Non
     config.proxy = _server.get("proxy")
     config.socket = _server.get("socket")
     config.credential_visible = _server.get("credential_visible", False)
+    config.admin_custom_css = _parse_admin_custom_css(_server.get("admin_custom_css"))
     # Force off when admin panel has no password protection
     if not _server.get("admin_password"):
         config.credential_visible = False
@@ -82,6 +126,26 @@ def apply_server_settings(config: GatewayConfig, _server: dict[str, Any]) -> Non
             "config: admin_password contains an unresolved ${...} placeholder. "
             "Set the environment variable or use a literal password."
         )
+
+    # Admin session lifetimes.  ``idle_minutes: 0`` never signs a session out
+    # for inactivity; ``remember_days: 0`` removes "stay signed in" from the
+    # login page and makes every session a browser-session cookie.
+    from ..middleware.auth import (
+        DEFAULT_SESSION_IDLE_MINUTES,
+        DEFAULT_SESSION_REMEMBER_DAYS,
+    )
+
+    session = _server.get("admin_session") or {}
+    config.admin_session_idle_minutes = _non_negative_int(
+        session.get("idle_minutes"),
+        DEFAULT_SESSION_IDLE_MINUTES,
+        "session idle_minutes",
+    )
+    config.admin_session_remember_days = _non_negative_int(
+        session.get("remember_days"),
+        DEFAULT_SESSION_REMEMBER_DAYS,
+        "session remember_days",
+    )
 
     # CORS allow-list for /admin/* endpoints.
     # Default [] means same-origin only (no Access-Control-Allow-Origin).

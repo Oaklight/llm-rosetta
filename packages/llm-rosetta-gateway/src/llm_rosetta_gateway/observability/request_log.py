@@ -52,6 +52,10 @@ class RequestLogEntry:
     #: The id the client saw in ``X-Request-Id``.  ``id`` is the entry id, so
     #: without this a client-visible id cannot be looked up (#1217).
     request_id: str | None = None
+    #: Milliseconds from the request reaching the upstream until its first
+    #: stream chunk.  Only a stream has one, and a row written before the
+    #: column existed has none: ``None`` means "not measured", never zero.
+    ttft_ms: float | None = None
 
     @classmethod
     def create(
@@ -77,6 +81,7 @@ class RequestLogEntry:
         api_key_bucket: str | None = None,
         model_type: str = DEFAULT_MODEL_TYPE,
         request_id: str | None = None,
+        ttft_ms: float | None = None,
     ) -> RequestLogEntry:
         """Factory with auto-generated id and timestamp."""
         return cls(
@@ -102,6 +107,7 @@ class RequestLogEntry:
             api_key_bucket=api_key_bucket,
             model_type=model_type,
             request_id=request_id,
+            ttft_ms=None if ttft_ms is None else round(float(ttft_ms), 2),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -125,6 +131,8 @@ class RequestLogEntry:
             d["api_key_label"] = self.api_key_label
         if self.target_provider_name is not None:
             d["target_provider_name"] = self.target_provider_name
+        if self.ttft_ms is not None:
+            d["ttft_ms"] = self.ttft_ms
         if self.client_ip is not None:
             d["client_ip"] = self.client_ip
         if self.profile is not None:
@@ -313,6 +321,28 @@ class RequestLog:
                 if entry.id == entry_id:
                     merged = dict(entry.profile or {}, **profile_update)
                     self._entries[i] = replace(entry, profile=merged)
+                    break
+
+    async def update_ttft(self, entry_id: str, ttft_ms: float | None) -> None:
+        """Store time-to-first-token for a stream that has started.
+
+        The row is written when the handler returns, before the body runs,
+        so this is a write-back like :meth:`update_profile`.
+
+        Args:
+            entry_id: The log entry ID to update.
+            ttft_ms: Milliseconds to the first chunk, or ``None`` to leave
+                the column alone.
+        """
+        if ttft_ms is None:
+            return
+        value = round(float(ttft_ms), 2)
+        if self._persistence is not None:
+            await self._persistence.update_entry_ttft(entry_id, value)
+        else:
+            for i, entry in enumerate(self._entries):
+                if entry.id == entry_id:
+                    self._entries[i] = replace(entry, ttft_ms=value)
                     break
 
     async def update_usage(

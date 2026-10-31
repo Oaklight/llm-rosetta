@@ -7,10 +7,13 @@ import { S, LOG_LIMIT } from '../core/state.js';
 import { t } from '../core/i18n.js';
 import { pageCount, clampPage, offsetForPage, shouldResync } from '../core/pagination.js';
 import { api, esc, formatDuration, inlineConfirm, showToast } from '../core/utils.js';
+import { closeMenus, openMenu } from '../core/utils.js';
+import { providerRowsHtml, providerLogoHtml, openPickerMenu } from '../components/provider-picker.js';
 
 // ===================== Request Log =====================
 
 async function loadLogs() {
+  _syncLogFacetChips();
   const model = document.getElementById('filterModel').value;
   const provider = document.getElementById('filterProvider').value;
   const statusDrop = document.getElementById('filterStatus').value;
@@ -63,6 +66,54 @@ function resolveProviderName(apiType) {
   return apiType;
 }
 
+/** How long the call took, as the operator means it.
+ *
+ *  A stream's row is written when its headers go out, so ``duration_ms`` stops
+ *  at the first byte; the body's real span is in the profile.  Showing the
+ *  column alone made a half-second stream read as ``5 ms``.
+ */
+function _durationCell(e) {
+  const profile = e.profile || {};
+  const openMs = Number(e.duration_ms) || 0;
+  const bodyMs = Number(profile.stream_duration_ms) || 0;
+  const shown = e.is_stream && bodyMs ? bodyMs : openMs;
+  const title = e.is_stream && bodyMs
+    ? t('log.durationStream', {open: String(Math.round(openMs)), body: String(Math.round(bodyMs))})
+    : '';
+  const attr = title ? ` title="${esc(title)}"` : '';
+  const cls = e.is_stream && bodyMs ? ' class="is-stream-span"' : '';
+  return `<span${cls}${attr}>${shown.toFixed(0)} ms</span>`;
+}
+
+/** Tokens per second of generation, shown beside the duration.
+ *
+ *  A stream's row is written when its headers go out, so its ``duration_ms``
+ *  is the time to open the stream, not to finish it: the body's own span is
+ *  ``profile.stream_duration_ms``.  The rate is counted from the first token,
+ *  which may be newer (``ttft_ms``) or older (``profile.stream_ttfb_ms``) than
+ *  the column.  A row with no first-token time falls back to the whole call,
+ *  which is the number to compare two providers on the same prompt.  No
+ *  tokens, or no duration, means no rate. */
+function _tokensPerSecond(e) {
+  const out = Number(e.output_tokens);
+  if (!out) return '';
+  const profile = e.profile || {};
+  const spanMs = e.is_stream
+    ? Number(profile.stream_duration_ms) || Number(e.duration_ms)
+    : Number(e.duration_ms);
+  if (!spanMs || spanMs <= 0) return '';
+  const rawTtft = e.ttft_ms != null ? e.ttft_ms : profile.stream_ttfb_ms;
+  const ttft = Number(rawTtft);
+  const hasTtft = Number.isFinite(ttft) && ttft > 0 && ttft < spanMs;
+  const window = hasTtft ? spanMs - ttft : spanMs;
+  const rate = out / (window / 1000);
+  const shown = rate >= 100 ? rate.toFixed(0) : rate.toFixed(1);
+  const tip = hasTtft
+    ? t('log.tokPerSecGen', {ttft: String(Math.round(ttft))})
+    : t('log.tokPerSec');
+  return ` <span class="log-tps" title="${esc(tip)}">${t('unit.tokPerSec', {n: shown})}</span>`;
+}
+
 function renderLogs(entries, total) {
   const tbody = document.getElementById('logTable');
   if (entries.length === 0) {
@@ -71,7 +122,7 @@ function renderLogs(entries, total) {
     tbody.innerHTML = entries.map((e, idx) => {
       const time = new Date(e.timestamp).toLocaleString(undefined, {month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit'});
       const statusCls = e.status_code < 400 ? 'badge-ok' : 'badge-error';
-      const modeBadge = e.is_stream ? '<span class="badge badge-stream">stream</span>' : '';
+      const modeBadge = e.is_stream ? `<span class="badge badge-stream">${t('stream.mode')}</span>` : '';
       const keyLabel = e.api_key_label || '—';
       const hasError = !!e.error_detail;
       // The log id is stable across refreshes (unlike an index) and cannot
@@ -79,7 +130,7 @@ function renderLogs(entries, total) {
       const rowId = String(e.id);
       const detailId = 'logErr-' + idx;
       const isExpanded = S.expandedLogRows.has(rowId);
-      const expandHint = hasError ? ' title="Click or press Enter to expand the error"' : '';
+      const expandHint = hasError ? ` title="${esc(t('log.expandHint'))}"` : '';
       const clientIp = e.client_ip || '—';
       const hlBg = S._highlightLogId === e.id ? 'background:color-mix(in srgb, var(--accent) 20%, transparent);' : '';
       const rowCursor = hasError ? 'cursor:pointer;' : '';
@@ -97,9 +148,9 @@ function renderLogs(entries, total) {
         <td class="log-mode" role="cell" aria-labelledby="thLogMode">${modeBadge}</td>
         <td class="log-key" role="cell" aria-labelledby="thLogApiKey" style="font-size:12px;color:var(--text-dim)">${esc(keyLabel)}</td>
         <td class="log-ip" role="cell" aria-labelledby="thLogClientIp" style="font-size:12px;color:var(--text-dim)">${esc(clientIp)}</td>
-        <td class="log-status" role="cell" aria-labelledby="thLogStatus"><span class="badge ${statusCls}">${e.status_code}${hasError ? ' ▸' : ''}</span>${e.status_code >= 400 ? ` <button class="btn btn-sm" onclick="event.stopPropagation();jumpToErrorDump('${esc(e.id)}')" title="View error dump" style="padding:2px 4px;margin-left:2px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></button>` : ''}</td>
+        <td class="log-status" role="cell" aria-labelledby="thLogStatus"><span class="badge ${statusCls}">${e.status_code}${hasError ? ' ▸' : ''}</span>${e.status_code >= 400 ? ` <button class="btn btn-sm" onclick="event.stopPropagation();jumpToErrorDump('${esc(e.id)}')" title="${esc(t('btn.viewErrorDump'))}" style="padding:2px 4px;margin-left:2px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></button>` : ''}</td>
         <td class="log-tokens" role="cell" aria-labelledby="thLogTokens" style="font-size:12px">${e.total_tokens != null ? fmtTokens(e.total_tokens) : '—'}${e.cache_read_tokens ? `<br><span title="${t('token.cacheRead')}" style="color:var(--blue);font-size:10px;cursor:help">C↓ ${fmtTokens(e.cache_read_tokens)}</span>` : ''}${e.reasoning_tokens ? `<br><span title="${t('token.reasoning')}" style="color:var(--red);font-size:10px;cursor:help">R ${fmtTokens(e.reasoning_tokens)}</span>` : ''}</td>
-        <td class="log-duration" role="cell" aria-labelledby="thLogDuration">${e.duration_ms.toFixed(0)} ms</td>
+        <td class="log-duration" role="cell" aria-labelledby="thLogDuration">${_durationCell(e)}${_tokensPerSecond(e)}</td>
       </tr>`;
       if (hasError) {
         rows += `<tr class="log-error-row" id="${detailId}" role="row"${isExpanded ? '' : ' hidden'}><td colspan="9" role="cell"><pre style="margin:0;padding:8px;background:var(--bg);border-radius:6px;font-size:11px;max-height:200px;overflow:auto;white-space:pre-wrap;word-break:break-all">${esc(e.error_detail)}</pre></td></tr>`;
@@ -198,7 +249,35 @@ function onLogPageSizeChange() {
   loadLogs();
 }
 
+/** Pick a facet value from a chip: the hidden select stays the source of
+ *  truth, so every existing handler keeps working. */
+function setLogFacet(selectId, value) {
+  const sel = document.getElementById(selectId);
+  if (!sel) return;
+  sel.value = value;
+  sel.dispatchEvent(new Event('change'));
+  _syncLogFacetChips();
+}
+window.setLogFacet = setLogFacet;
+
+/** Mark the chip that matches its select. */
+function _syncLogFacetChips() {
+  for (const [selectId, chipId] of [
+    ['filterTimeRange', 'logTimeChips'],
+    ['filterStatus', 'logStatusChips'],
+  ]) {
+    const sel = document.getElementById(selectId);
+    const chips = document.getElementById(chipId);
+    if (!sel || !chips) continue;
+    chips.querySelectorAll(':scope > div').forEach(c => {
+      c.classList.toggle('active', c.dataset.value === sel.value);
+    });
+  }
+}
+window._syncLogFacetChips = _syncLogFacetChips;
+
 function onLogTimeRangeChange() {
+  _syncLogFacetChips();
   const custom = document.getElementById('filterTimeRange').value === 'custom';
   document.getElementById('logCustomRange').style.display = custom ? 'inline-flex' : 'none';
   S.logOffset = 0;
@@ -214,12 +293,13 @@ function deleteModel(name, btn) {
 async function _doDeleteModel(name) {
   const res = await api.del(`/admin/api/config/models/${encodeURIComponent(name)}`);
   if (res.ok) { showToast(t('toast.modelDeleted', {name})); window.loadConfig(); }
-  else { showToast(res.error || 'Failed', 'error'); }
+  else { showToast(res.error || t('toast.error'), 'error'); }
 }
 
 let _logStatusTimer = 0;
 
 function onLogStatusFilterChange() {
+  _syncLogFacetChips();
   const val = document.getElementById('filterStatus').value;
   if (val === 'custom') {
     document.getElementById('filterStatus').style.display = 'none';
@@ -241,6 +321,7 @@ function closeLogStatusSearch(silent) {
   clearTimeout(_logStatusTimer);
   document.getElementById('logStatusSearch').value = '';
   document.getElementById('filterStatus').value = '';
+  _syncLogFacetChips();
   document.getElementById('filterStatus').style.display = '';
   document.getElementById('logStatusSearchWrap').style.display = 'none';
   if (!silent) { S.logOffset = 0; loadLogs(); }
@@ -269,10 +350,50 @@ function updateFilterOptions() {
   // preserve selection
   const mVal = mSel.value, pVal = pSel.value;
   mSel.innerHTML = `<option value="">${t('filter.allModels')}</option>` + models.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join('');
-  pSel.innerHTML = `<option value="">${t('filter.allProviders')}</option>` + providers.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
+  // A native select cannot show the provider logo, so this filter is a menu.
+  const menu = document.getElementById('logProviderMenu');
+  if (menu) {
+    menu.innerHTML = providerRowsHtml(
+      providers, n => `selectLogProvider('${esc(n)}')`,
+    );
+    const empty = document.createElement('div');
+    empty.className = 'more-menu-item pp-row';
+    empty.dataset.provider = '';
+    empty.innerHTML = `<span class="pp-name">${t('filter.allProviders')}</span>`;
+    empty.onclick = () => selectLogProvider('');
+    menu.prepend(empty);
+  }
   mSel.value = mVal; pSel.value = pVal;
+  _syncLogProviderBtn(pVal);
   updateKeyFilterOptions();
 }
+
+/** Show the chosen provider (and its logo) on the filter's trigger. */
+function _syncLogProviderBtn(name) {
+  const btn = document.getElementById('logProviderBtn');
+  if (!btn) return;
+  const val = btn.querySelector('.pp-value');
+  if (!val) return;
+  val.innerHTML = name
+    ? `${providerLogoHtml(name)}<span>${esc(name)}</span>`
+    : `<span>${t('filter.allProviders')}</span>`;
+}
+
+function selectLogProvider(name) {
+  const input = document.getElementById('filterProvider');
+  input.value = name;
+  _syncLogProviderBtn(name);
+  closeMenus();
+  input.dispatchEvent(new Event('change'));
+}
+window.selectLogProvider = selectLogProvider;
+
+function toggleLogProviderPicker(btn) {
+  const menu = document.getElementById('logProviderMenu');
+  if (menu.classList.contains('open')) { closeMenus(); return; }
+  openPickerMenu(menu, btn, openMenu, closeMenus);
+}
+window.toggleLogProviderPicker = toggleLogProviderPicker;
 
 function updateKeyFilterOptions() {
   const kSel = document.getElementById('filterApiKey');
@@ -286,7 +407,9 @@ function updateKeyFilterOptions() {
 // ===================== Window globals =====================
 
 function jumpToErrorDump(requestLogId) {
-  goToTab('dashboard', function() {
+  // The dumps live in the observability panel now, as one of its views.
+  if (S._logView !== 'dumps') window.switchLogView?.('dumps');
+  goToTab('logs', function() {
     function tryFind(attempts) {
       const entries = S._dumpAllEntries || [];
       const match = entries.find(e => e.request_log_id === requestLogId);

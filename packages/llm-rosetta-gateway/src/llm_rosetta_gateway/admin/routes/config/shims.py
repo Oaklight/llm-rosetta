@@ -60,12 +60,19 @@ def _validate_shim_sources_body(
     paths = body.get("paths")
     remotes = body.get("remotes")
     presets = body.get("presets")
+    disabled = body.get("disabled")
     if paths is not None and not isinstance(paths, list):
         return JSONResponse({"error": "'paths' must be an array"}, status_code=400)
     if remotes is not None and not isinstance(remotes, list):
         return JSONResponse({"error": "'remotes' must be an array"}, status_code=400)
     if presets is not None and not isinstance(presets, list):
         return JSONResponse({"error": "'presets' must be an array"}, status_code=400)
+    if disabled is not None and (
+        not isinstance(disabled, list) or any(not isinstance(n, str) for n in disabled)
+    ):
+        return JSONResponse(
+            {"error": "'disabled' must be an array of shim names"}, status_code=400
+        )
     for entry in remotes or []:
         if not isinstance(entry, dict) or not entry.get("url"):
             return JSONResponse(
@@ -89,7 +96,7 @@ def _merge_shim_sources_body(
     knobs clear on a falsy value, and empty sub-keys are dropped so the
     section stays tidy.
     """
-    for key in ("paths", "remotes", "presets"):
+    for key in ("paths", "remotes", "presets", "disabled"):
         if body.get(key) is not None:
             section[key] = body[key]
     for key, empty in (
@@ -104,7 +111,7 @@ def _merge_shim_sources_body(
             section.pop(key, None)
         else:
             section[key] = value
-    for key in ("paths", "remotes", "presets", "cache_dir"):
+    for key in ("paths", "remotes", "presets", "disabled", "cache_dir"):
         if key in section and not section[key]:
             section.pop(key)
     return section

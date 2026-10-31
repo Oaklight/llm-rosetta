@@ -7,7 +7,7 @@
  */
 
 import { S, _CAP_ICONS, populateCapIcons } from '../core/state.js';
-import { t } from '../core/i18n.js';
+import { t, capLabel } from '../core/i18n.js';
 import { api, showToast, showToastHtml, closeModal, esc, copyText, inlineConfirm, isFreeEntry, freeEntryLabel, providerTypeName } from '../core/utils.js';
 import { safeLinkUrl, parseRecord } from '../core/credential.js';
 import { initLogoPicker, setLogoPickerValue, getLogoPickerValue } from '../components/logo-picker.js';
@@ -336,14 +336,22 @@ function _syncKeylessUI() {
   _syncCredentialUI();
 }
 
-/** Render one preset button per free-source shim, labelled "<Brand> (Free)". */
+/**
+ * Fill the free-lane menu with one entry per free-source shim.
+ *
+ * One menu rather than a button per lane: every new free source would
+ * otherwise add another button to the toolbar, and the set of lanes is a
+ * server-supplied list that keeps growing.
+ */
 function renderFreeSourceButtons() {
-  const host = document.getElementById('freeProviderButtons');
-  if (!host) return;
-  host.innerHTML = _freeShims().map(s => {
-    const brand = shimBrand(s);
-    const label = `+ ${brand} ${t('free.suffix')}`;
-    return `<button class="btn btn-sm" data-free-shim="${esc(s.name)}" aria-label="${esc(label)}" onclick="openFreeProvider('${esc(s.name)}')">${esc(label)}</button>`;
+  const host = document.getElementById('freeProviderHost');
+  const menu = document.getElementById('freeProviderMenu');
+  if (!host || !menu) return;
+  const shims = _freeShims();
+  host.style.display = shims.length ? 'contents' : 'none';
+  menu.innerHTML = shims.map(s => {
+    const label = `${shimBrand(s)} ${t('free.suffix')}`;
+    return `<div class="more-menu-item" role="menuitem" data-free-shim="${esc(s.name)}" aria-label="${esc(label)}" onclick="closeMenus();openFreeProvider('${esc(s.name)}')">${esc(label)}</div>`;
   }).join('');
 }
 
@@ -487,7 +495,7 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
   maxToolDescEl.placeholder = _selShim.max_tool_description_length || '';
   document.getElementById('provModelsPath').value = (provCfg && provCfg.models_path) || '';
   setLogoPickerValue((provCfg && provCfg.logo) || '');
-  if (window._detectedHostIp) document.getElementById('provProxy').placeholder = `e.g. http://${window._detectedHostIp}:7890`;
+  if (window._detectedHostIp) document.getElementById('provProxy').placeholder = t('placeholder.proxyHost', {host: window._detectedHostIp});
   // Generate capability checkboxes from model_types metadata
   const provCaps = provCfg ? _getProviderCaps(provCfg, name) : ['llm'];
   _buildProvCapCheckboxes();
@@ -750,15 +758,15 @@ function _renderMultiKeys(keys) {
   let html = '<div class="multi-key-list">';
   keys.forEach((k, i) => {
     html += `<div class="multi-key-row">
-      <input type="${inputType}" value="${esc(k)}" data-key-idx="${i}" placeholder="API key #${i+1}">
-      <button type="button" class="key-btn" onclick="_removeKeyEntry(${i})" title="Remove">${delSvg}</button>
+      <input type="${inputType}" value="${esc(k)}" data-key-idx="${i}" placeholder="${t('label.apiKeyN', {n: i + 1})}">
+      <button type="button" class="key-btn" onclick="_removeKeyEntry(${i})" title="${esc(t('btn.remove'))}">${delSvg}</button>
     </div>`;
   });
   html += '</div>';
   html += `<div class="multi-key-footer">
     <button type="button" class="btn btn-sm" onclick="_addKeyEntry()">+ ${t('label.addKey')}</button>
-    <button type="button" class="key-btn" onclick="toggleModalKeyVisibility()" title="Toggle visibility">${eyeSvg}</button>
-    <button type="button" class="key-btn" onclick="copyModalKey()" title="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+    <button type="button" class="key-btn" onclick="toggleModalKeyVisibility()" title="${esc(t('btn.toggleVisibility'))}">${eyeSvg}</button>
+    <button type="button" class="key-btn" onclick="copyModalKey()" title="${esc(t('btn.copy'))}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
     <span class="key-count">${t('label.keyCount', {count: keys.length})}</span>
   </div>`;
   box.innerHTML = html;
@@ -828,9 +836,9 @@ async function copyModalKey() {
   const val = _getKeyFieldValue();
   try {
     await navigator.clipboard.writeText(val);
-    showToast('API key copied');
+    showToast(t('toast.copied'));
   } catch(e) {
-    showToast('Copy failed', 'error');
+    showToast(t('toast.copyFailed'), 'error');
   }
 }
 
@@ -856,18 +864,55 @@ function switchProviderFilter(el, filter) {
 const _LIST_VIEW_MIN_WIDTH = 700;
 const _listViewViable = window.matchMedia(`(min-width: ${_LIST_VIEW_MIN_WIDTH}px)`);
 
-function _applyProviderView() {
-  const useList = _providerViewMode === 'list' && _listViewViable.matches;
-  document.getElementById('providerGrid')?.classList.toggle('list-view', useList);
+/** Whether the list (table) view is the active one. */
+function _isListView() {
+  return _providerViewMode === 'list' && _listViewViable.matches;
 }
 
-_listViewViable.addEventListener('change', _applyProviderView);
+function _applyProviderView() {
+  const useList = _isListView();
+  const wrap = document.getElementById('providerListWrap');
+  const grid = document.getElementById('providerGrid');
+  if (wrap) wrap.hidden = !useList;
+  if (grid) grid.style.display = useList ? 'none' : '';
+}
+
+/** Write rendered rows into whichever view is active. */
+function _setProviderMarkup(html) {
+  const tbody = document.getElementById('providerTableBody');
+  const grid = document.getElementById('providerGrid');
+  if (_isListView()) {
+    if (tbody) tbody.innerHTML = html;
+    if (grid) grid.innerHTML = '';
+  } else {
+    if (grid) grid.innerHTML = html;
+    if (tbody) tbody.innerHTML = '';
+  }
+  _applyProviderView();
+}
+
+/** An empty or "nothing matches" line, in the shape the active view needs. */
+function _setProvidersMessage(text) {
+  if (_isListView()) {
+    _setProviderMarkup(`<tr><td class="provider-empty" colspan="5">${esc(text)}</td></tr>`);
+  } else {
+    _setProvidersMessageInGrid(text);
+  }
+}
+
+function _setProvidersMessageInGrid(text) {
+  const grid = document.getElementById('providerGrid');
+  if (grid) grid.innerHTML = `<p style="color:var(--text-dim)">${esc(text)}</p>`;
+  _applyProviderView();
+}
+
+_listViewViable.addEventListener('change', () => renderProviders());
 
 function setProviderView(mode) {
   _providerViewMode = mode;
   localStorage.setItem('provider-view', mode);
   _updateViewToggle();
-  _applyProviderView();
+  renderProviders();
 }
 
 function _updateViewToggle() {
@@ -923,20 +968,17 @@ function _capBadgesHtml(caps, {compact = false} = {}) {
   return caps.map(c => {
     const cls = typeMap[c] || `cap-badge-${c}`;
     const icon = _CAP_ICONS[c] || '';
+    const label = capLabel(c);
     return compact && icon
-      ? `<span class="cap-badge ${cls}" title="${esc(c.toUpperCase())}">${icon}</span>`
-      : `<span class="cap-badge ${cls}">${icon}${esc(c.toUpperCase())}</span>`;
+      ? `<span class="cap-badge ${cls}" title="${esc(label)}">${icon}</span>`
+      : `<span class="cap-badge ${cls}">${icon}${esc(label)}</span>`;
   }).join('');
 }
 
 function _countModelsForProvider(provName) {
-  if (!S.configData) return 0;
-  let count = 0;
-  for (const [, info] of Object.entries(S.configData.models || {})) {
-    const prov = typeof info === 'string' ? info : info.provider;
-    if (prov === provName) count++;
-  }
-  return count;
+  // A model served by several providers counts for each of them: the card's
+  // number is "models this provider can serve", not "models it owns".
+  return _modelsForProvider(provName).length;
 }
 
 function goToModelsForProvider(provName) {
@@ -973,7 +1015,6 @@ function goToProviderFromModel(provName) {
 function renderProviders() {
   // Also reached from applyI18n(), so the collapsed summary is re-translated
   // on a language switch.
-  _syncServerSettingsSummary();
   const grid = document.getElementById('providerGrid');
   const providers = S.configData.providers || {};
   const allEntries = Object.entries(providers);
@@ -988,7 +1029,7 @@ function renderProviders() {
   renderFreeSourceButtons();
 
   if (totalCount === 0) {
-    grid.innerHTML = `<p style="color:var(--text-dim)">${t('empty.providers')}</p>`;
+    _setProvidersMessage(t('empty.providers'));
     document.getElementById('providerCount').textContent = '';
     return;
   }
@@ -1024,14 +1065,14 @@ function renderProviders() {
   const shimDefaults = Object.fromEntries(registeredShims.map(s => [s.name, s]));
 
   if (entries.length === 0) {
-    grid.innerHTML = `<p style="color:var(--text-dim)">${t('empty.searchResults')}</p>`;
+    _setProvidersMessage(t('empty.searchResults'));
     return;
   }
 
-  // One markup shape for both views — layout is decided entirely by CSS.
-  // See design/ui/provider-list-responsive.html and issue #611.
-  grid.innerHTML = '';
-  const cardHtml = ([name, cfg]) => {
+  // Two renderings from one computation: a table row for the list view (a real
+  // <table>, like the model list, so the header, the column widths and the row
+  // hover come from the shared table CSS) and a card for the grid view.
+  const pieces = ([name, cfg]) => {
     const enabled = cfg.enabled !== false;
     const autoDisabled = !enabled && cfg._auto_disabled &&
       typeof cfg._auto_disabled === 'object';
@@ -1059,11 +1100,9 @@ function renderProviders() {
         ? `<img class="pc-logo" src="${esc(logo)}" alt="">`
         : '<span class="pc-logo pc-logo-empty"></span>';
     const shim = shimDefaults[typeName] || {};
-    // Base type shown as a badge beside the logo: the shim's declared base, or
-    // the type name itself when it is a bare vendor-neutral base format.
-    const baseType = shim.base || (
-      ((S.configData && S.configData.base_formats) || []).some(b => b.name === typeName)
-        ? typeName : '');
+    // The card names the provider and its capabilities only: the wire format
+    // repeats what the capability badges and the base URL already say, and a
+    // single provider can serve several formats at once (#611).
     const baseUrl = cfg.base_url || '';
     const shimBaseUrl = !baseUrl && shim.default_base_url ? shim.default_base_url : '';
     let apiKeyDisplay = cfg.api_key || '';
@@ -1081,51 +1120,89 @@ function renderProviders() {
     const isFree = _isFreeProvider(name);
     const title = isFree ? _freeTitle(name) : name;
     const modelCount = _countModelsForProvider(name);
-    const modelLink = modelCount > 0
-      ? `<span class="pc-models" onclick="goToModelsForProvider('${esc(name)}')">${modelCount} model${modelCount !== 1 ? 's' : ''} →</span>`
+    const nameTitle = isFree ? t('free.disclosure') : (baseUrl || shimBaseUrl || name);
+    const toggleHtml = `<label class="pc-toggle toggle" title="${enabled ? t('provider.enabled') : t('provider.disabled')}">
+        <input type="checkbox" ${enabled ? 'checked' : ''} role="switch" aria-checked="${enabled}" aria-label="${esc(name)}" onchange="this.setAttribute('aria-checked',this.checked);toggleProvider('${esc(name)}')">
+        <span class="slider"></span>
+      </label>`;
+    const actionsHtml = `<div class="pc-actions">
+          <button class="btn btn-sm" aria-label="${t('btn.edit')} ${esc(name)}" onclick="editProvider('${esc(name)}')">${t('btn.edit')}</button>
+          <button class="btn btn-sm btn-test-conn" aria-label="${t('btn.test')} ${esc(name)}" onclick="testProviderConnectivity('${esc(name)}')">${t('btn.test')}</button>
+          <button class="btn btn-sm more-menu-toggle" aria-haspopup="true" aria-expanded="false" aria-label="${t('btn.more')} ${esc(name)}" onclick="toggleMoreMenu(this)">&#8943;</button>
+          <div class="more-menu" role="menu">
+            <div class="more-menu-item" role="menuitem" onclick="closeMenus();copyProviderEntry('${esc(name)}')">${t('btn.clone')}</div>
+            ${isFree ? `<div class="more-menu-item" role="menuitem" onclick="closeMenus();refreshFreeModels('${esc(name)}')">${t('btn.refreshModels')}</div>` : ''}
+            <div class="more-menu-item" role="menuitem" onclick="closeMenus();showProviderQuota('${esc(name)}')">${t('btn.quota')}</div>
+            <div class="more-menu-sep"></div>
+            <div class="more-menu-item danger" role="menuitem" onclick="closeMenus();deleteProvider('${esc(name)}')">${t('btn.delete')}</div>
+          </div>
+        </div>`;
+    return {
+      name, cfg, enabled, isFree, title, nameTitle,
+      autoDisabled, autoWarningTitle, degraded, degradedHtml, logoHtml,
+      capsHtml: _capBadgesHtml(_getProviderCaps(cfg, name), { compact: true }),
+      // A card has room for the name of a capability; the table's 150px column
+      // does not, so it keeps the icon alone and the name in the tooltip.
+      capsHtmlFull: _capBadgesHtml(_getProviderCaps(cfg, name), { compact: false }),
+      toggleHtml, actionsHtml, modelCount, apiKeyField,
+    };
+  };
+
+  const cardHtml = ([name, cfg]) => {
+    const p = pieces([name, cfg]);
+    const modelLink = p.modelCount > 0
+      ? `<span class="pc-models" onclick="goToModelsForProvider('${esc(name)}')" title="${esc(p.modelCount + ' ' + t('col.models'))}"><span class="pc-models-n">${p.modelCount}</span><span class="pc-models-unit"> ${p.modelCount === 1 ? t('unit.model') : t('unit.models')} →</span></span>`
       : '<span class="pc-models pc-models-empty"></span>';
     return `
-    <div class="provider-card${enabled ? '' : ' disabled'}${autoDisabled ? ' auto-disabled' : ''}${degraded.length ? ' endpoint-degraded' : ''}" data-provider="${esc(name)}">
+    <div class="provider-card${p.enabled ? '' : ' disabled'}${p.autoDisabled ? ' auto-disabled' : ''}${p.degraded.length ? ' endpoint-degraded' : ''}" data-provider="${esc(name)}">
       <div class="pc-head">
-        <div class="pc-name"${isFree ? ` title="${esc(t('free.disclosure'))}"` : ''}>${logoHtml}<span class="pc-name-text">${esc(title)}</span>${baseType ? `<span class="pc-base-badge" title="${esc(baseType)}">${esc(baseType)}</span>` : ''}</div>
-        <label class="pc-toggle toggle" title="${enabled ? t('provider.enabled') : t('provider.disabled')}">
-          <input type="checkbox" ${enabled ? 'checked' : ''} role="switch" aria-checked="${enabled}" aria-label="${esc(name)}" onchange="this.setAttribute('aria-checked',this.checked);toggleProvider('${esc(name)}')">
-          <span class="slider"></span>
-        </label>
+        <div class="pc-name" title="${esc(p.nameTitle)}">${p.logoHtml}<span class="pc-name-text">${esc(p.title)}</span></div>
       </div>
-      <div class="pc-validation-warning" role="status" aria-hidden="true" title="${autoDisabled ? esc(autoWarningTitle) : ''}">${autoDisabled ? esc(autoWarningTitle) : ''}</div>
-      ${degradedHtml}
-      <div class="pc-badges">${_capBadgesHtml(_getProviderCaps(cfg, name), {compact: true})}</div>
-      <div class="pc-meta">
-        <div class="pc-field" data-label="${t('card.type')}" title="${esc(typeName)}"><code>${esc(typeName)}</code></div>
-        <div class="pc-field" data-label="${t('card.baseUrl')}" title="${esc(baseUrl || shimBaseUrl)}">${shimBaseUrl && !baseUrl
-          ? `<code class="text-muted">${esc(shimBaseUrl)}</code>`
-          : `<code>${esc(baseUrl)}</code>`}</div>
-        ${apiKeyField}
-      </div>
-      ${isFree ? `<div class="pc-free-note">${esc(t('free.disclosure'))}</div>` : ''}
-      <div class="pc-actions">
-        <button class="btn btn-sm" aria-label="${t('btn.clone')} ${esc(name)}" onclick="copyProviderEntry('${esc(name)}')">${t('btn.clone')}</button>
-        <button class="btn btn-sm" aria-label="${t('btn.edit')} ${esc(name)}" onclick="editProvider('${esc(name)}')">${t('btn.edit')}</button>
-        ${isFree ? `<button class="btn btn-sm btn-refresh-models" aria-label="${t('btn.refreshModels')} ${esc(name)}" onclick="refreshFreeModels('${esc(name)}')">${t('btn.refreshModels')}</button>` : ''}
-        <button class="btn btn-sm btn-test-conn" aria-label="${t('btn.test')} ${esc(name)}" onclick="testProviderConnectivity('${esc(name)}')">${t('btn.test')}</button>
-        <button class="btn btn-sm btn-quota" aria-label="${t('btn.quota')} ${esc(name)}" onclick="showProviderQuota('${esc(name)}')">${t('btn.quota')}</button>
-        <button class="btn btn-sm btn-danger" aria-label="${t('btn.delete')} ${esc(name)}" onclick="deleteProvider('${esc(name)}')">${t('btn.delete')}</button>
+      ${p.toggleHtml}
+      <div class="pc-validation-warning" role="status" aria-hidden="true" title="${p.autoDisabled ? esc(p.autoWarningTitle) : ''}">${p.autoDisabled ? esc(p.autoWarningTitle) : ''}</div>
+      ${p.degradedHtml}
+      <div class="pc-badges">${p.capsHtmlFull}</div>
+      ${p.apiKeyField ? `<div class="pc-meta">${p.apiKeyField}</div>` : ''}
+      ${p.isFree ? `<div class="pc-free-note">${esc(t('free.disclosure'))}</div>` : ''}
+      <div class="pc-foot">
+        ${p.actionsHtml}
         ${modelLink}
       </div>
     </div>`;
   };
+
+  const rowHtml = ([name, cfg]) => {
+    const p = pieces([name, cfg]);
+    return `
+    <tr class="provider-row${p.enabled ? '' : ' disabled'}${p.autoDisabled ? ' auto-disabled' : ''}${p.degraded.length ? ' endpoint-degraded' : ''}" data-provider="${esc(name)}">
+      <td class="pc-col-name">
+        <div class="pc-name" title="${esc(p.nameTitle)}">${p.logoHtml}<span class="pc-name-text">${esc(p.title)}</span>${p.autoDisabled ? `<span class="pc-row-warning" title="${esc(p.autoWarningTitle)}">&#9888;</span>` : ''}</div>
+        ${p.degradedHtml}
+      </td>
+      <td class="pc-col-cap"><div class="pc-badges">${p.capsHtml}</div></td>
+      <td class="pc-col-toggle">${p.toggleHtml}</td>
+      <td class="pc-col-num">${p.modelCount > 0
+        ? `<span class="pc-models" onclick="goToModelsForProvider('${esc(name)}')" title="${esc(p.modelCount + ' ' + t('col.models'))}">${p.modelCount}</span>`
+        : ''}</td>
+      <td class="pc-col-actions">${p.actionsHtml}</td>
+    </tr>`;
+  };
+
   // Free sources get their own section; regular providers follow.
   const freeEntries = entries.filter(([name]) => _isFreeProvider(name));
   const regularEntries = entries.filter(([name]) => !_isFreeProvider(name));
-  const sectionHead = label => `<div class="provider-section-head">${esc(label)}</div>`;
+  const isList = _isListView();
+  const render = isList ? rowHtml : cardHtml;
+  const sectionHead = label => isList
+    ? `<tr class="provider-section-row"><td colspan="5">${esc(label)}</td></tr>`
+    : `<div class="provider-section-head">${esc(label)}</div>`;
   const parts = [];
   if (freeEntries.length) {
-    parts.push(sectionHead(t('free.section')), ...freeEntries.map(cardHtml));
+    parts.push(sectionHead(t('free.section')), ...freeEntries.map(render));
   }
   if (freeEntries.length && regularEntries.length) parts.push(sectionHead(t('provider.section')));
-  parts.push(...regularEntries.map(cardHtml));
-  grid.innerHTML = parts.join('');
+  parts.push(...regularEntries.map(render));
+  _setProviderMarkup(parts.join(''));
 }
 
 // ── Provider CRUD ───────────────────────────────────────────────────
@@ -1180,7 +1257,7 @@ async function saveProvider() {
   }
   const res = await api.put(`/admin/api/config/providers/${encodeURIComponent(name)}`, body);
   if (res.ok) { showToast(t('toast.providerSaved',{name})); closeModal('providerModal'); loadConfig(); }
-  else { showToast(res.error || 'Failed', 'error'); }
+  else { showToast(res.error || t('toast.error'), 'error'); }
 }
 
 function deleteProvider(name) {
@@ -1247,7 +1324,7 @@ async function confirmDeleteProvider() {
       showToast(t('toast.providerDeleted',{name}));
     }
     loadConfig();
-  } else { showToast(res.error || 'Failed', 'error'); }
+  } else { showToast(res.error || t('toast.error'), 'error'); }
 }
 
 async function toggleProvider(name) {
@@ -1256,7 +1333,7 @@ async function toggleProvider(name) {
     const stateKey = res.enabled ? 'provider.enabled' : 'provider.disabled';
     showToast(`${name}: ${t(stateKey)}`);
     loadConfig();
-  } else { showToast(res.error || 'Failed', 'error'); }
+  } else { showToast(res.error || t('toast.error'), 'error'); }
 }
 
 function editProvider(name) {
@@ -1279,41 +1356,25 @@ function editProvider(name) {
 
 function copyProviderEntry(name) {
   const cfg = S.configData.providers[name] || {};
-  // Open Add Provider modal pre-filled with non-sensitive fields; API key is intentionally omitted
+  // Open the add form pre-filled with non-sensitive fields; API key is
+  // intentionally omitted.  The name is pre-filled too: a clone is a new entry,
+  // so the operator confirms a name instead of inventing one.
   openProviderModal('', cfg.base_url, '', cfg.proxy, providerTypeName(cfg, name));
+  const nameEl = document.getElementById('provName');
+  if (nameEl) {
+    nameEl.value = `${name} ${t('clone.suffix')}`;
+    nameEl.focus();
+    nameEl.select();
+  }
 }
 
 // ── Server settings ─────────────────────────────────────────────────
-
-// The collapsed header states the effective proxy, so the common case
-// ("no proxy") needs no click to read.
-function _syncServerSettingsSummary() {
-  const el = document.getElementById('serverSettingsSummary');
-  if (!el) return;
-  const proxy = (S.configData && S.configData.server && S.configData.server.proxy) || '';
-  // The collapsed header sits above the provider list on the landing tab, so
-  // it shows the endpoint without any credentials embedded in the URL.  The
-  // input and the saved value keep the full string.
-  const shown = proxy.replace(/\/\/[^@/]*@/, '//');
-  el.textContent = shown || t('server.proxyNone');
-  el.title = shown;
-}
-
-// Remember whether the operator left the panel open across reloads.
-(function initServerSettingsPanel() {
-  const el = document.getElementById('serverSettings');
-  if (!el) return;
-  el.open = localStorage.getItem('llm-rosetta-server-settings-open') === '1';
-  el.addEventListener('toggle', () => {
-    localStorage.setItem('llm-rosetta-server-settings-open', el.open ? '1' : '0');
-  });
-})();
 
 async function saveServerSettings() {
   const proxy = document.getElementById('globalProxy').value.trim();
   const res = await api.put('/admin/api/config/server', {proxy});
   if (res.ok) { showToast(t('toast.serverSaved')); loadConfig(); }
-  else { showToast(res.error || 'Failed', 'error'); }
+  else { showToast(res.error || t('toast.error'), 'error'); }
 }
 
 async function runNetDiag() {
@@ -1329,9 +1390,9 @@ async function runNetDiag() {
     const googleInfo = data.google || {};
     // Store detected host IP for provider form hints
     if (hostInfo.ok) window._detectedHostIp = hostInfo.ip;
-    const proxyText = data.proxy ? `(via ${esc(data.proxy)})` : `(${t('diag.direct')})`;
+    const proxyText = data.proxy ? t('diag.via', {proxy: esc(data.proxy)}) : `(${t('diag.direct')})`;
     const ipText = ipInfo.ok ? `${ipInfo.ip} (${ipInfo.city}, ${ipInfo.country})` : (ipInfo.error || t('diag.unknown'));
-    const googleText = googleInfo.ok ? 'OK' : (googleInfo.error || 'unreachable');
+    const googleText = googleInfo.ok ? t('diag.ok') : (googleInfo.error || t('diag.unreachable'));
     el.innerHTML = `
       <span class="diag-item" style="color:var(--text-dim);font-size:11px">${proxyText}</span>
       <span class="diag-item"><span class="diag-dot ${ipInfo.ok ? 'ok' : 'fail'}"></span>${t('diag.ip')}: ${esc(ipText)}</span>
@@ -1355,10 +1416,13 @@ async function loadConfig(prefetchedData) {
       _buildProviderSegControls();
     }
     const cpEl = document.getElementById('configPath');
-    const fullPath = S.configData.config_path || '';
-    cpEl.textContent = fullPath.split('/').pop() || fullPath;
+    // It sits in the settings page now, where the whole path is the point.
+    const fullPath = S.configData.config_path_full
+      || S.configData.config_path || '';
+    cpEl.textContent = fullPath;
     cpEl.title = fullPath;
     document.getElementById('globalProxy').value = (S.configData.server && S.configData.server.proxy) || '';
+    window.applyAdminCustomCss?.(S.configData.server?.admin_custom_css);
     renderProviders();
     applyProviderHealth();
     window.renderModels();
@@ -1367,12 +1431,16 @@ async function loadConfig(prefetchedData) {
       api.get('/admin/api/diagnostics/host-ip').then(data => {
         if (data.ok) {
           window._detectedHostIp = data.ip;
-          document.getElementById('globalProxy').placeholder = `e.g. http://${data.ip}:7890`;
+          document.getElementById('globalProxy').placeholder = t('placeholder.proxyHost', {host: data.ip});
         }
       }).catch(() => {});
     }
   } catch(e) {
-    console.error('Failed to load config:', e);
+    // While the login overlay is up a 401 is the expected answer: the signed-in
+    // path loads the config again after sign-in, so this is not a failure.
+    if (!document.body.classList.contains('auth-pending')) {
+      console.error('Failed to load config:', e);
+    }
   }
 }
 
@@ -1398,7 +1466,7 @@ async function applyProviderHealth() {
   try {
     const data = await api.get('/admin/api/metrics?seconds=60');
     const health = data.providers || {};
-    document.querySelectorAll('.provider-card[data-provider]').forEach(card => {
+    document.querySelectorAll('#providerGrid .provider-card[data-provider], #providerTableBody tr[data-provider]').forEach(card => {
       card.classList.remove('health-ok', 'health-warn', 'health-critical', 'health-nodata');
       const name = card.dataset.provider;
       const stats = health[name];
@@ -1519,17 +1587,17 @@ async function testProviderConnectivity(name) {
     const r = await api.post(`/admin/api/config/providers/${encodeURIComponent(name)}/test-connectivity`, {});
     const lines = [];
     if (r.reachable) {
-      lines.push(`<div class="conn-row"><span class="conn-ok"></span><span class="conn-label">${esc(name)}</span><span class="conn-detail">connected</span></div>`);
+      lines.push(`<div class="conn-row"><span class="conn-ok"></span><span class="conn-label">${esc(name)}</span><span class="conn-detail">${t('diag.connected')}</span></div>`);
     } else {
-      lines.push(`<div class="conn-row"><span class="conn-fail"></span><span class="conn-label">${esc(name)}</span><span class="conn-detail">${esc(r.base_error || 'connection failed')}</span></div>`);
+      lines.push(`<div class="conn-row"><span class="conn-fail"></span><span class="conn-label">${esc(name)}</span><span class="conn-detail">${esc(r.base_error || t('diag.connectionFailed'))}</span></div>`);
     }
     const eps = r.endpoints || {};
     for (const [ep, info] of Object.entries(eps)) {
       if (info.ok) {
         lines.push(`<div class="conn-row"><span class="conn-ok"></span><span class="conn-label">${esc(ep)}</span><span class="conn-detail">ok</span></div>`);
       } else {
-        const reason = esc(info.status ? `${info.status}` : (info.error || 'failed'));
-        lines.push(`<div class="conn-row"><span class="conn-warn"></span><span class="conn-label">${esc(ep)}</span><span class="conn-detail">${reason} (may not be supported by this provider)</span></div>`);
+        const reason = esc(info.status ? `${info.status}` : (info.error || t('diag.failed')));
+        lines.push(`<div class="conn-row"><span class="conn-warn"></span><span class="conn-label">${esc(ep)}</span><span class="conn-detail">${reason} ${t('diag.maybeUnsupported')}</span></div>`);
       }
     }
     if (r.warnings?.length) {
@@ -1539,7 +1607,7 @@ async function testProviderConnectivity(name) {
     }
     showToastHtml(lines.join(''), r.reachable ? 'success' : 'error');
   } catch (e) {
-    showToast(`Test failed: ${e.message || e}`, 'error');
+    showToast(t('toast.testFailed', {msg: e.message || e}), 'error');
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = t('btn.test'); }
   }

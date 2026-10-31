@@ -16,6 +16,7 @@ from llm_rosetta_gateway.config import GatewayConfig
 from llm_rosetta_gateway.shim_sources import (
     apply_shim_section,
     apply_shim_sources,
+    resolve_disabled,
     resolve_source_config,
     shims_signature,
 )
@@ -240,3 +241,49 @@ class TestAdminHelpers:
     def test_validate_rejects_bad_body(self, body, tmp_path: Path):
         cfg = str(tmp_path / "config.jsonc")
         assert _validate_shim_sources_body(body, cfg) is not None
+
+
+class TestDisabledShims:
+    """``shims.disabled`` drops a name after its source registers it."""
+
+    def test_empty_and_missing(self):
+        assert resolve_disabled(None) == []
+        assert resolve_disabled({}) == []
+        assert resolve_disabled({"disabled": []}) == []
+
+    def test_names_are_kept_in_order(self):
+        assert resolve_disabled({"disabled": ["b", "a"]}) == ["b", "a"]
+
+    @pytest.mark.parametrize("section", [{"disabled": "a"}, {"disabled": [1]}])
+    def test_bad_shape_raises(self, section):
+        with pytest.raises(ValueError, match="shims.disabled"):
+            resolve_disabled(section)
+
+    def test_disabled_shim_leaves_the_registry(self, tmp_path: Path):
+        from llm_rosetta.shims import get_shim
+
+        _write_provider(tmp_path, "acme", "acme--chat_completions")
+        report = apply_shim_section(
+            {"paths": [str(tmp_path)], "disabled": ["acme--chat_completions"]}
+        )
+
+        assert get_shim("acme--chat_completions") is None
+        assert report.sources[0].shim_count == 0
+        assert report.sources[0].shim_names == ()
+
+    def test_removing_the_name_brings_the_shim_back(self, tmp_path: Path):
+        from llm_rosetta.shims import get_shim
+
+        _write_provider(tmp_path, "acme", "acme--chat_completions")
+        apply_shim_section(
+            {"paths": [str(tmp_path)], "disabled": ["acme--chat_completions"]}
+        )
+        apply_shim_section({"paths": [str(tmp_path)]})
+
+        assert get_shim("acme--chat_completions") is not None
+
+    def test_a_disabled_name_the_sources_do_not_have_is_harmless(self):
+        report = apply_shim_section({"disabled": ["nope--chat_completions"]})
+
+        assert report.failures() == []
+        assert report.sources == []

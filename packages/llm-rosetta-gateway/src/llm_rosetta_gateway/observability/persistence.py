@@ -421,6 +421,16 @@ class PersistenceManager:
                 "ON request_log(request_id)",
             ],
         ),
+        (
+            8,
+            "add request_log.ttft_ms so a stream's generation rate is measurable",
+            [
+                # The stream path already measured time to first chunk; it
+                # kept it in the profile JSON, where no query could reach it
+                # without parsing every row.
+                "ALTER TABLE request_log ADD COLUMN ttft_ms REAL",
+            ],
+        ),
     ]
 
     async def _run_migrations(self) -> None:
@@ -589,6 +599,7 @@ class PersistenceManager:
         "api_key_bucket",
         "model_type",
         "request_id",
+        "ttft_ms",
     ]
 
     async def insert_log_entries(self, entries: list[dict[str, Any]]) -> None:
@@ -602,8 +613,8 @@ class PersistenceManager:
             "target_provider_name, client_ip, profile, "
             "input_tokens, output_tokens, total_tokens, "
             "cache_read_tokens, cache_creation_tokens, reasoning_tokens, "
-            "api_key_bucket, model_type, request_id) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "api_key_bucket, model_type, request_id, ttft_ms) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 (
                     e["id"],
@@ -632,6 +643,9 @@ class PersistenceManager:
                     # reconcile.
                     e.get("model_type") or DEFAULT_MODEL_TYPE,
                     e.get("request_id"),
+                    # Absent on a non-stream row and on every row written
+                    # before the column existed.
+                    e.get("ttft_ms"),
                 )
                 for e in entries
             ],
@@ -1938,6 +1952,23 @@ class PersistenceManager:
         if pruned > 0 and self.on_prune is not None:
             await self.on_prune("request_log", pruned)
 
+    async def update_entry_ttft(self, entry_id: str, ttft_ms: float) -> None:
+        """Record time-to-first-token on an existing log entry.
+
+        The row is written when the handler returns, before the response body
+        runs, so a stream's first chunk arrives afterwards.
+
+        Args:
+            entry_id: The log entry ID to update.
+            ttft_ms: Milliseconds from the upstream request to its first
+                stream chunk.
+        """
+        await self._conn.execute(
+            "UPDATE request_log SET ttft_ms = ? WHERE id = ?",
+            (float(ttft_ms), entry_id),
+        )
+        await self._conn.commit()
+
     async def update_entry_profile(
         self, entry_id: str, profile_update: dict[str, Any]
     ) -> None:
@@ -2085,6 +2116,89 @@ class PersistenceManager:
             "cache_creation_tokens_24h": row[3],
             "reasoning_tokens_24h": row[4],
             "total_tokens_24h": row[5],
+        }
+
+    async def query_request_histogram(
+        self, minutes: int = 300, buckets: int = 60
+    ) -> dict[str, Any]:
+        """Count requests per time bucket over the retained request log.
+
+        The in-memory series holds five minutes at one-second resolution, so
+        anything longer has to come from the log.  The window is clipped to
+        the retention caps: a bucket older than the oldest kept row reads zero
+        because the row is gone, not because no request arrived.
+
+        Args:
+            minutes: Window length, at most seven days.
+            buckets: Number of equal buckets in the window, at most 240.
+
+        Returns:
+            A mapping with the window description and one entry per bucket:
+            ``count``, ``errors``, ``output_tokens`` and ``duration_ms``.
+        """
+        from datetime import datetime, timedelta, timezone
+
+        minutes = max(1, min(int(minutes), 7 * 24 * 60))
+        buckets = max(1, min(int(buckets), 240))
+        now = datetime.now(timezone.utc)
+        start = now - timedelta(minutes=minutes)
+        start_epoch = int(start.timestamp())
+        width = max(1, int(minutes * 60 / buckets))
+
+        rows = await self._conn.execute_fetchall(
+            "SELECT CAST((CAST(strftime('%s', timestamp) AS INTEGER) - ?) / ? "
+            "AS INTEGER) AS b, "
+            "COUNT(*), "
+            "COALESCE(SUM(CASE WHEN status_code >= 400 THEN 1 ELSE 0 END), 0), "
+            "COALESCE(SUM(output_tokens), 0), "
+            "COALESCE(SUM(duration_ms), 0) "
+            "FROM request_log WHERE timestamp >= ? "
+            "GROUP BY b ORDER BY b",
+            (start_epoch, width, start.isoformat()),
+        )
+        # A row in the sliver after the last whole bucket (a window that does
+        # not divide evenly) still belongs to the chart: fold it into the last
+        # bucket rather than drop it.
+        by_index: dict[int, Any] = {}
+        for row in rows:
+            if row[0] is None:
+                continue
+            idx = min(max(int(row[0]), 0), buckets - 1)
+            prev = by_index.get(idx)
+            if prev is None:
+                by_index[idx] = row
+            else:
+                by_index[idx] = (
+                    idx,
+                    prev[1] + row[1],
+                    prev[2] + row[2],
+                    prev[3] + row[3],
+                    prev[4] + row[4],
+                )
+
+        series = []
+        total = 0
+        for i in range(buckets):
+            row = by_index.get(i)
+            count = int(row[1]) if row else 0
+            total += count
+            series.append(
+                {
+                    "t": (start + timedelta(seconds=i * width)).isoformat(),
+                    "count": count,
+                    "errors": int(row[2]) if row else 0,
+                    "output_tokens": int(row[3]) if row else 0,
+                    "duration_ms": float(row[4]) if row else 0.0,
+                }
+            )
+
+        return {
+            "minutes": minutes,
+            "bucket_seconds": width,
+            "start": start.isoformat(),
+            "end": now.isoformat(),
+            "total": total,
+            "buckets": series,
         }
 
     async def query_usage_groups(self) -> dict[str, Any]:
@@ -2308,6 +2422,7 @@ class PersistenceManager:
                     "reasoning_tokens",
                     "api_key_bucket",
                     "request_id",
+                    "ttft_ms",
                 )
                 and val is None
             ):

@@ -225,11 +225,11 @@ function renderKeys() {
       : t('keys.count', {count: allKeys.length});
   }
   if (allKeys.length === 0 && extraRows.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="8" style="color:var(--text-dim)">${t('keys.noKeys')}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" style="color:var(--text-dim)">${t('keys.noKeys')}</td></tr>`;
     return;
   }
   if (keys.length === 0 && extraRows.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="8" style="color:var(--text-dim)">${t('keys.noMatch')}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" style="color:var(--text-dim)">${t('keys.noMatch')}</td></tr>`;
     return;
   }
   const usageKeys = (S.keyUsage && S.keyUsage.keys) || {};
@@ -248,8 +248,9 @@ function renderKeys() {
       ? `<span title="${esc(t('keys.sharedLabelHint'))}" style="color:var(--orange);margin-left:4px;cursor:help">⚠</span>`
       : '';
     return `<tr role="row">
+      <td class="col-check" role="cell"><input type="checkbox" class="row-check key-check" data-key="${esc(k.id)}" onchange="updateKeyBulk()"${(S._selectedKeyIds || new Set()).has(String(k.id)) ? ' checked' : ''}></td>
       <td class="key-label-cell" role="cell" aria-labelledby="keySortLabel"><span class="key-label-text" id="label-${k.id}">${esc(k.label || '—')}</span>
-        <button class="key-btn" style="margin-left:4px" onclick="editKeyLabel('${k.id}')" title="Edit"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button>${sharedMark}</td>
+        <button class="key-btn" style="margin-left:4px" onclick="editKeyLabel('${k.id}')" title="${esc(t('btn.edit'))}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button>${sharedMark}</td>
       <td class="key-created-cell" role="cell" aria-labelledby="keySortCreated" data-label="${esc(t('col.created'))}" title="${createdFull}">${created}</td>
       <td class="key-lastused-cell" role="cell" aria-labelledby="keySortLastUsed" data-label="${esc(t('col.lastUsed'))}" title="${lastUsedFull}">${lastUsed}</td>
       <td class="key-requests-cell" role="cell" aria-labelledby="keySortRequests" data-label="${esc(t('col.requests'))}" title="${usageTip}">${reqs}</td>
@@ -259,7 +260,72 @@ function renderKeys() {
       <td class="key-actions-cell" role="cell" style="white-space:nowrap"><button class="btn btn-sm" onclick="rotateKey('${k.id}','${esc(k.label || k.id)}', this)">${t('btn.rotate')}</button> <button class="btn btn-sm btn-danger" onclick="deleteKey('${k.id}','${esc(k.label || k.id)}', this)">${t('btn.delete')}</button></td>
     </tr>`;
   }).join('') + extraRows.join('');
+  // The rows are new; the selection is not. Keep the bar honest about it.
+  updateKeyBulk();
 }
+
+/** Bulk selection over the key rows.  A key has no batch endpoint, so the
+ *  delete runs one call per selected key and reports what actually went. */
+// Selection is a set of ids, not a set of checkboxes: the table re-renders
+// after every load, and a selection that vanishes on a refresh is useless.
+if (!S._selectedKeyIds) S._selectedKeyIds = new Set();
+
+function _keysOnPage() {
+  return [...document.querySelectorAll('#keysTable .key-check')];
+}
+
+/** The header box means "every key on this page". */
+function selectAllKeys(cb) {
+  _keysOnPage().forEach(c => {
+    c.checked = cb.checked;
+    if (cb.checked) S._selectedKeyIds.add(String(c.dataset.key));
+    else S._selectedKeyIds.delete(String(c.dataset.key));
+  });
+  updateKeyBulk();
+}
+
+function updateKeyBulk() {
+  _keysOnPage().forEach(c => {
+    if (c.checked) S._selectedKeyIds.add(String(c.dataset.key));
+    else S._selectedKeyIds.delete(String(c.dataset.key));
+  });
+  const n = S._selectedKeyIds.size;
+  const bar = document.getElementById('keyBulkBar');
+  document.getElementById('keyBulkCount').textContent = n;
+  if (bar) bar.style.display = n > 0 ? 'flex' : 'none';
+  const onPage = _keysOnPage();
+  const head = document.querySelector('#keysTableEl thead .row-check');
+  if (head) head.checked = onPage.length > 0 && onPage.every(c => c.checked);
+}
+
+function clearKeySelection() {
+  S._selectedKeyIds.clear();
+  document.querySelectorAll('#keysTable .key-check').forEach(c => { c.checked = false; });
+  const head = document.querySelector('#keysTableEl thead .row-check');
+  if (head) head.checked = false;
+  updateKeyBulk();
+}
+window.clearKeySelection = clearKeySelection;
+
+async function bulkDeleteKeys() {
+  const ids = [...S._selectedKeyIds];
+  if (!ids.length) return;
+  if (!confirm(t('confirm.bulkDelete', {count: ids.length}))) return;
+  let ok = 0;
+  for (const id of ids) {
+    try {
+      const res = await api.del(`/admin/api/keys/${encodeURIComponent(id)}`);
+      if (res.ok) ok += 1;
+    } catch (_) { /* counted by omission */ }
+  }
+  showToast(t('toast.bulkDone', {action: 'delete', count: ok}));
+  clearKeySelection();
+  loadKeys();
+}
+
+window.selectAllKeys = selectAllKeys;
+window.updateKeyBulk = updateKeyBulk;
+window.bulkDeleteKeys = bulkDeleteKeys;
 
 function openKeyModal() {
   document.getElementById('keyLabel').value = '';
@@ -281,7 +347,7 @@ async function generateKey() {
     openModal('keyCreatedModal');
     loadKeys();
   } else {
-    showToast(res.error || 'Failed', 'error');
+    showToast(res.error || t('toast.error'), 'error');
   }
 }
 
@@ -291,14 +357,14 @@ async function copyCreatedKey() {
     await navigator.clipboard.writeText(input.value);
     showToast(t('toast.keyCopied'));
   } catch(e) {
-    showToast('Copy failed', 'error');
+    showToast(t('toast.copyFailed'), 'error');
   }
 }
 
 async function _doDeleteKey(id, label) {
   const res = await api.del(`/admin/api/keys/${encodeURIComponent(id)}`);
   if (res.ok) { showToast(t('toast.keyDeleted')); loadKeys(); }
-  else { showToast(res.error || 'Failed', 'error'); }
+  else { showToast(res.error || t('toast.error'), 'error'); }
 }
 
 // The row's label span is the source of truth: embedding the label in the
@@ -335,7 +401,7 @@ async function saveKeyLabel() {
     showToast(t('toast.keyLabelUpdated'));
     loadKeys();
   } else {
-    showToast(res.error || 'Failed', 'error');
+    showToast(res.error || t('toast.error'), 'error');
   }
 }
 
@@ -354,7 +420,7 @@ function rotateKey(id, label, btn) {
       openModal('keyCreatedModal');
       loadKeys();
     } else {
-      showToast(res.error || 'Failed', 'error');
+      showToast(res.error || t('toast.error'), 'error');
     }
   });
 }
@@ -365,7 +431,7 @@ async function backfillKeysLastUsed() {
     if (res && res.error) { showToast(res.error, 'error'); return; }
     showToast(t('toast.keysBackfilled').replace('{n}', res.updated || 0));
     if (res.updated > 0) loadKeys();
-  } catch(e) { showToast('Backfill failed', 'error'); }
+  } catch(e) { showToast(t('toast.backfillFailed'), 'error'); }
 }
 
 Object.assign(window, {

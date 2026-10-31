@@ -4,6 +4,7 @@ import { wireSortableHeaders } from './sort.js';
 import { isSegActivationKey, segKeyTargetIndex } from './seg.js';
 import {
   setScheme, setMode, setTheme, api, showToast, closeModal, esc, closeMenus,
+  paintThemeButton,
   _startInactivityTracking, _stopInactivityTracking,
 } from './utils.js';
 import { checkAuthAndInit, showLoginOverlay, openSettings } from './auth.js';
@@ -18,6 +19,14 @@ import { renderShimSources } from '../tabs/shims.js';
 import '../components/test-runner.js';
 import { initLogoPicker } from '../components/logo-picker.js';
 import { initTypePicker } from '../components/type-picker.js';
+
+// A #dump/<id> link is its own screen in this app, so the session check that
+// guards every other screen guards it too.  Captured before any tab
+// activation rewrites the hash.
+const _dumpRoute = (() => {
+  const h = location.hash.replace(/^#/, '');
+  return h.startsWith('dump/') ? decodeURIComponent(h.slice(5)) : null;
+})();
 
 // Disabled tabs from branding — skip data fetching for these
 const _dt = (window.__branding && window.__branding.disabled_tabs) || [];
@@ -71,10 +80,39 @@ function initApp(prefetchedConfig) {
   if (S.currentTab === 'providers') { S.healthTimer = setInterval(applyProviderHealth, 30000); }
   if (S.currentTab === 'settings') { openSettings(); }
   if (location.hash === "#change-password") { goToTab('settings'); }
+  if (_dumpRoute) { window.openDumpPage?.(_dumpRoute); }
 }
 
 // ===================== Tabs =====================
-function activateTab(tab) {
+
+/** Paint the rail's mode / language buttons from the current state. */
+function _syncRailPrefs() {
+  paintThemeButton(document.getElementById('railModeBtn'));
+  window.renderLoginForm?.();
+  const lang = document.getElementById('railLangBtn');
+  if (lang) {
+    lang.textContent = S.currentLang === 'zh' ? '\u4E2D' : 'EN';
+    lang.title = t('label.language');
+  }
+}
+
+function toggleAppMode() {
+  const state = S.currentMode || 'light';
+  setMode(state === 'light' ? 'dark' : state === 'dark' ? 'system' : 'light');
+  _syncRailPrefs();
+}
+
+function toggleAppLang() {
+  setLang(S.currentLang === 'zh' ? 'en' : 'zh');
+  _syncRailPrefs();
+}
+
+window.toggleAppMode = toggleAppMode;
+window.toggleAppLang = toggleAppLang;
+window._syncRailPrefs = _syncRailPrefs;
+
+function activateTab(tab, opts = {}) {
+  const prevId = S.currentTab;
   const allTabs = document.querySelectorAll('.tab[role="tab"]');
   allTabs.forEach(t => {
     t.classList.remove('active');
@@ -88,21 +126,83 @@ function activateTab(tab) {
   const id = tab.dataset.tab;
   document.getElementById('tab-' + id).classList.add('active');
   S.currentTab = id;
+  window._syncRailPrefs?.();
+  // The model panel belongs to the models tab; it does not follow the operator
+  // to another tab.
+  if (id !== 'models' && typeof window.closeModelDrawer === 'function') {
+    window.closeModelDrawer();
+  }
   localStorage.setItem('llm-rosetta-tab', id);
-  history.replaceState(null, '', '#' + id);
+  // A dump page is an overlay on whichever tab is beneath it; a tab click
+  // leaves it, and the #dump/<id> URL stays put while it is open.
+  if (typeof window.closeDumpPage === 'function') window.closeDumpPage();
+  if (!_dumpRoute) {
+    // A user switch is a navigation step, so Back returns to where they were.
+    // The initial paint and Back/Forward themselves replace instead of pushing.
+    if (opts.push !== false && id !== prevId) {
+      history.pushState({tab: id}, '', '#' + id);
+    } else {
+      history.replaceState({tab: id}, '', '#' + id);
+    }
+  }
   stopTimers();
-  if (id === 'dashboard' && _tabEnabled('dashboard')) { loadMetrics(); loadDumps(); S.dashboardTimer = (S._dashboardRefreshMs > 0 ? setInterval(loadMetrics, S._dashboardRefreshMs) : null); }
+  if (id === 'dashboard' && _tabEnabled('dashboard')) { loadMetrics(); S.dashboardTimer = (S._dashboardRefreshMs > 0 ? setInterval(loadMetrics, S._dashboardRefreshMs) : null); }
   if (id === 'logs' && _tabEnabled('logs')) {
-    if (S._logView === 'ops') { loadOpsLog(); }
-    else { if (!S._keepLogOffset) S.logOffset = 0; S._keepLogOffset = false; loadLogs(); }
+    const view = S._logView || 'requests';
+    if (view === 'ops') { loadOpsLog(); }
+    else if (view === 'dumps') { window.invalidateDumpCache?.(); window.renderDumps?.(); }
+    else if (view === 'profiling') { window.loadProfilingStatus?.(); window.loadProfilingResults?.(); }
+    else if (view === 'capture') { window.loadCaptureStatus?.(); window.loadCaptureResults?.(); }
+    else {
+      if (!S._keepLogOffset) S.logOffset = 0;
+      S._keepLogOffset = false;
+      loadLogs();
+    }
     populateOpsLogFilters();
     startLogTimers();
   }
   if (id === 'providers' || id === 'models') { loadConfig(); }
   if (id === 'providers') { S.healthTimer = setInterval(applyProviderHealth, 30000); }
   if (id === 'keys' && _tabEnabled('keys')) { loadKeys(); }
-  if (id === 'settings') { openSettings(); }
+  if (id === 'settings') {
+    setSettingsPane(localStorage.getItem(SETTINGS_PANE_KEY) || 'appearance');
+    openSettings();
+  }
 }
+
+// ---- Settings groups ----
+// One pane at a time on the settings tab; the choice outlives the visit.
+const SETTINGS_PANES = ['appearance', 'behavior', 'rateLimit', 'retention', 'security', 'shims', 'about'];
+const SETTINGS_PANE_KEY = 'llm-rosetta-settings-pane';
+
+function setSettingsPane(name) {
+  if (!SETTINGS_PANES.includes(name)) name = 'appearance';
+  document.querySelectorAll('.settings-nav-btn').forEach(b => {
+    const on = b.dataset.pane === name;
+    b.classList.toggle('is-active', on);
+    b.setAttribute('aria-selected', String(on));
+    b.tabIndex = on ? 0 : -1;
+  });
+  document.querySelectorAll('#tab-settings .settings-pane').forEach(p => {
+    p.classList.toggle('is-active', p.id === 'settingsPane-' + name);
+  });
+  localStorage.setItem(SETTINGS_PANE_KEY, name);
+}
+window.setSettingsPane = setSettingsPane;
+
+document.querySelectorAll('.settings-nav-btn').forEach(btn => {
+  btn.addEventListener('keydown', e => {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    const list = [...document.querySelectorAll('.settings-nav-btn')];
+    const i = list.indexOf(btn);
+    const next = e.key === 'ArrowDown'
+      ? list[(i + 1) % list.length]
+      : list[(i - 1 + list.length) % list.length];
+    e.preventDefault();
+    setSettingsPane(next.dataset.pane);
+    next.focus();
+  });
+});
 
 document.querySelectorAll('.tab[role="tab"]').forEach(tab => {
   tab.addEventListener('click', () => activateTab(tab));
@@ -122,17 +222,87 @@ document.querySelectorAll('.tab[role="tab"]').forEach(tab => {
 const _hashTab = location.hash.replace('#', '');
 const _initialTab = (document.querySelector(`.tab[data-tab="${_hashTab}"]`) ? _hashTab : null)
   || S.currentTab || 'providers';
-if (_initialTab !== 'providers') {
-  const savedTab = document.querySelector(`.tab[data-tab="${_initialTab}"]`);
-  if (savedTab) activateTab(savedTab);
-} else {
-  history.replaceState(null, '', '#providers');
-}
+const _savedTab = document.querySelector(`.tab[data-tab="${_initialTab}"]`);
+if (_savedTab) activateTab(_savedTab, {push: false});
 
 window.addEventListener('popstate', () => {
   const hash = location.hash.replace('#', '');
   const tab = document.querySelector(`.tab[data-tab="${hash}"]`);
-  if (tab && hash !== S.currentTab) activateTab(tab);
+  if (tab && hash !== S.currentTab) activateTab(tab, {push: false});
+});
+
+window.addEventListener('hashchange', () => {
+  const h = location.hash.replace(/^#/, '');
+  if (h.startsWith('dump/')) { window.openDumpPage?.(decodeURIComponent(h.slice(5))); }
+  else { window.closeDumpPage?.(); }
+});
+
+// ── Keyboard navigation ──
+//
+// The rail is reachable by number: Alt+1..n matches the order on screen, and
+// [ / ] step through it.  Shortcuts never fire while the operator is typing.
+const TAB_ORDER = () => [...document.querySelectorAll('.sidebar .tab:not(#tabBtn-settings)')]
+  .map(t => t.dataset.tab);
+
+function _isTypingTarget(el) {
+  if (!el) return false;
+  const tag = el.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable;
+}
+
+function _stepTab(delta) {
+  const order = TAB_ORDER();
+  const i = order.indexOf(S.currentTab);
+  const next = order[(i + delta + order.length) % order.length];
+  if (next) window.goToTab(next);
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.altKey && !e.ctrlKey && !e.metaKey && /^[1-9]$/.test(e.key)) {
+    const next = TAB_ORDER()[Number(e.key) - 1];
+    if (next) { e.preventDefault(); window.goToTab(next); }
+    return;
+  }
+  if (_isTypingTarget(document.activeElement)) return;
+  if (e.key === '[') { e.preventDefault(); _stepTab(-1); }
+  else if (e.key === ']') { e.preventDefault(); _stepTab(1); }
+  else if (e.key === '?') { e.preventDefault(); window.showShortcutHelp?.(); }
+});
+
+/** The shortcut sheet: what the panel answers to, in one place. */
+function showShortcutHelp() {
+  const existing = document.getElementById('shortcutHelp');
+  if (existing) { existing.remove(); return; }
+  const tabs = [...document.querySelectorAll('.sidebar .tab:not(#tabBtn-settings)')]
+    .map((el, i) => `<tr><td><kbd>Alt</kbd>+<kbd>${i + 1}</kbd></td><td>${esc(el.querySelector('.tab-label')?.textContent || '')}</td></tr>`)
+    .join('');
+  const el = document.createElement('div');
+  el.id = 'shortcutHelp';
+  el.className = 'shortcut-help';
+  el.innerHTML = `<div class="sh-panel" role="dialog" aria-modal="true">
+      <h3>${t('shortcut.title')}</h3>
+      <table>
+        ${tabs}
+        <tr><td><kbd>[</kbd> / <kbd>]</kbd></td><td>${t('shortcut.prevNext')}</td></tr>
+        <tr><td><kbd>?</kbd></td><td>${t('shortcut.thisSheet')}</td></tr>
+        <tr><td><kbd>Esc</kbd></td><td>${t('shortcut.closePanel')}</td></tr>
+      </table>
+    </div>`;
+  el.addEventListener('click', (e) => { if (e.target === el) el.remove(); });
+  document.body.appendChild(el);
+}
+window.showShortcutHelp = showShortcutHelp;
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') document.getElementById('shortcutHelp')?.remove();
+});
+
+// Hints on the rail itself, so the shortcuts are discoverable.
+document.querySelectorAll('.sidebar .tab:not(#tabBtn-settings)').forEach((el, i) => {
+  const key = i < 9 ? `Alt+${i + 1}` : '';
+  if (!key) return;
+  const base = el.querySelector('.tab-label')?.textContent || '';
+  el.title = base ? `${base} (${key})` : key;
 });
 
 function goToTab(tabId, callback) {
@@ -195,12 +365,12 @@ document.querySelectorAll('.modal-overlay').forEach(m => {
   // Header
   const h1 = document.getElementById('brandTitle');
   if (h1 && (b.title || b.subtitle)) {
-    h1.innerHTML = _esc(b.title || 'llm-rosetta') + ' <span>' + _esc(b.subtitle || 'gateway admin') + '</span>';
+    h1.innerHTML = _esc(b.title || 'llm-rosetta') + ' <span>' + _esc(b.subtitle || t('brand.admin')) + '</span>';
   }
   // Login
   const h2 = document.getElementById('brandLoginTitle');
   if (h2 && b.title) {
-    h2.innerHTML = '<strong>' + _esc(b.title) + '</strong> <span style="font-weight:400;color:var(--text-dim)">' + _esc(b.subtitle || 'gateway') + '</span>';
+    h2.innerHTML = '<strong>' + _esc(b.title) + '</strong> <span style="font-weight:400;color:var(--text-dim)">' + _esc(b.subtitle || t('brand.subtitle')) + '</span>';
   }
   // Settings footer — project name
   const fn = document.getElementById('brandFooterName');
@@ -245,14 +415,22 @@ document.querySelectorAll('.modal-overlay').forEach(m => {
 // menu, or lands inside it, does not immediately close it again.
 document.addEventListener('click', function(e) {
   if (e.target.closest('.more-menu') || e.target.closest('.test-menu')
-      || e.target.closest('.more-menu-toggle') || e.target.closest('.btn-caret')) return;
+      || e.target.closest('.more-menu-toggle') || e.target.closest('.btn-caret')
+      || e.target.closest('.provider-multi-btn') || e.target.closest('#fetchProviderBtn')
+      || e.target.closest('#modelProviderBtn') || e.target.closest('#logProviderBtn')) return;
   closeMenus();
 });
 
 // The menus are position:fixed, so close them on scroll rather than let them
 // drift away from the row they belong to.  Capture phase: the table has its
 // own scroll container, whose scroll events do not bubble.
-window.addEventListener('scroll', closeMenus, true);
+window.addEventListener('scroll', (e) => {
+  // A menu long enough to scroll (a provider roster) scrolls itself; that is
+  // not the page moving under the menu, so it must not close it.
+  const t = e.target;
+  if (t && t.nodeType === 1 && t.closest && t.closest('.more-menu')) return;
+  closeMenus();
+}, true);
 
 // ===================== Seg-control keyboard navigation =====================
 // Groups whose items are pseudo-radios (role="radio" on a div/label) have no

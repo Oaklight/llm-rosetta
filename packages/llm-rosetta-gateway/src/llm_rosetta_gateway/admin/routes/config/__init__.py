@@ -10,6 +10,7 @@ each handler lives in the module for the resource it edits:
 :mod:`.model_providers`       model-to-provider links and weights
 :mod:`.settings`              server settings, rate limits, log format
 :mod:`.shims`                 shim sources, reload, removal advisories
+:mod:`.shim_files`            loaded shims: inventory, view, edit, delete
 :mod:`.upstream`              upstream model discovery and routing loops
 :mod:`.bulk`                  bulk add: merge a provider into a model entry
 ============================  ============================================
@@ -43,6 +44,13 @@ from .providers import (
     toggle_provider,
 )
 from .settings import put_server_settings
+from .shim_files import (
+    delete_loaded_shim,
+    get_loaded_shim,
+    get_loaded_shims,
+    post_shim_enabled,
+    put_loaded_shim,
+)
 from .shims import (
     _merge_shim_sources_body,
     _shim_removal_advisories,
@@ -77,11 +85,16 @@ __all__ = [
     "bulk_add_models",
     "bulk_update_models",
     "check_routing_loops",
+    "delete_loaded_shim",
     "delete_model",
     "delete_provider",
     "fetch_upstream_models",
     "get_config",
+    "get_loaded_shim",
+    "get_loaded_shims",
     "post_shims_reload",
+    "post_shim_enabled",
+    "put_loaded_shim",
     "put_model",
     "put_provider",
     "put_server_settings",
@@ -138,6 +151,22 @@ def register_config_routes(app: Any) -> None:
         check_routing_loops
     )
     app.route("/admin/api/config/server", methods=["PUT"])(put_server_settings)
+    # Loaded shims: what is registered, and the local ones we may edit.
+    app.route("/admin/api/config/shims", methods=["GET"])(
+        _guard("providers", get_loaded_shims)
+    )
+    app.route("/admin/api/config/shims/<name>", methods=["GET"])(
+        _guard("providers", get_loaded_shim)
+    )
+    app.route("/admin/api/config/shims/<name>", methods=["PUT"])(
+        _guard("providers", put_loaded_shim)
+    )
+    app.route("/admin/api/config/shims/<name>", methods=["DELETE"])(
+        _guard("providers", delete_loaded_shim)
+    )
+    app.route("/admin/api/config/shims/<name>/enabled", methods=["POST"])(
+        _guard("providers", post_shim_enabled)
+    )
     app.route("/admin/api/config/shims", methods=["PUT"])(
         _guard("providers", put_shim_sources)
     )

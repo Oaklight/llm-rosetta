@@ -10,7 +10,7 @@
 export const LOG_LIMIT = 30;
 export const OPS_LOG_LIMIT = 30;
 export const DUMP_PAGE_SIZE = 20;
-export const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+export const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000; // fallback: 30 minutes
 export const _TEST_TIMEOUT_MS = 120_000;
 
 export const _CAP_ICONS = {};
@@ -33,6 +33,11 @@ export const S = {
   currentMode: localStorage.getItem('llm-rosetta-mode') || 'light',
   currentLang: localStorage.getItem('llm-rosetta-lang') || 'en',
   configData: null,
+  // Session lifetimes reported by /admin/api/auth-check: minutes of idle
+  // before the panel signs out (0 = never) and days a "stay signed in"
+  // session lasts (0 = the login page does not offer it).
+  idleMinutes: undefined,
+  rememberDays: undefined,
   _credentialVisible: true,
   _providerFilter: 'all',
   _modelDomain: 'all',
