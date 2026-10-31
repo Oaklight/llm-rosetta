@@ -84,6 +84,16 @@ RESPONSES_TERMINAL_EVENT_BY_STATUS: dict[str, str] = {
     "incomplete": ResponsesEventType.RESPONSE_INCOMPLETE,
 }
 
+#: The events that close a stream, whatever status the turn ended with.  A
+#: body writer reads the response payload off whichever one arrives.
+TERMINAL_EVENTS: frozenset[str] = frozenset(
+    {
+        ResponsesEventType.RESPONSE_COMPLETED,
+        ResponsesEventType.RESPONSE_FAILED,
+        ResponsesEventType.RESPONSE_INCOMPLETE,
+    }
+)
+
 # Envelope for the error event that precedes ``response.failed`` when the
 # source turn carried no error object of its own.
 RESPONSES_FAILURE_ERROR: dict[str, str] = {
