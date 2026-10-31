@@ -87,6 +87,8 @@ class TestTheConfigPayload:
         monkeypatch.setattr(payload, "_shim_source_presets_payload", lambda: [])
         config.credential_visible = False
         config.api_keys_db = None
+        config.admin_session_idle_minutes = 30
+        config.admin_session_remember_days = 30
         request = SimpleNamespace(
             app=SimpleNamespace(
                 gateway_config=config,

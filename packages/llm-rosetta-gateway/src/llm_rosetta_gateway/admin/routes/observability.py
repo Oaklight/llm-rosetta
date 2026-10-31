@@ -142,6 +142,29 @@ async def get_metrics(request: Any) -> Response:
     return JSONResponse(snap)
 
 
+async def get_request_histogram(request: Any) -> Response:
+    """Count requests per time bucket over the persisted request log.
+
+    Query params:
+        minutes: Window length (default 300, at most 10080).
+        buckets: Number of buckets (default 60, at most 240).
+
+    The in-memory series stops at five minutes, so the dashboard's longer
+    view reads the log instead.
+    """
+    persistence = getattr(request.app, "persistence", None)
+    if persistence is None:
+        return JSONResponse({"error": "Persistence is disabled"}, status_code=404)
+    try:
+        minutes = int(_qp(request, "minutes", "300"))
+        buckets = int(_qp(request, "buckets", "60"))
+    except ValueError:
+        return JSONResponse(
+            {"error": "minutes and buckets must be integers"}, status_code=400
+        )
+    return JSONResponse(await persistence.query_request_histogram(minutes, buckets))
+
+
 async def get_circuit_breaker_states(request: Any) -> Response:
     """Return per-provider circuit breaker states.
 

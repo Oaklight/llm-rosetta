@@ -1,11 +1,12 @@
 // models.js — Model management: modal, CRUD, rendering, filtering, bulk ops
 import { S, _CAP_ICONS } from '../core/state.js';
-import { t } from '../core/i18n.js';
+import { t, capLabel } from '../core/i18n.js';
 import { api, showToast, closeModal, esc, inlineConfirm, closeMenus, openMenu, isFreeEntry, freeEntryLabel, providerTypeName } from '../core/utils.js';
 import { syncAriaSort } from '../core/sort.js';
 import { syncChipState } from '../core/chips.js';
 import { initLogoSelect, setLogoSelectOptions } from '../components/logo-select.js';
 import { mergeReasoningOverride } from '../core/reasoning-override.js';
+import { providerRowsHtml, syncPickerBtn, openPickerMenu } from '../components/provider-picker.js';
 
 // ── helpers (module-private) ──
 
@@ -89,6 +90,45 @@ function _syncFilterTypeSeg(seg, typeNames) {
   }).join('');
 }
 
+/** The status facet: how much of the fleet can take traffic right now.
+ *
+ *  Counts are taken over the slice the other filters left, not the whole
+ *  table, so the numbers answer "how many of the rows I am looking at".
+ */
+function _buildStatusSeg(counts) {
+  const seg = document.getElementById('modelStatusSeg');
+  if (!seg) return;
+  const options = [
+    ['all', 'modelFilter.all'],
+    ['usable', 'modelFilter.usable'],
+    ['partial', 'modelFilter.partial'],
+    ['off', 'modelFilter.unusable'],
+  ];
+  seg.innerHTML = options.map(([value, key]) => {
+    const active = (S._modelStatus || 'all') === value;
+    return `<div class="${active ? 'active' : ''}" role="radio" data-status="${value}"`
+      + ` aria-checked="${active}" tabindex="${active ? '0' : '-1'}"`
+      + ` onclick="setModelStatus('${value}')"`
+      + ` onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();setModelStatus('${value}')}">`
+      + `<span data-i18n="${key}">${esc(t(key))}</span><span class="seg-count">${counts[value] ?? 0}</span></div>`;
+  }).join('');
+}
+
+function setModelStatus(value) {
+  S._modelStatus = value;
+  renderModels();
+}
+window.setModelStatus = setModelStatus;
+
+/** 'usable' (every provider live), 'partial' (some provider entry off) or
+ *  'off' (nothing can serve it). */
+function _modelStatus(info, disabledProviders) {
+  if (!_entryUsable(info, disabledProviders)) return 'off';
+  const details = _getProviderDetails(info);
+  const live = details.filter(p => !_providerEntryOff(p, disabledProviders)).length;
+  return live < details.length ? 'partial' : 'usable';
+}
+
 function _syncModalTypeSeg(seg, typeNames) {
   if (!seg) return;
   const items = Array.from(seg.querySelectorAll(':scope > *'));
@@ -113,7 +153,9 @@ function _syncModalTypeSeg(seg, typeNames) {
 // ── Model modal ──
 
 function switchModelTab(clicked, showId) {
-  const modal = clicked.closest('.modal');
+  // The form lives in the side panel now, which is not a .modal.
+  const modal = clicked.closest('.modal') || clicked.closest('.model-form')
+    || document.getElementById('modelModal');
   modal.querySelectorAll('.model-tab-content').forEach(el => el.classList.remove('active'));
   modal.querySelector('#' + showId).classList.add('active');
   clicked.parentElement.querySelectorAll('.model-tab').forEach(t => t.classList.remove('active'));
@@ -155,6 +197,26 @@ function toggleStreamUrl(el) {
   }
 }
 
+/** Show the chosen provider on the form's picker trigger. */
+function _syncModelProviderBtn(name) {
+  syncPickerBtn(document.getElementById('modelProviderBtn'), name, t('label.selectOne'));
+}
+
+/** Pick the provider from the form's roster menu. */
+function selectModelProvider(name) {
+  document.getElementById('modelProvider').value = name;
+  _syncModelProviderBtn(name);
+  closeMenus();
+}
+window.selectModelProvider = selectModelProvider;
+
+function toggleModelProviderPicker(btn) {
+  const menu = document.getElementById('modelProviderMenu');
+  if (menu.classList.contains('open')) { closeMenus(); return; }
+  openPickerMenu(menu, btn, openMenu, closeMenus);
+}
+window.toggleModelProviderPicker = toggleModelProviderPicker;
+
 function openModelModal(model, provider, capabilities, upstreamModel, sourceModel) {
   // sourceModel: when cloning, the original model name to read reasoning from
   // (the visible name field is left blank so the user picks a new name).
@@ -162,24 +224,26 @@ function openModelModal(model, provider, capabilities, upstreamModel, sourceMode
   document.getElementById('modelName').value = model || '';
   document.getElementById('modelName').dataset.originalName = model || '';
   document.getElementById('modelUpstream').value = upstreamModel || '';
-  // Populate provider dropdown from config
-  const sel = document.getElementById('modelProvider');
-  sel.innerHTML = '';
-  if (S.configData) {
-    for (const p of Object.keys(S.configData.providers)) {
-      const opt = document.createElement('option');
-      opt.value = p; opt.textContent = p;
-      if (p === provider) opt.selected = true;
-      sel.appendChild(opt);
-    }
-  }
+  // Populate the provider picker from config.  Every provider is listed, the
+  // disabled ones dimmed: a model may still point at one.
+  const providers = S.configData ? Object.entries(S.configData.providers) : [];
+  const muted = new Set(
+    providers.filter(([, cfg]) => cfg.enabled === false).map(([name]) => name),
+  );
+  document.getElementById('modelProviderMenu').innerHTML = providerRowsHtml(
+    providers.map(([name]) => name),
+    n => `selectModelProvider('${esc(n)}')`,
+    muted,
+  );
+  document.getElementById('modelProvider').value = provider || '';
+  _syncModelProviderBtn(provider);
   // Multi-provider indicator
   const multiHint = document.getElementById('modelMultiProviderHint');
   if (multiHint) {
     const modelInfo = model && S.configData ? S.configData.models[model] : null;
     const isMulti = modelInfo && typeof modelInfo === 'object' && modelInfo.providers && modelInfo.providers.length > 1;
     if (isMulti) {
-      multiHint.textContent = `This model has ${modelInfo.providers.length} providers. Manage providers in the model list.`;
+      multiHint.textContent = t('model.multipleProvidersHint', {n: modelInfo.providers.length});
       multiHint.style.display = '';
     } else {
       multiHint.style.display = 'none';
@@ -264,9 +328,19 @@ function openModelModal(model, provider, capabilities, upstreamModel, sourceMode
   document.getElementById('reasoningBudgetRatio').value = configOverride.budget_ratio != null ? configOverride.budget_ratio : '';
   document.getElementById('reasoningDisabled').value = configOverride.disabled || '';
   document.getElementById('reasoningReplayMissing').value = configOverride.replay_missing || '';
+  document.getElementById('reasoningEffortField').value = configOverride.effort_field || '';
+  const range = Array.isArray(configOverride.effort_range) ? configOverride.effort_range : [];
+  document.getElementById('reasoningEffortMin').value = range[0] || '';
+  document.getElementById('reasoningEffortMax').value = range[1] || '';
+  document.getElementById('reasoningUnsignedBlocks').value = configOverride.unsigned_blocks || '';
+  const vis = configOverride.visibility_modes || {};
+  for (const mode of ['Auto', 'Concise', 'Detailed', 'None']) {
+    document.getElementById('reasoningVis' + mode).value = vis[mode.toLowerCase()] || '';
+  }
   _renderReasoningEffective(reasoning, configOverride);
 
-  openModal('modelModal');
+  _setDrawerPane('form');
+  _openDrawer();
 }
 
 /**
@@ -331,6 +405,7 @@ function resetModelFilters() {
   if (allSeg) _activateSegChild(allSeg);
   document.getElementById('modelProviderFilter').value = '';
   document.getElementById('modelSearch').value = '';
+  S._modelStatus = 'all';
   renderModels();
 }
 
@@ -399,31 +474,34 @@ function _defaultTestKind(modelType) {
 }
 
 /** Build test menu items HTML for a given model type. */
-function _testMenuItems(modelType, modelName, {hasTools, hasVision, hasReasoning}) {
+function _testMenuItems(modelType, modelName, {hasTools, hasVision, hasReasoning}, provider) {
   const n = esc(modelName);
+  // Fourth argument of runTest: pins the request to one provider.  Omitted on
+  // the row's own test menu, where routing picks the provider.
+  const pArg = provider ? `,null,'${esc(provider)}'` : '';
   if (modelType === 'embedding') {
     return `
-      <div class="test-menu-item" onclick="runTest('${n}','embedding')">${t('test.embedding')}</div>
-      <div class="test-menu-item" onclick="runTest('${n}','embed_batch')">${t('test.embedBatch')}</div>
+      <div class="test-menu-item" onclick="runTest('${n}','embedding'${pArg})">${t('test.embedding')}</div>
+      <div class="test-menu-item" onclick="runTest('${n}','embed_batch'${pArg})">${t('test.embedBatch')}</div>
       <div class="test-menu-item" onclick="promptMatryoshka('${n}')">${t('test.matryoshka')}</div>
-      <div class="test-menu-item" onclick="runTest('${n}','embed_multimodal')">${t('test.embedMultimodal')}</div>`;
+      <div class="test-menu-item" onclick="runTest('${n}','embed_multimodal'${pArg})">${t('test.embedMultimodal')}</div>`;
   }
   if (modelType === 'rerank') {
     return `
-      <div class="test-menu-item" onclick="runTest('${n}','rerank')">${t('test.rerank')}</div>
-      <div class="test-menu-item" onclick="runTest('${n}','rerank_batch')">${t('test.rerankBatch')}</div>`;
+      <div class="test-menu-item" onclick="runTest('${n}','rerank'${pArg})">${t('test.rerank')}</div>
+      <div class="test-menu-item" onclick="runTest('${n}','rerank_batch'${pArg})">${t('test.rerankBatch')}</div>`;
   }
   if (modelType === 'llm') {
     return `
-      <div class="test-menu-item" onclick="runTest('${n}','text')">${t('test.text')}</div>
-      <div class="test-menu-item" onclick="runTest('${n}','stream')">${t('test.stream')}</div>
-      <div class="test-menu-item${hasTools ? '' : ' disabled'}" onclick="${hasTools ? `runTest('${n}','tools')` : ''}">${t('test.tools')}</div>
-      <div class="test-menu-item${hasVision ? '' : ' disabled'}" onclick="${hasVision ? `runTest('${n}','vision')` : ''}">${t('test.vision')}</div>
-      <div class="test-menu-item${hasReasoning ? '' : ' disabled'}" onclick="${hasReasoning ? `runTest('${n}','reasoning')` : ''}">${t('test.reasoning')}</div>`;
+      <div class="test-menu-item" onclick="runTest('${n}','text'${pArg})">${t('test.text')}</div>
+      <div class="test-menu-item" onclick="runTest('${n}','stream'${pArg})">${t('test.stream')}</div>
+      <div class="test-menu-item${hasTools ? '' : ' disabled'}" onclick="${hasTools ? `runTest('${n}','tools'${pArg})` : ''}">${t('test.tools')}</div>
+      <div class="test-menu-item${hasVision ? '' : ' disabled'}" onclick="${hasVision ? `runTest('${n}','vision'${pArg})` : ''}">${t('test.vision')}</div>
+      <div class="test-menu-item${hasReasoning ? '' : ' disabled'}" onclick="${hasReasoning ? `runTest('${n}','reasoning'${pArg})` : ''}">${t('test.reasoning')}</div>`;
   }
   // Fallback for unknown/new types: single test item using type name
   return `
-    <div class="test-menu-item" onclick="runTest('${n}','${esc(modelType)}')">${t('btn.test')} ${esc(modelType)}</div>`;
+    <div class="test-menu-item" onclick="runTest('${n}','${esc(modelType)}'${pArg})">${t('btn.test')} ${esc(modelType)}</div>`;
 }
 
 // ── Multi-provider helpers ──
@@ -437,14 +515,19 @@ function _getAllProviders(info) {
 }
 
 function _getProviderDetails(info) {
-  if (typeof info === 'string') return [{name: info}];
+  if (typeof info === 'string') return [{name: info, enabled: true}];
   if (info.providers && Array.isArray(info.providers)) {
     return info.providers.map(p => {
-      if (typeof p === 'string') return {name: p};
-      return {name: p.name || '', weight: p.weight, upstream_model: p.upstream_model};
+      if (typeof p === 'string') return {name: p, enabled: true};
+      return {
+        name: p.name || '',
+        weight: p.weight,
+        upstream_model: p.upstream_model,
+        enabled: p.enabled !== false,
+      };
     });
   }
-  return [{name: info.provider || '', upstream_model: info.upstream_model}];
+  return [{name: info.provider || '', upstream_model: info.upstream_model, enabled: true}];
 }
 
 /** Label for a provider cell — "<Brand> (Free)" for a free entry, else the name.
@@ -456,78 +539,347 @@ function _providerLabel(providerName) {
   return freeEntryLabel(providers, shims, providerName, t('free.suffix'));
 }
 
+/** True when this provider entry can take traffic right now.
+ *
+ *  Two switches can stop it: the provider itself, in the providers section,
+ *  and this model's own entry for it. */
+function _providerEntryOff(detail, disabledProviders) {
+  return detail.enabled === false || disabledProviders.has(detail.name);
+}
+
+/** True when at least one of the model's providers can serve it right now. */
+function _entryUsable(info, disabledProviders) {
+  if (typeof info === 'object' && info && info.enabled === false) return false;
+  return _getProviderDetails(info).some(
+    p => !_providerEntryOff(p, disabledProviders),
+  );
+}
+
 function _renderProviderCell(name, info, disabledProviders) {
   const details = _getProviderDetails(info);
   if (details.length <= 1) {
     const p = details[0] || {name: ''};
-    const dis = disabledProviders.has(p.name);
-    return `<span class="provider-link" onclick="goToProviderFromModel('${esc(p.name)}')">${esc(_providerLabel(p.name))}</span>${dis ? ` <span style="color:var(--text-dim);font-size:11px">(${t('provider.disabled')})</span>` : ''}`;
+    // No "(Disabled)" word: the dimmed cell and the switch already say it, and
+    // the word is what squeezes a long provider name into the switch.
+    return `<span class="provider-link" title="${esc(p.name)}" onclick="goToProviderFromModel('${esc(p.name)}')">${esc(_providerLabel(p.name))}</span>`;
   }
-  const primary = details.find(p => !disabledProviders.has(p.name)) || details[0];
-  const priDis = disabledProviders.has(primary.name);
-  return `<span class="provider-link" onclick="goToProviderFromModel('${esc(primary.name)}')">${esc(_providerLabel(primary.name))}</span>${priDis ? ` <span style="color:var(--text-dim);font-size:11px">(${t('provider.disabled')})</span>` : ''}
-    <span class="provider-expand-toggle" onclick="toggleProviderRows(this,'${esc(name)}')" style="cursor:pointer;font-size:11px;color:var(--text-dim);margin-left:4px;user-select:none"><span class="arrow" style="font-size:8px;display:inline-block;transition:transform 0.15s">▸</span> ${details.length} providers</span>`;
+  const live = details.filter(p => !_providerEntryOff(p, disabledProviders)).length;
+  return `<button class="btn btn-sm provider-multi-btn" aria-haspopup="true" aria-expanded="false" onclick="toggleProviderMenu(this,'${esc(name)}')">
+      <span>${t('model.multipleProviders')}</span><span class="provider-multi-count">${details.length}</span>${live < details.length ? `<span class="provider-multi-off">${details.length - live} ${t('label.off')}</span>` : ''}<span aria-hidden="true">&#9662;</span>
+    </button>
+    <div class="more-menu provider-menu" role="menu">${_providerMenuRows(name, info, disabledProviders)}</div>`;
 }
 
-function toggleProviderRows(el, modelName) {
-  const arrow = el.querySelector('.arrow');
-  const tr = el.closest('tr');
-  const existing = tr.parentNode.querySelectorAll(`tr.provider-detail-row[data-parent-model="${modelName}"]`);
-  if (existing.length > 0) {
-    existing.forEach(r => r.remove());
-    if (arrow) arrow.style.transform = '';
+/** One menu row per provider: its own on/off switch, weight, test and remove. */
+function _providerMenuRows(name, info, disabledProviders) {
+  const details = _getProviderDetails(info);
+  const modelType = _getModelType(info);
+  const kind = _defaultTestKind(modelType);
+  const caps = typeof info === 'string' ? ['text'] : (info.capabilities || ['text']);
+  const opts = {
+    hasTools: caps.includes('tools'),
+    hasVision: caps.includes('vision'),
+    hasReasoning: caps.includes('reasoning'),
+  };
+  return details.map(p => {
+    const off = _providerEntryOff(p, disabledProviders);
+    const n = esc(name);
+    const pn = esc(p.name);
+    const w = p.weight || 1;
+    return `<div class="provider-menu-row${off ? ' pm-off' : ''}" role="menuitem">
+      <label class="toggle row-toggle" title="${off ? t('provider.disabled') : t('provider.enabled')}"><input type="checkbox" role="switch" ${off ? '' : 'checked'} aria-checked="${!off}" aria-label="${esc(p.name)}" onchange="toggleModelProvider('${n}','${pn}')"><span class="slider"></span></label>
+      <div class="pm-id">
+        <span class="provider-link pm-name" title="${esc(p.name)}" onclick="goToProviderFromModel('${pn}')">${esc(_providerLabel(p.name))}</span>
+        <span class="pm-upstream">${p.upstream_model ? `→ ${esc(p.upstream_model)}` : ''}</span>
+      </div>
+      <input type="number" class="pd-weight" min="1" max="100" value="${w}" title="${t('label.weight')}" onchange="updateProviderWeight('${n}','${pn}',this)" onkeydown="if(event.key==='Enter'){this.blur()}">
+      <div class="test-group"><button class="btn btn-sm btn-test" onclick="runTest('${n}','${kind}',null,'${pn}')">${t('btn.test')}</button><button class="btn btn-sm btn-caret" aria-haspopup="true" aria-expanded="false" aria-label="${t('btn.test')} ${pn}" onclick="toggleTestMenu(this)">&#9662;</button><div class="test-menu">${_testMenuItems(modelType, name, opts, p.name)}</div></div>
+      <button class="btn btn-sm pd-remove" title="${t('btn.remove')}" onclick="removeProviderFromModel('${n}','${pn}')">✕</button>
+    </div>`;
+  }).join('');
+}
+
+/** The model shown in the side panel, and which of its two panes is up. */
+let _drawerModel = null;
+let _drawerPane = 'detail';
+
+/** Where focus was before the panel took it, so closing puts it back. */
+let _focusBeforeDrawer = null;
+
+function _openDrawer() {
+  const el = document.getElementById('modelDrawer');
+  if (!el.classList.contains('open')) _focusBeforeDrawer = document.activeElement;
+  el.classList.add('open');
+  el.setAttribute('aria-hidden', 'false');
+  document.body.classList.add('model-drawer-open');
+  // The panel is the new context: focus it so Escape and the close button work
+  // without a click, without stealing focus on every re-render.
+  if (document.activeElement !== el && !el.contains(document.activeElement)) {
+    el.querySelector('.md-close')?.focus();
+  }
+  _markActiveModelRow();
+}
+
+/** The row the panel is about, so the table and the panel read as one thing. */
+function _markActiveModelRow() {
+  document.querySelectorAll('#modelTable tr.model-row-active')
+    .forEach(r => r.classList.remove('model-row-active'));
+  if (!_drawerModel) return;
+  const check = document.querySelector(
+    `#modelTable .row-check[data-model="${CSS.escape(_drawerModel)}"]`,
+  );
+  check?.closest('tr')?.classList.add('model-row-active');
+}
+
+/** Swap the panel between the summary and the edit form. */
+function _setDrawerPane(which) {
+  _drawerPane = which;
+  document.getElementById('drawerDetail').hidden = which !== 'detail';
+  document.getElementById('modelModal').hidden = which !== 'form';
+  document.getElementById('drawerTitle').textContent = which === 'detail'
+    ? (_drawerModel || '')
+    : document.getElementById('modelModalTitle').textContent;
+  // The panel's own switch, hidden while adding (there is no summary yet).
+  const tabs = document.getElementById('drawerTabs');
+  if (tabs) {
+    tabs.hidden = !_drawerModel;
+    tabs.querySelectorAll('.md-tab').forEach((b, i) => {
+      const on = (i === 0) === (which === 'detail');
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-selected', String(on));
+    });
+  }
+}
+
+/** Open the form for the model the panel is showing, from the panel itself. */
+function openModelEditor() {
+  if (!_drawerModel) return;
+  if (_drawerPane !== 'form') editModel(_drawerModel, '');
+  else _setDrawerPane('form');
+}
+window.openModelEditor = openModelEditor;
+
+/** Switch the panel's pane from its tab strip. */
+function setModelDrawerPane(which) {
+  if (which === 'form') { openModelEditor(); return; }
+  _setDrawerPane('detail');
+  _syncModelDrawer();
+}
+window.setModelDrawerPane = setModelDrawerPane;
+
+function openModelDrawer(name) {
+  _drawerModel = name;
+  _setDrawerPane('detail');
+  _syncModelDrawer();
+  _openDrawer();
+}
+window.openModelDrawer = openModelDrawer;
+
+function closeModelDrawer() {
+  const el = document.getElementById('modelDrawer');
+  el.classList.remove('open');
+  el.setAttribute('aria-hidden', 'true');
+  document.body.classList.remove('model-drawer-open');
+  document.querySelectorAll('#modelTable tr.model-row-active')
+    .forEach(r => r.classList.remove('model-row-active'));
+  _drawerModel = null;
+  _drawerPane = 'detail';
+  if (_focusBeforeDrawer && document.contains(_focusBeforeDrawer)) {
+    _focusBeforeDrawer.focus();
+  }
+  _focusBeforeDrawer = null;
+}
+window.closeModelDrawer = closeModelDrawer;
+
+/** Provider rows: the dropdown's rows for a multi entry, a plain one otherwise.
+ *
+ *  A single-provider entry has no providers[] to switch or remove, so it gets
+ *  the name, its upstream and a test button and nothing that would fail. */
+function _detailProviderRows(name, info, disabledProviders) {
+  if (Array.isArray(info && info.providers) && info.providers.length > 1) {
+    return _providerMenuRows(name, info, disabledProviders);
+  }
+  const [p] = _getProviderDetails(info);
+  if (!p) return '';
+  const kind = _defaultTestKind(_getModelType(info));
+  const off = _providerEntryOff(p, disabledProviders);
+  return `<div class="provider-menu-row pd-single${off ? ' pm-off' : ''}">
+      <span class="pm-id">
+        <span class="provider-link pm-name" title="${esc(p.name)}" onclick="goToProviderFromModel('${esc(p.name)}')">${esc(_providerLabel(p.name))}</span>
+        <span class="pm-upstream">${p.upstream_model ? `→ ${esc(p.upstream_model)}` : ''}</span>
+      </span>
+      <div class="test-group"><button class="btn btn-sm btn-test" onclick="runTest('${esc(name)}','${kind}',null,'${esc(p.name)}')">${t('btn.test')}</button></div>
+    </div>`;
+}
+
+/** The detail block for one model. */
+function _modelDetailHtml(name, info, disabledProviders) {
+  const caps = typeof info === 'string' ? ['text'] : (info.capabilities || ['text']);
+  const capList = caps.map(c =>
+    `<span class="cap-badge cap-badge-${c}" title="${esc(capLabel(c))}">${_capIcons[c] || ''}<span>${esc(capLabel(c))}</span></span>`,
+  ).join('');
+  return `<div class="model-detail">
+      <div class="md-row"><span class="md-label">${t('label.capabilities')}</span><span class="md-caps">${capList}</span></div>
+      <div class="md-providers">${_detailProviderRows(name, info, disabledProviders)}</div>
+      <div class="md-actions">
+        <button class="btn btn-sm" onclick="editModel('${esc(name)}','${esc(_getProviderDetails(info)[0]?.name || '')}')">${t('btn.edit')}</button>
+        <button class="btn btn-sm" onclick="cloneModel('${esc(name)}')">${t('btn.clone')}</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteModel('${esc(name)}', this)">${t('btn.delete')}</button>
+      </div>
+    </div>`;
+}
+
+/** Repaint the summary pane; a form in progress is left alone. */
+function _syncModelDrawer() {
+  if (_drawerPane !== 'detail') return;
+  const el = document.getElementById('drawerDetail');
+  if (!el) return;
+  document.getElementById('drawerTitle').textContent = _drawerModel || '';
+  const info = _drawerModel ? S.configData?.models?.[_drawerModel] : null;
+  if (!info) {
+    el.innerHTML = '';
     return;
   }
-  if (arrow) arrow.style.transform = 'rotate(90deg)';
+  const providers = S.configData.providers || {};
+  const disabledProviders = new Set(
+    Object.entries(providers).filter(([, cfg]) => cfg.enabled === false).map(([n]) => n),
+  );
+  el.innerHTML = _modelDetailHtml(_drawerModel, info, disabledProviders);
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && document.getElementById('modelDrawer')?.classList.contains('open')) {
+    closeModelDrawer();
+  }
+});
+
+// A click outside the panel closes it — except on another row, which switches
+// the panel to that model instead of closing it.
+document.addEventListener('click', (e) => {
+  const el = document.getElementById('modelDrawer');
+  if (!el || !el.classList.contains('open')) return;
+  if (e.target.closest('#modelDrawer')) return;
+  if (e.target.closest('#modelTable tr')) return;
+  if (e.target.closest('.modal-overlay.open')) return;
+  // A control that opens the panel is, by definition, outside it.
+  if (e.target.closest('.drawer-trigger')) return;
+  closeModelDrawer();
+});
+
+/** The model whose provider menu is open, so a re-render can reopen it.
+ *
+ *  Acting inside the menu — a weight, a switch, a removal — reloads the config
+ *  and rebuilds the table.  Without this the menu closes under the pointer
+ *  after the first change, and the operator cannot make a second one. */
+let _openProviderMenuFor = null;
+
+function toggleProviderMenu(btn, modelName) {
+  const menu = btn.nextElementSibling;
+  const wasOpen = menu.classList.contains('open');
+  closeMenus();
+  if (!wasOpen) {
+    _openProviderMenuFor = modelName;
+    openMenu(menu, btn);
+  } else {
+    _openProviderMenuFor = null;
+  }
+}
+
+/** Reopen the provider menu after the table was rebuilt. */
+function _restoreProviderMenu() {
+  if (!_openProviderMenuFor) return;
+  const check = document.querySelector(
+    `#modelTable .row-check[data-model="${CSS.escape(_openProviderMenuFor)}"]`,
+  );
+  const btn = check && check.closest('tr').querySelector('.provider-multi-btn');
+  if (!btn) {
+    _openProviderMenuFor = null;
+    return;
+  }
+  openMenu(btn.nextElementSibling, btn);
+}
+
+// A click outside the menu and its button closes it for good: the next render
+// must not bring it back.
+document.addEventListener('click', (e) => {
+  if (e.target.closest('.provider-menu') || e.target.closest('.provider-multi-btn')) {
+    return;
+  }
+  _openProviderMenuFor = null;
+});
+window.toggleProviderMenu = toggleProviderMenu;
+
+/** Turn one provider's entry for a model on or off.
+ *
+ *  This is not the same as disabling the provider: it narrows one model to
+ *  its other providers. */
+async function toggleModelProvider(modelName, providerName) {
   const info = S.configData?.models?.[modelName];
   if (!info) return;
-  const disabledProviders = new Set();
-  if (S.configData?.providers) {
-    for (const [pn, pi] of Object.entries(S.configData.providers)) {
-      if (pi && pi.enabled === false) disabledProviders.add(pn);
-    }
+  const detail = _getProviderDetails(info).find(p => p.name === providerName);
+  if (!detail) return;
+  const next = detail.enabled === false;
+  const res = await api.post(
+    `/admin/api/config/models/${encodeURIComponent(modelName)}/update-provider`,
+    {provider: providerName, enabled: next},
+  );
+  if (res.ok) {
+    showToast(`${providerName}: ${t(next ? 'model.enabled' : 'model.disabled')}`);
+    window.loadConfig();
+  } else {
+    showToast(res.error || t('toast.error'), 'error');
   }
-  const details = _getProviderDetails(info);
-  const rows = details.map(p => {
-    const dis = disabledProviders.has(p.name);
-    const w = p.weight || 1;
-    return `<tr class="provider-detail-row" role="row" data-parent-model="${esc(modelName)}" style="background:var(--bg)">
-      <td role="cell"></td>
-      <td colspan="5" role="cell" style="padding:4px 12px 4px 20px">
-        <div class="provider-detail-grid">
-          <span class="provider-link pd-name" onclick="goToProviderFromModel('${esc(p.name)}')">${esc(p.name)}${dis ? ` <span style="color:var(--text-dim);font-size:10px">(${t('provider.disabled')})</span>` : ''}</span>
-          <input type="number" class="weight-input pd-weight" min="1" max="100" value="${w}" title="Routing weight" style="width:48px;padding:2px 4px;font-size:11px;text-align:center;border:1px solid var(--border);border-radius:3px;background:var(--bg-card);color:var(--text);font-family:var(--mono)" onchange="updateProviderWeight('${esc(modelName)}','${esc(p.name)}',this.value)" onkeydown="if(event.key==='Enter'){this.blur()}">
-          <span class="pd-upstream" style="font-size:11px;color:var(--text-dim)">${p.upstream_model ? `→ ${esc(p.upstream_model)}` : ''}</span>
-          <button class="btn btn-sm pd-remove" style="font-size:10px;padding:1px 6px;opacity:0.4" title="Remove" onclick="event.stopPropagation();removeProviderFromModel('${esc(modelName)}','${esc(p.name)}')">✕</button>
-        </div>
-      </td>
-    </tr>`;
-  }).join('');
-  tr.insertAdjacentHTML('afterend', rows);
 }
-window.toggleProviderRows = toggleProviderRows;
+window.toggleModelProvider = toggleModelProvider;
+
 
 async function removeProviderFromModel(modelName, providerName) {
-  if (!confirm(`Remove provider "${providerName}" from model "${modelName}"?`)) return;
+  if (!confirm(t('confirm.removeProviderFromModel', {provider: providerName, model: modelName}))) return;
   const res = await api.post(`/admin/api/config/models/${encodeURIComponent(modelName)}/remove-provider`, {provider: providerName});
   if (res.ok) {
-    showToast(`Removed ${providerName} from ${modelName}`);
+    showToast(t('toast.providerRemovedFromModel', {provider: providerName, model: modelName}));
     window.loadConfig();
   } else {
-    showToast(res.error || 'Failed', 'error');
+    showToast(res.error || t('toast.error'), 'error');
   }
 }
 
-async function updateProviderWeight(modelName, providerName, newWeight) {
-  const w = parseInt(newWeight, 10);
-  if (isNaN(w) || w < 1 || w > 100) { showToast('Weight must be 1–100', 'error'); window.loadConfig(); return; }
-  const res = await api.post(`/admin/api/config/models/${encodeURIComponent(modelName)}/update-provider`, {provider: providerName, weight: w});
-  if (res.ok) {
-    showToast(`${providerName} weight → ${w}`);
-    window.loadConfig();
-  } else {
-    showToast(res.error || 'Failed', 'error');
+/** The mutable `providers[]` entry for one provider, or null when the model
+ *  is a single-provider entry. */
+function _providerEntry(info, providerName) {
+  if (!info || typeof info !== 'object' || !Array.isArray(info.providers)) return null;
+  return info.providers.find(
+    p => (typeof p === 'string' ? p : p.name) === providerName,
+  ) || null;
+}
+
+/** Save one provider's weight.
+ *
+ *  The weight shows nowhere but this menu, so the answer is written back into
+ *  the loaded config instead of reloading it: a reload rebuilds the table and
+ *  the menu would close under the pointer after every step. */
+async function updateProviderWeight(modelName, providerName, input) {
+  const detail = _getProviderDetails(S.configData.models[modelName])
+    .find(p => p.name === providerName);
+  const previous = detail ? (detail.weight || 1) : 1;
+  const w = parseInt(input.value, 10);
+  if (isNaN(w) || w < 1 || w > 100) {
+    showToast(t('toast.weightRange'), 'error');
+    input.value = previous;
+    return;
   }
+  const res = await api.post(
+    `/admin/api/config/models/${encodeURIComponent(modelName)}/update-provider`,
+    {provider: providerName, weight: w},
+  );
+  if (!res.ok) {
+    showToast(res.error || t('toast.error'), 'error');
+    input.value = previous;
+    return;
+  }
+  const entry = _providerEntry(S.configData.models[modelName], providerName);
+  if (entry && typeof entry === 'object') entry.weight = w;
+  showToast(t('toast.weightSet', {provider: providerName, w}));
 }
 
 // ── Model rendering ──
@@ -553,7 +905,7 @@ function _checkRoutingLoops() {
       const banner = document.getElementById('loopWarningBanner');
       if (!banner) return;
       if (data.warnings && data.warnings.length) {
-        banner.innerHTML = '<strong>⚠ Routing loop detected:</strong> ' +
+        banner.innerHTML = `<strong>${t('error.routingLoop')}</strong> ` +
           data.warnings.map(w => esc(w)).join('<br>');
         banner.style.display = 'block';
       } else {
@@ -583,9 +935,17 @@ function renderModels() {
   for (const [, info] of Object.entries(models)) {
     _getAllProviders(info).forEach(p => provSet.add(p));
   }
+  // Each provider carries how many models it serves, the same count its card
+  // shows, so the roster can be read without opening the providers tab.
+  const provCount = {};
+  for (const [, info] of Object.entries(models)) {
+    for (const p of _getAllProviders(info)) provCount[p] = (provCount[p] || 0) + 1;
+  }
   setLogoSelectOptions('modelProviderFilter', [
     {value: '', label: t('filter.allProviders'), logo: ''},
-    ...[...provSet].sort().map(p => ({value: p, label: p, logo: _providerLogo(p)})),
+    ...[...provSet].sort().map(p => ({
+      value: p, label: `${p} (${provCount[p] || 0})`, logo: _providerLogo(p),
+    })),
   ], prevProv);
 
   // Update sort header indicators
@@ -609,7 +969,7 @@ function renderModels() {
   }
 
   if (totalCount === 0) {
-    tbody.innerHTML = `<tr role="row"><td colspan="6" role="cell" class="model-empty">${t('empty.models')}</td></tr>`;
+    tbody.innerHTML = `<tr role="row"><td colspan="4" role="cell" class="model-empty">${t('empty.models')}</td></tr>`;
     document.getElementById('modelCount').textContent = '';
     return;
   }
@@ -634,20 +994,33 @@ function renderModels() {
     entries = entries.filter(e => _getModelType(e.info) === S._modelDomain);
   }
 
+  // Providers that are off altogether, and the status facet over what is left.
+  const providers = S.configData.providers || {};
+  const disabledProviders = new Set(
+    Object.entries(providers).filter(([, cfg]) => cfg.enabled === false).map(([n]) => n),
+  );
+  const statusCounts = {all: entries.length, usable: 0, partial: 0, off: 0};
+  for (const e of entries) statusCounts[_modelStatus(e.info, disabledProviders)] += 1;
+  _buildStatusSeg(statusCounts);
+  if (S._modelStatus && S._modelStatus !== 'all') {
+    entries = entries.filter(e => _modelStatus(e.info, disabledProviders) === S._modelStatus);
+  }
+
   // Show/hide reset button
-  const hasFilters = S._modelDomain !== 'all' || selectedProv || query;
+  const hasFilters = S._modelDomain !== 'all' || selectedProv || query
+    || (S._modelStatus && S._modelStatus !== 'all');
   const resetBtn = document.getElementById('modelResetBtn');
   if (resetBtn) resetBtn.classList.toggle('visible', !!hasFilters);
 
-  // Determine which providers are disabled
-  const providers = S.configData.providers || {};
-  const disabledProviders = new Set(
-    Object.entries(providers).filter(([,cfg]) => cfg.enabled === false).map(([n]) => n)
-  );
 
-  // Sort
+  // Sort.  A model no provider can serve sinks below the usable ones whatever
+  // the chosen key is: it cannot take traffic, so it is not what an operator
+  // scanning the table is looking for.
   const dir = S._modelSortDir === 'asc' ? 1 : -1;
   entries.sort((a, b) => {
+    const ua = _entryUsable(a.info, disabledProviders) ? 0 : 1;
+    const ub = _entryUsable(b.info, disabledProviders) ? 0 : 1;
+    if (ua !== ub) return ua - ub;
     const va = S._modelSortKey === 'provider' ? a.prov : a.name;
     const vb = S._modelSortKey === 'provider' ? b.prov : b.name;
     return va.localeCompare(vb) * dir;
@@ -672,31 +1045,39 @@ function renderModels() {
     const rowDimmed = !modelEnabled || allProvsDisabled;
     const caps = typeof info === 'string' ? ['text'] : (info.capabilities || ['text']);
     const modelType = _getModelType(info);
+    // Icon only: the column is narrow and the four names repeat on every row.
+    // The name stays available as the badge's tooltip and accessible name.
     const capBadges = modelType === 'llm' ? caps.map(c => {
       const cls = 'cap-badge-' + c;
       const icon = _capIcons[c] || '';
-      return `<span class="cap-badge ${cls}">${icon}${esc(c)}</span>`;
+      const label = capLabel(c);
+      return `<span class="cap-badge ${cls}" title="${esc(label)}" aria-label="${esc(label)}">${icon}</span>`;
     }).join('') : '';
     const hasVision = caps.includes('vision');
     const hasTools = caps.includes('tools');
     const hasReasoning = caps.includes('reasoning');
     const typeBadgeCls = _typeBadgeClass(modelType);
-    const typeBadge = `<span class="cap-badge ${typeBadgeCls}">${_CAP_ICONS[modelType] || ''}${esc(modelType.toUpperCase())}</span>`;
+    const typeBadge = modelType === 'llm' ? '' : `<span class="cap-badge ${typeBadgeCls}">${_CAP_ICONS[modelType] || ''}${esc(capLabel(modelType))}</span>`;
+    // The upstream name is the same string on nearly every row and the provider
+    // menu already lists it per provider; it stays a tooltip here.
     const upstream = (typeof info === 'object' && info.upstream_model) ? info.upstream_model : '';
-    const upstreamTag = upstream ? ` <span style="font-size:11px;color:var(--text-dim)" title="Upstream: ${esc(upstream)}">→ ${esc(upstream)}</span>` : '';
     const urlTpl = (typeof info === 'object' && info.url_template) ? info.url_template : '';
-    const urlTplTag = urlTpl ? ` <span style="font-size:10px;color:var(--text-dim);background:var(--bg-card);padding:1px 4px;border-radius:3px;border:1px solid var(--border)" title="URL Template: ${esc(urlTpl)}">⛓ url</span>` : '';
-    return `<tr${rowDimmed ? ' class="model-disabled"' : ''} role="row">
+    const urlTplTag = urlTpl ? ` <span style="font-size:10px;color:var(--text-dim);background:var(--bg-card);padding:1px 4px;border-radius:3px;border:1px solid var(--border)" title="${t('label.urlTemplate')}: ${esc(urlTpl)}">⛓ url</span>` : '';
+    return `<tr${rowDimmed ? ' class="model-disabled"' : ''} role="row"
+      onclick="if(!event.target.closest('button,input,label,a,.more-menu,.provider-link'))openModelDrawer('${esc(name)}')">
       <td class="col-check" role="cell" aria-labelledby="thModelSelect"><input type="checkbox" class="row-check" data-model="${esc(name)}" onchange="updateModelBulk()"></td>
       <td class="model-name-cell" role="cell" aria-labelledby="sortName">
-        <code class="copyable" title="${esc(name)}" onclick="copyText('${esc(name)}')">${esc(name)}</code>
-        ${upstreamTag || urlTplTag ? `<div style="margin-top:2px">${upstreamTag}${urlTplTag}</div>` : ''}
+        <div class="mn-inner">
+          <code class="copyable" role="button" tabindex="0"
+                title="${esc(upstream ? name + ' → ' + upstream : name)}"
+                onclick="openModelDrawer('${esc(name)}')"
+                onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openModelDrawer('${esc(name)}')}">${esc(name)}</code>
+          <span class="mn-badges">${typeBadge}${capBadges}</span>
+        </div>
       </td>
-      <td class="model-type-cell" role="cell" aria-labelledby="thModelType">${typeBadge}</td>
-      <td class="model-caps-cell" role="cell" aria-labelledby="thModelCaps">${capBadges || '<span style="color:var(--text-dim);font-size:11px">—</span>'}</td>
       <td class="model-provider-cell" role="cell" aria-labelledby="sortProvider">${_renderProviderCell(name, info, disabledProviders)}</td>
       <td class="model-actions-cell" role="cell" aria-labelledby="sortEnabled">
-        <div class="pill-toggle ${effectiveEnabled ? 'is-on' : 'is-off'}" role="switch" tabindex="0" aria-checked="${effectiveEnabled}" aria-label="${esc(name)}" onclick="toggleModel('${esc(name)}')" onkeydown="if(event.key===' '||event.key==='Enter'){event.preventDefault();toggleModel('${esc(name)}')}" title="${allProvsDisabled ? t('provider.disabled') : modelEnabled ? t('model.enabled') : t('model.disabled')}" style="vertical-align:middle;margin-right:4px"><span class="pill-on">${t('label.on')}</span><span class="pill-off">${t('label.off')}</span></div>
+        <label class="toggle row-toggle" style="margin-right:6px" title="${allProvsDisabled ? t('provider.disabled') : modelEnabled ? t('model.enabled') : t('model.disabled')}"><input type="checkbox" role="switch" ${effectiveEnabled ? 'checked' : ''} aria-checked="${effectiveEnabled}" aria-label="${esc(name)}" onchange="toggleModel('${esc(name)}')"><span class="slider"></span></label>
         <div class="test-group" style="display:inline-block">
           <button class="btn btn-sm btn-test${modelType !== 'llm' ? ' btn-test-embed' : ''}" onclick="runTest('${esc(name)}','${_defaultTestKind(modelType)}')">${t('btn.test')}</button>
           <button class="btn btn-sm btn-caret" aria-haspopup="true" aria-expanded="false" aria-label="${t('btn.test')} ${esc(name)}" onclick="toggleTestMenu(this)">&#9662;</button>
@@ -704,9 +1085,10 @@ function renderModels() {
             ${_testMenuItems(modelType, name, {hasTools, hasVision, hasReasoning})}
           </div>
         </div>
-        <button class="btn btn-sm" aria-label="${t('btn.edit')} ${esc(name)}" onclick="editModel('${esc(name)}','${esc(prov)}')">${t('btn.edit')}</button>
         <button class="btn btn-sm more-menu-toggle" aria-haspopup="true" aria-expanded="false" aria-label="${t('btn.more')} ${esc(name)}" onclick="toggleMoreMenu(this)" style="padding:3px 6px">⋯</button>
         <div class="more-menu" role="menu">
+          <div class="more-menu-item" role="menuitem" aria-label="${t('btn.edit')} ${esc(name)}" onclick="closeMenus();editModel('${esc(name)}','${esc(prov)}')">${t('btn.edit')}</div>
+          <div class="more-menu-item" role="menuitem" aria-label="${t('btn.copy')} ${esc(name)}" onclick="closeMenus();copyText('${esc(name)}')">${t('btn.copy')}</div>
           <div class="more-menu-item" role="menuitem" aria-label="${t('btn.clone')} ${esc(name)}" onclick="closeMenus();cloneModel('${esc(name)}')">${t('btn.clone')}</div>
           <div class="more-menu-sep" role="separator"></div>
           <div class="more-menu-item danger" role="menuitem" aria-label="${t('btn.delete')} ${esc(name)}" onclick="deleteModel('${esc(name)}', this)">${t('btn.delete')}</div>
@@ -714,6 +1096,10 @@ function renderModels() {
       </td>
     </tr>`;
   }).join('');
+
+  _syncModelDrawer();
+
+  _restoreProviderMenu();
 
   // Update filter dropdowns
   window.updateFilterOptions();
@@ -751,11 +1137,26 @@ async function saveModel() {
     // Merge onto what was loaded rather than rebuilding: clearing a control
     // must delete its key (an omitted key means "leave it" to the backend), and
     // fields the card shows but cannot edit must survive an unrelated save.
+    // Effort range is two boxes but one field: either box alone is an edit,
+    // and both empty means "inherit".
+    const effMin = document.getElementById('reasoningEffortMin').value.trim();
+    const effMax = document.getElementById('reasoningEffortMax').value.trim();
+    const visModes = {};
+    for (const mode of ['Auto', 'Concise', 'Detailed', 'None']) {
+      const v = document.getElementById('reasoningVis' + mode).value;
+      if (v) visModes[mode.toLowerCase()] = v;
+    }
     body.reasoning_override = mergeReasoningOverride(_loadedReasoningOverride, {
       thinking_type: thinkingType,
       budget_ratio: budgetRatioStr === '' ? null : parseFloat(budgetRatioStr),
       disabled: disabledStrategy,
       replay_missing: replayMissing,
+      effort_field: document.getElementById('reasoningEffortField').value.trim() || null,
+      // A range is a pair: half of one is not a range, so it is treated as
+      // "inherit" rather than sent as a list with a hole in it.
+      effort_range: (effMin && effMax) ? [effMin, effMax] : null,
+      unsigned_blocks: document.getElementById('reasoningUnsignedBlocks').value || null,
+      visibility_modes: Object.keys(visModes).length ? visModes : null,
     });
   }
   // URL template overrides
@@ -775,22 +1176,22 @@ async function saveModel() {
   if (res.ok) {
     const msg = res.merged ? t('toast.modelMerged', {name, provider: res.provider}) : t('toast.modelSaved', {name});
     showToast(msg);
-    closeModal('modelModal');
+    closeModelDrawer();
     window.loadConfig();
   } else if (res.merge_possible && res.existing_provider) {
     if (confirm(t('confirm.mergeModel', {name, provider: res.existing_provider}))) {
       body.merge = true;
       const res2 = await api.put(`/admin/api/config/models/${encodeURIComponent(name)}`, body);
-      if (res2.ok) { showToast(t('toast.modelMerged', {name, provider: body.provider})); closeModal('modelModal'); window.loadConfig(); }
-      else { showToast(res2.error || 'Failed', 'error'); }
+      if (res2.ok) { showToast(t('toast.modelMerged', {name, provider: body.provider})); closeModelDrawer(); window.loadConfig(); }
+      else { showToast(res2.error || t('toast.error'), 'error'); }
     }
-  } else { showToast(res.error || 'Failed', 'error'); }
+  } else { showToast(res.error || t('toast.error'), 'error'); }
 }
 
 async function _doDeleteModel(name) {
   const res = await api.del(`/admin/api/config/models/${encodeURIComponent(name)}`);
   if (res.ok) { showToast(t('toast.modelDeleted',{name})); window.loadConfig(); }
-  else { showToast(res.error || 'Failed', 'error'); }
+  else { showToast(res.error || t('toast.error'), 'error'); }
 }
 
 /** Delete a model after an inline confirmation.
@@ -810,7 +1211,7 @@ async function toggleModel(name) {
     const stateKey = res.enabled ? 'model.enabled' : 'model.disabled';
     showToast(`${name}: ${t(stateKey)}`);
     window.loadConfig();
-  } else { showToast(res.error || 'Failed', 'error'); }
+  } else { showToast(res.error || t('toast.error'), 'error'); }
 }
 
 function editModel(name, provider) {
@@ -818,10 +1219,12 @@ function editModel(name, provider) {
   const caps = (typeof info === 'object' && info.capabilities) ? info.capabilities : ['text'];
   const upstream = (typeof info === 'object' && info.upstream_model) ? info.upstream_model : '';
   const provs = _getAllProviders(info);
+  // An omitted provider (the panel's own Edit tab passes none) falls back to
+  // the model's own, so the form never opens with an empty roster choice.
   const prov = provs.length > 1 ? (provs.find(p => {
     const cfg = (S.configData.providers || {})[p];
     return cfg && cfg.enabled !== false;
-  }) || provs[0]) : provider;
+  }) || provs[0]) : (provider || provs[0] || '');
   openModelModal(name, prov, caps, upstream);
 }
 
@@ -862,7 +1265,7 @@ async function bulkModels(action) {
     document.querySelectorAll('#modelTable .row-check:checked').forEach(cb => cb.checked = false);
     updateModelBulk();
     window.loadConfig();
-  } else { showToast(res.error || 'Failed', 'error'); }
+  } else { showToast(res.error || t('toast.error'), 'error'); }
 }
 
 function toggleMoreMenu(btn) {
@@ -882,7 +1285,8 @@ Object.assign(window, {
   selectAllModels, updateModelBulk, bulkModels, toggleMoreMenu,
   deleteModel, goToModelsForProvider, goToProviderFromModel,
   removeProviderFromModel, updateProviderWeight, _buildTypeSegControls,
+  toggleModelProvider,
   setModelSortKey, toggleModelSortDir,
 });
 
-export { renderModels };
+export { renderModels, _providerLogo };

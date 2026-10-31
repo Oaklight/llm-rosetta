@@ -177,12 +177,127 @@
    width, and the fixed navigation and status bars visibly jump.
    Overlay-scrollbar platforms reserve nothing, so this is a no-op there. */
 html { scrollbar-gutter: stable; }
+
+/* Themed scrollbars.  The platform's default paints a light track that reads
+   as a stray white strip in every dark scheme, so the track is transparent and
+   the thumb is the same token as every other border.  Both syntaxes are
+   needed: Firefox only knows scrollbar-color/width, Chromium only the
+   pseudo-elements. */
+/* A plain border token is invisible on a dark scheme, so the thumb is the
+   muted text colour at partial alpha: readable on both. */
+:root { --scrollbar-thumb: color-mix(in srgb, var(--text-dim) 45%, transparent); }
+* { scrollbar-color: var(--scrollbar-thumb) transparent; scrollbar-width: thin; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb); border-radius: 6px;
+  border: 2px solid transparent; background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-dim); background-clip: padding-box;
+}
+::-webkit-scrollbar-corner { background: transparent; }
 body { font-family: var(--font); background: var(--bg); color: var(--text); min-height: 100vh; }
 /* Hide main content until auth check completes to prevent flash of unauthenticated content */
 body.auth-pending > .header,
 body.auth-pending > .tabs,
 body.auth-pending > .content,
+body.auth-pending > .app-shell,
 body.auth-pending > .db-footer { display: none !important; }
+
+/* ── Console shell ────────────────────────────────────────────────────────
+   The navigation is a left rail, not a top bar: every panel is a work
+   surface that wants the full height, and a rail keeps the section names
+   visible while a table or a log scrolls. */
+.app-shell { display: grid; grid-template-columns: 220px minmax(0, 1fr); min-height: 100vh; }
+.sidebar {
+  position: sticky; top: 0; height: 100vh;
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 16px 12px 12px;
+  border-right: 1px solid var(--border); background: var(--bg-card);
+}
+/* The brand is the way home. */
+.sb-brand { padding: 2px 8px 6px; cursor: pointer; border-radius: 8px; }
+.sb-brand:hover h1 { color: var(--accent); }
+.sb-brand:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sb-brand h1 { font-size: 15px; }
+.sb-brand h1 span { display: block; font-size: 11px; margin-top: 2px; }
+.sidebar .tabs {
+  flex-direction: column; align-items: stretch; gap: 2px;
+  padding: 0; border-bottom: none; overflow: visible; flex: 0 0 auto;
+}
+/* Rail items follow the settings sub-nav: no bubble, an accent bar and an
+   accent label for the current section, the background only on hover.  Two
+   navigations that looked nothing alike made the panel feel assembled from
+   two designs. */
+.sidebar .tab {
+  position: relative;
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 8px 7px 12px; border-radius: 6px; border-bottom: none;
+  font-size: 13px; color: var(--text-dim); white-space: normal;
+  transition: color .12s ease, background .12s ease;
+}
+.sidebar .tab:hover { background: var(--bg-hover); color: var(--text); }
+.sidebar .tab.active {
+  background: transparent; color: var(--accent); font-weight: 600;
+  border-bottom-color: transparent;
+  box-shadow: none;
+}
+.sidebar .tab.active::before {
+  content: ''; position: absolute; left: 0; top: 6px; bottom: 6px;
+  width: 2px; border-radius: 2px; background: var(--accent);
+  pointer-events: none;
+}
+.sidebar .tabs-spacer { display: none; }
+.sidebar .config-path {
+  padding: 8px 10px 0; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+.sb-foot {
+  margin-top: auto; display: flex; flex-direction: column; gap: 8px;
+  padding-top: 10px; border-top: 1px solid var(--border);
+}
+.sb-clock { display: flex; flex-direction: column; gap: 2px; padding: 0 10px; font-size: 11px; color: var(--text-dim); }
+.sb-actions { display: flex; gap: 4px; }
+.sb-actions .btn { flex: 1; min-width: 0; display: inline-flex; align-items: center; justify-content: center; }
+/* The foot of the rail is icon-only and borderless: a box around each of four
+   40px buttons reads as a toolbar the panel does not have. */
+.sb-icon-btn {
+  padding: 6px 0; font-size: 12px; line-height: 1;
+  border: none; background: transparent; color: var(--text-dim);
+}
+.sb-icon-btn:hover { background: var(--bg-hover); color: var(--text); }
+.sb-icon-btn svg { width: 15px; height: 15px; display: block; margin: 0 auto; }
+.app-main { min-width: 0; }
+/* Language swap: the shell dips out for ~90ms while every string is replaced.
+   The login card does the same; it is on screen before the shell exists. */
+.app-shell, .login-box { transition: opacity .12s ease; }
+.app-shell.is-lang-switching, .login-box.is-lang-switching { opacity: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .app-shell, .login-box { transition: none; }
+}
+.content { max-width: 1600px; }
+/* The status bar belongs to the content column, not the whole window. */
+@media (min-width: 901px) { .db-footer { left: 220px; } }
+
+/* Below the rail's breakpoint the shell is the old top bar again. */
+@media (max-width: 900px) {
+  .app-shell { grid-template-columns: 1fr; }
+  .sidebar {
+    position: static; height: auto;
+    border-right: none; border-bottom: 1px solid var(--border);
+  }
+  .sidebar .tabs { flex-direction: row; overflow-x: auto; scrollbar-width: none; }
+  .sidebar .tabs::-webkit-scrollbar { display: none; }
+  .sidebar .tab { white-space: nowrap; border-radius: 0; padding: 10px 12px; }
+  .sidebar .tab.active { background: none; box-shadow: inset 0 -2px 0 var(--accent); }
+  /* Horizontal bar: the accent bar under the label replaces the left one. */
+  .sidebar .tab.active::before { display: none; }
+  .sb-foot { flex-direction: row; align-items: center; justify-content: space-between; }
+  .sb-clock { flex-direction: row; align-items: baseline; gap: 6px; }
+  .sb-actions { flex: 0 0 auto; }
+  .db-footer { left: 0; }
+}
 a { color: var(--accent); text-decoration: none; }
 
 /* Header */
@@ -194,11 +309,121 @@ a { color: var(--accent); text-decoration: none; }
 .header h1 { font-size: 18px; font-weight: 600; white-space: nowrap; }
 .header h1 span { color: var(--text-dim); font-weight: 400; }
 .header-right { display: flex; align-items: center; gap: 10px; }
-.config-path { font-size: 12px; color: var(--text-dim); font-family: var(--mono); }
+.config-path {
+  display: block; font-size: 12px; color: var(--text-dim);
+  font-family: var(--mono); word-break: break-all;
+}
 /* Settings popup (tinyleaf-style centered modal) */
 .settings-tab-content {
   max-width: 820px; margin: 0 auto; padding: 8px 0;
 }
+
+/* Settings shell: a group rail beside one pane at a time.  As one column the
+   eight cards ran past the fold, and where a field was saved — this browser or
+   the server config — was invisible.
+
+   The rail is drawn like the console rail next to it: no card, no border box,
+   an accent bar on the open item, and its left edge on the same line as the
+   content of every other tab. */
+.settings-shell {
+  display: grid; grid-template-columns: 172px minmax(0, 1fr);
+  gap: 32px; max-width: none; margin: 0; align-items: start;
+  padding: 20px 24px 32px;
+}
+.settings-nav {
+  position: sticky; top: 8px; align-self: stretch;
+  display: flex; flex-direction: column; gap: 1px;
+  padding: 0 18px 0 0;
+  border-right: 1px solid var(--border);
+}
+.settings-nav-btn {
+  position: relative;
+  appearance: none; border: 0; background: transparent; color: var(--text-dim);
+  font: inherit; font-size: 13px; text-align: left; cursor: pointer;
+  padding: 6px 8px 6px 12px; border-radius: 6px;
+  transition: color .12s ease, background .12s ease;
+}
+.settings-nav-btn:hover { background: var(--bg-hover); color: var(--text); }
+.settings-nav-btn.is-active { color: var(--accent); font-weight: 600; }
+.settings-nav-btn.is-active::before {
+  content: ''; position: absolute; left: 0; top: 7px; bottom: 7px; width: 2px;
+  border-radius: 2px; background: var(--accent);
+  pointer-events: none;
+}
+.settings-nav-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* Pane header: the group name and where its fields are stored, in one line. */
+.settings-pane-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin: 0 0 16px; min-height: 24px;
+}
+.settings-pane-head h3 {
+  font-size: 15px; font-weight: 600; letter-spacing: -0.01em; margin: 0;
+}
+/* Nothing on this tab is a card any more: a group is a heading, its fields
+   and its own buttons, separated by a rule rather than boxed. */
+.settings-group { padding: 18px 0; border-top: 1px solid var(--border); }
+.settings-group:first-of-type { padding-top: 0; border-top: 0; }
+.settings-group:last-of-type { padding-bottom: 0; }
+.settings-group-head { margin-bottom: 10px; }
+.settings-group-head h4 {
+  margin: 0 0 2px; font-size: 13px; font-weight: 600; color: var(--text);
+  letter-spacing: -0.01em;
+}
+.settings-group-head p { margin: 0; font-size: 11.5px; color: var(--text-dim); }
+/* A group can carry its own scope badge when it differs from its pane's; it
+   sits on the same right edge as the pane badge. */
+.settings-group-title {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+}
+/* One setting per line: label, control, and room to read the value.  Two
+   columns put unrelated fields side by side and made the wide page look
+   scattered. */
+.settings-fields {
+  display: flex; flex-direction: column; gap: 2px;
+  max-width: 720px;
+}
+.settings-group-actions {
+  display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px;
+}
+/* Anything still built as a section inside this tab keeps the flat look. */
+#tab-settings .settings-section {
+  background: transparent; border: 0; border-radius: 0;
+  padding: 18px 0; margin: 0; border-top: 1px solid var(--border);
+}
+#tab-settings .settings-section:first-of-type { padding-top: 0; border-top: 0; }
+.scope-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 2px 9px; border-radius: 999px; font-size: 11px;
+  border: 1px solid var(--border); color: var(--text-dim); background: var(--bg);
+  white-space: nowrap;
+}
+.scope-badge::before {
+  content: ''; width: 6px; height: 6px; border-radius: 50%;
+  background: currentColor; opacity: .6;
+}
+.scope-badge.server {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+}
+.scope-badge.server-save {
+  color: var(--yellow, #b7791f);
+  border-color: color-mix(in srgb, var(--yellow, #b7791f) 40%, var(--border));
+}
+@media (max-width: 900px) {
+  .settings-shell { grid-template-columns: 1fr; gap: 14px; }
+  .settings-nav {
+    position: static; flex-direction: row; overflow-x: auto;
+    padding: 0 0 8px; border-right: 0; border-bottom: 1px solid var(--border);
+    scrollbar-width: none;
+  }
+  .settings-nav::-webkit-scrollbar { display: none; }
+  .settings-nav-btn { white-space: nowrap; }
+  .settings-nav-btn.is-active::before { left: 8px; right: 8px; top: auto; bottom: 0; width: auto; height: 2px; }
+}
+.settings-pane { display: none; }
+.settings-pane.is-active { display: block; }
 .settings-popup {
   display: none; position: fixed; inset: 0;
   background: rgba(0,0,0,0.45); z-index: 200;
@@ -236,7 +461,7 @@ a { color: var(--accent); text-decoration: none; }
 }
 .settings-section-title .section-icon { width: 14px; height: 14px; opacity: 0.5; }
 .settings-grid {
-  display: grid; grid-template-columns: repeat(2, 1fr); gap: 2px 28px;
+  display: flex; flex-direction: column; gap: 2px; max-width: 720px;
 }
 /* The retention section puts three narrow fields on one row.  Kept as a
    class rather than an inline style so the phone rule below can stack it —
@@ -247,15 +472,23 @@ a { color: var(--accent); text-decoration: none; }
   .settings-grid-retention { grid-template-columns: 1fr; }
 }
 .settings-popup-item {
-  padding: 7px 0; font-size: 13px;
-  display: flex; align-items: center; gap: 10px;
+  padding: 6px 0; font-size: 13px;
+  display: grid; grid-template-columns: 190px minmax(0, 420px);
+  align-items: center; gap: 4px 16px;
 }
-.settings-popup-item label {
-  font-size: 12px; color: var(--text-dim);
-  white-space: nowrap; min-width: 84px; font-weight: 500;
+.settings-popup-item > label:not(.toggle-label) {
+  font-size: 12.5px; color: var(--text-dim);
+  font-weight: 500;
+}
+/* A toggle keeps its own line: the label names the switch, the state follows. */
+.settings-popup-item > .toggle-label {
+  display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px;
+}
+@media (max-width: 720px) {
+  .settings-popup-item { grid-template-columns: 1fr; }
 }
 .settings-popup-item select {
-  flex: 1; min-width: 0; padding: 5px 10px; font-size: 12px;
+  width: auto; min-width: 170px; max-width: 340px; justify-self: start; padding: 5px 10px; font-size: 12px;
   background: var(--bg); color: var(--text);
   border: 1px solid var(--border); border-radius: 6px;
   transition: border-color 0.15s ease, box-shadow 0.15s ease; cursor: pointer;
@@ -267,17 +500,41 @@ a { color: var(--accent); text-decoration: none; }
 .settings-popup-item input[type="text"],
 .settings-popup-item input[type="number"],
 .settings-popup-item input[type="password"] {
-  flex: 1; min-width: 0; padding: 5px 10px; font-size: 12px;
+  width: 100%; max-width: 420px; justify-self: start; min-width: 0; padding: 5px 10px; font-size: 12px;
   background: var(--bg); color: var(--text);
   border: 1px solid var(--border); border-radius: 6px;
   font-family: var(--mono);
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
+/* A cap or a day count is a short number, not a paragraph. */
+.settings-popup-item input[type="password"] { max-width: 260px; }
+
 .settings-popup-item input:focus {
   outline: none; border-color: var(--accent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 8%, transparent);
 }
-.settings-popup-item input[type="number"] { max-width: 90px; }
+.settings-popup-item input[type="number"] { width: 128px; }
+/* Free text in a settings row stops where reading stops. */
+.settings-popup-item textarea { max-width: 760px; }
+/* The shim pane builds its own blocks; keep them the same width. */
+#settingsPane-shims textarea,
+#settingsPane-shims input[type="text"] { max-width: 760px; }
+#settingsPane-shims select { max-width: 340px; }
+/* A quota string needs room for "60/m or 30/m, 500/h", not a paragraph. */
+.settings-popup-item .quota-input-wrap input { max-width: 320px; }
+/* The hint under a control belongs to that control, not the row. */
+.field-hint { margin: 4px 0 0; font-size: 11px; color: var(--text-dim); line-height: 1.45; }
+.settings-popup-item textarea {
+  width: 100%; font-family: var(--mono); font-size: 12px; padding: 6px 10px;
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px; resize: vertical;
+}
+.shim-remote-add { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
+.shim-remote-add select { flex: 1; }
+.shim-status { margin-top: 10px; font-size: 12px; }
+/* A pane's Save sits under the fields it saves, not at the window edge. */
+#tab-settings .section-footer { justify-content: flex-start; }
+
 .settings-popup-item .toggle-label {
   display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px;
   user-select: none;
@@ -297,12 +554,26 @@ a { color: var(--accent); text-decoration: none; }
 .settings-popup-item .toggle-label input[type="checkbox"]:checked::after { transform: translateX(14px); }
 .settings-popup-item .toggle-label input[type="checkbox"]:focus-visible { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 8%, transparent); }
 .settings-item-disabled { opacity: 0.5; pointer-events: none; }
-.settings-token-row {
-  display: flex; align-items: center; gap: 6px; font-size: 11px;
-  font-family: var(--mono); color: var(--text-dim); word-break: break-all;
-  background: var(--bg-card); padding: 6px 10px; border-radius: 6px;
-  border: 1px solid var(--border);
+/* Security pane: the admin token is a value to copy, never a field to type
+   into, so it reads as a chip beside its own button.  The chip and the
+   rotate-interval select share one column, so their right edges line up and
+   the copy button and countdown sit outside it. */
+.settings-token-value {
+  display: grid; grid-template-columns: 260px max-content;
+  align-items: center; gap: 8px; justify-content: start;
 }
+.settings-token-value select { width: 100%; justify-self: stretch; }
+.settings-token-chip {
+  font-family: var(--mono); font-size: 12px; color: var(--text);
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 6px; padding: 5px 10px;
+  /* One width whether or not a token is loaded: an empty chip must not pull
+     the copy button across the row. */
+  width: 100%; box-sizing: border-box;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.settings-error { font-size: 11.5px; color: var(--red); margin-top: 6px; }
+.settings-error:empty { display: none; }
 .countdown { color: var(--accent); font-size: 12px; white-space: nowrap; font-weight: 500; }
 .countdown .cd-time { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 .settings-divider { border-top: 1px solid var(--border); margin: 6px 0; }
@@ -367,7 +638,9 @@ a { color: var(--accent); text-decoration: none; }
 .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
 
 /* Content */
-.content { padding: 24px; max-width: 1400px; margin: 0 auto; }
+/* The status bar is fixed to the bottom; the last row has to be able to
+   scroll clear of it. */
+.content { padding: 24px 24px 56px; max-width: 1400px; margin: 0 auto; }
 .tab-panel { display: none; }
 .tab-panel.active { display: block; }
 

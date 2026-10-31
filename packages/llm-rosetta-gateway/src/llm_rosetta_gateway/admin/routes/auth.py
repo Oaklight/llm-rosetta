@@ -163,8 +163,15 @@ def _is_secure_request(request: Any) -> bool:
     return proto.lower() == "https"
 
 
-def _set_session_cookie(resp: Response, token: str, *, secure: bool = False) -> None:
-    """Set the admin session cookie on a response."""
+def _set_session_cookie(
+    resp: Response, token: str, *, secure: bool = False, max_age: int | None = None
+) -> None:
+    """Set the admin session cookie on a response.
+
+    ``max_age`` makes the cookie persistent — that is what "stay signed in"
+    means.  Without it the browser drops the cookie when it closes, and the
+    server-side idle window is the only limit on the session.
+    """
     resp.set_cookie(
         ADMIN_COOKIE_NAME,
         token,
@@ -172,6 +179,7 @@ def _set_session_cookie(resp: Response, token: str, *, secure: bool = False) -> 
         httponly=True,
         samesite="Lax",
         secure=secure,
+        max_age=max_age,
     )
 
 
@@ -208,17 +216,33 @@ async def admin_login(request: Any) -> Response:
         return JSONResponse(resp, status_code=401)
 
     _clear_login_failures(ip)
-    session_id = auth_state.create_session(ip=ip)
-    resp = JSONResponse({"ok": True})
-    _set_session_cookie(resp, session_id, secure=_is_secure_request(request))
+    remember = bool(body.get("remember")) and auth_state.remember_seconds > 0
+    session_id = auth_state.create_session(ip=ip, remember=remember)
+    resp = JSONResponse({"ok": True, "remember": remember})
+    _set_session_cookie(
+        resp,
+        session_id,
+        secure=_is_secure_request(request),
+        max_age=auth_state.remember_seconds if remember else None,
+    )
     return resp
 
 
 async def admin_check(request: Any) -> Response:
-    """Check whether admin auth is required (before loading config)."""
+    """Check whether admin auth is required (before loading config).
+
+    Also reports the session lifetimes, because the login page has to know
+    whether "stay signed in" is on offer and how long an idle session lasts.
+    """
     auth_state = request.app.auth_state
     requires_auth = bool(auth_state.admin_password)
-    return JSONResponse({"requires_auth": requires_auth})
+    return JSONResponse(
+        {
+            "requires_auth": requires_auth,
+            "idle_minutes": auth_state.session_idle_minutes,
+            "remember_days": auth_state.session_remember_days,
+        }
+    )
 
 
 async def admin_logout(request: Any) -> Response:
@@ -309,10 +333,19 @@ async def change_password(request: Any) -> Response:
     if _ops_ctx is not None:
         await OpsPasswordChange(_ops_ctx).execute()
 
-    # Create a new session for the current user so they stay logged in.
-    session_id = auth_state.create_session(ip=ip)
+    # Create a new session for the current user so they stay logged in, with
+    # the lifetime they chose at login: changing a password must not quietly
+    # turn a remembered session into one that dies with the browser.
+    old_session = auth_state.get_session(request.cookies.get(ADMIN_COOKIE_NAME, ""))
+    was_remembered = bool(old_session and old_session.remember)
+    session_id = auth_state.create_session(ip=ip, remember=was_remembered)
     resp = JSONResponse({"ok": True})
-    _set_session_cookie(resp, session_id, secure=_is_secure_request(request))
+    _set_session_cookie(
+        resp,
+        session_id,
+        secure=_is_secure_request(request),
+        max_age=auth_state.remember_seconds if was_remembered else None,
+    )
     return resp
 
 

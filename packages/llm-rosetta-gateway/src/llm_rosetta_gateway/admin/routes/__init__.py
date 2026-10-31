@@ -77,6 +77,7 @@ from .observability import (
     get_ops_log_event_types,
     get_ops_log_sources,
     get_rate_limit_status,
+    get_request_histogram,
     get_request_key_labels,
     get_token_usage,
     get_request_by_id,
@@ -133,6 +134,7 @@ def register_admin_routes(app: Any) -> None:
     register_config_routes(app)
     # Metrics (dashboard tab)
     app.route("/admin/api/metrics", methods=["GET"])(get_metrics)
+    app.route("/admin/api/metrics/histogram", methods=["GET"])(get_request_histogram)
     app.route("/admin/api/metrics/rebuild", methods=["POST"])(
         _guard("dashboard", rebuild_metrics)
     )

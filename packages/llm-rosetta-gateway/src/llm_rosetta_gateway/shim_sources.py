@@ -206,6 +206,29 @@ def resolve_source_config(
     return dirs, remotes, _cache_root(section.get("cache_dir"), config_dir)
 
 
+def resolve_disabled(section: Mapping[str, Any] | None) -> list[str]:
+    """Return the shim names ``shims.disabled`` keeps out of the registry.
+
+    The switch is a declaration, not a deletion: the shim's source stays
+    declared, so enabling the name again puts the same definition back.
+
+    Args:
+        section: The ``shims`` mapping (or ``None``/empty).
+
+    Returns:
+        The disabled names, in declaration order.
+
+    Raises:
+        ValueError: If the value is not an array of strings.
+    """
+    if not isinstance(section, Mapping):
+        return []
+    raw = section.get("disabled") or []
+    if not isinstance(raw, list) or any(not isinstance(n, str) for n in raw):
+        raise ValueError("config: 'shims.disabled' must be an array of strings")
+    return [name for name in raw if name]
+
+
 def apply_shim_sources(
     raw: Mapping[str, Any],
     config_path: str | None = None,
@@ -273,6 +296,7 @@ def apply_shim_section(
         http_get=http_get,
         ttl=ttl,
         proxy=proxy,
+        disabled=resolve_disabled(effective),
     )
     if report.sources:
         logger.info(

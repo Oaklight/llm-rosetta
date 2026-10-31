@@ -74,6 +74,7 @@ class SelectionContext:
         "quota_headroom",
         "quota_excluded",
         "failover_excluded",
+        "pinned",
         "key_affinity",
         "upstream_session_id",
     )
@@ -112,6 +113,10 @@ class SelectionContext:
         # for the rest of *this* request only — a failed-over request must not
         # bounce back to the provider that just said no.
         self.failover_excluded: frozenset[str] = frozenset()
+        # One provider this request must be served by, if the caller asked
+        # for a specific one.  Every other candidate is excluded, so neither
+        # the strategy nor failover can leave the pinned provider.
+        self.pinned: str | None = None
         self.key_affinity = True
         self.upstream_session_id: str | None = None
 
@@ -185,9 +190,26 @@ class SelectionContext:
         self.chosen = None
         self.provider_info = None
 
+    def with_pinned_provider(self, name: str | None) -> None:
+        """Serve this request from *name* only.
+
+        Used by the admin test path to reach one provider of a multi-provider
+        model.  ``None`` clears the pin and restores ordinary routing.
+        """
+        self.pinned = name or None
+
     def excluded_providers(self) -> frozenset[str]:
-        """Every provider selection must skip: spent readings plus failovers."""
-        return self.quota_excluded | self.failover_excluded
+        """Every provider selection must skip: spent readings plus failovers.
+
+        A pin excludes every other candidate, so a pinned request cannot be
+        served by a provider the caller did not name.
+        """
+        excluded = self.quota_excluded | self.failover_excluded
+        if not self.pinned:
+            return excluded
+        return frozenset(
+            {p.name for p in self.candidates if p.name != self.pinned} | excluded
+        )
 
     def with_ir_request(self, ir_request: dict[str, Any]) -> None:
         """Record the converted request, once the pipeline has produced one.

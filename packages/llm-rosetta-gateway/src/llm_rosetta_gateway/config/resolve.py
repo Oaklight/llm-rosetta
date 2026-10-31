@@ -215,7 +215,10 @@ def resolve_provider_identities(
 
 
 def selection_context(
-    config: GatewayConfig, model: str, source_format: str
+    config: GatewayConfig,
+    model: str,
+    source_format: str,
+    pinned_provider: str | None = None,
 ) -> SelectionContext:
     """Build one request's selection state, carrying this config's tables.
 
@@ -228,6 +231,9 @@ def selection_context(
         model: Model name as specified by the client.
         source_format: API standard the request arrived in.  Legacy
             spellings normalise here.
+        pinned_provider: Serve the request from this provider only.  The
+            admin test path sets it to reach one provider of a
+            multi-provider model; ordinary requests leave it unset.
 
     Returns:
         A context holding the model's route and this config's provider
@@ -244,6 +250,7 @@ def selection_context(
         provider_shim_names=config.provider_shim_names,
         provider_account_tokens=config.provider_account_tokens,
     )
+    ctx.with_pinned_provider(pinned_provider)
     return ctx
 
 

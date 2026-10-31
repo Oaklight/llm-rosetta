@@ -12,7 +12,8 @@ import { shimBrand } from './shim-tree.js';
 
 // ===================== Scheme + Mode =====================
 const VALID_SCHEMES = ['minimal', 'emerald'];
-const VALID_MODES = ['light', 'dark'];
+const VALID_MODES = ['light', 'dark', 'system'];
+const SYSTEM_DARK = () => window.matchMedia?.('(prefers-color-scheme: dark)').matches;
 
 function setScheme(scheme) {
   if (!VALID_SCHEMES.includes(scheme)) scheme = 'minimal';
@@ -21,23 +22,54 @@ function setScheme(scheme) {
   localStorage.setItem('llm-rosetta-scheme', scheme);
   const el = document.getElementById('settingsSchemeSelect');
   if (el) el.value = scheme;
+  window._syncRailPrefs?.();
   if (S.currentTab === 'dashboard') window.loadMetrics?.();
 }
 
 function setMode(mode) {
   if (!VALID_MODES.includes(mode)) mode = 'light';
-  document.documentElement.setAttribute('data-mode', mode);
+  // "System" stores the choice, not the resolved colour, so the panel follows
+  // the OS when it changes later.
+  const resolved = mode === 'system' ? (SYSTEM_DARK() ? 'dark' : 'light') : mode;
+  document.documentElement.setAttribute('data-mode', resolved);
   S.currentMode = mode;
   localStorage.setItem('llm-rosetta-mode', mode);
   const el = document.getElementById('settingsModeSelect');
   if (el) el.value = mode;
+  window._syncRailPrefs?.();
   if (S.currentTab === 'dashboard') window.loadMetrics?.();
 }
+
+// Follow the OS while "system" is the stored choice.
+window.matchMedia?.('(prefers-color-scheme: dark)')
+  .addEventListener?.('change', () => {
+    if (S.currentMode === 'system') setMode('system');
+  });
 
 function setTheme(name) {
   if (name === 'light') { setScheme('minimal'); setMode('light'); }
   else if (name === 'dark') { setScheme('minimal'); setMode('dark'); }
   else { setScheme('minimal'); setMode('light'); }
+}
+
+// ===================== Theme icons =====================
+// One set, painted by whoever owns a mode button: the rail's and the login
+// card's must be the same three glyphs, or the two controls read as different
+// features.
+const ICON_SUN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
+const ICON_MOON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 14.6A8.6 8.6 0 0 1 9.4 3.5a8.5 8.5 0 1 0 11.1 11.1Z"/></svg>';
+const ICON_SYSTEM = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="19" height="13" rx="2"/><path d="M8.5 21h7M12 17v4"/></svg>';
+
+/** Paint a mode button: the icon is the state, the title names the next. */
+export function paintThemeButton(btn) {
+  if (!btn) return;
+  const mode = S.currentMode || 'light';
+  btn.innerHTML = mode === 'dark' ? ICON_MOON
+    : mode === 'system' ? ICON_SYSTEM : ICON_SUN;
+  const next = mode === 'light' ? t('mode.dark')
+    : mode === 'dark' ? t('mode.system') : t('mode.light');
+  btn.title = next;
+  btn.setAttribute('aria-label', next);
 }
 
 // ===================== API =====================
@@ -76,15 +108,28 @@ const api = {
 };
 
 // ===================== Inactivity auto-logout =====================
+// The window comes from the server (server.admin_session.idle_minutes), so the
+// panel and the session store agree on when an idle session ends.  Zero means
+// the operator turned the idle sign-out off: only an explicit sign-out ends
+// the session, and no timer is armed.
 let _inactivityTimer = null;
+const _ACTIVITY_EVENTS = ['mousemove', 'keydown', 'mousedown', 'touchstart', 'scroll', 'click'];
+
+function _idleTimeoutMs() {
+  // undefined until /auth-check answers; the constant is the fallback so a
+  // page that never reaches it still signs out.
+  return typeof S.idleMinutes === 'number' ? S.idleMinutes * 60 * 1000 : INACTIVITY_TIMEOUT_MS;
+}
 
 function _resetInactivityTimer() {
   if (_inactivityTimer) clearTimeout(_inactivityTimer);
-  _inactivityTimer = setTimeout(() => doLogout(), INACTIVITY_TIMEOUT_MS);
+  const ms = _idleTimeoutMs();
+  _inactivityTimer = ms > 0 ? setTimeout(() => doLogout(), ms) : null;
 }
 
 function _startInactivityTracking() {
-  ['mousemove', 'keydown', 'mousedown', 'touchstart', 'scroll', 'click'].forEach(evt => {
+  _stopInactivityTracking();
+  _ACTIVITY_EVENTS.forEach(evt => {
     document.addEventListener(evt, _resetInactivityTimer, { passive: true });
   });
   _resetInactivityTimer();
@@ -92,6 +137,9 @@ function _startInactivityTracking() {
 
 function _stopInactivityTracking() {
   if (_inactivityTimer) { clearTimeout(_inactivityTimer); _inactivityTimer = null; }
+  _ACTIVITY_EVENTS.forEach(evt => {
+    document.removeEventListener(evt, _resetInactivityTimer);
+  });
 }
 
 async function doLogout() {
@@ -110,7 +158,7 @@ async function copyText(text, toastMsg) {
     await navigator.clipboard.writeText(text);
     showToast(toastMsg || t('toast.copied'));
   } catch(e) {
-    showToast('Copy failed', 'error');
+    showToast(t('toast.copyFailed'), 'error');
   }
 }
 
@@ -268,11 +316,12 @@ function esc(s) {
 }
 
 function formatDuration(seconds) {
-  if (seconds < 60) return Math.floor(seconds) + 's';
-  if (seconds < 3600) return Math.floor(seconds/60) + 'm ' + Math.floor(seconds%60) + 's';
+  const sec = t('unit.secondsShort'), min = t('unit.minutesShort'), hr = t('unit.hoursShort');
+  if (seconds < 60) return Math.floor(seconds) + sec;
+  if (seconds < 3600) return Math.floor(seconds/60) + min + ' ' + Math.floor(seconds%60) + sec;
   const h = Math.floor(seconds/3600);
   const m = Math.floor((seconds%3600)/60);
-  return h + 'h ' + m + 'm';
+  return h + hr + ' ' + m + min;
 }
 
 // Verbose byte formatter for request/response body sizes (e.g. "1.5 KB")

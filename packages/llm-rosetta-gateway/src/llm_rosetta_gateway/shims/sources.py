@@ -46,7 +46,7 @@ import time
 import uuid
 import zipfile
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal, cast
 
@@ -55,6 +55,7 @@ from llm_rosetta.shims.provider_shim import (
     list_shims,
     register_shim,
     staging_registry,
+    unregister_shim,
 )
 from llm_rosetta.shims.providers import load_providers, load_providers_from_dir
 
@@ -197,6 +198,7 @@ def rebuild_shims(
     now: Callable[[], float] | None = None,
     ttl: int = REMOTE_TTL_SECONDS,
     proxy: str | None = None,
+    disabled: Sequence[str] = (),
 ) -> ShimLoadReport:
     """Rebuild the shim registry from built-ins, entry points and sources.
 
@@ -218,6 +220,9 @@ def rebuild_shims(
         now: Injectable clock (defaults to :func:`time.time`).
         ttl: Re-fetch interval for unpinned remotes (seconds).
         proxy: Upstream proxy URL for fetches.
+        disabled: Shim names to leave out of the registry once everything has
+            loaded.  A name is dropped after its source registers it, so the
+            sources stay the one account of what a configuration declares.
 
     Returns:
         A :class:`ShimLoadReport` describing each source and the final registry
@@ -267,6 +272,22 @@ def rebuild_shims(
 
             for status in prefetched:
                 statuses.append(_scan_status(status))
+
+            # Disabled names go last: every source has registered by now, so a
+            # name is dropped whatever source would have provided it.
+            for name in disabled:
+                unregister_shim(name)
+
+        if disabled:
+            off = set(disabled)
+            statuses = [
+                replace(
+                    status,
+                    shim_names=tuple(n for n in status.shim_names if n not in off),
+                    shim_count=len([n for n in status.shim_names if n not in off]),
+                )
+                for status in statuses
+            ]
 
         _source_shims.clear()
         _source_shims.update(name for status in statuses for name in status.shim_names)

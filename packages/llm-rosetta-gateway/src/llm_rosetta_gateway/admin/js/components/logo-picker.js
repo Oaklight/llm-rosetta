@@ -6,6 +6,8 @@
  * Empty state shows an SVG placeholder.
  */
 
+import { t } from '../core/i18n.js';
+
 const _ICON_PKG = '@lobehub/icons-static-svg';
 const _CDN_BASE = 'https://cdn.jsdelivr.net/npm';
 const _ICON_URL = (name) => `${_CDN_BASE}/${_ICON_PKG}@latest/icons/${name}.svg`;
@@ -129,7 +131,7 @@ function _renderDropdown() {
   let html = '';
   let idx = 0;
   if (pop.length) {
-    html += '<div class="lp-section-label">Popular</div><div class="lp-grid">';
+    html += '<div class="lp-section-label">' + t('logo.popular') + '</div><div class="lp-grid">';
     for (const n of pop) {
       const cls = (n === _selectedName ? ' lp-active' : '') + (idx === _highlightIdx ? ' lp-highlight' : '');
       html += `<div class="lp-item${cls}" data-icon="${n}" data-idx="${idx}"><img class="lp-thumb" src="${_ICON_URL(n)}" alt="" loading="lazy"><span class="lp-label">${_esc(n)}</span></div>`;
@@ -138,19 +140,19 @@ function _renderDropdown() {
     html += '</div>';
   }
   if (capped.length) {
-    html += '<div class="lp-section-label">Other</div><div class="lp-grid">';
+    html += '<div class="lp-section-label">' + t('logo.other') + '</div><div class="lp-grid">';
     for (const n of capped) {
       const cls = (n === _selectedName ? ' lp-active' : '') + (idx === _highlightIdx ? ' lp-highlight' : '');
       html += `<div class="lp-item${cls}" data-icon="${n}" data-idx="${idx}"><img class="lp-thumb" src="${_ICON_URL(n)}" alt="" loading="lazy"><span class="lp-label">${_esc(n)}</span></div>`;
       idx++;
     }
     html += '</div>';
-    if (other.length > MAX) html += `<div class="lp-more">${other.length - MAX} more — type to filter</div>`;
+    if (other.length > MAX) html += `<div class="lp-more">${t('logo.more', {n: other.length - MAX})}</div>`;
   }
   if (!pop.length && !capped.length) {
     html += query
-      ? `<div class="lp-empty">No icons matching "${_esc(query)}"</div><div class="lp-custom-hint">Press Enter to use as custom URL</div>`
-      : '<div class="lp-empty">Loading icons…</div>';
+      ? `<div class="lp-empty">${t('logo.noMatch', {query: _esc(query)})}</div><div class="lp-custom-hint">${t('logo.customHint')}</div>`
+      : '<div class="lp-empty">' + t('logo.loading') + '</div>';
   }
 
   // Keep search input, replace content after it

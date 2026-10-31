@@ -76,6 +76,35 @@ _REFUSAL_MESSAGE = (
 )
 
 
+async def _write_back_stream_meta(
+    request_log: Any,
+    entry_id: str,
+    profile: dict[str, Any],
+    ttfb_ms: float | None,
+) -> None:
+    """Record what only the stream body knows, after the row already exists.
+
+    Both writes are best-effort: a log that cannot take them must not turn a
+    served response into a failed one.
+
+    Args:
+        request_log: The log the row went into.
+        entry_id: The row to update.
+        profile: Stream metrics to merge into the profile JSON.
+        ttfb_ms: Milliseconds to the first chunk, or ``None`` if none came.
+    """
+    try:
+        await request_log.update_profile(entry_id, profile)
+    except Exception:
+        logger.debug("Failed to write stream profile for %s", entry_id)
+    # The column, not just the profile: the rate view reads it per row, and a
+    # JSON lookup on every row would be a scan.
+    try:
+        await request_log.update_ttft(entry_id, ttfb_ms)
+    except Exception:
+        logger.debug("Failed to write ttft for %s", entry_id)
+
+
 def _terminal_error_sse(
     source_provider: ProviderType,
     processor: Any,
@@ -282,10 +311,9 @@ async def _stream_event_generator(
                 stream_profile["stream_ttfb_ms"] = ttfb_ms
             if stream_error is not None:
                 stream_profile["stream_error"] = stream_error.message[:500]
-            try:
-                await request_log.update_profile(entry_id, stream_profile)
-            except Exception:
-                logger.debug("Failed to write stream profile for %s", entry_id)
+            await _write_back_stream_meta(
+                request_log, entry_id, stream_profile, ttfb_ms
+            )
 
             await _write_back_stream_usage(
                 processor,

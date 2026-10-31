@@ -158,6 +158,11 @@ def parse_multi_provider(
                 f"config: model '{model_name}' provider '{pname}' "
                 f"has invalid weight {weight} (must be >= 1)"
             )
+        # A provider the operator turned off keeps its place in the list but
+        # takes no traffic, so the model can be narrowed without editing the
+        # list by hand.
+        if isinstance(item, dict) and item.get("enabled") is False:
+            continue
         if pname not in raw_providers:
             logger.warning(
                 "Model %r: provider %r not found, skipping",

@@ -1,7 +1,8 @@
 // Side-effect-only module: exposes functions via window.* for inline HTML handlers.
 import { S } from '../core/state.js';
 import { t } from '../core/i18n.js';
-import { api, showToast, closeModal, esc } from '../core/utils.js';
+import { api, showToast, closeModal, esc, openMenu, closeMenus } from '../core/utils.js';
+import { providerRowsHtml, syncPickerBtn, openPickerMenu } from './provider-picker.js';
 
 // ===================== Fetch Models from Provider =====================
 
@@ -24,16 +25,41 @@ function _buildFetchTypeRadios() {
   }
 }
 
+/** Show the chosen provider on the picker's trigger. */
+function _syncFetchProviderBtn(name) {
+  syncPickerBtn(
+    document.getElementById('fetchProviderBtn'), name, t('label.selectOne'),
+  );
+}
+
+/** Pick a provider from the roster menu. */
+function selectFetchProvider(name) {
+  const input = document.getElementById('fetchProvider');
+  input.value = name;
+  _syncFetchProviderBtn(name);
+  closeMenus();
+  window.doFetchModels();
+}
+window.selectFetchProvider = selectFetchProvider;
+
+function toggleFetchProviderPicker(btn) {
+  const menu = document.getElementById('fetchProviderMenu');
+  if (menu.classList.contains('open')) { closeMenus(); return; }
+  openPickerMenu(menu, btn, openMenu, closeMenus);
+}
+window.toggleFetchProviderPicker = toggleFetchProviderPicker;
+
 function openFetchModelsModal() {
-  // Populate provider dropdown
-  const sel = document.getElementById('fetchProvider');
-  sel.innerHTML = `<option value="">${t('label.selectOne')}</option>`;
-  if (S.configData) {
-    for (const [name, cfg] of Object.entries(S.configData.providers)) {
-      if (cfg.enabled === false) continue;
-      sel.innerHTML += `<option value="${esc(name)}">${esc(name)}</option>`;
-    }
-  }
+  // Populate the provider picker: one row per enabled provider, logo first.
+  const menu = document.getElementById('fetchProviderMenu');
+  const names = S.configData
+    ? Object.entries(S.configData.providers)
+        .filter(([, cfg]) => cfg.enabled !== false)
+        .map(([name]) => name)
+    : [];
+  menu.innerHTML = providerRowsHtml(names, n => `selectFetchProvider('${esc(n)}')`);
+  document.getElementById('fetchProvider').value = '';
+  _syncFetchProviderBtn('');
   // Reset state
   S._fetchedModels = [];
   S._fetchUpstreamMap = {};
@@ -83,6 +109,9 @@ function _getFetchModelType() {
 
 async function doFetchModels() {
   const provider = document.getElementById('fetchProvider').value;
+  // Callers other than the picker set the value directly; keep the trigger
+  // showing whatever is about to be fetched.
+  _syncFetchProviderBtn(provider);
   if (!provider) {
     document.getElementById('fetchModelsContent').style.display = 'none';
     return;
@@ -149,7 +178,7 @@ function renderFetchedModels() {
     let style = '';
     if (exists) {
       attrs = ' checked data-exists="true"';
-      tag = ` <span class="exists-tag" style="font-size:11px;color:var(--text-dim)">(exists)</span>`;
+      tag = ` <span class="exists-tag" style="font-size:11px;color:var(--text-dim)">${t('fetch.exists')}</span>`;
       style = ' style="opacity:0.6"';
     } else if (canAddProvider) {
       attrs = ' data-can-add="true"';
@@ -225,7 +254,7 @@ async function bulkAddFetchedModels() {
         addedCount = (res.added || []).length;
         appendedCount = (res.appended || []).length;
       } else {
-        showToast(res.error || 'Failed to add models', 'error');
+        showToast(res.error || t('toast.error'), 'error');
       }
     }
 

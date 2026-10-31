@@ -85,7 +85,10 @@ class GatewayConfig:
     _same_format: SameFormatStage
     _selection: RoutingChain
     admin_cors_origins: list[str]
+    admin_custom_css: str
     admin_password: str | None
+    admin_session_idle_minutes: int
+    admin_session_remember_days: int
     api_keys_db: str | None
     circuit_breaker_registry: Any
     credential_visible: bool
@@ -158,9 +161,14 @@ class GatewayConfig:
         """Return supported rerank formats from the model type registry."""
         return GatewayConfig._formats_for_type("rerank")
 
-    def selection_context(self, model: str, source_provider: str) -> SelectionContext:
+    def selection_context(
+        self,
+        model: str,
+        source_provider: str,
+        pinned_provider: str | None = None,
+    ) -> SelectionContext:
         """Build the selection context for one request."""
-        return selection_context(self, model, source_provider)
+        return selection_context(self, model, source_provider, pinned_provider)
 
     def resolve(self, ctx: SelectionContext) -> tuple[ResolvedRoute, ProviderInfo]:
         """Pick the provider that serves *ctx*."""

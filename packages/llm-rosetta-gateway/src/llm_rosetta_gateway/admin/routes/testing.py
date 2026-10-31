@@ -39,6 +39,7 @@ async def _run_test_task(
     payload: dict[str, Any],
     internal_token: str,
     proxy_url: str | None,  # noqa: ARG001 — reserved for future use
+    provider: str | None = None,
 ) -> None:
     """Execute an upstream test request via a self-call to the gateway.
 
@@ -60,6 +61,10 @@ async def _run_test_task(
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {internal_token}",
             }
+            # Route the test to one provider of a multi-provider model instead
+            # of letting the strategy choose.
+            if provider:
+                headers["X-Rosetta-Provider-Pin"] = provider
 
             base_url = _test_tasks[task_id].get("_base_url", "http://127.0.0.1:28765")
             url = f"{base_url}{endpoint}"
@@ -145,6 +150,8 @@ async def start_test(request: Any) -> Response:
         host = "127.0.0.1"
     base_url = f"http://{host}:{port}"
 
+    provider = body.get("provider") or None
+
     task_id = uuid.uuid4().hex[:12]
     _test_tasks[task_id] = {
         "status": "pending",
@@ -157,7 +164,7 @@ async def start_test(request: Any) -> Response:
     proxy_url = gw_config.proxy if gw_config else None
 
     asyncio_task = asyncio.create_task(
-        _run_test_task(task_id, endpoint, payload, internal_token, proxy_url)
+        _run_test_task(task_id, endpoint, payload, internal_token, proxy_url, provider)
     )
     _test_tasks[task_id]["_task_obj"] = asyncio_task
 

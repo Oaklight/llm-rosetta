@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from typing import TYPE_CHECKING, Any
 from llm_rosetta._compat import sync_compat
 
@@ -22,7 +23,13 @@ from llm_rosetta_gateway.observability import (
 if TYPE_CHECKING:
     from ..config import ConfigIO, GatewayConfig
 
-__all__ = ["setup_admin", "MetricsCollector", "RequestLog", "PersistenceManager"]
+__all__ = [
+    "setup_admin",
+    "apply_admin_theme",
+    "MetricsCollector",
+    "RequestLog",
+    "PersistenceManager",
+]
 
 logger = logging.getLogger("llm-rosetta-gateway")
 
@@ -149,6 +156,41 @@ async def _init_persistence(
         _counter_rebuild_needed = True
 
     return persistence, _counter_rebuild_needed
+
+
+def _admin_theme_style(css: str | None) -> str:
+    """Wrap an operator theme override in a ``<style>`` block.
+
+    A literal ``</style`` would close the block early, and CSS has no use for
+    one, so it is escaped.  An empty override produces no block at all.
+
+    Args:
+        css: The ``server.admin_custom_css`` text, or ``None``.
+
+    Returns:
+        A ``<style>`` element, or an empty string.
+    """
+    text = (css or "").strip()
+    if not text:
+        return ""
+    text = re.sub(r"</(style)", r"<\\/\1", text, flags=re.IGNORECASE)
+    return f'<style id="admin-custom-css">\n{text}\n</style>'
+
+
+def apply_admin_theme(app: Any, css: str | None) -> None:
+    """Rebuild ``app.admin_custom_head`` from the stored prefix and *css*.
+
+    Called at setup and again after a config reload, so a theme saved from the
+    admin panel reaches the next page load without restarting the gateway.
+    The override goes last: it must be able to beat both the built-in schemes
+    and a downstream ``custom_head`` fragment.
+
+    Args:
+        app: The httpserver application.
+        css: The operator's CSS override, or ``None``.
+    """
+    parts = [getattr(app, "_admin_head_prefix", ""), _admin_theme_style(css)]
+    app.admin_custom_head = "\n".join(part for part in parts if part)
 
 
 @sync_compat
@@ -290,7 +332,10 @@ async def setup_admin(
 
         serialized = _json.dumps(merged_branding).replace("</", r"<\/")
         parts.append(f"<script>window.__branding={serialized};</script>")
-    app.admin_custom_head = "\n".join(parts)
+    # Kept so a config reload can rebuild the head with a new theme
+    # override without repeating the disabled-tab and branding fragments.
+    app._admin_head_prefix = "\n".join(parts)
+    apply_admin_theme(app, getattr(config, "admin_custom_css", ""))
 
     # Record admin setup event (after all wiring is complete)
     await ops_log.add(

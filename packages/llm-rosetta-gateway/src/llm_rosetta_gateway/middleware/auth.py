@@ -36,6 +36,11 @@ from .request_context import request_context_var
 
 ADMIN_COOKIE_NAME = "rosetta_admin_session"
 
+# Session lifetimes when the config says nothing.  A session idles out after
+# 30 minutes; "stay signed in" keeps it for 30 days.
+DEFAULT_SESSION_IDLE_MINUTES = 30
+DEFAULT_SESSION_REMEMBER_DAYS = 30
+
 # Per-request auth context — set by auth hook, read by telemetry.
 api_key_context_var: contextvars.ContextVar[KeyContext | None] = contextvars.ContextVar(
     "api_key_context", default=None
@@ -153,6 +158,11 @@ class SessionInfo:
 
     created_at: float
     ip: str
+    last_seen: float = 0.0
+    #: Whether the session outlives the browser.  A remembered session gets a
+    #: persistent cookie; the flag is kept so a password change can mint the
+    #: replacement session with the same lifetime the user asked for.
+    remember: bool = False
 
 
 class AuthState:
@@ -164,11 +174,15 @@ class AuthState:
         internal_token: str | None,
         admin_password: str | None = None,
         open_on_no_keys: bool = False,
+        session_idle_minutes: int = DEFAULT_SESSION_IDLE_MINUTES,
+        session_remember_days: int = DEFAULT_SESSION_REMEMBER_DAYS,
     ) -> None:
         self.keystore = keystore
         self.internal_token = internal_token
         self.admin_password = admin_password
         self.open_on_no_keys = open_on_no_keys
+        self.session_idle_minutes = session_idle_minutes
+        self.session_remember_days = session_remember_days
         self._sessions: dict[str, SessionInfo] = {}
 
     def _has_keys(self) -> bool:
@@ -176,15 +190,75 @@ class AuthState:
 
     # ── Session management ──
 
-    def create_session(self, ip: str = "") -> str:
+    def configure_sessions(
+        self, idle_minutes: int | None = None, remember_days: int | None = None
+    ) -> None:
+        """Apply the configured session lifetimes.
+
+        A shorter idle window takes effect on the next request: a session that
+        is already older than the new window is refused, not grandfathered in.
+        """
+        if idle_minutes is not None:
+            self.session_idle_minutes = max(0, int(idle_minutes))
+        if remember_days is not None:
+            self.session_remember_days = max(0, int(remember_days))
+
+    @property
+    def idle_seconds(self) -> float:
+        """Idle window in seconds; 0 means a session never idles out."""
+        return self.session_idle_minutes * 60.0
+
+    @property
+    def remember_seconds(self) -> int:
+        """Persistent-cookie lifetime in seconds; 0 means "not offered"."""
+        return self.session_remember_days * 86400
+
+    def create_session(self, ip: str = "", remember: bool = False) -> str:
         """Create a new admin session and return the session ID."""
         session_id = secrets.token_hex(32)
-        self._sessions[session_id] = SessionInfo(created_at=time.time(), ip=ip)
+        now = time.time()
+        self._sessions[session_id] = SessionInfo(
+            created_at=now,
+            ip=ip,
+            last_seen=now,
+            remember=remember and self.remember_seconds > 0,
+        )
         return session_id
 
+    def get_session(self, session_id: str) -> SessionInfo | None:
+        """Return a session's metadata without touching its idle clock."""
+        return self._sessions.get(session_id)
+
     def validate_session(self, session_id: str) -> bool:
-        """Check whether a session ID is valid."""
-        return session_id in self._sessions
+        """Check whether a session ID is valid, and slide its idle clock.
+
+        A remembered session and an idle window describe different promises, so
+        only one of them applies to a given session.  "Stay signed in" means
+        "until you sign out, or until the cookie's own lifetime ends" — the
+        idle window would otherwise cut it short after a coffee break.  A
+        session without the box is the opposite: it ends after a period of not
+        being used.
+
+        Expiry is decided when the session is used rather than on a timer, so
+        no background task can be starved by a restart.
+        """
+        info = self._sessions.get(session_id)
+        if info is None:
+            return False
+        now = time.time()
+        if info.remember:
+            lifetime = self.remember_seconds
+            if lifetime and now - info.created_at > lifetime:
+                del self._sessions[session_id]
+                return False
+            info.last_seen = now
+            return True
+        idle = self.idle_seconds
+        if idle and now - (info.last_seen or info.created_at) > idle:
+            del self._sessions[session_id]
+            return False
+        info.last_seen = now
+        return True
 
     def invalidate_session(self, session_id: str) -> bool:
         """Remove a single session. Returns True if it existed."""

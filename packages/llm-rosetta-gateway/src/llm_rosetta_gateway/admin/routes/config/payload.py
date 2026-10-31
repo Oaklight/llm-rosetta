@@ -7,6 +7,7 @@ import os
 from typing import Any
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
+from llm_rosetta.ir.passes.enforcement import _apply_config_reasoning_override
 from llm_rosetta.shims import get_shim, list_shims
 from llm_rosetta.shims.provider_shim import match_model_reasoning
 
@@ -168,6 +169,10 @@ def _resolve_model_reasoning(
     )
     if config_override:
         source = "config"
+        # Report what the request will use, not the shim's default: the override
+        # is merged at request time, so an unmerged display would show a value
+        # the gateway is not going to use.
+        cap = _apply_config_reasoning_override(cap, config_override)
 
     return {
         "source": source,
@@ -370,6 +375,7 @@ async def get_config(request: Any) -> Response:
     return JSONResponse(
         {
             "config_path": os.path.basename(config_path),
+            "config_path_full": config_path,
             "providers": masked_providers,
             "models": models_normalized,
             "server": server,
@@ -379,6 +385,12 @@ async def get_config(request: Any) -> Response:
             "shim_source_presets": _shim_source_presets_payload(),
             "debug": raw.get("debug", {}),
             "credential_visible": config.credential_visible,
+            # Effective session lifetimes, defaults included, so the settings
+            # form shows what the gateway will actually enforce.
+            "admin_session": {
+                "idle_minutes": config.admin_session_idle_minutes,
+                "remember_days": config.admin_session_remember_days,
+            },
             "has_admin_password": bool(request.app.auth_state.admin_password),
             "api_keys_db": config.api_keys_db,
             "version": _get_version(),

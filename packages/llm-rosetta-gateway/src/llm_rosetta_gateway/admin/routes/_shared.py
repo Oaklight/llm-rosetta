@@ -258,6 +258,11 @@ async def _reload_gateway_config(
     _app_state._config = new_config
     request.app.gateway_config = new_config
 
+    # A theme saved from the admin panel must reach the next page load.
+    from .. import apply_admin_theme
+
+    apply_admin_theme(request.app, getattr(new_config, "admin_custom_css", ""))
+
     _sync_auth_middleware(request.app, new_config)
 
     # Hot-reload log level
@@ -349,6 +354,10 @@ def _sync_auth_middleware(app: Any, config: GatewayConfig) -> None:
         # Sync admin password (e.g. changed via CLI or config edit)
         if config.admin_password != auth_state.admin_password:
             auth_state.change_password(config.admin_password or "")
+        auth_state.configure_sessions(
+            idle_minutes=config.admin_session_idle_minutes,
+            remember_days=config.admin_session_remember_days,
+        )
 
 
 def _apply_optional_int(entry: dict[str, Any], body: dict[str, Any], key: str) -> None:

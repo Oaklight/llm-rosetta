@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>llm-rosetta Gateway — Admin</title>
+<title>llm-rosetta Gateway Console</title>
 <script>
 // FOUC prevention + localStorage migration
 (function(){try{
@@ -16,7 +16,10 @@
     localStorage.removeItem('llm-rosetta-theme');
   }
   var s=localStorage.getItem('llm-rosetta-scheme');if(s!=='minimal'&&s!=='emerald')s='minimal';h.setAttribute('data-scheme',s);
-  var m=localStorage.getItem('llm-rosetta-mode');if(m!=='light'&&m!=='dark')m='light';h.setAttribute('data-mode',m);
+  var m=localStorage.getItem('llm-rosetta-mode');
+  if(m!=='light'&&m!=='dark'&&m!=='system')m='light';
+  if(m==='system')m=(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';
+  h.setAttribute('data-mode',m);
 }catch(e){}}());
 </script>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='30 15 490 500'%3E%3Cpath fill='%23666' d='M517.5,415.4c.3-10.7-2.6-21.4-2.2-31.9c.1-2.4,2-4.5,2.1-6.9c.2-5.1-1.1-12.1-2.8-16.2c-2-4.9-1.4-11.1-1.1-16.9c.4-5.9-.3-11.6-.3-17.5c0-5.9-1.4-13.4-.3-18.4c.9-3.9-.3-8.7.2-12.7c.2-1.3,1.3-1.6,1.5-2.7c.6-2.8-1.7-2.8-1.7-4.7c0-1.6,1.7-3.2,1.9-5c1.5-3-2.3-8.2-1.4-10.6c4.9-14.2-8.2-27.4-12.9-37c-.1-.2-.2-.5-.2-.8c-3.8-15.2-8.4-27.1-13.8-41.1c-1.8-4.8-6-8.7-7.6-13.6c-1.6-4.9-5.1-9.4-7.9-13.4c-6.6-9.4-14.5-22.3-13.8-35.9c-6-6.5-6-18.5-9-28.5c-1.3-4.3-2-8.8-2.9-13.4c-.8-4.1-2.3-10.6-2.1-14.3c0-.6.8-1.1.7-1.7c-.1-.6-1.2-1-1.4-1.5c-1-2.7-1-6.6-2.2-10c-1.1-3.1-2.3-6.9-2.7-9.6c-.3-1.8-.1-3.2-1.1-4.2c-.9-.9-2.1-.9-2.3-1.9c-.5-1.8.8-2.5.8-3.8c0-2.6-2.7-6.6-3-9.7c-.1-.6.5-1.3.5-1.9c-.2-2.3-3.3-4.1-4.7-5.6c-1.8-1.8-4.3-7.6-4.9-10.1c-.6-2.2.3-6.1-1-7.2c-.7-.6-6-1-6.7-1.1c-11.2-.2-22.7-2.7-35.3-2.3c-8.5.2-17.3.5-25.6,1.4c-8.4.9-15.5,3.4-23.4,4.3c-4.5.5-7.4,1.9-11.1,2.8c-8,1.8-16.2,2.5-23,4.9c-2.8,1-8,2.4-9.6,4.4c-2,2.5-1.4,1.9-4.4,2c-1.1,0-2.4.9-3.7,1.1c-1.4.2-2.7-.5-4-.5c-1.9.1-5.9,2.2-7.9,3c-2.7,1-5.4,2.2-8.1,2.9c-14.2,3.8-26.2,10.3-38.8,16c-2.2,1-4.8,3.7-6.8,4.2c-6.6,1.8-9.7,6.2-15.4,8.7c-2.7,1.2-7.5,1.5-10,3.2c-3.7,2.6-7.4,5.9-11.7,8.4c-3,1.7-3.8.7-5,3.5c-.5,1.2-3.4.7-4.5,1.4c-5.5,3.7-9.7,9.5-15,14.1c-2.8,2.5-6,3.5-8.7,5.9c-2.9,2.5-5.8,3.9-8.9,5.7c-1.5.9-2.5,3.5-4.1,4.2c-4.1,1.9-7.7,4.2-11,7.2c-.3.2-.5.6-.6.8c-7.2,11.5-19.6,18.1-30.6,25.2c-4.6,1.7-6.6,9.6-7.1,15.3c-.2,2.1,1.1,3.6,1,5.7c-.1,1.8-1.4,2.6-1.3,4.4c.1,2.2.1,2.6-.5,4.4c-.9,2.7.8,6,.7,9.2c-.3,6.5-2.2,12.4-2.7,17.9c-.2,2.8,1.9,6.2,1,8.7c-3.3,9-1.6,21.4-.3,31.4c.7,5.2-.9,10.4-1,15.7c-.1,5.6.7,11.4.4,16.4c-.4,6.1-3.1,12.3-2.8,18.1c.3,6.1,2.2,11.8,3.5,17.2c2,7.7-.1,13.8-2.5,19.1c-2.5,5.5-.7,10.8-1.5,17.1c-.3,2.1-2.1,3.7-1.7,6.8c.3,2.5,1.2,5.1,1.3,7.5c.1,3.5-1.3,5.8-.3,9.5c1,3.8-.1,5.9-.8,9.3c-1.8,9.5-4.1,17.8-2.5,29.2c.6,4.1,1.7,7.4,2.1,11.4c.4,4.3-2.4,6.8-2.6,10.8c-.4,9.7.3,20.4-1.9,29c-1,3.8.7,5.6,1.2,8.7c.4,2.5-.4,6.2-1.3,9c-1,3.3.2,6,1.1,8.5c1.8,5.3.4,12.4-.1,18.2c-.5,6.4-.7,12.4-.5,19.1c.2,6.5-1.3,13-.4,19.7c.8,5.8,2,11.2,2,18.5c0,6.8,0,13.5-.3,19.9c-.3,7.4,3.7,9.9,11.2,9.5c3.3-.2,6.6-1.4,9.2-.2c2.4,1,4.6,2.7,7.7,2.9c1.3.1,2.6-.8,3.5-.8c2.6.2,5.4,2.4,8.7,2.1c4.7-.4,8.5.6,13,1.9c3.7,1.1,6.8,3,10.7,3.4c.7.1,1.2-.8,1.8-.8c2.9,0,5.5,1.6,8.7,1.1c3.1-.4,6.4-.4,9.3-.4c6.4.2,11.4-2.6,15.7-4.7c.3-.2.7-.3,1.1-.4c7.2-1.7,13.7-5.7,20.8-8c2.6-.8,6.4,0,9.3-.1c5-.3,11.2-1.2,16.4.8c5.9,2.2,10.9.6,16.6,1.4c2.8.4,4.9.7,7.8.8c9.8.4,19.8-4.8,29.1-5.5c.1,0,.1,0,.2-.1c5.3-1.9,13-1.6,17.9-1.3c8.2.6,18,2.6,25.4-1.1c3.2-1.6,7.4-3.3,11.1-3.7c4.5-.5,9.4,1.5,13.7.6c.8-.2.6-1.1,1.5-1.2c.6,0,1.2.5,1.9.5c12-.4,25.1-2.8,34.6-7c6.8-3,10.3-7.7,18.8-9.3c3.3-.6,6.6-3.3,9.2-4.9c5.1-3.2,15.8-4.4,18.4-9.8c5.6-11.5,22.2-12.4,28.9-22.5c.1-.1.2-.2.3-.3c4.8-4.1,9.7-8.1,13.8-12.8c2-2.3,5.1-3.6,7.1-6.2c2-2.6,4-5,6.3-7c4.6-4,8.2-9.4,12.6-14c6.8-7.1,12.3-15.3,18.6-22.2c1.6-1.7,7.5-4.8,8-7.1C521.1,437.1,517.2,426,517.5,415.4z'/%3E%3C/svg%3E">
@@ -27,75 +30,79 @@
 
 <!-- Login overlay (shown when admin_password is configured) -->
 <div class="login-overlay" id="loginOverlay" style="display:none">
-  <div class="login-box">
-    <h2 id="brandLoginTitle">llm-rosetta <span style="font-weight:400;color:var(--text-dim)">gateway</span></h2>
+  <form class="login-box" id="loginForm" autocomplete="on" onsubmit="doLogin();return false;">
+    <div class="login-brand" aria-hidden="true">
+      <svg width="26" height="28" viewBox="30 15 490 500" fill="currentColor"><path d="M517.5,415.4c.3-10.7-2.6-21.4-2.2-31.9c.1-2.4,2-4.5,2.1-6.9c.2-5.1-1.1-12.1-2.8-16.2c-2-4.9-1.4-11.1-1.1-16.9c.4-5.9-.3-11.6-.3-17.5c0-5.9-1.4-13.4-.3-18.4c.9-3.9-.3-8.7.2-12.7c.2-1.3,1.3-1.6,1.5-2.7c.6-2.8-1.7-2.8-1.7-4.7c0-1.6,1.7-3.2,1.9-5c1.5-3-2.3-8.2-1.4-10.6c4.9-14.2-8.2-27.4-12.9-37c-.1-.2-.2-.5-.2-.8c-3.8-15.2-8.4-27.1-13.8-41.1c-1.8-4.8-6-8.7-7.6-13.6c-1.6-4.9-5.1-9.4-7.9-13.4c-6.6-9.4-14.5-22.3-13.8-35.9c-6-6.5-6-18.5-9-28.5c-1.3-4.3-2-8.8-2.9-13.4c-.8-4.1-2.3-10.6-2.1-14.3c0-.6.8-1.1.7-1.7c-.1-.6-1.2-1-1.4-1.5c-1-2.7-1-6.6-2.2-10c-1.1-3.1-2.3-6.9-2.7-9.6c-.3-1.8-.1-3.2-1.1-4.2c-.9-.9-2.1-.9-2.3-1.9c-.5-1.8.8-2.5.8-3.8c0-2.6-2.7-6.6-3-9.7c-.1-.6.5-1.3.5-1.9c-.2-2.3-3.3-4.1-4.7-5.6c-1.8-1.8-4.3-7.6-4.9-10.1c-.6-2.2.3-6.1-1-7.2c-.7-.6-6-1-6.7-1.1c-11.2-.2-22.7-2.7-35.3-2.3c-8.5.2-17.3.5-25.6,1.4c-8.4.9-15.5,3.4-23.4,4.3c-4.5.5-7.4,1.9-11.1,2.8c-8,1.8-16.2,2.5-23,4.9c-2.8,1-8,2.4-9.6,4.4c-2,2.5-1.4,1.9-4.4,2c-1.1,0-2.4.9-3.7,1.1c-1.4.2-2.7-.5-4-.5c-1.9.1-5.9,2.2-7.9,3c-2.7,1-5.4,2.2-8.1,2.9c-14.2,3.8-26.2,10.3-38.8,16c-2.2,1-4.8,3.7-6.8,4.2c-6.6,1.8-9.7,6.2-15.4,8.7c-2.7,1.2-7.5,1.5-10,3.2c-3.7,2.6-7.4,5.9-11.7,8.4c-3,1.7-3.8.7-5,3.5c-.5,1.2-3.4.7-4.5,1.4c-5.5,3.7-9.7,9.5-15,14.1c-2.8,2.5-6,3.5-8.7,5.9c-2.9,2.5-5.8,3.9-8.9,5.7c-1.5.9-2.5,3.5-4.1,4.2c-4.1,1.9-7.7,4.2-11,7.2c-.3.2-.5.6-.6.8c-7.2,11.5-19.6,18.1-30.6,25.2c-4.6,1.7-6.6,9.6-7.1,15.3c-.2,2.1,1.1,3.6,1,5.7c-.1,1.8-1.4,2.6-1.3,4.4c.1,2.2.1,2.6-.5,4.4c-.9,2.7.8,6,.7,9.2c-.3,6.5-2.2,12.4-2.7,17.9c-.2,2.8,1.9,6.2,1,8.7c-3.3,9-1.6,21.4-.3,31.4c.7,5.2-.9,10.4-1,15.7c-.1,5.6.7,11.4.4,16.4c-.4,6.1-3.1,12.3-2.8,18.1c.3,6.1,2.2,11.8,3.5,17.2c2,7.7-.1,13.8-2.5,19.1c-2.5,5.5-.7,10.8-1.5,17.1c-.3,2.1-2.1,3.7-1.7,6.8c.3,2.5,1.2,5.1,1.3,7.5c.1,3.5-1.3,5.8-.3,9.5c1,3.8-.1,5.9-.8,9.3c-1.8,9.5-4.1,17.8-2.5,29.2c.6,4.1,1.7,7.4,2.1,11.4c.4,4.3-2.4,6.8-2.6,10.8c-.4,9.7.3,20.4-1.9,29c-1,3.8.7,5.6,1.2,8.7c.4,2.5-.4,6.2-1.3,9c-1,3.3.2,6,1.1,8.5c1.8,5.3.4,12.4-.1,18.2c-.5,6.4-.7,12.4-.5,19.1c.2,6.5-1.3,13-.4,19.7c.8,5.8,2,11.2,2,18.5c0,6.8,0,13.5-.3,19.9c-.3,7.4,3.7,9.9,11.2,9.5c3.3-.2,6.6-1.4,9.2-.2c2.4,1,4.6,2.7,7.7,2.9c1.3.1,2.6-.8,3.5-.8c2.6.2,5.4,2.4,8.7,2.1c4.7-.4,8.5.6,13,1.9c3.7,1.1,6.8,3,10.7,3.4c.7.1,1.2-.8,1.8-.8c2.9,0,5.5,1.6,8.7,1.1c3.1-.4,6.4-.4,9.3-.4c6.4.2,11.4-2.6,15.7-4.7c.3-.2.7-.3,1.1-.4c7.2-1.7,13.7-5.7,20.8-8c2.6-.8,6.4,0,9.3-.1c5-.3,11.2-1.2,16.4.8c5.9,2.2,10.9.6,16.6,1.4c2.8.4,4.9.7,7.8.8c9.8.4,19.8-4.8,29.1-5.5c.1,0,.1,0,.2-.1c5.3-1.9,13-1.6,17.9-1.3c8.2.6,18,2.6,25.4-1.1c3.2-1.6,7.4-3.3,11.1-3.7c4.5-.5,9.4,1.5,13.7.6c.8-.2.6-1.1,1.5-1.2c.6,0,1.2.5,1.9.5c12-.4,25.1-2.8,34.6-7c6.8-3,10.3-7.7,18.8-9.3c3.3-.6,6.6-3.3,9.2-4.9c5.1-3.2,15.8-4.4,18.4-9.8c5.6-11.5,22.2-12.4,28.9-22.5c.1-.1.2-.2.3-.3c4.8-4.1,9.7-8.1,13.8-12.8c2-2.3,5.1-3.6,7.1-6.2c2-2.6,4-5,6.3-7c4.6-4,8.2-9.4,12.6-14c6.8-7.1,12.3-15.3,18.6-22.2c1.6-1.7,7.5-4.8,8-7.1C521.1,437.1,517.2,426,517.5,415.4z"/></svg>
+    </div>
+    <h2 class="login-title" id="brandLoginTitle">llm-rosetta <span>Gateway Console</span></h2>
     <div class="login-subtitle" data-i18n="login.subtitle">Admin panel is password-protected</div>
-    <form id="loginForm" autocomplete="on" onsubmit="doLogin();return false;">
-      <input type="text" name="username" autocomplete="username"
-        value="admin" style="display:none" aria-hidden="true">
-      <input id="loginPassword" type="password" name="password"
-        autocomplete="current-password" placeholder="Password" autofocus>
-      <div class="login-error" id="loginError"></div>
-      <button type="submit" data-i18n="login.btn">Login</button>
-    </form>
-  </div>
+
+    <input type="text" name="username" autocomplete="username" value="admin" hidden aria-hidden="true">
+    <div class="login-field">
+      <input id="loginPassword" type="password" name="password" autocomplete="current-password"
+        data-i18n-placeholder="login.placeholder" placeholder="Password" autofocus>
+      <button type="button" class="login-reveal" id="loginReveal" onclick="toggleLoginReveal()"
+        aria-label="Show password" data-i18n-aria-label="login.showPassword" aria-pressed="false" tabindex="-1" data-i18n-title="login.showPassword" title="Show password"></button>
+    </div>
+    <div class="login-caps" id="loginCapsLock" hidden data-i18n="login.capsLock">Caps Lock is on</div>
+
+    <label class="login-remember" id="loginRememberRow" hidden>
+      <input type="checkbox" id="loginRemember">
+      <span data-i18n="login.remember">Stay signed in</span>
+    </label>
+
+    <div class="login-error" id="loginError" role="alert" aria-live="polite"></div>
+    <button type="submit" class="login-submit" id="loginSubmit" data-i18n="login.btn">Sign in</button>
+    <div class="login-foot">
+      <span id="loginFoot"></span>
+      <span class="login-prefs">
+        <button type="button" class="login-pref-btn" id="loginThemeBtn" onclick="toggleAppMode()"
+          title="Light / Dark" aria-label="Light / Dark" data-i18n-title="rail.themeToggle"
+          data-i18n-aria-label="rail.themeToggle"></button>
+        <button type="button" class="login-pref-btn" onclick="toggleAppLang()"
+          title="Language" aria-label="Language" data-i18n-title="rail.langToggle"
+          data-i18n-aria-label="rail.langToggle" id="loginLangBtn">EN</button>
+      </span>
+    </div>
+  </form>
 </div>
 
-<div class="header">
-  <div>
-    <h1 id="brandTitle"><svg class="logo-stone" width="18" height="20" viewBox="30 15 490 500" fill="currentColor" style="vertical-align:-2px;margin-right:6px"><path d="M517.5,415.4c.3-10.7-2.6-21.4-2.2-31.9c.1-2.4,2-4.5,2.1-6.9c.2-5.1-1.1-12.1-2.8-16.2c-2-4.9-1.4-11.1-1.1-16.9c.4-5.9-.3-11.6-.3-17.5c0-5.9-1.4-13.4-.3-18.4c.9-3.9-.3-8.7.2-12.7c.2-1.3,1.3-1.6,1.5-2.7c.6-2.8-1.7-2.8-1.7-4.7c0-1.6,1.7-3.2,1.9-5c1.5-3-2.3-8.2-1.4-10.6c4.9-14.2-8.2-27.4-12.9-37c-.1-.2-.2-.5-.2-.8c-3.8-15.2-8.4-27.1-13.8-41.1c-1.8-4.8-6-8.7-7.6-13.6c-1.6-4.9-5.1-9.4-7.9-13.4c-6.6-9.4-14.5-22.3-13.8-35.9c-6-6.5-6-18.5-9-28.5c-1.3-4.3-2-8.8-2.9-13.4c-.8-4.1-2.3-10.6-2.1-14.3c0-.6.8-1.1.7-1.7c-.1-.6-1.2-1-1.4-1.5c-1-2.7-1-6.6-2.2-10c-1.1-3.1-2.3-6.9-2.7-9.6c-.3-1.8-.1-3.2-1.1-4.2c-.9-.9-2.1-.9-2.3-1.9c-.5-1.8.8-2.5.8-3.8c0-2.6-2.7-6.6-3-9.7c-.1-.6.5-1.3.5-1.9c-.2-2.3-3.3-4.1-4.7-5.6c-1.8-1.8-4.3-7.6-4.9-10.1c-.6-2.2.3-6.1-1-7.2c-.7-.6-6-1-6.7-1.1c-11.2-.2-22.7-2.7-35.3-2.3c-8.5.2-17.3.5-25.6,1.4c-8.4.9-15.5,3.4-23.4,4.3c-4.5.5-7.4,1.9-11.1,2.8c-8,1.8-16.2,2.5-23,4.9c-2.8,1-8,2.4-9.6,4.4c-2,2.5-1.4,1.9-4.4,2c-1.1,0-2.4.9-3.7,1.1c-1.4.2-2.7-.5-4-.5c-1.9.1-5.9,2.2-7.9,3c-2.7,1-5.4,2.2-8.1,2.9c-14.2,3.8-26.2,10.3-38.8,16c-2.2,1-4.8,3.7-6.8,4.2c-6.6,1.8-9.7,6.2-15.4,8.7c-2.7,1.2-7.5,1.5-10,3.2c-3.7,2.6-7.4,5.9-11.7,8.4c-3,1.7-3.8.7-5,3.5c-.5,1.2-3.4.7-4.5,1.4c-5.5,3.7-9.7,9.5-15,14.1c-2.8,2.5-6,3.5-8.7,5.9c-2.9,2.5-5.8,3.9-8.9,5.7c-1.5.9-2.5,3.5-4.1,4.2c-4.1,1.9-7.7,4.2-11,7.2c-.3.2-.5.6-.6.8c-7.2,11.5-19.6,18.1-30.6,25.2c-4.6,1.7-6.6,9.6-7.1,15.3c-.2,2.1,1.1,3.6,1,5.7c-.1,1.8-1.4,2.6-1.3,4.4c.1,2.2.1,2.6-.5,4.4c-.9,2.7.8,6,.7,9.2c-.3,6.5-2.2,12.4-2.7,17.9c-.2,2.8,1.9,6.2,1,8.7c-3.3,9-1.6,21.4-.3,31.4c.7,5.2-.9,10.4-1,15.7c-.1,5.6.7,11.4.4,16.4c-.4,6.1-3.1,12.3-2.8,18.1c.3,6.1,2.2,11.8,3.5,17.2c2,7.7-.1,13.8-2.5,19.1c-2.5,5.5-.7,10.8-1.5,17.1c-.3,2.1-2.1,3.7-1.7,6.8c.3,2.5,1.2,5.1,1.3,7.5c.1,3.5-1.3,5.8-.3,9.5c1,3.8-.1,5.9-.8,9.3c-1.8,9.5-4.1,17.8-2.5,29.2c.6,4.1,1.7,7.4,2.1,11.4c.4,4.3-2.4,6.8-2.6,10.8c-.4,9.7.3,20.4-1.9,29c-1,3.8.7,5.6,1.2,8.7c.4,2.5-.4,6.2-1.3,9c-1,3.3.2,6,1.1,8.5c1.8,5.3.4,12.4-.1,18.2c-.5,6.4-.7,12.4-.5,19.1c.2,6.5-1.3,13-.4,19.7c.8,5.8,2,11.2,2,18.5c0,6.8,0,13.5-.3,19.9c-.3,7.4,3.7,9.9,11.2,9.5c3.3-.2,6.6-1.4,9.2-.2c2.4,1,4.6,2.7,7.7,2.9c1.3.1,2.6-.8,3.5-.8c2.6.2,5.4,2.4,8.7,2.1c4.7-.4,8.5.6,13,1.9c3.7,1.1,6.8,3,10.7,3.4c.7.1,1.2-.8,1.8-.8c2.9,0,5.5,1.6,8.7,1.1c3.1-.4,6.4-.4,9.3-.4c6.4.2,11.4-2.6,15.7-4.7c.3-.2.7-.3,1.1-.4c7.2-1.7,13.7-5.7,20.8-8c2.6-.8,6.4,0,9.3-.1c5-.3,11.2-1.2,16.4.8c5.9,2.2,10.9.6,16.6,1.4c2.8.4,4.9.7,7.8.8c9.8.4,19.8-4.8,29.1-5.5c.1,0,.1,0,.2-.1c5.3-1.9,13-1.6,17.9-1.3c8.2.6,18,2.6,25.4-1.1c3.2-1.6,7.4-3.3,11.1-3.7c4.5-.5,9.4,1.5,13.7.6c.8-.2.6-1.1,1.5-1.2c.6,0,1.2.5,1.9.5c12-.4,25.1-2.8,34.6-7c6.8-3,10.3-7.7,18.8-9.3c3.3-.6,6.6-3.3,9.2-4.9c5.1-3.2,15.8-4.4,18.4-9.8c5.6-11.5,22.2-12.4,28.9-22.5c.1-.1.2-.2.3-.3c4.8-4.1,9.7-8.1,13.8-12.8c2-2.3,5.1-3.6,7.1-6.2c2-2.6,4-5,6.3-7c4.6-4,8.2-9.4,12.6-14c6.8-7.1,12.3-15.3,18.6-22.2c1.6-1.7,7.5-4.8,8-7.1C521.1,437.1,517.2,426,517.5,415.4z"/></svg>llm-rosetta <span>gateway admin</span></h1>
-  </div>
-  <div class="header-right">
-    <span style="font-size:12px;color:var(--text-dim);margin-right:8px"><span style="margin-right:4px" data-i18n="label.systemTime">System Time</span><span id="systemClock" style="font-family:var(--mono)"></span></span>
-    <button class="btn btn-sm" onclick="goToTab('settings')" data-i18n-title="modal.settings" title="Settings" style="display:inline-flex;align-items:center;justify-content:center;padding:4px 8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
-    <button id="logoutBtn" class="btn btn-sm" onclick="doLogout()" style="display:none" data-i18n="btn.logout">Logout</button>
-  </div>
-</div>
-
+<div class="app-shell">
+<aside class="sidebar" aria-label="Main navigation" data-i18n-aria-label="aria.mainNav">
+  <div class="sb-brand" role="link" tabindex="0" title="llm-rosetta Gateway Console" data-i18n-title="aria.brand" onclick="goToTab('dashboard')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();goToTab('dashboard')}"><h1 id="brandTitle"><svg class="logo-stone" width="18" height="20" viewBox="30 15 490 500" fill="currentColor" style="vertical-align:-2px;margin-right:6px"><path d="M517.5,415.4c.3-10.7-2.6-21.4-2.2-31.9c.1-2.4,2-4.5,2.1-6.9c.2-5.1-1.1-12.1-2.8-16.2c-2-4.9-1.4-11.1-1.1-16.9c.4-5.9-.3-11.6-.3-17.5c0-5.9-1.4-13.4-.3-18.4c.9-3.9-.3-8.7.2-12.7c.2-1.3,1.3-1.6,1.5-2.7c.6-2.8-1.7-2.8-1.7-4.7c0-1.6,1.7-3.2,1.9-5c1.5-3-2.3-8.2-1.4-10.6c4.9-14.2-8.2-27.4-12.9-37c-.1-.2-.2-.5-.2-.8c-3.8-15.2-8.4-27.1-13.8-41.1c-1.8-4.8-6-8.7-7.6-13.6c-1.6-4.9-5.1-9.4-7.9-13.4c-6.6-9.4-14.5-22.3-13.8-35.9c-6-6.5-6-18.5-9-28.5c-1.3-4.3-2-8.8-2.9-13.4c-.8-4.1-2.3-10.6-2.1-14.3c0-.6.8-1.1.7-1.7c-.1-.6-1.2-1-1.4-1.5c-1-2.7-1-6.6-2.2-10c-1.1-3.1-2.3-6.9-2.7-9.6c-.3-1.8-.1-3.2-1.1-4.2c-.9-.9-2.1-.9-2.3-1.9c-.5-1.8.8-2.5.8-3.8c0-2.6-2.7-6.6-3-9.7c-.1-.6.5-1.3.5-1.9c-.2-2.3-3.3-4.1-4.7-5.6c-1.8-1.8-4.3-7.6-4.9-10.1c-.6-2.2.3-6.1-1-7.2c-.7-.6-6-1-6.7-1.1c-11.2-.2-22.7-2.7-35.3-2.3c-8.5.2-17.3.5-25.6,1.4c-8.4.9-15.5,3.4-23.4,4.3c-4.5.5-7.4,1.9-11.1,2.8c-8,1.8-16.2,2.5-23,4.9c-2.8,1-8,2.4-9.6,4.4c-2,2.5-1.4,1.9-4.4,2c-1.1,0-2.4.9-3.7,1.1c-1.4.2-2.7-.5-4-.5c-1.9.1-5.9,2.2-7.9,3c-2.7,1-5.4,2.2-8.1,2.9c-14.2,3.8-26.2,10.3-38.8,16c-2.2,1-4.8,3.7-6.8,4.2c-6.6,1.8-9.7,6.2-15.4,8.7c-2.7,1.2-7.5,1.5-10,3.2c-3.7,2.6-7.4,5.9-11.7,8.4c-3,1.7-3.8.7-5,3.5c-.5,1.2-3.4.7-4.5,1.4c-5.5,3.7-9.7,9.5-15,14.1c-2.8,2.5-6,3.5-8.7,5.9c-2.9,2.5-5.8,3.9-8.9,5.7c-1.5.9-2.5,3.5-4.1,4.2c-4.1,1.9-7.7,4.2-11,7.2c-.3.2-.5.6-.6.8c-7.2,11.5-19.6,18.1-30.6,25.2c-4.6,1.7-6.6,9.6-7.1,15.3c-.2,2.1,1.1,3.6,1,5.7c-.1,1.8-1.4,2.6-1.3,4.4c.1,2.2.1,2.6-.5,4.4c-.9,2.7.8,6,.7,9.2c-.3,6.5-2.2,12.4-2.7,17.9c-.2,2.8,1.9,6.2,1,8.7c-3.3,9-1.6,21.4-.3,31.4c.7,5.2-.9,10.4-1,15.7c-.1,5.6.7,11.4.4,16.4c-.4,6.1-3.1,12.3-2.8,18.1c.3,6.1,2.2,11.8,3.5,17.2c2,7.7-.1,13.8-2.5,19.1c-2.5,5.5-.7,10.8-1.5,17.1c-.3,2.1-2.1,3.7-1.7,6.8c.3,2.5,1.2,5.1,1.3,7.5c.1,3.5-1.3,5.8-.3,9.5c1,3.8-.1,5.9-.8,9.3c-1.8,9.5-4.1,17.8-2.5,29.2c.6,4.1,1.7,7.4,2.1,11.4c.4,4.3-2.4,6.8-2.6,10.8c-.4,9.7.3,20.4-1.9,29c-1,3.8.7,5.6,1.2,8.7c.4,2.5-.4,6.2-1.3,9c-1,3.3.2,6,1.1,8.5c1.8,5.3.4,12.4-.1,18.2c-.5,6.4-.7,12.4-.5,19.1c.2,6.5-1.3,13-.4,19.7c.8,5.8,2,11.2,2,18.5c0,6.8,0,13.5-.3,19.9c-.3,7.4,3.7,9.9,11.2,9.5c3.3-.2,6.6-1.4,9.2-.2c2.4,1,4.6,2.7,7.7,2.9c1.3.1,2.6-.8,3.5-.8c2.6.2,5.4,2.4,8.7,2.1c4.7-.4,8.5.6,13,1.9c3.7,1.1,6.8,3,10.7,3.4c.7.1,1.2-.8,1.8-.8c2.9,0,5.5,1.6,8.7,1.1c3.1-.4,6.4-.4,9.3-.4c6.4.2,11.4-2.6,15.7-4.7c.3-.2.7-.3,1.1-.4c7.2-1.7,13.7-5.7,20.8-8c2.6-.8,6.4,0,9.3-.1c5-.3,11.2-1.2,16.4.8c5.9,2.2,10.9.6,16.6,1.4c2.8.4,4.9.7,7.8.8c9.8.4,19.8-4.8,29.1-5.5c.1,0,.1,0,.2-.1c5.3-1.9,13-1.6,17.9-1.3c8.2.6,18,2.6,25.4-1.1c3.2-1.6,7.4-3.3,11.1-3.7c4.5-.5,9.4,1.5,13.7.6c.8-.2.6-1.1,1.5-1.2c.6,0,1.2.5,1.9.5c12-.4,25.1-2.8,34.6-7c6.8-3,10.3-7.7,18.8-9.3c3.3-.6,6.6-3.3,9.2-4.9c5.1-3.2,15.8-4.4,18.4-9.8c5.6-11.5,22.2-12.4,28.9-22.5c.1-.1.2-.2.3-.3c4.8-4.1,9.7-8.1,13.8-12.8c2-2.3,5.1-3.6,7.1-6.2c2-2.6,4-5,6.3-7c4.6-4,8.2-9.4,12.6-14c6.8-7.1,12.3-15.3,18.6-22.2c1.6-1.7,7.5-4.8,8-7.1C521.1,437.1,517.2,426,517.5,415.4z"/></svg>llm-rosetta <span>Gateway Console</span></h1></div>
 <!-- Note: the icons live beside the label, not around it.  `data-i18n` on a
      tab would rewrite its whole textContent and drop the SVG on a language
      switch, so the attribute sits on the inner label span instead. -->
-<div class="tabs" role="tablist" aria-label="Main navigation">
-  <div class="tab active" role="tab" id="tabBtn-providers" tabindex="0" aria-selected="true" aria-controls="tab-providers" data-tab="providers"><span class="tab-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="7" rx="1.5"/><rect x="3" y="13" width="18" height="7" rx="1.5"/><path d="M7 7.5h.01M7 16.5h.01"/></svg></span><span class="tab-label" data-i18n="tab.providers">Providers</span></div>
+<div class="tabs" role="tablist" aria-label="Main navigation" data-i18n-aria-label="aria.mainNav">
+  <div class="tab active" role="tab" id="tabBtn-dashboard" tabindex="0" aria-selected="true" aria-controls="tab-dashboard" data-tab="dashboard"><span class="tab-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg></span><span class="tab-label" data-i18n="tab.dashboard">Dashboard</span></div>
+  <div class="tab" role="tab" id="tabBtn-providers" tabindex="-1" aria-selected="false" aria-controls="tab-providers" data-tab="providers"><span class="tab-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="7" rx="1.5"/><rect x="3" y="13" width="18" height="7" rx="1.5"/><path d="M7 7.5h.01M7 16.5h.01"/></svg></span><span class="tab-label" data-i18n="tab.providers">Providers</span></div>
   <div class="tab" role="tab" id="tabBtn-models" tabindex="-1" aria-selected="false" aria-controls="tab-models" data-tab="models"><span class="tab-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></svg></span><span class="tab-label" data-i18n="tab.models">Models</span></div>
   <div class="tab" role="tab" id="tabBtn-keys" tabindex="-1" aria-selected="false" aria-controls="tab-keys" data-tab="keys"><span class="tab-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"/><path d="m10.7 12.3 9.3-9.3M17 6l3 3M14 9l3 3"/></svg></span><span class="tab-label" data-i18n="tab.keys">API Keys</span></div>
-  <div class="tab" role="tab" id="tabBtn-dashboard" tabindex="-1" aria-selected="false" aria-controls="tab-dashboard" data-tab="dashboard"><span class="tab-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg></span><span class="tab-label" data-i18n="tab.dashboard">Dashboard</span></div>
   <div class="tab" role="tab" id="tabBtn-logs" tabindex="-1" aria-selected="false" aria-controls="tab-logs" data-tab="logs"><span class="tab-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg></span><span class="tab-label" data-i18n="tab.logs">Request Log</span></div>
   <div class="tabs-spacer"></div>
-  <div class="config-path" id="configPath"></div>
   <div class="tab" role="tab" id="tabBtn-settings" tabindex="-1" aria-selected="false" aria-controls="tab-settings" data-tab="settings" style="display:none"></div>
 </div>
 
+  <div class="sb-foot">
+    <div class="sb-clock"><span class="sb-clock-k" data-i18n="label.systemTime">System Time</span><span id="systemClock" style="font-family:var(--mono)"></span></div>
+    <div class="sb-actions">
+      <button type="button" class="btn btn-sm sb-icon-btn" id="railModeBtn" onclick="toggleAppMode()"
+              title="Light / Dark" data-i18n-title="rail.themeToggle" aria-label="Light / Dark">&#9790;</button>
+      <button type="button" class="btn btn-sm sb-icon-btn" id="railLangBtn" onclick="toggleAppLang()"
+              title="English / 中文" aria-label="Language" data-i18n-aria-label="rail.langToggle">EN</button>
+      <button class="btn btn-sm" onclick="goToTab('settings')" data-i18n-title="modal.settings" title="Settings" style="display:inline-flex;align-items:center;justify-content:center;padding:4px 8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+      <button id="logoutBtn" class="btn btn-sm sb-icon-btn" onclick="doLogout()" style="display:none" data-i18n-title="btn.logout" title="Logout" aria-label="Logout" data-i18n-aria-label="btn.logout">&#9099;</button>
+    </div>
+  </div>
+</aside>
+<div class="app-main">
 <div class="content">
   <!-- Providers Tab -->
   <div class="tab-panel active" id="tab-providers" role="tabpanel" aria-labelledby="tabBtn-providers">
-    <!-- Collapsed by default: a global proxy is a deploy-time setting, and
-         the card used to push the provider list below the fold.  <details>
-         gives the toggle its keyboard behaviour and open state for free. -->
-    <details class="section section-collapsible" id="serverSettings">
-      <summary class="section-header">
-        <h2 data-i18n="section.server">Server Settings</h2>
-        <span class="section-summary" id="serverSettingsSummary"></span>
-      </summary>
-      <div class="provider-card" style="max-width:480px">
-        <div class="form-group" style="margin-bottom:0">
-          <label data-i18n="label.globalProxy">Global Proxy URL<span class="hint-icon">?<span class="hint-popup" data-i18n="hint.docker">In Docker, "localhost" refers to the container itself. Use "host.docker.internal" (macOS/Windows) or "172.17.0.1" (Linux) to reach the host machine.</span></span></label>
-          <div style="display:flex;gap:8px">
-            <input id="globalProxy" placeholder="e.g. http://127.0.0.1:7890" style="flex:1;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:14px;font-family:var(--mono)">
-            <button class="btn btn-primary btn-sm" onclick="saveServerSettings()" data-i18n="btn.save">Save</button>
-          </div>
-          <div style="font-size:11px;color:var(--text-dim);margin-top:6px" data-i18n="label.globalProxy.hint">Applies to all providers unless overridden per-provider.</div>
-          <div style="margin-top:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-            <button class="btn btn-sm" onclick="runNetDiag()" data-i18n="diag.runDiag">Network Diagnostics</button>
-            <div class="net-diag" id="netDiagResults"></div>
-          </div>
-        </div>
-      </div>
-    </details>
     <div class="section">
       <div class="section-header">
         <h2 data-i18n="section.providers">Providers</h2>
-        <div class="seg-control" id="providerSeg" role="radiogroup" aria-label="Provider filter">
+        <div class="seg-control" id="providerSeg" role="radiogroup" aria-label="Provider filter" data-i18n-aria-label="aria.providerFilter">
           <div class="active" role="radio" aria-checked="true" tabindex="0" onclick="switchProviderFilter(this,'all')"><span data-i18n="filter.all">All</span></div>
           <!-- Type-specific options generated by JS from model_types metadata -->
         </div>
@@ -108,7 +115,26 @@
           <button class="btn btn-sm" id="viewListBtn" onclick="setProviderView('list')" data-i18n-title="label.listView" title="List view"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
         </div>
         <button class="btn btn-primary btn-sm" onclick="openProviderModal()" data-i18n="btn.addProvider">+ Add Provider</button>
-        <span id="freeProviderButtons" style="display:contents"></span>
+        <span id="freeProviderHost" style="display:contents">
+          <button class="btn btn-sm more-menu-toggle" id="freeProviderBtn" aria-haspopup="true" aria-expanded="false" onclick="toggleMoreMenu(this)">+ <span data-i18n="free.add">Free resource</span> &#9662;</button>
+          <div class="more-menu" id="freeProviderMenu" role="menu"></div>
+        </span>
+      </div>
+      <div class="provider-list" id="providerListWrap" hidden>
+        <div class="table-scroll"><table id="providerTable">
+          <colgroup>
+            <col><col class="pc-w-cap"><col class="pc-w-toggle">
+            <col class="pc-w-num"><col class="pc-w-actions">
+          </colgroup>
+          <thead><tr>
+            <th data-i18n="col.provider">Provider</th>
+            <th class="pc-col-cap" data-i18n="col.capabilities">Capabilities</th>
+            <th class="pc-col-toggle" data-i18n="label.enabled">Enabled</th>
+            <th class="pc-col-num" data-i18n="col.models">Models</th>
+            <th></th>
+          </tr></thead>
+          <tbody id="providerTableBody"></tbody>
+        </table></div>
       </div>
       <div class="provider-grid" id="providerGrid"></div>
     </div>
@@ -123,37 +149,49 @@
         <div style="display:flex;align-items:center;gap:8px">
           <span class="model-count" id="modelCount" style="margin:0"></span>
           <button class="btn btn-sm" onclick="openFetchModelsModal()" data-i18n="btn.fetchModels">&#x2B07; Fetch from Provider</button>
-          <button class="btn btn-primary btn-sm" onclick="openModelModal()" data-i18n="btn.addModel">+ Add Model</button>
+          <button class="btn btn-primary btn-sm drawer-trigger" onclick="openModelModal()" data-i18n="btn.addModel">+ Add Model</button>
         </div>
       </div>
       <!-- Routing loop warning banner (populated by JS) -->
       <div id="loopWarningBanner" class="loop-warning-banner" style="display:none"></div>
-      <!-- Row 2: Filters only -->
+      <!-- Row 2: search on its own line, the facets labelled underneath -->
       <div class="model-toolbar">
-        <div class="logo-select">
-          <input type="hidden" id="modelProviderFilter">
-          <button type="button" class="logo-select-trigger" id="modelProviderFilterTrigger"
-                  aria-haspopup="listbox" aria-expanded="false" aria-controls="modelProviderFilterList">
-            <img class="logo-select-img" alt="" hidden>
-            <span class="logo-select-label" data-i18n="filter.allProviders">All Providers</span>
-            <span class="logo-select-chevron" aria-hidden="true">&#9662;</span>
-          </button>
-          <div class="logo-select-panel" id="modelProviderFilterList" role="listbox"
-               aria-label="Filter by provider" tabindex="-1"></div>
+        <div class="mt-row mt-row-search">
+          <input id="modelSearch" placeholder="Search models..." oninput="renderModels()" data-i18n-placeholder="label.searchModels">
+          <div class="model-sort-mobile">
+            <select id="modelSortKey" onchange="setModelSortKey(this.value)" aria-label="Sort by" data-i18n-aria-label="sort.by">
+              <option value="name" data-i18n="col.model">Model</option>
+              <option value="provider" data-i18n="col.provider">Provider</option>
+              <option value="enabled" data-i18n="col.status">Status</option>
+            </select>
+            <button type="button" class="btn btn-sm" id="modelSortDirBtn" onclick="toggleModelSortDir()" aria-label="Sort direction" data-i18n-aria-label="sort.direction" title="Sort direction" data-i18n-title="sort.direction">↑</button>
+          </div>
+          <button class="btn-reset" id="modelResetBtn" onclick="resetModelFilters()" data-i18n="btn.resetFilters">✕ Reset</button>
         </div>
-        <div class="seg-control" id="modelTypeSeg" role="radiogroup" aria-label="Model type filter">
-          <!-- Populated by models.js::_buildTypeSegControls() from model_types metadata -->
+        <div class="mt-row mt-row-facets">
+          <span class="facet-label" data-i18n="modelFilter.provider">Provider</span>
+          <div class="logo-select">
+            <input type="hidden" id="modelProviderFilter">
+            <button type="button" class="logo-select-trigger" id="modelProviderFilterTrigger"
+                    aria-haspopup="listbox" aria-expanded="false" aria-controls="modelProviderFilterList">
+              <img class="logo-select-img" alt="" hidden>
+              <span class="logo-select-label" data-i18n="filter.allProviders">All Providers</span>
+              <span class="logo-select-chevron" aria-hidden="true">&#9662;</span>
+            </button>
+            <div class="logo-select-panel" id="modelProviderFilterList" role="listbox"
+                 aria-label="Filter by provider" tabindex="-1"></div>
+          </div>
+          <span class="facet-sep" aria-hidden="true"></span>
+          <span class="facet-label" data-i18n="modelFilter.status">Status</span>
+          <div class="facet-chips" id="modelStatusSeg" role="radiogroup" aria-label="Model status filter" data-i18n-aria-label="modelFilter.status">
+            <!-- Populated by models.js::_buildStatusSeg() with live counts -->
+          </div>
+          <span class="facet-sep" aria-hidden="true"></span>
+          <span class="facet-label" data-i18n="modelFilter.type">Type</span>
+          <div class="facet-chips" id="modelTypeSeg" role="radiogroup" aria-label="Model type filter">
+            <!-- Populated by models.js::_buildTypeSegControls() from model_types metadata -->
+          </div>
         </div>
-        <input id="modelSearch" placeholder="Search models..." oninput="renderModels()" data-i18n-placeholder="label.searchModels">
-        <div class="model-sort-mobile">
-          <select id="modelSortKey" onchange="setModelSortKey(this.value)" aria-label="Sort by" data-i18n-aria-label="sort.by">
-            <option value="name" data-i18n="col.model">Model</option>
-            <option value="provider" data-i18n="col.provider">Provider</option>
-            <option value="enabled" data-i18n="col.status">Status</option>
-          </select>
-          <button type="button" class="btn btn-sm" id="modelSortDirBtn" onclick="toggleModelSortDir()" aria-label="Sort direction" data-i18n-aria-label="sort.direction" title="Sort direction" data-i18n-title="sort.direction">↑</button>
-        </div>
-        <button class="btn-reset" id="modelResetBtn" onclick="resetModelFilters()" data-i18n="btn.resetFilters">✕ Reset</button>
       </div>
       <div class="bulk-bar" id="modelBulkBar">
         <span class="bulk-count" id="modelBulkCount">0</span> <span data-i18n="label.selected">selected</span>
@@ -166,11 +204,9 @@
       <div class="table-scroll"><table>
         <thead><tr>
           <th id="thModelSelect" style="width:3%"><input type="checkbox" class="row-check" onchange="selectAllModels(this)"></th>
-          <th class="sortable" onclick="sortModels('name')" id="sortName" data-i18n="col.model" style="width:19%">Model</th>
-          <th id="thModelType" style="width:15%;text-align:center" data-i18n="col.type">Type</th>
-          <th id="thModelCaps" style="width:23%;text-align:center" data-i18n="col.capabilities">Capabilities</th>
-          <th class="sortable" onclick="sortModels('provider')" id="sortProvider" data-i18n="col.provider" style="width:13%">Provider</th>
-          <th class="sortable" onclick="sortModels('enabled')" id="sortEnabled" style="width:22%;text-align:right" data-i18n="col.actions">Actions</th>
+          <th class="sortable" onclick="sortModels('name')" id="sortName" data-i18n="col.model" style="width:46%">Model</th>
+          <th class="sortable" onclick="sortModels('provider')" id="sortProvider" data-i18n="col.provider" style="width:30%">Provider</th>
+          <th class="sortable" onclick="sortModels('enabled')" id="sortEnabled" style="width:20%;text-align:right" data-i18n="col.actions">Actions</th>
         </tr></thead>
         <tbody id="modelTable"></tbody>
       </table></div>
@@ -186,11 +222,9 @@
       </div>
       <p style="font-size:13px;color:var(--text-dim);margin-bottom:16px"><span data-i18n="keys.description">Manage gateway API keys used to authenticate requests to /v1/* endpoints.</span> <button onclick="backfillKeysLastUsed()" data-i18n-title="hint.refreshLastUsed" title="Refresh last-used timestamps from request log" style="background:none;border:none;cursor:pointer;color:var(--text-dim);padding:2px;vertical-align:middle;transition:color 0.15s" onmouseenter="this.style.color='var(--accent)'" onmouseleave="this.style.color='var(--text-dim)'"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15"/></svg></button></p>
       <div class="key-toolbar">
-        <span class="key-toolbar-label" data-i18n="keys.usageRange">Token usage</span>
-        <!-- Tiers are rendered from the window list the usage endpoint returns. -->
-        <div class="seg-control" id="keyUsageRange" role="radiogroup" aria-label="Usage range"></div>
-        <input id="keySearch" type="search" placeholder="Search keys..." data-i18n-placeholder="label.searchKeys" oninput="renderKeys()">
-        <span class="key-count" id="keyCount"></span>
+        <div class="mt-row mt-row-search">
+          <input id="keySearch" type="search" placeholder="Search keys..." data-i18n-placeholder="label.searchKeys" oninput="renderKeys()">
+          <span class="key-count" id="keyCount"></span>
         <div class="key-sort-mobile">
           <select id="keySortKey" onchange="setKeySortKey(this.value)" aria-label="Sort by" data-i18n-aria-label="sort.by">
             <option value="" data-i18n="sort.default">Default</option>
@@ -203,11 +237,25 @@
             <option value="total" data-i18n="tokenUsage.col.total">Total</option>
           </select>
           <button type="button" class="btn btn-sm" id="keySortDirBtn" onclick="toggleKeySortDir()" aria-label="Sort direction" data-i18n-aria-label="sort.direction" title="Sort direction" data-i18n-title="sort.direction">↑</button>
+          </div>
+        </div>
+        <div class="mt-row mt-row-facets">
+          <span class="facet-label" data-i18n="keys.usageRange">Token usage</span>
+          <!-- Tiers are rendered from the window list the usage endpoint returns. -->
+          <div class="facet-chips" id="keyUsageRange" role="radiogroup" aria-label="Usage range" data-i18n-aria-label="aria.usageRange"></div>
+        </div>
+      </div>
+      <div class="bulk-bar" id="keyBulkBar">
+        <span class="bulk-count" id="keyBulkCount">0</span> <span data-i18n="label.selected">selected</span>
+        <div class="bulk-actions">
+          <button class="btn btn-sm btn-danger" onclick="bulkDeleteKeys()" data-i18n="btn.delete">Delete</button>
+          <button class="btn btn-sm" onclick="clearKeySelection()" data-i18n="btn.cancel">Cancel</button>
         </div>
       </div>
       <div class="table-scroll"><table id="keysTableEl">
         <thead><tr>
-          <th class="sortable" id="keySortLabel" onclick="sortKeys('label')" style="width:24%" data-i18n="col.label">Label</th>
+          <th style="width:3%"><input type="checkbox" class="row-check" onchange="selectAllKeys(this)"></th>
+          <th class="sortable" id="keySortLabel" onclick="sortKeys('label')" style="width:22%" data-i18n="col.label">Label</th>
           <th class="sortable" id="keySortCreated" onclick="sortKeys('created')" style="width:12%" data-i18n="col.created">Created</th>
           <th class="sortable" id="keySortLastUsed" onclick="sortKeys('last_used')" style="width:12%" data-i18n="col.lastUsed">Last Used</th>
           <th class="sortable" id="keySortRequests" onclick="sortKeys('requests')" style="width:9%;text-align:right" data-i18n="col.requests">Requests</th>
@@ -234,6 +282,20 @@
         <canvas id="chartLatency"></canvas>
       </div>
     </div>
+    <div class="chart-row chart-row-wide">
+      <div class="chart-box">
+        <div class="chart-head">
+          <h3><span id="chartHistogramTitle" data-i18n="chart.histogram">Requests &middot; last {window}</span>
+            <span class="chart-sub" id="chartHistogramSub"></span></h3>
+          <span class="chart-legend" id="chartHistogramLegend"></span>
+          <div class="chart-range" role="group" aria-label="Window" data-i18n-aria-label="aria.chartWindow">
+            <button type="button" class="chart-range-btn" data-range="5h" onclick="setHistogramRange('5h')">5h</button>
+            <button type="button" class="chart-range-btn" data-range="24h" onclick="setHistogramRange('24h')">24h</button>
+          </div>
+        </div>
+        <canvas id="chartHistogram"></canvas>
+      </div>
+    </div>
     <div class="section">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
         <h2 style="margin:0" data-i18n="section.breakdown">Per-Provider Breakdown</h2>
@@ -241,193 +303,13 @@
       </div>
       <div id="providerBreakdownGrid" class="pb-grid"></div>
     </div>
-    <details class="section section-collapsible" id="profilingSection">
-      <summary class="section-header">
-        <h2 data-i18n="section.profiling">Profiling</h2>
-        <span id="profilingBadge" class="badge" style="margin-left:auto;padding:4px 10px;border-radius:4px;font-size:12px;font-weight:600;visibility:hidden">OFF</span>
-      </summary>
-      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap">
-        <label style="font-size:13px" data-i18n="profiling.requests">Requests:</label>
-        <input type="number" id="profilingCount" value="5" min="1" max="100" style="width:60px;padding:4px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text)">
-        <label style="font-size:13px;display:inline-flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="profilingTracing"> <span data-i18n="profiling.tracing">Tracing</span></label>
-        <button class="btn btn-sm" onclick="toggleProfiling()" id="profilingToggleBtn" data-i18n="profiling.enable">Enable</button>
-        <button class="btn btn-sm" onclick="clearProfilingResults()" data-i18n="profiling.clear">Clear</button>
-        <button class="btn btn-sm" onclick="downloadAllFlamegraphs()" id="profilingDownloadAll" style="display:none" data-i18n="profiling.downloadAll">Download All</button>
-      </div>
-      <p style="font-size:12px;color:var(--text-dim);margin:0 0 8px" data-i18n="profiling.hint">Results are in-memory only and will be lost on restart. Download important results.</p>
-      <div class="bulk-bar" id="profilingBulkBar">
-        <span class="bulk-count" id="profilingBulkCount">0</span> <span data-i18n="label.selected">selected</span>
-        <div class="bulk-actions">
-          <button class="btn btn-sm" onclick="bulkDownloadProfiling()" data-i18n="btn.downloadSelected">Download Selected</button>
-        </div>
-      </div>
-      <div class="table-scroll"><table>
-        <thead><tr>
-          <th style="width:3%"><input type="checkbox" class="row-check" onchange="selectAllProfiling(this)"></th>
-          <th data-i18n="col.time">Time</th>
-          <th data-i18n="col.model">Model</th>
-          <th data-i18n="col.sourceTarget">Source &rarr; Target</th>
-          <th data-i18n="col.mode">Mode</th>
-          <th data-i18n="col.duration">Duration</th>
-          <th data-i18n="profiling.type">Type</th>
-          <th data-i18n="profiling.flamegraph">Flamegraph</th>
-        </tr></thead>
-        <tbody id="profilingResults"></tbody>
-      </table></div>
-      <div id="profilingEmpty" class="empty-state">
-        <div class="empty-state-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 20h18M6 20V14M10 20V10M14 20V6M18 20V4"/></svg></div>
-        <div class="empty-state-text" data-i18n="profiling.empty">No profiling results. Enable profiling and send requests.</div>
-      </div>
-    </details>
-    <details class="section section-collapsible" id="captureSection">
-      <summary class="section-header">
-        <h2 data-i18n="section.capture">Content Capture</h2>
-        <span id="captureBadge" class="badge" style="margin-left:auto;padding:4px 10px;border-radius:4px;font-size:12px;font-weight:600;visibility:hidden">OFF</span>
-      </summary>
-      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap">
-        <label style="font-size:13px" data-i18n="capture.requests">Requests:</label>
-        <input type="number" id="captureCount" value="5" min="1" max="100" style="width:60px;padding:4px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text)">
-        <button class="btn btn-sm" onclick="toggleCapture()" id="captureToggleBtn" data-i18n="capture.enable">Enable</button>
-        <button class="btn btn-sm" onclick="clearCaptureResults()" data-i18n="capture.clear">Clear</button>
-        <button class="btn btn-sm" onclick="downloadAllCaptures()" id="captureDownloadAll" style="display:none" data-i18n="capture.downloadAll">Download All</button>
-      </div>
-      <p style="font-size:12px;color:var(--text-dim);margin:0 0 8px" data-i18n="capture.hint">Captures full request/response bodies in memory. Results are ephemeral and lost on restart.</p>
-      <div class="bulk-bar" id="captureBulkBar">
-        <span class="bulk-count" id="captureBulkCount">0</span> <span data-i18n="label.selected">selected</span>
-        <div class="bulk-actions">
-          <button class="btn btn-sm" onclick="bulkDownloadCapture()" data-i18n="btn.downloadSelected">Download Selected</button>
-        </div>
-      </div>
-      <div class="table-scroll"><table>
-        <thead><tr>
-          <th style="width:3%"><input type="checkbox" class="row-check" onchange="selectAllCapture(this)"></th>
-          <th data-i18n="col.time">Time</th>
-          <th data-i18n="col.model">Model</th>
-          <th data-i18n="col.sourceTarget">Source &rarr; Target</th>
-          <th data-i18n="capture.mode">Mode</th>
-          <th data-i18n="col.status">Status</th>
-          <th data-i18n="capture.detail">Detail</th>
-        </tr></thead>
-        <tbody id="captureResults"></tbody>
-      </table></div>
-      <div id="captureEmpty" class="empty-state">
-        <div class="empty-state-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg></div>
-        <div class="empty-state-text" data-i18n="capture.empty">No captures. Enable capture and send requests.</div>
-      </div>
-    </details>
-
-    <!-- Error Dumps Section -->
-    <div class="section" id="errorDumpSection">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
-        <h2 style="margin:0;line-height:1" data-i18n="section.errorDumps">Error Dumps</h2>
-        <div style="display:flex;align-items:center;gap:8px">
-          <span style="font-size:12px;color:var(--text-dim)" id="dumpCount"></span>
-          <button class="btn btn-sm" onclick="downloadAllDumps()" id="dumpDownloadAllBtn" style="display:none" data-i18n="btn.downloadAll">Download All</button>
-          <button class="btn btn-sm" onclick="backfillDumpLogIds()" title="Link unmatched error dumps to their request log entries by timestamp and provider" data-i18n="btn.matchLogs">Match Logs</button>
-          <div style="display:inline-block;position:relative">
-            <button class="btn btn-sm" onclick="toggleDumpMoreMenu(this)" style="padding:3px 8px">⋯</button>
-            <div id="dumpMoreMenu" style="display:none;position:absolute;right:0;top:calc(100% + 4px);min-width:140px;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.3);z-index:10;overflow:hidden">
-              <div style="padding:8px 14px;font-size:13px;cursor:pointer" onmouseenter="this.style.background='var(--bg-hover)'" onmouseleave="this.style.background=''" onclick="document.getElementById('dumpMoreMenu').style.display='none';openExportDumpsModal()" data-i18n="btn.export">Export...</div>
-              <div style="padding:8px 14px;font-size:13px;cursor:pointer;color:var(--red)" onmouseenter="this.style.background='var(--bg-hover)'" onmouseleave="this.style.background=''" onclick="document.getElementById('dumpMoreMenu').style.display='none';openClearDumpsConfirm()" data-i18n="btn.clearAll">Clear All</div>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="model-toolbar" id="dumpToolbar">
-        <select id="dumpPhaseFilter" onchange="renderDumps()">
-          <option value="" data-i18n="filter.allPhases">All Phases</option>
-          <option value="conversion">conversion</option>
-          <option value="upstream">upstream</option>
-          <option value="response">response</option>
-          <option value="stream">stream</option>
-        </select>
-        <span id="dumpStatusFilterWrap" style="display:inline-flex;width:140px">
-          <select id="dumpStatusFilter" onchange="onDumpStatusFilterChange()" style="width:100%">
-            <option value="" data-i18n="filter.allStatus">All Status</option>
-            <option value="4xx">4xx</option>
-            <option value="5xx">5xx</option>
-            <option value="custom" data-i18n="filter.custom">Custom...</option>
-          </select>
-          <span id="dumpStatusSearchWrap" style="display:none;align-items:center;gap:2px;width:100%">
-            <input type="text" id="dumpStatusSearch" data-i18n-placeholder="filter.statusPlaceholder" placeholder="e.g. 429" oninput="onDumpStatusSearchInput()" style="flex:1;min-width:0" inputmode="numeric" pattern="[0-9]*" maxlength="3">
-            <button class="btn btn-sm" onclick="closeDumpStatusSearch()" style="padding:6px 8px;font-size:13px;line-height:1;flex-shrink:0">✕</button>
-          </span>
-        </span>
-        <select id="dumpProviderFilter" onchange="renderDumps()">
-          <option value="" data-i18n="filter.allProviders">All Providers</option>
-        </select>
-        <span id="dumpModelFilterWrap" style="display:inline-flex;width:180px">
-          <select id="dumpModelFilter" onchange="onDumpModelFilterChange()" style="width:100%">
-            <option value="" data-i18n="filter.allModels">All Models</option>
-            <option value="custom">Custom...</option>
-          </select>
-          <span id="dumpModelSearchWrap" style="display:none;align-items:center;gap:2px;width:100%">
-            <input type="text" id="dumpModelSearch" placeholder="Search model..." oninput="renderDumps()" style="flex:1;min-width:0">
-            <button class="btn btn-sm" onclick="closeDumpModelSearch()" style="padding:6px 8px;font-size:13px;line-height:1;flex-shrink:0">✕</button>
-          </span>
-        </span>
-        <span id="dumpTimeFilterWrap" style="display:inline-flex;width:280px">
-          <select id="dumpTimeRange" onchange="onDumpTimeRangeChange()" style="width:100%">
-            <option value="" data-i18n="filter.allTime">All Time</option>
-            <option value="1h">Last 1h</option>
-            <option value="24h">Last 24h</option>
-            <option value="7d">Last 7d</option>
-            <option value="30d">Last 30d</option>
-            <option value="custom">Custom...</option>
-          </select>
-          <span id="dumpCustomDateRange" style="display:none;align-items:center;gap:4px;width:100%">
-            <input type="date" id="dumpDateFrom" onchange="renderDumps()" style="padding:5px 6px;font-size:12px;flex:1;min-width:0">
-            <span style="color:var(--text-dim)">—</span>
-            <input type="date" id="dumpDateTo" onchange="renderDumps()" style="padding:5px 6px;font-size:12px;flex:1;min-width:0">
-            <button class="btn btn-sm" onclick="closeDumpTimeCustom()" style="padding:5px 8px;font-size:12px;line-height:1;flex-shrink:0">✕</button>
-          </span>
-        </span>
-        <button class="btn-reset" id="dumpResetBtn" onclick="resetDumpFilters()" style="display:none" data-i18n="btn.resetFilters">✕ Reset</button>
-      </div>
-      <div class="bulk-bar" id="dumpBulkBar">
-        <span class="bulk-count" id="dumpBulkCount">0</span> <span data-i18n="label.selected">selected</span>
-        <div class="bulk-actions">
-          <button class="btn btn-sm" onclick="bulkDownloadDumps()" data-i18n="btn.downloadSelected">Download Selected</button>
-          <button class="btn btn-sm btn-danger" onclick="bulkDeleteDumps()" data-i18n="btn.deleteSelected">Delete Selected</button>
-        </div>
-      </div>
-      <div class="table-scroll"><table id="dumpTableEl">
-        <thead><tr>
-          <th id="dumpThSelect"><input type="checkbox" id="dumpSelectAll" class="row-check" onchange="selectAllDumps(this)"><label for="dumpSelectAll" class="dump-select-all-label" data-i18n="btn.selectAll">Select All</label></th>
-          <th id="dumpThTime" data-i18n="col.time">Time</th>
-          <th id="dumpThModel" data-i18n="col.model">Model</th>
-          <th id="dumpThSourceTarget" data-i18n="col.sourceTarget">Source &rarr; Target</th>
-          <th id="dumpThPhase">Phase</th>
-          <th id="dumpThStatus" data-i18n="col.status">Status</th>
-          <th id="dumpThError">Error</th>
-          <th id="dumpThActions" style="width:90px" data-i18n="col.actions">Actions</th>
-        </tr></thead>
-        <tbody id="dumpTable"></tbody>
-      </table></div>
-      <div id="dumpEmpty" class="empty-state">
-        <div class="empty-state-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg></div>
-        <div class="empty-state-text" data-i18n="dump.empty">No error dumps recorded.</div>
-      </div>
-      <div class="pagination">
-        <button class="btn btn-sm" onclick="changeDumpPage(-1)" id="dumpPrevPage" disabled>← Prev</button>
-        <span class="info" id="dumpPageInfo">Page 1 / 1</span>
-        <button class="btn btn-sm" onclick="changeDumpPage(1)" id="dumpNextPage" disabled>Next →</button>
-        <span class="page-jump-group">
-          <input type="number" id="dumpPageJump" class="page-jump" min="1" step="1" inputmode="numeric" disabled
-                 data-i18n-placeholder="page.number" data-i18n-aria-label="page.number" placeholder="Page"
-                 onkeydown="if(event.key==='Enter'){event.preventDefault();jumpToDumpPage();}">
-          <button class="btn btn-sm" onclick="jumpToDumpPage()" data-i18n="btn.go">Go</button>
-        </span>
-      </div>
-    </div>
   </div>
-
   <!-- Clear Dumps Confirm Modal -->
   <div class="modal-overlay" role="dialog" aria-modal="true" id="clearDumpsModal">
     <div class="modal" style="width:400px">
       <h3 data-i18n="confirm.clearDumps">Clear All Error Dumps</h3>
       <p style="font-size:13px;color:var(--text-dim);margin-bottom:16px" data-i18n-html="confirm.clearDumpsHint">This will permanently delete all error dump records. Type <strong style="color:var(--red)">CLEAR</strong> to confirm.</p>
-      <input type="text" id="clearDumpsInput" oninput="onClearDumpsInput()" placeholder="Type CLEAR" style="width:100%;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:14px;font-family:var(--mono)">
+      <input type="text" id="clearDumpsInput" oninput="onClearDumpsInput()" placeholder="Type CLEAR" data-i18n-placeholder="confirm.typeClear" style="width:100%;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:14px;font-family:var(--mono)">
       <div class="modal-actions">
         <button class="btn" onclick="closeModal('clearDumpsModal')" data-i18n="btn.cancel">Cancel</button>
         <button class="btn btn-danger" id="clearDumpsBtn" onclick="confirmClearDumps()" disabled data-i18n="btn.clearAll">Clear All</button>
@@ -455,31 +337,27 @@
   <!-- Request Log Tab -->
   <div class="tab-panel" id="tab-logs" role="tabpanel" aria-labelledby="tabBtn-logs">
     <div class="log-view-bar">
-      <div class="seg-control" id="logViewSeg" role="radiogroup" aria-label="Log view">
-        <label class="active" role="radio" aria-checked="true" tabindex="0" onclick="switchLogView('requests')" data-i18n="logView.requests">Request Log</label>
-        <label role="radio" aria-checked="false" tabindex="-1" onclick="switchLogView('ops')" data-i18n="logView.ops">Server Ops Log</label>
+      <div class="seg-control" id="logViewSeg" role="radiogroup" aria-label="Log view" data-i18n-aria-label="aria.logView">
+        <label class="active" role="radio" aria-checked="true" tabindex="0" data-view="requests" onclick="switchLogView('requests')" data-i18n="logView.requests">Requests</label>
+        <label role="radio" aria-checked="false" tabindex="-1" data-view="ops" onclick="switchLogView('ops')" data-i18n="logView.ops">Ops Log</label>
+        <label role="radio" aria-checked="false" tabindex="-1" data-view="dumps" onclick="switchLogView('dumps')" data-i18n="logView.dumps">Error Dumps</label>
+        <label role="radio" aria-checked="false" tabindex="-1" data-view="profiling" onclick="switchLogView('profiling')" data-i18n="logView.profiling">Profiling</label>
+        <label role="radio" aria-checked="false" tabindex="-1" data-view="capture" onclick="switchLogView('capture')" data-i18n="logView.capture">Capture</label>
       </div>
       <button class="btn btn-sm" id="logPauseBtn" onclick="toggleLogPause()" aria-pressed="false" data-i18n="btn.pauseRefresh" data-i18n-title="hint.pauseRefresh" title="Pause automatic refresh while you read">Pause refresh</button>
     </div>
     <div id="logView-requests">
       <div class="filters">
-        <select id="filterModel"><option value="" data-i18n="filter.allModels">All Models</option></select>
-        <select id="filterProvider"><option value="" data-i18n="filter.allProviders">All Providers</option></select>
-        <span id="filterStatusWrap" style="display:inline-flex;width:140px">
-          <select id="filterStatus" onchange="onLogStatusFilterChange()" style="width:100%">
-            <option value="" data-i18n="filter.allStatus">All Status</option>
-            <option value="ok" data-i18n="filter.ok">OK (2xx/3xx)</option>
-            <option value="4xx">4xx</option>
-            <option value="5xx">5xx</option>
-            <option value="custom" data-i18n="filter.custom">Custom...</option>
-          </select>
-          <span id="logStatusSearchWrap" style="display:none;align-items:center;gap:2px;width:100%">
-            <input type="text" id="logStatusSearch" data-i18n-placeholder="filter.statusPlaceholder" placeholder="e.g. 429" oninput="onLogStatusSearchInput()" style="flex:1;min-width:0" inputmode="numeric" pattern="[0-9]*" maxlength="3">
-            <button class="btn btn-sm" onclick="closeLogStatusSearch()" style="padding:6px 8px;font-size:13px;line-height:1;flex-shrink:0">✕</button>
-          </span>
-        </span>
-        <select id="filterApiKey"><option value="" data-i18n="filter.allKeys">All Keys</option></select>
-        <select id="filterTimeRange" onchange="onLogTimeRangeChange()">
+        <!-- The selects still hold the state; the chips are its face, in the
+             same shape the models and keys panels use. -->
+        <select id="filterStatus" class="sr-select" onchange="onLogStatusFilterChange()">
+          <option value="" data-i18n="filter.allStatus">All Status</option>
+          <option value="ok" data-i18n="filter.ok">OK (2xx/3xx)</option>
+          <option value="4xx">4xx</option>
+          <option value="5xx">5xx</option>
+          <option value="custom" data-i18n="filter.custom">Custom...</option>
+        </select>
+        <select id="filterTimeRange" class="sr-select" onchange="onLogTimeRangeChange()">
           <option value="" data-i18n="filter.allTime">All Time</option>
           <option value="1h" data-i18n="filter.last1h">Last 1h</option>
           <option value="24h" data-i18n="filter.last24h">Last 24h</option>
@@ -487,12 +365,51 @@
           <option value="30d" data-i18n="filter.last30d">Last 30d</option>
           <option value="custom" data-i18n="filter.custom">Custom...</option>
         </select>
-        <span id="logCustomRange" style="display:none;align-items:center;gap:4px">
-          <input type="date" id="logDateFrom" onchange="onLogTimeRangeChange()">
-          <span style="color:var(--text-dim)">—</span>
-          <input type="date" id="logDateTo" onchange="onLogTimeRangeChange()">
-        </span>
-        <button class="btn btn-sm" onclick="resetLogFilters()" data-i18n="btn.resetFilters">Reset Filters</button>
+        <div class="mt-row">
+          <span class="facet-label" data-i18n="col.time">Time</span>
+          <div class="facet-chips" id="logTimeChips">
+            <div data-value="" data-i18n="filter.allTime" onclick="setLogFacet('filterTimeRange', '')">All Time</div>
+            <div data-value="1h" data-i18n="filter.last1h" onclick="setLogFacet('filterTimeRange', '1h')">Last 1h</div>
+            <div data-value="24h" data-i18n="filter.last24h" onclick="setLogFacet('filterTimeRange', '24h')">Last 24h</div>
+            <div data-value="7d" data-i18n="filter.last7d" onclick="setLogFacet('filterTimeRange', '7d')">Last 7d</div>
+            <div data-value="30d" data-i18n="filter.last30d" onclick="setLogFacet('filterTimeRange', '30d')">Last 30d</div>
+            <div data-value="custom" data-i18n="filter.custom" onclick="setLogFacet('filterTimeRange', 'custom')">Custom...</div>
+          </div>
+          <span id="logCustomRange" style="display:none;align-items:center;gap:4px">
+            <input type="date" id="logDateFrom" onchange="onLogTimeRangeChange()">
+            <span style="color:var(--text-dim)">—</span>
+            <input type="date" id="logDateTo" onchange="onLogTimeRangeChange()">
+          </span>
+        </div>
+        <div class="mt-row">
+          <span class="facet-label" data-i18n="col.status">Status</span>
+          <div class="facet-chips" id="logStatusChips">
+            <div data-value="" data-i18n="filter.allStatus" onclick="setLogFacet('filterStatus', '')">All Status</div>
+            <div data-value="ok" data-i18n="filter.ok" onclick="setLogFacet('filterStatus', 'ok')">OK</div>
+            <div data-value="4xx" onclick="setLogFacet('filterStatus', '4xx')">4xx</div>
+            <div data-value="5xx" onclick="setLogFacet('filterStatus', '5xx')">5xx</div>
+            <div data-value="custom" data-i18n="filter.custom" onclick="setLogFacet('filterStatus', 'custom')">Custom...</div>
+          </div>
+          <span id="logStatusSearchWrap" style="display:none;align-items:center;gap:2px">
+            <input type="text" id="logStatusSearch" data-i18n-placeholder="filter.statusPlaceholder" placeholder="e.g. 429" oninput="onLogStatusSearchInput()" style="width:90px" inputmode="numeric" pattern="[0-9]*" maxlength="3">
+            <button class="btn btn-sm" onclick="closeLogStatusSearch()" style="padding:6px 8px;font-size:13px;line-height:1;flex-shrink:0">✕</button>
+          </span>
+        </div>
+        <div class="mt-row">
+          <span class="facet-label" data-i18n="col.provider">Provider</span>
+          <input type="hidden" id="filterProvider">
+          <button type="button" class="btn btn-sm provider-picker-btn log-provider-btn" id="logProviderBtn"
+                  aria-haspopup="listbox" aria-expanded="false" onclick="toggleLogProviderPicker(this)">
+            <span class="pp-value" data-i18n="filter.allProviders">All Providers</span>
+            <span aria-hidden="true">&#9662;</span>
+          </button>
+          <div class="more-menu provider-picker-menu" id="logProviderMenu" role="listbox"></div>
+          <span class="facet-label" data-i18n="col.model">Model</span>
+          <select id="filterModel"><option value="" data-i18n="filter.allModels">All Models</option></select>
+          <span class="facet-label" data-i18n="col.apiKey">API Key</span>
+          <select id="filterApiKey"><option value="" data-i18n="filter.allKeys">All Keys</option></select>
+          <button class="btn btn-sm btn-reset" onclick="resetLogFilters()" data-i18n="btn.resetFilters">Reset Filters</button>
+        </div>
       </div>
       <div class="table-scroll"><table id="requestLogTable">
         <thead><tr><th id="thLogTime" data-i18n="col.time">Time</th><th id="thLogModel" data-i18n="col.model">Model</th><th id="thLogSourceTarget" data-i18n="col.sourceTarget">Source &rarr; Target</th><th id="thLogMode" data-i18n="col.mode">Mode</th><th id="thLogApiKey" data-i18n="col.apiKey">API Key</th><th id="thLogClientIp" data-i18n="col.clientIp">Client IP</th><th id="thLogStatus" data-i18n="col.status">Status</th><th id="thLogTokens" data-i18n="col.tokens">Tokens</th><th id="thLogDuration" data-i18n="col.duration">Duration</th></tr></thead>
@@ -519,15 +436,20 @@
     </div>
     <div id="logView-ops" style="display:none">
       <div class="filters">
-        <select id="filterOpsEventType"><option value="" data-i18n="filter.allEventTypes">All Events</option></select>
-        <select id="filterOpsSeverity">
-          <option value="" data-i18n="filter.allSeverity">All Severity</option>
-          <option value="info" data-i18n="severity.info">Info</option>
-          <option value="warning" data-i18n="severity.warning">Warning</option>
-          <option value="error" data-i18n="severity.error">Error</option>
-        </select>
-        <select id="filterOpsSource"><option value="" data-i18n="filter.allSources">All Sources</option></select>
-        <button class="btn btn-sm" onclick="resetOpsLogFilters()" data-i18n="btn.resetFilters">Reset Filters</button>
+        <div class="mt-row">
+          <span class="facet-label" data-i18n="col.eventType">Event</span>
+          <select id="filterOpsEventType"><option value="" data-i18n="filter.allEventTypes">All Events</option></select>
+          <span class="facet-label" data-i18n="col.severity">Severity</span>
+          <select id="filterOpsSeverity">
+            <option value="" data-i18n="filter.allSeverity">All Severity</option>
+            <option value="info" data-i18n="severity.info">Info</option>
+            <option value="warning" data-i18n="severity.warning">Warning</option>
+            <option value="error" data-i18n="severity.error">Error</option>
+          </select>
+          <span class="facet-label" data-i18n="col.source">Source</span>
+          <select id="filterOpsSource"><option value="" data-i18n="filter.allSources">All Sources</option></select>
+          <button class="btn btn-sm btn-reset" onclick="resetOpsLogFilters()" data-i18n="btn.resetFilters">Reset Filters</button>
+        </div>
       </div>
       <div class="table-scroll"><table id="opsLogTableEl">
         <thead><tr><th id="thOpsTime" data-i18n="col.time">Time</th><th id="thOpsEvent" data-i18n="col.eventType">Event</th><th id="thOpsSeverity" data-i18n="col.severity">Severity</th><th id="thOpsMessage" data-i18n="col.message">Message</th><th id="thOpsSource" data-i18n="col.source">Source</th></tr></thead>
@@ -545,18 +467,220 @@
         </span>
       </div>
     </div>
+    <div class="log-view-pane" id="logView-profiling" style="display:none">
+  <details class="section section-collapsible" id="profilingSection">
+        <summary class="section-header">
+          <h2 data-i18n="section.profiling">Profiling</h2>
+          <span id="profilingBadge" class="badge" style="margin-left:auto;padding:4px 10px;border-radius:4px;font-size:12px;font-weight:600;visibility:hidden">OFF</span>
+        </summary>
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap">
+          <label style="font-size:13px" data-i18n="profiling.requests">Requests:</label>
+          <input type="number" id="profilingCount" value="5" min="1" max="100" style="width:60px;padding:4px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text)">
+          <label style="font-size:13px;display:inline-flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="profilingTracing"> <span data-i18n="profiling.tracing">Tracing</span></label>
+          <button class="btn btn-sm" onclick="toggleProfiling()" id="profilingToggleBtn" data-i18n="profiling.enable">Enable</button>
+          <button class="btn btn-sm" onclick="clearProfilingResults()" data-i18n="profiling.clear">Clear</button>
+          <button class="btn btn-sm" onclick="downloadAllFlamegraphs()" id="profilingDownloadAll" style="display:none" data-i18n="profiling.downloadAll">Download All</button>
+        </div>
+        <p style="font-size:12px;color:var(--text-dim);margin:0 0 8px" data-i18n="profiling.hint">Results are in-memory only and will be lost on restart. Download important results.</p>
+        <div class="bulk-bar" id="profilingBulkBar">
+          <span class="bulk-count" id="profilingBulkCount">0</span> <span data-i18n="label.selected">selected</span>
+          <div class="bulk-actions">
+            <button class="btn btn-sm" onclick="bulkDownloadProfiling()" data-i18n="btn.downloadSelected">Download Selected</button>
+          </div>
+        </div>
+        <div class="table-scroll"><table>
+          <thead><tr>
+            <th style="width:3%"><input type="checkbox" class="row-check" onchange="selectAllProfiling(this)"></th>
+            <th data-i18n="col.time">Time</th>
+            <th data-i18n="col.model">Model</th>
+            <th data-i18n="col.sourceTarget">Source &rarr; Target</th>
+            <th data-i18n="col.mode">Mode</th>
+            <th data-i18n="col.duration">Duration</th>
+            <th data-i18n="profiling.type">Type</th>
+            <th data-i18n="profiling.flamegraph">Flamegraph</th>
+          </tr></thead>
+          <tbody id="profilingResults"></tbody>
+        </table></div>
+        <div id="profilingEmpty" class="empty-state">
+          <div class="empty-state-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 20h18M6 20V14M10 20V10M14 20V6M18 20V4"/></svg></div>
+          <div class="empty-state-text" data-i18n="profiling.empty">No profiling results. Enable profiling and send requests.</div>
+        </div>
+      </details>
+      
+    </div>
+    <div class="log-view-pane" id="logView-capture" style="display:none">
+  <details class="section section-collapsible" id="captureSection">
+        <summary class="section-header">
+          <h2 data-i18n="section.capture">Content Capture</h2>
+          <span id="captureBadge" class="badge" style="margin-left:auto;padding:4px 10px;border-radius:4px;font-size:12px;font-weight:600;visibility:hidden">OFF</span>
+        </summary>
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap">
+          <label style="font-size:13px" data-i18n="capture.requests">Requests:</label>
+          <input type="number" id="captureCount" value="5" min="1" max="100" style="width:60px;padding:4px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text)">
+          <button class="btn btn-sm" onclick="toggleCapture()" id="captureToggleBtn" data-i18n="capture.enable">Enable</button>
+          <button class="btn btn-sm" onclick="clearCaptureResults()" data-i18n="capture.clear">Clear</button>
+          <button class="btn btn-sm" onclick="downloadAllCaptures()" id="captureDownloadAll" style="display:none" data-i18n="capture.downloadAll">Download All</button>
+        </div>
+        <p style="font-size:12px;color:var(--text-dim);margin:0 0 8px" data-i18n="capture.hint">Captures full request/response bodies in memory. Results are ephemeral and lost on restart.</p>
+        <div class="bulk-bar" id="captureBulkBar">
+          <span class="bulk-count" id="captureBulkCount">0</span> <span data-i18n="label.selected">selected</span>
+          <div class="bulk-actions">
+            <button class="btn btn-sm" onclick="bulkDownloadCapture()" data-i18n="btn.downloadSelected">Download Selected</button>
+          </div>
+        </div>
+        <div class="table-scroll"><table>
+          <thead><tr>
+            <th style="width:3%"><input type="checkbox" class="row-check" onchange="selectAllCapture(this)"></th>
+            <th data-i18n="col.time">Time</th>
+            <th data-i18n="col.model">Model</th>
+            <th data-i18n="col.sourceTarget">Source &rarr; Target</th>
+            <th data-i18n="capture.mode">Mode</th>
+            <th data-i18n="col.status">Status</th>
+            <th data-i18n="capture.detail">Detail</th>
+          </tr></thead>
+          <tbody id="captureResults"></tbody>
+        </table></div>
+        <div id="captureEmpty" class="empty-state">
+          <div class="empty-state-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg></div>
+          <div class="empty-state-text" data-i18n="capture.empty">No captures. Enable capture and send requests.</div>
+        </div>
+      </details>
+  
+      <!-- Error Dumps Section -->
+      
+    </div>
+    <div class="log-view-pane" id="logView-dumps" style="display:none">
+  <div class="section" id="errorDumpSection">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+          <h2 style="margin:0;line-height:1" data-i18n="section.errorDumps">Error Dumps</h2>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:12px;color:var(--text-dim)" id="dumpCount"></span>
+            <button class="btn btn-sm" onclick="downloadAllDumps()" id="dumpDownloadAllBtn" style="display:none" data-i18n="btn.downloadAll">Download All</button>
+            <button class="btn btn-sm" onclick="backfillDumpLogIds()" title="Link unmatched error dumps to their request log entries by timestamp and provider" data-i18n-title="btn.matchLogsTitle" data-i18n="btn.matchLogs">Match Logs</button>
+            <div style="display:inline-block;position:relative">
+              <button class="btn btn-sm" onclick="toggleDumpMoreMenu(this)" style="padding:3px 8px">⋯</button>
+              <div id="dumpMoreMenu" style="display:none;position:absolute;right:0;top:calc(100% + 4px);min-width:140px;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.3);z-index:10;overflow:hidden">
+                <div style="padding:8px 14px;font-size:13px;cursor:pointer" onmouseenter="this.style.background='var(--bg-hover)'" onmouseleave="this.style.background=''" onclick="document.getElementById('dumpMoreMenu').style.display='none';openExportDumpsModal()" data-i18n="btn.export">Export...</div>
+                <div style="padding:8px 14px;font-size:13px;cursor:pointer;color:var(--red)" onmouseenter="this.style.background='var(--bg-hover)'" onmouseleave="this.style.background=''" onclick="document.getElementById('dumpMoreMenu').style.display='none';openClearDumpsConfirm()" data-i18n="btn.clearAll">Clear All</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="dump-toolbar" id="dumpToolbar">
+          <input type="search" id="dumpIdSearch" class="dump-id-search" data-i18n-placeholder="filter.searchDumpId" placeholder="Dump id…" oninput="onDumpIdSearchInput()">
+          <select id="dumpPhaseFilter" onchange="renderDumps()">
+            <option value="" data-i18n="filter.allPhases">All Phases</option>
+            <option value="conversion" data-i18n="phase.conversion">conversion</option>
+            <option value="upstream" data-i18n="phase.upstream">upstream</option>
+            <option value="response" data-i18n="phase.response">response</option>
+            <option value="stream" data-i18n="phase.stream">stream</option>
+          </select>
+          <span id="dumpStatusFilterWrap" style="display:inline-flex;width:140px">
+            <select id="dumpStatusFilter" onchange="onDumpStatusFilterChange()" style="width:100%">
+              <option value="" data-i18n="filter.allStatus">All Status</option>
+              <option value="4xx">4xx</option>
+              <option value="5xx">5xx</option>
+              <option value="custom" data-i18n="filter.custom">Custom...</option>
+            </select>
+            <span id="dumpStatusSearchWrap" style="display:none;align-items:center;gap:2px;width:100%">
+              <input type="text" id="dumpStatusSearch" data-i18n-placeholder="filter.statusPlaceholder" placeholder="e.g. 429" oninput="onDumpStatusSearchInput()" style="flex:1;min-width:0" inputmode="numeric" pattern="[0-9]*" maxlength="3">
+              <button class="btn btn-sm" onclick="closeDumpStatusSearch()" style="padding:6px 8px;font-size:13px;line-height:1;flex-shrink:0">✕</button>
+            </span>
+          </span>
+          <select id="dumpProviderFilter" onchange="renderDumps()">
+            <option value="" data-i18n="filter.allProviders">All Providers</option>
+          </select>
+          <span id="dumpModelFilterWrap" style="display:inline-flex;width:180px">
+            <select id="dumpModelFilter" onchange="onDumpModelFilterChange()" style="width:100%">
+              <option value="" data-i18n="filter.allModels">All Models</option>
+              <option value="custom" data-i18n="filter.custom">Custom...</option>
+            </select>
+            <span id="dumpModelSearchWrap" style="display:none;align-items:center;gap:2px;width:100%">
+              <input type="text" id="dumpModelSearch" placeholder="Search model..." data-i18n-placeholder="label.searchModels" oninput="renderDumps()" style="flex:1;min-width:0">
+              <button class="btn btn-sm" onclick="closeDumpModelSearch()" style="padding:6px 8px;font-size:13px;line-height:1;flex-shrink:0">✕</button>
+            </span>
+          </span>
+          <span id="dumpTimeFilterWrap" style="display:inline-flex;width:280px">
+            <select id="dumpTimeRange" onchange="onDumpTimeRangeChange()" style="width:100%">
+              <option value="" data-i18n="filter.allTime">All Time</option>
+              <option value="1h" data-i18n="filter.last1h">Last 1h</option>
+              <option value="24h" data-i18n="filter.last24h">Last 24h</option>
+              <option value="7d" data-i18n="filter.last7d">Last 7d</option>
+              <option value="30d" data-i18n="filter.last30d">Last 30d</option>
+              <option value="custom" data-i18n="filter.custom">Custom...</option>
+            </select>
+            <span id="dumpCustomDateRange" style="display:none;align-items:center;gap:4px;width:100%">
+              <input type="date" id="dumpDateFrom" onchange="renderDumps()" style="padding:5px 6px;font-size:12px;flex:1;min-width:0">
+              <span style="color:var(--text-dim)">—</span>
+              <input type="date" id="dumpDateTo" onchange="renderDumps()" style="padding:5px 6px;font-size:12px;flex:1;min-width:0">
+              <button class="btn btn-sm" onclick="closeDumpTimeCustom()" style="padding:5px 8px;font-size:12px;line-height:1;flex-shrink:0">✕</button>
+            </span>
+          </span>
+          <button class="btn btn-sm" id="dumpSelectFilteredBtn" onclick="selectAllFilteredDumps()" data-i18n="btn.selectFiltered">Select all</button>
+          <button class="btn btn-sm" id="dumpInvertBtn" onclick="invertDumpSelection()" data-i18n="btn.invertSelection">Invert</button>
+          <button class="btn-reset" id="dumpResetBtn" onclick="resetDumpFilters()" style="display:none" data-i18n="btn.resetFilters">✕ Reset</button>
+        </div>
+        <div class="bulk-bar" id="dumpBulkBar">
+          <span class="bulk-count" id="dumpBulkCount">0</span> <span data-i18n="label.selected">selected</span>
+          <div class="bulk-actions">
+            <button class="btn btn-sm" onclick="bulkDownloadDumps()" data-i18n="btn.downloadSelected">Download Selected</button>
+            <button class="btn btn-sm btn-danger" onclick="bulkDeleteDumps()" data-i18n="btn.deleteSelected">Delete Selected</button>
+            <button class="btn btn-sm" onclick="clearDumpSelection()" data-i18n="btn.cancel">Cancel</button>
+          </div>
+        </div>
+        <div class="table-scroll"><table id="dumpTableEl">
+          <thead><tr>
+            <th id="dumpThSelect"><input type="checkbox" id="dumpSelectAll" class="row-check" onchange="selectAllDumps(this)"><label for="dumpSelectAll" class="dump-select-all-label" data-i18n="btn.selectAll">Select All</label></th>
+            <th id="dumpThTime" data-i18n="col.time">Time</th>
+            <th id="dumpThModel" data-i18n="col.model">Model</th>
+            <th id="dumpThSourceTarget" data-i18n="col.sourceTarget">Source &rarr; Target</th>
+            <th id="dumpThPhase" data-i18n="col.phase">Phase</th>
+            <th id="dumpThStatus" data-i18n="col.status">Status</th>
+            <th id="dumpThError" data-i18n="col.error">Error</th>
+            <th id="dumpThActions" style="width:90px" data-i18n="col.actions">Actions</th>
+          </tr></thead>
+          <tbody id="dumpTable"></tbody>
+        </table></div>
+        <div id="dumpEmpty" class="empty-state">
+          <div class="empty-state-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg></div>
+          <div class="empty-state-text" data-i18n="dump.empty">No error dumps recorded.</div>
+        </div>
+        <div class="pagination">
+          <button class="btn btn-sm" onclick="changeDumpPage(-1)" id="dumpPrevPage" disabled>← Prev</button>
+          <span class="info" id="dumpPageInfo">Page 1 / 1</span>
+          <button class="btn btn-sm" onclick="changeDumpPage(1)" id="dumpNextPage" disabled>Next →</button>
+          <span class="page-jump-group">
+            <input type="number" id="dumpPageJump" class="page-jump" min="1" step="1" inputmode="numeric" disabled
+                   data-i18n-placeholder="page.number" data-i18n-aria-label="page.number" placeholder="Page"
+                   onkeydown="if(event.key==='Enter'){event.preventDefault();jumpToDumpPage();}">
+            <button class="btn btn-sm" onclick="jumpToDumpPage()" data-i18n="btn.go">Go</button>
+          </span>
+        </div>
+      </div>
+    </div>
+
   </div>
 </div>
 
 <!-- Settings Tab Panel -->
 <div class="tab-panel" id="tab-settings" role="tabpanel" aria-labelledby="tabBtn-settings">
-  <div class="settings-tab-content">
-<!-- ── Appearance & Display ── -->
-    <div class="settings-section">
-      <div class="settings-section-title">
-        <svg class="section-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5A.75.75 0 0 1 8 1Zm0 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm0-1.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Zm5.657-5.157a.75.75 0 0 1 0 1.06l-1.06 1.061a.75.75 0 1 1-1.061-1.06l1.06-1.061a.75.75 0 0 1 1.06 0ZM15 8a.75.75 0 0 1-.75.75h-1.5a.75.75 0 0 1 0-1.5h1.5A.75.75 0 0 1 15 8Zm-2.343 5.657a.75.75 0 0 1-1.06 0l-1.061-1.06a.75.75 0 1 1 1.06-1.061l1.061 1.06a.75.75 0 0 1 0 1.06ZM8 15a.75.75 0 0 1-.75-.75v-1.5a.75.75 0 0 1 1.5 0v1.5A.75.75 0 0 1 8 15ZM2.343 12.657a.75.75 0 0 1 0-1.06l1.06-1.061a.75.75 0 0 1 1.061 1.06l-1.06 1.061a.75.75 0 0 1-1.06 0ZM1 8a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 0 1.5h-1.5A.75.75 0 0 1 1 8Zm2.343-5.657a.75.75 0 0 1 1.06 0l1.061 1.06a.75.75 0 0 1-1.06 1.061L3.343 3.404a.75.75 0 0 1 0-1.06Z"/></svg>
-        <span data-i18n="section.appearance">Appearance & Display</span>
-      </div>
+  <div class="settings-shell">
+    <nav class="settings-nav" role="tablist" aria-orientation="vertical" aria-label="Settings sections" data-i18n-aria-label="aria.settingsSections">
+      <button type="button" class="settings-nav-btn is-active" role="tab" id="settingsNav-appearance" aria-selected="true" aria-controls="settingsPane-appearance" data-pane="appearance" onclick="setSettingsPane('appearance')" data-i18n="settings.nav.appearance">Appearance</button>
+      <button type="button" class="settings-nav-btn" role="tab" id="settingsNav-behavior" aria-selected="false" aria-controls="settingsPane-behavior" data-pane="behavior" onclick="setSettingsPane('behavior')" data-i18n="settings.nav.behavior">Behavior</button>
+      <button type="button" class="settings-nav-btn" role="tab" id="settingsNav-rateLimit" aria-selected="false" aria-controls="settingsPane-rateLimit" data-pane="rateLimit" onclick="setSettingsPane('rateLimit')" data-i18n="settings.nav.rateLimit">Rate limiting</button>
+      <button type="button" class="settings-nav-btn" role="tab" id="settingsNav-retention" aria-selected="false" aria-controls="settingsPane-retention" data-pane="retention" onclick="setSettingsPane('retention')" data-i18n="settings.nav.retention">Retention &amp; cleanup</button>
+      <button type="button" class="settings-nav-btn" role="tab" id="settingsNav-security" aria-selected="false" aria-controls="settingsPane-security" data-pane="security" onclick="setSettingsPane('security')" data-i18n="settings.nav.security">Security</button>
+      <button type="button" class="settings-nav-btn" role="tab" id="settingsNav-shims" aria-selected="false" aria-controls="settingsPane-shims" data-pane="shims" onclick="setSettingsPane('shims')" data-i18n="settings.nav.shims">Shims</button>
+      <button type="button" class="settings-nav-btn" role="tab" id="settingsNav-about" aria-selected="false" aria-controls="settingsPane-about" data-pane="about" onclick="setSettingsPane('about')" data-i18n="settings.nav.about">About</button>
+    </nav>
+    <div class="settings-panes">
+      <section class="settings-pane is-active" id="settingsPane-appearance" role="tabpanel" aria-labelledby="settingsNav-appearance">
+        <header class="settings-pane-head">
+          <h3 data-i18n="settings.nav.appearance">Appearance</h3>
+          <span class="scope-badge local" data-i18n="scope.browser">This browser</span>
+        </header>
+    <div class="settings-group">
       <div class="settings-grid">
         <div class="settings-popup-item">
           <label data-i18n="label.scheme">Scheme</label>
@@ -570,6 +694,7 @@
           <select id="settingsModeSelect" onchange="setMode(this.value)">
             <option value="light" data-i18n="mode.light">Light</option>
             <option value="dark" data-i18n="mode.dark">Dark</option>
+            <option value="system" data-i18n="mode.system">System</option>
           </select>
         </div>
         <div class="settings-popup-item">
@@ -577,14 +702,6 @@
           <select id="settingsLangSelect" onchange="setLang(this.value)">
             <option value="en">English</option>
             <option value="zh">中文</option>
-          </select>
-        </div>
-        <div class="settings-popup-item">
-          <label data-i18n="label.logLevel">Log Level</label>
-          <select id="settingsLogLevel" onchange="saveSettingsField('logLevel',this.value)">
-            <option value="normal" data-i18n="logLevel.normal">Normal</option>
-            <option value="verbose" data-i18n="logLevel.verbose">Verbose</option>
-            <option value="debug" data-i18n="logLevel.debug">Debug (bodies)</option>
           </select>
         </div>
         <div class="settings-popup-item">
@@ -596,6 +713,43 @@
             <option value="10000">10s</option>
             <option value="30000">30s</option>
             <option value="0" data-i18n="label.off">Off</option>
+          </select>
+        </div>
+      </div>
+    </div>
+        <div class="settings-group">
+          <div class="settings-group-head">
+            <div class="settings-group-title">
+              <h4 data-i18n="label.customCss">Theme override</h4>
+              <span class="scope-badge server-save" data-i18n="scope.serverSave">Server config · saves on Save</span>
+            </div>
+            <p data-i18n="hint.customCss">CSS appended to the admin page after the built-in schemes, so it can restyle tokens or any element.</p>
+          </div>
+          <div class="settings-fields">
+            <div class="settings-popup-item">
+              <label data-i18n="label.customCssCode">CSS</label>
+              <textarea id="settingsCustomCss" rows="6" spellcheck="false" placeholder='[data-scheme="minimal"][data-mode="dark"] { --accent: #c2410c; }'></textarea>
+            </div>
+          </div>
+          <div class="settings-group-actions">
+            <button class="btn btn-sm" onclick="saveAdminTheme()" data-i18n="btn.save">Save</button>
+            <button class="btn btn-sm" onclick="resetAdminTheme()" data-i18n="btn.reset">Reset</button>
+          </div>
+        </div>
+      </section>
+      <section class="settings-pane" id="settingsPane-behavior" role="tabpanel" aria-labelledby="settingsNav-behavior">
+        <header class="settings-pane-head">
+          <h3 data-i18n="settings.nav.behavior">Behavior</h3>
+          <span class="scope-badge server" data-i18n="scope.serverNow">Server config · saves on change</span>
+        </header>
+    <div class="settings-group">
+      <div class="settings-grid">
+        <div class="settings-popup-item">
+          <label data-i18n="label.logLevel">Log Level</label>
+          <select id="settingsLogLevel" onchange="saveSettingsField('logLevel',this.value)">
+            <option value="normal" data-i18n="logLevel.normal">Normal</option>
+            <option value="verbose" data-i18n="logLevel.verbose">Verbose</option>
+            <option value="debug" data-i18n="logLevel.debug">Debug (bodies)</option>
           </select>
         </div>
         <div class="settings-popup-item">
@@ -614,13 +768,33 @@
         </div>
       </div>
     </div>
-
+        <div class="settings-group">
+          <div class="settings-group-head">
+            <h4 data-i18n="label.globalProxy">Global proxy</h4>
+            <p data-i18n="label.globalProxy.hint">Applies to all providers unless overridden per-provider.</p>
+          </div>
+          <div class="settings-fields">
+            <div class="settings-popup-item">
+              <label data-i18n="label.proxyUrl">Proxy URL<span class="hint-icon">?<span class="hint-popup" data-i18n="hint.docker">In Docker, "localhost" refers to the container itself. Use "host.docker.internal" (macOS/Windows) or "172.17.0.1" (Linux) to reach the host machine.</span></span></label>
+              <div class="settings-token-value">
+                <input type="text" id="globalProxy" placeholder="e.g. http://127.0.0.1:7890" data-i18n-placeholder="placeholder.proxy" spellcheck="false">
+                <button class="btn btn-sm" onclick="saveServerSettings()" data-i18n="btn.save">Save</button>
+              </div>
+            </div>
+          </div>
+          <div class="settings-group-actions">
+            <button class="btn btn-sm" onclick="runNetDiag()" data-i18n="diag.runDiag">Network Diagnostics</button>
+          </div>
+          <div class="net-diag" id="netDiagResults"></div>
+        </div>
+      </section>
+      <section class="settings-pane" id="settingsPane-rateLimit" role="tabpanel" aria-labelledby="settingsNav-rateLimit">
+        <header class="settings-pane-head">
+          <h3 data-i18n="settings.nav.rateLimit">Rate limiting</h3>
+          <span class="scope-badge server-save" data-i18n="scope.serverSave">Server config · saves on Save</span>
+        </header>
     <!-- ── Rate Limiting ── -->
-    <div class="settings-section">
-      <div class="settings-section-title">
-        <svg class="section-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0Zm0 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM8 3a.75.75 0 0 1 .75.75v3.69l2.28 2.28a.75.75 0 1 1-1.06 1.06l-2.5-2.5A.75.75 0 0 1 7.25 8V3.75A.75.75 0 0 1 8 3Z"/></svg>
-        <span data-i18n="section.rateLimit">Rate Limiting</span>
-      </div>
+    <div class="settings-group">
       <div class="settings-grid">
         <div class="settings-popup-item">
           <label data-i18n="label.rlEnabled">Enabled</label>
@@ -632,10 +806,10 @@
         <div class="settings-popup-item">
           <label data-i18n="label.rlAlgorithm">Algorithm</label>
           <select id="rlAlgorithm" disabled>
-            <option value="sliding_window" selected>Sliding Window</option>
-            <option value="token_bucket">Token Bucket</option>
-            <option value="fixed_window">Fixed Window</option>
-            <option value="gcra">GCRA</option>
+            <option value="sliding_window" selected data-i18n="rl.slidingWindow">Sliding Window</option>
+            <option value="token_bucket" data-i18n="rl.tokenBucket">Token Bucket</option>
+            <option value="fixed_window" data-i18n="rl.fixedWindow">Fixed Window</option>
+            <option value="gcra" data-i18n="rl.gcra">GCRA</option>
           </select>
         </div>
       </div>
@@ -644,7 +818,7 @@
           <div class="settings-popup-item">
             <label data-i18n="label.rlGlobal">Global</label>
             <div class="quota-input-wrap">
-              <input type="text" id="rlGlobal" placeholder="e.g. 600/m or 60/m, 1000/h">
+              <input type="text" id="rlGlobal" placeholder="e.g. 600/m or 60/m, 1000/h" data-i18n-placeholder="placeholder.rlQuota">
               <span class="quota-hint" data-i18n="hint.rlGlobal">All requests combined</span>
             </div>
           </div>
@@ -677,16 +851,18 @@
       </div>
     </div>
 
-    <!-- ── Log Retention ── -->
-    <div class="settings-section">
-      <div class="settings-section-title">
-        <svg class="section-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M5 3.25a.75.75 0 0 1 .75-.75h4.5a.75.75 0 0 1 0 1.5h-4.5A.75.75 0 0 1 5 3.25Zm-2 2a.75.75 0 0 1 .75-.75h8.5a.75.75 0 0 1 0 1.5h-8.5A.75.75 0 0 1 3 5.25ZM1 8a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V8Zm1.5.5v4h11v-4h-11Z"/></svg>
-        <span data-i18n="label.logRetention">Log Retention</span>
+      </section>
+      <section class="settings-pane" id="settingsPane-retention" role="tabpanel" aria-labelledby="settingsNav-retention">
+        <header class="settings-pane-head">
+          <h3 data-i18n="settings.nav.retention">Retention & cleanup</h3>
+          <span class="scope-badge server-save" data-i18n="scope.serverSave">Server config · saves on Save</span>
+        </header>
+    <div class="settings-group">
+      <div class="settings-group-head">
+        <h4 data-i18n="loggroup.request">Request log</h4>
+        <p data-i18n="loggroup.requestHint">One row per proxied call, whatever its outcome.</p>
       </div>
-      <div class="settings-grid settings-grid-retention" style="margin-top:4px">
-        <div class="settings-popup-item" style="grid-column:1/-1">
-          <label style="font-size:12px;font-weight:600;color:var(--text-dim)" data-i18n="label.requestLogSection">Request Log & Error Dumps</label>
-        </div>
+      <div class="settings-fields">
         <div class="settings-popup-item">
           <label data-i18n="label.successMax">Success Cap</label>
           <input type="number" id="settingsSuccessMax" min="50000" step="10000" value="50000">
@@ -695,13 +871,37 @@
           <label data-i18n="label.maxAgeDays">Max Age (days)</label>
           <input type="number" id="settingsMaxAgeDays" min="1" step="1" value="90">
         </div>
+      </div>
+      <div class="settings-group-actions">
+        <button class="btn btn-sm" onclick="saveRetentionPart('request')" data-i18n="btn.save">Save</button>
+        <button class="btn btn-sm btn-danger" onclick="openCleanupConfirm('logs')" data-i18n="btn.cleanupLogs">Cleanup Logs</button>
+      </div>
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-group-head">
+        <h4 data-i18n="label.errorDumpSection">Error Dumps</h4>
+        <p data-i18n="loggroup.errorsHint">The bodies behind a failed request, kept separately from the log.</p>
+      </div>
+      <div class="settings-fields">
         <div class="settings-popup-item">
           <label data-i18n="label.errorDumpMax">Error Dump Cap</label>
           <input type="number" id="settingsErrorDumpMax" min="1000" step="1000" value="10000">
         </div>
-        <div class="settings-popup-item" style="grid-column:1/-1;margin-top:2px">
-          <label style="font-size:12px;font-weight:600;color:var(--text-dim)" data-i18n="label.opsLogSection">Server Ops Log</label>
-        </div>
+      </div>
+      <div class="settings-group-actions">
+        <button class="btn btn-sm" onclick="saveRetentionPart('errors')" data-i18n="btn.save">Save</button>
+        <button class="btn btn-sm" onclick="openExportDumpsModal()" data-i18n="btn.export">Export...</button>
+        <button class="btn btn-sm btn-danger" onclick="openCleanupConfirm('errors')" data-i18n="btn.cleanupErrors">Cleanup Errors</button>
+      </div>
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-group-head">
+        <h4 data-i18n="loggroup.ops">Server ops log</h4>
+        <p data-i18n="loggroup.opsHint">What the gateway itself did: logins, config writes, key rotation.</p>
+      </div>
+      <div class="settings-fields">
         <div class="settings-popup-item">
           <label data-i18n="label.opsInfoMax">Info Cap</label>
           <input type="number" id="settingsOpsInfoMax" min="100" step="1000" value="10000">
@@ -714,131 +914,229 @@
           <label data-i18n="label.opsMaxAgeDays">Max Age (days)</label>
           <input type="number" id="settingsOpsMaxAgeDays" min="1" step="1" value="90">
         </div>
-        <div class="settings-popup-item" style="grid-column:1/-1;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px;margin-top:4px;padding-top:8px;border-top:1px solid var(--border)">
-          <button class="btn btn-sm" onclick="saveLogRetention()" data-i18n="btn.save">Save</button>
-          <button class="btn btn-sm" onclick="openExportDumpsModal()" data-i18n="btn.export">Export...</button>
-          <button class="btn btn-sm btn-danger" onclick="openCleanupConfirm('logs')" data-i18n="btn.cleanupLogs">Cleanup Logs</button>
-          <button class="btn btn-sm btn-danger" onclick="openCleanupConfirm('errors')" data-i18n="btn.cleanupErrors">Cleanup Errors</button>
-          <button class="btn btn-sm btn-danger" onclick="openCleanupConfirm('ops')" data-i18n="btn.cleanupOps">Cleanup Ops</button>
-          <button class="btn btn-sm btn-danger-fill" onclick="openCleanupConfirm('all')" data-i18n="btn.cleanupAll">Cleanup All</button>
-          <button class="btn btn-sm" onclick="doTrimToCap()" data-i18n="btn.trimToCap">Trim to Cap</button>
-          <button class="btn btn-sm" onclick="doVacuum()" data-i18n="btn.vacuum" title="Reclaim disk space">Vacuum</button>
-        </div>
+      </div>
+      <div class="settings-group-actions">
+        <button class="btn btn-sm" onclick="saveRetentionPart('ops')" data-i18n="btn.save">Save</button>
+        <button class="btn btn-sm btn-danger" onclick="openCleanupConfirm('ops')" data-i18n="btn.cleanupOps">Cleanup Ops Log</button>
       </div>
     </div>
 
-    <!-- ── Admin Token ── -->
-    <div class="settings-section">
-      <div class="settings-section-title">
-        <svg class="section-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M6.5 0a6.5 6.5 0 0 0-4.773 10.912L0 14.5l.5.5 3.588-1.727A6.5 6.5 0 1 0 6.5 0Zm0 1.5a5 5 0 1 1-3.312 8.745l-.35-.306-.932.449.449-.932-.306-.35A5 5 0 0 1 6.5 1.5Z"/><path d="M6.5 4a.75.75 0 0 1 .75.75v2.5a.75.75 0 0 1-1.5 0v-2.5A.75.75 0 0 1 6.5 4Zm0 5.5a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5Z"/></svg>
-        <span data-i18n="label.adminToken">Admin Token</span>
+    <div class="settings-group">
+      <div class="settings-group-head">
+        <h4 data-i18n="loggroup.database">Database</h4>
+        <p data-i18n="loggroup.databaseHint">These act at once, on every table.</p>
       </div>
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <span class="settings-token-row" style="flex:1;min-width:180px"><span id="settingsTokenDisplay">—</span></span>
-        <button class="btn btn-sm" onclick="copyAdminToken()" data-i18n="btn.copy">Copy</button>
-        <button class="btn btn-sm" onclick="_doTokenRotate()" data-i18n="btn.rotate">Rotate</button>
-        <button class="btn btn-sm btn-danger" onclick="logoutAllSessions()" data-i18n="btn.logoutAll">Logout All</button>
-        <span class="countdown" id="tokenCountdown"></span>
-        <select id="settingsRotateInterval" style="font-size:11px;padding:3px 6px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:4px" onchange="localStorage.setItem('tokenRotateMinutes',this.value)">
-          <option value="5">5 min</option>
-          <option value="15" selected>15 min</option>
-          <option value="30">30 min</option>
-          <option value="60">60 min</option>
-        </select>
+      <div class="settings-group-actions">
+        <button class="btn btn-sm" onclick="doTrimToCap()" data-i18n="btn.trimToCap">Trim to Cap</button>
+        <button class="btn btn-sm" onclick="doVacuum()" data-i18n="btn.vacuum">Vacuum</button>
+        <button class="btn btn-sm btn-danger-fill" onclick="openCleanupConfirm('all')" data-i18n="btn.cleanupAll">Cleanup All</button>
       </div>
     </div>
+      </section>
+      <section class="settings-pane" id="settingsPane-security" role="tabpanel" aria-labelledby="settingsNav-security">
+        <header class="settings-pane-head">
+          <h3 data-i18n="settings.nav.security">Security</h3>
+          <span class="scope-badge server" data-i18n="scope.serverNow">Server config · saves on change</span>
+        </header>
 
-    <!-- ── Change Password ── -->
-    <div class="settings-section">
-      <div class="settings-section-title">
-        <svg class="section-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M4 4a4 4 0 0 1 8 0v2h.25A1.75 1.75 0 0 1 14 7.75v5.5A1.75 1.75 0 0 1 12.25 15h-8.5A1.75 1.75 0 0 1 2 13.25v-5.5A1.75 1.75 0 0 1 3.75 6H4Zm8.5 3.75a.25.25 0 0 0-.25-.25h-8.5a.25.25 0 0 0-.25.25v5.5c0 .138.112.25.25.25h8.5a.25.25 0 0 0 .25-.25ZM10.5 6V4a2.5 2.5 0 1 0-5 0v2Z"/></svg>
-        <span data-i18n="label.changePassword">Change Password</span>
-      </div>
-      <div class="settings-grid">
-        <div class="settings-popup-item">
-          <label data-i18n="label.currentPw">Current</label>
-          <input type="password" id="settingsCurrentPw" autocomplete="current-password">
+        <div class="settings-group">
+          <div class="settings-group-head">
+            <h4 data-i18n="label.adminToken">Admin token</h4>
+            <p data-i18n="hint.adminToken">The panel sends this token with every admin request. Copying it starts a rotation countdown.</p>
+          </div>
+          <div class="settings-fields">
+            <div class="settings-popup-item">
+              <label data-i18n="label.token">Token</label>
+              <div class="settings-token-value">
+                <code class="settings-token-chip" id="settingsTokenDisplay">—</code>
+                <button class="btn btn-sm" onclick="copyAdminToken()" data-i18n="btn.copy">Copy</button>
+              </div>
+            </div>
+            <div class="settings-popup-item">
+              <label data-i18n="label.rotateInterval">Auto-rotate</label>
+              <div class="settings-token-value">
+                <select id="settingsRotateInterval" onchange="localStorage.setItem('tokenRotateMinutes',this.value)">
+                  <option value="5">5 min</option>
+                  <option value="15" selected>15 min</option>
+                  <option value="30">30 min</option>
+                  <option value="60">60 min</option>
+                </select>
+                <span class="countdown" id="tokenCountdown"></span>
+              </div>
+            </div>
+          </div>
+          <div class="settings-group-actions">
+            <button class="btn btn-sm" onclick="_doTokenRotate()" data-i18n="btn.rotateNow">Rotate now</button>
+            <button class="btn btn-sm btn-danger" onclick="logoutAllSessions()" data-i18n="btn.logoutAll">Log out all sessions</button>
+          </div>
         </div>
-        <div class="settings-popup-item">
-          <label data-i18n="label.newPw">New</label>
-          <input type="password" id="settingsNewPw" autocomplete="new-password">
-        </div>
-      </div>
-      <div class="settings-grid" style="margin-top:0">
-        <div class="settings-popup-item">
-          <label data-i18n="label.confirmPw">Confirm</label>
-          <input type="password" id="settingsConfirmPw" autocomplete="new-password">
-        </div>
-        <div class="settings-popup-item" style="justify-content:flex-end">
-          <button class="btn btn-sm" onclick="changeAdminPassword()" data-i18n="btn.change">Change</button>
-        </div>
-      </div>
-      <div id="settingsPwError" style="font-size:11px;color:var(--red);margin-top:2px"></div>
-    </div>
 
-    <!-- ── Shim Sources ── -->
-    <div class="settings-section">
-      <div class="settings-section-title">
-        <svg class="section-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M2 2.75A.75.75 0 0 1 2.75 2h4.5a.75.75 0 0 1 0 1.5H3.5v9h9v-3.75a.75.75 0 0 1 1.5 0v4.5a.75.75 0 0 1-.75.75h-10.5A.75.75 0 0 1 2 13.25Zm11.28 1.03a.75.75 0 0 0-1.06-1.06L7.47 7.47a.75.75 0 0 0 0 1.06l4.75 4.75a.75.75 0 1 0 1.06-1.06L9.06 8l4.22-4.22Z"/></svg>
-        <span data-i18n="section.shimSources">Shim Sources</span>
-      </div>
-      <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px" data-i18n="hint.shimTrust"></div>
-      <div style="display:flex;flex-direction:column;gap:8px">
-        <div>
-          <label style="display:block;font-size:12px;margin-bottom:3px" data-i18n="label.shimPaths">Directories</label>
-          <textarea id="shimPathsInput" rows="3" spellcheck="false" style="width:100%;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;resize:vertical" placeholder="/config/shims&#10;./local-shims"></textarea>
-          <div style="font-size:11px;color:var(--text-dim)" data-i18n="label.shimPathHint"></div>
-        </div>
-        <div>
-          <label style="display:block;font-size:12px;margin-bottom:3px" data-i18n="label.shimPresets">Preload presets</label>
-          <input type="text" id="shimPresetsInput" spellcheck="false" style="width:100%;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px" placeholder="argo, alcf, asksage">
-          <div style="font-size:11px;color:var(--text-dim)" data-i18n="label.shimPresetsHint"></div>
-        </div>
-        <div>
-          <label style="display:block;font-size:12px;margin-bottom:3px" data-i18n="label.shimRemotes">Remotes (JSON array)</label>
-          <div style="display:flex;gap:6px;align-items:center;margin-bottom:4px">
-            <select id="shimPresetSelect" style="flex:1;font-size:12px"></select>
-            <button type="button" class="btn btn-sm" id="shimPresetAdd" onclick="addShimPresetFromSelect()" data-i18n="shim.preset.add">Add source</button>
+        <div class="settings-group">
+          <div class="settings-group-head">
+            <h4 data-i18n="label.changePassword">Admin password</h4>
+            <p data-i18n="hint.changePassword">Used by the login prompt. Current sessions stay signed in.</p>
           </div>
-          <textarea id="shimRemotesInput" rows="5" spellcheck="false" style="width:100%;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;resize:vertical" placeholder='[{"url": "https://github.com/owner/repo", "ref": "v1.0.0", "path": "shims"}]'></textarea>
-          <div style="font-size:11px;color:var(--text-dim)" data-i18n="shim.preset.hint"></div>
-        </div>
-        <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
-          <div style="flex:1;min-width:200px">
-            <label style="display:block;font-size:12px;margin-bottom:3px" data-i18n="label.shimCacheDir">Cache directory</label>
-            <input type="text" id="shimCacheDirInput" spellcheck="false" style="width:100%;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px" placeholder="./shims-cache">
+          <div class="settings-fields">
+            <div class="settings-popup-item">
+              <label data-i18n="label.currentPw">Current</label>
+              <input type="password" id="settingsCurrentPw" autocomplete="current-password">
+            </div>
+            <div class="settings-popup-item">
+              <label data-i18n="label.newPw">New</label>
+              <input type="password" id="settingsNewPw" autocomplete="new-password">
+            </div>
+            <div class="settings-popup-item">
+              <label data-i18n="label.confirmPw">Confirm</label>
+              <input type="password" id="settingsConfirmPw" autocomplete="new-password">
+            </div>
           </div>
-          <div style="width:150px">
-            <label style="display:block;font-size:12px;margin-bottom:3px" data-i18n="label.shimTtl">Re-fetch TTL (s)</label>
-            <input type="number" id="shimTtlInput" min="0" step="3600" style="width:100%;font-size:12px" placeholder="86400">
+          <div class="settings-group-actions">
+            <button class="btn btn-sm" onclick="changeAdminPassword()" data-i18n="btn.setPassword">Change password</button>
           </div>
-          <label class="toggle-label" style="display:flex;align-items:center;gap:6px;font-size:12px;padding-bottom:4px">
-            <input type="checkbox" id="shimStrictInput" role="switch">
-            <span data-i18n="label.shimStrict">Fail startup on a bad source</span>
-          </label>
+          <div id="settingsPwError" class="settings-error"></div>
         </div>
+
+        <div class="settings-group">
+          <div class="settings-group-head">
+            <div class="settings-group-title">
+              <h4 data-i18n="label.session">Sessions</h4>
+              <span class="scope-badge server" data-i18n="scope.serverNow">Server config · saves on change</span>
+            </div>
+            <p data-i18n="hint.session">How long a signed-in browser stays signed in. A gateway restart ends every session.</p>
+          </div>
+          <div class="settings-fields">
+            <div class="settings-popup-item">
+              <label data-i18n="label.sessionIdle">Sign out after inactivity</label>
+              <select id="settingsSessionIdle" onchange="saveSessionSettings()">
+                <option value="15">15 min</option>
+                <option value="30">30 min</option>
+                <option value="60">1 h</option>
+                <option value="240">4 h</option>
+                <option value="480">8 h</option>
+                <option value="0" data-i18n="session.never">Never</option>
+              </select>
+            </div>
+            <div class="settings-popup-item">
+              <label data-i18n="label.sessionRemember">Stay signed in for</label>
+              <select id="settingsSessionRemember" onchange="saveSessionSettings()">
+                <option value="1">1 day</option>
+                <option value="7">7 days</option>
+                <option value="30">30 days</option>
+                <option value="90">90 days</option>
+                <option value="0" data-i18n="session.off">Off</option>
+              </select>
+            </div>
+          </div>
+          <div id="settingsSessionError" class="settings-error"></div>
+        </div>
+
+      </section>
+      <section class="settings-pane" id="settingsPane-shims" role="tabpanel" aria-labelledby="settingsNav-shims">
+        <header class="settings-pane-head">
+          <h3 data-i18n="settings.nav.shims">Shims</h3>
+          <span class="scope-badge server" data-i18n="scope.serverNow">Server config · saves on change</span>
+        </header>
+        <div class="settings-group">
+          <div class="settings-group-head">
+            <p data-i18n="hint.shimTrust"></p>
+          </div>
+          <div class="settings-fields">
+            <div class="settings-popup-item">
+              <label data-i18n="label.shimPaths">Directories</label>
+              <div>
+                <textarea id="shimPathsInput" rows="2" spellcheck="false" placeholder="/config/shims&#10;./local-shims"></textarea>
+                <p class="field-hint" data-i18n="label.shimPathHint"></p>
+              </div>
+            </div>
+            <div class="settings-popup-item">
+              <label data-i18n="label.shimPresets">Preload presets</label>
+              <div>
+                <input type="text" id="shimPresetsInput" spellcheck="false" placeholder="argo, alcf, asksage">
+                <p class="field-hint" data-i18n="label.shimPresetsHint"></p>
+              </div>
+            </div>
+            <div class="settings-popup-item">
+              <label data-i18n="label.shimRemotes">Remotes (JSON array)</label>
+              <div>
+                <div class="shim-remote-add">
+                  <select id="shimPresetSelect"></select>
+                  <button type="button" class="btn btn-sm" id="shimPresetAdd" onclick="addShimPresetFromSelect()" data-i18n="shim.preset.add">Add source</button>
+                </div>
+                <textarea id="shimRemotesInput" rows="4" spellcheck="false" placeholder='[{"url": "https://github.com/owner/repo", "ref": "v1.0.0", "path": "shims"}]'></textarea>
+                <p class="field-hint" data-i18n="shim.preset.hint"></p>
+              </div>
+            </div>
+            <div class="settings-popup-item">
+              <label data-i18n="label.shimCacheDir">Cache directory</label>
+              <input type="text" id="shimCacheDirInput" spellcheck="false" placeholder="./shims-cache">
+            </div>
+            <div class="settings-popup-item">
+              <label data-i18n="label.shimTtl">Re-fetch TTL (s)</label>
+              <input type="number" id="shimTtlInput" min="0" step="3600" placeholder="86400">
+            </div>
+            <div class="settings-popup-item">
+              <label data-i18n="label.shimStrict">Fail startup on a bad source</label>
+              <label class="toggle-label">
+                <input type="checkbox" id="shimStrictInput" role="switch">
+                <span data-i18n="label.enabled">Enabled</span>
+              </label>
+            </div>
+          </div>
+          <div class="settings-group-actions">
+            <button class="btn btn-sm" onclick="saveShimSources()" data-i18n="btn.save">Save</button>
+            <button class="btn btn-sm" onclick="reloadShimSources(false)" data-i18n="btn.reloadShims">Reload</button>
+            <button class="btn btn-sm" onclick="reloadShimSources(true)" data-i18n="btn.refetchShims">Refetch</button>
+            <span id="shimSourcesError" style="font-size:11px;color:var(--red)"></span>
+          </div>
+          <div id="shimRemovalAdvisories" class="shim-status"></div>
+        </div>
+
+        <div class="settings-group">
+          <div class="settings-group-head">
+            <div class="settings-group-title">
+              <h4 data-i18n="shim.inventory.title">Loaded shims</h4>
+              <span id="shimInventoryCount" class="shim-count"></span>
+            </div>
+            <p data-i18n="shim.inventory.hint">Every shim the gateway has registered. One from a local directory can be edited or deleted here; built-in and remote shims are read-only.</p>
+          </div>
+          <div class="shim-inventory-head">
+            <input type="search" id="shimFilterInput" class="shim-filter" oninput="renderLoadedShims()" data-i18n-placeholder="shim.filterPlaceholder" placeholder="Filter by shim or provider">
+            <label class="toggle-label">
+              <input type="checkbox" id="shimShowBuiltin" role="switch" onchange="renderLoadedShims()">
+              <span data-i18n="shim.showBuiltin">Built-in shims</span>
+            </label>
+          </div>
+          <div id="shimInventoryList" class="shim-inventory-list"></div>
+        </div>
+      </section>
+      <section class="settings-pane" id="settingsPane-about" role="tabpanel" aria-labelledby="settingsNav-about">
+        <header class="settings-pane-head">
+          <h3 data-i18n="settings.nav.about">About</h3>
+          <span class="scope-badge local" data-i18n="scope.browser">This browser</span>
+        </header>
+    <!-- ── Config file ── -->
+    <div class="settings-group" id="settingsConfigFileSection">
+      <div class="settings-group-head">
+        <h4 data-i18n="settings.configFile">Config File</h4>
       </div>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px">
-        <button class="btn btn-sm" onclick="saveShimSources()" data-i18n="btn.save">Save</button>
-        <button class="btn btn-sm" onclick="reloadShimSources(false)" data-i18n="btn.reloadShims">Reload</button>
-        <button class="btn btn-sm" onclick="reloadShimSources(true)" data-i18n="btn.refetchShims">Refetch</button>
-        <span id="shimSourcesError" style="font-size:11px;color:var(--red)"></span>
-      </div>
-      <div id="shimSourceStatus" style="margin-top:8px;font-size:12px"></div>
-      <div id="shimRemovalAdvisories" style="margin-top:8px;font-size:12px"></div>
+      <code class="config-path" id="configPath"></code>
     </div>
     <!-- Version & Links -->
-    <div style="text-align:center;padding:4px 0 2px">
+    <div class="settings-group">
       <div id="brandFooterName" style="font-size:14px;font-weight:600;margin-bottom:2px">llm-rosetta</div>
-      <div id="settingsVersion" style="font-size:11px;color:var(--text-dim);margin-bottom:8px"></div>
-      <div id="brandFooterLinks" style="display:flex;justify-content:center;gap:8px;flex-wrap:wrap">
+      <div id="settingsVersion" style="font-size:11px;color:var(--text-dim);margin-bottom:10px"></div>
+      <div id="brandFooterLinks" style="display:flex;gap:8px;flex-wrap:wrap">
         <a href="https://github.com/Oaklight/llm-rosetta" target="_blank" rel="noopener" class="about-link"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M12 .3a12 12 0 0 0-3.8 23.38c.6.12.83-.26.83-.57L9 20.86c-3.37.73-4.08-1.63-4.08-1.63-.55-1.4-1.34-1.77-1.34-1.77-1.1-.75.08-.73.08-.73 1.21.08 1.85 1.24 1.85 1.24 1.08 1.85 2.83 1.32 3.52 1 .1-.78.42-1.32.76-1.62-2.69-.3-5.52-1.34-5.52-5.98 0-1.32.47-2.4 1.24-3.24-.12-.3-.54-1.54.12-3.2 0 0 1.01-.33 3.3 1.24a11.5 11.5 0 0 1 6.02 0c2.3-1.57 3.3-1.24 3.3-1.24.66 1.66.24 2.9.12 3.2a4.65 4.65 0 0 1 1.24 3.24c0 4.65-2.83 5.67-5.53 5.97.43.37.82 1.1.82 2.22l-.01 3.29c0 .31.22.69.83.57A12 12 0 0 0 12 .3"/></svg> GitHub</a>
         <a href="https://pypi.org/project/llm-rosetta/" target="_blank" rel="noopener" class="about-link"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M14.25.18l.9.2.73.26.59.3.45.32.34.34.25.34.16.33.1.3.04.26.02.2-.01.13V8.5l-.05.63-.13.55-.21.46-.26.38-.3.31-.33.25-.35.19-.35.14-.33.1-.3.07-.26.04-.21.02H8.77l-.69.05-.59.14-.5.22-.41.27-.33.32-.27.35-.2.36-.15.37-.1.35-.07.32-.04.27-.02.21v3.06H3.17l-.21-.03-.28-.07-.32-.12-.35-.18-.36-.26-.36-.36-.35-.46-.32-.59-.28-.73-.21-.88-.14-1.05-.05-1.23.06-1.22.16-1.04.24-.87.32-.71.36-.57.4-.44.42-.33.42-.24.4-.16.36-.1.32-.05.24-.01h.16l.06.01h8.16v-.83H6.18l-.01-2.75-.02-.37.05-.34.11-.31.17-.28.25-.26.31-.23.38-.2.44-.18.51-.15.58-.12.64-.1.71-.06.77-.04.84-.02 1.27.05zm-6.3 1.98l-.23.33-.08.41.08.41.23.34.33.22.41.09.41-.09.33-.22.23-.34.08-.41-.08-.41-.23-.33-.33-.22-.41-.09-.41.09zm13.09 3.95l.28.06.32.12.35.18.36.27.36.35.35.47.32.59.28.73.21.88.14 1.04.05 1.23-.06 1.23-.16 1.04-.24.86-.32.71-.36.57-.4.45-.42.33-.42.24-.4.16-.36.09-.32.05-.24.02-.16-.01h-8.22v.82h5.84l.01 2.76.02.36-.05.34-.11.31-.17.29-.25.25-.31.24-.38.2-.44.17-.51.15-.58.13-.64.09-.71.07-.77.04-.84.01-1.27-.04-1.07-.14-.9-.2-.73-.25-.59-.3-.45-.33-.34-.34-.25-.34-.16-.33-.1-.3-.04-.25-.02-.2.01-.13v-5.34l.05-.64.13-.54.21-.46.26-.38.3-.32.33-.24.35-.2.35-.14.33-.1.3-.06.26-.04.21-.02.13-.01h5.84l.69-.05.59-.14.5-.21.41-.28.33-.32.27-.35.2-.36.15-.36.1-.35.07-.32.04-.28.02-.21V6.07h2.09l.14.01zm-6.47 14.25l-.23.33-.08.41.08.41.23.33.33.23.41.08.41-.08.33-.23.23-.33.08-.41-.08-.41-.23-.33-.33-.23-.41-.08-.41.08z"/></svg> PyPI</a>
         <a href="https://hub.docker.com/r/oaklight/llm-rosetta-gateway" target="_blank" rel="noopener" class="about-link"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M13.983 11.078h2.119a.186.186 0 00.186-.185V9.006a.186.186 0 00-.186-.186h-2.119a.185.185 0 00-.185.185v1.888c0 .102.083.185.185.185m-2.954-5.43h2.118a.186.186 0 00.186-.186V3.574a.186.186 0 00-.186-.185h-2.118a.185.185 0 00-.185.185v1.888c0 .102.082.185.185.185m0 2.716h2.118a.187.187 0 00.186-.186V6.29a.186.186 0 00-.186-.185h-2.118a.185.185 0 00-.185.185v1.887c0 .102.082.185.185.186m-2.93 0h2.12a.186.186 0 00.184-.186V6.29a.185.185 0 00-.185-.185H8.1a.185.185 0 00-.185.185v1.887c0 .102.083.185.185.186m-2.964 0h2.119a.186.186 0 00.185-.186V6.29a.185.185 0 00-.185-.185H5.136a.186.186 0 00-.186.185v1.887c0 .102.084.185.186.186m5.893 2.715h2.118a.186.186 0 00.186-.185V9.006a.186.186 0 00-.186-.186h-2.118a.185.185 0 00-.185.185v1.888c0 .102.082.185.185.185m-2.93 0h2.12a.185.185 0 00.184-.185V9.006a.185.185 0 00-.184-.186h-2.12a.185.185 0 00-.184.185v1.888c0 .102.083.185.185.185m-2.964 0h2.119a.185.185 0 00.185-.185V9.006a.185.185 0 00-.184-.186h-2.12a.186.186 0 00-.186.186v1.887c0 .102.084.185.186.185m-2.92 0h2.12a.185.185 0 00.184-.185V9.006a.185.185 0 00-.184-.186h-2.12a.185.185 0 00-.184.185v1.888c0 .102.082.185.185.185M23.763 9.89c-.065-.051-.672-.51-1.954-.51-.338.001-.676.03-1.01.087-.248-1.7-1.653-2.53-1.716-2.566l-.344-.199-.226.327c-.284.438-.49.922-.612 1.43-.23.97-.09 1.882.403 2.661-.595.332-1.55.413-1.744.42H.751a.751.751 0 00-.75.748 11.376 11.376 0 00.692 4.062c.545 1.428 1.355 2.48 2.41 3.124 1.18.723 3.1 1.137 5.275 1.137.983.003 1.963-.086 2.93-.266a12.248 12.248 0 003.823-1.389c.98-.567 1.86-1.288 2.61-2.136 1.252-1.418 1.998-2.997 2.553-4.4h.221c1.372 0 2.215-.549 2.68-1.009.309-.293.55-.65.707-1.046l.098-.288Z"/></svg> Docker</a>
-        <a href="https://llm-rosetta.readthedocs.io" target="_blank" rel="noopener" class="about-link"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg> Docs</a>
+        <a href="https://llm-rosetta.readthedocs.io" target="_blank" rel="noopener" class="about-link"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg> <span data-i18n="link.docs">Docs</span></a>
       </div>
     </div>
+      </section>
+    </div>
   </div>
+</div>
+
 </div>
 
 <!-- Settings Popup (legacy stub — content moved to tab-settings) -->
@@ -847,7 +1145,10 @@
 <!-- Provider Modal -->
 <div class="modal-overlay" role="dialog" aria-modal="true" id="providerModal">
   <div class="modal modal-wide">
-    <h3 id="providerModalTitle" data-i18n="modal.addProvider">Add Provider</h3>
+    <div class="drawer-head">
+      <h3 id="providerModalTitle" data-i18n="modal.addProvider">Add Provider</h3>
+      <button type="button" class="drawer-close" aria-label="Close" data-i18n-aria-label="btn.close" onclick="closeModal('providerModal')">&#10005;</button>
+    </div>
 
     <!-- Capability Selector — top of form -->
     <div class="cap-section" style="margin-top:0;border-top:none;padding-top:0;margin-bottom:14px">
@@ -863,21 +1164,21 @@
         <label data-i18n="label.logo">Logo</label>
         <input id="provLogo" type="hidden">
         <div class="lp-wrapper lp-compact" id="logoPickerWrapper">
-          <button type="button" class="lp-trigger" id="logoPickerTrigger" title="Choose logo">
+          <button type="button" class="lp-trigger" id="logoPickerTrigger" title="Choose logo" data-i18n-title="label.logo">
             <svg class="lp-placeholder" id="logoPickerPlaceholder" width="24" height="24" viewBox="0 0 600 600" fill="currentColor" opacity="0.4"><g transform="translate(50, 40) scale(0.95)"><path d="M517.5,415.4c.3-10.7-2.6-21.4-2.2-31.9c.1-2.4,2-4.5,2.1-6.9c.2-5.1-1.1-12.1-2.8-16.2c-2-4.9-1.4-11.1-1.1-16.9c.4-5.9-.3-11.6-.3-17.5c0-5.9-1.4-13.4-.3-18.4c.9-3.9-.3-8.7.2-12.7c.2-1.3,1.3-1.6,1.5-2.7c.6-2.8-1.7-2.8-1.7-4.7c0-1.6,1.7-3.2,1.9-5c1.5-3-2.3-8.2-1.4-10.6c4.9-14.2-8.2-27.4-12.9-37c-.1-.2-.2-.5-.2-.8c-3.8-15.2-8.4-27.1-13.8-41.1c-1.8-4.8-6-8.7-7.6-13.6c-1.6-4.9-5.1-9.4-7.9-13.4c-6.6-9.4-14.5-22.3-13.8-35.9c-6-6.5-6-18.5-9-28.5c-1.3-4.3-2-8.8-2.9-13.4c-.8-4.1-2.3-10.6-2.1-14.3c0-.6.8-1.1.7-1.7c-.1-.6-1.2-1-1.4-1.5c-1-2.7-1-6.6-2.2-10c-1.1-3.1-2.3-6.9-2.7-9.6c-.3-1.8-.1-3.2-1.1-4.2c-.9-.9-2.1-.9-2.3-1.9c-.5-1.8.8-2.5.8-3.8c0-2.6-2.7-6.6-3-9.7c-.1-.6.5-1.3.5-1.9c-.2-2.3-3.3-4.1-4.7-5.6c-1.8-1.8-4.3-7.6-4.9-10.1c-.6-2.2.3-6.1-1-7.2c-.7-.6-6-1-6.7-1.1c-11.2-.2-22.7-2.7-35.3-2.3c-8.5.2-17.3.5-25.6,1.4c-8.4.9-15.5,3.4-23.4,4.3c-4.5.5-7.4,1.9-11.1,2.8c-8,1.8-16.2,2.5-23,4.9c-2.8,1-8,2.4-9.6,4.4c-2,2.5-1.4,1.9-4.4,2c-1.1,0-2.4.9-3.7,1.1c-1.4.2-2.7-.5-4-.5c-1.9.1-5.9,2.2-7.9,3c-2.7,1-5.4,2.2-8.1,2.9c-14.2,3.8-26.2,10.3-38.8,16c-2.2,1-4.8,3.7-6.8,4.2c-6.6,1.8-9.7,6.2-15.4,8.7c-2.7,1.2-7.5,1.5-10,3.2c-3.7,2.6-7.4,5.9-11.7,8.4c-3,1.7-3.8.7-5,3.5c-.5,1.2-3.4.7-4.5,1.4c-5.5,3.7-9.7,9.5-15,14.1c-2.8,2.5-6,3.5-8.7,5.9c-2.9,2.5-5.8,3.9-8.9,5.7c-1.5.9-2.5,3.5-4.1,4.2c-4.1,1.9-7.7,4.2-11,7.2c-.3.2-.5.6-.6.8c-7.2,11.5-19.6,18.1-30.6,25.2c-4.6,1.7-6.6,9.6-7.1,15.3c-.2,2.1,1.1,3.6,1,5.7c-.1,1.8-1.4,2.6-1.3,4.4c.1,2.2.1,2.6-.5,4.4c-.9,2.7.8,6,.7,9.2c-.3,6.5-2.2,12.4-2.7,17.9c-.2,2.8,1.9,6.2,1,8.7c-3.3,9-1.6,21.4-.3,31.4c.7,5.2-.9,10.4-1,15.7c-.1,5.6.7,11.4.4,16.4c-.4,6.1-3.1,12.3-2.8,18.1c.3,6.1,2.2,11.8,3.5,17.2c2,7.7-.1,13.8-2.5,19.1c-2.5,5.5-.7,10.8-1.5,17.1c-.3,2.1-2.1,3.7-1.7,6.8c.3,2.5,1.2,5.1,1.3,7.5c.1,3.5-1.3,5.8-.3,9.5c1,3.8-.1,5.9-.8,9.3c-1.8,9.5-4.1,17.8-2.5,29.2c.6,4.1,1.7,7.4,2.1,11.4c.4,4.3-2.4,6.8-2.6,10.8c-.4,9.7.3,20.4-1.9,29c-1,3.8.7,5.6,1.2,8.7c.4,2.5-.4,6.2-1.3,9c-1,3.3.2,6,1.1,8.5c1.8,5.3.4,12.4-.1,18.2c-.5,6.4-.7,12.4-.5,19.1c.2,6.5-1.3,13-.4,19.7c.8,5.8,2,11.2,2,18.5c0,6.8,0,13.5-.3,19.9c-.3,7.4,3.7,9.9,11.2,9.5c3.3-.2,6.6-1.4,9.2-.2c2.4,1,4.6,2.7,7.7,2.9c1.3.1,2.6-.8,3.5-.8c2.6.2,5.4,2.4,8.7,2.1c4.7-.4,8.5.6,13,1.9c3.7,1.1,6.8,3,10.7,3.4c.7.1,1.2-.8,1.8-.8c2.9,0,5.5,1.6,8.7,1.1c3.1-.4,6.4-.4,9.3-.4c6.4.2,11.4-2.6,15.7-4.7c.3-.2.7-.3,1.1-.4c7.2-1.7,13.7-5.7,20.8-8c2.6-.8,6.4,0,9.3-.1c5-.3,11.2-1.2,16.4.8c5.9,2.2,10.9.6,16.6,1.4c2.8.4,4.9.7,7.8.8c9.8.4,19.8-4.8,29.1-5.5c.1,0,.1,0,.2-.1c5.3-1.9,13-1.6,17.9-1.3c8.2.6,18,2.6,25.4-1.1c3.2-1.6,7.4-3.3,11.1-3.7c4.5-.5,9.4,1.5,13.7.6c.8-.2.6-1.1,1.5-1.2c.6,0,1.2.5,1.9.5c12-.4,25.1-2.8,34.6-7c6.8-3,10.3-7.7,18.8-9.3c3.3-.6,6.6-3.3,9.2-4.9c5.1-3.2,15.8-4.4,18.4-9.8c5.6-11.5,22.2-12.4,28.9-22.5c.1-.1.2-.2.3-.3c4.8-4.1,9.7-8.1,13.8-12.8c2-2.3,5.1-3.6,7.1-6.2c2-2.6,4-5,6.3-7c4.6-4,8.2-9.4,12.6-14c6.8-7.1,12.3-15.3,18.6-22.2c1.6-1.7,7.5-4.8,8-7.1C521.1,437.1,517.2,426,517.5,415.4z"/></g></svg>
             <img class="lp-trigger-img" id="logoPickerPreviewImg" src="" alt="" style="display:none">
           </button>
-          <button type="button" class="lp-clear lp-clear-compact" id="logoPickerClear" title="Clear" style="display:none">&times;</button>
+          <button type="button" class="lp-clear lp-clear-compact" id="logoPickerClear" title="Clear" data-i18n-title="btn.clear" style="display:none">&times;</button>
           <div class="lp-dropdown" id="logoPickerDropdown">
             <div class="lp-search-row">
-              <input id="logoPickerInput" type="text" placeholder="Search icons or paste URL…" autocomplete="off">
+              <input id="logoPickerInput" type="text" placeholder="Search icons or paste URL…" data-i18n-placeholder="logo.searchIcons" autocomplete="off">
             </div>
           </div>
         </div>
       </div>
       <div class="form-group" style="flex:1">
         <label data-i18n="label.providerName">Provider Name <span style="color:var(--red)">*</span></label>
-        <input id="provName" placeholder="e.g. my-openai, openrouter-claude">
+        <input id="provName" placeholder="e.g. my-openai, openrouter-claude" data-i18n-placeholder="placeholder.providerName">
       </div>
     </div>
     <div class="form-group" id="provApiKeyGroup">
@@ -888,8 +1189,8 @@
       <div id="provApiKeyMultiBox" style="display:none"></div>
       <div class="multi-key-footer" id="provApiKeySingleFooter">
         <button type="button" class="btn btn-sm" onclick="_promoteToMultiKey()">+ <span data-i18n="label.addKey">Add key</span></button>
-        <button type="button" class="key-btn" id="provKeyToggleBtn" title="Toggle visibility" onclick="toggleModalKeyVisibility()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
-        <button type="button" class="key-btn" id="provKeyCopyBtn" title="Copy" onclick="copyModalKey()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+        <button type="button" class="key-btn" id="provKeyToggleBtn" title="Toggle visibility" data-i18n-title="btn.toggleVisibility" onclick="toggleModalKeyVisibility()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        <button type="button" class="key-btn" id="provKeyCopyBtn" title="Copy" data-i18n-title="btn.copy" onclick="copyModalKey()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
       </div>
       <div id="provKeylessHint" style="display:none;font-size:0.82em;color:var(--text-dim);margin-top:2px">
         <span data-i18n="label.keylessHint">No API key needed.</span>
@@ -926,7 +1227,7 @@
     <div class="form-row align-end">
       <div class="form-group" style="flex:0 0 69%">
         <label data-i18n="label.proxyUrl">Proxy URL<span class="hint-icon">?<span class="hint-popup" data-i18n="hint.docker">In Docker, "localhost" refers to the container itself. Use "host.docker.internal" (macOS/Windows) or "172.17.0.1" (Linux) to reach the host machine.</span></span></label>
-        <input id="provProxy" placeholder="e.g. http://127.0.0.1:7890">
+        <input id="provProxy" placeholder="e.g. http://127.0.0.1:7890" data-i18n-placeholder="placeholder.proxy">
       </div>
       <div class="form-group" style="flex:0 0 31%">
         <label data-i18n="label.timeout">Timeout (s)</label>
@@ -968,7 +1269,7 @@
       </div>
       <div class="form-group">
         <label data-i18n="label.streamUrlTemplate">Stream URL Template <span style="font-weight:normal;color:var(--text-dim)">(optional)</span></label>
-        <input id="provStreamUrlTemplate" placeholder="Leave blank to use URL Template above">
+        <input id="provStreamUrlTemplate" placeholder="Leave blank to use URL Template above" data-i18n-placeholder="label.streamUrlHint">
       </div>
       <div class="form-group">
         <div class="checkbox-group">
@@ -1002,8 +1303,18 @@
 </div>
 
 <!-- Model Modal -->
-<div class="modal-overlay" role="dialog" aria-modal="true" id="modelModal">
-  <div class="modal">
+<!-- Model side panel: the summary, and the edit form in the same panel -->
+<aside class="model-drawer" id="modelDrawer" aria-hidden="true" aria-label="Model details" data-i18n-aria-label="aria.modelDetails">
+  <div class="md-head">
+    <code class="md-name" id="drawerTitle"></code>
+    <button class="btn btn-sm md-close" onclick="closeModelDrawer()" data-i18n="btn.close" aria-label="Close">Close</button>
+  </div>
+  <div class="md-tabs" id="drawerTabs" role="tablist" hidden>
+    <button class="md-tab active" role="tab" aria-selected="true" onclick="setModelDrawerPane('detail')" data-i18n="drawer.overview">Overview</button>
+    <button class="md-tab" role="tab" aria-selected="false" onclick="openModelEditor()" data-i18n="drawer.edit">Edit Model</button>
+  </div>
+  <div class="md-pane" id="drawerDetail"></div>
+  <div class="md-pane model-form" id="modelModal" hidden>
     <h3 id="modelModalTitle" data-i18n="modal.addModel">Add Model</h3>
 
     <!-- Tab bar -->
@@ -1018,21 +1329,27 @@
       <div class="form-row">
         <div class="form-group">
           <label data-i18n="label.modelName">Model Name</label>
-          <input id="modelName" placeholder="e.g. gpt-4o, claude-sonnet-4-20250514">
+          <input id="modelName" placeholder="e.g. gpt-4o, claude-sonnet-4-20250514" data-i18n-placeholder="placeholder.modelName">
         </div>
         <div class="form-group">
           <label data-i18n="label.provider">Provider</label>
-          <select id="modelProvider"></select>
+          <input type="hidden" id="modelProvider">
+          <button type="button" class="btn provider-picker-btn" id="modelProviderBtn"
+                  aria-haspopup="listbox" aria-expanded="false"
+                  onclick="toggleModelProviderPicker(this)">
+            <span class="pp-value"></span><span aria-hidden="true">&#9662;</span>
+          </button>
+          <div class="more-menu provider-picker-menu" id="modelProviderMenu" role="listbox"></div>
           <div id="modelMultiProviderHint" style="display:none;font-size:11px;color:var(--text-dim);margin-top:4px"></div>
         </div>
       </div>
       <div class="form-group">
         <label data-i18n="label.upstreamModel">Upstream Model <span style="font-weight:normal;color:var(--text-dim)">(optional)</span></label>
-        <input id="modelUpstream" placeholder="e.g. claudeopus45 (leave blank if same as model name)">
+        <input id="modelUpstream" placeholder="e.g. claudeopus45 (leave blank if same as model name)" data-i18n-placeholder="placeholder.upstreamModel">
       </div>
       <div class="form-group">
         <label data-i18n="label.modelType">Type</label>
-        <div class="seg-control" id="modelModalTypeSeg" role="radiogroup" aria-label="Model type">
+        <div class="seg-control" id="modelModalTypeSeg" role="radiogroup" aria-label="Model type" data-i18n-aria-label="label.modelType">
           <!-- Populated by models.js::_buildTypeSegControls() from model_types metadata -->
         </div>
       </div>
@@ -1116,29 +1433,67 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
               <option value="fill_empty">fill_empty</option>
             </select>
           </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <label style="min-width:140px;margin:0;font-size:0.85em;color:var(--text-dim);text-transform:none;letter-spacing:0" data-i18n="label.effortField">Effort Field</label>
+            <input id="reasoningEffortField" type="text" placeholder="(inherit)" style="flex:1">
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <label style="min-width:140px;margin:0;font-size:0.85em;color:var(--text-dim);text-transform:none;letter-spacing:0" data-i18n="label.effortRange">Effort Range</label>
+            <input id="reasoningEffortMin" type="text" placeholder="(min)" style="width:110px">
+            <input id="reasoningEffortMax" type="text" placeholder="(max)" style="width:110px">
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <label style="min-width:140px;margin:0;font-size:0.85em;color:var(--text-dim);text-transform:none;letter-spacing:0" data-i18n="label.unsignedBlocks">Unsigned Blocks</label>
+            <select id="reasoningUnsignedBlocks" style="flex:1">
+              <option value="" data-i18n="label.inheritProvider">(inherit from provider)</option>
+              <option value="preserve">preserve</option>
+              <option value="strip">strip</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin:0">
+            <label style="margin:0 0 4px;font-size:0.85em;color:var(--text-dim);text-transform:none;letter-spacing:0" data-i18n="label.visibilityModes">Visibility Modes</label>
+            <div class="vis-grid">
+              <label>auto<select id="reasoningVisAuto"><option value="" data-i18n="label.inheritProvider">(inherit)</option><option value="summarized">summarized</option><option value="detailed">detailed</option><option value="omitted">omitted</option></select></label>
+              <label>concise<select id="reasoningVisConcise"><option value="" data-i18n="label.inheritProvider">(inherit)</option><option value="summarized">summarized</option><option value="detailed">detailed</option><option value="omitted">omitted</option></select></label>
+              <label>detailed<select id="reasoningVisDetailed"><option value="" data-i18n="label.inheritProvider">(inherit)</option><option value="summarized">summarized</option><option value="detailed">detailed</option><option value="omitted">omitted</option></select></label>
+              <label>none<select id="reasoningVisNone"><option value="" data-i18n="label.inheritProvider">(inherit)</option><option value="summarized">summarized</option><option value="detailed">detailed</option><option value="omitted">omitted</option></select></label>
+            </div>
+          </div>
           <div id="reasoningEffective" style="display:flex;flex-direction:column;gap:4px;font-size:0.85em;color:var(--text-dim)"></div>
         </div>
       </div>
     </div>
 
     <div class="modal-actions">
-      <button class="btn" onclick="closeModal('modelModal')" data-i18n="btn.cancel">Cancel</button>
+      <button class="btn" onclick="closeModelDrawer()" data-i18n="btn.cancel">Cancel</button>
       <button class="btn btn-primary" onclick="saveModel()" data-i18n="btn.save">Save</button>
     </div>
   </div>
-</div>
+</aside>
 
 <!-- Fetch Models Modal -->
 <div class="modal-overlay" role="dialog" aria-modal="true" id="fetchModelsModal">
   <div class="modal modal-wide">
-    <h3 data-i18n="modal.fetchModels">Fetch Models from Provider</h3>
+    <div class="drawer-head">
+      <h3 data-i18n="modal.fetchModels">Fetch Models from Provider</h3>
+      <button type="button" class="drawer-close" aria-label="Close" data-i18n-aria-label="btn.close" onclick="closeModal('fetchModelsModal')">&#10005;</button>
+    </div>
     <div class="form-group">
       <label data-i18n="label.selectProvider">Select Provider</label>
-      <select id="fetchProvider" onchange="doFetchModels()"></select>
+      <!-- A native select cannot render an image, so the roster is a menu of
+           logo + name; the hidden input keeps the value API the fetcher uses. -->
+      <input type="hidden" id="fetchProvider">
+      <button type="button" class="btn provider-picker-btn" id="fetchProviderBtn"
+              aria-haspopup="listbox" aria-expanded="false"
+              onclick="toggleFetchProviderPicker(this)">
+        <span class="pp-value" data-i18n="label.selectOne">Select one</span>
+        <span aria-hidden="true">&#9662;</span>
+      </button>
+      <div class="more-menu provider-picker-menu" id="fetchProviderMenu" role="listbox"></div>
     </div>
     <div id="fetchModelsContent" style="display:none">
       <div class="fetch-toolbar">
-        <input id="fetchModelSearch" placeholder="Filter models..." oninput="filterFetchedModels()">
+        <input id="fetchModelSearch" placeholder="Filter models..." data-i18n-placeholder="label.filterModels" oninput="filterFetchedModels()">
         <button class="btn btn-sm" onclick="toggleAllFetched(true)" data-i18n="btn.selectAll">Select All</button>
         <button class="btn btn-sm" onclick="toggleAllFetched(false)" data-i18n="btn.deselectAll">Deselect All</button>
         <span class="fetch-count" id="fetchCount"></span>
@@ -1156,10 +1511,10 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
       </div>
       <div class="fetch-caps-row" id="fetchCapsRow">
         <label data-i18n="label.capabilities">Capabilities</label>
-        <label><input type="checkbox" id="fetchCapText" checked> text</label>
-        <label><input type="checkbox" id="fetchCapVision"> vision</label>
-        <label><input type="checkbox" id="fetchCapTools" checked> tools</label>
-        <label><input type="checkbox" id="fetchCapReasoning"> reasoning</label>
+        <label><input type="checkbox" id="fetchCapText" checked> <span data-i18n="cap.text">text</span></label>
+        <label><input type="checkbox" id="fetchCapVision"> <span data-i18n="cap.vision">vision</span></label>
+        <label><input type="checkbox" id="fetchCapTools" checked> <span data-i18n="cap.tools">tools</span></label>
+        <label><input type="checkbox" id="fetchCapReasoning"> <span data-i18n="cap.reasoning">reasoning</span></label>
       </div>
     </div>
     <div id="fetchModelsLoading" style="display:none;text-align:center;padding:20px;color:var(--text-dim)">
@@ -1191,7 +1546,7 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
     <!-- Before Date inputs -->
     <div id="cleanupModeBeforeDate" class="cleanupModePanel" style="display:none">
       <div style="margin:0 0 8px">
-        <label style="font-size:12px;color:var(--text-dim)">Delete records before:</label>
+        <label style="font-size:12px;color:var(--text-dim)" data-i18n="label.cleanupBefore">Delete records before:</label>
         <input type="date" id="cleanupBeforeDate" style="width:100%;padding:6px;margin-top:4px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
       </div>
     </div>
@@ -1199,11 +1554,11 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
     <div id="cleanupModeDateRange" class="cleanupModePanel" style="display:none">
       <div style="display:flex;gap:8px;margin:0 0 8px">
         <div style="flex:1">
-          <label style="font-size:12px;color:var(--text-dim)">From:</label>
+          <label style="font-size:12px;color:var(--text-dim)" data-i18n="label.cleanupFrom">From:</label>
           <input type="date" id="cleanupRangeStart" style="width:100%;padding:6px;margin-top:4px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
         </div>
         <div style="flex:1">
-          <label style="font-size:12px;color:var(--text-dim)">To:</label>
+          <label style="font-size:12px;color:var(--text-dim)" data-i18n="label.cleanupTo">To:</label>
           <input type="date" id="cleanupRangeEnd" style="width:100%;padding:6px;margin-top:4px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
         </div>
       </div>
@@ -1215,7 +1570,7 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
     <div class="form-group">
       <input id="cleanupConfirmInput" autocomplete="off" spellcheck="false"
         oninput="onCleanupConfirmInput()" style="font-family:monospace"
-        placeholder="CLEANUP">
+        placeholder="CLEANUP" data-i18n-placeholder="confirm.typeToConfirm">
     </div>
     <div class="modal-actions">
       <button class="btn" onclick="closeModal('cleanupConfirmModal')" data-i18n="btn.cancel">Cancel</button>
@@ -1261,7 +1616,7 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
 <!-- Test Result Modal -->
 <div class="modal-overlay" role="dialog" aria-modal="true" id="testModal">
   <div class="modal modal-wide">
-    <h3 id="testModalTitle">Test Result</h3>
+    <h3 id="testModalTitle" data-i18n="test.resultTitle">Test Result</h3>
     <div class="test-meta" id="testMeta"></div>
     <div class="test-output" id="testOutput"></div>
     <details class="test-details" id="testImageDetails" style="display:none">
@@ -1283,12 +1638,25 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
 </div>
 
 <!-- API Key Modal -->
+<div class="modal-overlay" role="dialog" aria-modal="true" id="shimModal">
+  <div class="modal modal-yaml">
+    <h3 id="shimModalTitle" data-i18n="modal.shim">Shim</h3>
+    <div class="shim-modal-meta" id="shimModalMeta"></div>
+    <textarea id="shimModalYaml" class="shim-yaml" spellcheck="false" rows="18"></textarea>
+    <div class="field-hint" id="shimModalNote"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="copyShimYaml()" data-i18n="btn.copyDefinition">Copy</button>
+      <button class="btn" onclick="closeModal('shimModal')" data-i18n="btn.cancel">Cancel</button>
+      <button class="btn btn-primary" id="shimModalSave" onclick="saveShimYaml()" data-i18n="btn.save">Save</button>
+    </div>
+  </div>
+</div>
 <div class="modal-overlay" role="dialog" aria-modal="true" id="keyModal">
   <div class="modal">
     <h3 id="keyModalTitle" data-i18n="modal.generateKey">Generate API Key</h3>
     <div class="form-group">
       <label data-i18n="label.keyLabel">Label (optional)</label>
-      <input id="keyLabel" placeholder="e.g. Production, Dev testing">
+      <input id="keyLabel" placeholder="e.g. Production, Dev testing" data-i18n-placeholder="placeholder.keyLabel">
     </div>
     <div class="form-group">
       <label data-i18n="label.keyManual">Manual key (leave empty to auto-generate)</label>
@@ -1322,7 +1690,7 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
     <h3 data-i18n="modal.editKeyLabel">Edit Key Label</h3>
     <div class="form-group">
       <label data-i18n="col.label">Label</label>
-      <input id="keyLabelInput" placeholder="e.g. Production, Dev testing" onkeydown="onKeyLabelInputKeydown(event)">
+      <input id="keyLabelInput" placeholder="e.g. Production, Dev testing" data-i18n-placeholder="placeholder.keyLabel" onkeydown="onKeyLabelInputKeydown(event)">
     </div>
     <div class="modal-actions">
       <button class="btn" onclick="closeModal('keyLabelModal')" data-i18n="btn.cancel">Cancel</button>
@@ -1339,7 +1707,7 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
       <button class="btn btn-sm" onclick="closeModal('tokenUsageModal')" data-i18n="btn.close">Close</button>
     </div>
     <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
-      <div class="seg-control" id="tokenUsageRange" role="radiogroup" aria-label="Token usage range">
+      <div class="seg-control" id="tokenUsageRange" role="radiogroup" aria-label="Token usage range" data-i18n-aria-label="aria.tokenUsageRange">
         <label class="active"><input type="radio" name="tuRange" checked onchange="setTokenUsageRange(1)"><span data-i18n="tokenUsage.range1d">1 day</span></label>
         <label><input type="radio" name="tuRange" onchange="setTokenUsageRange(7)"><span data-i18n="tokenUsage.range7d">7 days</span></label>
         <label><input type="radio" name="tuRange" onchange="setTokenUsageRange(30)"><span data-i18n="tokenUsage.range30d">30 days</span></label>
@@ -1367,10 +1735,27 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
   </div>
 </div>
 
+<!-- Error dump detail, opened by #dump/<id> links -->
+<div class="dump-page" id="dumpPage" hidden>
+  <div class="dp-head">
+    <button class="btn btn-sm" onclick="exitDumpPage()">&larr; <span data-i18n="btn.back">Back</span></button>
+    <h1 id="dumpPageTitle">Error dump</h1>
+    <div class="dp-actions">
+      <button class="btn btn-sm" id="dumpPageLogBtn" onclick="openDumpPageLog()" data-i18n="dump.viewInLog">Request log</button>
+      <button class="btn btn-sm" id="dumpPageCopyBtn" onclick="copyDumpPageJson()" data-i18n="btn.copyJson">Copy JSON</button>
+      <button class="btn btn-sm" id="dumpPageDownloadBtn" onclick="downloadDumpPage()" data-i18n="btn.download">Download JSON</button>
+    </div>
+  </div>
+  <div class="dp-meta" id="dumpPageMeta"></div>
+  <div class="dp-body" id="dumpPageBody"></div>
+</div>
+
 <!-- Toast -->
 <div class="toast" id="toast"></div>
 
 <script type="module" src="/admin/static/js/core/init.js"></script>
 <div id="dbFooter" class="db-footer hidden"></div>
+</div><!-- /app-main -->
+</div><!-- /app-shell -->
 </body>
 </html>

@@ -129,6 +129,8 @@ async def _setup_auth(
         internal_token=internal_token,
         admin_password=config.admin_password,
         open_on_no_keys=config.open_on_no_keys,
+        session_idle_minutes=config.admin_session_idle_minutes,
+        session_remember_days=config.admin_session_remember_days,
     )
     if not auth_state._has_keys():
         _no_key_msg = (
