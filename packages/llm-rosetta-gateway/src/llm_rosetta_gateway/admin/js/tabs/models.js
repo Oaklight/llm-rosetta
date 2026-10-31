@@ -25,9 +25,10 @@ function _getModelType(info) {
   if (typeof info === 'string') return 'llm';
   // Server-provided type field takes precedence
   if (info.type) return info.type;
-  // Capability-based fallback for legacy entries
+  // Capability-based fallback for legacy entries.  ``embedding`` is the
+  // pre-rename capability spelling, still present on older payloads.
   const caps = info.capabilities || ['text'];
-  if (caps.includes('embedding') && !caps.includes('text')) return 'embedding';
+  if ((caps.includes('embeddings') || caps.includes('embedding')) && !caps.includes('text')) return 'embeddings';
   if (caps.includes('rerank') && !caps.includes('text')) return 'rerank';
   return 'llm';
 }
@@ -466,7 +467,7 @@ function goToProviderFromModel(provName) {
 
 /** Return the default test kind for the primary test button. */
 function _defaultTestKind(modelType) {
-  if (modelType === 'embedding') return 'embedding';
+  if (modelType === 'embeddings') return 'embedding';
   if (modelType === 'rerank') return 'rerank';
   if (modelType === 'llm') return 'text';
   // Unknown types: use the type name as the test kind
@@ -479,7 +480,7 @@ function _testMenuItems(modelType, modelName, {hasTools, hasVision, hasReasoning
   // Fourth argument of runTest: pins the request to one provider.  Omitted on
   // the row's own test menu, where routing picks the provider.
   const pArg = provider ? `,null,'${esc(provider)}'` : '';
-  if (modelType === 'embedding') {
+  if (modelType === 'embeddings') {
     return `
       <div class="test-menu-item" onclick="runTest('${n}','embedding'${pArg})">${t('test.embedding')}</div>
       <div class="test-menu-item" onclick="runTest('${n}','embed_batch'${pArg})">${t('test.embedBatch')}</div>

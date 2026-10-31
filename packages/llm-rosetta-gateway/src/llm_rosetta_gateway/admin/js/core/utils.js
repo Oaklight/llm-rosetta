@@ -356,7 +356,7 @@ function fmtTokens(n) {
  *  provider name.  A config that declares `shim:` instead of `type:` arrives
  *  with `type` filled in from the provider name (see admin/routes/config.py),
  *  so a `type` equal to the name is synthetic and must not win.  A provider
- *  defined only by `embedding_shim` / `rerank_shim` / `decision_shim` has no
+ *  defined only by `embeddings_shim` / `rerank_shim` / `decision_shim` has no
  *  chat type at all. */
 export function providerTypeName(cfg, name) {
   if (!cfg) return name;

@@ -153,7 +153,7 @@ _CRITICAL_RESPONSE_BY_FORMAT: dict[str, list[str]] = {
 # paths are the union across their formats: a path that does not exist in the
 # source dialect is absent from both sides of the comparison and never diffs.
 _CRITICAL_REQUEST_BY_TYPE: dict[str, list[str]] = {
-    "embedding": [
+    "embeddings": [
         "input",
         "texts",
         "encoding_format",
@@ -196,7 +196,7 @@ _CRITICAL_REQUEST_BY_TYPE: dict[str, list[str]] = {
 }
 
 _CRITICAL_RESPONSE_BY_TYPE: dict[str, list[str]] = {
-    "embedding": [
+    "embeddings": [
         "object",
         "id",
         "texts",
@@ -509,7 +509,7 @@ class FidelityChecker:
             checks all formats' paths (slower but safe when format is
             unknown).
         model_type: Capability category.  For a non-LLM type
-            (``embedding``, ``rerank``, ``decision``) the critical paths
+            (``embeddings``, ``rerank``, ``decision``) the critical paths
             are the union over that family's dialects, because one route
             serves all of them; *format_name* only labels the warning.
     """
@@ -521,7 +521,11 @@ class FidelityChecker:
         model_type: str = "llm",
     ) -> None:
         self.mode = mode
-        self.model_type = model_type
+        # Accept the legacy ``embedding`` spelling; the critical-path tables
+        # are keyed by the canonical name.
+        from llm_rosetta.formats import canonical_model_type
+
+        self.model_type = canonical_model_type(model_type)
         # Accept legacy base/format spellings (e.g. ``openai_chat``) in the
         # internal format name without emitting a duplicate warning.
         self.format_name = (

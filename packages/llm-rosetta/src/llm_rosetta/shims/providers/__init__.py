@@ -65,6 +65,7 @@ import importlib.util
 import logging
 import sys
 import types
+import warnings
 from importlib.metadata import entry_points
 from pathlib import Path
 from collections.abc import Callable
@@ -95,7 +96,7 @@ _PROVIDERS_DIR = Path(__file__).parent
 #: use the format name as a directory keep loading unchanged.
 _TYPE_DIRS: dict[str, str] = {
     "llm": "llm",
-    "embeddings": "embedding",
+    "embeddings": "embeddings",
     "rerank": "rerank",
     "decisions": "decision",
 }
@@ -477,12 +478,33 @@ def _resolve_shim_pair(cfg: dict[str, Any], yaml_path: Path) -> tuple[str, str]:
     # module scope (for ReasoningCapability), so a module-level import here
     # would close the cycle while the shims package is initialising.  The
     # vocabulary module is data-only and safe to import at any time.
+    from llm_rosetta.formats import canonical_model_type
     from llm_rosetta.model_vocabulary import FORMATS_BY_TYPE, MODEL_TYPES
     from llm_rosetta.provider_names import canonical_provider_name
 
     declared_type = cfg.get("model_type")
+    if isinstance(declared_type, str):
+        canonical = canonical_model_type(declared_type)
+        if canonical != declared_type:
+            warnings.warn(
+                f"{yaml_path}: model_type {declared_type!r} is deprecated; "
+                f"use {canonical!r}",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            declared_type = canonical
     legacy_base = cfg.get("base")
-    if not isinstance(legacy_base, str):
+    if isinstance(legacy_base, str):
+        canonical = canonical_model_type(legacy_base)
+        if canonical != legacy_base and canonical in MODEL_TYPES:
+            warnings.warn(
+                f"{yaml_path}: base {legacy_base!r} names a deprecated model "
+                f"type; use {canonical!r}",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            legacy_base = canonical
+    else:
         legacy_base = None
 
     # ``format`` is the new spelling and the schema requires the category with

@@ -1,8 +1,8 @@
 """Embeddings proxy handler with IR-based conversion.
 
 Proxies ``/v1/embeddings`` requests to upstream embedding providers.
-When the model's provider declares an embedding endpoint (``embedding_format``
-/ ``embedding_shim``, or the legacy ``embedding_providers`` section), every
+When the model's provider declares an embedding endpoint (``embeddings_format``
+/ ``embeddings_shim``, or the legacy ``embedding_providers`` section), every
 request and response goes through the IR — the same rule the chat routes
 follow — so a request is converted between OpenAI, Cohere, Jina, Voyage and
 Google GenAI formats even when the source and target format are the same.
@@ -15,7 +15,7 @@ module supplies the embedding hooks — the IR pipeline, the upstream model
 rename, and Google's model-in-URL path with its batch variant.
 
 Every request that reaches an upstream is recorded in the usage ledger with
-``model_type="embedding"``.
+``model_type="embeddings"``.
 """
 
 from __future__ import annotations
@@ -43,7 +43,7 @@ def _detect_embedding_source(
     ``embedding`` descriptor, so it is the same object the descriptor exposes
     and stays testable without a handler.
     """
-    return detect_source_format(request, body, config, "embedding")
+    return detect_source_format(request, body, config, "embeddings")
 
 
 @dataclass
@@ -136,10 +136,10 @@ def _response_post(body: dict[str, Any], model: str) -> None:
 
 
 _EMBEDDINGS = TypedHandler(
-    model_type="embedding",
+    model_type="embeddings",
     build_pipeline=EmbeddingConversionPipeline,
     resolve=_resolve_route,
-    configured_models=lambda config: config.embedding_models.keys(),
+    configured_models=lambda config: config.embeddings_models.keys(),
     response_usage=response_usage,
     prepare_body=_prepare_body,
     upstream_url=_upstream_url,

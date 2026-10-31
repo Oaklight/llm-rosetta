@@ -117,9 +117,11 @@ def _build_model_entry(
     render (yet) is carried over rather than silently dropped by a save that
     never knew about it.
     """
+    from llm_rosetta.formats import canonical_model_type
+
     from ....model_types import registered_type_names
 
-    model_type = body.get("type", "llm")
+    model_type = canonical_model_type(body.get("type", "llm"))
     valid_types = registered_type_names()
     if model_type not in valid_types:
         # Fall back to "llm" for unrecognised types — maintains backward
@@ -214,7 +216,9 @@ def _update_multi_provider_entry(
         existing.setdefault("providers", []).append({"name": provider})
     if "capabilities" in body:
         existing["capabilities"] = body["capabilities"]
-    model_type = body.get("type")
+    from llm_rosetta.formats import canonical_model_type
+
+    model_type = canonical_model_type(body["type"]) if body.get("type") else None
     if model_type and model_type != "llm":
         existing["type"] = model_type
     elif "type" in existing and (not model_type or model_type == "llm"):

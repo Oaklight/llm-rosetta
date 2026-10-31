@@ -13,8 +13,8 @@ from llm_rosetta_gateway.pipelines.embeddings import _resolve_embedding_provider
 def _config_with_provider(
     base_url: str,
     *,
-    embedding_format: str | None = None,
-    embedding_path: str | None = None,
+    embeddings_format: str | None = None,
+    embeddings_path: str | None = None,
     rerank_format: str | None = None,
     rerank_path: str | None = None,
     extra_models: dict | None = None,
@@ -24,10 +24,10 @@ def _config_with_provider(
         "base_url": base_url,
         "type": "openai_chat",
     }
-    if embedding_format:
-        provider["embedding_format"] = embedding_format
-    if embedding_path:
-        provider["embedding_path"] = embedding_path
+    if embeddings_format:
+        provider["embeddings_format"] = embeddings_format
+    if embeddings_path:
+        provider["embeddings_path"] = embeddings_path
     if rerank_format:
         provider["rerank_format"] = rerank_format
     if rerank_path:
@@ -37,7 +37,7 @@ def _config_with_provider(
         "gpt-4": "test-provider",
         "embed-model": {
             "provider": "test-provider",
-            "type": "embedding" if embedding_format else "llm",
+            "type": "embeddings" if embeddings_format else "llm",
         },
     }
     if extra_models:
@@ -81,7 +81,7 @@ class TestEmbeddingUrlConstruction:
     def test_base_url_no_v1_default_path(self):
         cfg = _config_with_provider(
             "https://api.example.com",
-            embedding_format="openai",
+            embeddings_format="openai",
         )
         body: dict = {"model": "embed-model", "input": "test"}
         resolved = _resolve_embedding_provider(cfg, "embed-model", body)
@@ -92,7 +92,7 @@ class TestEmbeddingUrlConstruction:
         """base_url with /v1 + default /v1/embeddings — normalized, no double /v1."""
         cfg = _config_with_provider(
             "https://api.openai.com/v1",
-            embedding_format="openai",
+            embeddings_format="openai",
         )
         body: dict = {"model": "embed-model", "input": "test"}
         resolved = _resolve_embedding_provider(cfg, "embed-model", body)
@@ -102,8 +102,8 @@ class TestEmbeddingUrlConstruction:
     def test_base_url_with_v1_custom_path_no_v1(self):
         cfg = _config_with_provider(
             "https://api.openai.com/v1",
-            embedding_format="openai",
-            embedding_path="/embeddings",
+            embeddings_format="openai",
+            embeddings_path="/embeddings",
         )
         body: dict = {"model": "embed-model", "input": "test"}
         resolved = _resolve_embedding_provider(cfg, "embed-model", body)
@@ -113,8 +113,8 @@ class TestEmbeddingUrlConstruction:
     def test_custom_path_v4_embed(self):
         cfg = _config_with_provider(
             "https://api.custom.com",
-            embedding_format="openai",
-            embedding_path="/v4/embed",
+            embeddings_format="openai",
+            embeddings_path="/v4/embed",
         )
         body: dict = {"model": "embed-model", "input": "test"}
         resolved = _resolve_embedding_provider(cfg, "embed-model", body)
@@ -125,7 +125,7 @@ class TestEmbeddingUrlConstruction:
         """An explicit non-OpenAI format gets that format's path, not /v1."""
         cfg = _config_with_provider(
             "https://api.cohere.com",
-            embedding_format="cohere",
+            embeddings_format="cohere",
         )
         body: dict = {"model": "embed-model", "input": "test"}
         resolved = _resolve_embedding_provider(cfg, "embed-model", body)

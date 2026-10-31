@@ -20,6 +20,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from llm_rosetta.formats import canonical_model_type
+
 __all__ = [
     "DEFAULT_MODEL_TYPE",
     "IR_FIELDS",
@@ -49,10 +51,11 @@ LEDGER_COLUMNS: tuple[str, ...] = (
 DEFAULT_MODEL_TYPE = "llm"
 
 #: The model types whose usage this module can normalize, matching the names
-#: ``gateway.model_types`` registers — ``llm``, ``embedding``, ``rerank``,
+#: ``gateway.model_types`` registers — ``llm``, ``embeddings``, ``rerank``,
 #: ``decision``.  A column value outside this set is a writer's bug, not a
-#: usage shape to guess at.
-MODEL_TYPES: tuple[str, ...] = ("llm", "embedding", "rerank", "decision")
+#: usage shape to guess at.  The legacy ``embedding`` spelling is translated
+#: at the call boundary so rows written before the rename still normalize.
+MODEL_TYPES: tuple[str, ...] = ("llm", "embeddings", "rerank", "decision")
 
 #: Ledger column -> the IR usage field behind it, per model type.
 #:
@@ -69,7 +72,7 @@ MODEL_TYPE_FIELDS: Mapping[str, Mapping[str, str]] = {
         "cache_creation_tokens": "cache_creation_tokens",
         "reasoning_tokens": "reasoning_tokens",
     },
-    "embedding": {
+    "embeddings": {
         "input_tokens": "prompt_tokens",
         "total_tokens": "total_tokens",
     },
@@ -196,7 +199,7 @@ def token_total(
     Raises:
         KeyError: If *model_type* is not one of :data:`MODEL_TYPES`.
     """
-    fields = MODEL_TYPE_FIELDS[model_type]
+    fields = MODEL_TYPE_FIELDS[canonical_model_type(model_type)]
     if not usage or _refused(usage, fields):
         return None
     total_field = fields.get("total_tokens")
@@ -231,7 +234,7 @@ def usage_columns(
     Raises:
         KeyError: If *model_type* is not one of :data:`MODEL_TYPES`.
     """
-    fields = MODEL_TYPE_FIELDS[model_type]
+    fields = MODEL_TYPE_FIELDS[canonical_model_type(model_type)]
     if not usage:
         return {}
     total = token_total(usage, model_type)

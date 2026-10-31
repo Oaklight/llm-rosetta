@@ -19,6 +19,54 @@ if TYPE_CHECKING:
 logger = logging.getLogger("llm-rosetta-gateway")
 
 
+def legacy_config_key(key: str, type_name: str) -> str | None:
+    """The pre-rename spelling of *key*, when *type_name* was renamed.
+
+    ``embeddings_format`` → ``embedding_format``.  A config written before
+    the model type was renamed is rewritten by the load-time migration; this
+    is the read-side fallback for a programmatic config, or a file that could
+    not be written back (a read-only mount).
+
+    Args:
+        key: A config key derived from *type_name* (``embeddings_path``).
+        type_name: The canonical model type.
+
+    Returns:
+        The legacy key, or ``None`` when the type was never renamed or the
+        key does not carry the type's prefix.
+    """
+    from llm_rosetta.formats import legacy_model_type
+
+    old = legacy_model_type(type_name)
+    prefix = f"{type_name}_"
+    if old is None or not key.startswith(prefix):
+        return None
+    return f"{old}_" + key[len(prefix) :]
+
+
+def _declared(cfg: dict[str, Any], key: str, type_name: str) -> Any:
+    """Read *key*, falling back to its pre-rename spelling.
+
+    The fallback logs once per read so an operator sees which key to change;
+    the migration normally rewrites the file before this runs.
+    """
+    value = cfg.get(key)
+    if value:
+        return value
+    legacy = legacy_config_key(key, type_name)
+    if legacy is None:
+        return value
+    value = cfg.get(legacy)
+    if value:
+        logger.warning(
+            "config: %r is deprecated for the %s endpoint; use %r",
+            legacy,
+            type_name,
+            key,
+        )
+    return value
+
+
 @dataclass(frozen=True)
 class _TypedKeys:
     """The config keys and defaults one typed endpoint is parsed with."""
@@ -190,7 +238,7 @@ def parse_typed_provider(
     if not isinstance(cfg, dict) or cfg.get("enabled") is False:
         return None
     shim = resolve_endpoint_shim(cfg, type_name=keys.type_name, shim_key=keys.shim_key)
-    explicit_format = cfg.get(keys.format_key) or ""
+    explicit_format = _declared(cfg, keys.format_key, keys.type_name) or ""
     if require_declared_format and not explicit_format and shim is None:
         return None
 
@@ -221,7 +269,7 @@ def typed_path(
     wire_format: str,
 ) -> str:
     """The upstream endpoint path an entry resolves to."""
-    path = cfg.get(keys.path_key) or ""
+    path = _declared(cfg, keys.path_key, keys.type_name) or ""
     if not path and shim is not None and wire_format == shim.format:
         path = shim.default_path or ""
     if not path:
@@ -262,13 +310,13 @@ def resolve_endpoint_shim(cfg: dict[str, Any], *, type_name: str, shim_key: str)
     *type_name*; a mismatch is a configuration error.  Otherwise the
     provider-wide ``shim`` / ``type`` is used only when its category
     matches, so a chat provider named ``openai`` keeps its chat identity
-    while still serving embeddings through ``embedding_format``.
+    while still serving embeddings through ``embeddings_format``.
 
     Args:
         cfg: Raw provider config entry.
         type_name: Registry category the endpoint belongs to.
         shim_key: Provider config key naming the endpoint shim
-            (e.g. ``"embedding_shim"``).
+            (e.g. ``"embeddings_shim"``).
 
     Returns:
         The effective :class:`~llm_rosetta.shims.provider_shim.ProviderShim`,
@@ -279,7 +327,7 @@ def resolve_endpoint_shim(cfg: dict[str, Any], *, type_name: str, shim_key: str)
     """
     from llm_rosetta.shims import get_shim
 
-    declared = cfg.get(shim_key)
+    declared = _declared(cfg, shim_key, type_name)
     if declared:
         shim = get_shim(declared)
         if shim is None:

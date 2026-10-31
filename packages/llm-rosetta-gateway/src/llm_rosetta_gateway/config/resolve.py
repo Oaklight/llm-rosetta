@@ -43,6 +43,7 @@ def identity_category(wire_format: str, cfg: dict[str, Any]) -> str | None:
     from llm_rosetta.model_vocabulary import FORMATS_BY_TYPE
 
     from ..model_types import all_model_types
+    from .typed import _declared
 
     if wire_format in FORMATS_BY_TYPE["llm"]:
         return "llm"
@@ -58,8 +59,13 @@ def identity_category(wire_format: str, cfg: dict[str, Any]) -> str | None:
         for desc in all_model_types()
         if not desc.is_llm
         and (
-            (desc.config_format_key and cfg.get(desc.config_format_key))
-            or (desc.config_shim_key and cfg.get(desc.config_shim_key))
+            (
+                desc.config_format_key
+                and _declared(cfg, desc.config_format_key, desc.name)
+            )
+            or (
+                desc.config_shim_key and _declared(cfg, desc.config_shim_key, desc.name)
+            )
         )
     }
     for candidate in candidates:
@@ -83,9 +89,13 @@ def endpoint_identity(
     """
     from llm_rosetta.provider_names import canonical_provider_name
 
+    from .typed import _declared
+
     for type_name, shim_key, format_key in endpoint_types:
-        declared_format = (cfg.get(format_key) if format_key else "") or ""
-        if not declared_format and not cfg.get(shim_key):
+        declared_format = (
+            _declared(cfg, format_key, type_name) if format_key else ""
+        ) or ""
+        if not declared_format and not _declared(cfg, shim_key, type_name):
             continue
         shim = resolve_endpoint_shim(cfg, type_name=type_name, shim_key=shim_key)
         if shim is None and not declared_format:
@@ -123,7 +133,7 @@ def resolve_provider_identities(
       4. a non-LLM ``*_shim`` when the provider has no chat identity
 
     Step 4 matters for a provider configured only as an endpoint, e.g.
-    ``{"embedding_shim": "jina--embedding"}``.  It never overrides a chat
+    ``{"embeddings_shim": "jina--embedding"}``.  It never overrides a chat
     identity: a provider named ``openai`` that also declares an embedding
     shim stays an LLM provider and serves embeddings through the endpoint
     config.

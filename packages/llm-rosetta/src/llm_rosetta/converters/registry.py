@@ -1,7 +1,7 @@
 """The one converter registry, keyed by ``(model_type, format)``.
 
 A converter is identified by the capability category it serves (``llm``,
-``embedding``, ``rerank``, ``decision``) and the wire dialect within that
+``embeddings``, ``rerank``, ``decision``) and the wire dialect within that
 category (``chat_completions``, ``openai``, ``jina``, ``systemone``, …).  The
 pair matters because format names are namespaced by category: for example
 ``google_generate`` names both a chat converter and an embedding converter.
@@ -37,7 +37,7 @@ from llm_rosetta.converters.llm.messages.converter import MessagesConverter
 from llm_rosetta.converters.llm.open_responses.converter import OpenResponsesConverter
 from llm_rosetta.converters.rerank.pipeline import _RERANK_CONVERTERS
 from llm_rosetta.model_vocabulary import FORMATS_BY_TYPE as _DECLARED_FORMATS
-from llm_rosetta.model_vocabulary import MODEL_TYPES
+from llm_rosetta.model_vocabulary import MODEL_TYPES, canonical_model_type
 
 __all__ = [
     "CONVERTER_REGISTRY",
@@ -59,7 +59,7 @@ _CONVERTER_CLASSES: dict[str, dict[str, type]] = {
         "google_generate": GoogleGenerateConverter,
         "google_interactions": GoogleInteractionsConverter,
     },
-    "embedding": cast(dict[str, type], _EMBEDDING_CONVERTERS),
+    "embeddings": cast(dict[str, type], _EMBEDDING_CONVERTERS),
     "rerank": cast(dict[str, type], _RERANK_CONVERTERS),
     "decision": cast(dict[str, type], _DECISION_CONVERTERS),
 }
@@ -101,8 +101,10 @@ def formats_for(model_type: str) -> tuple[str, ...]:
     Raises:
         ValueError: If *model_type* is not a registered category.
     """
+    from llm_rosetta.formats import canonical_model_type
+
     try:
-        return tuple(CONVERTER_REGISTRY[model_type])
+        return tuple(CONVERTER_REGISTRY[canonical_model_type(model_type)])
     except KeyError:
         raise ValueError(
             f"Unknown model type: '{model_type}'. Available: {', '.join(MODEL_TYPES)}"
@@ -117,7 +119,7 @@ def get_converter_class(model_type: str, format_name: str) -> type:
             category and its available formats.
     """
     try:
-        formats = CONVERTER_REGISTRY[model_type]
+        formats = CONVERTER_REGISTRY[canonical_model_type(model_type)]
     except KeyError:
         raise ValueError(
             f"Unknown model type: '{model_type}'. Available: {', '.join(MODEL_TYPES)}"
@@ -132,9 +134,13 @@ def get_converter_class(model_type: str, format_name: str) -> type:
 
 
 def converter_map(model_type: str) -> Mapping[str, type]:
-    """Return the ``format → class`` mapping for *model_type*."""
+    """Return the ``format → class`` mapping for *model_type*.
+
+    A legacy spelling names the same mapping, as it does for
+    :func:`formats_for` and :func:`get_converter_class`.
+    """
     try:
-        return CONVERTER_REGISTRY[model_type]
+        return CONVERTER_REGISTRY[canonical_model_type(model_type)]
     except KeyError:
         raise ValueError(
             f"Unknown model type: '{model_type}'. Available: {', '.join(MODEL_TYPES)}"

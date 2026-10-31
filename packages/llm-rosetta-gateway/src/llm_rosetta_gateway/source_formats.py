@@ -27,7 +27,7 @@ def detect_embedding_source(request: Any, body: dict[str, Any], config: Any) -> 
        signal an ordinary Voyage request carries)
     4. Google-shaped body (``requests`` or ``content.parts`` without ``input``
        or ``texts``) → Google GenAI
-    5. Fall back to ``config.default_embedding_format``
+    5. Fall back to ``config.default_embeddings_format``
 
     *request* is unused for embeddings but keeps the signature uniform with
     :func:`detect_rerank_source`.
@@ -40,7 +40,7 @@ def detect_embedding_source(request: Any, body: dict[str, Any], config: Any) -> 
         return "voyage"
     if "input" not in body and ("requests" in body or "content" in body):
         return "google_generate"
-    return canonical_provider_name(config.default_embedding_format)
+    return canonical_provider_name(config.default_embeddings_format)
 
 
 def detect_rerank_source(request: Any, body: dict[str, Any], config: Any) -> str:

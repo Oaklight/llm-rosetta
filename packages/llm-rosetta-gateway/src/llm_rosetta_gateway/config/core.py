@@ -67,16 +67,16 @@ class GatewayConfig:
     # fills one set per registered type; the built-in three are declared here
     # so their attributes are visible to a type checker.  A further type reads
     # its pools through :meth:`typed_pool`.
-    embedding_providers: dict[str, dict[str, Any]]
-    embedding_provider_infos: dict[str, ProviderInfo]
-    embedding_models: dict[str, str]
+    embeddings_providers: dict[str, dict[str, Any]]
+    embeddings_provider_infos: dict[str, ProviderInfo]
+    embeddings_models: dict[str, str]
     rerank_providers: dict[str, dict[str, Any]]
     rerank_provider_infos: dict[str, ProviderInfo]
     rerank_models: dict[str, str]
     decision_providers: dict[str, dict[str, Any]]
     decision_provider_infos: dict[str, ProviderInfo]
     decision_models: dict[str, str]
-    default_embedding_format: str
+    default_embeddings_format: str
     default_rerank_format: str
     default_decision_format: str
 
@@ -152,9 +152,14 @@ class GatewayConfig:
         return list(desc.formats) if desc else []
 
     @staticmethod
+    def embeddings_formats() -> list[str]:
+        """Return supported embeddings formats from the model type registry."""
+        return GatewayConfig._formats_for_type("embeddings")
+
+    @staticmethod
     def embedding_formats() -> list[str]:
-        """Return supported embedding formats from the model type registry."""
-        return GatewayConfig._formats_for_type("embedding")
+        """Deprecated alias for :meth:`embeddings_formats`."""
+        return GatewayConfig.embeddings_formats()
 
     @staticmethod
     def rerank_formats() -> list[str]:
@@ -313,8 +318,18 @@ class GatewayConfig:
         # entries plus its legacy ``<type>_providers`` section, and its
         # default format from the registry.  A newly registered type needs no
         # edit here.
+        from llm_rosetta.formats import legacy_model_type
+
         for descriptor in _typed_descriptors():
             name = descriptor.name
+            # A legacy spelling of the type names the same pools (the v1
+            # config's ``embedding_providers`` / ``embedding_models`` /
+            # ``default_embedding_format``).  Normalise it here so the loop
+            # stays one shape and a programmatic config that skipped the
+            # file migration still loads.
+            old_name = legacy_model_type(name)
+            old_providers = raw.get(f"{old_name}_providers", {}) if old_name else {}
+            old_models = raw.get(f"{old_name}_models", {}) if old_name else {}
             pools = parse_typed_config(
                 self._raw_providers,
                 {},
@@ -324,8 +339,8 @@ class GatewayConfig:
                 global_proxy=self.proxy,
             )
             legacy = parse_typed_config(
-                raw.get(f"{name}_providers", {}),
-                raw.get(f"{name}_models", {}),
+                raw.get(f"{name}_providers") or old_providers,
+                raw.get(f"{name}_models") or old_models,
                 descriptor=descriptor,
                 format_key="format",
                 global_proxy=self.proxy,
@@ -341,10 +356,15 @@ class GatewayConfig:
             setattr(self, f"{name}_providers", providers)
             setattr(self, f"{name}_provider_infos", provider_infos)
             setattr(self, f"{name}_models", models)
+            default_format = raw.get(f"default_{name}_format")
+            if default_format is None and old_name is not None:
+                default_format = raw.get(f"default_{old_name}_format")
             setattr(
                 self,
                 f"default_{name}_format",
-                raw.get(f"default_{name}_format", descriptor.default_format or ""),
+                default_format
+                if default_format is not None
+                else (descriptor.default_format or ""),
             )
 
         # --- Extract type-tagged models from unified models pool ---
@@ -380,8 +400,12 @@ class GatewayConfig:
         """The ``(providers, provider_infos, models)`` pools of *type_name*.
 
         The registry-driven counterpart of the per-type attributes, for a
-        caller that only has the type's name.
+        caller that only has the type's name.  A legacy spelling names the
+        same pools.
         """
+        from llm_rosetta.formats import canonical_model_type
+
+        type_name = canonical_model_type(type_name)
         return (
             getattr(self, f"{type_name}_providers"),
             getattr(self, f"{type_name}_provider_infos"),
@@ -398,8 +422,11 @@ class GatewayConfig:
         Raises:
             KeyError: If the model is not configured for that type.
         """
+        from llm_rosetta.formats import canonical_model_type
+
         from ..model_types import get_model_type
 
+        type_name = canonical_model_type(type_name)
         descriptor = get_model_type(type_name)
         path_key = (
             descriptor.config_path_key if descriptor is not None else None
@@ -420,9 +447,9 @@ class GatewayConfig:
         """Resolve an embedding model to its provider config.
 
         Raises:
-            KeyError: If the model is not in embedding_models.
+            KeyError: If the model is not in embeddings_models.
         """
-        return self.resolve_typed("embedding", model)
+        return self.resolve_typed("embeddings", model)
 
     def resolve_rerank(self, model: str) -> TypedRoute:
         """Resolve a rerank model to its provider config.

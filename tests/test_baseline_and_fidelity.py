@@ -184,7 +184,7 @@ class TestFidelityCheckerNonLlm:
 
     def test_embedding_request_drop_is_detected(self) -> None:
         checker = FidelityChecker(
-            mode="critical", format_name="openai", model_type="embedding"
+            mode="critical", format_name="openai", model_type="embeddings"
         )
         diffs = checker.compare_request(
             {"model": "m", "input": ["hello"], "dimensions": 8},
@@ -194,7 +194,7 @@ class TestFidelityCheckerNonLlm:
 
     def test_embedding_response_change_is_detected(self) -> None:
         checker = FidelityChecker(
-            mode="critical", format_name="openai", model_type="embedding"
+            mode="critical", format_name="openai", model_type="embeddings"
         )
         diffs = checker.compare_response(
             {"data": [{"index": 0, "embedding": [0.1]}]},
@@ -224,7 +224,7 @@ class TestFidelityCheckerNonLlm:
 
     def test_chat_paths_are_not_applied_to_a_non_llm_type(self) -> None:
         checker = FidelityChecker(
-            mode="critical", format_name="openai", model_type="embedding"
+            mode="critical", format_name="openai", model_type="embeddings"
         )
         # A chat-only field is outside the embedding family's paths.
         assert checker.compare_request({"messages": [{"role": "user"}]}, {}) == []

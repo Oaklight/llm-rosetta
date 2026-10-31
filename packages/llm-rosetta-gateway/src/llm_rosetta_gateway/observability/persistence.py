@@ -30,6 +30,7 @@ from .._vendor import aiosqlite
 
 from .maintenance import Policy, Registry, Step, StepContext
 from .retention import RetentionPolicy, RetentionTracker
+from llm_rosetta.formats import canonical_model_type
 from llm_rosetta.observability.usage.normalize import DEFAULT_MODEL_TYPE, LEDGER_COLUMNS
 from llm_rosetta.observability.usage.report import USAGE_WINDOWS
 from llm_rosetta.observability.usage.semantics import ADDITIVE_CACHE_STANDARDS
@@ -431,6 +432,17 @@ class PersistenceManager:
                 "ALTER TABLE request_log ADD COLUMN ttft_ms REAL",
             ],
         ),
+        (
+            9,
+            "rename request_log.model_type 'embedding' to 'embeddings'",
+            [
+                # The category is spelled like its endpoint now, and the
+                # usage report groups by this column: without the rewrite one
+                # model type would report as two rows, split at the upgrade.
+                "UPDATE request_log SET model_type = 'embeddings' "
+                "WHERE model_type = 'embedding'",
+            ],
+        ),
     ]
 
     async def _run_migrations(self) -> None:
@@ -641,7 +653,7 @@ class PersistenceManager:
                     # would fall out of every model-type breakdown, and a row
                     # that no breakdown counts is a row the report cannot
                     # reconcile.
-                    e.get("model_type") or DEFAULT_MODEL_TYPE,
+                    canonical_model_type(e.get("model_type") or DEFAULT_MODEL_TYPE),
                     e.get("request_id"),
                     # Absent on a non-stream row and on every row written
                     # before the column existed.
@@ -2046,7 +2058,7 @@ class PersistenceManager:
             params.append(api_key_label)
         if model_type:
             sql += " AND model_type = ?"
-            params.append(model_type)
+            params.append(canonical_model_type(model_type))
         sql += " GROUP BY date(timestamp), model_type ORDER BY day DESC"
 
         rows = await self._conn.execute_fetchall(sql, params)

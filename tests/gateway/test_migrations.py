@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from typing import Any
 
 
 from llm_rosetta_gateway.maintenance.migrations import CURRENT_VERSION, migrate
@@ -104,8 +105,8 @@ class TestMigrationV0ToV1:
         }
         migrate(raw)
         prov = raw["providers"]["openai"]
-        assert prov["embedding_format"] == "openai"
-        assert prov["embedding_path"] == "/v1/embeddings"
+        assert prov["embeddings_format"] == "openai"
+        assert prov["embeddings_path"] == "/v1/embeddings"
         assert prov["api_key"] == "sk-test"
 
     def test_rerank_models_migrated(self):
@@ -135,7 +136,7 @@ class TestMigrationV0ToV1:
         migrate(raw)
         assert raw["models"]["text-embed-3"] == {
             "provider": "openai",
-            "type": "embedding",
+            "type": "embeddings",
         }
 
     def test_existing_model_not_overwritten(self):
@@ -240,9 +241,117 @@ class TestMigrationV0ToV1:
         migrate(raw)
         cfg = GatewayConfig(raw)
         assert "jina-reranker" in cfg.rerank_models
-        assert "text-embed-3" in cfg.embedding_models
+        assert "text-embed-3" in cfg.embeddings_models
         route = cfg.resolve_rerank("jina-reranker")
         assert route.provider_name == "jina"
+
+
+class TestMigrationV1ToV2:
+    """Migration 002: rename the ``embedding`` model type to ``embeddings``."""
+
+    def test_provider_endpoint_keys_renamed(self):
+        raw = {
+            "config_version": 1,
+            "providers": {
+                "openai": {
+                    "api_key": "sk-test",
+                    "base_url": "https://api.openai.com",
+                    "embedding_format": "openai",
+                    "embedding_path": "/v1/embeddings",
+                    "embedding_shim": "openai--embedding",
+                }
+            },
+            "models": {},
+        }
+        migrate(raw)
+        prov = raw["providers"]["openai"]
+        assert prov["embeddings_format"] == "openai"
+        assert prov["embeddings_path"] == "/v1/embeddings"
+        assert prov["embeddings_shim"] == "openai--embedding"
+        assert "embedding_format" not in prov
+
+    def test_model_type_renamed(self):
+        raw = {
+            "config_version": 1,
+            "providers": {},
+            "models": {"text-embed-3": {"provider": "openai", "type": "embedding"}},
+        }
+        migrate(raw)
+        assert raw["models"]["text-embed-3"]["type"] == "embeddings"
+
+    def test_default_format_key_renamed(self):
+        raw = {
+            "config_version": 1,
+            "providers": {},
+            "models": {},
+            "default_embedding_format": "cohere",
+        }
+        migrate(raw)
+        assert raw["default_embeddings_format"] == "cohere"
+        assert "default_embedding_format" not in raw
+
+    def test_pool_sections_renamed(self):
+        """A v1 file that kept its pools says ``embedding`` in no place."""
+        raw: dict[str, Any] = {
+            "config_version": 1,
+            "providers": {},
+            "models": {},
+            "embedding_providers": {
+                "jina": {
+                    "api_key": "j-test",
+                    "base_url": "https://api.jina.ai",
+                    "format": "jina",
+                }
+            },
+            "embedding_models": {"jina-embed": "jina"},
+        }
+        migrate(raw)
+        assert raw["embeddings_providers"]["jina"]["format"] == "jina"
+        assert raw["embeddings_models"] == {"jina-embed": "jina"}
+        assert "embedding_providers" not in raw
+        assert "embedding_models" not in raw
+
+    def test_pool_sections_merge_entry_by_entry(self):
+        """Both spellings present: the canonical entry wins, nothing is lost."""
+        raw: dict[str, Any] = {
+            "config_version": 1,
+            "providers": {},
+            "models": {},
+            "embeddings_providers": {"jina": {"format": "jina", "api_key": "new"}},
+            "embedding_providers": {
+                "jina": {"format": "cohere", "api_key": "old"},
+                "cohere": {"format": "cohere"},
+            },
+            "embeddings_models": {"jina-embed": "jina"},
+            "embedding_models": {"cohere-embed": "cohere"},
+        }
+        migrate(raw)
+        assert raw["embeddings_providers"]["jina"]["api_key"] == "new"
+        assert raw["embeddings_providers"]["cohere"]["format"] == "cohere"
+        assert raw["embeddings_models"] == {
+            "jina-embed": "jina",
+            "cohere-embed": "cohere",
+        }
+        assert "embedding_providers" not in raw
+        assert "embedding_models" not in raw
+
+    def test_v0_document_reaches_v2(self):
+        raw = {
+            "providers": {},
+            "models": {},
+            "embedding_providers": {
+                "openai": {
+                    "api_key": "sk-test",
+                    "base_url": "https://api.openai.com",
+                    "format": "openai",
+                }
+            },
+            "embedding_models": {"text-embed-3": "openai"},
+        }
+        migrate(raw)
+        assert raw["providers"]["openai"]["embeddings_format"] == "openai"
+        assert raw["models"]["text-embed-3"]["type"] == "embeddings"
+        assert raw["config_version"] == CURRENT_VERSION
 
 
 class TestConfigIOIntegration:
@@ -306,8 +415,44 @@ class TestConfigIOIntegration:
         raw = io.load_raw(config_path)
 
         assert raw["providers"]["openai"]["api_key"] == "${OPENAI_API_KEY}"
-        assert raw["providers"]["openai"]["embedding_format"] == "openai"
+        assert raw["providers"]["openai"]["embeddings_format"] == "openai"
         assert "embedding_providers" not in raw
+
+    def test_v1_pool_sections_written_back_renamed(self, tmp_path):
+        """A v1 file keeps its pools but stops saying ``embedding``.
+
+        The migration reads the section on the way in and writes the
+        canonical spelling out, so a migrated file does not say both.
+        """
+        config_path = str(tmp_path / "config.jsonc")
+        v1_config = {
+            "config_version": 1,
+            "providers": {},
+            "models": {},
+            "embedding_providers": {
+                "jina": {
+                    "api_key": "j-test",
+                    "base_url": "https://api.jina.ai",
+                    "format": "jina",
+                }
+            },
+            "embedding_models": {"jina-embed": "jina"},
+        }
+        with open(config_path, "w") as f:
+            json.dump(v1_config, f)
+
+        from llm_rosetta_gateway.config import JsoncConfigIO
+
+        io = JsoncConfigIO()
+        io.load(config_path)
+
+        with open(config_path) as f:
+            on_disk = json.load(f)
+        assert on_disk["config_version"] == CURRENT_VERSION
+        assert on_disk["embeddings_providers"]["jina"]["format"] == "jina"
+        assert on_disk["embeddings_models"] == {"jina-embed": "jina"}
+        assert "embedding_providers" not in on_disk
+        assert "embedding_models" not in on_disk
 
     def test_load_does_not_write_substituted_env_vars(self, tmp_path, monkeypatch):
         """Critical: load() must not write substituted secrets back to disk."""
@@ -386,13 +531,14 @@ class TestTheVersionField:
 
     def test_a_quoted_number_is_the_version_it_names(self):
         """A template that renders ``"1"`` means v1, not "unreadable"."""
-        raw = {"config_version": "1", "providers": {}, "models": {}}
+        current = str(CURRENT_VERSION)
+        raw = {"config_version": current, "providers": {}, "models": {}}
         _raw, changed = migrate(raw)
         assert changed is False
-        assert raw["config_version"] == "1", "and it is left as written"
+        assert raw["config_version"] == current, "and it is left as written"
 
     def test_a_json_float_is_the_version_it_names(self):
-        raw = {"config_version": 1.0, "providers": {}, "models": {}}
+        raw = {"config_version": float(CURRENT_VERSION), "providers": {}, "models": {}}
         assert migrate(raw)[1] is False
 
     def test_an_unreadable_version_means_none_recorded(self, caplog):

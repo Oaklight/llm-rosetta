@@ -1,5 +1,5 @@
 name: jina--embedding
-model_type: embedding
+model_type: embeddings
 format: jina
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/jina.svg
 

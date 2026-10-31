@@ -120,32 +120,32 @@ class TestEmbeddingConfig:
                 }
             },
             "models": {"gpt-4o": "openai_chat"},
-            "embedding_providers": {
+            "embeddings_providers": {
                 "openai": {
                     "api_key": "sk-test",
                     "base_url": "https://api.openai.com",
                     "format": "openai",
-                    "embedding_path": "/v1/embeddings",
+                    "embeddings_path": "/v1/embeddings",
                 },
                 "cohere": {
                     "api_key": "cohere-key",
                     "base_url": "https://api.cohere.com",
                     "format": "cohere",
-                    "embedding_path": "/v2/embed",
+                    "embeddings_path": "/v2/embed",
                 },
             },
-            "embedding_models": {
+            "embeddings_models": {
                 "text-embedding-3-small": "openai",
                 "embed-v4.0": "cohere",
             },
-            "default_embedding_format": "openai",
+            "default_embeddings_format": "openai",
         }
         config = GatewayConfig(raw)
-        assert len(config.embedding_providers) == 2
-        assert config.embedding_providers["cohere"]["format"] == "cohere"
-        assert config.embedding_providers["cohere"]["embedding_path"] == "/v2/embed"
-        assert len(config.embedding_models) == 2
-        assert config.default_embedding_format == "openai"
+        assert len(config.embeddings_providers) == 2
+        assert config.embeddings_providers["cohere"]["format"] == "cohere"
+        assert config.embeddings_providers["cohere"]["embeddings_path"] == "/v2/embed"
+        assert len(config.embeddings_models) == 2
+        assert config.default_embeddings_format == "openai"
 
     def test_resolve_embedding(self) -> None:
         from llm_rosetta_gateway.config import GatewayConfig
@@ -158,15 +158,15 @@ class TestEmbeddingConfig:
                 }
             },
             "models": {"gpt-4o": "openai_chat"},
-            "embedding_providers": {
+            "embeddings_providers": {
                 "jina": {
                     "api_key": "jina-key",
                     "base_url": "https://api.jina.ai",
                     "format": "jina",
-                    "embedding_path": "/v1/embeddings",
+                    "embeddings_path": "/v1/embeddings",
                 }
             },
-            "embedding_models": {"jina-embeddings-v3": "jina"},
+            "embeddings_models": {"jina-embeddings-v3": "jina"},
         }
         config = GatewayConfig(raw)
         route = config.resolve_embedding("jina-embeddings-v3")
@@ -176,24 +176,24 @@ class TestEmbeddingConfig:
         assert route.provider_info.base_url == "https://api.jina.ai"
         assert route.provider_info.auth_headers()["Authorization"] == "Bearer jina-key"
 
-    def test_legacy_embedding_models_accept_a_provider_list(self) -> None:
+    def test_legacy_embeddings_models_accept_a_provider_list(self) -> None:
         from llm_rosetta_gateway.config import GatewayConfig
 
         raw = {
             "providers": {},
-            "embedding_providers": {
+            "embeddings_providers": {
                 "g": {
                     "api_key": "k",
                     "base_url": "https://generativelanguage.googleapis.com",
                     "format": "google_generate",
                 }
             },
-            "embedding_models": {
+            "embeddings_models": {
                 "m": {"providers": ["g"]},
             },
         }
         config = GatewayConfig(raw)
-        assert config.embedding_models["m"] == "g"
+        assert config.embeddings_models["m"] == "g"
 
     def test_empty_embedding_config(self) -> None:
         from llm_rosetta_gateway.config import GatewayConfig
@@ -208,9 +208,9 @@ class TestEmbeddingConfig:
             "models": {"gpt-4o": "openai_chat"},
         }
         config = GatewayConfig(raw)
-        assert config.embedding_providers == {}
-        assert config.embedding_models == {}
-        assert config.default_embedding_format == "openai"
+        assert config.embeddings_providers == {}
+        assert config.embeddings_models == {}
+        assert config.default_embeddings_format == "openai"
 
     def test_resolve_embedding_unknown_model(self) -> None:
         from llm_rosetta_gateway.config import GatewayConfig

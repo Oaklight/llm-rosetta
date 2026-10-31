@@ -72,7 +72,7 @@ def _make_config(base_url: str, upstream_model: str | None = None) -> GatewayCon
     """Build a minimal GatewayConfig for embedding tests."""
     model_entry: dict[str, Any] = {
         "provider": "test-provider",
-        "type": "embedding",
+        "type": "embeddings",
     }
     if upstream_model:
         model_entry["upstream_model"] = upstream_model
@@ -83,7 +83,7 @@ def _make_config(base_url: str, upstream_model: str | None = None) -> GatewayCon
                 "api_key": "test-key",
                 "base_url": base_url,
                 "type": "openai",
-                "embedding_format": "openai",
+                "embeddings_format": "openai",
             }
         },
         "models": {
@@ -243,7 +243,7 @@ def _make_google_config(
     """Build a config whose embedding endpoint is the Google shim."""
     model_entry: dict[str, Any] = {
         "provider": "google-embed",
-        "type": "embedding",
+        "type": "embeddings",
     }
     if upstream_model:
         model_entry["upstream_model"] = upstream_model
@@ -253,7 +253,7 @@ def _make_google_config(
                 "google-embed": {
                     "api_key": "test-key",
                     "base_url": base_url,
-                    "embedding_shim": "google--embedding",
+                    "embeddings_shim": "google--embedding",
                 }
             },
             "models": {"gemini-embedding": model_entry},
@@ -332,20 +332,20 @@ class TestGoogleEmbeddingRouting:
         assert args[1].endswith("/v1beta/models/text-embedding-004:embedContent")
 
     def test_format_without_a_shim_uses_the_format_default_path(self) -> None:
-        """`embedding_format: google_generate` alone gets Google's path shape."""
+        """`embeddings_format: google_generate` alone gets Google's path shape."""
         config = GatewayConfig(
             {
                 "providers": {
                     "google-embed": {
                         "api_key": "test-key",
                         "base_url": "https://generativelanguage.googleapis.com",
-                        "embedding_format": "google_generate",
+                        "embeddings_format": "google_generate",
                     }
                 },
                 "models": {
                     "gemini-embedding": {
                         "provider": "google-embed",
-                        "type": "embedding",
+                        "type": "embeddings",
                     }
                 },
             }
@@ -456,5 +456,5 @@ class TestDetectEmbeddingSource:
 
         assert (
             _detect_embedding_source(None, {"input": "hi"}, config)
-            == config.default_embedding_format
+            == config.default_embeddings_format
         )

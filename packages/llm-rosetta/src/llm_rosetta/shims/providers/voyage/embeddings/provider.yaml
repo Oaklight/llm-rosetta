@@ -1,5 +1,5 @@
 name: voyage--embedding
-model_type: embedding
+model_type: embeddings
 format: voyage
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/voyage.svg
 

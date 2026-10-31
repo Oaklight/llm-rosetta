@@ -277,18 +277,21 @@ class TestResolveModelType:
             ProviderShim(
                 name="vendor--embedding",
                 format="openai",
-                model_type="embedding",
+                model_type="embeddings",
             )
         )
-        assert resolve_model_type("vendor--embedding") == "embedding"
+        assert resolve_model_type("vendor--embedding") == "embeddings"
 
     def test_chat_format_is_llm(self):
         assert resolve_model_type("chat_completions") == "llm"
         assert resolve_model_type("google") == "llm"
 
     def test_category_name_is_itself(self):
-        for name in ("llm", "embedding", "rerank", "decision"):
+        for name in ("llm", "embeddings", "rerank", "decision"):
             assert resolve_model_type(name) == name
+
+    def test_the_legacy_category_spelling_resolves(self):
+        assert resolve_model_type("embedding") == "embeddings"
 
     def test_ambiguous_non_chat_format_is_none(self):
         # `openai` is both a vendor and an embedding format; without a shim or

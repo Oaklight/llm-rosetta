@@ -475,7 +475,7 @@ class TestUsageByModel:
         await pm.insert_log_entries(
             [
                 self._row("chat", "shared-name", 100, model_type="llm"),
-                self._row("embed", "shared-name", 300, model_type="embedding"),
+                self._row("embed", "shared-name", 300, model_type="embeddings"),
             ]
         )
 
@@ -483,7 +483,7 @@ class TestUsageByModel:
         by_type = {group["model_type"]: group["windows"]["24h"] for group in groups}
         assert by_type["llm"]["total_tokens"] == 100
         assert by_type["llm"]["request_count"] == 1
-        assert by_type["embedding"]["total_tokens"] == 300
+        assert by_type["embeddings"]["total_tokens"] == 300
 
     @pytest.mark.asyncio
     async def test_the_biggest_model_comes_first(self, pm):

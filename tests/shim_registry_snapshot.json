@@ -13,7 +13,7 @@
   },
   {
     "name": "cohere--embedding",
-    "model_type": "embedding",
+    "model_type": "embeddings",
     "format": "cohere",
     "base_url": "https://api.cohere.com",
     "api_key_env": "COHERE_API_KEY",
@@ -61,7 +61,7 @@
   },
   {
     "name": "google--embedding",
-    "model_type": "embedding",
+    "model_type": "embeddings",
     "format": "google_generate",
     "base_url": "https://generativelanguage.googleapis.com",
     "api_key_env": "GOOGLE_API_KEY",
@@ -97,7 +97,7 @@
   },
   {
     "name": "jina--embedding",
-    "model_type": "embedding",
+    "model_type": "embeddings",
     "format": "jina",
     "base_url": "https://api.jina.ai",
     "api_key_env": "JINA_API_KEY",
@@ -181,7 +181,7 @@
   },
   {
     "name": "openai--embedding",
-    "model_type": "embedding",
+    "model_type": "embeddings",
     "format": "openai",
     "base_url": "https://api.openai.com/v1",
     "api_key_env": "OPENAI_API_KEY",
@@ -361,7 +361,7 @@
   },
   {
     "name": "voyage--embedding",
-    "model_type": "embedding",
+    "model_type": "embeddings",
     "format": "voyage",
     "base_url": "https://api.voyageai.com",
     "api_key_env": "VOYAGE_API_KEY",

@@ -17,7 +17,7 @@ const _TEST_REGISTRY = {};
  * Register a test type so that buildTestPayload() and runTest() can handle
  * it without additional switch/case branches.
  *
- * @param {string} modelType - The model type name (e.g. 'embedding').
+ * @param {string} modelType - The test kind (e.g. 'embedding').
  * @param {{endpoint: string, payloads: Object, renderResult: Function}} spec
  */
 export function registerTestType(modelType, spec) {

@@ -221,9 +221,15 @@ def _normalize_model_entry(value: Any) -> dict[str, Any]:
 
 
 def _merge_typed_models(raw: dict[str, Any], models: dict[str, Any]) -> None:
-    """Merge embedding/rerank/decision models into the main models dict."""
-    for model_type in ("embedding", "rerank", "decision"):
-        for model_name, provider_name in raw.get(f"{model_type}_models", {}).items():
+    """Merge embeddings/rerank/decision models into the main models dict."""
+    from llm_rosetta.formats import legacy_model_type
+
+    for model_type in ("embeddings", "rerank", "decision"):
+        old = legacy_model_type(model_type)
+        section = raw.get(f"{model_type}_models")
+        if not section and old is not None:
+            section = raw.get(f"{old}_models", {})
+        for model_name, provider_name in (section or {}).items():
             if model_name not in models:
                 prov = (
                     provider_name
@@ -421,7 +427,7 @@ async def get_config(request: Any) -> Response:
                 }
                 for s in list_shims()
             ],
-            "embedding_formats": GatewayConfig.embedding_formats(),
+            "embeddings_formats": GatewayConfig.embeddings_formats(),
             "rerank_formats": GatewayConfig.rerank_formats(),
             "model_types": _get_model_type_metadata(),
         }

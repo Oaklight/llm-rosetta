@@ -24,7 +24,11 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from ..types.ir.configs import IREffort, IRMode  # re-exported
-from llm_rosetta.model_vocabulary import FORMATS_BY_TYPE, MODEL_TYPES
+from llm_rosetta.model_vocabulary import (
+    FORMATS_BY_TYPE,
+    MODEL_TYPES,
+    canonical_model_type,
+)
 from llm_rosetta.provider_names import (
     canonical_provider_name,
     canonical_shim_name,
@@ -366,6 +370,21 @@ class SoftErrorPattern:
 # ---------------------------------------------------------------------------
 
 
+def _normalize_model_type_kwargs(kwargs: dict[str, Any]) -> None:
+    """Rewrite a legacy ``model_type`` to its canonical spelling."""
+    if "model_type" not in kwargs:
+        return
+    canonical = canonical_model_type(kwargs["model_type"])
+    if canonical != kwargs["model_type"]:
+        warnings.warn(
+            f"ProviderShim(model_type={kwargs['model_type']!r}) is "
+            f"deprecated, use {canonical!r}",
+            DeprecationWarning,
+            stacklevel=3,
+        )
+        kwargs["model_type"] = canonical
+
+
 def _normalize_format_kwargs(kwargs: dict[str, Any]) -> None:
     """Fold the deprecated ``base`` keyword into ``format``.
 
@@ -402,7 +421,7 @@ class ProviderShim:
     Attributes:
         name: Canonical provider identifier (e.g. ``"deepseek"``).
         model_type: Capability category this shim serves (``"llm"``,
-            ``"embedding"``, ``"rerank"``, ``"decision"``).  A format name is
+            ``"embeddings"``, ``"rerank"``, ``"decision"``).  A format name is
             scoped by this category, so the same spelling may name a chat
             format and an embedding format.
         format: Wire format within :attr:`model_type` (e.g.
@@ -527,6 +546,7 @@ class ProviderShim:
         """
         # ── format / model_type ──────────────────────────────────────
         _normalize_format_kwargs(kwargs)
+        _normalize_model_type_kwargs(kwargs)
 
         # ── Transform renames ────────────────────────────────────────
         if "from_transforms" in kwargs:
@@ -924,8 +944,9 @@ def resolve_model_type(name: str) -> str | None:
     category; this function returns ``None`` for it.
 
     Returns:
-        ``"llm"``, ``"embedding"``, ``"rerank"`` or ``"decision"``, or
-        ``None`` when the name does not identify a category.
+        ``"llm"``, ``"embeddings"``, ``"rerank"`` or ``"decision"``, or
+        ``None`` when the name does not identify a category.  The legacy
+        ``"embedding"`` spelling is canonicalised here.
     """
     registry = _current_registry()
     shim = registry.get(name)
@@ -933,7 +954,7 @@ def resolve_model_type(name: str) -> str | None:
         shim = registry.get(canonical_shim_name(name))
     if shim is not None:
         return shim.model_type
-    resolved = canonical_provider_name(name)
+    resolved = canonical_model_type(canonical_provider_name(name))
     if resolved in MODEL_TYPES:
         return resolved
     if resolved in _CHAT_FORMATS:

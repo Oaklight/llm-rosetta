@@ -14,8 +14,17 @@ from __future__ import annotations
 
 from llm_rosetta.formats.spec import FormatSpec
 
-#: Capability categories, in display order.
-MODEL_TYPES: tuple[str, ...] = ("llm", "embedding", "rerank", "decision")
+#: Capability categories, in display order.  A category, its shim directory
+#: and its route share one spelling, taken from the endpoint the type serves
+#: (``/v1/embeddings``); ``llm`` keeps its name because chat has no single
+#: endpoint.
+MODEL_TYPES: tuple[str, ...] = ("llm", "embeddings", "rerank", "decision")
+
+#: Spellings an earlier release used for a category.  They are accepted at
+#: every boundary that takes a model type from outside the process — a shim's
+#: ``model_type``, a config key or ``type:`` value, a request parameter — and
+#: rewritten to the canonical name, so the alias never reaches stored state.
+LEGACY_MODEL_TYPES: dict[str, str] = {"embedding": "embeddings"}
 
 #: Every format, in display order within its model type.  A pair is unique;
 #: format names are namespaced by the model type (``google_generate`` names
@@ -107,20 +116,20 @@ FORMAT_SPECS: tuple[FormatSpec, ...] = (
         sse="google_interactions",
         models_path="/v1beta/models",
     ),
-    # -- embedding ------------------------------------------------------
+    # -- embeddings -----------------------------------------------------
     FormatSpec(
-        model_type="embedding",
+        model_type="embeddings",
         format="openai",
         wire_family="openai",
         auth="openai",
         default_path="/v1/embeddings",
         models_path="/models",
     ),
-    FormatSpec(model_type="embedding", format="cohere", default_path="/v2/embed"),
-    FormatSpec(model_type="embedding", format="jina", default_path="/v1/embeddings"),
-    FormatSpec(model_type="embedding", format="voyage", default_path="/v1/embeddings"),
+    FormatSpec(model_type="embeddings", format="cohere", default_path="/v2/embed"),
+    FormatSpec(model_type="embeddings", format="jina", default_path="/v1/embeddings"),
+    FormatSpec(model_type="embeddings", format="voyage", default_path="/v1/embeddings"),
     FormatSpec(
-        model_type="embedding",
+        model_type="embeddings",
         format="google_generate",
         wire_family="google",
         auth="google",
@@ -146,8 +155,45 @@ BY_PAIR: dict[tuple[str, str], FormatSpec] = {
 }
 
 
+def canonical_model_type(name: str) -> str:
+    """The canonical spelling of the model type *name*.
+
+    The one place a legacy spelling is translated.  Callers pass the result
+    to anything that stores or compares a model type; the legacy name itself
+    is never persisted.
+
+    Args:
+        name: A model type as read from a shim, a config or a request.
+
+    Returns:
+        The canonical name, unchanged when *name* is already canonical (or is
+        not a known type at all).
+    """
+    return LEGACY_MODEL_TYPES.get(name, name)
+
+
+def legacy_model_type(name: str) -> str | None:
+    """The spelling an earlier release used for canonical *name*, if any.
+
+    The reverse of :func:`canonical_model_type`, for a reader that must also
+    accept the old spelling of a key it derives (``embeddings_format`` →
+    ``embedding_format``).
+
+    Args:
+        name: A canonical model type.
+
+    Returns:
+        The legacy spelling, or ``None`` when the name was never renamed.
+    """
+    for old, new in LEGACY_MODEL_TYPES.items():
+        if new == name:
+            return old
+    return None
+
+
 def default_format(model_type: str) -> str:
     """The default (first listed) format of *model_type*."""
+    model_type = canonical_model_type(model_type)
     for spec in FORMAT_SPECS:
         if spec.model_type == model_type:
             return spec.format
@@ -156,4 +202,6 @@ def default_format(model_type: str) -> str:
 
 def default_path(model_type: str) -> str | None:
     """The upstream endpoint path of *model_type*'s default format."""
-    return BY_PAIR[(model_type, default_format(model_type))].default_path
+    return BY_PAIR[
+        (canonical_model_type(model_type), default_format(model_type))
+    ].default_path

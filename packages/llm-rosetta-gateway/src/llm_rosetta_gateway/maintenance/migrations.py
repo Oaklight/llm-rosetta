@@ -18,7 +18,7 @@ from typing import Any
 
 logger = logging.getLogger("llm-rosetta-gateway")
 
-CURRENT_VERSION = 1
+CURRENT_VERSION = 2
 
 
 def _migrate_v0_to_v1(raw: dict[str, Any]) -> None:
@@ -107,8 +107,83 @@ def _migrate_v0_to_v1(raw: dict[str, Any]) -> None:
         raw.pop(key, None)
 
 
+def _merge_section(raw: dict[str, Any], old: str, new: str) -> None:
+    """Rename the top-level pool section *old* to *new*, keeping both.
+
+    A per-type pool section (``embedding_providers`` / ``embedding_models``)
+    is read by the same parser under either spelling, so moving it is
+    lossless.  When both spellings are present the canonical section wins
+    entry by entry — the precedence the loader applies — and entries only the
+    legacy section has are carried over rather than dropped.
+    """
+    section = raw.pop(old, None)
+    if section is None:
+        return
+    target = raw.get(new)
+    if target is None:
+        raw[new] = section
+    elif isinstance(target, dict) and isinstance(section, dict):
+        for key, value in section.items():
+            target.setdefault(key, value)
+
+
+def _migrate_v1_to_v2(raw: dict[str, Any]) -> None:
+    """Rename the ``embedding`` model type to ``embeddings``.
+
+    Before (v1):
+        providers.{name}.embedding_format / embedding_path / embedding_shim
+        models.{model}.type = "embedding"
+        default_embedding_format: str
+        embedding_providers / embedding_models sections
+
+    After (v2):
+        providers.{name}.embeddings_format / embeddings_path / embeddings_shim
+        models.{model}.type = "embeddings"
+        default_embeddings_format: str
+        embeddings_providers / embeddings_models sections
+
+    The category is spelled like the endpoint it serves (``/v1/embeddings``),
+    matching the shim directory and the route.  The old spelling is still
+    accepted at runtime by the parser, so a config that cannot be written
+    back (a read-only mount) keeps working.
+    """
+    renames = {
+        "embedding_format": "embeddings_format",
+        "embedding_path": "embeddings_path",
+        "embedding_shim": "embeddings_shim",
+        "default_embedding_format": "default_embeddings_format",
+    }
+    for old, new in renames.items():
+        if old in raw:
+            raw.setdefault(new, raw.pop(old))
+
+    # The pool sections carry the same shape under either spelling (the
+    # loader parses ``embeddings_providers`` with ``format_key="format"``,
+    # exactly as it parsed ``embedding_providers``).  Left behind, they
+    # would keep the old spelling in the document — the admin save
+    # round-trips what it loaded, so the file would say both.
+    _merge_section(raw, "embedding_providers", "embeddings_providers")
+    _merge_section(raw, "embedding_models", "embeddings_models")
+
+    providers = raw.get("providers")
+    if isinstance(providers, dict):
+        for cfg in providers.values():
+            if not isinstance(cfg, dict):
+                continue
+            for old, new in renames.items():
+                if old in cfg:
+                    cfg.setdefault(new, cfg.pop(old))
+
+    models = raw.get("models")
+    if isinstance(models, dict):
+        for cfg in models.values():
+            if isinstance(cfg, dict) and cfg.get("type") == "embedding":
+                cfg["type"] = "embeddings"
+
+
 _MIGRATIONS: list[tuple[int, Any]] = [
     (0, _migrate_v0_to_v1),
+    (1, _migrate_v1_to_v2),
 ]
 
 

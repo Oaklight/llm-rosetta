@@ -30,9 +30,11 @@ class TestBuiltinRegistration:
         assert desc.name == "llm"
 
     def test_embedding_registered(self) -> None:
+        # The legacy spelling resolves to the canonical descriptor, which is
+        # the compatibility the config and shim loaders rely on.
         desc = get_model_type("embedding")
         assert desc is not None
-        assert desc.name == "embedding"
+        assert desc.name == "embeddings"
 
     def test_rerank_registered(self) -> None:
         desc = get_model_type("rerank")
@@ -46,7 +48,7 @@ class TestBuiltinRegistration:
     def test_registered_type_names(self) -> None:
         names = registered_type_names()
         assert "llm" in names
-        assert "embedding" in names
+        assert "embeddings" in names
         assert "rerank" in names
         assert "decision" in names
 
@@ -115,7 +117,7 @@ class TestEmbeddingDescriptor:
         paths = [r.path for r in desc.routes]
         assert "/v1/embeddings" in paths
 
-    def test_embedding_formats(self) -> None:
+    def test_embeddings_formats(self) -> None:
         desc = get_model_type("embedding")
         assert desc is not None
         assert "openai" in desc.formats
@@ -131,8 +133,8 @@ class TestEmbeddingDescriptor:
     def test_embedding_config_keys(self) -> None:
         desc = get_model_type("embedding")
         assert desc is not None
-        assert desc.config_format_key == "embedding_format"
-        assert desc.config_path_key == "embedding_path"
+        assert desc.config_format_key == "embeddings_format"
+        assert desc.config_path_key == "embeddings_path"
         assert desc.default_path == "/v1/embeddings"
 
     def test_embedding_is_not_llm(self) -> None:
@@ -333,14 +335,14 @@ class TestRouteSpec:
 class TestConfigIntegration:
     """Verify that GatewayConfig format lists align with the registry."""
 
-    def test_embedding_formats_match_registry(self) -> None:
+    def test_embeddings_formats_match_registry(self) -> None:
         from llm_rosetta_gateway.config import GatewayConfig
 
         desc = get_model_type("embedding")
         assert desc is not None
         # The static method delegates to the registry — results should
         # match the descriptor's formats.
-        assert set(GatewayConfig.embedding_formats()) == set(desc.formats)
+        assert set(GatewayConfig.embeddings_formats()) == set(desc.formats)
 
     def test_rerank_formats_match_registry(self) -> None:
         from llm_rosetta_gateway.config import GatewayConfig
@@ -376,13 +378,13 @@ class TestDistributeTypedModels:
                     "api_key": "test",
                     "base_url": "https://api.jina.ai",
                     "type": "openai_chat",
-                    "embedding_format": "jina",
+                    "embeddings_format": "jina",
                 },
             },
             "models": {
                 "jina-embeddings-v3": {
                     "provider": "jina",
-                    "type": "embedding",
+                    "type": "embeddings",
                 },
                 "gpt-4": {
                     "provider": "jina",
@@ -390,8 +392,8 @@ class TestDistributeTypedModels:
             },
         }
         config = GatewayConfig(raw)
-        # Embedding model should be in embedding_models, not in LLM models
-        assert "jina-embeddings-v3" in config.embedding_models
+        # Embedding model should be in embeddings_models, not in LLM models
+        assert "jina-embeddings-v3" in config.embeddings_models
         assert "jina-embeddings-v3" not in config.models
         # LLM model should remain in the LLM pool
         assert "gpt-4" in config.models
@@ -435,18 +437,18 @@ class TestDistributeTypedModels:
                     "api_key": "test",
                     "base_url": "https://api.jina.ai",
                     "type": "openai_chat",
-                    "embedding_format": "jina",
+                    "embeddings_format": "jina",
                 },
             },
             "models": {
                 "jina-embeddings-v3": {
                     "providers": ["chat-only", "jina"],
-                    "type": "embedding",
+                    "type": "embeddings",
                 },
             },
         }
         config = GatewayConfig(raw)
-        assert config.embedding_models["jina-embeddings-v3"] == "jina"
+        assert config.embeddings_models["jina-embeddings-v3"] == "jina"
         assert "jina-embeddings-v3" not in config.models
 
     def test_typed_model_without_a_pool_provider_is_skipped(self) -> None:
@@ -462,11 +464,11 @@ class TestDistributeTypedModels:
                 },
             },
             "models": {
-                "m": {"providers": ["chat-only"], "type": "embedding"},
+                "m": {"providers": ["chat-only"], "type": "embeddings"},
             },
         }
         config = GatewayConfig(raw)
-        assert "m" not in config.embedding_models
+        assert "m" not in config.embeddings_models
         assert "m" in config.models
 
 
@@ -481,8 +483,8 @@ class TestAdminModelEntry:
     def test_valid_type_accepted(self) -> None:
         from llm_rosetta_gateway.admin.routes.config import _build_model_entry
 
-        entry = _build_model_entry({"type": "embedding"}, "provider-a")
-        assert entry["type"] == "embedding"
+        entry = _build_model_entry({"type": "embeddings"}, "provider-a")
+        assert entry["type"] == "embeddings"
 
     def test_llm_type_omitted_from_entry(self) -> None:
         from llm_rosetta_gateway.admin.routes.config import _build_model_entry
@@ -518,7 +520,7 @@ class TestAdminModelTypeMetadata:
         metadata = _get_model_type_metadata()
         names = [m["name"] for m in metadata]
         assert "llm" in names
-        assert "embedding" in names
+        assert "embeddings" in names
         assert "rerank" in names
 
     def test_metadata_has_expected_fields(self) -> None:
@@ -559,9 +561,9 @@ class TestAdminModelTypeMetadata:
         from llm_rosetta_gateway.admin.routes.config import _get_model_type_metadata
 
         metadata = _get_model_type_metadata()
-        emb = next(m for m in metadata if m["name"] == "embedding")
-        assert emb["config_format_key"] == "embedding_format"
-        assert emb["config_path_key"] == "embedding_path"
+        emb = next(m for m in metadata if m["name"] == "embeddings")
+        assert emb["config_format_key"] == "embeddings_format"
+        assert emb["config_path_key"] == "embeddings_path"
         assert emb["default_path"] == "/v1/embeddings"
 
 

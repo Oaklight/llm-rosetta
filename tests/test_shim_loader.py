@@ -797,15 +797,25 @@ class TestShimPair:
         assert shims[0].format == "chat_completions"
 
     def test_non_llm_pair(self, tmp_path: Path):
-        shims = self._load(tmp_path, "name: x\nmodel_type: embedding\nformat: openai\n")
-        assert shims[0].model_type == "embedding"
+        shims = self._load(
+            tmp_path, "name: x\nmodel_type: embeddings\nformat: openai\n"
+        )
+        assert shims[0].model_type == "embeddings"
         assert shims[0].format == "openai"
 
+    def test_the_legacy_type_spelling_is_accepted(self, tmp_path: Path):
+        """``embedding`` is rewritten to the canonical ``embeddings``."""
+        with pytest.warns(DeprecationWarning, match="model_type 'embedding'"):
+            shims = self._load(
+                tmp_path, "name: x\nmodel_type: embedding\nformat: openai\n"
+            )
+        assert shims[0].model_type == "embeddings"
+
     def test_mismatched_pair_is_refused(self, tmp_path: Path):
-        with pytest.raises(ValueError, match="not a embedding format"):
+        with pytest.raises(ValueError, match="not a embeddings format"):
             self._load(
                 tmp_path,
-                "name: x\nmodel_type: embedding\nformat: chat_completions\n",
+                "name: x\nmodel_type: embeddings\nformat: chat_completions\n",
             )
 
     def test_unknown_model_type_is_refused(self, tmp_path: Path):
@@ -1109,10 +1119,10 @@ class TestModelTypeDirectories:
 
     def test_the_type_directory_can_hold_the_leaf(self, tmp_path: Path):
         self._write(
-            tmp_path, "cohere/embeddings", "cohere--embedding", "embedding", "cohere"
+            tmp_path, "cohere/embeddings", "cohere--embedding", "embeddings", "cohere"
         )
         (shim,) = load_providers_from_dir(tmp_path)
-        assert shim.model_type == "embedding"
+        assert shim.model_type == "embeddings"
         assert shim.format == "cohere"
 
     def test_the_type_directory_can_group_format_leaves(self, tmp_path: Path):
@@ -1146,7 +1156,7 @@ class TestModelTypeDirectories:
     def test_a_legacy_format_directory_still_loads(self, tmp_path: Path):
         """``embedding/`` is a format directory, not the ``embeddings`` level."""
         self._write(
-            tmp_path, "vendor/embedding", "vendor--embedding", "embedding", "openai"
+            tmp_path, "vendor/embedding", "vendor--embedding", "embeddings", "openai"
         )
         (shim,) = load_providers_from_dir(tmp_path)
         assert shim.name == "vendor--embedding"

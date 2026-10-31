@@ -4,14 +4,14 @@
   // Provider credentials and base URLs.
   // API keys support ${ENV_VAR} syntax for environment variable substitution.
   // Providers can declare LLM, embedding, and rerank capabilities via
-  // their respective fields (type, embedding_format, rerank_format).
+  // their respective fields (type, embeddings_format, rerank_format).
   "providers": {
     "openai_chat": {
       "api_key": "${OPENAI_API_KEY}",
       "base_url": "https://api.openai.com/v1",
       // Embedding endpoint on the same provider
-      "embedding_format": "openai",
-      "embedding_path": "/v1/embeddings"
+      "embeddings_format": "openai",
+      "embeddings_path": "/v1/embeddings"
     },
     "openai_responses": {
       "api_key": "${OPENAI_API_KEY}",
@@ -34,8 +34,8 @@
       "base_url": "https://api.jina.ai",
       "models_path": "/v1/models",
       "logo": "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/jina.svg",
-      "embedding_format": "jina",
-      "embedding_path": "/v1/embeddings",
+      "embeddings_format": "jina",
+      "embeddings_path": "/v1/embeddings",
       "rerank_format": "jina",
       "rerank_path": "/v1/rerank"
     },
@@ -46,8 +46,8 @@
       // page_size=100 returns the full list including rerank models.
       "models_path": "/v1/models?page_size=100",
       "logo": "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/cohere.svg",
-      "embedding_format": "cohere",
-      "embedding_path": "/v2/embed",
+      "embeddings_format": "cohere",
+      "embeddings_path": "/v2/embed",
       "rerank_format": "cohere",
       "rerank_path": "/v2/rerank"
     },
@@ -55,8 +55,8 @@
       "api_key": "${VOYAGE_API_KEY}",
       "base_url": "https://api.voyageai.com",
       "logo": "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/voyage.svg",
-      "embedding_format": "voyage",
-      "embedding_path": "/v1/embeddings",
+      "embeddings_format": "voyage",
+      "embeddings_path": "/v1/embeddings",
       "rerank_format": "voyage",
       "rerank_path": "/v1/rerank"
     }
@@ -91,10 +91,10 @@
     //   "strategy": "weighted_round_robin"
     // },
     // Embedding models
-    "text-embedding-3-small": { "provider": "openai_chat", "type": "embedding" },
-    "jina-embeddings-v3": { "provider": "jina", "type": "embedding" },
-    "embed-v4.0": { "provider": "cohere", "type": "embedding" },
-    "voyage-3-lite": { "provider": "voyage", "type": "embedding" },
+    "text-embedding-3-small": { "provider": "openai_chat", "type": "embeddings" },
+    "jina-embeddings-v3": { "provider": "jina", "type": "embeddings" },
+    "embed-v4.0": { "provider": "cohere", "type": "embeddings" },
+    "voyage-3-lite": { "provider": "voyage", "type": "embeddings" },
     // Rerank models
     "jina-reranker-v2-base-multilingual": { "provider": "jina", "type": "rerank" },
     "rerank-v3.5": { "provider": "cohere", "type": "rerank" },
