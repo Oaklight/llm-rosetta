@@ -269,3 +269,72 @@ class TestTheOrigin:
 
         assert native_record(metadata, origin=ORIGIN)["finish_reason"] == "OTHER"
         assert native_record(metadata, origin="chat_completions") == {}
+
+    def test_a_factless_write_leaves_a_foreign_record_alone(self):
+        """A write with nothing to say must not delete what another said."""
+        metadata = {
+            NATIVE_RESPONSE_KEY: {"origin": "chat_completions", "finish_reason": "X"}
+        }
+
+        written = record_native(metadata, origin=ORIGIN)
+
+        assert written == {}
+        assert metadata == {
+            NATIVE_RESPONSE_KEY: {"origin": "chat_completions", "finish_reason": "X"}
+        }
+
+    def test_a_write_leaves_a_foreign_legacy_key_alone(self):
+        """Only the legacy key this write folded is consumed."""
+        metadata = {
+            LEGACY_FINISH_REASON_KEY: {"base": "chat_completions", "reason": "X"}
+        }
+
+        record_native(metadata, origin=ORIGIN, finish_reason="OTHER")
+
+        assert metadata[LEGACY_FINISH_REASON_KEY] == {
+            "base": "chat_completions",
+            "reason": "X",
+        }
+        assert metadata[NATIVE_RESPONSE_KEY]["finish_reason"] == "OTHER"
+
+    def test_a_write_consumes_its_own_key_beside_a_foreign_one(self):
+        """The foreign key survives while the write's own key is consumed."""
+        metadata = {
+            LEGACY_FINISH_REASON_KEY: {"base": ORIGIN, "reason": "OTHER"},
+            LEGACY_PROMPT_FEEDBACK_KEY: {
+                "base": "chat_completions",
+                "prompt_feedback": {"blockReason": "X"},
+            },
+        }
+
+        record_native(metadata, origin=ORIGIN, finish_reason="LANGUAGE")
+
+        assert LEGACY_FINISH_REASON_KEY not in metadata
+        assert metadata[LEGACY_PROMPT_FEEDBACK_KEY]["base"] == "chat_completions"
+
+    def test_a_current_record_with_a_stale_base_is_still_ours(self):
+        """Ownership of the current key is asked by ``origin``, as the read is.
+
+        A value carrying both spellings must not be classified by ``base``:
+        ``native_record`` reads this key by ``origin``, so a write that judged
+        it by ``base`` would disagree with the read it was told to consume.
+        """
+        metadata = {NATIVE_RESPONSE_KEY: {"origin": ORIGIN, "base": "chat_completions"}}
+
+        record_native(metadata, origin=ORIGIN)
+
+        assert metadata == {}
+
+    def test_a_legacy_key_with_a_stray_origin_is_judged_by_base(self):
+        """A legacy key is read by ``base``, so only ``base`` may claim it."""
+        metadata = {
+            LEGACY_FINISH_REASON_KEY: {
+                "base": "chat_completions",
+                "origin": ORIGIN,
+                "reason": "X",
+            }
+        }
+
+        record_native(metadata, origin=ORIGIN, finish_reason="OTHER")
+
+        assert metadata[LEGACY_FINISH_REASON_KEY]["reason"] == "X"

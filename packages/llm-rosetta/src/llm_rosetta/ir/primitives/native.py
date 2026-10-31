@@ -30,12 +30,16 @@ into the new shape, field by field, so a value produced by an earlier release
 converts the same as one produced today.  A write consumes the legacy keys it
 folded — the dict leaves with one spelling, not two.
 
-One holder, one dialect: the key holds a single record, so a write by one
-dialect replaces a record another dialect left on the same dict, while
+One holder, one dialect: the key holds a single record.  A write that carries
+a fact replaces a record another dialect left on the same dict, while
 :func:`native_record` refuses to read that foreign record.  The asymmetry is
-deliberate and currently unreachable — a record is written by the reader that
-produced the turn, so a dict carries at most one dialect's — and a
-per-origin shape is a decision for P6, where the carriers are merged.
+deliberate — a record is written by the reader that produced the turn, so a
+dict carries at most one dialect's, and the write that carries the turn's word
+is the one that should own the key.  A write that carries no fact touches
+nothing it does not own: it neither removes a foreign record nor pops a legacy
+key another dialect wrote.  The read and the write agree about ownership; only
+a factful write's replacement of a foreign record is asymmetric, and that is
+the shape a per-origin record would revisit if a dict ever had to hold two.
 """
 
 from __future__ import annotations
@@ -100,14 +104,16 @@ def native_record(metadata: Any, *, origin: str) -> dict[str, Any]:
             folded["prompt_feedback"] = feedback
 
     # The current record wins a field it holds.  A field with no value is not
-    # held: a dict with ``finish_reason: None`` must not read as a word.
+    # held: a dict with ``finish_reason: None`` must not read as a word.  The
+    # legacy origin spelling is not a fact either — a ``base`` left beside an
+    # ``origin`` names whose record this is, which the key already says.
     record = metadata.get(NATIVE_RESPONSE_KEY)
     if isinstance(record, Mapping) and record.get("origin") == origin:
         folded.update(
             {
                 key: value
                 for key, value in record.items()
-                if key != "origin" and value is not None
+                if key not in ("origin", "base") and value is not None
             }
         )
 
@@ -157,10 +163,32 @@ def record_native(
         record["finish_reason"] = finish_reason
     if prompt_feedback is not None:
         record["prompt_feedback"] = dict(prompt_feedback)
-    metadata.pop(LEGACY_FINISH_REASON_KEY, None)
-    metadata.pop(LEGACY_PROMPT_FEEDBACK_KEY, None)
+    # Consume only the legacy keys this write folded.  A key carrying another
+    # dialect's ``base`` was not read (``native_record`` filters by origin),
+    # so removing it would destroy a word this write never saw.
+    if _wrote(metadata.get(LEGACY_FINISH_REASON_KEY), field="base", origin=origin):
+        metadata.pop(LEGACY_FINISH_REASON_KEY, None)
+    if _wrote(metadata.get(LEGACY_PROMPT_FEEDBACK_KEY), field="base", origin=origin):
+        metadata.pop(LEGACY_PROMPT_FEEDBACK_KEY, None)
     if len(record) == 1:  # the origin alone
-        metadata.pop(NATIVE_RESPONSE_KEY, None)
+        # A write with no fact must not erase a record it does not own; the
+        # same ownership rule, on the other side.  This key is read by
+        # ``origin`` and only by ``origin``, so that is the field to ask.
+        if _wrote(metadata.get(NATIVE_RESPONSE_KEY), field="origin", origin=origin):
+            metadata.pop(NATIVE_RESPONSE_KEY, None)
         return {}
     metadata[NATIVE_RESPONSE_KEY] = record
     return record
+
+
+def _wrote(value: Any, *, field: str, origin: str) -> bool:
+    """Whether *value* names *origin* in the spelling *field* its key uses.
+
+    Each key has one spelling — ``origin`` for the current record, ``base``
+    for a legacy one — so ownership is asked in the same field the read in
+    :func:`native_record` filters on.  A value that happens to carry both
+    spellings cannot be classified by the wrong one.
+    """
+    if not isinstance(value, Mapping):
+        return False
+    return value.get(field) == origin
