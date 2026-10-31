@@ -76,8 +76,8 @@ with calibrated probabilities.
 
 | Converter | API Standard | Module |
 |-----------|-------------|--------|
-| `systemone` | System One (Jev / TypeSafe) | `converters/decision/` |
-| `openai_decisions` | OpenAI Decisions API | `converters/decision/` |
+| `systemone` | System One (Jev / TypeSafe) | `converters/decisions/` |
+| `openai_decisions` | OpenAI Decisions API | `converters/decisions/` |
 
 IR question types: `assertion` (a proposition → P(true) ∈ [0,1]),
 `choice` (a categorical proposition), `score` (an ordinal proposition).
@@ -93,7 +93,7 @@ model type:
 
 | Model type | Formats | Module |
 |-----------|---------|--------|
-| `embeddings` | `openai`, `cohere`, `jina`, `voyage`, `google_generate`, `minimax` | `converters/embedding/` |
+| `embeddings` | `openai`, `cohere`, `jina`, `voyage`, `google_generate`, `minimax` | `converters/embeddings/` |
 | `rerank` | `jina`, `cohere`, `voyage` | `converters/rerank/` |
 
 They are reached through `EmbeddingConversionPipeline` /
@@ -183,9 +183,10 @@ packages/
 │       │   │   ├── messages/
 │       │   │   ├── google_generate/
 │       │   │   └── google_interactions/
-│       │   ├── embedding/
+│       │   ├── embeddings/
 │       │   ├── rerank/
-│       │   └── decision/            # Decision paradigm (TypeSafe System One)
+│       │   ├── decisions/           # Decision paradigm (TypeSafe System One)
+│       │   └── embedding/           # deprecated alias of embeddings/ (0.16.0)
 │       ├── shims/                   # Provider/model identity cards + transforms
 │       │   ├── provider_shim.py
 │       │   ├── auth_exchange.py     # shim-shipped credential exchange (auth.py)
@@ -477,7 +478,7 @@ must be completed before the work is considered done.  Use this as a
 gate — missing any item means the converter is not fully integrated.
 
 1. **Converter module** — `converters/llm/<format>/` (chat) or the
-   model-type package (embedding/rerank/decision), with `__init__.py`,
+   model-type package (embeddings/rerank/decisions), with `__init__.py`,
    `converter.py`, `content_ops.py`, `tool_ops.py`, `config_ops.py`,
    `message_ops.py`.  Converter class extends `BaseConverter` and
    implements all abstract hooks.

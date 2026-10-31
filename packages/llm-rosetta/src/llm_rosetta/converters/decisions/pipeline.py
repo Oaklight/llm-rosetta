@@ -2,7 +2,7 @@
 
 Lightweight pipeline that converts decision requests/responses between
 provider formats via IR, using the decision converter family.
-Mirrors :class:`~llm_rosetta.converters.embedding.pipeline.EmbeddingConversionPipeline`
+Mirrors :class:`~llm_rosetta.converters.embeddings.pipeline.EmbeddingConversionPipeline`
 and :class:`~llm_rosetta.converters.rerank.pipeline.RerankConversionPipeline`.
 
 Currently the ``systemone`` and ``openai_decisions`` native formats are
@@ -23,8 +23,8 @@ from typing import Any
 from llm_rosetta.converters.base.context import ConversionContext
 from llm_rosetta.converters.base.decision_converter import BaseDecisionConverter
 from llm_rosetta.converters.base.defaults import apply_ir_defaults
-from llm_rosetta.converters.decision.openai import OpenAIDecisionsConverter
-from llm_rosetta.converters.decision.systemone import SystemOneDecisionConverter
+from llm_rosetta.converters.decisions.openai import OpenAIDecisionsConverter
+from llm_rosetta.converters.decisions.systemone import SystemOneDecisionConverter
 
 __all__ = [
     "DECISION_FORMATS",

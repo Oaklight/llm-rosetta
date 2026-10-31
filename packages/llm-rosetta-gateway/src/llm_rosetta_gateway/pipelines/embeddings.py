@@ -24,7 +24,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from llm_rosetta_gateway._vendor.httpserver import Response
-from llm_rosetta.converters.embedding.pipeline import (
+from llm_rosetta.converters.embeddings.pipeline import (
     EmbeddingConversionPipeline,
     get_embedding_converter,
     response_usage,

@@ -5,7 +5,7 @@ from typing import Any
 import pytest
 
 from llm_rosetta.converters.base.context import ConversionContext
-from llm_rosetta.converters.decision.reranker import RerankerDecisionConverter
+from llm_rosetta.converters.decisions.reranker import RerankerDecisionConverter
 from llm_rosetta.types.ir.decision import (
     ChoiceQuestion,
     IRDecisionRequest,

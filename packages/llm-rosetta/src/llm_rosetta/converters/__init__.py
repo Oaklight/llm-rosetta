@@ -8,7 +8,7 @@ Provides converter implementations between various providers
 import warnings as _warnings
 
 from .base import BaseConverter, BaseEmbeddingConverter, BaseRerankConverter
-from .embedding import (
+from .embeddings import (
     CohereEmbeddingConverter,
     GoogleEmbeddingConverter,
     JinaEmbeddingConverter,
@@ -21,7 +21,7 @@ from .llm.google_generate import GoogleGenerateConverter
 from .llm.google_interactions import GoogleInteractionsConverter
 from .llm.messages import MessagesConverter
 from .llm.open_responses import OpenAIResponsesConverter, OpenResponsesConverter
-from .decision import (
+from .decisions import (
     EmbeddingDecisionConverter,
     LLMChatDecisionConverter,
     RerankerDecisionConverter,

@@ -4,7 +4,7 @@ from typing import Any, cast
 
 import pytest
 
-from llm_rosetta.converters.decision.score_ops import (
+from llm_rosetta.converters.decisions.score_ops import (
     build_context,
     get_option_texts,
     scores_to_answer,

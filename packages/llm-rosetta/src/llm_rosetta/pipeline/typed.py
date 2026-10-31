@@ -6,11 +6,11 @@ module only makes all four paradigms reachable as ``llm_rosetta.pipeline``.
 
 from __future__ import annotations
 
-from llm_rosetta.converters.decision.pipeline import (
+from llm_rosetta.converters.decisions.pipeline import (
     DecisionConversionPipeline,
     get_decision_converter,
 )
-from llm_rosetta.converters.embedding.pipeline import (
+from llm_rosetta.converters.embeddings.pipeline import (
     EmbeddingConversionPipeline,
     get_embedding_converter,
 )

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 
-from llm_rosetta.converters.embedding import (
+from llm_rosetta.converters.embeddings import (
     CohereEmbeddingConverter,
     GoogleEmbeddingConverter,
     JinaEmbeddingConverter,

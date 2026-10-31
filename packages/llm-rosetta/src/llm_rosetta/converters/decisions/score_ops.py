@@ -16,7 +16,7 @@ import json
 import math
 from typing import Any, cast
 
-from llm_rosetta.converters.decision.schema_ops import compute_confidence
+from llm_rosetta.converters.decisions.schema_ops import compute_confidence
 from llm_rosetta.types.ir.decision import (
     AssertionAnswer,
     ChoiceAnswer,

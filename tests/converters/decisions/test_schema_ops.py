@@ -4,7 +4,7 @@ from typing import Any, cast
 
 import pytest
 
-from llm_rosetta.converters.decision.schema_ops import (
+from llm_rosetta.converters.decisions.schema_ops import (
     build_decision_schema,
     build_system_prompt,
     compute_confidence,

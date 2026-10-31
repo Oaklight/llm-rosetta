@@ -12,7 +12,7 @@ logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/minima
 # The dialect is not OpenAI's: the input field is `texts`, the output field is
 # `vectors`, and a refusal is HTTP 200 with a non-zero `base_resp.status_code`
 # (an unknown model answers 2013 `invalid params`).  The converter owns
-# that envelope; see converters/embedding/minimax.py.
+# that envelope; see converters/embeddings/minimax.py.
 #
 # Domestic (China mainland): api.minimaxi.com; international: api.minimax.io
 connection:

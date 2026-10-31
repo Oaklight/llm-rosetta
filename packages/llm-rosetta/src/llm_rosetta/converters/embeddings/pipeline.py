@@ -17,12 +17,12 @@ from llm_rosetta.provider_names import canonical_provider_name
 from llm_rosetta.converters.base.context import ConversionContext
 from llm_rosetta.converters.base.defaults import apply_ir_defaults
 from llm_rosetta.converters.base.embedding_converter import BaseEmbeddingConverter
-from llm_rosetta.converters.embedding.cohere import CohereEmbeddingConverter
-from llm_rosetta.converters.embedding.google import GoogleEmbeddingConverter
-from llm_rosetta.converters.embedding.jina import JinaEmbeddingConverter
-from llm_rosetta.converters.embedding.minimax import MiniMaxEmbeddingConverter
-from llm_rosetta.converters.embedding.openai import OpenAIEmbeddingConverter
-from llm_rosetta.converters.embedding.voyage import VoyageEmbeddingConverter
+from llm_rosetta.converters.embeddings.cohere import CohereEmbeddingConverter
+from llm_rosetta.converters.embeddings.google import GoogleEmbeddingConverter
+from llm_rosetta.converters.embeddings.jina import JinaEmbeddingConverter
+from llm_rosetta.converters.embeddings.minimax import MiniMaxEmbeddingConverter
+from llm_rosetta.converters.embeddings.openai import OpenAIEmbeddingConverter
+from llm_rosetta.converters.embeddings.voyage import VoyageEmbeddingConverter
 
 __all__ = [
     "EMBEDDING_FORMATS",
