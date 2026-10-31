@@ -1,0 +1,14 @@
+name: volcengine--embedding
+model_type: embeddings
+format: openai
+logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/volcengine.svg
+
+# ARK's /embeddings speaks the OpenAI dialect.  Measured against
+# doubao-embedding-text-240715: a list input answers one vector per item,
+# data[].embedding is a float list, and encoding_format=base64 is honoured.
+# `dimensions` is accepted but ignored (the vector stays 2560), so the shim
+# declares no parameter defaults.
+connection:
+  base_url: https://ark.cn-beijing.volces.com/api/v3
+  api_key_env: ARK_API_KEY
+  default_path: /embeddings

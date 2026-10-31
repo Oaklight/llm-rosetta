@@ -118,7 +118,7 @@ declare the differences.
 | `AuthExchange` | `shims/auth_exchange.py` | Credential-exchange contract a shim ships in `auth.py` |
 | `QuotaProbe` | `shims/quota_probe.py` | Allowance-probe contract a shim ships in `quota.py` |
 | `Transform` primitives | `shims/transforms.py` | `strip_fields`, `rename_field`, `set_defaults` |
-| Built-in shims | `shims/providers/<vendor>/<type>/provider.yaml` | One shim per vendor/format pair, grouped by model type (34 built in) |
+| Built-in shims | `shims/providers/<vendor>/<type>/provider.yaml` | One shim per vendor/format pair, grouped by model type (38 built in) |
 | External shim sources | `llm_rosetta_gateway/shims/` | Directory/archive loaders, standalone catalog, scheduled removals |
 
 ### Gateway

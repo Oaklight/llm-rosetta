@@ -1,0 +1,13 @@
+name: openrouter--rerank
+model_type: rerank
+format: cohere
+logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/openrouter.svg
+
+# Measured against rerank-v3.5 (served by Cohere through OpenRouter): the
+# Cohere request and response shape, top_n and max_tokens_per_doc accepted.
+# return_documents is ignored — documents always come back — so the shim
+# declares no parameter defaults.
+connection:
+  base_url: https://openrouter.ai/api/v1
+  api_key_env: OPENROUTER_API_KEY
+  default_path: /rerank

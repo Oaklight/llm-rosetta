@@ -1,0 +1,13 @@
+name: zhipu--rerank
+model_type: rerank
+format: cohere
+logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/zhipu.svg
+
+# Measured against model `rerank`: the Cohere request shape
+# (model/query/documents, top_n, max_tokens_per_doc) and response shape
+# (results[].index/relevance_score, document as a plain string when
+# return_documents is set).  Both optional parameters are honoured.
+connection:
+  base_url: https://open.bigmodel.cn/api/paas/v4
+  api_key_env: ZHIPU_API_KEY
+  default_path: /rerank

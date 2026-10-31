@@ -1,0 +1,12 @@
+name: zhipu--embedding
+model_type: embeddings
+format: openai
+logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/zhipu.svg
+
+# Measured against embedding-3: a string or a list input answers one vector
+# per item, data[].embedding is a float list, and `dimensions` is honoured
+# (2048 -> 512).  No parameter default is needed.
+connection:
+  base_url: https://open.bigmodel.cn/api/paas/v4
+  api_key_env: ZHIPU_API_KEY
+  default_path: /embeddings

@@ -33,6 +33,31 @@ class TestUnifiedProviderEmbeddingRerank:
         assert cfg.embeddings_providers["openai"]["format"] == "openai"
         assert cfg.embeddings_providers["openai"]["embeddings_path"] == "/v1/embeddings"
 
+    def test_one_entry_serves_chat_and_embeddings_from_the_shims(self):
+        """A chat shim plus an embedding shim route both endpoints, one base_url."""
+        cfg = GatewayConfig(
+            {
+                "providers": {
+                    "ark": {
+                        "api_key": "k",
+                        "type": "volcengine--chat_completions",
+                        "embeddings_shim": "volcengine--embedding",
+                    }
+                },
+                "models": {
+                    "doubao-pro": {"provider": "ark"},
+                    "doubao-embed": {"providers": ["ark"], "type": "embeddings"},
+                },
+            }
+        )
+
+        assert cfg.provider_identities["ark"].format == "chat_completions"
+        assert cfg.embeddings_providers["ark"]["format"] == "openai"
+        assert cfg.embeddings_providers["ark"]["embeddings_path"] == "/embeddings"
+        info = cfg.embeddings_provider_infos["ark"]
+        assert info.base_url == "https://ark.cn-beijing.volces.com/api/v3"
+        assert cfg.resolve_embedding("doubao-embed").provider_name == "ark"
+
     def test_rerank_format_creates_rerank_provider(self):
         raw = _base_config()
         raw["providers"]["jina"] = {
