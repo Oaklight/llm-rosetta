@@ -11,9 +11,10 @@ the hand-written fixture.
 from __future__ import annotations
 
 import json
-from typing import Any, cast
+from typing import Any, cast, get_args
 
 from llm_rosetta.ir.primitives import expand_response
+from llm_rosetta.types.ir.parts import ContentPart
 
 
 def _expand(response: Any) -> list[dict[str, Any]]:
@@ -392,3 +393,73 @@ def test_a_stop_sequence_rides_the_finish_reason():
     finish = next(e for e in _expand(response) if e["type"] == "finish")
 
     assert finish["finish_reason"] == {"reason": "stop", "stop_sequence": "END"}
+
+
+#: The IR part types no event carries.  The primitive never claimed to carry
+#: them, so it loses nothing; what the split decides is which body writers may
+#: fold.  A writer that can emit one of these (Google's formats write image,
+#: file and audio parts) would lose it in a fold, which is why those writers
+#: are not folds.
+UNREPRESENTABLE_PART_TYPES = frozenset({"image", "file", "audio"})
+
+#: The part types :func:`expand_response` renders as events.
+REPRESENTABLE_PART_TYPES = frozenset(
+    {"text", "reasoning", "refusal", "citation", "tool_call", "tool_result"}
+)
+
+#: The events that frame a turn rather than carry a part of it.
+_ENVELOPE_EVENTS = frozenset({"stream_start", "stream_end", "usage", "finish"})
+
+
+def _declared_part_types() -> set[str]:
+    """Every ``type`` value the IR's ``ContentPart`` union declares."""
+    declared: set[str] = set()
+    for part in get_args(ContentPart):
+        # ``Required[Literal["text"]]`` on every part today, but a bare
+        # ``Literal`` is legal TypedDict too, so unwrap until nothing is left.
+        annotation: Any = part.__annotations__["type"]
+        while args := get_args(annotation):
+            annotation = args[0]
+        declared.add(annotation)
+    return declared
+
+
+def test_every_declared_part_type_is_classified():
+    """A new IR part type must be a decision: given an event, or not.
+
+    The classified set is what a body writer may fold over.  A part type
+    outside it is one a fold would drop, so adding a part type to the IR fails
+    here until someone decides which side it is on.  That the primitive really
+    emits nothing for the unrepresentable ones is
+    ``test_an_unrepresentable_part_adds_no_block``; that a fold would then lose
+    them is why the four body writers that write them are not folds.
+    """
+    declared = _declared_part_types()
+
+    assert declared == REPRESENTABLE_PART_TYPES | UNREPRESENTABLE_PART_TYPES
+
+
+def test_an_unrepresentable_part_adds_no_block():
+    """An image, file or audio part contributes no content event.
+
+    The parts use the fields the IR declares (``image_url``, ``file_url``,
+    ``url``), not a flat spelling: a body writer reads those fields, so the
+    witness has to be a part a writer would really accept.  Only the content
+    events are asserted — a change to the usage or finish event is not this
+    test's subject, and failing on one would misname the regression.
+    """
+    for part in (
+        {"type": "image", "image_url": "https://example.test/a.png"},
+        {
+            "type": "file",
+            "file_url": "https://example.test/a.pdf",
+            "file_type": "application/pdf",
+        },
+        {"type": "audio", "url": "https://example.test/a.wav"},
+    ):
+        content = [
+            event
+            for event in _expand(_response([part]))
+            if event["type"] not in _ENVELOPE_EVENTS
+        ]
+        assert content == [], part
