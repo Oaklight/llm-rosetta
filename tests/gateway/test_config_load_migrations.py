@@ -12,7 +12,7 @@ rerank and embedding pools beside ``providers``:
     providers      ['alcf']          providers      ['alcf', 'emb', 'jina']
     rerank_providers    ['jina']     rerank_providers    ['jina']
     embedding_providers ['emb']      embedding_providers ['emb']
-    config_version on disk: 0        config_version on disk: 1
+    config_version on disk: 0        config_version on disk: 2
 
 ``GatewayConfig`` re-parses both legacy pool sections itself, so rerank and
 embedding routing worked either way and nothing was unroutable; this file's
@@ -38,6 +38,7 @@ import pytest
 
 from llm_rosetta_gateway import config as config_module
 from llm_rosetta_gateway.maintenance import config as config_maintenance
+from llm_rosetta_gateway.maintenance.migrations import CURRENT_VERSION
 from llm_rosetta_gateway.cli import _load_startup_config
 from llm_rosetta_gateway.config import (
     GatewayConfig,
@@ -96,7 +97,7 @@ class TestThePublicReader:
         load_config(str(path))
 
         written = json.loads(path.read_text())
-        assert written["config_version"] == 1
+        assert written["config_version"] == CURRENT_VERSION
         assert "rerank_providers" not in written
         assert (tmp_path / "gateway.jsonc.pre-migration.bak").exists(), (
             "the operator's original is kept, as on the admin path"
@@ -202,7 +203,7 @@ class TestTheParsePath:
         text = (
             "{\n"
             "  // the ledger this document carries\n"
-            '  "config_version": 1,\n'
+            '  "config_version": 2,\n'
             '  "providers": {"alcf": {"type": "chat_completions"}},\n'
             "}\n"
         )
@@ -244,7 +245,7 @@ class TestTheStartPath:
         )
         assert config.resolve_rerank("rerank-v1").provider_name == "jina"
         assert report is None, "no shims section, so nothing to report"
-        assert json.loads(path.read_text())["config_version"] == 1
+        assert json.loads(path.read_text())["config_version"] == CURRENT_VERSION
 
     def test_the_config_carries_the_registry_the_load_ran(self, tmp_path):
         """So the admin surface lists the load-time set for a served config."""

@@ -83,11 +83,11 @@ def _embedding_config() -> GatewayConfig:
                 "emb": {
                     "api_key": "k",
                     "base_url": "https://emb.invalid",
-                    "embedding_format": "openai",
+                    "embeddings_format": "openai",
                 }
             },
             "models": {
-                "my-embed": {"provider": "emb", "type": "embedding"},
+                "my-embed": {"provider": "emb", "type": "embeddings"},
             },
         }
     )
@@ -150,7 +150,7 @@ class TestTheEmbeddingHandler:
         assert response.status_code == 200
 
         row = await _the_row(pm)
-        assert row["model_type"] == "embedding"
+        assert row["model_type"] == "embeddings"
         assert row["model"] == "my-embed"
         assert row["status_code"] == 200
         assert row["is_stream"] is False
@@ -296,6 +296,7 @@ class TestTheDailyTable:
     async def test_a_day_is_every_type_summed_and_also_split_by_type(self, pm):
         await pm.insert_log_entries(
             [
+                # The pre-rename spelling; the writer canonicalises it.
                 self._row("a", 30, "embedding"),
                 self._row("b", 20, "embedding"),
                 self._row("c", 5, "rerank"),
@@ -311,7 +312,7 @@ class TestTheDailyTable:
         assert day["total_tokens"] == 62
         assert {
             name: split["total_tokens"] for name, split in day["by_model_type"].items()
-        } == {"embedding": 50, "rerank": 5, "llm": 7}
+        } == {"embeddings": 50, "rerank": 5, "llm": 7}
         # The split is the day's own counters divided, not a peer reading of
         # them: every counter has to add up to what the dashboard is shown.
         for counter, value in day.items():
@@ -321,7 +322,7 @@ class TestTheDailyTable:
                 sum(split[counter] for split in day["by_model_type"].values()) == value
             ), counter
         assert table["totals"]["total_tokens"] == 62
-        assert table["totals"]["by_model_type"]["embedding"]["total_tokens"] == 50
+        assert table["totals"]["by_model_type"]["embeddings"]["total_tokens"] == 50
 
     async def test_the_type_filter_narrows_the_whole_table(self, pm):
         await pm.insert_log_entries(
@@ -332,13 +333,13 @@ class TestTheDailyTable:
             ]
         )
 
-        table = await pm.query_token_usage_by_day(days=7, model_type="embedding")
+        table = await pm.query_token_usage_by_day(days=7, model_type="embeddings")
         (day,) = table["days"]
         assert day["request_count"] == 2
         assert day["total_tokens"] == 50
-        assert set(day["by_model_type"]) == {"embedding"}
+        assert set(day["by_model_type"]) == {"embeddings"}
         assert table["totals"]["total_tokens"] == 50
-        assert table["totals"]["by_model_type"]["embedding"]["request_count"] == 2
+        assert table["totals"]["by_model_type"]["embeddings"]["request_count"] == 2
 
     async def test_an_empty_table_keeps_its_shape(self, pm):
         """The dashboard reads these keys with no traffic at all."""

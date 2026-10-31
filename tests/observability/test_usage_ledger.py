@@ -90,11 +90,11 @@ class TestRecording:
         ledger.record(
             {"prompt_tokens": 1},
             model="text-embedding-3-small",
-            model_type="embedding",
+            model_type="embeddings",
         )
         (record,) = ledger.records()
         assert record.model == "text-embedding-3-small"
-        assert record.model_type == "embedding"
+        assert record.model_type == "embeddings"
 
     def test_the_model_type_defaults_to_llm(self):
         ledger = UsageLedger()

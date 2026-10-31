@@ -132,7 +132,7 @@ def typed_source(tmp_path: Path) -> Path:
     embedding.mkdir(parents=True)
     (embedding / "provider.yaml").write_text(
         "name: demo--embedding\n"
-        "model_type: embedding\n"
+        "model_type: embeddings\n"
         "format: openai\n"
         "connection:\n"
         "  base_url: https://demo.example/v1\n",
@@ -151,7 +151,7 @@ async def test_the_inventory_reads_a_type_level_source(tmp_path, typed_source):
 
     assert embedding is not None
     assert embedding["origin"] == "path"
-    assert embedding["model_type"] == "embedding"
+    assert embedding["model_type"] == "embeddings"
     assert embedding["editable"] is True and embedding["deletable"] is True
 
 
@@ -170,7 +170,7 @@ async def test_editing_a_type_level_shim_writes_it_back(
     monkeypatch.setattr(shim_files, "_rebuild_shims", _rebuild)
     edited = (
         "name: demo--embedding\n"
-        "model_type: embedding\n"
+        "model_type: embeddings\n"
         "format: openai\n"
         "display_name: Edited\n"
         "connection:\n"

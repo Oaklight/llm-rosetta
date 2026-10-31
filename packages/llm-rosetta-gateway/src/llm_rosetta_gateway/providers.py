@@ -112,7 +112,7 @@ def default_models_path(provider_type: str) -> str:
     from llm_rosetta.formats import BY_PAIR
 
     fmt = canonical_provider_name(provider_type)
-    for model_type in ("llm", "embedding"):
+    for model_type in ("llm", "embeddings"):
         spec = BY_PAIR.get((model_type, fmt))
         if spec is not None and spec.models_path:
             return spec.models_path

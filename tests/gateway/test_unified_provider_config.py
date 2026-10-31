@@ -24,14 +24,14 @@ def _base_config(**overrides):
 class TestUnifiedProviderEmbeddingRerank:
     """Providers can declare embedding/rerank capabilities via unified fields."""
 
-    def test_embedding_format_creates_embedding_provider(self):
+    def test_embeddings_format_creates_embedding_provider(self):
         raw = _base_config()
-        raw["providers"]["openai"]["embedding_format"] = "openai"
-        raw["providers"]["openai"]["embedding_path"] = "/v1/embeddings"
+        raw["providers"]["openai"]["embeddings_format"] = "openai"
+        raw["providers"]["openai"]["embeddings_path"] = "/v1/embeddings"
         cfg = GatewayConfig(raw)
-        assert "openai" in cfg.embedding_providers
-        assert cfg.embedding_providers["openai"]["format"] == "openai"
-        assert cfg.embedding_providers["openai"]["embedding_path"] == "/v1/embeddings"
+        assert "openai" in cfg.embeddings_providers
+        assert cfg.embeddings_providers["openai"]["format"] == "openai"
+        assert cfg.embeddings_providers["openai"]["embeddings_path"] == "/v1/embeddings"
 
     def test_rerank_format_creates_rerank_provider(self):
         raw = _base_config()
@@ -48,18 +48,18 @@ class TestUnifiedProviderEmbeddingRerank:
 
     def test_default_paths(self):
         raw = _base_config()
-        raw["providers"]["openai"]["embedding_format"] = "openai"
+        raw["providers"]["openai"]["embeddings_format"] = "openai"
         raw["providers"]["openai"]["rerank_format"] = "jina"
         cfg = GatewayConfig(raw)
-        assert cfg.embedding_providers["openai"]["embedding_path"] == "/v1/embeddings"
+        assert cfg.embeddings_providers["openai"]["embeddings_path"] == "/v1/embeddings"
         assert cfg.rerank_providers["openai"]["rerank_path"] == "/v1/rerank"
 
     def test_provider_info_constructed(self):
         raw = _base_config()
-        raw["providers"]["openai"]["embedding_format"] = "openai"
+        raw["providers"]["openai"]["embeddings_format"] = "openai"
         cfg = GatewayConfig(raw)
-        pinfo = cfg.embedding_provider_infos["openai"]
-        assert pinfo.name == "embedding:openai"
+        pinfo = cfg.embeddings_provider_infos["openai"]
+        assert pinfo.name == "embeddings:openai"
         assert "api.openai.com" in pinfo.base_url
 
     def test_rerank_provider_info_constructed(self):
@@ -122,20 +122,20 @@ class TestLegacyBackwardCompat:
         assert "jina" in cfg.rerank_providers
         assert "jina-reranker" in cfg.rerank_models
 
-    def test_legacy_embedding_providers(self):
+    def test_legacy_embeddings_providers(self):
         raw = _base_config(
-            embedding_providers={
+            embeddings_providers={
                 "embed-prov": {
                     "api_key": "e-test",
                     "base_url": "https://embed.example.com",
                     "format": "openai",
                 }
             },
-            embedding_models={"text-embed": "embed-prov"},
+            embeddings_models={"text-embed": "embed-prov"},
         )
         cfg = GatewayConfig(raw)
-        assert "embed-prov" in cfg.embedding_providers
-        assert "text-embed" in cfg.embedding_models
+        assert "embed-prov" in cfg.embeddings_providers
+        assert "text-embed" in cfg.embeddings_models
 
     def test_legacy_decision_providers(self):
         raw = _base_config(
@@ -237,13 +237,13 @@ class TestModelTypeField:
 
     def test_embedding_model_moved_to_pool(self):
         raw = _base_config()
-        raw["providers"]["openai"]["embedding_format"] = "openai"
+        raw["providers"]["openai"]["embeddings_format"] = "openai"
         raw["models"]["text-embed-3"] = {
             "provider": "openai",
-            "type": "embedding",
+            "type": "embeddings",
         }
         cfg = GatewayConfig(raw)
-        assert "text-embed-3" in cfg.embedding_models
+        assert "text-embed-3" in cfg.embeddings_models
         assert "text-embed-3" not in cfg.models
 
     def test_rerank_model_moved_to_pool(self):
@@ -271,7 +271,7 @@ class TestModelTypeField:
         }
         cfg = GatewayConfig(raw)
         assert "gpt-4o" in cfg.models
-        assert "gpt-4o" not in cfg.embedding_models
+        assert "gpt-4o" not in cfg.embeddings_models
         assert "gpt-4o" not in cfg.rerank_models
 
     def test_default_type_is_llm(self):
@@ -281,11 +281,11 @@ class TestModelTypeField:
 
     def test_resolve_embedding_via_type(self):
         raw = _base_config()
-        raw["providers"]["openai"]["embedding_format"] = "openai"
-        raw["providers"]["openai"]["embedding_path"] = "/v1/embeddings"
+        raw["providers"]["openai"]["embeddings_format"] = "openai"
+        raw["providers"]["openai"]["embeddings_path"] = "/v1/embeddings"
         raw["models"]["text-embed-3"] = {
             "provider": "openai",
-            "type": "embedding",
+            "type": "embeddings",
         }
         cfg = GatewayConfig(raw)
         route = cfg.resolve_embedding("text-embed-3")
@@ -314,14 +314,14 @@ class TestModelTypeField:
 
     def test_disabled_model_not_distributed(self):
         raw = _base_config()
-        raw["providers"]["openai"]["embedding_format"] = "openai"
+        raw["providers"]["openai"]["embeddings_format"] = "openai"
         raw["models"]["text-embed-disabled"] = {
             "provider": "openai",
-            "type": "embedding",
+            "type": "embeddings",
             "enabled": False,
         }
         cfg = GatewayConfig(raw)
-        assert "text-embed-disabled" not in cfg.embedding_models
+        assert "text-embed-disabled" not in cfg.embeddings_models
         assert "text-embed-disabled" not in cfg.models
 
 
@@ -334,22 +334,22 @@ class TestMultiCapProvider:
             "api_key": "co-test",
             "base_url": "https://api.cohere.com",
             "type": "openai",
-            "embedding_format": "cohere",
-            "embedding_path": "/v2/embed",
+            "embeddings_format": "cohere",
+            "embeddings_path": "/v2/embed",
             "rerank_format": "cohere",
             "rerank_path": "/v2/rerank",
         }
         raw["models"].update(
             {
                 "command-r": {"provider": "cohere", "capabilities": ["text", "tools"]},
-                "embed-v4": {"provider": "cohere", "type": "embedding"},
+                "embed-v4": {"provider": "cohere", "type": "embeddings"},
                 "rerank-v3": {"provider": "cohere", "type": "rerank"},
             }
         )
         cfg = GatewayConfig(raw)
         assert "command-r" in cfg.models
-        assert "embed-v4" in cfg.embedding_models
+        assert "embed-v4" in cfg.embeddings_models
         assert "rerank-v3" in cfg.rerank_models
         assert "cohere" in cfg.providers
-        assert "cohere" in cfg.embedding_providers
+        assert "cohere" in cfg.embeddings_providers
         assert "cohere" in cfg.rerank_providers

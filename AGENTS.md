@@ -86,11 +86,13 @@ IR question types: `assertion` (a proposition → P(true) ∈ [0,1]),
 
 Embedding and rerank each have one converter per wire dialect, all under one
 module per family (their dialects differ in parameters, not in message
-structure):
+structure).  The model-type vocabulary is `llm`, `embeddings`, `rerank`,
+`decision`; the category follows its endpoint's spelling, and `embedding` is
+accepted as a deprecated alias at every boundary that reads a model type:
 
 | Model type | Formats | Module |
 |-----------|---------|--------|
-| `embedding` | `openai`, `cohere`, `jina`, `voyage`, `google_generate` | `converters/embedding/` |
+| `embeddings` | `openai`, `cohere`, `jina`, `voyage`, `google_generate` | `converters/embedding/` |
 | `rerank` | `jina`, `cohere`, `voyage` | `converters/rerank/` |
 
 They are reached through `EmbeddingConversionPipeline` /
@@ -494,7 +496,7 @@ gate — missing any item means the converter is not fully integrated.
    import-time check refuses a catalog entry with no converter binding.
    Add the name to the `ProviderType` literal in `auto_detect.py`.
 5. **Provider shim** — create `shims/providers/<vendor>/llm/<format>/provider.yaml`
-   (chat) or `shims/providers/<vendor>/<type>/provider.yaml` (embedding, rerank,
+   (chat) or `shims/providers/<vendor>/<type>/provider.yaml` (embeddings, rerank,
    decision) with `model_type: <type>` and `format: <format>`.  The loader
    validates the `(model_type, format)` pair against the converter registry and
    the directory name against `model_type`; `base:` is the deprecated alias for

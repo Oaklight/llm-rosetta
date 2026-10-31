@@ -5,13 +5,13 @@ model type (e.g. "decision") requires defining one descriptor plus a
 pipeline function — no changes needed in ``app.py``, ``config.py``, or
 admin routes.
 
-Built-in types registered at import time: ``llm``, ``embedding``, ``rerank``.
+Built-in types registered at import time: ``llm``, ``embeddings``, ``rerank``.
 
 LLM is special: it uses the full converter pipeline via ``_proxy_handler``
 in ``app.py``, so its ``pipeline`` is ``None``.  Its routes are still the
 descriptor's: ``app.py`` walks :attr:`ModelTypeDescriptor.routes` and picks a
 handler by ``source_format``, so the chat path list exists only here.
-Non-LLM types (embedding, rerank) point to their dedicated pipeline-handler
+Non-LLM types (embeddings, rerank) point to their dedicated pipeline-handler
 callables.
 
 Every descriptor takes its format list from the format catalog
@@ -50,7 +50,7 @@ class ModelTypeDescriptor:
     """Declarative description of a model type.
 
     Attributes:
-        name: Canonical type name (``"llm"``, ``"embedding"``, ``"rerank"``).
+        name: Canonical type name (``"llm"``, ``"embeddings"``, ``"rerank"``).
         routes: HTTP routes this type responds on.
         formats: Provider API format strings this type supports.  For the
             non-LLM types this is the converter registry's own key set.
@@ -62,11 +62,11 @@ class ModelTypeDescriptor:
         supports_streaming: Whether streaming is relevant for this type.
         badge_class: CSS class for the admin UI badge.
         config_format_key: Provider config key for the type's format
-            (e.g. ``"embedding_format"``).  Used by config resolution.
+            (e.g. ``"embeddings_format"``).  Used by config resolution.
         config_path_key: Provider config key for the type's endpoint path
-            (e.g. ``"embedding_path"``).  Used by config resolution.
+            (e.g. ``"embeddings_path"``).  Used by config resolution.
         config_shim_key: Provider config key naming a shim of this type
-            (e.g. ``"embedding_shim"``), whose connection defaults and
+            (e.g. ``"embeddings_shim"``), whose connection defaults and
             format fill what the entry leaves out.  ``None`` for LLM, whose
             identity is the ``shim``/``type`` key itself.
         default_format: Source format used when detection cannot decide.
@@ -135,8 +135,15 @@ def register_model_type(descriptor: ModelTypeDescriptor) -> None:
 
 
 def get_model_type(name: str) -> ModelTypeDescriptor | None:
-    """Return the descriptor for *name*, or ``None`` if not registered."""
-    return MODEL_TYPE_REGISTRY.get(name)
+    """Return the descriptor for *name*, or ``None`` if not registered.
+
+    The legacy ``embedding`` spelling resolves to ``embeddings`` so a config
+    or a request written before the rename keeps working without every caller
+    restating the alias.
+    """
+    from llm_rosetta.formats import canonical_model_type
+
+    return MODEL_TYPE_REGISTRY.get(canonical_model_type(name))
 
 
 def all_model_types() -> list[ModelTypeDescriptor]:
@@ -251,20 +258,20 @@ def _register_builtins() -> None:
     # --- Embedding ---
     register_model_type(
         ModelTypeDescriptor(
-            name="embedding",
+            name="embeddings",
             routes=[
                 RouteSpec("/v1/embeddings"),
             ],
-            formats=formats_of("embedding"),
+            formats=formats_of("embeddings"),
             pipeline=_embedding_pipeline,
             supports_streaming=False,
             badge_class="cap-badge-embedding",
-            config_format_key="embedding_format",
-            config_path_key="embedding_path",
-            config_shim_key="embedding_shim",
+            config_format_key="embeddings_format",
+            config_path_key="embeddings_path",
+            config_shim_key="embeddings_shim",
             default_format="openai",
             default_path="/v1/embeddings",
-            default_paths=_default_paths("embedding"),
+            default_paths=_default_paths("embeddings"),
             detect_source_format=detect_embedding_source,
             icon_svg=(
                 '<svg viewBox="0 0 16 16" fill="currentColor">'

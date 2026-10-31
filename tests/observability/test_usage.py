@@ -246,7 +246,7 @@ class TestTheModelTypesAreTheRegistrys:
     """
 
     def test_the_canonical_names(self):
-        assert MODEL_TYPES == ("llm", "embedding", "rerank", "decision")
+        assert MODEL_TYPES == ("llm", "embeddings", "rerank", "decision")
         assert DEFAULT_MODEL_TYPE == "llm"
 
     def test_the_registry_registers_exactly_these(self):
@@ -482,7 +482,7 @@ class TestTheReportBreaksDownByModelType:
         report = UsageReport.build(
             groups=[
                 _group("b1", "k", model_type="llm", total_tokens=100),
-                _group("b1", "k", model_type="embedding", total_tokens=10),
+                _group("b1", "k", model_type="embeddings", total_tokens=10),
                 _group("b1", "k", model_type="rerank", total_tokens=5),
                 _group("b1", "k", model_type="decision", total_tokens=1),
             ],

@@ -17,12 +17,12 @@ SHIM_NAME = "acme--embedding"
 
 
 @pytest.fixture()
-def embedding_shim():
+def embeddings_shim():
     """A registered embedding shim with its own path and connection defaults."""
     shim = ProviderShim(
         name=SHIM_NAME,
         format="openai",
-        model_type="embedding",
+        model_type="embeddings",
         connection=ConnectionConfig(
             base_url="https://embed.acme.test",
             api_key_env="ACME_EMBED_KEY",
@@ -48,34 +48,34 @@ class TestProviderIdentities:
         # provider_types keeps meaning the format for existing consumers.
         assert cfg.provider_types["openai"] == "chat_completions"
 
-    def test_embedding_only_provider_takes_the_shim_identity(self, embedding_shim):
+    def test_embedding_only_provider_takes_the_shim_identity(self, embeddings_shim):
         cfg = GatewayConfig(
             {
-                "providers": {"acme": {"embedding_shim": SHIM_NAME}},
+                "providers": {"acme": {"embeddings_shim": SHIM_NAME}},
                 "models": {},
             }
         )
         assert cfg.provider_identities["acme"] == ProviderIdentity(
-            model_type="embedding", format="openai"
+            model_type="embeddings", format="openai"
         )
 
-    def test_chat_identity_is_not_overridden_by_an_endpoint_shim(self, embedding_shim):
+    def test_chat_identity_is_not_overridden_by_an_endpoint_shim(self, embeddings_shim):
         cfg = GatewayConfig(
             {
-                "providers": {"acme": {"type": "openai", "embedding_shim": SHIM_NAME}},
+                "providers": {"acme": {"type": "openai", "embeddings_shim": SHIM_NAME}},
                 "models": {"m": "acme"},
             }
         )
         assert cfg.provider_identities["acme"].model_type == "llm"
         # The endpoint still resolves through the shim.
-        assert cfg.embedding_providers["acme"]["format"] == "openai"
+        assert cfg.embeddings_providers["acme"]["format"] == "openai"
 
     @pytest.mark.parametrize(
         ("fmt", "expected"),
         [
-            ("cohere", "embedding"),
-            ("jina", "embedding"),
-            ("voyage", "embedding"),
+            ("cohere", "embeddings"),
+            ("jina", "embeddings"),
+            ("voyage", "embeddings"),
             ("systemone", "decision"),
         ],
     )
@@ -99,7 +99,7 @@ class TestProviderIdentities:
     @pytest.mark.parametrize(
         ("endpoint_key", "format_name", "expected_type"),
         [
-            ("embedding_format", "openai", "embedding"),
+            ("embeddings_format", "openai", "embeddings"),
             ("rerank_format", "jina", "rerank"),
             ("decision_format", "openai_decisions", "decision"),
         ],
@@ -176,14 +176,14 @@ class TestProviderIdentities:
                 }
             )
 
-    def test_provider_named_after_a_chat_shim_keeps_its_identity(self, embedding_shim):
+    def test_provider_named_after_a_chat_shim_keeps_its_identity(self, embeddings_shim):
         from llm_rosetta.shims.providers import load_providers
 
         load_providers()
         cfg = GatewayConfig(
             {
                 "providers": {
-                    "openai--chat_completions": {"embedding_shim": SHIM_NAME}
+                    "openai--chat_completions": {"embeddings_shim": SHIM_NAME}
                 },
                 "models": {},
             }
@@ -194,53 +194,55 @@ class TestProviderIdentities:
 
 
 class TestEndpointResolution:
-    def test_embedding_shim_supplies_format_path_and_connection(
-        self, embedding_shim, monkeypatch
+    def test_embeddings_shim_supplies_format_path_and_connection(
+        self, embeddings_shim, monkeypatch
     ):
         monkeypatch.setenv("ACME_EMBED_KEY", "secret")
         cfg = GatewayConfig(
             {
-                "providers": {"acme": {"embedding_shim": SHIM_NAME}},
+                "providers": {"acme": {"embeddings_shim": SHIM_NAME}},
                 "models": {},
             }
         )
-        assert cfg.embedding_providers["acme"]["format"] == "openai"
-        assert cfg.embedding_providers["acme"]["embedding_path"] == "/shim/embeddings"
-        info = cfg.embedding_provider_infos["acme"]
+        assert cfg.embeddings_providers["acme"]["format"] == "openai"
+        assert cfg.embeddings_providers["acme"]["embeddings_path"] == "/shim/embeddings"
+        info = cfg.embeddings_provider_infos["acme"]
         assert info.base_url == "https://embed.acme.test"
         assert info.auth_headers() == {"Authorization": "Bearer secret"}
         assert info.upstream_url("m") == "https://embed.acme.test/shim/embeddings"
 
-    def test_explicit_path_beats_the_shim_path(self, embedding_shim):
+    def test_explicit_path_beats_the_shim_path(self, embeddings_shim):
         cfg = GatewayConfig(
             {
                 "providers": {
                     "acme": {
-                        "embedding_shim": SHIM_NAME,
-                        "embedding_path": "/custom/embeddings",
+                        "embeddings_shim": SHIM_NAME,
+                        "embeddings_path": "/custom/embeddings",
                     }
                 },
                 "models": {},
             }
         )
-        assert cfg.embedding_providers["acme"]["embedding_path"] == "/custom/embeddings"
+        assert (
+            cfg.embeddings_providers["acme"]["embeddings_path"] == "/custom/embeddings"
+        )
 
-    def test_shim_path_is_not_used_for_a_different_format(self, embedding_shim):
+    def test_shim_path_is_not_used_for_a_different_format(self, embeddings_shim):
         cfg = GatewayConfig(
             {
                 "providers": {
                     "acme": {
-                        "embedding_shim": SHIM_NAME,
-                        "embedding_format": "cohere",
+                        "embeddings_shim": SHIM_NAME,
+                        "embeddings_format": "cohere",
                     }
                 },
                 "models": {},
             }
         )
-        assert cfg.embedding_providers["acme"]["format"] == "cohere"
+        assert cfg.embeddings_providers["acme"]["format"] == "cohere"
         # The shim's path belongs to its own format, so the effective format's
         # own default applies instead.
-        assert cfg.embedding_providers["acme"]["embedding_path"] == "/v2/embed"
+        assert cfg.embeddings_providers["acme"]["embeddings_path"] == "/v2/embed"
 
     def test_explicit_format_is_canonicalised(self):
         cfg = GatewayConfig(
@@ -249,37 +251,37 @@ class TestEndpointResolution:
                     "acme": {
                         "base_url": "https://acme.test",
                         "api_key": "k",
-                        "embedding_format": "google",
+                        "embeddings_format": "google",
                     }
                 },
                 "models": {},
             }
         )
-        assert cfg.embedding_providers["acme"]["format"] == "google_generate"
+        assert cfg.embeddings_providers["acme"]["format"] == "google_generate"
         # Google's path shape is per-format, not the embedding default.
         assert (
-            cfg.embedding_providers["acme"]["embedding_path"]
+            cfg.embeddings_providers["acme"]["embeddings_path"]
             == "/v1beta/models/{model}:embedContent"
         )
-        info = cfg.embedding_provider_infos["acme"]
+        info = cfg.embeddings_provider_infos["acme"]
         assert info.auth_headers() == {"x-goog-api-key": "k"}
 
     def test_legacy_google_embedding_uses_the_format_default_path(self):
         cfg = GatewayConfig(
             {
                 "providers": {},
-                "embedding_providers": {
+                "embeddings_providers": {
                     "g": {
                         "base_url": "https://generativelanguage.googleapis.com",
                         "api_key": "k",
                         "format": "google_generate",
                     }
                 },
-                "embedding_models": {"m": "g"},
+                "embeddings_models": {"m": "g"},
             }
         )
         assert (
-            cfg.embedding_providers["g"]["embedding_path"]
+            cfg.embeddings_providers["g"]["embeddings_path"]
             == "/v1beta/models/{model}:embedContent"
         )
 
@@ -291,43 +293,43 @@ class TestEndpointResolution:
             GatewayConfig(
                 {
                     "providers": {
-                        "acme": {"embedding_shim": "deepseek--chat_completions"}
+                        "acme": {"embeddings_shim": "deepseek--chat_completions"}
                     },
                     "models": {},
                 }
             )
 
     def test_unknown_endpoint_shim_is_rejected(self):
-        with pytest.raises(ValueError, match="embedding_shim names unknown shim"):
+        with pytest.raises(ValueError, match="embeddings_shim names unknown shim"):
             GatewayConfig(
                 {
-                    "providers": {"acme": {"embedding_shim": "nope"}},
+                    "providers": {"acme": {"embeddings_shim": "nope"}},
                     "models": {},
                 }
             )
 
 
 class TestValidation:
-    def test_llm_model_cannot_route_to_an_embedding_provider(self, embedding_shim):
+    def test_llm_model_cannot_route_to_an_embedding_provider(self, embeddings_shim):
         with pytest.raises(
             ValueError,
             match="model 'gpt-4' is an LLM model but provider 'acme' serves embedding",
         ):
             GatewayConfig(
                 {
-                    "providers": {"acme": {"embedding_shim": SHIM_NAME}},
+                    "providers": {"acme": {"embeddings_shim": SHIM_NAME}},
                     "models": {"gpt-4": "acme"},
                 }
             )
 
-    def test_typed_embedding_model_is_accepted(self, embedding_shim):
+    def test_typed_embedding_model_is_accepted(self, embeddings_shim):
         cfg = GatewayConfig(
             {
-                "providers": {"acme": {"embedding_shim": SHIM_NAME}},
-                "models": {"e": {"provider": "acme", "type": "embedding"}},
+                "providers": {"acme": {"embeddings_shim": SHIM_NAME}},
+                "models": {"e": {"provider": "acme", "type": "embeddings"}},
             }
         )
-        assert cfg.embedding_models["e"] == "acme"
+        assert cfg.embeddings_models["e"] == "acme"
 
 
 class TestBuiltinEndpointShims:
@@ -344,38 +346,38 @@ class TestBuiltinEndpointShims:
         [
             (
                 "openai--embedding",
-                "embedding",
+                "embeddings",
                 "openai",
                 "https://api.openai.com/v1/embeddings",
             ),
             (
                 "cohere--embedding",
-                "embedding",
+                "embeddings",
                 "cohere",
                 "https://api.cohere.com/v2/embed",
             ),
             (
                 "jina--embedding",
-                "embedding",
+                "embeddings",
                 "jina",
                 "https://api.jina.ai/v1/embeddings",
             ),
             (
                 "voyage--embedding",
-                "embedding",
+                "embeddings",
                 "voyage",
                 "https://api.voyageai.com/v1/embeddings",
             ),
             (
                 "google--embedding",
-                "embedding",
+                "embeddings",
                 "google_generate",
                 "https://generativelanguage.googleapis.com"
                 "/v1beta/models/m:embedContent",
             ),
         ],
     )
-    def test_embedding_shims(self, shim_name, type_name, fmt, url):
+    def test_embeddings_shims(self, shim_name, type_name, fmt, url):
         from llm_rosetta.shims.providers import load_providers
 
         load_providers()
@@ -428,9 +430,9 @@ class TestBuiltinEndpointShims:
 class TestAdminMetadata:
     def test_model_types_expose_the_endpoint_keys(self):
         meta = {d["name"]: d for d in admin_config._get_model_type_metadata()}
-        assert meta["embedding"]["config_shim_key"] == "embedding_shim"
-        assert meta["embedding"]["default_format"] == "openai"
-        assert meta["embedding"]["default_paths"] == {
+        assert meta["embeddings"]["config_shim_key"] == "embeddings_shim"
+        assert meta["embeddings"]["default_format"] == "openai"
+        assert meta["embeddings"]["default_paths"] == {
             "cohere": "/v2/embed",
             "google_generate": "/v1beta/models/{model}:embedContent",
         }

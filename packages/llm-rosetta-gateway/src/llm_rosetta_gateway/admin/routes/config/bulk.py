@@ -31,7 +31,9 @@ def _add_new_models(
         if display_name in models_section:
             skipped.append(display_name)
             continue
-        model_type = body.get("type", "llm")
+        from llm_rosetta.formats import canonical_model_type
+
+        model_type = canonical_model_type(body.get("type", "llm"))
         entry: dict[str, Any] = {
             "provider": provider,
             "capabilities": body.get("capabilities", ["text", "vision", "tools"]),

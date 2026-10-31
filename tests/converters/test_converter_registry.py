@@ -8,6 +8,7 @@ from llm_rosetta.converters.registry import (
     CONVERTER_REGISTRY,
     FORMATS_BY_TYPE,
     MODEL_TYPES,
+    converter_map,
     formats_for,
     get_converter_class,
 )
@@ -15,7 +16,7 @@ from llm_rosetta.converters.registry import (
 
 class TestRegistryShape:
     def test_the_four_categories(self) -> None:
-        assert MODEL_TYPES == ("llm", "embedding", "rerank", "decision")
+        assert MODEL_TYPES == ("llm", "embeddings", "rerank", "decision")
 
     def test_every_category_has_formats(self) -> None:
         for model_type in MODEL_TYPES:
@@ -47,8 +48,17 @@ class TestLookup:
             get_converter_class("speech", "whisper")
 
     def test_unknown_format_names_the_category_and_formats(self) -> None:
-        with pytest.raises(ValueError, match="Unknown embedding format.*openai"):
-            get_converter_class("embedding", "openai_embeddings")
+        with pytest.raises(ValueError, match="Unknown embeddings format.*openai"):
+            get_converter_class("embeddings", "openai_embeddings")
+
+    def test_the_legacy_category_spelling_resolves(self) -> None:
+        """A caller that still says ``embedding`` gets the same converters."""
+        from llm_rosetta.converters.embedding.openai import OpenAIEmbeddingConverter
+        from llm_rosetta.formats import LEGACY_MODEL_TYPES
+
+        assert get_converter_class("embedding", "openai") is OpenAIEmbeddingConverter
+        for legacy, canonical in LEGACY_MODEL_TYPES.items():
+            assert converter_map(legacy) is converter_map(canonical), legacy
 
 
 class TestTheDescriptorsAgree:

@@ -46,7 +46,7 @@ async def put_provider(request: Any, **kwargs: Any) -> Response:
         # A shim can supply the connection defaults, so neither field is
         # mandatory when the selected type is one: the shim's base_url, and —
         # for a keyless shim (free resource) — no credential at all.  A
-        # non-LLM endpoint shim (``embedding_shim``, …) counts too, so a
+        # non-LLM endpoint shim (``embeddings_shim``, …) counts too, so a
         # provider defined only by that shim needs no duplicated credentials.
         from ....model_types import all_model_types
 

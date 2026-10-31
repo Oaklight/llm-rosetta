@@ -26,11 +26,11 @@ test('degraded endpoints come back sorted by model type', () => {
   const cfg = {
     _auto_disabled_endpoints: {
       rerank: { reason: 'rerank_shim is unknown', category: 'unknown_shim' },
-      embedding: { reason: 'embedding_shim serves llm, not embedding', category: 'wrong_model_type' },
+      embeddings: { reason: 'embeddings_shim serves llm, not embeddings', category: 'wrong_model_type' },
     },
   };
   assert.deepEqual(degradedEndpoints(cfg), [
-    { type: 'embedding', reason: 'embedding_shim serves llm, not embedding', category: 'wrong_model_type' },
+    { type: 'embeddings', reason: 'embeddings_shim serves llm, not embeddings', category: 'wrong_model_type' },
     { type: 'rerank', reason: 'rerank_shim is unknown', category: 'unknown_shim' },
   ]);
 });
@@ -38,7 +38,7 @@ test('degraded endpoints come back sorted by model type', () => {
 test('a marker with no reason and no known category is dropped', () => {
   const cfg = {
     _auto_disabled_endpoints: {
-      embedding: { category: 'unknown_shim' },
+      embeddings: { category: 'unknown_shim' },
       rerank: {},
       decision: { reason: '', category: '' },
       llm: null,
@@ -46,12 +46,12 @@ test('a marker with no reason and no known category is dropped', () => {
     },
   };
   assert.deepEqual(degradedEndpoints(cfg), [
-    { type: 'embedding', reason: '', category: 'unknown_shim' },
+    { type: 'embeddings', reason: '', category: 'unknown_shim' },
   ]);
 });
 
 test('an unrecognised category keeps its reason and loses the category', () => {
-  const cfg = { _auto_disabled_endpoints: { embedding: { reason: 'something new', category: 'brand_new' } } };
+  const cfg = { _auto_disabled_endpoints: { embeddings: { reason: 'something new', category: 'brand_new' } } };
   const [entry] = degradedEndpoints(cfg);
   assert.equal(entry.reason, 'something new');
   assert.equal(categoryKey(entry.category), '');

@@ -27,7 +27,8 @@ async def handle_list_models(request: Any) -> Response:
     Supports an optional ``?type=`` query parameter to filter by model type:
 
     * ``type=llm`` — only LLM models (default pool)
-    * ``type=embedding`` — only embedding models
+    * ``type=embeddings`` — only embeddings models (the legacy
+      ``type=embedding`` is accepted)
     * ``type=rerank`` — only rerank models
     * ``type=all`` or omitted — all model types
     """
@@ -38,9 +39,13 @@ async def handle_list_models(request: Any) -> Response:
     qp = getattr(request, "query_params", {})
     type_vals = qp.get("type")
     if type_vals:
+        from llm_rosetta.formats import canonical_model_type
+
         type_filter = type_vals[0] if isinstance(type_vals, list) else type_vals
         if type_filter == "all":
             type_filter = None
+        else:
+            type_filter = canonical_model_type(type_filter)
 
     data = []
 
@@ -70,9 +75,9 @@ async def handle_list_models(request: Any) -> Response:
             data.append(entry)
 
     # Embedding models
-    if type_filter is None or type_filter == "embedding":
-        for name in sorted(_state._config.embedding_models.keys()):
-            provider_name = _state._config.embedding_models[name]
+    if type_filter is None or type_filter == "embeddings":
+        for name in sorted(_state._config.embeddings_models.keys()):
+            provider_name = _state._config.embeddings_models[name]
             api_standard = _state._config.provider_types.get(provider_name, "unknown")
             data.append(
                 {
@@ -81,8 +86,8 @@ async def handle_list_models(request: Any) -> Response:
                     "created": 0,
                     "owned_by": provider_name,
                     "api_standard": api_standard,
-                    "capabilities": ["embedding"],
-                    "type": "embedding",
+                    "capabilities": ["embeddings"],
+                    "type": "embeddings",
                     "display_name": name,
                     "created_at": "1970-01-01T00:00:00Z",
                 }
@@ -131,9 +136,13 @@ async def handle_list_models_google(request: Any) -> Response:
     qp = getattr(request, "query_params", {})
     type_vals = qp.get("type")
     if type_vals:
+        from llm_rosetta.formats import canonical_model_type
+
         type_filter = type_vals[0] if isinstance(type_vals, list) else type_vals
         if type_filter == "all":
             type_filter = None
+        else:
+            type_filter = canonical_model_type(type_filter)
 
     models_list: list[dict[str, Any]] = []
 
@@ -150,8 +159,8 @@ async def handle_list_models_google(request: Any) -> Response:
                 }
             )
 
-    if type_filter is None or type_filter == "embedding":
-        for name in sorted(_state._config.embedding_models.keys()):
+    if type_filter is None or type_filter == "embeddings":
+        for name in sorted(_state._config.embeddings_models.keys()):
             models_list.append(
                 {
                     "name": f"models/{name}",

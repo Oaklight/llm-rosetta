@@ -41,8 +41,11 @@ def detect_source_format(
     when the registry has no detector for it — a test double, or a type that
     has not declared one.
     """
+    from llm_rosetta.formats import canonical_model_type
+
     from ..model_types import get_model_type
 
+    type_name = canonical_model_type(type_name)
     descriptor = get_model_type(type_name)
     if descriptor is not None and descriptor.detect_source_format is not None:
         return descriptor.detect_source_format(request, body, config)
@@ -54,7 +57,7 @@ class TypedHandler:
     """What one typed model type supplies to the shared request flow.
 
     Attributes:
-        model_type: Registry category (``embedding``, ``rerank``, …); it names
+        model_type: Registry category (``embeddings``, ``rerank``, …); it names
             the type in logs and in the usage ledger.
         build_pipeline: ``(source_format, target_format) -> pipeline``.
         resolve: ``(config, model) -> route``, or ``None`` when the model is

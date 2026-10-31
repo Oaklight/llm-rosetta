@@ -1,5 +1,5 @@
 name: cohere--embedding
-model_type: embedding
+model_type: embeddings
 format: cohere
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/cohere.svg
 

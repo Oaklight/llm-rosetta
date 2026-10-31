@@ -113,36 +113,36 @@ class TestEmbeddingSection:
     def test_defaults(self) -> None:
         cfg = GatewayConfig(
             {
-                "embedding_providers": {
+                "embeddings_providers": {
                     "jina": {"api_key": "k", "base_url": "https://api.jina.ai"}
                 },
-                "embedding_models": {"jina-embeddings-v3": "jina"},
+                "embeddings_models": {"jina-embeddings-v3": "jina"},
             }
         )
-        assert cfg.embedding_providers["jina"] == {
+        assert cfg.embeddings_providers["jina"] == {
             "format": "openai",
-            "embedding_path": "/v1/embeddings",
+            "embeddings_path": "/v1/embeddings",
         }
         route = cfg.resolve_embedding("jina-embeddings-v3")
         assert route.format == "openai"
         assert route.path == "/v1/embeddings"
-        assert route.provider_info.name == "embedding:jina"
+        assert route.provider_info.name == "embeddings:jina"
         assert _auth(route.provider_info) == "Authorization"
 
     def test_cohere_uses_the_descriptor_path(self) -> None:
         cfg = GatewayConfig(
             {
-                "embedding_providers": {
+                "embeddings_providers": {
                     "p": {"format": "cohere", "base_url": "https://x"}
                 }
             }
         )
-        assert cfg.embedding_providers["p"]["embedding_path"] == "/v2/embed"
+        assert cfg.embeddings_providers["p"]["embeddings_path"] == "/v2/embed"
 
     def test_google_uses_google_auth_and_the_model_in_url_path(self) -> None:
         cfg = GatewayConfig(
             {
-                "embedding_providers": {
+                "embeddings_providers": {
                     "p": {
                         "api_key": "k",
                         "format": "google_generate",
@@ -151,7 +151,7 @@ class TestEmbeddingSection:
                 }
             }
         )
-        info = cfg.embedding_provider_infos["p"]
+        info = cfg.embeddings_provider_infos["p"]
         assert _auth(info) == "x-goog-api-key"
         assert info.upstream_url("text-embedding-004") == (
             "https://generativelanguage.googleapis.com"
@@ -161,27 +161,27 @@ class TestEmbeddingSection:
     def test_format_wins_over_type(self) -> None:
         cfg = GatewayConfig(
             {
-                "embedding_providers": {
+                "embeddings_providers": {
                     "p": {"format": "cohere", "type": "jina", "base_url": "https://x"}
                 }
             }
         )
-        assert cfg.embedding_providers["p"]["format"] == "cohere"
+        assert cfg.embeddings_providers["p"]["format"] == "cohere"
 
     def test_disabled_provider_is_skipped(self) -> None:
         cfg = GatewayConfig(
             {
-                "embedding_providers": {
+                "embeddings_providers": {
                     "p": {"enabled": False, "base_url": "https://x"}
                 },
-                "embedding_models": {"m": "p"},
+                "embeddings_models": {"m": "p"},
             }
         )
-        assert "p" not in cfg.embedding_providers
-        assert "m" not in cfg.embedding_models
+        assert "p" not in cfg.embeddings_providers
+        assert "m" not in cfg.embeddings_models
 
     def test_shim_is_honoured_by_the_legacy_section(self) -> None:
-        """Aligned in #1109: a legacy entry naming ``embedding_shim`` uses it.
+        """Aligned in #1109: a legacy entry naming ``embeddings_shim`` uses it.
 
         The unified ``providers:`` entry already honoured the shim; the legacy
         section used to ignore it, so the same shim gave a different format,
@@ -189,31 +189,31 @@ class TestEmbeddingSection:
         """
         cfg = GatewayConfig(
             {
-                "embedding_providers": {
+                "embeddings_providers": {
                     "p": {
-                        "embedding_shim": "cohere--embedding",
+                        "embeddings_shim": "cohere--embedding",
                         "api_key": "k",
                         "base_url": "https://x",
                     }
                 }
             }
         )
-        assert cfg.embedding_providers["p"] == {
+        assert cfg.embeddings_providers["p"] == {
             "format": "cohere",
-            "embedding_path": "/v2/embed",
+            "embeddings_path": "/v2/embed",
         }
 
     def test_model_maps_to_the_first_live_provider(self) -> None:
         cfg = GatewayConfig(
             {
-                "embedding_providers": {
+                "embeddings_providers": {
                     "off": {"enabled": False, "base_url": "https://x"},
                     "on": {"base_url": "https://x"},
                 },
-                "embedding_models": {"m": {"providers": ["off", "on"]}},
+                "embeddings_models": {"m": {"providers": ["off", "on"]}},
             }
         )
-        assert cfg.embedding_models["m"] == "on"
+        assert cfg.embeddings_models["m"] == "on"
 
 
 class TestDecisionSection:

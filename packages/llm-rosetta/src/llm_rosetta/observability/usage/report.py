@@ -271,7 +271,9 @@ class UsageReport:
 
     def for_model_type(self, model_type: str, window: str) -> dict[str, int]:
         """One model type's counters for one window, zero-filled when it saw none."""
-        windows = self.by_model_type.get(model_type)
+        from llm_rosetta.formats import canonical_model_type
+
+        windows = self.by_model_type.get(canonical_model_type(model_type))
         return (windows or zero_windows())[window]
 
     def window_parts(self, window: str) -> Iterator[Mapping[str, int]]:

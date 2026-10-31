@@ -259,6 +259,8 @@ def distribute_typed_models(config: GatewayConfig, raw_models: dict[str, Any]) -
     non-LLM types.  Models whose provider lacks the corresponding
     endpoint config are silently skipped.
     """
+    from llm_rosetta.formats import canonical_model_type
+
     from ..model_types import registered_type_names
 
     # Build a mapping from type name -> (providers dict, models dict)
@@ -279,7 +281,9 @@ def distribute_typed_models(config: GatewayConfig, raw_models: dict[str, Any]) -
     for name, value in raw_models.items():
         if not isinstance(value, dict):
             continue
-        model_type = value.get("type", "llm")
+        # A model written before the rename says ``type: embedding``; the
+        # pools are keyed by the canonical name.
+        model_type = canonical_model_type(value.get("type", "llm"))
         if model_type == "llm" or value.get("enabled") is False:
             continue
 

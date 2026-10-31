@@ -398,7 +398,7 @@ def test_connectivity_skips_every_authenticated_probe_when_not_ready():
     pinfo = _pinfo("alcf")
     raw = {
         "base_url": "https://example.com/v1",
-        "embedding_format": "openai",
+        "embeddings_format": "openai",
         "rerank_format": "openai",
     }
     config = _Config({"alcf": pinfo}, {"alcf": raw})
@@ -416,6 +416,6 @@ def test_connectivity_skips_every_authenticated_probe_when_not_ready():
     sent = [h for _, _, h in _PROBES if any(k.lower() == "authorization" for k in h)]
     assert sent == []
     assert body["endpoints"]["models"]["skipped"] == "provider not ready"
-    assert body["endpoints"]["embedding"]["skipped"] == "provider not ready"
+    assert body["endpoints"]["embeddings"]["skipped"] == "provider not ready"
     assert body["endpoints"]["rerank"]["skipped"] == "provider not ready"
     assert any("skipped" in w for w in body["warnings"])

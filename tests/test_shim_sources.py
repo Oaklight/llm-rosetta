@@ -97,7 +97,7 @@ class TestLocalDirs:
         embedding.mkdir(parents=True)
         (embedding / "provider.yaml").write_text(
             "name: acme--embedding\n"
-            "model_type: embedding\n"
+            "model_type: embeddings\n"
             "format: openai\n"
             "connection:\n"
             "  base_url: https://acme.example/v1\n"

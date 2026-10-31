@@ -123,7 +123,7 @@ async def test_provider_connectivity(request: Any, name: str) -> Response:
 
         # 3–5. Check optional POST endpoints (embedding, rerank, decision)
         for ep_name, fmt_key, path_key, default_path in (
-            ("embedding", "embedding_format", "embedding_path", "/v1/embeddings"),
+            ("embeddings", "embeddings_format", "embeddings_path", "/v1/embeddings"),
             ("rerank", "rerank_format", "rerank_path", "/v1/rerank"),
             ("decision", "decision_format", "decision_path", "/v1/systemone"),
         ):

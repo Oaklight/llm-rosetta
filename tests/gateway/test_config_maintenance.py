@@ -14,6 +14,7 @@ from pathlib import Path
 
 from llm_rosetta_gateway.config import GatewayConfig, JsoncConfigIO
 from llm_rosetta_gateway.maintenance.config import STEPS, apply, build_registry
+from llm_rosetta_gateway.maintenance.migrations import CURRENT_VERSION
 from llm_rosetta_gateway.observability.maintenance import Policy, StepContext
 
 #: A document as an older release wrote it: version 0, and both spellings that
@@ -25,7 +26,10 @@ _OLD = {
 }
 
 #: The same document, current in structure but keeping the old names.
-_NAMES_ONLY = {"config_version": 1, "providers": {"x": {"type": "openai_chat"}}}
+_NAMES_ONLY = {
+    "config_version": CURRENT_VERSION,
+    "providers": {"x": {"type": "openai_chat"}},
+}
 
 
 def _by_name(registry):
@@ -47,7 +51,9 @@ def test_a_document_with_work_to_do_reports_both_steps():
 
     assert changed is True
     assert document is raw, "the document is corrected in place, as it always was"
-    assert raw["config_version"] == 1, "the structure migration keeps the ledger"
+    assert raw["config_version"] == CURRENT_VERSION, (
+        "the structure migration keeps the ledger"
+    )
     assert raw["providers"]["alcf"]["type"] == "chat_completions"
     assert raw["providers"]["alcf"]["shim"] == "volcengine--chat_completions"
     assert _by_name(registry) == {
@@ -77,7 +83,7 @@ def test_a_current_document_reports_nothing():
 
 
 def test_the_name_correction_runs_on_a_document_the_structure_step_migrated():
-    """The order is load-bearing: v0's legacy spellings only reach v1's shape first."""
+    """The order is load-bearing: v0's legacy spellings only reach the current shape first."""
     raw = json.loads(json.dumps(_OLD))
     apply(raw)
     # v1 is what gives the rerank provider its format; the name correction then
@@ -202,5 +208,5 @@ def test_the_loader_writes_back_once(tmp_path):
     JsoncConfigIO().load(str(path))
 
     written = json.loads(Path(path).read_text())
-    assert written["config_version"] == 1
+    assert written["config_version"] == CURRENT_VERSION
     assert written["providers"]["alcf"]["type"] == "chat_completions"

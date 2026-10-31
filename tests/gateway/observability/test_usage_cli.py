@@ -82,7 +82,7 @@ async def store(tmp_path: Path) -> Path:
         [
             _row(_K1, "team-a", 1000, inp=600, cache_read=200),
             _row(_K1, "team-a", 1000, inp=600, when=_ago(hours=30)),
-            _row(_K2, "team-b", 300, model="text-embedding-3", model_type="embedding"),
+            _row(_K2, "team-b", 300, model="text-embedding-3", model_type="embeddings"),
             _row("retired-bucket", "retired", 70, inp=50, when=_ago(hours=3)),
             _row(None, None, 20, when=_ago(hours=4)),
             _row(INTERNAL_SUBJECT, INTERNAL_LABEL, 11, model="gpt-5-nano"),
@@ -235,7 +235,7 @@ class TestItPrintsTheReportTheLibraryBuilds:
         """An embedding call is not chat traffic, and says so."""
         document = _json(store, "--by", "model")
         models = {group["model"]: group for group in document["models"]}
-        assert models["text-embedding-3"]["model_type"] == "embedding"
+        assert models["text-embedding-3"]["model_type"] == "embeddings"
         assert models["gpt-5"]["model_type"] == "llm"
         # Ordered by the widest window's total, so the busiest model leads.
         assert document["models"][0]["model"] == "gpt-5"
