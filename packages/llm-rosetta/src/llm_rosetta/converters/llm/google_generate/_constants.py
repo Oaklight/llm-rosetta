@@ -26,22 +26,6 @@ GOOGLE_REASON_TO_PROVIDER: dict[str, str] = {
     "error": "OTHER",
 }
 
-#: ``provider_metadata`` key holding the ``finishReason`` (or, for a blocked
-#: prompt, ``blockReason``) the *source* Google response carried when it maps
-#: to an IR failure reason.  Three Google values (``LANGUAGE``,
-#: ``MALFORMED_FUNCTION_CALL``, ``OTHER``) collapse into IR ``error``, so the
-#: IR alone cannot tell a Google target which word to write back — nor a
-#: gateway whether the turn is Google's own odd stop or a foreign failure it
-#: cannot express.  The reader records the word, the writer restores it.
-GOOGLE_NATIVE_FINISH_REASON = "_native_finish_reason"
-
-#: ``provider_metadata`` key holding a blocked prompt's ``promptFeedback``.  A
-#: prompt Google blocked has no candidate at all: the reason lives in
-#: ``promptFeedback.blockReason``.  The IR has only a choice to put it on, so
-#: the reader keeps the field verbatim here and a Google target writes it back
-#: as ``promptFeedback`` with no candidates, which is what Google itself sends.
-GOOGLE_NATIVE_PROMPT_FEEDBACK = "_native_prompt_feedback"
-
 
 # --- Output formats ---
 

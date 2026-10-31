@@ -85,6 +85,46 @@ def test_google_writes_its_own_word_back():
     assert result["candidates"][0]["finishReason"] == "MALFORMED_FUNCTION_CALL"
 
 
+def test_google_reads_the_record_in_its_current_shape():
+    """The one record replaced two keys; both spellings convert the same."""
+    ir = _ir(
+        "error",
+        metadata={
+            "_native_response": {
+                "origin": "google_generate",
+                "finish_reason": "MALFORMED_FUNCTION_CALL",
+            }
+        },
+    )
+
+    result = GoogleGenerateConverter().response_to_provider(ir)
+
+    assert result["candidates"][0]["finishReason"] == "MALFORMED_FUNCTION_CALL"
+
+
+def test_a_record_is_written_in_the_current_shape():
+    """A Google reader writes the one record, not the two keys it replaced."""
+    converter = GoogleGenerateConverter()
+    provider_response: Any = {
+        "candidates": [
+            {
+                "index": 0,
+                "content": {"role": "model", "parts": [{"text": "done"}]},
+                "finishReason": "MALFORMED_FUNCTION_CALL",
+            }
+        ],
+    }
+
+    ir = converter.response_from_provider(provider_response)
+    metadata = cast(dict[str, Any], ir["choices"][0]["message"])["provider_metadata"]
+
+    assert metadata["_native_response"] == {
+        "origin": "google_generate",
+        "finish_reason": "MALFORMED_FUNCTION_CALL",
+    }
+    assert "_native_finish_reason" not in metadata
+
+
 @pytest.mark.parametrize("base", ["chat_completions", "open_responses", "messages"])
 def test_google_ignores_another_dialects_record(base):
     """Only Google's own record explains a Google word.
@@ -209,8 +249,11 @@ def test_a_google_word_the_mapping_preserves_is_not_recorded():
 
     ir = converter.response_from_provider(cast(Any, provider_response))
 
-    message = cast(dict[str, Any], ir["choices"][0]["message"])
-    assert "_native_finish_reason" not in (message.get("provider_metadata") or {})
+    metadata = (
+        cast(dict[str, Any], ir["choices"][0]["message"]).get("provider_metadata") or {}
+    )
+    assert "_native_response" not in metadata
+    assert "_native_finish_reason" not in metadata
 
 
 def test_a_google_filter_word_survives_the_stream():
