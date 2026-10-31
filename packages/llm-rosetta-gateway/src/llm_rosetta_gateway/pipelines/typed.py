@@ -72,6 +72,10 @@ class TypedHandler:
             connection's own URL.
         response_post: Final touch on the converted response (e.g. echo the
             client's model name).
+        upstream_error: ``(format, body) -> message | None``: the vendor's own
+            error, for an API that answers HTTP 200 and carries the verdict in
+            the body (MiniMax).  ``None`` for a dialect whose status code is
+            the verdict.
         connection_error_message: Wording of the 502 body.
         empty_body_is_passthrough: An empty upstream body becomes a
             passthrough response carrying ``x-rosetta-conversion``; rerank
@@ -90,6 +94,7 @@ class TypedHandler:
         Callable[[TypedRoute, dict[str, Any], str, GatewayConfig], str] | None
     ) = None
     response_post: Callable[[dict[str, Any], str], None] | None = None
+    upstream_error: Callable[[str, dict[str, Any] | None], str | None] | None = None
     connection_error_message: str = "Upstream connection failed"
     empty_body_is_passthrough: bool = False
     log_conversion: bool = True
@@ -262,6 +267,20 @@ async def handle_typed_request(
                     content_type="application/json",
                 )
             )
+
+        # Some vendors answer HTTP 200 and put the verdict in the body
+        # (MiniMax's base_resp.status_code).  The target converter knows its
+        # own envelope; without this check the gateway would report an empty
+        # success for a request the vendor refused.
+        inband_error = (
+            handler.upstream_error(route.format, resp.body)
+            if handler.upstream_error is not None
+            else None
+        )
+        if inband_error:
+            status_code = 502
+            error_detail = inband_error
+            return with_request_id(_error(inband_error, "upstream_error", 502))
 
         if resp.body is None:
             raw = with_request_id(

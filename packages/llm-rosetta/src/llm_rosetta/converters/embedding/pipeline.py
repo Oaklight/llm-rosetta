@@ -20,6 +20,7 @@ from llm_rosetta.converters.base.embedding_converter import BaseEmbeddingConvert
 from llm_rosetta.converters.embedding.cohere import CohereEmbeddingConverter
 from llm_rosetta.converters.embedding.google import GoogleEmbeddingConverter
 from llm_rosetta.converters.embedding.jina import JinaEmbeddingConverter
+from llm_rosetta.converters.embedding.minimax import MiniMaxEmbeddingConverter
 from llm_rosetta.converters.embedding.openai import OpenAIEmbeddingConverter
 from llm_rosetta.converters.embedding.voyage import VoyageEmbeddingConverter
 
@@ -36,6 +37,7 @@ _EMBEDDING_CONVERTERS: dict[str, type[BaseEmbeddingConverter]] = {
     "jina": JinaEmbeddingConverter,
     "voyage": VoyageEmbeddingConverter,
     "google_generate": GoogleEmbeddingConverter,
+    "minimax": MiniMaxEmbeddingConverter,
 }
 
 EMBEDDING_FORMATS = frozenset(_EMBEDDING_CONVERTERS.keys())

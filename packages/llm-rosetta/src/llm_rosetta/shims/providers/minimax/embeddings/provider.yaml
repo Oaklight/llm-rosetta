@@ -1,0 +1,21 @@
+name: minimax--embedding
+model_type: embeddings
+format: minimax
+logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/minimax.svg
+
+# Measured 2026-10-31 against `embo-01` on the domestic lane:
+#   POST https://api.minimaxi.com/v1/embeddings
+#   Authorization: Bearer <key>
+#   {"model": "embo-01", "texts": ["..."], "type": "db"}  -> 200
+#   {"vectors": [[...1536 floats]], "total_tokens": 3,
+#    "base_resp": {"status_code": 0, "status_msg": "success"}}
+# The dialect is not OpenAI's: the input field is `texts`, the output field is
+# `vectors`, and a refusal is HTTP 200 with a non-zero `base_resp.status_code`
+# (an unknown model answers 2013 `invalid params`).  The converter owns
+# that envelope; see converters/embedding/minimax.py.
+#
+# Domestic (China mainland): api.minimaxi.com; international: api.minimax.io
+connection:
+  base_url: https://api.minimaxi.com
+  api_key_env: MINIMAX_API_KEY
+  default_path: /v1/embeddings

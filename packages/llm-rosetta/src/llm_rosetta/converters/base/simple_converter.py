@@ -167,6 +167,20 @@ class BaseSimpleConverter(ABC, Generic[IRReq, IRResp, IRUsage]):
     @abstractmethod
     def _build_ir_usage_to_p(ir_usage: IRUsage) -> dict[str, Any]: ...  # type: ignore[type-var]
 
+    # ==================== In-band errors ====================
+
+    @classmethod
+    def upstream_error(cls, body: dict[str, Any] | None) -> str | None:
+        """The vendor's own error message when *body* carries one, else ``None``.
+
+        Some APIs answer HTTP 200 and put the verdict in the body (MiniMax's
+        ``base_resp.status_code``).  The typed pipeline asks the target
+        converter before converting, so such a body becomes an error instead
+        of an empty success.  A dialect without an in-band envelope inherits
+        the ``None``.
+        """
+        return None
+
     # ==================== Utilities ====================
 
     @staticmethod

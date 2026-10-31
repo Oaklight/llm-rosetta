@@ -26,6 +26,7 @@ from typing import Any
 from llm_rosetta_gateway._vendor.httpserver import Response
 from llm_rosetta.converters.embedding.pipeline import (
     EmbeddingConversionPipeline,
+    get_embedding_converter,
     response_usage,
 )
 
@@ -135,6 +136,15 @@ def _response_post(body: dict[str, Any], model: str) -> None:
         body["model"] = model
 
 
+def _upstream_error(format_name: str, body: dict[str, Any] | None) -> str | None:
+    """Ask the target dialect whether *body* is an error dressed as a success.
+
+    Only MiniMax embeds its verdict in the body today; every other embedding
+    dialect inherits ``None`` from the base converter.
+    """
+    return get_embedding_converter(format_name).upstream_error(body)
+
+
 _EMBEDDINGS = TypedHandler(
     model_type="embeddings",
     build_pipeline=EmbeddingConversionPipeline,
@@ -144,6 +154,7 @@ _EMBEDDINGS = TypedHandler(
     prepare_body=_prepare_body,
     upstream_url=_upstream_url,
     response_post=_response_post,
+    upstream_error=_upstream_error,
     connection_error_message="Upstream request failed",
     log_conversion=False,
 )
