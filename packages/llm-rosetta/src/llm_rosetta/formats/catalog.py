@@ -139,6 +139,9 @@ FORMAT_SPECS: tuple[FormatSpec, ...] = (
         default_path="/v1beta/models/{model}:embedContent",
         models_path="/v1beta/models",
     ),
+    FormatSpec(
+        model_type="embeddings", format="minimax", default_path="/v1/embeddings"
+    ),
     # -- rerank ---------------------------------------------------------
     FormatSpec(model_type="rerank", format="jina", default_path="/v1/rerank"),
     FormatSpec(model_type="rerank", format="cohere", default_path="/v2/rerank"),

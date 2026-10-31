@@ -7,6 +7,7 @@ from llm_rosetta.converters.embedding import (
     CohereEmbeddingConverter,
     GoogleEmbeddingConverter,
     JinaEmbeddingConverter,
+    MiniMaxEmbeddingConverter,
     OpenAIEmbeddingConverter,
     VoyageEmbeddingConverter,
 )
@@ -83,6 +84,22 @@ GOOGLE_BATCH_RESPONSE = {
 SAMPLE_REQUEST = {
     "model": "test-model",
     "input": ["hello world"],
+}
+
+# Captured from a live `embo-01` call on 2026-10-31; the vectors are trimmed
+# from 1536 floats to 2 to keep the fixture readable — the shape is the
+# vendor's, including the missing `model` echo and the top-level token count.
+MINIMAX_RESPONSE = {
+    "vectors": [[-0.01, -0.02], [0.21, 0.22]],
+    "total_tokens": 7,
+    "base_resp": {"status_code": 0, "status_msg": "success"},
+}
+
+# An unknown model: HTTP 200 with the verdict in base_resp.
+MINIMAX_ERROR_RESPONSE = {
+    "vectors": None,
+    "total_tokens": None,
+    "base_resp": {"status_code": 2013, "status_msg": "invalid params"},
 }
 
 
@@ -259,6 +276,95 @@ class TestCohereEmbeddingConverter:
         ir2 = IREmbeddingRequest(model="test", input=["hello"], truncation=False)
         result2, _ = self.converter.request_to_provider(ir2)
         assert result2["truncate"] == "NONE"
+
+
+# ============================================================================
+# MiniMax converter tests
+# ============================================================================
+
+
+class TestMiniMaxEmbeddingConverter:
+    def setup_method(self) -> None:
+        self.converter = MiniMaxEmbeddingConverter()
+
+    def test_response_from_provider(self) -> None:
+        ir = self.converter.response_from_provider(MINIMAX_RESPONSE)
+        assert ir["object"] == "list"
+        assert len(ir["data"]) == 2
+        assert ir["data"][0]["index"] == 0
+        assert ir["data"][1]["embedding"] == [0.21, 0.22]
+        assert ir["usage"]["total_tokens"] == 7
+        assert ir["usage"]["prompt_tokens"] == 7
+
+    def test_model_falls_back_to_the_context(self) -> None:
+        # MiniMax does not echo the model; the pipeline supplies it.
+        ctx = MiniMaxEmbeddingConverter.create_conversion_context()
+        ctx.metadata["model"] = "embo-01"
+        ir = self.converter.response_from_provider(MINIMAX_RESPONSE, context=ctx)
+        assert ir["model"] == "embo-01"
+
+    def test_request_to_provider_uses_texts_and_type(self) -> None:
+        ir = IREmbeddingRequest(model="embo-01", input=["hello", "world"])
+        result, _ = self.converter.request_to_provider(ir)
+        assert result["texts"] == ["hello", "world"]
+        assert "input" not in result
+        # The vendor requires `type`; a request with no task is a document.
+        assert result["type"] == "db"
+
+    def test_task_type_mapping(self) -> None:
+        query = IREmbeddingRequest(
+            model="embo-01", input=["hi"], task_type="retrieval_query"
+        )
+        assert self.converter.request_to_provider(query)[0]["type"] == "query"
+
+        document = IREmbeddingRequest(
+            model="embo-01", input=["hi"], task_type="retrieval_document"
+        )
+        assert self.converter.request_to_provider(document)[0]["type"] == "db"
+
+        # MiniMax has no equivalent for the other IR task types.
+        other = IREmbeddingRequest(
+            model="embo-01", input=["hi"], task_type="classification"
+        )
+        assert self.converter.request_to_provider(other)[0]["type"] == "db"
+
+    def test_request_from_provider(self) -> None:
+        ir = self.converter.request_from_provider(
+            {"model": "embo-01", "texts": ["hello"], "type": "query"}
+        )
+        assert ir["input"] == ["hello"]
+        assert ir["task_type"] == "retrieval_query"
+
+    def test_response_roundtrip(self) -> None:
+        ir = self.converter.response_from_provider(MINIMAX_RESPONSE)
+        provider = self.converter.response_to_provider(ir)
+        assert provider["base_resp"] == {"status_code": 0, "status_msg": "success"}
+        ir_back = self.converter.response_from_provider(provider)
+        assert ir_back["data"][0]["embedding"] == ir["data"][0]["embedding"]
+        assert ir_back["usage"]["total_tokens"] == ir["usage"]["total_tokens"]
+
+    def test_upstream_error_reads_base_resp(self) -> None:
+        # A refusal is HTTP 200 with a non-zero status in the body.
+        assert (
+            self.converter.upstream_error(MINIMAX_ERROR_RESPONSE)
+            == "MiniMax error 2013: invalid params"
+        )
+        assert self.converter.upstream_error(MINIMAX_RESPONSE) is None
+        assert self.converter.upstream_error({"vectors": [[0.1]]}) is None
+        assert self.converter.upstream_error(None) is None
+
+    def test_cross_format_request_and_response(self) -> None:
+        openai = OpenAIEmbeddingConverter()
+        ir = openai.request_from_provider(
+            {"model": "embo-01", "input": ["hello"], "dimensions": 8}
+        )
+        body, _ = self.converter.request_to_provider(ir)
+        assert body == {"model": "embo-01", "texts": ["hello"], "type": "db"}
+
+        ir_response = self.converter.response_from_provider(MINIMAX_RESPONSE)
+        out = openai.response_to_provider(ir_response)
+        assert out["data"][0]["embedding"] == [-0.01, -0.02]
+        assert out["usage"]["total_tokens"] == 7
 
 
 # ============================================================================

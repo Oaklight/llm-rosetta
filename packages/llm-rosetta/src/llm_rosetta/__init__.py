@@ -30,6 +30,7 @@ from .converters import (
     JinaEmbeddingConverter,
     JinaRerankConverter,
     MessagesConverter,
+    MiniMaxEmbeddingConverter,
     OpenAIEmbeddingConverter,
     OpenAIResponsesConverter,
     OpenResponsesConverter,
@@ -102,6 +103,7 @@ __all__ = [
     "VoyageEmbeddingConverter",
     "CohereEmbeddingConverter",
     "GoogleEmbeddingConverter",
+    "MiniMaxEmbeddingConverter",
     # Rerank converters
     "JinaRerankConverter",
     "CohereRerankConverter",

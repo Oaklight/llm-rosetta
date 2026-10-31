@@ -463,6 +463,9 @@ class TestDetectEmbeddingSource:
             ({"input": "hello", "input_type": "query"}, "voyage"),
             # Cohere also sends input_type, but with texts.
             ({"texts": ["hello"], "input_type": "search_query"}, "cohere"),
+            # MiniMax sends texts plus its own required `type` field.
+            ({"texts": ["hello"], "type": "db"}, "minimax"),
+            ({"texts": ["hello"], "type": "query"}, "minimax"),
             # Google shapes: parts for embedContent, requests for batch.
             ({"content": {"parts": [{"text": "hello"}]}}, "google_generate"),
             (
@@ -527,3 +530,71 @@ class TestDetectEmbeddingSource:
             _detect_embedding_source(None, {"input": "hi"}, config)
             == config.default_embeddings_format
         )
+
+
+# ============================================================================
+# In-band upstream errors
+# ============================================================================
+
+
+class TestInBandUpstreamError:
+    """A 200 whose body carries a refusal is a 502, not an empty success."""
+
+    def _config(self) -> GatewayConfig:
+        return GatewayConfig(
+            {
+                "providers": {
+                    "minimax": {
+                        "api_key": "k",
+                        "base_url": "https://api.minimaxi.com",
+                        "embeddings_format": "minimax",
+                    }
+                },
+                "models": {"embo-01": {"provider": "minimax", "type": "embeddings"}},
+            }
+        )
+
+    def _request(self, body: dict[str, Any], upstream_body: dict[str, Any]):
+        request = _make_request(body)
+        request.app.transport = MagicMock()
+        request.app.transport.send = AsyncMock(
+            return_value=UpstreamResponse(
+                status_code=200,
+                body=upstream_body,
+                raw_content=b"{}",
+            )
+        )
+        return request
+
+    def test_minimax_base_resp_error_becomes_502(self) -> None:
+        request = self._request(
+            {"model": "embo-01", "texts": ["hello"], "type": "db"},
+            {
+                "vectors": None,
+                "total_tokens": None,
+                "base_resp": {"status_code": 2013, "status_msg": "invalid params"},
+            },
+        )
+
+        response = asyncio.run(handle_embeddings(request, self._config()))
+
+        assert response.status_code == 502
+        body = json.loads(response.body)
+        assert body["error"]["type"] == "upstream_error"
+        assert "MiniMax error 2013: invalid params" in body["error"]["message"]
+
+    def test_a_success_body_still_converts(self) -> None:
+        request = self._request(
+            {"model": "embo-01", "texts": ["hello"], "type": "db"},
+            {
+                "vectors": [[0.1, 0.2]],
+                "total_tokens": 2,
+                "base_resp": {"status_code": 0, "status_msg": "success"},
+            },
+        )
+
+        response = asyncio.run(handle_embeddings(request, self._config()))
+
+        assert response.status_code == 200
+        body = json.loads(response.body)
+        assert body["vectors"] == [[0.1, 0.2]]

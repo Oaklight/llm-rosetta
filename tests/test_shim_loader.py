@@ -129,6 +129,7 @@ class TestLoadProviders:
             "google--embedding",
             "jina--embedding",
             "jina--rerank",
+            "minimax--embedding",
             "openai--embedding",
             "voyage--embedding",
             "voyage--rerank",

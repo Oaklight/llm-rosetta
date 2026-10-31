@@ -19,7 +19,9 @@ def detect_embedding_source(request: Any, body: dict[str, Any], config: Any) -> 
     """Infer the source embedding format from the request body.
 
     Detection order:
-    1. ``texts`` field (without ``input``) → Cohere
+    1. ``texts`` field (without ``input``) → MiniMax when it carries ``type``
+       (``db``/``query``, which the vendor requires) and no ``input_type``;
+       otherwise Cohere (which requires ``input_type``)
     2. ``task`` field → Jina
     3. ``input_type`` or ``output_dtype`` beside ``input`` → Voyage
        (Cohere sends ``input_type`` too, but with ``texts``, which rule 1
@@ -33,6 +35,8 @@ def detect_embedding_source(request: Any, body: dict[str, Any], config: Any) -> 
     :func:`detect_rerank_source`.
     """
     if "texts" in body and "input" not in body:
+        if "type" in body and "input_type" not in body:
+            return "minimax"
         return "cohere"
     if "task" in body:
         return "jina"

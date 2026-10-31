@@ -12,6 +12,7 @@ from .embedding import (
     CohereEmbeddingConverter,
     GoogleEmbeddingConverter,
     JinaEmbeddingConverter,
+    MiniMaxEmbeddingConverter,
     OpenAIEmbeddingConverter,
     VoyageEmbeddingConverter,
 )
@@ -47,6 +48,7 @@ __all__ = [
     "VoyageEmbeddingConverter",
     "CohereEmbeddingConverter",
     "GoogleEmbeddingConverter",
+    "MiniMaxEmbeddingConverter",
     "ChatCompletionsConverter",
     "OpenAIChatConverter",  # deprecated alias
     "MessagesConverter",

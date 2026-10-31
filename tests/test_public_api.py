@@ -42,6 +42,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "VoyageEmbeddingConverter",
             "CohereEmbeddingConverter",
             "GoogleEmbeddingConverter",
+            "MiniMaxEmbeddingConverter",
             # Rerank converters
             "JinaRerankConverter",
             "CohereRerankConverter",
