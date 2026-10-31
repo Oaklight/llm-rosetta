@@ -63,7 +63,7 @@ packages/llm-rosetta/src/llm_rosetta/shims/providers/
 
 每个叶子目录包含：
 
-- **`provider.yaml`**（必需）—— 声明 `name`、`model_type`、`format`、连接设置（`connection.base_url`、`connection.api_key_env`、`connection.auth_header`、`connection.keyless`、`connection.models_path`、`connection.default_path`、`connection.token_command`），以及可选的 `logo`、`display_name`、`free_source`。`base` 是 `format` 的弃用别名；loader 会校验 `(model_type, format)` 对。使用 `format` 时必须同时声明 `model_type` —— 只有声明 `base` 且不写 `format` 的 shim 可以省略。非 chat shim 用 `connection.default_path` 声明它服务的端点（例如 `/v1/embeddings`），提供方可以通过 `embeddings_shim` / `rerank_shim` / `decision_shim` 指向它，而不必写裸格式。
+- **`provider.yaml`**（必需）—— 声明 `name`、`model_type`、`format`、连接设置（`connection.base_url`、`connection.api_key_env`、`connection.auth_header`、`connection.keyless`、`connection.models_path`、`connection.default_path`、`connection.token_command`），以及可选的 `logo`、`display_name`、`free_source`。`base` 是 `format` 的弃用别名；loader 会校验 `(model_type, format)` 对。使用 `format` 时必须同时声明 `model_type` —— 只有声明 `base` 且不写 `format` 的 shim 可以省略。非 chat shim 用 `connection.default_path` 声明它服务的端点（例如 `/v1/embeddings`），提供方可以通过 `embeddings_shim` / `rerank_shim` / `decisions_shim` 指向它，而不必写裸格式。
 - **`transforms.py`**（可选）—— 导出 `post_ir_transforms` 和/或 `pre_ir_transforms` 元组（旧名 `to_transforms` / `from_transforms` 也可用）
 
 **按类型声明的参数默认值。** 非 chat shim 可以在以自身模型类型命名的段里，声明该 vendor 真正有差异的请求字段：
@@ -706,9 +706,10 @@ resolve_format("chat_completions")            # → "chat_completions"（直接�
 resolve_format("unknown")                     # → "unknown"（直接透传）
 
 resolve_model_type("deepseek--chat_completions")  # → "llm"
-resolve_model_type("typesafe--systemone")         # → "decision"
-resolve_model_type("typesafe")                    # → "decision"（旧别名）
+resolve_model_type("typesafe--systemone")         # → "decisions"
+resolve_model_type("typesafe")                    # → "decisions"（旧别名）
 resolve_model_type("embedding")                    # → "embeddings"（弃用别名）
+resolve_model_type("decision")                     # → "decisions"（弃用别名）
 resolve_model_type("openai")                      # → None（歧义：既是厂商名也是 embeddings format）
 ```
 

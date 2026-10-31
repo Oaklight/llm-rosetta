@@ -296,7 +296,7 @@ wire_response = converter.response_to_provider(ir_response)
 - `POST /v1/systemone` — System One 兼容别名
 
 !!! note "Provider 路由"
-    网关通过 `decision_models`（`GatewayConfig.resolve_decision`）解析 decision 请求的上游 provider。`decision` 模型类型 descriptor 负责源格式探测（`gateway/source_formats.py`）：先看路由（`/v1/decisions` → `openai_decisions`，`/v1/systemone` → `systemone`），再看请求体形状（`input` + 列表 `questions` 对 `state` + 映射 `questions`），最后回退到 `default_decision_format`。每个 format 自带上游路径（`openai_decisions` → `/v1/decisions`，`systemone` → `/v1/systemone`），显式 `decision_path` 可覆盖。内置 shim 为 `openai--openai_decisions` 与 `typesafe--systemone`；裸名 `openai_decisions`、`typesafe` 仍为别名。
+    网关通过 `decisions_models`（`GatewayConfig.resolve_decision`）解析 decision 请求的上游 provider。`decisions` 模型类型 descriptor 负责源格式探测（`gateway/source_formats.py`）：先看路由（`/v1/decisions` → `openai_decisions`，`/v1/systemone` → `systemone`），再看请求体形状（`input` + 列表 `questions` 对 `state` + 映射 `questions`），最后回退到 `default_decisions_format`。每个 format 自带上游路径（`openai_decisions` → `/v1/decisions`，`systemone` → `/v1/systemone`），显式 `decisions_path` 可覆盖。内置 shim 为 `openai--openai_decisions` 与 `typesafe--systemone`；裸名 `openai_decisions`、`typesafe` 仍为别名。
 
 ## 与 Chat 结构化输出的对比
 

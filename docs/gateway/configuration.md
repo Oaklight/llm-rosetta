@@ -143,18 +143,18 @@ commit；配置文件本身不会被改写。要可复现部署请固定 tag 或
 }
 ```
 
-端点键为 `embeddings_format` / `embeddings_path` / `embeddings_shim`、`rerank_format` / `rerank_path` / `rerank_shim`，以及 `decision_format` / `decision_path` / `decision_shim`。每个端点的优先级：
+端点键为 `embeddings_format` / `embeddings_path` / `embeddings_shim`、`rerank_format` / `rerank_path` / `rerank_shim`，以及 `decisions_format` / `decisions_path` / `decisions_shim`。每个端点的优先级：
 
 1. **shim**：`<type>_shim`；否则使用提供方级的 `shim` 或 `type`，但仅当该 shim 的 `model_type` 与端点一致；
 2. **格式**：显式的 `<type>_format` 优先于 shim 的格式；
 3. **路径**：显式的 `<type>_path` 优先于 shim 的 `connection.default_path`（仅当最终格式就是该 shim 的格式时才使用），其次是该格式自身的默认路径（Cohere 使用 `/v2/...`；Google 的 embedding 路径携带模型）；
 4. **连接**：条目中非空的 `base_url` / `api_key` 优先于 shim 默认值。
 
-`<type>_shim` 若不属于该能力，启动时会报错并指明该 shim 的类别。gateway 把每个提供方的身份记录为 `(model_type, format)` 对；LLM 模型若被路由到身份为 `embeddings`、`rerank` 或 `decision` 的提供方，会被拒绝。
+`<type>_shim` 若不属于该能力，启动时会报错并指明该 shim 的类别。gateway 把每个提供方的身份记录为 `(model_type, format)` 对；LLM 模型若被路由到身份为 `embeddings`、`rerank` 或 `decisions` 的提供方，会被拒绝。
 
-旧的 `embeddings_providers` / `rerank_providers` / `decision_providers` 段仍然可用，并与统一条目合并；改名前写作 `embedding_providers` 的段按同一段读取。
+旧的 `embeddings_providers` / `rerank_providers` / `decisions_providers` 段仍然可用，并与统一条目合并；改名前写作 `embedding_providers`、`decision_providers` 的段按同一段读取。
 
-模型类型与它服务的端点拼写一致，为 `embeddings`。改名前写下的配置 —— `embedding_format`、`embedding_path`、`embedding_shim`、`default_embedding_format`，或标记为 `"type": "embedding"` 的模型 —— 会在加载时改写，原文件另存为 `.pre-migration.bak`（文档版本升到 `config_version` 2）。若文件无法写回（只读挂载），旧键仍会被读取。
+模型类型与它服务的端点拼写一致：`embeddings` 与 `decisions`。改名前写下的配置 —— `embedding_format` / `embedding_path` / `embedding_shim`、`default_embedding_format`、`decision_format` / `decision_path` / `decision_shim`、`default_decision_format`，或标记为 `"type": "embedding"` / `"type": "decision"` 的模型 —— 会在加载时改写，原文件另存为 `.pre-migration.bak`（文档版本升到 `config_version` 3）。若文件无法写回（只读挂载），旧键仍会被读取。
 
 ### 图片数量限制
 
@@ -731,27 +731,27 @@ Embedding 流量**只**通过 embedding 端点路由。没有 embedding 路由�
 
 ## Decision 提供方
 
-网关可代理 `/v1/decision` 和 `/v1/systemone` 请求，用于概率化结构决策模型。统一条目使用 `decision_format` 或 `decision_shim`（见[非 LLM 端点](#non-llm-endpoints)）；下面的旧格式仍然受支持：
+网关可代理 `/v1/decision` 和 `/v1/systemone` 请求，用于概率化结构决策模型。统一条目使用 `decisions_format` 或 `decisions_shim`（见[非 LLM 端点](#non-llm-endpoints)）；下面的旧格式仍然受支持：
 
 ```jsonc
 {
-  "decision_providers": {
+  "decisions_providers": {
     "jev-prod": { "type": "typesafe", "api_key": "${JEV_API_KEY}", "base_url": "https://api.typesafe.ai" }
   },
-  "decision_models": {
+  "decisions_models": {
     "jev-1": "jev-prod"
   },
-  "default_decision_format": "systemone"
+  "default_decisions_format": "systemone"
 }
 ```
 
 | 字段 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `decision_providers` | `dict` | `{}` | Decision 上游的 provider 配置 |
-| `decision_models` | `dict` | `{}` | 模型 → provider 映射 |
-| `default_decision_format` | `str` | `"systemone"` | 源格式回退 |
+| `decisions_providers` | `dict` | `{}` | Decision 上游的 provider 配置 |
+| `decisions_models` | `dict` | `{}` | 模型 → provider 映射 |
+| `default_decisions_format` | `str` | `"systemone"` | 源格式回退 |
 
-旧式条目的 `format` 或 `type` 可以写 decision format（`systemone`、`openai_decisions`），也可以写已注册的 decision shim，由其提供 format 与连接默认值（例如 `"type": "typesafe"` → `systemone`）。`decision_path` 默认取该 format 的上游路径（`openai_decisions` → `/v1/decisions`，其余为 `/v1/systemone`）。
+旧式条目的 `format` 或 `type` 可以写 decision format（`systemone`、`openai_decisions`），也可以写已注册的 decision shim，由其提供 format 与连接默认值（例如 `"type": "typesafe"` → `systemone`）。`decisions_path` 默认取该 format 的上游路径（`openai_decisions` → `/v1/decisions`，其余为 `/v1/systemone`）。
 
 ## 完整示例
 
