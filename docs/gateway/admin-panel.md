@@ -4,71 +4,39 @@ title: Admin Panel
 
 # Admin Panel
 
-The gateway includes a built-in web-based admin panel for managing configuration, monitoring traffic, and inspecting request logs — all without editing config files or restarting the server.
+The gateway ships a built-in web console for configuration, traffic and diagnostics — no config file to edit by hand, no restart to apply a change.
 
-Access it at: **`http://localhost:8765/admin/`**
+Open **`http://localhost:8765/admin/`**.
 
-## Configuration
+## The console
 
-The **Configuration** tab lets you manage providers, models, and server settings through a visual interface.
+The console is a left rail of sections — **Dashboard**, **Providers**, **Models**, **API Keys** and **Observability** — with the mode, language, settings and logout buttons in one row at the bottom, and a status bar along the bottom edge that reports the request counters. Below 900 px the rail folds into a top bar.
 
-![Configuration tab](images/admin-configuration.png)
+`Alt+1` … `Alt+5` jump to a section, `[` and `]` step through them, Back and Forward move between the sections you visited, and `?` opens the shortcut list.
 
-### Server Settings
+## Providers
 
-Set a global proxy URL that applies to all providers unless overridden per-provider.
+The **Providers** section manages every upstream the gateway can call.
 
-### Shim Sources
+![Providers section](images/admin-providers.png)
 
-The **Settings** tab has a **Shim Sources** section for the top-level `shims`
-config section (see [External Shim Sources](configuration.md#external-shim-sources)).
-It lists the declared **Directories** (one per line), **Presets** (comma- or
-whitespace-separated catalog keys), **Remotes** (a JSON array) and the remaining
-knobs — **Cache directory**, **Re-fetch TTL (s)** and
-**Fail startup on a bad source** — and shows a per-source status table:
-`loaded` / `failed`, whether a stale cache was used, the shim count (shim names
-are in the tooltip), the resolved directory and, for remotes, the commit SHA the
-archive was pinned to.
+The header filters by model type — **All**, **LLM**, **Embedding**, **Rerank**, **Decision** — and searches by name, shim or base URL; the count beside it is how many providers the filters leave. The grid/list toggle switches between cards and a compact table, and the choice is stored in `localStorage`. **+ Add Provider** opens the form; **+ Free resource** lists the free lanes the gateway knows about, and picking one is the same as adding that provider.
 
-**Save** persists the section and re-applies it; **Reload** re-applies the
-current config; **Refetch** forces every remote to be downloaded again, bypassing
-its cache and `refresh` mode. A source that fails is reported here without
-stopping the gateway.
+Each card shows the logo and name, the capability badges for the model types the provider serves, an enable switch and the number of models on it. A disabled provider greys its logo and dims its name; the card stays readable. The actions are **Edit**, **Test** and a **⋯** menu holding **Clone**, **Refresh** (when the shim declares a model-listing path), **Quota** (when the shim ships a probe) and **Delete**.
 
-**Preset catalog.** Above the remotes list, a catalog offers every standalone
-shim package the gateway knows about — ALCF, Argo and AskSage. Choosing one and
-pressing **Add source** appends its expanded `shims.remotes` entry to the JSON
-list below — it does **not** save, so the entry goes through the same review and
-the same **Save** as one typed by hand. The **Presets** field above is the
-shorter spelling: catalog keys (`argo, alcf`) that expand server-side, with an
-explicit remote overriding its preset when the URLs match. An entry whose `url`
-is already in the list is not added a second time, and the button says so. See
-[Standalone shim packages](../guide/shims.md#standalone-shim-packages).
+The card omits the type row and the base URL on purpose: one provider can serve several model types at once, which the badges say better than a single cell, and the URL is in the name's tooltip and in the form.
 
-**Removal advisories.** Below the status table, the advisories name each provider
-in the config whose shim is going away, the release that removes it, and the
-source that replaces it — with the same **Add source** action. The list is derived
-per request from the config and the load report, so it is current without a
-restart: once a declared source supplies the shim, the advisory is gone.
+### Adding and editing
 
-!!! warning
-    A declared shim directory or archive runs third-party Python
-    (`transforms.py`) at load time. Only add sources you trust, and prefer
-    pinning a tag or commit SHA.
+The provider form is a right-side drawer with a sticky title and action bar. It holds the name, the provider type or shim, the base URL, the API key, an optional proxy and the logo.
 
-### Providers
+- **Rename** rewrites every model reference automatically.
+- **Clone** pre-fills the drawer with the source provider's settings and the name `<name> Clone` (`<name> 克隆` in Chinese).
+- **Delete** opens a type-to-confirm dialog that warns about the cascade: the provider's models go with it.
 
-Each provider card shows its name, API standard type (or shim name), base URL, masked API key, optional proxy, and provider logo. When a provider uses a [shim](../guide/shims.md), any active transforms (e.g. `strip_fields("logprobs")`) are also displayed on the card. You can:
+An API key field auto-detects comma-separated values and switches to a multi-entry list with one password row per key. **+ Add key** appends a row at any time; each row has an eye toggle and a copy button, and the footer offers view-all and copy-all for the whole comma-separated value. Masked keys on cards are never written back to the config file.
 
-- **Add** a new provider with the "+ Add Provider" button
-- **Edit** an existing provider (name, type/shim, base URL, API key, proxy)
-- **Rename** a provider — all model references are updated automatically
-- **Clone** a provider — opens the Add Provider modal pre-filled with the source provider's settings as a template
-- **Delete** a provider
-
-When editing, API keys are shown as a password field with a visibility toggle and copy button. Masked keys displayed on cards are never written back to the config file.
-
-#### Signing in to a Shim-Declared Credential
+### Signing in to a shim-declared credential
 
 A provider whose shim ships `auth.py` has no key to type in — the exchange mints the credential through a sign-in that needs a browser. Editing such a provider replaces the API-key box with a **Credential** section that reads `GET /admin/api/config/providers/<name>/credential`:
 
@@ -80,46 +48,29 @@ A provider whose shim ships `auth.py` has no key to type in — the exchange min
 
 **Install a record** takes the JSON the CLI prints (`llm-rosetta-gateway credential <provider>`, see the [CLI reference](cli.md#credential-provider)) and hands it to the exchange over `PUT …/credential`; a record that does not verify is refused with the exchange's own message. **Sign out** calls `DELETE`, which revokes the grant upstream when the vendor allows it and takes the token out of the gateway's key ring immediately. The panel never renders a token: only the subject and expiry the exchange chooses to expose.
 
-#### API Key Multi-Entry
+## Models
 
-The API key field auto-detects comma-separated values and switches to a multi-entry list with individual password inputs, one per key. An **+ Add key** button is always visible to append additional keys. Each row has an eye toggle and copy button; the modal footer provides combined view-all and copy-all actions for the full comma-separated value.
+The **Models** section is the model routing table: every configured model, the capabilities it declares, and the provider that serves it.
 
-#### Provider Search
+![Models section](images/admin-models.png)
 
-When more than 6 providers are configured, a search bar appears at the top of the providers section. It filters providers in real time by name, type/shim, or base URL.
+- **Filters** — provider, a status facet (**All statuses**, **Usable**, **Partial**, **Unusable**, each counting the rows the other filters leave), and model type.
+- **Badges** are icon-only; the capability name is the tooltip. A model served by more than one provider says **Multiple providers**, and the cell opens a list with each provider's own switch, weight and **Test**.
+- **Actions** — **Test** and **⋯** appear when a row is hovered; the enable switch never hides, because it is the row's state.
+- **A row opens a side panel** with the capabilities, every provider with its weight, and **Edit** in the same panel — there is no separate model modal.
+- **Ordering** — the header stays put while the table scrolls, and a model no provider can serve sorts below the usable rows.
 
-#### Grid / List View
+Two actions are not in the table: **+ Add Model** in the header, and **Fetch from Provider**, which queries the upstream `/v1/models` endpoint, lists what it returns with checkboxes, and bulk-adds the selection with an optional name prefix. Its failure messages are diagnostic rather than generic:
 
-Two icon buttons in the providers header let you switch between **grid** (card) and **list** (compact row) layout. The selected view is persisted in `localStorage`.
+- **Connection refused** — the upstream service is not running, or a firewall blocks the connection
+- **Timeout** — the upstream host is not reachable from the gateway
+- **DNS failure** — the Base URL hostname does not resolve
 
-### Multi-Provider Models
+Renaming a model onto a name that already exists merges the providers instead of failing: the confirm dialog adds the new provider to `providers[]` rather than replacing the entry that already held the name.
 
-A single model can be served by multiple providers with weighted load distribution. In the providers section, multi-provider models show all associated providers with their individual weights, types, and enabled states. You can:
+### Model capabilities
 
-- **Edit weights** inline to control traffic distribution between providers
-- **Toggle individual providers** within a multi-provider model
-- **Add providers** to an existing model via the "Fetch Models" dialog
-
-When renaming a model to a name that already exists, providers are merged instead of failing.
-
-### Model Routing
-
-Below the providers section, a model routing table lists all configured models with their target provider and capabilities. You can:
-
-- **Search** models by name or **filter** by provider using the dropdown
-- **Sort** by model name or provider by clicking column headers
-- **Add** a new model with provider assignment
-- **Fetch from Provider** — query the upstream `/v1/models` endpoint, browse available models with checkboxes, and bulk-add with optional prefix. Error responses show actionable diagnostics:
-    - **Connection refused** — the upstream service is not running or a firewall is blocking the connection
-    - **Timeout** — the upstream host is not reachable from the gateway container
-    - **DNS failure** — the Base URL hostname cannot be resolved
-- **Edit** model capabilities inline
-- **Delete** a model routing entry
-- **Test** a model directly from the admin panel
-
-### Model Capabilities
-
-Each model can declare capabilities that determine available test types and are returned in the `/v1/models` response:
+Each model can declare capabilities that determine the available test types and are returned in the `/v1/models` response:
 
 | Capability | Description | Badge Color |
 |------------|-------------|-------------|
@@ -129,9 +80,9 @@ Each model can declare capabilities that determine available test types and are 
 | `embedding` | Text embeddings (mutually exclusive with vision/tools) | Teal |
 | `reasoning` | Extended thinking / chain-of-thought (mutually exclusive with embedding) | Purple |
 
-### Model Testing
+### Model testing
 
-Click the **Test** button on any model row to run a quick test. The available test types depend on the model's declared capabilities:
+**Test** on a model row runs a quick test; the types on offer follow the declared capabilities:
 
 | Test Type | Description | Requires |
 |-----------|-------------|----------|
@@ -142,96 +93,94 @@ Click the **Test** button on any model row to run a quick test. The available te
 | Embedding | POST to `/v1/embeddings`, displays dimension count | `embedding` |
 | Reasoning | Text query with `reasoning_effort: "low"` | `reasoning` |
 
-Embedding models show a single Test button (no dropdown) since only one test type applies.
+Embedding models show a single Test button, since only one test type applies.
 
-While a test is pending, a **Cancel** button is visible so you can abort the request. A live elapsed timer is displayed alongside the status (e.g. "Sending request... 5s") to give immediate feedback on long-running completions. Test payloads use `max_tokens=256` for fast completion.
+A model served by several providers is tested against the one picked in its provider list, pinned with the `X-Rosetta-Provider-Pin` header — which the gateway honours only for admin-internal tokens. While a test runs, **Cancel** aborts it and an elapsed timer ticks beside the status. Test payloads use `max_tokens=256`. Results show the extracted reply, with collapsible sections for the raw request, the raw response body and, for a vision test, the image preview.
 
-Test results show the extracted model reply in the main output area, with collapsible sections for the raw request payload, raw response body, and (for vision tests) the test image preview.
+### Delete confirmations
 
-### Delete Confirmations
+Destructive operations use two confirmation patterns:
 
-Destructive operations use two different confirmation patterns depending on severity:
+- **Provider delete** — a type-to-confirm dialog that names the cascade effects.
+- **Model delete**, **API key delete** and **Clear Log** — an inline two-step confirmation: the button becomes **Sure? Yes** and reverts after 3 seconds.
 
-- **Provider delete** — opens a type-to-confirm modal that warns about cascade effects (all associated models will be removed).
-- **Model delete**, **API key delete**, and **Clear Log** — use an inline two-step confirmation: the button changes to "Sure? Yes" and automatically reverts after 3 seconds if not confirmed.
+## API Keys
+
+The **API Keys** section issues and revokes the keys that call `/v1/*`. Each key has a label, an allowed-shim list (`*` for any), a creation time and a last-used time. A new key is shown once, in full; the list keeps only its id and label. Deleting a key takes effect on the next request — no restart.
 
 ## Dashboard
 
-The **Dashboard** tab provides real-time metrics about gateway traffic.
+The **Dashboard** is the landing section and reports live traffic.
 
-![Dashboard tab](images/admin-dashboard.png)
+![Dashboard](images/admin-dashboard.png)
 
-### Summary Cards
+**Summary cards** — Total Requests, Error Rate, Active Streams, Uptime and Tokens (24h), the last with a link to its breakdown.
 
-- **Total Requests** — cumulative request count since startup (or last persistence load)
-- **Error Rate** — percentage of non-2xx responses
-- **Active Streams** — currently active streaming connections
-- **Uptime** — time since the gateway started
+**Rolling charts** — Throughput (req/s) and Latency (ms) over the last 60 seconds. With no traffic they say "No data yet" rather than drawing a flat line.
 
-### Time-Series Charts
+**Requests histogram** — the request log folded into buckets, with a **5h** / **24h** toggle. Success stacks on the baseline and errors cap the bar, so the height stays the request count and red only ever means errors; hovering a bucket breaks it down.
 
-Two rolling 60-second charts show:
+**Token usage** — clicking a token count opens a modal with prompt / completion / total, cache creation and cache read (Anthropic-style providers), reasoning tokens, and the rolling 24-hour figures.
 
-- **Throughput (req/s)** — request rate over time
-- **Latency (ms)** — average response time per second
+**Per-Provider Breakdown** — requests grouped by target provider in a two-column list. **Rebuild Counters** recomputes the totals from the request log when a counter has drifted.
 
-When there is no traffic yet, charts display a "No data yet" message instead of rendering a flat line.
-
-### Token Usage
-
-Click a model's token count in the dashboard to open a breakdown modal showing:
-
-- **Prompt / Completion / Total** token counts
-- **Cache creation / Cache read** token counts (Anthropic-style providers)
-- **Reasoning tokens** (for models with extended thinking)
-- **Rolling 24-hour** statistics
-
-### Per-Provider Breakdown
-
-A table showing request counts grouped by target provider, useful for identifying traffic distribution.
-
-### Network Diagnostics
-
-The dashboard includes a Network Diagnostics section that checks connectivity from the gateway process. Three items are displayed:
+**Network Diagnostics** — three checks from the gateway process:
 
 | Item | Description |
 |------|-------------|
-| **IP Location** | The gateway's outgoing public IP and geolocation, detected via an external lookup service |
-| **Host IP** | The Docker host's gateway IP (e.g. `172.29.0.1`), detected from the container's default route via `/proc/net/route`. Useful for reaching services running on the host machine. Only shown when running inside a container. |
+| **IP Location** | The gateway's outgoing public IP and geolocation, from an external lookup |
+| **Host IP** | The Docker host's gateway IP (e.g. `172.29.0.1`), read from the container's default route via `/proc/net/route`. Only shown inside a container. |
 | **Google** | Basic connectivity check to `google.com` |
 
-## Request Log
+## Observability
 
-The **Request Log** tab shows individual requests flowing through the gateway.
+**Observability** is one panel with five views of the same traffic.
 
-![Request Log tab](images/admin-request-log.png)
+![Observability — requests](images/admin-observability.png)
 
-Each entry includes:
+| View | Shows |
+|------|-------|
+| **Requests** | One row per proxied call — the request log |
+| **Ops Log** | Server-level events: lifecycle, config, keys, data mutations, security, health |
+| **Error Dumps** | The bodies behind a failed request |
+| **Profiling** | Toggle for the phase profiler |
+| **Capture** | Toggle for request/response capture |
+
+### Filters
+
+Every view shares one filter vocabulary:
+
+- **Time** — All time, Last 1h, Last 24h, Last 7d, Last 30d, or a custom range
+- **Status** — All, OK (2xx/3xx), 4xx, 5xx, or a custom code
+- **Provider**, **Model**, **API Key** — the same lists the config defines
+
+### Request rows
 
 | Column | Description |
 |--------|-------------|
-| Time | Request timestamp (date and time) |
+| Time | Request timestamp |
 | Model | Model name from the request |
-| Source -> Target | Source API format and target provider |
-| Mode | Streaming or non-streaming |
-| Status | HTTP status code (color-coded) |
-| Duration | End-to-end latency |
+| Source → Target | Source format and target provider |
+| Mode | `stream`, or a blank cell for a non-streaming call |
+| API Key | Label of the key that called |
+| Client IP | Peer address |
+| Status | HTTP status, colour-coded |
+| Tokens | Prompt and completion counts, plus cache reads where the provider reports them |
+| Duration | End to end, and output tokens per second where token usage is known |
 
-### Filtering
+A stream's duration is the span of the streamed body, not the time to headers, so the rate beside it reflects what the client actually waited for.
 
-Use the dropdown filters at the top to narrow by:
+**Pause refresh** freezes the list while you read it. **Clear Log** empties the view behind an inline confirmation.
 
-- **Model** — filter by specific model
-- **Provider** — filter by target provider
-- **Status** — show only successful (2xx/3xx) or error (4xx/5xx) responses
+### Error dumps
 
-Click **Clear Log** to remove all entries from the current view.
+An error dump opens full screen at `#dump/<id>` — behind the same login gate as the rest of the panel — with copy and download per section, and a bulk selection (**select all**, **invert**) scoped to the filtered result rather than the page. The header box reflects the rows the filter leaves.
 
-### Server Ops Log
+### Server ops log
 
-The Logs tab includes a segmented toggle to switch between **Request Log** and **Server Ops Log**. The ops log tracks server-level operational events with structured metadata.
+The ops log records mutations and security events with structured metadata.
 
-#### Event Categories
+#### Event categories
 
 | Category | Event Types | Description |
 |----------|-------------|-------------|
@@ -242,16 +191,14 @@ The Logs tab includes a segmented toggle to switch between **Request Log** and *
 | Security | `password_changed`, `token_rotated`, `session_logout_all` | Authentication and session events |
 | Health | `health_status_change` | Provider health state changes |
 
-#### Severity Levels
+#### Severity levels
 
 - **info** — non-destructive operations (key creation, config reload, vacuum)
 - **warning** — destructive data mutations (clear, trim, cleanup) and security events (password change, token rotation)
 
-Operations that fail are automatically recorded with elevated severity.
+An operation that fails is recorded with elevated severity automatically.
 
-#### Source Filtering
-
-Filter by the originating subsystem:
+#### Source filtering
 
 | Source | Operations |
 |--------|-----------|
@@ -264,29 +211,72 @@ Filter by the originating subsystem:
 
 #### ops_log vs request_log
 
-The **request log** records every proxy request (high volume, traffic-focused). The **ops log** records mutations and security events (low volume, audit-focused). They are queried independently — auto-refresh is gated on the active log view.
+The **request log** records every proxy request (high volume, traffic-focused). The **ops log** records mutations and security events (low volume, audit-focused). They are queried independently, and auto-refresh follows the active view.
 
-### Log Retention
+### Retention
 
-Retention is configured in the Settings section of the admin panel:
+Retention lives in **Settings → Logging & data** and applies per store — request log, error dumps and the ops log each have their own cap and age:
 
-- **Count-based**: maximum number of entries to keep (oldest are pruned)
-- **Age-based**: entries older than a threshold are automatically cleaned up
+- **Count-based**: the maximum number of entries to keep (the oldest are pruned)
+- **Age-based**: entries older than a threshold are cleaned up
 
 Both thresholds apply independently — whichever triggers first wins.
 
+## Settings
+
+**Settings** is a full-width console with a left sub-nav, not a drawer of cards. Each line is one setting and the control is sized to its content instead of stretched across the page. Server-scoped groups save on change; the groups that touch the database keep an explicit **Save**.
+
+![Settings — security](images/admin-settings-security.png)
+
+| Pane | Holds |
+|------|-------|
+| **Appearance** | Colour scheme, mode, language, auto-refresh interval and the theme override |
+| **Behavior** | Console output level, error detail, credential reveal, the global proxy URL |
+| **Rate limiting** | Switch, algorithm (sliding window, token bucket, fixed window, GCRA) and scope (global, per IP, per key, per model) |
+| **Logging & data** | Request log cap and age, error dump cap, export and cleanup, ops log retention |
+| **Security** | Admin token and its rotation, **Logout All**, the password form and the session lifetimes |
+| **Shims** | Declared sources and the loaded-shim inventory |
+| **About** | Config file path, versions and links |
+
+The **global proxy URL** lives here rather than on the Providers page: it is server-scoped, and it applies to every provider that does not override it.
+
+### Theme override
+
+**Appearance → Theme override** appends CSS to the admin page after the built-in schemes and after any downstream fragment. It saves to `server.admin_custom_css` and applies on save and on every later page load, so an operator can restyle the panel from the console instead of shipping a `custom_head` from code. A rule that sets a theme token needs the scheme's own selector.
+
+### Session lifetimes
+
+**Security → Sessions** holds two answers, and only one of them applies to a given session:
+
+- **Sign out after inactivity** — the window a session slides on every authenticated request (`server.admin_session.idle_minutes`, default 30, `0` = never). The panel's own idle timer reads the same number.
+- **Stay signed in for** — the persistent-cookie lifetime a remembered sign-in gets (`server.admin_session.remember_days`, default 30, `0` = the login page does not offer it). A remembered session ignores the idle window and ends at its own lifetime.
+
+Both apply on the next request, and both are reported by `/admin/api/auth-check` before sign-in, so the login card can say which one is in force.
+
+### Shims { #shim-sources }
+
+The **Shims** pane declares external sources and lists what loaded.
+
+![Settings — shims](images/admin-shims.png)
+
+**Declared sources** — the top-level `shims` section (see [External Shim Sources](configuration.md#external-shim-sources)): **Directories** (one per line), **Preload presets** (catalog keys such as `argo, alcf, asksage`), **Remotes** (a JSON array), and the remaining knobs — cache directory, re-fetch TTL and fail-startup-on-a-bad-source. **Save** persists the section and re-applies it; **Reload** re-applies the current config; **Refetch** forces every remote to be downloaded again, bypassing its cache and `refresh` mode. A source that fails is reported here without stopping the gateway.
+
+**Preset catalog.** Above the remotes list, a catalog offers every standalone shim package the gateway knows about — ALCF, Argo and AskSage. Choosing one and pressing **Add source** appends its expanded `shims.remotes` entry to the JSON list below — it does **not** save, so the entry goes through the same review and the same **Save** as one typed by hand. The **Preload presets** field is the shorter spelling: catalog keys that expand server-side, with an explicit remote overriding its preset when the URLs match. An entry whose `url` is already in the list is not added a second time, and the button says so. See [Standalone shim packages](../guide/shims.md#standalone-shim-packages).
+
+**Loaded shims.** Below the sources, the inventory lists every registered shim, grouped by the source it came from — the group head carries the source's state, resolved ref, count and any failure, so "what loaded" and "where from" are one answer. A shim in a declared local directory can be opened, edited and deleted here; an edit that does not load is rolled back to the previous file, and deletion is refused while a configured provider still names the shim. A shim can also be **disabled** and re-enabled through `shims.disabled` — a declaration rather than a deletion, so the same definition comes back. Built-in and remote shims are read-only, with the reason on the row; so is a definition sitting at the root of a declared source, because the loader does not read it and removing "its directory" would take the whole source.
+
+**Removal advisories.** Below the inventory, the advisories name each provider in the config whose shim is going away, the release that removes it and the source that replaces it — with the same **Add source** action. The list is derived per request from the config and the load report, so it is current without a restart.
+
+!!! warning
+    A declared shim directory or archive runs third-party Python
+    (`transforms.py`) at load time. Only add sources you trust, and prefer
+    pinning a tag or commit SHA.
+
 ## Themes
 
-The panel ships two colour schemes, **Minimal** and **Emerald**, each in a
-light and a dark mode. Choose them under **Settings → Appearance & Display**
-(the **Scheme** and **Mode** selects). The choice is stored per browser profile
-in `localStorage` (`llm-rosetta-scheme` and `llm-rosetta-mode`) and applied
-before the first paint, so a stored scheme does not flash the default.
+The panel ships two colour schemes, **Minimal** and **Emerald**, each in a light and a dark mode. The rail's mode button cycles light / dark / system, and **Settings → Appearance** carries the same choice as selects. The choice is stored per browser profile in `localStorage` (`llm-rosetta-scheme` and `llm-rosetta-mode`) and applied before the first paint, so a stored scheme does not flash the default. The login card carries the same mode and language buttons, because both live in `localStorage` and a login page in the wrong language is otherwise a dead end.
 
-A scheme declares token values only; the components decide where those values
-land. If you are adding a scheme, see [Admin Themes](../contributing/admin-themes.md):
-the contract is enforced by `make test-js`, and `make theme-matrix` renders
-every scheme × mode × width against a live panel and saves screenshots.
+A scheme declares token values only; the components decide where those values land. If you are adding a scheme, see [Admin Themes](../contributing/admin-themes.md): the contract is enforced by `make test-js`, and `make theme-matrix` renders every scheme × mode × width against a live panel and saves screenshots.
 
 ## Authentication
 
@@ -300,15 +290,18 @@ Set `server.admin_password` in your config to enable built-in password protectio
 
 See [Configuration — Admin Panel Security](configuration.md#admin-panel-security) for details.
 
-When password protection is enabled:
+With password protection enabled, the console shows a login card: the product mark, one password field with a reveal button, a Caps Lock hint and a submit button that goes busy. A **Stay signed in** checkbox appears only when the gateway offers it, and it follows the last choice. The server's own message is shown verbatim, so a lockout names its remaining seconds instead of "Invalid password".
+
+![Login card](images/admin-login.png)
 
 !!! info "No content flash"
-    While the browser verifies your stored session, the admin UI remains hidden (`body.auth-pending`) until authentication is confirmed. This prevents a brief flash of the full interface before the login overlay appears.
+    While the browser verifies the stored session, the admin UI stays hidden (`body.auth-pending`) until authentication is confirmed. This prevents a brief flash of the interface before the login card appears.
 
-- Authentication uses **HttpOnly + SameSite=Lax** session cookies — no tokens are exposed to JavaScript.
-- A **Logout** button appears in the top-right corner to end your session manually.
-- Sessions automatically expire after **30 minutes of inactivity**. Mouse movement, keyboard input, scrolling, and clicks all count as activity.
-- The login form uses standard HTML form semantics, so browser password managers can save and autofill credentials.
+- Authentication uses **HttpOnly + SameSite=Lax** session cookies with `Path=/admin` — no token is exposed to JavaScript.
+- Without **Stay signed in**, the cookie dies with the browser and the session ends after the idle window (default 30 minutes without activity; mouse movement, keyboard input, scrolling and clicks all count).
+- With it, the cookie carries a `Max-Age` of the remembered lifetime (default 30 days) and the session ignores the idle window — "stay signed in" and "idle timeout" are two promises, so only one applies to a given session.
+- A **Logout** button sits in the rail footer. A password change mints the replacement session with the lifetime the user asked for, so remembering survives it.
+- Sessions live in memory: a gateway restart ends every one, remembered or not.
 - For programmatic API access, the `X-Admin-Token` header is still accepted as a fallback.
 
 Alternatively, protect the admin panel using a reverse proxy:
@@ -317,11 +310,11 @@ Alternatively, protect the admin panel using a reverse proxy:
 - **Nginx**: Use `auth_basic` directive
 - **Traefik**: Use BasicAuth middleware
 
-Gateway API keys (managed via the admin panel) protect AI request endpoints (`/v1/*`). See [Configuration — Gateway API Keys](configuration.md#gateway-api-keys) for details.
+Gateway API keys (managed in the **API Keys** section) protect AI request endpoints (`/v1/*`). See [Configuration — Gateway API Keys](configuration.md#gateway-api-keys) for details.
 
 ## Internationalization
 
-The admin panel supports English and Chinese (中文). Switch languages using the language dropdown in the top-right corner. The selection persists in `localStorage`.
+The console supports English and Chinese (中文). The language button sits in the rail footer, and on the login card. Every interface string — tooltips, placeholders, aria-labels and toasts included — goes through the translation layer, and the selection persists in `localStorage`.
 
 !!! note "Chinese label update"
     The Chinese translation for "provider" was updated from **服务商** to **服务方** to better reflect the local usage convention.
@@ -383,4 +376,4 @@ Model test polling also uses POST requests instead of GET, which avoids being ca
 
 ## Mobile / Responsive
 
-The admin panel is responsive — the header, tab bar, and content layout adapt to narrow screens. Data tables scroll horizontally on mobile devices so no columns are clipped.
+The console is responsive — below 900 px the rail becomes a top bar, the settings sub-nav folds into a bar above the pane, and data tables scroll horizontally so no column is clipped.
