@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import os
 import textwrap
 from pathlib import Path
 
@@ -12,11 +14,16 @@ from llm_rosetta.shims.provider_shim import (
     get_shim,
 )
 from llm_rosetta.shims.providers import (
+    _TYPE_DIRS,
     _load_plugin_shims,
     _load_transforms,
     load_providers,
     load_providers_from_dir,
 )
+
+#: The registry recorded before the model-type layout landed.  It is the old
+#: tree's answer, kept as the expectation the new tree has to reproduce.
+SNAPSHOT_PATH = Path(__file__).with_name("shim_registry_snapshot.json")
 
 
 @pytest.fixture(autouse=True)
@@ -1032,3 +1039,140 @@ class TestAuthExchange:
         )
 
         assert load_providers_from_dir(tmp_path, on_error="warn") == []
+
+
+def _snapshot_rows() -> list[dict]:
+    """The registry facts a directory move must not change."""
+    from llm_rosetta.shims import list_shims
+
+    load_providers()
+    return [
+        {
+            "name": s.name,
+            "model_type": s.model_type,
+            "format": s.format,
+            "base_url": s.connection.base_url,
+            "api_key_env": s.connection.api_key_env,
+            "default_path": s.connection.default_path,
+            "group": s.group,
+            "group_label": s.group_label,
+            "display_name": s.display_name,
+            "free_source": s.free_source,
+        }
+        for s in sorted(list_shims(), key=lambda s: s.name)
+    ]
+
+
+class TestBuiltinRegistrySnapshot:
+    """Where a built-in shim sits must not change what the registry says.
+
+    The snapshot was recorded from the tree before the model-type layout
+    landed, so the expectation is the *old* tree's registry and this tree has
+    to reproduce it.  Regenerate it deliberately, never to make a red test
+    green:
+
+        SHIM_SNAPSHOT_REGEN=1 pytest \
+            tests/test_shim_loader.py::TestBuiltinRegistrySnapshot
+    """
+
+    def test_the_registry_matches_the_committed_snapshot(self):
+        actual = _snapshot_rows()
+        if os.environ.get("SHIM_SNAPSHOT_REGEN"):
+            SNAPSHOT_PATH.write_text(
+                json.dumps(actual, indent=2, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
+            pytest.skip("snapshot regenerated")
+        expected = json.loads(SNAPSHOT_PATH.read_text(encoding="utf-8"))
+        assert actual == expected
+
+
+class TestModelTypeDirectories:
+    """A vendor groups its shims by model type, and the path is checked.
+
+    The type directory is named after the endpoint the type serves
+    (``embeddings``, ``rerank``, ``decisions``), not after the registry key,
+    so the loader keeps an explicit mapping.  Chat keeps the format level
+    because a vendor serves several chat dialects; a non-chat vendor normally
+    serves one, so the type directory is the leaf.
+    """
+
+    @staticmethod
+    def _write(root: Path, rel: str, name: str, model_type: str, fmt: str) -> Path:
+        d = root / rel
+        d.mkdir(parents=True)
+        (d / "provider.yaml").write_text(
+            f"name: {name}\nmodel_type: {model_type}\nformat: {fmt}\n",
+            encoding="utf-8",
+        )
+        return d
+
+    def test_the_type_directory_can_hold_the_leaf(self, tmp_path: Path):
+        self._write(
+            tmp_path, "cohere/embeddings", "cohere--embedding", "embedding", "cohere"
+        )
+        (shim,) = load_providers_from_dir(tmp_path)
+        assert shim.model_type == "embedding"
+        assert shim.format == "cohere"
+
+    def test_the_type_directory_can_group_format_leaves(self, tmp_path: Path):
+        self._write(
+            tmp_path,
+            "openai/llm/chat_completions",
+            "openai--chat_completions",
+            "llm",
+            "chat_completions",
+        )
+        self._write(
+            tmp_path,
+            "openai/llm/open_responses",
+            "openai--open_responses",
+            "llm",
+            "open_responses",
+        )
+        shims = load_providers_from_dir(tmp_path)
+        assert {s.name for s in shims} == {
+            "openai--chat_completions",
+            "openai--open_responses",
+        }
+
+    def test_a_mismatch_names_the_directory_and_the_declaration(self, tmp_path: Path):
+        self._write(
+            tmp_path, "vendor/embeddings", "vendor--x", "llm", "chat_completions"
+        )
+        with pytest.raises(ValueError, match=r"'embeddings'.*model_type='llm'"):
+            load_providers_from_dir(tmp_path)
+
+    def test_a_legacy_format_directory_still_loads(self, tmp_path: Path):
+        """``embedding/`` is a format directory, not the ``embeddings`` level."""
+        self._write(
+            tmp_path, "vendor/embedding", "vendor--embedding", "embedding", "openai"
+        )
+        (shim,) = load_providers_from_dir(tmp_path)
+        assert shim.name == "vendor--embedding"
+
+    def test_a_legacy_group_still_loads(self, tmp_path: Path):
+        self._write(
+            tmp_path,
+            "vendor/chat_completions",
+            "vendor--chat_completions",
+            "llm",
+            "chat_completions",
+        )
+        (shim,) = load_providers_from_dir(tmp_path)
+        assert shim.format == "chat_completions"
+
+    def test_every_builtin_sits_under_its_model_type(self):
+        import llm_rosetta.shims.providers as providers_mod
+        from llm_rosetta._vendor.yaml import load as yaml_load
+
+        root = Path(providers_mod.__file__).parent
+        paths = sorted(root.glob("*/*/provider.yaml")) + sorted(
+            root.glob("*/*/*/provider.yaml")
+        )
+        assert paths
+        for path in paths:
+            rel = path.relative_to(root).parts
+            assert rel[1] in _TYPE_DIRS, path
+            cfg = yaml_load(path.read_text(encoding="utf-8"))
+            assert _TYPE_DIRS[rel[1]] == cfg["model_type"], path

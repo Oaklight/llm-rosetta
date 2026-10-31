@@ -26,6 +26,14 @@ may export ``pre_ir_transforms`` and/or ``post_ir_transforms`` tuples
 NOT contain ``provider.yaml`` but DOES contain subdirectories with one is
 treated as a *group folder* (e.g. ``vendor/messages/``, ``vendor/chat_completions/``).
 
+**Model-type directories** name a category, using the endpoint spelling:
+``llm/``, ``embeddings/``, ``rerank/`` and ``decisions/``.  Under one, either
+the directory itself holds the leaf (``vendor/embeddings/provider.yaml``, the
+usual non-chat shape) or it groups format directories
+(``vendor/llm/chat_completions/provider.yaml``, because a chat vendor serves
+several dialects).  A shim filed under a model-type directory must declare the
+matching ``model_type``; a mismatch is refused at load time.
+
 Plugin shims
 ------------
 Downstream packages register shims via entry points::
@@ -77,6 +85,20 @@ from ..provider_shim import (
 logger = logging.getLogger(__name__)
 
 _PROVIDERS_DIR = Path(__file__).parent
+
+#: Model-type directory names, keyed to the registry category they name.
+#: The spelling follows the endpoint a type serves (``/v1/embeddings``,
+#: ``/v1/rerank``, ``/v1/decisions``) so a path reads like the route it
+#: configures; ``llm`` keeps its registry name because chat has no single
+#: endpoint.  A plural type name cannot collide with a format name
+#: (``embedding`` is a format; ``embeddings`` is not), so legacy layouts that
+#: use the format name as a directory keep loading unchanged.
+_TYPE_DIRS: dict[str, str] = {
+    "llm": "llm",
+    "embeddings": "embedding",
+    "rerank": "rerank",
+    "decisions": "decision",
+}
 
 # Convention-based model list transforms registered by shim transforms modules.
 # Each entry maps a shim name to a callable that converts upstream model
@@ -561,6 +583,7 @@ def _load_single_provider(
     _builtin: bool = True,
     root: Path | None = None,
     quota_probes: tuple[Any, ...] = (),
+    expected_type: str | None = None,
 ) -> ProviderShim | None:
     """Load a single provider from *provider_dir* and register it.
 
@@ -568,6 +591,8 @@ def _load_single_provider(
         provider_dir: Directory containing ``provider.yaml``.
         group: Name of the parent group folder (``None`` for top-level shims).
         _builtin: Whether this is a built-in provider directory.
+        expected_type: The model type the enclosing model-type directory
+            names.  When set, the shim's own ``model_type`` must match it.
 
     Returns:
         The registered :class:`ProviderShim`, or ``None`` on failure.
@@ -586,6 +611,13 @@ def _load_single_provider(
         return None
 
     fmt, model_type = _resolve_shim_pair(cfg, yaml_path)
+    if expected_type is not None and model_type != expected_type:
+        raise ValueError(
+            f"{yaml_path}: directory {provider_dir.name!r} is the "
+            f"{expected_type!r} model-type level, but this shim declares "
+            f"model_type={model_type!r}; move it under the {model_type!r} "
+            f"directory or correct the declaration"
+        )
 
     pre_t, post_t, ir_t, resp_t, transforms_mod = _load_transforms(
         provider_dir, group=group, _builtin=_builtin, root=root
@@ -779,6 +811,7 @@ def _load_provider_tolerant(
     root: Path,
     on_error: str,
     quota_probes: tuple[Any, ...] = (),
+    expected_type: str | None = None,
 ) -> ProviderShim | None:
     """Load one provider directory, optionally downgrading errors to a warning.
 
@@ -793,12 +826,61 @@ def _load_provider_tolerant(
             _builtin=builtin,
             root=root,
             quota_probes=quota_probes,
+            expected_type=expected_type,
         )
     except Exception as exc:
         if on_error == "warn":
             logger.warning("Skipping shim directory %s: %s", directory, exc)
             return None
         raise
+
+
+def _load_type_folder(
+    type_dir: Path,
+    group: str | None,
+    expected_type: str,
+    *,
+    builtin: bool,
+    root: Path,
+    on_error: str,
+    quota_probes: tuple[Any, ...] = (),
+) -> list[ProviderShim]:
+    """Load the leaves under a model-type directory.
+
+    The directory itself may be the leaf (``vendor/embeddings/provider.yaml``)
+    or group format directories (``vendor/llm/chat_completions/provider.yaml``).
+    Every leaf is checked against the type the directory names.
+    """
+    if (type_dir / "provider.yaml").exists():
+        shim = _load_provider_tolerant(
+            type_dir,
+            group,
+            builtin=builtin,
+            root=root,
+            on_error=on_error,
+            quota_probes=quota_probes,
+            expected_type=expected_type,
+        )
+        return [shim] if shim is not None else []
+
+    child_group = f"{group}.{type_dir.name}" if group else type_dir.name
+    loaded: list[ProviderShim] = []
+    for sub in sorted(type_dir.iterdir()):
+        if not sub.is_dir() or sub.name.startswith(("_", ".")):
+            continue
+        if (sub / "provider.yaml").exists():
+            shim = _load_provider_tolerant(
+                sub,
+                child_group,
+                builtin=builtin,
+                root=root,
+                on_error=on_error,
+                quota_probes=quota_probes,
+                expected_type=expected_type,
+            )
+            if shim is not None:
+                loaded.append(shim)
+    return loaded
 
 
 def _load_group_folder(
@@ -810,11 +892,30 @@ def _load_group_folder(
     on_error: str,
     quota_probes: tuple[Any, ...] = (),
 ) -> list[ProviderShim]:
-    """Load every leaf provider inside a *group_dir* (``<group>/<leaf>/``)."""
+    """Load every leaf provider inside a *group_dir*.
+
+    A child is a leaf (``<group>/<leaf>/provider.yaml``) or a model-type
+    directory (``<group>/llm/...``, ``<group>/embeddings/...``); a child that
+    is neither is not a provider directory and is skipped.
+    """
     child_group = f"{group}.{group_dir.name}" if group else group_dir.name
     loaded: list[ProviderShim] = []
     for sub in sorted(group_dir.iterdir()):
         if not sub.is_dir() or sub.name.startswith(("_", ".")):
+            continue
+        expected_type = _TYPE_DIRS.get(sub.name)
+        if expected_type is not None:
+            loaded.extend(
+                _load_type_folder(
+                    sub,
+                    child_group,
+                    expected_type,
+                    builtin=builtin,
+                    root=root,
+                    on_error=on_error,
+                    quota_probes=quota_probes,
+                )
+            )
             continue
         if (sub / "provider.yaml").exists():
             shim = _load_provider_tolerant(
@@ -843,11 +944,15 @@ def load_providers_from_dir(
     (``_llm_rosetta_plugin_shims.*``) to avoid collisions with built-in
     modules in ``sys.modules``.
 
-    Supports two layouts:
+    Supports three layouts:
 
     * **Flat** — a direct child with ``provider.yaml`` (e.g. ``openai/``).
     * **Grouped** — a child WITHOUT ``provider.yaml`` whose own children
       each contain one (e.g. ``vendor/messages/``, ``vendor/chat_completions/``).
+    * **Model-typed** — a child WITHOUT ``provider.yaml`` whose name is a
+      model-type directory (``llm``, ``embeddings``, ``rerank``, ``decisions``):
+      the directory itself holds the leaf, or it groups format directories.
+      Every shim below it must declare the matching ``model_type``.
 
     Args:
         providers_dir: Root directory to scan for provider subdirectories.

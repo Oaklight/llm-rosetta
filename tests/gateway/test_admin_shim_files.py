@@ -119,6 +119,106 @@ class TestYamlProblem:
         assert _yaml_problem("name: demo\n", "demo") is not None
 
 
+@pytest.fixture()
+def typed_source(tmp_path: Path) -> Path:
+    """A declared source that groups by model type, like the built-ins."""
+    root = tmp_path / "typed"
+    chat = root / "demo" / "llm" / "chat_completions"
+    chat.mkdir(parents=True)
+    (chat / "provider.yaml").write_text(
+        _yaml("demo--chat_completions"), encoding="utf-8"
+    )
+    embedding = root / "demo" / "embeddings"
+    embedding.mkdir(parents=True)
+    (embedding / "provider.yaml").write_text(
+        "name: demo--embedding\n"
+        "model_type: embedding\n"
+        "format: openai\n"
+        "connection:\n"
+        "  base_url: https://demo.example/v1\n",
+        encoding="utf-8",
+    )
+    return root
+
+
+@pytest.mark.asyncio
+async def test_the_inventory_reads_a_type_level_source(tmp_path, typed_source):
+    """A shim one model-type level down is still found and editable."""
+    request = _request(tmp_path, {"providers": {}, "models": {}}, typed_source)
+
+    rows = _body(await get_loaded_shims(request))["shims"]
+    embedding = next((r for r in rows if r["name"] == "demo--embedding"), None)
+
+    assert embedding is not None
+    assert embedding["origin"] == "path"
+    assert embedding["model_type"] == "embedding"
+    assert embedding["editable"] is True and embedding["deletable"] is True
+
+
+@pytest.mark.asyncio
+async def test_editing_a_type_level_shim_writes_it_back(
+    tmp_path, typed_source, monkeypatch
+):
+    """The editor writes by path, so a model-type level is just a longer path."""
+    from llm_rosetta.shims.provider_shim import unregister_shim
+    from llm_rosetta.shims.providers import load_providers_from_dir
+
+    async def _rebuild(_request):
+        load_providers_from_dir(typed_source)
+        return None
+
+    monkeypatch.setattr(shim_files, "_rebuild_shims", _rebuild)
+    edited = (
+        "name: demo--embedding\n"
+        "model_type: embedding\n"
+        "format: openai\n"
+        "display_name: Edited\n"
+        "connection:\n"
+        "  base_url: https://demo.example/v1\n"
+    )
+    request = _request(
+        tmp_path,
+        {"providers": {}, "models": {}},
+        typed_source,
+        body={"yaml": edited},
+    )
+
+    try:
+        response = await put_loaded_shim(request, "demo--embedding")
+
+        assert response.status_code == 200
+        written = typed_source / "demo" / "embeddings" / "provider.yaml"
+        assert written.read_text(encoding="utf-8") == edited
+    finally:
+        unregister_shim("demo--embedding")
+        unregister_shim("demo--chat_completions")
+
+
+@pytest.mark.asyncio
+async def test_a_failed_edit_restores_the_previous_file(
+    tmp_path, typed_source, monkeypatch
+):
+    """An edit that does not come back as a shim leaves the old file in place."""
+
+    async def _rebuild(_request):
+        return None
+
+    monkeypatch.setattr(shim_files, "_rebuild_shims", _rebuild)
+    path = typed_source / "demo" / "embeddings" / "provider.yaml"
+    original = path.read_text(encoding="utf-8")
+    request = _request(
+        tmp_path,
+        {"providers": {}, "models": {}},
+        typed_source,
+        body={"yaml": original + "display_name: Edited\n"},
+    )
+
+    response = await put_loaded_shim(request, "demo--embedding")
+
+    assert response.status_code == 400
+    assert path.read_text(encoding="utf-8") == original
+
+
 @pytest.mark.asyncio
 async def test_inventory_marks_a_declared_shim_editable(tmp_path, local_source):
     request = _request(tmp_path, {"providers": {}, "models": {}}, local_source)

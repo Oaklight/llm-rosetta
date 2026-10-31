@@ -29,7 +29,7 @@ from llm_rosetta.shims.auth_exchange import AuthContext, InteractiveSetupRequire
 
 MODULE_PATH = (
     Path(__file__).resolve().parent.parent
-    / "packages/llm-rosetta/src/llm_rosetta/shims/providers/openai_chatgpt/open_responses/auth.py"
+    / "packages/llm-rosetta/src/llm_rosetta/shims/providers/openai_chatgpt/llm/open_responses/auth.py"
 )
 
 # A throwaway 2048-bit key, generated for these tests only.  The exchange
