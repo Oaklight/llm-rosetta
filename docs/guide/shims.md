@@ -67,6 +67,16 @@ Each leaf directory contains:
 - **`provider.yaml`** (required) — declares `name`, `model_type`, `format`, connection settings (`connection.base_url`, `connection.api_key_env`, `connection.auth_header`, `connection.keyless`, `connection.models_path`, `connection.default_path`, `connection.token_command`), plus optional `logo`, `display_name`, and `free_source`.  `base` is the deprecated alias for `format`; the loader validates the `(model_type, format)` pair against the converter registry.  `model_type` is required whenever `format` is used — only a shim that declares `base` and no `format` may omit it.  A non-chat shim declares `connection.default_path` for the endpoint it serves (e.g. `/v1/embeddings`), and a provider can name it through `embedding_shim` / `rerank_shim` / `decision_shim` instead of a bare format.
 - **`transforms.py`** (optional) — exports `post_ir_transforms` and/or `pre_ir_transforms` tuples (the old names `to_transforms` / `from_transforms` also work)
 
+**Per-type parameter defaults.** A non-chat shim may declare the request fields its vendor differs on, in a section named after its own model type:
+
+```yaml
+# cohere/embeddings/provider.yaml
+embedding:
+  task_type: retrieval_document
+```
+
+The keys are IR field names, so the converter writes them in the vendor's dialect; a declared value is a *default* — it fills a field the client omitted and never overrides one the client sent. The whitelist is the set of fields measured against the live endpoints: embedding `task_type`, `dimensions`, `encoding_format`, `truncation`; rerank `top_n`, `return_documents`, `max_tokens_per_doc`, `truncation`; decision none. A key outside the list, or a section for another model type, is refused at load time. `cohere--embedding` ships `task_type: retrieval_document` because Cohere rejects a `/v2/embed` request without `input_type`.
+
 `connection.keyless` marks an upstream that accepts requests with no credential: the
 provider sends no auth header while no `api_key` is configured, and falls back to the
 base type's auth when one is supplied. `free_source: true` marks a shim whose gateway
