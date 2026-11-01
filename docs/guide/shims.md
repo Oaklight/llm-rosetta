@@ -474,8 +474,16 @@ v0.6.3. All three left core in 0.14.0. The OpenCode free lane left core after
 Their packages register the same canonical shim names, so a provider's `shim`
 value does not change — only the source declaration is new.
 
-**Preload a package by name.** `shims.presets` expands a catalog key into the
-repository, path and token variable, so one line replaces the expanded remote:
+**Preload a package by clicking it.** **Settings → Shims** lists every known
+standalone package as a chip — its name, its shim count, and the repository on
+hover — and clicking one adds or removes it from `shims.presets`. Save applies
+the selection; the field it writes is the same comma-separated list of keys you
+can also write by hand. A key the running catalog does not know is left in
+place until you next change the selection, so a config written against a newer
+catalog is not silently rewritten.
+
+`shims.presets` expands a catalog key into the repository, path and token
+variable, so one line replaces the expanded remote:
 
 ```jsonc
 "shims": {
