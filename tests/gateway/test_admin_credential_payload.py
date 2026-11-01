@@ -111,6 +111,16 @@ class TestTheConfigPayload:
         assert plain["credential_kind"] is None
         assert plain["manage_usage_url"] is None
 
+    def test_registered_shims_carry_the_language_mapped_hint(self, monkeypatch):
+        """A shim's panel note travels as one entry per language."""
+        payload = self._payload(monkeypatch, SimpleNamespace(providers={}))
+
+        by_name = {s["name"]: s for s in payload["registered_shims"]}
+        hint = by_name["opencode--chat_completions"]["hint_msg"]
+        assert set(hint) == {"en", "zh"}
+        assert "zen/v1" in hint["en"]
+        assert by_name["openai--open_responses"]["hint_msg"] is None
+
     def test_a_provider_entry_says_whether_it_mints_its_own(self, monkeypatch):
         config = SimpleNamespace(
             providers={

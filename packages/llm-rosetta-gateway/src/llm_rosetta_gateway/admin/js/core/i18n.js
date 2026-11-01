@@ -978,6 +978,9 @@ export function applyI18n() {
   // The update bubble's text is built from the probe payload, not an
   // attribute, so it repaints itself on a language change.
   window.repaintUpdateLabels?.();
+  // The provider form's shim hint is built from the shim payload too, and the
+  // dialog can be open while the language changes.
+  window.refreshShimHint?.();
   // Read the Docs serves the two translations under different paths, so the
   // docs link follows the interface language instead of the site root's
   // English redirect.

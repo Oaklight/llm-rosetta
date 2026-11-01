@@ -453,6 +453,7 @@ async def get_config(request: Any) -> Response:
                     "display_name": s.display_name,
                     "group": s.group,
                     "group_label": s.group_label,
+                    "hint_msg": s.hint_msg,
                     "free_source": s.free_source,
                     "keyless": s.connection.keyless,
                     "mints_credential": s.auth is not None,
