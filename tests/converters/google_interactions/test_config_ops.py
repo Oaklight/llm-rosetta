@@ -59,6 +59,18 @@ class TestReasoningConfig:
             assert result["effort"] == expected
             assert result["mode"] == "enabled"
 
+    def test_thinking_level_does_not_stamp_include_thoughts(self):
+        """The API returns thoughts on its own; the request never asked for them.
+
+        Stamping ``include_thoughts`` here made a Chat target answer with
+        ``reasoning.summary: auto`` for a request that carried no summary, which
+        is a field the source never sent (cross-format property, #1313).
+        """
+        result = GoogleInteractionsConfigOps.p_reasoning_to_ir(
+            {"thinking_level": "high"}
+        )
+        assert "include_thoughts" not in result
+
     def test_ir_effort_to_thinking_level(self):
         for effort, expected in [
             ("minimal", "minimal"),
