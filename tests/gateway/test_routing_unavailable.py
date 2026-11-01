@@ -86,6 +86,22 @@ class TestTheBlock:
         )
         assert blocked_until([pinfo]) is None
 
+    def test_a_blocked_provider_that_is_also_spent_reports_the_block(self):
+        """Both states can hold at once, and the order decides the answer.
+
+        A blocked provider whose readings are also spent satisfies the
+        ``exhausted`` branch as well; the client is told the block, because it
+        has a known end.  Swapping the two checks in ``classify`` leaves the
+        rest of the suite green, so this is what makes the order load-bearing.
+        """
+        pinfo = _blocked("a", "@unavail-block-both", 30)
+        ctx = _ctx(["a"], excluded=frozenset({"a"}))
+
+        state = classify(_config({"a": pinfo}), ctx)
+
+        assert state.reason == "blocked"
+        assert state.as_kwargs()["blocked_until"] is not None
+
 
 class TestTheSpentAllowance:
     def test_a_known_reset_is_reported(self, monkeypatch):
