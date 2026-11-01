@@ -4,11 +4,13 @@
 instead of re-deriving the four states inline.  The order of the checks is the
 rule:
 
-1. a **quota block** covering the whole route has a known end and must not be
-   reported as startup — a client that just received a plan refusal would go
-   looking for a boot problem that does not exist;
-2. a route every candidate of which a **reading** removed is ``exhausted``,
-   with the reset when the vendor named one and without one when it did not;
+1. a **quota block** covering every provider the request can still use has a
+   known end and must not be reported as startup — a client that just
+   received a plan refusal would go looking for a boot problem that does not
+   exist;
+2. a route every remaining candidate of which a **reading** removed is
+   ``exhausted``, with the reset when the vendor named one and without one
+   when it did not;
 3. otherwise the route is down for a startup reason: ``failed`` when every
    unready provider failed to initialise, else ``initializing``.
 
@@ -77,17 +79,30 @@ def blocked_until(unready: list[Any]) -> datetime | None:
     return max(ends) if ends else None
 
 
-def exhausted_until(config: GatewayConfig, ctx: SelectionContext) -> datetime | None:
+def exhausted_until(
+    config: GatewayConfig,
+    ctx: SelectionContext,
+    names: set[str] | None = None,
+) -> datetime | None:
     """The end of a spent allowance covering every candidate, if one is known.
 
     The route is unavailable until the **last** provider comes back, so this is
     the latest of their earliest serve times; any provider whose vendor named
     no reset makes the end unknown.
+
+    Args:
+        config: The live config, for the provider table.
+        ctx: The request's selection state, for the route.
+        names: The candidates the question is about.  ``None`` asks about the
+            whole route; the caller passes what a failed-over request can
+            still use.
     """
     from ..quota.service import provider_exhausted_until
 
     ends: list[datetime] = []
     for entry in ctx.candidates:
+        if names is not None and entry.name not in names:
+            continue
         pinfo = config.providers.get(entry.name)
         if pinfo is None:
             return None
@@ -112,23 +127,28 @@ def classify(config: GatewayConfig, ctx: SelectionContext) -> Unavailable:
     """
     from ..maintenance.startup import ProviderInitState
 
-    # The whole route, not a candidate list: ``len(unready) == len(route)`` and
-    # ``names <= quota_excluded`` are whole-route questions — "every provider
-    # is blocked", "every provider is spent" — and both were asked that way by
-    # ``resolve`` before this module existed.  A filtered list here would make
-    # them answer about the filtered set instead.
-    route = ctx.candidates
+    # The route as this request can still use it: a provider it already failed
+    # over from is not "available", so answering "every provider" over the full
+    # list would describe a route that includes the one that just refused.
+    # Everything else is whole-route -- ``len(unready) == len(remaining)`` and
+    # ``names <= quota_excluded`` are "every provider is blocked" / "... spent"
+    # -- and both were asked that way by ``resolve`` before this module
+    # existed.  A list filtered by anything else here would make them answer
+    # about that filtered set instead.
+    remaining = [p for p in ctx.candidates if p.name not in ctx.failover_excluded]
     unready = [
-        config.providers[p.name] for p in route if not config.providers[p.name].ready
+        config.providers[p.name]
+        for p in remaining
+        if not config.providers[p.name].ready
     ]
 
     end = blocked_until(unready)
-    if end is not None and len(unready) == len(route):
+    if end is not None and len(unready) == len(remaining):
         return Unavailable("blocked", end)
 
-    names = {p.name for p in route}
+    names = {p.name for p in remaining}
     if names and names <= set(ctx.quota_excluded):
-        return Unavailable("exhausted", exhausted_until(config, ctx))
+        return Unavailable("exhausted", exhausted_until(config, ctx, names))
 
     deferred = getattr(config, "_deferred_startup", None)
     failed = deferred is not None and all(
