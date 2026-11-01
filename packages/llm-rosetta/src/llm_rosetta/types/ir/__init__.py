@@ -21,6 +21,16 @@ This module reorganizes IR type definitions:
 - request.py: Request parameter types (based on SDK body structures)
 - response.py: Response types (extension items and response statistics)
 - helpers.py: Helper functions (content extraction, message creation, etc.)
+
+Python 3.10 上标准库 typing.TypedDict 不识别 Required/NotRequired 包装，
+__required_keys__ 与 __optional_keys__ 与 PEP 655 不符；运行时校验器读取注解上的
+包装，validate() 与 json_schema() 不受影响（见
+tests/test_types/ir/test_typeddict_key_sets.py）。Python 3.11+ 无此偏差。
+
+On Python 3.10 the stdlib typing.TypedDict ignores the Required/NotRequired
+wrappers, so __required_keys__ and __optional_keys__ disagree with PEP 655.
+The runtime validator reads the annotation-level wrapper, so validate() and
+json_schema() are unaffected. Python 3.11+ has no such deviation.
 """
 
 # ============================================================================

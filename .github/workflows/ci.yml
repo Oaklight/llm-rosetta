@@ -198,6 +198,40 @@ jobs:
         if: needs.changes.outputs.core == 'true'
         run: python -m pytest tests/test_types/ -v
 
+  test-310:
+    # 3.10 is still supported, and it is the one version whose TypedDict
+    # behaviour differs: typing.TypedDict there ignores Required/NotRequired,
+    # so __required_keys__/__optional_keys__ disagree with PEP 655 (see
+    # tests/test_types/ir/test_typeddict_key_sets.py).  Every other job runs on
+    # 3.11, so this one is the standing guard for the oldest interpreter.
+    needs: changes
+    if: needs.changes.outputs.core == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e "packages/llm-rosetta[all]" -e packages/llm-rosetta-gateway
+
+      - name: Check the 3.10 typing backport marker
+        # The SDK extras declare typing_extensions unconditionally, so an
+        # import check would pass even if our own marker were dropped.  Assert
+        # the project's metadata instead: types/ir/* and the vendored
+        # create_struct() import it on 3.10.
+        run: |
+          python -c "import importlib.metadata as m; reqs = m.requires('llm-rosetta') or []; assert any('typing_extensions' in r and 'python_version' in r for r in reqs), 'typing_extensions marker missing from llm-rosetta metadata'"
+
+      - name: Run the type and converter suites
+        run: python -m pytest tests/test_types/ tests/converters/ -q
+
   conformance:
     # The wire, fields and request-fields suites are offline and deterministic,
     # so they can gate every PR: their committed baselines turn a conversion
