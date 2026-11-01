@@ -66,7 +66,7 @@ deprecated alias in `model_type:` and in the per-type section name.
 
 Each leaf directory contains:
 
-- **`provider.yaml`** (required) — declares `name`, `model_type`, `format`, connection settings (`connection.base_url`, `connection.api_key_env`, `connection.auth_header`, `connection.keyless`, `connection.models_path`, `connection.default_path`, `connection.token_command`), plus optional `logo`, `display_name`, and `free_source`.  `base` is the deprecated alias for `format`; the loader validates the `(model_type, format)` pair against the converter registry.  `model_type` is required whenever `format` is used — only a shim that declares `base` and no `format` may omit it.  A non-chat shim declares `connection.default_path` for the endpoint it serves (e.g. `/v1/embeddings`), and a provider can name it through `embeddings_shim` / `rerank_shim` / `decisions_shim` instead of a bare format.
+- **`provider.yaml`** (required) — declares `name`, `model_type`, `format`, connection settings (`connection.base_url`, `connection.api_key_env`, `connection.auth_header`, `connection.keyless`, `connection.models_path`, `connection.default_path`, `connection.token_command`), plus optional `logo`, `display_name`, `hint_msg`, and `free_source`.  `base` is the deprecated alias for `format`; the loader validates the `(model_type, format)` pair against the converter registry.  `model_type` is required whenever `format` is used — only a shim that declares `base` and no `format` may omit it.  A non-chat shim declares `connection.default_path` for the endpoint it serves (e.g. `/v1/embeddings`), and a provider can name it through `embeddings_shim` / `rerank_shim` / `decisions_shim` instead of a bare format.
 - **`transforms.py`** (optional) — exports `post_ir_transforms` and/or `pre_ir_transforms` tuples (the old names `to_transforms` / `from_transforms` also work)
 
 **Per-type parameter defaults.** A non-chat shim may declare the request fields its vendor differs on, in a section named after its own model type:
@@ -84,6 +84,22 @@ provider sends no auth header while no `api_key` is configured, and falls back t
 base type's auth when one is supplied. `free_source: true` marks a shim whose gateway
 serves a free model pool — the admin UI groups its keyless entry under a "Free
 Resource" section and titles it `<display_name> (Free)`.
+
+**A note in the provider form.** `hint_msg` is a line the admin panel shows under the
+Base URL field when the shim is selected — the place to explain a configuration step
+the connection defaults cannot express. Declare one string per language; a bare string
+is stored as `en`:
+
+```yaml
+hint_msg:
+  en: "Defaults to the Go lane. For the Zen lane set Base URL to https://opencode.ai/zen/v1."
+  zh: "默认走 Go lane。Zen lane 请把 Base URL 改为 https://opencode.ai/zen/v1。"
+```
+
+The panel picks the current interface language, falls back to `en`, then to the first
+declared language. The note is plain text (inserted as text, never HTML) and renders on
+one line: a short note reads inline, a longer one truncates with an ellipsis and the full
+text appears on hover. Nothing in the proxy path reads it.
 
 **Credential exchange.** Some upstreams do not accept an account API key on their
 inference endpoints — AskSage takes a short-lived access token minted from the
