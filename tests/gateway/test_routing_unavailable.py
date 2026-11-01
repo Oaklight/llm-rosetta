@@ -66,11 +66,10 @@ class TestTheBlock:
 
         assert state.reason == "blocked"
         assert state.until is not None
-        ends = {
-            QUOTA_STATE.provider_block("@unavail-block-a").until,
-            QUOTA_STATE.provider_block("@unavail-block-b").until,
-        }
-        assert state.until == max(ends)
+        first = QUOTA_STATE.provider_block("@unavail-block-a")
+        second = QUOTA_STATE.provider_block("@unavail-block-b")
+        assert first is not None and second is not None
+        assert state.until == max(first.until, second.until)
 
     def test_one_provider_unblocked_is_not_a_block(self):
         """The route's story is not (only) a quota story, so it falls through."""
