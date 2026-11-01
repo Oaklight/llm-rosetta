@@ -1,0 +1,95 @@
+{
+  "formats": {
+    "chat_completions": {
+      "chunks": 8,
+      "recovered": [
+        "stream_start",
+        "reasoning_delta",
+        "text_delta",
+        "citation_delta",
+        "tool_call_start",
+        "tool_call_delta",
+        "finish",
+        "usage",
+        "stream_end"
+      ]
+    },
+    "google_generate": {
+      "chunks": 5,
+      "recovered": [
+        "stream_start",
+        "reasoning_delta",
+        "text_delta",
+        "text_delta",
+        "tool_call_start",
+        "tool_call_delta",
+        "citation_delta",
+        "finish",
+        "stream_end",
+        "usage"
+      ]
+    },
+    "google_interactions": {
+      "chunks": 12,
+      "recovered": [
+        "stream_start",
+        "content_block_start",
+        "reasoning_delta",
+        "content_block_end",
+        "content_block_start",
+        "text_delta",
+        "text_delta",
+        "citation_delta",
+        "content_block_end",
+        "content_block_start",
+        "tool_call_start",
+        "tool_call_delta",
+        "finish",
+        "usage",
+        "stream_end"
+      ]
+    },
+    "messages": {
+      "chunks": 15,
+      "recovered": [
+        "usage",
+        "stream_start",
+        "content_block_end",
+        "content_block_start",
+        "reasoning_delta",
+        "content_block_end",
+        "content_block_start",
+        "text_delta",
+        "content_block_end",
+        "content_block_start",
+        "tool_call_start",
+        "tool_call_delta",
+        "content_block_start",
+        "content_block_end",
+        "content_block_end",
+        "usage",
+        "finish",
+        "stream_end"
+      ]
+    },
+    "open_responses": {
+      "chunks": 21,
+      "recovered": [
+        "stream_start",
+        "reasoning_delta",
+        "content_block_start",
+        "text_delta",
+        "refusal_delta",
+        "citation_delta",
+        "content_block_end",
+        "tool_call_start",
+        "tool_call_delta",
+        "usage",
+        "finish",
+        "stream_end"
+      ]
+    }
+  },
+  "schema_version": 1,
+  "suite": "stream-events"
+}
