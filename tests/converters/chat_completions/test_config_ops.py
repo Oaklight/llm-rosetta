@@ -303,10 +303,17 @@ class TestChatCompletionsConfigOps:
     def test_p_cache_config_to_ir(self):
         """Test OpenAI cache params → IR CacheConfig."""
         result = ChatCompletionsConfigOps.p_cache_config_to_ir(
-            {"prompt_cache_key": "k1", "prompt_cache_retention": "in-memory"}
+            {"prompt_cache_key": "k1", "prompt_cache_retention": "in_memory"}
         )
         assert result["key"] == "k1"
         assert result["retention"] == "in-memory"
+
+    def test_ir_cache_config_to_p_spells_retention_for_the_wire(self):
+        """The IR's ``in-memory`` goes out as the wire's ``in_memory``."""
+        result = ChatCompletionsConfigOps.ir_cache_config_to_p(
+            cast(CacheConfig, {"retention": "in-memory"})
+        )
+        assert result["prompt_cache_retention"] == "in_memory"
 
     def test_cache_config_round_trip(self):
         """Test cache config round-trip."""
