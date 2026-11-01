@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import time
+from functools import lru_cache
 from typing import TYPE_CHECKING, Any
 
 
@@ -34,6 +35,19 @@ def version_info() -> dict[str, str]:
     return {"gateway": gateway_version, "core": core_version}
 
 
+@lru_cache(maxsize=1)
+def _known_zones() -> frozenset[str]:
+    """The zone names this machine's zone database knows, computed once."""
+    try:
+        from zoneinfo import available_timezones
+    except ImportError:  # pragma: no cover - zoneinfo is 3.9+
+        return frozenset()
+    try:
+        return frozenset(available_timezones())
+    except Exception:  # pragma: no cover - a broken tzpath is not fatal here
+        return frozenset()
+
+
 def _tz_name() -> str:
     """The gateway's zone as an IANA name, or its abbreviation.
 
@@ -41,9 +55,17 @@ def _tz_name() -> str:
     the operator can tell ``Asia/Shanghai`` from ``Asia/Tokyo``.  The name is
     read from ``TZ`` or the ``/etc/localtime`` link; a process without either
     reports the platform abbreviation (``CST``).
+
+    ``TZ`` is free text, not a zone key: a POSIX rule (``CST-8``) or a path
+    (``TZ=:/etc/localtime``) is not a name, and ``/health`` is public, so only
+    a value the zone database knows — or the ``/etc/localtime`` target, which
+    is one by construction — is reported as the name.
     """
-    tz = os.environ.get("TZ", "").lstrip(":")
-    if tz:
+    zones = _known_zones()
+    tz = os.environ.get("TZ", "").strip().lstrip(":")
+    if "zoneinfo/" in tz:
+        tz = tz.rsplit("zoneinfo/", 1)[1]
+    if tz and (tz in zones or (not zones and "/" in tz and not tz.startswith("/"))):
         return tz
     try:
         path = os.path.realpath("/etc/localtime")

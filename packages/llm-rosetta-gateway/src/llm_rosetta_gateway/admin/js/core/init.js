@@ -436,7 +436,9 @@ document.querySelectorAll('.modal-overlay').forEach(m => {
   fetch('/health').then(r => r.json()).then(d => {
     if (typeof d.server_time !== 'number') return;
     state.offsetMs = d.server_time - Date.now();
-    state.offsetMin = typeof d.server_tz_offset_minutes === 'number' ? d.server_tz_offset_minutes : 0;
+    // Missing offset is absent, not UTC: `0` would label the browser's own
+    // time as the gateway's in the gateway's zone.
+    state.offsetMin = typeof d.server_tz_offset_minutes === 'number' ? d.server_tz_offset_minutes : null;
     state.zoneName = typeof d.server_tz_name === 'string' && d.server_tz_name ? d.server_tz_name : null;
     updateLabel();
     tick();

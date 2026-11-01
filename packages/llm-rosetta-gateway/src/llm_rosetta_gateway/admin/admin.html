@@ -165,7 +165,7 @@
       <div id="loopWarningBanner" class="loop-warning-banner" style="display:none"></div>
       <!-- Row 2: search on its own line, the facets labelled underneath -->
       <div class="model-toolbar">
-        <div class="mt-row mt-row-search">
+        <div class="mt-row">
           <input id="modelSearch" placeholder="Search models..." oninput="renderModels()" data-i18n-placeholder="label.searchModels">
           <div class="model-sort-mobile">
             <select id="modelSortKey" onchange="setModelSortKey(this.value)" aria-label="Sort by" data-i18n-aria-label="sort.by">
@@ -233,7 +233,7 @@
       </div>
       <p style="font-size:13px;color:var(--text-dim);margin-bottom:16px"><span data-i18n="keys.description">Manage gateway API keys used to authenticate requests to /v1/* endpoints.</span> <button onclick="backfillKeysLastUsed()" data-i18n-title="hint.refreshLastUsed" title="Refresh last-used timestamps from request log" style="background:none;border:none;cursor:pointer;color:var(--text-dim);padding:2px;vertical-align:middle;transition:color 0.15s" onmouseenter="this.style.color='var(--accent)'" onmouseleave="this.style.color='var(--text-dim)'"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15"/></svg></button></p>
       <div class="key-toolbar">
-        <div class="mt-row mt-row-search">
+        <div class="mt-row">
           <input id="keySearch" type="search" placeholder="Search keys..." data-i18n-placeholder="label.searchKeys" oninput="renderKeys()">
           <span class="key-count" id="keyCount"></span>
         <div class="key-sort-mobile">
