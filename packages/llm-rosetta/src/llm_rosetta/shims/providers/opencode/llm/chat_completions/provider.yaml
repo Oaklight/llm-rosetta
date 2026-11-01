@@ -13,8 +13,8 @@ model_type: llm
 format: chat_completions
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/opencode.svg
 hint_msg:
-  en: "For the Zen balance lane set Base URL to https://opencode.ai/zen/v1 — the default is the Go subscription lane, and one API key signs both. The keyless free pool is a separate shim: opencode_zen_free--chat_completions."
-  zh: "默认走 Go 订阅 lane。Zen 余额 lane 请把 Base URL 改为 https://opencode.ai/zen/v1，两者共用同一个 API Key。无密钥免费池是另一个 shim：opencode_zen_free--chat_completions。"
+  en: "For the Zen balance lane set Base URL to https://opencode.ai/zen/v1 — the default is the Go subscription lane, and one API key signs both. The keyless free pool ships as its own package — declare shims.presets: ["opencode_zen_free"] to load opencode_zen_free--chat_completions."
+  zh: "默认走 Go 订阅 lane。Zen 余额 lane 请把 Base URL 改为 https://opencode.ai/zen/v1，两者共用同一个 API Key。无密钥免费池是独立包：声明 shims.presets: ["opencode_zen_free"] 后即可加载 opencode_zen_free--chat_completions。"
 
 connection:
   base_url: https://opencode.ai/zen/go/v1

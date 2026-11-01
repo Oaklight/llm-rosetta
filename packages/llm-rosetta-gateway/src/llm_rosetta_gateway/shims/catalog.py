@@ -44,6 +44,8 @@ class ShimSourcePackage:
         token_env: Environment variable holding the forge token, for a private
             repository or mirror.  The repositories this project publishes are
             public, so the presets carry no token by default.
+        free: Whether the package serves a keyless free resource.  The panel
+            groups these apart from the paid packages.
     """
 
     key: str
@@ -53,6 +55,7 @@ class ShimSourcePackage:
     shims: tuple[str, ...]
     legacy_names: tuple[str, ...] = ()
     token_env: str | None = None
+    free: bool = False
 
     @property
     def remote(self) -> dict[str, Any]:
@@ -78,6 +81,7 @@ class ShimSourcePackage:
             "source_repo": self.repo,
             "remote": self.remote,
             "shims": list(self.shims),
+            "free": self.free,
         }
 
 
@@ -254,6 +258,18 @@ SHIM_SOURCE_PACKAGES: tuple[ShimSourcePackage, ...] = (
             "argo--anthropic",
             "argo--openai_responses",
         ),
+    ),
+    ShimSourcePackage(
+        key="opencode_zen_free",
+        # The lane is upstream-gated to OpenCode's own client; see the
+        # package README.  It lives outside core so it can be withdrawn
+        # without a release.
+        label="OpenCode Zen free lane",
+        repo="https://github.com/Oaklight/llm-rosetta-shim-opencode-free",
+        package="llm_rosetta_shim_opencode_zen_free",
+        shims=("opencode_zen_free--chat_completions",),
+        # The only keyless package: the picker groups it under free resources.
+        free=True,
     ),
     ShimSourcePackage(
         key="asksage",

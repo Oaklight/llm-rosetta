@@ -240,10 +240,11 @@ class TestDetectShimRemovals:
 class TestSourceCatalog:
     """The standalone packages the Settings panel offers as presets."""
 
-    def test_catalog_covers_the_three_standalone_repos(self):
+    def test_catalog_covers_the_standalone_repos(self):
         assert [entry.key for entry in SHIM_SOURCE_PACKAGES] == [
             "alcf",
             "argo",
+            "opencode_zen_free",
             "asksage",
         ]
 
@@ -292,6 +293,7 @@ class TestSourceCatalog:
             "source_repo",
             "remote",
             "shims",
+            "free",
         }
 
 

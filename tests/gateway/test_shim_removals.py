@@ -264,7 +264,12 @@ class TestAdminPayload:
         from llm_rosetta_gateway.admin.routes.config import payload as config_payload
 
         payload = config_payload._shim_source_presets_payload()
-        assert [entry["key"] for entry in payload] == ["alcf", "argo", "asksage"]
+        assert [entry["key"] for entry in payload] == [
+            "alcf",
+            "argo",
+            "opencode_zen_free",
+            "asksage",
+        ]
         for entry in payload:
             assert set(entry) == {
                 "key",
@@ -272,6 +277,7 @@ class TestAdminPayload:
                 "source_repo",
                 "remote",
                 "shims",
+                "free",
             }
             assert set(entry["remote"]) == {"url", "path"}
             assert entry["shims"]
@@ -331,7 +337,7 @@ class TestPresets:
     def test_an_unknown_preset_names_the_known_ones(self):
         with pytest.raises(ValueError, match="unknown shim preset 'nope'"):
             resolve_source_config({"presets": ["nope"]}, None)
-        with pytest.raises(ValueError, match="alcf, argo, asksage"):
+        with pytest.raises(ValueError, match="alcf, argo, opencode_zen_free, asksage"):
             resolve_source_config({"presets": ["nope"]}, None)
 
     @pytest.mark.parametrize("presets", ["argo", [123], [""], [None]])
