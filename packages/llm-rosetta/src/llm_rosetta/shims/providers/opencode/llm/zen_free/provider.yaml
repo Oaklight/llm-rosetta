@@ -19,6 +19,9 @@ format: chat_completions
 display_name: Zen free lane
 free_source: true
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/opencode.svg
+hint_msg:
+  en: "Keyless free pool. Only the -free models are served here; the listing also shows paid models."
+  zh: "无密钥免费池。这里只服务 -free 模型；模型列表里同时会显示付费模型。"
 
 connection:
   base_url: https://opencode.ai/zen/v1

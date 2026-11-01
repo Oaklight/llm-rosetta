@@ -599,6 +599,47 @@ def _parse_connection_token_command(
     return tuple(argv)
 
 
+def _parse_hint_msg(raw: Any, yaml_path: Path) -> dict[str, str] | None:
+    """Normalise a shim's ``hint_msg`` to ``{language code: text}``.
+
+    A bare string is the single-language form and is stored under ``en``.  A
+    mapping keeps one entry per language.  Blank entries are dropped, and an
+    entry whose key is not a string (YAML reads a bare ``1:`` as an integer)
+    is dropped with a warning rather than re-keyed.  A declaration that
+    leaves nothing readable is ``None``, so the panel shows no hint rather
+    than an empty box.
+
+    Args:
+        raw: The ``hint_msg`` value as read from the YAML file.
+        yaml_path: The declaring file, named in the warning.
+
+    Returns:
+        The normalised mapping, or ``None`` when nothing was declared.
+    """
+    if isinstance(raw, str):
+        text = raw.strip()
+        return {"en": text} if text else None
+    if isinstance(raw, dict):
+        hints: dict[str, str] = {}
+        for lang, text in raw.items():
+            if not isinstance(lang, str):
+                logger.warning(
+                    "Ignoring hint_msg entry %r in %s: its key is not a language code",
+                    lang,
+                    yaml_path,
+                )
+                continue
+            if isinstance(text, str) and text.strip():
+                hints[lang] = text.strip()
+        return hints or None
+    if raw is not None:
+        logger.warning(
+            "Ignoring hint_msg in %s: expected a string or a language mapping",
+            yaml_path,
+        )
+    return None
+
+
 def _parse_type_params(
     cfg: dict[str, Any], model_type: str, yaml_path: Path
 ) -> dict[str, Any]:
@@ -851,6 +892,7 @@ def _load_single_provider(
         display_name=cfg.get("display_name"),
         group=cfg.get("group"),
         group_label=cfg.get("group_label"),
+        hint_msg=_parse_hint_msg(cfg.get("hint_msg"), yaml_path),
         free_source=cfg.get("free_source", False),
         connection=connection,
         auth=exchange,

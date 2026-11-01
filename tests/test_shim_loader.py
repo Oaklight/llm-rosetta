@@ -12,6 +12,7 @@ import pytest
 from llm_rosetta.shims.provider_shim import (
     _reset_registry,
     get_shim,
+    list_shims,
 )
 from llm_rosetta.shims.providers import (
     _TYPE_DIRS,
@@ -449,6 +450,80 @@ class TestLoadProviders:
         shims = load_providers_from_dir(tmp_path)
         assert len(shims) == 1
         assert shims[0].multimodal_tool_result is None
+
+    def test_hint_msg_string_is_stored_under_english(self, tmp_path: Path):
+        """A bare string is the single-language form of hint_msg."""
+        d = tmp_path / "hinted"
+        d.mkdir()
+        (d / "provider.yaml").write_text(
+            "name: hinted\nmodel_type: llm\nformat: chat_completions\n"
+            "hint_msg: Set the base URL to the other lane.\n"
+        )
+        shims = load_providers_from_dir(tmp_path)
+        assert shims[0].hint_msg == {"en": "Set the base URL to the other lane."}
+
+    def test_hint_msg_mapping_keeps_one_entry_per_language(self, tmp_path: Path):
+        """A mapping carries a translation per language."""
+        d = tmp_path / "bilingual"
+        d.mkdir()
+        (d / "provider.yaml").write_text(
+            textwrap.dedent(
+                """\
+                name: bilingual
+                model_type: llm
+                format: chat_completions
+                hint_msg:
+                  en: "Use the Zen base URL."
+                  zh: "改用 Zen 的 base URL。"
+                  fr: "   "
+                """
+            )
+        )
+        shims = load_providers_from_dir(tmp_path)
+        assert shims[0].hint_msg == {
+            "en": "Use the Zen base URL.",
+            "zh": "改用 Zen 的 base URL。",
+        }
+
+    def test_hint_msg_absent_or_blank_is_none(self, tmp_path: Path):
+        """No declaration, a blank string and a blank mapping all leave none."""
+        for name, body in (
+            ("none", ""),
+            ("blank", "hint_msg: '   '\n"),
+            ("blank_map", "hint_msg:\n  en: '  '\n  zh: ''\n"),
+        ):
+            d = tmp_path / name
+            d.mkdir()
+            (d / "provider.yaml").write_text(
+                f"name: {name}\nmodel_type: llm\nformat: chat_completions\n{body}"
+            )
+        shims = load_providers_from_dir(tmp_path)
+        assert {s.name: s.hint_msg for s in shims} == {
+            "none": None,
+            "blank": None,
+            "blank_map": None,
+        }
+
+    def test_hint_msg_non_string_language_key_is_dropped(self, tmp_path: Path, caplog):
+        """A key YAML read as an integer is not a language code."""
+        d = tmp_path / "rekeyed"
+        d.mkdir()
+        (d / "provider.yaml").write_text(
+            "name: rekeyed\nmodel_type: llm\nformat: chat_completions\n"
+            "hint_msg:\n  1: 'one'\n  en: 'English note'\n"
+        )
+        with caplog.at_level("WARNING", logger="llm_rosetta.shims.providers"):
+            shims = load_providers_from_dir(tmp_path)
+        assert shims[0].hint_msg == {"en": "English note"}
+        assert any("not a language code" in r.message for r in caplog.records)
+
+    def test_every_shipped_hint_declares_both_languages(self):
+        """A built-in hint that ships must reach a reader in either language."""
+        load_providers()
+        hints = {s.name: s.hint_msg for s in list_shims() if s.hint_msg}
+        assert hints, "no built-in shim declares hint_msg"
+        for name, hint in hints.items():
+            assert {"en", "zh"} <= set(hint), name
 
 
 class TestLoadProvidersFromDir:

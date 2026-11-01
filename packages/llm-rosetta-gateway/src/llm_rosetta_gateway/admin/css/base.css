@@ -549,6 +549,9 @@ a { color: var(--accent); text-decoration: none; }
 .settings-popup-item .quota-input-wrap input { max-width: 320px; }
 /* The hint under a control belongs to that control, not the row. */
 .field-hint { margin: 4px 0 0; font-size: 11px; color: var(--text-dim); line-height: 1.45; }
+/* A shim's own note sits under the Base URL row.  One line: short notes read
+   inline, a long one truncates and the element's `title` carries the rest. */
+.shim-hint { margin: -2px 0 12px; font-size: 11px; color: var(--text-dim); line-height: 1.45; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .settings-popup-item textarea {
   width: 100%; font-family: var(--mono); font-size: 12px; padding: 6px 10px;
   background: var(--bg); color: var(--text);

@@ -15,6 +15,7 @@ import { setTypeTree, getSelectedValue, selectValue, onTypeSelect, createTypePic
 import { buildTypeModel, buildEndpointTypeModel, endpointChoiceConfig, shimBrand } from '../core/shim-tree.js';
 import { degradedEndpoints, categoryKey, endpointState, degradedMarker, providerStatus, providerOrder } from '../core/provider-endpoints.js';
 import { routingRows, blockRow } from '../core/quota-lines.js';
+import { shimHintText } from '../core/shim-hint.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
@@ -35,6 +36,32 @@ function _applyTypePlaceholders(s, { preserveKeyHint = false } = {}) {
   const keyInput = document.getElementById('provApiKey');
   const env = (s && (s.placeholder_api_key_env || s.default_api_key_env)) || '';
   keyInput.placeholder = env ? '${' + env + '}' : '${OPENAI_API_KEY}';
+}
+
+/** Show the selected shim's hint under the Base URL row.
+ *
+ *  The element is a single truncated line (see ``.shim-hint``); its ``title``
+ *  carries the full text for hover.  Text is inserted as text, never HTML. */
+function _applyShimHint(shim) {
+  const el = document.getElementById('provShimHint');
+  if (!el) return;
+  const text = shimHintText(shim && shim.hint_msg, S.currentLang);
+  el.textContent = text;
+  el.title = text;
+  el.hidden = !text;
+}
+
+/** Re-render the hint for the picker's current selection.
+ *
+ *  `applyI18n` calls this after a language switch: the modal's static labels
+ *  repaint there, and a hint built from the shim payload needs the same
+ *  treatment while the dialog is open. */
+function refreshShimHint() {
+  const name = getSelectedValue();
+  const shims = (S.configData && S.configData.registered_shims) || [];
+  const baseFormats = (S.configData && S.configData.base_formats) || [];
+  const shim = [...baseFormats, ...shims].find(s => s.name === name) || null;
+  _applyShimHint(shim);
 }
 
 // ── Free sources ────────────────────────────────────────────────────
@@ -410,6 +437,7 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
     _syncBaseTypeDropdown(typeModel.rootOf(value), value);
     _syncKeylessUI();
     const s = shimMap[value];
+    _applyShimHint(s);
     if (!s) return;
     const urlInput = document.getElementById('provBaseUrl');
     const cur = urlInput.value.trim();
@@ -462,6 +490,9 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
   _applyTypePlaceholders(shimMap[getSelectedValue()] || {}, {
     preserveKeyHint: !S._credentialVisible && !!name,
   });
+  // The picker's setTree does not fire the change callback, so the modal's
+  // initial selection needs the hint set explicitly.
+  _applyShimHint(shimMap[getSelectedValue()] || null);
   document.getElementById('provProxy').value = proxy || '';
 
   // URL template overrides
@@ -1708,6 +1739,7 @@ Object.assign(window, {
   installProviderCredential, signOutProviderCredential, toggleProviderCredentialBox,
   _activateSegChild,
   openFreeProvider, refreshFreeModels, revealProviderKey,
+  refreshShimHint,
 });
 
 // ── Provider health indicators ───────────────────────────────────────

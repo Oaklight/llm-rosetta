@@ -464,6 +464,13 @@ class ProviderShim:
         group_label: Title of the shim's top-level group.  Falls back to the
             group key.  Keep it identical across the members of one group; the
             last shim loaded wins, as with ``logo``.
+        hint_msg: Note the admin panel shows beside the Base URL field when
+            this shim is selected — the place to explain a configuration step
+            the connection defaults cannot express (e.g. "the Zen lane uses a
+            different base URL").  A mapping of language code to text
+            (``{"en": ..., "zh": ...}``); a YAML string is stored as
+            ``{"en": ...}``.  Plain text: the panel inserts it as text, never
+            as HTML.  Display-only; no proxy behavior reads it.
         free_source: Marks the provider as a source with a free model pool.
             The admin UI groups its free (keyless) entry under a "Free
             Resource" section, adds a refresh action, and shows the
@@ -521,6 +528,7 @@ class ProviderShim:
     display_name: str | None = None
     group: str | None = None
     group_label: str | None = None
+    hint_msg: dict[str, str] | None = None
     free_source: bool = False
     connection: ConnectionConfig = ConnectionConfig()
     quota: QuotaDeclaration | None = None
@@ -636,6 +644,7 @@ class ProviderShim:
             "display_name": None,
             "group": None,
             "group_label": None,
+            "hint_msg": None,
             "free_source": False,
             "connection": ConnectionConfig(),
             "quota": None,
