@@ -265,7 +265,9 @@ class MessagesConfigOps(BaseConfigOps):
         """Anthropic thinking + output_config → IR ReasoningConfig.
 
         Extracts ``thinking.type`` → ``mode``, ``thinking.budget_tokens`` →
-        ``budget_tokens``, and ``output_config.effort`` → ``effort``.
+        ``budget_tokens``, and ``output_config.effort`` → ``effort``; an
+        effort with no ``thinking`` object also records ``mode: "auto"``,
+        because effort says the model should think.
 
         Args:
             provider_reasoning: Dict with ``thinking`` and/or ``output_config``
@@ -307,6 +309,11 @@ class MessagesConfigOps(BaseConfigOps):
             effort = output_config.get("effort")
             if effort is not None:
                 result["effort"] = effort
+                # Effort says how hard to think, so a body that carries it is
+                # asking the model to think; record that once here rather than
+                # letting the writer infer it from effort alone, which turned
+                # a same-format round trip into a different IR (#1299).
+                result.setdefault("mode", "auto")
 
         return cast(ReasoningConfig, result)
 

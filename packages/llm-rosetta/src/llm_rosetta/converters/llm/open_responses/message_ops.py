@@ -43,6 +43,23 @@ from .content_ops import OpenResponsesContentOps
 from .tool_ops import OpenResponsesToolOps
 
 
+def _recorded_status(provider_metadata: dict | None) -> dict[str, Any]:
+    """Return the ``status`` an item carries, and only when the source had one.
+
+    The reader records an item's own ``status`` in ``provider_metadata``.  A
+    default here would put a fact in the body the client never sent, and the
+    next read would then see an IR that differs from the first (#1299).
+
+    Args:
+        provider_metadata: The IR item's metadata, if any.
+
+    Returns:
+        ``{"status": value}``, or an empty dict when nothing was recorded.
+    """
+    status = (provider_metadata or {}).get("responses_status")
+    return {"status": status} if status is not None else {}
+
+
 def _degraded_intrinsic_calls(ir_messages: Sequence[IRInputItem]) -> dict[str, bool]:
     """Map intrinsic call id → whether the history writer degrades it.
 
@@ -227,13 +244,12 @@ class OpenResponsesMessageOps(BaseMessageOps):
 
         # Add message item if there are content parts
         if content_parts:
-            status = (provider_metadata or {}).get("responses_status", "completed")
             result_items.append(
                 {
                     "type": "message",
                     "role": role,
                     "content": content_parts,
-                    "status": status,
+                    **_recorded_status(provider_metadata),
                 }
             )
 
@@ -315,12 +331,11 @@ class OpenResponsesMessageOps(BaseMessageOps):
 
         # Add assistant message if there are text content parts
         if content_parts:
-            status = (provider_metadata or {}).get("responses_status", "completed")
             msg_item: dict[str, Any] = {
                 "type": "message",
                 "role": "assistant",
                 "content": content_parts,
-                "status": status,
+                **_recorded_status(provider_metadata),
             }
             # Restore phase from provider_metadata
             if provider_metadata:

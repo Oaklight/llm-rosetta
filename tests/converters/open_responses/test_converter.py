@@ -1203,6 +1203,48 @@ class TestRequestFieldForwarding:
         restored, _ = self.converter.request_to_provider(ir)
         assert restored["text"]["verbosity"] == "low"
 
+    def test_a_written_input_item_carries_no_invented_status(self):
+        """A message the source did not give a status is written without one.
+
+        The reader records an item's own ``status``; defaulting it here put a
+        fact in the body the client never sent, and the next read saw an IR
+        that differed from the first (#1299).
+        """
+        provider_request = {
+            "model": "gpt-4o",
+            "input": [
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": "hi"}],
+                }
+            ],
+        }
+
+        ir = self.converter.request_from_provider(provider_request)
+        restored, _ = self.converter.request_to_provider(ir)
+
+        assert "status" not in restored["input"][0]
+
+    def test_a_recorded_status_is_written_back(self):
+        """A status the source did carry survives the round trip."""
+        provider_request = {
+            "model": "gpt-4o",
+            "input": [
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": "hi"}],
+                    "status": "incomplete",
+                }
+            ],
+        }
+
+        ir = self.converter.request_from_provider(provider_request)
+        restored, _ = self.converter.request_to_provider(ir)
+
+        assert restored["input"][0]["status"] == "incomplete"
+
     def test_frequency_penalty_round_trip(self):
         """frequency_penalty survives Responses→IR→Responses via GenerationConfig."""
         provider_request = {
