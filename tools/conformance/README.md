@@ -1,5 +1,7 @@
 # Conformance probes
 
+English | [中文](README_zh.md)
+
 Developer-only probe harness. It lives outside the `packages/` trees so the wheel
 does not ship it.
 
