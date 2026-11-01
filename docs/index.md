@@ -35,18 +35,18 @@ Provider A ↔ **IR** ↔ Provider B — any supported format in, any supported 
 
 ---
 
-<a id="four-levels"></a>
+<a id="control-levels"></a>
 
-## Four Levels of Control
+## Three Levels and a Toolbox
 
-| | Functions | Raw converter | Pipeline | Gateway |
+| | Toolbox | Raw converter | Pipeline | Gateway |
 |---|---|---|---|---|
 | **Use case** | Convert one IR value or tool | Translate one leg inside your own loop | Source → IR → target in one call | HTTP proxy for any client |
 | **Entry point** | `tool_ops`, `transforms`, `capabilities` | `ChatCompletionsConverter()` | `convert()` / `ConversionPipeline` | `llm-rosetta-gateway` |
 | **Provider call** | You | You | You | The gateway |
 | **Routing, keys, admin** | — | — | — | Built in |
 
-All four share the same IR and converters. Start at the level you need and move up without rewriting the translation. `tool_ops` converts one tool definition, choice, call or result between a provider dialect and IR; `transforms` and `capabilities` apply one field or capability pass without building a converter.
+All three levels share the same IR and converters, and the toolbox operates on that same IR. Start at the level you need and move up without rewriting the translation. `tool_ops` converts one tool definition, choice, call or result between a provider dialect and IR; `transforms` and `capabilities` apply one field or capability pass without building a converter.
 
 Python 3.11+ needs no third-party runtime dependency; 3.10 adds only `typing_extensions`, a backport of the standard library's `typing` module. That is unusual for a multi-provider gateway, and it means the same pipeline moves between applications and deployments without a dependency graph to resolve.
 
@@ -133,10 +133,10 @@ the provider matrix.
 
 | | |
 |---|---|
-| **Four levels of control** | Functions, raw converter, pipeline, gateway — one IR underneath |
+| **Three levels + a toolbox** | Toolbox, raw converter, pipeline, gateway — one IR underneath |
 | **Bidirectional conversion** | Requests, responses and streamed chunks in both directions |
 | **IR as the application payload** | Keep history and orchestration state provider-neutral |
-| **Provider shims** | 39 shims across 18 providers declare field, auth and URL differences |
+| **Provider shims** | 39 shims across 19 vendor prefixes declare field, auth and URL differences |
 | **Gateway + admin console** | HTTP proxy with routing, keys, logs, metrics and an admin UI |
 | **Zero third-party dependencies** | Nothing on Python 3.11+; `typing_extensions` on 3.10 only |
 | **Type safe** | Full TypedDict annotations for all types |

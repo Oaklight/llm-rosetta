@@ -4,7 +4,7 @@ title: Library Quick Start
 
 # Library Quick Start
 
-LLM-Rosetta exposes the same translation at four levels. This page starts at the raw converter; the pipeline (`convert()` / `ConversionPipeline`) adds shim resolution and warnings, and the gateway adds the HTTP proxy. See [Four Levels of Control](../index.md#four-levels) for the full picture.
+LLM-Rosetta exposes the same translation at three levels, with a toolbox for single values. This page starts at the raw converter; the pipeline (`convert()` / `ConversionPipeline`) adds shim resolution and warnings, and the gateway adds the HTTP proxy. See [Three Levels and a Toolbox](../index.md#control-levels) for the full picture.
 
 ## Hello World
 
@@ -91,5 +91,5 @@ converted = convert(some_request, target_provider="messages")
 - [Using Converters](../guide/converters.md) — detailed converter usage and metadata preservation
 - [Streaming](../guide/streaming.md) — convert streaming chunks between providers
 - [IR Types](../guide/ir-types.md) — the Intermediate Representation type system
-- [Four Levels of Control](../index.md#four-levels) — functions, raw converter, pipeline, gateway
+- [Three Levels and a Toolbox](../index.md#control-levels) — toolbox, raw converter, pipeline, gateway
 - [Usage](../api/observability.md#usage) — measure tokens and read a report with no gateway

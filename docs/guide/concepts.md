@@ -23,17 +23,17 @@ graph LR
     style IR fill:#f9a825,stroke:#f57f17,color:#000
 ```
 
-## Four Levels of Control
+## Three Levels and a Toolbox
 
 The IR is the same at every level; only who calls the provider changes.
 
-| | Functions | Raw converter | Pipeline | Gateway |
+| | Toolbox | Raw converter | Pipeline | Gateway |
 |---|---|---|---|---|
 | **Use case** | Convert one IR value or tool | Translate one leg | Source → IR → target | HTTP proxy for any client |
 | **Entry point** | `tool_ops`, `transforms`, `capabilities` | `ChatCompletionsConverter()` | `convert()` / `ConversionPipeline` | `llm-rosetta-gateway` |
 | **Provider call** | You | You | You | The gateway |
 
-Start at the level you need and move up without rewriting the translation.
+All three levels share the same IR and converters, and the toolbox operates on that same IR. Start at the level you need and move up without rewriting the translation.
 
 ## Converter Architecture
 

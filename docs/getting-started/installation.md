@@ -27,29 +27,6 @@ transitional alias that installs both.
 
 The gateway has **zero external runtime dependencies** — it uses vendored stdlib-only modules for HTTP server and client.
 
-### Standalone Binaries
-
-Pre-compiled single-file executables are available on [GitHub Releases](https://github.com/Oaklight/llm-rosetta/releases). No Python runtime required.
-
-| Platform | File |
-|----------|------|
-| Linux x86_64 (glibc) | `llm-rosetta-gateway-<ver>-linux-x86_64` |
-| Linux x86_64 (musl) | `llm-rosetta-gateway-<ver>-linux-x86_64-musl` |
-| Linux arm64 (glibc) | `llm-rosetta-gateway-<ver>-linux-arm64` |
-| Linux arm64 (musl) | `llm-rosetta-gateway-<ver>-linux-arm64-musl` |
-| macOS arm64 | `llm-rosetta-gateway-<ver>-macos-arm64` |
-| Windows x86_64 | `llm-rosetta-gateway-<ver>-windows-x86_64.exe` |
-
-```bash
-# Download and run (Linux/macOS)
-chmod +x llm-rosetta-gateway-*
-./llm-rosetta-gateway-<ver>-linux-x86_64 --help
-```
-
-!!! tip
-
-    Use **musl** binaries for Alpine-based environments and Docker. Use **glibc** binaries for Ubuntu, Debian, and most other Linux distributions.
-
 ### Docker
 
 Three image variants are available on [DockerHub](https://hub.docker.com/r/oaklight/llm-rosetta-gateway):

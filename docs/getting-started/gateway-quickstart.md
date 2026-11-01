@@ -22,8 +22,6 @@ docker pull oaklight/llm-rosetta-gateway:latest
 
 See [`docker/docker-compose.yaml`](https://github.com/Oaklight/llm-rosetta/blob/master/docker/docker-compose.yaml) for a ready-to-use Compose file with volume mounts, environment variables, and ALCF token passthrough.
 
-Or download a standalone binary from [GitHub Releases](https://github.com/Oaklight/llm-rosetta/releases) — no Python needed.
-
 ## 2. Create a config file
 
 Create a `config.jsonc` (JSON with comments):
@@ -42,8 +40,12 @@ Create a `config.jsonc` (JSON with comments):
     "gemini-2.0-flash": "my-google"
   },
   "server": {
-    "host": "0.0.0.0",
-    "port": 8765
+    "host": "127.0.0.1",
+    "port": 8765,
+    // Local demo only. For a shared deployment, bind 0.0.0.0 behind your
+    // own network controls, create a gateway key in /admin, and send it
+    // in the format's native auth header.
+    "open_on_no_keys": true
   }
 }
 ```
@@ -90,5 +92,5 @@ Streaming works too — just add `"stream": true`.
 - [Configuration](../gateway/configuration.md) — full config reference
 - [CLI Reference](../gateway/cli.md) — all CLI options and subcommands
 - [CLI Integrations](../gateway/cli-integrations.md) — use with Claude Code, Codex, OpenCode and Kilo Code
-- [Four Levels of Control](../index.md#four-levels) — where the gateway sits
+- [Three Levels and a Toolbox](../index.md#control-levels) — where the gateway sits
 - [Admin Panel](../gateway/admin-panel.md) — web UI for config and monitoring
