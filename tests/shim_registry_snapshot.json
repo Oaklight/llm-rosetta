@@ -276,18 +276,6 @@
     "free_source": false
   },
   {
-    "name": "opencode_zen_free--chat_completions",
-    "model_type": "llm",
-    "format": "chat_completions",
-    "base_url": "https://opencode.ai/zen/v1",
-    "api_key_env": null,
-    "default_path": null,
-    "group": null,
-    "group_label": null,
-    "display_name": "Zen free lane",
-    "free_source": true
-  },
-  {
     "name": "openrouter--chat_completions",
     "model_type": "llm",
     "format": "chat_completions",
