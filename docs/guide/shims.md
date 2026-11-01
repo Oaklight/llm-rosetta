@@ -474,13 +474,22 @@ v0.6.3. All three left core in 0.14.0. The OpenCode free lane left core after
 Their packages register the same canonical shim names, so a provider's `shim`
 value does not change — only the source declaration is new.
 
-**Preload a package by clicking it.** **Settings → Shims** lists every known
-standalone package as a chip — its name, its shim count, and the repository on
-hover — and clicking one adds or removes it from `shims.presets`. Save applies
-the selection; the field it writes is the same comma-separated list of keys you
-can also write by hand. A key the running catalog does not know is left in
-place until you next change the selection, so a config written against a newer
-catalog is not silently rewritten.
+**Preload a package by clicking it.** **Settings → Shims** opens one dropdown
+of every known standalone package, each row carrying its name and shim count
+with the repository on hover; free resources are listed above paid packages.
+Clicking a row adds or removes it from `shims.presets` — but nothing is written
+until **Save**, which is why the pane keeps a guide beside the picker and an
+*Unsaved changes* note next to the button. Save writes the same
+comma-separated list of keys you can also write by hand. A key the running
+catalog does not know is left in place until you next change the selection, so
+a config written against a newer catalog is not silently rewritten.
+
+**Check whether a remote has moved.** A remote source is fetched once and
+pinned to the commit it came from, so a later run reuses that commit even when
+the repository has advanced. The inventory shows the verdict on the source's
+row: *Up to date*, *Update `<old>` → `<new>`* (click it to refetch that source
+at the new HEAD), or *Check failed* with the reason on hover. **Check now**
+asks again immediately; otherwise the answer is cached for five minutes.
 
 `shims.presets` expands a catalog key into the repository, path and token
 variable, so one line replaces the expanded remote:
