@@ -106,9 +106,11 @@ not look like its own desktop client, so the shim reproduces that shape in its
 - `stream: true` (`stream_required`), with the non-streaming reply reassembled
   by the gateway.
 
-Its model listing is filtered to the `-free` slice: the lane's `/models` answers
-with the whole Zen catalogue, but it serves only the models whose id ends in
-`-free`, so the panel offers those and nothing else.
+Its model listing is filtered to the zero-cost slice: the lane's `/models`
+answers with the whole Zen catalogue, but the keyless lane serves only the
+models whose declared input and output cost is zero, so the panel offers those
+and nothing else. A listing that states no cost at all falls back to the
+`-free` suffix.
 
 This is an anti-abuse gate rather than a public pool: it can change or close
 without notice, its quota is metered per egress address block (a `/64` on IPv6,
