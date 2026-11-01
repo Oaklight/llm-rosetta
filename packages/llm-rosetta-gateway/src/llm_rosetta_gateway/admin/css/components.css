@@ -929,15 +929,18 @@ th.sortable:focus-visible { outline:2px solid var(--accent);outline-offset:-2px;
 
 /* Provider / Model search & filter toolbars */
 .provider-toolbar { display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap; }
-/* Two rows: search first, then the facets with a label per group.  A single
-   row of four different control styles read as a jumble. */
-.model-toolbar { display:flex;flex-direction:column;gap:10px;margin-bottom:8px; }
+/* One facet per row, its label beside the control — the shape the
+   observability filters use.  A row wraps as a whole, so a label never
+   separates from the chips it names. */
+.model-toolbar { display:flex;flex-direction:column;gap:8px;margin-bottom:10px; }
 .mt-row { display:flex;align-items:center;gap:8px;flex-wrap:wrap; }
-.mt-row-search .btn-reset { margin-left:auto; }
 .facet-label {
   font-size:11px; text-transform:uppercase; letter-spacing:.04em;
   color:var(--text-dim); margin-right:2px;
 }
+/* One label column, so the controls start at the same x in every row — the
+   alignment the observability filters get from equal-width Chinese labels. */
+.model-toolbar .facet-label { flex:0 0 68px; }
 .facet-sep { width:1px; height:16px; background:var(--border); margin:0 6px; }
 .facet-chips { display:flex; align-items:center; gap:2px; flex-wrap:wrap; }
 .facet-chips > div {

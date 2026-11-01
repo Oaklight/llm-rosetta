@@ -171,9 +171,8 @@
             </select>
             <button type="button" class="btn btn-sm" id="modelSortDirBtn" onclick="toggleModelSortDir()" aria-label="Sort direction" data-i18n-aria-label="sort.direction" title="Sort direction" data-i18n-title="sort.direction">↑</button>
           </div>
-          <button class="btn-reset" id="modelResetBtn" onclick="resetModelFilters()" data-i18n="btn.resetFilters">✕ Reset</button>
         </div>
-        <div class="mt-row mt-row-facets">
+        <div class="mt-row">
           <span class="facet-label" data-i18n="modelFilter.provider">Provider</span>
           <div class="logo-select">
             <input type="hidden" id="modelProviderFilter">
@@ -186,17 +185,19 @@
             <div class="logo-select-panel" id="modelProviderFilterList" role="listbox"
                  aria-label="Filter by provider" tabindex="-1"></div>
           </div>
-          <span class="facet-sep" aria-hidden="true"></span>
+        </div>
+        <div class="mt-row">
           <span class="facet-label" data-i18n="modelFilter.status">Status</span>
           <div class="facet-chips" id="modelStatusSeg" role="radiogroup" aria-label="Model status filter" data-i18n-aria-label="modelFilter.status">
             <!-- Populated by models.js::_buildStatusSeg() with live counts -->
           </div>
         </div>
-        <div class="mt-row mt-row-facets">
+        <div class="mt-row">
           <span class="facet-label" data-i18n="modelFilter.type">Type</span>
           <div class="facet-chips" id="modelTypeSeg" role="radiogroup" aria-label="Model type filter">
             <!-- Populated by models.js::_buildTypeSegControls() from model_types metadata -->
           </div>
+          <button class="btn btn-sm btn-reset" id="modelResetBtn" onclick="resetModelFilters()" data-i18n="btn.resetFilters">✕ Reset</button>
         </div>
       </div>
       <div class="bulk-bar" id="modelBulkBar">
