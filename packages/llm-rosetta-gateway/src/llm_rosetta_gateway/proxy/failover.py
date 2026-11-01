@@ -19,44 +19,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from ..routing.failover import reselect_after_refusal
+
 if TYPE_CHECKING:
     from llm_rosetta.routing import ResolvedRoute
 
     from ..config import GatewayConfig
     from ..routing import SelectionContext
     from ..transport import ProviderInfo
-
-
-def reselect_after_quota(
-    config: GatewayConfig,
-    selection: SelectionContext,
-    *,
-    exclude: str,
-) -> tuple[ResolvedRoute, ProviderInfo] | None:
-    """Run selection again with *exclude* out of the running.
-
-    The provider that refused is excluded for the rest of the request, and the
-    previous choice is voided with it, so a stage that finds nothing cannot
-    leave the refused provider standing.
-
-    Args:
-        config: The live config, whose tables ``resolve`` needs.
-        selection: This request's selection state, already installed with the
-            config's tables.
-        exclude: The provider that just refused.
-
-    Returns:
-        The new route and transport config, or ``None`` when nothing else can
-        serve — in which case the caller reports the upstream's own refusal
-        rather than inventing a different story.
-    """
-    from ..maintenance.startup import ProviderNotReady
-
-    selection.with_failover_excluded(selection.failover_excluded | {exclude})
-    try:
-        return config.resolve(selection)
-    except (ProviderNotReady, KeyError):
-        return None
 
 
 def prepare_failover(
@@ -86,7 +56,9 @@ def prepare_failover(
         return None
     if selection.model not in getattr(config, "model_failover_on_quota", {}):
         return None
-    target = reselect_after_quota(config, selection, exclude=route.provider_name)
+    target = reselect_after_refusal(
+        selection, exclude=route.provider_name, resolve=config.resolve
+    )
     if target is None:
         return None
     new_route, new_pinfo = target
