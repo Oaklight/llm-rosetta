@@ -23,6 +23,18 @@ graph LR
     style IR fill:#f9a825,stroke:#f57f17,color:#000
 ```
 
+## Four Levels of Control
+
+The IR is the same at every level; only who calls the provider changes.
+
+| | Functions | Raw converter | Pipeline | Gateway |
+|---|---|---|---|---|
+| **Use case** | Convert one IR value or tool | Translate one leg | Source → IR → target | HTTP proxy for any client |
+| **Entry point** | `tool_ops`, `transforms`, `capabilities` | `ChatCompletionsConverter()` | `convert()` / `ConversionPipeline` | `llm-rosetta-gateway` |
+| **Provider call** | You | You | You | The gateway |
+
+Start at the level you need and move up without rewriting the translation.
+
 ## Converter Architecture
 
 Each converter (e.g., `ChatCompletionsConverter`) is composed of four specialized operations classes:
@@ -58,6 +70,13 @@ The `metadata_mode` option (`"strip"` or `"preserve"`) controls whether provider
 
 !!! tip "Deep Dive"
     For details on the passthrough data model (`ProviderPassthroughEvent`, `ProviderPassthroughItem`), the three-layer preservation architecture, and converter dispatch internals, see the [Architecture Guide](../contributing/architecture.md).
+
+## IR as the Application Payload
+
+The IR is not only an intermediate step. Keep conversation history, routing
+state or evaluation data in IR, and render it to a provider's dialect only at
+the call boundary. Switching providers changes the renderer, not your
+application's data model.
 
 ## IR Message Types
 

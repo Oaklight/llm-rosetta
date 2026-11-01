@@ -117,6 +117,7 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### Documentation
 - **The READMEs now describe the 0.14 surface, in both languages**: the root README and both package READMEs (each with an English and a Chinese version) lead with the four levels of control — functions, raw converter, pipeline, gateway — and the reason to own your model sources; use the canonical converter names (`ChatCompletionsConverter`, `MessagesConverter`, …); list the five chat formats plus the embedding, rerank and decision formats; and state the real Python floor (3.10, with `typing_extensions` as the only 3.10 addition). The gateway's install paths (pip, Docker, standalone binaries), config example, admin console and CLI integrations are documented there for the first time.
+- **The docs site's entry pages follow the same structure**: the home page, installation, both quickstarts and Core Concepts now lead with the four levels of control, the IR-as-payload model and the zero-dependency story.
 
 ## v0.13.0 — 2026-09-08
 

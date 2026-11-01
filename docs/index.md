@@ -9,7 +9,7 @@ hide:
   <img src="images/rosetta_stone.svg" alt="Rosetta Stone" style="width: 96px; flex-shrink: 0;">
   <div>
     <h1 style="margin: 0 0 0.2em 0;">LLM-Rosetta</h1>
-    <p style="margin: 0; font-size: 1.1em; opacity: 0.85;">A unified message format conversion library for LLM provider APIs.</p>
+    <p style="margin: 0; font-size: 1.1em; opacity: 0.85;">A self-hosted, format-neutral translation layer for LLM provider APIs.</p>
     <p style="margin: 0.4em 0 0 0;">
       <a href="https://pypi.org/project/llm-rosetta/"><img src="https://img.shields.io/pypi/v/llm-rosetta?color=green" alt="PyPI"></a>
       <a href="https://test.pypi.org/project/llm-rosetta/"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Ftest.pypi.org%2Fpypi%2Fllm-rosetta%2Fjson&query=%24.info.version&label=TestPyPI&color=blue" alt="TestPyPI"></a>
@@ -21,35 +21,58 @@ hide:
   </div>
 </div>
 
-Just as the Rosetta Stone enabled translation between ancient scripts, LLM-Rosetta bridges the gap between incompatible LLM provider APIs — letting you speak any format and be understood by any provider.
+Just as the Rosetta Stone enabled translation between ancient scripts, LLM-Rosetta bridges the gap between incompatible LLM provider APIs — letting any client speak its own format and reach any model source, while you keep control of every upstream.
 
 ---
 
 ## The Problem
 
-Different LLM providers use incompatible API formats. A request that works with OpenAI won't work with Anthropic or Google. Switching providers means rewriting integration code. Supporting multiple providers means maintaining N² converters.
+Different LLM providers use incompatible API formats. A request that works with OpenAI won't work with Anthropic or Google. Switching providers means rewriting integration code. Supporting N formats pairwise takes O(N²) adapters.
 
-**LLM-Rosetta** introduces a central **Intermediate Representation (IR)** as a hub. Each provider only needs one converter to/from the IR, reducing the total from N² to 2N.
+**LLM-Rosetta** introduces a central **Intermediate Representation (IR)** as a hub. Each format only needs one bidirectional converter to and from the IR, reducing the total to 2N.
 
-Provider A ↔ **IR** ↔ Provider B — any format in, any format out.
+Provider A ↔ **IR** ↔ Provider B — any supported format in, any supported format out.
 
 ---
 
-## Two Ways to Use
+<a id="four-levels"></a>
+
+## Four Levels of Control
+
+| | Functions | Raw converter | Pipeline | Gateway |
+|---|---|---|---|---|
+| **Use case** | Convert one IR value or tool | Translate one leg inside your own loop | Source → IR → target in one call | HTTP proxy for any client |
+| **Entry point** | `tool_ops`, `transforms`, `capabilities` | `ChatCompletionsConverter()` | `convert()` / `ConversionPipeline` | `llm-rosetta-gateway` |
+| **Provider call** | You | You | You | The gateway |
+| **Routing, keys, admin** | — | — | — | Built in |
+
+All four share the same IR and converters. Start at the level you need and move up without rewriting the translation. `tool_ops` converts one tool definition, choice, call or result between a provider dialect and IR; `transforms` and `capabilities` apply one field or capability pass without building a converter.
+
+Python 3.11+ needs no third-party runtime dependency; 3.10 adds only `typing_extensions`, a backport of the standard library's `typing` module. That is unusual for a multi-provider gateway, and it means the same pipeline moves between applications and deployments without a dependency graph to resolve.
+
+---
+
+## Quick Start
 
 === "As a Library"
 
-    Convert between provider formats in your own code — no server needed:
+    Convert one leg with a raw converter, or run the full source → IR → target
+    path with the pipeline:
 
     ```python
-    from llm_rosetta import ChatCompletionsConverter, MessagesConverter
+    from llm_rosetta import ChatCompletionsConverter, MessagesConverter, convert
 
-    openai_conv = ChatCompletionsConverter()
-    anthropic_conv = MessagesConverter()
+    openai_request = {
+        "model": "gpt-4o",
+        "messages": [{"role": "user", "content": "Hello!"}],
+    }
 
-    # OpenAI format → IR → Anthropic format
-    ir_request = openai_conv.request_from_provider(openai_request)
-    anthropic_request, warnings = anthropic_conv.request_to_provider(ir_request)
+    # Raw converter: one leg at a time
+    ir = ChatCompletionsConverter().request_from_provider(openai_request)
+    anthropic_request, warnings = MessagesConverter().request_to_provider(ir)
+
+    # Pipeline: source → IR → target in one call
+    anthropic_request = convert(openai_request, target_provider="messages")
     ```
 
     ```bash
@@ -60,7 +83,8 @@ Provider A ↔ **IR** ↔ Provider B — any format in, any format out.
 
 === "As a Gateway"
 
-    Run a local HTTP proxy that translates between formats in real time:
+    Run a local HTTP proxy that translates between formats in real time, and
+    keeps every upstream, credential and route in your deployment:
 
     ```mermaid
     flowchart LR
@@ -76,28 +100,32 @@ Provider A ↔ **IR** ↔ Provider B — any format in, any format out.
     ```
 
     ```bash
-    pip install "llm-rosetta[gateway]"
+    pip install llm-rosetta-gateway
+    llm-rosetta-gateway init
     llm-rosetta-gateway
     ```
 
-    Drop-in backend for **Claude Code**, **Antigravity CLI (agy)**, **OpenAI Codex CLI**, **Kilo Code**, and **Ollama**. See [CLI Integrations](gateway/cli-integrations.md).
+    A backend for **Claude Code**, **Antigravity CLI (agy)**, **OpenAI Codex CLI**,
+    **Kilo Code** and **OpenCode**, and a translating proxy in front of **Ollama**.
+    See [CLI Integrations](gateway/cli-integrations.md).
 
     [Gateway Quick Start →](getting-started/gateway-quickstart.md){ .md-button }
 
 ---
 
-## Supported API Standards
+## Supported Formats
 
-| Provider | API Standard | ProviderType |
-|----------|-------------|:------------:|
-| OpenAI | Chat Completions | `chat_completions` |
-| OpenAI | Responses | `open_responses` |
-| Open Responses | Vendor-neutral standard | `open_responses` |
-| Anthropic | Messages | `messages` |
-| Google | GenAI | `google_generate` |
-| Google | Interactions | `google_interactions` |
+| Model type | Formats |
+|------------|---------|
+| LLM (chat) | `chat_completions`, `open_responses`, `messages`, `google_generate`, `google_interactions` |
+| Embeddings | `openai`, `cohere`, `jina`, `voyage`, `google_generate`, `minimax` |
+| Rerank | `jina`, `cohere`, `voyage` |
+| Decisions | `systemone`, `openai_decisions` |
 
-See [API Standards](guide/api-standards.md) for detailed format comparisons, and [Provider Compatibility](guide/compatibility.md) for the full provider support matrix.
+Every format converts both to and from the IR, for requests and responses; chat
+formats also convert streamed chunks. See [API Standards](guide/api-standards.md)
+for detailed comparisons and [Provider Compatibility](guide/compatibility.md) for
+the provider matrix.
 
 ---
 
@@ -105,13 +133,13 @@ See [API Standards](guide/api-standards.md) for detailed format comparisons, and
 
 | | |
 |---|---|
-| **Hub-and-Spoke Architecture** | Central IR eliminates N² conversion problem |
-| **Bidirectional Conversion** | Requests, responses, and messages in both directions |
-| **Streaming Support** | Convert streaming chunks with stateful context |
-| **Tool Calling** | Unified tool definition and call handling across providers |
-| **Auto Detection** | Detect provider format from request structure |
-| **Gateway + Admin Panel** | HTTP proxy with web UI for config, metrics, and logs |
-| **Type Safe** | Full TypedDict annotations for all types |
+| **Four levels of control** | Functions, raw converter, pipeline, gateway — one IR underneath |
+| **Bidirectional conversion** | Requests, responses and streamed chunks in both directions |
+| **IR as the application payload** | Keep history and orchestration state provider-neutral |
+| **Provider shims** | 39 shims across 18 providers declare field, auth and URL differences |
+| **Gateway + admin console** | HTTP proxy with routing, keys, logs, metrics and an admin UI |
+| **Zero third-party dependencies** | Nothing on Python 3.11+; `typing_extensions` on 3.10 only |
+| **Type safe** | Full TypedDict annotations for all types |
 
 ---
 

@@ -4,13 +4,15 @@ title: Gateway Quick Start
 
 # Gateway Quick Start
 
-Get a format-translating HTTP proxy running in under 5 minutes.
+Get a format-translating HTTP proxy running in under 5 minutes. The gateway is the fourth level of control: it owns the provider call, routing, keys and admin console, and keeps the upstream configuration in your deployment.
 
 ## 1. Install
 
 ```bash
-pip install "llm-rosetta[gateway]"
+pip install llm-rosetta-gateway
 ```
+
+`pip install "llm-rosetta[gateway]"` also works as a transitional alias that installs both distributions.
 
 Or use Docker (Alpine binary, ~21 MB):
 
@@ -51,7 +53,8 @@ Provider names are user-defined strings. The `type` field specifies the API stan
 ## 3. Start the gateway
 
 ```bash
-llm-rosetta-gateway
+llm-rosetta-gateway init     # writes a template config
+llm-rosetta-gateway          # serves on :8765
 ```
 
 The gateway auto-discovers config files at these locations (first match wins):
@@ -86,5 +89,6 @@ Streaming works too — just add `"stream": true`.
 
 - [Configuration](../gateway/configuration.md) — full config reference
 - [CLI Reference](../gateway/cli.md) — all CLI options and subcommands
-- [CLI Integrations](../gateway/cli-integrations.md) — use with Claude Code, Codex, Gemini CLI
+- [CLI Integrations](../gateway/cli-integrations.md) — use with Claude Code, Codex, OpenCode and Kilo Code
+- [Four Levels of Control](../index.md#four-levels) — where the gateway sits
 - [Admin Panel](../gateway/admin-panel.md) — web UI for config and monitoring

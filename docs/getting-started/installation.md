@@ -5,31 +5,13 @@ title: Installation
 # Installation
 
 !!! info "Requirements"
-    Python **≥ 3.10** is required. The core library has minimal dependencies (`typing_extensions>=4.0.0`).
+    Python **≥ 3.10** is required. On Python 3.11+ the core has no third-party runtime dependency; Python 3.10 adds only `typing_extensions`, the standard library's `typing` backport.
 
 ## Library
 
 ```bash
 pip install llm-rosetta
 ```
-
-### Provider SDKs (Optional)
-
-Install provider SDKs if you need to make direct API calls:
-
-```bash
-# Individual providers
-pip install openai
-pip install anthropic
-pip install google-genai
-
-# All providers at once
-pip install "llm-rosetta[openai,anthropic,google]"
-```
-
-!!! note
-
-    Provider SDKs are only needed for making API calls. LLM-Rosetta's conversion functions work with plain dictionaries and don't require the SDKs.
 
 ## Gateway
 
@@ -41,7 +23,7 @@ pip install llm-rosetta-gateway
 
 The gateway is published as its own distribution and depends on a compatible
 `llm-rosetta` core. `pip install "llm-rosetta[gateway]"` still works as a
-one-release meta alias that installs both.
+transitional alias that installs both.
 
 The gateway has **zero external runtime dependencies** — it uses vendored stdlib-only modules for HTTP server and client.
 
@@ -96,5 +78,5 @@ Or use Docker Compose — see `docker/docker-compose.yaml` in the repository.
 ```bash
 git clone https://github.com/Oaklight/llm-rosetta.git
 cd llm-rosetta
-pip install -e "packages/llm-rosetta[all]" -e packages/llm-rosetta-gateway
+pip install -e "packages/llm-rosetta[openai,anthropic,google]" -e packages/llm-rosetta-gateway
 ```

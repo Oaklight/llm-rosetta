@@ -4,6 +4,8 @@ title: Library Quick Start
 
 # Library Quick Start
 
+LLM-Rosetta exposes the same translation at four levels. This page starts at the raw converter; the pipeline (`convert()` / `ConversionPipeline`) adds shim resolution and warnings, and the gateway adds the HTTP proxy. See [Four Levels of Control](../index.md#four-levels) for the full picture.
+
 ## Hello World
 
 The simplest possible use: convert one dict to another. No API keys, no SDK, no network calls.
@@ -65,6 +67,10 @@ from llm_rosetta.types.ir import extract_text_content
 text = extract_text_content(ir_response["choices"][0]["message"])
 ```
 
+## Use the IR as Your Payload
+
+The IR is typed and provider-neutral. Keep conversation history, routing state or evaluation data in IR, and render it to a provider's dialect only at the call boundary. Switching providers changes the renderer, not your application's data model.
+
 ## Auto Detection
 
 Don't know the source format? Let LLM-Rosetta figure it out:
@@ -85,4 +91,5 @@ converted = convert(some_request, target_provider="messages")
 - [Using Converters](../guide/converters.md) — detailed converter usage and metadata preservation
 - [Streaming](../guide/streaming.md) — convert streaming chunks between providers
 - [IR Types](../guide/ir-types.md) — the Intermediate Representation type system
+- [Four Levels of Control](../index.md#four-levels) — functions, raw converter, pipeline, gateway
 - [Usage](../api/observability.md#usage) — measure tokens and read a report with no gateway
