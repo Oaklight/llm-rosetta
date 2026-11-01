@@ -26,6 +26,6 @@ Per-provider guides covering shim configuration, transforms, authentication, and
 | [OpenCode](opencode.md) | `opencode--*` | multiple | Go subscription / Zen balance |
 | [Plan (ChatGPT)](openai_chatgpt.md) | `openai_chatgpt--open_responses` | `open_responses` | ChatGPT plan route; sign-in instead of an API key |
 
-The Argo, AskSage and ALCF shims ship as standalone packages — declare their source with `shims.presets` (or **Settings → Shim Sources**) before using their names. See [Standalone shim packages](../shims.md#standalone-shim-packages).
+The Argo, AskSage, ALCF and OpenCode free-lane shims ship as standalone packages — declare their source with `shims.presets` (or **Settings → Shim Sources**) before using their names. See [Standalone shim packages](../shims.md#standalone-shim-packages).
 
 For general shim concepts and custom shim registration, see [Provider Shims](../shims.md).

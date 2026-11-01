@@ -89,9 +89,26 @@ Quota](../quota.md).
 ## Public free lane
 
 The keyless `/zen/v1` pool is a separate shim,
-`opencode_zen_free--chat_completions`. The upstream refuses a request that does
-not look like its own desktop client, so the shim reproduces that shape in its
-`connection` block and `transforms.py`:
+`opencode_zen_free--chat_completions`, and it ships as a standalone package
+rather than in core: [llm-rosetta-shim-opencode-zen-free](https://github.com/Oaklight/llm-rosetta-shim-opencode-zen-free).
+Declare the package before using the name:
+
+```jsonc
+{
+  "shims": { "presets": ["opencode_zen_free"] },
+  "providers": {
+    "zen-free": { "type": "opencode_zen_free--chat_completions" }
+  },
+  "models": {
+    "beam-free": { "provider": "zen-free" }
+  }
+}
+```
+
+No API key is required: the lane's credential is the literal word `public`,
+which the shim sends as `Authorization: Bearer public`. The upstream refuses a
+request that does not look like its own client, so the shim reproduces that
+shape in its `connection` block and `transforms.py`:
 
 - a `User-Agent` of `opencode/<version>` and the `x-opencode-client` /
   `x-opencode-project` markers;
@@ -112,25 +129,24 @@ models whose declared input and output cost is zero, so the panel offers those
 and nothing else. A listing that states no cost at all falls back to the
 `-free` suffix.
 
-This is an anti-abuse gate rather than a public pool: it can change or close
-without notice, its quota is metered per egress address block (a `/64` on IPv6,
-a `/32` on IPv4) and resets daily, and prompts may be logged upstream. The
-provider appears under **Free Resource** with the panel's third-party
-disclosure. See [issue #884](https://github.com/Oaklight/llm-rosetta/issues/884)
-for the measurements, and
-[opencode-unlimited-proxy](https://github.com/ebouther/opencode-unlimited-proxy)
-for an independent record of the gates and the quota axis.
+!!! warning "Measured 2026-11-01: the gate now refuses every non-OpenCode client"
+    The lane answers the OpenCode client itself and refuses everything else with
+    `429 FreeUsageLimitError`. A request that reproduces the real client's body
+    and headers byte for byte — captured through a local MITM proxy — is still
+    refused when sent with curl, Node `https`, Node `fetch`, Bun `fetch`, or
+    browser-impersonating TLS, on a host where the genuine client answers in the
+    same minute. The gate therefore keys on the client's transport (TLS/HTTP
+    stack), which a shim cannot set.
 
-```jsonc
-{
-  "providers": {
-    "zen-free": { "type": "opencode_zen_free--chat_completions" }
-  },
-  "models": {
-    "beam-free": { "provider": "zen-free" }
-  }
-}
-```
+    `429 FreeUsageLimitError` is also what genuine quota exhaustion returns, so
+    the two cannot be told apart from the response alone. Treat this lane as
+    experimental: it is kept because the upstream may relax the gate, and its
+    request-shape work (model filter, placeholder tool, finish-reason rewrite)
+    stays useful either way. See [issue
+    #884](https://github.com/Oaklight/llm-rosetta/issues/884) for the measurement
+    history.
 
-No key is required. The Go subscription also grants the two *Preview Free* models
-through the paid lane.
+The provider appears under **Free Resource** with the panel's third-party
+disclosure: it is an anti-abuse gate rather than a public pool, it can change or
+close without notice, and prompts may be logged upstream. The Go subscription
+also grants the two *Preview Free* models through the paid lane.

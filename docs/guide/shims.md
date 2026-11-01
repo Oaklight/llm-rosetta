@@ -407,7 +407,7 @@ config file needed) or `llm_rosetta_gateway.apply_shim_sources(raw, config_path)
 
 LLM-Rosetta ships with 39 built-in provider shims, one directory per shim under
 `packages/llm-rosetta/src/llm_rosetta/shims/providers/<vendor>/<model-type>/`. `list_shims()` prints the live set; this is
-that set. The ALCF, AskSage and Argo shims ship as standalone packages — see
+that set. The ALCF, AskSage, Argo and OpenCode free-lane shims ship as standalone packages — see
 [Standalone shim packages](#standalone-shim-packages).
 
 | Name | Format | Default Base URL | API Key Env | Transforms |
@@ -457,19 +457,22 @@ here; every shim's full declaration is in its own `transforms.py`.
 
 ### Standalone shim packages
 
-Three shim sets live in their own repositories rather than in core:
+Four shim sets live in their own repositories rather than in core:
 
 | Package | Shim names | Repository |
 |---------|------------|------------|
 | ALCF | `alcf_metis--chat_completions`, `alcf_minerva--chat_completions`, `alcf_sophia--chat_completions` | [llm-rosetta-shim-alcf](https://github.com/Oaklight/llm-rosetta-shim-alcf) |
 | Argo | `argo--chat_completions`, `argo--messages`, `argo--open_responses` | [llm-rosetta-shim-argo](https://github.com/Oaklight/llm-rosetta-shim-argo) |
 | AskSage | `asksage--chat_completions`, `asksage--messages`, `asksage--open_responses`, `asksage--google_generate` | [llm-rosetta-shim-asksage](https://github.com/Oaklight/llm-rosetta-shim-asksage) |
+| OpenCode Zen free lane | `opencode_zen_free--chat_completions` | [llm-rosetta-shim-opencode-zen-free](https://github.com/Oaklight/llm-rosetta-shim-opencode-zen-free) |
 
 ALCF and AskSage were introduced during the 0.14.0 development cycle and never
 appeared in a stable release's built-in set; Argo had shipped built in since
-v0.6.3. All three left core in 0.14.0. Their packages register the same
-canonical shim names, so a provider's `shim` value does not change — only the
-source declaration is new.
+v0.6.3. All three left core in 0.14.0. The OpenCode free lane left core after
+0.14 because the upstream gate changes independently of a release cycle — see
+[OpenCode](providers/opencode.md#public-free-lane) for its measured status.
+Their packages register the same canonical shim names, so a provider's `shim`
+value does not change — only the source declaration is new.
 
 **Preload a package by name.** `shims.presets` expands a catalog key into the
 repository, path and token variable, so one line replaces the expanded remote:
