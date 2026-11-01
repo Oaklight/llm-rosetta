@@ -246,6 +246,29 @@ class TestMessagesConverter:
         assert ir_request["reasoning"]["mode"] == "enabled"
         assert ir_request["reasoning"]["budget_tokens"] == 4096
 
+    def test_effort_alone_round_trips_to_the_same_ir(self):
+        """``output_config.effort`` alone reads back the same way twice.
+
+        The reader records that effort means the model should think, so the
+        writer's ``thinking`` object is what the IR asked for rather than a
+        fact invented on the way out; before #1299 the second read carried a
+        mode the first one did not.
+        """
+        provider_request = {
+            "model": "claude-3-5-sonnet-20241022",
+            "max_tokens": 1024,
+            "output_config": {"effort": "high"},
+            "messages": [{"role": "user", "content": "hi"}],
+        }
+
+        first = self.converter.request_from_provider(provider_request)
+        assert first["reasoning"] == {"effort": "high", "mode": "auto"}
+
+        restored, _ = self.converter.request_to_provider(first)
+        second = self.converter.request_from_provider(restored)
+
+        assert second["reasoning"] == first["reasoning"]
+
     def test_request_from_provider_pydantic(self):
         """Test request from provider with Pydantic model."""
 
