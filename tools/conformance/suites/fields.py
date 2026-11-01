@@ -151,6 +151,11 @@ class FormatSchema:
     expand: dict[str, frozenset[str]]
     skip: dict[str, str]
     source: str = "sdk"
+    #: Further (prefix, root) pairs to walk beside ``root``.  A request type
+    #: sometimes splits one wire body across two SDK types — Google's
+    #: ``contents`` is a call argument, not a config field — and both halves
+    #: belong in one inventory.
+    extra_roots: tuple[tuple[str, Any], ...] = ()
 
 
 def _hints(tp: Any) -> dict[str, Any]:

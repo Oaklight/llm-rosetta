@@ -1,0 +1,779 @@
+{
+  "formats": {
+    "chat_completions": {
+      "fields": {
+        "audio": {
+          "class": "dropped",
+          "reason": "no IR field for a provider-side audio reply"
+        },
+        "frequency_penalty": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "function_call": {
+          "class": "dropped",
+          "reason": "deprecated functions API; the reader reads only `tools`"
+        },
+        "function_call.name": {
+          "class": "dropped",
+          "reason": "deprecated functions API; the reader reads only `tools`"
+        },
+        "functions": {
+          "class": "dropped",
+          "reason": "deprecated functions API; the reader reads only `tools`"
+        },
+        "logit_bias": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "logprobs": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "max_completion_tokens": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "max_tokens": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "messages": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "metadata": {
+          "class": "dropped",
+          "reason": "the IR has no request-level metadata"
+        },
+        "modalities": {
+          "class": "dropped",
+          "reason": "no IR field for the requested output modalities"
+        },
+        "model": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "moderation": {
+          "class": "dropped",
+          "reason": "no IR field for a provider-side moderation pass"
+        },
+        "n": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "parallel_tool_calls": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "prediction": {
+          "class": "dropped",
+          "reason": "no IR field for predicted-output optimisation"
+        },
+        "presence_penalty": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "prompt_cache_key": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "prompt_cache_options": {
+          "class": "dropped",
+          "reason": "no IR field; the IR cache config is key + retention only"
+        },
+        "prompt_cache_retention": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "reasoning_effort": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "response_format": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "safety_identifier": {
+          "class": "dropped",
+          "reason": "no IR field for an abuse-reporting identifier"
+        },
+        "seed": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "service_tier": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "stop": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "store": {
+          "class": "dropped",
+          "reason": "no IR field for server-side response storage"
+        },
+        "stream": {
+          "class": "mapped",
+          "reason": "the gateway rewrites the target's stream flag"
+        },
+        "stream_options": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "stream_options.include_obfuscation": {
+          "class": "dropped",
+          "reason": "no IR field; the IR stream config is enabled + usage only"
+        },
+        "stream_options.include_usage": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "temperature": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "tool_choice": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "tools": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "top_logprobs": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "top_p": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "user": {
+          "class": "dropped",
+          "reason": "the IR has no end-user identifier"
+        },
+        "verbosity": {
+          "class": "dropped",
+          "reason": "no IR field for output verbosity"
+        },
+        "web_search_options": {
+          "class": "dropped",
+          "reason": "no IR field for per-request web-search options"
+        }
+      }
+    },
+    "google_generate": {
+      "fields": {
+        "audio_timestamp": {
+          "class": "dropped",
+          "reason": "no IR field for audio timestamps"
+        },
+        "audio_transcription_config": {
+          "class": "dropped",
+          "reason": "no IR field for transcription config"
+        },
+        "automatic_continuation": {
+          "class": "dropped",
+          "reason": "no IR field for continuing a truncated generation"
+        },
+        "automatic_function_calling": {
+          "class": "not_on_wire",
+          "reason": "SDK-only helper; never sent on the wire"
+        },
+        "cached_content": {
+          "class": "dropped",
+          "reason": "the reader has no cache leg; cached content is write-only"
+        },
+        "candidate_count": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "contents[].parts": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "contents[].role": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "continuation_token": {
+          "class": "dropped",
+          "reason": "no IR field for continuing a truncated generation"
+        },
+        "enable_enhanced_civic_answers": {
+          "class": "dropped",
+          "reason": "no IR field for enhanced civic answers"
+        },
+        "frequency_penalty": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "generation_output_config": {
+          "class": "dropped",
+          "reason": "no IR field for output file configuration"
+        },
+        "http_options": {
+          "class": "not_on_wire",
+          "reason": "SDK-only helper; never sent on the wire"
+        },
+        "image_config": {
+          "class": "dropped",
+          "reason": "no IR field for image-generation config"
+        },
+        "labels": {
+          "class": "dropped",
+          "reason": "no IR field for request labels"
+        },
+        "logprobs": {
+          "class": "dropped",
+          "reason": "no IR field for log probabilities"
+        },
+        "max_output_tokens": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "media_resolution": {
+          "class": "dropped",
+          "reason": "no IR field for media resolution"
+        },
+        "model_armor_config": {
+          "class": "dropped",
+          "reason": "no IR field for model armor config"
+        },
+        "model_selection_config": {
+          "class": "dropped",
+          "reason": "no IR field for model selection config"
+        },
+        "presence_penalty": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "response_json_schema": {
+          "class": "dropped",
+          "reason": "the reader reads `response_schema`, not `response_json_schema`"
+        },
+        "response_logprobs": {
+          "class": "dropped",
+          "reason": "no IR field for log probabilities"
+        },
+        "response_mime_type": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "response_modalities": {
+          "class": "dropped",
+          "reason": "no IR field for the requested output modalities"
+        },
+        "response_schema": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "routing_config": {
+          "class": "dropped",
+          "reason": "no IR field for routing config"
+        },
+        "safety_settings": {
+          "class": "dropped",
+          "reason": "no IR field for per-request safety settings"
+        },
+        "seed": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "service_tier": {
+          "class": "dropped",
+          "reason": "no IR field read on this leg"
+        },
+        "should_return_http_response": {
+          "class": "not_on_wire",
+          "reason": "SDK-only helper; never sent on the wire"
+        },
+        "speech_config": {
+          "class": "dropped",
+          "reason": "no IR field for speech synthesis config"
+        },
+        "stop_sequences": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "store": {
+          "class": "dropped",
+          "reason": "no IR field for server-side response storage"
+        },
+        "system_instruction": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "temperature": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "thinking_config": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "thinking_config.include_thoughts": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "thinking_config.thinking_budget": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "thinking_config.thinking_level": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "tool_config": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "tool_config.function_calling_config": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "tool_config.function_calling_config.allowed_function_names": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "tool_config.function_calling_config.mode": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "tool_config.function_calling_config.stream_function_call_arguments": {
+          "class": "dropped",
+          "reason": "no IR field for streamed function-call arguments"
+        },
+        "tool_config.include_server_side_tool_invocations": {
+          "class": "dropped",
+          "reason": "no IR field for server-side tool invocation echoes"
+        },
+        "tool_config.retrieval_config": {
+          "class": "dropped",
+          "reason": "no IR field for retrieval config"
+        },
+        "tools": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "top_k": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "top_p": {
+          "class": "mapped",
+          "reason": ""
+        }
+      }
+    },
+    "google_interactions": {
+      "fields": {
+        "agent": {
+          "class": "dropped",
+          "reason": "no IR field for an agent definition"
+        },
+        "agent_config": {
+          "class": "dropped",
+          "reason": "no IR field for an agent definition"
+        },
+        "background": {
+          "class": "mapped",
+          "reason": "provider_extensions passthrough"
+        },
+        "cached_content": {
+          "class": "dropped",
+          "reason": "the reader has no cache leg; cached content is write-only"
+        },
+        "environment": {
+          "class": "dropped",
+          "reason": "no IR field for an execution environment"
+        },
+        "environment_id": {
+          "class": "dropped",
+          "reason": "no IR field for an execution environment"
+        },
+        "generation_config": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "generation_config.image_config": {
+          "class": "dropped",
+          "reason": "no IR field for image-generation config"
+        },
+        "generation_config.max_output_tokens": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "generation_config.seed": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "generation_config.stop_sequences": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "generation_config.temperature": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "generation_config.thinking_level": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "generation_config.thinking_summaries": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "generation_config.tool_choice": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "generation_config.top_p": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "generation_config.transcription_config": {
+          "class": "dropped",
+          "reason": "no IR field for transcription config"
+        },
+        "generation_config.video_config": {
+          "class": "dropped",
+          "reason": "no IR field for video config"
+        },
+        "input": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "labels": {
+          "class": "dropped",
+          "reason": "no IR field for request labels"
+        },
+        "model": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "previous_interaction_id": {
+          "class": "mapped",
+          "reason": "provider_extensions passthrough"
+        },
+        "response_format": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "response_mime_type": {
+          "class": "dropped",
+          "reason": "the reader reads `response_format` only"
+        },
+        "response_modalities": {
+          "class": "dropped",
+          "reason": "no IR field for the requested output modalities"
+        },
+        "safety_settings": {
+          "class": "mapped",
+          "reason": "provider_extensions passthrough"
+        },
+        "service_tier": {
+          "class": "dropped",
+          "reason": "no IR field read on this leg"
+        },
+        "store": {
+          "class": "mapped",
+          "reason": "provider_extensions passthrough"
+        },
+        "stream": {
+          "class": "mapped",
+          "reason": "the gateway rewrites the target's stream flag"
+        },
+        "system_instruction": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "tools": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "webhook_config": {
+          "class": "dropped",
+          "reason": "no IR field for a completion webhook"
+        }
+      }
+    },
+    "messages": {
+      "fields": {
+        "cache_control": {
+          "class": "dropped",
+          "reason": "cache_control is read per part; a top-level one is not"
+        },
+        "container": {
+          "class": "dropped",
+          "reason": "no IR field for a code-execution container"
+        },
+        "diagnostics": {
+          "class": "dropped",
+          "reason": "no IR field for request diagnostics"
+        },
+        "inference_geo": {
+          "class": "dropped",
+          "reason": "no IR field for an inference geography"
+        },
+        "max_tokens": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "messages": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "metadata": {
+          "class": "dropped",
+          "reason": "the IR has no request-level metadata"
+        },
+        "model": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "output_config": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "output_config.effort": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "output_config.format": {
+          "class": "dropped",
+          "reason": "structured output is read from `response_format` only"
+        },
+        "service_tier": {
+          "class": "mapped",
+          "reason": "only `auto` has an IR equivalent; others are reported"
+        },
+        "speed": {
+          "class": "dropped",
+          "reason": "no IR field for a latency/cost tier"
+        },
+        "stop_sequences": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "stream": {
+          "class": "mapped",
+          "reason": "the gateway rewrites the target's stream flag"
+        },
+        "system": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "system.cache_control": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "system.citations": {
+          "class": "dropped",
+          "reason": "no IR field for citations on a system text block"
+        },
+        "system.text": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "system.type": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "thinking": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "tool_choice": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "tools": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "user_profile_id": {
+          "class": "dropped",
+          "reason": "no IR field for a user profile id"
+        },
+        "workspace_id": {
+          "class": "dropped",
+          "reason": "no IR field for a workspace"
+        }
+      }
+    },
+    "open_responses": {
+      "fields": {
+        "access_programs": {
+          "class": "mapped",
+          "reason": "provider_extensions, profile-only"
+        },
+        "background": {
+          "class": "mapped",
+          "reason": "provider_extensions passthrough"
+        },
+        "context_management": {
+          "class": "mapped",
+          "reason": "provider_extensions passthrough"
+        },
+        "conversation": {
+          "class": "mapped",
+          "reason": "provider_extensions passthrough"
+        },
+        "include": {
+          "class": "mapped",
+          "reason": "provider_extensions passthrough"
+        },
+        "input": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "instructions": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "max_output_tokens": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "max_tool_calls": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "metadata": {
+          "class": "mapped",
+          "reason": "provider_extensions passthrough"
+        },
+        "model": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "moderation": {
+          "class": "mapped",
+          "reason": "provider_extensions, profile-only"
+        },
+        "parallel_tool_calls": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "previous_response_id": {
+          "class": "mapped",
+          "reason": "provider_extensions passthrough"
+        },
+        "prompt": {
+          "class": "mapped",
+          "reason": "provider_extensions passthrough"
+        },
+        "prompt_cache_key": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "prompt_cache_options": {
+          "class": "mapped",
+          "reason": "provider_extensions, profile-only"
+        },
+        "prompt_cache_retention": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "reasoning": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "reasoning.context": {
+          "class": "dropped",
+          "reason": "no IR field for reasoning context management"
+        },
+        "reasoning.effort": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "reasoning.generate_summary": {
+          "class": "dropped",
+          "reason": "the reader reads `reasoning.summary`, not `generate_summary`"
+        },
+        "reasoning.mode": {
+          "class": "dropped",
+          "reason": "the reader reads `reasoning.type`, not `reasoning.mode`"
+        },
+        "reasoning.summary": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "safety_identifier": {
+          "class": "mapped",
+          "reason": "provider_extensions passthrough"
+        },
+        "service_tier": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "store": {
+          "class": "mapped",
+          "reason": "provider_extensions passthrough"
+        },
+        "stream": {
+          "class": "mapped",
+          "reason": "the gateway rewrites the target's stream flag"
+        },
+        "stream_options": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "stream_options.include_obfuscation": {
+          "class": "dropped",
+          "reason": "no IR field; the IR stream config is enabled + usage only"
+        },
+        "temperature": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "text": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "text.format": {
+          "class": "dropped",
+          "reason": "the reader reads the Chat-shaped `text.type`; the spec's `text.format` has no reader"
+        },
+        "text.verbosity": {
+          "class": "mapped",
+          "reason": "provider_extensions as _text_verbosity"
+        },
+        "tool_choice": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "tools": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "top_logprobs": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "top_p": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "truncation": {
+          "class": "mapped",
+          "reason": ""
+        },
+        "user": {
+          "class": "mapped",
+          "reason": "provider_extensions passthrough"
+        }
+      }
+    }
+  },
+  "schema_version": 1,
+  "sdk_versions": {
+    "anthropic": "2.3.0",
+    "google-genai": "2.34.0",
+    "openai": "3.42.0"
+  },
+  "suite": "request-fields"
+}

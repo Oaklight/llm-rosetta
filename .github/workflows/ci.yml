@@ -199,12 +199,12 @@ jobs:
         run: python -m pytest tests/test_types/ -v
 
   conformance:
-    # The wire and fields suites are offline and deterministic, so they can
-    # gate every PR: their committed baselines turn a conversion behaviour
-    # change into a named diff (`generation.top_k: lost`) or a new upstream
-    # field rather than a flaky red build.  Upstream probing — what a vendor
-    # accepts and echoes — needs credentials and stays out of PR CI until the
-    # scheduled group lands (epic #1128).
+    # The wire, fields and request-fields suites are offline and deterministic,
+    # so they can gate every PR: their committed baselines turn a conversion
+    # behaviour change into a named diff (`generation.top_k: lost`) or a new
+    # upstream field rather than a flaky red build.  Upstream probing — what a
+    # vendor accepts and echoes — needs credentials and stays out of PR CI until
+    # the scheduled group lands (epic #1128).
     needs: changes
     if: needs.changes.outputs.core == 'true'
     runs-on: ubuntu-latest
@@ -231,6 +231,11 @@ jobs:
       - name: Run the fields suite against its ledger
         run: python -m tools.conformance run --suite fields --out fields-report.json
 
+      - name: Run the request-fields suite against its ledger
+        run: >-
+          python -m tools.conformance run --suite request-fields
+          --out request-fields-report.json
+
       - name: Upload the reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -239,6 +244,7 @@ jobs:
           path: |
             wire-report.json
             fields-report.json
+            request-fields-report.json
           # A run that produced no report is not a run: the default warning
           # would let this step look green on an install failure.
           if-no-files-found: error
