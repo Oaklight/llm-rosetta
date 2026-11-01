@@ -450,6 +450,40 @@ class TestDecisionSection:
         )
         assert "p" not in cfg.decisions_providers
 
+    def test_the_canonical_flag_wins_when_both_spellings_are_present(self) -> None:
+        """Presence, not truthiness: the canonical `False` is the answer.
+
+        Without the `*_enabled` carve-out the falsy canonical value would fall
+        through to the legacy `True` and the endpoint would stay in the pool.
+        """
+        cfg = GatewayConfig(
+            {
+                "decisions_providers": {
+                    "p": {
+                        "base_url": "https://x",
+                        "decisions_enabled": False,
+                        "decision_enabled": True,
+                    }
+                }
+            }
+        )
+        assert "p" not in cfg.decisions_providers
+
+    def test_an_empty_canonical_flag_does_not_fall_through(self) -> None:
+        """The flag decides by presence, so an empty canonical value wins too."""
+        cfg = GatewayConfig(
+            {
+                "decisions_providers": {
+                    "p": {
+                        "base_url": "https://x",
+                        "decisions_enabled": "",
+                        "decision_enabled": False,
+                    }
+                }
+            }
+        )
+        assert "p" in cfg.decisions_providers
+
     def test_an_enabled_flag_participates_as_usual(self) -> None:
         cfg = GatewayConfig(
             {
