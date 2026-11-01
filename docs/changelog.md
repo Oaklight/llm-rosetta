@@ -115,6 +115,9 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **Gateway reliability** (issues [#964](https://github.com/Oaklight/llm-rosetta/issues/964), [#1046](https://github.com/Oaklight/llm-rosetta/issues/1046), [#1106](https://github.com/Oaklight/llm-rosetta/issues/1106)): a config reload re-seeds `token_command` providers, a failing startup repair no longer skips the repairs behind it, error dumps are written on databases that enforce the foreign key, and one broken endpoint degrades only itself.
 - **Admin panel on phones** (issues [#1083](https://github.com/Oaklight/llm-rosetta/issues/1083), [#1085](https://github.com/Oaklight/llm-rosetta/issues/1085), [#1087](https://github.com/Oaklight/llm-rosetta/issues/1087), [#1091](https://github.com/Oaklight/llm-rosetta/issues/1091), [#1097](https://github.com/Oaklight/llm-rosetta/issues/1097), [#1099](https://github.com/Oaklight/llm-rosetta/pull/1099)): the request log, ops log, error dumps, settings, dashboard and keys pages fit a phone, and rows, headers, segmented controls and capability chips work from the keyboard.
 
+### Documentation
+- **The READMEs now describe the 0.14 surface, in both languages**: the root README and both package READMEs (each with an English and a Chinese version) lead with the four levels of control — functions, raw converter, pipeline, gateway — and the reason to own your model sources; use the canonical converter names (`ChatCompletionsConverter`, `MessagesConverter`, …); list the five chat formats plus the embedding, rerank and decision formats; and state the real Python floor (3.10, with `typing_extensions` as the only 3.10 addition). The gateway's install paths (pip, Docker, standalone binaries), config example, admin console and CLI integrations are documented there for the first time.
+
 ## v0.13.0 — 2026-09-08
 
 ### Added
