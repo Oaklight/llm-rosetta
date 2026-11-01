@@ -46,7 +46,7 @@ Provider A ↔ **IR** ↔ Provider B — any supported format in, any supported 
 | **Provider call** | You | You | You | The gateway |
 | **Routing, keys, admin** | — | — | — | Built in |
 
-All three levels share the same IR and converters, and the toolbox operates on that same IR. Start at the level you need and move up without rewriting the translation. `tool_ops` converts one tool definition, choice, call or result between a provider dialect and IR; `transforms` and `capabilities` apply one field or capability pass without building a converter.
+All three levels share the same IR and converters, and the toolbox operates on that same IR. Start at the level you need and move up without rewriting the translation. `tool_ops` converts one tool definition, choice, call or result between a provider dialect and IR; `transforms` and `capabilities` apply one field or capability pass without building a converter. The pipeline resolves both shims, so a target shim's defaults can make its body differ from the raw converter's — Anthropic's default `cache_control` breakpoint is one example.
 
 Python 3.11+ needs no third-party runtime dependency; 3.10 adds only `typing_extensions`, a backport of the standard library's `typing` module. That is unusual for a multi-provider gateway, and it means the same pipeline moves between applications and deployments without a dependency graph to resolve.
 
