@@ -11,12 +11,12 @@ IR扩展项类型定义（实验性），用于特殊场景的扩展功能。
 """
 
 import sys
-from typing import Any, Literal, TypeGuard, Union
+from typing import Any, Literal, TypedDict, TypeGuard, Union
 
 if sys.version_info >= (3, 11):
-    from typing import NotRequired, Required, TypedDict
+    from typing import NotRequired, Required
 else:
-    from typing_extensions import NotRequired, Required, TypedDict
+    from typing_extensions import NotRequired, Required
 
 # ============================================================================
 # 扩展项类型（用于特殊场景） Extension item types (for special scenarios)

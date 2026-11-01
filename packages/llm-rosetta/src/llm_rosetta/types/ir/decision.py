@@ -21,14 +21,14 @@ API docs: https://docs.typesafe.ai/api
 """
 
 import sys
-from typing import Any, Literal, Union
+from typing import Any, Literal, TypedDict, Union
 
 from .parts import ImagePart, TextPart
 
 if sys.version_info >= (3, 11):
-    from typing import NotRequired, Required, TypedDict
+    from typing import NotRequired, Required
 else:
-    from typing_extensions import NotRequired, Required, TypedDict
+    from typing_extensions import NotRequired, Required
 
 
 # ============================================================================

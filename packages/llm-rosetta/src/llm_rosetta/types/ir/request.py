@@ -11,12 +11,12 @@ Unified request parameter types based on sdk_body_structures.md
 """
 
 import sys
-from typing import Any, Union
+from typing import Any, TypedDict, Union
 
 if sys.version_info >= (3, 11):
-    from typing import NotRequired, Required, TypedDict
+    from typing import NotRequired, Required
 else:
-    from typing_extensions import NotRequired, Required, TypedDict
+    from typing_extensions import NotRequired, Required
 
 from .configs import (
     CacheConfig,

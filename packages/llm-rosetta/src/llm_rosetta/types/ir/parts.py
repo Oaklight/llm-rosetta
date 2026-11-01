@@ -6,12 +6,12 @@ IR content parts type definitions
 """
 
 import sys
-from typing import Any, Literal, Union
+from typing import Any, Literal, TypedDict, Union
 
 if sys.version_info >= (3, 11):
-    from typing import NotRequired, Required, TypedDict
+    from typing import NotRequired, Required
 else:
-    from typing_extensions import NotRequired, Required, TypedDict
+    from typing_extensions import NotRequired, Required
 
 # ============================================================================
 # 基础内容部分类型 Basic content part types
