@@ -294,6 +294,7 @@ class TestSourceCatalog:
             "remote",
             "shims",
             "free",
+            "note",
         }
 
 

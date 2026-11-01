@@ -59,11 +59,24 @@ def shims_signature(raw: Mapping[str, Any] | None) -> str:
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 
 
-def _resolve_presets(raw_presets: list[Any]) -> list[dict[str, Any]]:
+def _resolve_presets(
+    raw_presets: list[Any], *, on_unknown: str = "raise"
+) -> list[dict[str, Any]]:
     """Expand ``shims.presets`` keys into their catalogue remotes.
 
     Duplicates collapse to the first mention, so the same archive is not
     listed twice.
+
+    Args:
+        raw_presets: The declared keys.
+        on_unknown: ``"raise"`` (the admin PUT path, where the operator can
+            correct the body) or ``"skip"`` (startup, where a key this build
+            does not ship must not keep the gateway from running — it may come
+            from a newer build, and the panel is part of the same process).
+
+    Raises:
+        ValueError: On a non-string key, or an unknown key when *on_unknown*
+            is ``"raise"``.
     """
     remotes: list[dict[str, Any]] = []
     seen_urls: set[str] = set()
@@ -75,6 +88,13 @@ def _resolve_presets(raw_presets: list[Any]) -> list[dict[str, Any]]:
         package = get_source_package(key)
         if package is None:
             known = ", ".join(entry.key for entry in SHIM_SOURCE_PACKAGES)
+            if on_unknown == "skip":
+                logger.warning(
+                    "config: unknown shim preset %r is skipped; this build ships: %s",
+                    key,
+                    known,
+                )
+                continue
             raise ValueError(
                 f"config: unknown shim preset {key!r}; known presets: {known}"
             )
@@ -165,7 +185,10 @@ def _validate_knobs(section: Mapping[str, Any]) -> None:
 
 
 def resolve_source_config(
-    section: Mapping[str, Any] | None, config_path: str | None
+    section: Mapping[str, Any] | None,
+    config_path: str | None,
+    *,
+    on_unknown: str = "raise",
 ) -> tuple[list[str], list[dict[str, Any]], str]:
     """Resolve a ``shims`` section into absolute dirs, remotes and cache root.
 
@@ -182,6 +205,8 @@ def resolve_source_config(
     Args:
         section: The ``shims`` mapping (or ``None``/empty).
         config_path: Path to the config file, used as the anchoring base.
+        on_unknown: What to do with a ``presets`` key this build does not ship;
+            see :func:`_resolve_presets`.
 
     Returns:
         ``(dirs, remotes, cache_root)``.
@@ -200,7 +225,8 @@ def resolve_source_config(
     if not isinstance(raw_presets, list):
         raise ValueError("config: 'shims.presets' must be an array")
     remotes = _resolve_remotes(
-        section.get("remotes") or [], _resolve_presets(raw_presets)
+        section.get("remotes") or [],
+        _resolve_presets(raw_presets, on_unknown=on_unknown),
     )
     _validate_knobs(section)
     return dirs, remotes, _cache_root(section.get("cache_dir"), config_dir)
@@ -281,9 +307,11 @@ def apply_shim_section(
 ) -> ShimLoadReport:
     """Apply a ``shims`` section (already extracted) to the registry."""
     effective = section if isinstance(section, Mapping) else {}
-    dirs, remotes, cache_root = resolve_source_config(effective, config_path)
     if strict is None:
         strict = bool(effective.get("strict", False))
+    dirs, remotes, cache_root = resolve_source_config(
+        effective, config_path, on_unknown="raise" if strict else "skip"
+    )
     ttl = _int_setting(effective, "remote_ttl", REMOTE_TTL_SECONDS)
     if force_refresh:
         remotes = [dict(spec, refresh="always") for spec in remotes]

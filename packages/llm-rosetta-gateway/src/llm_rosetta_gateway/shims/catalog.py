@@ -46,6 +46,10 @@ class ShimSourcePackage:
             public, so the presets carry no token by default.
         free: Whether the package serves a keyless free resource.  The panel
             groups these apart from the paid packages.
+        note: An optional sentence the operator should read before selecting
+            the package, keyed by language code like a shim's ``hint_msg``.
+            It travels with the preset so a warning cannot be left behind in
+            the docs.
     """
 
     key: str
@@ -56,6 +60,7 @@ class ShimSourcePackage:
     legacy_names: tuple[str, ...] = ()
     token_env: str | None = None
     free: bool = False
+    note: dict[str, str] | None = None
 
     @property
     def remote(self) -> dict[str, Any]:
@@ -82,6 +87,7 @@ class ShimSourcePackage:
             "remote": self.remote,
             "shims": list(self.shims),
             "free": self.free,
+            "note": self.note,
         }
 
 
@@ -270,6 +276,15 @@ SHIM_SOURCE_PACKAGES: tuple[ShimSourcePackage, ...] = (
         shims=("opencode_zen_free--chat_completions",),
         # The only keyless package: the picker groups it under free resources.
         free=True,
+        note={
+            "en": (
+                "The upstream gate fingerprints the client transport, so a "
+                "non-CLI client is refused even when the shim loads."
+            ),
+            "zh": (
+                "上游门禁会识别客户端传输栈，非 CLI 客户端即使 shim 加载成功也会被拒。"
+            ),
+        },
     ),
     ShimSourcePackage(
         key="asksage",

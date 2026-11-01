@@ -212,6 +212,17 @@ def _get_config_io(request: Any) -> ConfigIO:
     return io
 
 
+def _install_shim_report(request: Any, report: Any, signature: str) -> None:
+    """Record a freshly applied shim report on the app.
+
+    The update verdicts cached on ``shim_update_check`` describe the previous
+    report — which pinned other commits — so they are dropped with it.
+    """
+    request.app.shim_source_report = report
+    request.app.shim_source_signature = signature
+    request.app.shim_update_check = None
+
+
 async def _reload_gateway_config(
     request: Any, config_path: str, *, force_shims: bool = False
 ) -> GatewayConfig:
@@ -241,8 +252,7 @@ async def _reload_gateway_config(
     if force_shims or signature != getattr(request.app, "shim_source_signature", None):
         loop = asyncio.get_running_loop()
         report = await loop.run_in_executor(None, apply_shim_sources, raw, config_path)
-        request.app.shim_source_report = report
-        request.app.shim_source_signature = signature
+        _install_shim_report(request, report, signature)
 
     from ...ops import OpsContext, OpsProviderValidation
 
