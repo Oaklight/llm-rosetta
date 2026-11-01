@@ -1,6 +1,6 @@
 // auth.js — Authentication, login, settings, token management
 import { S } from './state.js';
-import { t, applyI18n } from './i18n.js';
+import { t, applyI18n, typeNamesMode } from './i18n.js';
 import { api, _adminHeaders, showToast, closeModal, fmtBytesLong, _startInactivityTracking, _stopInactivityTracking, paintThemeButton } from './utils.js';
 import { renderShimSources } from '../tabs/shims.js';
 
@@ -17,6 +17,8 @@ function openSettings() {
   if (ms) ms.value = S.currentMode;
   const ls = document.getElementById('settingsLangSelect');
   if (ls) ls.value = S.currentLang;
+  const tn = document.getElementById('settingsTypeNamesSelect');
+  if (tn) tn.value = typeNamesMode();
   // Version — the gateway's own, plus the core when they differ (they are
   // released together but may drift by a patch).
   const ver = document.getElementById('settingsVersion');

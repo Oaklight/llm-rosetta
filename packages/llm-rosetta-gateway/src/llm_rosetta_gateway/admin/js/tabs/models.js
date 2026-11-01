@@ -1,6 +1,6 @@
 // models.js — Model management: modal, CRUD, rendering, filtering, bulk ops
 import { S, _CAP_ICONS } from '../core/state.js';
-import { t, capLabel } from '../core/i18n.js';
+import { t, capLabel, typeLabel, typeLabelAlt } from '../core/i18n.js';
 import { api, showToast, closeModal, esc, inlineConfirm, closeMenus, openMenu, isFreeEntry, freeEntryLabel, providerTypeName } from '../core/utils.js';
 import { syncAriaSort } from '../core/sort.js';
 import { syncChipState } from '../core/chips.js';
@@ -78,16 +78,17 @@ function _syncFilterTypeSeg(seg, typeNames) {
       el.setAttribute('aria-checked', active ? 'true' : 'false');
       el.setAttribute('tabindex', active ? '0' : '-1');
       const span = el.querySelector('span');
-      const labelKey = domain === 'all' ? 'filter.all' : 'label.' + domain;
-      if (span) span.textContent = t(labelKey) || (domain === 'all' ? 'All' : domain.toUpperCase());
+      if (span) span.textContent = domain === 'all' ? t('filter.all') : typeLabel(domain);
     });
     return;
   }
   seg.innerHTML = domains.map((domain) => {
     const active = S._modelDomain === domain;
-    const labelKey = domain === 'all' ? 'filter.all' : 'label.' + domain;
-    const label = t(labelKey) || (domain === 'all' ? 'All' : domain.toUpperCase());
-    return `<div class="${active ? 'active' : ''}" role="radio" data-domain="${esc(domain)}" aria-checked="${active}" tabindex="${active ? '0' : '-1'}" onclick="switchModelDomain(this,'${esc(domain)}')"><span data-i18n="${labelKey}">${esc(label)}</span></div>`;
+    // A model type is named in the vocabulary the preference picks; `All` is
+    // ordinary interface text and keeps data-i18n.
+    const attrs = domain === 'all' ? 'data-i18n="filter.all"' : `data-type-name="${esc(domain)}"`;
+    const label = domain === 'all' ? t('filter.all') : typeLabel(domain);
+    return `<div class="${active ? 'active' : ''}" role="radio" data-domain="${esc(domain)}" aria-checked="${active}" tabindex="${active ? '0' : '-1'}" onclick="switchModelDomain(this,'${esc(domain)}')"><span ${attrs}>${esc(label)}</span></div>`;
   }).join('');
 }
 
@@ -140,14 +141,12 @@ function _syncModalTypeSeg(seg, typeNames) {
     // the labels, which is what a language switch needs.
     items.forEach((el, i) => {
       const span = el.querySelector('span');
-      const labelKey = 'label.' + typeNames[i];
-      if (span) span.textContent = t(labelKey) || typeNames[i].toUpperCase();
+      if (span) span.textContent = typeLabel(typeNames[i]);
     });
     return;
   }
   seg.innerHTML = typeNames.map((name, i) => {
-    const labelKey = 'label.' + name;
-    return `<div class="${i === 0 ? 'active' : ''}" onclick="segModelType(this,'${esc(name)}')"><input type="radio" name="modelType" value="${esc(name)}"${i === 0 ? ' checked' : ''} onchange="segModelType(this)"><span data-i18n="${labelKey}">${esc(t(labelKey) || name.toUpperCase())}</span></div>`;
+    return `<div class="${i === 0 ? 'active' : ''}" onclick="segModelType(this,'${esc(name)}')"><input type="radio" name="modelType" value="${esc(name)}"${i === 0 ? ' checked' : ''} onchange="segModelType(this)"><span data-type-name="${esc(name)}">${esc(typeLabel(name))}</span></div>`;
   }).join('');
 }
 
@@ -1062,7 +1061,7 @@ function renderModels() {
     const hasTools = caps.includes('tools');
     const hasReasoning = caps.includes('reasoning');
     const typeBadgeCls = _typeBadgeClass(modelType);
-    const typeBadge = modelType === 'llm' ? '' : `<span class="cap-badge ${typeBadgeCls}">${_CAP_ICONS[modelType] || ''}${esc(capLabel(modelType))}</span>`;
+    const typeBadge = modelType === 'llm' ? '' : `<span class="cap-badge ${typeBadgeCls}" title="${esc(typeLabelAlt(modelType))}">${_CAP_ICONS[modelType] || ''}${esc(typeLabel(modelType))}</span>`;
     // The upstream name is the same string on nearly every row and the provider
     // menu already lists it per provider; it stays a tooltip here.
     const upstream = (typeof info === 'object' && info.upstream_model) ? info.upstream_model : '';

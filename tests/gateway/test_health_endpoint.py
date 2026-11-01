@@ -239,6 +239,19 @@ class TestHandleHealthFunction:
         assert "errors_last_hour" in body
         assert "providers" not in body
 
+    def test_health_carries_the_gateway_clock(self):
+        """The admin footer renders the gateway's wall time from these two."""
+        import json
+        import time
+
+        req = _FakeRequest(metrics=None)
+        before = time.time() * 1000
+        body = json.loads(_run(self.handle_health(req)).body)
+        after = time.time() * 1000
+
+        assert before - 1000 <= body["server_time"] <= after + 1000
+        assert -24 * 60 <= body["server_tz_offset_minutes"] <= 24 * 60
+
     def test_health_returns_200_degraded_for_critical_provider(self):
         import json
 

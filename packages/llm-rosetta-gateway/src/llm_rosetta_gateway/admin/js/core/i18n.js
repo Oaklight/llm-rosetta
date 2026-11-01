@@ -60,7 +60,7 @@ export const I18N = {
     'col.model':'Model', 'col.provider':'Provider', 'col.time':'Time',
     'col.sourceTarget':'Source \u2192 Target', 'col.mode':'Mode',
     'col.status':'Status', 'col.tokens':'Tokens', 'col.duration':'Duration', 'col.requests':'Requests',
-    'col.eventType':'Event', 'btn.view':'View', 'btn.downloadFile':'Download', 'btn.viewInRequestLog':'View in request log', 'btn.viewErrorDump':'View error dump', 'btn.toggleVisibility':'Toggle visibility', 'toast.loadFailed':'Failed to load', 'toast.downloadFailed':'Failed to download', 'toast.nothingToDownload':'Nothing to download', 'toast.downloaded':'Downloaded {count} file(s)', 'toast.deleted':'Deleted {count} item(s)', 'toast.backfillFailed':'Backfill failed', 'toast.weightRange':'Weight must be 1–100', 'confirm.deleteDumps':'Delete {count} error dump(s)?', 'confirm.removeProviderFromModel':'Remove provider "{provider}" from model "{model}"?', 'log.expandHint':'Click or press Enter to expand the error', 'dump.metaModel':'Model', 'dump.metaRouting':'Routing', 'dump.metaProvider':'Provider', 'dump.metaPhase':'Phase', 'dump.metaStatus':'Status', 'dump.metaTime':'Time', 'dump.metaUpstream':'Upstream URL', 'dump.metaCollisions':'Tool collisions', 'dump.metaDumpId':'Dump id', 'dump.metaRequestLog':'Request log id', 'loggroup.request':'Request log', 'loggroup.requestHint':'One row per proxied call, whatever its outcome.', 'loggroup.errorsHint':'The bodies behind a failed request, kept apart from the log.', 'loggroup.ops':'Server ops log', 'loggroup.opsHint':'What the gateway itself did: logins, config writes, key rotation.', 'loggroup.database':'Database', 'loggroup.databaseHint':'These act at once, on every table.', 'label.token':'Token', 'label.rotateInterval':'Auto-rotate', 'btn.rotateNow':'Rotate now', 'btn.setPassword':'Change password', 'hint.adminToken':'The panel sends this token with every admin request. Copying it starts a rotation countdown.', 'hint.changePassword':'Used by the login prompt. Current sessions stay signed in.', 'label.customCss':'Theme override', 'label.customCssCode':'CSS', 'btn.reset':'Reset', 'hint.customCss':'CSS appended to the admin page after the built-in schemes. It can restyle anything; a theme token needs the scheme\'s own selector, e.g. [data-scheme="minimal"][data-mode="dark"] { --accent: #c2410c; }.', 'shim.inventory.title':'Loaded shims', 'shim.showBuiltin':'Built-in shims', 'shim.inventory.empty':'No shim matches this filter.', 'shim.origin.builtin':'built-in', 'shim.origin.path':'local', 'shim.origin.remote':'remote', 'shim.usedBy':'Used by {providers}', 'shim.unused':'No provider uses it', 'shim.open':'Open', 'shim.edit':'Edit', 'shim.delete':'Delete', 'shim.delete.confirm':'Delete shim "{name}"? Its directory is removed from disk.', 'shim.saveFailed':'The shim did not load; the previous file was kept.', 'shim.copied':'Definition copied', 'btn.copyDefinition':'Copy', 'shim.editHint':'Saved to disk and reloaded at once. A definition that fails to load is rolled back.', 'shim.inventory.hint':'Every shim the gateway has registered. One from a local directory can be edited or deleted here; built-in and remote shims are read-only.', 'shim.group.builtin':'bundled with llm-rosetta', 'shim.status.count':'{count} shim(s)', 'shim.disable':'Disable', 'shim.enable':'Enable', 'shim.disabled':'Shim disabled', 'shim.enabled':'Shim enabled', 'shim.state.disabled':'disabled', 'shim.origin.unknown':'unknown', 'shim.filterPlaceholder':'Filter by shim or provider', 'col.models':'Models', 'free.add':'Free resource', 'label.proxyUrl':'Proxy URL', 'clone.suffix':'Clone', 'cap.text':'Text', 'cap.vision':'Vision', 'cap.tools':'Tools', 'cap.reasoning':'Reasoning', 'cap.llm':'LLM', 'cap.embedding':'Embedding', 'cap.embeddings':'Embedding', 'cap.rerank':'Rerank', 'cap.decision':'Decision', 'cap.decisions':'Decision', 'cap.audio':'Audio', 'chart.tipBody':'{count} requests \u00b7 {errors} errors \u00b7 {tokens} tokens', 'chart.histogram':'Requests \u00b7 last {window}', 'chart.legendOk':'requests', 'chart.legendErr':'errors', 'chart.histogramSub':'{total} requests \u00b7 peak {peak}', 'log.tokPerSec':'Output tokens per second, over the whole request. No first-token time is recorded for this row.', 'log.tokPerSecGen':'Output tokens per second after the first token, which arrived {ttft} ms in.', 'log.durationStream':'Headers in {open} ms, body streamed for {body} ms.', 'col.severity':'Severity', 'col.message':'Message', 'col.source':'Source',
+    'col.eventType':'Event', 'btn.view':'View', 'btn.downloadFile':'Download', 'btn.viewInRequestLog':'View in request log', 'btn.viewErrorDump':'View error dump', 'btn.toggleVisibility':'Toggle visibility', 'toast.loadFailed':'Failed to load', 'toast.downloadFailed':'Failed to download', 'toast.nothingToDownload':'Nothing to download', 'toast.downloaded':'Downloaded {count} file(s)', 'toast.deleted':'Deleted {count} item(s)', 'toast.backfillFailed':'Backfill failed', 'toast.weightRange':'Weight must be 1–100', 'confirm.deleteDumps':'Delete {count} error dump(s)?', 'confirm.removeProviderFromModel':'Remove provider "{provider}" from model "{model}"?', 'log.expandHint':'Click or press Enter to expand the error', 'dump.metaModel':'Model', 'dump.metaRouting':'Routing', 'dump.metaProvider':'Provider', 'dump.metaPhase':'Phase', 'dump.metaStatus':'Status', 'dump.metaTime':'Time', 'dump.metaUpstream':'Upstream URL', 'dump.metaCollisions':'Tool collisions', 'dump.metaDumpId':'Dump id', 'dump.metaRequestLog':'Request log id', 'loggroup.request':'Request log', 'loggroup.requestHint':'One row per proxied call, whatever its outcome.', 'loggroup.errorsHint':'The bodies behind a failed request, kept apart from the log.', 'loggroup.ops':'Server ops log', 'loggroup.opsHint':'What the gateway itself did: logins, config writes, key rotation.', 'loggroup.database':'Database', 'loggroup.databaseHint':'These act at once, on every table.', 'label.token':'Token', 'label.rotateInterval':'Auto-rotate', 'btn.rotateNow':'Rotate now', 'btn.setPassword':'Change password', 'hint.adminToken':'The panel sends this token with every admin request. Copying it starts a rotation countdown.', 'hint.changePassword':'Used by the login prompt. Current sessions stay signed in.', 'label.customCss':'Theme override', 'label.customCssCode':'CSS', 'btn.reset':'Reset', 'hint.customCss':'CSS appended to the admin page after the built-in schemes. It can restyle anything; a theme token needs the scheme\'s own selector, e.g. [data-scheme="minimal"][data-mode="dark"] { --accent: #c2410c; }.', 'shim.inventory.title':'Loaded shims', 'shim.showBuiltin':'Built-in shims', 'shim.inventory.empty':'No shim matches this filter.', 'shim.origin.builtin':'built-in', 'shim.origin.path':'local', 'shim.origin.remote':'remote', 'shim.usedBy':'Used by {providers}', 'shim.unused':'No provider uses it', 'shim.open':'Open', 'shim.edit':'Edit', 'shim.delete':'Delete', 'shim.delete.confirm':'Delete shim "{name}"? Its directory is removed from disk.', 'shim.saveFailed':'The shim did not load; the previous file was kept.', 'shim.copied':'Definition copied', 'btn.copyDefinition':'Copy', 'shim.editHint':'Saved to disk and reloaded at once. A definition that fails to load is rolled back.', 'shim.inventory.hint':'Every shim the gateway has registered. One from a local directory can be edited or deleted here; built-in and remote shims are read-only.', 'shim.group.builtin':'bundled with llm-rosetta', 'shim.status.count':'{count} shim(s)', 'shim.disable':'Disable', 'shim.enable':'Enable', 'shim.disabled':'Shim disabled', 'shim.enabled':'Shim enabled', 'shim.state.disabled':'disabled', 'shim.origin.unknown':'unknown', 'shim.filterPlaceholder':'Filter by shim or provider', 'col.models':'Models', 'free.add':'Free resource', 'label.proxyUrl':'Proxy URL', 'clone.suffix':'Clone', 'cap.text':'Text', 'cap.vision':'Vision', 'cap.tools':'Tools', 'cap.reasoning':'Reasoning', 'cap.llm':'LLM', 'cap.embedding':'Embeddings', 'cap.embeddings':'Embeddings', 'cap.rerank':'Rerank', 'cap.decision':'Decisions', 'cap.decisions':'Decisions', 'cap.audio':'Audio', 'chart.tipBody':'{count} requests \u00b7 {errors} errors \u00b7 {tokens} tokens', 'chart.histogram':'Requests \u00b7 last {window}', 'chart.legendOk':'requests', 'chart.legendErr':'errors', 'chart.histogramSub':'{total} requests \u00b7 peak {peak}', 'log.tokPerSec':'Output tokens per second, over the whole request. No first-token time is recorded for this row.', 'log.tokPerSecGen':'Output tokens per second after the first token, which arrived {ttft} ms in.', 'log.durationStream':'Headers in {open} ms, body streamed for {body} ms.', 'col.severity':'Severity', 'col.message':'Message', 'col.source':'Source',
     'stat.totalRequests':'Total Requests', 'stat.errorRate':'Error Rate',
     'stat.activeStreams':'Active Streams', 'stat.uptime':'Uptime', 'stat.totalTokens':'Total Tokens', 'stat.tokens24h':'Tokens (24h)', 'stat.cacheRead':'Cache↓', 'stat.cacheWrite':'Cache↑', 'stat.reasoning':'Reasoning',
     'token.cacheRead':'Cache read tokens', 'token.reasoning':'Reasoning tokens',
@@ -348,6 +348,12 @@ export const I18N = {
     'unit.tokPerSec':" \u00b7 {n} tok/s",
     'btn.logout':'Logout',
     'label.systemTime':'Server Time',
+    'label.localTime':'Your Time',
+    'hint.clockToggle':'Click to switch between the gateway clock and your browser clock.',
+    'hint.clockZone':'Click to switch between the GMT offset and the zone name.',
+    'label.typeNames':'Model type names',
+    'typeNames.en':'English',
+    'typeNames.i18n':'Follow language',
     'footer.db':'DB', 'footer.ok':'ok', 'footer.err':'err', 'footer.dumps':'Dumps', 'footer.req':'Req',
     'footer.tip.req':'Total requests tracked in the database (rebuilds automatically after cleanup)',
     'footer.tip.ok':'Logged success entries / retention cap (status < 400)',
@@ -723,6 +729,12 @@ export const I18N = {
     'toast.testFailed':"\u6d4b\u8bd5\u5931\u8d25\uff1a{msg}",
     'unit.tokPerSec':" \u00b7 {n} tok/s",
     'label.systemTime':'\u670d\u52a1\u5668\u65f6\u95f4',
+    'label.localTime':'\u672c\u5730\u65f6\u95f4',
+    'hint.clockToggle':'\u70b9\u51fb\u5728\u7f51\u5173\u65f6\u95f4\u4e0e\u6d4f\u89c8\u5668\u65f6\u95f4\u4e4b\u95f4\u5207\u6362\u3002',
+    'hint.clockZone':'\u70b9\u51fb\u5728 GMT \u504f\u79fb\u4e0e\u65f6\u533a\u540d\u4e4b\u95f4\u5207\u6362\u3002',
+    'label.typeNames':'\u6a21\u578b\u7c7b\u578b\u540d\u79f0',
+    'typeNames.en':'\u82f1\u8bed',
+    'typeNames.i18n':'\u8ddf\u968f\u754c\u9762\u8bed\u8a00',
     'footer.db':'DB', 'footer.ok':'\u6b63\u5e38', 'footer.err':'\u9519\u8bef', 'footer.dumps':'\u8bb0\u5f55', 'footer.req':'\u8bf7\u6c42',
     'footer.tip.req':'数据库中记录的总请求数（清理后自动重建）',
     'section.shimSources':'外部 Shim 源',
@@ -794,6 +806,50 @@ export function capLabel(name) {
   return value === key ? name : value;
 }
 
+// Model types are the panel's own vocabulary — LLM, Embeddings, Rerank,
+// Decisions.  Which language they are spelled in is a display preference
+// (Settings → Appearance): English by default, or the interface language.
+// Whichever is on screen, the other one is what a badge's tooltip carries, so
+// a reader who knows only one of the two words still finds the type.
+const TYPE_NAMES_KEY = 'llm-rosetta-type-names';
+
+/** `'en'` (default) or `'i18n'`: which language the type names are spelled in. */
+export function typeNamesMode() {
+  try {
+    return localStorage.getItem(TYPE_NAMES_KEY) === 'i18n' ? 'i18n' : 'en';
+  } catch {
+    return 'en';
+  }
+}
+
+/** Set the type-name language and tell the panel to re-render. */
+export function setTypeNamesMode(mode) {
+  const value = mode === 'i18n' ? 'i18n' : 'en';
+  try {
+    localStorage.setItem(TYPE_NAMES_KEY, value);
+  } catch {
+    /* private window: the choice lasts this page only */
+  }
+  const el = document.getElementById('settingsTypeNamesSelect');
+  if (el) el.value = value;
+  applyI18n();
+}
+
+/** The English spelling of a model type, whatever the interface language. */
+function _typeNameEn(name) {
+  return I18N.en['label.' + name] || _capitalize(name);
+}
+
+/** The model type's name on screen, in the configured language. */
+export function typeLabel(name) {
+  return typeNamesMode() === 'i18n' ? capLabel(name) : _typeNameEn(name);
+}
+
+/** The same name in the other language, for a tooltip. */
+export function typeLabelAlt(name) {
+  return typeNamesMode() === 'i18n' ? _typeNameEn(name) : capLabel(name);
+}
+
 export function t(key, params) {
   let s = (I18N[S.currentLang] && I18N[S.currentLang][key]) || I18N.en[key];
   // Convention-based fallback for unknown keys
@@ -863,6 +919,22 @@ export function applyI18n() {
   document.querySelectorAll('[data-i18n-aria-label]').forEach(el => {
     el.setAttribute('aria-label', t(el.dataset.i18nAriaLabel));
   });
+  // Model-type names follow the type-name preference rather than the
+  // interface language, so they carry their own attribute; the tooltip holds
+  // the other language's word.
+  document.querySelectorAll('[data-type-name]').forEach(el => {
+    el.textContent = typeLabel(el.dataset.typeName);
+    el.title = typeLabelAlt(el.dataset.typeName);
+  });
+  // The clock's label names its source ("Server Time" / "Your Time"), which
+  // changes with the language like any other label.
+  window.updateClockLabel?.();
+  // Read the Docs serves the two translations under different paths, so the
+  // docs link follows the interface language instead of the site root's
+  // English redirect.
+  document.querySelectorAll('[data-docs-link]').forEach(el => {
+    el.href = 'https://llm-rosetta.readthedocs.io/' + (S.currentLang === 'zh' ? 'zh-cn' : 'en') + '/latest/';
+  });
   // Re-render dynamic content via window.* to break circular deps
   if (S.configData) { window.renderProviders?.(); window.renderModels?.(); }
   if (S.keysData) window.renderKeys?.();
@@ -871,11 +943,11 @@ export function applyI18n() {
   // values and have to be rebuilt by their own renderer.
   window.renderLoginForm?.();
   if (S.currentTab === 'dashboard') window.loadMetrics?.();
-  if (S.currentTab === 'logs') window.loadLogs?.();
+  if (S.currentTab === 'observability') window.loadLogs?.();
   // Re-render DB status footer with cached data
   if (S._lastPersistence != null) window.renderPersistence?.(S._lastPersistence, S._lastTotalReq);
 }
 
 // ---- Expose on window for non-module scripts -------------------------
 
-Object.assign(window, { t, setLang, applyI18n, capLabel });
+Object.assign(window, { t, setLang, applyI18n, capLabel, typeLabel, typeLabelAlt, typeNamesMode, setTypeNamesMode });

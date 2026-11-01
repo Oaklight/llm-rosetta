@@ -7,7 +7,7 @@
  */
 
 import { S, _CAP_ICONS, populateCapIcons } from '../core/state.js';
-import { t, capLabel } from '../core/i18n.js';
+import { t, capLabel, typeLabel, typeLabelAlt } from '../core/i18n.js';
 import { api, showToast, showToastHtml, closeModal, esc, copyText, inlineConfirm, isFreeEntry, freeEntryLabel, providerTypeName } from '../core/utils.js';
 import { safeLinkUrl, parseRecord } from '../core/credential.js';
 import { initLogoPicker, setLogoPickerValue, getLogoPickerValue } from '../components/logo-picker.js';
@@ -599,7 +599,7 @@ function _buildProvCapCheckboxes() {
     const label = document.createElement('label');
     label.id = `provCap${_capitalize(desc.name)}Wrap`;
     label.style = 'flex:1;padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius);transition:all 0.2s';
-    const labelText = t('label.' + desc.name) || desc.name.toUpperCase();
+    const labelText = typeLabel(desc.name);
     label.innerHTML = `<input type="checkbox" id="provCap${_capitalize(desc.name)}" onchange="toggleProvCapSection()"> <span>${esc(labelText)}</span>`;
     container.appendChild(label);
   }
@@ -833,8 +833,7 @@ function _buildProviderSegControls() {
     div.setAttribute('tabindex', S._providerFilter === desc.name ? '0' : '-1');
     if (S._providerFilter === desc.name) div.className = 'active';
     div.setAttribute('onclick', `switchProviderFilter(this,'${desc.name}')`);
-    const labelKey = 'label.' + desc.name;
-    div.innerHTML = `<span data-i18n="${labelKey}">${t(labelKey) || desc.name.toUpperCase()}</span>`;
+    div.innerHTML = `<span data-type-name="${esc(desc.name)}">${esc(typeLabel(desc.name))}</span>`;
     seg.appendChild(div);
   }
 }
@@ -1139,7 +1138,7 @@ function _capBadgesHtml(caps, {compact = false, cfg = null} = {}) {
   return caps.map(c => {
     const cls = typeMap[c] || `cap-badge-${c}`;
     const icon = _CAP_ICONS[c] || '';
-    const label = capLabel(c);
+    const label = typeLabel(c);
     // A capability that no longer routes says so on the badge itself: greyed
     // out, with an `!` overlay naming the reason.  The card's warning row
     // spells the reason out; the badge is what makes the *type* readable at a
@@ -1151,7 +1150,7 @@ function _capBadgesHtml(caps, {compact = false, cfg = null} = {}) {
       : '';
     const why = state === 'degraded'
       ? _degradedDetail(degradedMarker(cfg, c), _degradedFallback(cfg))
-      : state === 'disabled' ? t('provider.typeDisabled') : '';
+      : state === 'disabled' ? t('provider.typeDisabled') : typeLabelAlt(c);
     const title = why || (compact && icon ? label : '');
     const titleAttr = title ? ` title="${esc(title)}"` : '';
     return compact && icon
@@ -1302,14 +1301,14 @@ function renderProviders() {
     // the only record of why: the card names it in the same row the per-type
     // failures use, so "why is this off" is answered the same way for both.
     const wholeWarning = autoDisabled
-      ? `<span class="pc-endpoint-warning" title="${esc(autoWarningHover)}"><span class="pc-endpoint-warning-icon" aria-hidden="true">&#9888;</span><span class="pc-endpoint-type">${esc(t('label.llm'))}</span><span class="pc-endpoint-reason">${esc(autoWarningTitle)}</span></span>`
+      ? `<span class="pc-endpoint-warning" title="${esc(autoWarningHover)}"><span class="pc-endpoint-warning-icon" aria-hidden="true">&#9888;</span><span class="pc-endpoint-type">${esc(typeLabel('llm'))}</span><span class="pc-endpoint-reason">${esc(autoWarningTitle)}</span></span>`
       : '';
     const degradedHtml = (degraded.length === 0 && !wholeWarning) ? '' : `
       <div class="pc-endpoint-warnings" role="status">
         ${wholeWarning}
         ${degraded.map(e => {
           const why = _degradedWhy(e);
-          return `<span class="pc-endpoint-warning" title="${esc(_degradedDetail(e))}"><span class="pc-endpoint-warning-icon" aria-hidden="true">&#9888;</span><span class="pc-endpoint-type">${esc(t('label.' + e.type))}</span><span class="pc-endpoint-reason">${esc(why)}</span></span>`;
+          return `<span class="pc-endpoint-warning" title="${esc(_degradedDetail(e))}"><span class="pc-endpoint-warning-icon" aria-hidden="true">&#9888;</span><span class="pc-endpoint-type">${esc(typeLabel(e.type))}</span><span class="pc-endpoint-reason">${esc(why)}</span></span>`;
         }).join('')}
       </div>`;
     const typeName = providerTypeName(cfg, name);

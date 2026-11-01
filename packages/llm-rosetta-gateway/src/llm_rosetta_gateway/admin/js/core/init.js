@@ -30,7 +30,12 @@ const _dumpRoute = (() => {
 
 // Disabled tabs from branding — skip data fetching for these
 const _dt = (window.__branding && window.__branding.disabled_tabs) || [];
-function _tabEnabled(id) { return _dt.indexOf(id) === -1; }
+// Branding lists tabs by id; `logs` is the pre-rename name of the
+// observability tab, so a config that disables one spelling disables it.
+function _tabEnabled(id) {
+  const alias = id === 'logs' ? 'observability' : id === 'observability' ? 'logs' : id;
+  return _dt.indexOf(id) === -1 && _dt.indexOf(alias) === -1;
+}
 function _logRefreshMs() { return S._dashboardRefreshMs > 0 ? S._dashboardRefreshMs : 5000; }
 
 // One place starts the request/ops log refresh timer, so the pause state
@@ -71,7 +76,7 @@ function initApp(prefetchedConfig) {
   }).catch(() => {});
   stopTimers();
   if (S.currentTab === 'dashboard' && _tabEnabled('dashboard')) { loadMetrics(); S.dashboardTimer = (S._dashboardRefreshMs > 0 ? setInterval(loadMetrics, S._dashboardRefreshMs) : null); }
-  if (S.currentTab === 'logs' && _tabEnabled('logs')) {
+  if (S.currentTab === 'observability' && _tabEnabled('observability')) {
     if (S._logView === 'ops') { loadOpsLog(); }
     else { S.logOffset = 0; loadLogs(); }
     populateOpsLogFilters();
@@ -151,7 +156,7 @@ function activateTab(tab, opts = {}) {
   }
   stopTimers();
   if (id === 'dashboard' && _tabEnabled('dashboard')) { loadMetrics(); S.dashboardTimer = (S._dashboardRefreshMs > 0 ? setInterval(loadMetrics, S._dashboardRefreshMs) : null); }
-  if (id === 'logs' && _tabEnabled('logs')) {
+  if (id === 'observability' && _tabEnabled('observability')) {
     const view = S._logView || 'requests';
     if (view === 'ops') { loadOpsLog(); }
     else if (view === 'dumps') { window.invalidateDumpCache?.(); window.renderDumps?.(); }
@@ -222,12 +227,22 @@ document.querySelectorAll('.tab[role="tab"]').forEach(tab => {
   });
 });
 
-// Hash routing: #tab-name overrides localStorage
+// Hash routing: only an explicit #tab-name opens a tab other than the default.
+// A bare /admin is the front door — it lands on the dashboard every time
+// rather than resuming whatever the last session had open; #models and the
+// like still deep-link.
 const _hashTab = location.hash.replace('#', '');
-const _initialTab = (document.querySelector(`.tab[data-tab="${_hashTab}"]`) ? _hashTab : null)
-  || S.currentTab || 'providers';
+// `#logs` was this tab's URL before the rail item was named after the page;
+// an old bookmark still lands on it.
+const _hashTabId = _hashTab === 'logs' ? 'observability' : _hashTab;
+const _initialTab = document.querySelector(`.tab[data-tab="${_hashTabId}"]`) ? _hashTabId : 'dashboard';
 const _savedTab = document.querySelector(`.tab[data-tab="${_initialTab}"]`);
 if (_savedTab) activateTab(_savedTab, {push: false});
+// A bookmarked `#logs` opens the renamed tab; rewrite the address bar so a
+// reload or a copied link carries the current name.
+if (_hashTab !== _hashTabId && S.currentTab === _hashTabId) {
+  try { history.replaceState(null, '', '#' + _hashTabId); } catch { /* file:// */ }
+}
 
 window.addEventListener('popstate', () => {
   const hash = location.hash.replace('#', '');
@@ -310,6 +325,7 @@ document.querySelectorAll('.sidebar .tab:not(#tabBtn-settings)').forEach((el, i)
 });
 
 function goToTab(tabId, callback) {
+  if (tabId === 'logs') tabId = 'observability';
   const tab = document.querySelector('.tab[data-tab="' + tabId + '"]');
   if (tab) {
     activateTab(tab);
@@ -344,14 +360,87 @@ document.querySelectorAll('.modal-overlay').forEach(m => {
 // inside the dialog runs first and can consume the key.
 
 // ===================== System Clock =====================
+//
+// One clock, two sources: the gateway's time (the label says so) and the
+// browser's.  A click switches between them and the choice is remembered.  The
+// offset comes from /health, so the server side is the gateway's real clock
+// rather than the browser's time under a misleading label.
+//
+// The zone is a second toggle: the GMT offset by default, the IANA name
+// (`Asia/Shanghai`) on a click, which tells two zones at the same offset
+// apart.  A long name is trimmed by CSS so the rail's width does not change.
 (function initClock() {
   const el = document.getElementById('systemClock');
-  function tick() {
-    const now = new Date();
-    const time = now.toLocaleTimeString();
-    const tz = 'GMT' + (now.getTimezoneOffset() > 0 ? '-' : '+') + String(Math.abs(Math.floor(now.getTimezoneOffset()/60))).padStart(1,'0') + (now.getTimezoneOffset()%60 ? ':' + String(Math.abs(now.getTimezoneOffset()%60)).padStart(2,'0') : '');
-    el.textContent = time + ' ' + tz;
+  const labelEl = document.getElementById('clockLabel');
+  const zoneEl = document.getElementById('clockZone');
+  const KEY = 'llm-rosetta-clock';
+  const ZONE_KEY = 'llm-rosetta-clock-zone';
+  const state = { source: 'server', offsetMs: 0, offsetMin: null, zoneName: null, showName: false };
+  try { if (localStorage.getItem(KEY) === 'local') state.source = 'local'; } catch { /* private window */ }
+  try { state.showName = localStorage.getItem(ZONE_KEY) === 'name'; } catch { /* private window */ }
+
+  /** `offsetMin` as `GMT+8` / `GMT-5` / `GMT+5:30`. */
+  function offsetLabel(offsetMin) {
+    const sign = offsetMin < 0 ? '-' : '+';
+    const h = Math.floor(Math.abs(offsetMin) / 60);
+    const m = Math.abs(offsetMin) % 60;
+    return 'GMT' + sign + h + (m ? ':' + String(m).padStart(2, '0') : '');
   }
+
+  /** `ms` shifted by `offsetMin`, rendered as a wall clock without the zone. */
+  function fmtTime(ms, offsetMin) {
+    return new Date(ms + offsetMin * 60000).toLocaleTimeString(undefined, { timeZone: 'UTC' });
+  }
+
+  function localZoneName() {
+    try { return Intl.DateTimeFormat().resolvedOptions().timeZone || null; } catch { return null; }
+  }
+
+  function updateLabel() {
+    if (!labelEl) return;
+    // Without a server reading the clock falls back to the browser's, and the
+    // label has to say so.
+    const local = state.source === 'local' || state.offsetMin == null;
+    labelEl.textContent = t(local ? 'label.localTime' : 'label.systemTime');
+  }
+
+  function tick() {
+    if (!el) return;
+    const local = state.source === 'local' || state.offsetMin == null;
+    const offsetMin = local ? -new Date().getTimezoneOffset() : state.offsetMin;
+    const ms = local ? Date.now() : Date.now() + state.offsetMs;
+    el.textContent = fmtTime(ms, offsetMin);
+    if (!zoneEl) return;
+    const name = local ? localZoneName() : state.zoneName;
+    zoneEl.textContent = state.showName && name ? name : offsetLabel(offsetMin);
+    // The hint stays in the tooltip; the full name joins it only when the
+    // visible text is the trimmed one.
+    zoneEl.title = t('hint.clockZone') + (name && name !== zoneEl.textContent ? ' ' + name : '');
+  }
+
+  window.toggleClockSource = () => {
+    state.source = state.source === 'local' ? 'server' : 'local';
+    try { localStorage.setItem(KEY, state.source); } catch { /* private window */ }
+    updateLabel();
+    tick();
+  };
+  window.toggleClockZone = () => {
+    state.showName = !state.showName;
+    try { localStorage.setItem(ZONE_KEY, state.showName ? 'name' : 'offset'); } catch { /* private window */ }
+    tick();
+  };
+  window.updateClockLabel = () => { updateLabel(); tick(); };
+
+  fetch('/health').then(r => r.json()).then(d => {
+    if (typeof d.server_time !== 'number') return;
+    state.offsetMs = d.server_time - Date.now();
+    state.offsetMin = typeof d.server_tz_offset_minutes === 'number' ? d.server_tz_offset_minutes : 0;
+    state.zoneName = typeof d.server_tz_name === 'string' && d.server_tz_name ? d.server_tz_name : null;
+    updateLabel();
+    tick();
+  }).catch(() => { /* keep the browser clock */ });
+
+  updateLabel();
   tick();
   setInterval(tick, 1000);
 })();
@@ -406,7 +495,7 @@ document.querySelectorAll('.modal-overlay').forEach(m => {
   }
   // Redirect away from disabled tabs
   if (b.disabled_tabs && b.disabled_tabs.indexOf(S.currentTab) !== -1) {
-    const _allTabs = b.all_tabs || ['providers', 'models', 'keys', 'dashboard', 'logs', 'settings'];
+    const _allTabs = b.all_tabs || ['providers', 'models', 'keys', 'dashboard', 'observability', 'settings'];
     for (let i = 0; i < _allTabs.length; i++) {
       if (b.disabled_tabs.indexOf(_allTabs[i]) === -1) { S.currentTab = _allTabs[i]; break; }
     }
