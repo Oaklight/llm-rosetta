@@ -13,6 +13,7 @@ recorded next to it.
 from __future__ import annotations
 
 from typing import Any
+from unittest.mock import patch
 
 from llm_rosetta_gateway.config import GatewayConfig
 
@@ -241,6 +242,62 @@ class TestEmbeddingSection:
 
         assert cfg.resolve_embedding("m").params is None
 
+    def test_an_empty_canonical_key_falls_through_to_the_legacy_spelling(self) -> None:
+        """An empty value still means "the operator said nothing".
+
+        Only the ``*_enabled`` key decides by presence; every other key keeps
+        the fallback, so a stale file that carries both spellings does not
+        lose the format it holds.
+        """
+        cfg = GatewayConfig(
+            {
+                "providers": {
+                    "p": {
+                        "embeddings_format": "",
+                        "embedding_format": "jina",
+                        "base_url": "https://x",
+                    }
+                }
+            }
+        )
+        assert cfg.embeddings_providers["p"]["format"] == "jina"
+
+    def test_a_none_canonical_key_falls_through_too(self) -> None:
+        cfg = GatewayConfig(
+            {
+                "providers": {
+                    "p": {
+                        "embeddings_format": None,
+                        "embedding_format": "jina",
+                        "base_url": "https://x",
+                    }
+                }
+            }
+        )
+        assert cfg.embeddings_providers["p"]["format"] == "jina"
+
+    def test_a_quoted_flag_warns_and_leaves_the_endpoint_enabled(self) -> None:
+        """``"false"`` is a string, not a switch: say so instead of guessing."""
+        from llm_rosetta_gateway.config import typed as typed_module
+
+        with patch.object(typed_module.logger, "warning") as warn:
+            cfg = GatewayConfig(
+                {
+                    "embeddings_providers": {
+                        "p": {
+                            "embeddings_format": "openai",
+                            "embeddings_enabled": "false",
+                            "base_url": "https://x",
+                        }
+                    }
+                }
+            )
+
+        assert "p" in cfg.embeddings_providers
+        assert any(
+            "must be true or false" in str(call.args[0]) for call in warn.call_args_list
+        )
+
     def test_model_maps_to_the_first_live_provider(self) -> None:
         cfg = GatewayConfig(
             {
@@ -363,6 +420,45 @@ class TestDecisionSection:
         )
         assert "p" not in cfg.decisions_providers
         assert "m" not in cfg.decisions_models
+
+    def test_one_endpoint_can_be_disabled_without_the_provider(self) -> None:
+        """``decisions_enabled: false`` keeps the config and stops routing."""
+        raw: dict[str, Any] = {
+            "providers": {
+                "multi": {
+                    "base_url": "https://x",
+                    "api_key": "k",
+                    "type": "chat_completions",
+                    "decisions_shim": "typesafe--systemone",
+                    "decisions_enabled": False,
+                }
+            }
+        }
+        cfg = GatewayConfig(raw)
+
+        assert "multi" in cfg.providers, "the provider still serves chat"
+        assert "multi" not in cfg.decisions_providers
+        assert "_auto_disabled_endpoints" not in raw["providers"]["multi"]
+
+    def test_the_endpoint_flag_accepts_the_legacy_spelling(self) -> None:
+        cfg = GatewayConfig(
+            {
+                "decisions_providers": {
+                    "p": {"base_url": "https://x", "decision_enabled": False}
+                }
+            }
+        )
+        assert "p" not in cfg.decisions_providers
+
+    def test_an_enabled_flag_participates_as_usual(self) -> None:
+        cfg = GatewayConfig(
+            {
+                "decisions_providers": {
+                    "p": {"base_url": "https://x", "decisions_enabled": True}
+                }
+            }
+        )
+        assert "p" in cfg.decisions_providers
 
     def test_model_maps_to_the_first_live_provider(self) -> None:
         cfg = GatewayConfig(

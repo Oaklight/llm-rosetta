@@ -109,6 +109,10 @@
         </div>
       </div>
       <div class="provider-toolbar" id="providerToolbar">
+        <span class="facet-label" data-i18n="providerFilter.status">Status</span>
+        <div class="facet-chips" id="providerStatusSeg" role="radiogroup" aria-label="Provider status filter" data-i18n-aria-label="providerFilter.status">
+          <!-- Populated by providers.js::_buildProviderStatusSeg() with live counts -->
+        </div>
         <input id="providerSearch" placeholder="Search providers..." oninput="renderProviders()" data-i18n-placeholder="label.searchProviders" style="display:none">
         <span class="provider-count" id="providerCount"></span>
         <div class="view-toggle">
@@ -187,7 +191,8 @@
           <div class="facet-chips" id="modelStatusSeg" role="radiogroup" aria-label="Model status filter" data-i18n-aria-label="modelFilter.status">
             <!-- Populated by models.js::_buildStatusSeg() with live counts -->
           </div>
-          <span class="facet-sep" aria-hidden="true"></span>
+        </div>
+        <div class="mt-row mt-row-facets">
           <span class="facet-label" data-i18n="modelFilter.type">Type</span>
           <div class="facet-chips" id="modelTypeSeg" role="radiogroup" aria-label="Model type filter">
             <!-- Populated by models.js::_buildTypeSegControls() from model_types metadata -->
@@ -1238,7 +1243,13 @@
 
     <!-- LLM Endpoint panel -->
     <div class="endpoint-section" id="provLlmSection">
-      <div class="section-label"><span class="dot dot-llm"></span> <span data-i18n="label.llmEndpoint">LLM Endpoint</span></div>
+      <div class="section-label"><span class="dot dot-llm"></span> <span data-i18n="label.llmEndpoint">LLM Endpoint</span>
+        <label class="endpoint-enabled" data-i18n-title="hint.providerEnabled">
+          <input type="checkbox" id="provLlmEnabled" checked>
+          <span data-i18n="label.enabled">Enabled</span>
+        </label>
+      </div>
+      <div class="endpoint-status" id="provLlmStatus" role="status" hidden></div>
       <div class="form-row align-end">
         <div class="form-group" style="flex:1;min-width:0">
           <label data-i18n="label.topLevel">Top Level</label>

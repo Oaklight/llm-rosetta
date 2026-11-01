@@ -410,6 +410,11 @@ def _apply_optional_provider_fields(
 
     Truthy values in *body* are stored; keys explicitly sent as empty
     are removed so the admin UI can clear them.
+
+    The per-endpoint ``<type>_enabled`` flags are the exception: ``False`` is
+    a value, not an absence, so it is stored as sent.  Any other falsy value
+    (``""``, ``null``) removes the key, which is how the editor says "enabled"
+    without writing a key that only restates the default.
     """
     for opt_key in _optional_provider_keys():
         val = body.get(opt_key)
@@ -417,6 +422,19 @@ def _apply_optional_provider_fields(
             entry[opt_key] = val
         elif opt_key in body:
             entry.pop(opt_key, None)
+    for flag in _typed_enable_keys():
+        val = body.get(flag)
+        if isinstance(val, bool):
+            entry[flag] = val
+        elif flag in body:
+            entry.pop(flag, None)
+
+
+def _typed_enable_keys() -> list[str]:
+    """The ``<type>_enabled`` keys the registry's model types declare."""
+    from ...model_types import all_model_types
+
+    return [f"{desc.name}_enabled" for desc in all_model_types() if not desc.is_llm]
 
 
 def _shim_ships_credential_exchange(shim: Any) -> bool:
@@ -492,7 +510,16 @@ def _build_provider_entry(
         if tpl_val:
             entry[tpl_key] = tpl_val
 
-    if resolve_name in existing_providers:
+    # `enabled` is the provider's own switch — the LLM endpoint's on/off, since
+    # chat is the provider rather than one of its endpoints.  An explicit
+    # `true` drops the key (it is the default); an absent one keeps what is
+    # stored, so a card toggle is not undone by an unrelated edit.  The
+    # auto-disable marker is never carried over: the entry is rebuilt, and the
+    # next reload revalidates it.
+    if isinstance(body.get("enabled"), bool):
+        if not body["enabled"]:
+            entry["enabled"] = False
+    elif resolve_name in existing_providers:
         existing_enabled = existing_providers[resolve_name].get("enabled")
         if existing_enabled is not None:
             entry["enabled"] = existing_enabled
