@@ -83,6 +83,17 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Bundle the changelog
+        # The admin panel shows a release's notes from a file shipped inside
+        # the wheel; the text lives on the docs branches, so the build takes
+        # it from there instead of a second copy in the tree.
+        run: |
+          for lang in en zh; do
+            git fetch --depth=1 origin "docs_$lang"
+            git show "origin/docs_$lang:docs/changelog.md" > \
+              "packages/llm-rosetta-gateway/src/llm_rosetta_gateway/CHANGELOG.$lang.md"
+          done
+
       - name: Build wheel + sdist
         run: |
           pip install --upgrade pip build

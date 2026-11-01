@@ -14,7 +14,12 @@ from .proxy import OpsProxyRequest
 from .rejected import OpsRejectedRequest
 from .provider_validation import OpsProviderValidation
 from .keys import OpsKeyCreate, OpsKeyDelete, OpsKeyRotate, OpsKeyUpdate
-from .security import OpsPasswordChange, OpsSessionLogoutAll, OpsTokenRotate
+from .security import (
+    OpsPasswordChange,
+    OpsSelfUpdate,
+    OpsSessionLogoutAll,
+    OpsTokenRotate,
+)
 from .data import (
     OpsClearData,
     OpsClearOpsLog,
@@ -45,6 +50,7 @@ __all__ = [
     "OpsProviderValidation",
     "OpsRebuildMetrics",
     "OpsRejectedRequest",
+    "OpsSelfUpdate",
     "OpsTrimData",
     "OpsSessionLogoutAll",
     "OpsTokenRotate",

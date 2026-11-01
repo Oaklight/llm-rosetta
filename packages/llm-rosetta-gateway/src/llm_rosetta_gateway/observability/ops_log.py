@@ -66,6 +66,10 @@ EVENT_DATA_REBUILT = "data_rebuilt"
 EVENT_PASSWORD_CHANGED = "password_changed"
 EVENT_TOKEN_ROTATED = "token_rotated"
 
+# -- Self-update event type -------------------------------------------------
+
+EVENT_SELF_UPDATE = "self_update"
+
 ALL_EVENT_TYPES = [
     EVENT_STARTUP,
     EVENT_SHUTDOWN,
@@ -86,6 +90,7 @@ ALL_EVENT_TYPES = [
     EVENT_DATA_REBUILT,
     EVENT_PASSWORD_CHANGED,
     EVENT_TOKEN_ROTATED,
+    EVENT_SELF_UPDATE,
 ]
 
 # -- Severity constants ----------------------------------------------------

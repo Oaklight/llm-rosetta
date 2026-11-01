@@ -153,6 +153,13 @@ def apply_server_settings(config: GatewayConfig, _server: dict[str, Any]) -> Non
 
     # Optional root redirect: GET / returns 307 to the given path.
     config.root_redirect = _server.get("root_redirect")
+    # The console's update probe asks PyPI for the newest release so the
+    # panel can offer it.  Off means no outbound request and no bubble.
+    # Only a literal ``true`` enables either switch: a quoted string in a
+    # hand-written file must not turn an outbound check -- or a pip run that
+    # replaces the running code -- on by accident.
+    config.update_check = _server.get("update_check", True) is True
+    config.self_update = _server.get("self_update", True) is True
 
     # upstream_timeout: entire upstream HTTP lifecycle (connect + headers
     # + per-chunk streaming reads).  read_timeout: how long the inbound

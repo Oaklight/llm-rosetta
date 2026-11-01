@@ -55,6 +55,27 @@ class TestAdminPasswordUnresolvedEnvVar:
         assert cfg.admin_password is None
 
 
+class TestUpdateSwitches:
+    """server.update_check and server.self_update gate the console's update UI."""
+
+    def test_both_are_on_by_default(self):
+        cfg = GatewayConfig(_minimal_raw())
+        assert cfg.update_check is True
+        assert cfg.self_update is True
+
+    def test_each_switch_turns_off(self):
+        cfg = GatewayConfig(_minimal_raw(update_check=False, self_update=False))
+        assert cfg.update_check is False
+        assert cfg.self_update is False
+
+    def test_a_quoted_value_does_not_enable_a_switch(self):
+        # Only a literal true enables the probe or the pip run; a string in a
+        # hand-written file must not turn either on by accident.
+        cfg = GatewayConfig(_minimal_raw(update_check="true", self_update="false"))
+        assert cfg.update_check is False
+        assert cfg.self_update is False
+
+
 class TestOpenOnNoKeys:
     """server.open_on_no_keys controls anonymous access when no keys exist."""
 

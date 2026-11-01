@@ -33,6 +33,17 @@ jobs:
           [ "$GW_VER" = "$INPUT_VERSION" ] || \
             (echo "::error::Version mismatch: llm_rosetta_gateway has $GW_VER but release requested $INPUT_VERSION"; exit 1)
 
+      - name: Bundle the changelog
+        # The admin panel shows a release's notes from a file shipped inside
+        # the wheel; the text lives on the docs branches, so the build takes
+        # it from there instead of a second copy in the tree.
+        run: |
+          for lang in en zh; do
+            git fetch --depth=1 origin "docs_$lang"
+            git show "origin/docs_$lang:docs/changelog.md" > \
+              "packages/llm-rosetta-gateway/src/llm_rosetta_gateway/CHANGELOG.$lang.md"
+          done
+
       - name: Build wheel + sdist
         run: |
           pip install --upgrade pip build

@@ -133,10 +133,12 @@ class GatewayConfig:
     read_timeout: float
     request_log: dict[str, Any]
     root_redirect: str | None
+    self_update: bool
     shims: dict[str, Any]
     socket: str | None
     tls_cert: str | None
     tls_key: str | None
+    update_check: bool
     upstream_timeout: float
     verbose: bool
 

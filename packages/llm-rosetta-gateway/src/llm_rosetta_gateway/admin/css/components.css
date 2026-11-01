@@ -1823,3 +1823,59 @@ body { padding-bottom: 26px; }
   .dump-toolbar #dumpIdSearch { flex: 1 1 100%; }
   .dp-actions { flex-wrap: wrap; }
 }
+
+/* ===================== Update bubble =====================
+   The server tells the panel when a newer release exists; this is the corner
+   that says so.  It is fixed to the viewport, so it stays put while a long
+   model list scrolls, and it is hidden entirely when there is nothing to
+   offer. */
+.update-badge {
+  position: fixed; top: 14px; right: 18px; z-index: 60;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 11px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--card-bg); color: var(--text);
+  font-size: 12px; font-weight: 600; cursor: pointer;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .12);
+}
+.update-badge:hover { border-color: var(--accent); }
+.update-badge[hidden], .update-popover[hidden] { display: none; }
+.update-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+
+.update-popover {
+  position: fixed; top: 48px; right: 18px; z-index: 61; width: 300px;
+  padding: 14px; border-radius: var(--radius);
+  border: 1px solid var(--border); background: var(--card-bg);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .22);
+}
+.update-row {
+  display: flex; justify-content: space-between; gap: 12px;
+  font-size: 12px; color: var(--text-dim); margin-bottom: 6px;
+}
+.update-row code { color: var(--text); font-family: var(--mono); }
+.update-note { font-size: 12px; color: var(--text-dim); margin: 8px 0 0; }
+.update-empty { font-size: 12px; color: var(--text-dim); }
+.update-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.update-actions .btn { text-decoration: none; }
+.update-close {
+  position: absolute; top: 4px; right: 8px; border: none; background: none;
+  color: var(--text-dim); font-size: 17px; line-height: 1; cursor: pointer;
+}
+.update-close:hover { color: var(--text); }
+
+/* The changelog dialog scrolls inside the modal so a long release does not
+   push the buttons off a short screen. */
+.changelog-body { max-height: 60vh; overflow: auto; font-size: 13px; line-height: 1.55; }
+.changelog-body h4 {
+  margin: 14px 0 6px; font-size: 12px; text-transform: uppercase;
+  letter-spacing: .04em; color: var(--text-dim);
+}
+.changelog-body ul { margin: 0; padding-left: 18px; }
+.changelog-body li { margin-bottom: 8px; }
+.changelog-body code {
+  font-family: var(--mono); font-size: 12px;
+  background: var(--bg); padding: 1px 4px; border-radius: 3px;
+}
+
+/* The full changelog link sits at the left of the dialog's action row; the
+   buttons keep the right. */
+.changelog-full { margin-right: auto; align-self: center; font-size: 12px; color: var(--accent); }
