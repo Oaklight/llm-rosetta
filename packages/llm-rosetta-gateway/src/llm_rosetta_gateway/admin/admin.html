@@ -97,6 +97,10 @@
   </div>
 </aside>
 <div class="app-main">
+<!-- The update bubble appears only when the server's probe found a newer
+     release; it sits above the page in the content corner. -->
+<div class="update-badge" id="updateBadge" role="button" tabindex="0" hidden data-i18n-title="update.hint" onclick="toggleUpdatePopover()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleUpdatePopover();}"><span class="update-dot" aria-hidden="true"></span><span id="updateBadgeText"></span></div>
+<div class="update-popover" id="updatePopover" hidden><button type="button" class="update-close" onclick="closeUpdatePopover()" aria-label="Close" data-i18n-aria-label="btn.close">&times;</button><div id="updatePopoverBody"></div></div>
 <div class="content">
   <!-- Providers Tab -->
   <div class="tab-panel active" id="tab-providers" role="tabpanel" aria-labelledby="tabBtn-providers">
@@ -1772,6 +1776,20 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
 
 <!-- Toast -->
 <div class="toast" id="toast"></div>
+
+<!-- What changed in the running release.  Shown once per version: closing it
+     without pressing "don't show again" brings it back on the next load. -->
+<div class="modal-overlay" role="dialog" aria-modal="true" id="changelogModal">
+  <div class="modal" style="width:640px;max-width:92vw">
+    <h3 id="changelogTitle"></h3>
+    <div class="changelog-body" id="changelogBody"></div>
+    <div class="modal-actions">
+      <a class="changelog-full" id="changelogFullLink" target="_blank" rel="noopener" data-i18n="update.docsLink">Full changelog</a>
+      <button type="button" class="btn" onclick="dismissChangelog()" data-i18n="update.dontShow">Don't show again</button>
+      <button type="button" class="btn btn-primary" onclick="closeChangelog()" data-i18n="btn.close">Close</button>
+    </div>
+  </div>
+</div>
 
 <script type="module" src="/admin/static/js/core/init.js"></script>
 <div id="dbFooter" class="db-footer hidden"></div>

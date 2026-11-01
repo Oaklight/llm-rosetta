@@ -39,6 +39,9 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "llm_rosetta_gateway.admin" = ["admin.html", "css/*.css", "js/**/*.js"]
+# The changelog is written by the release workflow from the docs branches; a
+# wheel built from source without them simply has no file to ship.
+"llm_rosetta_gateway" = ["CHANGELOG.*.md"]
 
 [tool.setuptools.dynamic]
 version = { attr = "llm_rosetta_gateway.__version__" }

@@ -6,6 +6,7 @@ from typing import Any, ClassVar
 
 from llm_rosetta_gateway.observability.ops_log import (
     EVENT_PASSWORD_CHANGED,
+    EVENT_SELF_UPDATE,
     EVENT_SESSION_LOGOUT_ALL,
     EVENT_TOKEN_ROTATED,
     SOURCE_ADMIN,
@@ -67,3 +68,25 @@ class OpsSessionLogoutAll(OpsBase):
 
     def _details(self, result: Any) -> dict[str, Any]:
         return {"sessions_cleared": self._count}
+
+
+class OpsSelfUpdate(OpsBase):
+    """Record a self-update: the install that replaced the running code."""
+
+    event_type: ClassVar[str] = EVENT_SELF_UPDATE
+    source: ClassVar[str] = SOURCE_ADMIN
+
+    __slots__ = ("_version",)
+
+    def __init__(self, ctx: OpsContext, *, version: str) -> None:
+        super().__init__(ctx)
+        self._version = version
+
+    async def _run(self) -> dict[str, Any]:
+        return {"version": self._version}
+
+    def _message(self, result: Any) -> str:
+        return f"Installed {self._version} and restarting"
+
+    def _details(self, result: Any) -> dict[str, Any]:
+        return {"version": self._version}

@@ -114,6 +114,7 @@ from .testing import (
     get_test_result,
     start_test,
 )
+from .updates import apply_update, get_changelog, get_updates
 
 
 def register_admin_routes(app: Any) -> None:
@@ -217,6 +218,10 @@ def register_admin_routes(app: Any) -> None:
     app.route("/admin/api/keys/<key_id>/rotate", methods=["POST"])(
         _guard("keys", rotate_api_key)
     )
+    # Version probe, bundled changelog and self-update (rail footer)
+    app.route("/admin/api/updates", methods=["GET"])(get_updates)
+    app.route("/admin/api/updates/apply", methods=["POST"])(apply_update)
+    app.route("/admin/api/changelog", methods=["GET"])(get_changelog)
     app.route("/admin/api/internal-token", methods=["GET"])(get_internal_token)
     # Async model test
     app.route("/admin/api/test", methods=["POST"])(start_test)

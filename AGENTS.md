@@ -214,7 +214,7 @@ packages/
         ├── providers.py
         ├── shims/               # External shim sources, catalog, scheduled removals
         ├── shim_sources.py      # Config `shims` section → shim registry
-        ├── model_types.py, keystore.py, logging.py
+        ├── model_types.py, keystore.py, logging.py, updates.py
         ├── routing/, maintenance/  # Selection strategies; config/key/backfill steps
         ├── cli.py, banner.py, __main__.py
         ├── middleware/          # Auth, rate limiting, error format, headers, etc.

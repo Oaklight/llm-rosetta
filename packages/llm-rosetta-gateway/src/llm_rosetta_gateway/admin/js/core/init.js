@@ -19,6 +19,7 @@ import { renderShimSources } from '../tabs/shims.js';
 import '../components/test-runner.js';
 import { initLogoPicker } from '../components/logo-picker.js';
 import { initTypePicker } from '../components/type-picker.js';
+import { initUpdates } from './updates.js';
 
 // A #dump/<id> link is its own screen in this app, so the session check that
 // guards every other screen guards it too.  Captured before any tab
@@ -69,6 +70,7 @@ function toggleLogPause() {
 // ===================== Init =====================
 function initApp(prefetchedConfig) {
   loadConfig(prefetchedConfig);
+  initUpdates();
   if (_tabEnabled('keys')) { loadKeys(); loadLogKeyLabels(); }
   api.get('/admin/api/internal-token').then(r => { S.internalToken = r.token; }).catch(() => {});
   api.get('/admin/api/metrics?seconds=1').then(data => {
