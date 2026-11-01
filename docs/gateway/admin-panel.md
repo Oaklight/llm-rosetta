@@ -12,6 +12,8 @@ Open **`http://localhost:8765/admin/`**.
 
 The console is a left rail of sections — **Dashboard**, **Providers**, **Models**, **API Keys** and **Observability** — with the mode, language, settings and logout buttons in one row at the bottom, and a status bar along the bottom edge that reports the request counters. Below 900 px the rail folds into a top bar.
 
+The rail's foot carries the clock. It shows the gateway's own wall time, not the browser's: `/health` reports the process's clock and zone, and a click on the time switches to the browser clock (the label says which one is showing, and the choice is remembered). The zone beside it is a second click target — the GMT offset (`GMT-5`) by default, the IANA name (`America/Chicago`) when switched; a name wider than the rail is trimmed with an ellipsis. A bare `/admin` opens the dashboard rather than resuming the last section; an explicit hash (`#providers`, `#models`) still deep-links. The logs section is `#observability`, and an old `#logs` bookmark opens it and is rewritten in the address bar.
+
 `Alt+1` … `Alt+5` jump to a section, `[` and `]` step through them, Back and Forward move between the sections you visited, and `?` opens the shortcut list.
 
 ## Providers
@@ -20,7 +22,7 @@ The **Providers** section manages every upstream the gateway can call.
 
 ![Providers section](images/admin-providers.png)
 
-The header filters by model type — **All**, **LLM**, **Embedding**, **Rerank**, **Decision** — and searches by name, shim or base URL; the count beside it is how many providers the filters leave. The grid/list toggle switches between cards and a compact table, and the choice is stored in `localStorage`. **+ Add Provider** opens the form; **+ Free resource** lists the free lanes the gateway knows about, and picking one is the same as adding that provider.
+The header filters by model type — **All**, **LLM**, **Embeddings**, **Rerank**, **Decisions** — and searches by name, shim or base URL; the count beside it is how many providers the filters leave. The grid/list toggle switches between cards and a compact table, and the choice is stored in `localStorage`. **+ Add Provider** opens the form; **+ Free resource** lists the free lanes the gateway knows about, and picking one is the same as adding that provider.
 
 The toolbar's **Status** facet — **All**, **Needs attention**, **Disabled** — filters by what the provider is doing, with live counts over the slice the other filters left. The list itself is ordered: providers with a problem come first, healthy ones next, and providers switched off last, so an endpoint that stopped routing is at the top rather than lost in the grid.
 
@@ -234,7 +236,7 @@ Both thresholds apply independently — whichever triggers first wins.
 
 | Pane | Holds |
 |------|-------|
-| **Appearance** | Colour scheme, mode, language, auto-refresh interval and the theme override |
+| **Appearance** | Colour scheme, mode, language, model type names, auto-refresh interval and the theme override |
 | **Behavior** | Console output level, error detail, credential reveal, the global proxy URL |
 | **Rate limiting** | Switch, algorithm (sliding window, token bucket, fixed window, GCRA) and scope (global, per IP, per key, per model) |
 | **Logging & data** | Request log cap and age, error dump cap, export and cleanup, ops log retention |
@@ -319,6 +321,8 @@ Gateway API keys (managed in the **API Keys** section) protect AI request endpoi
 ## Internationalization
 
 The console supports English and Chinese (中文). The language button sits in the rail footer, and on the login card. Every interface string — tooltips, placeholders, aria-labels and toasts included — goes through the translation layer, and the selection persists in `localStorage`.
+
+Model type names are the exception, and they have their own switch: the panel spells a type the way the API does (`llm`, `embeddings`, `rerank`, `decisions`) on every surface — badges, warning rows, facets, type radios and model rows — and the hover carries the localized word. **Settings → Appearance → Model type names** flips the two, so an operator who prefers the words on screen to follow the language gets them there, with the English on the hover instead. The default is English. The **Docs** link in About follows the interface language as well: Chinese opens `/zh-cn/latest/` on Read the Docs rather than the site root's English redirect.
 
 !!! note "Chinese label update"
     The Chinese translation for "provider" was updated from **服务商** to **服务方** to better reflect the local usage convention.
