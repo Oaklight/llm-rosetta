@@ -33,6 +33,8 @@ from .strategy import (
     WeightedRoundRobinStrategy,
     create_strategy,
 )
+from .unavailable import Unavailable
+from .unavailable import classify as classify_unavailable
 
 __all__ = [
     "DEFAULT_STRATEGY",
@@ -50,7 +52,9 @@ __all__ = [
     "SelectionContext",
     "SessionHeaderAffinity",
     "StageOrderError",
+    "Unavailable",
     "WeightedRoundRobinStrategy",
+    "classify_unavailable",
     "compute_affinity_identity",
     "create_strategy",
     "extract_prefix_from_ir",

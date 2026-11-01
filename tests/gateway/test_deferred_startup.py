@@ -907,7 +907,7 @@ class TestProviderNotReadyForAQuotaBlock:
 class TestAQuotaBlockedRoute:
     def test_every_provider_blocked_reports_the_block_not_startup(self):
         """The client that just got a plan refusal is not told we are booting."""
-        from llm_rosetta_gateway.config.resolve import _quota_blocked_until
+        from llm_rosetta_gateway.routing.unavailable import blocked_until
         from llm_rosetta_gateway.quota.state import QUOTA_STATE
         from llm_rosetta_gateway.transport.provider_info import ProviderInfo
 
@@ -925,7 +925,7 @@ class TestAQuotaBlockedRoute:
         )
         QUOTA_STATE.block_provider(identity, 30, "usage limit")
 
-        assert _quota_blocked_until([pinfo]) is not None
+        assert blocked_until([pinfo]) is not None
 
         # An unblocked sibling means the route's unavailability is not (only)
         # a quota story, so the helper declines.
@@ -937,4 +937,4 @@ class TestAQuotaBlockedRoute:
             url_template="{base_url}/x",
         )
         other.quota_provider_blocked = lambda: False
-        assert _quota_blocked_until([pinfo, other]) is None
+        assert blocked_until([pinfo, other]) is None
