@@ -413,16 +413,19 @@ LLM-Rosetta 内置 39 个提供方 shim，每个 shim 对应 `packages/llm-roset
 
 ### 独立 Shim 包 { #standalone-shim-packages }
 
-有三套 shim 维护在各自的仓库中，而不在核心包内：
+有四套 shim 维护在各自的仓库中，而不在核心包内：
 
 | 包 | Shim 名称 | 仓库 |
 |----|----------|------|
 | ALCF | `alcf_metis--chat_completions`、`alcf_minerva--chat_completions`、`alcf_sophia--chat_completions` | [llm-rosetta-shim-alcf](https://github.com/Oaklight/llm-rosetta-shim-alcf) |
 | Argo | `argo--chat_completions`、`argo--messages`、`argo--open_responses` | [llm-rosetta-shim-argo](https://github.com/Oaklight/llm-rosetta-shim-argo) |
 | AskSage | `asksage--chat_completions`、`asksage--messages`、`asksage--open_responses`、`asksage--google_generate` | [llm-rosetta-shim-asksage](https://github.com/Oaklight/llm-rosetta-shim-asksage) |
+| OpenCode Zen 免费通道 | `opencode_zen_free--chat_completions` | [llm-rosetta-shim-opencode-zen-free](https://github.com/Oaklight/llm-rosetta-shim-opencode-zen-free) |
 
 ALCF 与 AskSage 是在 0.14.0 开发周期中引入的，从未出现在任何稳定版的内置集合中；Argo 则自
-v0.6.3 起一直作为内置 shim 发布。三者均已在 0.14.0 离开核心。独立包注册相同的规范 shim
+v0.6.3 起一直作为内置 shim 发布。三者均已在 0.14.0 离开核心。OpenCode 免费通道在 0.14 之后
+离开核心，因为上游门禁的变化与发布周期无关——其实测状态见
+[OpenCode](providers/opencode.md#public-free-lane)。独立包注册相同的规范 shim
 名称，因此提供方的 `shim` 值无需改动 —— 新增的只是源声明。
 
 **按名称预载一个包。** `shims.presets` 会把 catalog 键展开为仓库、路径与 token 变量，

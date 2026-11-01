@@ -80,8 +80,25 @@ Go 订阅的窗口（5 小时 / 每周 / 每月）可以按 key 读取，显示�
 
 ## 公共免费通道 {#public-free-lane}
 
-keyless 的 `/zen/v1` 免费池是一个独立 shim：
-`opencode_zen_free--chat_completions`。上游会拒绝任何不像它自家桌面客户端的请求，
+keyless 的 `/zen/v1` 免费池是一个独立 shim：`opencode_zen_free--chat_completions`，
+并且它作为独立包发布而不是内置在 core 里：
+[llm-rosetta-shim-opencode-zen-free](https://github.com/Oaklight/llm-rosetta-shim-opencode-zen-free)。
+使用该名称前先声明这个包：
+
+```jsonc
+{
+  "shims": { "presets": ["opencode_zen_free"] },
+  "providers": {
+    "zen-free": { "type": "opencode_zen_free--chat_completions" }
+  },
+  "models": {
+    "beam-free": { "provider": "zen-free" }
+  }
+}
+```
+
+不需要任何 API key：这条 lane 的“凭据”就是字面量 `public`，shim 以
+`Authorization: Bearer public` 发送。上游会拒绝任何不像它自家客户端的请求，
 所以该 shim 在 `connection` 块和 `transforms.py` 里复现这个形状：
 
 - `opencode/<version>` 的 `User-Agent`，以及 `x-opencode-client` /
@@ -98,22 +115,18 @@ keyless 的 `/zen/v1` 免费池是一个独立 shim：
 只服务声明的输入与输出成本都为 0 的模型，因此面板只提供这些。若列表完全不含成本字段，
 则回退到 `-free` 后缀。
 
-这是反滥用网关，而不是公共池：它可能随时变化或关闭，额度按出网地址块计（IPv6 一个
-`/64`，IPv4 一个 `/32`），每天重置，prompt 也可能被上游记录。该 provider 会出现在
-**Free Resource** 分组下，并带上面板的第三方声明。测量过程见
-[issue #884](https://github.com/Oaklight/llm-rosetta/issues/884)；
-[opencode-unlimited-proxy](https://github.com/ebouther/opencode-unlimited-proxy)
-另有一份关于各道门与额度维度的独立记录。
+!!! warning "2026-11-01 实测：门禁现在拒绝所有非 OpenCode 客户端"
+    这条 lane 只回答 OpenCode 客户端本身，其余一律返回
+    `429 FreeUsageLimitError`。把真客户端的 body 与 headers 逐字节复现——经本地 MITM
+    代理抓包得到——用 curl、Node `https`、Node `fetch`、Bun `fetch` 或浏览器指纹 TLS
+    发送，在同一台机器、真客户端同一分钟内能正常回答的情况下，仍然被拒。也就是说门禁
+    判定的是客户端传输栈（TLS/HTTP 指纹），shim 无法设置。
 
-```jsonc
-{
-  "providers": {
-    "zen-free": { "type": "opencode_zen_free--chat_completions" }
-  },
-  "models": {
-    "beam-free": { "provider": "zen-free" }
-  }
-}
-```
+    `429 FreeUsageLimitError` 同时也是真正配额耗尽时的返回，所以单看响应无法区分两者。
+    请把这条 lane 视为实验性：保留它是因为上游可能放宽门禁，而它的请求形状工作
+    （模型过滤、占位工具、finish_reason 改写）无论如何都有价值。测量历史见
+    [issue #884](https://github.com/Oaklight/llm-rosetta/issues/884)。
 
-不需要任何 key。Go 订阅本身也通过付费通道提供两个 *Preview Free* 模型。
+该 provider 会出现在 **Free Resource** 分组下，并带上面板的第三方声明：它是反滥用
+网关而不是公共池，可能随时变化或关闭，prompt 也可能被上游记录。Go 订阅本身也通过
+付费通道提供两个 *Preview Free* 模型。
