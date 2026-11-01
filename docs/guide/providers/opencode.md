@@ -82,7 +82,7 @@ Go 订阅的窗口（5 小时 / 每周 / 每月）可以按 key 读取，显示�
 
 keyless 的 `/zen/v1` 免费池是一个独立 shim：`opencode_zen_free--chat_completions`，
 并且它作为独立包发布而不是内置在 core 里：
-[llm-rosetta-shim-opencode-zen-free](https://github.com/Oaklight/llm-rosetta-shim-opencode-zen-free)。
+[llm-rosetta-shim-opencode-free](https://github.com/Oaklight/llm-rosetta-shim-opencode-free)。
 使用该名称前先声明这个包：
 
 ```jsonc
