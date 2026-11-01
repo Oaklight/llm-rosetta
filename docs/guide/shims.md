@@ -428,8 +428,13 @@ v0.6.3 起一直作为内置 shim 发布。三者均已在 0.14.0 离开核心�
 [OpenCode](providers/opencode.md#public-free-lane)。独立包注册相同的规范 shim
 名称，因此提供方的 `shim` 值无需改动 —— 新增的只是源声明。
 
-**按名称预载一个包。** `shims.presets` 会把 catalog 键展开为仓库、路径与 token 变量，
-因此一行即可替代完整的 remote 配置：
+**点选预载一个包。** **Settings → Shims** 把每个已知的独立包列成一个 chip——名称、shim
+数量，悬停显示仓库地址——点击即可把它加入或移出 `shims.presets`。保存后生效；写回字段就是
+那个逗号分隔的键列表，也可以手写。运行中的 catalog 不认识的键会一直保留到下次改动选择为止，
+所以按新 catalog 写的配置不会被悄悄改写。
+
+`shims.presets` 会把 catalog 键展开为仓库、路径与 token 变量，因此一行即可替代完整的
+remote 配置：
 
 ```jsonc
 "shims": {
