@@ -34,12 +34,12 @@ Contains the following event types:
 """
 
 import sys
-from typing import Any, Literal, Union
+from typing import Any, Literal, TypedDict, Union
 
 if sys.version_info >= (3, 11):
-    from typing import NotRequired, Required, TypedDict
+    from typing import NotRequired, Required
 else:
-    from typing_extensions import NotRequired, Required, TypedDict
+    from typing_extensions import NotRequired, Required
 
 from .parts import CitationPart
 from .passthrough import ProviderPassthroughEvent

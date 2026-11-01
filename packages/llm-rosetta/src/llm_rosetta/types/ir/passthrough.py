@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import sys
-from typing import Any, Literal
+from typing import Any, Literal, TypedDict
 
 if sys.version_info >= (3, 11):
-    from typing import NotRequired, Required, TypedDict
+    from typing import NotRequired, Required
 else:
-    from typing_extensions import NotRequired, Required, TypedDict
+    from typing_extensions import NotRequired, Required
 
 
 class ProviderPassthroughEvent(TypedDict):
