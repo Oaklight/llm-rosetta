@@ -128,9 +128,17 @@ class GoogleInteractionsConfigOps(BaseConfigOps):
             if effort:
                 result["effort"] = effort
                 result["mode"] = "enabled"
-                # Interactions API always expects thought steps in the
-                # response when thinking is enabled
-                result["include_thoughts"] = True
+        # ``include_thoughts`` is deliberately not stamped here.  The
+        # Interactions API returns thought steps when thinking is enabled, but
+        # that is a fact about its responses, not about the request: recording
+        # it made every Interactions request ask for thoughts in every other
+        # dialect, and a Chat target answered with ``reasoning.summary: auto``
+        # for a request that never asked for a summary (cross-format property,
+        # issue #1313).  There is no request field to read instead — measured
+        # against the live route, ``generation_config.include_thoughts`` and
+        # ``generation_config.thoughts`` are both answered ``400 Unknown
+        # parameter``; ``thinking_level`` and ``thinking_summaries`` are the
+        # whole surface.
         thinking_summaries = provider_config.get("thinking_summaries")
         if thinking_summaries in ("auto", "none"):
             result["summary"] = cast(IRVisibility, thinking_summaries)
