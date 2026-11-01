@@ -151,6 +151,43 @@ def _run(config: GatewayConfig, transport: _Transport):
     return asyncio.run(_go())
 
 
+def _stream_required_config() -> GatewayConfig:
+    """Provider ``a`` refuses ``stream: false``; ``b`` answers either way."""
+    config = _config()
+    config.providers["a"].stream_required = True
+    return config
+
+
+class TestTheStreamRequiredBridge:
+    def test_a_refusal_is_classified_and_failed_over(self):
+        """A client asking for one body must not lose the failover.
+
+        The bridge used to handle only 401, so a 429 on a stream-required
+        provider went straight back to the client even when the model had
+        another provider and had opted in.
+        """
+        config = _stream_required_config()
+        transport = _StreamTransport(_stream_refused(), _ok())
+
+        response, profile = _run(config, transport)
+
+        assert response.status_code == 200
+        assert transport.calls == ["https://a.test", "https://b.test"]
+        assert profile["failover"]["from"] == "a"
+        assert profile["failover"]["to"] == "b"
+
+    def test_an_opted_out_model_keeps_the_refusal(self):
+        config = _stream_required_config()
+        config.model_failover_on_quota = {}
+        transport = _StreamTransport(_stream_refused())
+
+        response, profile = _run(config, transport)
+
+        assert response.status_code == 429
+        assert transport.calls == ["https://a.test"]
+        assert "failover" not in profile
+
+
 class TestTheFailover:
     def test_a_refusal_on_one_provider_is_served_by_the_other(self):
         config = _config()

@@ -38,7 +38,6 @@ from .errors import (
     RefusalAction,
     _connection_error_response,
     _detect_stream_chunk_error,
-    _handle_401,
     _soft_error_response,
     _upstream_error_passthrough,
     decide_on_refusal,
@@ -334,6 +333,9 @@ async def _non_streaming_from_stream(
     capture_state: CaptureState | None,
     entry_id: str | None,
     profile: dict[str, Any],
+    selection: SelectionContext | None = None,
+    config: Any | None = None,
+    _failover_from: str | None = None,
 ) -> tuple[Response, dict[str, Any]]:
     """Serve a non-streaming client from an upstream that only streams.
 
@@ -343,6 +345,18 @@ async def _non_streaming_from_stream(
     ordinary JSON.  Only Chat Completions clients are supported: every other
     source format has a different terminal-event shape, and synthesizing one
     without a measured sample would be guesswork.
+
+    A refused attempt is classified exactly as on the other two paths: a 401
+    a refresh can fix is retried, an in-band quota refusal demotes the
+    credential, and a provider with nothing left hands the request to another
+    one when the model opted in.  Nothing has reached the client here, so
+    failover is always still possible.
+
+    Args:
+        selection: This request's routing state.  ``None`` disables failover,
+            which is what a bare handler call (a test) gets.
+        config: The live config; with *selection*, enables failover.
+        _failover_from: The provider a failover is already coming from.
     """
     if route.source_provider != "chat_completions":
         return (
@@ -370,13 +384,39 @@ async def _non_streaming_from_stream(
         status = stream.status_code
         await stream.close()
         stream = None
-        retry, err = await _handle_401(
+        # The same decision the JSON and SSE paths take, so a 429 here is not
+        # a dead end just because the client asked for one body.
+        decision = await decide_on_refusal(
             provider_info, status, error_text, route.source_provider
         )
-        if err is not None:
-            return err, profile
-        if not retry:
-            break
+        if decision.action is RefusalAction.RETURN:
+            assert decision.response is not None
+            return decision.response, profile
+        if decision.action is RefusalAction.RETRY:
+            continue
+        if (
+            decision.action is RefusalAction.FAILOVER
+            and config is not None
+            and selection is not None
+        ):
+            failed_over = await _failover_response(
+                config,
+                selection,
+                route,
+                body,
+                signal=decision.signal,
+                transport=transport,
+                metadata_store=metadata_store,
+                extra_headers=extra_headers,
+                persistence=persistence,
+                capture_state=capture_state,
+                entry_id=entry_id,
+                profile=profile,
+                attempted=_failover_from,
+            )
+            if failed_over is not None:
+                return failed_over
+        break
     if stream is None:
         return (
             await _upstream_error_passthrough(
@@ -517,6 +557,9 @@ async def handle_non_streaming(  # noqa: C901
             capture_state=capture_state,
             entry_id=entry_id,
             profile=profile,
+            selection=selection,
+            config=config,
+            _failover_from=_failover_from,
         )
 
     # Phase 3: Forward to upstream via transport
