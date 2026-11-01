@@ -601,6 +601,29 @@ To allow a specific origin:
 !!! note
     CORS tightening applies to `/admin/api/*` endpoints only. The `/v1/*` proxy endpoints are unaffected.
 
+### `update_check` and `self_update`
+
+The admin panel can report a newer release, and can install it. Both behaviours are separate switches under `server`, and both default to `true`:
+
+| Key | Effect |
+|-----|--------|
+| `update_check` | The gateway asks the package index for the newest `llm-rosetta` / `llm-rosetta-gateway` release and caches the answer for six hours; the panel shows a bubble while a newer release exists. `false` sends no outbound request at all. |
+| `self_update` | **Update now** in the panel runs `pip install --upgrade` in this environment and then replaces the process with the same command line. `false` leaves the bubble (and the changelog) in place and disables the button. |
+
+```jsonc
+{
+  "server": {
+    "update_check": true,
+    "self_update": false
+  }
+}
+```
+
+Only a literal `true` enables either switch: a quoted `"true"` in a hand-written file leaves it off, so an outbound check — or a pip run that replaces the running code — cannot be switched on by accident.
+
+!!! warning "Editable installs and containers"
+    A gateway installed from a source checkout refuses to update itself: pip would replace the working tree's package with an index release, and the next edit would stop taking effect. Inside a container the installed version survives until the container is recreated; a new image is the durable path.
+
 ## Rate Limiting
 
 The gateway supports per-client rate limiting with single or multiple sliding windows. Configure in the `server` section:

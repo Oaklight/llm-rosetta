@@ -318,6 +318,23 @@ Alternatively, protect the admin panel using a reverse proxy:
 
 Gateway API keys (managed in the **API Keys** section) protect AI request endpoints (`/v1/*`). See [Configuration — Gateway API Keys](configuration.md#gateway-api-keys) for details.
 
+## Updates { #updates }
+
+The console can say that a newer release exists, show what changed, and install it without leaving the panel.
+
+**The bubble.** The gateway asks the package index for the newest release once every six hours (`server.update_check`), and while one is newer than the running version a small pill sits in the top-right corner — `v0.15.0 available`. A click opens the details: what is running, what is available, a link to the full changelog on Read the Docs in the interface language, and **Update now**.
+
+**Updating.** **Update now** runs `pip install --upgrade` for the distributions that publish that release, then replaces the process image with the same command line. The PID survives, so a systemd unit or a container restart policy is not what brings the gateway back. The panel polls `/health` and reloads itself when the new version answers; if the install fails, the old version keeps serving and pip's reason is shown.
+
+Two installations are refused, with the reason in the bubble:
+
+- an **editable install** (a source checkout) — pip would replace the working tree's package with an index release;
+- an interpreter without `pip`, or `server.self_update: false` in the configuration file.
+
+Inside a container the installed version survives until the container is recreated; a new image is the durable path.
+
+**The changelog dialog.** The first time the panel loads after an update, it opens the new release's notes, read from a changelog file shipped inside the wheel. **Close** only closes it — the dialog returns on the next load; **Don't show again** remembers the version in `localStorage` and stops it coming back. A build without the bundled file — a source checkout that never ran `scripts/dev/sync_changelog.py` — shows no dialog at all.
+
 ## Internationalization
 
 The console supports English and Chinese (中文). The language button sits in the rail footer, and on the login card. Every interface string — tooltips, placeholders, aria-labels and toasts included — goes through the translation layer, and the selection persists in `localStorage`.
