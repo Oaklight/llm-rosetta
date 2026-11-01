@@ -113,8 +113,8 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **手机上的管理面板**（issue [#1083](https://github.com/Oaklight/llm-rosetta/issues/1083)、[#1085](https://github.com/Oaklight/llm-rosetta/issues/1085)、[#1087](https://github.com/Oaklight/llm-rosetta/issues/1087)、[#1091](https://github.com/Oaklight/llm-rosetta/issues/1091)、[#1097](https://github.com/Oaklight/llm-rosetta/issues/1097)、PR [#1099](https://github.com/Oaklight/llm-rosetta/pull/1099)）：请求日志、运维日志、错误转储、设置、仪表盘与密钥页都能在手机上使用，行、表头、分段控件与能力标签支持键盘操作。
 
 ### 文档
-- **README 已按 0.14 的现状重写，并提供双语版本**：根 README 和两个包的 README（各含中英文两版）现在以四种控制层级——函数、原始转换器、管线、网关——和「掌控模型来源」开头；使用规范转换器名（`ChatCompletionsConverter`、`MessagesConverter` 等）；列出五种 chat 格式以及 embedding、rerank、decision 格式；并写明真实的 Python 版本下限（3.10，3.10 上仅额外需要 `typing_extensions`）。网关的安装方式（pip、Docker、单文件二进制）、配置示例、管理面板和 CLI 集成首次写进 README。
-- **文档站的入口页与 README 结构对齐**：首页、安装、两个快速开始和核心概念页现在都以四种控制层级、IR 作为 payload 和零依赖开头。
+- **README 已按 0.14 的现状重写，并提供双语版本**：根 README 和两个包的 README（各含中英文两版）现在以三种控制粒度——原始转换器、管线、网关——加一个工具箱，以及「掌控模型来源」开头；使用规范转换器名（`ChatCompletionsConverter`、`MessagesConverter` 等）；列出五种 chat 格式以及 embedding、rerank、decision 格式；并写明真实的 Python 版本下限（3.10，3.10 上仅额外需要 `typing_extensions`）。网关的安装方式（pip、Docker）、配置示例、管理面板和 CLI 集成首次写进 README。
+- **文档站的入口页与 README 结构对齐**：首页、安装、两个快速开始和核心概念页现在都以三种控制粒度加工具箱、IR 作为 payload 和零依赖开头。
 
 ## v0.13.0 — 2026-09-08
 

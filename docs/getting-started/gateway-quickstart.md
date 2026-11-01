@@ -22,8 +22,6 @@ docker pull oaklight/llm-rosetta-gateway:latest
 
 参见 [`docker/docker-compose.yaml`](https://github.com/Oaklight/llm-rosetta/blob/master/docker/docker-compose.yaml) 获取开箱即用的 Compose 文件，包含 volume 挂载、环境变量和 ALCF 令牌直通配置。
 
-也可以从 [GitHub Releases](https://github.com/Oaklight/llm-rosetta/releases) 下载独立二进制文件 — 无需 Python。
-
 ## 2. 创建配置文件
 
 创建 `config.jsonc`（支持注释的 JSON）：
@@ -42,8 +40,11 @@ docker pull oaklight/llm-rosetta-gateway:latest
     "gemini-2.0-flash": "my-google"
   },
   "server": {
-    "host": "0.0.0.0",
-    "port": 8765
+    "host": "127.0.0.1",
+    "port": 8765,
+    // 仅用于本地演示。共享部署请绑定 0.0.0.0 并置于自己的网络控制之后，
+    // 在 /admin 生成网关密钥，再按各格式的原生鉴权头发送。
+    "open_on_no_keys": true
   }
 }
 ```
@@ -90,5 +91,5 @@ curl http://localhost:8765/v1/chat/completions \
 - [配置](../gateway/configuration.md) — 完整配置参考
 - [CLI 参考](../gateway/cli.md) — 所有 CLI 选项和子命令
 - [CLI 工具集成](../gateway/cli-integrations.md) — 配合 Claude Code、Codex、OpenCode 和 Kilo Code 使用
-- [四种控制粒度](../index.md#four-levels) — 网关在分层中的位置
+- [三种控制粒度与一个工具箱](../index.md#control-levels) — 网关在分层中的位置
 - [管理面板](../gateway/admin-panel.md) — Web UI 配置与监控

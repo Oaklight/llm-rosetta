@@ -4,7 +4,7 @@ title: 库快速开始
 
 # 库快速开始
 
-LLM-Rosetta 在四种控制粒度上提供同一套翻译。本页从原始转换器开始；管线（`convert()` / `ConversionPipeline`）增加 shim 解析和转换告警，网关再往上增加 HTTP 代理。完整分层见[四种控制粒度](../index.md#four-levels)。
+LLM-Rosetta 在三种控制粒度上提供同一套翻译，另有一个处理单个值的工具箱。本页从原始转换器开始；管线（`convert()` / `ConversionPipeline`）增加 shim 解析和转换告警，网关再往上增加 HTTP 代理。完整分层见[三种控制粒度与一个工具箱](../index.md#control-levels)。
 
 ## Hello World
 
@@ -91,5 +91,5 @@ converted = convert(some_request, target_provider="messages")
 - [使用转换器](../guide/converters.md) — 转换器详细用法和元数据保留
 - [流式处理](../guide/streaming.md) — 跨提供方转换流式数据块
 - [IR 类型](../guide/ir-types.md) — 中间表示类型系统
-- [四种控制粒度](../index.md#four-levels) — 函数、原始转换器、管线、网关
+- [三种控制粒度与一个工具箱](../index.md#control-levels) — 工具箱、原始转换器、管线、网关
 - [用量](../api/observability.md#usage) — 无需网关即可计量 token 并读取报告

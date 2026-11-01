@@ -26,29 +26,6 @@ pip install llm-rosetta-gateway
 
 网关**零外部运行时依赖** — 使用内置的纯标准库 HTTP 服务器和客户端模块。
 
-### 独立二进制文件
-
-预编译的单文件可执行程序可从 [GitHub Releases](https://github.com/Oaklight/llm-rosetta/releases) 下载，无需 Python 运行时。
-
-| 平台 | 文件名 |
-|------|--------|
-| Linux x86_64 (glibc) | `llm-rosetta-gateway-<ver>-linux-x86_64` |
-| Linux x86_64 (musl) | `llm-rosetta-gateway-<ver>-linux-x86_64-musl` |
-| Linux arm64 (glibc) | `llm-rosetta-gateway-<ver>-linux-arm64` |
-| Linux arm64 (musl) | `llm-rosetta-gateway-<ver>-linux-arm64-musl` |
-| macOS arm64 | `llm-rosetta-gateway-<ver>-macos-arm64` |
-| Windows x86_64 | `llm-rosetta-gateway-<ver>-windows-x86_64.exe` |
-
-```bash
-# 下载后运行（Linux/macOS）
-chmod +x llm-rosetta-gateway-*
-./llm-rosetta-gateway-<ver>-linux-x86_64 --help
-```
-
-!!! tip
-
-    Alpine 环境和 Docker 请使用 **musl** 版本。Ubuntu、Debian 等大多数 Linux 发行版请使用 **glibc** 版本。
-
 ### Docker
 
 [DockerHub](https://hub.docker.com/r/oaklight/llm-rosetta-gateway) 提供三种镜像变体：
