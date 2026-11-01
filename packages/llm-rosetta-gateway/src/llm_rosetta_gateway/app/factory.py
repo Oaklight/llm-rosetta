@@ -88,7 +88,7 @@ async def _setup_auth(
     config_path: str | None,
     data_dir: str | None = None,
 ) -> tuple[str, KeyStore, AuthState]:
-    """Create KeyStore, import config keys, build AuthState."""
+    """Create KeyStore and build AuthState."""
     import os
     import secrets
 
@@ -135,12 +135,12 @@ async def _setup_auth(
     if not auth_state._has_keys():
         _no_key_msg = (
             "No API keys configured — all /v1/* endpoints are OPEN "
-            "(server.open_on_no_keys=true). Set server.api_keys in your "
-            "config or generate keys in the admin panel to restrict access."
+            "(server.open_on_no_keys=true). Generate keys in the admin "
+            "panel to restrict access."
             if config.open_on_no_keys
             else "No API keys configured — all /v1/* endpoints are BLOCKED. "
-            "Generate keys in the admin panel, set server.api_keys, or "
-            "set server.open_on_no_keys=true to allow anonymous access."
+            "Generate keys in the admin panel, or set "
+            "server.open_on_no_keys=true to allow anonymous access."
         )
         logger.warning(_no_key_msg)
 
