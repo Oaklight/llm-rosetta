@@ -86,6 +86,73 @@ A format whose SDK is not installed skips; a missing or renamed ledger fails,
 because that is a repository state rather than an environment property. The suite
 runs in the `conformance` CI job, which installs `[all]`.
 
+### `request-fields`
+
+Every request field of each chat format, taken from the provider SDK request
+type (`CompletionCreateParamsNonStreaming`,
+`ResponseCreateParamsNonStreaming`, `MessageCreateParamsNonStreaming`,
+`GenerateContentConfig` plus `contents[]`) or, for the Interactions API, from a
+hand-authored surface. Each field path is recorded in
+`baselines/request-fields.json` with what the read leg
+(`request_from_provider`) does with it:
+
+| class | meaning |
+| --- | --- |
+| `mapped` | the reader stores it in the IR, or in `provider_extensions` where the IR has no home but a same-format round trip must survive |
+| `dropped` | the reader ignores it (needs a reason) |
+| `not_on_wire` | SDK-only helper such as `http_options`, never sent |
+
+A field the format declares and the ledger does not record fails the case; a
+recorded field the format no longer declares is reported, not failed. A new
+path lands `unclassified` and fails until a human reads the reader — the class
+is not derivable from the type, because a reader may read a key directly or
+through a list of names.
+
+```bash
+python -m tools.conformance run --suite request-fields --out /tmp/request-fields-report.json
+```
+
+Refresh the ledger after classifying a reviewed change:
+
+```bash
+python -c "from tools.conformance.suites.request_fields import write_baseline; write_baseline()"
+```
+
+The ledger is generated against the SDK versions the `conformance` job
+resolves and records them under `sdk_versions`; a newer upstream field is a
+named failure, which is how the version skew is caught.
+
+### `stream-events`
+
+A stream has no single declared type to walk, and the unit cannot be an event:
+in an empty `StreamContext`, `finish`, `usage` and `stream_end` produce nothing
+because they need an open response or a started block first. So the unit is a
+sequence.
+
+One canonical IR stream — an opening, a reasoning block, a text block with a
+refusal and a citation, a tool call with its result, a finish and a usage — is
+written through each of the five chat dialects, read back, and recorded in
+`baselines/stream-events.json` as:
+
+| key | meaning |
+| --- | --- |
+| `chunks` | how many wire messages the writer produced |
+| `recovered` | the IR event types the reader produced, in order |
+
+A cell that changes fails the case: a recovered type that disappears is a loss,
+one that appears is an improvement worth recording, and a reordering is a
+change too.
+
+```bash
+python -m tools.conformance run --suite stream-events --out /tmp/stream-events-report.json
+```
+
+Refresh the ledger after reviewing a change:
+
+```bash
+python -c "from tools.conformance.suites.stream_events import write_baseline; write_baseline()"
+```
+
 ### `wire`
 
 One canonical request, round-tripped through each of the five chat formats
