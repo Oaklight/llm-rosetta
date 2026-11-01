@@ -79,6 +79,51 @@ def test_the_canonical_flag_wins_over_the_legacy_one():
     assert masked["embeddings_enabled"] is True
 
 
+def test_the_legacy_endpoint_keys_reach_the_panel_under_their_canonical_names():
+    """The capability is invisible without them: `_getProviderCaps` reads the
+    canonical format/shim keys, so a pre-rename provider showed as LLM-only and
+    the next save dropped the endpoint."""
+    masked = _mask_provider_entry(
+        "p",
+        {
+            "base_url": "https://a.example/v1",
+            "embedding_format": "cohere",
+            "embedding_path": "/v2/embed",
+            "embedding_shim": "cohere--embedding",
+        },
+    )
+
+    assert masked["embeddings_format"] == "cohere"
+    assert masked["embeddings_path"] == "/v2/embed"
+    assert masked["embeddings_shim"] == "cohere--embedding"
+
+
+def test_a_non_empty_canonical_key_wins_over_the_legacy_one():
+    masked = _mask_provider_entry(
+        "p",
+        {
+            "base_url": "https://a.example/v1",
+            "embeddings_format": "openai",
+            "embedding_format": "cohere",
+        },
+    )
+
+    assert masked["embeddings_format"] == "openai"
+
+
+def test_an_empty_canonical_key_falls_through_to_the_legacy_one():
+    masked = _mask_provider_entry(
+        "p",
+        {
+            "base_url": "https://a.example/v1",
+            "embeddings_format": "",
+            "embedding_format": "cohere",
+        },
+    )
+
+    assert masked["embeddings_format"] == "cohere"
+
+
 def test_a_non_mapping_marker_is_dropped():
     masked = _mask_provider_entry("p", {"_auto_disabled_endpoints": "not-a-mapping"})
 

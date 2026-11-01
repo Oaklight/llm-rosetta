@@ -289,13 +289,21 @@ def _with_live_endpoint_markers(
 
 
 def _normalise_endpoint_flags(masked: dict[str, Any]) -> None:
-    """Spell every per-endpoint flag the way the panel reads it.
+    """Spell every type-derived endpoint key the way the panel reads it.
 
-    The parser accepts the pre-rename spelling (``embedding_enabled``) with a
-    deprecation warning; the panel's state helpers read the canonical key
-    only, so a config written before the rename would otherwise show an
-    endpoint as enabled while the gateway has already stopped routing to it.
-    Normalising here keeps that one rule in the browser.
+    The parser accepts the pre-rename spelling of each of them
+    (``embedding_format``, ``embedding_path``, ``embedding_shim``,
+    ``embedding_enabled``) with a deprecation warning.  The panel reads the
+    canonical names only, so a config written before the rename would
+    otherwise show an endpoint as enabled while the gateway had stopped
+    routing to it, hide the capability from ``_getProviderCaps`` altogether,
+    and then drop the endpoint on the next save — the editor sends the
+    canonical keys it knows, all empty.  Normalising here keeps that one rule
+    in the browser.
+
+    Precedence follows ``config/typed.py::_declared``: an ``*_enabled`` key
+    decides by presence (``False`` is a value), every other key falls through
+    to the legacy spelling only when the canonical one is empty.
     """
     from ....config.typed import legacy_config_key
     from ....model_types import all_model_types
@@ -303,12 +311,20 @@ def _normalise_endpoint_flags(masked: dict[str, Any]) -> None:
     for desc in all_model_types():
         if desc.is_llm:
             continue
-        canonical = f"{desc.name}_enabled"
-        if canonical in masked:
-            continue
-        legacy = legacy_config_key(canonical, desc.name)
-        if legacy is not None and legacy in masked:
-            masked[canonical] = masked[legacy]
+        pairs = [
+            (f"{desc.name}_enabled", True),
+            (desc.config_format_key, False),
+            (desc.config_path_key, False),
+            (desc.config_shim_key, False),
+        ]
+        for canonical, by_presence in pairs:
+            if not canonical:
+                continue
+            if canonical in masked and (by_presence or masked[canonical]):
+                continue
+            legacy = legacy_config_key(canonical, desc.name)
+            if legacy is not None and legacy in masked:
+                masked[canonical] = masked[legacy]
 
 
 def _mask_provider_entry(name: str, cfg: Any) -> dict[str, Any]:
