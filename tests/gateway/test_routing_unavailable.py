@@ -102,6 +102,36 @@ class TestTheBlock:
         assert state.reason == "blocked"
         assert state.as_kwargs()["blocked_until"] is not None
 
+    def test_a_retry_reports_the_block_it_lands_on(self):
+        """A failed-over request must not be told the gateway is booting.
+
+        The provider that refused is in ``failover_excluded``, so the route
+        the retry can still use is the rest of it.  If the only one left is
+        quota-blocked, that block is the client's story -- asking the question
+        over the whole route would count the refuser as an available provider
+        and answer "initializing".
+        """
+        refuser = SimpleNamespace(name="a", ready=True)
+        blocked = _blocked("b", "@unavail-block-after-failover", 30)
+        ctx = _ctx(["a", "b"])
+        ctx.failover_excluded = frozenset({"a"})
+
+        state = classify(_config({"a": refuser, "b": blocked}), ctx)
+
+        assert state.reason == "blocked"
+        assert state.as_kwargs()["blocked_until"] is not None
+
+    def test_a_retry_with_another_candidate_left_is_not_a_full_block(self):
+        refuser = SimpleNamespace(name="a", ready=True)
+        blocked = _blocked("b", "@unavail-block-partial-retry", 30)
+        spare = SimpleNamespace(name="c", ready=False)
+        ctx = _ctx(["a", "b", "c"])
+        ctx.failover_excluded = frozenset({"a"})
+
+        state = classify(_config({"a": refuser, "b": blocked, "c": spare}), ctx)
+
+        assert state.reason == "initializing"
+
 
 class TestTheSpentAllowance:
     def test_a_known_reset_is_reported(self, monkeypatch):
