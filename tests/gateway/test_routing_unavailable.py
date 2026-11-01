@@ -176,6 +176,30 @@ class TestTheSpentAllowance:
 
         assert state.reason == "initializing"
 
+    def test_the_reset_is_read_from_the_route_that_is_left(self, monkeypatch):
+        """An excluded provider's unknown reset must not make the answer unknown.
+
+        Both providers are spent; the one the request failed over from never
+        named a reset, the one it can still use did.  The reset lookup follows
+        the same reduced route as the two "every provider" questions, so the
+        client gets the date instead of "no reset time is known".
+        """
+        from llm_rosetta_gateway.quota import service
+
+        resets = {"a": None, "b": NOW + timedelta(minutes=7)}
+        monkeypatch.setattr(
+            service, "provider_exhausted_until", lambda pinfo: resets[pinfo.name]
+        )
+        spent = SimpleNamespace(name="a", ready=True)
+        spent_b = SimpleNamespace(name="b", ready=True)
+        ctx = _ctx(["a", "b"], excluded=frozenset({"a", "b"}))
+        ctx.failover_excluded = frozenset({"a"})
+
+        state = classify(_config({"a": spent, "b": spent_b}), ctx)
+
+        assert state.reason == "exhausted"
+        assert state.until == NOW + timedelta(minutes=7)
+
     def test_a_route_with_no_candidates_is_not_exhausted(self):
         ctx = _ctx([])
 
