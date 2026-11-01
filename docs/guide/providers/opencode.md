@@ -98,16 +98,26 @@ not look like its own desktop client, so the shim reproduces that shape in its
 - an `x-opencode-session` whose value decodes back into a recent timestamp
   (`session_id_format: opencode`), plus a per-request `x-opencode-request`;
 - one tool declared under the exact name `read` — injected only when the client
-  did not declare one, and calls to an injected tool are removed rather than
-  forwarded;
+  did not declare one. The declaration describes itself as a transport
+  placeholder and tells the model not to call it, so the client's own tools stay
+  the ones worth calling; a call to it is removed rather than forwarded, and a
+  turn whose every call was removed ends with `finish_reason: stop` instead of
+  leaving the client waiting for a result that will never arrive;
 - `stream: true` (`stream_required`), with the non-streaming reply reassembled
   by the gateway.
 
+Its model listing is filtered to the `-free` slice: the lane's `/models` answers
+with the whole Zen catalogue, but it serves only the models whose id ends in
+`-free`, so the panel offers those and nothing else.
+
 This is an anti-abuse gate rather than a public pool: it can change or close
-without notice, its quota is per source address and session, and prompts may be
-logged upstream. The provider appears under **Free Resource** with the panel's
-third-party disclosure. See [issue #884](https://github.com/Oaklight/llm-rosetta/issues/884)
-for the measurements.
+without notice, its quota is metered per egress address block (a `/64` on IPv6,
+a `/32` on IPv4) and resets daily, and prompts may be logged upstream. The
+provider appears under **Free Resource** with the panel's third-party
+disclosure. See [issue #884](https://github.com/Oaklight/llm-rosetta/issues/884)
+for the measurements, and
+[opencode-unlimited-proxy](https://github.com/ebouther/opencode-unlimited-proxy)
+for an independent record of the gates and the quota axis.
 
 ```jsonc
 {
