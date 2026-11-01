@@ -701,6 +701,45 @@ class TestResolveSkipsUnready:
         route, pinfo = cfg.resolve(cfg.selection_context("test-model", "openai_chat"))
         assert route.provider_name == "only"
 
+    def test_every_provider_blocked_raises_the_block_not_pending(self):
+        """The wiring: resolve() asks routing.unavailable and raises its answer."""
+        from llm_rosetta_gateway.quota.state import QUOTA_STATE
+
+        identity = "@deferred-block-route"
+        QUOTA_STATE.block_provider(identity, 30, "usage limit")
+        blocked = _make_pinfo("a")
+        blocked.quota_identity = identity
+        blocked.quota_provider_blocked = lambda: (
+            QUOTA_STATE.provider_block(identity) is not None
+        )
+        cfg = self._build_config({"a": blocked})
+
+        with pytest.raises(ProviderNotReady) as exc_info:
+            cfg.resolve(cfg.selection_context("test-model", "openai_chat"))
+
+        assert "quota block" in str(exc_info.value)
+        assert exc_info.value.retry_after is not None
+
+    def test_every_provider_spent_raises_exhausted_with_the_reset(self, monkeypatch):
+        """A spent allowance is its own story, with the reset as Retry-After."""
+        from datetime import datetime, timedelta, timezone
+
+        from llm_rosetta_gateway.quota import service as quota_service
+
+        reset = datetime.now(timezone.utc) + timedelta(minutes=10)
+        monkeypatch.setattr(quota_service, "provider_spent", lambda pinfo: True)
+        monkeypatch.setattr(
+            quota_service, "provider_exhausted_until", lambda pinfo: reset
+        )
+        cfg = self._build_config({"a": _make_pinfo("a"), "b": _make_pinfo("b")})
+
+        with pytest.raises(ProviderNotReady) as exc_info:
+            cfg.resolve(cfg.selection_context("test-model", "openai_chat"))
+
+        assert exc_info.value.exhausted is True
+        assert exc_info.value.retry_after is not None
+        assert exc_info.value.retry_after > 0
+
 
 # ---------------------------------------------------------------------------
 # _resolve_or_error
