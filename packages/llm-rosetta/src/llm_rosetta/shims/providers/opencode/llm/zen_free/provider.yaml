@@ -9,10 +9,12 @@
 #   * at least one tool declared under the exact name `read`,
 #   * stream: true.
 #
-# The connection block and transforms.py supply all five.  See issue #884 for
-# the measurement history; the gate is anti-abuse machinery, so this lane is
-# offered as a free source with a third-party disclosure and may change or
-# close without notice.
+# The connection block and transforms.py supply all five.  transforms.py also
+# filters the model listing to the models whose declared cost is zero, and
+# declares the injected `read` as a placeholder the model should not call.  See
+# issue #884 for the measurement history; the gate is anti-abuse machinery, so
+# this lane is offered as a free source with a third-party disclosure and may
+# change or close without notice.
 name: opencode_zen_free--chat_completions
 model_type: llm
 format: chat_completions
@@ -20,8 +22,8 @@ display_name: Zen free lane
 free_source: true
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/opencode.svg
 hint_msg:
-  en: "Keyless free pool. Only the -free models are served here; the listing also shows paid models."
-  zh: "无密钥免费池。这里只服务 -free 模型；模型列表里同时会显示付费模型。"
+  en: "Keyless free pool. Only zero-cost models are served here; the model list is filtered to them."
+  zh: "无密钥免费池。这里只服务零成本模型；模型列表已按此过滤。"
 
 connection:
   base_url: https://opencode.ai/zen/v1
