@@ -45,6 +45,7 @@ import threading
 import time
 import uuid
 import zipfile
+from urllib.parse import quote
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
@@ -126,6 +127,8 @@ class ShimSourceStatus:
         resolved_ref: Concrete ref the archive was fetched at (a HEAD fetch is
             pinned to its commit SHA here).
         checksum_ok: ``True``/``False`` when a ``sha256`` pin was checked.
+        ref: The ref the declaration named (``None`` for a HEAD fetch), so the
+            update check can ask about the same ref it fetched.
     """
 
     kind: Literal["path", "remote"]
@@ -141,6 +144,7 @@ class ShimSourceStatus:
     fetched_at: float | None = None
     resolved_ref: str | None = None
     checksum_ok: bool | None = None
+    ref: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-safe view for the admin API."""
@@ -158,6 +162,7 @@ class ShimSourceStatus:
             "fetched_at": self.fetched_at,
             "resolved_ref": self.resolved_ref,
             "checksum_ok": self.checksum_ok,
+            "ref": self.ref,
         }
 
 
@@ -421,6 +426,7 @@ def _resolve_remote_source(
             stale=stale,
             fetched_at=cached.get("fetched_at"),
             resolved_ref=cached.get("resolved_ref") or parsed.ref,
+            ref=parsed.ref,
         )
     except Exception as exc:
         logger.warning("Shim remote %s: %s", location, exc)
@@ -440,6 +446,7 @@ def _scan_status(status: ShimSourceStatus) -> ShimSourceStatus:
         stale=status.stale,
         fetched_at=status.fetched_at,
         resolved_ref=status.resolved_ref,
+        ref=status.ref,
     )
 
 
@@ -528,6 +535,11 @@ def _needs_fetch(
         cached_digest = str(cached.get("sha256") or "")
         if cached_digest.lower() != spec.sha256.lower():
             return True
+    if has_cache and spec.github is not None:
+        # Stamps written before refs were resolved hold the literal ref; a
+        # commit is what the update check can compare against.
+        if not _SHA_RE.match(str(cached.get("resolved_ref") or "")):
+            return True
     if spec.refresh == "never":
         return not has_cache
     if spec.refresh == "always":
@@ -578,6 +590,7 @@ def _scan_dir(
     stale: bool = False,
     fetched_at: float | None = None,
     resolved_ref: str | None = None,
+    ref: str | None = None,
 ) -> ShimSourceStatus:
     """Run the loader over *directory* and fold the result into a status."""
     if not directory.is_dir():
@@ -591,6 +604,7 @@ def _scan_dir(
             stale=stale,
             fetched_at=fetched_at,
             resolved_ref=resolved_ref,
+            ref=ref,
             error=f"not a directory: {directory}",
         )
     try:
@@ -606,6 +620,7 @@ def _scan_dir(
             stale=stale,
             fetched_at=fetched_at,
             resolved_ref=resolved_ref,
+            ref=ref,
             error=f"{type(exc).__name__}: {exc}",
         )
     names = tuple(s.name for s in shims)
@@ -621,6 +636,7 @@ def _scan_dir(
         stale=stale,
         fetched_at=fetched_at,
         resolved_ref=resolved_ref,
+        ref=ref,
     )
 
 
@@ -640,14 +656,33 @@ def _fetch_remote(
     """Fetch, verify and atomically install one archive; return its stamp."""
     ref = spec.ref
     resolved_ref = ref
-    if ref is None and spec.github is not None:
-        resolved_ref = _resolve_github_head(
-            spec.github[0],
-            spec.github[1],
-            headers=headers,
-            http_get=http_get,
-            proxy=proxy,
-        )
+    if spec.github is not None:
+        # A declared ref ("main", "v1.0.0") is resolved to the commit it points
+        # at *now*, so the stamp records a commit and the update check compares
+        # commit with commit.  Codeload accepts either spelling for the archive.
+        try:
+            resolved_ref = _resolve_github_head(
+                spec.github[0],
+                spec.github[1],
+                ref=ref,
+                headers=headers,
+                http_get=http_get,
+                proxy=proxy,
+            )
+        except Exception as exc:  # noqa: BLE001 - the pin must not gate the install
+            # The commit is for the update check, not a precondition for
+            # installing the source: an anonymous rate limit, or a network that
+            # allows codeload but not api.github.com, still gets the archive.
+            # The stamp then holds the ref itself, and _needs_fetch re-pins it
+            # on the next fetch.
+            logger.warning(
+                "Shim remote %s: cannot resolve %s to a commit (%s); "
+                "pinning the ref itself",
+                spec.url,
+                ref or "HEAD",
+                exc,
+            )
+            resolved_ref = ref
 
     archive_url = _archive_url(
         spec.url, resolved_ref if spec.github else ref, spec.github
@@ -716,12 +751,14 @@ def _resolve_github_head(
     owner: str,
     repo: str,
     *,
+    ref: str | None = None,
     headers: dict[str, str],
     http_get: HttpGet,
     proxy: str | None,
 ) -> str:
-    """Resolve a GitHub repo's HEAD to a concrete commit SHA."""
-    api = f"https://api.github.com/repos/{owner}/{repo}/commits/HEAD"
+    """Resolve a GitHub ref (default: HEAD) to a concrete commit SHA."""
+    target = quote(ref, safe="") if ref else "HEAD"
+    api = f"https://api.github.com/repos/{owner}/{repo}/commits/{target}"
     data = http_get(api, headers=headers, timeout=HTTP_TIMEOUT, proxy=proxy)
     payload = json.loads(bytes(data).decode("utf-8"))
     sha = payload.get("sha")
@@ -949,6 +986,77 @@ def _file_lock(path: Path):
 # ---------------------------------------------------------------------------
 # URL / HTTP helpers
 # ---------------------------------------------------------------------------
+
+
+def check_remote_updates(
+    report: ShimLoadReport,
+    *,
+    http_get: HttpGet | None = None,
+    proxy: str | None = None,
+) -> list[dict[str, Any]]:
+    """Compare each remote source's pinned commit with its repository HEAD.
+
+    A remote is pinned to the commit it was fetched at (``resolved_ref``), so
+    "is there an update?" is one API call per source: resolve ``HEAD`` and see
+    whether it moved.  Only GitHub sources can answer — an archive URL has no
+    head to ask for — and a source that failed to load reports the error
+    instead of a verdict.
+
+    Args:
+        report: The last applied load report.
+        http_get: Injectable HTTP getter (tests).
+        proxy: Upstream proxy; defaults to the caller's.
+
+    Returns:
+        One entry per remote source: its location, the pinned commit, the
+        current head (``None`` when it could not be read) and whether the head
+        differs.
+    """
+    get = http_get or _default_http_get
+    out: list[dict[str, Any]] = []
+    for status in report.sources:
+        if status.kind != "remote":
+            continue
+        entry: dict[str, Any] = {
+            "location": status.location,
+            "current": status.resolved_ref,
+            "head": None,
+            "update": False,
+            "error": None,
+        }
+        if not status.ok:
+            # A source that never loaded has no pin to compare; the badge must
+            # say so rather than claim the (absent) pin is current.
+            entry["error"] = status.error or "source failed to load"
+            out.append(entry)
+            continue
+        pin = status.resolved_ref
+        if not pin or not _SHA_RE.match(pin):
+            entry["error"] = f"pinned at {pin!r}, not a commit — refetch to re-pin"
+            out.append(entry)
+            continue
+        parts = _parse_github(status.location)
+        if parts is None:
+            entry["error"] = "not a GitHub repository"
+            out.append(entry)
+            continue
+        try:
+            head = _resolve_github_head(
+                parts[0],
+                parts[1],
+                ref=status.ref,
+                headers=_auth_headers(None),
+                http_get=get,
+                proxy=proxy,
+            )
+        except Exception as exc:  # noqa: BLE001 - a check must not break the page
+            entry["error"] = str(exc)
+            out.append(entry)
+            continue
+        entry["head"] = head
+        entry["update"] = head != pin
+        out.append(entry)
+    return out
 
 
 def _parse_github(url: str) -> tuple[str, str] | None:

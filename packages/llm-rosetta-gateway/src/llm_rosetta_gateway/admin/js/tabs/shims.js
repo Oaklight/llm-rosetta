@@ -7,6 +7,7 @@
 import { S } from '../core/state.js';
 import { t } from '../core/i18n.js';
 import { api, showToast, esc, copyText, openModal, closeModal } from '../core/utils.js';
+import { parsePresets, togglePreset, presetGroups } from '../core/shim-presets.js';
 
 function _section() {
   const sec = S.configData && S.configData.shims;
@@ -37,6 +38,9 @@ function renderShimSources() {
   if (presetsEl) {
     presetsEl.value = Array.isArray(sec.presets) ? sec.presets.join(', ') : '';
   }
+  _bindPresetDropdown();
+  _renderPresetPicker();
+  checkShimUpdates(false);
   const remEl = document.getElementById('shimRemotesInput');
   if (remEl) {
     remEl.value = Array.isArray(sec.remotes) && sec.remotes.length
@@ -51,8 +55,10 @@ function renderShimSources() {
   if (strictEl) strictEl.checked = sec.strict === true;
   const err = document.getElementById('shimSourcesError');
   if (err) err.textContent = '';
-  _renderPresets();
   _renderAdvisories();
+  // Last: every field above must be filled before the form is compared with
+  // the saved section, or a config with a remote/cache/TTL/strict opens dirty.
+  _updateShimDirty();
   loadLoadedShims();
 }
 
@@ -86,7 +92,11 @@ async function saveShimSources() {
     const ttlRaw = (document.getElementById('shimTtlInput').value || '').trim();
     body.remote_ttl = ttlRaw === '' ? null : Number(ttlRaw);
     body.strict = document.getElementById('shimStrictInput').checked;
-    await api.put('/admin/api/config/shims', body);
+    const r = await api.put('/admin/api/config/shims', body);
+    // `api.put` resolves with the body even on 400; without this check the
+    // server's refusal (an unknown preset, say) was shown nowhere and the
+    // reload below silently reverted the operator's pick.
+    if (r && r.error) throw new Error(r.error);
     await window.loadConfig();
     renderShimSources();
     showToast(t('toast.shimsSaved'));
@@ -120,24 +130,143 @@ async function reloadShimSources(forceRefresh) {
   }
 }
 
-/** Offer the standalone shim packages the gateway knows about. */
-function _renderPresets() {
-  const sel = document.getElementById('shimPresetSelect');
-  if (!sel) return;
+/**
+ * Paint the preload-preset chips.
+ *
+ * The declared presets are a list of catalogue keys; showing them as a free
+ * text field made the operator remember the keys and spell them correctly.
+ * Each known package is a chip instead: clicking one toggles it in the list,
+ * and the existing Save is still the one thing that persists anything.
+ */
+function _renderPresetPicker() {
+  const list = document.getElementById('shimPresetList');
+  if (!list) return;
   const presets = _presets();
+  const selected = _selectedPresets();
   if (!presets.length) {
-    sel.innerHTML = `<option value="">${esc(t('shim.preset.select'))}</option>`;
-    sel.disabled = true;
+    list.innerHTML = `<div class="tp-empty">${esc(t('shim.preset.none'))}</div>`;
+    _renderPresetTrigger(selected, []);
     return;
   }
-  sel.disabled = false;
-  sel.innerHTML = presets.map((p, i) => {
-    const label = t('shim.preset.option', {
-      label: p.label || p.source_repo,
-      count: Array.isArray(p.shims) ? p.shims.length : 0,
-    });
-    return `<option value="${i}">${esc(label)}</option>`;
+  const groups = presetGroups(presets, selected);
+  list.innerHTML = groups.map(g => {
+    const head = `<div class="tp-group-label" role="presentation">${esc(t('shim.preset.group.' + g.key))}</div>`;
+    const rows = g.items.map(c =>
+      `<label class="tp-item" title="${esc(c.repo)}">`
+      + `<input type="checkbox" data-preset="${esc(c.key)}"${c.selected ? ' checked' : ''}>`
+      + `<span class="tp-name">${esc(c.label)}</span>`
+      + `<span class="tp-base">${c.count}</span></label>`
+    ).join('');
+    return head + rows;
   }).join('');
+  list.querySelectorAll('input[data-preset]').forEach(box => {
+    box.addEventListener('change', () => toggleShimPreset(box.dataset.preset, box.checked));
+  });
+  _renderPresetTrigger(selected, presets);
+}
+
+/** The trigger shows the chosen packages by name, or how many. */
+function _renderPresetTrigger(selected, presets) {
+  const label = document.getElementById('shimPresetLabel');
+  if (!label) return;
+  const byKey = new Map((presets || []).map(p => [p.key, p.label || p.key]));
+  const names = selected.map(k => byKey.get(k) || k);
+  label.textContent = names.length
+    ? names.join(', ')
+    : t('shim.preset.noneSelected');
+  label.classList.toggle('tp-placeholder', names.length === 0);
+  label.title = names.join(', ');
+}
+
+/**
+ * Whether the form holds changes the saved config does not.
+ *
+ * Save is the only thing that persists, so the button says so: disabled when
+ * there is nothing to write, with a "Unsaved changes" note beside it while
+ * there is.  Comparing the form against the saved section (rather than
+ * counting keystrokes) means editing a value back to what was saved clears
+ * the note again.
+ */
+function _shimFormDirty() {
+  const sec = _section();
+  const el = id => document.getElementById(id);
+  const paths = (el('shimPathsInput').value || '')
+    .split('\n').map(x => x.trim()).filter(Boolean);
+  const savedPaths = Array.isArray(sec.paths) ? sec.paths : [];
+  if (JSON.stringify(paths) !== JSON.stringify(savedPaths)) return true;
+
+  const presets = parsePresets(el('shimPresetsInput').value);
+  const savedPresets = Array.isArray(sec.presets) ? sec.presets : [];
+  if (JSON.stringify(presets) !== JSON.stringify(savedPresets)) return true;
+
+  const rawRemotes = (el('shimRemotesInput').value || '').trim();
+  const savedRemotes = Array.isArray(sec.remotes) && sec.remotes.length
+    ? JSON.stringify(sec.remotes, null, 2) : '';
+  if (rawRemotes !== savedRemotes) return true;
+
+  if ((el('shimCacheDirInput').value || '').trim() !== (sec.cache_dir || '')) return true;
+  const ttl = (el('shimTtlInput').value || '').trim();
+  const savedTtl = sec.remote_ttl != null ? String(sec.remote_ttl) : '';
+  if (ttl !== savedTtl) return true;
+  if (el('shimStrictInput').checked !== (sec.strict === true)) return true;
+  return false;
+}
+
+/** Repaint the Save button and the unsaved note. */
+function _updateShimDirty() {
+  const dirty = _shimFormDirty();
+  const note = document.getElementById('shimSourcesDirty');
+  if (note) note.hidden = !dirty;
+  const btn = document.getElementById('shimSaveBtn');
+  if (btn) btn.disabled = !dirty;
+}
+
+/** Bind the trigger once: click opens, outside click and Escape close. */
+function _bindPresetDropdown() {
+  const trigger = document.getElementById('shimPresetTrigger');
+  if (!trigger || trigger.dataset.bound) return;
+  trigger.dataset.bound = '1';
+  trigger.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const box = document.getElementById('shimPresetDropdown');
+    setPresetDropdown(!(box && box.classList.contains('open')));
+  });
+  document.addEventListener('click', (e) => {
+    const wrap = document.getElementById('shimPresetPicker');
+    if (wrap && !wrap.contains(e.target)) setPresetDropdown(false);
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') setPresetDropdown(false);
+  });
+  for (const id of ['shimPathsInput', 'shimPresetsInput', 'shimRemotesInput',
+                    'shimCacheDirInput', 'shimTtlInput', 'shimStrictInput']) {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', _updateShimDirty);
+    if (el) el.addEventListener('change', _updateShimDirty);
+  }
+}
+
+/** Open or close the preset dropdown. */
+function setPresetDropdown(open) {
+  const box = document.getElementById('shimPresetDropdown');
+  const trigger = document.getElementById('shimPresetTrigger');
+  if (!box || !trigger) return;
+  box.classList.toggle('open', !!open);
+  trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+
+/** The preset keys currently declared, in declaration order. */
+function _selectedPresets() {
+  return parsePresets(document.getElementById('shimPresetsInput')?.value || '');
+}
+
+/** Toggle one preset and repaint. The hidden field is what Save reads. */
+function toggleShimPreset(key, on) {
+  const el = document.getElementById('shimPresetsInput');
+  if (el) el.value = togglePreset(_selectedPresets(), key, on).join(', ');
+  _renderPresetPicker();
+  // Writing the hidden field fires no input event, so refresh Save here.
+  _updateShimDirty();
 }
 
 /** List the providers that are still on a shim with a removal scheduled. */
@@ -188,13 +317,6 @@ function appendShimPreset(entry) {
   showToast(t('shim.preset.added', { name: entry.label || entry.remote.url }));
 }
 
-/** "Add source" on the preset picker. */
-function addShimPresetFromSelect() {
-  const sel = document.getElementById('shimPresetSelect');
-  const entry = _presets()[Number(sel && sel.value)];
-  if (entry) appendShimPreset(entry);
-}
-
 /** "Add the replacement source" on one advisory row. */
 function addShimPresetByUrl(url) {
   const entry = _presets().find(p => p.remote && p.remote.url === url);
@@ -225,6 +347,8 @@ function addShimPresetFromRow(button) {
 
 let _shimRows = [];
 let _shimDetail = null;
+// location -> {current, head, update, error}, from the last check.
+let _shimUpdates = new Map();
 
 /** Fetch the inventory and repaint the list. */
 async function loadLoadedShims() {
@@ -271,6 +395,47 @@ function _sourceGroups() {
 }
 
 /** Paint the list for the current filter. */
+/**
+ * The update verdict for a remote source's group head.
+ *
+ * A remote is pinned to the commit it was fetched at, so "there is an update"
+ * is "the repository's HEAD is no longer that commit".  Nothing is claimed
+ * before the check runs, and a failed lookup says so instead of "up to date".
+ */
+function _updateBadge(group) {
+  if (group.origin !== 'remote') return '';
+  const u = _shimUpdates.get(group.source);
+  if (!u) return '';
+  if (u.error) {
+    return `<span class="shim-update unknown"
+      title="${esc(u.error)}">${esc(t('shim.update.unknown'))}</span>`;
+  }
+  if (!u.update) return `<span class="shim-update ok">${esc(t('shim.update.current'))}</span>`;
+  const from = String(u.current || '').slice(0, 7);
+  const to = String(u.head || '').slice(0, 7);
+  return `<button type="button" class="shim-update new" onclick="reloadShimSources(true)"
+    title="${esc(t('shim.update.tip', { from: u.current || '', to: u.head || '' }))}"
+    >${esc(t('shim.update.available', { from, to }))}</button>`;
+}
+
+/**
+ * Ask the gateway whether any remote source's repository moved past its pin.
+ *
+ * Cached for five minutes on the server; *force* is the panel's "Check now".
+ * A failure leaves the badges as they were rather than showing a verdict that
+ * was never read.
+ */
+async function checkShimUpdates(force) {
+  try {
+    const d = await api.post('/admin/api/config/shims/check-updates', force ? { refresh: true } : {});
+    const rows = (d && d.sources) || [];
+    _shimUpdates = new Map(rows.map(r => [r.location, r]));
+    renderLoadedShims();
+  } catch {
+    /* the badges simply stay as they were */
+  }
+}
+
 function renderLoadedShims() {
   const host = document.getElementById('shimInventoryList');
   if (!host) return;
@@ -316,6 +481,7 @@ function renderLoadedShims() {
         <span class="shim-pill ${esc(g.origin)}">${esc(t('shim.origin.' + g.origin))}</span>
         <span class="shim-group-source" title="${esc(where)}">${esc(where)}</span>
         <span class="shim-group-count">${esc(t('shim.status.count', { count: g.shown.length }))}</span>
+        ${_updateBadge(g)}
       </div>
       ${note ? `<div class="shim-group-note" title="${esc(note)}">${esc(note)}</div>` : ''}
       ${g.shown.map(_shimRowHtml).join('')}
@@ -431,9 +597,14 @@ async function deleteLoadedShim(name) {
 
 Object.assign(window, {
   renderShimSources, saveShimSources, reloadShimSources,
-  addShimPresetFromSelect, addShimPresetFromRow, appendShimPreset,
+  setPresetDropdown, checkShimUpdates,
+  addShimPresetFromRow, appendShimPreset,
   loadLoadedShims, renderLoadedShims, openShimDetail, saveShimYaml,
   copyShimYaml, deleteLoadedShim, toggleShimEnabled,
+  // Repainted on a language change; the chips carry translated labels and
+  // the update badges are built from translated strings.
+  renderShimPresetPicker: _renderPresetPicker,
+  repaintShimUpdateBadges: renderLoadedShims,
 });
 
 export { renderShimSources, saveShimSources, reloadShimSources, appendShimPreset, loadLoadedShims };

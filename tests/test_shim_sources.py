@@ -70,6 +70,20 @@ def _tar_bytes(files: dict[str, bytes], root: str | None = "repo-abc123") -> byt
     return buf.getvalue()
 
 
+_API_SHA = "d" * 40
+
+
+def _http(data: bytes, sha: str = _API_SHA):
+    """Serve *data* for archive URLs and a commit SHA for GitHub's API."""
+
+    def get(url: str, **_kwargs):
+        if url.startswith("https://api.github.com/"):
+            return json.dumps({"sha": sha}).encode()
+        return data
+
+    return get
+
+
 class TestLocalDirs:
     def test_flat_and_grouped_layouts(self, tmp_path: Path):
         root = tmp_path / "shims"
@@ -295,10 +309,11 @@ class TestRemote:
             }
         )
         calls: list[str] = []
+        serve = _http(data)
 
         def http_get(url, *, headers=None, timeout=None, proxy=None):
             calls.append(url)
-            return data
+            return serve(url)
 
         cache = tmp_path / "cache"
         report = rebuild_shims(
@@ -308,13 +323,17 @@ class TestRemote:
         assert src.ok, src.error
         assert src.shim_names == ("rem--chat_completions",)
         assert src.from_cache is False
-        assert calls == ["https://codeload.github.com/acme/repo/tar.gz/v1.0.0"]
+        # A declared ref is resolved to its commit, and the archive is fetched
+        # at that commit — the stamp records a commit, not the tag name.
+        assert calls[0].endswith("/commits/v1.0.0")
+        assert src.resolved_ref == _API_SHA
+        assert calls[1] == (f"https://codeload.github.com/acme/repo/tar.gz/{_API_SHA}")
 
         # Second call within the TTL is served from cache — no refetch.
         report2 = rebuild_shims(
             extra_remotes=[self._spec()], cache_root=cache, http_get=http_get
         )
-        assert len(calls) == 1
+        assert len(calls) == 2
         assert report2.sources[0].from_cache is True
 
     def test_sha256_mismatch_fails_without_extracting(self, tmp_path: Path):
@@ -322,7 +341,7 @@ class TestRemote:
         report = rebuild_shims(
             extra_remotes=[self._spec(sha256="0" * 64)],
             cache_root=cache,
-            http_get=lambda url, **kw: b"not-the-archive",
+            http_get=_http(b"not-the-archive"),
         )
         src = report.sources[0]
         assert src.ok is False
@@ -344,14 +363,14 @@ class TestRemote:
         rebuild_shims(
             extra_remotes=[self._spec(sha256=good)],
             cache_root=cache,
-            http_get=lambda url, **kw: data,
+            http_get=_http(data),
         )
 
         # Same (warm) cache, but the pin now names different bytes.
         report = rebuild_shims(
             extra_remotes=[self._spec(sha256="0" * 64)],
             cache_root=cache,
-            http_get=lambda url, **kw: data,
+            http_get=_http(data),
         )
         src = report.sources[0]
         assert src.ok is False
@@ -370,13 +389,13 @@ class TestRemote:
         rebuild_shims(
             extra_remotes=[self._spec()],
             cache_root=cache,
-            http_get=lambda url, **kw: data,
+            http_get=_http(data),
         )
         with pytest.raises(ShimSourceError):
             rebuild_shims(
                 extra_remotes=[self._spec(sha256="0" * 64)],
                 cache_root=cache,
-                http_get=lambda url, **kw: data,
+                http_get=_http(data),
                 strict=True,
             )
 
@@ -393,7 +412,7 @@ class TestRemote:
         report = rebuild_shims(
             extra_remotes=[self._spec(path="providers")],
             cache_root=tmp_path / "cache",
-            http_get=lambda url, **kw: data,
+            http_get=_http(data),
         )
         src = report.sources[0]
         assert src.ok, src.error
@@ -416,9 +435,7 @@ class TestRemote:
         )
         cache = tmp_path / "cache"
         spec = self._spec()
-        rebuild_shims(
-            extra_remotes=[spec], cache_root=cache, http_get=lambda url, **kw: data
-        )
+        rebuild_shims(extra_remotes=[spec], cache_root=cache, http_get=_http(data))
 
         started = threading.Event()
         release = threading.Event()
@@ -468,7 +485,7 @@ class TestRemote:
         rebuild_shims(
             extra_remotes=[self._spec()],
             cache_root=cache,
-            http_get=lambda url, **kw: data,
+            http_get=_http(data),
         )
 
         def boom(url, **kw):
@@ -497,7 +514,7 @@ class TestRemote:
         rebuild_shims(
             extra_remotes=[self._spec()],
             cache_root=cache,
-            http_get=lambda url, **kw: data,
+            http_get=_http(data),
         )
         calls: list[str] = []
 
@@ -553,6 +570,118 @@ class TestRemote:
         )
         assert len(calls) == before
 
+    def test_a_declared_ref_is_pinned_to_its_commit(self, tmp_path: Path):
+        """A tag or branch in the declaration is not the pin: its commit is."""
+        sha = "b" * 40
+        data = _tar_bytes(
+            {
+                "providers/rem/provider.yaml": PROVIDER_YAML.format(
+                    name="rem--chat_completions", slug="rem"
+                ).encode()
+            }
+        )
+        calls: list[str] = []
+
+        def http_get(url, *, headers=None, timeout=None, proxy=None):
+            calls.append(url)
+            if url.startswith("https://api.github.com/"):
+                return json.dumps({"sha": sha}).encode()
+            return data
+
+        report = rebuild_shims(
+            extra_remotes=[
+                {
+                    "url": "https://github.com/acme/repo",
+                    "ref": "v1.0.0",
+                    "path": "providers",
+                }
+            ],
+            cache_root=tmp_path / "cache",
+            http_get=http_get,
+        )
+        assert report.sources[0].ok, report.sources[0].error
+        assert calls[0].endswith("/commits/v1.0.0")
+        assert report.sources[0].resolved_ref == sha
+        # The declared ref survives the scan that turns the fetch into a status;
+        # the update check asks about it instead of the default branch.
+        assert report.sources[0].ref == "v1.0.0"
+        assert calls[1] == f"https://codeload.github.com/acme/repo/tar.gz/{sha}"
+
+    def test_an_unreachable_api_still_installs_the_source(self, tmp_path: Path):
+        """The commit is for the update check, not a precondition for loading."""
+        data = _tar_bytes(
+            {
+                "providers/rem/provider.yaml": PROVIDER_YAML.format(
+                    name="rem--chat_completions", slug="rem"
+                ).encode()
+            }
+        )
+        calls: list[str] = []
+
+        def http_get(url, *, headers=None, timeout=None, proxy=None):
+            calls.append(url)
+            if url.startswith("https://api.github.com/"):
+                raise OSError("HTTP 403 rate limit exceeded")
+            return data
+
+        report = rebuild_shims(
+            extra_remotes=[
+                {
+                    "url": "https://github.com/acme/repo",
+                    "ref": "main",
+                    "path": "providers",
+                }
+            ],
+            cache_root=tmp_path / "cache",
+            http_get=http_get,
+        )
+        src = report.sources[0]
+        assert src.ok, src.error
+        assert src.shim_names == ("rem--chat_completions",)
+        # The stamp keeps the ref; the next fetch re-pins it.
+        assert src.resolved_ref == "main"
+        assert calls[-1] == "https://codeload.github.com/acme/repo/tar.gz/main"
+
+    def test_a_stamp_holding_a_branch_name_is_re_pinned(self, tmp_path: Path):
+        """Caches written before refs were resolved carry a name, not a commit."""
+        sha = "c" * 40
+        data = _tar_bytes(
+            {
+                "providers/rem/provider.yaml": PROVIDER_YAML.format(
+                    name="rem--chat_completions", slug="rem"
+                ).encode()
+            }
+        )
+        cache = tmp_path / "cache"
+        calls: list[str] = []
+
+        def http_get(url, *, headers=None, timeout=None, proxy=None):
+            calls.append(url)
+            if url.startswith("https://api.github.com/"):
+                return json.dumps({"sha": sha}).encode()
+            return data
+
+        spec = [
+            {
+                "url": "https://github.com/acme/repo",
+                "ref": "main",
+                "path": "providers",
+                "refresh": "never",
+            }
+        ]
+        rebuild_shims(extra_remotes=spec, cache_root=cache, http_get=http_get)
+
+        # Rewrite the stamp the way the old loader wrote it: the literal ref.
+        stamp_path = next(cache.glob("*.stamp.json"))
+        stamp = json.loads(stamp_path.read_text())
+        stamp["resolved_ref"] = "main"
+        stamp_path.write_text(json.dumps(stamp))
+
+        before = len(calls)
+        report = rebuild_shims(extra_remotes=spec, cache_root=cache, http_get=http_get)
+        assert len(calls) > before
+        assert report.sources[0].resolved_ref == sha
+
     def test_non_github_archive_url(self, tmp_path: Path):
         data = _tar_bytes(
             {
@@ -607,7 +736,7 @@ class TestRemote:
         report = rebuild_shims(
             extra_remotes=[self._spec(archive="zip")],
             cache_root=tmp_path / "cache",
-            http_get=lambda url, **kw: buf.getvalue(),
+            http_get=_http(buf.getvalue()),
         )
         assert report.sources[0].ok, report.sources[0].error
         assert report.sources[0].shim_names == ("rem--chat_completions",)
@@ -620,7 +749,7 @@ class TestSafety:
                 {"url": "https://github.com/acme/repo", "ref": "v1", "path": subpath}
             ],
             cache_root=tmp_path / "cache",
-            http_get=lambda url, **kw: data,
+            http_get=_http(data),
         )
 
     def test_traversal_member_rejected(self, tmp_path: Path):

@@ -282,6 +282,17 @@ class TestAdminPayload:
             assert set(entry["remote"]) == {"url", "path"}
             assert entry["shims"]
 
+    def test_the_free_package_carries_the_flag_the_picker_groups_on(self):
+        """The pane's "free above paid" split reads this key off the payload."""
+        from llm_rosetta_gateway.admin.routes.config import payload as config_payload
+
+        entries = {
+            entry["key"]: entry
+            for entry in config_payload._shim_source_presets_payload()
+        }
+        assert entries["opencode_zen_free"]["free"] is True
+        assert entries["alcf"]["free"] is False
+
     def test_presets_come_from_the_source_catalog(self):
         """The panel's catalogue is the standalone-package list, not the manifest."""
         from llm_rosetta_gateway.admin.routes.config import payload as config_payload

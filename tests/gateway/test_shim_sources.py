@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
 import os
 from types import SimpleNamespace
 from pathlib import Path
@@ -20,6 +22,7 @@ from llm_rosetta_gateway.shim_sources import (
     resolve_source_config,
     shims_signature,
 )
+from llm_rosetta_gateway.shims.sources import check_remote_updates
 from llm_rosetta.shims.provider_shim import _reset_registry
 
 
@@ -204,6 +207,231 @@ class TestMergeShimSourcesBody:
             {"paths": ["/a"], "strict": True}, {"presets": ["alcf"]}
         )
         assert merged == {"paths": ["/a"], "strict": True, "presets": ["alcf"]}
+
+
+class TestCheckRemoteUpdates:
+    """``check_remote_updates`` answers "is the pinned commit still HEAD?"."""
+
+    SHA = "a" * 40
+    OTHER = "b" * 40
+
+    @staticmethod
+    def _report(*statuses):
+        from llm_rosetta_gateway.shims.sources import ShimLoadReport
+
+        return ShimLoadReport(sources=list(statuses))
+
+    @staticmethod
+    def _remote(location: str, resolved_ref: str | None = None, ref: str | None = None):
+        from llm_rosetta_gateway.shims.sources import ShimSourceStatus
+
+        return ShimSourceStatus(
+            kind="remote", location=location, resolved_ref=resolved_ref, ref=ref
+        )
+
+    @staticmethod
+    def _get(sha: str):
+        import json as _json
+
+        def get(url, **_kwargs):
+            return _json.dumps({"sha": sha}).encode("utf-8")
+
+        return get
+
+    def test_local_sources_are_skipped(self):
+        from llm_rosetta_gateway.shims.sources import ShimSourceStatus
+
+        report = self._report(ShimSourceStatus(kind="path", location="/tmp/shims"))
+        assert check_remote_updates(report, http_get=self._get(self.SHA)) == []
+
+    def test_head_matches_pin(self):
+        report = self._report(self._remote("https://github.com/o/r", self.SHA))
+        [entry] = check_remote_updates(report, http_get=self._get(self.SHA))
+        assert entry["head"] == self.SHA
+        assert entry["update"] is False
+        assert entry["error"] is None
+
+    def test_head_moved(self):
+        report = self._report(self._remote("https://github.com/o/r", self.OTHER))
+        [entry] = check_remote_updates(report, http_get=self._get(self.SHA))
+        assert entry["current"] == self.OTHER
+        assert entry["head"] == self.SHA
+        assert entry["update"] is True
+
+    def test_non_github_source_reports_an_error(self):
+        report = self._report(
+            self._remote("https://example.com/shims.tar.gz", self.SHA)
+        )
+        [entry] = check_remote_updates(report, http_get=self._get(self.SHA))
+        assert entry["error"] == "not a GitHub repository"
+        assert entry["head"] is None
+        assert entry["update"] is False
+
+    def test_a_failed_source_reports_its_error_not_a_verdict(self):
+        from llm_rosetta_gateway.shims.sources import ShimSourceStatus
+
+        report = self._report(
+            ShimSourceStatus(
+                kind="remote",
+                location="https://github.com/o/r",
+                ok=False,
+                error="fetch failed: 404",
+            )
+        )
+        [entry] = check_remote_updates(report, http_get=self._get(self.SHA))
+        assert entry["error"] == "fetch failed: 404"
+        assert entry["update"] is False
+        assert entry["head"] is None
+
+    def test_a_branch_pin_is_not_a_commit(self):
+        report = self._report(self._remote("https://github.com/o/r", "main"))
+        [entry] = check_remote_updates(report, http_get=self._get(self.SHA))
+        assert "not a commit" in entry["error"]
+        assert entry["update"] is False
+        assert entry["head"] is None
+
+    def test_the_check_asks_about_the_declared_ref(self):
+        """A branch-pinned source is checked against that branch, not HEAD."""
+        seen: list[str] = []
+
+        def get(url, **_kwargs):
+            seen.append(url)
+            return json.dumps({"sha": self.SHA}).encode()
+
+        report = self._report(
+            self._remote("https://github.com/o/r", "b" * 40, ref="main")
+        )
+        [entry] = check_remote_updates(report, http_get=get)
+        assert seen == ["https://api.github.com/repos/o/r/commits/main"]
+        assert entry["update"] is True
+
+    def test_the_proxy_reaches_the_head_lookup(self):
+        seen = {}
+
+        def get(url, **kwargs):
+            seen["proxy"] = kwargs.get("proxy")
+            return b'{"sha": "' + self.SHA.encode() + b'"}'
+
+        report = self._report(self._remote("https://github.com/o/r", self.SHA))
+        check_remote_updates(report, http_get=get, proxy="http://proxy:1")
+        assert seen["proxy"] == "http://proxy:1"
+
+    def test_resolution_failure_is_captured_per_source(self):
+        def boom(url, **_kwargs):
+            raise OSError("network down")
+
+        report = self._report(
+            self._remote("https://github.com/o/r", self.SHA),
+            self._remote("https://github.com/o/s", self.SHA),
+        )
+        entries = check_remote_updates(report, http_get=boom)
+        assert [e["error"] for e in entries] == ["network down", "network down"]
+        assert all(e["update"] is False for e in entries)
+
+
+class TestReportInstallation:
+    """A new report must not inherit the previous report's verdicts."""
+
+    def test_installing_a_report_drops_the_cached_verdicts(self):
+        from llm_rosetta_gateway.admin.routes._shared import _install_shim_report
+
+        app = SimpleNamespace(
+            shim_source_report="old-report",
+            shim_source_signature="old-signature",
+            shim_update_check={"sources": [{"location": "x"}], "checked_at": 1.0},
+        )
+        _install_shim_report(SimpleNamespace(app=app), "new-report", "sig")
+
+        assert app.shim_source_report == "new-report"
+        assert app.shim_source_signature == "sig"
+        assert app.shim_update_check is None
+
+
+class TestCheckUpdatesRoute:
+    """The endpoint decides *whether* the check runs; that is what it is tested for."""
+
+    @staticmethod
+    def _request(*, report=None, config=None, body=None):
+        app = SimpleNamespace(
+            shim_source_report=report,
+            gateway_config=config,
+            shim_update_check=None,
+        )
+        return SimpleNamespace(app=app, json=lambda: body if body is not None else {})
+
+    @staticmethod
+    def _report(*statuses):
+        from llm_rosetta_gateway.shims.sources import ShimLoadReport
+
+        return ShimLoadReport(sources=list(statuses))
+
+    @staticmethod
+    def _remote(location: str, resolved_ref: str):
+        from llm_rosetta_gateway.shims.sources import ShimSourceStatus
+
+        return ShimSourceStatus(
+            kind="remote", location=location, resolved_ref=resolved_ref
+        )
+
+    def _call(self, request):
+        from llm_rosetta_gateway.admin.routes.config.shims import (
+            post_shims_check_updates,
+        )
+
+        response = asyncio.run(post_shims_check_updates(request))
+        return json.loads(response.body)
+
+    @pytest.fixture()
+    def counted(self, monkeypatch):
+        calls: list[dict] = []
+
+        def fake(report, *, http_get=None, proxy=None):
+            calls.append({"proxy": proxy, "sources": len(report.sources)})
+            return [
+                {
+                    "location": s.location,
+                    "current": s.resolved_ref,
+                    "head": s.resolved_ref,
+                    "update": False,
+                    "error": None,
+                }
+                for s in report.sources
+            ]
+
+        from llm_rosetta_gateway.shims import sources as shim_sources
+
+        monkeypatch.setattr(shim_sources, "check_remote_updates", fake)
+        return calls
+
+    def test_without_a_report_there_is_nothing_to_check(self):
+        assert self._call(self._request()) == {"sources": [], "checked_at": 0.0}
+
+    def test_a_second_call_is_served_from_the_cache(self, counted):
+        request = self._request(
+            report=self._report(self._remote("https://github.com/o/r", "a" * 40))
+        )
+        first = self._call(request)
+        second = self._call(request)
+        assert len(counted) == 1
+        assert second["checked_at"] == first["checked_at"]
+
+    def test_refresh_asks_again(self, counted):
+        request = self._request(
+            report=self._report(self._remote("https://github.com/o/r", "a" * 40))
+        )
+        self._call(request)
+        request.json = lambda: {"refresh": True}
+        refreshed = self._call(request)
+        assert len(counted) == 2
+        assert refreshed["checked_at"] >= 0.0
+
+    def test_the_check_uses_the_gateways_proxy(self, counted):
+        request = self._request(
+            report=self._report(self._remote("https://github.com/o/r", "a" * 40)),
+            config=SimpleNamespace(proxy="http://proxy:1"),
+        )
+        self._call(request)
+        assert counted[0]["proxy"] == "http://proxy:1"
 
 
 class TestAdminHelpers:

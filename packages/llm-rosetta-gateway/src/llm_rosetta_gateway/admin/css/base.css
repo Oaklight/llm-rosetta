@@ -729,3 +729,5 @@ body::before {
 
 /* Utility */
 .text-muted { color: var(--text-muted); font-style: italic; }
+/* A hint above its control, not under it (the preset picker's how-to). */
+.field-hint-above { margin: 0 0 6px; }
