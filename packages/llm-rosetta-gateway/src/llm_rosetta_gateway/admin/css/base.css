@@ -264,6 +264,10 @@ body.auth-pending > .db-footer { display: none !important; }
    The name can be long (`America/Argentina/Buenos_Aires`), so the zone is
    clamped to the rail's width and trimmed rather than widening the rail. */
 .sb-clock-k, #systemClock, .sb-clock-zone { cursor: pointer; }
+/* The time never wraps: in an AM/PM locale "2:14:26 AM" breaks at the
+   space, and the zone name (which has its own ellipsis) is the part that
+   should absorb a narrow rail. */
+#systemClock { white-space: nowrap; flex: 0 0 auto; }
 .sb-clock-k:hover, #systemClock:hover, .sb-clock-zone:hover { color: var(--text); }
 .sb-clock-v { display: flex; align-items: baseline; gap: 4px; min-width: 0; }
 .sb-clock-zone { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: .85; }

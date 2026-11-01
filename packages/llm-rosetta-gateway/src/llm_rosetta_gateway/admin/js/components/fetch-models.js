@@ -1,6 +1,6 @@
 // Side-effect-only module: exposes functions via window.* for inline HTML handlers.
 import { S } from '../core/state.js';
-import { t } from '../core/i18n.js';
+import { t, typeLabel, typeLabelAlt } from '../core/i18n.js';
 import { api, showToast, closeModal, esc, openMenu, closeMenus } from '../core/utils.js';
 import { providerRowsHtml, syncPickerBtn, openPickerMenu } from './provider-picker.js';
 
@@ -19,8 +19,10 @@ function _buildFetchTypeRadios() {
     const desc = types[i];
     const label = document.createElement('label');
     const checked = desc.is_llm ? ' checked' : '';
-    const labelText = t('label.' + desc.name);
-    label.innerHTML = `<input type="radio" name="fetchModelType" value="${esc(desc.name)}"${checked} onchange="onFetchTypeChange()"> <span data-i18n="label.${esc(desc.name)}">${esc(labelText)}</span>`;
+    // The type name follows the model-type vocabulary, not the interface
+    // language: `data-type-name` is the same pass the badges and the model
+    // rows use, so "Follow language" reaches this dialog too.
+    label.innerHTML = `<input type="radio" name="fetchModelType" value="${esc(desc.name)}"${checked} onchange="onFetchTypeChange()"> <span data-type-name="${esc(desc.name)}" title="${esc(typeLabelAlt(desc.name))}">${esc(typeLabel(desc.name))}</span>`;
     container.appendChild(label);
   }
 }

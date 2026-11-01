@@ -12,6 +12,33 @@ from llm_rosetta_gateway.observability.metrics import MetricsCollector, _Provide
 # ---------------------------------------------------------------------------
 
 
+class TestTimeZoneName:
+    """`/health` is public, so the zone name must be a name, not free text."""
+
+    def test_a_zone_key_is_reported_as_is(self, monkeypatch):
+        from llm_rosetta_gateway.app import routes_health as rh
+
+        monkeypatch.setattr(rh, "_known_zones", lambda: frozenset({"Europe/Paris"}))
+        monkeypatch.setenv("TZ", "Europe/Paris")
+        assert rh._tz_name() == "Europe/Paris"
+
+    def test_a_posix_rule_is_not_reported_as_a_zone_name(self, monkeypatch):
+        from llm_rosetta_gateway.app import routes_health as rh
+
+        monkeypatch.setattr(rh, "_known_zones", lambda: frozenset({"Europe/Paris"}))
+        monkeypatch.setenv("TZ", "CST-8")
+        name = rh._tz_name()
+        assert name != "CST-8"
+        assert name  # the platform abbreviation is still a name
+
+    def test_a_zoneinfo_path_loses_the_path(self, monkeypatch):
+        from llm_rosetta_gateway.app import routes_health as rh
+
+        monkeypatch.setattr(rh, "_known_zones", lambda: frozenset({"Europe/Paris"}))
+        monkeypatch.setenv("TZ", ":/usr/share/zoneinfo/Europe/Paris")
+        assert rh._tz_name() == "Europe/Paris"
+
+
 class TestProviderStats:
     def test_empty_success_rate(self):
         s = _ProviderStats()
@@ -250,7 +277,11 @@ class TestHandleHealthFunction:
         after = time.time() * 1000
 
         assert before - 1000 <= body["server_time"] <= after + 1000
-        assert -24 * 60 <= body["server_tz_offset_minutes"] <= 24 * 60
+        # The process's own offset, not merely a plausible number: a flipped
+        # sign would still satisfy a range check.
+        assert body["server_tz_offset_minutes"] == int(time.localtime().tm_gmtoff // 60)
+        assert isinstance(body["server_tz_name"], str)
+        assert body["server_tz_name"]
 
     def test_health_returns_200_degraded_for_critical_provider(self):
         import json
