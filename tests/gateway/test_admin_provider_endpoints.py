@@ -47,6 +47,38 @@ def test_a_provider_without_endpoint_failures_has_no_marker():
     assert "_auto_disabled_endpoints" not in masked
 
 
+def test_a_legacy_endpoint_flag_is_spelled_the_way_the_panel_reads_it():
+    """The parser honours `embedding_enabled`; the panel reads the canonical key.
+
+    Without the normalisation the card shows an endpoint as enabled while the
+    gateway has already stopped routing to it.
+    """
+    masked = _mask_provider_entry(
+        "p",
+        {
+            "type": "openai",
+            "base_url": "https://a.example/v1",
+            "embedding_enabled": False,
+        },
+    )
+
+    assert masked["embeddings_enabled"] is False
+
+
+def test_the_canonical_flag_wins_over_the_legacy_one():
+    masked = _mask_provider_entry(
+        "p",
+        {
+            "type": "openai",
+            "base_url": "https://a.example/v1",
+            "embeddings_enabled": True,
+            "embedding_enabled": False,
+        },
+    )
+
+    assert masked["embeddings_enabled"] is True
+
+
 def test_a_non_mapping_marker_is_dropped():
     masked = _mask_provider_entry("p", {"_auto_disabled_endpoints": "not-a-mapping"})
 

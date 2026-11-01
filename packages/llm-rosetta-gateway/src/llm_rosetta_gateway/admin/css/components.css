@@ -122,7 +122,11 @@ tr:hover td { background: var(--bg-hover); }
 /* Capability badges for provider cards */
 /* Capability badges are secondary metadata — kept small so a provider with
    all three still fits its column without squeezing the base URL. */
-.cap-badge { display:inline-flex;align-items:center;gap:3px;padding:3px 7px;border-radius:10px;font-size:11px;font-weight:600;letter-spacing:.02em;margin:0 2px;vertical-align:middle; }
+.cap-badge { position:relative;display:inline-flex;align-items:center;gap:3px;padding:3px 7px;border-radius:10px;font-size:11px;font-weight:600;letter-spacing:.02em;margin:0 2px;vertical-align:middle; }
+/* A capability that no longer routes: greyed out, with an `!` overlay that
+   names the type and carries the reason in its tooltip. */
+.cap-badge.is-off { filter:grayscale(1);opacity:.55; }
+.cap-badge-alert { position:absolute;top:-5px;right:-5px;width:13px;height:13px;border-radius:50%;background:var(--red);color:#fff;font-size:9px;font-weight:700;line-height:13px;text-align:center;box-shadow:0 0 0 2px var(--bg-card); }
 /* Icon-only capability badge: same height as the named ones, square. */
 #tab-models .mn-badges .cap-badge { padding:4px;border-radius:6px;margin:0; }
 #tab-models .mn-badges .cap-badge svg { width:12px;height:12px; }
@@ -169,6 +173,17 @@ tr:hover td { background: var(--bg-hover); }
 /* Non-LLM endpoint section colors are injected dynamically by _injectTypeStyles() */
 .endpoint-section .section-label { font-size:12px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;display:flex;align-items:center;gap:6px; }
 .endpoint-section .section-label .dot { width:8px;height:8px;border-radius:50%;display:inline-block; }
+/* Per-endpoint enable switch: keeps the endpoint's configuration and stops
+   routing to it, so the label sits on the section's own header line. */
+.endpoint-section .endpoint-enabled { margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500;text-transform:none;letter-spacing:0;cursor:pointer; }
+.endpoint-section .endpoint-enabled input { margin:0; }
+/* What an endpoint is actually doing, when that is not "routing": the switch
+   beside it is the operator's intent, so the state needs its own line. */
+.endpoint-status { display:flex;align-items:flex-start;gap:6px;margin:-4px 0 10px;font-size:12px;line-height:1.4; }
+.endpoint-status[hidden] { display:none; }
+.endpoint-status.is-error { color:var(--orange); }
+.endpoint-status.is-off { color:var(--text-dim); }
+.endpoint-status-icon { flex-shrink:0; }
 .dot-llm { background:var(--purple); }
 .dot-embedding { background:var(--green); }
 .dot-rerank { background:var(--orange); }

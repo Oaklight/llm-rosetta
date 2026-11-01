@@ -288,6 +288,29 @@ def _with_live_endpoint_markers(
         masked["_auto_disabled_endpoints"] = markers
 
 
+def _normalise_endpoint_flags(masked: dict[str, Any]) -> None:
+    """Spell every per-endpoint flag the way the panel reads it.
+
+    The parser accepts the pre-rename spelling (``embedding_enabled``) with a
+    deprecation warning; the panel's state helpers read the canonical key
+    only, so a config written before the rename would otherwise show an
+    endpoint as enabled while the gateway has already stopped routing to it.
+    Normalising here keeps that one rule in the browser.
+    """
+    from ....config.typed import legacy_config_key
+    from ....model_types import all_model_types
+
+    for desc in all_model_types():
+        if desc.is_llm:
+            continue
+        canonical = f"{desc.name}_enabled"
+        if canonical in masked:
+            continue
+        legacy = legacy_config_key(canonical, desc.name)
+        if legacy is not None and legacy in masked:
+            masked[canonical] = masked[legacy]
+
+
 def _mask_provider_entry(name: str, cfg: Any) -> dict[str, Any]:
     """Mask one provider's credentials and keep its diagnostics.
 
@@ -321,6 +344,7 @@ def _mask_provider_entry(name: str, cfg: Any) -> dict[str, Any]:
     # Ensure explicit type — fall back to provider name for legacy configs
     if "type" not in masked:
         masked["type"] = name
+    _normalise_endpoint_flags(masked)
     return masked
 
 

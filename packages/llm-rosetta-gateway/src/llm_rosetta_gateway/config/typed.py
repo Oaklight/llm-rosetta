@@ -47,24 +47,29 @@ def legacy_config_key(key: str, type_name: str) -> str | None:
 def _declared(cfg: dict[str, Any], key: str, type_name: str) -> Any:
     """Read *key*, falling back to its pre-rename spelling.
 
+    ``False`` is a value the endpoint flag relies on, so for an ``*_enabled``
+    key presence decides, not truthiness.  Every other key keeps the "an empty
+    value means the operator said nothing" rule: an empty canonical key still
+    falls through to the legacy spelling, so a stale file that carries both
+    does not lose the format it holds.
+
     The fallback logs once per read so an operator sees which key to change;
     the migration normally rewrites the file before this runs.
     """
-    value = cfg.get(key)
-    if value:
-        return value
+    if key in cfg and (cfg[key] or key.endswith("_enabled")):
+        return cfg[key]
     legacy = legacy_config_key(key, type_name)
-    if legacy is None:
-        return value
-    value = cfg.get(legacy)
-    if value:
-        logger.warning(
-            "config: %r is deprecated for the %s endpoint; use %r",
-            legacy,
-            type_name,
-            key,
-        )
-    return value
+    if legacy is None or legacy not in cfg:
+        if key in cfg:
+            return cfg[key]
+        return None
+    logger.warning(
+        "config: %r is deprecated for the %s endpoint; use %r",
+        legacy,
+        type_name,
+        key,
+    )
+    return cfg[legacy]
 
 
 @dataclass(frozen=True)
@@ -75,6 +80,7 @@ class _TypedKeys:
     format_key: str
     path_key: str
     shim_key: str
+    enabled_key: str
     default_path: str
     default_format: str
 
@@ -89,6 +95,7 @@ class _TypedKeys:
             format_key=format_key or descriptor.config_format_key or f"{name}_format",
             path_key=descriptor.config_path_key or f"{name}_path",
             shim_key=descriptor.config_shim_key or f"{name}_shim",
+            enabled_key=f"{name}_enabled",
             default_path=descriptor.default_path or "",
             default_format=descriptor.default_format or "",
         )
@@ -234,9 +241,28 @@ def parse_typed_provider(
        per-provider ``proxy`` > the server proxy;
     5. auth: Google's header for a ``google_generate`` upstream, OpenAI
        Bearer otherwise.
+
+    An entry declaring ``<type>_enabled: false`` does not participate, even
+    when it declares a format or shim: the operator keeps the endpoint's
+    configuration and stops routing to it, and the provider's other endpoints
+    are untouched.
     """
     if not isinstance(cfg, dict) or cfg.get("enabled") is False:
         return None
+    endpoint_flag = _declared(cfg, keys.enabled_key, keys.type_name)
+    if endpoint_flag is False:
+        return None
+    if endpoint_flag not in (None, "") and not isinstance(endpoint_flag, bool):
+        # A quoted "false" is a string, not a switch: the endpoint stays on and
+        # the operator is told, rather than silently serving what they believe
+        # is off.
+        logger.warning(
+            "config: %r for the %s endpoint must be true or false, got %r; "
+            "the endpoint stays enabled",
+            keys.enabled_key,
+            keys.type_name,
+            endpoint_flag,
+        )
     shim = resolve_endpoint_shim(cfg, type_name=keys.type_name, shim_key=keys.shim_key)
     explicit_format = _declared(cfg, keys.format_key, keys.type_name) or ""
     if require_declared_format and not explicit_format and shim is None:

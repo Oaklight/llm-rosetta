@@ -13,7 +13,7 @@ import { safeLinkUrl, parseRecord } from '../core/credential.js';
 import { initLogoPicker, setLogoPickerValue, getLogoPickerValue } from '../components/logo-picker.js';
 import { setTypeTree, getSelectedValue, selectValue, onTypeSelect, createTypePicker } from '../components/type-picker.js';
 import { buildTypeModel, buildEndpointTypeModel, endpointChoiceConfig, shimBrand } from '../core/shim-tree.js';
-import { degradedEndpoints, categoryKey } from '../core/provider-endpoints.js';
+import { degradedEndpoints, categoryKey, endpointState, degradedMarker, providerStatus, providerOrder } from '../core/provider-endpoints.js';
 import { routingRows, blockRow } from '../core/quota-lines.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -497,7 +497,10 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
   setLogoPickerValue((provCfg && provCfg.logo) || '');
   if (window._detectedHostIp) document.getElementById('provProxy').placeholder = t('placeholder.proxyHost', {host: window._detectedHostIp});
   // Generate capability checkboxes from model_types metadata
-  const provCaps = provCfg ? _getProviderCaps(provCfg, name) : ['llm'];
+  // A new provider starts with nothing selected: which capabilities it serves
+  // is the first decision, and pre-ticking one made the other three look like
+  // opt-ins rather than peers.
+  const provCaps = provCfg ? _getProviderCaps(provCfg, name) : [];
   _buildProvCapCheckboxes();
   for (const desc of S.configData?.model_types || []) {
     const chk = document.getElementById(`provCap${_capitalize(desc.name)}`);
@@ -518,8 +521,12 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
     picker.setTree(tree.roots, preferred);
     // The picker keeps a value the tree does not offer (a dialect this build
     // does not list), so membership is asked explicitly: a shim that no
-    // longer loads still falls back to the format it served.
-    if (preferred && !picker.has(preferred)) picker.setTree(tree.roots, formatName);
+    // longer loads still falls back to the format it served.  With no format
+    // to fall back to — the entry named only an unregistered shim — the shim
+    // stays, so reopening the form does not rewrite it to the type default.
+    if (preferred && !picker.has(preferred) && formatName) {
+      picker.setTree(tree.roots, formatName);
+    }
     const pathEl = document.getElementById(`provPath_${desc.name}`);
     if (pathEl) {
       const shimDef = shimMap[shimName] || {};
@@ -531,6 +538,24 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
         ? (provCfg[desc.config_path_key] || pathEl.dataset.defaultPath)
         : '';
     }
+    // Enabled unless the entry says otherwise; the endpoint keeps its
+    // configuration either way, so the operator can turn it back on.
+    const enabledEl = document.getElementById(`provTypeEnabled_${desc.name}`);
+    if (enabledEl) {
+      enabledEl.checked = !(provCfg && provCfg[`${desc.name}_enabled`] === false);
+    }
+    _renderEndpointStatus(desc, provCfg);
+  }
+  _renderLlmStatus(provCfg);
+  // The LLM endpoint is the provider itself: its switch is `enabled`, the same
+  // flag the card's toggle writes.  An automatically disabled provider opens
+  // checked — the failure is on the status line, and saving with the box still
+  // checked restores it once the shim is fixed.
+  const llmEnabledEl = document.getElementById('provLlmEnabled');
+  if (llmEnabledEl) {
+    const auto = provCfg && provCfg._auto_disabled &&
+      typeof provCfg._auto_disabled === 'object';
+    llmEnabledEl.checked = auto ? true : !(provCfg && provCfg.enabled === false);
   }
   toggleProvCapSection();
   // Reveal the key field for a free provider that already carries a key.
@@ -601,7 +626,13 @@ function _buildProvEndpointSections() {
     // different levels.  The path is a peer field: with a 58% basis on the
     // picker it was squeezed to about 140px.
     section.innerHTML = `
-      <div class="section-label"><span class="dot" style="background:${dotColor}"></span> <span>${esc(endpointLabel)}</span></div>
+      <div class="section-label"><span class="dot" style="background:${dotColor}"></span> <span>${esc(endpointLabel)}</span>
+        <label class="endpoint-enabled" title="${esc(t('hint.typeEnabled'))}">
+          <input type="checkbox" id="provTypeEnabled_${desc.name}">
+          <span>${esc(t('label.enabled'))}</span>
+        </label>
+      </div>
+      <div class="endpoint-status" id="provTypeStatus_${desc.name}" role="status" hidden></div>
       <div class="form-row">
         <div class="form-group" style="flex:1 1 0;min-width:0">
           <label>${esc(t('label.endpointSource'))}</label>
@@ -692,6 +723,96 @@ function _applyEndpointChoice(desc, value) {
 function _descPathFor(desc, format) {
   const paths = desc?.default_paths || {};
   return paths[format] || desc?.default_path || '';
+}
+
+/** A degraded marker's user-facing words.
+ *
+ *  The marker's `reason` is the server's own sentence, in English; the visible
+ *  text shows the translated category instead, and :func:`_degradedDetail`
+ *  appends the reason where there is room (a hover).
+ */
+function _degradedWhy(marker, fallbackKey = 'provider.endpointDegraded') {
+  if (!marker) return t(fallbackKey);
+  const key = categoryKey(marker.category);
+  return key ? t(key) : t(fallbackKey);
+}
+
+/** The words to fall back on when a marker carries no known category.
+ *
+ *  A whole-provider failure (`_auto_disabled`) reads differently from one
+ *  endpoint being skipped, so the tooltip says which happened.
+ */
+function _degradedFallback(cfg) {
+  const whole = cfg && typeof cfg === 'object' ? cfg._auto_disabled : null;
+  return whole && typeof whole === 'object' && !Array.isArray(whole)
+    ? 'provider.autoDisabled'
+    : 'provider.endpointDegraded';
+}
+
+/** A marker's hover text: the translated category, then the server's own
+ *  sentence.
+ *
+ *  The category is what the panel can translate; the reason is the only
+ *  place the actual fault — which shim, which field — is named, so a hover
+ *  carries both rather than hiding the detail behind the gateway log.
+ */
+function _degradedDetail(marker, fallbackKey = 'provider.endpointDegraded') {
+  const why = _degradedWhy(marker, fallbackKey);
+  const reason = marker && typeof marker.reason === 'string' ? marker.reason.trim() : '';
+  return reason && reason !== why ? `${why} — ${reason}` : why;
+}
+
+/** Say what an endpoint is doing when it is not routing.
+ *
+ *  The switch beside it is the operator's intent, not the endpoint's state: an
+ *  endpoint that failed to parse stays "enabled", because unchecking it here
+ *  would turn the automatic failure into a manual disable on the next save —
+ *  fixing the shim afterwards would leave it off.  The failure is reported on
+ *  its own line, with the reason, so the editor never reads as if all is well.
+ */
+function _renderEndpointStatus(desc, provCfg) {
+  const el = document.getElementById(`provTypeStatus_${desc.name}`);
+  if (!el) return;
+  const state = endpointState(provCfg, desc.name);
+  if (state === 'degraded') {
+    const marker = degradedMarker(provCfg, desc.name);
+    const reason = _degradedWhy(marker, _degradedFallback(provCfg));
+    el.hidden = false;
+    el.className = 'endpoint-status is-error';
+    el.title = _degradedDetail(marker, _degradedFallback(provCfg));
+    el.innerHTML = `<span class="endpoint-status-icon" aria-hidden="true">&#9888;</span><span>${esc(t('provider.endpointAutoDisabled', { reason }))}</span>`;
+    return;
+  }
+  if (state === 'disabled') {
+    el.hidden = false;
+    el.className = 'endpoint-status is-off';
+    el.title = '';
+    el.textContent = t('provider.endpointOff');
+    return;
+  }
+  el.hidden = true;
+  el.className = 'endpoint-status';
+  el.title = '';
+  el.textContent = '';
+}
+
+function _renderLlmStatus(provCfg) {
+  const el = document.getElementById('provLlmStatus');
+  if (!el) return;
+  const marker = provCfg && typeof provCfg._auto_disabled === 'object' && provCfg._auto_disabled
+    ? provCfg._auto_disabled : null;
+  if (!marker) {
+    el.hidden = true;
+    el.className = 'endpoint-status';
+    el.title = '';
+    el.textContent = '';
+    return;
+  }
+  const reason = _degradedWhy(marker, 'provider.autoDisabled');
+  el.hidden = false;
+  el.className = 'endpoint-status is-error';
+  el.title = _degradedDetail(marker, 'provider.autoDisabled');
+  el.innerHTML = `<span class="endpoint-status-icon" aria-hidden="true">&#9888;</span><span>${esc(t('provider.endpointAutoDisabled', { reason }))}</span>`;
 }
 
 /**
@@ -884,6 +1005,31 @@ function switchProviderFilter(el, filter) {
   renderProviders();
 }
 
+/** The providers page's status facet, with counts over the current slice. */
+function _buildProviderStatusSeg(counts) {
+  const seg = document.getElementById('providerStatusSeg');
+  if (!seg) return;
+  const options = [
+    ['all', 'providerFilter.all'],
+    ['problem', 'providerFilter.problem'],
+    ['off', 'providerFilter.off'],
+  ];
+  seg.innerHTML = options.map(([value, key]) => {
+    const active = (S._providerStatus || 'all') === value;
+    return `<div class="${active ? 'active' : ''}" role="radio" data-status="${value}"`
+      + ` aria-checked="${active}" tabindex="${active ? '0' : '-1'}"`
+      + ` onclick="setProviderStatus('${value}')"`
+      + ` onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();setProviderStatus('${value}')}">`
+      + `<span data-i18n="${key}">${esc(t(key))}</span><span class="seg-count">${counts[value] ?? 0}</span></div>`;
+  }).join('');
+}
+
+function setProviderStatus(value) {
+  S._providerStatus = value;
+  renderProviders();
+}
+window.setProviderStatus = setProviderStatus;
+
 // Below this width a row layout has no room left, so list view falls back to
 // cards. The preference is still remembered — only the class is dropped.
 const _LIST_VIEW_MIN_WIDTH = 700;
@@ -987,16 +1133,30 @@ function _getProviderCaps(cfg, provName) {
   return caps;
 }
 
-function _capBadgesHtml(caps, {compact = false} = {}) {
+function _capBadgesHtml(caps, {compact = false, cfg = null} = {}) {
   const typeMap = {};
   for (const d of S.configData?.model_types || []) typeMap[d.name] = d.badge_class;
   return caps.map(c => {
     const cls = typeMap[c] || `cap-badge-${c}`;
     const icon = _CAP_ICONS[c] || '';
     const label = capLabel(c);
+    // A capability that no longer routes says so on the badge itself: greyed
+    // out, with an `!` overlay naming the reason.  The card's warning row
+    // spells the reason out; the badge is what makes the *type* readable at a
+    // glance.
+    const state = endpointState(cfg, c);
+    const off = state === 'ok' ? '' : ' is-off';
+    const alert = state === 'degraded'
+      ? '<span class="cap-badge-alert" aria-hidden="true">!</span>'
+      : '';
+    const why = state === 'degraded'
+      ? _degradedDetail(degradedMarker(cfg, c), _degradedFallback(cfg))
+      : state === 'disabled' ? t('provider.typeDisabled') : '';
+    const title = why || (compact && icon ? label : '');
+    const titleAttr = title ? ` title="${esc(title)}"` : '';
     return compact && icon
-      ? `<span class="cap-badge ${cls}" title="${esc(label)}">${icon}</span>`
-      : `<span class="cap-badge ${cls}">${icon}${esc(label)}</span>`;
+      ? `<span class="cap-badge ${cls}${off}"${titleAttr}>${icon}${alert}</span>`
+      : `<span class="cap-badge ${cls}${off}"${titleAttr}>${icon}${esc(label)}${alert}</span>`;
   }).join('');
 }
 
@@ -1022,6 +1182,7 @@ function goToProviderFromModel(provName) {
   const provTab = document.querySelector('[data-tab="providers"]');
   if (provTab) { provTab.click(); }
   S._providerFilter = 'all';
+  S._providerStatus = 'all';
   const allSeg = document.querySelector('#providerSeg > div:first-child');
   if (allSeg) _activateSegChild(allSeg);
   renderProviders();
@@ -1076,6 +1237,29 @@ function renderProviders() {
     entries = entries.filter(([name, cfg]) => _getProviderCaps(cfg, name).includes(S._providerFilter));
   }
 
+  // Status facet: counts answer "how many of the rows I am looking at", so
+  // they are taken over the slice the other filters left (the same rule the
+  // models page follows).
+  const statusCounts = { all: entries.length, problem: 0, off: 0, ok: 0 };
+  for (const [name, cfg] of entries) {
+    statusCounts[providerStatus(cfg, _getProviderCaps(cfg, name))] += 1;
+  }
+  _buildProviderStatusSeg(statusCounts);
+  if (S._providerStatus && S._providerStatus !== 'all') {
+    entries = entries.filter(([name, cfg]) =>
+      providerStatus(cfg, _getProviderCaps(cfg, name)) === S._providerStatus);
+  }
+
+  // Problems first, switched-off last, otherwise the configured order.  A
+  // stable sort keeps that order inside each group.
+  entries = entries
+    .map((entry, index) => ({ entry, index }))
+    .sort((a, b) =>
+      providerOrder(a.entry[1], _getProviderCaps(a.entry[1], a.entry[0])) -
+      providerOrder(b.entry[1], _getProviderCaps(b.entry[1], b.entry[0])) ||
+      a.index - b.index)
+    .map(({ entry }) => entry);
+
   // Update count
   const countEl = document.getElementById('providerCount');
   if (totalCount > 6) {
@@ -1101,26 +1285,37 @@ function renderProviders() {
     const enabled = cfg.enabled !== false;
     const autoDisabled = !enabled && cfg._auto_disabled &&
       typeof cfg._auto_disabled === 'object';
-    const autoReason = autoDisabled && typeof cfg._auto_disabled.reason === 'string'
-      ? cfg._auto_disabled.reason : '';
-    const autoShim = autoDisabled && typeof cfg._auto_disabled.shim === 'string'
-      ? cfg._auto_disabled.shim : '';
-    const autoWarningTitle = autoReason || autoShim || t('provider.autoDisabled');
+    // The visible row keeps the panel's own vocabulary — the server's English
+    // sentence is too long for the card — while the hover carries both, so the
+    // actual fault (which shim, which field) is one hover away rather than only
+    // in the gateway log.
+    const autoWarningTitle = autoDisabled
+      ? _degradedWhy(degradedMarker(cfg, 'llm'), 'provider.autoDisabled')
+      : t('provider.autoDisabled');
+    const autoWarningHover = autoDisabled
+      ? _degradedDetail(degradedMarker(cfg, 'llm'), 'provider.autoDisabled')
+      : autoWarningTitle;
     // A provider that serves several model types can lose one endpoint without
     // going away: the card names each degraded endpoint and why (#1106).
     const degraded = degradedEndpoints(cfg);
-    const degradedHtml = degraded.length === 0 ? '' : `
+    // A provider whose own shim failed is disabled whole, and the marker is
+    // the only record of why: the card names it in the same row the per-type
+    // failures use, so "why is this off" is answered the same way for both.
+    const wholeWarning = autoDisabled
+      ? `<span class="pc-endpoint-warning" title="${esc(autoWarningHover)}"><span class="pc-endpoint-warning-icon" aria-hidden="true">&#9888;</span><span class="pc-endpoint-type">${esc(t('label.llm'))}</span><span class="pc-endpoint-reason">${esc(autoWarningTitle)}</span></span>`
+      : '';
+    const degradedHtml = (degraded.length === 0 && !wholeWarning) ? '' : `
       <div class="pc-endpoint-warnings" role="status">
+        ${wholeWarning}
         ${degraded.map(e => {
-          const key = categoryKey(e.category);
-          const why = key ? t(key) : (e.reason || t('provider.endpointDegraded'));
-          return `<span class="pc-endpoint-warning" title="${esc(e.reason || why)}"><span class="pc-endpoint-warning-icon" aria-hidden="true">&#9888;</span><span class="pc-endpoint-type">${esc(t('label.' + e.type))}</span><span class="pc-endpoint-reason">${esc(why)}</span></span>`;
+          const why = _degradedWhy(e);
+          return `<span class="pc-endpoint-warning" title="${esc(_degradedDetail(e))}"><span class="pc-endpoint-warning-icon" aria-hidden="true">&#9888;</span><span class="pc-endpoint-type">${esc(t('label.' + e.type))}</span><span class="pc-endpoint-reason">${esc(why)}</span></span>`;
         }).join('')}
       </div>`;
     const typeName = providerTypeName(cfg, name);
     const logo = cfg.logo || shimLogo[name] || shimLogo[typeName] || '';
     const logoHtml = autoDisabled
-      ? `<span class="pc-logo pc-logo-warning" role="img" aria-label="${esc(t('provider.autoDisabled'))}" title="${esc(autoWarningTitle)}">&#9888;</span>`
+      ? `<span class="pc-logo pc-logo-warning" role="img" aria-label="${esc(t('provider.autoDisabled'))}" title="${esc(autoWarningHover)}">&#9888;</span>`
       : logo
         ? `<img class="pc-logo" src="${esc(logo)}" alt="">`
         : '<span class="pc-logo pc-logo-empty"></span>';
@@ -1164,11 +1359,11 @@ function renderProviders() {
         </div>`;
     return {
       name, cfg, enabled, isFree, title, nameTitle,
-      autoDisabled, autoWarningTitle, degraded, degradedHtml, logoHtml,
-      capsHtml: _capBadgesHtml(_getProviderCaps(cfg, name), { compact: true }),
+      autoDisabled, autoWarningTitle, autoWarningHover, degraded, degradedHtml, logoHtml,
+      capsHtml: _capBadgesHtml(_getProviderCaps(cfg, name), { compact: true, cfg }),
       // A card has room for the name of a capability; the table's 150px column
       // does not, so it keeps the icon alone and the name in the tooltip.
-      capsHtmlFull: _capBadgesHtml(_getProviderCaps(cfg, name), { compact: false }),
+      capsHtmlFull: _capBadgesHtml(_getProviderCaps(cfg, name), { compact: false, cfg }),
       toggleHtml, actionsHtml, modelCount, apiKeyField,
     };
   };
@@ -1184,7 +1379,7 @@ function renderProviders() {
         <div class="pc-name" title="${esc(p.nameTitle)}">${p.logoHtml}<span class="pc-name-text">${esc(p.title)}</span></div>
       </div>
       ${p.toggleHtml}
-      <div class="pc-validation-warning" role="status" aria-hidden="true" title="${p.autoDisabled ? esc(p.autoWarningTitle) : ''}">${p.autoDisabled ? esc(p.autoWarningTitle) : ''}</div>
+      <div class="pc-validation-warning" role="status" aria-hidden="true" title="${p.autoDisabled ? esc(p.autoWarningHover) : ''}">${p.autoDisabled ? esc(p.autoWarningTitle) : ''}</div>
       ${p.degradedHtml}
       <div class="pc-badges">${p.capsHtmlFull}</div>
       ${p.apiKeyField ? `<div class="pc-meta">${p.apiKeyField}</div>` : ''}
@@ -1201,7 +1396,7 @@ function renderProviders() {
     return `
     <tr class="provider-row${p.enabled ? '' : ' disabled'}${p.autoDisabled ? ' auto-disabled' : ''}${p.degraded.length ? ' endpoint-degraded' : ''}" data-provider="${esc(name)}">
       <td class="pc-col-name">
-        <div class="pc-name" title="${esc(p.nameTitle)}">${p.logoHtml}<span class="pc-name-text">${esc(p.title)}</span>${p.autoDisabled ? `<span class="pc-row-warning" title="${esc(p.autoWarningTitle)}">&#9888;</span>` : ''}</div>
+        <div class="pc-name" title="${esc(p.nameTitle)}">${p.logoHtml}<span class="pc-name-text">${esc(p.title)}</span>${p.autoDisabled ? `<span class="pc-row-warning" title="${esc(p.autoWarningHover)}">&#9888;</span>` : ''}</div>
         ${p.degradedHtml}
       </td>
       <td class="pc-col-cap"><div class="pc-badges">${p.capsHtml}</div></td>
@@ -1239,10 +1434,17 @@ async function saveProvider() {
   const apiKey = _getKeyFieldValue();
   const proxy = document.getElementById('provProxy').value.trim();
   const isLlm = document.getElementById('provCapLlm').checked;
+  // Nothing selected saves a provider that serves nothing: name it and stop.
+  const anyCap = (S.configData?.model_types || []).some(
+    d => document.getElementById(`provCap${_capitalize(d.name)}`)?.checked);
+  if (!anyCap) { showToast(t('error.noCapability'), 'error'); return; }
   if (!name || (isLlm && !provType)) { showToast(t('error.fieldsRequired'), 'error'); return; }
   const urlTemplate = document.getElementById('provUrlTemplate').value.trim();
   const streamUrlTemplate = document.getElementById('provStreamUrlTemplate').value.trim();
   const body = {base_url: baseUrl, proxy};
+  // The LLM section's switch is the provider's own `enabled` flag, so a
+  // provider that serves chat and embeddings can still be switched off whole.
+  body.enabled = document.getElementById('provLlmEnabled').checked;
   // Empty string clears the type: _build_provider_entry only copies `type`
   // when truthy, so the key is dropped from the saved entry.
   body.type = isLlm ? provType : '';
@@ -1263,15 +1465,33 @@ async function saveProvider() {
       const typeShims = (S.configData?.registered_shims || [])
         .filter(s => s.model_type === desc.name);
       const choice = endpointChoiceConfig(value, typeShims, desc.formats || []);
-      if (desc.config_shim_key) body[desc.config_shim_key] = choice.shim;
-      body[desc.config_format_key] = choice.format;
+      // A value this build does not register as a shim goes back to the key it
+      // came from.  Writing it as the bare format would turn "unknown shim" —
+      // which the panel reports and the operator can fix — into an unknown
+      // dialect, which nothing validates.
+      const storedShim = desc.config_shim_key
+        ? (S.configData?.providers?.[_editingProviderName || name]?.[desc.config_shim_key] || '')
+        : '';
+      const keepAsShim = !choice.shim && storedShim && value === storedShim;
+      if (desc.config_shim_key) {
+        body[desc.config_shim_key] = keepAsShim ? storedShim : choice.shim;
+      }
+      body[desc.config_format_key] = keepAsShim ? '' : choice.format;
       body[desc.config_path_key] =
         document.getElementById(`provPath_${desc.name}`)?.value?.trim()
         || _descPathFor(desc, choice.format);
+      // An endpoint that keeps its configuration but stops routing sends
+      // `false`; enabled sends `''`, which the save path drops so the key is
+      // only present when it says something.
+      const typeEnabled = document.getElementById(`provTypeEnabled_${desc.name}`);
+      body[`${desc.name}_enabled`] = typeEnabled && !typeEnabled.checked ? false : '';
     } else {
       if (desc.config_shim_key) body[desc.config_shim_key] = '';
       body[desc.config_format_key] = '';
       body[desc.config_path_key] = '';
+      // A capability the provider no longer declares has no endpoint to
+      // enable or disable; clear the flag with the declaration.
+      body[`${desc.name}_enabled`] = '';
     }
   }
   const provTimeoutVal = document.getElementById('provTimeout').value.trim();
