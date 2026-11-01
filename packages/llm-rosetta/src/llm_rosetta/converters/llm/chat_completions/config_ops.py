@@ -18,6 +18,7 @@ from ....types.ir.configs import (
 from ...base import BaseConfigOps
 from llm_rosetta.conversion_warnings import report_loss
 from ...base.helpers.reasoning import DEFAULT_REASONING_CAPS, apply_reasoning_config
+from ...base.helpers.retention import retention_to_ir, retention_to_wire
 
 
 class ChatCompletionsConfigOps(BaseConfigOps):
@@ -339,7 +340,7 @@ class ChatCompletionsConfigOps(BaseConfigOps):
         if "key" in ir_cache:
             result["prompt_cache_key"] = ir_cache["key"]
         if "retention" in ir_cache:
-            result["prompt_cache_retention"] = ir_cache["retention"]
+            result["prompt_cache_retention"] = retention_to_wire(ir_cache["retention"])
 
         return result
 
@@ -362,7 +363,9 @@ class ChatCompletionsConfigOps(BaseConfigOps):
         if "prompt_cache_key" in provider_cache:
             result["key"] = provider_cache["prompt_cache_key"]
         if "prompt_cache_retention" in provider_cache:
-            result["retention"] = provider_cache["prompt_cache_retention"]
+            result["retention"] = retention_to_ir(
+                provider_cache["prompt_cache_retention"]
+            )
 
         return cast(CacheConfig, result)
 

@@ -92,7 +92,7 @@ class TestOpenAIResponsesConverter:
         assert result["instructions"] == "Be helpful."
         assert result["temperature"] == 0.7
         assert result["max_output_tokens"] == 100
-        assert result["text"] == {"type": "json_object"}
+        assert result["text"] == {"format": {"type": "json_object"}}
         assert result["reasoning"] == {"effort": "medium"}
         assert result["stream"] is True
         # Responses API does NOT support stream_options (Chat-only field)
@@ -190,6 +190,39 @@ class TestOpenAIResponsesConverter:
         }
         result = self.converter.request_from_provider(provider_request)
         assert result["response_format"]["type"] == "json_object"
+
+    def test_request_from_provider_with_spec_text_format(self):
+        """The spec's ``text.format`` reaches the IR (issue #1294)."""
+        provider_request = {
+            "model": "gpt-4o",
+            "input": [],
+            "text": {
+                "format": {
+                    "type": "json_schema",
+                    "name": "answer",
+                    "schema": {"type": "object"},
+                }
+            },
+        }
+        result = self.converter.request_from_provider(provider_request)
+        assert result["response_format"]["type"] == "json_schema"
+        assert result["response_format"]["json_schema"]["name"] == "answer"
+
+    def test_text_format_round_trips(self):
+        """A spec-shaped format survives Responses → IR → Responses (#1294)."""
+        provider_request = {
+            "model": "gpt-4o",
+            "input": [],
+            "text": {"format": {"type": "json_object"}, "verbosity": "low"},
+        }
+
+        ir = self.converter.request_from_provider(provider_request)
+        restored, _ = self.converter.request_to_provider(ir)
+
+        assert restored["text"] == {
+            "format": {"type": "json_object"},
+            "verbosity": "low",
+        }
 
     def test_request_from_provider_codex_custom_tool_passes_validation(self):
         """End-to-end: a Codex ``"custom"`` apply_patch tool passes IR validation.

@@ -164,27 +164,30 @@ class TestOpenAIResponsesConfigOps:
     # ==================== Response Format ====================
 
     def test_ir_response_format_text(self):
-        """Test text response format → text field."""
+        """Test text response format → the nested text.format field."""
         result = OpenAIResponsesConfigOps.ir_response_format_to_p(
             cast(ResponseFormatConfig, {"type": "text"})
         )
-        assert result["text"] == {"type": "text"}
+        assert result["text"] == {"format": {"type": "text"}}
 
     def test_ir_response_format_json_object(self):
-        """Test json_object response format → text field."""
+        """Test json_object response format → the nested text.format field."""
         result = OpenAIResponsesConfigOps.ir_response_format_to_p(
             cast(ResponseFormatConfig, {"type": "json_object"})
         )
-        assert result["text"] == {"type": "json_object"}
+        assert result["text"] == {"format": {"type": "json_object"}}
 
     def test_ir_response_format_json_schema(self):
-        """Test json_schema response format → text field with schema."""
+        """A JSON schema is written flat, beside ``type`` (issue #1294)."""
         schema = {"name": "test", "schema": {"type": "object"}}
         result = OpenAIResponsesConfigOps.ir_response_format_to_p(
             cast(ResponseFormatConfig, {"type": "json_schema", "json_schema": schema})
         )
-        assert result["text"]["type"] == "json_schema"
-        assert result["text"]["json_schema"] == schema
+        assert result["text"]["format"] == {
+            "type": "json_schema",
+            "name": "test",
+            "schema": {"type": "object"},
+        }
 
     def test_ir_response_format_unknown(self):
         """Test unknown format type returns empty dict."""
@@ -208,6 +211,31 @@ class TestOpenAIResponsesConfigOps:
         )
         assert result["type"] == "json_schema"
         assert result["json_schema"] == schema
+
+    def test_p_response_format_to_ir_reads_the_spec_shape(self):
+        """``text.format`` is where the spec puts the format (issue #1294)."""
+        result = OpenAIResponsesConfigOps.p_response_format_to_ir(
+            {"format": {"type": "json_object"}}
+        )
+        assert result["type"] == "json_object"
+
+    def test_p_response_format_to_ir_unflattens_a_schema(self):
+        """A flat JSON schema lands in the IR's ``json_schema`` object."""
+        result = OpenAIResponsesConfigOps.p_response_format_to_ir(
+            {
+                "format": {
+                    "type": "json_schema",
+                    "name": "answer",
+                    "schema": {"type": "object"},
+                    "strict": True,
+                }
+            }
+        )
+        assert result["json_schema"] == {
+            "name": "answer",
+            "schema": {"type": "object"},
+            "strict": True,
+        }
 
     def test_p_response_format_to_ir_non_dict(self):
         """Test non-dict input returns empty dict."""
@@ -389,6 +417,20 @@ class TestOpenAIResponsesConfigOps:
         result = OpenAIResponsesConfigOps.p_reasoning_config_to_ir("not a dict")
         assert result == {}
 
+    def test_p_reasoning_config_to_ir_reads_generate_summary(self):
+        """``generate_summary`` is the deprecated spelling of ``summary``."""
+        result = OpenAIResponsesConfigOps.p_reasoning_config_to_ir(
+            {"reasoning": {"generate_summary": "concise"}}
+        )
+        assert result["summary"] == "concise"
+
+    def test_p_reasoning_config_to_ir_prefers_summary(self):
+        """The declared key wins when a body carries both."""
+        result = OpenAIResponsesConfigOps.p_reasoning_config_to_ir(
+            {"reasoning": {"summary": "auto", "generate_summary": "detailed"}}
+        )
+        assert result["summary"] == "auto"
+
     def test_reasoning_config_round_trip(self):
         """Test reasoning config round-trip."""
         original = cast(ReasoningConfig, {"effort": "high"})
@@ -417,10 +459,17 @@ class TestOpenAIResponsesConfigOps:
     def test_p_cache_config_to_ir(self):
         """Test OpenAI Responses cache params → IR CacheConfig."""
         result = OpenAIResponsesConfigOps.p_cache_config_to_ir(
-            {"prompt_cache_key": "k1", "prompt_cache_retention": "in-memory"}
+            {"prompt_cache_key": "k1", "prompt_cache_retention": "in_memory"}
         )
         assert result["key"] == "k1"
         assert result["retention"] == "in-memory"
+
+    def test_ir_cache_config_to_p_spells_retention_for_the_wire(self):
+        """The IR's ``in-memory`` goes out as the wire's ``in_memory``."""
+        result = OpenAIResponsesConfigOps.ir_cache_config_to_p(
+            cast(CacheConfig, {"retention": "in-memory"})
+        )
+        assert result["prompt_cache_retention"] == "in_memory"
 
     def test_p_cache_config_to_ir_non_dict(self):
         """Test non-dict input returns empty dict."""

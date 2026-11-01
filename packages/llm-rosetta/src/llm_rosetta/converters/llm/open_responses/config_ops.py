@@ -23,6 +23,16 @@ from ....types.ir.configs import (
 from llm_rosetta.conversion_warnings import report_loss
 from ...base import BaseConfigOps
 from ...base.helpers.reasoning import DEFAULT_REASONING_CAPS, apply_reasoning_config
+from ...base.helpers.retention import retention_to_ir, retention_to_wire
+
+#: The response formats the Responses ``text`` parameter defines.  The spec
+#: names ``text`` and ``json_schema``; ``json_object`` is accepted by the live
+#: API and is a value the IR carries, so it is written too.
+_TEXT_FORMAT_TYPES = frozenset({"text", "json_object", "json_schema"})
+
+#: The keys a ``json_schema`` format carries beside ``type``, flat on the wire
+#: and nested under ``json_schema`` in the IR.
+_SCHEMA_KEYS = ("name", "description", "schema", "strict")
 
 
 class OpenResponsesConfigOps(BaseConfigOps):
@@ -142,36 +152,42 @@ class OpenResponsesConfigOps(BaseConfigOps):
 
     @staticmethod
     def ir_response_format_to_p(ir_format: ResponseFormatConfig, **kwargs: Any) -> dict:
-        """IR ResponseFormatConfig → OpenAI Responses text format parameter.
+        """IR ResponseFormatConfig → the Responses ``text`` parameter.
 
-        Responses API uses ``text`` field instead of ``response_format``.
+        The spec keeps the format one level down — ``text`` is
+        ``{format: {...}, verbosity}`` — and spells a JSON schema flat, with
+        ``name`` / ``description`` / ``schema`` / ``strict`` beside ``type``
+        instead of nested under ``json_schema`` as the Chat dialect does.
+        Writing the Chat shape here produced a body the spec does not define
+        and the reader could not read back (#1294).
 
         Args:
             ir_format: IR response format config.
 
         Returns:
-            Dict with ``text`` field for OpenAI Responses request.
+            Dict with the ``text`` field, empty for a format the API does not
+            define.
         """
         fmt_type = ir_format.get("type", "text")
+        if fmt_type not in _TEXT_FORMAT_TYPES:
+            return {}
 
-        if fmt_type == "text":
-            return {"text": {"type": "text"}}
-        elif fmt_type == "json_object":
-            return {"text": {"type": "json_object"}}
-        elif fmt_type == "json_schema":
-            text_config: dict[str, Any] = {"type": "json_schema"}
-            json_schema = ir_format.get("json_schema")
-            if json_schema:
-                text_config["json_schema"] = json_schema
-            return {"text": text_config}
-
-        return {}
+        fmt: dict[str, Any] = {"type": fmt_type}
+        if fmt_type == "json_schema":
+            schema = ir_format.get("json_schema") or {}
+            fmt.update({key: schema[key] for key in _SCHEMA_KEYS if key in schema})
+        return {"text": {"format": fmt}}
 
     @staticmethod
     def p_response_format_to_ir(
         provider_format: Any, **kwargs: Any
     ) -> ResponseFormatConfig:
-        """OpenAI Responses text format → IR ResponseFormatConfig.
+        """The Responses ``text`` parameter → IR ResponseFormatConfig.
+
+        Reads the spec's nested ``text: {format: {...}}`` and, as a fallback,
+        the Chat-shaped ``text: {type: ...}`` this converter wrote before
+        #1294 — a body built for a Chat-compatible lane may still carry it.
+        A JSON schema is unflattened into the IR's ``json_schema`` object.
 
         Args:
             provider_format: OpenAI Responses ``text`` field dict.
@@ -182,13 +198,21 @@ class OpenResponsesConfigOps(BaseConfigOps):
         if not isinstance(provider_format, dict):
             return cast(ResponseFormatConfig, {})
 
+        nested_format = provider_format.get("format")
+        fmt = nested_format if isinstance(nested_format, dict) else provider_format
+
         result: dict[str, Any] = {}
-        fmt_type = provider_format.get("type")
+        fmt_type = fmt.get("type")
         if fmt_type:
             result["type"] = fmt_type
 
-        if fmt_type == "json_schema" and "json_schema" in provider_format:
-            result["json_schema"] = provider_format["json_schema"]
+        json_schema = fmt.get("json_schema")
+        if isinstance(json_schema, dict):
+            result["json_schema"] = json_schema
+        elif fmt_type == "json_schema":
+            schema = {key: fmt[key] for key in _SCHEMA_KEYS if key in fmt}
+            if schema:
+                result["json_schema"] = schema
 
         return cast(ResponseFormatConfig, result)
 
@@ -288,6 +312,10 @@ class OpenResponsesConfigOps(BaseConfigOps):
         if not isinstance(reasoning, dict):
             return cast(ReasoningConfig, result)
 
+        # A vendor dialect: some OpenAI-compatible lanes spell the on/off
+        # switch ``reasoning.type``.  The spec declares no such key, and the
+        # SDK's ``reasoning.mode`` is a different axis ("standard" | "pro"),
+        # so the two are never interchangeable.
         reasoning_type = reasoning.get("type")
         if reasoning_type == "enabled":
             result["mode"] = "enabled"
@@ -301,8 +329,13 @@ class OpenResponsesConfigOps(BaseConfigOps):
             else:
                 result["effort"] = effort
 
-        if "summary" in reasoning and isinstance(reasoning["summary"], str):
+        # ``summary`` is the declared spelling; ``generate_summary`` is the
+        # deprecated one the SDK still types, over the same value space, so a
+        # body carrying only that field is not a body without a summary.
+        if isinstance(reasoning.get("summary"), str):
             result["summary"] = reasoning["summary"]
+        elif isinstance(reasoning.get("generate_summary"), str):
+            result["summary"] = reasoning["generate_summary"]
 
         return cast(ReasoningConfig, result)
 
@@ -327,7 +360,7 @@ class OpenResponsesConfigOps(BaseConfigOps):
         if "key" in ir_cache:
             result["prompt_cache_key"] = ir_cache["key"]
         if "retention" in ir_cache:
-            result["prompt_cache_retention"] = ir_cache["retention"]
+            result["prompt_cache_retention"] = retention_to_wire(ir_cache["retention"])
 
         return result
 
@@ -350,7 +383,9 @@ class OpenResponsesConfigOps(BaseConfigOps):
         if "prompt_cache_key" in provider_cache:
             result["key"] = provider_cache["prompt_cache_key"]
         if "prompt_cache_retention" in provider_cache:
-            result["retention"] = provider_cache["prompt_cache_retention"]
+            result["retention"] = retention_to_ir(
+                provider_cache["prompt_cache_retention"]
+            )
 
         return cast(CacheConfig, result)
 
