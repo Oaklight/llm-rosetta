@@ -56,6 +56,7 @@ from .shims import (
     _shim_removal_advisories,
     _shim_status_payload,
     _validate_shim_sources_body,
+    post_shims_check_updates,
     post_shims_reload,
     put_shim_sources,
     reload_config,
@@ -92,6 +93,7 @@ __all__ = [
     "get_config",
     "get_loaded_shim",
     "get_loaded_shims",
+    "post_shims_check_updates",
     "post_shims_reload",
     "post_shim_enabled",
     "put_loaded_shim",
@@ -172,5 +174,8 @@ def register_config_routes(app: Any) -> None:
     )
     app.route("/admin/api/config/shims/reload", methods=["POST"])(
         _guard("providers", post_shims_reload)
+    )
+    app.route("/admin/api/config/shims/check-updates", methods=["POST"])(
+        _guard("providers", post_shims_check_updates)
     )
     app.route("/admin/api/config/reload", methods=["POST"])(reload_config)

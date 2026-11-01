@@ -570,7 +570,9 @@ document.querySelectorAll('.modal-overlay, .settings-popup').forEach(overlay => 
 
 // ===================== Smart hint popup positioning =====================
 document.addEventListener('mouseenter', (e) => {
-  const icon = e.target.closest('.hint-icon');
+  // The capture listener also fires when the pointer enters the document
+  // itself, and that target has no closest().
+  const icon = e.target instanceof Element ? e.target.closest('.hint-icon') : null;
   if (!icon) return;
   const popup = icon.querySelector('.hint-popup');
   if (!popup) return;
@@ -596,7 +598,8 @@ document.addEventListener('mouseenter', (e) => {
 }, true);
 
 document.addEventListener('mouseleave', (e) => {
-  const icon = e.target.closest('.hint-icon');
+  // Same guard as the enter path: leaving the document makes it the target.
+  const icon = e.target instanceof Element ? e.target.closest('.hint-icon') : null;
   if (!icon) return;
   const popup = icon.querySelector('.hint-popup');
   if (!popup) return;
