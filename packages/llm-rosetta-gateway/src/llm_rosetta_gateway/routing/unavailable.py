@@ -112,6 +112,11 @@ def classify(config: GatewayConfig, ctx: SelectionContext) -> Unavailable:
     """
     from ..maintenance.startup import ProviderInitState
 
+    # The whole route, not a candidate list: ``len(unready) == len(route)`` and
+    # ``names <= quota_excluded`` are whole-route questions — "every provider
+    # is blocked", "every provider is spent" — and both were asked that way by
+    # ``resolve`` before this module existed.  A filtered list here would make
+    # them answer about the filtered set instead.
     route = ctx.candidates
     unready = [
         config.providers[p.name] for p in route if not config.providers[p.name].ready
