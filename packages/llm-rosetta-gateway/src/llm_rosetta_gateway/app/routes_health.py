@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import time
 from typing import TYPE_CHECKING, Any
 
 
@@ -32,6 +34,43 @@ def version_info() -> dict[str, str]:
     return {"gateway": gateway_version, "core": core_version}
 
 
+def _tz_name() -> str:
+    """The gateway's zone as an IANA name, or its abbreviation.
+
+    The panel shows the name instead of a bare GMT offset when asked to, so
+    the operator can tell ``Asia/Shanghai`` from ``Asia/Tokyo``.  The name is
+    read from ``TZ`` or the ``/etc/localtime`` link; a process without either
+    reports the platform abbreviation (``CST``).
+    """
+    tz = os.environ.get("TZ", "").lstrip(":")
+    if tz:
+        return tz
+    try:
+        path = os.path.realpath("/etc/localtime")
+    except OSError:
+        path = ""
+    marker = "/zoneinfo/"
+    if marker in path:
+        return path.split(marker, 1)[1]
+    return time.tzname[0]
+
+
+def _clock_info() -> dict[str, Any]:
+    """The gateway's own clock, for the admin panel's footer.
+
+    ``server_time`` is epoch milliseconds, ``server_tz_offset_minutes`` the
+    process's UTC offset and ``server_tz_name`` its zone, so the panel can
+    render the gateway's wall time without guessing the browser's zone.  All
+    three are public facts about the process, not about any provider.
+    """
+    now = time.time()
+    return {
+        "server_time": int(now * 1000),
+        "server_tz_offset_minutes": int(time.localtime(now).tm_gmtoff // 60),
+        "server_tz_name": _tz_name(),
+    }
+
+
 async def handle_health(request: Any) -> Response:
     """Return aggregate health status without exposing provider details.
 
@@ -44,7 +83,9 @@ async def handle_health(request: Any) -> Response:
     """
     metrics = getattr(request.app, "metrics", None)
     if metrics is None:
-        return JSONResponse({"status": "ok", "versions": version_info()})
+        return JSONResponse(
+            {"status": "ok", "versions": version_info(), **_clock_info()}
+        )
 
     snap = metrics.snapshot(series_seconds=3600)
     errors_last_hour = sum(
@@ -63,6 +104,7 @@ async def handle_health(request: Any) -> Response:
         "errors_last_hour": errors_last_hour,
         "detail_url": "/admin/api/metrics",
         "versions": version_info(),
+        **_clock_info(),
     }
     return JSONResponse(payload, status_code=200)
 

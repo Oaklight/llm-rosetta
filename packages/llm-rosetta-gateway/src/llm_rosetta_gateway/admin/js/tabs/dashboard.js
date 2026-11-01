@@ -862,9 +862,9 @@ function closeDumpPage() {
 function exitDumpPage() {
   closeDumpPage();
   if (location.hash.startsWith('#dump/')) {
-    history.pushState({tab: 'logs'}, '', '#logs');
+    history.pushState({tab: 'observability'}, '', '#observability');
     window.switchLogView?.('dumps');
-    window.goToTab?.('logs');
+    window.goToTab?.('observability');
   }
 }
 
@@ -1401,7 +1401,7 @@ function jumpToRequestLog(requestLogId) {
     // The log panel may be showing dumps or ops; the jump is to the request
     // list, so put that view up first.
     if (S._logView !== 'requests') window.switchLogView?.('requests');
-    goToTab('logs', function() {
+    goToTab('observability', function() {
       ['filterModel','filterProvider','filterStatus','filterApiKey'].forEach(function(id) {
         const el = document.getElementById(id);
         if (el) el.value = '';

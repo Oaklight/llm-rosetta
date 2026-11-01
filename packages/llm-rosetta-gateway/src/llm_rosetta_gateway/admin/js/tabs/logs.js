@@ -409,7 +409,7 @@ function updateKeyFilterOptions() {
 function jumpToErrorDump(requestLogId) {
   // The dumps live in the observability panel now, as one of its views.
   if (S._logView !== 'dumps') window.switchLogView?.('dumps');
-  goToTab('logs', function() {
+  goToTab('observability', function() {
     function tryFind(attempts) {
       const entries = S._dumpAllEntries || [];
       const match = entries.find(e => e.request_log_id === requestLogId);
