@@ -356,7 +356,9 @@ async def _non_streaming_from_stream(
         selection: This request's routing state.  ``None`` disables failover,
             which is what a bare handler call (a test) gets.
         config: The live config; with *selection*, enables failover.
-        _failover_from: The provider a failover is already coming from.
+        _failover_from: The provider a failover is already coming from.  Set
+            on the second attempt, so a refusal there cannot start a third:
+            the failover budget is one per request.
     """
     if route.source_provider != "chat_completions":
         return (
