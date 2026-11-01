@@ -4,13 +4,15 @@ title: 网关快速开始
 
 # 网关快速开始
 
-5 分钟内启动一个格式转换 HTTP 代理。
+5 分钟内启动一个格式转换 HTTP 代理。网关是第四层控制粒度：它负责调用提供方、路由、密钥和管理面板，并把上游配置留在你自己的部署里。
 
 ## 1. 安装
 
 ```bash
-pip install "llm-rosetta[gateway]"
+pip install llm-rosetta-gateway
 ```
+
+`pip install "llm-rosetta[gateway]"` 也可以作为过渡别名，同时安装两个发行包。
 
 或使用 Docker（Alpine 二进制版，~21 MB）：
 
@@ -51,7 +53,8 @@ docker pull oaklight/llm-rosetta-gateway:latest
 ## 3. 启动网关
 
 ```bash
-llm-rosetta-gateway
+llm-rosetta-gateway init     # 生成模板配置
+llm-rosetta-gateway          # 在 :8765 启动
 ```
 
 网关会按以下顺序自动搜索配置文件（首个匹配生效）：
@@ -86,5 +89,6 @@ curl http://localhost:8765/v1/chat/completions \
 
 - [配置](../gateway/configuration.md) — 完整配置参考
 - [CLI 参考](../gateway/cli.md) — 所有 CLI 选项和子命令
-- [CLI 工具集成](../gateway/cli-integrations.md) — 配合 Claude Code、Codex、Gemini CLI 使用
+- [CLI 工具集成](../gateway/cli-integrations.md) — 配合 Claude Code、Codex、OpenCode 和 Kilo Code 使用
+- [四种控制粒度](../index.md#four-levels) — 网关在分层中的位置
 - [管理面板](../gateway/admin-panel.md) — Web UI 配置与监控

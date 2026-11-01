@@ -114,6 +114,7 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### 文档
 - **README 已按 0.14 的现状重写，并提供双语版本**：根 README 和两个包的 README（各含中英文两版）现在以四种控制层级——函数、原始转换器、管线、网关——和「掌控模型来源」开头；使用规范转换器名（`ChatCompletionsConverter`、`MessagesConverter` 等）；列出五种 chat 格式以及 embedding、rerank、decision 格式；并写明真实的 Python 版本下限（3.10，3.10 上仅额外需要 `typing_extensions`）。网关的安装方式（pip、Docker、单文件二进制）、配置示例、管理面板和 CLI 集成首次写进 README。
+- **文档站的入口页与 README 结构对齐**：首页、安装、两个快速开始和核心概念页现在都以四种控制层级、IR 作为 payload 和零依赖开头。
 
 ## v0.13.0 — 2026-09-08
 

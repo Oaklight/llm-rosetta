@@ -5,31 +5,13 @@ title: 安装
 # 安装
 
 !!! info "环境要求"
-    需要 Python **≥ 3.10**。核心库依赖极少（`typing_extensions>=4.0.0`）。
+    需要 Python **≥ 3.10**。Python 3.11+ 上没有第三方运行时依赖；Python 3.10 上也只需要 `typing_extensions`，即标准库 `typing` 的向后移植包（backport）。
 
 ## 库
 
 ```bash
 pip install llm-rosetta
 ```
-
-### Provider SDK（可选）
-
-如果要直接调用 API，装上对应 Provider 的 SDK：
-
-```bash
-# 单独安装
-pip install openai
-pip install anthropic
-pip install google-genai
-
-# 一次性安装全部
-pip install "llm-rosetta[openai,anthropic,google]"
-```
-
-!!! note
-
-    Provider SDK 仅在直接调用 API 时需要。LLM-Rosetta 的格式转换功能使用纯字典操作，不依赖 SDK。
 
 ## 网关
 
@@ -40,7 +22,7 @@ pip install llm-rosetta-gateway
 ```
 
 网关作为独立发行版发布，并依赖一个兼容的 `llm-rosetta` 核心版本。
-`pip install "llm-rosetta[gateway]"` 仍可作为一次性元别名使用，会同时安装两者。
+`pip install "llm-rosetta[gateway]"` 仍可作为过渡别名使用，会同时安装两者。
 
 网关**零外部运行时依赖** — 使用内置的纯标准库 HTTP 服务器和客户端模块。
 
@@ -95,5 +77,5 @@ docker run --user $(id -u):$(id -g) -p 8765:8765 -v /path/to/config:/config oakl
 ```bash
 git clone https://github.com/Oaklight/llm-rosetta.git
 cd llm-rosetta
-pip install -e "packages/llm-rosetta[all]" -e packages/llm-rosetta-gateway
+pip install -e "packages/llm-rosetta[openai,anthropic,google]" -e packages/llm-rosetta-gateway
 ```
