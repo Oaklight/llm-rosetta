@@ -88,14 +88,21 @@ keyless 的 `/zen/v1` 免费池是一个独立 shim：
   `x-opencode-project` 标记；
 - `x-opencode-session` 的值可以解码回最近的时间戳（`session_id_format: opencode`），
   外加每个请求独立的 `x-opencode-request`；
-- 恰好一个名为 `read` 的工具声明——仅在客户端没有声明时注入，注入工具产生的调用
-  会被移除而不是转发给客户端；
+- 恰好一个名为 `read` 的工具声明——仅在客户端没有声明时注入。该声明明确写着自己只是
+  传输占位符、模型不应调用，客户端自己的工具才是可用的；对它的调用会被移除而不是
+  转发，若一轮里所有调用都被移除，`finish_reason` 会改为 `stop`，客户端不会一直等待
+  一个永远不会到达的结果；
 - `stream: true`（`stream_required`），非流式回复由网关重新拼装。
 
-这是反滥用网关，而不是公共池：它可能随时变化或关闭，额度按源地址和会话计，
-prompt 也可能被上游记录。该 provider 会出现在 **Free Resource** 分组下，并带上
-面板的第三方声明。测量过程见
-[issue #884](https://github.com/Oaklight/llm-rosetta/issues/884)。
+它的模型列表会过滤为 `-free` 子集：lane 的 `/models` 返回整个 Zen 目录，但它只服务
+id 以 `-free` 结尾的模型，因此面板只提供这些。
+
+这是反滥用网关，而不是公共池：它可能随时变化或关闭，额度按出网地址块计（IPv6 一个
+`/64`，IPv4 一个 `/32`），每天重置，prompt 也可能被上游记录。该 provider 会出现在
+**Free Resource** 分组下，并带上面板的第三方声明。测量过程见
+[issue #884](https://github.com/Oaklight/llm-rosetta/issues/884)；
+[opencode-unlimited-proxy](https://github.com/ebouther/opencode-unlimited-proxy)
+另有一份关于各道门与额度维度的独立记录。
 
 ```jsonc
 {
