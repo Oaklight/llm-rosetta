@@ -63,7 +63,7 @@ packages/llm-rosetta/src/llm_rosetta/shims/providers/
 
 每个叶子目录包含：
 
-- **`provider.yaml`**（必需）—— 声明 `name`、`model_type`、`format`、连接设置（`connection.base_url`、`connection.api_key_env`、`connection.auth_header`、`connection.keyless`、`connection.models_path`、`connection.default_path`、`connection.token_command`），以及可选的 `logo`、`display_name`、`free_source`。`base` 是 `format` 的弃用别名；loader 会校验 `(model_type, format)` 对。使用 `format` 时必须同时声明 `model_type` —— 只有声明 `base` 且不写 `format` 的 shim 可以省略。非 chat shim 用 `connection.default_path` 声明它服务的端点（例如 `/v1/embeddings`），提供方可以通过 `embeddings_shim` / `rerank_shim` / `decisions_shim` 指向它，而不必写裸格式。
+- **`provider.yaml`**（必需）—— 声明 `name`、`model_type`、`format`、连接设置（`connection.base_url`、`connection.api_key_env`、`connection.auth_header`、`connection.keyless`、`connection.models_path`、`connection.default_path`、`connection.token_command`），以及可选的 `logo`、`display_name`、`hint_msg`、`free_source`。`base` 是 `format` 的弃用别名；loader 会校验 `(model_type, format)` 对。使用 `format` 时必须同时声明 `model_type` —— 只有声明 `base` 且不写 `format` 的 shim 可以省略。非 chat shim 用 `connection.default_path` 声明它服务的端点（例如 `/v1/embeddings`），提供方可以通过 `embeddings_shim` / `rerank_shim` / `decisions_shim` 指向它，而不必写裸格式。
 - **`transforms.py`**（可选）—— 导出 `post_ir_transforms` 和/或 `pre_ir_transforms` 元组（旧名 `to_transforms` / `from_transforms` 也可用）
 
 **按类型声明的参数默认值。** 非 chat shim 可以在以自身模型类型命名的段里，声明该 vendor 真正有差异的请求字段：
@@ -80,6 +80,20 @@ embeddings:
 配置了则回退到基础类型的鉴权方式。`free_source: true` 表示该 shim 的网关提供免费模型池
 —— 管理台会把它的 keyless 条目归入 "Free Resource" 分区，并命名为
 `<display_name> (Free)`。
+
+**提供方表单里的一条提示。** `hint_msg` 是管理台在选中该 shim 时、Base URL 一行下面
+显示的一句话 —— 用它说明连接默认值表达不了的配置步骤。按语言各写一条；只写一个字符串
+时按 `en` 保存：
+
+```yaml
+hint_msg:
+  en: "Defaults to the Go lane. For the Zen lane set Base URL to https://opencode.ai/zen/v1."
+  zh: "默认走 Go lane。Zen lane 请把 Base URL 改为 https://opencode.ai/zen/v1。"
+```
+
+面板取当前界面语言，缺失时回退到 `en`，再回退到第一条声明。提示是纯文本（按文本插入，
+不当作 HTML），只占一行：短的直接内联显示，长的以省略号截断，鼠标悬停显示全文。代理路径
+不读取这个字段。
 
 **凭据交换（Credential exchange）。** 有些上游的推理端点不接受账号 API key —— AskSage
 接受由账号 key 换来的短期 access token，ALCF 接受会过期的 Globus bearer token 并需要
