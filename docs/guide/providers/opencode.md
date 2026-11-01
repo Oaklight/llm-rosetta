@@ -90,7 +90,7 @@ Quota](../quota.md).
 
 The keyless `/zen/v1` pool is a separate shim,
 `opencode_zen_free--chat_completions`, and it ships as a standalone package
-rather than in core: [llm-rosetta-shim-opencode-zen-free](https://github.com/Oaklight/llm-rosetta-shim-opencode-zen-free).
+rather than in core: [llm-rosetta-shim-opencode-free](https://github.com/Oaklight/llm-rosetta-shim-opencode-free).
 Declare the package before using the name:
 
 ```jsonc

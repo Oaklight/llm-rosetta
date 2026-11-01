@@ -464,7 +464,7 @@ Four shim sets live in their own repositories rather than in core:
 | ALCF | `alcf_metis--chat_completions`, `alcf_minerva--chat_completions`, `alcf_sophia--chat_completions` | [llm-rosetta-shim-alcf](https://github.com/Oaklight/llm-rosetta-shim-alcf) |
 | Argo | `argo--chat_completions`, `argo--messages`, `argo--open_responses` | [llm-rosetta-shim-argo](https://github.com/Oaklight/llm-rosetta-shim-argo) |
 | AskSage | `asksage--chat_completions`, `asksage--messages`, `asksage--open_responses`, `asksage--google_generate` | [llm-rosetta-shim-asksage](https://github.com/Oaklight/llm-rosetta-shim-asksage) |
-| OpenCode Zen free lane | `opencode_zen_free--chat_completions` | [llm-rosetta-shim-opencode-zen-free](https://github.com/Oaklight/llm-rosetta-shim-opencode-zen-free) |
+| OpenCode Zen free lane | `opencode_zen_free--chat_completions` | [llm-rosetta-shim-opencode-free](https://github.com/Oaklight/llm-rosetta-shim-opencode-free) |
 
 ALCF and AskSage were introduced during the 0.14.0 development cycle and never
 appeared in a stable release's built-in set; Argo had shipped built in since
