@@ -6,14 +6,13 @@ it, plus the identity map the admin panel and the ops layer read.
 
 from __future__ import annotations
 
-from datetime import datetime
-
 import logging
 from typing import TYPE_CHECKING, Any
 
 from ..routing import (
     ModelRoute,
     SelectionContext,
+    classify_unavailable,
 )
 from llm_rosetta.auto_detect import ProviderType
 from llm_rosetta.routing import ResolvedRoute
@@ -264,50 +263,6 @@ def selection_context(
     return ctx
 
 
-def _quota_blocked_until(unready: list[Any]) -> datetime | None:
-    """The end of a quota block covering every unready provider, if any.
-
-    Returns the **latest** end, because the route is unavailable until the last
-    of its providers is back.
-    """
-    from ..quota.state import QUOTA_STATE
-
-    ends: list[datetime] = []
-    for pinfo in unready:
-        blocked = getattr(pinfo, "quota_provider_blocked", None)
-        if blocked is None or not blocked():
-            return None
-        identity = getattr(pinfo, "quota_identity", None) or f"@{pinfo.name}"
-        block = QUOTA_STATE.provider_block(identity)
-        if block is None:
-            return None
-        ends.append(block.until)
-    return max(ends) if ends else None
-
-
-def _quota_exhausted_until(
-    config: GatewayConfig, ctx: SelectionContext
-) -> datetime | None:
-    """The end of a spent allowance covering every provider, if one is known.
-
-    The route is unavailable until the **last** provider comes back, so this is
-    the latest of their earliest serve times; any provider whose vendor named
-    no reset makes the end unknown, and the gateway will not invent one.
-    """
-    from ..quota.service import provider_exhausted_until
-
-    ends: list[datetime] = []
-    for entry in ctx.candidates:
-        pinfo = config.providers.get(entry.name)
-        if pinfo is None:
-            return None
-        moment = provider_exhausted_until(pinfo)
-        if moment is None:
-            return None
-        ends.append(moment)
-    return max(ends) if ends else None
-
-
 def resolve(
     config: GatewayConfig, ctx: SelectionContext
 ) -> tuple[ResolvedRoute, ProviderInfo]:
@@ -332,7 +287,7 @@ def resolve(
     """
     from typing import cast
 
-    from ..maintenance.startup import ProviderInitState, ProviderNotReady
+    from ..maintenance.startup import ProviderNotReady
 
     model = ctx.model
     source_provider = cast(ProviderType, ctx.source_format)
@@ -343,34 +298,12 @@ def resolve(
     # (tier 3), so what is preserved is the anchor selection, not the
     # per-account served share.
     config._selection.run(ctx)
-    model_route = ctx.model_route
-    assert model_route is not None  # install_route() put it there
+    assert ctx.model_route is not None  # install_route() put it there
     if ctx.chosen is None:
-        unready = [
-            config.providers[p.name]
-            for p in model_route.providers
-            if not config.providers[p.name].ready
-        ]
-        # Every route is out because of a quota block: that has a known end,
-        # and telling the client "initializing" would be a different story.
-        blocked_until = _quota_blocked_until(unready)
-        if blocked_until is not None and len(unready) == len(model_route.providers):
-            raise ProviderNotReady(model, blocked_until=blocked_until)
-        # Every candidate removed by a reading rather than by readiness.  A
-        # reading knows when its window resets, which is exactly what
-        # ``Retry-After`` is for; "initializing" would send the client looking
-        # for a startup problem that does not exist.
-        route_names = {p.name for p in model_route.providers}
-        if route_names and route_names <= set(ctx.quota_excluded):
-            until = _quota_exhausted_until(config, ctx)
-            raise ProviderNotReady(
-                model, exhausted_until=until, exhausted=until is None
-            )
-        deferred = getattr(config, "_deferred_startup", None)
-        all_failed = deferred is not None and all(
-            deferred.provider_state(p.name) == ProviderInitState.FAILED for p in unready
-        )
-        raise ProviderNotReady(model, failed=all_failed)
+        # The four reasons a route can be down are one question with one
+        # answer, asked in one place (``routing.unavailable``); this function
+        # only turns the answer into the exception the route layer raises.
+        raise ProviderNotReady(model, **classify_unavailable(config, ctx).as_kwargs())
 
     entry = ctx.chosen
     provider_name = entry.name
