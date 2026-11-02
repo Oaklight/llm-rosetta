@@ -72,7 +72,7 @@ without installing anything into the gateway image.
       "path": "src/llm_rosetta_shim_alcf/providers",   // subpath inside the archive
       "archive": "auto",                               // auto | tar.gz | zip
       "sha256": "0123…abcd",                           // optional archive pin
-      "token_env": "GITHUB_TOKEN",                     // optional; private mirror only
+      "token_env": "GITHUB_TOKEN",                     // optional; private shim repository only
       "refresh": "auto"                                // auto | always | never
     }
   ],

@@ -382,7 +382,7 @@ ships no `pip` and no `git`) and the shims live in their own repository:
       "url": "https://github.com/Oaklight/llm-rosetta-shim-alcf",
       // "ref": "v0.1.0",                          // pin once the repo is tagged; omit => HEAD, pinned on first fetch
       "path": "src/llm_rosetta_shim_alcf/providers",
-      "token_env": "GITHUB_TOKEN"                  // optional; private mirror only
+      "token_env": "GITHUB_TOKEN"                  // optional; private shim repository only
     }
   ]
 }
@@ -516,7 +516,7 @@ variable, so one line replaces the expanded remote:
 Presets are applied before explicit remotes, and an explicit remote with the
 same URL is merged onto its preset (explicit keys win), so a `ref` can be pinned
 without restating the `path`. The three repositories are public, so a preset
-carries no `token_env`; add one only for a private mirror. No `ref` is pinned
+carries no `token_env`; add one for a private shim repository. No `ref` is pinned
 because none of them is tagged yet: a remote without a `ref` resolves `HEAD` to
 a commit once and records it in the cache stamp. Once they are tagged, pin the
 tag — see [Ref resolution](../gateway/configuration.md#external-shim-sources).
