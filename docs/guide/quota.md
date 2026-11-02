@@ -184,9 +184,12 @@ the reset in `Retry-After` when the vendor named one — rather than the
 "initializing" message, which would send it looking for a startup problem that
 does not exist.
 
-The stage is called `quota` in the selection chain and runs before the anchor,
-so it informs the choice rather than making it — the strategies stay what they
-are.
+The stage is called `eligibility` in the selection chain and runs before the
+anchor, so it informs the choice rather than making it — the strategies stay
+what they are. It asks one predicate per candidate and records the answer:
+whether the provider may serve, why not when it may not, the weight it serves
+at, and whether a recent refusal orders it last. Every later stage reads that
+answer instead of asking the same question again.
 
 The provider card shows what the router concluded — a live cooldown, an
 exclusion with the reason, or the weight the provider serves at alongside the
@@ -199,8 +202,44 @@ still serving at a quarter of its configured weight, and the card says both.
 ## Keyless lanes
 
 The [OpenCode Zen public lane](providers/opencode.md#public-free-lane) has no
-credential, so it has no per-key allowance. A 429 there puts the provider on a
-short cooldown instead of demoting a key.
+credential, so it has no per-key allowance. Its 429s are counted against the
+provider itself, by the rule below — the same rule every other lane follows.
+
+## Continuous 429s
+
+One 429 is evidence about one request. A run of them is evidence about the
+lane, and the gateway acts on both — whatever the lane's quota declaration,
+including a provider no probe can read:
+
+| Refusals within the window | Effect |
+|:---|:---|
+| 1 | **sink** — the provider moves to the back of the order; it is still a candidate, so a route with nothing else still serves |
+| `after` (default 3) | **disable** — excluded for `cooldown_s` (default 60), doubling on each repeat up to `cooldown_max_s` (default 900) |
+| any success | the count, the ladder and the sink are cleared |
+
+```jsonc
+"routing": {
+  "rate_limit": {"sink": true, "after": 3, "window_s": 300, "cooldown_s": 60, "cooldown_max_s": 900}
+}
+```
+
+| Field | Meaning |
+|:---|:---|
+| `sink` | Whether the first refusal sinks the provider. `false` only counts refusals towards `after` |
+| `after` | Refusals within `window_s` that disable the lane. `0` never disables |
+| `window_s` | How long refusals count towards `after` |
+| `cooldown_s` | First disable's length; each repeat doubles it |
+| `cooldown_max_s` | Cap the doubling may not exceed |
+
+Refusals are counted per provider **and** per credential: a 429 names the
+credential that earned it when the lane has keys, and the provider when it does
+not. A provider with one disabled credential and one working one stays in
+rotation; the key ring skips the disabled one. The state lives beside the quota
+block, is not persisted, and is read — never written — by the selector.
+
+A 429 that no probe can classify is still a rate limit: the request fails over
+to another provider when the model opted in, rather than being answered with
+the refusal and retried on the same lane next time.
 
 ## Lanes with no usage endpoint
 
