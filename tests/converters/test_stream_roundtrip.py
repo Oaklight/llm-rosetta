@@ -107,7 +107,7 @@ def drive(format_name: str, events: list[dict[str, Any]]) -> list[dict[str, Any]
 def _baseline() -> dict[str, Any]:
     """Return the committed record of what the dialects disagree about today."""
     if not BASELINE_PATH.exists():
-        return {"not_fixed": {}, "cross": []}
+        return {"not_fixed": {}, "cross": [], "first_pass": []}
     return json.loads(BASELINE_PATH.read_text())
 
 
@@ -153,6 +153,42 @@ def _views_differ(a_name: str, b_name: str, case_id: str) -> set[str]:
     before = asdict(_view_of_events(first))
     after = asdict(_view_of_events(again))
     return {field for field in _VIEW_FIELDS if before[field] != after[field]}
+
+
+@pytest.mark.parametrize("case_id", list(_TURNS))
+@pytest.mark.parametrize("format_name", _DIALECT_NAMES)
+def test_a_first_stream_pass_keeps_the_turn(format_name: str, case_id: str) -> None:
+    """One pass through a dialect must not lose what the turn carried.
+
+    A fixed point on its own is satisfied by a dialect that loses everything
+    on the first pass and then keeps losing it: silence is a fixed point too.
+    This is the anchor — the turn the dialect produces must be the turn it was
+    given, up to the fields the dialect cannot express, each recorded.
+    """
+    if _refused(format_name, case_id):
+        return
+
+    source = _view_of_events(_events(case_id))
+    produced = _view_of_events(drive(format_name, _events(case_id)))
+    changed = {
+        field
+        for field in _VIEW_FIELDS
+        if asdict(source)[field] != asdict(produced)[field]
+    }
+
+    known = {
+        entry["field"]
+        for entry in _baseline()["first_pass"]
+        if entry["dialect"] == format_name and entry["case"] == case_id
+    }
+    assert not changed - known, (
+        f"{format_name}/{case_id} changes {sorted(changed - known)} on its first "
+        "pass, and the baseline has no entry saying why"
+    )
+    assert not known - changed, (
+        f"{format_name}/{case_id}: the baseline claims {sorted(known - changed)} "
+        "change on the first pass, but it does not"
+    )
 
 
 @pytest.mark.parametrize(
@@ -204,6 +240,11 @@ def test_every_baseline_entry_says_why() -> None:
         dialect, _, case_id = key.partition("/")
         assert dialect in _DIALECT_NAMES, key
         assert case_id in _TURNS, key
+    for entry in _baseline()["first_pass"]:
+        assert entry["reason"] and entry["reason"] != _UNREVIEWED, entry
+        assert entry["dialect"] in _DIALECT_NAMES, entry
+        assert entry["case"] in _TURNS, entry
+        assert entry["field"] in _VIEW_FIELDS, entry
 
 
 def _not_fixed_now(previous: dict[str, Any]) -> dict[str, str]:
@@ -248,6 +289,34 @@ def _cross_now(reasons: dict[str, str]) -> list[dict[str, Any]]:
     return found
 
 
+def _first_pass_now(previous: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return the turn fields a dialect changes on its first pass today."""
+    reasons = {
+        "|".join((e["dialect"], e["case"], e["field"])): e["reason"]
+        for e in previous.get("first_pass", [])
+    }
+    found: list[dict[str, Any]] = []
+    for format_name in _DIALECT_NAMES:
+        for case_id in _TURNS:
+            if _refused(format_name, case_id):
+                continue
+            source = asdict(_view_of_events(_events(case_id)))
+            produced = asdict(_view_of_events(drive(format_name, _events(case_id))))
+            for field in _VIEW_FIELDS:
+                if source[field] == produced[field]:
+                    continue
+                marker = "|".join((format_name, case_id, field))
+                found.append(
+                    {
+                        "dialect": format_name,
+                        "case": case_id,
+                        "field": field,
+                        "reason": reasons.get(marker, _UNREVIEWED),
+                    }
+                )
+    return found
+
+
 def write_baseline() -> Path:
     """Regenerate the baseline from the current behaviour.
 
@@ -270,6 +339,7 @@ def write_baseline() -> Path:
         ),
         "not_fixed": _not_fixed_now(previous),
         "cross": _cross_now(reasons),
+        "first_pass": _first_pass_now(previous),
     }
     BASELINE_PATH.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
     return BASELINE_PATH
