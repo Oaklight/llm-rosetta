@@ -84,6 +84,17 @@ class KeyRing:
     def _is_usable(self, key: str) -> bool:
         return self._usable is None or self._usable(key)
 
+    def any_usable(self) -> bool:
+        """Whether at least one key may be used right now.
+
+        The provider-level half of eligibility: a ring whose every key is
+        demoted or disabled cannot serve this request, so the provider is not
+        a candidate — as opposed to :meth:`next`, which falls back to the
+        whole ring because a provider that *was* chosen must still send
+        something.
+        """
+        return any(self._is_usable(key) for key in self._keys)
+
     def refresh(self, keys_csv: str) -> int | None:
         """Replace all keys atomically via reference swap.
 
@@ -207,6 +218,7 @@ class ProviderInfo:
         self,
         name: str,
         *,
+        config_name: str | None = None,
         api_key: str,
         base_url: str,
         auth_header_fn: AuthHeaderFn,
@@ -239,6 +251,11 @@ class ProviderInfo:
                 f"got '{base_url}'"
             )
         self.name = name
+        # The provider's key in the config (``"chatgpt-personal"``), as opposed
+        # to *name*, which is the base format.  Routing state that belongs to
+        # one configured provider — the continuous-429 counters, say — keys on
+        # this: two entries may serve the same format and must not share it.
+        self.config_name = config_name or name
         self.base_url = normalize_base_url(base_url.rstrip("/"), url_template)
         self.key_ring = KeyRing(api_key)
         self._auth_header_fn = auth_header_fn
@@ -328,25 +345,31 @@ class ProviderInfo:
         return self.token_command is not None or self.auth_exchange is not None
 
     @property
+    def credentials_pending(self) -> bool:
+        """Whether the initial token fetch has not completed yet.
+
+        The key ring still holds the deferred sentinel, so any request would
+        send a placeholder as its credential.  This is the startup question
+        alone: a provider that is merely rate-limited or spent is *not*
+        pending, and callers that say "still starting up" must ask this rather
+        than :attr:`ready`.
+        """
+        return self.key_ring.contains_only(TOKEN_PENDING_SENTINEL)
+
+    @property
     def ready(self) -> bool:
         """Whether this provider can accept traffic.
 
-        Returns ``False`` when the provider as a whole is in a quota block, or
-        when the key ring contains only the deferred token-command sentinel
-        (the initial fetch has not completed).
-
-        The block is consulted for **every** provider, not only a keyless one.
-        A provider that mints its credential has no per-key demotion available
-        — a rotating token is a new fingerprint on every refresh — so a block
-        on the account identity is the only thing that can take it out of
-        rotation, and reading it only for keyless lanes meant an exhausted plan
-        account recorded the refusal and kept serving.
+        The one eligibility predicate's answer (see
+        :func:`~llm_rosetta_gateway.routing.eligibility.provider_eligibility`):
+        a provider-wide quota block, a rate-limit disable, a key ring with no
+        usable credential, and readings that say the allowance is spent are
+        all "no".  Admin callers that need to tell "still starting" from the
+        rest ask :attr:`credentials_pending`.
         """
-        if self.quota_provider_blocked is not None and self.quota_provider_blocked():
-            return False
-        if self.key_ring.contains_only(TOKEN_PENDING_SENTINEL):
-            return False
-        return True
+        from ..routing.eligibility import provider_eligibility
+
+        return provider_eligibility(self).eligible
 
     # -- public helpers used by the proxy -----------------------------------
 

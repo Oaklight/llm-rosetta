@@ -682,6 +682,7 @@ def build_provider_info(
 
     return ProviderInfo(
         name=provider_type,
+        config_name=provider_key,
         api_key=api_key,
         base_url=cfg["base_url"],
         auth_header_fn=auth_fn,

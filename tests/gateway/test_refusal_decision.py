@@ -9,16 +9,26 @@ tests pin that decision on its own, without either transport.
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
 
 from llm_rosetta_gateway.proxy import errors
+from llm_rosetta_gateway.quota.state import QUOTA_STATE
 from llm_rosetta_gateway.proxy.errors import (
     QuotaRefusal,
     RefusalAction,
     decide_on_refusal,
 )
+
+
+@pytest.fixture(autouse=True)
+def _clean_state():
+    """Every refusal test starts from an empty rate-limit state."""
+    QUOTA_STATE.rate_limits.clear()
+    yield
+    QUOTA_STATE.rate_limits.clear()
 
 
 class _Stub:
@@ -28,6 +38,7 @@ class _Stub:
 def _decide(
     monkeypatch: pytest.MonkeyPatch,
     *,
+    status: int = 429,
     auth: tuple[bool, Any] = (False, None),
     quota: tuple[QuotaRefusal | None, Any] = (None, None),
 ) -> tuple[Any, list[bool]]:
@@ -48,9 +59,12 @@ def _decide(
 
     monkeypatch.setattr(errors, "_handle_401", fake_401)
     monkeypatch.setattr(errors, "_quota_refusal", fake_quota)
+    # A keyless provider keeps the continuous-429 counter out of the test:
+    # the refusals are counted against the provider, not a credential.
+    provider = SimpleNamespace(name="p", config_name="p", keyless=True)
     decision = asyncio.run(
         decide_on_refusal(
-            cast(Any, object()), 429, "upstream said no", "chat_completions"
+            cast(Any, provider), status, "upstream said no", "chat_completions"
         )
     )
     return decision, consulted
@@ -98,7 +112,22 @@ def test_an_exhausted_provider_fails_over(monkeypatch):
 
 def test_an_ordinary_error_breaks(monkeypatch):
     """Nothing to retry and nothing to fail over to: the upstream's answer."""
-    decision, consulted = _decide(monkeypatch)
+    decision, consulted = _decide(monkeypatch, status=500)
 
     assert decision.action is RefusalAction.BREAK
+    assert consulted == [True]
+
+
+def test_a_429_no_probe_can_classify_still_fails_over(monkeypatch):
+    """A lane with no probe answered 429; it is still rate limited.
+
+    Before this, an unclassifiable 429 fell through to BREAK: the request was
+    answered with the upstream's refusal even when another provider was ready,
+    and the next request was retried on the same lane as if nothing happened.
+    """
+    decision, consulted = _decide(monkeypatch)
+
+    assert decision.action is RefusalAction.FAILOVER
+    assert decision.signal is not None
+    assert "429" in decision.signal.reason
     assert consulted == [True]

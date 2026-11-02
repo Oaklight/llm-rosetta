@@ -381,6 +381,9 @@ async def _non_streaming_from_stream(
             provider_info, upstream_url, target_body, extra_headers=extra_headers
         )
         if not stream.is_error:
+            from ..quota.service import clear_upstream_rate_limit
+
+            clear_upstream_rate_limit(provider_info)
             break
         error_text = await stream.read_error()
         status = stream.status_code
@@ -389,7 +392,11 @@ async def _non_streaming_from_stream(
         # The same decision the JSON and SSE paths take, so a 429 here is not
         # a dead end just because the client asked for one body.
         decision = await decide_on_refusal(
-            provider_info, status, error_text, route.source_provider
+            provider_info,
+            status,
+            error_text,
+            route.source_provider,
+            rate_limit=getattr(config, "routing_rate_limit", None),
         )
         if decision.action is RefusalAction.RETURN:
             assert decision.response is not None
@@ -602,7 +609,11 @@ async def handle_non_streaming(  # noqa: C901
         # One decision for a refused attempt: answer the client, retry the
         # same upstream, or hand the request to another provider.
         decision = await decide_on_refusal(
-            provider_info, resp.status_code, resp.error_text, route.source_provider
+            provider_info,
+            resp.status_code,
+            resp.error_text,
+            route.source_provider,
+            rate_limit=getattr(config, "routing_rate_limit", None),
         )
         if decision.action is RefusalAction.RETURN:
             assert decision.response is not None
@@ -633,6 +644,12 @@ async def handle_non_streaming(  # noqa: C901
         break
 
     assert resp is not None
+    if not resp.is_error:
+        # A success clears the lane's 429 count and strike ladder, so one
+        # transient refusal does not accumulate across hours.
+        from ..quota.service import clear_upstream_rate_limit
+
+        clear_upstream_rate_limit(provider_info)
 
     # Check for upstream errors (HTTP 4xx/5xx) or soft-errors (HTTP 200
     # with an error embedded in the body, e.g. Argo auth warnings).

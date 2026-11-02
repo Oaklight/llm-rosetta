@@ -13,13 +13,32 @@ from llm_rosetta_gateway.quota.models import QuotaReading, QuotaWindow
 from llm_rosetta_gateway.quota.state import QUOTA_STATE
 from llm_rosetta_gateway.routing import (
     AnchorStage,
-    QuotaStage,
+    Eligibility,
+    EligibilityStage,
     SelectionContext,
     create_strategy,
 )
 from llm_rosetta_gateway.routing.select import quota_weight, select_ready_entry
 from llm_rosetta_gateway.routing.strategy import ModelRoute, ProviderEntry
 from llm_rosetta_gateway.transport.provider_info import ProviderInfo
+
+
+def _eligible(
+    names: list[str],
+    *,
+    headroom: dict[str, float] | None = None,
+    sunk: frozenset[str] = frozenset(),
+) -> dict[str, Eligibility]:
+    """The predicate's answer for a list of names, all eligible."""
+    return {
+        name: Eligibility(
+            name=name,
+            eligible=True,
+            headroom=(headroom or {}).get(name),
+            sunk=name in sunk,
+        )
+        for name in names
+    }
 
 
 def _pinfo(name: str, *, keys: str = "k1", probe: str | None = None) -> Any:
@@ -84,14 +103,14 @@ class TestTheStage:
         )
         ctx = self._ctx({"a": pinfo}, ["a"])
 
-        QuotaStage().run(ctx)
+        EligibilityStage().run(ctx)
 
         assert ctx.quota_headroom["a"] == 0.1
 
     def test_an_unmeasured_provider_is_one_not_zero(self):
         ctx = self._ctx({"a": _pinfo("a"), "b": _pinfo("b")}, ["a", "b"])
 
-        QuotaStage().run(ctx)
+        EligibilityStage().run(ctx)
 
         assert ctx.quota_headroom == {"a": 1.0, "b": 1.0}
 
@@ -107,8 +126,9 @@ class TestTheAnchor:
         for _ in range(40):
             entry = select_ready_entry(
                 route,
-                is_ready=lambda name: True,
-                headroom={"fresh": 1.0, "spent": 0.0},
+                eligibility=_eligible(
+                    ["fresh", "spent"], headroom={"fresh": 1.0, "spent": 0.0}
+                ),
             )
             assert entry is not None
             picks[entry.name] += 1
@@ -124,7 +144,7 @@ class TestTheAnchor:
         )
         picks = {"a": 0, "b": 0}
         for _ in range(20):
-            entry = select_ready_entry(route, is_ready=lambda name: True)
+            entry = select_ready_entry(route, eligibility=_eligible(["a", "b"]))
             assert entry is not None
             picks[entry.name] += 1
 
@@ -132,22 +152,22 @@ class TestTheAnchor:
 
 
 class TestTheChainOrder:
-    def test_the_anchor_refuses_to_run_before_the_quota_stage(self):
-        """A reversed chain would weight nothing and say nothing."""
+    def test_the_anchor_refuses_to_run_before_the_eligibility_stage(self):
+        """A reversed chain would choose without the predicate and say nothing."""
         from llm_rosetta_gateway.routing import RoutingChain
         from llm_rosetta_gateway.routing.stage import StageOrderError
 
         try:
-            RoutingChain([AnchorStage(), QuotaStage()])
+            RoutingChain([AnchorStage(), EligibilityStage()])
         except StageOrderError as exc:
-            assert "quota_headroom" in str(exc)
+            assert "eligibility" in str(exc)
         else:  # pragma: no cover - the failure this test exists for
             raise AssertionError("the reversed chain was accepted")
 
     def test_the_real_order_builds(self):
         from llm_rosetta_gateway.routing import RoutingChain
 
-        RoutingChain([QuotaStage(), AnchorStage()])
+        RoutingChain([EligibilityStage(), AnchorStage()])
 
 
 class TestExclusionByReading:
@@ -226,7 +246,7 @@ class TestExclusionByReading:
         for _ in range(20):
             entry = select_ready_entry(
                 route,
-                is_ready=lambda name: True,
+                eligibility=_eligible(["spent", "fresh"]),
                 excluded=frozenset({"spent"}),
             )
             assert entry is not None
@@ -347,7 +367,7 @@ class TestTheChainEndToEnd:
             route_id="r-chain",
             strategy=create_strategy("weighted_round_robin"),
         )
-        self._chain = RoutingChain([QuotaStage(), AnchorStage()])
+        self._chain = RoutingChain([EligibilityStage(), AnchorStage()])
         return ctx
 
     def test_a_spent_provider_never_serves_beside_an_unmeasured_one(self):

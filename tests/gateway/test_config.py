@@ -257,3 +257,68 @@ class TestShimConnectionDefaults:
         }
         cfg = GatewayConfig(raw)
         assert cfg.providers["openrouter"].base_url == "https://proxy.internal/v1"
+
+
+class TestRoutingSection:
+    """``routing.rate_limit`` defaults, and the errors for a malformed block."""
+
+    @staticmethod
+    def _config(routing):
+        return GatewayConfig(
+            {
+                "providers": {
+                    "a": {
+                        "type": "chat_completions",
+                        "api_key": "k",
+                        "base_url": "https://a.test",
+                    }
+                },
+                "models": {"m": "a"},
+                "routing": routing,
+            }
+        )
+
+    def test_absent_section_takes_the_documented_defaults(self):
+        policy = self._config(None).routing_rate_limit
+
+        assert policy.sink is True
+        assert policy.after == 3
+        assert policy.window_s == 300.0
+        assert policy.cooldown_s == 60.0
+        assert policy.cooldown_max_s == 900.0
+
+    def test_a_block_overrides_field_by_field(self):
+        policy = self._config(
+            {"rate_limit": {"after": 5, "sink": False}}
+        ).routing_rate_limit
+
+        assert policy.after == 5
+        assert policy.sink is False
+        assert policy.cooldown_s == 60.0
+
+    def test_an_unknown_key_is_refused(self):
+        with pytest.raises(ValueError, match="unknown key"):
+            self._config({"rate_limit": {"afterr": 3}})
+
+    def test_an_unknown_section_key_is_refused(self):
+        with pytest.raises(ValueError, match="routing has unknown key"):
+            self._config({"stratgey": "weighted"})
+
+    @pytest.mark.parametrize(
+        "rate_limit, message",
+        [
+            ({"after": -1}, "after must be 0 or greater"),
+            ({"after": "three"}, "after must be an integer"),
+            ({"sink": "yes"}, "sink must be true or false"),
+            ({"window_s": 0}, "window_s must be at least 1"),
+            ({"cooldown_s": 120, "cooldown_max_s": 60}, "cooldown_max_s"),
+            ({"cooldown_s": 0}, "cooldown_s must be at least 1"),
+        ],
+    )
+    def test_a_malformed_value_is_refused(self, rate_limit, message):
+        with pytest.raises(ValueError, match=message):
+            self._config({"rate_limit": rate_limit})
+
+    def test_the_section_must_be_an_object(self):
+        with pytest.raises(ValueError, match="routing must be an object"):
+            self._config([])

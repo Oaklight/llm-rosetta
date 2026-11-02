@@ -28,6 +28,7 @@ from .models import (
     credential_fingerprint,
 )
 from .probes import QuotaProbe, QuotaProbeError, resolve_probe
+from .rate_limit import RateLimitPolicy
 from .state import QUOTA_STATE
 
 logger = logging.getLogger("llm-rosetta-gateway")
@@ -40,6 +41,22 @@ _PROBE_TIMEOUT_SECONDS = 10.0
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _iso(value: datetime | None) -> str | None:
+    """Render a timestamp as ISO 8601 with a ``Z`` suffix."""
+    if value is None:
+        return None
+    return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def provider_config_key(pinfo: Any) -> str:
+    """The provider's key in the config, which its routing state is keyed on.
+
+    ``ProviderInfo.name`` is the base format, so two configured providers of
+    the same format share it; the config key tells them apart.
+    """
+    return getattr(pinfo, "config_name", None) or pinfo.name
 
 
 def _quota_declaration(config: Any, name: str) -> dict[str, Any]:
@@ -276,15 +293,12 @@ def note_upstream_quota_error(
     except (TypeError, ValueError):
         pass
 
-    # A keyless lane has no credential to demote; its refusal is a cooldown of
-    # the provider itself.  Any 429 is enough evidence: there is no key whose
-    # quota this could be, so retrying immediately only spends requests.
+    # A keyless lane has no credential to demote.  Its refusal is counted by
+    # the continuous-429 rule, exactly as a keyed lane's is, and the signal is
+    # returned so the proxy still treats it as a quota-class refusal: there is
+    # no key to demote, but there may be another provider to try.
     if getattr(pinfo, "keyless", False):
         if status_code == 429:
-            identity = getattr(pinfo, "quota_identity", None) or f"@{pinfo.name}"
-            QUOTA_STATE.block_provider(identity, 60, "keyless lane rate limited")
-            # Returned so the proxy can treat this as a quota-class refusal:
-            # there is no key to demote, but there is another provider to try.
             from llm_rosetta.shims.quota_probe import InBandSignal
 
             return InBandSignal(cooldown_seconds=60, reason="keyless lane rate limited")
@@ -328,6 +342,74 @@ def note_upstream_quota_error(
         signal.reason,
     )
     return signal
+
+
+def note_upstream_rate_limit(
+    pinfo: Any,
+    policy: RateLimitPolicy | None = None,
+) -> str:
+    """Count one 429 against the lane that answered it.
+
+    Every lane is counted, whatever its quota declaration: a provider with no
+    probe used to answer 429 and be retried on the next request as if nothing
+    had happened.  The first refusal sinks the provider, ``policy.after``
+    refusals disable it for ``policy.cooldown_s``, and each repeat doubles that
+    up to ``policy.cooldown_max_s``.
+
+    Args:
+        pinfo: The provider that answered.
+        policy: The rule in force, or the default when the caller has none.
+
+    Returns:
+        ``"disable"``, ``"sink"`` or ``"off"``, as :meth:`RateLimitTracker.note`
+        reports it.
+    """
+    name = provider_config_key(pinfo)
+    key = None if getattr(pinfo, "keyless", False) else pinfo.active_key()
+    credential = credential_fingerprint(key) if key else None
+    outcome = QUOTA_STATE.rate_limits.note(
+        name, credential, policy or RateLimitPolicy()
+    )
+    if outcome == "disable":
+        logger.warning(
+            "Rate limit: %s disabled until %s after repeated 429s",
+            name,
+            _iso(QUOTA_STATE.rate_limits.disabled(name, credential)),
+        )
+    return outcome
+
+
+def clear_upstream_rate_limit(pinfo: Any) -> None:
+    """A success clears its lane's count, strike ladder and sink.
+
+    Counted per provider *and* credential, so one credential succeeding does
+    not absolve another — but it does stop one transient refusal from
+    accumulating across hours on the lane that keeps working.
+    """
+    name = provider_config_key(pinfo)
+    key = None if getattr(pinfo, "keyless", False) else pinfo.active_key()
+    credential = credential_fingerprint(key) if key else None
+    QUOTA_STATE.rate_limits.clear_lane(name, credential)
+
+
+def provider_offline_until(pinfo: Any) -> datetime | None:
+    """When a provider-wide block ends, if the state can date one.
+
+    Two states take a whole provider out: a quota block (an in-band refusal, a
+    keyless lane, a rotating credential whose account is out) and a rate-limit
+    disable that covers every lane.  ``blocked_until`` asks this so the client
+    is told when the route comes back rather than "initializing".
+    """
+    name = provider_config_key(pinfo)
+    identity = getattr(pinfo, "quota_identity", None) or f"@{name}"
+    ends: list[datetime] = []
+    block = QUOTA_STATE.provider_block(identity)
+    if block is not None:
+        ends.append(block.until)
+    disable = QUOTA_STATE.rate_limits.latest_disable(name)
+    if disable is not None:
+        ends.append(disable)
+    return max(ends) if ends else None
 
 
 def quota_intervals(config: Any) -> dict[str, int]:
@@ -384,10 +466,24 @@ def bind_provider_quota(name: str, pinfo: Any) -> None:
         QUOTA_STATE.provider_block(identity) is not None
     )
     probe, _url, _unsupported = resolve_provider_probe_for_info(name, pinfo)
-    if probe is None:
-        return
-    pinfo.quota_probe = probe.id
-    pinfo.key_ring.set_usable(lambda key: QUOTA_STATE.is_usable(probe.id, key))
+    probe_id = probe.id if probe is not None else None
+    if probe_id is not None:
+        pinfo.quota_probe = probe_id
+
+    def _usable(key: str) -> bool:
+        """One credential's availability: quota demotion *and* 429 disable.
+
+        Bound for every provider, not only one with a probe: a lane that
+        answers 429 has a credential that earned it whether or not anything
+        can read its allowance, and the ring must skip that credential.
+        """
+        if probe_id is not None and not QUOTA_STATE.is_usable(probe_id, key):
+            return False
+        return (
+            QUOTA_STATE.rate_limits.disabled(name, credential_fingerprint(key)) is None
+        )
+
+    pinfo.key_ring.set_usable(_usable)
 
 
 def resolve_provider_probe_for_info(
@@ -562,8 +658,10 @@ def routing_facts(pinfo: Any, name: str | None = None) -> dict[str, Any]:
       (``0.25 + 0.75 × headroom``, never zero).  They differ exactly when a key
       ring is mixed: one spent key and one healthy one reads as ``0.0``
       headroom but still serves at a quarter weight.
+    - ``sunk`` — a recent refusal orders this provider last without taking it
+      out; the panel shows it as deprioritised rather than blocked.
     """
-    from ..routing.select import quota_weight
+    from ..routing.eligibility import quota_weight
 
     headroom = provider_headroom(pinfo)
     excluded = provider_spent(pinfo)
@@ -577,17 +675,24 @@ def routing_facts(pinfo: Any, name: str | None = None) -> dict[str, Any]:
         "excluded": excluded,
         "blocked": blocked,
         "reason": "spent" if excluded else None,
+        "sunk": QUOTA_STATE.rate_limits.sunk(provider_config_key(pinfo)),
     }
 
 
 def provider_cooldown(name: str, pinfo: Any) -> dict[str, Any] | None:
-    """Return a provider-wide quota block, for the admin surface.
+    """Return a provider-wide block, for the admin surface.
 
-    Two lanes land here: a keyless one, whose 429 has no key to demote, and a
+    Three lanes land here: a keyless one, whose 429 has no key to demote; a
     provider that mints its credential, whose rotating token cannot carry a
-    per-key demotion across a refresh.  In both cases the block is what keeps
-    the provider out of rotation, so it is also what the operator needs to see.
+    per-key demotion across a refresh; and any lane whose continuous refusals
+    escalated to a disable.  In every case the block is what keeps the
+    provider out of rotation, so it is also what the operator needs to see.
     """
     identity = getattr(pinfo, "quota_identity", None) or f"@{name}"
     block = QUOTA_STATE.provider_block(identity)
-    return block.describe() if block else None
+    if block is not None:
+        return block.describe()
+    until = QUOTA_STATE.rate_limits.latest_disable(provider_config_key(pinfo))
+    if until is None:
+        return None
+    return {"until": _iso(until), "reason": "repeated 429s", "window": None}

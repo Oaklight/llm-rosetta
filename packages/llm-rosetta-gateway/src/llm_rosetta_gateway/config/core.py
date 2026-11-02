@@ -17,7 +17,7 @@ from llm_rosetta.routing import ResolvedRoute
 from ..providers import build_provider_info
 from ..routing import (
     AnchorStage,
-    QuotaStage,
+    EligibilityStage,
     RoutingChain,
     RoutingStage,
     SameFormatStage,
@@ -44,6 +44,7 @@ from .settings import (
     apply_circuit_breaker_settings,
     apply_debug_settings,
     apply_rate_limit_settings,
+    apply_routing_settings,
     apply_server_settings,
     parse_custom_tools_overrides,
     parse_hoist_system_overrides,
@@ -57,6 +58,7 @@ from .typed import _typed_descriptors, parse_typed_config
 logger = logging.getLogger("llm-rosetta-gateway")
 
 if TYPE_CHECKING:
+    from ..quota.rate_limit import RateLimitPolicy
     from ..shim_sources import ShimSources
 
 
@@ -136,6 +138,7 @@ class GatewayConfig:
     read_timeout: float
     request_log: dict[str, Any]
     root_redirect: str | None
+    routing_rate_limit: RateLimitPolicy
     self_update: bool
     shims: ShimSources
     socket: str | None
@@ -278,6 +281,11 @@ class GatewayConfig:
 
         apply_debug_settings(self, raw.get("debug", {}))
 
+        # The top-level routing defaults.  Parsed here so a malformed section
+        # fails the load, not the first request, and so the panel can show the
+        # same values the router will apply.
+        apply_routing_settings(self, raw.get("routing"))
+
         validate(self, raw.get("models", {}))
 
         # Build ProviderInfo objects (with key rotation support)
@@ -317,7 +325,7 @@ class GatewayConfig:
         # The order is checked when the chain is built, so a stage added later
         # fails at construction rather than on the first request.
         self._same_format = SameFormatStage()
-        stages: list[RoutingStage] = [QuotaStage(), AnchorStage()]
+        stages: list[RoutingStage] = [EligibilityStage(), AnchorStage()]
         if self.prefer_same_format:
             stages.append(self._same_format)
         self._selection = RoutingChain(stages)

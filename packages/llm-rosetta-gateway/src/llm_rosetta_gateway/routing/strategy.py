@@ -17,9 +17,12 @@ strategy with them, so counters start over either way.
 from __future__ import annotations
 
 import hashlib
+import math
 from dataclasses import dataclass, field
 from typing import Protocol
 from collections.abc import Mapping
+
+_U64 = float(1 << 64)
 
 
 @dataclass(slots=True)
@@ -108,11 +111,17 @@ class WeightedRoundRobinStrategy:
 
 
 class AffinityRoundRobinStrategy:
-    """Hash client identity to a preferred provider for cache locality.
+    """Keep one client on one provider, in proportion to the weights.
 
-    When an ``identity`` string is provided, uses a deterministic hash
-    to pick the same provider every time — preserving provider-side
-    prompt cache across requests from the same client.
+    When an ``identity`` string is provided, the choice is weighted rendezvous
+    hashing: each candidate draws ``-ln(u) / weight`` for a hash ``u`` of
+    ``(identity, provider)``, and the **smallest** draw wins — the weight is
+    the rate of an exponential race, so a heavier provider wins more often.
+    That keeps the mapping stable for one identity — the same client keeps the
+    same provider, and its prompt cache — while a heavier provider wins in
+    proportion to its weight.  Hashing the identity modulo the candidate count,
+    as this did before, ignored the weight entirely, so a nearly spent provider
+    kept its full share of the affinity traffic.
 
     Falls back to weighted round-robin when no identity is provided
     or the provider list is trivial.
@@ -134,10 +143,19 @@ class AffinityRoundRobinStrategy:
             return providers[0].name
         if identity is None:
             return self._fallback.select(providers, route_id=route_id)
-        idx = int.from_bytes(
-            hashlib.sha256(identity.encode()).digest()[:8], "big"
-        ) % len(providers)
-        return providers[idx].name
+
+        best = providers[0].name
+        best_score = float("inf")
+        for provider in providers:
+            digest = hashlib.sha256(f"{identity}\0{provider.name}".encode()).digest()
+            # A uniform draw from (0, 1]; the +1 keeps it away from zero, where
+            # the logarithm would be infinite.
+            draw = (int.from_bytes(digest[:8], "big") + 1) / _U64
+            score = -math.log(draw) / max(provider.weight, 1e-9)
+            if score < best_score:
+                best_score = score
+                best = provider.name
+        return best
 
 
 # Strategy registry
@@ -191,6 +209,7 @@ class ModelRoute:
         self,
         weights: Mapping[str, float] | None,
         excluded: frozenset[str] = frozenset(),
+        sunk: frozenset[str] = frozenset(),
     ) -> list[ProviderEntry]:
         """The entries the strategy sees, with this request's weights applied.
 
@@ -199,6 +218,14 @@ class ModelRoute:
         leave the excluded provider consuming turns, so the survivors would
         not get the share the weights promise.
 
+        ``sunk`` is an ordering input, not a weight: a provider that just
+        answered 429 keeps its configured weight but is only offered to the
+        strategy when every provider above it is gone.  Dropping it from the
+        list is what "last" means to every strategy at once — a round-robin
+        counter and a rendezvous hash both only ever see what they are given.
+        A sunk provider still serves a route with nothing else, which is why
+        the survivors are checked before the drop.
+
         The configured weight is the operator's statement of preference; a
         request-time factor only scales it, and never to zero — a live provider
         with a nearly spent window still serves its share.
@@ -206,6 +233,10 @@ class ModelRoute:
         entries = self.providers
         if excluded:
             entries = [p for p in entries if p.name not in excluded]
+        if sunk:
+            standing = [p for p in entries if p.name not in sunk]
+            if standing:
+                entries = standing
         if not weights:
             return entries
         return [
@@ -225,6 +256,7 @@ class ModelRoute:
         identity: str | None = None,
         weights: Mapping[str, float] | None = None,
         excluded: frozenset[str] = frozenset(),
+        sunk: frozenset[str] = frozenset(),
     ) -> str:
         """Pick the next provider according to the strategy.
 
@@ -233,9 +265,10 @@ class ModelRoute:
             weights: Optional per-provider multiplier for this selection, e.g.
                 an allowance headroom.  Absent means the configured weights.
             excluded: Providers that are not candidates at all this time.
+            sunk: Providers that are candidates but are tried last.
         """
         return self.strategy.select(
-            self._candidates(weights, excluded),
+            self._candidates(weights, excluded, sunk),
             route_id=self.route_id,
             identity=identity,
         )
@@ -246,6 +279,7 @@ class ModelRoute:
         identity: str | None = None,
         weights: Mapping[str, float] | None = None,
         excluded: frozenset[str] = frozenset(),
+        sunk: frozenset[str] = frozenset(),
     ) -> ProviderEntry:
         """Pick the next provider and return the full entry.
 
@@ -253,10 +287,11 @@ class ModelRoute:
             identity: Optional client identity for affinity routing.
             weights: Optional per-provider multiplier, as in :meth:`select`.
             excluded: Providers that are not candidates at all this time.
+            sunk: Providers that are candidates but are tried last.
         """
         return self._entry_by_name[
             self.strategy.select(
-                self._candidates(weights, excluded),
+                self._candidates(weights, excluded, sunk),
                 route_id=self.route_id,
                 identity=identity,
             )

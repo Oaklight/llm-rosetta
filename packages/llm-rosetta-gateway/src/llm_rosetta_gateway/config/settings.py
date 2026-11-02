@@ -257,6 +257,33 @@ def apply_rate_limit_settings(config: GatewayConfig, _server: dict[str, Any]) ->
     config.rate_limit_trust_proxy = bool(rl.get("trust_proxy", False))
 
 
+def apply_routing_settings(config: GatewayConfig, _routing: Any) -> None:
+    """Parse the top-level ``routing`` section.
+
+    This is the default every model routes under.  A model-level ``routing``
+    block overrides it field by field; both are read through the same parsers,
+    so a value the panel accepts is a value the router can honour.
+
+    Args:
+        config: The config being built.
+        _routing: The ``routing`` object, or ``None`` when the key is absent.
+
+    Raises:
+        ValueError: If the section or one of its blocks is malformed.
+    """
+    from ..quota.rate_limit import RateLimitPolicy
+
+    if _routing is None:
+        _routing = {}
+    if not isinstance(_routing, dict):
+        raise ValueError(f"config: routing must be an object, got {_routing!r}")
+    unknown = set(_routing) - {"rate_limit"}
+    if unknown:
+        names = ", ".join(sorted(unknown))
+        raise ValueError(f"config: routing has unknown key(s): {names}")
+    config.routing_rate_limit = RateLimitPolicy.from_config(_routing.get("rate_limit"))
+
+
 def apply_debug_settings(config: GatewayConfig, _debug: dict[str, Any]) -> None:
     """Parse debug/logging settings with env-var overrides.
 

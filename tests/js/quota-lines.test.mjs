@@ -112,3 +112,25 @@ test('a block row carries the cooldown, or nothing', () => {
   assert.ok(calls.some(([key]) => key === 'quota.blocked'));
   assert.match(row.text, /usage limit/);
 });
+
+test('a sunk provider keeps its share row and adds the sink row', () => {
+  const { t, calls } = translator();
+  const rows = routingRows({ blocked: false, excluded: false, headroom: 1, sunk: true }, t);
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].tone, 'ok');
+  assert.equal(rows[1].tone, 'warn');
+  assert.ok(calls.some(([key]) => key === 'quota.routingSunk'));
+});
+
+test('a provider that is not sunk adds no sink row', () => {
+  const { t, calls } = translator();
+  const rows = routingRows({ blocked: false, excluded: false, headroom: 1, sunk: false }, t);
+  assert.equal(rows.length, 1);
+  assert.ok(!calls.some(([key]) => key === 'quota.routingSunk'));
+});
+
+test('a repeated-429 block asks for its translated reason', () => {
+  const { t, calls } = translator();
+  blockRow({ until: '2026-11-02T12:00:00Z', reason: 'repeated 429s' }, t);
+  assert.ok(calls.some(([key]) => key === 'quota.blockReason.rateLimited'));
+});

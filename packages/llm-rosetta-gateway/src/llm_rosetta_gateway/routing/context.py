@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from ..transport.provider_info import ProviderInfo
+    from .eligibility import Eligibility
     from .strategy import ModelRoute, ProviderEntry
 
 
@@ -68,6 +69,7 @@ class SelectionContext:
         "provider_account_tokens",
         # Filled by the stages.
         "identity",
+        "eligibility",
         "chosen",
         "provider_info",
         "ir_request",
@@ -99,6 +101,10 @@ class SelectionContext:
         self.provider_account_tokens: Mapping[str, str] = {}
 
         self.identity = Identity()
+        # The one eligibility predicate's answer for every candidate, keyed by
+        # provider name.  Computed once by the stage that runs first; nothing
+        # after it re-derives whether a provider may serve.
+        self.eligibility: Mapping[str, Eligibility] = {}
         self.chosen: ProviderEntry | None = None
         self.provider_info: ProviderInfo | None = None
 
@@ -170,6 +176,14 @@ class SelectionContext:
         """Record the transport configuration the request will be sent with."""
         self.provider_info = provider_info
 
+    def with_eligibility(self, answers: Mapping[str, Eligibility]) -> None:
+        """Record the one predicate's answer for every candidate.
+
+        The stage that fills this runs first, so every later stage reads a
+        decision instead of re-deriving one.
+        """
+        self.eligibility = dict(answers)
+
     def with_quota_headroom(
         self,
         headroom: Mapping[str, float],
@@ -199,12 +213,18 @@ class SelectionContext:
         self.pinned = name or None
 
     def excluded_providers(self) -> frozenset[str]:
-        """Every provider selection must skip: spent readings plus failovers.
+        """Every provider selection must skip: ineligible, spent, failed over.
 
         A pin excludes every other candidate, so a pinned request cannot be
         served by a provider the caller did not name.
         """
-        excluded = self.quota_excluded | self.failover_excluded
+        excluded = (
+            frozenset(
+                n for n, answer in self.eligibility.items() if not answer.eligible
+            )
+            | self.quota_excluded
+            | self.failover_excluded
+        )
         if not self.pinned:
             return excluded
         return frozenset(
@@ -232,9 +252,10 @@ class SelectionContext:
         """Record the session identity the upstream will be told."""
         self.upstream_session_id = session_id
 
-    def is_ready(self, provider_name: str) -> bool:
-        """Whether *provider_name* can take traffic right now."""
-        return self.providers[provider_name].ready
+    def is_eligible(self, provider_name: str) -> bool:
+        """Whether *provider_name* is a candidate for this request."""
+        answer = self.eligibility.get(provider_name)
+        return answer is not None and answer.eligible
 
     @property
     def candidates(self) -> list[ProviderEntry]:
