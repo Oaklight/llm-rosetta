@@ -147,6 +147,12 @@ async def handle_responses_compact(request: Any, config: GatewayConfig) -> Respo
         )
     key_ctx = api_key_context_var.get()
     selection.with_client(key_ctx.key_hash if key_ctx else None)
+    # A model with rules needs the request in IR form before the chain runs;
+    # one without them never pays for the extra read leg.
+    from .routes_llm import _model_rules, _rule_facts
+
+    if _model_rules(config, model):
+        selection.with_rule_facts(_rule_facts(SOURCE_FORMAT, body, request))
 
     resolved = _resolve_or_error(config, selection, request_id)
     if isinstance(resolved, Response):

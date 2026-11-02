@@ -148,6 +148,47 @@ async def _proxy_handler(
     )
 
 
+def _model_rules(config: Any, model: str) -> tuple[Any, ...]:
+    """A model's rules, or an empty tuple.
+
+    Duck-typed: a test can hand the handler a config whose ``models`` is the
+    raw document rather than the parsed table, and a model without a routing
+    block has no rules either way.
+    """
+    route = getattr(config, "models", {}).get(model)
+    return getattr(getattr(route, "routing", None), "rules", ())
+
+
+def _rule_facts(source_provider: str, body: dict[str, Any], request: Any):
+    """What the model's rules may read, from the source request in IR form.
+
+    Rules read the IR, never the source body, so one rule means the same
+    thing whichever dialect the client spoke.  The conversion here is the
+    source→IR leg alone and runs only for a model that has rules; a model
+    without them pays nothing.  A conversion failure is not fatal: the engine
+    will report it properly a moment later, and a rule must not fail a request.
+    """
+    from llm_rosetta.converters.registry import get_converter_class
+
+    from ..routing import facts_from_ir
+
+    agents: list[str] = []
+    explicit = request.headers.get("x-rosetta-agent")
+    if explicit:
+        agents.extend(part.strip() for part in explicit.split(",") if part.strip())
+    user_agent = request.headers.get("user-agent")
+    if user_agent:
+        agents.append(user_agent)
+
+    ir: dict[str, Any] | None = None
+    try:
+        converter = get_converter_class("llm", source_provider)()
+        ir = converter.request_from_provider(body)
+    except Exception:  # noqa: BLE001 - the engine reports a bad body later
+        ir = None
+    return facts_from_ir(ir, agents=tuple(agents))
+
+
 async def _handle_llm(
     request: Any,
     config: GatewayConfig,
@@ -188,6 +229,11 @@ async def _handle_llm(
         model, source_provider, pinned_provider=_pinned_provider(request, _kctx)
     )
     selection.with_client(_kctx.key_hash if _kctx else None)
+
+    # A model with rules needs the request in IR form before the chain runs;
+    # one without them never pays for the extra read leg.
+    if _model_rules(config, model):
+        selection.with_rule_facts(_rule_facts(source_provider, body, request))
 
     # Resolve target provider via unified routing
     result = _resolve_or_error(config, selection, ctx.request_id)

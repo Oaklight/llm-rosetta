@@ -146,9 +146,15 @@ class TestTheParse:
                 {"strategy": "rotate", "affinity": "session"}, label="models.m.routing"
             )
 
-    def test_rules_are_refused_until_they_do_something(self):
-        with pytest.raises(ValueError, match="rules is not supported yet"):
-            parse_model_routing({"rules": [{"when": {}}]}, label="models.m.routing")
+    def test_rules_parse_into_the_block(self):
+        routing = parse_model_routing(
+            {"rules": [{"when": {"images": True}, "use": "b"}]},
+            label="models.m.routing",
+        )
+
+        assert len(routing.rules) == 1
+        assert routing.rules[0].use == "b"
+        assert routing.rules[0].when == {"images": True}
 
     def test_sink_must_be_a_boolean(self):
         with pytest.raises(ValueError, match="sink must be true or false"):

@@ -86,7 +86,7 @@ def parse_model_route(
         return None
     # A single-provider entry carries a routing block like any other: without
     # this the panel would write a block the runtime never reads.
-    routing = _model_routing(name, value)
+    routing = _model_routing(name, value, {provider_name})
     return ModelRoute(
         [ProviderEntry(provider_name)], name, strategy_for(routing), routing=routing
     )
@@ -182,17 +182,20 @@ def parse_multi_provider(
     if not entries:
         return None
 
-    routing = _model_routing(model_name, value)
+    routing = _model_routing(model_name, value, {entry.name for entry in entries})
     return ModelRoute(entries, model_name, strategy_for(routing), routing=routing)
 
 
-def _model_routing(model_name: str, value: Any):
+def _model_routing(model_name: str, value: Any, members: set[str]):
     """Read a model entry's routing block, absorbing the old ``strategy`` key.
 
     The block is the only place routing is configured.  The pre-block
     ``strategy`` key is still read so an existing config keeps its behaviour,
     but naming both is a mistake the load refuses rather than a silent
     precedence rule.
+
+    A rule may only promote or drop a member of this model's route; naming
+    anyone else is a config error here, not a rule that quietly never matches.
     """
     raw_routing = value.get("routing") if isinstance(value, dict) else None
     legacy = value.get("strategy") if isinstance(value, dict) else None
@@ -203,7 +206,16 @@ def _model_routing(model_name: str, value: Any):
         )
     if legacy is not None:
         return routing_from_legacy(legacy, label=f"models.{model_name}.strategy")
-    return parse_model_routing(raw_routing, label=f"models.{model_name}.routing")
+    routing = parse_model_routing(raw_routing, label=f"models.{model_name}.routing")
+    for index, rule in enumerate(routing.rules):
+        target = rule.use or rule.pause
+        if target not in members:
+            raise ValueError(
+                f"config: models.{model_name}.routing.rules[{index}] names "
+                f"{target!r}, which is not a provider of this model; a rule "
+                "may promote or drop a member, never introduce one"
+            )
+    return routing
 
 
 def parse_model_overrides(
