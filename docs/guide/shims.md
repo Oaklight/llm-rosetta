@@ -398,6 +398,11 @@ for the full field list, caching and refresh behaviour, precedence, and the
 security note. Programmatically, use `llm_rosetta.shims.rebuild_shims()` (no
 config file needed) or `llm_rosetta_gateway.apply_shim_sources(raw, config_path)`.
 
+An unknown preset is skipped with a warning unless `shims.strict` is `true`,
+which refuses it, so a config written by a newer build still starts on an
+older one. A malformed section (a `presets` string, say) is refused when the
+config loads rather than at startup.
+
 !!! warning
     A declared source may ship a `transforms.py` that is executed on load — the
     same trust level as installing a plugin package. Pin a ref and only add
