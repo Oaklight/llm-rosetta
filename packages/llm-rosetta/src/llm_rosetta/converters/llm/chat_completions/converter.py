@@ -1451,11 +1451,22 @@ class ChatCompletionsConverter(BaseConverter):
         """Handle FinishEvent → finish_reason chunk."""
         choice_index = event.get("choice_index", 0)
         reason = event["finish_reason"]["reason"]
+        delta: dict[str, Any] = {}
+        refusal_text = (event.get("provider_metadata") or {}).get("refusal_text")
+        if reason == "refusal" and refusal_text:
+            # Chat has no ``refusal`` finish reason: the body writer marks a
+            # refusal with the words alone (``message.refusal``) and the stream
+            # reader recovers the reason from the ``delta.refusal`` it
+            # accumulated.  A finish that carried the words only in its
+            # metadata therefore lost them, and the reason with them, whenever
+            # the source dialect recorded a refusal no content block held
+            # (cross-format stream property, #1314).
+            delta["refusal"] = refusal_text
         return {
             "choices": [
                 {
                     "index": choice_index,
-                    "delta": {},
+                    "delta": delta,
                     "finish_reason": _chat_finish_reason(
                         reason,
                         context.response_id if context is not None else "",

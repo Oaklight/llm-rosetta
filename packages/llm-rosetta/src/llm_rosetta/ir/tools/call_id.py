@@ -22,6 +22,11 @@ _INVALID_CHARS = re.compile(r"[^a-zA-Z0-9_-]")
 
 MAX_TOOL_CALL_ID_LENGTH = 64
 
+#: Prefixes a provider requires on a *server* tool id.  A reader keeps the id
+#: it saw, so an id written for one dialect carries that dialect's prefix; a
+#: writer for another dialect has to replace it, not stack its own on top.
+_SERVER_TOOL_ID_PREFIXES = ("srvtoolu_", "ws_", "ci_", "srv_")
+
 
 def sanitize_tool_call_id(
     raw_id: str, max_length: int = MAX_TOOL_CALL_ID_LENGTH
@@ -61,10 +66,17 @@ def prefixed_tool_call_id(raw_id: str, prefix: str) -> str:
     Some providers require a server-tool id to carry their own prefix
     (Anthropic ``srvtoolu_``, OpenAI ``ws_`` / ``ci_``).  An id that already has
     it is returned unchanged, so a same-dialect replay keeps its original id;
-    any other id gets the prefix.  Pure and deterministic, so a call and the
-    result that answers it stay paired without a lookup table.
+    an id carrying *another* dialect's server-tool prefix has that prefix
+    replaced rather than stacked — ``srvtoolu_x`` reaching a Responses target
+    used to become ``ws_srvtoolu_x``, and a trip back through Messages added
+    ``srvtoolu_`` a second time.  Any other id gets the prefix.  Pure and
+    deterministic, so a call and the result that answer it stay paired without
+    a lookup table.
     """
     sanitized = sanitize_tool_call_id(raw_id)
     if sanitized.startswith(prefix):
         return sanitized
+    for known in _SERVER_TOOL_ID_PREFIXES:
+        if sanitized.startswith(known):
+            return sanitize_tool_call_id(prefix + sanitized[len(known) :])
     return sanitize_tool_call_id(prefix + sanitized)
