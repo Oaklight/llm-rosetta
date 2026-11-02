@@ -344,7 +344,7 @@ def register_shims():
       "url": "https://github.com/Oaklight/llm-rosetta-shim-alcf",
       // "ref": "v0.1.0",                          // 仓库打 tag 后再固定；省略则取 HEAD，首次拉取时固化
       "path": "src/llm_rosetta_shim_alcf/providers",
-      "token_env": "GITHUB_TOKEN"                  // 可选；仅私有镜像需要
+      "token_env": "GITHUB_TOKEN"                  // 可选；仅私有 shim 仓库需要
     }
   ]
 }
@@ -460,7 +460,7 @@ remote 配置：
 ```
 
 预设先于显式 remote 应用，同一 URL 的显式 remote 会合并到对应预设上（显式键优先），
-因此固定 `ref` 时无需重复 `path`。三个仓库都是公开的，预设不带 `token_env`；只有私有镜像
+因此固定 `ref` 时无需重复 `path`。三个仓库都是公开的，预设不带 `token_env`；只有私有 shim 仓库
 才需要添加。预设中不固定 `ref`，因为这些仓库都还
 没有打 tag：不带 `ref` 的远程源会先把 `HEAD` 解析为某个 commit 并记录进缓存 stamp。等它们
 打上 tag 后再固定该 tag —— 参见 [ref 解析](../gateway/configuration.md#external-shim-sources)。

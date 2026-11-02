@@ -71,7 +71,7 @@ shim 不必放在包内。顶层 `shims` 段可以让 gateway 额外扫描若干
       "path": "src/llm_rosetta_shim_alcf/providers",   // 归档内的子路径
       "archive": "auto",                               // auto | tar.gz | zip
       "sha256": "0123…abcd",                           // 可选；归档校验
-      "token_env": "GITHUB_TOKEN",                     // 可选；仅私有镜像需要
+      "token_env": "GITHUB_TOKEN",                     // 可选；仅私有 shim 仓库需要
       "refresh": "auto"                                // auto | always | never
     }
   ],
