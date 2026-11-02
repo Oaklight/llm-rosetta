@@ -225,5 +225,157 @@
       "field": "reason",
       "reason": "the terminal reason is re-derived from the target dialect's own vocabulary on the way out and back"
     }
+  ],
+  "first_pass": [
+    {
+      "dialect": "chat_completions",
+      "case": "stop_with_call",
+      "field": "reason",
+      "reason": "the dialect's own terminal vocabulary differs: it writes the closest reason it has, so the turn comes back with that word"
+    },
+    {
+      "dialect": "chat_completions",
+      "case": "intrinsic",
+      "field": "calls",
+      "reason": "the dialect cannot express the call it was given: a freeform (\"custom\") call becomes a function call, and a server-tool call has no carrier"
+    },
+    {
+      "dialect": "chat_completions",
+      "case": "refusal",
+      "field": "reason",
+      "reason": "the dialect's own terminal vocabulary differs: it writes the closest reason it has, so the turn comes back with that word"
+    },
+    {
+      "dialect": "open_responses",
+      "case": "stop_with_call",
+      "field": "reason",
+      "reason": "the dialect's own terminal vocabulary differs: it writes the closest reason it has, so the turn comes back with that word"
+    },
+    {
+      "dialect": "open_responses",
+      "case": "intrinsic",
+      "field": "calls",
+      "reason": "the dialect cannot express the call it was given: a freeform (\"custom\") call becomes a function call, and a server-tool call has no carrier"
+    },
+    {
+      "dialect": "open_responses",
+      "case": "refusal",
+      "field": "reason",
+      "reason": "the dialect's own terminal vocabulary differs: it writes the closest reason it has, so the turn comes back with that word"
+    },
+    {
+      "dialect": "open_responses",
+      "case": "refusal_with_words",
+      "field": "reason",
+      "reason": "the dialect's own terminal vocabulary differs: it writes the closest reason it has, so the turn comes back with that word"
+    },
+    {
+      "dialect": "messages",
+      "case": "stop_with_call",
+      "field": "reason",
+      "reason": "the dialect's own terminal vocabulary differs: it writes the closest reason it has, so the turn comes back with that word"
+    },
+    {
+      "dialect": "messages",
+      "case": "custom",
+      "field": "calls",
+      "reason": "the dialect cannot express the call it was given: a freeform (\"custom\") call becomes a function call, and a server-tool call has no carrier"
+    },
+    {
+      "dialect": "messages",
+      "case": "intrinsic",
+      "field": "calls",
+      "reason": "the dialect cannot express the call it was given: a freeform (\"custom\") call becomes a function call, and a server-tool call has no carrier"
+    },
+    {
+      "dialect": "messages",
+      "case": "filter",
+      "field": "reason",
+      "reason": "the dialect's own terminal vocabulary differs: it writes the closest reason it has, so the turn comes back with that word"
+    },
+    {
+      "dialect": "google_generate",
+      "case": "stop_with_call",
+      "field": "reason",
+      "reason": "the dialect's own terminal vocabulary differs: it writes the closest reason it has, so the turn comes back with that word"
+    },
+    {
+      "dialect": "google_generate",
+      "case": "custom",
+      "field": "calls",
+      "reason": "the dialect cannot express the call it was given: a freeform (\"custom\") call becomes a function call, and a server-tool call has no carrier"
+    },
+    {
+      "dialect": "google_generate",
+      "case": "intrinsic",
+      "field": "calls",
+      "reason": "the dialect cannot express the call it was given: a freeform (\"custom\") call becomes a function call, and a server-tool call has no carrier"
+    },
+    {
+      "dialect": "google_generate",
+      "case": "refusal",
+      "field": "reason",
+      "reason": "the dialect's own terminal vocabulary differs: it writes the closest reason it has, so the turn comes back with that word"
+    },
+    {
+      "dialect": "google_generate",
+      "case": "refusal_with_words",
+      "field": "reason",
+      "reason": "the dialect's own terminal vocabulary differs: it writes the closest reason it has, so the turn comes back with that word"
+    },
+    {
+      "dialect": "google_generate",
+      "case": "refusal_with_words",
+      "field": "text",
+      "reason": "the dialect writes a refusal as text, so the words move from the refusal slot to text"
+    },
+    {
+      "dialect": "google_generate",
+      "case": "refusal_with_words",
+      "field": "refusal",
+      "reason": "the dialect has no refusal slot: the words reach the reader as text, and the reason carries the terminal state"
+    },
+    {
+      "dialect": "google_interactions",
+      "case": "stop_with_call",
+      "field": "reason",
+      "reason": "the dialect's own terminal vocabulary differs: it writes the closest reason it has, so the turn comes back with that word"
+    },
+    {
+      "dialect": "google_interactions",
+      "case": "custom",
+      "field": "calls",
+      "reason": "the dialect cannot express the call it was given: a freeform (\"custom\") call becomes a function call, and a server-tool call has no carrier"
+    },
+    {
+      "dialect": "google_interactions",
+      "case": "intrinsic",
+      "field": "calls",
+      "reason": "the dialect cannot express the call it was given: a freeform (\"custom\") call becomes a function call, and a server-tool call has no carrier"
+    },
+    {
+      "dialect": "google_interactions",
+      "case": "refusal",
+      "field": "reason",
+      "reason": "the dialect's own terminal vocabulary differs: it writes the closest reason it has, so the turn comes back with that word"
+    },
+    {
+      "dialect": "google_interactions",
+      "case": "refusal_with_words",
+      "field": "reason",
+      "reason": "the dialect's own terminal vocabulary differs: it writes the closest reason it has, so the turn comes back with that word"
+    },
+    {
+      "dialect": "google_interactions",
+      "case": "refusal_with_words",
+      "field": "text",
+      "reason": "the dialect writes a refusal as text, so the words move from the refusal slot to text"
+    },
+    {
+      "dialect": "google_interactions",
+      "case": "refusal_with_words",
+      "field": "refusal",
+      "reason": "the dialect has no refusal slot: the words reach the reader as text, and the reason carries the terminal state"
+    }
   ]
 }
