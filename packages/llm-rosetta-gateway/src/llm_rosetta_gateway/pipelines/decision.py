@@ -43,10 +43,12 @@ def _detect_decision_source_format(
     return detect_source_format(request, body, config, "decisions")
 
 
-def _resolve_route(config: GatewayConfig, model: str) -> TypedRoute | None:
+def _resolve_route(
+    config: GatewayConfig, model: str, excluded: frozenset[str] = frozenset()
+) -> TypedRoute | None:
     """Resolve the decision provider, or ``None`` when the model is unknown."""
     try:
-        return config.resolve_decision(model)
+        return config.resolve_decision(model, excluded=excluded)
     except KeyError:
         return None
 
@@ -61,6 +63,7 @@ _DECISION = TypedHandler(
     model_type="decisions",
     build_pipeline=DecisionConversionPipeline,
     resolve=_resolve_route,
+    resolve_excluding=_resolve_route,
     configured_models=lambda config: config.decisions_models.keys(),
     response_usage=response_usage,
     not_found_label="decision model",

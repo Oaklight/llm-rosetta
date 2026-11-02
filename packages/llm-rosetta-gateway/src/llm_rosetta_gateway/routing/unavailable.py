@@ -26,6 +26,8 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from ..config.core import GatewayConfig
     from .context import SelectionContext
 
@@ -83,6 +85,8 @@ def exhausted_until(
     config: GatewayConfig,
     ctx: SelectionContext,
     names: set[str] | None = None,
+    *,
+    providers: Mapping[str, Any] | None = None,
 ) -> datetime | None:
     """The end of a spent allowance covering every candidate, if one is known.
 
@@ -96,14 +100,17 @@ def exhausted_until(
         names: The candidates the question is about.  ``None`` asks about the
             whole route; the caller passes what a failed-over request can
             still use.
+        providers: The provider table to read, when it is not the chat pool —
+            a typed route keeps its own.
     """
     from ..quota.service import provider_exhausted_until
 
+    table = config.providers if providers is None else providers
     ends: list[datetime] = []
     for entry in ctx.candidates:
         if names is not None and entry.name not in names:
             continue
-        pinfo = config.providers.get(entry.name)
+        pinfo = table.get(entry.name)
         if pinfo is None:
             return None
         moment = provider_exhausted_until(pinfo)
@@ -113,7 +120,12 @@ def exhausted_until(
     return max(ends) if ends else None
 
 
-def classify(config: GatewayConfig, ctx: SelectionContext) -> Unavailable:
+def classify(
+    config: GatewayConfig,
+    ctx: SelectionContext,
+    *,
+    providers: Mapping[str, Any] | None = None,
+) -> Unavailable:
     """Say why no candidate was chosen.
 
     Only meaningful after the selection chain left ``ctx.chosen`` unset.
@@ -121,11 +133,16 @@ def classify(config: GatewayConfig, ctx: SelectionContext) -> Unavailable:
     Args:
         config: The live config, whose provider table the readiness check reads.
         ctx: The request's selection state, already run through the chain.
+        providers: The provider table to read, when it is not the chat pool —
+            the typed pools keep their own, and a typed model is answered
+            about its own candidates.
 
     Returns:
         The state to report, in the order documented on the module.
     """
     from ..maintenance.startup import ProviderInitState
+
+    table = config.providers if providers is None else providers
 
     # The route as this request can still use it: a provider it already failed
     # over from is not "available", so answering "every provider" over the full
@@ -137,9 +154,7 @@ def classify(config: GatewayConfig, ctx: SelectionContext) -> Unavailable:
     # about that filtered set instead.
     remaining = [p for p in ctx.candidates if p.name not in ctx.failover_excluded]
     unready = [
-        config.providers[p.name]
-        for p in remaining
-        if not config.providers[p.name].ready
+        table[p.name] for p in remaining if p.name in table and not table[p.name].ready
     ]
 
     end = blocked_until(unready)
@@ -148,7 +163,9 @@ def classify(config: GatewayConfig, ctx: SelectionContext) -> Unavailable:
 
     names = {p.name for p in remaining}
     if names and names <= set(ctx.quota_excluded):
-        return Unavailable("exhausted", exhausted_until(config, ctx, names))
+        return Unavailable(
+            "exhausted", exhausted_until(config, ctx, names, providers=table)
+        )
 
     deferred = getattr(config, "_deferred_startup", None)
     failed = deferred is not None and all(

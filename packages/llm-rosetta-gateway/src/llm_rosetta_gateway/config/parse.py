@@ -288,6 +288,46 @@ def parse_model_failover(raw_models: dict[str, Any]) -> dict[str, bool]:
     }
 
 
+def declared_provider_entries(value: Any) -> list[Any]:
+    """The providers a model entry names, with the weight each one carries.
+
+    The same shapes :func:`declared_provider_names` reads, kept as entries so
+    a typed model's candidate pool carries its weights into the selector.  A
+    typed model has no ``upstream_model`` per entry — the model's rename map
+    covers that — so only the name and the weight survive.
+
+    Args:
+        value: A model entry: a provider name, or an object with ``provider``
+            or ``providers``.
+
+    Returns:
+        ``ProviderEntry`` values in declared order.
+    """
+    from ..routing import ProviderEntry
+
+    if isinstance(value, str):
+        return [ProviderEntry(name=value)] if value else []
+    if not isinstance(value, dict):
+        return []
+    if isinstance(value.get("provider"), str) and value["provider"]:
+        return [ProviderEntry(name=value["provider"])]
+    raw_list = value.get("providers")
+    if not isinstance(raw_list, list):
+        return []
+    entries: list[Any] = []
+    for item in raw_list:
+        if isinstance(item, str):
+            entries.append(ProviderEntry(name=item))
+        elif isinstance(item, dict) and isinstance(item.get("name"), str):
+            weight = item.get("weight", 1)
+            try:
+                weight = float(weight)
+            except (TypeError, ValueError):
+                weight = 1.0
+            entries.append(ProviderEntry(name=item["name"], weight=weight))
+    return [entry for entry in entries if entry.name]
+
+
 def distribute_typed_models(config: GatewayConfig, raw_models: dict[str, Any]) -> None:
     """Move models with non-LLM ``type`` from the main models pool
     into the corresponding specialized models dicts.
@@ -333,6 +373,15 @@ def distribute_typed_models(config: GatewayConfig, raw_models: dict[str, Any]) -
         provider_name = first_pool_provider(value, type_providers)
         if provider_name:
             type_models.setdefault(name, provider_name)
+            # The whole candidate list, so the selector can score and fail
+            # over across a typed model's providers rather than reading the
+            # first one only.
+            candidates = [
+                entry
+                for entry in declared_provider_entries(value)
+                if entry.name in type_providers
+            ]
+            config.typed_model_candidates.setdefault(model_type, {})[name] = candidates
             to_remove.append(name)
         else:
             warn_skipped_typed_model(name, model_type, value)

@@ -63,16 +63,21 @@ class _ResolvedEmbedding:
     path: str = ""
 
 
-def _resolve_route(config: GatewayConfig, model: str) -> TypedRoute | None:
+def _resolve_route(
+    config: GatewayConfig, model: str, excluded: frozenset[str] = frozenset()
+) -> TypedRoute | None:
     """Resolve the embedding provider, or ``None`` when the model is unknown.
 
     Embedding traffic is routed only through the embedding pool.  There is no
     chat-provider fallback: an unconfigured model returns 404 instead of
     forwarding a chat-shaped request to a provider that never declared an
     embedding endpoint.
+
+    ``excluded`` is what the request already failed over from, so a retry
+    picks a different provider of the same model.
     """
     try:
-        return config.resolve_embedding(model)
+        return config.resolve_embedding(model, excluded=excluded)
     except KeyError:
         return None
 
@@ -149,6 +154,7 @@ _EMBEDDINGS = TypedHandler(
     model_type="embeddings",
     build_pipeline=EmbeddingConversionPipeline,
     resolve=_resolve_route,
+    resolve_excluding=_resolve_route,
     configured_models=lambda config: config.embeddings_models.keys(),
     response_usage=response_usage,
     prepare_body=_prepare_body,

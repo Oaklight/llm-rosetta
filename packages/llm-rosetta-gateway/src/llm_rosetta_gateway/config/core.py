@@ -73,6 +73,10 @@ class GatewayConfig:
     # fills one set per registered type; the built-in three are declared here
     # so their attributes are visible to a type checker.  A further type reads
     # its pools through :meth:`typed_pool`.
+    #: Per type, then per model: the providers that serve that type, with the
+    #: weights the model declared.  The typed pools keep only the first one as
+    #: ``<type>_models[model]``; this is the pool the selector scores.
+    typed_model_candidates: dict[str, dict[str, list[Any]]]
     embeddings_providers: dict[str, dict[str, Any]]
     embeddings_provider_infos: dict[str, ProviderInfo]
     embeddings_models: dict[str, str]
@@ -334,6 +338,14 @@ class GatewayConfig:
         stages.append(RulesStage())
         self._selection = RoutingChain(stages)
 
+        # The typed pools' candidates, filled while the pools are built.
+        self.typed_model_candidates = {}
+        # Typed models are scored by the same two stages the chat route starts
+        # with: eligibility, then the anchor.  No same-format tier and no rules
+        # apply to them.
+        self._typed_selection = RoutingChain([EligibilityStage(), AnchorStage()])
+        self._typed_routes: dict[tuple[str, str], Any] = {}
+
         # --- Typed (non-LLM) endpoint pools ---
         # One loop over the model-type registry: every non-LLM type gets its
         # providers / provider_infos / models pools from the unified provider
@@ -434,15 +446,58 @@ class GatewayConfig:
             getattr(self, f"{type_name}_models"),
         )
 
-    def resolve_typed(self, type_name: str, model: str) -> TypedRoute:
+    def _typed_model_route(self, type_name: str, model: str) -> Any:
+        """The selection route for one typed model, built once per config.
+
+        Raises:
+            KeyError: If the model is not configured for that type.
+        """
+        from ..routing import ModelRoute, ProviderEntry
+
+        key = (type_name, model)
+        cached = self._typed_routes.get(key)
+        if cached is not None:
+            return cached
+        models: dict[str, str] = getattr(self, f"{type_name}_models")
+        infos: dict[str, ProviderInfo] = getattr(self, f"{type_name}_provider_infos")
+        if model not in models:
+            raise KeyError(model)
+        entries = list(self.typed_model_candidates.get(type_name, {}).get(model) or [])
+        if not entries:
+            # A model from a legacy ``<type>_models`` section names one
+            # provider and carries no weight.
+            entries = [ProviderEntry(name=models[model])]
+        entries = [entry for entry in entries if entry.name in infos]
+        if not entries:
+            raise KeyError(model)
+        route = ModelRoute(providers=entries, route_id=f"{type_name}:{model}")
+        self._typed_routes[key] = route
+        return route
+
+    def resolve_typed(
+        self,
+        type_name: str,
+        model: str,
+        *,
+        excluded: frozenset[str] = frozenset(),
+    ) -> TypedRoute:
         """Resolve *model* to its provider config for *type_name*.
 
         The one implementation behind ``resolve_embedding``, ``resolve_rerank``
         and ``resolve_decision``; a newly registered type resolves through it
-        without a new method.
+        without a new method.  A typed model with several providers goes
+        through the same selector the chat route uses: eligibility first, then
+        the anchor over the configured weights, so a spent or blocked first
+        provider is passed over instead of always being chosen.
+
+        Args:
+            type_name: The model type (``embeddings``, ``rerank``, …).
+            model: The model name the client asked for.
+            excluded: Providers this request already failed over from.
 
         Raises:
             KeyError: If the model is not configured for that type.
+            ProviderNotReady: If no candidate can serve it right now.
         """
         from llm_rosetta.formats import canonical_model_type
 
@@ -453,10 +508,30 @@ class GatewayConfig:
         path_key = (
             descriptor.config_path_key if descriptor is not None else None
         ) or f"{type_name}_path"
-        models: dict[str, str] = getattr(self, f"{type_name}_models")
+        route = self._typed_model_route(type_name, model)
         providers: dict[str, dict[str, Any]] = getattr(self, f"{type_name}_providers")
         infos: dict[str, ProviderInfo] = getattr(self, f"{type_name}_provider_infos")
-        provider_name = models[model]
+
+        ctx = SelectionContext(model, "")
+        ctx.install_route(
+            model_route=route,
+            providers=infos,
+            provider_types={},
+            provider_shim_names={},
+            provider_account_tokens={},
+        )
+        if excluded:
+            ctx.with_failover_excluded(excluded)
+        self._typed_selection.run(ctx)
+        if ctx.chosen is None:
+            from ..maintenance.startup import ProviderNotReady
+            from ..routing.unavailable import classify
+
+            raise ProviderNotReady(
+                model, **classify(self, ctx, providers=infos).as_kwargs()
+            )
+
+        provider_name = ctx.chosen.name
         pcfg = providers[provider_name]
         return TypedRoute(
             provider_name=provider_name,
@@ -466,26 +541,47 @@ class GatewayConfig:
             params=pcfg.get("params") or None,
         )
 
-    def resolve_embedding(self, model: str) -> TypedRoute:
+    def resolve_embedding(
+        self, model: str, *, excluded: frozenset[str] = frozenset()
+    ) -> TypedRoute:
         """Resolve an embedding model to its provider config.
+
+        Args:
+            model: The model name the client asked for.
+            excluded: Providers this request already failed over from.
 
         Raises:
             KeyError: If the model is not in embeddings_models.
+            ProviderNotReady: If no candidate can serve it right now.
         """
-        return self.resolve_typed("embeddings", model)
+        return self.resolve_typed("embeddings", model, excluded=excluded)
 
-    def resolve_rerank(self, model: str) -> TypedRoute:
+    def resolve_rerank(
+        self, model: str, *, excluded: frozenset[str] = frozenset()
+    ) -> TypedRoute:
         """Resolve a rerank model to its provider config.
+
+        Args:
+            model: The model name the client asked for.
+            excluded: Providers this request already failed over from.
 
         Raises:
             KeyError: If the model is not in rerank_models.
+            ProviderNotReady: If no candidate can serve it right now.
         """
-        return self.resolve_typed("rerank", model)
+        return self.resolve_typed("rerank", model, excluded=excluded)
 
-    def resolve_decision(self, model: str) -> TypedRoute:
+    def resolve_decision(
+        self, model: str, *, excluded: frozenset[str] = frozenset()
+    ) -> TypedRoute:
         """Resolve a decision model to its provider config.
+
+        Args:
+            model: The model name the client asked for.
+            excluded: Providers this request already failed over from.
 
         Raises:
             KeyError: If the model is not in decisions_models.
+            ProviderNotReady: If no candidate can serve it right now.
         """
-        return self.resolve_typed("decisions", model)
+        return self.resolve_typed("decisions", model, excluded=excluded)
