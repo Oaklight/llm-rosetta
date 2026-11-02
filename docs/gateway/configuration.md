@@ -407,8 +407,7 @@ Capabilities are displayed in the [admin panel](admin-panel.md) and can be edite
 
 ### Routing Strategy
 
-Multi-provider model entries support a `strategy` field to control how
-the gateway selects among providers:
+A multi-provider model chooses between its providers with a `routing` block:
 
 ```jsonc
 "models": {
@@ -417,17 +416,44 @@ the gateway selects among providers:
       {"name": "openai-prod", "weight": 5},
       {"name": "openai-backup", "weight": 1}
     ],
-    "strategy": "weighted_round_robin"
+    "routing": {"strategy": "weighted", "affinity": "off", "sink": true}
   }
 }
 ```
 
 | Strategy | Description |
 |----------|-------------|
-| `weighted_round_robin` | **(default)** Smooth nginx-style interleaving based on weights. Weights [5, 1] yield the sequence A A A A A B, not burst-then-switch. |
-| `affinity_round_robin` | SHA-256 hash of client identity (API key or IP) selects a deterministic preferred provider for cache locality. Falls back to weighted round-robin when no identity is available or only one provider is configured. |
+| `weighted` | **(default)** Smooth nginx-style interleaving based on weights. Weights [5, 1] yield the sequence A A A A A B, not burst-then-switch. |
+| `ordered` | The first eligible provider serves every request; the list order is the policy and weights are ignored. |
+| `rotate` | Plain round-robin — every provider takes its turn, whatever its weight. |
+| `least_used` | The provider that has served the fewest requests since the route was built. A process-local tie-breaker, not a load monitor. |
+| `pace` | Weighted round-robin over the remaining allowance alone: the configured weight is ignored, and the provider with the most room left is spent first. |
 
-The strategy is set per model.  Single-provider models ignore it.
+Every strategy still applies the allowance weight (`weight × (0.25 + 0.75 × headroom)`); `pace` is
+the one that drops the configured factor from that product.
+
+| Affinity | Description |
+|----------|-------------|
+| `off` | **(default)** Each request is chosen independently. |
+| `session` | One client keeps one provider (weighted rendezvous on the client's key), preserving its prompt cache. Allowed only with `strategy: "weighted"`, because the identity replaces the per-request choice. |
+| `turn`, `strict` | Not implemented yet. The load refuses them by name rather than accepting a value that would do nothing. |
+
+| Field | Description |
+|-------|-------------|
+| `strategy` | One of the values above. |
+| `affinity` | `off` or `session`. |
+| `sink` | **(default `true`)** Whether a recent 429 orders this model's provider last. The provider's *disable* is process-wide; this only says whether the model cares about the milder sink. |
+| `first_token_ms` | Reserved for the first-token deadline. Parsed and kept; the selector does not act on it yet. |
+| `rules` | Reserved for per-model rules. A non-empty list is refused until the rules land. |
+
+An unknown key fails the config load, and the admin save reports the same message, because both
+build the config through the same parser.
+
+The pre-block spelling — a single `strategy` field beside the provider list — is still read:
+`weighted_round_robin` means the defaults, and `affinity_round_robin` means `affinity: "session"`.
+Naming both `strategy` and `routing` on one model is an error rather than a precedence rule.
+
+Single-provider models ignore the block.
 
 ### Same-Format Preference
 
