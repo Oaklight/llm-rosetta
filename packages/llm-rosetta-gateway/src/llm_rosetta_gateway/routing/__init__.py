@@ -29,6 +29,7 @@ from .eligibility import (
     quota_weight,
 )
 from .key import ProviderKeyAffinity
+from .model_routing import ModelRouting, parse_model_routing, routing_from_legacy
 from .prefix import compute_affinity_identity, extract_prefix_from_ir
 from .same_format import SameFormatStage, shim_group_key
 from .session import SessionHeaderAffinity
@@ -37,11 +38,16 @@ from .stage import RoutingChain, RoutingStage, StageOrderError
 from .strategy import (
     DEFAULT_STRATEGY,
     AffinityRoundRobinStrategy,
+    LeastUsedStrategy,
     ModelRoute,
+    OrderedStrategy,
+    PaceStrategy,
     ProviderEntry,
+    RotateStrategy,
     RoutingStrategy,
     WeightedRoundRobinStrategy,
     create_strategy,
+    strategy_for,
 )
 from .unavailable import Unavailable
 from .unavailable import classify as classify_unavailable
@@ -58,9 +64,14 @@ __all__ = [
     "Eligibility",
     "EligibilityStage",
     "Identity",
+    "LeastUsedStrategy",
     "ModelRoute",
+    "ModelRouting",
+    "OrderedStrategy",
+    "PaceStrategy",
     "ProviderEntry",
     "ProviderKeyAffinity",
+    "RotateStrategy",
     "RoutingChain",
     "RoutingStage",
     "RoutingStrategy",
@@ -74,8 +85,11 @@ __all__ = [
     "compute_affinity_identity",
     "create_strategy",
     "extract_prefix_from_ir",
+    "parse_model_routing",
     "provider_eligibility",
     "quota_weight",
+    "routing_from_legacy",
     "select_ready_entry",
     "shim_group_key",
+    "strategy_for",
 ]

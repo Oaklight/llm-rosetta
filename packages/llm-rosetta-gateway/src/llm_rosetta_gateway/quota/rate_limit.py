@@ -269,28 +269,48 @@ class RateLimitTracker:
 
     # -- reading -----------------------------------------------------------
 
-    def record(self, provider: str, credential: str | None = None) -> RateLimit | None:
+    def record(
+        self,
+        provider: str,
+        credential: str | None = None,
+        *,
+        now: datetime | None = None,
+    ) -> RateLimit | None:
         """The live record for one lane, or ``None`` when there is none."""
+        moment = now or _now()
         key = (provider, credential)
         with self._lock:
             found = self._records.get(key)
             if found is None:
                 return None
-            if _now() >= found.window_end and not found.is_disabled(_now()):
+            if moment >= found.window_end and not found.is_disabled(moment):
                 self._records.pop(key, None)
                 return None
             return found
 
-    def disabled(self, provider: str, credential: str | None = None) -> datetime | None:
-        """When *credential*'s lane may serve again, or ``None``."""
-        record = self.record(provider, credential)
-        if record is None or not record.is_disabled(_now()):
+    def disabled(
+        self,
+        provider: str,
+        credential: str | None = None,
+        *,
+        now: datetime | None = None,
+    ) -> datetime | None:
+        """When *credential*'s lane may serve again, or ``None``.
+
+        ``now`` is the moment to judge against; tests pass one so a fixed
+        timeline stays fixed.  The caller with no opinion gets the clock.
+        """
+        moment = now or _now()
+        record = self.record(provider, credential, now=moment)
+        if record is None or not record.is_disabled(moment):
             return None
         return record.disabled_until
 
-    def latest_disable(self, provider: str) -> datetime | None:
+    def latest_disable(
+        self, provider: str, *, now: datetime | None = None
+    ) -> datetime | None:
         """The latest disable end across every lane of *provider*."""
-        moment = _now()
+        moment = now or _now()
         ends: list[datetime] = []
         with self._lock:
             for (owner, _credential), record in self._records.items():

@@ -19,8 +19,10 @@ from __future__ import annotations
 import hashlib
 import math
 from dataclasses import dataclass, field
-from typing import Protocol
+from typing import Any, Protocol
 from collections.abc import Mapping
+
+from .model_routing import ModelRouting
 
 _U64 = float(1 << 64)
 
@@ -158,13 +160,122 @@ class AffinityRoundRobinStrategy:
         return best
 
 
-# Strategy registry
+class OrderedStrategy:
+    """Always the first candidate — the operator's order is the policy.
+
+    The cheapest thing that can be called a strategy: the list is sorted by
+    preference, and the first eligible provider serves every request.  Weights
+    are ignored, because the point of naming this strategy is to say the
+    order *is* the policy.
+    """
+
+    def select(
+        self,
+        providers: list[ProviderEntry],
+        *,
+        route_id: str,
+        identity: str | None = None,
+    ) -> str:
+        if not providers:
+            raise ValueError("No providers configured")
+        return providers[0].name
+
+
+class RotateStrategy:
+    """Plain round-robin: every candidate takes its turn.
+
+    Unlike weighted round-robin, a provider configured at ``weight: 5`` gets
+    no larger a share than its peer at ``weight: 1``.  Counted per route, so a
+    tier subset takes turns of its own.
+    """
+
+    def __init__(self) -> None:
+        self._next: dict[str, int] = {}
+
+    def select(
+        self,
+        providers: list[ProviderEntry],
+        *,
+        route_id: str,
+        identity: str | None = None,
+    ) -> str:
+        n = len(providers)
+        if n == 0:
+            raise ValueError("No providers configured")
+        index = self._next.get(route_id, 0) % n
+        self._next[route_id] = (index + 1) % n
+        return providers[index].name
+
+
+class LeastUsedStrategy:
+    """The candidate that has served the fewest requests.
+
+    Counted per route from the moment the route was built — this is a
+    process-local tie-breaker, not a load monitor: it knows what *this* gateway
+    has sent, not what the upstream is doing.  That is enough to keep a fresh
+    provider catch up with a long-serving one.
+    """
+
+    def __init__(self) -> None:
+        self._counts: dict[str, list[int]] = {}
+
+    def select(
+        self,
+        providers: list[ProviderEntry],
+        *,
+        route_id: str,
+        identity: str | None = None,
+    ) -> str:
+        n = len(providers)
+        if n == 0:
+            raise ValueError("No providers configured")
+        counts = self._counts.get(route_id)
+        if counts is None or len(counts) != n:
+            counts = [0] * n
+            self._counts[route_id] = counts
+        best = min(range(n), key=lambda i: counts[i])
+        counts[best] += 1
+        return providers[best].name
+
+
+class PaceStrategy:
+    """Weighted round-robin over the allowance headroom alone.
+
+    The configured weight is *not* applied: this is the strategy that says
+    "spend the provider with the most room left, whatever the operator
+    configured".  A provider nothing has measured counts as having full room,
+    so it is tried before one that is nearly spent.
+    """
+
+    #: Read by :class:`ModelRoute`: scale by headroom only, not by weight.
+    uses_headroom_only = True
+
+    def __init__(self) -> None:
+        self._fallback = WeightedRoundRobinStrategy()
+
+    def select(
+        self,
+        providers: list[ProviderEntry],
+        *,
+        route_id: str,
+        identity: str | None = None,
+    ) -> str:
+        return self._fallback.select(providers, route_id=route_id)
+
+
+# Strategy registry.  The old names stay: a config written before the model
+# routing block still names them, and the block's own vocabulary is a superset.
 _STRATEGIES: dict[str, type[RoutingStrategy]] = {
+    "weighted": WeightedRoundRobinStrategy,
+    "ordered": OrderedStrategy,
+    "rotate": RotateStrategy,
+    "least_used": LeastUsedStrategy,
+    "pace": PaceStrategy,
     "weighted_round_robin": WeightedRoundRobinStrategy,
     "affinity_round_robin": AffinityRoundRobinStrategy,
 }
 
-DEFAULT_STRATEGY = "weighted_round_robin"
+DEFAULT_STRATEGY = "weighted"
 
 
 def create_strategy(name: str) -> RoutingStrategy:
@@ -180,6 +291,17 @@ def create_strategy(name: str) -> RoutingStrategy:
             f"Unknown routing strategy '{name}'. Valid strategies: {valid}"
         )
     return cls()
+
+
+def strategy_for(routing: Any) -> RoutingStrategy:
+    """Build the strategy a model's routing block names.
+
+    ``affinity: session`` replaces the per-request choice with one client on
+    one provider, which is why the parser only allows it with ``weighted``.
+    """
+    if getattr(routing, "affinity", "off") == "session":
+        return AffinityRoundRobinStrategy()
+    return create_strategy(routing.strategy)
 
 
 @dataclass
@@ -201,6 +323,7 @@ class ModelRoute:
     providers: list[ProviderEntry]
     route_id: str
     strategy: RoutingStrategy = field(default_factory=WeightedRoundRobinStrategy)
+    routing: ModelRouting = field(default_factory=ModelRouting)
 
     def __post_init__(self) -> None:
         self._entry_by_name = {p.name: p for p in self.providers}
@@ -233,18 +356,31 @@ class ModelRoute:
         entries = self.providers
         if excluded:
             entries = [p for p in entries if p.name not in excluded]
-        if sunk:
+        if sunk and self.routing.sink:
             standing = [p for p in entries if p.name not in sunk]
             if standing:
                 entries = standing
-        if not weights:
+        headroom_only = getattr(self.strategy, "uses_headroom_only", False)
+        if not weights and not headroom_only:
             return entries
+        factors = weights or {}
+        if headroom_only:
+            # "Pace" spends the provider with the most room left; the
+            # configured weight is exactly what it is told to ignore.
+            return [
+                ProviderEntry(
+                    name=p.name,
+                    weight=max(0.05, factors.get(p.name, 1.0)),
+                    upstream_model=p.upstream_model,
+                )
+                for p in entries
+            ]
         return [
             ProviderEntry(
                 name=p.name,
                 # Never zero: a provider with a spent window is still a
                 # candidate — the quota state, not this factor, removes one.
-                weight=max(0.05, p.weight * weights.get(p.name, 1.0)),
+                weight=max(0.05, p.weight * factors.get(p.name, 1.0)),
                 upstream_model=p.upstream_model,
             )
             for p in entries

@@ -153,6 +153,7 @@ class SameFormatStage(RoutingStage):
                     members,
                     _subset_route_id(ctx.model, kind, key),
                     model_route.strategy,
+                    routing=model_route.routing,
                 )
 
             by_shim: dict[tuple[str | None, str], list[ProviderEntry]] = {}

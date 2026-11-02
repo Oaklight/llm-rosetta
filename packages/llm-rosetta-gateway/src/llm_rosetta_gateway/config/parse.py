@@ -12,7 +12,8 @@ import logging
 import re
 from typing import TYPE_CHECKING, Any
 
-from ..routing import DEFAULT_STRATEGY, ModelRoute, ProviderEntry, create_strategy
+from ..routing import ModelRoute, ProviderEntry, strategy_for
+from ..routing.model_routing import parse_model_routing, routing_from_legacy
 
 if TYPE_CHECKING:
     from .core import GatewayConfig
@@ -83,7 +84,12 @@ def parse_model_route(
     provider_name = value["provider"]
     if provider_name not in raw_providers:
         return None
-    return ModelRoute([ProviderEntry(provider_name)], name)
+    # A single-provider entry carries a routing block like any other: without
+    # this the panel would write a block the runtime never reads.
+    routing = _model_routing(name, value)
+    return ModelRoute(
+        [ProviderEntry(provider_name)], name, strategy_for(routing), routing=routing
+    )
 
 
 def declared_provider_names(value: Any) -> list[str]:
@@ -176,9 +182,28 @@ def parse_multi_provider(
     if not entries:
         return None
 
-    strategy_name = value.get("strategy", DEFAULT_STRATEGY)
-    strategy = create_strategy(strategy_name)
-    return ModelRoute(entries, model_name, strategy)
+    routing = _model_routing(model_name, value)
+    return ModelRoute(entries, model_name, strategy_for(routing), routing=routing)
+
+
+def _model_routing(model_name: str, value: Any):
+    """Read a model entry's routing block, absorbing the old ``strategy`` key.
+
+    The block is the only place routing is configured.  The pre-block
+    ``strategy`` key is still read so an existing config keeps its behaviour,
+    but naming both is a mistake the load refuses rather than a silent
+    precedence rule.
+    """
+    raw_routing = value.get("routing") if isinstance(value, dict) else None
+    legacy = value.get("strategy") if isinstance(value, dict) else None
+    if raw_routing is not None and legacy is not None:
+        raise ValueError(
+            f"config: model '{model_name}' sets both 'strategy' and 'routing'; "
+            "move the strategy into routing.strategy"
+        )
+    if legacy is not None:
+        return routing_from_legacy(legacy, label=f"models.{model_name}.strategy")
+    return parse_model_routing(raw_routing, label=f"models.{model_name}.routing")
 
 
 def parse_model_overrides(

@@ -167,7 +167,8 @@ class TestMultiProviderValidation:
             _make_config({"gpt-4o": {"providers": [{"weight": 3}]}})
 
     def test_invalid_strategy_raises(self):
-        with pytest.raises(ValueError, match="Unknown routing strategy"):
+        """The legacy key is checked by the block parser, which names the path."""
+        with pytest.raises(ValueError, match="models.gpt-4o.strategy must be one of"):
             _make_config(
                 {
                     "gpt-4o": {
