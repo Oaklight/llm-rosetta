@@ -368,7 +368,7 @@ llm-rosetta-gateway --socket /run/user/$(id -u)/rosetta.sock
 
 ### 路由策略
 
-多提供方模型条目支持 `strategy` 字段来控制网关如何在提供方之间选择：
+多提供方模型通过 `routing` 块在提供方之间选择：
 
 ```jsonc
 "models": {
@@ -377,17 +377,43 @@ llm-rosetta-gateway --socket /run/user/$(id -u)/rosetta.sock
       {"name": "openai-prod", "weight": 5},
       {"name": "openai-backup", "weight": 1}
     ],
-    "strategy": "weighted_round_robin"
+    "routing": {"strategy": "weighted", "affinity": "off", "sink": true}
   }
 }
 ```
 
 | 策略 | 描述 |
 |------|------|
-| `weighted_round_robin` | **（默认）** 平滑的 nginx 风格加权轮询。权重 [5, 1] 产生序列 A A A A A B，而非突发切换。 |
-| `affinity_round_robin` | 对客户端标识（API key 或 IP）做 SHA-256 哈希，确定性地选择首选提供方，实现缓存亲和。无标识或仅单提供方时回退到加权轮询。 |
+| `weighted` | **（默认）** 平滑的 nginx 风格加权轮询。权重 [5, 1] 产生序列 A A A A A B，而非突发切换。 |
+| `ordered` | 第一个可用的提供方服务每个请求；列表顺序就是策略，权重被忽略。 |
+| `rotate` | 普通轮询 —— 每个提供方轮流服务，与其权重无关。 |
+| `least_used` | 自路由建立以来服务次数最少的提供方。它是进程内的平局裁决，不是负载监控。 |
+| `pace` | 只按剩余额度做加权轮询：配置权重被忽略，剩余额度最多的提供方先用。 |
 
-策略按模型设置。单提供方模型忽略此字段。
+所有策略都仍会乘以额度权重（`weight × (0.25 + 0.75 × headroom)`）；`pace` 是其中唯一把配置权重
+从乘积中去掉的那个。
+
+| 亲和 | 描述 |
+|------|------|
+| `off` | **（默认）** 每个请求独立选择。 |
+| `session` | 同一客户端固定在一个提供方（按客户端 key 做加权 rendezvous），保全其提示缓存。只能与 `strategy: "weighted"` 搭配，因为身份取代了逐请求的选择。 |
+| `turn`、`strict` | 尚未实现。加载时会按名称拒绝，而不是接受一个什么都不做的值。 |
+
+| 字段 | 描述 |
+|------|------|
+| `strategy` | 上表中的一个值。 |
+| `affinity` | `off` 或 `session`。 |
+| `sink` | **（默认 `true`）** 最近一次 429 是否让该模型的提供方排到最后。提供方的*禁用*是进程级的；这里只决定该模型是否在意较轻的下沉。 |
+| `first_token_ms` | 预留给首个 token 的截止时间。会被解析并保留；选择器尚未据此行动。 |
+| `rules` | 预留给按模型的规则。规则落地前，非空列表会被拒绝。 |
+
+未知键会让配置加载失败，管理面板保存会报同样的消息，因为两者都通过同一个解析器构建配置。
+
+块之前的写法 —— 提供方列表旁的单个 `strategy` 字段 —— 仍会被读取：
+`weighted_round_robin` 表示默认值，`affinity_round_robin` 表示 `affinity: "session"`。
+在同一模型上同时写 `strategy` 和 `routing` 是错误，而不是谁优先的规则。
+
+单提供方模型忽略此块。
 
 ### 同格式偏好
 
