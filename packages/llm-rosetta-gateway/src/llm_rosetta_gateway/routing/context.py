@@ -70,6 +70,7 @@ class SelectionContext:
         # Filled by the stages.
         "identity",
         "eligibility",
+        "rule_facts",
         "chosen",
         "provider_info",
         "ir_request",
@@ -105,6 +106,10 @@ class SelectionContext:
         # provider name.  Computed once by the stage that runs first; nothing
         # after it re-derives whether a provider may serve.
         self.eligibility: Mapping[str, Eligibility] = {}
+        # What a rule sees: the source request in IR form, reduced to the
+        # facts rules read.  Built by the caller only when the model has
+        # rules, so a model without them pays nothing for the feature.
+        self.rule_facts: Any = None
         self.chosen: ProviderEntry | None = None
         self.provider_info: ProviderInfo | None = None
 
@@ -175,6 +180,14 @@ class SelectionContext:
     def with_provider_info(self, provider_info: ProviderInfo) -> None:
         """Record the transport configuration the request will be sent with."""
         self.provider_info = provider_info
+
+    def with_rule_facts(self, facts: Any) -> None:
+        """Record what the model's rules see of this request.
+
+        Set by the edge, before the chain runs: the rules stage is one of the
+        stages, and the IR it reads has to exist before any of them starts.
+        """
+        self.rule_facts = facts
 
     def with_eligibility(self, answers: Mapping[str, Eligibility]) -> None:
         """Record the one predicate's answer for every candidate.

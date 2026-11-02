@@ -22,6 +22,7 @@ from ..routing import (
     RoutingStage,
     SameFormatStage,
     SelectionContext,
+    RulesStage,
 )
 from ..transport import ProviderInfo
 from .parse import (
@@ -328,6 +329,9 @@ class GatewayConfig:
         stages: list[RoutingStage] = [EligibilityStage(), AnchorStage()]
         if self.prefer_same_format:
             stages.append(self._same_format)
+        # Rules run last: they start from the provider the anchor and the
+        # tiers chose, so a rule composes with them instead of replacing them.
+        stages.append(RulesStage())
         self._selection = RoutingChain(stages)
 
         # --- Typed (non-LLM) endpoint pools ---

@@ -31,6 +31,15 @@ from .eligibility import (
 from .key import ProviderKeyAffinity
 from .model_routing import ModelRouting, parse_model_routing, routing_from_legacy
 from .prefix import compute_affinity_identity, extract_prefix_from_ir
+from .rules import (
+    EFFORT_ORDER,
+    Rule,
+    RuleFacts,
+    RulesStage,
+    facts_from_ir,
+    matches,
+    parse_rules,
+)
 from .same_format import SameFormatStage, shim_group_key
 from .session import SessionHeaderAffinity
 from .select import AnchorStage, select_ready_entry
@@ -54,6 +63,7 @@ from .unavailable import classify as classify_unavailable
 
 __all__ = [
     "BLOCKED",
+    "EFFORT_ORDER",
     "DEFAULT_STRATEGY",
     "INITIALIZING",
     "NO_CREDENTIAL",
@@ -75,6 +85,9 @@ __all__ = [
     "RoutingChain",
     "RoutingStage",
     "RoutingStrategy",
+    "Rule",
+    "RuleFacts",
+    "RulesStage",
     "SameFormatStage",
     "SelectionContext",
     "SessionHeaderAffinity",
@@ -85,7 +98,10 @@ __all__ = [
     "compute_affinity_identity",
     "create_strategy",
     "extract_prefix_from_ir",
+    "facts_from_ir",
+    "matches",
     "parse_model_routing",
+    "parse_rules",
     "provider_eligibility",
     "quota_weight",
     "routing_from_legacy",

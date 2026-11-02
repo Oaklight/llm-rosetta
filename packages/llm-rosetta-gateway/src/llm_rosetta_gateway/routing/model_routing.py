@@ -19,6 +19,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from .rules import Rule, parse_rules
+
 #: How a model's providers are chosen between when no affinity applies.
 STRATEGIES = ("weighted", "ordered", "rotate", "least_used", "pace")
 
@@ -54,14 +56,14 @@ class ModelRouting:
             the model cares about the milder sink.
         first_token_ms: Reserved for the first-token deadline.  Parsed and
             kept, but the selector does not act on it yet.
-        rules: Reserved for the per-model rules of the next slice.
+        rules: Per-request rules, evaluated in order; the first match wins.
     """
 
     strategy: str = "weighted"
     affinity: str = "off"
     sink: bool = True
     first_token_ms: int | None = None
-    rules: tuple[Any, ...] = ()
+    rules: tuple[Rule, ...] = ()
 
     def describe(self) -> dict[str, Any]:
         """The block as the admin panel reports it."""
@@ -70,7 +72,7 @@ class ModelRouting:
             "affinity": self.affinity,
             "sink": self.sink,
             "first_token_ms": self.first_token_ms,
-            "rules": list(self.rules),
+            "rules": [rule.describe() for rule in self.rules],
         }
 
 
@@ -116,21 +118,14 @@ def parse_model_routing(raw: Any, *, label: str) -> ModelRouting:
                 f"got {first_token_ms!r}"
             )
 
-    rules = raw.get("rules", [])
-    if not isinstance(rules, list):
-        raise ValueError(f"config: {label}.rules must be an array, got {rules!r}")
-    if rules:
-        raise ValueError(
-            f"config: {label}.rules is not supported yet; a rule that did "
-            "nothing would be worse than no rule"
-        )
+    rules = parse_rules(raw.get("rules"), label=f"{label}.rules")
 
     return ModelRouting(
         strategy=strategy,
         affinity=affinity,
         sink=sink,
         first_token_ms=first_token_ms,
-        rules=(),
+        rules=rules,
     )
 
 
