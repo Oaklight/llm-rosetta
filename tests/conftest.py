@@ -3,6 +3,38 @@
 import pytest
 
 
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_protocol(item, nextitem):
+    """Give every test the shim registry it started with.
+
+    The registry is process-wide, and a suite that rebuilds it with its own
+    fixtures (``tests/test_shim_sources.py``) would otherwise leak those shims
+    into whatever runs next — the app-wiring tests, typically — so the same
+    two files pass alone and fail together (#1332).
+
+    A hook wrapper rather than an autouse fixture: a function-scoped fixture is
+    set up *after* module-scoped ones, so a module that loads preset shims in
+    its own ``sources`` fixture (``tests/integration/test_shim_presets_live.py``)
+    would have its shims captured as the baseline and restored as if they were
+    built-ins.  The protocol hook runs before any fixture and after every
+    finalizer, so the snapshot is always the registry the previous test left.
+
+    The restore is what makes file order irrelevant for every suite, not just
+    the one that remembered to clean up.  ``tests/test_shim_registry_snapshot``
+    witnesses that a registration does not outlive its test; the hook-versus-
+    fixture ordering above is argued rather than witnessed, because the
+    module-scoped fixture that distinguishes the two lives in
+    ``tests/integration/``, which a default run skips.
+    """
+    from llm_rosetta.shims import restore_registry, snapshot_registry
+
+    saved = snapshot_registry()
+    try:
+        return (yield)
+    finally:
+        restore_registry(saved)
+
+
 @pytest.fixture(autouse=True)
 def _clear_tool_conversion_caches():
     """Ensure each test starts and ends with clean conversion caches.
