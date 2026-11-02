@@ -1,0 +1,151 @@
+{
+  "schema_version": 2,
+  "definition": "A path is in A ∩ B when A → IR → B → IR gives it back unchanged.  A path outside it must be named by a conversion warning; each silent entry counts the bodies that lost it, and the corruptions are paths B carries and then changes, each with the reason it is still open.",
+  "silent_issue": "https://github.com/Oaklight/llm-rosetta/issues/1328",
+  "silent": {
+    "chat_completions->open_responses": {
+      "generation.logit_bias.k": 1,
+      "stream.include_usage": 1
+    },
+    "chat_completions->messages": {
+      "generation.logit_bias.k": 1,
+      "generation.max_tokens": 20
+    },
+    "chat_completions->google_generate": {
+      "cache.key": 1,
+      "generation.logit_bias.k": 1,
+      "service_tier": 1,
+      "stream.enabled": 22,
+      "stream.include_usage": 1
+    },
+    "chat_completions->google_interactions": {
+      "cache.key": 1,
+      "cache.retention": 1,
+      "generation.logit_bias.k": 1,
+      "service_tier": 1,
+      "stream.enabled": 1,
+      "stream.include_usage": 1
+    },
+    "open_responses->chat_completions": {
+      "generation.truncation": 1,
+      "provider_extensions.background": 1,
+      "provider_extensions.context_management.type": 1,
+      "provider_extensions.conversation": 1,
+      "provider_extensions.include": 1,
+      "provider_extensions.metadata.k": 1,
+      "provider_extensions.previous_response_id": 1,
+      "provider_extensions.prompt.id": 1,
+      "provider_extensions.safety_identifier": 1,
+      "provider_extensions.store": 1,
+      "provider_extensions.user": 1
+    },
+    "open_responses->messages": {
+      "generation.max_tokens": 24,
+      "generation.truncation": 1,
+      "provider_extensions.background": 1,
+      "provider_extensions.context_management.type": 1,
+      "provider_extensions.conversation": 1,
+      "provider_extensions.include": 1,
+      "provider_extensions.metadata.k": 1,
+      "provider_extensions.previous_response_id": 1,
+      "provider_extensions.prompt.id": 1,
+      "provider_extensions.safety_identifier": 1,
+      "provider_extensions.store": 1,
+      "provider_extensions.user": 1
+    },
+    "open_responses->google_generate": {
+      "cache.key": 1,
+      "generation.truncation": 1,
+      "provider_extensions.background": 1,
+      "provider_extensions.context_management.type": 1,
+      "provider_extensions.conversation": 1,
+      "provider_extensions.include": 1,
+      "provider_extensions.metadata.k": 1,
+      "provider_extensions.previous_response_id": 1,
+      "provider_extensions.prompt.id": 1,
+      "provider_extensions.safety_identifier": 1,
+      "provider_extensions.store": 1,
+      "provider_extensions.user": 1,
+      "service_tier": 1,
+      "stream.enabled": 25
+    },
+    "open_responses->google_interactions": {
+      "cache.key": 1,
+      "cache.retention": 1,
+      "provider_extensions.background": 1,
+      "provider_extensions.context_management.type": 1,
+      "provider_extensions.conversation": 1,
+      "provider_extensions.include": 1,
+      "provider_extensions.metadata.k": 1,
+      "provider_extensions.previous_response_id": 1,
+      "provider_extensions.prompt.id": 1,
+      "provider_extensions.safety_identifier": 1,
+      "provider_extensions.store": 1,
+      "provider_extensions.user": 1,
+      "service_tier": 1,
+      "stream.enabled": 1
+    },
+    "messages->chat_completions": {
+      "reasoning.budget_tokens": 1,
+      "reasoning.mode": 1
+    },
+    "messages->open_responses": {
+      "reasoning.mode": 1
+    },
+    "messages->google_generate": {
+      "service_tier": 1,
+      "stream.enabled": 1
+    },
+    "messages->google_interactions": {
+      "reasoning.budget_tokens": 1,
+      "reasoning.mode": 1,
+      "service_tier": 1,
+      "stream.enabled": 1
+    },
+    "google_generate->chat_completions": {
+      "reasoning.budget_tokens": 1,
+      "reasoning.mode": 1
+    },
+    "google_generate->open_responses": {
+      "reasoning.mode": 1,
+      "response_format.json_schema.type": 1
+    },
+    "google_generate->messages": {
+      "generation.max_tokens": 12
+    },
+    "google_generate->google_interactions": {
+      "reasoning.budget_tokens": 1,
+      "reasoning.mode": 1
+    },
+    "google_interactions->chat_completions": {
+      "provider_extensions.background": 1,
+      "provider_extensions.previous_interaction_id": 1,
+      "provider_extensions.store": 1
+    },
+    "google_interactions->open_responses": {
+      "provider_extensions.background": 1,
+      "provider_extensions.previous_interaction_id": 1,
+      "provider_extensions.store": 1
+    },
+    "google_interactions->messages": {
+      "generation.max_tokens": 8,
+      "provider_extensions.background": 1,
+      "provider_extensions.previous_interaction_id": 1,
+      "provider_extensions.store": 1
+    },
+    "google_interactions->google_generate": {
+      "provider_extensions.background": 1,
+      "provider_extensions.previous_interaction_id": 1,
+      "provider_extensions.store": 1,
+      "stream.enabled": 1
+    }
+  },
+  "corruptions": [
+    {
+      "pair": "google_generate->open_responses",
+      "field": "response_schema",
+      "loss": "response_format.type: 'json_schema' → 'json_object'",
+      "reason": "issue #1327: the IR's json_schema has two shapes — the OpenAI envelope the Responses writer expects and the raw schema the Google reader fills — so the writer emits a format with no schema and the reader reconstructs json_object"
+    }
+  ]
+}
