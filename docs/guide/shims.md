@@ -488,8 +488,8 @@ silently rewritten.
 **Check whether a remote has moved.** A remote source is fetched once and
 pinned to the commit it came from, so a later run reuses that commit even when
 the repository has advanced. The inventory shows the verdict on the source's
-row: *Up to date*, *Update `<old>` → `<new>`* (click it to refetch that source
-at the new commit), or *Check failed* with the reason on hover. **Check now**
+row: *Up to date*, *Update `<old>` → `<new>`* (click it to refetch every remote
+source), or *Check failed* with the reason on hover. **Check now**
 asks again immediately; otherwise the answer is cached for five minutes.
 
 `shims.presets` expands a catalog key into the repository, path and token
