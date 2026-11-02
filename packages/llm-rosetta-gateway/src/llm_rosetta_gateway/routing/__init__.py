@@ -19,6 +19,7 @@ from __future__ import annotations
 from .context import Identity, SelectionContext
 from .eligibility import (
     BLOCKED,
+    CAPABILITY,
     INITIALIZING,
     NO_CREDENTIAL,
     RATE_LIMITED,
@@ -27,6 +28,7 @@ from .eligibility import (
     EligibilityStage,
     provider_eligibility,
     quota_weight,
+    required_capabilities,
 )
 from .key import ProviderKeyAffinity
 from .model_routing import ModelRouting, parse_model_routing, routing_from_legacy
@@ -94,6 +96,7 @@ __all__ = [
     "StageOrderError",
     "Unavailable",
     "WeightedRoundRobinStrategy",
+    "CAPABILITY",
     "classify_unavailable",
     "compute_affinity_identity",
     "create_strategy",
@@ -104,6 +107,7 @@ __all__ = [
     "parse_rules",
     "provider_eligibility",
     "quota_weight",
+    "required_capabilities",
     "routing_from_legacy",
     "select_ready_entry",
     "shim_group_key",

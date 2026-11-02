@@ -85,6 +85,7 @@ class RuleFacts:
 
     Attributes:
         images: Whether the request carries at least one image.
+        tools: Whether the request declares tools.
         tokens: Estimated input size, in tokens.
         effort: The reasoning effort the request asked for, if any.
         thinking: Whether the request asked for thinking at all.  An Anthropic
@@ -95,6 +96,7 @@ class RuleFacts:
     """
 
     images: bool = False
+    tools: bool = False
     tokens: int = 0
     effort: str | None = None
     thinking: bool = False
@@ -347,6 +349,7 @@ def facts_from_ir(
     thinking = mode in ("auto", "enabled") or (mode != "disabled" and bool(budget))
     return RuleFacts(
         images=images > 0,
+        tools=bool(ir_request.get("tools")),
         tokens=size // 4,
         effort=effort if isinstance(effort, str) else None,
         thinking=thinking,

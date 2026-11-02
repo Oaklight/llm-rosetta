@@ -136,9 +136,16 @@ tr:hover td { background: var(--bg-hover); }
 .cap-badge-rerank { background:color-mix(in srgb, var(--orange) 12%, transparent);color:var(--orange); }
 .cap-badge-decision { background:color-mix(in srgb, #8b5cf6 12%, transparent);color:#8b5cf6; }
 .cap-badge-text { background:color-mix(in srgb, var(--text-dim) 15%, transparent);color:var(--text-dim); }
-.cap-badge-vision { background:color-mix(in srgb, var(--purple) 12%, transparent);color:var(--purple); }
-.cap-badge-tools { background:color-mix(in srgb, var(--blue) 8%, var(--green) 4%);color:color-mix(in srgb, var(--blue) 50%, var(--green)); }
-.cap-badge-reasoning { background:color-mix(in srgb, var(--red) 8%, transparent);color:var(--red); }
+.cap-badge-vision { background:color-mix(in srgb, var(--magenta) 12%, transparent);color:var(--magenta); }
+/* Capability hues avoid the status vocabulary: red, green and orange mean
+   failed, healthy and warning everywhere else in the console, so a small dot
+   in one of them reads as a state rather than a capability.  Reasoning was
+   red and looked broken, so it is the one deliberate exception: a lime green,
+   far enough toward yellow that it does not read as the board's healthy dot.
+   Tools took the cyan the reasoning teal used to hold, and vision moved from
+   purple to magenta because its old dot read as a dark smudge on white. */
+.cap-badge-tools { background:color-mix(in srgb, var(--cyan) 10%, transparent);color:var(--cyan); }
+.cap-badge-reasoning { background:color-mix(in srgb, var(--lime) 10%, transparent);color:var(--lime); }
 /* Provider-model cross-navigation */
 .provider-link { color:inherit;cursor:pointer;text-decoration:none; }
 .provider-link:hover { text-decoration:underline;color:var(--accent); }
@@ -813,6 +820,36 @@ canvas { width: 100%; height: 160px; }
   border: 1px solid var(--border); border-radius: 3px;
   background: var(--bg-card); color: var(--text); font-family: var(--mono);
 }
+/* The capability picker: icon badges on the trigger, checkboxes in the menu.
+   An entry with no list of its own shows a dash — inherit is a state. */
+.cap-picker { display: inline-flex; }
+.cap-menu-toggle {
+  display: inline-flex; align-items: center; gap: 3px;
+  border: 1px solid var(--border); border-radius: 4px;
+  background: var(--bg-card); padding: 2px 5px; cursor: pointer;
+}
+/* One 5 px circle per capability, in its badge's colour: four of them still
+   leave the provider name the room it needs.  `currentColor` picks the colour
+   up from the cap-badge-* class beside it, so there is one definition. */
+.cap-dot {
+  display: inline-block; flex: none; width: 6px; height: 6px;
+  border-radius: 50%; background: currentColor; padding: 0; margin: 0;
+  box-sizing: border-box; vertical-align: middle;
+}
+/* Text is the neutral capability, and a dim grey at 6 px reads as an empty
+   slot on white; it takes the body text colour instead. */
+.cap-dot.cap-badge-text { background: var(--text); }
+.cap-dot.is-inherit { background: transparent; border: 1px solid var(--text-muted); }
+.cap-menu-toggle:hover { border-color: var(--text-dim); }
+.cap-menu { min-width: 150px; padding: 4px; }
+.cap-menu-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 8px; border-radius: 4px; cursor: pointer; font-size: 12px;
+}
+.cap-menu-row:hover { background: var(--bg-hover); }
+.cap-menu-row input { margin: 0; }
+.cap-menu-label { color: var(--text); }
+.cap-badge-inherit { color: var(--text-muted); }
 .provider-menu-row .pd-remove { padding: 1px 6px; opacity: 0.4; }
 .provider-menu-row .pd-remove:hover { opacity: 1; color: var(--red); }
 
@@ -1999,6 +2036,9 @@ button.shim-update.unknown { color: var(--yellow, #b7791f); }
 .routing-bar { display: block; height: 6px; margin: 3px 0 4px; border-radius: 3px; background: var(--border); overflow: hidden; }
 .routing-bar > i { display: block; height: 100%; background: var(--accent); }
 .routing-bar.is-dim > i { background: var(--text-muted); }
+/* Nothing left: an outline, not a solid track. The track alone has the shape
+   of a full bar, so a lane at 0.00 headroom read as a full one. */
+.routing-bar.is-empty { background: transparent; box-shadow: inset 0 0 0 1px var(--border); }
 .routing-sub { font-family: var(--mono); font-size: 11px; color: var(--text-muted); }
 /* The "no reading" words are a hint, not a value: dotted under the text
    says a tooltip explains them. */
@@ -2161,12 +2201,30 @@ button.shim-update.unknown { color: var(--yellow, #b7791f); }
   white-space: nowrap; flex: none;
 }
 .routing-model-count.is-blocked { color: var(--red); }
+/* The lane count carries the whole answer on hover, so it has to look like a
+   control, not like a label that happens to have a title. */
+.routing-model-count.is-laned { cursor: help; }
+.routing-model-count.is-laned:hover { color: var(--text); }
 .routing-model-stack {
   display: flex; height: 4px; gap: 1px; margin: 6px 0 2px;
   background: var(--border); border-radius: 2px; overflow: hidden;
+  cursor: help;
 }
-.routing-model-stack i { display: block; height: 100%; background: var(--accent); }
+/* A serving slice is a quiet grey, not the accent: the bar is context for
+   the model list, and a solid black line under every multi-provider row drew
+   the eye away from the one thing that matters — the lanes that are wrong. */
+.routing-model-stack i { display: block; height: 100%; background: color-mix(in srgb, var(--text-dim) 55%, transparent); }
 .routing-model-stack i.mute { background: var(--text-muted); opacity: 0.4; }
+/* A slice takes its lane's state: amber for a lane that is only sunk, red for
+   one that cannot serve at all.  The same two tones the board's dot uses. */
+.routing-model-stack i.is-warn { background: var(--orange); }
+.routing-model-stack i.is-bad { background: var(--red); }
+/* A zero-share lane keeps a 2 px mark, faint until hovered: it is a presence
+   note, not a share, so it must not weigh as much as a real slice.  A broken
+   lane keeps a little more of its colour, since red is the point of it. */
+.routing-model-stack i.is-zero { opacity: 0.22; }
+.routing-model-stack i.is-zero.is-bad { opacity: 0.5; }
+.routing-model-stack i.is-zero:hover { opacity: 0.6; }
 .routing-model-empty { padding: 10px; font-size: 12px; color: var(--text-muted); }
 .routing-split[hidden] { display: none; }
 /* The board needs about 700 px for its six columns.  Once the model list has

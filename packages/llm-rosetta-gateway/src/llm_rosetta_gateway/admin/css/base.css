@@ -58,6 +58,9 @@
   --orange: #bd5b00;
   --blue: #0070f3;
   --purple: #7c3aed;
+  --magenta: #d946ef;
+  --cyan: #0891b2;
+  --lime: #65a30d;
 }
 
 /* Minimal Dark — colors */
@@ -82,6 +85,9 @@
   --orange: #f1a10d;
   --blue: #3291ff;
   --purple: #a78bfa;
+  --magenta: #f0abfc;
+  --cyan: #22d3ee;
+  --lime: #a3e635;
 }
 
 /* ═══ Emerald — structural variables (shared across light/dark) ═══ */
@@ -142,6 +148,9 @@
   --orange: #d97706;
   --blue: #2563eb;
   --purple: #7c3aed;
+  --magenta: #d946ef;
+  --cyan: #0891b2;
+  --lime: #65a30d;
 }
 
 /* Emerald Dark — colors + dark-specific dot/grid overrides */
@@ -166,6 +175,9 @@
   --orange: #fbbf24;
   --blue: #60a5fa;
   --purple: #a78bfa;
+  --magenta: #f0abfc;
+  --cyan: #22d3ee;
+  --lime: #a3e635;
   --dot: rgba(255,255,255,.025);
   --grid: rgba(255,255,255,.025);
 }

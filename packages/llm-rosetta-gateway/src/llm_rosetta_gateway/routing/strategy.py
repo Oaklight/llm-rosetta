@@ -40,6 +40,10 @@ class ProviderEntry:
     name: str
     weight: float = 1.0
     upstream_model: str | None = None
+    #: What this provider serves for this model, when the entry says.  ``None``
+    #: means the entry declares nothing, so the provider's own capabilities
+    #: apply and the candidate is never filtered for a request's needs.
+    capabilities: tuple[str, ...] | None = None
 
 
 class RoutingStrategy(Protocol):

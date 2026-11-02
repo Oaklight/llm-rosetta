@@ -104,14 +104,16 @@ def _resolve_or_error(
     try:
         return config.resolve(selection)
     except ProviderNotReady as exc:
-        status = 502 if exc.failed else 503
+        # A capability mismatch will not heal by retrying: it is the request
+        # that asks for something this route never serves.
+        status = 400 if exc.unsupported else (502 if exc.failed else 503)
         resp = error_response_for_source(source_provider, status, str(exc))
         resp.headers["x-request-id"] = request_id
         if exc.retry_after is not None:
             # A quota block has a known end, which is exactly what this header
             # is for; startup does not, so it keeps the short default.
             resp.headers["Retry-After"] = str(exc.retry_after)
-        elif not exc.failed:
+        elif not exc.failed and not exc.unsupported:
             resp.headers["Retry-After"] = "5"
         return resp
     except KeyError:
@@ -157,6 +159,17 @@ def _model_rules(config: Any, model: str) -> tuple[Any, ...]:
     """
     route = getattr(config, "models", {}).get(model)
     return getattr(getattr(route, "routing", None), "rules", ())
+
+
+def _entry_capabilities(config: Any, model: str) -> bool:
+    """Whether any candidate for *model* declares its own capabilities.
+
+    Duck-typed like :func:`_model_rules`: a model entry may be a bare name in
+    a test's raw document, and it has no entries to read.
+    """
+    route = getattr(config, "models", {}).get(model)
+    entries = getattr(route, "providers", None) or ()
+    return any(getattr(entry, "capabilities", None) is not None for entry in entries)
 
 
 def _rule_facts(source_provider: str, body: dict[str, Any], request: Any):
@@ -232,8 +245,15 @@ async def _handle_llm(
 
     # A model with rules needs the request in IR form before the chain runs;
     # one without them never pays for the extra read leg.
-    if _model_rules(config, model):
-        selection.with_rule_facts(_rule_facts(source_provider, body, request))
+    # The IR is built when a rule will read it, and also when a candidate
+    # declares capabilities: the request's own needs (vision, tools,
+    # reasoning) are what those declarations are compared against.
+    if _model_rules(config, model) or _entry_capabilities(config, model):
+        from ..routing import required_capabilities
+
+        facts = _rule_facts(source_provider, body, request)
+        selection.with_rule_facts(facts)
+        selection.with_required_capabilities(required_capabilities(facts))
 
     # Resolve target provider via unified routing
     result = _resolve_or_error(config, selection, ctx.request_id)

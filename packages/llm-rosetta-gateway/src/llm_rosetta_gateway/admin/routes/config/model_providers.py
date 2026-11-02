@@ -7,6 +7,7 @@ from collections.abc import Iterator
 from typing import Any
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
+from llm_rosetta_gateway.config.parse import ENTRY_CAPABILITIES
 
 from .._shared import (
     config_mutate,
@@ -305,11 +306,17 @@ def _validate_weight(raw: Any) -> tuple[int | None, Response | None]:
     return w, None
 
 
+#: Marks "the caller did not send this field", which is not the same as an
+#: explicit ``None`` that clears it.
+_UNSET: Any = object()
+
+
 def _set_provider_attrs(
     plist: list[Any],
     provider: str,
     weight: int | None,
     enabled: bool | None,
+    capabilities: Any = _UNSET,
 ) -> bool:
     """Find *provider* in *plist* and apply the given attributes.
 
@@ -337,6 +344,13 @@ def _set_provider_attrs(
                 entry.pop("enabled", None)
             else:
                 entry["enabled"] = False
+        if capabilities is not _UNSET:
+            # ``None`` or an empty list clears the declaration, which puts the
+            # entry back to inheriting the provider's own capabilities.
+            if capabilities:
+                entry["capabilities"] = list(capabilities)
+            else:
+                entry.pop("capabilities", None)
         return True
     return False
 
@@ -360,9 +374,37 @@ async def update_model_provider(request: Any, **kwargs: Any) -> Response:
     enabled = body.get("enabled")
     if enabled is not None and not isinstance(enabled, bool):
         return JSONResponse({"error": "'enabled' must be a boolean"}, status_code=400)
-    if weight is None and enabled is None:
+
+    capabilities = body.get("capabilities", _UNSET)
+    if capabilities is not _UNSET and not (
+        capabilities is None
+        or (
+            isinstance(capabilities, list)
+            and all(isinstance(c, str) for c in capabilities)
+        )
+    ):
         return JSONResponse(
-            {"error": "One of 'weight' or 'enabled' is required"}, status_code=400
+            {"error": "'capabilities' must be a list of names"}, status_code=400
+        )
+    # The same vocabulary and the same normalisation the file parser applies,
+    # so a value saved here cannot come back as an unknown name later.
+    if isinstance(capabilities, list):
+        names = [item.strip().lower() for item in capabilities]
+        unknown = sorted(set(names) - ENTRY_CAPABILITIES)
+        if unknown:
+            return JSONResponse(
+                {
+                    "error": f"Unknown capabilities: {', '.join(unknown)}; "
+                    f"known: {', '.join(sorted(ENTRY_CAPABILITIES))}"
+                },
+                status_code=400,
+            )
+        capabilities = names
+
+    if weight is None and enabled is None and capabilities is _UNSET:
+        return JSONResponse(
+            {"error": "One of 'weight', 'enabled' or 'capabilities' is required"},
+            status_code=400,
         )
 
     async with config_mutate(request) as ctx:
@@ -380,7 +422,9 @@ async def update_model_provider(request: Any, **kwargs: Any) -> Response:
                 status_code=400,
             )
 
-        if not _set_provider_attrs(existing["providers"], provider, weight, enabled):
+        if not _set_provider_attrs(
+            existing["providers"], provider, weight, enabled, capabilities
+        ):
             return JSONResponse(
                 {"error": f"Provider '{provider}' not found on model '{name}'"},
                 status_code=404,
@@ -398,5 +442,6 @@ async def update_model_provider(request: Any, **kwargs: Any) -> Response:
             "provider": provider,
             "weight": weight,
             "enabled": enabled,
+            "capabilities": (None if capabilities is _UNSET else capabilities),
         }
     )

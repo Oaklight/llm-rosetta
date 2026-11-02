@@ -53,6 +53,20 @@ def _clean_quota_state():
     QUOTA_STATE.clear()
 
 
+@pytest.fixture(autouse=True)
+def _pinned_clock(monkeypatch):
+    """Every read judges against NOW, not the wall clock.
+
+    ``record``, ``disabled``, ``latest_disable`` and ``sunk`` take a moment
+    for callers that pass one; the eligibility stage does not pass one, so a
+    fixed timeline would otherwise be true only while the file runs within the
+    policy's own window of its import.
+    """
+    from llm_rosetta_gateway.quota import rate_limit as rate_limit_module
+
+    monkeypatch.setattr(rate_limit_module, "_now", lambda: NOW)
+
+
 def _pinfo(name: str = "a", *, keys: str = "k1", keyless: bool = False) -> ProviderInfo:
     return ProviderInfo(
         name,

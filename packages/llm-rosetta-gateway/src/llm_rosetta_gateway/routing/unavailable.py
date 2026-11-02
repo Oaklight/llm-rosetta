@@ -32,8 +32,9 @@ if TYPE_CHECKING:
     from .context import SelectionContext
 
 #: ``blocked`` and ``exhausted`` are quota states; ``failed`` and
-#: ``initializing`` are startup states.
-Reason = Literal["blocked", "exhausted", "failed", "initializing"]
+#: ``initializing`` are startup states; ``capability`` means every candidate
+#: serves the model but not this request.
+Reason = Literal["blocked", "exhausted", "failed", "initializing", "capability"]
 
 
 @dataclass(frozen=True)
@@ -49,9 +50,13 @@ class Unavailable:
 
     reason: Reason
     until: datetime | None = None
+    #: For ``capability``: the capabilities no candidate declared.
+    unsupported: tuple[str, ...] = ()
 
     def as_kwargs(self) -> dict[str, Any]:
         """The keyword arguments ``ProviderNotReady`` takes for this state."""
+        if self.reason == "capability":
+            return {"unsupported": self.unsupported}
         if self.reason == "blocked":
             return {"blocked_until": self.until}
         if self.reason == "exhausted":
@@ -165,6 +170,17 @@ def classify(
     if names and names <= set(ctx.quota_excluded):
         return Unavailable(
             "exhausted", exhausted_until(config, ctx, names, providers=table)
+        )
+
+    from .eligibility import CAPABILITY
+
+    if remaining and all(
+        ctx.eligibility.get(p.name) is not None
+        and ctx.eligibility[p.name].reason == CAPABILITY
+        for p in remaining
+    ):
+        return Unavailable(
+            "capability", unsupported=tuple(sorted(ctx.required_capabilities))
         )
 
     deferred = getattr(config, "_deferred_startup", None)
