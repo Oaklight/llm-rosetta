@@ -481,14 +481,15 @@ Clicking a row adds or removes it from `shims.presets` — but nothing is writte
 until **Save**, which is why the pane keeps a guide beside the picker and an
 *Unsaved changes* note next to the button. Save writes the same
 comma-separated list of keys you can also write by hand. A key the running
-catalog does not know is left in place until you next change the selection, so
-a config written against a newer catalog is not silently rewritten.
+catalog does not know gets no row, but it stays in the declaration and the
+trigger still names it, so a config written against a newer catalog is not
+silently rewritten.
 
 **Check whether a remote has moved.** A remote source is fetched once and
 pinned to the commit it came from, so a later run reuses that commit even when
 the repository has advanced. The inventory shows the verdict on the source's
 row: *Up to date*, *Update `<old>` → `<new>`* (click it to refetch that source
-at the new HEAD), or *Check failed* with the reason on hover. **Check now**
+at the new commit), or *Check failed* with the reason on hover. **Check now**
 asks again immediately; otherwise the answer is cached for five minutes.
 
 `shims.presets` expands a catalog key into the repository, path and token
@@ -520,9 +521,9 @@ because none of them is tagged yet: a remote without a `ref` resolves `HEAD` to
 a commit once and records it in the cache stamp. Once they are tagged, pin the
 tag — see [Ref resolution](../gateway/configuration.md#external-shim-sources).
 
-**Settings → Shim Sources** offers every catalog package as a one-click preset
-(and a text field for the same keys); saving writes `presets` or the expanded
-remote to the config. A config that still names one of these shims without a
+**Settings → Shim Sources** offers every catalog package in one dropdown — a
+row per package, free resources first — and saving writes `presets` or the
+expanded remote to the config. A config that still names one of these shims without a
 declared source gets a startup error naming the package, the preset and the
 expanded remote; once the source loads, the error goes away.
 
