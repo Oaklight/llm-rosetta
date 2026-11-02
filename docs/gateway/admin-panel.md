@@ -120,7 +120,6 @@ The **Routing** section answers one question per model: which lane serves it, an
 - **Legend** — names the three dots (**serving**, **sunk**, **blocked by a refusal**) and the share formula: weight × (0.25 + 0.75 × headroom), normalised over the serving lanes.
 - **Decisions** — the last requests for this model from the request log: time, request id, client, chosen lane, any failover hop, status and latency.
 - **Policy** — the model's `routing` block in a card beside the board: five presets as chips (**Balanced**, **Sticky sessions**, **Cheap first**, **Spread**, **Quota saver**), strategy and affinity, the sunk-lane switch, the first-token timeout, the rules as written, and the block as JSON. A preset writes the literal block an operator could have typed; a block that is no preset leaves every chip unpressed.
-- **Models** — a rail of the routable models beside the same policy and decision views, one model at a time.
 - **Flow** — the same candidates as read-only lanes, for a quick read of how many lanes a model has and which are out.
 
 States follow the eligibility predicate, so the panel and the proxy agree by construction:
@@ -135,7 +134,7 @@ States follow the eligibility predicate, so the panel and the proxy agree by con
 | **No credential** | The key ring has nothing usable left |
 | **Starting** | A credential has not been seeded yet |
 
-The model picker lists only the models the gateway can route (`GET /admin/api/routing`), not every key in the config document: a model whose provider was skipped at load has nothing to route to.
+The model picker is a search box over the routable models (`GET /admin/api/routing`), not a select and not every key in the config document: typing narrows the list, and a model whose provider was skipped at load is not offered because it has nothing to route to.
 
 Saving the policy writes through `PUT /admin/api/routing/<model>`, which rebuilds the config — so a value the parser refuses comes back as the parser's own message, and a key the editor does not own (`rules`, `first_token_ms`) is carried through the save unchanged.
 
