@@ -38,7 +38,10 @@ from llm_rosetta_gateway.routing import (
 from llm_rosetta_gateway.routing.strategy import ModelRoute, ProviderEntry
 from llm_rosetta_gateway.transport.provider_info import ProviderInfo
 
-NOW = datetime(2026, 11, 2, 12, 0, tzinfo=timezone.utc)
+# The tracker judges a disable against the wall clock, so the timeline this
+# file builds starts when the file is imported: a fixed date would age out
+# of its own cooldown between two runs.
+NOW = datetime.now(timezone.utc)
 POLICY = RateLimitPolicy()
 
 
@@ -94,20 +97,20 @@ class TestTheLadder:
             assert tracker.note("a", None, POLICY, now=NOW) == "sink"
 
         assert tracker.note("a", None, POLICY, now=NOW) == "disable"
-        until = tracker.disabled("a")
+        until = tracker.disabled("a", now=NOW)
         assert until == NOW + timedelta(seconds=60)
 
     def test_a_repeat_disable_doubles(self):
         tracker = RateLimitTracker()
         for _ in range(3):
             tracker.note("a", None, POLICY, now=NOW)
-        assert tracker.disabled("a") == NOW + timedelta(seconds=60)
+        assert tracker.disabled("a", now=NOW) == NOW + timedelta(seconds=60)
 
         later = NOW + timedelta(seconds=61)
         for _ in range(3):
             tracker.note("a", None, POLICY, now=later)
 
-        assert tracker.disabled("a") == later + timedelta(seconds=120)
+        assert tracker.disabled("a", now=later) == later + timedelta(seconds=120)
 
     def test_the_doubling_stops_at_the_cap(self):
         tracker = RateLimitTracker()
@@ -117,7 +120,7 @@ class TestTheLadder:
         for _ in range(4):
             for _ in range(3):
                 tracker.note("a", None, policy, now=moment)
-            until = tracker.disabled("a")
+            until = tracker.disabled("a", now=moment)
             assert until is not None
             lengths.append((until - moment).total_seconds())
             moment = until + timedelta(seconds=1)
@@ -131,7 +134,7 @@ class TestTheLadder:
 
         after_window = NOW + timedelta(seconds=POLICY.window_s + 1)
         assert tracker.note("a", None, POLICY, now=after_window) == "sink"
-        assert tracker.disabled("a") is None
+        assert tracker.disabled("a", now=after_window) is None
 
     def test_a_success_clears_the_count_and_the_ladder(self):
         tracker = RateLimitTracker()
@@ -144,7 +147,7 @@ class TestTheLadder:
         # The ladder restarted too: the next disable is the first one again.
         for _ in range(2):
             tracker.note("a", None, POLICY, now=NOW)
-        assert tracker.disabled("a") == NOW + timedelta(seconds=60)
+        assert tracker.disabled("a", now=NOW) == NOW + timedelta(seconds=60)
 
     def test_sink_can_be_off_without_turning_the_rule_off(self):
         tracker = RateLimitTracker()
