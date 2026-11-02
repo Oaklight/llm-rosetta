@@ -357,6 +357,8 @@ remote；同一 URL 的显式 remote 会合并到预设上（显式键优先）�
 编程方式可用 `llm_rosetta.shims.rebuild_shims()`（无需配置文件）或
 `llm_rosetta_gateway.apply_shim_sources(raw, config_path)`。
 
+未知 preset 默认跳过并告警，`shims.strict` 为 `true` 时改为拒绝 —— 因此较新版本写出的配置仍能在较旧版本上启动。配置段形状错误（例如把 `presets` 写成字符串）会在加载配置时被拒绝，而不是等到启动时。
+
 !!! warning
     声明的源可能携带在加载时被执行的 `transforms.py` —— 与安装插件包是同一信任级别。
     请固定 ref，并只添加你信任的源。
