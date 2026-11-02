@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
@@ -10,6 +11,7 @@ from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
 from ....shim_sources import apply_shim_sources, resolve_source_config, shims_signature
 from .._shared import (
     _get_config_io,
+    _install_shim_report,
     _get_config_path,
     _reload_gateway_config,
     config_mutate,
@@ -187,8 +189,7 @@ async def post_shims_reload(request: Any) -> Response:
             return JSONResponse(
                 {"error": f"Shim reload failed: {exc}"}, status_code=500
             )
-        request.app.shim_source_report = report
-        request.app.shim_source_signature = shims_signature(raw)
+        _install_shim_report(request, report, shims_signature(raw))
 
     try:
         new_config = await _reload_gateway_config(
@@ -207,6 +208,55 @@ async def post_shims_reload(request: Any) -> Response:
             "providers": list(new_config.providers.keys()),
         }
     )
+
+
+#: How long a check-updates answer is reused.  One GitHub API call per remote
+#: source is cheap but not free: unauthenticated callers get 60 per hour per
+#: address, and the settings pane asks on every open.
+UPDATE_CHECK_TTL = 300.0
+
+
+async def post_shims_check_updates(request: Any) -> Response:
+    """Report whether each remote source's repository has moved past its pin.
+
+    A remote is pinned to the commit it was fetched at, so this is one HEAD
+    lookup per source.  The answer is cached on the app for
+    :data:`UPDATE_CHECK_TTL`; ``{"refresh": true}`` forces a new round of
+    lookups (the panel's *Check now*).  A source whose head cannot be read
+    carries the error and no verdict, so a rate limit reads as "unknown"
+    rather than "up to date".
+    """
+    report = getattr(request.app, "shim_source_report", None)
+    if report is None:
+        return JSONResponse({"sources": [], "checked_at": 0.0})
+
+    body, _err = parse_json_body(request)
+    force = isinstance(body, dict) and bool(body.get("refresh"))
+    cached = getattr(request.app, "shim_update_check", None)
+    now = time.time()
+    if not force and isinstance(cached, dict):
+        checked_at = cached.get("checked_at") or 0.0
+        if now - float(checked_at) < UPDATE_CHECK_TTL:
+            return JSONResponse(cached)
+
+    from ....shims.sources import check_remote_updates
+
+    import asyncio
+    import functools
+
+    # The check rides the same transport as the fetch it describes: a
+    # deployment that reaches GitHub only through server.proxy would otherwise
+    # read "Check failed" on every badge while its shims load fine.
+    config = getattr(request.app, "gateway_config", None)
+    proxy = getattr(config, "proxy", None)
+
+    loop = asyncio.get_running_loop()
+    entries = await loop.run_in_executor(
+        None, functools.partial(check_remote_updates, report, proxy=proxy)
+    )
+    payload = {"sources": entries, "checked_at": now}
+    request.app.shim_update_check = payload
+    return JSONResponse(payload)
 
 
 async def reload_config(request: Any) -> Response:

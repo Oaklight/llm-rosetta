@@ -1069,17 +1069,23 @@
             <div class="settings-popup-item">
               <label data-i18n="label.shimPresets">Preload presets</label>
               <div>
-                <input type="text" id="shimPresetsInput" spellcheck="false" placeholder="argo, alcf, asksage">
+                <p class="field-hint field-hint-above" data-i18n="shim.guide"></p>
+                <div class="type-picker" id="shimPresetPicker">
+                  <button type="button" id="shimPresetTrigger" class="type-picker-trigger" aria-haspopup="listbox" aria-expanded="false">
+                    <span id="shimPresetLabel" class="tp-trigger-label tp-placeholder"></span>
+                    <svg class="type-picker-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                  </button>
+                  <div class="type-picker-dropdown" id="shimPresetDropdown">
+                    <div class="tp-list" id="shimPresetList" role="listbox" aria-multiselectable="true"></div>
+                  </div>
+                </div>
+                <input type="hidden" id="shimPresetsInput">
                 <p class="field-hint" data-i18n="label.shimPresetsHint"></p>
               </div>
             </div>
             <div class="settings-popup-item">
               <label data-i18n="label.shimRemotes">Remotes (JSON array)</label>
               <div>
-                <div class="shim-remote-add">
-                  <select id="shimPresetSelect"></select>
-                  <button type="button" class="btn btn-sm" id="shimPresetAdd" onclick="addShimPresetFromSelect()" data-i18n="shim.preset.add">Add source</button>
-                </div>
                 <textarea id="shimRemotesInput" rows="4" spellcheck="false" placeholder='[{"url": "https://github.com/owner/repo", "ref": "v1.0.0", "path": "shims"}]'></textarea>
                 <p class="field-hint" data-i18n="shim.preset.hint"></p>
               </div>
@@ -1101,9 +1107,10 @@
             </div>
           </div>
           <div class="settings-group-actions">
-            <button class="btn btn-sm" onclick="saveShimSources()" data-i18n="btn.save">Save</button>
-            <button class="btn btn-sm" onclick="reloadShimSources(false)" data-i18n="btn.reloadShims">Reload</button>
+            <button class="btn btn-sm" id="shimSaveBtn" onclick="saveShimSources()" data-i18n="btn.save">Save</button>
             <button class="btn btn-sm" onclick="reloadShimSources(true)" data-i18n="btn.refetchShims">Refetch</button>
+            <button class="btn btn-sm" onclick="checkShimUpdates(true)" data-i18n="btn.checkShimUpdates">Check now</button>
+            <span id="shimSourcesDirty" class="shim-dirty" hidden data-i18n="shim.dirty"></span>
             <span id="shimSourcesError" style="font-size:11px;color:var(--red)"></span>
           </div>
           <div id="shimRemovalAdvisories" class="shim-status"></div>
