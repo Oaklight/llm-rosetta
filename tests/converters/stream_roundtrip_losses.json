@@ -1,0 +1,259 @@
+{
+  "schema_version": 1,
+  "definition": "not_fixed records the dialect/case pairs whose second stream pass differs from the first.  cross records the turn-view fields a detour through the other dialect changes.  Both carry the reason each entry is still open; an entry that no longer happens fails the suite.",
+  "not_fixed": {},
+  "cross": [
+    {
+      "pair": "chat_completions->open_responses",
+      "case": "refusal_with_words",
+      "field": "reason",
+      "reason": "the terminal reason is re-derived from the target dialect's own vocabulary on the way out and back"
+    },
+    {
+      "pair": "chat_completions->open_responses",
+      "case": "refusal_with_words",
+      "field": "refusal",
+      "reason": "a refusal that rides only on the finish event has no content block to carry it, so the target dialect writes the words nowhere and the return leg reads a turn without them"
+    },
+    {
+      "pair": "chat_completions->messages",
+      "case": "custom",
+      "field": "calls",
+      "reason": "the call does not survive the leg: a server-tool call has no carrier in the target dialect, or its id and arguments are rewritten"
+    },
+    {
+      "pair": "chat_completions->messages",
+      "case": "filter",
+      "field": "reason",
+      "reason": "the terminal reason is re-derived from the target dialect's own vocabulary on the way out and back"
+    },
+    {
+      "pair": "chat_completions->google_generate",
+      "case": "text",
+      "field": "usage",
+      "reason": "the target dialect has no usage on this leg and reports nothing"
+    },
+    {
+      "pair": "chat_completions->google_generate",
+      "case": "custom",
+      "field": "calls",
+      "reason": "the call does not survive the leg: a server-tool call has no carrier in the target dialect, or its id and arguments are rewritten"
+    },
+    {
+      "pair": "chat_completions->google_generate",
+      "case": "refusal_with_words",
+      "field": "reason",
+      "reason": "the terminal reason is re-derived from the target dialect's own vocabulary on the way out and back"
+    },
+    {
+      "pair": "chat_completions->google_generate",
+      "case": "refusal_with_words",
+      "field": "refusal",
+      "reason": "a refusal that rides only on the finish event has no content block to carry it, so the target dialect writes the words nowhere and the return leg reads a turn without them"
+    },
+    {
+      "pair": "chat_completions->google_interactions",
+      "case": "custom",
+      "field": "calls",
+      "reason": "the call does not survive the leg: a server-tool call has no carrier in the target dialect, or its id and arguments are rewritten"
+    },
+    {
+      "pair": "chat_completions->google_interactions",
+      "case": "refusal_with_words",
+      "field": "reason",
+      "reason": "the terminal reason is re-derived from the target dialect's own vocabulary on the way out and back"
+    },
+    {
+      "pair": "chat_completions->google_interactions",
+      "case": "refusal_with_words",
+      "field": "refusal",
+      "reason": "a refusal that rides only on the finish event has no content block to carry it, so the target dialect writes the words nowhere and the return leg reads a turn without them"
+    },
+    {
+      "pair": "open_responses->chat_completions",
+      "case": "intrinsic",
+      "field": "calls",
+      "reason": "the call does not survive the leg: a server-tool call has no carrier in the target dialect, or its id and arguments are rewritten"
+    },
+    {
+      "pair": "open_responses->chat_completions",
+      "case": "refusal_with_words",
+      "field": "refusal",
+      "reason": "a refusal that rides only on the finish event has no content block to carry it, so the target dialect writes the words nowhere and the return leg reads a turn without them"
+    },
+    {
+      "pair": "open_responses->messages",
+      "case": "custom",
+      "field": "calls",
+      "reason": "the call does not survive the leg: a server-tool call has no carrier in the target dialect, or its id and arguments are rewritten"
+    },
+    {
+      "pair": "open_responses->messages",
+      "case": "filter",
+      "field": "reason",
+      "reason": "the terminal reason is re-derived from the target dialect's own vocabulary on the way out and back"
+    },
+    {
+      "pair": "open_responses->messages",
+      "case": "refusal_with_words",
+      "field": "refusal",
+      "reason": "a refusal that rides only on the finish event has no content block to carry it, so the target dialect writes the words nowhere and the return leg reads a turn without them"
+    },
+    {
+      "pair": "open_responses->google_generate",
+      "case": "custom",
+      "field": "calls",
+      "reason": "the call does not survive the leg: a server-tool call has no carrier in the target dialect, or its id and arguments are rewritten"
+    },
+    {
+      "pair": "open_responses->google_generate",
+      "case": "intrinsic",
+      "field": "calls",
+      "reason": "the call does not survive the leg: a server-tool call has no carrier in the target dialect, or its id and arguments are rewritten"
+    },
+    {
+      "pair": "open_responses->google_generate",
+      "case": "refusal_with_words",
+      "field": "refusal",
+      "reason": "a refusal that rides only on the finish event has no content block to carry it, so the target dialect writes the words nowhere and the return leg reads a turn without them"
+    },
+    {
+      "pair": "open_responses->google_generate",
+      "case": "refusal_with_words",
+      "field": "text",
+      "reason": "a refusal that rides only on the finish event is written into the text part by the target dialect, so it comes back as text"
+    },
+    {
+      "pair": "open_responses->google_interactions",
+      "case": "custom",
+      "field": "calls",
+      "reason": "the call does not survive the leg: a server-tool call has no carrier in the target dialect, or its id and arguments are rewritten"
+    },
+    {
+      "pair": "open_responses->google_interactions",
+      "case": "intrinsic",
+      "field": "calls",
+      "reason": "the call does not survive the leg: a server-tool call has no carrier in the target dialect, or its id and arguments are rewritten"
+    },
+    {
+      "pair": "open_responses->google_interactions",
+      "case": "refusal_with_words",
+      "field": "refusal",
+      "reason": "a refusal that rides only on the finish event has no content block to carry it, so the target dialect writes the words nowhere and the return leg reads a turn without them"
+    },
+    {
+      "pair": "open_responses->google_interactions",
+      "case": "refusal_with_words",
+      "field": "text",
+      "reason": "a refusal that rides only on the finish event is written into the text part by the target dialect, so it comes back as text"
+    },
+    {
+      "pair": "messages->chat_completions",
+      "case": "intrinsic",
+      "field": "calls",
+      "reason": "the call does not survive the leg: a server-tool call has no carrier in the target dialect, or its id and arguments are rewritten"
+    },
+    {
+      "pair": "messages->chat_completions",
+      "case": "filter",
+      "field": "reason",
+      "reason": "the terminal reason is re-derived from the target dialect's own vocabulary on the way out and back"
+    },
+    {
+      "pair": "messages->chat_completions",
+      "case": "refusal",
+      "field": "reason",
+      "reason": "the terminal reason is re-derived from the target dialect's own vocabulary on the way out and back"
+    },
+    {
+      "pair": "messages->open_responses",
+      "case": "filter",
+      "field": "reason",
+      "reason": "the terminal reason is re-derived from the target dialect's own vocabulary on the way out and back"
+    },
+    {
+      "pair": "messages->open_responses",
+      "case": "refusal",
+      "field": "reason",
+      "reason": "the terminal reason is re-derived from the target dialect's own vocabulary on the way out and back"
+    },
+    {
+      "pair": "messages->open_responses",
+      "case": "refusal_with_words",
+      "field": "reason",
+      "reason": "the terminal reason is re-derived from the target dialect's own vocabulary on the way out and back"
+    },
+    {
+      "pair": "messages->open_responses",
+      "case": "refusal_with_words",
+      "field": "refusal",
+      "reason": "a refusal that rides only on the finish event has no content block to carry it, so the target dialect writes the words nowhere and the return leg reads a turn without them"
+    },
+    {
+      "pair": "messages->google_generate",
+      "case": "intrinsic",
+      "field": "calls",
+      "reason": "the call does not survive the leg: a server-tool call has no carrier in the target dialect, or its id and arguments are rewritten"
+    },
+    {
+      "pair": "messages->google_generate",
+      "case": "filter",
+      "field": "reason",
+      "reason": "the terminal reason is re-derived from the target dialect's own vocabulary on the way out and back"
+    },
+    {
+      "pair": "messages->google_generate",
+      "case": "refusal",
+      "field": "reason",
+      "reason": "the terminal reason is re-derived from the target dialect's own vocabulary on the way out and back"
+    },
+    {
+      "pair": "messages->google_generate",
+      "case": "refusal_with_words",
+      "field": "reason",
+      "reason": "the terminal reason is re-derived from the target dialect's own vocabulary on the way out and back"
+    },
+    {
+      "pair": "messages->google_generate",
+      "case": "refusal_with_words",
+      "field": "refusal",
+      "reason": "a refusal that rides only on the finish event has no content block to carry it, so the target dialect writes the words nowhere and the return leg reads a turn without them"
+    },
+    {
+      "pair": "messages->google_interactions",
+      "case": "intrinsic",
+      "field": "calls",
+      "reason": "the call does not survive the leg: a server-tool call has no carrier in the target dialect, or its id and arguments are rewritten"
+    },
+    {
+      "pair": "messages->google_interactions",
+      "case": "refusal",
+      "field": "reason",
+      "reason": "the terminal reason is re-derived from the target dialect's own vocabulary on the way out and back"
+    },
+    {
+      "pair": "messages->google_interactions",
+      "case": "refusal_with_words",
+      "field": "reason",
+      "reason": "the terminal reason is re-derived from the target dialect's own vocabulary on the way out and back"
+    },
+    {
+      "pair": "messages->google_interactions",
+      "case": "refusal_with_words",
+      "field": "refusal",
+      "reason": "a refusal that rides only on the finish event has no content block to carry it, so the target dialect writes the words nowhere and the return leg reads a turn without them"
+    },
+    {
+      "pair": "google_generate->messages",
+      "case": "filter",
+      "field": "reason",
+      "reason": "the terminal reason is re-derived from the target dialect's own vocabulary on the way out and back"
+    },
+    {
+      "pair": "google_interactions->google_generate",
+      "case": "text",
+      "field": "usage",
+      "reason": "the target dialect has no usage on this leg and reports nothing"
+    }
+  ]
+}
