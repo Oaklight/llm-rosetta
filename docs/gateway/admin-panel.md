@@ -116,10 +116,12 @@ The **Routing** section answers one question per model: which lane serves it, an
 
 ![Routing section](images/admin-routing.png)
 
-- **Board** — one row per candidate: its state, configured weight, the share it serves at (weight scaled by remaining allowance) and its headroom, with a bar showing each lane's proportion of the model's traffic.
-- **Flow** — the same candidates as lanes, for a quick read of how many lanes a model has and which are out.
-- **Recent decisions** — the last requests for this model from the request log: time, provider, status and any failover hop.
-- **Policy** — the model's `routing` block, editable: strategy, affinity and the sunk-lane switch, plus five presets (**Balanced**, **Sticky sessions**, **Cheap first**, **Spread**, **Quota saver**). A preset writes the literal block an operator could have typed, and the select shows **Custom** for a block that is no preset.
+- **Board** — the route in the order the selector reads it: each candidate's position, the lane and the wire format and shim behind it, a weight stepper that writes the model entry, the remaining allowance, the share it serves at, and the state with its countdown.
+- **Legend** — names the three dots (**serving**, **sunk**, **blocked by a refusal**) and the share formula: weight × (0.25 + 0.75 × headroom), normalised over the serving lanes.
+- **Decisions** — the last requests for this model from the request log: time, request id, client, chosen lane, any failover hop, status and latency.
+- **Policy** — the model's `routing` block in a card beside the board: five presets as chips (**Balanced**, **Sticky sessions**, **Cheap first**, **Spread**, **Quota saver**), strategy and affinity, the sunk-lane switch, the first-token timeout, the rules as written, and the block as JSON. A preset writes the literal block an operator could have typed; a block that is no preset leaves every chip unpressed.
+- **Models** — a rail of the routable models beside the same policy and decision views, one model at a time.
+- **Flow** — the same candidates as read-only lanes, for a quick read of how many lanes a model has and which are out.
 
 States follow the eligibility predicate, so the panel and the proxy agree by construction:
 
