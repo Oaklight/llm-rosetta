@@ -7,7 +7,7 @@
       "pair": "chat_completions->messages",
       "case": "custom",
       "field": "calls",
-      "reason": "the call does not survive the leg: a server-tool call has no carrier in the target dialect, or its id and arguments are rewritten"
+      "reason": "the target dialect cannot express the call: a freeform (\"custom\") call becomes a function call there, and a server-tool call has no carrier at all, so the turn comes back with the call's kind changed or with no call"
     },
     {
       "pair": "chat_completions->messages",
@@ -19,7 +19,7 @@
       "pair": "chat_completions->google_generate",
       "case": "custom",
       "field": "calls",
-      "reason": "the call does not survive the leg: a server-tool call has no carrier in the target dialect, or its id and arguments are rewritten"
+      "reason": "the target dialect cannot express the call: a freeform (\"custom\") call becomes a function call there, and a server-tool call has no carrier at all, so the turn comes back with the call's kind changed or with no call"
     },
     {
       "pair": "chat_completions->google_generate",
@@ -37,7 +37,7 @@
       "pair": "chat_completions->google_interactions",
       "case": "custom",
       "field": "calls",
-      "reason": "the call does not survive the leg: a server-tool call has no carrier in the target dialect, or its id and arguments are rewritten"
+      "reason": "the target dialect cannot express the call: a freeform (\"custom\") call becomes a function call there, and a server-tool call has no carrier at all, so the turn comes back with the call's kind changed or with no call"
     },
     {
       "pair": "chat_completions->google_interactions",
@@ -55,13 +55,13 @@
       "pair": "open_responses->chat_completions",
       "case": "intrinsic",
       "field": "calls",
-      "reason": "the call does not survive the leg: a server-tool call has no carrier in the target dialect, or its id and arguments are rewritten"
+      "reason": "the target dialect cannot express the call: a freeform (\"custom\") call becomes a function call there, and a server-tool call has no carrier at all, so the turn comes back with the call's kind changed or with no call"
     },
     {
       "pair": "open_responses->messages",
       "case": "custom",
       "field": "calls",
-      "reason": "the call does not survive the leg: a server-tool call has no carrier in the target dialect, or its id and arguments are rewritten"
+      "reason": "the target dialect cannot express the call: a freeform (\"custom\") call becomes a function call there, and a server-tool call has no carrier at all, so the turn comes back with the call's kind changed or with no call"
     },
     {
       "pair": "open_responses->messages",
@@ -79,13 +79,13 @@
       "pair": "open_responses->google_generate",
       "case": "custom",
       "field": "calls",
-      "reason": "the call does not survive the leg: a server-tool call has no carrier in the target dialect, or its id and arguments are rewritten"
+      "reason": "the target dialect cannot express the call: a freeform (\"custom\") call becomes a function call there, and a server-tool call has no carrier at all, so the turn comes back with the call's kind changed or with no call"
     },
     {
       "pair": "open_responses->google_generate",
       "case": "intrinsic",
       "field": "calls",
-      "reason": "the call does not survive the leg: a server-tool call has no carrier in the target dialect, or its id and arguments are rewritten"
+      "reason": "the target dialect cannot express the call: a freeform (\"custom\") call becomes a function call there, and a server-tool call has no carrier at all, so the turn comes back with the call's kind changed or with no call"
     },
     {
       "pair": "open_responses->google_generate",
@@ -103,13 +103,13 @@
       "pair": "open_responses->google_interactions",
       "case": "custom",
       "field": "calls",
-      "reason": "the call does not survive the leg: a server-tool call has no carrier in the target dialect, or its id and arguments are rewritten"
+      "reason": "the target dialect cannot express the call: a freeform (\"custom\") call becomes a function call there, and a server-tool call has no carrier at all, so the turn comes back with the call's kind changed or with no call"
     },
     {
       "pair": "open_responses->google_interactions",
       "case": "intrinsic",
       "field": "calls",
-      "reason": "the call does not survive the leg: a server-tool call has no carrier in the target dialect, or its id and arguments are rewritten"
+      "reason": "the target dialect cannot express the call: a freeform (\"custom\") call becomes a function call there, and a server-tool call has no carrier at all, so the turn comes back with the call's kind changed or with no call"
     },
     {
       "pair": "open_responses->google_interactions",
@@ -127,7 +127,7 @@
       "pair": "messages->chat_completions",
       "case": "intrinsic",
       "field": "calls",
-      "reason": "the call does not survive the leg: a server-tool call has no carrier in the target dialect, or its id and arguments are rewritten"
+      "reason": "the target dialect cannot express the call: a freeform (\"custom\") call becomes a function call there, and a server-tool call has no carrier at all, so the turn comes back with the call's kind changed or with no call"
     },
     {
       "pair": "messages->chat_completions",
@@ -169,7 +169,7 @@
       "pair": "messages->google_generate",
       "case": "intrinsic",
       "field": "calls",
-      "reason": "the call does not survive the leg: a server-tool call has no carrier in the target dialect, or its id and arguments are rewritten"
+      "reason": "the target dialect cannot express the call: a freeform (\"custom\") call becomes a function call there, and a server-tool call has no carrier at all, so the turn comes back with the call's kind changed or with no call"
     },
     {
       "pair": "messages->google_generate",
@@ -199,7 +199,7 @@
       "pair": "messages->google_interactions",
       "case": "intrinsic",
       "field": "calls",
-      "reason": "the call does not survive the leg: a server-tool call has no carrier in the target dialect, or its id and arguments are rewritten"
+      "reason": "the target dialect cannot express the call: a freeform (\"custom\") call becomes a function call there, and a server-tool call has no carrier at all, so the turn comes back with the call's kind changed or with no call"
     },
     {
       "pair": "messages->google_interactions",
