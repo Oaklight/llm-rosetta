@@ -444,7 +444,52 @@ the one that drops the configured factor from that product.
 | `affinity` | `off` or `session`. |
 | `sink` | **(default `true`)** Whether a recent 429 orders this model's provider last. The provider's *disable* is process-wide; this only says whether the model cares about the milder sink. |
 | `first_token_ms` | Reserved for the first-token deadline. Parsed and kept; the selector does not act on it yet. |
-| `rules` | Reserved for per-model rules. A non-empty list is refused until the rules land. |
+| `rules` | Per-request rules, evaluated in order; the first match wins (see [Rules](#rules)). |
+
+#### Rules
+
+A rule moves one request within the model's own route:
+
+```jsonc
+"routing": {
+  "rules": [
+    {"when": {"images": true}, "use": "openrouter"},
+    {"when": {"tokens_gte": 120000}, "use": "argo"},
+    {"when": {"effort_gte": "high"}, "use": "argo"},
+    {"when": {"agents": ["codex"]}, "use": "openrouter"},
+    {"when": {"time": {"tz": "Asia/Shanghai", "from": "09:00", "to": "18:00"}}, "pause": "argo"}
+  ]
+}
+```
+
+| Condition | Holds when |
+|:---|:---|
+| `images` | The request carries (or, with `false`, does not carry) an image. |
+| `tokens_gte` | The request's estimated input size is at least this many tokens. |
+| `effort_gte` | The reasoning effort it asked for is at least this level, on the ladder `minimal < low < medium < high < xhigh < max`. A request that names no effort does not match. |
+| `agents` | One of the names appears in the client's `x-rosetta-agent` tags or its `User-Agent`, case-insensitively. The value is a non-empty array. |
+| `time` | The current time in `tz` falls in `[from, to)`; an overnight window (`from` later than `to`) wraps past midnight. |
+
+Every condition in one `when` must hold, and an empty `when` always matches.
+
+An action is exactly one of `use` (promote that provider for this request) or `pause` (drop it
+for this request). The first matching rule wins; a request no rule matches falls through to the
+strategy. A rule may only name a provider the model already lists — it promotes or drops a member,
+never introduces one — and naming anyone else fails the load.
+
+Rules run after the anchor is chosen, so they compose with the same-format tiers rather than
+replacing them: a rule starts from the provider routing would have picked. A `use` rule whose
+provider cannot serve this request is ignored, and the anchor stands.
+
+Conditions read the request's **IR**, never the source body, so one rule means the same thing
+whichever dialect the client spoke. Two facts are approximations and worth knowing:
+
+- `tokens_gte` compares against the serialized IR's size divided by four, with image payloads
+  excluded. The gateway has no tokenizer; treat the number as an order of magnitude.
+- `agents` matches by substring because the agents do not agree on a spelling.
+
+A model with no rules pays nothing for the feature: the IR is only built for rule evaluation when
+the model has at least one.
 
 An unknown key fails the config load, and the admin save reports the same message, because both
 build the config through the same parser.
