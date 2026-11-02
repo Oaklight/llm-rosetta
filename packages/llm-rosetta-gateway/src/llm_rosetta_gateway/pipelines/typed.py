@@ -89,6 +89,11 @@ class TypedHandler:
     configured_models: Callable[[GatewayConfig], Iterable[str]]
     response_usage: Callable[[str, dict[str, Any] | None], dict[str, Any]]
     not_found_label: str = "model"
+    #: The same resolver with the providers a request already failed over from
+    #: left out.  ``None`` for a handler that cannot fail over.
+    resolve_excluding: (
+        Callable[[GatewayConfig, str, frozenset[str]], TypedRoute | None] | None
+    ) = None
     prepare_body: Callable[[dict[str, Any], str, GatewayConfig], None] | None = None
     upstream_url: (
         Callable[[TypedRoute, dict[str, Any], str, GatewayConfig], str] | None
@@ -98,6 +103,85 @@ class TypedHandler:
     connection_error_message: str = "Upstream connection failed"
     empty_body_is_passthrough: bool = False
     log_conversion: bool = True
+
+
+def _may_fail_over(
+    config: GatewayConfig, handler: TypedHandler, model: str, status_code: int
+) -> bool:
+    """Whether a refusal from this attempt should try another provider.
+
+    One retryable refusal, the same one chat fails over on: a 429.  The model
+    must have opted in with ``failover_on_quota`` — a failover trades a warm
+    upstream cache for a served request, which is a per-model choice — and the
+    handler must have a resolver that can leave the refused provider out.
+    """
+    return (
+        status_code == 429
+        and handler.resolve_excluding is not None
+        and model in getattr(config, "model_failover_on_quota", {})
+    )
+
+
+def _inband_error(handler: TypedHandler, route: TypedRoute, resp: Any) -> str | None:
+    """The vendor's own verdict in a 200 body, if the dialect carries one.
+
+    Some vendors answer HTTP 200 and put the refusal in the body (MiniMax's
+    ``base_resp.status_code``).  The target converter knows its own envelope;
+    without this check the gateway would report an empty success for a request
+    the vendor refused.
+    """
+    if handler.upstream_error is None:
+        return None
+    return handler.upstream_error(route.format, resp.body)
+
+
+def _converted_body(
+    handler: TypedHandler,
+    pipeline: Any,
+    body: dict[str, Any],
+    route: TypedRoute,
+) -> tuple[Any, JSONResponse | None]:
+    """Convert the request to the provider's dialect, or the error to send.
+
+    A shim's defaults are passed only when it declares some: a pipeline that
+    predates them (or a type whose shims declare none) keeps the one-argument
+    call it has always had.
+    """
+    try:
+        if route.params:
+            return pipeline.convert_request(body, defaults=route.params), None
+        return pipeline.convert_request(body), None
+    except Exception as exc:
+        logger.warning("%s: request conversion failed: %s", handler.model_type, exc)
+        return None, _error(
+            f"Request conversion failed: {exc}", "conversion_error", 400
+        )
+
+
+def _failover_target(
+    config: GatewayConfig,
+    handler: TypedHandler,
+    model: str,
+    route: TypedRoute,
+    excluded: frozenset[str],
+) -> TypedRoute | None:
+    """The route to retry after a refusal, or ``None`` to report it.
+
+    The refusal is counted against the lane that answered it — the same
+    counter chat feeds, so a typed 429 sinks and eventually disables a provider
+    like any other.  The refused provider is then left out of the re-resolution.
+    """
+    from ..maintenance.startup import ProviderNotReady
+    from ..quota.service import note_upstream_rate_limit
+
+    note_upstream_rate_limit(route.provider_info)
+    assert handler.resolve_excluding is not None
+    try:
+        return handler.resolve_excluding(
+            config, model, excluded | {route.provider_name}
+        )
+    except ProviderNotReady:
+        return None
 
 
 def _error(message: str, error_type: str, status_code: int) -> JSONResponse:
@@ -127,7 +211,20 @@ def _parse_and_resolve(
     if not model:
         return _error("Missing 'model' in request body", "invalid_request_error", 400)
 
-    route = handler.resolve(config, model)
+    from ..maintenance.startup import ProviderNotReady
+
+    try:
+        route = handler.resolve(config, model)
+    except ProviderNotReady as exc:
+        # The typed pools go through the same selector as the chat route, so
+        # "nothing can serve this" arrives in the same vocabulary.
+        status = 502 if exc.failed else 503
+        response = _error(str(exc), "server_error", status)
+        if exc.retry_after is not None:
+            response.headers["Retry-After"] = str(exc.retry_after)
+        elif not exc.failed:
+            response.headers["Retry-After"] = "5"
+        return response
     if route is None:
         configured = ", ".join(sorted(handler.configured_models(config)))
         return _error(
@@ -175,6 +272,68 @@ def _converted_response(
     return JSONResponse(source_body, status_code=200)
 
 
+def _prepare_body(
+    handler: TypedHandler, body: dict[str, Any], model: str, config: GatewayConfig
+) -> None:
+    """Let the handler rewrite the body before conversion (e.g. the model name)."""
+    if handler.prepare_body is not None:
+        handler.prepare_body(body, model, config)
+
+
+def _target_url(
+    handler: TypedHandler,
+    route: TypedRoute,
+    target_body: dict[str, Any],
+    upstream_model: str,
+    config: GatewayConfig,
+) -> str:
+    """The upstream URL: the handler's own if it builds one, else the connection."""
+    if handler.upstream_url is not None:
+        return handler.upstream_url(route, target_body, upstream_model, config)
+    return route.provider_info.upstream_url("")
+
+
+def _success_response(
+    handler: TypedHandler,
+    pipeline: Any,
+    resp: Any,
+    *,
+    same_format: bool,
+    source_format: str,
+    route: TypedRoute,
+    model: str,
+) -> Response:
+    """The response for an upstream success: converted, or passed through.
+
+    An empty body, or a conversion failure, is the raw upstream bytes with
+    ``x-rosetta-conversion: passthrough`` — the same contract the chat routes
+    use.  An empty body of a type that marks it as passthrough (rerank) keeps
+    that marker too.
+    """
+    if resp.body is None:
+        raw = Response(
+            body=resp.raw_content, status_code=200, content_type="application/json"
+        )
+        return _passthrough(raw) if handler.empty_body_is_passthrough else raw
+
+    converted = _converted_response(
+        resp,
+        pipeline,
+        handler,
+        same_format=same_format,
+        source_format=source_format,
+        target_format=route.format,
+        model=model,
+    )
+    if converted is not None:
+        return converted
+    return _passthrough(
+        Response(
+            body=resp.raw_content, status_code=200, content_type="application/json"
+        )
+    )
+
+
 async def handle_typed_request(
     request: Any, config: GatewayConfig, handler: TypedHandler
 ) -> Response:
@@ -192,162 +351,140 @@ async def handle_typed_request(
 
     source_format = detect_source_format(request, body, config, handler.model_type)
     logger.debug("%s: detected source format: %s", handler.model_type, source_format)
-    rejection = begin_typed(
-        request,
-        source_format=source_format,
-        target_format=route.format,
-        provider_name=route.provider_name,
-    )
-    if rejection is not None:
-        return rejection
 
-    if handler.prepare_body is not None:
-        handler.prepare_body(body, model, config)
-    # The model the upstream URL is built from; a rename map or the conversion
-    # itself may have changed it.
-    upstream_model = body.get("model") or model
-
-    pipeline = handler.build_pipeline(source_format, route.format)
-    same_format = source_format == route.format
-    original_body = copy.deepcopy(body) if same_format else None
-    try:
-        # A shim's defaults are passed only when it declares some: a pipeline
-        # that predates them (or a type whose shims declare none) keeps the
-        # one-argument call it has always had.
-        if route.params:
-            target_body = pipeline.convert_request(body, defaults=route.params)
-        else:
-            target_body = pipeline.convert_request(body)
-    except Exception as exc:
-        logger.warning("%s: request conversion failed: %s", handler.model_type, exc)
-        return with_request_id(
-            _error(f"Request conversion failed: {exc}", "conversion_error", 400)
-        )
-    check_same_format_fidelity(
-        handler.model_type,
-        source_format,
-        route.format,
-        original_body,
-        target_body,
-        "request",
-        model=model,
-    )
-
-    if handler.upstream_url is not None:
-        upstream_url = handler.upstream_url(route, target_body, upstream_model, config)
-    else:
-        upstream_url = route.provider_info.upstream_url("")
-
-    transport: UpstreamTransport = request.app.transport
-    extra_headers = build_upstream_extra_headers(request, request_id)
-
-    t0 = time.monotonic()
-    status_code = 500
-    error_detail: str | None = None
-    usage: dict[str, Any] = {}
-
-    try:
-        resp = await transport.send(
-            route.provider_info,
-            upstream_url,
-            target_body,
-            extra_headers=extra_headers,
-        )
-        status_code = resp.status_code
-        # Read even on an error status: a 4xx can still carry the tokens the
-        # upstream counted before it refused.
-        usage = handler.response_usage(route.format, resp.body)
-
-        if resp.is_error:
-            error_detail = resp.error_text
-            return with_request_id(
-                Response(
-                    body=resp.raw_content,
-                    status_code=resp.status_code,
-                    content_type="application/json",
-                )
-            )
-
-        # Some vendors answer HTTP 200 and put the verdict in the body
-        # (MiniMax's base_resp.status_code).  The target converter knows its
-        # own envelope; without this check the gateway would report an empty
-        # success for a request the vendor refused.
-        inband_error = (
-            handler.upstream_error(route.format, resp.body)
-            if handler.upstream_error is not None
-            else None
-        )
-        if inband_error:
-            status_code = 502
-            error_detail = inband_error
-            return with_request_id(_error(inband_error, "upstream_error", 502))
-
-        if resp.body is None:
-            raw = with_request_id(
-                Response(
-                    body=resp.raw_content,
-                    status_code=200,
-                    content_type="application/json",
-                )
-            )
-            return _passthrough(raw) if handler.empty_body_is_passthrough else raw
-
-        converted = _converted_response(
-            resp,
-            pipeline,
-            handler,
-            same_format=same_format,
+    # One attempt per candidate, at most: a retryable refusal adds the provider
+    # that answered it to the excluded set and resolves again.  The lifecycle
+    # note is re-taken per attempt so the log names the provider that served.
+    excluded: frozenset[str] = frozenset()
+    while True:
+        rejection = begin_typed(
+            request,
             source_format=source_format,
             target_format=route.format,
-            model=model,
+            provider_name=route.provider_name,
         )
-        if converted is not None:
-            return with_request_id(converted)
-        return with_request_id(
-            _passthrough(
-                Response(
-                    body=resp.raw_content,
-                    status_code=200,
-                    content_type="application/json",
-                )
-            )
+        if rejection is not None:
+            return rejection
+
+        # A refused attempt that fails over writes no row: the request is
+        # answered by the next attempt, and one request is one row.
+        retrying = False
+        _prepare_body(handler, body, model, config)
+        # The model the upstream URL is built from; a rename map or the conversion
+        # itself may have changed it.
+        upstream_model = body.get("model") or model
+
+        pipeline = handler.build_pipeline(source_format, route.format)
+        same_format = source_format == route.format
+        original_body = copy.deepcopy(body) if same_format else None
+        target_body, conversion_error = _converted_body(handler, pipeline, body, route)
+        if conversion_error is not None:
+            return with_request_id(conversion_error)
+        check_same_format_fidelity(
+            handler.model_type,
+            source_format,
+            route.format,
+            original_body,
+            target_body,
+            "request",
+            model=model,
         )
 
-    except UpstreamTimeoutError as exc:
-        status_code = 504
-        error_detail = f"Upstream timeout: {exc}"
-        return with_request_id(
-            _error(f"Upstream timeout: {exc}", "upstream_error", 504)
-        )
-    except UpstreamConnectionError as exc:
-        status_code = 502
-        error_detail = f"{handler.connection_error_message}: {exc}"
-        return with_request_id(_error(error_detail, "upstream_error", 502))
-    finally:
-        duration_ms = (time.monotonic() - t0) * 1000
-        if handler.log_conversion:
-            logger.info(
-                "%s: %s → %s (%s→%s) %dms status=%d",
-                handler.model_type,
-                model,
-                route.provider_name,
-                source_format,
-                route.format,
-                duration_ms,
-                status_code,
+        upstream_url = _target_url(handler, route, target_body, upstream_model, config)
+
+        transport: UpstreamTransport = request.app.transport
+        extra_headers = build_upstream_extra_headers(request, request_id)
+
+        t0 = time.monotonic()
+        status_code = 500
+        error_detail: str | None = None
+        usage: dict[str, Any] = {}
+
+        try:
+            resp = await transport.send(
+                route.provider_info,
+                upstream_url,
+                target_body,
+                extra_headers=extra_headers,
             )
-        await finish_typed(
-            request,
-            model=model,
-            source_provider=source_format,
-            target_provider=route.format,
-            provider_name=route.provider_name,
-            status_code=status_code,
-            duration_ms=duration_ms,
-            error_detail=error_detail,
-            model_type=handler.model_type,
-            usage=usage,
-        )
+            status_code = resp.status_code
+            # Read even on an error status: a 4xx can still carry the tokens the
+            # upstream counted before it refused.
+            usage = handler.response_usage(route.format, resp.body)
+
+            if resp.is_error:
+                error_detail = resp.error_text
+                if _may_fail_over(config, handler, model, resp.status_code):
+                    next_route = _failover_target(
+                        config, handler, model, route, excluded
+                    )
+                    if next_route is not None:
+                        excluded = excluded | {route.provider_name}
+                        route = next_route
+                        retrying = True
+                        continue
+                return with_request_id(
+                    Response(
+                        body=resp.raw_content,
+                        status_code=resp.status_code,
+                        content_type="application/json",
+                    )
+                )
+
+            inband_error = _inband_error(handler, route, resp)
+            if inband_error:
+                status_code = 502
+                error_detail = inband_error
+                return with_request_id(_error(inband_error, "upstream_error", 502))
+
+            return with_request_id(
+                _success_response(
+                    handler,
+                    pipeline,
+                    resp,
+                    same_format=same_format,
+                    source_format=source_format,
+                    route=route,
+                    model=model,
+                )
+            )
+
+        except UpstreamTimeoutError as exc:
+            status_code = 504
+            error_detail = f"Upstream timeout: {exc}"
+            return with_request_id(
+                _error(f"Upstream timeout: {exc}", "upstream_error", 504)
+            )
+        except UpstreamConnectionError as exc:
+            status_code = 502
+            error_detail = f"{handler.connection_error_message}: {exc}"
+            return with_request_id(_error(error_detail, "upstream_error", 502))
+        finally:
+            if not retrying:
+                duration_ms = (time.monotonic() - t0) * 1000
+                if handler.log_conversion:
+                    logger.info(
+                        "%s: %s → %s (%s→%s) %dms status=%d",
+                        handler.model_type,
+                        model,
+                        route.provider_name,
+                        source_format,
+                        route.format,
+                        duration_ms,
+                        status_code,
+                    )
+                await finish_typed(
+                    request,
+                    model=model,
+                    source_provider=source_format,
+                    target_provider=route.format,
+                    provider_name=route.provider_name,
+                    status_code=status_code,
+                    duration_ms=duration_ms,
+                    error_detail=error_detail,
+                    model_type=handler.model_type,
+                    usage=usage,
+                )
 
 
 __all__ = ["TypedHandler", "detect_source_format", "handle_typed_request"]

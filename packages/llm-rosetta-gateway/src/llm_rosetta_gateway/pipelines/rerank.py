@@ -36,10 +36,12 @@ def _detect_source_format(
     return detect_source_format(request, body, config, "rerank")
 
 
-def _resolve_route(config: GatewayConfig, model: str) -> TypedRoute | None:
+def _resolve_route(
+    config: GatewayConfig, model: str, excluded: frozenset[str] = frozenset()
+) -> TypedRoute | None:
     """Resolve the rerank provider, or ``None`` when the model is unknown."""
     try:
-        return config.resolve_rerank(model)
+        return config.resolve_rerank(model, excluded=excluded)
     except KeyError:
         return None
 
@@ -48,6 +50,7 @@ _RERANK = TypedHandler(
     model_type="rerank",
     build_pipeline=RerankConversionPipeline,
     resolve=_resolve_route,
+    resolve_excluding=_resolve_route,
     configured_models=lambda config: config.rerank_models.keys(),
     response_usage=response_usage,
     not_found_label="rerank model",
