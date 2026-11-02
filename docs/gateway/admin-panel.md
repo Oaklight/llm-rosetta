@@ -110,6 +110,33 @@ Destructive operations use two confirmation patterns:
 - **Provider delete** — a type-to-confirm dialog that names the cascade effects.
 - **Model delete**, **API key delete** and **Clear Log** — an inline two-step confirmation: the button becomes **Sure? Yes** and reverts after 3 seconds.
 
+## Routing
+
+The **Routing** section answers one question per model: which lane serves it, and why. It reads the selector's own answer rather than re-deriving one — every number on the page comes from `GET /admin/api/routing/<model>`.
+
+![Routing section](images/admin-routing.png)
+
+- **Board** — one row per candidate: its state, configured weight, the share it serves at (weight scaled by remaining allowance) and its headroom, with a bar showing each lane's proportion of the model's traffic.
+- **Flow** — the same candidates as lanes, for a quick read of how many lanes a model has and which are out.
+- **Recent decisions** — the last requests for this model from the request log: time, provider, status and any failover hop.
+- **Policy** — the model's `routing` block, editable: strategy, affinity and the sunk-lane switch, plus five presets (**Balanced**, **Sticky sessions**, **Cheap first**, **Spread**, **Quota saver**). A preset writes the literal block an operator could have typed, and the select shows **Custom** for a block that is no preset.
+
+States follow the eligibility predicate, so the panel and the proxy agree by construction:
+
+| State | Meaning |
+|-------|---------|
+| **Serving** | A candidate; nothing is holding it back |
+| **Sunk** | Still a candidate, but a recent 429 orders it last |
+| **Blocked** | A provider-wide block (a keyless 429, a rotating credential whose account is out); the row counts down to its end and the board refetches when it expires |
+| **Rate limited** | Continuous 429s disabled the lane until the cooldown ends |
+| **Spent** | Every credential's freshest reading says its window is spent |
+| **No credential** | The key ring has nothing usable left |
+| **Starting** | A credential has not been seeded yet |
+
+The model picker lists only the models the gateway can route (`GET /admin/api/routing`), not every key in the config document: a model whose provider was skipped at load has nothing to route to.
+
+Saving the policy writes through `PUT /admin/api/routing/<model>`, which rebuilds the config — so a value the parser refuses comes back as the parser's own message, and a key the editor does not own (`rules`, `first_token_ms`) is carried through the save unchanged.
+
 ## API Keys
 
 The **API Keys** section issues and revokes the keys that call `/v1/*`. Each key has a label, an allowed-shim list (`*` for any), a creation time and a last-used time. A new key is shown once, in full; the list keeps only its id and label. Deleting a key takes effect on the next request — no restart.
