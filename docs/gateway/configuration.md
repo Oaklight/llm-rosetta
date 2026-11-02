@@ -561,6 +561,23 @@ point can still be answered from elsewhere. Once bytes have reached the client
 the response cannot be replayed, and a mid-stream failure ends the client's
 stream with its code.
 
+### Per-Provider Capabilities { #provider-capabilities }
+
+A `providers[]` entry may declare what that provider serves **for this model**, which narrows the route one request at a time:
+
+```jsonc
+"models": {
+  "gemini-3.5-flash": {
+    "providers": [
+      {"name": "gemini-text", "capabilities": ["text"]},
+      {"name": "gemini-vision", "capabilities": ["text", "vision"]}
+    ]
+  }
+}
+```
+
+A request that carries an image needs `vision`, one that declares tools needs `tools`, and one that asks for a reasoning effort needs `reasoning`. An entry whose list lacks a needed capability is not a candidate **for that request**, and stays a candidate for every other one. An entry that declares nothing inherits the provider's own capabilities, so a config without the field behaves exactly as before. When every candidate lacks the capability the route answers `400` and names it — a retry cannot add one. The model drawer has the same field on each provider row; blank means inherit ([admin panel](gateway/admin-panel.md)).
+
 ### Typed Routes { #typed-routes }
 
 Embedding, rerank and decision models declared in the unified `models` section go through the same two stages as the chat route — eligibility, then the anchor over the declared weights. A typed model with several providers therefore serves them by weight and skips one the state has removed (spent, blocked, or disabled by a run of 429s):
