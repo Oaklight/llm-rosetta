@@ -492,6 +492,14 @@ row: *Up to date*, *Update `<old>` → `<new>`* (click it to refetch every remot
 source), or *Check failed* with the reason on hover. **Check now**
 asks again immediately; otherwise the answer is cached for five minutes.
 
+A pin can also be missing: if the commit could not be resolved when the source
+was fetched — the API was rate-limited or unreachable — the stamp keeps the
+declared ref instead of a commit, and the source is re-pinned on the next fetch
+that `refresh` allows. Until then its badge reads *Check failed* with
+"refetch to re-pin". **Refetch** re-pins at once, and `refresh: "never"` does
+not stand in its way: an explicit refetch is not the schedule that setting
+governs.
+
 `shims.presets` expands a catalog key into the repository, path and token
 variable, so one line replaces the expanded remote:
 
