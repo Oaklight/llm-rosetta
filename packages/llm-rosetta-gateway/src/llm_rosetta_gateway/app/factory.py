@@ -397,11 +397,11 @@ async def create_app(
 
     # Expose the shim-source outcome to the admin API, and record the applied
     # signature so the reload path can skip a rebuild when the section is
-    # unchanged.  ``App`` does not declare these, so set them dynamically.
-    from ..shim_sources import shims_signature as _shims_signature
-
+    # unchanged.  The signature is computed by the loader from the raw
+    # section; the reload path hashes the same raw section, so the two are
+    # comparable.  ``App`` does not declare these, so set them dynamically.
     setattr(app, "shim_source_report", shim_source_report)
-    setattr(app, "shim_source_signature", _shims_signature({"shims": config.shims}))
+    setattr(app, "shim_source_signature", config.shims_signature)
 
     # --- Routes ---
     if not ext.skip_default_routes:

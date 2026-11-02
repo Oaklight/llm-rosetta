@@ -23,6 +23,7 @@ import json
 import logging
 import os
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -48,6 +49,12 @@ def shims_signature(raw: Mapping[str, Any] | None) -> str:
     Used by the admin reload path to skip a full shim rebuild (and any remote
     fetch) when an unrelated part of the config changed.  Key order inside the
     section does not affect the result.
+
+    The hash covers the section **as the document spells it**, not the parsed
+    :class:`ShimSources`: the loader stores this value and the reload path
+    recomputes it from the document it has just read, so both sides must hash
+    the same kind of value.  A parsed section has already anchored its paths
+    and expanded its presets, which would make the two disagree.
     """
     section = raw.get("shims") if isinstance(raw, Mapping) else None
     if not section:
@@ -57,6 +64,22 @@ def shims_signature(raw: Mapping[str, Any] | None) -> str:
     except (TypeError, ValueError):
         blob = repr(section)
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def _known_preset_keys() -> str:
+    """The preset keys this build ships, for an error or a warning."""
+    return ", ".join(entry.key for entry in SHIM_SOURCE_PACKAGES)
+
+
+def _unknown_preset_error(key: str) -> ValueError:
+    """The one error for a preset key this build does not ship.
+
+    One constructor for both the parse path and the already-parsed path, so
+    the two cannot word the same refusal differently.
+    """
+    return ValueError(
+        f"config: unknown shim preset {key!r}; known presets: {_known_preset_keys()}"
+    )
 
 
 def _resolve_presets(
@@ -69,10 +92,11 @@ def _resolve_presets(
 
     Args:
         raw_presets: The declared keys.
-        on_unknown: ``"raise"`` (the admin PUT path, where the operator can
+        on_unknown: ``"raise"`` (the admin save path, where the operator can
             correct the body) or ``"skip"`` (startup, where a key this build
             does not ship must not keep the gateway from running — it may come
-            from a newer build, and the panel is part of the same process).
+            from a newer build, and the panel that would fix it is part of the
+            same process).
 
     Raises:
         ValueError: On a non-string key, or an unknown key when *on_unknown*
@@ -87,17 +111,14 @@ def _resolve_presets(
             )
         package = get_source_package(key)
         if package is None:
-            known = ", ".join(entry.key for entry in SHIM_SOURCE_PACKAGES)
             if on_unknown == "skip":
                 logger.warning(
                     "config: unknown shim preset %r is skipped; this build ships: %s",
                     key,
-                    known,
+                    _known_preset_keys(),
                 )
                 continue
-            raise ValueError(
-                f"config: unknown shim preset {key!r}; known presets: {known}"
-            )
+            raise _unknown_preset_error(key)
         remote = package.remote
         url = remote.get("url")
         if url and url not in seen_urls:
@@ -184,6 +205,95 @@ def _validate_knobs(section: Mapping[str, Any]) -> None:
         raise ValueError("config: 'shims.strict' must be a boolean")
 
 
+@dataclass(frozen=True)
+class ShimSources:
+    """The ``shims`` section, parsed and validated once.
+
+    One parser feeds the config loader, :func:`apply_shim_sources` and the
+    admin save path, so a document a load accepts is a document an apply
+    accepts too — they cannot drift apart the way a loader that kept the raw
+    mapping and an apply that validated it did (#1330).
+
+    Attributes:
+        presets: The declared catalogue keys, as written.
+        remotes: The remotes to load: presets expanded, explicit entries
+            merged over a preset with the same URL.
+        paths: Local shim directories, anchored to the config file.
+        disabled: Shim names to keep out of the registry.
+        cache_root: Where remote archives are cached, anchored the same way.
+        remote_ttl: Seconds a remote archive may be reused without a refetch.
+        strict: Whether an unknown preset or a failed source stops the load.
+        declared: Whether the document carried a non-empty ``shims``
+            section.  Only this makes the object truthy — a parsed empty
+            section still resolves a cache root, which is not a declaration.
+    """
+
+    presets: tuple[str, ...] = ()
+    remotes: tuple[Mapping[str, Any], ...] = ()
+    paths: tuple[str, ...] = ()
+    disabled: tuple[str, ...] = ()
+    cache_root: str | None = None
+    remote_ttl: int = REMOTE_TTL_SECONDS
+    strict: bool = False
+    declared: bool = False
+
+    def __bool__(self) -> bool:
+        """Whether the config declared this section."""
+        return self.declared
+
+
+def parse_shims_section(
+    section: Mapping[str, Any] | None,
+    config_path: str | None = None,
+    *,
+    on_unknown: str | None = None,
+) -> ShimSources:
+    """Parse and validate a ``shims`` section.
+
+    Args:
+        section: The ``shims`` mapping (or ``None``/empty).
+        config_path: Path to the config file, the anchoring base for relative
+            ``paths`` and ``cache_dir`` entries.
+        on_unknown: ``"raise"`` or ``"skip"`` for a ``presets`` key this build
+            does not ship.  ``None`` reads it from ``shims.strict``: a strict
+            document raises, a tolerant one skips with a warning (see
+            :func:`_resolve_presets`).
+
+    Returns:
+        The parsed section.  Falsy when the document carried none.
+
+    Raises:
+        ValueError: If the section or one of its fields has the wrong shape.
+    """
+    config_dir = os.path.dirname(config_path) if config_path else None
+    if not section:
+        return ShimSources(cache_root=_cache_root(None, config_dir))
+    if not isinstance(section, Mapping):
+        raise ValueError("config: 'shims' must be an object")
+
+    mode = on_unknown
+    if mode is None:
+        mode = "raise" if section.get("strict") is True else "skip"
+    dirs = _resolve_paths(section.get("paths") or [], config_dir)
+    raw_presets = section.get("presets") or []
+    if not isinstance(raw_presets, list):
+        raise ValueError("config: 'shims.presets' must be an array")
+    remotes = _resolve_remotes(
+        section.get("remotes") or [], _resolve_presets(raw_presets, on_unknown=mode)
+    )
+    _validate_knobs(section)
+    return ShimSources(
+        presets=tuple(raw_presets),
+        remotes=tuple(remotes),
+        paths=tuple(dirs),
+        disabled=tuple(resolve_disabled(section)),
+        cache_root=_cache_root(section.get("cache_dir"), config_dir),
+        remote_ttl=_int_setting(section, "remote_ttl", REMOTE_TTL_SECONDS),
+        strict=bool(section.get("strict", False)),
+        declared=True,
+    )
+
+
 def resolve_source_config(
     section: Mapping[str, Any] | None,
     config_path: str | None,
@@ -192,21 +302,15 @@ def resolve_source_config(
 ) -> tuple[list[str], list[dict[str, Any]], str]:
     """Resolve a ``shims`` section into absolute dirs, remotes and cache root.
 
-    Relative ``paths`` entries and a relative ``cache_dir`` are anchored to the
-    directory containing the config file, mirroring ``server.data_dir``.
-
-    ``presets`` names packages from
-    :data:`llm_rosetta.shims.SHIM_SOURCE_PACKAGES` (``"argo"``, ``"alcf"``,
-    ``"asksage"``); each is expanded to its catalogue ``remote`` and applied
-    like an explicit entry.  Presets come first, so an explicit ``remotes``
-    entry with the same URL is merged onto its preset (explicit keys win) —
-    a ``ref`` can be pinned without losing the catalogue's ``path``.
+    A thin view over :func:`parse_shims_section`, kept for callers that want
+    the three values rather than the object.
 
     Args:
         section: The ``shims`` mapping (or ``None``/empty).
         config_path: Path to the config file, used as the anchoring base.
         on_unknown: What to do with a ``presets`` key this build does not ship;
-            see :func:`_resolve_presets`.
+            defaults to raising, because every caller of this view is a path
+            where the caller can still correct what it sent.
 
     Returns:
         ``(dirs, remotes, cache_root)``.
@@ -214,22 +318,12 @@ def resolve_source_config(
     Raises:
         ValueError: If the section or one of its fields has the wrong shape.
     """
-    config_dir = os.path.dirname(config_path) if config_path else None
-    if not section:
-        return [], [], _cache_root(None, config_dir)
-    if not isinstance(section, Mapping):
-        raise ValueError("config: 'shims' must be an object")
-
-    dirs = _resolve_paths(section.get("paths") or [], config_dir)
-    raw_presets = section.get("presets") or []
-    if not isinstance(raw_presets, list):
-        raise ValueError("config: 'shims.presets' must be an array")
-    remotes = _resolve_remotes(
-        section.get("remotes") or [],
-        _resolve_presets(raw_presets, on_unknown=on_unknown),
+    sources = parse_shims_section(section, config_path, on_unknown=on_unknown)
+    return (
+        list(sources.paths),
+        [dict(remote) for remote in sources.remotes],
+        sources.cache_root or _cache_root(None, None),
     )
-    _validate_knobs(section)
-    return dirs, remotes, _cache_root(section.get("cache_dir"), config_dir)
 
 
 def resolve_disabled(section: Mapping[str, Any] | None) -> list[str]:
@@ -297,7 +391,7 @@ def apply_shim_sources(
 
 
 def apply_shim_section(
-    section: Mapping[str, Any] | None,
+    section: ShimSources | Mapping[str, Any] | None,
     config_path: str | None = None,
     *,
     strict: bool | None = None,
@@ -305,26 +399,55 @@ def apply_shim_section(
     proxy: str | None = None,
     force_refresh: bool = False,
 ) -> ShimLoadReport:
-    """Apply a ``shims`` section (already extracted) to the registry."""
-    effective = section if isinstance(section, Mapping) else {}
+    """Apply a parsed ``shims`` section to the registry.
+
+    Accepts the parsed object (what the config loader stores) or a raw
+    mapping, which is parsed with the same validator the loader uses — so a
+    section that reached this far has already been checked, and the two
+    paths cannot disagree about its shape.
+
+    A *strict* argument given here also governs the parse: an unknown preset
+    is refused when it is ``True``, skipped when it is ``False``, and read from
+    ``shims.strict`` when it is ``None``.  A section that was already parsed
+    cannot be re-judged — the loader parsed it with the document's own
+    ``strict`` — so ``strict=True`` over such a section **raises** when it
+    carries a preset this build does not ship, rather than reporting success
+    for a rule it never applied; ``strict=False`` accepts what the parse
+    already skipped.
+
+    Raises:
+        ValueError: If the section or one of its fields has the wrong shape,
+            or if a parsed section contradicts an explicit ``strict=True``.
+    """
+    if isinstance(section, ShimSources):
+        sources = section
+        if strict is True:
+            unknown = [
+                key for key in sources.presets if get_source_package(key) is None
+            ]
+            if unknown:
+                raise _unknown_preset_error(unknown[0])
+    else:
+        sources = parse_shims_section(
+            section,
+            config_path,
+            on_unknown=(None if strict is None else ("raise" if strict else "skip")),
+        )
     if strict is None:
-        strict = bool(effective.get("strict", False))
-    dirs, remotes, cache_root = resolve_source_config(
-        effective, config_path, on_unknown="raise" if strict else "skip"
-    )
-    ttl = _int_setting(effective, "remote_ttl", REMOTE_TTL_SECONDS)
+        strict = sources.strict
+    remotes = [dict(spec) for spec in sources.remotes]
     if force_refresh:
         remotes = [dict(spec, refresh="always") for spec in remotes]
 
     report = rebuild_shims(
-        dirs,
+        list(sources.paths),
         remotes,
-        cache_root=cache_root,
+        cache_root=sources.cache_root or _cache_root(None, None),
         strict=bool(strict),
         http_get=http_get,
-        ttl=ttl,
+        ttl=sources.remote_ttl,
         proxy=proxy,
-        disabled=resolve_disabled(effective),
+        disabled=list(sources.disabled),
     )
     if report.sources:
         logger.info(
@@ -440,8 +563,10 @@ def report_shim_removals(
 
 
 __all__ = [
+    "ShimSources",
     "apply_shim_section",
     "apply_shim_sources",
+    "parse_shims_section",
     "report_shim_removals",
     "resolve_source_config",
     "shim_removal_advisories",
