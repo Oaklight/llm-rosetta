@@ -1030,3 +1030,72 @@ def _reset_registry() -> None:
     """Clear the registry and everything derived from it.  Intended for testing."""
     _SHIM_REGISTRY.clear()
     _clear_registry_caches()
+
+
+@dataclass(frozen=True)
+class RegistrySnapshot:
+    """A restorable view of the process-wide shim registry.
+
+    The registry is not the only state a test can disturb: the convention
+    model-list transforms are filled while the shims load and cleared with
+    them, so a snapshot carries both.  Converter instances are not carried —
+    they are derived from a shim and are rebuilt on the next lookup.
+
+    Attributes:
+        registry: The shim mapping, as :func:`snapshot_registry` copied it.
+        model_list_transforms: The convention transforms registered by the
+            same load, keyed by shim name.
+    """
+
+    registry: dict[str, ProviderShim] = field(default_factory=dict)
+    model_list_transforms: dict[str, Any] = field(default_factory=dict)
+
+
+def snapshot_registry() -> RegistrySnapshot:
+    """Return a restorable copy of the process-wide registry.
+
+    The registry is process-wide and a test may replace it — a unit suite that
+    calls ``rebuild_shims`` with its own fixtures, say.  Take a snapshot before
+    such a test and hand it back to :func:`restore_registry` afterwards, so the
+    next test sees the registry it expects and file order stops mattering
+    (#1332).
+
+    This reads the live registry rather than a thread's staging view: the pair
+    exists to restore the state other threads see, and the restore always
+    rebinds it.
+
+    Returns:
+        A snapshot whose mappings are copies; mutating them does not touch the
+        live state.
+    """
+    from .providers import _model_list_transforms
+
+    return RegistrySnapshot(
+        registry=dict(_SHIM_REGISTRY),
+        model_list_transforms=dict(_model_list_transforms),
+    )
+
+
+def restore_registry(snapshot: RegistrySnapshot) -> None:
+    """Put the registry and its derived state back.
+
+    Rebinds the global to a copy of the snapshot, matching
+    :func:`staging_registry`, which also rebinds rather than mutating in place.
+    The convention transforms are restored from the snapshot rather than
+    cleared: they are registered while shims load, not rebuilt on demand, so
+    clearing them would leave the built-ins' transforms missing for the rest
+    of the process.
+
+    Args:
+        snapshot: A snapshot from :func:`snapshot_registry`.
+    """
+    global _SHIM_REGISTRY
+    from llm_rosetta.auto_detect import _converter_cache
+
+    from .providers import _model_list_transforms
+
+    _SHIM_REGISTRY = dict(snapshot.registry)
+    _model_list_transforms.clear()
+    _model_list_transforms.update(snapshot.model_list_transforms)
+    # Cached converters are derived from shims that may no longer exist.
+    _converter_cache.clear()
