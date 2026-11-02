@@ -62,9 +62,12 @@ class ProviderNotReady(Exception):
         blocked_until: datetime | None = None,
         exhausted_until: datetime | None = None,
         exhausted: bool = False,
+        unsupported: tuple[str, ...] = (),
         now: datetime | None = None,
     ) -> None:
         self.model = model
+        #: Capabilities no candidate declared, for the ``unsupported`` state.
+        self.unsupported: tuple[str, ...] = tuple(unsupported)
         self.failed = failed
         #: Whether the reason is a spent allowance rather than startup state.
         self.exhausted = False
@@ -72,6 +75,15 @@ class ProviderNotReady(Exception):
         #: a known end (a quota block or a spent window does; startup does not).
         self.retry_after: int | None = None
         moment = now or datetime.now(timezone.utc)
+        if self.unsupported:
+            # The route exists, but not for this request: retrying will not
+            # help, and the client is told which capability is missing.
+            names = ", ".join(self.unsupported)
+            super().__init__(
+                f"No provider for model '{model}' serves this request; "
+                f"every candidate lacks: {names}"
+            )
+            return
         if exhausted_until is not None:
             self.exhausted = True
             self.retry_after = max(1, int((exhausted_until - moment).total_seconds()))

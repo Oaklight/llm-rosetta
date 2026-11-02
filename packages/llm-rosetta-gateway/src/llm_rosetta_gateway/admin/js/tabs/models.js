@@ -527,6 +527,7 @@ function _getProviderDetails(info) {
         name: p.name || '',
         weight: p.weight,
         upstream_model: p.upstream_model,
+        capabilities: p.capabilities,
         enabled: p.enabled !== false,
       };
     });
@@ -574,6 +575,96 @@ function _renderProviderCell(name, info, disabledProviders) {
     <div class="more-menu provider-menu" role="menu">${_providerMenuRows(name, info, disabledProviders)}</div>`;
 }
 
+/** The dots a capability list draws: one per capability, its badge's colour.
+ *
+ *  A dot rather than the badge glyph, because four of them standing in a row
+ *  still have to leave the provider name the room it needs.  The title names
+ *  the capability, since the dot itself has no text.
+ */
+function _capDots(caps) {
+  if (!caps.length) {
+    return '<span class="cap-dot is-inherit" title="' +
+      esc(t('label.providerCaps.inherit')) + '"></span>';
+  }
+  return caps.map((capability) =>
+    '<span class="cap-dot cap-badge-' + esc(capability) + '" title="' +
+    esc(capLabel(capability)) + '"></span>'
+  ).join('');
+}
+
+/** One provider entry's capability picker: badges, and checkboxes behind them.
+ *
+ *  The badges are the entry's own list, drawn icon-only like the model row's.
+ *  An entry that declares none inherits the provider's, which the button says
+ *  with a dash rather than an empty box: "inherit" is a state, not a blank.
+ */
+function _capPicker(model, provider) {
+  const caps = Array.isArray(provider.capabilities) ? provider.capabilities : [];
+  const options = ['text', 'vision', 'tools', 'reasoning'].map((capability) =>
+    '<label class="cap-menu-row" role="menuitemcheckbox" aria-checked="' +
+    caps.includes(capability) + '">' +
+    '<input type="checkbox"' + (caps.includes(capability) ? ' checked' : '') +
+    ' data-capability="' + capability + '"' +
+    ' onchange="toggleProviderCapability(\'' + esc(model) + '\',\'' +
+    esc(provider.name) + '\',this)">' +
+    '<span class="cap-dot cap-badge-' + capability + '" aria-hidden="true"></span>' +
+    '<span class="cap-menu-label">' + esc(capLabel(capability)) + '</span></label>'
+  ).join('');
+  return '<span class="cap-picker">' +
+    '<button type="button" class="cap-menu-toggle" aria-haspopup="true"' +
+    ' aria-expanded="false" title="' + esc(t('hint.providerCaps')) + '"' +
+    ' onclick="toggleCapMenu(this)">' + _capDots(caps) + '</button>' +
+    '<div class="more-menu cap-menu" role="menu">' + options + '</div></span>';
+}
+
+/** Open or close one capability menu; only one is open at a time. */
+function toggleCapMenu(button) {
+  const menu = button.nextElementSibling;
+  if (!menu) return;
+  const wasOpen = menu.classList.contains('open');
+  closeMenus();
+  if (!wasOpen) openMenu(menu, button);
+}
+
+/** Tick or untick one capability, write the list, and redraw the dots.
+ *
+ *  The whole menu is read rather than the cached entry: ticking several boxes
+ *  in a row must not send four snapshots of the same starting state and keep
+ *  only the last one.  The newest click owns the badges — an older response
+ *  that lands late must not repaint the row with a state the menu no longer
+ *  shows.
+ */
+async function toggleProviderCapability(model, provider, checkbox) {
+  const menu = checkbox.closest('.cap-menu');
+  const list = [...menu.querySelectorAll('input[data-capability]')]
+    .filter((box) => box.checked)
+    .map((box) => box.dataset.capability);
+  const seq = String(Number(menu.dataset.seq || 0) + 1);
+  menu.dataset.seq = seq;
+  const res = await api.post(
+    `/admin/api/config/models/${encodeURIComponent(model)}/update-provider`,
+    { provider, capabilities: list },
+  );
+  if (!res.ok) {
+    if (menu.dataset.seq === seq) {
+      checkbox.checked = !checkbox.checked;
+      showToast(res.error || t('toast.error'), 'error');
+    }
+    return;
+  }
+  if (menu.dataset.seq !== seq) return;
+  const entry = _providerEntry(S.configData.models[model], provider);
+  if (entry && typeof entry === 'object') {
+    if (list.length) entry.capabilities = list;
+    else delete entry.capabilities;
+  }
+  const button = menu.previousElementSibling;
+  if (button) button.innerHTML = _capDots(list);
+  const row = checkbox.closest('.cap-menu-row');
+  if (row) row.setAttribute('aria-checked', String(checkbox.checked));
+  showToast(t('toast.capsSet', { provider }));
+}
+
 /** One menu row per provider: its own on/off switch, weight, test and remove. */
 function _providerMenuRows(name, info, disabledProviders) {
   const details = _getProviderDetails(info);
@@ -605,6 +696,9 @@ function _providerMenuRows(name, info, disabledProviders) {
         <span class="provider-link pm-name" title="${esc(p.name)}" onclick="goToProviderFromModel('${pn}')">${esc(_providerLabel(p.name))}</span>
         <span class="pm-upstream">${p.upstream_model ? `→ ${esc(p.upstream_model)}` : ''}</span>
       </div>
+      ${modelType === 'llm'
+        ? _capPicker(name, p)
+        : `<span class="cap-badge ${_typeBadgeClass(modelType)}" title="${esc(typeLabelAlt(modelType))}">${_CAP_ICONS[modelType] || ''}</span>`}
       <input type="number" class="pd-weight" min="1" max="100" value="${w}" title="${t('label.weight')}" onchange="updateProviderWeight('${n}','${pn}',this)" onkeydown="if(event.key==='Enter'){this.blur()}">
       <div class="test-group"><button class="btn btn-sm btn-test" onclick="runTest('${n}','${kind}',null,'${pn}')">${t('btn.test')}</button><button class="btn btn-sm btn-caret" aria-haspopup="true" aria-expanded="false" aria-label="${t('btn.test')} ${pn}" onclick="toggleTestMenu(this)">&#9662;</button><div class="test-menu">${_testMenuItems(modelType, name, opts, p.name)}</div></div>
       <button class="btn btn-sm pd-remove" title="${t('btn.remove')}" onclick="removeProviderFromModel('${n}','${pn}')">✕</button>
@@ -973,6 +1067,11 @@ async function updateProviderWeight(modelName, providerName, input) {
   if (entry && typeof entry === 'object') entry.weight = w;
   showToast(t('toast.weightSet', {provider: providerName, w}));
 }
+
+/** Set what this provider serves for this model; blank means inherit.
+ *
+ *  The list is comma-separated in the row, which is the whole edit surface:
+ *  the kernel vocabulary is small (text, vision, tools, reasoning). */
 
 // ── Model rendering ──
 
@@ -1377,7 +1476,8 @@ Object.assign(window, {
   renderModels, saveModel, toggleModel, editModel, cloneModel,
   selectAllModels, updateModelBulk, bulkModels, toggleMoreMenu,
   deleteModel, goToModelsForProvider, goToProviderFromModel,
-  removeProviderFromModel, updateProviderWeight, _buildTypeSegControls,
+  removeProviderFromModel, updateProviderWeight, toggleProviderCapability, toggleCapMenu,
+  _buildTypeSegControls,
   toggleModelProvider,
   setModelSortKey, toggleModelSortDir,
 });

@@ -522,7 +522,8 @@ document.addEventListener('click', function(e) {
   if (e.target.closest('.more-menu') || e.target.closest('.test-menu')
       || e.target.closest('.more-menu-toggle') || e.target.closest('.btn-caret')
       || e.target.closest('.provider-multi-btn') || e.target.closest('#fetchProviderBtn')
-      || e.target.closest('#modelProviderBtn') || e.target.closest('#logProviderBtn')) return;
+      || e.target.closest('#modelProviderBtn') || e.target.closest('#logProviderBtn')
+      || e.target.closest('.cap-menu-toggle')) return;
   closeMenus();
 });
 

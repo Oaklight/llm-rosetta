@@ -83,11 +83,50 @@ function _renderModelList() {
       Math.round((Math.max(0, Number(value) || 0) / total) * 100)
     );
     // The stack is the board's share column in miniature: a lane that is not
-    // serving has no width and is drawn muted, the way the bar does it.
-    const stack = shares.map((value) =>
-      '<i class="' + (Number(value) > 0 ? '' : 'mute') + '" style="width:' +
-      ((Math.max(0, Number(value) || 0) / total) * 100).toFixed(1) + '%"></i>'
-    ).join('');
+    // serving has no width and is drawn muted, the way the bar does it.  A
+    // zero-share lane keeps a 2 px mark so its existence is still visible —
+    // a 0 % slice leaves no trace, and the bar then reads as one lane's.
+    // The bar alone cannot say which lane the width belongs to, so the title
+    // names every lane and its share.
+    const lanesInfo = Array.isArray(row.lanes) ? row.lanes : [];
+    const stack = shares.map((value, index) => {
+      const share = Math.max(0, Number(value) || 0);
+      const zero = share <= 0;
+      const width = zero ? '2px' : ((share / total) * 100).toFixed(1) + '%';
+      const lane = lanesInfo[index];
+      // The slice takes the lane's state, the way the board's dot does: amber
+      // for a lane that is only sunk, red for one that cannot serve at all.
+      const tone = !lane || lane.state === 'serving'
+        ? ''
+        : (lane.state === 'sunk' ? 'is-warn' : 'is-bad');
+      const classes = [tone, zero ? 'mute is-zero' : ''].filter(Boolean).join(' ');
+      // Each slice carries its own lane, so hovering the 2 px mark of a
+      // blocked lane says which lane it is and what is wrong with it.
+      const label = lane
+        ? ' title="' + esc(
+          lane.name + ' ' + Math.round((share / total) * 100) + '%' +
+          (tone ? ' · ' + _stateLabel({ state: lane.state }) : '')
+        ) + '"'
+        : '';
+      return '<i class="' + classes + '"' + label +
+        ' style="width:' + width + '"></i>';
+    }).join('');
+    const stackTitle = lanesInfo
+      .map((lane) =>
+        lane.name + ' ' +
+        Math.round((Math.max(0, Number(lane.share) || 0) / total) * 100) + '%'
+      )
+      .join(' · ');
+    // The count is where an operator asks "how many, and are they well?" —
+    // the answer belongs on it, one lane per line, rather than on the slices
+    // they would have to hunt through one at a time.
+    const laneTitle = lanesInfo
+      .map((lane) =>
+        lane.name + ' · ' +
+        Math.round((Math.max(0, Number(lane.share) || 0) / total) * 100) + '% · ' +
+        _stateLabel({ state: lane.state })
+      )
+      .join('\n');
     return (
       '<div class="routing-model-item' + (name === _model ? ' is-selected' : '') +
       '" role="option" aria-selected="' + (name === _model) + '" tabindex="0"' +
@@ -97,10 +136,12 @@ function _renderModelList() {
       esc(_activityKnown
         ? t('routing.modelRequests', { count: requests })
         : t('routing.activityUnknown')) + '</span></div>' +
-      (lanes > 1 ? '<div class="routing-model-stack">' + stack + '</div>' : '') +
-      '<div class="routing-model-row1 is-meta"><span class="routing-model-count">' +
+      (lanes > 1 ? '<div class="routing-model-stack" title="' + esc(stackTitle) + '">' + stack + '</div>' : '') +
+      '<div class="routing-model-row1 is-meta"><span class="routing-model-count' +
+      (lanesInfo.length ? ' is-laned' : '') +
+      '"' + (lanesInfo.length ? ' title="' + esc(laneTitle) + '"' : '') + '>' +
       esc(t(lanes === 1 ? 'routing.modelLane' : 'routing.modelLanes', { count: lanes })) +
-      (lanes > 1 ? ' · ' + percentages.join(' · ') + '%' : '') +
+      (lanes > 1 ? ' · ' + percentages.map((pct) => pct + '%').join(' · ') : '') +
       '</span>' +
       (blocked
         ? '<span class="routing-model-count is-blocked">' +
@@ -288,18 +329,22 @@ function _renderBoard() {
     ).join('\n');
     // A lane with no probe, and one whose probe has not answered yet, both
     // have no headroom; the cell says which, in as few words as it can.
-    const allowance = headroom === null
+    // Nothing left is drawn as a hollow track: a 0 % fill on a solid track
+    // reads as a full bar, which is the opposite of what it says.
+    const remaining = headroom === null
+      ? null
+      : (shown ? Number(shown.remaining) : headroom);
+    const allowance = remaining === null
       ? '<small class="routing-sub routing-sub-muted">' +
         esc(t(provider.probe ? 'routing.allowance.waiting' : 'routing.allowance.noProbe')) +
         '</small>'
       : _bar(
-          shown ? Number(shown.remaining) : headroom,
-          provider.state === 'serving' ? '' : 'dim'
+          remaining,
+          remaining <= 0 ? 'empty' : (provider.state === 'serving' ? '' : 'dim')
         ) +
         '<small class="routing-sub">' +
-        esc(t('routing.headroom', {
-          value: (shown ? Number(shown.remaining) : headroom).toFixed(2),
-        })) + (shown ? ' · ' + esc(shown.name) : '') + '</small>';
+        esc(t('routing.headroom', { value: remaining.toFixed(2) })) +
+        (shown ? ' · ' + esc(shown.name) : '') + '</small>';
     // The tooltip sits on the cell, not on the sub-line, so hovering the bar
     // itself says which windows the figure came from.
     const allowanceTitle = headroom === null

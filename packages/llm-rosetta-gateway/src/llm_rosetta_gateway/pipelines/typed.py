@@ -218,11 +218,11 @@ def _parse_and_resolve(
     except ProviderNotReady as exc:
         # The typed pools go through the same selector as the chat route, so
         # "nothing can serve this" arrives in the same vocabulary.
-        status = 502 if exc.failed else 503
+        status = 400 if exc.unsupported else (502 if exc.failed else 503)
         response = _error(str(exc), "server_error", status)
         if exc.retry_after is not None:
             response.headers["Retry-After"] = str(exc.retry_after)
-        elif not exc.failed:
+        elif not exc.failed and not exc.unsupported:
             response.headers["Retry-After"] = "5"
         return response
     if route is None:

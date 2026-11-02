@@ -71,6 +71,7 @@ class SelectionContext:
         "identity",
         "eligibility",
         "rule_facts",
+        "required_capabilities",
         "chosen",
         "provider_info",
         "ir_request",
@@ -110,6 +111,11 @@ class SelectionContext:
         # facts rules read.  Built by the caller only when the model has
         # rules, so a model without them pays nothing for the feature.
         self.rule_facts: Any = None
+        # Capabilities the request needs from whichever provider serves it
+        # (vision for an image, tools for a tool-using request, reasoning for
+        # an effort-bearing one).  Empty when nothing asked or the route has
+        # no per-entry capabilities to compare against.
+        self.required_capabilities: frozenset[str] = frozenset()
         self.chosen: ProviderEntry | None = None
         self.provider_info: ProviderInfo | None = None
 
@@ -188,6 +194,15 @@ class SelectionContext:
         stages, and the IR it reads has to exist before any of them starts.
         """
         self.rule_facts = facts
+
+    def with_required_capabilities(self, capabilities: frozenset[str]) -> None:
+        """Record what this request needs a provider to be able to do.
+
+        Set by the edge, alongside the rule facts: an image needs vision, a
+        tool list needs tools, an effort needs reasoning.  A route whose
+        entries declare no capabilities never compares against it.
+        """
+        self.required_capabilities = frozenset(capabilities)
 
     def with_eligibility(self, answers: Mapping[str, Eligibility]) -> None:
         """Record the one predicate's answer for every candidate.

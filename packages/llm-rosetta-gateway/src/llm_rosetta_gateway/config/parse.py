@@ -24,6 +24,46 @@ logger = logging.getLogger("llm-rosetta-gateway")
 #: Capabilities a model entry gets when it declares none.
 DEFAULT_CAPABILITIES: list[str] = ["text"]
 
+#: The capabilities a provider entry may declare.  These are the only names a
+#: request can require, so an unknown one reserves nothing: a typo would
+#: silently narrow the entry to no traffic at all, which is why it is refused.
+ENTRY_CAPABILITIES = frozenset({"text", "vision", "tools", "reasoning"})
+
+
+def parse_entry_capabilities(raw: Any, *, label: str) -> tuple[str, ...] | None:
+    """Read one provider entry's ``capabilities`` field.
+
+    ``None`` and ``[]`` both mean "declares nothing": the entry inherits the
+    provider's own capabilities.  The file and the admin therefore agree on
+    what an empty list means, instead of one deleting the key and the other
+    keeping a declaration that covers nothing.
+
+    Args:
+        raw: The field's value, or ``None`` when it is absent.
+        label: The config path, for the error message.
+
+    Returns:
+        The capability names, lowercased, or ``None`` for "inherit".
+
+    Raises:
+        ValueError: If the value is not a list of known names.
+    """
+    if raw is None:
+        return None
+    if not isinstance(raw, list) or not all(isinstance(item, str) for item in raw):
+        raise ValueError(
+            f"config: {label} has invalid capabilities {raw!r} (must be a list of names)"
+        )
+    names = [item.strip().lower() for item in raw]
+    unknown = sorted(set(names) - ENTRY_CAPABILITIES)
+    if unknown:
+        raise ValueError(
+            f"config: {label} declares unknown "
+            f"{'capability' if len(unknown) == 1 else 'capabilities'} "
+            f"{', '.join(unknown)}; known: {', '.join(sorted(ENTRY_CAPABILITIES))}"
+        )
+    return tuple(names) or None
+
 
 def parse_models(
     raw_models: dict[str, Any],
@@ -177,7 +217,14 @@ def parse_multi_provider(
             )
             continue
         upstream = item.get("upstream_model") if isinstance(item, dict) else None
-        entries.append(ProviderEntry(pname, weight, upstream_model=upstream))
+        caps = item.get("capabilities") if isinstance(item, dict) else None
+        if caps is not None:
+            caps = parse_entry_capabilities(
+                caps, label=f"model '{model_name}' provider '{pname}'"
+            )
+        entries.append(
+            ProviderEntry(pname, weight, upstream_model=upstream, capabilities=caps)
+        )
 
     if not entries:
         return None
@@ -324,7 +371,16 @@ def declared_provider_entries(value: Any) -> list[Any]:
                 weight = float(weight)
             except (TypeError, ValueError):
                 weight = 1.0
-            entries.append(ProviderEntry(name=item["name"], weight=weight))
+            caps = item.get("capabilities")
+            entries.append(
+                ProviderEntry(
+                    name=item["name"],
+                    weight=weight,
+                    capabilities=parse_entry_capabilities(
+                        caps, label=f"provider entry '{item['name']}'"
+                    ),
+                )
+            )
     return [entry for entry in entries if entry.name]
 
 

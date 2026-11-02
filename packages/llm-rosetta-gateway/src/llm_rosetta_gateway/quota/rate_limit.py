@@ -319,9 +319,14 @@ class RateLimitTracker:
                     ends.append(record.disabled_until)
         return max(ends) if ends else None
 
-    def sunk(self, provider: str) -> bool:
-        """Whether any lane of *provider* is sunk right now."""
-        moment = _now()
+    def sunk(self, provider: str, *, now: datetime | None = None) -> bool:
+        """Whether any lane of *provider* is sunk at *now*.
+
+        ``now`` is the moment to judge against; tests pass one so a fixed
+        timeline does not have to run inside the policy's own window of its
+        import to stay true.
+        """
+        moment = now or _now()
         with self._lock:
             return any(
                 owner == provider and record.is_sunk(moment)

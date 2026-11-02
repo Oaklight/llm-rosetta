@@ -149,10 +149,14 @@ async def handle_responses_compact(request: Any, config: GatewayConfig) -> Respo
     selection.with_client(key_ctx.key_hash if key_ctx else None)
     # A model with rules needs the request in IR form before the chain runs;
     # one without them never pays for the extra read leg.
-    from .routes_llm import _model_rules, _rule_facts
+    from .routes_llm import _entry_capabilities, _model_rules, _rule_facts
 
-    if _model_rules(config, model):
-        selection.with_rule_facts(_rule_facts(SOURCE_FORMAT, body, request))
+    if _model_rules(config, model) or _entry_capabilities(config, model):
+        from ..routing import required_capabilities
+
+        facts = _rule_facts(SOURCE_FORMAT, body, request)
+        selection.with_rule_facts(facts)
+        selection.with_required_capabilities(required_capabilities(facts))
 
     resolved = _resolve_or_error(config, selection, request_id)
     if isinstance(resolved, Response):

@@ -44,6 +44,36 @@ RATE_LIMITED = "rate_limited"
 SPENT = "spent"
 NO_CREDENTIAL = "no_credential"
 INITIALIZING = "initializing"
+#: The entry serves this model but not this request: its declared
+#: capabilities lack one the request needs.
+CAPABILITY = "capability"
+
+
+def required_capabilities(facts: Any) -> frozenset[str]:
+    """What a request needs a provider to be able to do, from its facts.
+
+    Three facts map to a capability: an image needs ``vision``, a tool list
+    needs ``tools``, and an effort needs ``reasoning``.  Everything else — a
+    plain text request — needs nothing, so a route whose entries declare
+    capabilities is never narrowed for it.
+
+    Args:
+        facts: A :class:`~.rules.RuleFacts`, or ``None`` when the edge built
+            none.
+
+    Returns:
+        The capability names the request needs.
+    """
+    if facts is None:
+        return frozenset()
+    needed: set[str] = set()
+    if getattr(facts, "images", False):
+        needed.add("vision")
+    if getattr(facts, "tools", False):
+        needed.add("tools")
+    if getattr(facts, "effort", None) or getattr(facts, "thinking", False):
+        needed.add("reasoning")
+    return frozenset(needed)
 
 
 def quota_weight(headroom: float | None) -> float:
@@ -217,6 +247,19 @@ class EligibilityStage(RoutingStage):
                 headroom[entry.name] = 1.0
                 continue
             answer = provider_eligibility(pinfo, entry.name)
+            # A provider entry may declare what it serves for this model.  The
+            # comparison is per request: the same entry stays a candidate for
+            # every request whose needs it covers.
+            declared = entry.capabilities
+            if declared is not None and not ctx.required_capabilities <= set(declared):
+                answer = Eligibility(
+                    name=entry.name,
+                    eligible=False,
+                    reason=CAPABILITY,
+                    until=answer.until,
+                    headroom=answer.headroom,
+                    sunk=answer.sunk,
+                )
             answers[entry.name] = answer
             headroom[entry.name] = 1.0 if answer.headroom is None else answer.headroom
             if answer.reason == SPENT:

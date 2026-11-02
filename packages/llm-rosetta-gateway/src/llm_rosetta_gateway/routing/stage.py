@@ -84,6 +84,10 @@ class RoutingChain:
             # in IR form, reduced to what a rule reads.  A model without rules
             # leaves it ``None`` and no stage reads it.
             "rule_facts",
+            # Seeded by the edge too: an image, a tool list or an effort asks
+            # for a capability, and an entry that declares capabilities must
+            # have the one asked for.
+            "required_capabilities",
         }
     )
 
