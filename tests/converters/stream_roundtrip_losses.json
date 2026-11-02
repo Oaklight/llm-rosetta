@@ -4,18 +4,6 @@
   "not_fixed": {},
   "cross": [
     {
-      "pair": "chat_completions->open_responses",
-      "case": "refusal_with_words",
-      "field": "reason",
-      "reason": "the terminal reason is re-derived from the target dialect's own vocabulary on the way out and back"
-    },
-    {
-      "pair": "chat_completions->open_responses",
-      "case": "refusal_with_words",
-      "field": "refusal",
-      "reason": "a refusal that rides only on the finish event has no content block to carry it, so the target dialect writes the words nowhere and the return leg reads a turn without them"
-    },
-    {
       "pair": "chat_completions->messages",
       "case": "custom",
       "field": "calls",
@@ -68,12 +56,6 @@
       "case": "intrinsic",
       "field": "calls",
       "reason": "the call does not survive the leg: a server-tool call has no carrier in the target dialect, or its id and arguments are rewritten"
-    },
-    {
-      "pair": "open_responses->chat_completions",
-      "case": "refusal_with_words",
-      "field": "refusal",
-      "reason": "a refusal that rides only on the finish event has no content block to carry it, so the target dialect writes the words nowhere and the return leg reads a turn without them"
     },
     {
       "pair": "open_responses->messages",

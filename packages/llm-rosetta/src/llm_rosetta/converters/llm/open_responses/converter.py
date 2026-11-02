@@ -2644,6 +2644,35 @@ class OpenResponsesConverter(BaseConverter):
         # failure leaves with a code and message rather than a placeholder.
         provider_metadata = event.get("provider_metadata") or {}
         carried_error = provider_metadata.get("responses_error")
+
+        # A refusal whose words arrived only on the finish event has no content
+        # part yet: open one and write them, so a reader sees the words as
+        # content instead of a status with nothing behind it.  The spec carries
+        # a refusal as an output part, and every dialect that reads it back
+        # reads it there (#1314).
+        opening: list[dict[str, Any]] = []
+        refusal_text = provider_metadata.get("refusal_text")
+        if context is not None and reason == "refusal" and refusal_text:
+            block_index = context.next_block_index()
+            opening = [
+                {
+                    "type": "content_block_start",
+                    "block_index": block_index,
+                    "block_type": "refusal",
+                },
+                {"type": "refusal_delta", "refusal": refusal_text},
+                {"type": "content_block_end", "block_index": block_index},
+            ]
+            opened: list[dict[str, Any]] = []
+            for block_event in opening:
+                handler = self._IR_TO_P_DISPATCH[block_event["type"]]
+                produced = getattr(self, handler)(  # ty: ignore[call-arg]
+                    block_event, context
+                )
+                items = produced if isinstance(produced, list) else [produced]
+                opened.extend(item for item in items if item)
+            opening = opened
+
         response = self._build_finish_response(
             status,
             context,
@@ -2652,7 +2681,7 @@ class OpenResponsesConverter(BaseConverter):
         )
 
         # Emit done events before response.completed
-        results: list[dict[str, Any]] = []
+        results: list[dict[str, Any]] = list(opening)
 
         if context is not None:
             self._emit_reasoning_done_events(context, results)
