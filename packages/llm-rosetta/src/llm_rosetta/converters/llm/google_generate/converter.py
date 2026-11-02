@@ -2400,6 +2400,14 @@ class GoogleGenerateConverter(BaseConverter):
             parts.append({"text": context.pending_text})
             context.pending_text = None
 
+        # A refusal whose words arrived only on the finish event has no part
+        # yet.  Google carries it as text, so write it as one: a reader then
+        # sees the words rather than a terminal state with nothing behind it
+        # (#1314).
+        refusal_text = (event.get("provider_metadata") or {}).get("refusal_text")
+        if reason == "refusal" and refusal_text:
+            parts.append({"text": refusal_text})
+
         if context is not None:
             parts.extend(self._flushed_tool_parts(context))
 
