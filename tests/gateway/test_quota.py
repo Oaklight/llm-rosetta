@@ -462,22 +462,38 @@ class TestInBandDemotion:
         assert signal is not None
         assert QUOTA_STATE.provider_block(identity) is not None
 
-    def test_keyless_429_cools_the_provider(self):
+    def test_keyless_429_is_counted_not_blocked_at_once(self):
+        """A keyless lane has no credential, so the provider itself is counted.
+
+        The 60-second block this used to set was one lane's private rule: every
+        other lane answered 429 and was retried as if nothing had happened.
+        The continuous-429 rule replaces it — one refusal sinks the provider,
+        and only a run of them takes it out.
+        """
         from types import SimpleNamespace
 
-        from llm_rosetta_gateway.quota.service import note_upstream_quota_error
+        from llm_rosetta_gateway.quota.rate_limit import RateLimitPolicy
+        from llm_rosetta_gateway.quota.service import (
+            note_upstream_quota_error,
+            note_upstream_rate_limit,
+        )
         from llm_rosetta_gateway.quota.state import QUOTA_STATE
 
         identity = "@free-lane-test"
         pinfo = SimpleNamespace(
             name="free",
+            config_name="free",
             keyless=True,
             quota_probe=None,
             quota_identity=identity,
             active_key=lambda: None,
         )
-        note_upstream_quota_error(pinfo, 429, "{}")
-        assert QUOTA_STATE.provider_block(identity) is not None
+        # Still a quota-class refusal, so the proxy can fail over.
+        assert note_upstream_quota_error(pinfo, 429, "{}") is not None
+        assert QUOTA_STATE.provider_block(identity) is None
+
+        assert note_upstream_rate_limit(pinfo, RateLimitPolicy()) == "sink"
+        assert QUOTA_STATE.rate_limits.sunk("free") is True
 
 
 class TestKeyRingDemotion:
@@ -831,6 +847,7 @@ class TestTheRoutingFacts:
             "excluded": False,
             "blocked": False,
             "reason": None,
+            "sunk": False,
         }
 
     def test_a_mixed_ring_reads_zero_but_serves_a_quarter(self):

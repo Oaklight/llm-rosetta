@@ -101,6 +101,7 @@ class SameFormatStage(RoutingStage):
             "provider_types",
             "provider_shim_names",
             "provider_account_tokens",
+            "eligibility",
             "quota_headroom",
             "quota_excluded",
             "failover_excluded",
@@ -195,9 +196,8 @@ class SameFormatStage(RoutingStage):
                 continue
             entry = select_ready_entry(
                 route,
-                is_ready=ctx.is_ready,
+                eligibility=ctx.eligibility,
                 identity=ctx.identity.client,
-                headroom=ctx.quota_headroom or None,
                 excluded=ctx.excluded_providers(),
             )
             if entry is not None:

@@ -121,8 +121,9 @@ async def fetch_upstream_models(request: Any, **kwargs: Any) -> Response:
     # A token_command provider whose initial fetch has not completed still
     # holds the pending sentinel.  Sending it would come back as an upstream
     # 401 that reads as "this provider may not support model listing", so
-    # report the real state instead.
-    if not pinfo.ready:
+    # report the real state instead.  Asked of ``credentials_pending`` rather
+    # than ``ready``: a provider that is merely cooling down can still list.
+    if pinfo.credentials_pending:
         return JSONResponse(
             {
                 "error": (

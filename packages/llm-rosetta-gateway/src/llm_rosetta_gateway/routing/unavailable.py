@@ -58,24 +58,24 @@ class Unavailable:
 
 
 def blocked_until(unready: list[Any]) -> datetime | None:
-    """The end of a quota block covering every unready provider, if any.
+    """The end of a block covering every unready provider, if any.
 
     Returns the **latest** end, because the route is unavailable until the last
     of its providers is back.  A provider that is unready for any other reason,
     or a block the state cannot date, makes the answer unknown — ``None``.
+
+    A block is either kind the state records: a quota block from an in-band
+    refusal, or a rate-limit disable from a run of 429s.  Both name an end, so
+    both let the client be told "blocked until" rather than "initializing".
     """
-    from ..quota.state import QUOTA_STATE
+    from ..quota.service import provider_offline_until
 
     ends: list[datetime] = []
     for pinfo in unready:
-        blocked = getattr(pinfo, "quota_provider_blocked", None)
-        if blocked is None or not blocked():
+        moment = provider_offline_until(pinfo)
+        if moment is None:
             return None
-        identity = getattr(pinfo, "quota_identity", None) or f"@{pinfo.name}"
-        block = QUOTA_STATE.provider_block(identity)
-        if block is None:
-            return None
-        ends.append(block.until)
+        ends.append(moment)
     return max(ends) if ends else None
 
 

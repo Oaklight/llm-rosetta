@@ -56,8 +56,9 @@ async def test_provider_connectivity(request: Any, name: str) -> Response:
         # A token_command provider still holding the pending sentinel would
         # send that placeholder as its bearer and get a 401 that says nothing
         # about reachability, so the authenticated probes are skipped until it
-        # has been seeded.
-        auth_ready = pinfo is None or pinfo.ready
+        # has been seeded.  A provider that is merely rate-limited or spent is
+        # not pending, and its endpoints are still worth probing.
+        auth_ready = pinfo is None or not pinfo.credentials_pending
         auth_headers = {**pinfo.extra_headers, **pinfo.auth_headers()} if pinfo else {}
 
         results: dict[str, Any] = {

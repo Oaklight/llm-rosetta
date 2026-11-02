@@ -280,6 +280,8 @@ async def decide_on_refusal(
     status_code: int,
     error_text: str,
     source_provider: ProviderType,
+    *,
+    rate_limit: Any | None = None,
 ) -> RefusalDecision:
     """Classify a failed upstream attempt into one action.
 
@@ -287,16 +289,27 @@ async def decide_on_refusal(
     not a quota refusal, and a session-policy ``401`` answers the client
     before either is considered.
 
+    A ``429`` is counted against the lane first — every lane, whatever its
+    quota declaration — so a provider that no probe can read still sinks and
+    finally disables instead of being retried as if nothing happened.
+
     Args:
         provider_info: The provider that just refused.
         status_code: The upstream's HTTP status.
         error_text: The upstream's error body, as text.
         source_provider: The client's dialect, for a direct answer.
+        rate_limit: The continuous-429 rule in force, or ``None`` for the
+            default.
 
     Returns:
         The action to take, with the response for ``RETURN`` and the signal
         for ``FAILOVER``.
     """
+    if status_code == 429:
+        from ..quota.service import note_upstream_rate_limit
+
+        note_upstream_rate_limit(provider_info, rate_limit)
+
     retry, err = await _handle_401(
         provider_info, status_code, error_text, source_provider
     )
@@ -307,6 +320,15 @@ async def decide_on_refusal(
         if retry
         else _quota_refusal(provider_info, status_code, error_text)
     )
+    if refusal is None and status_code == 429:
+        # No probe could classify it, but the status is unambiguous: this lane
+        # is rate limited.  The refusals were counted above, so the provider
+        # sinks — or is disabled — for the next request; for this one it has
+        # nothing left to give, and another provider may serve.
+        from llm_rosetta.shims.quota_probe import InBandSignal
+
+        refusal = QuotaRefusal.EXHAUSTED
+        signal = InBandSignal(cooldown_seconds=None, reason="upstream answered 429")
     if retry or refusal is QuotaRefusal.RETRY:
         return RefusalDecision(RefusalAction.RETRY)
     if refusal is QuotaRefusal.EXHAUSTED:

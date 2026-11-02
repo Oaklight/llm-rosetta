@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 from .models import QuotaReading, credential_fingerprint
+from .rate_limit import RateLimitTracker
 
 
 def _now() -> datetime:
@@ -61,6 +62,10 @@ class QuotaState:
         # Keyless lanes have no credential; their refusal is a cooldown of the
         # upstream account the provider fronts.
         self._provider_blocks: dict[str, Demotion] = {}
+        # Continuous-429 state, kept beside the block because both answer the
+        # same question: may this lane serve right now?  Its counts are per
+        # provider *and* credential, so it is not a `Demotion`.
+        self.rate_limits = RateLimitTracker()
 
     def clear(self) -> None:
         """Drop every reading, demotion and provider cooldown.
@@ -72,6 +77,7 @@ class QuotaState:
             self._readings.clear()
             self._demotions.clear()
             self._provider_blocks.clear()
+        self.rate_limits.clear()
 
     # -- readings ----------------------------------------------------------
 

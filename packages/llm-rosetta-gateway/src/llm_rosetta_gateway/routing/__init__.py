@@ -17,9 +17,19 @@ Anything not listed in ``__all__`` is internal.
 from __future__ import annotations
 
 from .context import Identity, SelectionContext
+from .eligibility import (
+    BLOCKED,
+    INITIALIZING,
+    NO_CREDENTIAL,
+    RATE_LIMITED,
+    SPENT,
+    Eligibility,
+    EligibilityStage,
+    provider_eligibility,
+    quota_weight,
+)
 from .key import ProviderKeyAffinity
 from .prefix import compute_affinity_identity, extract_prefix_from_ir
-from .quota import QuotaStage
 from .same_format import SameFormatStage, shim_group_key
 from .session import SessionHeaderAffinity
 from .select import AnchorStage, select_ready_entry
@@ -37,14 +47,20 @@ from .unavailable import Unavailable
 from .unavailable import classify as classify_unavailable
 
 __all__ = [
+    "BLOCKED",
     "DEFAULT_STRATEGY",
+    "INITIALIZING",
+    "NO_CREDENTIAL",
+    "RATE_LIMITED",
+    "SPENT",
     "AffinityRoundRobinStrategy",
     "AnchorStage",
+    "Eligibility",
+    "EligibilityStage",
     "Identity",
     "ModelRoute",
     "ProviderEntry",
     "ProviderKeyAffinity",
-    "QuotaStage",
     "RoutingChain",
     "RoutingStage",
     "RoutingStrategy",
@@ -58,6 +74,8 @@ __all__ = [
     "compute_affinity_identity",
     "create_strategy",
     "extract_prefix_from_ir",
+    "provider_eligibility",
+    "quota_weight",
     "select_ready_entry",
     "shim_group_key",
 ]

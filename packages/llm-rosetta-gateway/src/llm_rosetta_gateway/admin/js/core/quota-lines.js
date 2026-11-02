@@ -52,6 +52,7 @@ export function appliedWeight(routing) {
  */
 const BLOCK_REASON_KEYS = {
   'keyless lane rate limited': 'quota.blockReason.keyless',
+  'repeated 429s': 'quota.blockReason.rateLimited',
 };
 
 function blockReasonLabel(reason, t) {
@@ -67,6 +68,9 @@ function blockReasonLabel(reason, t) {
  * Returns an empty list when the provider is blocked: the card renders the
  * block row itself (it carries the cooldown's own reason), and a share row
  * next to it would contradict it.
+ *
+ * A sunk provider still serves, so its share row stands; the sink row says
+ * only that a recent 429 puts it last, which the share alone would hide.
  */
 export function routingRows(routing, t) {
   if (!routing || routing.blocked) return [];
@@ -81,16 +85,22 @@ export function routingRows(routing, t) {
     }
     return [{ tone: 'fail', text: t('quota.routingExcluded', { reason }) }];
   }
+  const rows = [];
   if (routing.headroom === null || routing.headroom === undefined) {
-    return [{ tone: 'warn', text: t('quota.routingUnmeasured') }];
+    rows.push({ tone: 'warn', text: t('quota.routingUnmeasured') });
+  } else {
+    rows.push({
+      tone: 'ok',
+      text: t('quota.routingShare', {
+        share: sharePercent(appliedWeight(routing)),
+        pct: sharePercent(routing.headroom),
+      }),
+    });
   }
-  return [{
-    tone: 'ok',
-    text: t('quota.routingShare', {
-      share: sharePercent(appliedWeight(routing)),
-      pct: sharePercent(routing.headroom),
-    }),
-  }];
+  if (routing.sunk) {
+    rows.push({ tone: 'warn', text: t('quota.routingSunk') });
+  }
+  return rows;
 }
 
 /** The row for a live provider-wide cooldown, or `null`. */

@@ -506,6 +506,9 @@ async def handle_streaming(  # noqa: C901
         )
 
         if not stream.is_error:
+            from ..quota.service import clear_upstream_rate_limit
+
+            clear_upstream_rate_limit(provider_info)
             stream_error_text = None
             break
 
@@ -519,6 +522,7 @@ async def handle_streaming(  # noqa: C901
             stream_error_code,
             stream_error_text,
             route.source_provider,
+            rate_limit=getattr(config, "routing_rate_limit", None),
         )
         if decision.action is RefusalAction.RETURN:
             assert decision.response is not None

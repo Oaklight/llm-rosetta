@@ -207,6 +207,35 @@ class TestAffinityRoundRobinStrategy:
         # With 100 distinct identities across 3 providers, all should appear
         assert chosen == {"a", "b", "c"}
 
+    def test_a_heavy_provider_gets_its_share(self):
+        """Weight decides the split, not just the candidate count.
+
+        The mapping used to hash the identity modulo the candidate count, so a
+        provider at a ninth of the weight still took half the identities — and
+        a quota headroom scaled into the weight did nothing at all.
+        """
+        s = AffinityRoundRobinStrategy()
+        providers = [ProviderEntry("a", weight=9.0), ProviderEntry("b", weight=1.0)]
+
+        picks = {"a": 0, "b": 0}
+        for i in range(2000):
+            picks[s.select(providers, route_id=ROUTE, identity=f"id-{i}")] += 1
+
+        assert picks["a"] > picks["b"] * 5
+        assert picks["b"] > 0
+
+    def test_a_scaled_weight_is_still_a_share(self):
+        """A nearly spent provider (weight 0.25) keeps a minority of clients."""
+        s = AffinityRoundRobinStrategy()
+        providers = [ProviderEntry("a", weight=1.0), ProviderEntry("b", weight=0.25)]
+
+        picks = {"a": 0, "b": 0}
+        for i in range(2000):
+            picks[s.select(providers, route_id=ROUTE, identity=f"id-{i}")] += 1
+
+        assert picks["a"] > picks["b"]
+        assert picks["b"] > 0
+
     def test_stable_across_instances(self):
         """Two separate strategy instances produce the same mapping."""
         s1 = AffinityRoundRobinStrategy()

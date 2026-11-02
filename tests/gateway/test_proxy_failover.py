@@ -233,16 +233,22 @@ class TestTheFailover:
         assert transport.calls == ["https://a.test"]
         assert "failover" not in profile
 
-    def test_an_unclassified_refusal_is_not_a_quota_refusal(self):
-        """No probe, no signal: the gateway will not guess that a 429 is quota."""
+    def test_a_lane_with_no_probe_still_fails_over(self):
+        """A 429 needs no probe to be a rate limit.
+
+        This used to be "no probe, no signal: do not guess".  The guess was
+        wrong for the lane it mattered on: a provider with no quota probe
+        answered 429, the request was answered with that refusal, and the next
+        request went to the same lane as if nothing had happened.
+        """
         config = _config(probe=False, opt_in=True)
         transport = _Transport(_refused(), _ok())
 
         response, profile = _run(config, transport)
 
-        assert response.status_code == 429
-        assert transport.calls == ["https://a.test"]
-        assert "failover" not in profile
+        assert response.status_code == 200
+        assert transport.calls == ["https://a.test", "https://b.test"]
+        assert profile["failover"]["reason"] == "upstream answered 429"
 
     def test_a_plain_upstream_error_is_the_answer_after_one_attempt(self):
         """``BREAK``: report this attempt's error, and do not try again.
@@ -395,19 +401,30 @@ class TestTheKeylessLane:
         # The keyless branch classifies before any probe is consulted.
         assert profile["failover"]["reason"] == "keyless lane rate limited"
 
-    def test_it_blocks_the_lane_as_before(self):
-        """Classification must not cost the cooldown the 429 used to set."""
-        from llm_rosetta_gateway.quota.service import note_upstream_quota_error
+    def test_the_refusal_is_counted_against_the_provider(self):
+        """A keyless lane has no credential, so the provider itself is counted.
+
+        This used to set a 60-second block for keyless lanes only; every other
+        lane answered 429 and was retried as if nothing had happened.  The
+        continuous-429 rule replaces that private case: one refusal sinks the
+        provider, and only a run of them takes it out.
+        """
+        from llm_rosetta_gateway.quota.rate_limit import RateLimitPolicy
+        from llm_rosetta_gateway.quota.service import (
+            note_upstream_quota_error,
+            note_upstream_rate_limit,
+        )
         from llm_rosetta_gateway.quota.state import QUOTA_STATE
 
         config = self._keyless_config()
         pinfo = config.providers["a"]
         pinfo.quota_identity = "acct:keyless-test"
 
-        signal = note_upstream_quota_error(pinfo, 429, "{}")
+        assert note_upstream_quota_error(pinfo, 429, "{}") is not None
+        assert QUOTA_STATE.provider_block("acct:keyless-test") is None
 
-        assert signal is not None
-        assert QUOTA_STATE.provider_block("acct:keyless-test") is not None
+        assert note_upstream_rate_limit(pinfo, RateLimitPolicy()) == "sink"
+        assert QUOTA_STATE.rate_limits.sunk("a") is True
 
 
 class TestTheRequestLog:

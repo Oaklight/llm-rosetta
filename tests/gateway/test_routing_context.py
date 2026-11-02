@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -17,9 +17,7 @@ from llm_rosetta_gateway.routing import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
-
-    from llm_rosetta_gateway.transport import ProviderInfo
+    pass
 
 
 def _ctx() -> SelectionContext:
@@ -97,18 +95,22 @@ class TestSelectionContext:
     def test_candidates_without_a_route(self):
         assert SelectionContext("m", "messages").candidates == []
 
-    def test_readiness_is_read_from_the_providers_table(self):
+    def test_eligibility_is_read_from_the_recorded_answers(self):
+        """Selection reads the predicate's answer, not the provider again."""
+        from llm_rosetta_gateway.routing import BLOCKED, Eligibility
+
         ctx = _ctx()
-
-        class _Info:
-            def __init__(self, ready: bool) -> None:
-                self.ready = ready
-
-        ctx.providers = cast(
-            "Mapping[str, ProviderInfo]", {"a": _Info(False), "b": _Info(True)}
+        ctx.with_eligibility(
+            {
+                "a": Eligibility(name="a", eligible=False, reason=BLOCKED),
+                "b": Eligibility(name="b", eligible=True),
+            }
         )
-        assert ctx.is_ready("a") is False
-        assert ctx.is_ready("b") is True
+
+        assert ctx.is_eligible("a") is False
+        assert ctx.is_eligible("b") is True
+        # A provider the stage never answered for is not a candidate.
+        assert ctx.is_eligible("missing") is False
 
 
 class TestRoutingChain:

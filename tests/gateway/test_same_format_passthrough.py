@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 
 from llm_rosetta_gateway.config import GatewayConfig
-from llm_rosetta_gateway.routing import SelectionContext
+from llm_rosetta_gateway.routing import EligibilityStage, SelectionContext
 
 
 @pytest.fixture(autouse=True)
@@ -95,8 +95,15 @@ def _make_unready(config: GatewayConfig, *names: str) -> None:
 
 
 def _tier_context(config: GatewayConfig, source_format: str) -> SelectionContext:
-    """A context for model ``m`` — enough to drive the same-format stage."""
-    return config.selection_context("m", source_format)
+    """A context for model ``m`` — enough to drive the same-format stage.
+
+    The eligibility stage runs here because ``select_tiered`` is called
+    directly: in a request the chain runs it first, and the tier selection
+    reads its answers rather than asking the predicate again.
+    """
+    ctx = config.selection_context("m", source_format)
+    EligibilityStage().run(ctx)
+    return ctx
 
 
 def _groups(config: GatewayConfig, source_format: str):
