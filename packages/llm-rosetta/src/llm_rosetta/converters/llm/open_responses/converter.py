@@ -2654,24 +2654,32 @@ class OpenResponsesConverter(BaseConverter):
         refusal_text = provider_metadata.get("refusal_text")
         if context is not None and reason == "refusal" and refusal_text:
             block_index = context.next_block_index()
-            opening = [
-                {
-                    "type": "content_block_start",
-                    "block_index": block_index,
-                    "block_type": "refusal",
-                },
-                {"type": "refusal_delta", "refusal": refusal_text},
-                {"type": "content_block_end", "block_index": block_index},
+            produced_events = [
+                self._handle_ir_content_block_start_to_p(
+                    cast(
+                        Any,
+                        {
+                            "type": "content_block_start",
+                            "block_index": block_index,
+                            "block_type": "refusal",
+                        },
+                    ),
+                    context,
+                ),
+                self._handle_ir_refusal_delta_to_p(
+                    cast(Any, {"type": "refusal_delta", "refusal": refusal_text}),
+                    context,
+                ),
+                self._handle_ir_content_block_end_to_p(
+                    cast(
+                        Any, {"type": "content_block_end", "block_index": block_index}
+                    ),
+                    context,
+                ),
             ]
-            opened: list[dict[str, Any]] = []
-            for block_event in opening:
-                handler = self._IR_TO_P_DISPATCH[block_event["type"]]
-                produced = getattr(self, handler)(  # ty: ignore[call-arg]
-                    block_event, context
-                )
+            for produced in produced_events:
                 items = produced if isinstance(produced, list) else [produced]
-                opened.extend(item for item in items if item)
-            opening = opened
+                opening.extend(item for item in items if item)
 
         response = self._build_finish_response(
             status,
