@@ -1474,11 +1474,15 @@ class GoogleGenerateConverter(BaseConverter):
         """
         if chunk is None:
             # The EOF sentinel: this dialect holds nothing back across chunks
-            # (the event that ends its stream carries the usage the Chat
-            # reader waits for), so there is nothing to flush.  Callers pass
-            # it — ``BaseConverter.iter_stream_from_provider`` and the
-            # gateway's per-chunk ``StreamProcessor`` both do — so it must not
-            # reach the normalizing below.
+            # except an end that waited for a ``usageMetadata`` chunk which
+            # never came, so it flushes that.  Callers pass it —
+            # ``BaseConverter.iter_stream_from_provider`` and the gateway's
+            # per-chunk ``StreamProcessor`` both do — so it must not reach the
+            # normalizing below.
+            if context is not None and context._stream_end_deferred:
+                context._stream_end_deferred = False
+                context.mark_ended()
+                return [StreamEndEvent(type="stream_end")]
             return []
 
         chunk = self._normalize(chunk)
@@ -1524,9 +1528,28 @@ class GoogleGenerateConverter(BaseConverter):
         if deferred_finish is not None:
             events.append(deferred_finish)
 
-        if context is not None and has_finish_reason:
+        if (
+            context is not None
+            and context._stream_end_deferred
+            and any(e["type"] == "usage" for e in events)
+        ):
+            # The usage chunk the deferral waited for: it has been emitted
+            # above, so the end may follow it.
+            context._stream_end_deferred = False
             context.mark_ended()
             events.append(StreamEndEvent(type="stream_end"))
+
+        if context is not None and has_finish_reason:
+            # Google sends ``usageMetadata`` in a chunk *after* the one that
+            # carries ``finishReason``.  Ending the stream here put the
+            # ``usage`` event behind ``stream_end``, and a target dialect that
+            # stops reading at the end dropped it (#1314).  Wait for the
+            # usage chunk; the EOF sentinel flushes an end that never came.
+            if chunk.get("usageMetadata"):
+                context.mark_ended()
+                events.append(StreamEndEvent(type="stream_end"))
+            else:
+                context._stream_end_deferred = True
 
         return self.finalize_stream_finish(events, context)
 

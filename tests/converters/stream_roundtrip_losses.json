@@ -29,12 +29,6 @@
     },
     {
       "pair": "chat_completions->google_generate",
-      "case": "text",
-      "field": "usage",
-      "reason": "the target dialect has no usage on this leg and reports nothing"
-    },
-    {
-      "pair": "chat_completions->google_generate",
       "case": "custom",
       "field": "calls",
       "reason": "the call does not survive the leg: a server-tool call has no carrier in the target dialect, or its id and arguments are rewritten"
@@ -248,12 +242,6 @@
       "case": "filter",
       "field": "reason",
       "reason": "the terminal reason is re-derived from the target dialect's own vocabulary on the way out and back"
-    },
-    {
-      "pair": "google_interactions->google_generate",
-      "case": "text",
-      "field": "usage",
-      "reason": "the target dialect has no usage on this leg and reports nothing"
     }
   ]
 }

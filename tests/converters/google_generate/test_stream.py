@@ -1165,9 +1165,43 @@ class TestStreamResponseFromProviderWithContext:
         )
         types = [e["type"] for e in events]
         assert "finish" in types
-        assert "stream_end" in types
-        # stream_end should be the last event
-        assert events[-1]["type"] == "stream_end"
+        # The end waits for the ``usageMetadata`` chunk Google sends after the
+        # one carrying ``finishReason``: ending here put ``usage`` behind
+        # ``stream_end`` and a target dialect stopped reading before it.
+        assert "stream_end" not in types
+        assert not context.is_ended
+
+        flushed = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(None, context=context),
+        )
+        assert [e["type"] for e in flushed] == ["stream_end"]
+        assert context.is_ended
+
+    def test_a_usage_chunk_closes_the_stream_it_was_waited_for(self):
+        """The usage chunk ends the stream, after the usage event."""
+        context = StreamContext()
+        self.converter.stream_response_from_provider(
+            {
+                "model_version": "gemini-2.0-flash",
+                "candidates": [
+                    {
+                        "index": 0,
+                        "content": {"role": "model", "parts": [{"text": "Hi"}]},
+                        "finish_reason": "STOP",
+                    }
+                ],
+            },
+            context=context,
+        )
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(
+                {"usage_metadata": {"prompt_token_count": 1}}, context=context
+            ),
+        )
+        types = [e["type"] for e in events]
+        assert types.index("usage") < types.index("stream_end")
         assert context.is_ended
 
     def test_no_stream_end_without_finish_reason(self):
