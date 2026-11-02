@@ -561,6 +561,22 @@ point can still be answered from elsewhere. Once bytes have reached the client
 the response cannot be replayed, and a mid-stream failure ends the client's
 stream with its code.
 
+### Typed Routes { #typed-routes }
+
+Embedding, rerank and decision models declared in the unified `models` section go through the same two stages as the chat route — eligibility, then the anchor over the declared weights. A typed model with several providers therefore serves them by weight and skips one the state has removed (spent, blocked, or disabled by a run of 429s):
+
+```jsonc
+"models": {
+  "jina-embeddings-v3": {
+    "type": "embeddings",
+    "providers": [{"name": "jina-embed", "weight": 3}, {"name": "voyage-embed"}],
+    "failover_on_quota": true
+  }
+}
+```
+
+A provider that does not declare the type's endpoint is not a candidate. When no candidate can serve, the route answers `503` — or `502` after a failed startup — with `Retry-After` when an end is known, rather than `404`. With `failover_on_quota`, an upstream `429` moves the request to the next provider and counts against the same continuous-429 rule the chat route uses. The legacy `<type>_models` sections name one provider each and stay single-provider.
+
 ## Circuit Breaker
 
 An optional, opt-in breaker short-circuits requests to a provider that keeps
