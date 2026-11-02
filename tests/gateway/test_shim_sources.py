@@ -144,7 +144,8 @@ class TestApplyShimSources:
         config = GatewayConfig(raw)
         assert config.provider_types["acme"] == "chat_completions"
         assert config.providers["acme"].base_url == "https://acme.example/v1"
-        assert config.shims == {"paths": ["./shims"]}
+        assert config.shims.paths == ("./shims",)
+        assert config.shims.declared is True
 
     def test_dropping_the_section_drops_the_shims(self, tmp_path: Path):
         shims_dir = tmp_path / "shims"

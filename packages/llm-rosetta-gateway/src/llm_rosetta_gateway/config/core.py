@@ -9,7 +9,7 @@ in :mod:`config.parse`, :mod:`config.typed`, :mod:`config.settings` and
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from llm_rosetta_gateway.observability.maintenance import Registry
 from llm_rosetta.routing import ResolvedRoute
@@ -55,6 +55,9 @@ from .settings import (
 from .typed import _typed_descriptors, parse_typed_config
 
 logger = logging.getLogger("llm-rosetta-gateway")
+
+if TYPE_CHECKING:
+    from ..shim_sources import ShimSources
 
 
 class GatewayConfig:
@@ -134,7 +137,7 @@ class GatewayConfig:
     request_log: dict[str, Any]
     root_redirect: str | None
     self_update: bool
-    shims: dict[str, Any]
+    shims: ShimSources
     socket: str | None
     tls_cert: str | None
     tls_key: str | None
@@ -198,10 +201,15 @@ class GatewayConfig:
         # every provider's credential-record directory.
         self.config_path: str | None = config_path
 
-        # Declarative external shim sources (see gateway/shim_sources.py).
-        # Kept verbatim so create_app can apply them for programmatic callers
-        # and get_config can expose the section to the admin UI.
-        self.shims: dict[str, Any] = dict(raw.get("shims") or {})
+        # Declarative external shim sources, parsed and validated here so the
+        # document the panel reads and the one the apply path loads cannot
+        # disagree about its shape (#1330).  The signature is computed from
+        # the raw section, because that is what the reload path compares.
+        from ..shim_sources import parse_shims_section, shims_signature
+
+        raw_shims = raw.get("shims")
+        self.shims = parse_shims_section(raw_shims, config_path)
+        self.shims_signature = shims_signature({"shims": raw_shims})
 
         all_providers: dict[str, dict[str, str]] = raw.get("providers", {})
 

@@ -65,8 +65,10 @@ if TYPE_CHECKING:
     )
     from .proxy import ProviderMetadataStore
     from .shim_sources import (
+        ShimSources,
         apply_shim_section,
         apply_shim_sources,
+        parse_shims_section,
         resolve_source_config,
         shims_signature,
     )
@@ -79,6 +81,7 @@ _EXPORTS: dict[str, tuple[str, str]] = {
     "GatewayExtensions": (".app", "GatewayExtensions"),
     "JsoncConfigIO": (".config", "JsoncConfigIO"),
     "ProviderMetadataStore": (".proxy", "ProviderMetadataStore"),
+    "ShimSources": (".shim_sources", "ShimSources"),
     "apply_shim_section": (".shim_sources", "apply_shim_section"),
     "apply_shim_sources": (".shim_sources", "apply_shim_sources"),
     "create_app": (".app", "create_app"),
@@ -86,6 +89,7 @@ _EXPORTS: dict[str, tuple[str, str]] = {
     "load_config": (".config", "load_config"),
     "load_gateway_config": (".config", "load_gateway_config"),
     "main": (".cli", "main"),
+    "parse_shims_section": (".shim_sources", "parse_shims_section"),
     "resolve_source_config": (".shim_sources", "resolve_source_config"),
     "shims_signature": (".shim_sources", "shims_signature"),
 }
@@ -96,6 +100,7 @@ __all__ = [
     "GatewayExtensions",
     "JsoncConfigIO",
     "ProviderMetadataStore",
+    "ShimSources",
     "apply_shim_section",
     "apply_shim_sources",
     "create_app",
@@ -103,6 +108,7 @@ __all__ = [
     "load_config",
     "load_gateway_config",
     "main",
+    "parse_shims_section",
     "resolve_source_config",
     "shims_signature",
 ]
