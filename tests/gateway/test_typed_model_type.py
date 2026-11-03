@@ -178,6 +178,54 @@ class TestFourthType:
         assert url == "https://acme.test" + DEFAULT_PATH
         assert sent_body["converted"] == FORMAT
 
+    def test_the_upstream_model_name_replaces_the_client_name(
+        self, sentiment_type: str
+    ) -> None:
+        """``upstream_model`` reaches the provider for any typed type."""
+        config = GatewayConfig(
+            {
+                "providers": {
+                    "acme": {
+                        "api_key": "k",
+                        "base_url": "https://acme.test",
+                        "sentiment_format": FORMAT,
+                    }
+                },
+                "models": {
+                    "acme-sentiment": {
+                        "provider": "acme",
+                        "type": TYPE_NAME,
+                        "upstream_model": "upstream-sentiment",
+                    },
+                },
+            }
+        )
+        handler = TypedHandler(
+            model_type=TYPE_NAME,
+            build_pipeline=_FakePipeline,
+            resolve=lambda cfg, model: _resolve(cfg, model),
+            configured_models=_configured_models,
+            response_usage=_fake_response_usage,
+        )
+        request = MagicMock()
+        request.json.return_value = {"model": "acme-sentiment", "input": "hi"}
+        request.headers = {}
+        request.app.metrics = None
+        request.app.request_log = None
+        request.app.transport = MagicMock()
+        request.app.transport.send = AsyncMock(
+            return_value=UpstreamResponse(
+                status_code=200,
+                body={"label": "positive"},
+                raw_content=b'{"label": "positive"}',
+            )
+        )
+
+        asyncio.run(handle_typed_request(request, config, handler))
+
+        _, _, sent_body = request.app.transport.send.call_args.args
+        assert sent_body["model"] == "upstream-sentiment"
+
     def test_unknown_model_is_a_404(self, sentiment_type: str) -> None:
         config = _config("https://acme.test")
         handler = TypedHandler(

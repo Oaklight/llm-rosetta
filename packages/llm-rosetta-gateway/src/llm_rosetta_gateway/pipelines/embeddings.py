@@ -11,8 +11,8 @@ than a chat-shaped request forwarded to a provider that never declared an
 embedding endpoint.
 
 The request flow itself is the shared one in :mod:`pipelines.typed`; this
-module supplies the embedding hooks — the IR pipeline, the upstream model
-rename, and Google's model-in-URL path with its batch variant.
+module supplies the embedding hooks — the IR pipeline and Google's
+model-in-URL path with its batch variant.
 
 Every request that reaches an upstream is recorded in the usage ledger with
 ``model_type="embeddings"``.
@@ -108,13 +108,6 @@ def _resolve_embedding_provider(
     )
 
 
-def _prepare_body(body: dict[str, Any], model: str, config: GatewayConfig) -> None:
-    """Send the provider's upstream name for the model, when it declares one."""
-    upstream_model = config.model_upstream_names.get(model)
-    if upstream_model:
-        body["model"] = upstream_model
-
-
 def _upstream_url(
     route: TypedRoute,
     body: dict[str, Any],
@@ -157,7 +150,6 @@ _EMBEDDINGS = TypedHandler(
     resolve_excluding=_resolve_route,
     configured_models=lambda config: config.embeddings_models.keys(),
     response_usage=response_usage,
-    prepare_body=_prepare_body,
     upstream_url=_upstream_url,
     response_post=_response_post,
     upstream_error=_upstream_error,
