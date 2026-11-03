@@ -1,0 +1,1400 @@
+<meta charset="utf-8">
+<title>提供方抽屉 Basic·Auth</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* One drawer, two sub-panels.  Basic carries identity, a read-only summary of
+   the credential mode, the model-type checkboxes and — for each checked type —
+   the endpoint card master already draws.  Auth carries the credential itself.
+   Palette mirrors the admin's Minimal scheme. */
+:root {
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans SC", sans-serif;
+  --mono: "SF Mono", "Cascadia Code", "Consolas", "Liberation Mono", monospace;
+  --bg: #ffffff; --bg-soft: #fafafa; --bg-hover: #f5f5f5; --bg-sink: rgba(0,0,0,.38);
+  --border: #eaeaea; --border-strong: #d9d9d9;
+  --text: #171717; --text-dim: #666666; --text-muted: #999999;
+  --accent: #171717; --accent-on: #ffffff;
+  --green: #1a7f37; --green-bg: #f0faf4; --green-border: #cdebd6;
+  --red: #d63a3f; --red-bg: #fdf3f3; --red-border: #f2cfcf;
+  --orange: #a85400; --orange-bg: #fff8ef; --orange-border: #f1dcc0;
+  --blue: #0064d2; --blue-bg: #f3f7ff; --blue-border: #d3e2fa;
+  --purple: #7c3aed; --purple-bg: #f6f2ff; --purple-border: #ded2fb;
+  --radius: 6px; --drawer-w: 660px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #000; --bg-soft: #0a0a0a; --bg-hover: #111; --bg-sink: rgba(0,0,0,.6);
+    --border: #222; --border-strong: #333;
+    --text: #ededed; --text-dim: #888; --text-muted: #555;
+    --accent: #ededed; --accent-on: #000;
+    --green: #45a557; --green-bg: #0b1a10; --green-border: #1d3a25;
+    --red: #e5484d; --red-bg: #1c0d0e; --red-border: #3d1a1c;
+    --orange: #d08a3c; --orange-bg: #1a1206; --orange-border: #3a2a12;
+    --blue: #6aa5f5; --blue-bg: #0b1322; --blue-border: #1c2f4d;
+    --purple: #a78bfa; --purple-bg: #150f22; --purple-border: #33265c;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #000; --bg-soft: #0a0a0a; --bg-hover: #111; --bg-sink: rgba(0,0,0,.6);
+  --border: #222; --border-strong: #333;
+  --text: #ededed; --text-dim: #888; --text-muted: #555;
+  --accent: #ededed; --accent-on: #000;
+  --green: #45a557; --green-bg: #0b1a10; --green-border: #1d3a25;
+  --red: #e5484d; --red-bg: #1c0d0e; --red-border: #3d1a1c;
+  --orange: #d08a3c; --orange-bg: #1a1206; --orange-border: #3a2a12;
+  --blue: #6aa5f5; --blue-bg: #0b1322; --blue-border: #1c2f4d;
+  --purple: #a78bfa; --purple-bg: #150f22; --purple-border: #33265c;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  margin: 0;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 24px 48px;
+  background: var(--bg); color: var(--text); font: 14px/1.55 var(--font);
+}
+h1, h2, h3 { text-wrap: balance; margin: 0; }
+code, .mono { font-family: var(--mono); font-size: 12.5px; }
+:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+button, input, select, textarea { font-family: inherit; }
+
+.page { max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+.mast { display: flex; flex-direction: column; gap: 5px; }
+.mast h1 { font-size: 21px; letter-spacing: -.01em; }
+.mast p { margin: 0; color: var(--text-dim); max-width: 72ch; }
+.eyebrow { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-muted); }
+.mast ul { margin: 4px 0 0; padding-left: 18px; color: var(--text-dim); font-size: 12.5px; display: flex; flex-direction: column; gap: 2px; }
+
+.list { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.list-head, .row {
+  display: grid; grid-template-columns: minmax(0,1.4fr) minmax(0,1fr) 110px 70px;
+  gap: 12px; align-items: center; padding: 11px 14px;
+}
+.list-head { font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--text-muted); background: var(--bg-soft); border-bottom: 1px solid var(--border); }
+.row { border-bottom: 1px solid var(--border); background: var(--bg); }
+.row:last-child { border-bottom: 0; }
+.row:hover { background: var(--bg-hover); }
+.row .name { font-weight: 550; min-width: 0; overflow-wrap: anywhere; }
+.row .kind { font-family: var(--mono); font-size: 12px; color: var(--text-dim); }
+.row .state { font-size: 12px; color: var(--text-dim); }
+.row .open { justify-self: end; }
+@media (max-width: 700px) {
+  .list-head { display: none; }
+  .row { grid-template-columns: minmax(0,1fr) auto; grid-template-areas: "name open" "kind state"; }
+  .row .name { grid-area: name; } .row .kind { grid-area: kind; }
+  .row .state { grid-area: state; text-align: right; } .row .open { grid-area: open; }
+}
+
+.btn {
+  cursor: pointer; border: 1px solid var(--border-strong); background: var(--bg); color: var(--text);
+  padding: 5px 12px; border-radius: 5px; font-size: 13px;
+}
+.btn:hover:not(:disabled) { background: var(--bg-hover); }
+.btn:disabled { opacity: .45; cursor: default; }
+.btn.primary { background: var(--accent); color: var(--accent-on); border-color: var(--accent); }
+.btn.primary:hover:not(:disabled) { opacity: .9; background: var(--accent); }
+.btn.danger { color: var(--red); border-color: var(--red-border); }
+.btn.sm { padding: 3px 9px; font-size: 12px; }
+.link-btn { border: 0; background: none; color: var(--blue); cursor: pointer; font-size: 12px; padding: 0; text-decoration: underline; font-family: inherit; }
+
+/* ── Drawer shell ── */
+.backdrop { position: fixed; inset: 0; background: var(--bg-sink); display: flex; justify-content: flex-end; z-index: 20; }
+.drawer {
+  width: min(var(--drawer-w), 100%); height: 100%; background: var(--bg);
+  border-left: 1px solid var(--border); display: flex; flex-direction: column;
+  box-shadow: -12px 0 40px rgba(0,0,0,.18);
+}
+.drawer-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--border); flex: none; }
+.drawer-head h2 { font-size: 15px; }
+.drawer-head .sub { font-size: 12px; color: var(--text-muted); font-family: var(--mono); }
+.close { cursor: pointer; border: 0; background: transparent; color: var(--text-dim); font-size: 17px; line-height: 1; padding: 6px 8px; border-radius: 4px; }
+.close:hover { background: var(--bg-hover); color: var(--text); }
+.tabs { display: flex; gap: 2px; padding: 0 18px; border-bottom: 1px solid var(--border); flex: none; }
+.tab {
+  cursor: pointer; border: 0; background: transparent; color: var(--text-dim);
+  padding: 11px 12px 9px; border-bottom: 2px solid transparent; font-size: 13px;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.tab:hover { color: var(--text); }
+.tab[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+.tab .badge { width: 7px; height: 7px; border-radius: 50%; background: var(--red); }
+.drawer-body { overflow-y: auto; padding: 16px 18px 10px; flex: 1; }
+.drawer-foot { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 12px 18px calc(12px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--border); flex: none; }
+.foot-note { margin-right: auto; font-size: 12px; color: var(--text-muted); }
+.pane { display: flex; flex-direction: column; gap: 16px; }
+
+/* ── Fields ── */
+.group { display: flex; flex-direction: column; gap: 7px; }
+.group > label, .group-title { font-size: 12px; color: var(--text-dim); font-weight: 550; }
+.req { color: var(--red); }
+.form-group { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.form-group > label { font-size: 11.5px; color: var(--text-dim); font-weight: 550; }
+.form-row { display: flex; gap: 10px; }
+.form-row > .form-group { flex: 1 1 0; min-width: 0; }
+@media (max-width: 520px) { .form-row { flex-direction: column; } }
+input[type="text"], input[type="password"], input[type="number"], textarea, select {
+  width: 100%; min-width: 0; font: inherit; color: var(--text); background: var(--bg-soft);
+  border: 1px solid var(--border-strong); border-radius: 5px; padding: 7px 9px;
+}
+textarea { font-family: var(--mono); font-size: 12.5px; resize: vertical; }
+input[readonly] { color: var(--text-dim); }
+.field-hint { font-size: 11.5px; color: var(--text-dim); }
+.opt { font-weight: 400; color: var(--text-muted); }
+.narrow { max-width: 200px; }
+.hint { font-size: 12px; color: var(--text-dim); }
+.error { color: var(--red); font-size: 12.5px; }
+.check { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+.check input { margin: 0; flex: none; }
+.checks { display: flex; flex-direction: column; gap: 8px; }
+.info {
+  display: inline-flex; width: 15px; height: 15px; align-items: center; justify-content: center;
+  border-radius: 50%; border: 1px solid var(--border-strong); color: var(--text-muted);
+  font-size: 10px; font-style: normal; cursor: help; flex: none;
+}
+
+/* ── Identity ── */
+.identity { display: flex; gap: 12px; align-items: flex-end; }
+.identity .fields { flex: 1; display: grid; grid-template-columns: minmax(0,1.2fr) minmax(0,1fr); gap: 10px; min-width: 0; }
+@media (max-width: 560px) {
+  .identity { flex-wrap: wrap; }
+  .identity .fields { grid-template-columns: 1fr; flex-basis: 100%; }
+}
+.logo-wrap { position: relative; flex: none; }
+.logo-tile {
+  width: 52px; height: 52px; border-radius: 10px; border: 1px solid var(--border-strong);
+  background: var(--bg-soft); color: var(--text-dim); font-size: 20px; font-weight: 650;
+  cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0;
+  background-size: cover; background-position: center;
+}
+.logo-tile:hover { border-color: var(--text-muted); color: var(--text); }
+.logo-clear {
+  position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; border-radius: 50%;
+  border: 1px solid var(--border-strong); background: var(--bg); color: var(--text-dim);
+  font-size: 11px; line-height: 1; cursor: pointer; padding: 0;
+}
+
+/* ── Auth summary (Basic) ── */
+.auth-line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.mode-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.mode-chip {
+  cursor: pointer; font-size: 12px; padding: 4px 10px; border: 1px solid var(--border);
+  border-radius: 20px; color: var(--text-dim); background: var(--bg); font-family: inherit;
+}
+.mode-chip:hover { border-color: var(--border-strong); color: var(--text); }
+.mode-chip[aria-pressed="true"] {
+  border-color: var(--accent); color: var(--text); background: var(--bg-soft);
+  font-weight: 600; box-shadow: inset 0 0 0 1px var(--accent);
+}
+.auth-line .btn { margin-left: auto; }
+
+/* ── Capabilities ── */
+.cap-boxes { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+@media (max-width: 560px) { .cap-boxes { grid-template-columns: 1fr 1fr; } }
+.cap-box { display: flex; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; cursor: pointer; font-size: 13px; }
+.cap-box:hover { background: var(--bg-hover); }
+.cap-box input { margin: 0; }
+
+/* ── Endpoint cards (master's style) ── */
+#endpoint-cards { display: flex; flex-direction: column; gap: 12px; }
+.endpoint-card {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--type-color, var(--border));
+  border-radius: var(--radius);
+  background: var(--bg);
+  background: color-mix(in srgb, var(--type-color, var(--border)) 2%, var(--bg));
+  padding: 12px; display: flex; flex-direction: column; gap: 10px;
+}
+.endpoint-card.is-off { opacity: .72; }
+.section-label {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 11.5px; font-weight: 650; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--text-dim);
+}
+.section-label .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--type-color); flex: none; }
+.endpoint-enabled {
+  margin-left: auto; display: inline-flex; align-items: center; gap: 6px;
+  text-transform: none; letter-spacing: 0; font-weight: 500; font-size: 12px;
+  color: var(--text-dim); cursor: pointer;
+}
+.endpoint-enabled input { margin: 0; }
+.endpoint-status { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; font-size: 12px; color: var(--orange); }
+.endpoint-status.is-off { color: var(--text-muted); }
+
+/* ── Credential (Auth) ── */
+.sources { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+@media (max-width: 480px) { .sources { grid-template-columns: 1fr; } }
+.source {
+  all: unset; cursor: pointer; display: flex; flex-direction: column; gap: 3px;
+  padding: 10px 11px; border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--bg); min-width: 0;
+}
+.source:hover { border-color: var(--border-strong); background: var(--bg-hover); }
+.source[aria-checked="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); background: var(--bg-soft); }
+.source .t { font-weight: 600; font-size: 13px; }
+.source .d { font-size: 11.5px; color: var(--text-dim); }
+.source .m { font-family: var(--mono); font-size: 10.5px; color: var(--text-muted); }
+
+.card { border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); }
+.card-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+.card-head h3 { font-size: 12.5px; font-weight: 600; }
+.card-body { padding: 11px 12px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.pill { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 550; padding: 1px 8px; border-radius: 20px; border: 1px solid transparent; }
+.pill.ready, .pill.connected { color: var(--green); background: var(--green-bg); border-color: var(--green-border); }
+.pill.initializing { color: var(--orange); background: var(--orange-bg); border-color: var(--orange-border); }
+.pill.failing, .pill.needs_setup { color: var(--red); background: var(--red-bg); border-color: var(--red-border); }
+.pill.plain { color: var(--text-dim); background: var(--bg); border-color: var(--border); }
+.rows { display: grid; grid-template-columns: max-content minmax(0,1fr); gap: 5px 16px; margin: 0; }
+.rows dt { color: var(--text-dim); font-size: 12px; }
+.rows dd { margin: 0; min-width: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.rows dd.bad { color: var(--red); }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.arg-row { display: flex; gap: 6px; align-items: center; }
+.arg-row input, .arg-row select { flex: 1; }
+.icon-btn { cursor: pointer; border: 1px solid var(--border-strong); background: var(--bg); color: var(--text-dim); border-radius: 4px; width: 26px; height: 26px; flex: none; font-size: 14px; line-height: 1; }
+.icon-btn:hover { background: var(--bg-hover); color: var(--text); }
+.add-arg { align-self: flex-start; }
+.test-out { border: 1px solid var(--border); border-radius: 5px; background: var(--bg-soft); padding: 8px 10px; font-family: var(--mono); font-size: 11.5px; white-space: pre-wrap; overflow-x: auto; margin: 0; }
+.test-out .bad { color: var(--red); }
+.test-out .good { color: var(--green); }
+.warn { border: 1px solid var(--orange-border); background: var(--orange-bg); border-radius: var(--radius); padding: 10px 12px; display: flex; flex-direction: column; gap: 7px; }
+.warn h3 { font-size: 12.5px; color: var(--orange); }
+.warn p { margin: 0; font-size: 12.5px; }
+.preview { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.preview summary { cursor: pointer; padding: 9px 12px; font-size: 12.5px; font-weight: 550; background: var(--bg-soft); }
+.preview pre { margin: 0; padding: 10px 12px; overflow-x: auto; background: var(--bg); }
+.preview code { display: block; white-space: pre; }
+
+.toast {
+  position: fixed; left: 50%; transform: translateX(-50%);
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  background: var(--accent); color: var(--accent-on);
+  padding: 9px 16px; border-radius: 6px; font-size: 13px;
+  opacity: 0; pointer-events: none; transition: opacity .18s ease; z-index: 40;
+}
+.toast.show { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .toast { transition: none; } }
+</style>
+
+<div class="page">
+  <header class="mast">
+    <div class="eyebrow">Admin · provider editor · sub-panels</div>
+    <h1>提供方抽屉：Basic / Auth</h1>
+    <p>Basic 只放身份、认证方式摘要和模型类型；选中类型的端点配置按 master 的卡片展开。Auth 放凭据本身。点一行提供方打开抽屉。</p>
+    <ul>
+      <li>勾选 / 取消模型类型，端点卡片随之出现或消失。</li>
+      <li>端点卡片沿用 master：左侧色条、已启用开关、自动禁用提示。</li>
+      <li>Basic 的认证方式只读，点任意模式跳到 Auth 修改。</li>
+      <li>「Nebius（连接失效）」演示端点自动禁用与凭据失败两种状态。</li>
+    </ul>
+  </header>
+
+  <section class="list" aria-label="提供方列表">
+    <div class="list-head"><span>提供方</span><span>认证方式</span><span>状态</span><span></span></div>
+    <div id="rows"></div>
+  </section>
+</div>
+
+<div class="backdrop" id="backdrop" hidden>
+  <div class="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title">
+    <div class="drawer-head">
+      <div>
+        <h2 id="drawer-title">编辑提供方</h2>
+        <div class="sub" id="drawer-sub">—</div>
+      </div>
+      <button class="close" type="button" id="close-drawer" aria-label="关闭">✕</button>
+    </div>
+    <div class="tabs" role="tablist" aria-label="提供方设置">
+      <button class="tab" type="button" role="tab" id="tab-basic" data-tab="basic" aria-selected="true">Basic</button>
+      <button class="tab" type="button" role="tab" id="tab-auth" data-tab="auth" aria-selected="false">Auth<span class="badge" id="auth-badge" hidden></span></button>
+    </div>
+    <div class="drawer-body" id="body" role="tabpanel"></div>
+    <div class="drawer-foot">
+      <span class="foot-note" id="foot-note"></span>
+      <button class="btn" type="button" id="cancel">取消</button>
+      <button class="btn primary" type="button" id="save">保存</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+"use strict";
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => (
+  { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
+));
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const pad = (n) => String(n).padStart(2, "0");
+const clock = (d) => d ? `${pad(d.getHours())}:${pad(d.getMinutes())}` : "—";
+const stamp = (d) => d
+  ? `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${clock(d)}`
+  : "从未";
+const NOW = Date.now();
+const ago = (minutes) => new Date(NOW - minutes * 60000);
+const soon = (minutes) => new Date(NOW + minutes * 60000);
+
+/* ── Model types ─────────────────────────────────────────── */
+const TYPE_ORDER = ["llm", "embeddings", "rerank", "decisions"];
+const TYPE_LABEL = { llm: "LLM", embeddings: "Embeddings", rerank: "Rerank", decisions: "Decisions" };
+const TYPE_COLOR = {
+  llm: "var(--accent)",
+  embeddings: "var(--blue)",
+  rerank: "var(--orange)",
+  decisions: "var(--purple)",
+};
+const TOP_BASES = {
+  alcf: ["sophia · chat_completions"],
+  asksage: ["asksage · chat_completions"],
+  openai: ["chatgpt · open_responses", "chat_completions"],
+  siliconflow: ["chat_completions"],
+  nebius: ["chat_completions"],
+  typesafe: ["systemone"],
+};
+const PATHS = {
+  embeddings: {
+    "siliconflow--embedding": "/v1/embeddings",
+    "openai--embedding": "/v1/embeddings",
+    "jina--embedding": "/v1/embeddings",
+    "cohere--embedding": "/v1/embeddings",
+    openai: "/v1/embeddings",
+    cohere: "/v1/embeddings",
+    jina: "/v1/embeddings",
+    voyage: "/v1/embeddings",
+    google_generate: "/v1beta/models/{model}:embedContent",
+    minimax: "/v1/embeddings",
+  },
+  rerank: {
+    "siliconflow--rerank": "/v1/rerank",
+    "jina--rerank": "/v1/rerank",
+    "cohere--rerank": "/v1/rerank",
+    jina: "/v1/rerank",
+    cohere: "/v1/rerank",
+    voyage: "/v1/rerank",
+  },
+  decisions: {
+    "typesafe--systemone": "/v1/systemone",
+    "openai--decisions": "/v1/decisions",
+    systemone: "/v1/systemone",
+    openai_decisions: "/v1/decisions",
+  },
+};
+const SOURCE_OPTIONS = {
+  embeddings: [
+    ["提供方 shim", [
+      ["siliconflow--embedding", "siliconflow · embeddings"],
+      ["openai--embedding", "openai · embeddings"],
+      ["jina--embedding", "jina · embeddings"],
+      ["cohere--embedding", "cohere · embeddings"],
+    ]],
+    ["基础格式", [
+      ["openai", "openai"], ["cohere", "cohere"], ["jina", "jina"],
+      ["voyage", "voyage"], ["google_generate", "google_generate"], ["minimax", "minimax"],
+    ]],
+  ],
+  rerank: [
+    ["提供方 shim", [
+      ["siliconflow--rerank", "siliconflow · rerank"],
+      ["jina--rerank", "jina · rerank"],
+      ["cohere--rerank", "cohere · rerank"],
+    ]],
+    ["基础格式", [["jina", "jina"], ["cohere", "cohere"], ["voyage", "voyage"]]],
+  ],
+  decisions: [
+    ["提供方 shim", [
+      ["typesafe--systemone", "typesafe · systemone"],
+      ["openai--decisions", "openai · decisions"],
+    ]],
+    ["基础格式", [["systemone", "systemone"], ["openai_decisions", "openai_decisions"]]],
+  ],
+};
+const defaultPath = (type, source) => (PATHS[type] && PATHS[type][source]) || "";
+
+/* ── Data ────────────────────────────────────────────────── */
+const providers = {
+  alcf: {
+    name: "ALCF Sophia",
+    type: "alcf_sophia--chat_completions",
+    base: "https://inference-api.alcf.anl.gov/resource_server/sophia/vllm/v1",
+    logo: null,
+    types: ["llm"],
+    endpoints: {
+      llm: {
+        enabled: true, top: "alcf", baseType: "sophia · chat_completions",
+        url: "{base_url}/v1/chat/completions", stream: "",
+        customTools: true, hoist: true, preflight: false, maxToolDesc: "",
+      },
+    },
+    source: "shim",
+    command: ["python3", "-m", "llm_rosetta_shim_alcf.providers.alcf.token"],
+    interval: 3600, env: null, key: "", sentinel: true,
+    shimName: "llm-rosetta-shim-alcf",
+    status: { state: "ready", last: ago(42), failures: 0, error: null, needsLogin: false, expires: null },
+  },
+  asksage: {
+    name: "AskSage",
+    type: "asksage--chat_completions",
+    base: "https://api.asksage.ai",
+    logo: null,
+    types: ["llm"],
+    endpoints: {
+      llm: {
+        enabled: true, top: "asksage", baseType: "asksage · chat_completions",
+        url: "{base_url}/v1/chat/completions", stream: "",
+        customTools: false, hoist: true, preflight: false, maxToolDesc: "",
+      },
+    },
+    source: "config",
+    command: ["python3", "/opt/asksage/token.py", "--json"],
+    interval: 86400, env: "ASKSAGE_ACCOUNT_KEY", key: "", sentinel: false,
+    shimName: null,
+    status: { state: "ready", last: ago(90), failures: 0, error: null, needsLogin: false, expires: null },
+  },
+  chatgpt: {
+    name: "OpenAI ChatGPT",
+    type: "openai_chatgpt--open_responses",
+    base: "https://chatgpt.com/backend-api/codex",
+    logo: null,
+    types: ["llm"],
+    endpoints: {
+      llm: {
+        enabled: true, top: "openai", baseType: "chatgpt · open_responses",
+        url: "{base_url}/responses", stream: "",
+        customTools: true, hoist: true, preflight: false, maxToolDesc: "",
+      },
+    },
+    source: "exchange",
+    command: null,
+    interval: 3600, env: null, key: "", sentinel: false,
+    shimShipsExchange: true, shimName: null,
+    status: { state: "connected", last: ago(12), failures: 0, error: null, needsLogin: false, expires: soon(40) },
+  },
+  chatgptOverride: {
+    name: "ChatGPT（命令覆盖）",
+    type: "openai_chatgpt--open_responses",
+    base: "https://chatgpt.com/backend-api/codex",
+    logo: null,
+    types: ["llm"],
+    endpoints: {
+      llm: {
+        enabled: true, top: "openai", baseType: "chatgpt · open_responses",
+        url: "{base_url}/responses", stream: "",
+        customTools: true, hoist: true, preflight: false, maxToolDesc: "",
+      },
+    },
+    source: "config",
+    command: ["python3", "/opt/vault/chatgpt-token.py"],
+    interval: 1800, env: null, key: "", sentinel: false,
+    shimShipsExchange: true, shimName: null,
+    status: { state: "needs_setup", last: null, failures: 0, error: null, needsLogin: true, expires: null },
+    commandStatus: { state: "ready", last: ago(5), failures: 0, error: null, needsLogin: false, expires: null },
+  },
+  siliconflow: {
+    name: "SiliconFlow CN",
+    type: "openai--chat_completions",
+    base: "https://api.siliconflow.cn",
+    logo: null,
+    types: ["llm", "embeddings", "rerank"],
+    endpoints: {
+      llm: {
+        enabled: true, top: "siliconflow", baseType: "chat_completions",
+        url: "{base_url}/v1/chat/completions", stream: "",
+        customTools: false, hoist: true, preflight: false, maxToolDesc: "",
+      },
+      embeddings: { enabled: true, source: "openai", path: "/v1/embeddings" },
+      rerank: { enabled: true, source: "cohere", path: "/v1/rerank" },
+    },
+    source: "static",
+    command: null,
+    interval: 3600, env: null, key: "sk-fj…（已保存）", sentinel: false,
+    shimName: null, status: null,
+  },
+  typesafe: {
+    name: "TypeSafe Jev",
+    type: "typesafe--systemone",
+    base: "https://api.typesafe.ai",
+    logo: null,
+    types: ["decisions"],
+    endpoints: {
+      decisions: { enabled: true, source: "systemone", path: "/v1/systemone" },
+    },
+    source: "static",
+    command: null,
+    interval: 3600, env: null, key: "ts-live…（已保存）", sentinel: false,
+    shimName: null, status: null,
+  },
+  nebius: {
+    name: "Nebius（连接失效）",
+    type: "nebius--chat_completions",
+    base: "https://api.studio.nebius.ai/v1",
+    logo: null,
+    degraded: true,
+    types: ["llm", "embeddings", "rerank"],
+    endpoints: {
+      llm: {
+        enabled: true, top: "nebius", baseType: "chat_completions",
+        url: "{base_url}/v1/chat/completions", stream: "",
+        customTools: false, hoist: true, preflight: false, maxToolDesc: "",
+      },
+      embeddings: { enabled: true, source: "openai", path: "/v1/embeddings" },
+      rerank: { enabled: true, source: "jina", path: "/v1/rerank" },
+    },
+    source: "config",
+    command: ["python3", "/opt/nebius/token.py"],
+    interval: 3600, env: null, key: "", sentinel: false,
+    shimName: null,
+    status: {
+      state: "failing", last: ago(120), failures: 2,
+      error: "token endpoint returned 503", needsLogin: false, expires: null,
+    },
+  },
+};
+
+const SOURCE_MODE = {
+  static: "静态 API key",
+  config: "配置里的命令",
+  shim: "shim 自带命令",
+  exchange: "登录（auth.py）",
+};
+const SOURCE_SHORT = { static: "静态 key", config: "配置命令", shim: "shim 命令", exchange: "auth.py" };
+const SOURCES = [
+  { id: "static", title: "静态 API key", desc: "写在条目里，或由环境变量解析", meta: "api_key" },
+  { id: "config", title: "配置里的命令", desc: "argv 产出 token；可带 env 输入", meta: "token_command" },
+  { id: "shim", title: "shim 自带命令", desc: "shim 包声明，提供方不用写", meta: "connection.token_command" },
+  { id: "exchange", title: "登录（auth.py）", desc: "OAuth 型，登录后安装记录", meta: "auth.py" },
+];
+const SOURCE_NOTE = {
+  static: "最普通的来源；没有刷新动作，也没有 token_status。",
+  config: "网关启动取一次，按间隔刷新，上游 401 时重取。",
+  shim: "命令来自 shim 包；这一项只读，间隔可覆盖为更短的寿命。",
+  exchange: "shim 的 auth.py 负责登录；可安装别处生成的记录。",
+};
+
+const state = { selected: null, draft: null, tab: "basic", toastTimer: null };
+
+/* ── Helpers ─────────────────────────────────────────────── */
+function clone(p) {
+  return {
+    ...p,
+    types: [...p.types],
+    endpoints: Object.fromEntries(
+      Object.entries(p.endpoints).map(([k, v]) => [k, { ...v }])
+    ),
+    command: p.command ? [...p.command] : null,
+    status: p.status ? { ...p.status } : null,
+    commandStatus: p.commandStatus ? { ...p.commandStatus } : null,
+  };
+}
+
+/** The status that describes the credential actually in force. */
+function effectiveStatus(p) {
+  return p.shimShipsExchange && p.source === "config" && p.commandStatus
+    ? p.commandStatus
+    : p.status;
+}
+
+function problem(p) {
+  const s = effectiveStatus(p);
+  return p.source !== "static" && !!s && s.state !== "ready" && s.state !== "connected";
+}
+
+function pillClass(p) {
+  if (p.source === "static") return "plain";
+  return effectiveStatus(p)?.state || "plain";
+}
+
+function pillText(p) {
+  if (p.source === "static") return "无状态";
+  return effectiveStatus(p)?.state || "未播种";
+}
+
+function authDetail(p) {
+  const s = effectiveStatus(p);
+  if (p.source === "static") return "无刷新动作，也没有 token_status";
+  if (p.source === "exchange") {
+    if (!s) return "需要登录";
+    return s.state === "connected"
+      ? (s.expires ? `凭据过期 ${stamp(s.expires)}` : "已连接")
+      : "需要登录";
+  }
+  if (!s) return "保存后开始播种凭据";
+  if (s.state === "failing") return `连续失败 ${s.failures} 次 · ${s.error || ""}`.trim();
+  return s.last ? `上次取 token ${stamp(s.last)}` : "尚未取到 token";
+}
+
+function letterOf(name) {
+  const ch = (name || "?").trim().charAt(0);
+  return ch.toUpperCase();
+}
+
+function toast(msg) {
+  const el = $("toast");
+  el.textContent = msg;
+  el.classList.add("show");
+  clearTimeout(state.toastTimer);
+  state.toastTimer = setTimeout(() => el.classList.remove("show"), 1800);
+}
+
+/* ── List ────────────────────────────────────────────────── */
+function renderRows() {
+  const host = $("rows");
+  host.innerHTML = "";
+  for (const [id, p] of Object.entries(providers)) {
+    const row = document.createElement("div");
+    row.className = "row";
+    const mode = p.shimShipsExchange && p.source === "config"
+      ? "配置命令（覆盖）"
+      : SOURCE_SHORT[p.source];
+    const s = effectiveStatus(p);
+    row.innerHTML = `<span class="name">${esc(p.name)}</span>
+      <span class="kind">${esc(mode)}</span>
+      <span class="state">${esc(s ? s.state : "ready")}</span>`;
+    const open = document.createElement("button");
+    open.type = "button";
+    open.className = "btn sm open";
+    open.textContent = "编辑";
+    open.addEventListener("click", () => openDrawer(id));
+    row.appendChild(open);
+    host.appendChild(row);
+  }
+}
+
+/* ── Drawer shell ────────────────────────────────────────── */
+function openDrawer(id) {
+  state.selected = id;
+  state.draft = clone(providers[id]);
+  state.tab = "basic";
+  $("drawer-sub").textContent = state.draft.type;
+  $("backdrop").hidden = false;
+  render();
+  $("f-name")?.focus();
+}
+
+function closeDrawer() {
+  $("backdrop").hidden = true;
+  state.selected = null;
+  state.draft = null;
+}
+
+function setTab(tab) {
+  state.tab = tab;
+  render();
+}
+
+function render() {
+  const d = state.draft;
+  if (!d) return;
+  $("tab-basic").setAttribute("aria-selected", String(state.tab === "basic"));
+  $("tab-auth").setAttribute("aria-selected", String(state.tab === "auth"));
+  $("auth-badge").hidden = !problem(d);
+  $("foot-note").textContent = d.sentinel && d.source !== "static" && d.source !== "exchange"
+    ? "保存时会清理残留的 api_key 标记"
+    : "";
+  const body = $("body");
+  body.innerHTML = "";
+  if (state.tab === "basic") renderBasic(body);
+  else renderAuth(body);
+}
+
+/* ── Basic pane ──────────────────────────────────────────── */
+function renderBasic(body) {
+  const d = state.draft;
+  const pane = document.createElement("div");
+  pane.className = "pane";
+  const logoStyle = d.logo ? ` style="background-image:url('${d.logo}')"` : "";
+  const logoText = d.logo ? "" : letterOf(d.name);
+  pane.innerHTML = `
+    <div class="identity">
+      <div class="logo-wrap">
+        <button class="logo-tile" type="button" id="logo-tile" title="更换图标" aria-label="更换图标"${logoStyle}>${esc(logoText)}</button>
+        <input type="file" id="logo-file" accept="image/*" hidden>
+        ${d.logo ? '<button class="logo-clear" type="button" id="logo-clear" title="移除图标" aria-label="移除图标">×</button>' : ""}
+      </div>
+      <div class="fields">
+        <div class="form-group">
+          <label for="f-name">服务方名称 <span class="req">*</span></label>
+          <input id="f-name" type="text" value="${esc(d.name)}">
+        </div>
+        <div class="form-group">
+          <label for="f-type">类型</label>
+          <input id="f-type" type="text" readonly value="${esc(d.type)}">
+        </div>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="f-base">Base URL</label>
+      <input id="f-base" type="text" value="${esc(d.base)}">
+    </div>
+
+    <div class="group">
+      <div class="group-title">认证方式</div>
+      <div class="auth-line">
+        <div class="mode-chips" id="mode-chips"></div>
+        <span class="pill ${pillClass(d)}" id="auth-pill">${esc(pillText(d))}</span>
+        <span class="hint">${esc(authDetail(d))}</span>
+        <button class="btn sm" type="button" id="to-auth">在 Auth 中更改</button>
+      </div>
+      <div class="hint">这里只显示当前模式；来源、命令、刷新和登录都在 Auth 页。</div>
+    </div>
+
+    <div class="group">
+      <div class="group-title">能力（模型类型）</div>
+      <div class="cap-boxes" id="cap-boxes"></div>
+      <div class="hint">勾选该服务方实际提供的模型类型，每个类型的端点配置显示在下方；text / vision / tools / reasoning 属于模型条目，不在这里。</div>
+    </div>
+
+    <div class="group">
+      <div class="group-title">端点</div>
+      <div id="endpoint-cards"></div>
+    </div>
+  `;
+  body.appendChild(pane);
+
+  // mode chips — read-only here, a click goes to the Auth page
+  const chips = $("mode-chips");
+  for (const s of SOURCES) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "mode-chip";
+    b.textContent = SOURCE_MODE[s.id];
+    b.setAttribute("aria-pressed", String(d.source === s.id));
+    b.title = "在 Auth 页更改";
+    b.addEventListener("click", () => setTab("auth"));
+    chips.appendChild(b);
+  }
+  $("to-auth").addEventListener("click", () => setTab("auth"));
+
+  // identity
+  $("f-name").addEventListener("input", (e) => {
+    d.name = e.target.value;
+    if (!d.logo) {
+      const tile = $("logo-tile");
+      if (tile) tile.textContent = letterOf(d.name);
+    }
+  });
+  $("f-base").addEventListener("input", (e) => { d.base = e.target.value; });
+
+  // logo
+  $("logo-tile").addEventListener("click", () => $("logo-file").click());
+  $("logo-file").addEventListener("change", (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      d.logo = String(reader.result);
+      render();
+      toast("图标已更换");
+    };
+    reader.readAsDataURL(file);
+  });
+  $("logo-clear")?.addEventListener("click", () => {
+    d.logo = null;
+    render();
+  });
+
+  // capabilities
+  const boxes = $("cap-boxes");
+  for (const t of TYPE_ORDER) {
+    const label = document.createElement("label");
+    label.className = "cap-box";
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = d.types.includes(t);
+    cb.addEventListener("change", () => {
+      const i = d.types.indexOf(t);
+      if (cb.checked && i < 0) d.types.push(t);
+      if (!cb.checked && i >= 0) d.types.splice(i, 1);
+      renderEndpointCards();
+    });
+    label.append(cb, document.createTextNode(TYPE_LABEL[t]));
+    boxes.appendChild(label);
+  }
+
+  renderEndpointCards();
+}
+
+/* ── Endpoint cards (master's presentation) ──────────────── */
+function topOptions(current) {
+  const names = Object.keys(TOP_BASES);
+  return names.map((n) => `<option value="${esc(n)}"${n === current ? " selected" : ""}>${esc(n)}</option>`).join("");
+}
+
+function baseOptions(top, current) {
+  const list = TOP_BASES[top] || [];
+  const opts = list.map((b) => `<option value="${esc(b)}"${b === current ? " selected" : ""}>${esc(b)}</option>`);
+  if (current && !list.includes(current)) {
+    opts.push(`<option value="${esc(current)}" selected>${esc(current)}</option>`);
+  }
+  return opts.join("");
+}
+
+function sourceOptions(type, current) {
+  const groups = SOURCE_OPTIONS[type] || [];
+  let html = `<option value=""${current ? "" : " selected"}>— 请选择 —</option>`;
+  let found = !current;
+  for (const [label, items] of groups) {
+    html += `<optgroup label="${esc(label)}">`;
+    for (const [value, text] of items) {
+      const sel = value === current ? " selected" : "";
+      if (sel) found = true;
+      html += `<option value="${esc(value)}"${sel}>${esc(text)}</option>`;
+    }
+    html += "</optgroup>";
+  }
+  if (!found) html += `<option value="${esc(current)}" selected>${esc(current)}</option>`;
+  return html;
+}
+
+function renderEndpointCards() {
+  const host = $("endpoint-cards");
+  if (!host) return;
+  host.innerHTML = "";
+  const types = TYPE_ORDER.filter((t) => state.draft.types.includes(t));
+  if (!types.length) {
+    host.innerHTML = '<div class="hint">至少选择一种模型类型，否则这个服务方没有可路由的端点。</div>';
+    return;
+  }
+  for (const t of types) host.appendChild(buildEndpointCard(t));
+}
+
+function buildEndpointCard(type) {
+  const d = state.draft;
+  const ep = d.endpoints[type] || (d.endpoints[type] = { enabled: true });
+  const card = document.createElement("div");
+  card.className = "endpoint-card" + (ep.enabled === false ? " is-off" : "");
+  card.dataset.type = type;
+  card.style.setProperty("--type-color", TYPE_COLOR[type]);
+
+  const label = type === "llm" ? "LLM 端点" : `${TYPE_LABEL[type]} 端点`;
+  let status = "";
+  if (d.degraded) {
+    status = `<div class="endpoint-status"><span aria-hidden="true">⚠</span>
+      <span>已自动禁用：连接信息无效 修复后保存即可恢复。</span>
+      <button class="link-btn" type="button" data-role="recheck">重新检测</button></div>`;
+  } else if (ep.enabled === false) {
+    status = '<div class="endpoint-status is-off">已关闭 —— 配置保留。</div>';
+  }
+
+  let fields = "";
+  if (type === "llm") {
+    fields = `
+      <div class="form-row">
+        <div class="form-group"><label>顶级名称</label><select data-role="top">${topOptions(ep.top)}</select></div>
+        <div class="form-group"><label>基础类型</label><select data-role="baseType">${baseOptions(ep.top, ep.baseType)}</select></div>
+      </div>
+      <div class="form-group">
+        <label>URL 模板 <span class="opt">(可选)</span></label>
+        <input type="text" data-role="url" value="${esc(ep.url || "")}" placeholder="{base_url}/v1/chat/completions">
+        <div class="field-hint">覆盖端点路径。占位符：{base_url}、{model}</div>
+      </div>
+      <div class="form-group">
+        <label>流式 URL 模板 <span class="opt">(可选)</span></label>
+        <input type="text" data-role="stream" value="${esc(ep.stream || "")}" placeholder="留空则使用上方的 URL 模板">
+      </div>
+      <div class="checks">
+        <label class="check"><input type="checkbox" data-role="customTools"${ep.customTools ? " checked" : ""}>
+          <span>支持自定义工具定义</span><span class="info" title="该提供方的 API 原生接受 {type: &quot;custom&quot;} 工具定义；关闭时降级为函数包装。">i</span></label>
+        <label class="check"><input type="checkbox" data-role="hoist"${ep.hoist !== false ? " checked" : ""}>
+          <span>提升后置系统消息</span><span class="info" title="把对话中段的 system/developer 消息改写为用户角色信封，保持可缓存的提示前缀。">i</span></label>
+        <label class="check"><input type="checkbox" data-role="preflight"${ep.preflight ? " checked" : ""}>
+          <span>预检请求计数</span><span class="info" title="流式请求前先发一次 max_tokens=1 的请求，拿到精确的 input_tokens。">i</span></label>
+      </div>
+      <div class="form-group narrow">
+        <label>工具描述最大长度</label>
+        <input type="number" min="0" step="1" data-role="maxToolDesc" value="${esc(ep.maxToolDesc ?? "")}">
+      </div>`;
+  } else {
+    const pathLabel = `${TYPE_LABEL[type].toUpperCase()} 路径`;
+    fields = `
+      <div class="form-row">
+        <div class="form-group"><label>来源</label><select data-role="source">${sourceOptions(type, ep.source)}</select></div>
+        <div class="form-group"><label>${pathLabel}</label>
+          <input type="text" data-role="path" value="${esc(ep.path || "")}" placeholder="${esc(defaultPath(type, ep.source))}"></div>
+      </div>
+      <div class="field-hint">选厂商则用其默认端点；选裸格式则用上方的 base URL。</div>`;
+  }
+
+  card.innerHTML = `
+    <div class="section-label"><span class="dot"></span><span>${esc(label)}</span>
+      <label class="endpoint-enabled"><input type="checkbox" data-role="enabled"${ep.enabled !== false ? " checked" : ""}>
+        <span>已启用</span></label>
+    </div>
+    ${status}
+    ${fields}
+  `;
+
+  const q = (role) => card.querySelector(`[data-role="${role}"]`);
+  q("enabled").addEventListener("change", (e) => {
+    ep.enabled = e.target.checked;
+    renderEndpointCards();
+  });
+  q("recheck")?.addEventListener("click", () => {
+    d.degraded = false;
+    renderEndpointCards();
+    toast("连接信息有效，保存后端点恢复路由");
+  });
+
+  if (type === "llm") {
+    q("top").addEventListener("change", (e) => {
+      ep.top = e.target.value;
+      const bases = TOP_BASES[ep.top] || [];
+      ep.baseType = bases[0] || "";
+      renderEndpointCards();
+    });
+    q("baseType").addEventListener("change", (e) => { ep.baseType = e.target.value; });
+    q("url").addEventListener("input", (e) => { ep.url = e.target.value; });
+    q("stream").addEventListener("input", (e) => { ep.stream = e.target.value; });
+    q("customTools").addEventListener("change", (e) => { ep.customTools = e.target.checked; });
+    q("hoist").addEventListener("change", (e) => { ep.hoist = e.target.checked; });
+    q("preflight").addEventListener("change", (e) => { ep.preflight = e.target.checked; });
+    q("maxToolDesc").addEventListener("input", (e) => { ep.maxToolDesc = e.target.value; });
+  } else {
+    q("source").addEventListener("change", (e) => {
+      const prevDefault = defaultPath(type, ep.source);
+      ep.source = e.target.value;
+      const nextDefault = defaultPath(type, ep.source);
+      const pathEl = q("path");
+      if (!ep.path || ep.path === prevDefault) ep.path = nextDefault;
+      pathEl.value = ep.path || "";
+      pathEl.placeholder = nextDefault;
+    });
+    q("path").addEventListener("input", (e) => { ep.path = e.target.value; });
+  }
+  return card;
+}
+
+/* ── Auth pane ───────────────────────────────────────────── */
+function renderAuth(body) {
+  const d = state.draft;
+  const pane = document.createElement("div");
+  pane.className = "pane";
+  pane.innerHTML = `
+    <div class="group">
+      <div class="group-title">凭据来源</div>
+      <div class="sources" id="sources" role="radiogroup" aria-label="凭据来源"></div>
+      <div class="hint" id="source-note"></div>
+    </div>
+
+    <div class="group" id="panel-static" hidden>
+      <label for="f-key">API Key <span class="req">*</span></label>
+      <input id="f-key" type="password" placeholder="sk-…">
+      <div class="hint">直接保存在条目里，或写成 <code>\${VENDOR_API_KEY}</code> 由服务端环境变量解析。</div>
+    </div>
+
+    <div class="card" id="panel-command" hidden>
+      <div class="card-head"><h3>命令与刷新</h3><span class="hint" id="cmd-mode"></span></div>
+      <div class="card-body">
+        <div class="group">
+          <label>token_command</label>
+          <div id="args" class="group"></div>
+          <button class="btn sm add-arg" type="button" id="add-arg">+ 参数</button>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="f-interval">token_refresh_interval（秒，≥ 60）</label>
+            <input id="f-interval" type="number" min="60" step="60">
+          </div>
+          <div class="form-group" id="env-group">
+            <label for="f-env">token_command_env（可选）</label>
+            <input id="f-env" type="text" placeholder="VENDOR_ACCOUNT_KEY">
+          </div>
+        </div>
+        <div class="hint" id="env-hint" hidden>设置了 env：命令把它作为输入（账号 key 换 token），此时静态 key 不算第二个凭据。</div>
+        <div class="error" id="cmd-error" hidden></div>
+        <div class="group" id="sim-group">
+          <label for="f-sim">测试命令</label>
+          <div class="arg-row">
+            <select id="f-sim">
+              <option value="ok">成功：stdout 就是 token</option>
+              <option value="fail">失败：退出码 1</option>
+              <option value="timeout">超时：10s 无输出</option>
+            </select>
+            <button class="btn sm" type="button" id="run-cmd">运行</button>
+          </div>
+          <pre class="test-out" id="cmd-out" hidden></pre>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" id="panel-exchange" hidden>
+      <div class="card-head"><h3>登录凭据</h3><span class="hint">auth.py</span></div>
+      <div class="card-body">
+        <dl class="rows" id="ex-rows"></dl>
+        <div class="actions" id="ex-actions"></div>
+        <div class="group" id="ex-install" hidden>
+          <label for="f-record">记录 JSON</label>
+          <textarea id="f-record" spellcheck="false" placeholder='{"access_token": "...", "refresh_token": "..."}'></textarea>
+          <div><button class="btn sm primary" type="button" id="ex-install-btn">安装记录</button></div>
+        </div>
+        <div class="hint">在有浏览器的机器上运行 <code>llm-rosetta-gateway credential &lt;provider&gt;</code>，把输出粘贴到这里。</div>
+      </div>
+    </div>
+
+    <div class="card" id="status-card" hidden>
+      <div class="card-head"><h3>凭据状态</h3><span class="hint">token_status</span></div>
+      <div class="card-body">
+        <dl class="rows" id="status-rows"></dl>
+        <div class="actions" id="status-actions"></div>
+      </div>
+    </div>
+
+    <div class="warn" id="sentinel" hidden>
+      <h3>条目里有一个旧面板留下的标记</h3>
+      <p><code>api_key: "token_command"</code> 与命令互斥。保存时会自动删除它；不删，加载就会报错。</p>
+      <div><button class="btn sm danger" type="button" id="clean-sentinel">清理标注</button></div>
+    </div>
+
+    <details class="preview" id="preview">
+      <summary>凭据将写入的字段</summary>
+      <pre><code id="preview-code"></code></pre>
+    </details>
+  `;
+  body.appendChild(pane);
+
+  $("add-arg").addEventListener("click", () => {
+    if (!d.command) d.command = [];
+    d.command.push("");
+    renderArgs();
+    renderPreview();
+    const inputs = $("args").querySelectorAll("input");
+    inputs[inputs.length - 1]?.focus();
+  });
+  $("f-interval").addEventListener("input", () => {
+    d.interval = Number($("f-interval").value) || d.interval;
+    renderPreview();
+  });
+  $("f-env").addEventListener("input", () => {
+    d.env = $("f-env").value.trim() || null;
+    $("env-hint").hidden = !d.env;
+    renderPreview();
+  });
+  $("f-key").addEventListener("input", () => {
+    d.key = $("f-key").value;
+    renderPreview();
+  });
+  $("run-cmd").addEventListener("click", runCommand);
+  $("clean-sentinel").addEventListener("click", () => {
+    d.sentinel = false;
+    $("sentinel").hidden = true;
+    $("foot-note").textContent = "";
+    renderPreview();
+    toast("已清理 api_key 标注");
+  });
+
+  syncAuth();
+}
+
+function syncAuth() {
+  const d = state.draft;
+  renderSources();
+  $("panel-static").hidden = d.source !== "static";
+  $("panel-command").hidden = !(d.source === "config" || d.source === "shim");
+  $("panel-exchange").hidden = d.source !== "exchange";
+  $("status-card").hidden = d.source === "static";
+  $("sentinel").hidden = !(d.sentinel && d.source !== "static" && d.source !== "exchange");
+
+  if (d.source === "static") {
+    // A stored key is shown as a placeholder, not a value: typing replaces it,
+    // leaving the field alone keeps it.
+    const saved = !!(d.key && d.key.includes("…"));
+    $("f-key").value = saved ? "" : (d.key || "");
+    $("f-key").placeholder = saved ? d.key : "sk-…";
+  }
+
+  if (d.source === "config" || d.source === "shim") {
+    const readonly = d.source === "shim";
+    $("cmd-mode").textContent = readonly ? `来自 ${d.shimName || "shim"}` : "提供方条目可编辑";
+    renderArgs();
+    $("args").querySelectorAll("input").forEach((el) => { el.readOnly = readonly; });
+    $("args").querySelectorAll(".icon-btn").forEach((el) => { el.hidden = readonly; });
+    $("add-arg").hidden = readonly;
+    $("f-interval").value = String(d.interval);
+    $("f-env").value = d.env || "";
+    $("env-group").hidden = readonly;
+    $("env-hint").hidden = !d.env;
+    $("sim-group").hidden = readonly;
+    $("cmd-out").hidden = true;
+    $("cmd-error").hidden = true;
+  }
+
+  if (d.source === "exchange") renderExchange();
+  renderStatus();
+  renderPreview();
+}
+
+function renderSources() {
+  const d = state.draft;
+  const host = $("sources");
+  host.innerHTML = "";
+  for (const s of SOURCES) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "source";
+    b.setAttribute("role", "radio");
+    b.setAttribute("aria-checked", String(d.source === s.id));
+    b.innerHTML = `<span class="t">${esc(s.title)}</span><span class="d">${esc(s.desc)}</span><span class="m">${esc(s.meta)}</span>`;
+    b.addEventListener("click", () => {
+      d.source = s.id;
+      if (s.id === "config" && !d.command) d.command = ["python3", "/opt/vendor/token.py"];
+      syncAuth();
+      render();
+      toast(`认证方式：${SOURCE_MODE[s.id]}（Basic 摘要已同步）`);
+    });
+    host.appendChild(b);
+  }
+  const note = $("source-note");
+  note.textContent = d.shimShipsExchange && d.source === "config"
+    ? "这条命令覆盖 shim 的 auth.py 登录：登录 / 安装记录不会生效，凭据由命令产出。"
+    : SOURCE_NOTE[d.source];
+}
+
+function renderArgs() {
+  const host = $("args");
+  host.innerHTML = "";
+  const args = state.draft.command || [];
+  args.forEach((arg, i) => {
+    const row = document.createElement("div");
+    row.className = "arg-row";
+    const input = document.createElement("input");
+    input.type = "text";
+    input.value = arg;
+    input.setAttribute("aria-label", `参数 ${i + 1}`);
+    input.addEventListener("input", () => {
+      state.draft.command[i] = input.value;
+      renderPreview();
+    });
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "icon-btn";
+    del.textContent = "×";
+    del.setAttribute("aria-label", `删除参数 ${i + 1}`);
+    del.addEventListener("click", () => {
+      state.draft.command.splice(i, 1);
+      renderArgs();
+      renderPreview();
+    });
+    row.append(input, del);
+    host.appendChild(row);
+  });
+}
+
+function renderExchange() {
+  const d = state.draft;
+  const s = d.status || {};
+  const rows = $("ex-rows");
+  rows.innerHTML = "";
+  const row = (k, v, cls) => {
+    const dt = document.createElement("dt");
+    dt.textContent = k;
+    const dd = document.createElement("dd");
+    dd.textContent = v;
+    if (cls) dd.className = cls;
+    rows.append(dt, dd);
+  };
+  row("状态", s.state === "connected" ? "已连接" : "需要登录");
+  if (s.expires) row("凭据过期", stamp(s.expires));
+  if (s.last) row("上次刷新", stamp(s.last));
+
+  const acts = $("ex-actions");
+  acts.innerHTML = "";
+  const mk = (label, fn, cls) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "btn sm" + (cls ? " " + cls : "");
+    b.textContent = label;
+    b.addEventListener("click", fn);
+    acts.appendChild(b);
+  };
+  if (s.state === "connected") {
+    mk("退出登录", () => {
+      s.state = "needs_setup";
+      s.expires = null;
+      renderExchange();
+      renderStatus();
+      renderPreview();
+      toast("已退出登录");
+    }, "danger");
+  } else {
+    mk("登录", () => {
+      s.state = "connected";
+      s.expires = soon(55);
+      s.last = new Date();
+      $("ex-install").hidden = true;
+      renderExchange();
+      renderStatus();
+      renderPreview();
+      toast("登录完成，记录已写入");
+    }, "primary");
+    mk("安装记录", () => { $("ex-install").hidden = !$("ex-install").hidden; });
+  }
+  $("ex-install-btn").onclick = () => {
+    if (!$("f-record").value.trim()) { toast("记录为空"); return; }
+    s.state = "connected";
+    s.expires = soon(55);
+    $("ex-install").hidden = true;
+    renderExchange();
+    renderStatus();
+    renderPreview();
+    toast("记录已安装");
+  };
+}
+
+function renderStatus() {
+  const d = state.draft;
+  const rows = $("status-rows");
+  const acts = $("status-actions");
+  rows.innerHTML = "";
+  acts.innerHTML = "";
+  if (d.source === "static") return;
+  const s = effectiveStatus(d);
+  if (!s) {
+    const dt = document.createElement("dt");
+    dt.textContent = "状态";
+    const dd = document.createElement("dd");
+    dd.textContent = "保存后开始播种凭据";
+    rows.append(dt, dd);
+  } else {
+    const row = (k, v, cls) => {
+      const dt = document.createElement("dt");
+      dt.textContent = k;
+      const dd = document.createElement("dd");
+      dd.textContent = v;
+      if (cls) dd.className = cls;
+      rows.append(dt, dd);
+    };
+    row("状态", s.state);
+    row("上次取 token", stamp(s.last));
+    row("连续失败", String(s.failures), s.failures ? "bad" : "");
+    if (s.error) row("last_error", s.error, "bad");
+    if (s.needsLogin) row("需要交互", "是 —— 运行登录后继续");
+    if (s.expires) row("凭据过期", stamp(s.expires));
+  }
+  const mk = (label, fn) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "btn sm";
+    b.textContent = label;
+    b.addEventListener("click", fn);
+    acts.appendChild(b);
+  };
+  mk("立即刷新", () => {
+    const st = s || (d.status = { state: "initializing", last: null, failures: 0, error: null, needsLogin: false, expires: null });
+    st.state = "initializing";
+    renderStatus();
+    renderPreview();
+    toast("正在取 token…");
+    setTimeout(() => {
+      st.state = "ready";
+      st.last = new Date();
+      st.failures = 0;
+      st.error = null;
+      renderStatus();
+      renderPreview();
+      toast("刷新完成");
+    }, 700);
+  });
+  mk("测试凭据", () => {
+    const st = effectiveStatus(d) || {};
+    if (st.state === "needs_setup" || st.needsLogin) { toast("还没有可用凭据，先登录"); return; }
+    if (st.state === "failing") { toast("上游 503 · token 命令失败"); return; }
+    toast("上游 200，凭据指纹 cmd:a19f…");
+  });
+}
+
+function renderPreview() {
+  const d = state.draft;
+  const entry = {};
+  if (d.source === "static") {
+    entry.api_key = d.key && d.key.startsWith("sk-") ? "sk-…" : (d.key || "");
+  } else if (d.source === "config") {
+    entry.token_command = d.command || [];
+    entry.token_refresh_interval = Number(d.interval) || 0;
+    if (d.env) entry.token_command_env = d.env;
+  } else if (d.source === "shim") {
+    entry.token_refresh_interval = Number(d.interval) || 0;
+    entry._note = `命令由 ${d.shimName || "shim"} 提供`;
+  } else {
+    entry._note = "凭据由 shim 的 auth.py 管理，条目里不存 key";
+  }
+  const sentinel = d.sentinel && d.source !== "static" && d.source !== "exchange";
+  $("preview-code").textContent = JSON.stringify(entry, null, 2)
+    + (sentinel ? '\n\n// 保存时删除 api_key: "token_command"' : "");
+  $("foot-note").textContent = sentinel ? "保存时会清理残留的 api_key 标记" : "";
+}
+
+async function runCommand() {
+  const out = $("cmd-out");
+  const mode = $("f-sim").value;
+  out.hidden = false;
+  out.textContent = "运行中…";
+  await sleep(600);
+  if (mode === "ok") {
+    out.innerHTML = '<span class="good">exit 0 · 42ms</span>\neyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhbGNmIn0…\n\n凭据指纹 cmd:a19f7c…';
+  } else if (mode === "fail") {
+    out.innerHTML = '<span class="bad">exit 1 · 88ms</span>\ntoken endpoint returned 503 Service Unavailable';
+  } else {
+    out.innerHTML = '<span class="bad">timeout after 10s</span>\n没有输出；可按间隔重试，或检查网络与登录状态';
+  }
+}
+
+/* ── Save ────────────────────────────────────────────────── */
+function save() {
+  const d = state.draft;
+  if (d.source === "static" && !(d.key && d.key.trim())) {
+    toast("静态来源需要 API Key");
+    return;
+  }
+  if (d.source === "config") {
+    if (!d.command || !d.command.filter((a) => a.trim()).length) {
+      toast("token_command must be a non-empty array");
+      return;
+    }
+    if (!(Number(d.interval) >= 60)) {
+      toast("token_refresh_interval must be >= 60");
+      return;
+    }
+  }
+  if (d.source === "shim" && !(Number(d.interval) >= 60)) {
+    toast("token_refresh_interval must be >= 60");
+    return;
+  }
+  if (d.source === "exchange" && (!d.status || d.status.state !== "connected")) {
+    toast("先登录，或安装一条记录");
+    return;
+  }
+  d.sentinel = false;
+  if (d.source !== "static" && d.source !== "exchange" && !d.status) {
+    d.status = { state: "initializing", last: null, failures: 0, error: null, needsLogin: false, expires: null };
+  }
+  providers[state.selected] = clone(d);
+  renderRows();
+  const name = providers[state.selected].name;
+  closeDrawer();
+  toast("已保存：" + name);
+}
+
+/* ── Wiring ──────────────────────────────────────────────── */
+$("close-drawer").addEventListener("click", closeDrawer);
+$("cancel").addEventListener("click", closeDrawer);
+$("backdrop").addEventListener("click", (e) => { if (e.target === $("backdrop")) closeDrawer(); });
+$("save").addEventListener("click", save);
+$("tab-basic").addEventListener("click", () => setTab("basic"));
+$("tab-auth").addEventListener("click", () => setTab("auth"));
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !$("backdrop").hidden) closeDrawer();
+});
+
+renderRows();
+const hash = (location.hash || "").replace("#", "");
+const [hashId, hashTab] = hash.split("-");
+if (providers[hashId]) {
+  openDrawer(hashId);
+  if (hashTab === "auth") setTab("auth");
+} else {
+  openDrawer("alcf");
+}
+</script>
