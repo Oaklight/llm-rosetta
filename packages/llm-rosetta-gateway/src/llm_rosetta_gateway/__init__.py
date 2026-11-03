@@ -47,7 +47,7 @@ from __future__ import annotations
 #: Released independently of ``llm_rosetta.__version__`` from 0.15.0 on; they
 #: start together.  A literal because the build backend reads it without
 #: importing the package.
-__version__ = "0.14.0.dev22"
+__version__ = "0.14.0.dev27"
 
 from importlib import import_module
 from typing import TYPE_CHECKING, Any
