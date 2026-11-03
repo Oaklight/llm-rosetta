@@ -216,13 +216,25 @@ textarea { font-family: var(--mono); font-size: 12.5px; resize: vertical; }
 .cap-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip { font-size: 11.5px; padding: 2px 8px; border: 1px solid var(--border); border-radius: 20px; color: var(--text-dim); }
 .chip.on { border-color: var(--border-strong); color: var(--text); background: var(--bg-soft); }
+
+.viewbar { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.view-btn { cursor: pointer; border: 1px solid var(--border-strong); background: var(--bg); color: var(--text); padding: 5px 12px; border-radius: 20px; font-size: 13px; }
+.view-btn:hover { background: var(--bg-hover); }
+.view-btn[aria-checked="true"] { background: var(--accent); color: var(--accent-on); border-color: var(--accent); }
+.view-note { margin: 6px 0 0; color: var(--text-dim); font-size: 12.5px; min-height: 1.4em; max-width: 72ch; }
+.master-state { color: var(--red); font-size: 12.5px; line-height: 1.5; }
 </style>
 
 <div class="page">
   <header class="mast">
     <div class="eyebrow">Admin · provider editor</div>
     <h1>提供方编辑抽屉</h1>
-    <p>凭据来源改成可点选的四种；选中哪一种，下面就是网关真正会读的字段。先点一行提供方打开抽屉，再换来源、改命令、跑一次测试。</p>
+    <p>同一个凭据区，左边是当前 master 的渲染，右边是新设计。先点一行提供方打开抽屉，再切换视图对比；「ChatGPT（命令覆盖）」是提供方命令覆盖 shim 的 auth.py 的情形。</p>
+    <div class="viewbar" id="viewbar" role="radiogroup" aria-label="视图">
+      <button class="view-btn" type="button" role="radio" data-view="master">当前 master</button>
+      <button class="view-btn" type="button" role="radio" data-view="new">新设计</button>
+    </div>
+    <p class="view-note" id="view-note"></p>
   </header>
 
   <section class="list" aria-label="提供方列表">
@@ -264,9 +276,15 @@ textarea { font-family: var(--mono); font-size: 12.5px; resize: vertical; }
       </div>
 
       <div class="group" id="credential-group">
-        <div class="group-title">凭据来源</div>
+        <div class="group-title" id="cred-title">凭据来源</div>
         <div class="sources" id="sources" role="radiogroup" aria-label="凭据来源"></div>
         <div class="hint" id="source-note"></div>
+      </div>
+
+      <div class="group" id="panel-master" hidden>
+        <div class="master-state" id="master-state"></div>
+        <div class="actions" id="master-actions"></div>
+        <div class="hint" id="master-hint"></div>
       </div>
 
       <!-- static key -->
@@ -412,6 +430,23 @@ const providers = {
     key: "",
     sentinel: false,
     status: { state: "connected", last: new Date(Date.now() - 12 * 60000), failures: 0, error: null, needsLogin: false, expires: new Date(Date.now() + 40 * 60000) },
+    shimShipsExchange: true,
+    shimName: null,
+  },
+  chatgptOverride: {
+    name: "ChatGPT（命令覆盖）",
+    type: "openai_chatgpt--open_responses",
+    base: "https://chatgpt.com/backend-api/codex",
+    caps: ["text", "vision", "tools"],
+    source: "config",
+    command: ["python3", "/opt/vault/chatgpt-token.py"],
+    interval: 1800,
+    env: null,
+    key: "",
+    sentinel: false,
+    shimShipsExchange: true,
+    status: { state: "needs_setup", last: null, failures: 0, error: null, needsLogin: true, expires: null },
+    commandStatus: { state: "ready", last: new Date(Date.now() - 5 * 60000), failures: 0, error: null, needsLogin: false, expires: null },
     shimName: null,
   },
   siliconflow: {
@@ -444,7 +479,7 @@ const SOURCE_NOTE = {
   exchange: "shim 的 auth.py 负责登录；需要浏览器签名，或安装别处生成的记录。",
 };
 
-const state = { selected: null, draft: null, toastTimer: null };
+const state = { selected: null, draft: null, view: "new", toastTimer: null };
 
 function clone(p) {
   return {
@@ -452,6 +487,7 @@ function clone(p) {
     caps: [...p.caps],
     command: p.command ? [...p.command] : null,
     status: p.status ? { ...p.status } : null,
+    commandStatus: p.commandStatus ? { ...p.commandStatus } : null,
   };
 }
 
@@ -467,8 +503,9 @@ function renderRows() {
   for (const [id, p] of Object.entries(providers)) {
     const row = document.createElement("div");
     row.className = "row";
-    const sourceLabel = { static: "静态 key", config: "配置命令", shim: "shim 命令", exchange: "auth.py" }[p.source];
-    const st = p.status ? p.status.state : "ready";
+    let sourceLabel = { static: "静态 key", config: "配置命令", shim: "shim 命令", exchange: "auth.py" }[p.source];
+    if (p.shimShipsExchange && p.source === "config") sourceLabel = "配置命令（覆盖）";
+    const st = p.commandStatus ? p.commandStatus.state : (p.status ? p.status.state : "ready");
     row.innerHTML = `<span class="name">${p.name}</span>
       <span class="kind">${sourceLabel}</span>
       <span class="state">${st}</span>`;
@@ -557,7 +594,26 @@ function renderArgs() {
 
 function renderCredential() {
   const d = state.draft;
+  const master = state.view === "master";
+  $("cred-title").textContent = master ? "Credential" : "凭据来源";
+  $("sources").hidden = master;
+  $("source-note").hidden = master;
+  $("panel-master").hidden = !master;
+  $("preview").hidden = master;
+  if (master) {
+    $("panel-static").hidden = d.source !== "static";
+    $("panel-command").hidden = true;
+    $("panel-exchange").hidden = true;
+    $("status-card").hidden = true;
+    $("sentinel").hidden = true;
+    if (d.source === "static") $("f-key").value = d.key || "";
+    renderMaster();
+    return;
+  }
   renderSources();
+  if (d.shimShipsExchange && d.source === "config") {
+    $("source-note").textContent = "这条命令覆盖 shim 的 auth.py 登录：登录 / 安装记录不会生效，凭据由命令产出。";
+  }
   $("panel-static").hidden = d.source !== "static";
   $("panel-command").hidden = !(d.source === "config" || d.source === "shim");
   $("panel-exchange").hidden = d.source !== "exchange";
@@ -587,6 +643,44 @@ function renderCredential() {
   renderStatus();
   renderPreview();
   $("sentinel").hidden = !(d.sentinel && d.source !== "static");
+}
+
+function renderMaster() {
+  const d = state.draft;
+  const stateEl = $("master-state");
+  const actions = $("master-actions");
+  const hint = $("master-hint");
+  actions.innerHTML = "";
+  hint.textContent = "";
+  stateEl.className = "master-state";
+  const AUTH_HINT = "This provider signs in rather than stores a key. Produce the record where a browser is — llm-rosetta-gateway credential <provider> — and paste it here promptly.";
+  if (d.source === "static") {
+    stateEl.className = "hint";
+    stateEl.textContent = "静态 API key，由上方的 API Key 输入框保存。";
+    return;
+  }
+  if (d.shimShipsExchange) {
+    // master attaches the exchange; a provider-level token_command is silently ignored.
+    const s = d.status || {};
+    stateEl.className = "hint";
+    if (s.state === "connected") {
+      stateEl.textContent = "Connected as this account" + (s.expires ? " · access token expires " + stamp(s.expires) : "");
+      const out = document.createElement("button");
+      out.type = "button"; out.className = "btn sm danger"; out.textContent = "Sign out";
+      out.addEventListener("click", () => { d.status.state = "needs_setup"; d.status.expires = null; renderCredential(); toast("已退出登录（master 路径）"); });
+      actions.appendChild(out);
+    } else {
+      stateEl.textContent = "No credential yet — a sign-in is needed.";
+      const install = document.createElement("button");
+      install.type = "button"; install.className = "btn sm"; install.textContent = "Install a record";
+      install.addEventListener("click", () => { d.status.state = "connected"; d.status.expires = new Date(Date.now() + 55 * 60000); renderCredential(); toast("已安装记录（master 路径）"); });
+      actions.appendChild(install);
+    }
+    hint.textContent = AUTH_HINT;
+    return;
+  }
+  stateEl.textContent = `Could not read the credential: Provider '${d.name}' mints no credential of its own: its shim ships no auth.py, and a static key is configured in the provider entry`;
+  hint.textContent = AUTH_HINT;
 }
 
 function renderExchange() {
@@ -637,7 +731,8 @@ function renderExchange() {
 
 function renderStatus() {
   const d = state.draft;
-  const s = d.status;
+  const s = d.shimShipsExchange && d.source === "config" && d.commandStatus
+    ? d.commandStatus : d.status;
   const rows = $("status-rows");
   rows.innerHTML = "";
   if (d.source === "static") return;
@@ -668,7 +763,7 @@ function renderStatus() {
     acts.appendChild(b);
   };
   mk("立即刷新", () => {
-    const st = d.status || (d.status = { state: "initializing", last: null, failures: 0, error: null, needsLogin: false, expires: null });
+    const st = s || (d.status = { state: "initializing", last: null, failures: 0, error: null, needsLogin: false, expires: null });
     st.state = "initializing";
     renderStatus(); renderPreview();
     toast("正在取 token…");
@@ -813,6 +908,28 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && !$("backdrop").hidden) closeDrawer();
 });
 
+const VIEW_NOTE = {
+  master: "master：凭据区对命令型提供方走 auth.py 的加载路径 —— 显示 Could not read the credential，没有命令、状态或动作；提供方命令覆盖 auth.py 时，命令被静默忽略，面板仍显示登录状态。",
+  new: "新设计：凭据区按来源分型；命令可编辑或只读，状态与刷新/测试齐全；提供方命令显式覆盖 shim 的 auth.py，并标明覆盖。",
+};
+
+function renderView() {
+  document.querySelectorAll(".view-btn").forEach((b) => {
+    b.setAttribute("aria-checked", String(b.dataset.view === state.view));
+  });
+  $("view-note").textContent = VIEW_NOTE[state.view];
+  if (state.selected) renderCredential();
+}
+
+document.querySelectorAll(".view-btn").forEach((b) => {
+  b.addEventListener("click", () => { state.view = b.dataset.view; renderView(); });
+});
+
+const hashTokens = (location.hash || "").replace("#", "").split("-");
+if (hashTokens.includes("master")) state.view = "master";
+if (hashTokens.includes("new")) state.view = "new";
+
+renderView();
 renderRows();
-openDrawer("alcf");
+openDrawer(hashTokens.includes("override") ? "chatgptOverride" : "alcf");
 </script>
