@@ -84,12 +84,12 @@ Each model can declare capabilities that determine the available test types and 
 | Capability | Description | Badge Color |
 |------------|-------------|-------------|
 | `text` | Text generation | Grey |
-| `vision` | Image comprehension | Purple |
-| `tools` | Function/tool calling | Magenta |
+| `vision` | Image comprehension | Magenta |
+| `tools` | Function/tool calling | Cyan |
 | `embedding` | Text embeddings (mutually exclusive with vision/tools) | Blue |
-| `reasoning` | Extended thinking / chain-of-thought (mutually exclusive with embedding) | Teal |
+| `reasoning` | Extended thinking / chain-of-thought (mutually exclusive with embedding) | Lime |
 
-The hues stay clear of the status vocabulary: red, green and orange already mean failed, healthy and warning elsewhere in the console.
+The hues stay clear of the status vocabulary — red, green and orange already mean failed, healthy and warning elsewhere in the console — with one deliberate exception: reasoning is a lime green, far enough toward yellow that it does not read as the routing board's healthy dot.
 
 ### Model testing
 
