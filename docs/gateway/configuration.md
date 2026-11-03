@@ -528,16 +528,16 @@ including in tier 1. See the [Architecture Guide](../contributing/architecture.m
 
 ### Quota Failover
 
-`failover_on_error` (per model, default `false`) serves a request from another
-provider of the same model when the serving provider refuses. `failover_on_quota`
-is the older spelling of the same flag and is still read, so an existing config
-keeps working.
+`failover_on_error` (per model, default `true`) serves a request from another
+provider of the same model when the serving provider refuses; set it to `false`
+to opt the model out. `failover_on_quota` is the older spelling of the same flag
+and is still read, so an existing config keeps working.
 
 ```jsonc
 "models": {
   "gpt-5": {
     "providers": ["openai-prod", "azure-backup"],
-    "failover_on_error": true
+    "failover_on_error": false
   }
 }
 ```
@@ -560,9 +560,11 @@ provider with nothing left fails over. The refusing provider is excluded for
 the rest of the request, one other provider is tried, and if it refuses too the
 client receives that refusal.
 
-It is off by default because it trades something real: another provider is
-another prompt cache, another rate-limit bucket and possibly another model
-build. When it happens, the request's profile records
+It is on by default because a refusal it reacts to is one the client would
+otherwise receive as an error, and a model with one provider has no second
+attempt to make. Turning it off trades availability for something real: another
+provider is another prompt cache, another rate-limit bucket and possibly another
+model build. When it happens, the request's profile records
 `failover: {from, to, reason}` and the log row names the provider that actually
 served.
 
