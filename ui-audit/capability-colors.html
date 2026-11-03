@@ -1,0 +1,113 @@
+<title>Tools colour options</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+:root {
+  --bg: #f6f6f7; --fg: #171717; --fg-dim: #5f5f66; --line: #e4e4e7;
+  --radius: 8px; color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0b0b0c; --fg: #f2f2f2; --fg-dim: #a1a1aa; --line: #26262a; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0b0b0c; --fg: #f2f2f2; --fg-dim: #a1a1aa; --line: #26262a; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans SC", sans-serif;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 32px 56px;
+}
+.wrap { max-width: 1080px; margin: 0 auto; }
+h1 { margin: 0 0 6px; font-size: 24px; font-weight: 600; letter-spacing: -0.01em; }
+.lede { margin: 0 0 26px; color: var(--fg-dim); max-width: 72ch; }
+.lede b { color: var(--fg); font-weight: 600; }
+.palette { margin-bottom: 30px; }
+.palette-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.palette-head h2 { margin: 0; font-size: 15px; font-weight: 600; }
+.palette-head .note { font-size: 12px; color: var(--fg-dim); }
+.palette-head .hexes { margin-left: auto; display: flex; gap: 10px; flex-wrap: wrap; font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--fg-dim); }
+.hexes i { font-style: normal; display: inline-flex; align-items: center; gap: 4px; }
+.hexes i::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
+.panels { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.panel { border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; }
+.panel.light { background: #ffffff; color: #171717; border-color: #e4e4e7; }
+.panel.dark { background: #0b0b0c; color: #f2f2f2; border-color: #26262a; }
+.panel .tag { font: 10.5px ui-monospace, SFMono-Regular, Menlo, monospace; text-transform: uppercase; letter-spacing: .08em; opacity: .55; margin-bottom: 10px; }
+table, td, th { color: inherit; }
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em; font-weight: 500; opacity: .5; padding: 0 0 6px; }
+td { padding: 7px 0; vertical-align: middle; border-top: 1px solid rgba(127,127,127,.18); }
+td:first-child { width: 64px; }
+td:nth-child(2) { width: 150px; }
+.dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--c); }
+.dotpair { display: inline-flex; align-items: center; gap: 7px; }
+.badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; letter-spacing: .02em; background: color-mix(in srgb, var(--c) 12%, transparent); color: var(--c); }
+.trigger { display: inline-flex; align-items: center; gap: 3px; border: 1px solid rgba(127,127,127,.35); border-radius: 4px; padding: 3px 6px; margin-top: 12px; }
+.trigger .cap { font: 10.5px ui-monospace, SFMono-Regular, Menlo, monospace; opacity: .6; margin-left: 4px; }
+.foot { margin-top: 8px; font-size: 12px; color: var(--fg-dim); max-width: 80ch; }
+@media (max-width: 720px) { .panels { grid-template-columns: 1fr; } }
+</style>
+<div class="wrap">
+  <h1>Tools colour options</h1>
+  <p class="lede">Text, vision and reasoning stay as they are in <b>Deep</b>; only the tools dot changes. Each panel shows the 6 px dot, the dot with its name, the badge, and the picker trigger with all four lit. Blue went because it reads as the house accent and sits between the purple and the teal — the new colour has to be seen next to those two.</p>
+  <div id="root"></div>
+  <p class="foot">Recommendation: <b>fuchsia</b>. It is the only hue left that stands apart from purple and teal at 6 px, and it stays bright on black. Rose is a close second but borders the failure red; cyan collapses into the reasoning teal.</p>
+</div>
+<script>
+const CAPS = [
+  { key: 'text', name: 'Text', glyph: 'T' },
+  { key: 'vision', name: 'Vision', glyph: '◉' },
+  { key: 'tools', name: 'Tools', glyph: '⚒' },
+  { key: 'reasoning', name: 'Reasoning', glyph: '✦' },
+];
+const BASE_LIGHT = { text: '#475569', vision: '#6d28d9', reasoning: '#0e7490' };
+const BASE_DARK = { text: '#cbd5e1', vision: '#a78bfa', reasoning: '#67e8f9' };
+const OPTIONS = [
+  {
+    title: '1 · Fuchsia',
+    note: 'the only hue left clear of purple, teal, red, amber and green',
+    light: '#c026d3', dark: '#e879f9',
+    darkAlt: null,
+  },
+  {
+    title: '2 · Rose',
+    note: 'bright, but close to the failure red the console already uses',
+    light: '#e11d48', dark: '#fb7185',
+  },
+  {
+    title: '3 · Cyan',
+    note: 'kept for comparison: it merges into the reasoning teal',
+    light: '#0891b2', dark: '#22d3ee',
+  },
+];
+function row(cap, hexes) {
+  const c = hexes[cap.key];
+  return `<tr>
+    <td><span class="dot" style="--c:${c}"></span></td>
+    <td><span class="dotpair"><span class="dot" style="--c:${c}"></span>${cap.name}</span></td>
+    <td><span class="badge" style="--c:${c}">${cap.glyph} ${cap.name}</span></td>
+  </tr>`;
+}
+function panel(theme, hexes) {
+  const rows = CAPS.map((cap) => row(cap, hexes)).join('');
+  const dots = CAPS.map((cap) => `<span class="dot" style="--c:${hexes[cap.key]}"></span>`).join('');
+  return `<div class="panel ${theme}">
+    <div class="tag">${theme}</div>
+    <table><thead><tr><th>dot</th><th>dot + name</th><th>badge</th></tr></thead><tbody>${rows}</tbody></table>
+    <div class="trigger">${dots}<span class="cap">all four</span></div>
+  </div>`;
+}
+document.getElementById('root').innerHTML = OPTIONS.map((opt) => {
+  const light = { ...BASE_LIGHT, tools: opt.light };
+  const dark = { ...BASE_DARK, tools: opt.dark };
+  const hexes = [light.tools, dark.tools].map((h) => `<i style="--c:${h}">${h}</i>`).join('');
+  return `<section class="palette">
+    <div class="palette-head"><h2>${opt.title}</h2><span class="note">${opt.note}</span><span class="hexes">${hexes}</span></div>
+    <div class="panels">${panel('light', light)}${panel('dark', dark)}</div>
+  </section>`;
+}).join('');
+</script>

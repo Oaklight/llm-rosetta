@@ -1,0 +1,805 @@
+<title>提供方抽屉布局</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Three layouts for the same drawer: one page with the credential block
+   collapsed, two sub-pages, and two sub-pages with a persistent status strip.
+   Palette mirrors the admin's Minimal scheme. */
+:root {
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans SC", sans-serif;
+  --mono: "SF Mono", "Cascadia Code", "Consolas", "Liberation Mono", monospace;
+  --bg: #ffffff; --bg-soft: #fafafa; --bg-hover: #f5f5f5; --bg-sink: rgba(0,0,0,.38);
+  --border: #eaeaea; --border-strong: #d9d9d9;
+  --text: #171717; --text-dim: #666666; --text-muted: #999999;
+  --accent: #171717; --accent-on: #ffffff;
+  --green: #1a7f37; --green-bg: #f0faf4; --green-border: #cdebd6;
+  --red: #d63a3f; --red-bg: #fdf3f3; --red-border: #f2cfcf;
+  --orange: #a85400; --orange-bg: #fff8ef; --orange-border: #f1dcc0;
+  --blue: #0064d2; --blue-bg: #f3f7ff; --blue-border: #d3e2fa;
+  --radius: 6px; --drawer-w: 620px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #000; --bg-soft: #0a0a0a; --bg-hover: #111; --bg-sink: rgba(0,0,0,.6);
+    --border: #222; --border-strong: #333;
+    --text: #ededed; --text-dim: #888; --text-muted: #555;
+    --accent: #ededed; --accent-on: #000;
+    --green: #45a557; --green-bg: #0b1a10; --green-border: #1d3a25;
+    --red: #e5484d; --red-bg: #1c0d0e; --red-border: #3d1a1c;
+    --orange: #d08a3c; --orange-bg: #1a1206; --orange-border: #3a2a12;
+    --blue: #6aa5f5; --blue-bg: #0b1322; --blue-border: #1c2f4d;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #000; --bg-soft: #0a0a0a; --bg-hover: #111; --bg-sink: rgba(0,0,0,.6);
+  --border: #222; --border-strong: #333;
+  --text: #ededed; --text-dim: #888; --text-muted: #555;
+  --accent: #ededed; --accent-on: #000;
+  --green: #45a557; --green-bg: #0b1a10; --green-border: #1d3a25;
+  --red: #e5484d; --red-bg: #1c0d0e; --red-border: #3d1a1c;
+  --orange: #d08a3c; --orange-bg: #1a1206; --orange-border: #3a2a12;
+  --blue: #6aa5f5; --blue-bg: #0b1322; --blue-border: #1c2f4d;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  margin: 0;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 24px 48px;
+  background: var(--bg); color: var(--text); font: 14px/1.55 var(--font);
+}
+h1, h2, h3 { text-wrap: balance; margin: 0; }
+code, .mono { font-family: var(--mono); font-size: 12.5px; }
+:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+button, input, select { font-family: inherit; }
+button { font-size: 13px; }
+
+.page { max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+.mast { display: flex; flex-direction: column; gap: 5px; }
+.mast h1 { font-size: 21px; letter-spacing: -.01em; }
+.mast p { margin: 0; color: var(--text-dim); max-width: 70ch; }
+.eyebrow { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-muted); }
+
+.modebar { display: flex; flex-wrap: wrap; gap: 6px; }
+.mode-btn {
+  cursor: pointer; border: 1px solid var(--border-strong); background: var(--bg);
+  color: var(--text); padding: 6px 12px; border-radius: 20px; font-size: 13px;
+}
+.mode-btn:hover { background: var(--bg-hover); }
+.mode-btn[aria-checked="true"] { background: var(--accent); color: var(--accent-on); border-color: var(--accent); }
+.mode-note { margin: 0; color: var(--text-dim); font-size: 12.5px; min-height: 1.4em; }
+
+.list { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.list-head, .row {
+  display: grid; grid-template-columns: minmax(0,1.4fr) minmax(0,1fr) 110px 70px;
+  gap: 12px; align-items: center; padding: 10px 14px;
+}
+.list-head { font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--text-muted); background: var(--bg-soft); border-bottom: 1px solid var(--border); }
+.row { border-bottom: 1px solid var(--border); background: var(--bg); }
+.row:last-child { border-bottom: 0; }
+.row:hover { background: var(--bg-hover); }
+.row .name { font-weight: 550; min-width: 0; overflow-wrap: anywhere; }
+.row .kind { font-family: var(--mono); font-size: 12px; color: var(--text-dim); }
+.row .state { font-size: 12px; color: var(--text-dim); }
+.row .open { justify-self: end; }
+@media (max-width: 700px) {
+  .list-head { display: none; }
+  .row { grid-template-columns: minmax(0,1fr) auto; grid-template-areas: "name open" "kind state"; }
+  .row .name { grid-area: name; } .row .kind { grid-area: kind; }
+  .row .state { grid-area: state; text-align: right; } .row .open { grid-area: open; }
+}
+
+.btn {
+  cursor: pointer; border: 1px solid var(--border-strong); background: var(--bg); color: var(--text);
+  padding: 5px 12px; border-radius: 5px;
+}
+.btn:hover:not(:disabled) { background: var(--bg-hover); }
+.btn:disabled { opacity: .45; cursor: default; }
+.btn.primary { background: var(--accent); color: var(--accent-on); border-color: var(--accent); }
+.btn.primary:hover:not(:disabled) { background: var(--accent); opacity: .9; }
+.btn.danger { color: var(--red); border-color: var(--red-border); }
+.btn.sm { padding: 3px 9px; font-size: 12px; }
+
+/* ── Drawer ── */
+.backdrop { position: fixed; inset: 0; background: var(--bg-sink); display: flex; justify-content: flex-end; z-index: 20; }
+.drawer {
+  width: min(var(--drawer-w), 100%); height: 100%; background: var(--bg);
+  border-left: 1px solid var(--border); display: flex; flex-direction: column;
+  box-shadow: -12px 0 40px rgba(0,0,0,.18);
+}
+.drawer-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--border); flex: none; }
+.drawer-head h2 { font-size: 15px; }
+.drawer-head .sub { font-size: 12px; color: var(--text-muted); font-family: var(--mono); }
+.close { cursor: pointer; border: 0; background: transparent; color: var(--text-dim); font-size: 17px; line-height: 1; padding: 6px 8px; border-radius: 4px; }
+.close:hover { background: var(--bg-hover); color: var(--text); }
+.drawer-body { overflow-y: auto; padding: 16px 18px 10px; display: flex; flex-direction: column; gap: 16px; flex: 1; }
+.drawer-foot { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 12px 18px calc(12px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--border); flex: none; }
+.foot-note { margin-right: auto; font-size: 12px; color: var(--text-muted); }
+
+/* status strip (C) */
+.strip { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 9px 18px; border-bottom: 1px solid var(--border); background: var(--bg-soft); flex: none; font-size: 12.5px; }
+.strip .grow { flex: 1; min-width: 120px; }
+.strip .src { font-family: var(--mono); font-size: 11.5px; color: var(--text-muted); }
+
+/* tabs (B, C) */
+.tabs { display: flex; gap: 2px; padding: 0 18px; border-bottom: 1px solid var(--border); flex: none; }
+.tab {
+  cursor: pointer; border: 0; background: transparent; color: var(--text-dim);
+  padding: 10px 10px 9px; border-bottom: 2px solid transparent; font-size: 13px;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.tab:hover { color: var(--text); }
+.tab[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+.tab .badge { width: 7px; height: 7px; border-radius: 50%; background: var(--red); }
+
+.group { display: flex; flex-direction: column; gap: 7px; }
+.group > label, .group-title { font-size: 12px; color: var(--text-dim); font-weight: 550; }
+.req { color: var(--red); }
+.grid-2 { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 10px; }
+@media (max-width: 480px) { .grid-2 { grid-template-columns: 1fr; } }
+input[type="text"], input[type="password"], input[type="number"], textarea {
+  width: 100%; min-width: 0; font: inherit; color: var(--text); background: var(--bg-soft);
+  border: 1px solid var(--border-strong); border-radius: 5px; padding: 7px 9px;
+}
+textarea { font-family: var(--mono); font-size: 12.5px; resize: vertical; }
+
+.cap-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.cap-chip {
+  cursor: pointer; font-size: 12px; padding: 3px 10px; border: 1px solid var(--border);
+  border-radius: 20px; color: var(--text-dim); background: var(--bg);
+}
+.cap-chip[aria-pressed="true"] { border-color: var(--border-strong); color: var(--text); background: var(--bg-soft); font-weight: 550; }
+
+.rows { display: grid; grid-template-columns: max-content minmax(0,1fr); gap: 5px 16px; margin: 0; }
+.rows dt { color: var(--text-dim); font-size: 12px; }
+.rows dd { margin: 0; min-width: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.rows dd.bad { color: var(--red); }
+.hint { font-size: 12px; color: var(--text-dim); }
+.error { color: var(--red); font-size: 12.5px; }
+
+.card { border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); }
+.card-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+.card-head h3 { font-size: 12.5px; font-weight: 600; }
+.card-body { padding: 11px 12px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+
+.pill { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 550; padding: 1px 8px; border-radius: 20px; border: 1px solid transparent; }
+.pill.ready, .pill.connected { color: var(--green); background: var(--green-bg); border-color: var(--green-border); }
+.pill.initializing { color: var(--orange); background: var(--orange-bg); border-color: var(--orange-border); }
+.pill.failing, .pill.needs_setup { color: var(--red); background: var(--red-bg); border-color: var(--red-border); }
+
+/* source picker */
+.sources { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+@media (max-width: 480px) { .sources { grid-template-columns: 1fr; } }
+.source {
+  all: unset; cursor: pointer; display: flex; flex-direction: column; gap: 3px;
+  padding: 9px 11px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); min-width: 0;
+}
+.source:hover { border-color: var(--border-strong); background: var(--bg-hover); }
+.source[aria-checked="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); background: var(--bg-soft); }
+.source .t { font-weight: 600; font-size: 12.5px; }
+.source .d { font-size: 11px; color: var(--text-dim); }
+.source .m { font-family: var(--mono); font-size: 10.5px; color: var(--text-muted); }
+
+/* disclosure (A) */
+details.cred { border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); }
+details.cred > summary {
+  cursor: pointer; list-style: none; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px;
+  padding: 10px 12px; font-size: 13px;
+}
+details.cred > summary::-webkit-details-marker { display: none; }
+details.cred > summary .chev { margin-left: auto; color: var(--text-muted); font-size: 11px; }
+details.cred[open] > summary { border-bottom: 1px solid var(--border); }
+details.cred > .inner { padding: 12px; display: flex; flex-direction: column; gap: 12px; }
+
+.warn { border: 1px solid var(--orange-border); background: var(--orange-bg); border-radius: var(--radius); padding: 10px 12px; display: flex; flex-direction: column; gap: 7px; }
+.warn h3 { font-size: 12.5px; color: var(--orange); }
+.warn p { margin: 0; font-size: 12.5px; }
+
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* comparison */
+.compare { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; }
+@media (max-width: 820px) { .compare { grid-template-columns: 1fr; } }
+.compare article { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; background: var(--bg); display: flex; flex-direction: column; gap: 8px; }
+.compare h3 { font-size: 13.5px; }
+.compare p { margin: 0; font-size: 12.5px; color: var(--text-dim); }
+.compare ul { margin: 0; padding-left: 17px; font-size: 12.5px; color: var(--text-dim); display: flex; flex-direction: column; gap: 3px; }
+.compare .verdict { margin-top: auto; font-size: 12px; font-weight: 600; }
+.compare .verdict.pick { color: var(--green); }
+
+.toast {
+  position: fixed; left: 50%; transform: translateX(-50%);
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  background: var(--accent); color: var(--accent-on);
+  padding: 9px 16px; border-radius: 6px; font-size: 13px;
+  opacity: 0; pointer-events: none; transition: opacity .18s ease; z-index: 40;
+}
+.toast.show { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .toast { transition: none; } }
+</style>
+
+<div class="page">
+  <header class="mast">
+    <div class="eyebrow">Admin · provider editor · layout</div>
+    <h1>提供方抽屉布局</h1>
+    <p>模型类型设置（能力、端点）和凭据设置挤在同一个抽屉里。下面三种分法共用同一份内容，点顶部切换，抽屉里的一切都能点。</p>
+  </header>
+
+  <div class="modebar" id="modebar" role="radiogroup" aria-label="布局方案">
+    <button class="mode-btn" type="button" role="radio" data-mode="A">方案 A · 凭据折叠</button>
+    <button class="mode-btn" type="button" role="radio" data-mode="B">方案 B · 两个子页</button>
+    <button class="mode-btn" type="button" role="radio" data-mode="C">方案 C · 子页 + 状态条（推荐）</button>
+  </div>
+  <p class="mode-note" id="mode-note"></p>
+
+  <section class="list" aria-label="提供方列表">
+    <div class="list-head"><span>提供方</span><span>凭据来源</span><span>状态</span><span></span></div>
+    <div id="rows"></div>
+  </section>
+
+  <section class="compare" aria-label="方案对比">
+    <article>
+      <h3>方案 A · 凭据折叠</h3>
+      <p>一个长页，凭据收进折叠区，标题行给状态摘要。</p>
+      <ul>
+        <li>改动最小，不引入页签</li>
+        <li>页仍然长；展开会推走后面的端点设置</li>
+        <li>摘要行必须自带状态，否则凭据问题看不见</li>
+      </ul>
+      <div class="verdict">适合：凭据很少改、但需要偶尔看一眼</div>
+    </article>
+    <article>
+      <h3>方案 B · 两个子页</h3>
+      <p>抽屉分「提供方与模型类型」和「凭据」两页，保存按钮固定在底部。</p>
+      <ul>
+        <li>每页都短，任务边界清楚</li>
+        <li>凭据问题藏在页签后面</li>
+        <li>需要给页签加状态点，否则容易漏</li>
+      </ul>
+      <div class="verdict">适合：端点配置很长、经常在改的情况</div>
+    </article>
+    <article>
+      <h3>方案 C · 子页 + 状态条</h3>
+      <p>在 B 上加一条常驻的凭据状态，页签带异常点，出问题自动打开凭据页。</p>
+      <ul>
+        <li>兼顾短页面与可见状态</li>
+        <li>状态条只放结论，不放大段配置</li>
+        <li>比 B 多一行常驻高度</li>
+      </ul>
+      <div class="verdict pick">推荐：编辑频率和可见性都照顾到</div>
+    </article>
+  </section>
+</div>
+
+<div class="backdrop" id="backdrop" hidden>
+  <div class="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title">
+    <div class="drawer-head">
+      <div>
+        <h2 id="drawer-title">编辑提供方</h2>
+        <div class="sub" id="drawer-sub">—</div>
+      </div>
+      <button class="close" type="button" id="close-drawer" aria-label="关闭">✕</button>
+    </div>
+    <div class="strip" id="strip" hidden></div>
+    <div class="tabs" id="tabs" role="tablist" hidden></div>
+    <div class="drawer-body" id="body"></div>
+    <div class="drawer-foot">
+      <span class="foot-note" id="foot-note"></span>
+      <button class="btn" type="button" id="cancel">取消</button>
+      <button class="btn primary" type="button" id="save">保存</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+"use strict";
+
+const $ = (id) => document.getElementById(id);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const pad = (n) => String(n).padStart(2, "0");
+const clock = (d) => d ? `${pad(d.getHours())}:${pad(d.getMinutes())}` : "—";
+const stamp = (d) => d
+  ? `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${clock(d)}`
+  : "从未";
+
+const providers = {
+  alcf: {
+    name: "ALCF Sophia", type: "alcf_sophia--chat_completions",
+    base: "https://inference-api.alcf.anl.gov/resource_server/sophia/vllm/v1",
+    caps: ["text", "tools", "reasoning"], source: "shim",
+    command: ["python3", "-m", "llm_rosetta_shim_alcf.providers.alcf.token"],
+    interval: 3600, env: null, key: "", sentinel: true,
+    status: { state: "ready", last: new Date(Date.now() - 42 * 60000), failures: 0, error: null, needsLogin: false, expires: null },
+  },
+  asksage: {
+    name: "AskSage", type: "asksage--chat_completions", base: "https://api.asksage.ai",
+    caps: ["text", "tools"], source: "config",
+    command: ["python3", "/opt/asksage/token.py", "--json"],
+    interval: 86400, env: "ASKSAGE_ACCOUNT_KEY", key: "", sentinel: false,
+    status: { state: "ready", last: new Date(Date.now() - 90 * 60000), failures: 0, error: null, needsLogin: false, expires: null },
+  },
+  chatgpt: {
+    name: "OpenAI ChatGPT", type: "openai_chatgpt--open_responses",
+    base: "https://chatgpt.com/backend-api/codex",
+    caps: ["text", "vision", "tools"], source: "exchange",
+    command: null, interval: 3600, env: null, key: "", sentinel: false,
+    status: { state: "connected", last: new Date(Date.now() - 12 * 60000), failures: 0, error: null, needsLogin: false, expires: new Date(Date.now() + 40 * 60000) },
+  },
+  siliconflow: {
+    name: "SiliconFlow CN", type: "openai--chat_completions", base: "https://api.siliconflow.cn",
+    caps: ["text", "tools", "embeddings", "rerank"], source: "static",
+    command: null, interval: 3600, env: null, key: "sk-fj…（已保存）", sentinel: false, status: null,
+  },
+};
+
+const SOURCES = [
+  { id: "static", title: "静态 API key", desc: "写在条目里，或由环境变量解析", meta: "api_key" },
+  { id: "config", title: "配置里的命令", desc: "argv 产出 token；可带 env 输入", meta: "token_command" },
+  { id: "shim", title: "shim 自带命令", desc: "shim 包声明，提供方不用写", meta: "connection.token_command" },
+  { id: "exchange", title: "登录（auth.py）", desc: "OAuth 型，登录后安装记录", meta: "auth.py" },
+];
+const SOURCE_NOTE = {
+  static: "最普通的来源；没有刷新动作，也没有 token_status。",
+  config: "网关启动取一次，按间隔刷新，上游 401 时重取。",
+  shim: "命令来自 shim 包；这一项只读，间隔可覆盖。",
+  exchange: "shim 的 auth.py 负责登录；可安装别处生成的记录。",
+};
+const SOURCE_SHORT = { static: "静态 key", config: "配置命令", shim: "shim 命令", exchange: "auth.py" };
+const MODE_NOTE = {
+  A: "凭据整段收进折叠区，默认收起；标题行给出「来源 · 状态 · 上次取 token」。点标题展开。",
+  B: "抽屉分成「提供方与模型类型」和「凭据」两页，保存始终在底部。",
+  C: "在 B 之上加一条常驻凭据状态；凭据异常时页签带红点并自动打开该页。",
+};
+
+const state = { mode: "C", selected: null, draft: null, tab: "general", credOpen: false, toastTimer: null };
+
+function clone(p) {
+  return { ...p, caps: [...p.caps], command: p.command ? [...p.command] : null, status: p.status ? { ...p.status } : null };
+}
+function problem(p) {
+  return p.source !== "static" && p.status && p.status.state !== "ready" && p.status.state !== "connected";
+}
+
+/* ── list ─────────────────────────────────────────────────── */
+function renderRows() {
+  const host = $("rows");
+  host.innerHTML = "";
+  for (const [id, p] of Object.entries(providers)) {
+    const row = document.createElement("div");
+    row.className = "row";
+    row.innerHTML = `<span class="name">${p.name}</span><span class="kind">${SOURCE_SHORT[p.source]}</span><span class="state">${p.status ? p.status.state : "ready"}</span>`;
+    const open = document.createElement("button");
+    open.type = "button"; open.className = "btn sm open"; open.textContent = "编辑";
+    open.addEventListener("click", () => openDrawer(id));
+    row.appendChild(open);
+    host.appendChild(row);
+  }
+}
+
+/* ── drawer shell ─────────────────────────────────────────── */
+function openDrawer(id) {
+  state.selected = id;
+  state.draft = clone(providers[id]);
+  const p = state.draft;
+  // C: a credential that needs attention opens its own page.
+  state.tab = state.mode === "C" && problem(p) ? "credential" : "general";
+  $("backdrop").hidden = false;
+  renderDrawer();
+}
+
+function closeDrawer() { $("backdrop").hidden = true; state.selected = null; state.draft = null; }
+
+function setMode(mode) {
+  state.mode = mode;
+  if (state.selected) {
+    if (mode === "B") state.tab = "general";
+  }
+  try { history.replaceState(null, "", "#" + mode.toLowerCase()); } catch (e) { /* file:// may refuse */ }
+  renderPage();
+  if (state.selected) renderDrawer();
+}
+
+function renderPage() {
+  document.querySelectorAll(".mode-btn").forEach((b) => {
+    b.setAttribute("aria-checked", String(b.dataset.mode === state.mode));
+  });
+  $("mode-note").textContent = MODE_NOTE[state.mode];
+}
+
+function renderDrawer() {
+  const p = state.draft;
+  $("drawer-sub").textContent = p.type;
+  // strip (C)
+  const strip = $("strip");
+  strip.hidden = state.mode !== "C";
+  if (state.mode === "C") {
+    strip.innerHTML = "";
+    const pill = document.createElement("span");
+    pill.className = "pill " + (p.status ? p.status.state : "ready");
+    pill.textContent = p.status ? p.status.state : "ready";
+    const src = document.createElement("span");
+    src.className = "src";
+    src.textContent = SOURCE_SHORT[p.source] + (p.status && p.status.last ? " · " + stamp(p.status.last) : "");
+    const grow = document.createElement("span");
+    grow.className = "grow";
+    const manage = document.createElement("button");
+    manage.type = "button"; manage.className = "btn sm"; manage.textContent = "管理凭据";
+    manage.addEventListener("click", () => { state.tab = "credential"; renderDrawer(); });
+    strip.append(pill, src, grow, manage);
+  }
+  // tabs (B, C)
+  const tabs = $("tabs");
+  tabs.hidden = state.mode === "A";
+  if (state.mode !== "A") {
+    tabs.innerHTML = "";
+    tabs.append(
+      tabButton("general", "提供方与模型类型"),
+      tabButton("credential", "凭据", problem(p)),
+    );
+  }
+  // body
+  const body = $("body");
+  body.innerHTML = "";
+  if (state.mode === "A") {
+    body.append(sectionCapabilities(), sectionIdentity(), sectionBase(), sectionEndpoints(), credentialDisclosure());
+  } else if (state.tab === "credential") {
+    body.append(sectionCredential());
+  } else {
+    body.append(sectionCapabilities(), sectionIdentity(), sectionBase(), sectionEndpoints());
+  }
+  $("foot-note").textContent = p.sentinel && p.source !== "static" && p.source !== "exchange"
+    ? "保存时会清理残留的 api_key 标记" : "";
+}
+
+function tabButton(tab, label, badge) {
+  const b = document.createElement("button");
+  b.type = "button"; b.className = "tab"; b.setAttribute("role", "tab");
+  b.setAttribute("aria-selected", String(state.tab === tab));
+  b.append(document.createTextNode(label));
+  if (badge) {
+    const dot = document.createElement("span");
+    dot.className = "badge";
+    b.appendChild(dot);
+  }
+  b.addEventListener("click", () => { state.tab = tab; renderDrawer(); });
+  return b;
+}
+
+/* ── sections ─────────────────────────────────────────────── */
+function el(tag, cls, text) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text !== undefined) n.textContent = text;
+  return n;
+}
+
+function sectionCapabilities() {
+  const g = el("div", "group");
+  g.append(el("div", "group-title", "能力"));
+  const chips = el("div", "cap-chips");
+  for (const cap of ["text", "vision", "tools", "reasoning", "embeddings", "rerank", "decisions"]) {
+    const b = el("button", "cap-chip", cap);
+    b.type = "button";
+    b.setAttribute("aria-pressed", String(state.draft.caps.includes(cap)));
+    b.addEventListener("click", () => {
+      const i = state.draft.caps.indexOf(cap);
+      if (i >= 0) state.draft.caps.splice(i, 1); else state.draft.caps.push(cap);
+      renderDrawer();
+    });
+    chips.appendChild(b);
+  }
+  g.appendChild(chips);
+  return g;
+}
+
+function sectionIdentity() {
+  const wrap = el("div", "grid-2");
+  const g1 = el("div", "group");
+  const l1 = el("label", "", "名称"); l1.append(el("span", "req", " *"));
+  const name = el("input"); name.type = "text"; name.value = state.draft.name;
+  name.addEventListener("input", () => { state.draft.name = name.value; });
+  g1.append(l1, name);
+  const g2 = el("div", "group");
+  const l2 = el("label", "", "类型");
+  const type = el("input"); type.type = "text"; type.value = state.draft.type; type.readOnly = true;
+  g2.append(l2, type);
+  wrap.append(g1, g2);
+  return wrap;
+}
+
+function sectionBase() {
+  const g = el("div", "group");
+  g.append(el("label", "", "Base URL"));
+  const input = el("input"); input.type = "text"; input.value = state.draft.base;
+  input.addEventListener("input", () => { state.draft.base = input.value; });
+  g.append(input);
+  return g;
+}
+
+function sectionEndpoints() {
+  const card = el("div", "card");
+  const head = el("div", "card-head");
+  head.append(el("h3", "", "端点"), el("span", "hint", "模型类型设置"));
+  const body = el("div", "card-body");
+  const rows = [
+    ["chat", "chat_completions", true],
+    ["embeddings", "openai", state.draft.caps.includes("embeddings")],
+    ["rerank", "cohere", state.draft.caps.includes("rerank")],
+    ["decisions", "openai_decisions", state.draft.caps.includes("decisions")],
+  ];
+  for (const [type, fmt, on] of rows) {
+    const row = el("div", "actions");
+    const chip = el("span", "hint mono", `${type} · ${fmt}`);
+    const toggle = el("button", "btn sm", on ? "已启用" : "未启用");
+    toggle.type = "button";
+    toggle.setAttribute("aria-pressed", String(on));
+    toggle.addEventListener("click", () => {
+      if (type === "chat") return;
+      const i = state.draft.caps.indexOf(type);
+      if (i >= 0) state.draft.caps.splice(i, 1); else state.draft.caps.push(type);
+      renderDrawer();
+    });
+    row.append(chip, toggle);
+    body.appendChild(row);
+  }
+  body.append(el("div", "hint", "这一页只放模型类型与端点；凭据不占位置。"));
+  card.append(head, body);
+  return card;
+}
+
+function credentialDisclosure() {
+  const d = el("details", "cred");
+  const s = el("summary");
+  const p = state.draft;
+  s.append(
+    el("b", "", "凭据"),
+    el("span", "hint", SOURCE_SHORT[p.source]),
+  );
+  if (p.status) {
+    const pill = el("span", "pill " + p.status.state, p.status.state);
+    s.append(pill);
+    s.append(el("span", "hint", stamp(p.status.last)));
+  }
+  s.append(el("span", "chev", "▾"));
+  d.appendChild(s);
+  const inner = el("div", "inner");
+  inner.append(sectionCredential());
+  d.appendChild(inner);
+  d.open = state.credOpen;
+  d.addEventListener("toggle", () => { state.credOpen = d.open; });
+  return d;
+}
+
+function sectionCredential() {
+  const frag = document.createDocumentFragment();
+  const g = el("div", "group");
+  g.append(el("div", "group-title", "凭据来源"));
+  const sources = el("div", "sources");
+  sources.setAttribute("role", "radiogroup");
+  for (const s of SOURCES) {
+    const b = el("button", "source");
+    b.type = "button"; b.setAttribute("role", "radio");
+    b.setAttribute("aria-checked", String(state.draft.source === s.id));
+    b.append(el("span", "t", s.title), el("span", "d", s.desc), el("span", "m", s.meta));
+    b.addEventListener("click", () => {
+      state.draft.source = s.id;
+      if (s.id === "config" && !state.draft.command) state.draft.command = ["python3", "/opt/vendor/token.py"];
+      renderDrawer();
+    });
+    sources.appendChild(b);
+  }
+  g.append(sources, el("div", "hint", SOURCE_NOTE[state.draft.source]));
+  frag.appendChild(g);
+  if (state.draft.source === "static") frag.appendChild(panelStatic());
+  if (state.draft.source === "config" || state.draft.source === "shim") frag.appendChild(panelCommand());
+  if (state.draft.source === "exchange") frag.appendChild(panelExchange());
+  if (state.draft.source !== "static") frag.appendChild(panelStatus());
+  if (state.draft.sentinel && state.draft.source !== "static" && state.draft.source !== "exchange") frag.appendChild(panelSentinel());
+  return frag;
+}
+
+function panelStatic() {
+  const g = el("div", "group");
+  g.append(el("label", "", "API Key"));
+  const i = el("input"); i.type = "password"; i.value = state.draft.key || ""; i.placeholder = "sk-…";
+  i.addEventListener("input", () => { state.draft.key = i.value; });
+  g.append(i, el("div", "hint", "也可以写 ${VENDOR_API_KEY}，由服务端环境变量解析。"));
+  return g;
+}
+
+function panelCommand() {
+  const p = state.draft;
+  const readonly = p.source === "shim";
+  const card = el("div", "card");
+  const head = el("div", "card-head");
+  head.append(el("h3", "", "命令与刷新"), el("span", "hint", readonly ? "shim 提供，只读" : "条目可编辑"));
+  const body = el("div", "card-body");
+  const args = el("div", "group");
+  args.append(el("label", "", "token_command"));
+  (p.command || []).forEach((arg, i) => {
+    const row = el("div", "actions");
+    const input = el("input"); input.type = "text"; input.value = arg; input.readOnly = readonly;
+    input.style.flex = "1";
+    input.addEventListener("input", () => { p.command[i] = input.value; });
+    row.appendChild(input);
+    if (!readonly) {
+      const del = el("button", "btn sm", "×");
+      del.type = "button";
+      del.addEventListener("click", () => { p.command.splice(i, 1); renderDrawer(); });
+      row.appendChild(del);
+    }
+    args.appendChild(row);
+  });
+  body.appendChild(args);
+  const grid = el("div", "grid-2");
+  const g1 = el("div", "group");
+  g1.append(el("label", "", "token_refresh_interval（秒，≥ 60）"));
+  const interval = el("input"); interval.type = "number"; interval.min = "60"; interval.step = "60"; interval.value = String(p.interval);
+  interval.addEventListener("input", () => { p.interval = Number(interval.value); });
+  g1.append(interval);
+  grid.appendChild(g1);
+  if (!readonly) {
+    const g2 = el("div", "group");
+    g2.append(el("label", "", "token_command_env（可选）"));
+    const env = el("input"); env.type = "text"; env.value = p.env || ""; env.placeholder = "VENDOR_ACCOUNT_KEY";
+    env.addEventListener("input", () => { p.env = env.value.trim() || null; });
+    g2.append(env);
+    grid.appendChild(g2);
+  }
+  body.appendChild(grid);
+  const err = el("div", "error");
+  err.hidden = true;
+  body.appendChild(err);
+  card.append(head, body);
+  card.dataset.hasError = "0";
+  return card;
+}
+
+function panelStatus() {
+  const p = state.draft;
+  const card = el("div", "card");
+  const head = el("div", "card-head");
+  head.append(el("h3", "", "凭据状态"), el("span", "hint", "token_status"));
+  const body = el("div", "card-body");
+  const rows = el("dl", "rows");
+  if (!p.status) {
+    rows.append(el("dt", "", "状态"), el("dd", "", "保存后开始播种凭据"));
+  } else {
+    const row = (k, v, bad) => {
+      rows.append(el("dt", "", k), el("dd", bad ? "bad" : "", v));
+    };
+    row("状态", p.status.state);
+    row("上次取 token", stamp(p.status.last));
+    row("连续失败", String(p.status.failures), p.status.failures > 0);
+    if (p.status.error) row("last_error", p.status.error, true);
+    if (p.status.needsLogin) row("需要交互", "是 —— 运行登录后继续");
+    if (p.status.expires) row("凭据过期", stamp(p.status.expires));
+  }
+  body.appendChild(rows);
+  const acts = el("div", "actions");
+  const refresh = el("button", "btn sm", "立即刷新");
+  refresh.type = "button";
+  refresh.addEventListener("click", async () => {
+    const st = p.status || (p.status = { state: "initializing", last: null, failures: 0, error: null, needsLogin: false, expires: null });
+    st.state = "initializing"; renderDrawer();
+    await sleep(650);
+    st.state = "ready"; st.last = new Date(); st.error = null; st.failures = 0;
+    renderDrawer(); toast("刷新完成");
+  });
+  const test = el("button", "btn sm", "测试凭据");
+  test.type = "button";
+  test.addEventListener("click", () => {
+    if (p.status && (p.status.state === "needs_setup" || p.status.needsLogin)) { toast("还没有可用凭据，先登录"); return; }
+    toast("上游 200 · 凭据指纹 cmd:a19f…");
+  });
+  acts.append(refresh, test);
+  body.appendChild(acts);
+  card.append(head, body);
+  return card;
+}
+
+function panelExchange() {
+  const p = state.draft;
+  const s = p.status || {};
+  const card = el("div", "card");
+  const head = el("div", "card-head");
+  head.append(el("h3", "", "登录凭据"), el("span", "hint", "auth.py"));
+  const body = el("div", "card-body");
+  const rows = el("dl", "rows");
+  const row = (k, v) => rows.append(el("dt", "", k), el("dd", "", v));
+  row("状态", s.state === "connected" ? "已连接" : "需要登录");
+  if (s.expires) row("凭据过期", stamp(s.expires));
+  if (s.last) row("上次刷新", stamp(s.last));
+  body.appendChild(rows);
+  const acts = el("div", "actions");
+  if (s.state === "connected") {
+    const out = el("button", "btn sm danger", "退出登录");
+    out.type = "button";
+    out.addEventListener("click", () => {
+      p.status.state = "needs_setup"; p.status.expires = null;
+      renderDrawer(); toast("已退出登录");
+    });
+    acts.appendChild(out);
+  } else {
+    const login = el("button", "btn sm primary", "登录");
+    login.type = "button";
+    login.addEventListener("click", () => {
+      p.status.state = "connected"; p.status.expires = new Date(Date.now() + 55 * 60000); p.status.last = new Date();
+      renderDrawer(); toast("登录完成，记录已写入");
+    });
+    const install = el("button", "btn sm", "安装记录");
+    install.type = "button";
+    install.addEventListener("click", () => {
+      p.status.state = "connected"; p.status.expires = new Date(Date.now() + 55 * 60000);
+      renderDrawer(); toast("记录已安装");
+    });
+    acts.append(login, install);
+  }
+  body.appendChild(acts);
+  body.append(el("div", "hint", "在有浏览器的机器上运行 llm-rosetta-gateway credential，把输出粘贴进来。"));
+  card.append(head, body);
+  return card;
+}
+
+function panelSentinel() {
+  const w = el("div", "warn");
+  w.append(el("h3", "", "条目里有一个旧面板留下的标记"));
+  const p = el("p");
+  p.append(document.createTextNode(""));
+  p.innerHTML = '<code>api_key: "token_command"</code> 与命令互斥。保存时会自动删除它；不删，加载就会报错。';
+  w.appendChild(p);
+  const fix = el("button", "btn sm danger", "清理标注");
+  fix.type = "button";
+  fix.addEventListener("click", () => { state.draft.sentinel = false; renderDrawer(); toast("已清理"); });
+  w.appendChild(fix);
+  return w;
+}
+
+/* ── save ─────────────────────────────────────────────────── */
+function save() {
+  const p = state.draft;
+  if (p.source === "static" && !p.key) { toast("静态来源需要 API Key"); return; }
+  if (p.source === "config" || p.source === "shim") {
+    if (!(p.interval >= 60)) { toast("token_refresh_interval must be >= 60"); return; }
+    if (p.source === "config" && (!p.command || !p.command.filter((a) => a.trim()).length)) {
+      toast("token_command must be a non-empty array"); return;
+    }
+  }
+  if (p.source === "exchange" && (!p.status || p.status.state !== "connected")) { toast("先登录，或安装一条记录"); return; }
+  p.sentinel = false;
+  providers[state.selected] = clone(p);
+  renderRows();
+  closeDrawer();
+  toast("已保存：" + providers[state.selected].name);
+}
+
+function toast(msg) {
+  const el = $("toast");
+  el.textContent = msg;
+  el.classList.add("show");
+  clearTimeout(state.toastTimer);
+  state.toastTimer = setTimeout(() => el.classList.remove("show"), 1800);
+}
+
+/* ── wiring ───────────────────────────────────────────────── */
+document.querySelectorAll(".mode-btn").forEach((b) => {
+  b.addEventListener("click", () => setMode(b.dataset.mode));
+});
+$("close-drawer").addEventListener("click", closeDrawer);
+$("cancel").addEventListener("click", closeDrawer);
+$("backdrop").addEventListener("click", (e) => { if (e.target === $("backdrop")) closeDrawer(); });
+$("save").addEventListener("click", save);
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !$("backdrop").hidden) closeDrawer();
+});
+
+const h = (location.hash || "").replace("#", "").toUpperCase();
+if (h === "A" || h === "B" || h === "C") state.mode = h;
+renderPage();
+renderRows();
+openDrawer("alcf");
+</script>

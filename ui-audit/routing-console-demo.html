@@ -1,0 +1,820 @@
+<title>Routing Console Demo</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+:root {
+  --bg: #ffffff;
+  --surface: #fafafa;
+  --surface-2: #f5f5f5;
+  --line: #eaeaea;
+  --line-strong: #d6d6d6;
+  --ink: #171717;
+  --ink-dim: #666666;
+  --ink-muted: #999999;
+  --accent-subtle: rgba(0, 0, 0, .04);
+  --green: #1a7f37;
+  --green-bg: #f0faf4;
+  --red: #e5484d;
+  --red-bg: #fdf2f2;
+  --amber: #bd5b00;
+  --amber-bg: #fdf6ec;
+  --radius: 6px;
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --mono: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0b0b0c; --surface: #131315; --surface-2: #191919;
+    --line: #26262a; --line-strong: #3a3a3f;
+    --ink: #f2f2f2; --ink-dim: #a3a3aa; --ink-muted: #77777f;
+    --accent-subtle: rgba(255, 255, 255, .06);
+    --green: #4ac26b; --green-bg: #10251a;
+    --red: #ff6369; --red-bg: #2a1415;
+    --amber: #ffa057; --amber-bg: #2a1f13;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0b0b0c; --surface: #131315; --surface-2: #191919;
+  --line: #26262a; --line-strong: #3a3a3f;
+  --ink: #f2f2f2; --ink-dim: #a3a3aa; --ink-muted: #77777f;
+  --accent-subtle: rgba(255, 255, 255, .06);
+  --green: #4ac26b; --green-bg: #10251a;
+  --red: #ff6369; --red-bg: #2a1415;
+  --amber: #ffa057; --amber-bg: #2a1f13;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 14px/1.55 var(--font);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 56px;
+  -webkit-font-smoothing: antialiased;
+}
+
+.doc { max-width: 1180px; margin: 0 auto; padding-top: 36px; }
+.eyebrow { margin: 0 0 10px; font-size: 11px; letter-spacing: .09em; text-transform: uppercase; color: var(--ink-muted); }
+h1 { margin: 0 0 10px; font-size: 28px; font-weight: 600; letter-spacing: -.02em; text-wrap: balance; }
+.lede { margin: 0; max-width: 66ch; color: var(--ink-dim); font-size: 14.5px; }
+.lede code { font: 12.5px var(--mono); background: var(--accent-subtle); padding: 1px 5px; border-radius: 4px; }
+.hint { display: none; }
+
+.stage {
+  margin-top: 20px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 10px;
+  overflow-x: auto;
+}
+.app {
+  display: grid;
+  grid-template-columns: 176px minmax(940px, 1fr);
+  min-width: 1116px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+  font-size: 13px;
+}
+.rail { background: var(--bg); border-right: 1px solid var(--line); padding: 14px 0 10px; display: flex; flex-direction: column; gap: 2px; }
+.brand { display: flex; gap: 8px; align-items: center; padding: 0 14px 16px; }
+.brand .mark { width: 16px; height: 16px; border-radius: 3px; background: var(--ink); }
+.brand b { font-size: 12.5px; letter-spacing: -.01em; }
+.brand span { display: block; font-size: 10px; color: var(--ink-muted); }
+.rail a { display: flex; align-items: center; gap: 9px; padding: 7px 14px; color: var(--ink-dim); text-decoration: none; font-size: 12.5px; position: relative; }
+.rail a svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 1.4; opacity: .8; }
+.rail a.active { color: var(--ink); font-weight: 500; }
+.rail a.active::before { content: ''; position: absolute; left: 0; top: 6px; bottom: 6px; width: 2px; background: var(--ink); border-radius: 2px; }
+.rail .spacer { flex: 1; }
+.rail .foot { display: flex; gap: 6px; padding: 10px 12px 0; border-top: 1px solid var(--line); }
+.foot button { border: 1px solid var(--line); background: var(--bg); color: var(--ink-dim); border-radius: 4px; padding: 4px 7px; font: 11px var(--font); cursor: pointer; }
+.statusline { margin-top: 8px; padding: 6px 12px; border-top: 1px solid var(--line); font: 10.5px var(--mono); color: var(--ink-muted); display: flex; gap: 12px; flex-wrap: wrap; }
+
+.panel { padding: 16px 18px 20px; min-width: 0; background: var(--bg); }
+.panel-head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; position: relative; }
+.panel-head h3 { margin: 0; font-size: 15px; font-weight: 600; }
+.panel-head .grow { flex: 1; }
+.head-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--line); border-radius: 999px; padding: 3px 9px; font-size: 11px; color: var(--ink-dim); background: var(--bg); }
+.chip.live::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
+select.mini, .btn-mini {
+  border: 1px solid var(--line); background: var(--bg); color: var(--ink);
+  border-radius: 4px; padding: 5px 8px; font: 12px var(--font);
+}
+select.mini { cursor: pointer; }
+.btn-mini { cursor: pointer; }
+.btn-mini:hover { background: var(--surface); }
+.btn-mini.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn-mini.ghost { background: transparent; color: var(--ink-dim); }
+
+.popover {
+  position: absolute; top: 42px; right: 0; z-index: 30;
+  background: var(--bg); border: 1px solid var(--line-strong);
+  border-radius: 8px; padding: 12px; width: 264px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .14);
+}
+.popover h5 { margin: 0 0 8px; font-size: 12px; font-weight: 600; }
+.popover p { margin: 0 0 8px; font-size: 11.5px; color: var(--ink-dim); }
+.popover select { width: 100%; }
+.popover .row { display: flex; gap: 6px; justify-content: flex-end; margin-top: 10px; }
+
+.route { border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.route-row {
+  display: grid;
+  grid-template-columns: 26px minmax(170px, 1.4fr) 88px minmax(110px, 1fr) 64px 122px;
+  gap: 10px; align-items: center;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.route-row:last-child { border-bottom: 0; }
+.route-row.head { background: var(--surface); color: var(--ink-muted); font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em; padding: 7px 12px; }
+.route-row.is-anchor { background: var(--accent-subtle); }
+.route-row.hl { box-shadow: inset 0 0 0 2px var(--ink); }
+.pos { font: 11px var(--mono); color: var(--ink-muted); }
+.who { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.logo { width: 20px; height: 20px; border-radius: 5px; background: var(--surface-2); border: 1px solid var(--line); display: grid; place-items: center; font: 10px var(--mono); color: var(--ink-dim); flex: none; }
+.who b { font-weight: 500; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+.who small { color: var(--ink-muted); font: 10.5px var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+.who > span:last-child { min-width: 0; }
+.num { font: 12px var(--mono); font-variant-numeric: tabular-nums; }
+.stepper { display: inline-flex; align-items: center; gap: 3px; }
+.stepper button { width: 18px; height: 18px; padding: 0; line-height: 1; border: 1px solid var(--line); background: var(--bg); border-radius: 3px; font: 11px var(--mono); color: var(--ink-dim); cursor: pointer; }
+.stepper button:hover { background: var(--surface-2); color: var(--ink); }
+.stepper span { min-width: 14px; text-align: center; font: 12px var(--mono); }
+.bar { display: block; height: 6px; margin: 4px 0 3px; background: var(--surface-2); border-radius: 3px; overflow: hidden; }
+.bar > i { display: block; height: 100%; background: var(--ink); border-radius: 3px; }
+.bar.dim > i { background: var(--ink-muted); }
+.sub { font: 10px var(--mono); color: var(--ink-muted); }
+.sub.warn { color: var(--red); }
+.sub.amber { color: var(--amber); }
+.state { font-size: 11px; display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.state::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--ink-muted); flex: none; }
+.state.serving::before { background: var(--green); }
+.state.blocked::before { background: var(--red); }
+.state.sunk::before { background: var(--amber); }
+.state.spent::before { background: var(--ink-muted); }
+.pill { font: 10.5px var(--mono); padding: 2px 6px; border-radius: 3px; background: var(--surface-2); color: var(--ink-dim); }
+.pill.blocked { background: var(--red-bg); color: var(--red); }
+.pill.serving { background: var(--green-bg); color: var(--green); }
+.pill.sunk { background: var(--amber-bg); color: var(--amber); }
+
+.split { display: grid; grid-template-columns: minmax(0, 1fr) 292px; gap: 16px; align-items: start; }
+.section { margin-top: 16px; }
+.section-head { display: flex; align-items: baseline; gap: 8px; margin: 0 0 8px; }
+.section-head h4 { margin: 0; font-size: 12px; font-weight: 600; }
+.section-head span { font-size: 11px; color: var(--ink-muted); }
+table.dec { width: 100%; border-collapse: collapse; font-size: 12px; }
+table.dec th { text-align: left; font-weight: 400; color: var(--ink-muted); font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; padding: 6px 8px; border-bottom: 1px solid var(--line); background: var(--surface); }
+table.dec td { padding: 7px 8px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+.dec-row { cursor: pointer; }
+.dec-row:hover td { background: var(--surface); }
+.dec-detail td { background: var(--surface); padding: 10px 12px; }
+.dec-detail .chain { font: 11px var(--mono); color: var(--ink); margin-bottom: 4px; }
+.dec-detail .why { font-size: 11.5px; color: var(--ink-dim); }
+.mono { font-family: var(--mono); font-size: 11.5px; }
+.reason { font: 10.5px var(--mono); padding: 2px 6px; border-radius: 3px; background: var(--surface-2); color: var(--ink-dim); }
+.reason.failover { background: var(--amber-bg); color: var(--amber); }
+.reason.pin { background: var(--accent-subtle); color: var(--ink); }
+.reason.err { background: var(--red-bg); color: var(--red); }
+
+.policy { border: 1px solid var(--line); border-radius: 6px; padding: 12px; background: var(--surface); }
+.policy.wide { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 0 16px; align-items: start; }
+.policy.wide h4 { grid-column: 1 / -1; }
+.policy.wide .policy-controls { grid-column: 1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 14px; align-items: start; }
+.policy.wide .policy-controls .presets,
+.policy.wide .policy-controls .field-rules { grid-column: 1 / -1; }
+.policy.wide pre.json { grid-column: 2; margin-top: 0; }
+.policy h4 { margin: 0 0 10px; font-size: 12px; font-weight: 600; }
+.field { margin-bottom: 10px; }
+.field label { display: block; font-size: 10.5px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px; }
+.seg { display: flex; flex: none; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; background: var(--bg); }
+.seg button { flex: 1; border: 0; background: transparent; padding: 5px 8px; font: 11px var(--font); color: var(--ink-dim); cursor: pointer; white-space: nowrap; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+.presets { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; }
+.preset { border: 1px solid var(--line); background: var(--bg); color: var(--ink-dim); border-radius: 999px; padding: 4px 9px; font: 11.5px var(--font); cursor: pointer; }
+.preset:hover { color: var(--ink); }
+.preset[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+button.toggle { width: 100%; border: 0; background: transparent; cursor: pointer; color: inherit; font: inherit; display: flex; align-items: center; justify-content: space-between; padding: 6px 0; text-align: left; }
+.sw { width: 30px; height: 17px; border-radius: 999px; background: var(--line-strong); position: relative; flex: none; transition: background .12s; }
+.sw.on { background: var(--ink); }
+.sw::after { content: ''; position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; border-radius: 50%; background: var(--bg); transition: left .12s; }
+.sw.on::after { left: 15px; }
+.rules { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.rules li { font: 10.5px var(--mono); color: var(--ink-dim); background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 4px 6px; }
+.rules li.none { color: var(--ink-muted); border-style: dashed; }
+pre.json { margin: 10px 0 0; padding: 10px; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; font: 10.5px/1.55 var(--mono); color: var(--ink-dim); overflow-x: auto; white-space: pre; }
+
+.b-split { display: grid; grid-template-columns: 288px minmax(0, 1fr); min-height: 540px; }
+.model-list { border-right: 1px solid var(--line); background: var(--surface); padding: 10px; }
+.model-item { padding: 9px 10px; border-radius: 5px; margin-bottom: 3px; cursor: pointer; border: 1px solid transparent; }
+.model-item:hover { background: var(--surface-2); }
+.model-item.sel { background: var(--bg); border-color: var(--line); }
+.model-item .row1 { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.model-item b { font-size: 12.5px; font-weight: 500; }
+.model-item .count { font: 10.5px var(--mono); color: var(--ink-muted); white-space: nowrap; }
+.stack { display: flex; height: 4px; border-radius: 2px; overflow: hidden; margin-top: 7px; gap: 1px; background: var(--surface-2); }
+.stack i { display: block; height: 100%; background: var(--ink); }
+.stack i.mute { background: var(--ink-muted); }
+.detail { padding: 14px 16px; min-width: 0; }
+.subtabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin-bottom: 14px; }
+.subtabs button { border: 0; background: transparent; padding: 8px 12px; font: 12px var(--font); color: var(--ink-dim); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.subtabs button[aria-pressed="true"] { color: var(--ink); border-bottom-color: var(--ink); }
+
+.flow { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 18px; align-items: stretch; }
+.flow-in { border: 1px solid var(--line); border-radius: 6px; padding: 12px; background: var(--surface); display: flex; flex-direction: column; justify-content: space-between; }
+.flow-in .big { font: 26px/1.1 var(--mono); font-variant-numeric: tabular-nums; }
+.flow-in small { color: var(--ink-muted); font-size: 11px; }
+.lanes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.lane { border: 1px solid var(--line); border-radius: 6px; padding: 10px; display: flex; flex-direction: column; gap: 8px; background: var(--bg); text-align: left; font: inherit; color: inherit; }
+.lane.clickable { cursor: pointer; }
+.lane.clickable:hover { border-color: var(--line-strong); }
+.lane.blocked { border-style: dashed; background: var(--red-bg); }
+.lane.sunk { background: var(--amber-bg); }
+.lane .lh { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; }
+.lane .lh b { font-size: 12px; font-weight: 500; }
+.lane .share { font: 20px/1 var(--mono); font-variant-numeric: tabular-nums; }
+.lane .meta { font: 10.5px var(--mono); color: var(--ink-muted); }
+.lane .lspark { width: 100%; height: 34px; display: block; color: var(--ink-muted); overflow: visible; }
+.lane.sunk .lspark { color: var(--amber); }
+.lane.blocked .lspark { color: var(--red); }
+.spark { border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; margin-top: 14px; }
+.spark .row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+.spark small { font-size: 11px; color: var(--ink-muted); }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px; font-size: 11px; color: var(--ink-dim); }
+.legend span::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; background: var(--ink-muted); }
+.legend .l-serv::before { background: var(--green); }
+.legend .l-blk::before { background: var(--red); }
+.legend .l-sunk::before { background: var(--amber); }
+.readonly { margin-top: 12px; font-size: 12px; color: var(--ink-dim); border: 1px dashed var(--line-strong); border-radius: 6px; padding: 8px 10px; }
+
+.toast {
+  position: fixed; left: 50%; bottom: max(16px, env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%) translateY(10px);
+  background: var(--ink); color: var(--bg);
+  padding: 8px 14px; border-radius: 999px; font-size: 12.5px;
+  opacity: 0; pointer-events: none; transition: opacity .15s, transform .15s;
+  z-index: 50; max-width: calc(100vw - 32px);
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+.i { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 1.4; }
+
+@media (max-width: 720px) {
+  .doc { padding-top: 22px; }
+  h1 { font-size: 24px; }
+  .hint { display: block; margin-top: 10px; font-size: 12.5px; color: var(--ink-muted); }
+  .split { grid-template-columns: minmax(0, 1fr); }
+  .flow { grid-template-columns: minmax(0, 1fr); }
+  .lanes { grid-template-columns: minmax(0, 1fr); }
+  .b-split { grid-template-columns: minmax(0, 1fr); }
+  .model-list { border-right: 0; border-bottom: 1px solid var(--line); }
+  .rail { display: none; }
+  .app { grid-template-columns: minmax(620px, 1fr); min-width: 620px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<header class="doc">
+  <p class="eyebrow">LLM-Rosetta Gateway Console · clickable prototype</p>
+  <h1>Routing</h1>
+  <p class="lede">One page, three views. <b>Board</b> is the workbench: the route in the order the selector tries it, the decision stream, and the policy editor. <b>Models</b> adds the model switcher on the left. <b>Flow</b> is read-only — lanes only, no controls.</p>
+  <p class="lede hint">The console is drawn at desktop width. On a phone, scroll sideways inside the frame.</p>
+</header>
+
+<div class="stage"><div class="app">
+  <aside class="rail">
+    <div class="brand"><span class="mark"></span><span><b>llm-rosetta</b><span>Gateway Console</span></span></div>
+    <a href="#"><svg class="i" viewBox="0 0 16 16"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg>Dashboard</a>
+    <a href="#"><svg class="i" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M2 7h12"/></svg>Providers</a>
+    <a href="#"><svg class="i" viewBox="0 0 16 16"><path d="M3 4h10M3 8h10M3 12h6"/></svg>Models</a>
+    <a href="#"><svg class="i" viewBox="0 0 16 16"><circle cx="5.5" cy="8" r="2.5"/><path d="M11 8h3M11 5.5h3M11 10.5h3"/></svg>API Keys</a>
+    <a href="#"><svg class="i" viewBox="0 0 16 16"><path d="M2 12l3.5-4 3 2.5L14 4"/></svg>Observability</a>
+    <a class="active" href="#"><svg class="i" viewBox="0 0 16 16"><path d="M3 8h3l2-4 2 8 2-4h1"/></svg>Routing</a>
+    <span class="spacer"></span>
+    <div class="foot"><button>theme</button><button>EN</button><button>cfg</button></div>
+    <div class="statusline"><span>Req 268,357</span><span>err 1.0%</span><span>WAL 3.4M</span></div>
+  </aside>
+  <main class="panel" id="panel"></main>
+</div></div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  var INITIAL = {
+    models: {
+      'claude-sonnet-5': {
+        providers: [
+          { id: 'argo', slug: 'argo', name: 'Argo Claude', short: 'AC', shim: 'messages · argo', weight: 3, headroom: 0.62, state: 'serving' },
+          { id: 'openrouter', slug: 'openrouter', name: 'Anthropic@OpenRouter', short: 'OR', shim: 'open_responses · openrouter', weight: 1, headroom: 0.90, state: 'serving' },
+          { id: 'zen', slug: 'zen', name: 'Zen free lane', short: 'ZN', shim: 'chat_completions · zen_free', weight: 1, headroom: 0.0, state: 'blocked', blockLeft: 42, hits: 4 }
+        ],
+        policy: { strategy: 'weighted', affinity: 'session', sink: true, failover: true, sameFormat: false, firstToken: 20000 },
+        rules: ['tokens ≥ 120,000 → Argo Claude', 'has image → Anthropic@OpenRouter', '09:00–18:00 Asia/Shanghai → pause Argo Claude'],
+        decisions: [
+          { t: '22:31:04', id: '7fce…a12', client: 'codex', chosen: 'Argo Claude', reason: 'anchor', status: 200, lat: '4.1 s' },
+          { t: '22:30:51', id: '1a02…c93', client: 'codex', chosen: 'Argo Claude', reason: 'anchor', status: 200, lat: '3.8 s' },
+          { t: '22:30:40', id: 'b45d…fe7', client: 'elena', chosen: 'Anthropic@OpenRouter', reason: 'failover ← zen (429)', status: 200, lat: '6.2 s', fail: true },
+          { t: '22:30:12', id: '9c31…0b4', client: 'admin', chosen: 'Zen free lane', reason: 'pinned', status: 429, lat: '0.3 s', pin: true },
+          { t: '22:29:58', id: '3e88…71a', client: 'codex', chosen: 'Argo Claude', reason: 'same-format tier 1', status: 200, lat: '5.0 s' },
+          { t: '22:29:31', id: '5fa0…9cc', client: 'brettin', chosen: 'Anthropic@OpenRouter', reason: 'anchor', status: 500, lat: '1.2 s', err: true },
+          { t: '22:29:02', id: '8d1c…3fa', client: 'codex', chosen: 'Argo Claude', reason: 'anchor', status: 200, lat: '4.6 s' },
+          { t: '22:28:47', id: '0b7e…55d', client: 'elena', chosen: 'Zen free lane', reason: 'anchor', status: 429, lat: '0.2 s', err: true }
+        ],
+        sessions: [
+          { id: 'sess_7f3a…9c', client: 'codex', provider: 'Argo Claude', requests: 14, cache: '86%', last: '12 s' },
+          { id: 'sess_1b8d…4e', client: 'elena', provider: 'Anthropic@OpenRouter', requests: 6, cache: '71%', last: '2 min' },
+          { id: 'sess_44c0…a1', client: 'codex', provider: 'Argo Claude', requests: 22, cache: '93%', last: '3 min' },
+          { id: 'sess_9e21…77', client: 'brettin', provider: 'Anthropic@OpenRouter', requests: 3, cache: '12%', last: '8 min' }
+        ]
+      },
+      'gpt-5.6-luna': {
+        providers: [
+          { id: 'argo-gpt', slug: 'argo', name: 'Argo GPT', short: 'AG', shim: 'open_responses · argo', weight: 2, headroom: 0.55, state: 'serving' },
+          { id: 'openrouter-gpt', slug: 'openrouter', name: 'OpenRouter GPT', short: 'OG', shim: 'open_responses · openrouter', weight: 1, headroom: 0.80, state: 'sunk' }
+        ],
+        policy: { strategy: 'weighted', affinity: 'session', sink: true, failover: true, sameFormat: true, firstToken: 20000 },
+        rules: ['reasoning effort ≥ high → Argo GPT'],
+        decisions: [
+          { t: '22:30:58', id: 'c1aa…02b', client: 'codex', chosen: 'Argo GPT', reason: 'anchor', status: 200, lat: '3.2 s' },
+          { t: '22:30:31', id: '77de…9f0', client: 'opencode', chosen: 'Argo GPT', reason: 'same-format tier 1', status: 200, lat: '2.9 s' },
+          { t: '22:29:44', id: 'e0b3…c15', client: 'codex', chosen: 'OpenRouter GPT', reason: 'sunk — tried last', status: 200, lat: '7.4 s' },
+          { t: '22:29:11', id: '4f61…8a2', client: 'elena', chosen: 'Argo GPT', reason: 'anchor', status: 200, lat: '3.5 s' }
+        ],
+        sessions: [
+          { id: 'sess_2ac1…d9', client: 'codex', provider: 'Argo GPT', requests: 9, cache: '78%', last: '40 s' },
+          { id: 'sess_88fe…03', client: 'opencode', provider: 'Argo GPT', requests: 5, cache: '64%', last: '1 min' }
+        ]
+      },
+      'deepseek-v4-pro': {
+        providers: [
+          { id: 'ds', slug: 'deepseek', name: 'DeepSeek direct', short: 'DS', shim: 'chat_completions · deepseek', weight: 1, headroom: 0.40, state: 'serving' }
+        ],
+        policy: { strategy: 'order', affinity: 'off', sink: true, failover: false, sameFormat: true, firstToken: 30000 },
+        rules: [],
+        decisions: [
+          { t: '22:30:22', id: 'aa12…9c3', client: 'opencode', chosen: 'DeepSeek direct', reason: 'anchor', status: 200, lat: '2.1 s' },
+          { t: '22:29:37', id: 'b8e0…441', client: 'codex', chosen: 'DeepSeek direct', reason: 'anchor', status: 200, lat: '2.4 s' },
+          { t: '22:28:55', id: '10cf…7d2', client: 'opencode', chosen: 'DeepSeek direct', reason: 'anchor', status: 429, lat: '0.2 s', err: true }
+        ],
+        sessions: [
+          { id: 'sess_5510…aa', client: 'opencode', provider: 'DeepSeek direct', requests: 31, cache: '88%', last: '20 s' }
+        ]
+      },
+      'kimi-k2.7-code': {
+        providers: [
+          { id: 'ms', slug: 'moonshot', name: 'Moonshot direct', short: 'MS', shim: 'chat_completions · moonshot', weight: 1, headroom: 0.0, state: 'spent' },
+          { id: 'ok', slug: 'openrouter', name: 'OpenRouter Kimi', short: 'OK', shim: 'chat_completions · openrouter', weight: 1, headroom: 0.75, state: 'serving' }
+        ],
+        policy: { strategy: 'weighted', affinity: 'session', sink: true, failover: true, sameFormat: false, firstToken: 20000 },
+        rules: [],
+        decisions: [
+          { t: '22:30:47', id: 'dd02…1fe', client: 'codex', chosen: 'OpenRouter Kimi', reason: 'failover ← moonshot (quota)', status: 200, lat: '5.1 s', fail: true },
+          { t: '22:30:05', id: '0c77…a8b', client: 'codex', chosen: 'OpenRouter Kimi', reason: 'anchor', status: 200, lat: '4.4 s' },
+          { t: '22:29:20', id: '5b13…e90', client: 'elena', chosen: 'OpenRouter Kimi', reason: 'anchor', status: 200, lat: '4.8 s' },
+          { t: '22:28:41', id: '9af6…2c4', client: 'codex', chosen: 'Moonshot direct', reason: 'anchor', status: 402, lat: '0.4 s', err: true }
+        ],
+        sessions: [
+          { id: 'sess_31bb…c7', client: 'codex', provider: 'OpenRouter Kimi', requests: 11, cache: '81%', last: '55 s' }
+        ]
+      },
+      'local-mock-model': {
+        providers: [
+          { id: 'mock', slug: 'mock', name: 'Local mock', short: 'LM', shim: 'chat_completions · mock', weight: 1, headroom: 1.0, state: 'serving' }
+        ],
+        policy: { strategy: 'order', affinity: 'off', sink: true, failover: false, sameFormat: false, firstToken: 20000 },
+        rules: [],
+        decisions: [
+          { t: '22:19:14', id: '5e10…b22', client: 'admin', chosen: 'Local mock', reason: 'pinned', status: 200, lat: '0.1 s', pin: true },
+          { t: '22:18:02', id: '2a44…90c', client: 'admin', chosen: 'Local mock', reason: 'anchor', status: 200, lat: '0.1 s' }
+        ],
+        sessions: []
+      }
+    }
+  };
+
+  var DATA = clone(INITIAL);
+  var state = { model: 'claude-sonnet-5', view: 'board', tab: 'policy', expanded: null, pinOpen: false, preset: 'balanced', highlight: null };
+  var toastTimer = null, highlightTimer = null;
+
+  function clone(o) { return JSON.parse(JSON.stringify(o)); }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]; }); }
+  function pct(x) { return Math.round(x * 100) + '%'; }
+  function clock() { return new Date().toTimeString().slice(0, 8); }
+  function rid() { return Math.random().toString(16).slice(2, 6) + '…' + Math.random().toString(16).slice(2, 5); }
+  function m() { return DATA.models[state.model]; }
+
+  function shares(model) {
+    var out = {};
+    model.providers.forEach(function (p) { out[p.id] = 0; });
+    var serving = model.providers.filter(function (p) { return p.state === 'serving'; });
+    if (!serving.length) return out;
+    if (model.policy.strategy === 'order') { out[serving[0].id] = 1; return out; }
+    if (model.policy.strategy === 'rotate') { serving.forEach(function (p) { out[p.id] = 1 / serving.length; }); return out; }
+    var raw = serving.map(function (p) { return p.weight * (0.25 + 0.75 * p.headroom); });
+    var total = raw.reduce(function (a, b) { return a + b; }, 0) || 1;
+    serving.forEach(function (p, i) { out[p.id] = raw[i] / total; });
+    return out;
+  }
+
+  function stateLabel(p) {
+    if (p.state === 'serving') return 'serving';
+    if (p.state === 'sunk') return 'sunk';
+    if (p.state === 'spent') return 'spent';
+    return 'blocked ' + (p.blockLeft || 0) + 's';
+  }
+
+  function statePill(p, isAnchor) {
+    if (p.state === 'blocked') return '<span class="pill blocked">429 ×' + (p.hits || 1) + '</span>';
+    if (p.state === 'sunk') return '<span class="pill sunk">tried last</span>';
+    if (p.state === 'spent') return '<span class="pill">quota</span>';
+    return isAnchor ? '<span class="pill serving">anchor</span>' : '';
+  }
+
+  function routeTable(model) {
+    var sh = shares(model);
+    var firstServing = model.providers.filter(function (p) { return p.state === 'serving'; })[0];
+    var rows = model.providers.map(function (p, i) {
+      var share = sh[p.id] || 0;
+      var isAnchor = firstServing && firstServing.id === p.id;
+      var sub;
+      if (p.state === 'blocked') sub = '<small class="sub warn">blocked · ' + (p.blockLeft || 0) + 's</small>';
+      else if (p.state === 'spent') sub = '<small class="sub amber">quota spent</small>';
+      else if (p.state === 'sunk') sub = '<small class="sub amber">tried last</small>';
+      else sub = '<small class="sub">' + p.headroom.toFixed(2) + ' headroom</small>';
+      return '<div class="route-row ' + (isAnchor ? 'is-anchor ' : '') + (state.highlight === p.id ? 'hl' : '') + '">' +
+        '<span class="pos">' + (i + 1) + '</span>' +
+        '<span class="who"><span class="logo">' + esc(p.short) + '</span><span><b>' + esc(p.name) + '</b><small>' + esc(p.shim) + '</small></span></span>' +
+        '<span class="stepper"><button type="button" data-act="w" data-p="' + p.id + '" data-d="-1" data-fk="w-' + p.id + '-m" aria-label="Lower weight">−</button><span>' + p.weight + '</span><button type="button" data-act="w" data-p="' + p.id + '" data-d="1" data-fk="w-' + p.id + '-p" aria-label="Raise weight">+</button></span>' +
+        '<span><span class="bar' + (p.state === 'serving' ? '' : ' dim') + '"><i style="width:' + (share * 100) + '%"></i></span>' + sub + '</span>' +
+        '<span class="num">' + pct(share) + '</span>' +
+        '<span class="state ' + p.state + '">' + stateLabel(p) + ' ' + statePill(p, isAnchor) + '</span>' +
+      '</div>';
+    }).join('');
+    return '<div class="route">' +
+      '<div class="route-row head"><span>#</span><span>Provider</span><span>Weight</span><span>Remaining allowance</span><span>Share</span><span>State</span></div>' +
+      rows + '</div>';
+  }
+
+  function legend() {
+    return '<div class="legend">' +
+      '<span class="l-serv">serving</span><span class="l-sunk">sunk — tried last</span><span class="l-blk">blocked by a refusal</span>' +
+      '<span>share = weight × (0.25 + 0.75 × headroom), normalised over serving providers</span></div>';
+  }
+
+  function reasonTag(d) {
+    var cls = d.pin ? 'pin' : (d.fail ? 'failover' : (d.err ? 'err' : ''));
+    return '<span class="reason ' + cls + '">' + esc(d.reason) + '</span>';
+  }
+
+  function decisionsTable(model, limit, interactive) {
+    var rows = model.decisions.slice(0, limit).map(function (d, i) {
+      var key = state.model + ':' + i + ':' + d.id;
+      var row = '<tr class="dec-row" data-act="dec" data-key="' + esc(key) + '"' + (interactive ? '' : ' data-noop="1"') + '>' +
+        '<td>' + esc(d.t) + '</td><td class="mono">' + esc(d.id) + '</td><td class="mono">' + esc(d.client) + '</td>' +
+        '<td>' + esc(d.chosen) + '</td><td>' + reasonTag(d) + '</td><td>' + d.status + '</td><td>' + esc(d.lat) + '</td></tr>';
+      if (state.expanded === key) {
+        row += '<tr class="dec-detail"><td colspan="7">' +
+          '<div class="chain">' + esc(d.client) + ' → gateway → ' + esc(d.chosen) + ' · ' + esc(model.policy.strategy) + ' · attempt 1</div>' +
+          '<div class="why">Reason: ' + esc(d.reason) + '. Status ' + d.status + ', ' + esc(d.lat) + '. Click the row again to close.</div>' +
+        '</td></tr>';
+      }
+      return row;
+    }).join('');
+    return '<table class="dec"><thead><tr><th>Time</th><th>Request</th><th>Client</th><th>Chosen</th><th>Reason</th><th>Status</th><th>Latency</th></tr></thead><tbody>' + rows + '</tbody></table>';
+  }
+
+  function sessionsTable(model) {
+    if (!model.sessions.length) return '<p class="sub">No sessions recorded for this model yet.</p>';
+    var rows = model.sessions.map(function (s) {
+      return '<tr><td class="mono">' + esc(s.id) + '</td><td class="mono">' + esc(s.client) + '</td><td>' + esc(s.provider) + '</td><td>' + s.requests + '</td><td>' + esc(s.cache) + '</td><td>' + esc(s.last) + '</td></tr>';
+    }).join('');
+    return '<table class="dec"><thead><tr><th>Session</th><th>Client</th><th>Provider</th><th>Requests</th><th>Cache hit</th><th>Last seen</th></tr></thead><tbody>' + rows + '</tbody></table>';
+  }
+
+  function policyJson(model) {
+    var w = {};
+    model.providers.forEach(function (p) { w[p.id] = p.weight; });
+    return JSON.stringify({
+      strategy: model.policy.strategy,
+      affinity: model.policy.affinity,
+      sink: model.policy.sink,
+      failover_on_quota: model.policy.failover,
+      prefer_same_format: model.policy.sameFormat,
+      first_token_ms: model.policy.firstToken,
+      weights: w
+    }, null, 2);
+  }
+
+  function policyCard(model, wide) {
+    var p = model.policy;
+    var presets = [['balanced', 'Balanced'], ['sticky', 'Sticky'], ['cheap', 'Cheap first'], ['spread', 'Spread']].map(function (x) {
+      return '<button type="button" class="preset" data-act="preset" data-p="' + x[0] + '" aria-pressed="' + (state.preset === x[0]) + '" data-fk="preset-' + x[0] + '">' + x[1] + '</button>';
+    }).join('');
+    var rules = model.rules.length
+      ? '<ul class="rules">' + model.rules.map(function (r) { return '<li>' + esc(r) + '</li>'; }).join('') + '</ul>'
+      : '<ul class="rules"><li class="none">no rules — strategy only</li></ul>';
+    function tog(key, label) {
+      return '<button type="button" class="toggle" data-act="tog" data-k="' + key + '" aria-pressed="' + p[key] + '" data-fk="tog-' + key + '">' +
+        '<span>' + label + '</span><span class="sw' + (p[key] ? ' on' : '') + '"></span></button>';
+    }
+    var controls = '<div class="policy-controls">' +
+      '<div class="presets">' + presets + '</div>' +
+      '<div class="field"><label>Strategy</label><div class="seg">' +
+        ['order', 'weighted', 'rotate'].map(function (s) {
+          return '<button type="button" data-act="strategy" data-s="' + s + '" aria-pressed="' + (p.strategy === s) + '" data-fk="strat-' + s + '">' + s + '</button>';
+        }).join('') + '</div></div>' +
+      '<div class="field"><label>Affinity</label><select class="mini" data-act="affinity" style="width:100%">' +
+        [['session', 'session — cache'], ['off', 'off'], ['strict', 'strict']].map(function (o) {
+          return '<option value="' + o[0] + '"' + (p.affinity === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
+        }).join('') + '</select></div>' +
+      '<div class="field" style="margin-bottom:0"><label>Behaviour</label>' +
+        tog('sink', 'Sink after a 429') + tog('failover', 'Failover on quota') + tog('sameFormat', 'Prefer same format') + '</div>' +
+      '<div class="field" style="margin-top:6px"><label>First token timeout</label><select class="mini" data-act="firstToken" style="width:100%">' +
+        [[20000, '20 s → next provider'], [10000, '10 s'], [30000, '30 s'], [0, 'off']].map(function (o) {
+          return '<option value="' + o[0] + '"' + (p.firstToken === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
+        }).join('') + '</select></div>' +
+      '<div class="field field-rules" style="margin-bottom:0"><label>Rules</label>' + rules + '</div>' +
+    '</div>';
+    return '<aside class="policy' + (wide ? ' wide' : '') + '">' +
+      '<h4>Policy · ' + esc(state.model) + '</h4>' + controls +
+      '<pre class="json">' + esc(policyJson(model)) + '</pre>' +
+    '</aside>';
+  }
+
+  function modelList() {
+    return Object.keys(DATA.models).map(function (name) {
+      var model = DATA.models[name];
+      var sh = shares(model);
+      var blocked = model.providers.filter(function (p) { return p.state === 'blocked'; }).length;
+      var stack = model.providers.map(function (p) {
+        var w = (sh[p.id] || 0) * 100;
+        return '<i class="' + (p.state === 'serving' ? '' : 'mute') + '" style="width:' + w + '%"></i>';
+      }).join('');
+      return '<div class="model-item' + (name === state.model ? ' sel' : '') + '" data-act="pick" data-model="' + esc(name) + '" role="button" tabindex="0">' +
+        '<div class="row1"><b>' + esc(name) + '</b><span class="count">' + model.providers.length + ' providers</span></div>' +
+        '<div class="stack">' + stack + '</div>' +
+        '<div class="row1" style="margin-top:5px"><span class="count">' + model.providers.map(function (p) { return pct(sh[p.id] || 0); }).join(' · ') + '</span>' +
+        (blocked ? '<span class="count" style="color:var(--red)">' + blocked + ' blocked</span>' : '<span class="count">all serving</span>') + '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  function sparkPath(i) {
+    var paths = [
+      'M0 12 L9 9 L18 11 L27 7 L36 10 L45 6 L54 9 L63 5 L72 8 L81 6 L90 9 L100 7',
+      'M0 22 L9 21 L18 23 L27 20 L36 22 L45 19 L54 21 L63 22 L72 20 L81 23 L90 21 L100 20',
+      'M0 26 L9 25 L18 26 L27 24 L36 25 L45 23 L54 25 L63 24 L72 26 L81 24 L90 25 L100 24'
+    ];
+    return paths[i % paths.length];
+  }
+
+  function flowLanes(model) {
+    var sh = shares(model);
+    return model.providers.map(function (p, i) {
+      var share = sh[p.id] || 0;
+      var cls = 'lane clickable ' + (p.state === 'serving' ? '' : p.state);
+      var line = p.state === 'blocked'
+        ? '<path d="M0 28 L100 28" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="3 3" vector-effect="non-scaling-stroke"/>'
+        : '<path d="' + sparkPath(i) + '" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/>';
+      var meta = p.state === 'blocked'
+        ? 'blocked ' + (p.blockLeft || 0) + ' s'
+        : (p.state === 'spent' ? 'quota spent' : 'w ' + p.weight + ' · headroom ' + p.headroom.toFixed(2));
+      return '<button type="button" class="' + cls + '" data-act="lane" data-p="' + p.id + '">' +
+        '<span class="lh"><b>' + esc(p.name) + '</b><span class="pill ' + (p.state === 'blocked' ? 'blocked' : (p.state === 'serving' ? 'serving' : 'sunk')) + '">' + (p.state === 'blocked' ? '429 ×' + (p.hits || 1) : p.state) + '</span></span>' +
+        '<span class="share">' + pct(share) + '</span>' +
+        '<span class="meta">' + esc(meta) + '</span>' +
+        '<svg class="lspark" viewBox="0 0 100 30" preserveAspectRatio="none" aria-hidden="true">' + line + '</svg>' +
+        '<span class="meta">' + (p.state === 'blocked' ? 'resumes in ' + (p.blockLeft || 0) + ' s' : 'click to open in Board') + '</span>' +
+      '</button>';
+    }).join('');
+  }
+
+  function flowBody(model) {
+    var total = 128;
+    return '<div class="flow">' +
+      '<div class="flow-in"><div><small>Requests in · last 60 s</small><div class="big">' + total + '</div><small>2.1 / s · p50 4.2 s</small></div>' +
+      '<div><small>' + esc(state.model) + '</small><div class="sub" style="margin-top:4px">' + model.providers.length + ' providers · ' +
+        model.providers.filter(function (p) { return p.state === 'blocked'; }).length + ' blocked</div></div></div>' +
+      '<div class="lanes">' + flowLanes(model) + '</div>' +
+    '</div>' +
+    '<div class="spark"><div class="row"><small>Requests per minute · ' + esc(state.model) + '</small><small>peak 41 · now 2.1/s</small></div>' +
+      '<svg viewBox="0 0 640 64" preserveAspectRatio="none" style="width:100%;height:64px;display:block" aria-hidden="true">' +
+      '<path d="M0 52 L40 48 L80 44 L120 46 L160 38 L200 28 L240 30 L280 22 L320 24 L360 18 L400 30 L440 40 L480 36 L520 26 L560 20 L600 16 L640 14" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".85"/>' +
+      '<path d="M0 52 L40 48 L80 44 L120 46 L160 38 L200 28 L240 30 L280 22 L320 24 L360 18 L400 30 L440 40 L480 36 L520 26 L560 20 L600 16 L640 14 L640 64 L0 64 Z" fill="currentColor" opacity=".06"/></svg></div>' +
+    '<div class="legend"><span class="l-serv">serving</span><span class="l-sunk">sunk — tried last</span><span class="l-blk">blocked by a refusal</span><span>lane spark = requests per minute</span></div>' +
+    '<div class="readonly">Read-only view. Click a lane to open that provider in Board. Policy changes live in Board.</div>';
+  }
+
+  function header(model) {
+    var views = [['board', 'Board'], ['models', 'Models'], ['flow', 'Flow']].map(function (v) {
+      return '<button type="button" data-act="view" data-view="' + v[0] + '" aria-pressed="' + (state.view === v[0]) + '" data-fk="view-' + v[0] + '">' + v[1] + '</button>';
+    }).join('');
+    var options = Object.keys(DATA.models).map(function (name) {
+      return '<option value="' + esc(name) + '"' + (name === state.model ? ' selected' : '') + '>' + esc(name) + '</option>';
+    }).join('');
+    var pop = state.pinOpen
+      ? '<div class="popover" role="dialog" aria-label="Send a pinned test request">' +
+          '<h5>Send a pinned test</h5><p>Bypasses the strategy and sends one request to the provider you pick.</p>' +
+          '<select class="mini" id="pinTarget">' + model.providers.map(function (p) {
+            return '<option value="' + p.id + '">' + esc(p.name) + (p.state === 'serving' ? '' : ' — ' + stateLabel(p)) + '</option>';
+          }).join('') + '</select>' +
+          '<div class="row"><button type="button" class="btn-mini" data-act="pin-cancel">Cancel</button><button type="button" class="btn-mini primary" data-act="pin-send">Send</button></div>' +
+        '</div>'
+      : '';
+    return '<div class="panel-head">' +
+      '<h3>Routing</h3>' +
+      '<select class="mini" data-act="model" aria-label="Model">' + options + '</select>' +
+      '<div class="seg" role="group" aria-label="View">' + views + '</div>' +
+      '<span class="chip live">live</span>' +
+      '<span class="grow"></span>' +
+      '<div class="head-actions">' +
+        '<button type="button" class="btn-mini" data-act="test" aria-expanded="' + state.pinOpen + '" data-fk="test">Test pinned…</button>' +
+        '<button type="button" class="btn-mini" data-act="429" data-fk="429">Simulate 429</button>' +
+        '<button type="button" class="btn-mini ghost" data-act="reset" data-fk="reset">Reset</button>' +
+      '</div>' + pop +
+    '</div>';
+  }
+
+  function body(model) {
+    if (state.view === 'flow') return flowBody(model);
+    if (state.view === 'models') {
+      var tab = state.tab;
+      var inner;
+      if (tab === 'decisions') {
+        inner = '<div class="section-head"><h4>Decisions</h4><span>newest first · click a row for the chain</span></div>' + decisionsTable(model, 20, true);
+      } else if (tab === 'sessions') {
+        inner = '<div class="section-head"><h4>Sessions</h4><span>sticky routing keyed by session</span></div>' + sessionsTable(model);
+      } else {
+        inner = routeTable(model) + legend() + '<div class="section">' + policyCard(model, true) + '</div>';
+      }
+      return '<div class="b-split"><div class="model-list">' + modelList() + '</div><div class="detail">' +
+        '<div class="subtabs">' +
+          [['policy', 'Policy'], ['decisions', 'Decisions'], ['sessions', 'Sessions']].map(function (t) {
+            return '<button type="button" data-act="tab" data-tab="' + t[0] + '" aria-pressed="' + (state.tab === t[0]) + '" data-fk="tab-' + t[0] + '">' + t[1] + '</button>';
+          }).join('') +
+        '</div>' + inner + '</div></div>';
+    }
+    return '<div class="split"><div>' + routeTable(model) + legend() +
+      '<div class="section"><div class="section-head"><h4>Decisions</h4><span>last 6 of ' + model.decisions.length + ' · ' + esc(state.model) + '</span></div>' +
+      decisionsTable(model, 6, true) + '</div></div>' + policyCard(model) + '</div>';
+  }
+
+  function render() {
+    var model = m();
+    var fk = document.activeElement && document.activeElement.getAttribute ? document.activeElement.getAttribute('data-fk') : null;
+    document.getElementById('panel').innerHTML = header(model) + body(model);
+    if (fk) {
+      var el = document.querySelector('[data-fk="' + fk.replace(/"/g, '\\"') + '"]');
+      if (el) el.focus();
+    }
+  }
+
+  function toast(msg) {
+    var t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.classList.remove('show'); }, 2600);
+  }
+
+  function applyPreset(name) {
+    var model = m();
+    state.preset = name;
+    if (name === 'balanced') {
+      model.policy.strategy = 'weighted'; model.policy.affinity = 'session';
+      model.policy.sink = true; model.policy.failover = true; model.policy.sameFormat = false; model.policy.firstToken = 20000;
+    } else if (name === 'sticky') {
+      model.policy.strategy = 'order'; model.policy.affinity = 'strict';
+      model.policy.sink = true; model.policy.failover = true; model.policy.sameFormat = true; model.policy.firstToken = 30000;
+    } else if (name === 'cheap') {
+      model.policy.strategy = 'weighted'; model.policy.affinity = 'session';
+      model.policy.sink = true; model.policy.failover = true; model.policy.sameFormat = false; model.policy.firstToken = 20000;
+      model.providers.forEach(function (p) { p.weight = 1; });
+      var free = model.providers.filter(function (p) { return /zen|free|mock/i.test(p.name); })[0];
+      if (free) free.weight = 5;
+    } else {
+      model.policy.strategy = 'rotate'; model.policy.affinity = 'off';
+      model.policy.sink = true; model.policy.failover = true; model.policy.sameFormat = false; model.policy.firstToken = 20000;
+    }
+    render();
+    toast('Preset applied: ' + name);
+  }
+
+  function simulate429() {
+    var model = m();
+    var target = model.providers.filter(function (p) { return p.state === 'serving'; })[0];
+    if (!target) { toast('No serving provider left to block'); return; }
+    target.state = 'blocked';
+    target.blockLeft = 45;
+    target.hits = (target.hits || 0) + 1;
+    var next = model.providers.filter(function (p) { return p.state === 'serving'; })[0];
+    if (model.policy.failover && next) {
+      model.decisions.unshift({ t: clock(), id: rid(), client: 'codex', chosen: next.name, reason: 'failover ← ' + target.slug + ' (429)', status: 200, lat: '5.8 s', fail: true });
+      toast(target.name + ' blocked 45 s · failed over to ' + next.name);
+    } else {
+      model.decisions.unshift({ t: clock(), id: rid(), client: 'codex', chosen: target.name, reason: 'upstream 429', status: 429, lat: '0.3 s', err: true });
+      toast(target.name + ' blocked 45 s · no failover target');
+    }
+    render();
+  }
+
+  function sendPinned() {
+    var model = m();
+    var sel = document.getElementById('pinTarget');
+    var id = sel ? sel.value : null;
+    var p = model.providers.filter(function (x) { return x.id === id; })[0];
+    if (!p) { state.pinOpen = false; render(); return; }
+    var ok = p.state === 'serving';
+    model.decisions.unshift({ t: clock(), id: rid(), client: 'admin', chosen: p.name, reason: 'pinned', status: ok ? 200 : 429, lat: ok ? '2.9 s' : '0.3 s', pin: true, err: !ok });
+    state.pinOpen = false;
+    render();
+    toast('Pinned test → ' + p.name + ' · ' + (ok ? '200' : '429'));
+  }
+
+  document.getElementById('panel').addEventListener('click', function (e) {
+    var el = e.target.closest('[data-act]');
+    if (!el) return;
+    var act = el.getAttribute('data-act');
+    var model = m();
+    if (act === 'view') { state.view = el.getAttribute('data-view'); state.pinOpen = false; state.expanded = null; render(); }
+    else if (act === 'tab') { state.tab = el.getAttribute('data-tab'); render(); }
+    else if (act === 'pick') { state.model = el.getAttribute('data-model'); state.tab = 'policy'; state.expanded = null; render(); }
+    else if (act === 'strategy') { model.policy.strategy = el.getAttribute('data-s'); state.preset = null; render(); }
+    else if (act === 'tog') { var k = el.getAttribute('data-k'); model.policy[k] = !model.policy[k]; state.preset = null; render(); }
+    else if (act === 'preset') { applyPreset(el.getAttribute('data-p')); }
+    else if (act === 'w') {
+      var p = model.providers.filter(function (x) { return x.id === el.getAttribute('data-p'); })[0];
+      if (!p) return;
+      p.weight = Math.min(9, Math.max(1, p.weight + Number(el.getAttribute('data-d'))));
+      state.preset = null;
+      render();
+    }
+    else if (act === 'dec') {
+      if (el.getAttribute('data-noop')) return;
+      var key = el.getAttribute('data-key');
+      state.expanded = state.expanded === key ? null : key;
+      render();
+    }
+    else if (act === 'lane') {
+      state.highlight = el.getAttribute('data-p');
+      state.view = 'board';
+      render();
+      clearTimeout(highlightTimer);
+      highlightTimer = setTimeout(function () { state.highlight = null; render(); }, 2600);
+    }
+    else if (act === 'test') { state.pinOpen = !state.pinOpen; render(); }
+    else if (act === 'pin-cancel') { state.pinOpen = false; render(); }
+    else if (act === 'pin-send') { sendPinned(); }
+    else if (act === '429') { simulate429(); }
+    else if (act === 'reset') {
+      DATA = clone(INITIAL);
+      state = { model: 'claude-sonnet-5', view: 'board', tab: 'policy', expanded: null, pinOpen: false, preset: 'balanced', highlight: null };
+      render();
+      toast('Demo reset');
+    }
+  });
+
+  document.getElementById('panel').addEventListener('change', function (e) {
+    var el = e.target.closest('[data-act]');
+    if (!el) return;
+    var act = el.getAttribute('data-act');
+    var model = m();
+    if (act === 'model') { state.model = el.value; state.expanded = null; render(); }
+    else if (act === 'affinity') { model.policy.affinity = el.value; state.preset = null; render(); }
+    else if (act === 'firstToken') { model.policy.firstToken = Number(el.value); state.preset = null; render(); }
+  });
+
+  document.getElementById('panel').addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    var el = e.target.closest('.model-item[data-act="pick"]');
+    if (!el) return;
+    e.preventDefault();
+    el.click();
+  });
+
+  setInterval(function () {
+    var changed = false;
+    Object.keys(DATA.models).forEach(function (name) {
+      DATA.models[name].providers.forEach(function (p) {
+        if (p.state === 'blocked' && typeof p.blockLeft === 'number') {
+          p.blockLeft -= 1;
+          changed = true;
+          if (p.blockLeft <= 0) { p.state = 'serving'; p.blockLeft = 0; toast(p.name + ' resumed'); }
+        }
+      });
+    });
+    if (changed) render();
+  }, 1000);
+
+  render();
+})();
+</script>
