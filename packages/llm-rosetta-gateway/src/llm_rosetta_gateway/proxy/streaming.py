@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import time
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
 from typing import Any
 
 from llm_rosetta_gateway._vendor.httpserver import Response, StreamingResponse
@@ -37,6 +38,7 @@ from ..transport.sse_format import (
 from .errors import (
     RefusalAction,
     _connection_error_response,
+    _first_token_timeout_response,
     _detect_stream_chunk_error,
     _upstream_error_passthrough,
     DumpContext,
@@ -207,6 +209,116 @@ def _flush_and_finalize(
     return tail
 
 
+async def _close_quietly(stream: Any) -> None:
+    """Close an abandoned upstream without letting the close replace the answer.
+
+    A socket that went quiet is the one most likely to refuse a clean close;
+    the 504 or the failover is the answer the client is owed either way.
+
+    Args:
+        stream: The upstream stream to release.
+    """
+    try:
+        await stream.close()
+    except Exception:  # noqa: BLE001 - the deadline's answer outranks the close
+        logger.warning(
+            "Closing the upstream after a deadline miss failed", exc_info=True
+        )
+
+
+async def _first_chunk_within_budget(
+    *,
+    budget_ms: int | None,
+    stream: Any,
+    sent_at: float,
+) -> tuple[dict[str, Any] | None, AsyncIterator[dict[str, Any]], bool]:
+    """Pull the upstream's first chunk, under the model's deadline if any.
+
+    Args:
+        budget_ms: The model's first-token budget, or ``None`` when it sets
+            none.
+        stream: The upstream stream the transport just opened.
+        sent_at: ``time.perf_counter()`` taken before the request was sent; the
+            budget is measured from there.
+
+    Returns:
+        ``(first_chunk, iterator, timed_out)``.  The iterator is the one the
+        chunk was read from, so the caller continues where this stopped; an
+        exhausted stream hands back ``None`` and is not a timeout.
+    """
+    iterator = stream.__aiter__()
+    if budget_ms is None:
+        return None, iterator, False
+    remaining = budget_ms / 1000 - (time.perf_counter() - sent_at)
+    try:
+        chunk = await asyncio.wait_for(iterator.__anext__(), max(0.0, remaining))
+    except asyncio.TimeoutError:
+        return None, iterator, True
+    except StopAsyncIteration:
+        return None, iterator, False
+    return chunk, iterator, False
+
+
+@dataclass(frozen=True, slots=True)
+class FirstTokenDeadline:
+    """A lane that accepted the stream and sent nothing within the budget.
+
+    Shaped like the refusal signals the failover path already takes: it only
+    has to say, in words a request log can carry, why the request moved.
+    """
+
+    provider: str
+    budget_ms: int
+
+    @property
+    def reason(self) -> str:
+        """The words the profile records for this failure."""
+        return f"no first token within {self.budget_ms} ms"
+
+
+def _first_token_budget(selection: SelectionContext) -> int | None:
+    """The model's first-token deadline in milliseconds, when it sets one.
+
+    Args:
+        selection: This request's routing context, which carries the model's
+            block.
+
+    Returns:
+        The budget, or ``None`` when the model sets none.  A value the model
+        does not set, or one the parser would have refused, never applies.
+    """
+    route = getattr(selection, "model_route", None)
+    routing = getattr(route, "routing", None)
+    budget = getattr(routing, "first_token_ms", None)
+    return budget if isinstance(budget, int) and budget > 0 else None
+
+
+async def _stream_chunks(
+    stream: Any,
+    chunk_iterator: AsyncIterator[dict[str, Any]] | None,
+    first_chunk: dict[str, Any] | None,
+) -> AsyncIterator[dict[str, Any]]:
+    """Yield the upstream's chunks, starting with the one the deadline pulled.
+
+    The deadline path consumes the first chunk before the response exists;
+    replaying it here keeps one place that sees every upstream event, so error
+    detection, capture and the TTFB reading all still start at chunk one.
+
+    Args:
+        stream: The upstream stream, used when no iterator was handed over.
+        chunk_iterator: The iterator the deadline already advanced, if any.
+        first_chunk: The chunk that iterator produced, if any.
+
+    Yields:
+        The upstream's JSON chunks, in order.
+    """
+    if first_chunk is not None:
+        yield first_chunk
+    source = chunk_iterator if chunk_iterator is not None else stream
+    async for item in source:
+        yield item
+
+
 async def _stream_event_generator(
     *,
     source_provider: ProviderType,
@@ -214,6 +326,9 @@ async def _stream_event_generator(
     processor: Any,
     model: str,
     format_sse: Any,
+    chunk_iterator: AsyncIterator[dict[str, Any]] | None = None,
+    first_chunk: dict[str, Any] | None = None,
+    started_at: float | None = None,
     reported_model: str | None = None,
     entry_id: str | None = None,
     request_log: Any | None = None,
@@ -236,14 +351,17 @@ async def _stream_event_generator(
     t0 = time.monotonic()
     stream_error: UpstreamStreamError | None = None
     ttfb_ms: float | None = None
-    t_stream_open = time.perf_counter()
+    # The clock the first chunk is measured against: the moment the upstream
+    # request was sent, so the reading spans connect, headers and the chunk,
+    # the same way the deadline does.
+    t_stream_open = started_at if started_at is not None else time.perf_counter()
     upstream_chunks: list[dict[str, Any]] | None = (
         [] if capture_record is not None else None
     )
 
     try:
         async with stream:
-            async for chunk in stream:
+            async for chunk in _stream_chunks(stream, chunk_iterator, first_chunk):
                 if chunk_count == 0:
                     ttfb_ms = round((time.perf_counter() - t_stream_open) * 1000, 2)
                 chunk_count += 1
@@ -415,6 +533,11 @@ async def handle_streaming(  # noqa: C901
     happen here, before the ``StreamingResponse`` exists: once the first event
     is on the wire the answer cannot be retracted, so a mid-stream failure ends
     the client's stream with its code (see #1060).
+
+    The model's ``first_token_ms`` is enforced at the same point: the first
+    upstream chunk is pulled under that deadline, and a lane that misses it is
+    closed before anything reaches the client, so the request can still move
+    to another provider or answer ``504``.
 
     Opens the upstream connection *before* constructing the
     ``StreamingResponse`` so that immediate errors (4xx/5xx from the
@@ -588,6 +711,59 @@ async def handle_streaming(  # noqa: C901
 
     assert stream is not None
 
+    # A lane that returns headers and then goes quiet is as unusable as one
+    # that refused.  The first chunk is pulled here, while nothing has been
+    # written to the client, which is the only point at which another lane
+    # can still answer.
+    budget_ms = _first_token_budget(selection)
+    first_chunk, chunk_iterator, timed_out = await _first_chunk_within_budget(
+        budget_ms=budget_ms, stream=stream, sent_at=t_connect
+    )
+    if timed_out:
+        assert budget_ms is not None  # only a budget can time out
+        profile["first_token_timeout_ms"] = budget_ms
+        await _close_quietly(stream)
+        logger.warning(
+            "First-token deadline of %d ms missed on %s for model %s",
+            budget_ms,
+            route.provider_name,
+            selection.model,
+        )
+        failed_over = await _failover_stream(
+            config,
+            selection,
+            route,
+            body,
+            reported_model=reported_model,
+            signal=FirstTokenDeadline(route.provider_name, budget_ms),
+            transport=transport,
+            metadata_store=store,
+            extra_headers=extra_headers,
+            entry_id=entry_id,
+            request_log=request_log,
+            metrics=metrics,
+            persistence=persistence,
+            capture_state=capture_state,
+            preflight_token_count=preflight_token_count,
+            profile=profile,
+            attempted=_failover_from,
+        )
+        if failed_over is not None:
+            return failed_over
+        return (
+            await _first_token_timeout_response(
+                body=body,
+                target_body=target_body,
+                route=route,
+                provider_info=provider_info,
+                persistence=persistence,
+                entry_id=entry_id,
+                capture_state=capture_state,
+                budget_ms=budget_ms,
+            ),
+            profile,
+        )
+
     # Phase 4: No error — create stream processor and return SSE response
     processor = pipeline.create_stream_processor(
         on_ir_event=store.cache_from_stream_event,
@@ -620,6 +796,9 @@ async def handle_streaming(  # noqa: C901
             _stream_event_generator(
                 source_provider=route.source_provider,
                 stream=stream,
+                chunk_iterator=chunk_iterator,
+                first_chunk=first_chunk,
+                started_at=t_connect,
                 processor=processor,
                 model=model,
                 reported_model=reported_model,

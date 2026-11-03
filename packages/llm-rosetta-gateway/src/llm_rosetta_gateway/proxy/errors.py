@@ -171,6 +171,69 @@ async def _connection_error_response(
     )
 
 
+async def _first_token_timeout_response(
+    *,
+    body: dict[str, Any],
+    target_body: dict[str, Any],
+    route: ResolvedRoute,
+    provider_info: ProviderInfo,
+    persistence: Any | None,
+    entry_id: str | None,
+    capture_state: CaptureState | None,
+    budget_ms: int,
+) -> Response:
+    """Build the 504 for a lane that accepted the request and then went quiet.
+
+    Nothing has been written to the client when this is called, so the answer
+    can still be an honest status rather than a stream that fails to start.
+
+    Args:
+        body: The client's request, for the dump and the capture record.
+        target_body: The converted request that was sent upstream.
+        route: The route whose provider timed out.
+        provider_info: The provider that was waiting.
+        persistence: The error-dump store, when one exists.
+        entry_id: The request-log row this request owns.
+        capture_state: Content capture, when it is on.
+        budget_ms: The model's first-token budget, for the message.
+
+    Returns:
+        A 504 in the client's own error envelope.
+    """
+    message = (
+        f"Upstream '{route.provider_name}' sent no first token within {budget_ms} ms"
+    )
+    await dump_error(
+        persistence,
+        request_body=body,
+        response_text=message,
+        converted_body=target_body,
+        model=body.get("model", ""),
+        source_provider=route.source_provider,
+        target_provider=route.target_provider,
+        provider_name=route.provider_name,
+        status_code=504,
+        error_phase="stream_first_token",
+        upstream_url=str(provider_info.base_url),
+        request_log_id=entry_id,
+    )
+    if capture_state is not None:
+        capture_state.record(
+            CapturedRequest(
+                original_request=body,
+                converted_body=target_body,
+                request_id="",
+                model=body.get("model", ""),
+                source_provider=route.source_provider,
+                target_provider=route.target_provider,
+                is_stream=True,
+                status_code=504,
+                upstream_response={"error": message},
+            )
+        )
+    return error_response_for_source(route.source_provider, 504, message)
+
+
 async def _handle_401(
     provider_info: ProviderInfo,
     status_code: int,
