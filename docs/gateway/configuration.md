@@ -568,6 +568,14 @@ model build. When it happens, the request's profile records
 `failover: {from, to, reason}` and the log row names the provider that actually
 served.
 
+A run of capacity refusals is also a routing signal. Three `503`, `529` or
+`520`-`524` responses (or a `402`/`429` no probe explained) inside five minutes
+block that provider for a minute, so later requests are routed away instead of
+paying the failed attempt again; a served request clears the count. A `500`,
+`502`, `504` or `408` fails over for the request but does not, on its own, take
+a provider out of rotation. The three requests that reach the threshold are
+still served — by the failover, not by the failing provider.
+
 Streaming requests fail over too, but only before the first event: the handler
 opens the upstream connection before writing anything, so a refusal at that
 point can still be answered from elsewhere. Once bytes have reached the client
