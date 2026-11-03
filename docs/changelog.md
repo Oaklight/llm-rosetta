@@ -98,6 +98,8 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### 修复
 
+- **拨动提供方开关时该行留在原位**（issue [#1361](https://github.com/Oaklight/llm-rosetta/issues/1361)）：列表每次渲染都会把有问题的提供方排在前、已关闭的排在最后，拨动开关触发的那次渲染也不例外；提供方一多，那一行就跳到末尾并离开视口 —— 刚被关掉的条目反而找不到了。现在渲染接受一个固定顺序：拨动成功后保持屏幕上的顺序，重新进入本节、切换筛选或修改搜索时才重新排序（[管理面板](gateway/admin-panel.md#providers)）。
+
 - **类型只写在旧版能力字段里的模型会进入对应的类型池**（issue [#1353](https://github.com/Oaklight/llm-rosetta/issues/1353)）：在模型编辑器写入 `type` 之前创建的条目，把类型只写成单个能力（`capabilities: ["embedding"]`），而面板一直按它显示该类型。`distribute_typed_models()` 只读 `type`，于是模型留在聊天池、类型池为空 —— 面板显示 EMBEDDING 的模型，`/v1/embeddings` 却返回 `404 Unknown model: '…'. Configured: (none)`，重排与决策也有同样的缺口。现在由 `declared_model_type()` 独占这条规则 —— 显式 `type` 优先；否则在条目未声明 `text` 时，按注册表顺序取优先级最高的类型能力（embeddings、rerank、decisions）—— 池构建、加载期校验与管理面板 payload 都读它，面板不再保留第二份规则。加载期迁移（`config_version` 3 → 4）还会把推导出的 `type` 写进文档，因此即使读取方没有这条兜底规则，文件本身也写明各池读到的是什么。迁移会在每个 v3 文档首次加载时重写文件，不保留 JSONC 注释；原文件以 `.pre-migration.bak` 保存在旁边。
 - **`upstream_model` 对重排与决策同样生效**（issue [#1353](https://github.com/Oaklight/llm-rosetta/issues/1353)）：此前只有嵌入处理器在转发前改写模型名，重排或决策条目若提供方使用的模型名不同（`bge-reranker-v2-m3` 对应 `BAAI/bge-reranker-v2-m3`），发出的仍是客户端名称，提供方返回「模型不存在」。现在改名逻辑位于共享的非 LLM 流程中，上游 URL 也按改名后的模型构建。
 - **Chat 流会写出它收到的拒绝文本**（issue [#1314](https://github.com/Oaklight/llm-rosetta/issues/1314)）：流读取方根据累积到的 `delta.refusal` 推导拒绝原因，而写入方只在存在拒绝内容块时才写出这些文字，于是只出现在终止事件上的拒绝回来时变成 `stop` 且没有文本。整包写入方早已用文字本身标记拒绝，流写入方现在照做；由此产生的唯一一处同格式流不稳定也消失了。
