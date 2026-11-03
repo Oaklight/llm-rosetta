@@ -187,3 +187,30 @@ export function orderedProviders(entries, capsOf = null, pinned = null) {
     })
     .map(({ entry }) => entry);
 }
+
+/**
+ * The non-LLM type a bare provider `type` implies, if any.
+ *
+ * A format can belong to more than one model type: `google_generate` is a chat
+ * format and an embedding dialect.  A bare `type` names the chat side in that
+ * case — an embeddings provider must say so with its `<type>_format` key or an
+ * embeddings shim — so a format that also serves LLM is not evidence of a
+ * non-LLM provider.  Without this, `type: google_generate` showed an
+ * Embeddings badge and hid the provider from the LLM facet.
+ *
+ * Args:
+ *   modelTypes: the registry descriptors from the admin payload.
+ *   formatName: the provider's type/shim name, or its name when neither is set.
+ *
+ * Returns:
+ *   The matching non-LLM type name, or `null`.
+ */
+export function nonLlmFormatType(modelTypes, formatName) {
+  if (!formatName) return null;
+  const descriptors = modelTypes || [];
+  const llm = descriptors.find((d) => d.is_llm);
+  if (llm && (llm.formats || []).includes(formatName)) return null;
+  const match = descriptors.find(
+    (d) => !d.is_llm && (d.formats || []).includes(formatName));
+  return match ? match.name : null;
+}
