@@ -335,6 +335,21 @@ def _success_response(
     )
 
 
+def _upstream_model_name(
+    body: dict[str, Any], model: str, config: GatewayConfig
+) -> str:
+    """Send the name the provider knows the model by, when it declares one.
+
+    The rename belongs to the shared flow — every typed type can need it — and
+    the returned name is what the upstream URL is built from, so a Google
+    endpoint that carries the model in its path gets the provider's name too.
+    """
+    upstream_model = config.model_upstream_names.get(model)
+    if upstream_model:
+        body["model"] = upstream_model
+    return body.get("model") or model
+
+
 async def handle_typed_request(
     request: Any, config: GatewayConfig, handler: TypedHandler
 ) -> Response:
@@ -371,9 +386,9 @@ async def handle_typed_request(
         # answered by the next attempt, and one request is one row.
         retrying = False
         _prepare_body(handler, body, model, config)
-        # The model the upstream URL is built from; a rename map or the conversion
-        # itself may have changed it.
-        upstream_model = body.get("model") or model
+        # The model the upstream URL is built from; the handler or the shared
+        # rename map may have changed it.
+        upstream_model = _upstream_model_name(body, model, config)
 
         pipeline = handler.build_pipeline(source_format, route.format)
         same_format = source_format == route.format
