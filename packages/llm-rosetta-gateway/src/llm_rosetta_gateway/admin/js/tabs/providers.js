@@ -13,7 +13,7 @@ import { safeLinkUrl, parseRecord } from '../core/credential.js';
 import { initLogoPicker, setLogoPickerValue, getLogoPickerValue } from '../components/logo-picker.js';
 import { setTypeTree, getSelectedValue, selectValue, onTypeSelect, createTypePicker } from '../components/type-picker.js';
 import { buildTypeModel, buildEndpointTypeModel, endpointChoiceConfig, shimBrand } from '../core/shim-tree.js';
-import { degradedEndpoints, categoryKey, endpointState, degradedMarker, providerStatus, orderedProviders } from '../core/provider-endpoints.js';
+import { degradedEndpoints, categoryKey, endpointState, degradedMarker, providerStatus, orderedProviders, nonLlmFormatType } from '../core/provider-endpoints.js';
 import { routingRows, blockRow } from '../core/quota-lines.js';
 import { shimHintText } from '../core/shim-hint.js';
 
@@ -1177,12 +1177,13 @@ function _getProviderCaps(cfg, provName) {
   const llmShims = (S.configData && S.configData.registered_shims) || [];
   const cfgType = providerTypeName(cfg, provName);
   // A bare `type` can name a non-chat format (`cohere`, `jina`, `voyage`).
-  // That is not a shim, but it is still not an LLM provider.
+  // That is not a shim, but it is still not an LLM provider.  A format that
+  // also serves chat (`google_generate`) does not imply one: embeddings need
+  // an explicit `<type>_format` or shim before the gateway routes any.
   if (!hasNonLlmCap) {
-    const formatType = (S.configData?.model_types || []).find(
-      d => !d.is_llm && (d.formats || []).includes(cfgType));
+    const formatType = nonLlmFormatType(S.configData?.model_types, cfgType);
     if (formatType) {
-      caps.push(formatType.name);
+      caps.push(formatType);
       hasNonLlmCap = true;
     }
   }
