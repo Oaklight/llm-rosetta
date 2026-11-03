@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, cast
 
 from llm_rosetta_gateway.admin.routes.config.model_providers import (
+    _reorder_providers,
     _set_provider_attrs,
 )
 from llm_rosetta_gateway.admin.routes.config.models import (
@@ -132,6 +133,117 @@ class TestProviderEntrySwitches:
     def test_unknown_provider(self):
         plist = [{"name": "a"}]
         assert _set_provider_attrs(plist, "z", None, False) is False
+
+
+class TestReorderProviders:
+    """The provider list is the route order, so a drag writes it in place."""
+
+    def test_moves_an_entry_with_its_own_attributes(self):
+        models = {
+            "m": {
+                "providers": [
+                    {"name": "a", "weight": 3},
+                    "b",
+                    {"name": "c", "capabilities": ["vision"]},
+                ]
+            }
+        }
+
+        assert _reorder_providers(models, "m", ["c", "a", "b"]) is None
+        assert models["m"]["providers"] == [
+            {"name": "c", "capabilities": ["vision"]},
+            {"name": "a", "weight": 3},
+            "b",
+        ]
+
+    def test_a_disabled_lane_keeps_its_place(self):
+        # The board does not list a lane the operator turned off, so a drag
+        # cannot name it; it stays at its index while the others move.
+        models = {
+            "m": {
+                "providers": [
+                    "a",
+                    {"name": "off", "enabled": False},
+                    "b",
+                    "c",
+                ]
+            }
+        }
+
+        assert _reorder_providers(models, "m", ["c", "a", "b"]) is None
+        assert models["m"]["providers"] == [
+            "c",
+            {"name": "off", "enabled": False},
+            "a",
+            "b",
+        ]
+
+    def test_a_provider_that_is_not_in_the_document_keeps_its_place(self):
+        # A disabled provider is dropped before the route is built, so the
+        # lane is not on the board even though the entry still names it.
+        models = {"m": {"providers": ["a", "gone", "b"]}}
+
+        assert (
+            _reorder_providers(
+                models,
+                "m",
+                ["b", "a"],
+                raw_providers={"a": {}, "b": {}, "gone": {"enabled": False}},
+            )
+            is None
+        )
+        assert models["m"]["providers"] == ["b", "gone", "a"]
+
+    def test_a_full_list_may_name_the_hidden_entries_too(self):
+        # The Models page's provider menu shows a switched-off provider, so
+        # its drag sends every entry; that list is written as given.
+        models = {"m": {"providers": ["a", {"name": "off", "enabled": False}, "b"]}}
+
+        assert _reorder_providers(models, "m", ["b", "off", "a"]) is None
+        assert models["m"]["providers"] == [
+            "b",
+            {"name": "off", "enabled": False},
+            "a",
+        ]
+
+    def test_refuses_a_name_the_model_does_not_list(self):
+        models = {"m": {"providers": ["a", "b"]}}
+
+        error = _reorder_providers(models, "m", ["a", "z"])
+
+        assert error is not None and error.status_code == 400
+        assert "'z'" in error.body.decode()
+        assert models["m"]["providers"] == ["a", "b"]
+
+    def test_refuses_a_list_that_drops_a_provider(self):
+        models = {"m": {"providers": ["a", "b"]}}
+
+        error = _reorder_providers(models, "m", ["a"])
+
+        assert error is not None and error.status_code == 400
+        assert models["m"]["providers"] == ["a", "b"]
+
+    def test_refuses_a_repeated_name(self):
+        models = {"m": {"providers": ["a", "b"]}}
+
+        error = _reorder_providers(models, "m", ["a", "a"])
+
+        assert error is not None and error.status_code == 400
+
+    def test_refuses_a_single_provider_entry(self):
+        models = {"m": {"provider": "a"}}
+
+        error = _reorder_providers(models, "m", ["a"])
+
+        assert error is not None and error.status_code == 400
+        assert models["m"] == {"provider": "a"}
+
+    def test_refuses_a_body_that_is_not_a_list_of_names(self):
+        models = {"m": {"providers": ["a", "b"]}}
+
+        error = _reorder_providers(models, "m", [{"name": "b"}, "a"])
+
+        assert error is not None and error.status_code == 400
 
 
 class TestParseSkipsDisabledEntry:

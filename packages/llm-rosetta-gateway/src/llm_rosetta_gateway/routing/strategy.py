@@ -163,7 +163,7 @@ class AffinityRoundRobinStrategy:
 class OrderedStrategy:
     """Always the first candidate — the operator's order is the policy.
 
-    The cheapest thing that can be called a strategy: the list is sorted by
+    The simplest thing that can be called a strategy: the list is sorted by
     preference, and the first eligible provider serves every request.  Weights
     are ignored, because the point of naming this strategy is to say the
     order *is* the policy.

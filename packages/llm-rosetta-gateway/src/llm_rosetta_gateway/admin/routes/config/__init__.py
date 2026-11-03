@@ -24,6 +24,7 @@ from .._shared import _guard
 from ..observability import get_provider_key
 from .model_providers import (
     remove_model_provider,
+    reorder_model_providers,
     update_model_provider,
 )
 from .models import (
@@ -104,6 +105,7 @@ __all__ = [
     "register_config_routes",
     "reload_config",
     "remove_model_provider",
+    "reorder_model_providers",
     "toggle_model",
     "toggle_provider",
     "update_model_provider",
@@ -140,6 +142,9 @@ def register_config_routes(app: Any) -> None:
     app.route("/admin/api/config/models/<path:name>/update-provider", methods=["POST"])(
         _guard("models", update_model_provider)
     )
+    app.route(
+        "/admin/api/config/models/<path:name>/reorder-providers", methods=["POST"]
+    )(_guard("models", reorder_model_providers))
     app.route("/admin/api/config/models/bulk", methods=["POST"])(
         _guard("models", bulk_update_models)
     )

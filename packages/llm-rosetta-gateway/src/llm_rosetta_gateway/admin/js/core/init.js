@@ -16,6 +16,7 @@ import { loadMetrics, loadDumps, renderPersistence } from '../tabs/dashboard.js'
 import { loadLogs, renderLogs, updateFilterOptions, updateKeyFilterOptions } from '../tabs/logs.js';
 import { loadOpsLog, switchLogView, populateOpsLogFilters } from '../tabs/ops-log.js';
 import { renderShimSources } from '../tabs/shims.js';
+import { loadRouting, stopRoutingTimer } from '../tabs/routing.js';
 import '../components/test-runner.js';
 import { initLogoPicker } from '../components/logo-picker.js';
 import { initTypePicker } from '../components/type-picker.js';
@@ -69,7 +70,12 @@ function toggleLogPause() {
 
 // ===================== Init =====================
 function initApp(prefetchedConfig) {
-  loadConfig(prefetchedConfig);
+  // The routing panel lists the config's models, so it waits for the config
+  // this call loads: on a deep link the tab's first activation ran before the
+  // session existed and its fetch was refused.
+  loadConfig(prefetchedConfig).then(() => {
+    if (S.currentTab === 'routing') loadRouting();
+  }).catch(() => { /* the models tab reports it */ });
   initUpdates();
   if (_tabEnabled('keys')) { loadKeys(); loadLogKeyLabels(); }
   api.get('/admin/api/internal-token').then(r => { S.internalToken = r.token; }).catch(() => {});
@@ -173,6 +179,7 @@ function activateTab(tab, opts = {}) {
     startLogTimers();
   }
   if (id === 'providers' || id === 'models') { loadConfig(); }
+  if (id === 'routing') { loadRouting(); }
   if (id === 'providers') { S.healthTimer = setInterval(applyProviderHealth, 30000); }
   if (id === 'keys' && _tabEnabled('keys')) { loadKeys(); }
   if (id === 'settings') {
@@ -341,6 +348,7 @@ function stopTimers() {
   if (S.logTimer) { clearInterval(S.logTimer); S.logTimer = null; }
   if (S.opsLogTimer) { clearInterval(S.opsLogTimer); S.opsLogTimer = null; }
   if (S.healthTimer) { clearInterval(S.healthTimer); S.healthTimer = null; }
+  stopRoutingTimer();
 }
 
 // Filter change handlers
@@ -499,7 +507,7 @@ document.querySelectorAll('.modal-overlay').forEach(m => {
   }
   // Redirect away from disabled tabs
   if (b.disabled_tabs && b.disabled_tabs.indexOf(S.currentTab) !== -1) {
-    const _allTabs = b.all_tabs || ['providers', 'models', 'keys', 'dashboard', 'observability', 'settings'];
+    const _allTabs = b.all_tabs || ['providers', 'models', 'routing', 'keys', 'dashboard', 'observability', 'settings'];
     for (let i = 0; i < _allTabs.length; i++) {
       if (b.disabled_tabs.indexOf(_allTabs[i]) === -1) { S.currentTab = _allTabs[i]; break; }
     }

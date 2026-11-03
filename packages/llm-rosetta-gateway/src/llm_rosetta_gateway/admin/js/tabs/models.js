@@ -590,7 +590,16 @@ function _providerMenuRows(name, info, disabledProviders) {
     const n = esc(name);
     const pn = esc(p.name);
     const w = p.weight || 1;
-    return `<div class="provider-menu-row${off ? ' pm-off' : ''}" role="menuitem">
+    // A multi-provider entry's order is its route order, so the rows are
+    // draggable here exactly as they are on the Routing board.
+    const drag = details.length > 1
+      ? ` draggable="true" data-pname="${pn}" data-pmodel="${n}"`
+      : '';
+    const grip = details.length > 1
+      ? `<span class="pm-grip" title="${t('model.reorderHint')}" aria-hidden="true">⠿</span>`
+      : '';
+    return `<div class="provider-menu-row${off ? ' pm-off' : ''}" role="menuitem"${drag}>
+      ${grip}
       <label class="toggle row-toggle" title="${off ? t('provider.disabled') : t('provider.enabled')}"><input type="checkbox" role="switch" ${off ? '' : 'checked'} aria-checked="${!off}" aria-label="${esc(p.name)}" onchange="toggleModelProvider('${n}','${pn}')"><span class="slider"></span></label>
       <div class="pm-id">
         <span class="provider-link pm-name" title="${esc(p.name)}" onclick="goToProviderFromModel('${pn}')">${esc(_providerLabel(p.name))}</span>
@@ -749,6 +758,7 @@ function _syncModelDrawer() {
     Object.entries(providers).filter(([, cfg]) => cfg.enabled === false).map(([n]) => n),
   );
   el.innerHTML = _modelDetailHtml(_drawerModel, info, disabledProviders);
+  _wireProviderDrag(el);
 }
 
 document.addEventListener('keydown', (e) => {
@@ -769,6 +779,84 @@ document.addEventListener('click', (e) => {
   if (e.target.closest('.drawer-trigger')) return;
   closeModelDrawer();
 });
+
+/** Let the provider rows be dragged into a new order.
+ *
+ *  The order is the route: an ``ordered`` model serves from the first
+ *  eligible row, and every other strategy breaks a tie the same way.  The
+ *  drop writes the model's ``providers`` list through the same endpoint the
+ *  Routing board uses, then reloads from what the config accepted.
+ */
+function _wireProviderDrag(root) {
+  if (!root) return;
+  const rows = [...root.querySelectorAll('.provider-menu-row[draggable="true"]')];
+  if (rows.length < 2) return;
+  let dragged = null;
+  rows.forEach((row) => {
+    row.addEventListener('dragstart', (event) => {
+      dragged = row.dataset.pname;
+      row.classList.add('is-dragging');
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', dragged);
+    });
+    row.addEventListener('dragend', () => {
+      dragged = null;
+      rows.forEach((other) => {
+        other.classList.remove('is-dragging', 'is-drop-before', 'is-drop-after');
+      });
+    });
+    row.addEventListener('dragover', (event) => {
+      if (!dragged || row.dataset.pname === dragged) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'move';
+      const box = row.getBoundingClientRect();
+      const after = event.clientY > box.top + box.height / 2;
+      rows.forEach((other) => {
+        other.classList.toggle('is-drop-before', other === row && !after);
+        other.classList.toggle('is-drop-after', other === row && after);
+      });
+    });
+    row.addEventListener('dragleave', () => {
+      row.classList.remove('is-drop-before', 'is-drop-after');
+    });
+    row.addEventListener('drop', (event) => {
+      event.preventDefault();
+      const after = row.classList.contains('is-drop-after');
+      const from = dragged;
+      rows.forEach((other) => {
+        other.classList.remove('is-dragging', 'is-drop-before', 'is-drop-after');
+      });
+      dragged = null;
+      if (!from || from === row.dataset.pname) return;
+      // The same model's rows exist twice — the table's menu and the drawer —
+      // so the list is read from the container this drag happened in.
+      _reorderModelProviders(
+        row.dataset.pmodel, from, row.dataset.pname, after,
+        row.parentElement || document,
+      );
+    });
+  });
+}
+
+/** Move one provider beside another and write the order the rows now show. */
+async function _reorderModelProviders(model, lane, target, after, root) {
+  const names = [...root.querySelectorAll('.provider-menu-row[data-pname]')].map(
+    (row) => row.dataset.pname,
+  );
+  if (!names.includes(lane) || !names.includes(target)) return;
+  names.splice(names.indexOf(lane), 1);
+  names.splice(names.indexOf(target) + (after ? 1 : 0), 0, lane);
+  const res = await api.post(
+    `/admin/api/config/models/${encodeURIComponent(model)}/reorder-providers`,
+    { providers: names },
+  );
+  if (!res.ok) {
+    showToast(res.error || t('toast.error'), 'error');
+    return;
+  }
+  await loadConfig();
+  _syncModelDrawer();
+}
 
 /** The model whose provider menu is open, so a re-render can reopen it.
  *
@@ -1104,6 +1192,7 @@ function renderModels() {
   _syncModelDrawer();
 
   _restoreProviderMenu();
+  _wireProviderDrag(tbody);
 
   // Update filter dropdowns
   window.updateFilterOptions();

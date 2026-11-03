@@ -51,6 +51,34 @@ class TestPersistenceManager:
         assert await pm.count_error_entries() == 1
 
     @pytest.mark.asyncio
+    async def test_activity_by_model(self, pm):
+        for stamp, model in (
+            ("2026-11-02T10:00:00+00:00", "old"),
+            ("2026-11-02T12:00:00+00:00", "fresh"),
+            ("2026-11-02T11:00:00+00:00", "fresh"),
+        ):
+            await pm.insert_log_entries(
+                [
+                    {
+                        "id": stamp + model,
+                        "timestamp": stamp,
+                        "model": model,
+                        "source_provider": "openai_chat",
+                        "target_provider": "anthropic",
+                        "is_stream": False,
+                        "status_code": 200,
+                        "duration_ms": 1.0,
+                    }
+                ]
+            )
+
+        activity = await pm.log_activity_by_model("2026-11-02T00:00:00+00:00")
+
+        assert activity["fresh"]["requests"] == 2
+        assert activity["fresh"]["last_seen"] == "2026-11-02T12:00:00+00:00"
+        assert activity["old"]["requests"] == 1
+
+    @pytest.mark.asyncio
     async def test_clear_log(self, pm):
         entry = RequestLogEntry.create(
             model="gpt-4o",
@@ -157,6 +185,27 @@ class TestSchemaVersioning:
         cursor = await pm._conn.execute("PRAGMA table_info(request_log)")
         columns = {r[1] for r in await cursor.fetchall()}
         assert "api_key_bucket" in columns
+
+    async def test_request_log_has_user_agent_column(self, pm):
+        """Migration v11 adds the client's User-Agent, for the routing panel."""
+        cursor = await pm._conn.execute("PRAGMA table_info(request_log)")
+        columns = {r[1] for r in await cursor.fetchall()}
+        assert "user_agent" in columns
+
+    @pytest.mark.asyncio
+    async def test_user_agent_round_trips(self, pm):
+        entry = RequestLogEntry.create(
+            model="gpt-4o",
+            source_provider="openai_chat",
+            target_provider="anthropic",
+            is_stream=False,
+            status_code=200,
+            duration_ms=50.0,
+            user_agent="claude-cli/1.2.3 (external, cli)",
+        )
+        await pm.insert_log_entries([entry.to_dict()])
+        entries, _total = await pm.query_log_entries(limit=10)
+        assert entries[0]["user_agent"] == "claude-cli/1.2.3 (external, cli)"
 
     async def test_foreign_keys_enabled(self, pm):
         row = await pm._conn.execute_fetchone("PRAGMA foreign_keys")
