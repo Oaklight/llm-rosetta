@@ -474,13 +474,13 @@ llm-rosetta-gateway --socket /run/user/$(id -u)/rosetta.sock
 
 ### 配额故障转移 { #quota-failover }
 
-`failover_on_error`（按模型配置，默认 `false`）在服务方拒绝时，让请求改由同一模型的另一个 provider 来服务。`failover_on_quota` 是同一开关的旧拼写，仍然会被读取，已有配置不受影响：
+`failover_on_error`（按模型配置，默认 `true`）在服务方拒绝时，让请求改由同一模型的另一个 provider 来服务；设为 `false` 可为该模型关闭。`failover_on_quota` 是同一开关的旧拼写，仍然会被读取，已有配置不受影响：
 
 ```jsonc
 "models": {
   "gpt-5": {
     "providers": ["openai-prod", "azure-backup"],
-    "failover_on_error": true
+    "failover_on_error": false
   }
 }
 ```
@@ -492,7 +492,7 @@ llm-rosetta-gateway --socket /run/user/$(id -u)/rosetta.sock
 
 `400`、`403`、`404`、`413`、`422` 会把上游的答复原样返回：换一个 provider 也会拒绝同一个请求。预算是**一次故障转移** —— 不是一次上游调用：如果同一 provider 还有一个可用凭据，会先花掉原有的同 provider 重试，只有整个 provider 都用尽才会转移。拒绝的 provider 在本次请求余下部分被排除，改试另一个 provider；如果它也拒绝，客户端收到的就是它这次的拒绝。
 
-默认关闭，是因为它真的有所取舍：换一个 provider 就是换一份 prompt 缓存、换一个限流桶，甚至可能是另一个模型构建。真的发生时，请求的 profile 会记录 `failover: {from, to, reason}`，请求日志行也指向实际服务的 provider。
+默认开启，因为它响应的拒绝本来就是客户端会收到的错误；只有一个提供方的模型也没有第二次尝试可言。关闭它才是真正的取舍：换一个 provider 就是换一份 prompt 缓存、换一个限流桶，甚至可能是另一个模型构建。真的发生时，请求的 profile 会记录 `failover: {from, to, reason}`，请求日志行也指向实际服务的 provider。
 
 流式请求同样会故障转移，但只在第一个事件之前：处理程序在写出任何内容之前就打开上游连接，因此这一刻的拒绝仍可由别处作答。字节一旦发给客户端，响应就无法重放，流中途的失败会以对应代码结束客户端的流。
 
