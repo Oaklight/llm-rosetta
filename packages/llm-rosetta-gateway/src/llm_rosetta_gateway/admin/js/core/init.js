@@ -178,6 +178,9 @@ function activateTab(tab, opts = {}) {
     populateOpsLogFilters();
     startLogTimers();
   }
+  // Entering the list is a fresh view: a switch flip pins the order only
+  // while the operator stays on the page, so the sort runs again here.
+  if (id === 'providers') { window.resetProviderListOrder?.(); }
   if (id === 'providers' || id === 'models') { loadConfig(); }
   if (id === 'routing') { loadRouting(); }
   if (id === 'providers') { S.healthTimer = setInterval(applyProviderHealth, 30000); }

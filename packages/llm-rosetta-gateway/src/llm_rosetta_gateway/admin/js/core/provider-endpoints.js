@@ -143,3 +143,47 @@ export function providerOrder(cfg, caps = null) {
   if (status === 'problem') return 0;
   return status === 'off' ? 2 : 1;
 }
+
+/**
+ * Order provider entries for display.
+ *
+ * Without a pin this is the sort: problems first, healthy providers next,
+ * switched-off last, and the configured order kept inside each group.
+ *
+ * `pinned` is the order already on screen.  Names it lists keep that order
+ * and names it does not list follow in sorted order.  That is what keeps a
+ * row under the pointer when the switch that changes its group is the row
+ * itself: re-sorting on every render made a disabled provider jump to the
+ * tail and vanish from view.
+ *
+ * Args:
+ *   entries: `[name, cfg]` pairs, in configured order.
+ *   capsOf: `(cfg, name) => string[]` for the capabilities the row shows, or
+ *     `null` when only the provider switch matters.
+ *   pinned: names in the order currently displayed, or `null`.
+ *
+ * Returns:
+ *   A new array in display order.
+ */
+export function orderedProviders(entries, capsOf = null, pinned = null) {
+  const position = new Map();
+  for (const [index, name] of (pinned || []).entries()) position.set(name, index);
+  return entries
+    .map((entry, index) => ({ entry, index }))
+    .sort((a, b) => {
+      const pa = position.get(a.entry[0]);
+      const pb = position.get(b.entry[0]);
+      if (pa !== undefined || pb !== undefined) {
+        if (pa === undefined) return 1;
+        if (pb === undefined) return -1;
+        return pa - pb;
+      }
+      const capsA = capsOf ? capsOf(a.entry[1], a.entry[0]) : null;
+      const capsB = capsOf ? capsOf(b.entry[1], b.entry[0]) : null;
+      return (
+        providerOrder(a.entry[1], capsA) - providerOrder(b.entry[1], capsB) ||
+        a.index - b.index
+      );
+    })
+    .map(({ entry }) => entry);
+}
