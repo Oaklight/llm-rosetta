@@ -18,7 +18,7 @@ from typing import Any
 
 logger = logging.getLogger("llm-rosetta-gateway")
 
-CURRENT_VERSION = 3
+CURRENT_VERSION = 4
 
 
 def _migrate_v0_to_v1(raw: dict[str, Any]) -> None:
@@ -233,10 +233,89 @@ def _migrate_v2_to_v3(raw: dict[str, Any]) -> None:
                 cfg["type"] = "decisions"
 
 
+def _migrate_v3_to_v4(raw: dict[str, Any]) -> None:
+    """Give a legacy capability-only model an explicit ``type``.
+
+    Before (v3):
+        models.{model}.capabilities = ["embedding"]   (no ``type``)
+
+    After (v4):
+        models.{model}.type = "embeddings"
+
+    The admin console has always rendered such an entry as that type, and the
+    parser reads it the same way (:func:`config.parse.declared_model_type`);
+    writing the field makes the document say what both already do, so a
+    reader without the capability fallback cannot change the answer.
+
+    The type is written only when the entry's provider can serve that
+    endpoint — the same pool parse the distribution uses.  A provider without
+    an ``embeddings_format`` (or the matching shim) leaves the entry in the
+    chat pool at runtime, so writing the type there would make the file
+    disagree with the process, and with a reader that trusts ``type``.
+    """
+    models = raw.get("models")
+    if not isinstance(models, dict):
+        return
+    from ..config.parse import declared_model_type, declared_provider_names
+
+    serving: dict[str, set[str]] = {}
+    for cfg in models.values():
+        if not isinstance(cfg, dict) or cfg.get("type"):
+            continue
+        model_type = declared_model_type(cfg)
+        if model_type == "llm":
+            continue
+        if not serving:
+            serving.update(_serving_providers(raw))
+        names = declared_provider_names(cfg)
+        if not any(name in serving.get(model_type, ()) for name in names):
+            continue
+        cfg["type"] = model_type
+
+
+def _serving_providers(raw: dict[str, Any]) -> dict[str, set[str]]:
+    """The providers each non-LLM type would route to, from the raw document.
+
+    Uses the same ``parse_typed_config`` calls the runtime pools make, so the
+    migration's idea of "this provider serves the type" cannot drift from the
+    distribution's.
+    """
+    from llm_rosetta.formats import legacy_model_type
+
+    from ..config.typed import _typed_descriptors, parse_typed_config
+
+    raw_providers = raw.get("providers") or {}
+    proxy = (raw.get("server") or {}).get("proxy")
+    serving: dict[str, set[str]] = {}
+    for descriptor in _typed_descriptors():
+        unified = parse_typed_config(
+            raw_providers,
+            {},
+            descriptor=descriptor,
+            require_declared_format=True,
+            map_models=False,
+            global_proxy=proxy,
+        )[0]
+        old_name = legacy_model_type(descriptor.name)
+        legacy_raw = raw.get(f"{descriptor.name}_providers") or (
+            raw.get(f"{old_name}_providers", {}) if old_name else {}
+        )
+        legacy = parse_typed_config(
+            legacy_raw,
+            {},
+            descriptor=descriptor,
+            format_key="format",
+            global_proxy=proxy,
+        )[0]
+        serving[descriptor.name] = set(unified) | set(legacy)
+    return serving
+
+
 _MIGRATIONS: list[tuple[int, Any]] = [
     (0, _migrate_v0_to_v1),
     (1, _migrate_v1_to_v2),
     (2, _migrate_v2_to_v3),
+    (3, _migrate_v3_to_v4),
 ]
 
 

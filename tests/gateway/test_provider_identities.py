@@ -331,6 +331,17 @@ class TestValidation:
         )
         assert cfg.embeddings_models["e"] == "acme"
 
+    def test_capability_only_embedding_model_is_accepted(self, embeddings_shim):
+        """A legacy entry names its type as a capability, not ``type``."""
+        cfg = GatewayConfig(
+            {
+                "providers": {"acme": {"embeddings_shim": SHIM_NAME}},
+                "models": {"e": {"provider": "acme", "capabilities": ["embedding"]}},
+            }
+        )
+        assert cfg.embeddings_models["e"] == "acme"
+        assert "e" not in cfg.models
+
 
 class TestBuiltinEndpointShims:
     """The shipped embedding/rerank shims resolve an endpoint-only provider.

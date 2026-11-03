@@ -189,10 +189,13 @@ def _resolve_model_reasoning(
 
 def _normalize_model_entry(value: Any) -> dict[str, Any]:
     """Normalize a single model config value to a dict for the admin UI."""
+    from ....config.parse import declared_model_type
+
     if isinstance(value, str):
         return {
             "provider": value,
             "capabilities": ["text"],
+            "type": "llm",
             "failover_on_error": True,
         }
     entry: dict[str, Any] = {
@@ -207,8 +210,10 @@ def _normalize_model_entry(value: Any) -> dict[str, Any]:
         entry["provider"] = first if isinstance(first, str) else first.get("name", "")
     else:
         entry["provider"] = value.get("provider", "")
-    if value.get("type"):
-        entry["type"] = value["type"]
+    # The derived type, not only an explicit one: the console reads this field
+    # and nothing else, so the panel and the pools cannot apply different
+    # rules to a legacy capability-only entry.
+    entry["type"] = declared_model_type(value)
     for key in (
         "upstream_model",
         "reasoning_override",

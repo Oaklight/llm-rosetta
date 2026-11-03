@@ -203,7 +203,7 @@ class TestTheParsePath:
         text = (
             "{\n"
             "  // the ledger this document carries\n"
-            '  "config_version": 3,\n'
+            f'  "config_version": {CURRENT_VERSION},\n'
             '  "providers": {"alcf": {"type": "chat_completions"}},\n'
             "}\n"
         )

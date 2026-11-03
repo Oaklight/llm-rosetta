@@ -11,6 +11,7 @@ import os
 from typing import TYPE_CHECKING, Any
 
 from .io import _ENV_VAR_RE
+from .parse import declared_model_type
 from .resolve import detect_routing_loops
 
 if TYPE_CHECKING:
@@ -325,8 +326,9 @@ def validate(config: GatewayConfig, raw_models: dict[str, Any]) -> None:
     for model, route in config.models.items():
         entry = raw_models.get(model)
         # Typed models are moved out of the LLM pool later; an embedding
-        # model legitimately points at an embedding provider.
-        declared_type = entry.get("type", "llm") if isinstance(entry, dict) else "llm"
+        # model legitimately points at an embedding provider.  The type may
+        # be declared explicitly or, on a legacy entry, only as a capability.
+        declared_type = declared_model_type(entry)
         for pname in route.provider_names:
             if pname not in config._raw_providers:
                 raise ValueError(

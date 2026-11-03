@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import pytest
 
+from llm_rosetta_gateway.config.parse import declared_model_type
 from llm_rosetta_gateway.model_types import (
     ModelTypeDescriptor,
     RouteSpec,
@@ -14,6 +15,42 @@ from llm_rosetta_gateway.model_types import (
     register_model_type,
     registered_type_names,
 )
+
+
+class TestDeclaredModelTypePriority:
+    """A multi-capability entry lands in one pool, whatever order it lists.
+
+    The console used a fixed priority while the backend read the array in
+    order, so a hand edit that put ``rerank`` before ``embedding`` moved the
+    model to another pool than the panel showed.  Both now read the registry
+    order (llm, embeddings, rerank, decisions), with ``llm`` excluded.
+    """
+
+    @pytest.mark.parametrize(
+        ("caps", "expected"),
+        [
+            (["rerank", "embedding"], "embeddings"),
+            (["embedding", "rerank"], "embeddings"),
+            (["decision", "embedding"], "embeddings"),
+            (["decisions", "rerank"], "rerank"),
+            (["decision"], "decisions"),
+            (["decisions"], "decisions"),
+            (["embedding", "text"], "llm"),
+        ],
+    )
+    def test_fixed_priority(self, caps: list[str], expected: str) -> None:
+        assert declared_model_type({"capabilities": caps}) == expected
+
+    def test_explicit_type_wins(self) -> None:
+        entry = {"type": "llm", "capabilities": ["embedding"]}
+        assert declared_model_type(entry) == "llm"
+
+    def test_an_unknown_type_is_kept(self) -> None:
+        """Only canonicalised, not validated: the pools skip it themselves."""
+        assert declared_model_type({"type": "ghost"}) == "ghost"
+
+    def test_a_bare_string_is_not_a_capability_list(self) -> None:
+        assert declared_model_type({"capabilities": "embedding"}) == "llm"
 
 
 # ---------------------------------------------------------------------------
@@ -421,6 +458,74 @@ class TestDistributeTypedModels:
         config = GatewayConfig(raw)
         assert "jina-reranker-v2" in config.rerank_models
         assert "jina-reranker-v2" not in config.models
+
+    def test_capability_only_entry_joins_the_typed_pool(self) -> None:
+        """A legacy entry names its type only as a capability.
+
+        The model editor writes ``type``, but entries written before it did
+        carry the type as a single capability — the spelling the admin
+        console renders as that type.
+        """
+        from llm_rosetta_gateway.config import GatewayConfig
+
+        raw = {
+            "providers": {
+                "sf": {
+                    "api_key": "test",
+                    "base_url": "https://api.siliconflow.cn",
+                    "type": "openai_chat",
+                    "embeddings_format": "openai",
+                },
+            },
+            "models": {
+                "bge-m3": {"provider": "sf", "capabilities": ["embedding"]},
+            },
+        }
+        config = GatewayConfig(raw)
+        assert config.embeddings_models["bge-m3"] == "sf"
+        assert "bge-m3" not in config.models
+
+    def test_capability_only_decision_entry_is_canonicalised(self) -> None:
+        """The legacy spelling ``decision`` joins the ``decisions`` pool."""
+        from llm_rosetta_gateway.config import GatewayConfig
+
+        raw = {
+            "providers": {
+                "oa": {
+                    "api_key": "test",
+                    "base_url": "https://api.openai.com",
+                    "type": "openai_chat",
+                    "decisions_format": "openai_decisions",
+                },
+            },
+            "models": {
+                "decider": {"provider": "oa", "capabilities": ["decision"]},
+            },
+        }
+        config = GatewayConfig(raw)
+        assert config.decisions_models["decider"] == "oa"
+        assert "decider" not in config.models
+
+    def test_text_capability_keeps_the_model_in_the_llm_pool(self) -> None:
+        """A typed capability beside ``text`` is an extra, not an identity."""
+        from llm_rosetta_gateway.config import GatewayConfig
+
+        raw = {
+            "providers": {
+                "sf": {
+                    "api_key": "test",
+                    "base_url": "https://api.siliconflow.cn",
+                    "type": "openai_chat",
+                    "embeddings_format": "openai",
+                },
+            },
+            "models": {
+                "multi": {"provider": "sf", "capabilities": ["text", "embedding"]},
+            },
+        }
+        config = GatewayConfig(raw)
+        assert "multi" in config.models
+        assert "multi" not in config.embeddings_models
 
     def test_typed_model_with_provider_list_is_distributed(self) -> None:
         """A ``providers`` list routes to its first provider in the pool."""

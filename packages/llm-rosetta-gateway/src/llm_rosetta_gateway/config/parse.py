@@ -414,16 +414,58 @@ def declared_provider_entries(value: Any) -> list[Any]:
     return [entry for entry in entries if entry.name]
 
 
-def distribute_typed_models(config: GatewayConfig, raw_models: dict[str, Any]) -> None:
-    """Move models with non-LLM ``type`` from the main models pool
-    into the corresponding specialized models dicts.
+def declared_model_type(value: Any) -> str:
+    """The model type a ``models`` entry declares, canonicalised.
 
-    Uses the model type registry to determine which types are valid
-    non-LLM types.  Models whose provider lacks the corresponding
-    endpoint config are silently skipped.
+    An explicit ``type`` is authoritative and is only canonicalised, not
+    validated: an entry that spells a type the registry does not know keeps
+    that spelling, and the pools treat it as an unknown non-chat type.
+
+    An entry written before the model editor sent that field names its type
+    only as a capability — ``capabilities: ["embedding"]``.  Several typed
+    capabilities may be present, so the one with the highest priority wins in
+    a fixed order — the registry order, with ``llm`` excluded — never the
+    order the entry happens to list them in.  That is what keeps the answer
+    stable when a hand edit reorders the array.
+
+    A model that also declares ``text`` is a chat model: the typed capability
+    is an extra it serves, not its identity, so it stays in the LLM pool.
+
+    Args:
+        value: One entry of the ``models`` section.
+
+    Returns:
+        A canonical model type name; ``"llm"`` when the entry declares none.
     """
     from llm_rosetta.formats import canonical_model_type
 
+    from ..model_types import registered_type_names
+
+    if not isinstance(value, dict):
+        return "llm"
+    declared = value.get("type")
+    if declared:
+        return canonical_model_type(declared)
+
+    caps = value.get("capabilities")
+    if not isinstance(caps, list) or "text" in caps:
+        return "llm"
+    declared_types = {canonical_model_type(cap) for cap in caps if isinstance(cap, str)}
+    for name in registered_type_names():
+        if name != "llm" and name in declared_types:
+            return name
+    return "llm"
+
+
+def distribute_typed_models(config: GatewayConfig, raw_models: dict[str, Any]) -> None:
+    """Move models of a non-LLM type from the main models pool
+    into the corresponding specialized models dicts.
+
+    The type comes from :func:`declared_model_type`, so an entry that names it
+    only as a legacy capability is distributed too.  Uses the model type
+    registry to determine which types are valid non-LLM types.  Models whose
+    provider lacks the corresponding endpoint config are silently skipped.
+    """
     from ..model_types import registered_type_names
 
     # Build a mapping from type name -> (providers dict, models dict)
@@ -444,9 +486,9 @@ def distribute_typed_models(config: GatewayConfig, raw_models: dict[str, Any]) -
     for name, value in raw_models.items():
         if not isinstance(value, dict):
             continue
-        # A model written before the rename says ``type: embedding``; the
+        # An explicit ``type`` or the legacy capability-only spelling; the
         # pools are keyed by the canonical name.
-        model_type = canonical_model_type(value.get("type", "llm"))
+        model_type = declared_model_type(value)
         if model_type == "llm" or value.get("enabled") is False:
             continue
 
