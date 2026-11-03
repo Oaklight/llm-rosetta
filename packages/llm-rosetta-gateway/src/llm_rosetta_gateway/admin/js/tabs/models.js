@@ -23,14 +23,10 @@ function _activateSegChild(el) {
 
 function _getModelType(info) {
   if (typeof info === 'string') return 'llm';
-  // Server-provided type field takes precedence
-  if (info.type) return info.type;
-  // Capability-based fallback for legacy entries.  ``embedding`` is the
-  // pre-rename capability spelling, still present on older payloads.
-  const caps = info.capabilities || ['text'];
-  if ((caps.includes('embeddings') || caps.includes('embedding')) && !caps.includes('text')) return 'embeddings';
-  if (caps.includes('rerank') && !caps.includes('text')) return 'rerank';
-  return 'llm';
+  // The payload ships the derived type for every entry, so the console does
+  // not keep a second copy of the capability rule.  A missing type is an old
+  // payload, and reads as the chat default.
+  return info.type || 'llm';
 }
 
 /** Look up the badge CSS class for a model type from registry metadata. */
@@ -217,9 +213,10 @@ function toggleModelProviderPicker(btn) {
 }
 window.toggleModelProviderPicker = toggleModelProviderPicker;
 
-function openModelModal(model, provider, capabilities, upstreamModel, sourceModel) {
+function openModelModal(model, provider, capabilities, upstreamModel, sourceModel, modelType) {
   // sourceModel: when cloning, the original model name to read reasoning from
   // (the visible name field is left blank so the user picks a new name).
+  // modelType: the type the payload derived for this entry; a new model is chat.
   document.getElementById('modelModalTitle').textContent = model ? t('modal.editModel') : t('modal.addModel');
   document.getElementById('modelName').value = model || '';
   document.getElementById('modelName').dataset.originalName = model || '';
@@ -262,7 +259,7 @@ function openModelModal(model, provider, capabilities, upstreamModel, sourceMode
 
   // Set model type via seg-control (data-driven: find the matching radio)
   const caps = capabilities || ['text', 'tools'];
-  const detectedType = _getModelType({capabilities: caps, type: null});
+  const detectedType = modelType || 'llm';
   const segLabels = document.getElementById('modelModalTypeSeg').querySelectorAll(':scope > div');
   segLabels.forEach(l => l.classList.remove('active'));
   // Find the seg-control option matching detectedType
@@ -1424,7 +1421,8 @@ function editModel(name, provider) {
     const cfg = (S.configData.providers || {})[p];
     return cfg && cfg.enabled !== false;
   }) || provs[0]) : (provider || provs[0] || '');
-  openModelModal(name, prov, caps, upstream);
+  const modelType = (typeof info === 'object' && info.type) ? info.type : null;
+  openModelModal(name, prov, caps, upstream, undefined, modelType);
 }
 
 function cloneModel(name) {
@@ -1435,8 +1433,9 @@ function cloneModel(name) {
   const provider = typeof info === 'string' ? info : (info.provider || '');
   const caps = typeof info === 'string' ? ['text'] : (info.capabilities || ['text']);
   const upstream = (typeof info === 'object' && info.upstream_model) ? info.upstream_model : '';
+  const modelType = (typeof info === 'object' && info.type) ? info.type : null;
   // name blank ('') → modal opens in "add" mode; sourceModel feeds reasoning config
-  openModelModal('', provider, caps, upstream, name);
+  openModelModal('', provider, caps, upstream, name, modelType);
 }
 
 // ── Bulk operations ──

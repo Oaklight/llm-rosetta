@@ -44,3 +44,21 @@ def test_supports_custom_tools_defaults():
 
     assert by_name["chat_completions"]["supports_custom_tools"] is True
     assert by_name["messages"]["supports_custom_tools"] is False
+
+
+def test_a_model_entry_carries_its_derived_type():
+    """The console reads ``type`` and nothing else, so the payload derives it.
+
+    A legacy capability-only entry used to arrive without a type, and the
+    console then re-applied its own capability rule; the two could disagree.
+    """
+    from llm_rosetta_gateway.admin.routes.config.payload import _normalize_model_entry
+
+    legacy = _normalize_model_entry({"provider": "p", "capabilities": ["embedding"]})
+    assert legacy["type"] == "embeddings"
+
+    plain = _normalize_model_entry({"provider": "p", "capabilities": ["text"]})
+    assert plain["type"] == "llm"
+
+    bare = _normalize_model_entry("p")
+    assert bare["type"] == "llm"

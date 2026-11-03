@@ -441,6 +441,94 @@ class TestMigrationV2ToV3:
         assert "decision_models" not in raw
 
 
+class TestMigrationV3ToV4:
+    """Migration 004: write the type a legacy entry names as a capability."""
+
+    def test_capability_only_embedding_entry_gains_its_type(self):
+        raw = {
+            "config_version": 3,
+            "providers": {
+                "sf": {
+                    "type": "openai",
+                    "api_key": "sk-sf",
+                    "base_url": "https://sf.test",
+                    "embeddings_format": "openai",
+                }
+            },
+            "models": {"bge-m3": {"provider": "sf", "capabilities": ["embedding"]}},
+        }
+        migrate(raw)
+        assert raw["models"]["bge-m3"]["type"] == "embeddings"
+        assert raw["models"]["bge-m3"]["capabilities"] == ["embedding"]
+
+    def test_decision_spelling_is_canonicalised(self):
+        raw = {
+            "config_version": 3,
+            "providers": {
+                "oa": {
+                    "type": "openai",
+                    "api_key": "sk-oa",
+                    "base_url": "https://oa.test",
+                    "decisions_format": "openai_decisions",
+                }
+            },
+            "models": {"decider": {"provider": "oa", "capabilities": ["decision"]}},
+        }
+        migrate(raw)
+        assert raw["models"]["decider"]["type"] == "decisions"
+
+    def test_a_type_the_provider_cannot_serve_is_not_written(self):
+        """The file must not claim a pool the process does not use.
+
+        The distribution skips an entry whose provider declares no such
+        endpoint, so the entry stays a chat model; writing ``type`` here
+        would make the document disagree with every reader of it.
+        """
+        raw = {
+            "config_version": 3,
+            "providers": {
+                "chat-only": {
+                    "type": "chat_completions",
+                    "api_key": "sk-c",
+                    "base_url": "https://chat.test",
+                }
+            },
+            "models": {"m": {"provider": "chat-only", "capabilities": ["embedding"]}},
+        }
+        migrate(raw)
+        assert "type" not in raw["models"]["m"]
+
+    def test_an_explicit_type_is_not_overwritten(self):
+        raw = {
+            "config_version": 3,
+            "providers": {},
+            "models": {
+                "m": {"provider": "p", "type": "rerank", "capabilities": ["embedding"]}
+            },
+        }
+        migrate(raw)
+        assert raw["models"]["m"]["type"] == "rerank"
+
+    def test_a_chat_model_keeps_no_type(self):
+        """``text`` beside a typed capability makes the entry a chat model."""
+        raw = {
+            "config_version": 3,
+            "providers": {},
+            "models": {"m": {"provider": "p", "capabilities": ["text", "embedding"]}},
+        }
+        migrate(raw)
+        assert "type" not in raw["models"]["m"]
+
+    def test_llm_capabilities_are_not_a_type(self):
+        raw = {
+            "config_version": 3,
+            "providers": {},
+            "models": {"m": {"provider": "p", "capabilities": ["vision", "tools"]}},
+        }
+        migrate(raw)
+        assert "type" not in raw["models"]["m"]
+
+
 class TestConfigIOIntegration:
     """JsoncConfigIO applies migrations on load and writes back."""
 
@@ -478,6 +566,63 @@ class TestConfigIOIntegration:
             on_disk = json.load(f)
         assert on_disk["config_version"] == CURRENT_VERSION
         assert "rerank_providers" not in on_disk
+
+    def test_a_capability_only_entry_is_written_with_the_type_it_serves(self, tmp_path):
+        """The write-back, the migration and the pools agree on the answer."""
+        config_path = str(tmp_path / "config.jsonc")
+        old_config = {
+            "config_version": 3,
+            "providers": {
+                "sf": {
+                    "type": "openai",
+                    "api_key": "sk-sf",
+                    "base_url": "https://sf.test",
+                    "embeddings_format": "openai",
+                }
+            },
+            "models": {"bge-m3": {"provider": "sf", "capabilities": ["embedding"]}},
+        }
+        with open(config_path, "w") as f:
+            json.dump(old_config, f)
+
+        from llm_rosetta_gateway.config import load_gateway_config
+
+        config = load_gateway_config(config_path)
+
+        assert "bge-m3" in config.embeddings_models
+        with open(config_path) as f:
+            on_disk = json.load(f)
+        assert on_disk["config_version"] == CURRENT_VERSION
+        assert on_disk["models"]["bge-m3"]["type"] == "embeddings"
+
+    def test_a_capability_only_entry_its_provider_cannot_serve_stays_chat(
+        self, tmp_path
+    ):
+        """The negative case, end to end: no ``type`` on disk, chat in memory."""
+        config_path = str(tmp_path / "config.jsonc")
+        old_config = {
+            "config_version": 3,
+            "providers": {
+                "chat-only": {
+                    "type": "chat_completions",
+                    "api_key": "sk-c",
+                    "base_url": "https://chat.test",
+                }
+            },
+            "models": {"m": {"provider": "chat-only", "capabilities": ["embedding"]}},
+        }
+        with open(config_path, "w") as f:
+            json.dump(old_config, f)
+
+        from llm_rosetta_gateway.config import load_gateway_config
+
+        config = load_gateway_config(config_path)
+
+        assert "m" in config.models
+        assert "m" not in config.embeddings_models
+        with open(config_path) as f:
+            on_disk = json.load(f)
+        assert "type" not in on_disk["models"]["m"]
 
     def test_load_raw_migrates_preserving_env_vars(self, tmp_path):
         config_path = str(tmp_path / "config.jsonc")
