@@ -1,0 +1,42 @@
+{
+  "generated_by": "zerodep 2026.10.24",
+  "lock_version": 1,
+  "modules": {
+    "aiosqlite": {
+      "files": {
+        "aiosqlite.py": "dfc81b2866a65c6cfa2ece5ea2d2adf66aa2c38d6636f63a2165d6e830d53cec"
+      },
+      "requested": true,
+      "upstream_hash": "5ccc743a9afc629507d295d3111dff3d229a2c8a604f18ad6640d0bd9d3dca40",
+      "version": "0.1.0"
+    },
+    "httpclient": {
+      "files": {
+        "httpclient.py": "4071ede8ef2e6d28c642ea2f5590109ce48dd6d359d93320b150752a2dbc7c00"
+      },
+      "requested": true,
+      "upstream_hash": "3966c84bb7f6305da7a7dfefdc2de6800ebc8498618e7255ae78c183949c7855",
+      "version": "0.6.4"
+    },
+    "httpserver": {
+      "files": {
+        "httpserver.py": "a9a7d64bdd4a599ee582764466779db72f5cc3e1e7f21e03d27bedf0281f2d3e"
+      },
+      "requested": true,
+      "upstream_hash": "83f6f376fb6bb4ee3d05eeeb9a4039807c9d30339a75cbfcd6053f2fdc0fbf98",
+      "version": "0.7.0"
+    },
+    "ratelimit": {
+      "files": {
+        "ratelimit.py": "ef027e0d0df54171db5d65735dccb59ff370abc4c6ddaf5f7869b9f941b0f841"
+      },
+      "requested": true,
+      "upstream_hash": "8631c3eec614fbf0f12022840f498ff3b558ca8a5e1846bcc1205192baf61ef0",
+      "version": "0.2.0"
+    }
+  },
+  "source": {
+    "ref": "v2026.11.3",
+    "repo": "Oaklight/zerodep"
+  }
+}
