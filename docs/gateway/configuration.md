@@ -576,7 +576,7 @@ A `providers[]` entry may declare what that provider serves **for this model**, 
 }
 ```
 
-A request that carries an image needs `vision`, one that declares tools needs `tools`, and one that asks for a reasoning effort needs `reasoning`. An entry whose list lacks a needed capability is not a candidate **for that request**, and stays a candidate for every other one. An entry that declares nothing inherits the provider's own capabilities, so a config without the field behaves exactly as before. When every candidate lacks the capability the route answers `400` and names it — a retry cannot add one. The model drawer has the same field on each provider row; blank means inherit ([admin panel](gateway/admin-panel.md)).
+A request that carries an image needs `vision`, one that declares tools needs `tools`, and one that asks for a reasoning effort needs `reasoning`. An entry whose list lacks a needed capability is not a candidate **for that request**, and stays a candidate for every other one. An entry that declares nothing inherits the provider's own capabilities, so a config without the field behaves exactly as before. When every candidate lacks the capability the route answers `400` and names it — a retry cannot add one. The model drawer has the same field on each provider row; blank means inherit ([admin panel](admin-panel.md)).
 
 ### Typed Routes { #typed-routes }
 
