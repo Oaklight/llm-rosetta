@@ -54,8 +54,10 @@ class ModelRouting:
         sink: Whether a recent 429 orders a provider last for this model.
             The provider's *disable* is process-wide; this only says whether
             the model cares about the milder sink.
-        first_token_ms: Reserved for the first-token deadline.  Parsed and
-            kept, but the selector does not act on it yet.
+        first_token_ms: The first-token deadline, in milliseconds.  The
+            streaming proxy closes a lane that sends no event within it and,
+            when the model opted into failover, tries the next lane;
+            otherwise the request answers ``504``.
         rules: Per-request rules, evaluated in order; the first match wins.
     """
 
