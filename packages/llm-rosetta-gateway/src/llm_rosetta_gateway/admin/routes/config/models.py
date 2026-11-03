@@ -204,6 +204,23 @@ def _to_multi_provider_entry(
     return entry
 
 
+def _carry_routing(existing: dict[str, Any], body: dict[str, Any]) -> None:
+    """Carry the model's ``routing`` block, which the editor writes whole.
+
+    The block is stored verbatim; the config rebuild that follows the save is
+    what validates it, so a bad value comes back as the parser's own message
+    instead of a second, weaker check here.  A body that omits the key leaves
+    a block already stored in place.
+    """
+    if "routing" not in body:
+        return
+    routing = body["routing"]
+    if routing in (None, {}):
+        existing.pop("routing", None)
+    else:
+        existing["routing"] = routing
+
+
 def _update_multi_provider_entry(
     existing: dict[str, Any], body: dict[str, Any], provider: str = ""
 ) -> None:
@@ -242,6 +259,7 @@ def _update_multi_provider_entry(
         elif "reasoning_override" in existing:
             del existing["reasoning_override"]
     _carry_flag(existing, body, "failover_on_quota")
+    _carry_routing(existing, body)
     if body.get("enabled") is not None:
         existing["enabled"] = body["enabled"]
 

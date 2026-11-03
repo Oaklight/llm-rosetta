@@ -109,6 +109,7 @@ from .credential import (
     put_provider_credential,
 )
 from .quota import get_provider_quota
+from .routing import get_model_routing, list_routable_models, put_model_routing
 from .testing import (
     cancel_test,
     get_test_result,
@@ -236,6 +237,12 @@ def register_admin_routes(app: Any) -> None:
     app.route("/admin/api/config/providers/<name>/quota", methods=["GET"])(
         get_provider_quota
     )
+    # The routing panel: one model's candidates, their state and the block.
+    # ``<path:model>`` because a model name can carry a vendor prefix
+    # (``alcf/Qwen3-Coder-480B``), the same shape the config endpoints take.
+    app.route("/admin/api/routing", methods=["GET"])(list_routable_models)
+    app.route("/admin/api/routing/<path:model>", methods=["GET"])(get_model_routing)
+    app.route("/admin/api/routing/<path:model>", methods=["PUT"])(put_model_routing)
     # Shim-declared credentials: read, install a record, sign out
     app.route("/admin/api/config/providers/<name>/credential", methods=["GET"])(
         get_provider_credential

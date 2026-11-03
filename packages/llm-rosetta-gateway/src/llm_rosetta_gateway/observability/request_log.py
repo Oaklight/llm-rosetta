@@ -52,6 +52,9 @@ class RequestLogEntry:
     #: The id the client saw in ``X-Request-Id``.  ``id`` is the entry id, so
     #: without this a client-visible id cannot be looked up (#1217).
     request_id: str | None = None
+    #: The client's ``User-Agent``, truncated.  ``None`` when it sent none or
+    #: when the row predates the column.
+    user_agent: str | None = None
     #: Milliseconds from the request reaching the upstream until its first
     #: stream chunk.  Only a stream has one, and a row written before the
     #: column existed has none: ``None`` means "not measured", never zero.
@@ -82,6 +85,7 @@ class RequestLogEntry:
         model_type: str = DEFAULT_MODEL_TYPE,
         request_id: str | None = None,
         ttft_ms: float | None = None,
+        user_agent: str | None = None,
     ) -> RequestLogEntry:
         """Factory with auto-generated id and timestamp."""
         return cls(
@@ -108,6 +112,7 @@ class RequestLogEntry:
             model_type=model_type,
             request_id=request_id,
             ttft_ms=None if ttft_ms is None else round(float(ttft_ms), 2),
+            user_agent=user_agent,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -125,34 +130,27 @@ class RequestLogEntry:
             # value on every row, so a dict without it would not be the row.
             "model_type": self.model_type,
         }
-        if self.error_detail is not None:
-            d["error_detail"] = self.error_detail
-        if self.api_key_label is not None:
-            d["api_key_label"] = self.api_key_label
-        if self.target_provider_name is not None:
-            d["target_provider_name"] = self.target_provider_name
-        if self.ttft_ms is not None:
-            d["ttft_ms"] = self.ttft_ms
-        if self.client_ip is not None:
-            d["client_ip"] = self.client_ip
-        if self.profile is not None:
-            d["profile"] = self.profile
-        if self.input_tokens is not None:
-            d["input_tokens"] = self.input_tokens
-        if self.output_tokens is not None:
-            d["output_tokens"] = self.output_tokens
-        if self.total_tokens is not None:
-            d["total_tokens"] = self.total_tokens
-        if self.cache_read_tokens is not None:
-            d["cache_read_tokens"] = self.cache_read_tokens
-        if self.cache_creation_tokens is not None:
-            d["cache_creation_tokens"] = self.cache_creation_tokens
-        if self.reasoning_tokens is not None:
-            d["reasoning_tokens"] = self.reasoning_tokens
-        if self.api_key_bucket is not None:
-            d["api_key_bucket"] = self.api_key_bucket
-        if self.request_id is not None:
-            d["request_id"] = self.request_id
+        # Optional fields are absent, not null, when they were not measured:
+        # a reader that sums a column must not count a row it cannot see.
+        for key, value in (
+            ("error_detail", self.error_detail),
+            ("api_key_label", self.api_key_label),
+            ("target_provider_name", self.target_provider_name),
+            ("ttft_ms", self.ttft_ms),
+            ("client_ip", self.client_ip),
+            ("profile", self.profile),
+            ("input_tokens", self.input_tokens),
+            ("output_tokens", self.output_tokens),
+            ("total_tokens", self.total_tokens),
+            ("cache_read_tokens", self.cache_read_tokens),
+            ("cache_creation_tokens", self.cache_creation_tokens),
+            ("reasoning_tokens", self.reasoning_tokens),
+            ("api_key_bucket", self.api_key_bucket),
+            ("request_id", self.request_id),
+            ("user_agent", self.user_agent),
+        ):
+            if value is not None:
+                d[key] = value
         return d
 
 
@@ -278,6 +276,30 @@ class RequestLog:
         if self._persistence is not None:
             return await self._persistence.get_api_key_labels()
         return sorted({e.api_key_label for e in self._entries if e.api_key_label})
+
+    async def activity_by_model(self, since: str) -> dict[str, dict[str, Any]]:
+        """Count requests per model since *since*, and when it last ran.
+
+        Args:
+            since: ISO 8601 lower bound (inclusive).
+
+        Returns:
+            ``{model: {"requests": int, "last_seen": str}}``; a model with no
+            row in the window is absent.
+        """
+        if self._persistence is not None:
+            return await self._persistence.log_activity_by_model(since)
+        activity: dict[str, dict[str, Any]] = {}
+        for entry in self._entries:
+            if entry.timestamp < since:
+                continue
+            row = activity.setdefault(
+                entry.model, {"requests": 0, "last_seen": entry.timestamp}
+            )
+            row["requests"] += 1
+            if entry.timestamp > row["last_seen"]:
+                row["last_seen"] = entry.timestamp
+        return activity
 
     def load_entries(self, entries: list[dict[str, Any]]) -> None:
         """Bulk-load entries (in-memory fallback only)."""

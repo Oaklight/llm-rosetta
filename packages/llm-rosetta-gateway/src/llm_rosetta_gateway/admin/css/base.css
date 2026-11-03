@@ -302,8 +302,12 @@ body.auth-pending > .db-footer { display: none !important; }
   .app-shell, .login-box { transition: none; }
 }
 .content { max-width: 1600px; }
-/* The status bar belongs to the content column, not the whole window. */
-@media (min-width: 901px) { .db-footer { left: 220px; } }
+/* The rail is the console's left edge and runs to the window bottom, so the
+   status bar starts beside it (components.css) and its four buttons sit at
+   the very foot of the column, not above a reserved strip. */
+@media (min-width: 901px) {
+  .sidebar { padding-bottom: 10px; }
+}
 
 /* Below the rail's breakpoint the shell is the old top bar again. */
 @media (max-width: 900px) {

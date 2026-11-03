@@ -285,7 +285,8 @@ class PersistenceManager:
                 error_detail    TEXT,
                 api_key_label   TEXT,
                 target_provider_name TEXT,
-                client_ip       TEXT
+                client_ip       TEXT,
+                user_agent      TEXT
             );
             CREATE INDEX IF NOT EXISTS idx_rl_timestamp
                 ON request_log(timestamp DESC);
@@ -449,6 +450,16 @@ class PersistenceManager:
             [
                 "UPDATE request_log SET model_type = 'decisions' "
                 "WHERE model_type = 'decision'",
+            ],
+        ),
+        (
+            11,
+            "add request_log.user_agent so a decision names its client",
+            [
+                # The routing panel's decision stream shows who called; a key
+                # label is one name per key, while the agent CLI behind it is
+                # only visible in the header the client sends.
+                "ALTER TABLE request_log ADD COLUMN user_agent TEXT",
             ],
         ),
     ]
@@ -620,6 +631,7 @@ class PersistenceManager:
         "model_type",
         "request_id",
         "ttft_ms",
+        "user_agent",
     ]
 
     async def insert_log_entries(self, entries: list[dict[str, Any]]) -> None:
@@ -633,8 +645,8 @@ class PersistenceManager:
             "target_provider_name, client_ip, profile, "
             "input_tokens, output_tokens, total_tokens, "
             "cache_read_tokens, cache_creation_tokens, reasoning_tokens, "
-            "api_key_bucket, model_type, request_id, ttft_ms) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "api_key_bucket, model_type, request_id, ttft_ms, user_agent) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 (
                     e["id"],
@@ -666,6 +678,7 @@ class PersistenceManager:
                     # Absent on a non-stream row and on every row written
                     # before the column existed.
                     e.get("ttft_ms"),
+                    e.get("user_agent"),
                 )
                 for e in entries
             ],
@@ -919,6 +932,30 @@ class PersistenceManager:
             "SELECT COUNT(*) FROM request_log WHERE status_code >= 400"
         )
         return row[0] if row else 0
+
+    async def log_activity_by_model(self, since: str) -> dict[str, dict[str, Any]]:
+        """Count logged requests per model since *since*, and when it last ran.
+
+        One grouped read rather than a query per model: the Routing panel's
+        model list asks for every model at once, and a hundred small queries
+        would make a tab switch feel like a scan.  The last request time is
+        what orders the list — the model an operator just used belongs at the
+        top — and the count is what the row prints.
+
+        Args:
+            since: ISO 8601 lower bound (inclusive).
+
+        Returns:
+            ``{model: {"requests": int, "last_seen": str}}`` for the models
+            with at least one row in the window.  A model with none is
+            absent, not zero.
+        """
+        rows = await self._conn.execute_fetchall(
+            "SELECT model, COUNT(*), MAX(timestamp) FROM request_log "
+            "WHERE timestamp >= ? GROUP BY model",
+            [since],
+        )
+        return {row[0]: {"requests": int(row[1]), "last_seen": row[2]} for row in rows}
 
     def db_file_sizes(self) -> dict[str, int]:
         """Return on-disk byte sizes of the SQLite database files.

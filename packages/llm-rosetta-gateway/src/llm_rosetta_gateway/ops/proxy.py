@@ -151,6 +151,9 @@ class OpsProxyRequest(OpsBase):
                 api_key_bucket=_kctx.usage_bucket if _kctx else None,
                 client_ip=self.client_ip
                 or (_rctx.client_ip if (_rctx := request_context_var.get()) else None),
+                user_agent=_rctx.user_agent
+                if (_rctx := request_context_var.get())
+                else None,
                 profile=self.profile,
                 model_type=self.model_type,
                 request_id=self.request_id,

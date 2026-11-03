@@ -9,7 +9,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from llm_rosetta_gateway.quota.models import QuotaReading, QuotaWindow
+from llm_rosetta_gateway.quota.models import (
+    QuotaReading,
+    QuotaWindow,
+    credential_fingerprint,
+)
+from llm_rosetta_gateway.quota.service import provider_allowance, provider_windows
 from llm_rosetta_gateway.quota.state import QUOTA_STATE
 from llm_rosetta_gateway.routing import (
     AnchorStage,
@@ -59,6 +64,104 @@ def _reading(probe: str, key: str, used: float) -> QuotaReading:
         credential="fingerprint",
         windows=[QuotaWindow(name="5h", used_percent=used, span_seconds=18000)],
     )
+
+
+class TestProviderWindows:
+    """The panel's answer to "0.00 of *which* window?"."""
+
+    def test_every_window_is_reported_tightest_first(self):
+        probe = "p-test-windows"
+        pinfo = _pinfo("a", keys="k1", probe=probe)
+        QUOTA_STATE.put_reading(
+            QuotaReading(
+                probe=probe,
+                credential=credential_fingerprint("k1"),
+                windows=[
+                    QuotaWindow(name="5 hours", used_percent=0, span_seconds=18000),
+                    QuotaWindow(name="Month", used_percent=100),
+                    QuotaWindow(name="7 days", used_percent=40, span_seconds=604800),
+                ],
+            )
+        )
+
+        windows = provider_windows(pinfo)
+
+        assert [w["name"] for w in windows] == ["Month", "7 days", "5 hours"]
+        assert windows[0]["remaining"] == 0.0
+        assert windows[-1]["remaining"] == 1.0
+
+    def test_a_lane_without_a_probe_reports_nothing(self):
+        assert provider_windows(_pinfo("a")) == []
+
+
+class TestProviderAllowance:
+    """One yes/no and one number, so two providers can be compared."""
+
+    def test_the_tightest_window_is_the_value(self):
+        probe = "p-test-allowance"
+        pinfo = _pinfo("a", keys="k1", probe=probe)
+        QUOTA_STATE.put_reading(
+            QuotaReading(
+                probe=probe,
+                credential=credential_fingerprint("k1"),
+                windows=[
+                    QuotaWindow(name="5 hours", used_percent=100),
+                    QuotaWindow(name="7 days", used_percent=60),
+                ],
+            )
+        )
+
+        answer = provider_allowance(pinfo)
+
+        assert answer.has_allowance is False
+        assert answer.value == 0.0
+        assert [w["name"] for w in answer.windows] == ["5 hours", "7 days"]
+
+    def test_room_in_the_tightest_window_still_counts(self):
+        probe = "p-test-allowance-room"
+        pinfo = _pinfo("a", keys="k1", probe=probe)
+        QUOTA_STATE.put_reading(
+            QuotaReading(
+                probe=probe,
+                credential=credential_fingerprint("k1"),
+                windows=[QuotaWindow(name="Month", used_percent=75)],
+            )
+        )
+
+        answer = provider_allowance(pinfo)
+
+        assert answer.has_allowance is True
+        assert answer.value == 0.25
+
+    def test_an_unmeasured_provider_is_not_spent(self):
+        answer = provider_allowance(_pinfo("a"))
+
+        assert answer.has_allowance is True
+        assert answer.value is None
+        assert answer.windows == ()
+
+    def test_the_worst_credential_decides(self):
+        probe = "p-test-allowance-ring"
+        pinfo = _pinfo("a", keys="k1,k2", probe=probe)
+        QUOTA_STATE.put_reading(
+            QuotaReading(
+                probe=probe,
+                credential=credential_fingerprint("k1"),
+                windows=[QuotaWindow(name="Month", used_percent=10)],
+            )
+        )
+        QUOTA_STATE.put_reading(
+            QuotaReading(
+                probe=probe,
+                credential=credential_fingerprint("k2"),
+                windows=[QuotaWindow(name="Month", used_percent=90)],
+            )
+        )
+
+        answer = provider_allowance(pinfo)
+
+        assert answer.has_allowance is True
+        assert answer.value == 0.1
 
 
 class TestTheWeight:

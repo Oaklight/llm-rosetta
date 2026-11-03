@@ -43,6 +43,10 @@ class RequestContext:
         request_start: Monotonic timestamp captured when the request
             context is created, used to compute gateway-level TTFB.
             ``None`` for contexts created without timing (e.g. tests).
+        user_agent: The ``User-Agent`` header, truncated.  ``None`` when the
+            client sent none.  Kept for the request log: it names the agent
+            behind a key better than the key label can when one key serves
+            several clients.
     """
 
     request_id: str
@@ -50,6 +54,7 @@ class RequestContext:
     api_format: str | None
     is_admin: bool
     request_start: float | None = None
+    user_agent: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -64,6 +69,23 @@ request_context_var: contextvars.ContextVar[RequestContext | None] = (
 # ---------------------------------------------------------------------------
 # Client IP extraction (canonical implementation)
 # ---------------------------------------------------------------------------
+
+
+#: A User-Agent longer than this is cut: it goes into a log row, and no agent
+#: needs more than this to be recognised.
+_USER_AGENT_MAX_CHARS = 200
+
+
+def extract_user_agent(request: Any) -> str | None:
+    """Return the request's ``User-Agent`` header, truncated, or ``None``."""
+    headers = getattr(request, "headers", None)
+    if headers is None:
+        return None
+    value = headers.get("User-Agent") or headers.get("user-agent")
+    if not value:
+        return None
+    text = str(value).strip()
+    return text[:_USER_AGENT_MAX_CHARS] or None
 
 
 def extract_client_ip(request: Any, *, trust_proxy: bool = True) -> str:
@@ -131,6 +153,7 @@ def setup_request_context(*, trust_proxy: bool = True) -> Any:
             api_format=api_format,
             is_admin=admin,
             request_start=time.monotonic(),
+            user_agent=extract_user_agent(request),
         )
         request_context_var.set(ctx)
 

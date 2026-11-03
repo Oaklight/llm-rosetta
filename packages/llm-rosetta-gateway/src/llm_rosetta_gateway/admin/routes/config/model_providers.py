@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterator
 from typing import Any
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
@@ -92,6 +93,157 @@ def _collapse_to_single_provider(
         if key in existing:
             entry[key] = existing[key]
     models[name] = entry
+
+
+def _entry_name(entry: Any) -> str:
+    """The provider an entry names, whether it is a string or an object."""
+    return entry if isinstance(entry, str) else entry.get("name", "")
+
+
+def _lane_hidden(entry: Any, raw_providers: dict[str, Any] | None) -> bool:
+    """Whether the selector skips this entry, so the board does not show it.
+
+    A lane is off the route when the operator turned the entry off, or when
+    the provider behind it is not in the document at all — a disabled provider
+    is dropped before the route is built, and the model entry it leaves behind
+    is inert.
+    """
+    if isinstance(entry, dict) and entry.get("enabled") is False:
+        return True
+    if raw_providers is None:
+        return False
+    provider = raw_providers.get(_entry_name(entry))
+    if provider is None:
+        return True
+    return isinstance(provider, dict) and provider.get("enabled") is False
+
+
+def _reorder_request_error(name: str, existing: Any, providers: Any) -> Response | None:
+    """The shape checks: the model has a list, and so does the request."""
+    if not isinstance(existing, dict) or "providers" not in existing:
+        return JSONResponse(
+            {"error": "Order is only supported for multi-provider models"},
+            status_code=400,
+        )
+    if not isinstance(providers, list) or not all(
+        isinstance(item, str) for item in providers
+    ):
+        return JSONResponse(
+            {"error": "'providers' must be a list of provider names"},
+            status_code=400,
+        )
+    return None
+
+
+def _permutation_error(
+    name: str, providers: list[str], visible_names: set[str]
+) -> Response:
+    """Refuse a list that is not a permutation of the lanes the board shows."""
+    missing = sorted(visible_names - set(providers))
+    detail = (
+        f"missing {', '.join(repr(item) for item in missing)}"
+        if missing
+        else "a name appears twice"
+    )
+    return JSONResponse(
+        {
+            "error": f"The new order must name every provider of model "
+            f"'{name}' once: {detail}"
+        },
+        status_code=400,
+    )
+
+
+def _reorder_visible(
+    existing: dict[str, Any],
+    name: str,
+    providers: list[str],
+    raw: list[Any],
+    raw_providers: dict[str, Any] | None,
+    by_name: dict[str, Any],
+) -> Response | None:
+    """Reorder the lanes the board shows, leaving the hidden ones in place."""
+    visible = [entry for entry in raw if not _lane_hidden(entry, raw_providers)]
+    visible_names = {_entry_name(entry) for entry in visible}
+    unknown = [entry for entry in providers if entry not in visible_names]
+    if unknown:
+        return JSONResponse(
+            {"error": f"Provider '{unknown[0]}' is not on model '{name}'"},
+            status_code=400,
+        )
+    # A permutation, not a list: a dropped name would silently remove a lane
+    # from the route, which is what the remove-provider route is for.
+    if len(providers) != len(visible) or len(set(providers)) != len(providers):
+        return _permutation_error(name, providers, visible_names)
+    wanted: Iterator[str] = iter(providers)
+    existing["providers"] = [
+        by_name[next(wanted)] if not _lane_hidden(entry, raw_providers) else entry
+        for entry in raw
+    ]
+    return None
+
+
+def _reorder_providers(
+    models: dict[str, Any],
+    name: str,
+    providers: Any,
+    raw_providers: dict[str, Any] | None = None,
+) -> Response | None:
+    """Put a model's providers in the order given, or say why not.
+
+    The order is the route the selector reads — the first eligible provider of
+    an ``ordered`` model, the tie-break of every other strategy — so it is
+    written where the route is declared, not kept in the panel.
+
+    Returns a :class:`JSONResponse` error, or ``None`` on success (the caller
+    commits).
+    """
+    existing = models[name]
+    error = _reorder_request_error(name, existing, providers)
+    if error is not None:
+        return error
+    raw = existing["providers"]
+    by_name = {_entry_name(entry): entry for entry in raw}
+    # Two lists are legal.  The full one names every entry — the Models page's
+    # provider menu shows the switched-off ones too — and is written as given.
+    # The short one names only the lanes the selector reads, because the
+    # Routing board does not show a lane the operator turned off; those keep
+    # the slots they already hold.
+    if len(providers) == len(by_name) and set(providers) == set(by_name):
+        existing["providers"] = [by_name[entry] for entry in providers]
+        return None
+    return _reorder_visible(existing, name, providers, raw, raw_providers, by_name)
+
+
+async def reorder_model_providers(request: Any, **kwargs: Any) -> Response:
+    """Write a multi-provider model's provider order."""
+    name = request.path_params["name"]
+
+    body, err = parse_json_body(request)
+    if err:
+        return err
+
+    async with config_mutate(request) as ctx:
+        if ctx.error:
+            return ctx.error
+
+        models = ctx.data.get("models", {})
+        if name not in models:
+            return JSONResponse({"error": f"Model '{name}' not found"}, status_code=404)
+
+        err_resp = _reorder_providers(
+            models, name, body.get("providers"), ctx.data.get("providers", {})
+        )
+        if err_resp is not None:
+            return err_resp
+
+        ctx.commit()
+
+    if ctx.error:
+        return ctx.error
+    assert ctx.new_config is not None
+
+    return JSONResponse({"ok": True, "model": name, "providers": body.get("providers")})
 
 
 async def remove_model_provider(request: Any, **kwargs: Any) -> Response:

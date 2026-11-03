@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
@@ -524,6 +525,52 @@ def resolve_provider_probe_for_info(
     return match.probe, match.url, None
 
 
+@dataclass(frozen=True, slots=True)
+class Allowance:
+    """Whether a provider may still spend, and how much room it has.
+
+    The rule is the tightest window: a provider that reports several windows
+    (five hours, a week, a month) can spend only as much as the emptiest one
+    allows, so the smallest remaining share is the number every caller compares
+    on.  :attr:`windows` keeps the names, so a panel can say *which* window is
+    binding instead of showing a bare 0.00.
+
+    Attributes:
+        has_allowance: ``False`` only when every measured window is empty.
+            A provider nothing has measured has allowance — the absence of a
+            reading is not evidence of a spent budget.
+        value: The tightest remaining share, ``0.0`` to ``1.0``; ``None`` when
+            no reading is known.  This is the number to compare providers by.
+        windows: Every window the provider reports, tightest first.  Empty
+            when it reports none, or when nothing has been read yet.
+    """
+
+    has_allowance: bool
+    value: float | None
+    windows: tuple[dict[str, Any], ...] = ()
+
+
+def provider_allowance(pinfo: Any) -> Allowance:
+    """Read one provider's allowance as a yes/no and a comparable number.
+
+    The read is a lookup in the probe cache, not a call to the vendor.  A
+    window that reports no share (a vendor that only says "rate-limited")
+    contributes nothing; that case is what the demotion state is for.
+
+    Args:
+        pinfo: The provider's transport configuration.
+
+    Returns:
+        The allowance answer.  An unmeasured provider answers ``True`` with
+        ``value=None``, so a caller that scales by it keeps its weight.
+    """
+    windows = tuple(provider_windows(pinfo))
+    if not windows:
+        return Allowance(has_allowance=True, value=None)
+    value = min(float(entry["remaining"]) for entry in windows)
+    return Allowance(has_allowance=value > 0.0, value=value, windows=windows)
+
+
 def provider_headroom(pinfo: Any) -> float | None:
     """The smallest remaining share across this provider's credentials.
 
@@ -531,16 +578,35 @@ def provider_headroom(pinfo: Any) -> float | None:
     — which is not the same as "plenty": a lane nothing has probed must keep
     its configured weight rather than be punished for being unmeasured.
 
-    The reading is per credential and already cached by the probe layer, so
-    this is a lookup, not a call.  A window that reports no share (a vendor
-    that only says "rate-limited") contributes nothing here; that case is what
-    the demotion state is for.
+    This is the number :func:`provider_allowance` compares on; it stays a
+    separate function because the weighting code asks only for the number.
+
+    Args:
+        pinfo: The provider's transport configuration.
+
+    Returns:
+        The tightest remaining share, or ``None`` when nothing measured it.
+    """
+    return provider_allowance(pinfo).value
+
+
+def provider_windows(pinfo: Any) -> list[dict[str, Any]]:
+    """Every allowance window this provider reports, tightest first.
+
+    :func:`provider_headroom` answers "how much is left" with one number — the
+    tightest window across the key ring — which says nothing about *which*
+    window is binding.  The panel needs that name to explain a lane at 0.00:
+    a five-hour window that just reset is a different situation from a monthly
+    one that is spent.
+
+    A window name keeps the worst reading across the ring, because the
+    tightest credential is what the router acts on.
     """
     probe = getattr(pinfo, "quota_probe", None)
     ring = getattr(pinfo, "key_ring", None)
     if not probe or ring is None:
-        return None
-    shares: list[float] = []
+        return []
+    worst: dict[str, dict[str, Any]] = {}
     for key in ring.keys():
         reading = QUOTA_STATE.get_reading(probe, credential_fingerprint(key))
         if reading is None:
@@ -548,8 +614,16 @@ def provider_headroom(pinfo: Any) -> float | None:
         for window in reading.windows:
             if window.used_percent is None:
                 continue
-            shares.append(max(0.0, 100.0 - float(window.used_percent)) / 100.0)
-    return min(shares) if shares else None
+            remaining = max(0.0, 100.0 - float(window.used_percent)) / 100.0
+            current = worst.get(window.name)
+            if current is None or remaining < current["remaining"]:
+                worst[window.name] = {
+                    "name": window.name,
+                    "remaining": remaining,
+                    "resets_at": _iso(window.resets_at),
+                    "status": window.status,
+                }
+    return sorted(worst.values(), key=lambda entry: entry["remaining"])
 
 
 #: A reading older than this is not evidence about right now.  A vendor that

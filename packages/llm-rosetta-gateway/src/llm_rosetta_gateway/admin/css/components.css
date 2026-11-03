@@ -785,6 +785,19 @@ canvas { width: 100%; height: 160px; }
 /* A single-provider row has no switch, weight or remove: the test button takes
    the right edge, where it sits in a multi-provider row too. */
 .provider-menu-row.pd-single { grid-template-columns: minmax(0, 1fr) auto; }
+/* A multi-provider row: grip, switch, name, caps, weight, test, remove.  The
+   grip is the order control — the same drag the Routing board offers. */
+.provider-menu-row:has(.pm-grip) {
+  grid-template-columns: auto auto minmax(0, 1fr) auto auto auto auto;
+}
+.pm-grip {
+  cursor: grab; color: var(--text-dim); letter-spacing: -1px;
+  user-select: none;
+}
+.pm-grip:active { cursor: grabbing; }
+.provider-menu-row.is-dragging { opacity: 0.45; }
+.provider-menu-row.is-drop-before { box-shadow: inset 0 2px 0 var(--accent); }
+.provider-menu-row.is-drop-after { box-shadow: inset 0 -2px 0 var(--accent); }
 .provider-menu-row .pm-name {
   display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis;
   white-space: nowrap; font-weight: 500;
@@ -1279,7 +1292,7 @@ th.sortable:focus-visible { outline:2px solid var(--accent);outline-offset:-2px;
 .db-footer {
   position: fixed;
   bottom: 0;
-  /* Starts where the console rail ends; the rail keeps its own bottom row. */
+  /* Starts where the console rail ends: the rail runs to the window edge. */
   left: 220px;
   right: 0;
   z-index: 50;
@@ -1910,4 +1923,280 @@ button.shim-update.unknown { color: var(--yellow, #b7791f); }
 .tp-item.tp-has-note .tp-note {
   flex-basis: 100%; padding-left: 22px; font-size: 11px; line-height: 1.35;
   color: var(--text-dim); white-space: normal;
+}
+
+/* Routing panel: the route board, the decision stream, the policy card.
+   Drawn with the console's own vocabulary: the table row rhythm and header
+   tokens, the connection dots, the status badges and the facet chips.  The
+   board is a grid rather than a <table> because a row holds a stepper and a
+   bar, but every measurement matches the tables beside it. */
+/* The board refreshes once a second while it is open; the dot says so. */
+.routing-live { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 8px; font-size: 12px; color: var(--text-dim); }
+.routing-live .conn-ok { animation: routing-pulse 2s ease-in-out infinite; }
+@keyframes routing-pulse { 50% { opacity: .3; } }
+@media (prefers-reduced-motion: reduce) { .routing-live .conn-ok { animation: none; } }
+
+.routing-split { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; align-items: start; }
+.routing-col { min-width: 0; }
+.routing-col[hidden] { display: none; }
+
+/* The route: one row per candidate, in the order the selector reads it. */
+.routing-route { border-top: 1px solid var(--border); }
+.routing-route-row {
+  display: grid;
+  grid-template-columns: 26px minmax(150px, 1.4fr) 84px minmax(160px, 1.6fr) 56px 150px;
+  gap: 12px; align-items: center; padding: 10px 12px;
+  border-bottom: 1px solid var(--border); font-size: 13px;
+}
+.routing-route-row:not(.is-head):hover { background: var(--bg-hover); }
+.routing-route-row.is-head {
+  background: var(--bg-card); padding: 10px 12px;
+  color: var(--th-color); font-weight: var(--th-weight);
+  font-size: var(--th-size); text-transform: var(--th-transform);
+  letter-spacing: var(--th-spacing);
+}
+.routing-pos {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-family: var(--mono); font-size: 12px; color: var(--text-muted);
+}
+/* The grip is the affordance: a row is draggable only when the route has more
+   than one lane, and the cursor says so before the drag starts. */
+.routing-row-grip { display: none; }
+.routing-grip {
+  cursor: grab; color: var(--text-muted); letter-spacing: -1px;
+  user-select: none;
+}
+.routing-grip:active { cursor: grabbing; }
+.routing-route-row.is-draggable:hover .routing-grip { color: var(--text-primary); }
+.routing-route-row.is-dragging { opacity: 0.45; }
+.routing-route-row.is-drop-before { box-shadow: inset 0 2px 0 var(--accent); }
+.routing-route-row.is-drop-after { box-shadow: inset 0 -2px 0 var(--accent); }
+.routing-who { min-width: 0; }
+.routing-who b {
+  display: block; font-weight: 500; font-size: 13px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.routing-who small {
+  display: block; font-family: var(--mono); font-size: 11px; color: var(--text-muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.routing-stepper { display: inline-flex; align-items: center; gap: 4px; }
+.routing-stepper button {
+  width: 22px; height: 22px; padding: 0; line-height: 1;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--bg); color: var(--text-dim);
+  font: 12px var(--mono); cursor: pointer;
+}
+.routing-stepper button:hover { background: var(--bg-hover); color: var(--text); }
+/* A fixed width and tabular digits: the -/+ buttons must not move when
+   the weight goes from 1 to 10 to 100. */
+.routing-stepper span {
+  width: 24px; text-align: center; font-family: var(--mono); font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.routing-weight-static { color: var(--text-dim); }
+.routing-allowance { min-width: 0; }
+.routing-bar { display: block; height: 6px; margin: 3px 0 4px; border-radius: 3px; background: var(--border); overflow: hidden; }
+.routing-bar > i { display: block; height: 100%; background: var(--accent); }
+.routing-bar.is-dim > i { background: var(--text-muted); }
+.routing-sub { font-family: var(--mono); font-size: 11px; color: var(--text-muted); }
+/* The "no reading" words are a hint, not a value: dotted under the text
+   says a tooltip explains them. */
+.routing-sub-muted { cursor: help; border-bottom: 1px dotted var(--border); }
+/* A lane with several allowance windows can be clicked through them. */
+.routing-allowance.is-cyclable { cursor: pointer; }
+.routing-allowance.is-cyclable:hover .routing-sub { color: var(--text); }
+.routing-share { font-family: var(--mono); font-size: 13px; font-variant-numeric: tabular-nums; }
+.routing-state { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; white-space: nowrap; overflow: hidden; }
+/* The countdown is the only text that changes every second; tabular digits
+   keep its width steady so the badge beside it does not jitter. */
+.routing-countdown { font-variant-numeric: tabular-nums; }
+.routing-muted { color: var(--text-muted); }
+
+/* The legend under the board: the three dots, and how a share is made. */
+.routing-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; margin: 12px 0 20px; font-size: 12px; color: var(--text-dim); }
+.routing-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.routing-legend-formula { font-family: var(--mono); font-size: 11px; color: var(--text-muted); }
+
+.routing-section-head { display: flex; align-items: baseline; gap: 8px; margin: 0 0 8px; }
+
+/* The detail column's panes: Policy carries the board, Decisions the log,
+   Sessions the client identities.  Drawn as the model modal's tabs are. */
+.routing-subtabs {
+  display: flex; gap: 2px; border-bottom: 1px solid var(--border);
+  margin-bottom: 14px;
+}
+.routing-subtabs button {
+  border: 0; background: transparent; padding: 8px 12px;
+  font-size: 12px; color: var(--text-dim); cursor: pointer;
+  border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+.routing-subtabs button:hover { color: var(--text); }
+.routing-subtabs button.active {
+  color: var(--accent); border-bottom-color: var(--accent); font-weight: 600;
+}
+.routing-pane[hidden] { display: none; }
+.routing-dec-row.is-openable { cursor: pointer; }
+.routing-dec-row.is-openable:hover { background: var(--bg-hover); }
+.routing-dec-detail {
+  padding: 8px 12px 10px; background: var(--bg-card);
+  border-bottom: 1px solid var(--border); font-size: 12px;
+}
+.routing-dec-chain { font-family: var(--mono); font-size: 11.5px; color: var(--text); }
+.routing-dec-why { margin-top: 3px; color: var(--text-dim); }
+.routing-session-row { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) 90px 110px; }
+.routing-section-head h3 { margin: 0; font-size: 13px; font-weight: 600; }
+.routing-section-head span { font-size: 12px; color: var(--text-muted); }
+.routing-section-head[hidden] { display: none; }
+
+/* The decision stream: one request per row, on the table rhythm. */
+.routing-dec { border-top: 1px solid var(--border); }
+.routing-dec-row {
+  display: grid;
+  grid-template-columns: 88px 84px minmax(60px, 1fr) minmax(90px, 1.2fr) minmax(90px, 1fr) 56px 64px;
+  gap: 12px; align-items: center; padding: 10px 12px;
+  border-bottom: 1px solid var(--border); font-size: 13px;
+}
+.routing-dec-row:not(.is-head):hover { background: var(--bg-hover); }
+.routing-dec-row.is-head {
+  background: var(--bg-card); padding: 10px 12px;
+  color: var(--th-color); font-weight: var(--th-weight);
+  font-size: var(--th-size); text-transform: var(--th-transform);
+  letter-spacing: var(--th-spacing);
+}
+.routing-mono { font-family: var(--mono); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The client cell carries the key label and, under it, the agent's name from
+   the User-Agent: one key can serve several CLIs. */
+.routing-client { white-space: normal; }
+.routing-client small {
+  display: block; font-size: 10px; color: var(--text-muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.routing-status { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.routing-status.is-fail { color: var(--red); }
+.routing-status.is-ok { color: var(--green); }
+
+/* The policy card beside the board: the provider card's surface, the
+   settings pane's label weight. */
+.routing-policy {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 16px; min-width: 0;
+}
+.routing-policy[hidden] { display: none; }
+.routing-policy-title { margin: 0 0 12px; font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The presets are the Models panel's facet chips; the card surface is one
+   step lighter than the page, so the selected chip takes the accent instead
+   of the chip row's card fill. */
+.routing-presets { margin-bottom: 14px; }
+.routing-policy .routing-preset.active { background: var(--accent-subtle); color: var(--accent); font-weight: 600; box-shadow: none; }
+.routing-field-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px 14px; margin-bottom: 12px; }
+.routing-field-row label { display: flex; flex-direction: column; gap: 4px; min-width: 0; font-size: 12px; color: var(--text-dim); }
+.routing-field-row .routing-check { flex-direction: row; align-items: center; gap: 6px; color: var(--text); }
+.routing-field-row select {
+  width: 100%; min-width: 0; padding: 5px 10px;
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px; font-size: 12px;
+}
+.routing-field-row select:focus {
+  outline: none; border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.routing-rules-head { font-size: 12px; color: var(--text-dim); margin: 14px 0 6px; }
+.routing-rules { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.routing-rules li { font-family: var(--mono); font-size: 11px; color: var(--text-dim); padding: 2px 0; }
+.routing-rules li.is-none { color: var(--text-muted); font-style: italic; }
+.routing-save { margin-top: 14px; }
+.routing-json {
+  margin: 0; padding: 10px; background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius); font: 11px/1.55 var(--mono); color: var(--text-dim);
+  overflow-x: auto; white-space: pre; max-height: 220px;
+}
+
+.routing-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 12px; }
+.routing-card:empty { display: none; }
+
+/* The model list: the selector is the list, with the search box above it.
+   The gateway carries a hundred models, so typing narrows the list instead of
+   opening a second widget over it. */
+.routing-layout {
+  display: grid; grid-template-columns: 264px minmax(0, 1fr);
+  gap: 20px; align-items: start;
+}
+.routing-models {
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--bg-card); overflow: hidden;
+}
+.routing-models-head { display: flex; align-items: center; gap: 8px; padding: 10px 10px 6px; }
+.routing-models-head .routing-picker { flex: 1; min-width: 0; }
+.routing-picker { position: relative; display: block; }
+.routing-picker input {
+  width: 100%; padding: 6px 10px;
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius); color: var(--text);
+  font-size: 13px; font-family: var(--mono);
+}
+.routing-picker input:focus { outline: none; border-color: var(--accent); }
+.routing-windows { margin: 0; padding: 0 10px 8px; }
+.routing-model-list {
+  max-height: 540px; overflow-y: auto;
+  border-top: 1px solid var(--border);
+}
+.routing-model-item {
+  padding: 8px 10px; cursor: pointer;
+  border-left: 2px solid transparent;
+  border-bottom: 1px solid var(--border);
+}
+.routing-model-item:last-child { border-bottom: 0; }
+.routing-model-item:hover { background: var(--bg-hover); }
+.routing-model-item.is-selected { background: var(--bg-hover); border-left-color: var(--accent); }
+.routing-model-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.routing-model-row1 { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.routing-model-row1.is-meta { margin-top: 4px; }
+.routing-model-item b {
+  font-size: 12.5px; font-weight: 500;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.routing-model-count {
+  font-family: var(--mono); font-size: 10.5px; color: var(--text-muted);
+  white-space: nowrap; flex: none;
+}
+.routing-model-count.is-blocked { color: var(--red); }
+.routing-model-stack {
+  display: flex; height: 4px; gap: 1px; margin: 6px 0 2px;
+  background: var(--border); border-radius: 2px; overflow: hidden;
+}
+.routing-model-stack i { display: block; height: 100%; background: var(--accent); }
+.routing-model-stack i.mute { background: var(--text-muted); opacity: 0.4; }
+.routing-model-empty { padding: 10px; font-size: 12px; color: var(--text-muted); }
+.routing-split[hidden] { display: none; }
+/* The board needs about 700 px for its six columns.  Once the model list has
+   taken its 264, the policy card moves under the board instead of squeezing
+   the route until the state column is clipped. */
+@media (max-width: 1440px) {
+  .routing-layout { grid-template-columns: 240px minmax(0, 1fr); }
+  .routing-split { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 1100px) {
+  .routing-layout { grid-template-columns: minmax(0, 1fr); }
+  .routing-model-list { max-height: 260px; }
+}
+@media (max-width: 720px) {
+  /* One route row becomes three lines rather than a sideways scroll: the
+     lane and its format, then weight and share, then what is left and the
+     state.  The order number adds nothing at this width. */
+  .routing-route-row { display: flex; flex-wrap: wrap; gap: 6px 10px; }
+  .routing-route-row.is-head { display: none; }
+  .routing-pos { display: none; }
+  .routing-who { order: 1; flex: 1 1 100%; }
+  .routing-stepper { order: 2; }
+  .routing-share { order: 2; margin-left: auto; }
+  .routing-allowance { order: 3; flex: 1 1 100%; }
+  /* A lane with nothing measured has no allowance line to show. */
+  .routing-allowance.is-empty { display: none; }
+  .routing-state { order: 4; flex: 1 1 100%; }
+  /* The stream keeps the four columns a phone can read. */
+  .routing-dec-row { grid-template-columns: 74px minmax(0, 1fr) 44px 56px; }
+  .routing-dec-row > span:nth-child(2),
+  .routing-dec-row > span:nth-child(3),
+  .routing-dec-row > span:nth-child(5) { display: none; }
 }
