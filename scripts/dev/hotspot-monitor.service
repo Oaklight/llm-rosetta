@@ -1,0 +1,38 @@
+# Install on the Docker host (cloud.usa2):
+#
+#   install -d /opt/llm-rosetta-monitor
+#   install -m 0755 hotspot_monitor.py hotspot_watch.py /opt/llm-rosetta-monitor/
+#   install -m 0644 hotspot-monitor.service /etc/systemd/system/llm-rosetta-hotspot.service
+#   systemctl daemon-reload
+#   systemctl enable --now llm-rosetta-hotspot
+#
+# The socket is 0600 and lives in a root-only runtime directory.  Forward it
+# from a workstation with:
+#
+#   ssh -N -L /tmp/hotspot.sock:/run/llm-rosetta-hotspot/hotspot.sock cloud.usa2
+
+[Unit]
+Description=LLM-Rosetta hotspot monitor (host-side)
+Documentation=https://github.com/Oaklight/llm-rosetta/issues/1363
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+Environment=CONTAINER=llm-rosetta-llm-rosetta-gateway-1
+Environment=DB=/dockervol/llm-rosetta/data/gateway.db
+Environment=SOCKET=/run/llm-rosetta-hotspot/hotspot.sock
+RuntimeDirectory=llm-rosetta-hotspot
+RuntimeDirectoryMode=0700
+LogsDirectory=llm-rosetta-hotspot
+LogsDirectoryMode=0700
+ExecStart=/usr/bin/python3 /opt/llm-rosetta-monitor/hotspot_monitor.py --container ${CONTAINER} --db ${DB} --socket ${SOCKET} --log-dir /var/log/llm-rosetta-hotspot
+Restart=always
+RestartSec=5
+User=root
+Group=root
+KillSignal=SIGTERM
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target
