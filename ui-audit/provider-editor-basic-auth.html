@@ -286,7 +286,7 @@ input[readonly] { color: var(--text-dim); }
       <li>勾选 / 取消模型类型，端点卡片随之出现或消失。</li>
       <li>端点卡片沿用 master：左侧色条、已启用开关、自动禁用提示。</li>
       <li>Basic 的认证方式只读，点任意模式跳到 Auth 修改。</li>
-      <li>「Nebius（连接失效）」演示端点自动禁用与凭据失败两种状态。</li>
+      <li>「ALCF Sophia」演示端点自动禁用与凭据失败两种状态；提供方数据取自 prod 配置。</li>
     </ul>
   </header>
 
@@ -348,10 +348,9 @@ const TYPE_COLOR = {
 };
 const TOP_BASES = {
   alcf: ["sophia · chat_completions"],
-  asksage: ["asksage · chat_completions"],
+  deepseek: ["chat_completions"],
   openai: ["chatgpt · open_responses", "chat_completions"],
   siliconflow: ["chat_completions"],
-  nebius: ["chat_completions"],
   typesafe: ["systemone"],
 };
 const PATHS = {
@@ -420,38 +419,43 @@ const providers = {
     type: "alcf_sophia--chat_completions",
     base: "https://inference-api.alcf.anl.gov/resource_server/sophia/vllm/v1",
     logo: null,
-    types: ["llm"],
+    degraded: true,
+    types: ["llm", "embeddings", "rerank"],
     endpoints: {
       llm: {
         enabled: true, top: "alcf", baseType: "sophia · chat_completions",
         url: "{base_url}/v1/chat/completions", stream: "",
         customTools: true, hoist: true, preflight: false, maxToolDesc: "",
       },
+      embeddings: { enabled: true, source: "openai", path: "/v1/embeddings" },
+      rerank: { enabled: true, source: "cohere", path: "/v1/rerank" },
     },
     source: "shim",
     command: ["python3", "-m", "llm_rosetta_shim_alcf.providers.alcf.token"],
     interval: 3600, env: null, key: "", sentinel: true,
     shimName: "llm-rosetta-shim-alcf",
-    status: { state: "ready", last: ago(42), failures: 0, error: null, needsLogin: false, expires: null },
+    status: {
+      state: "failing", last: ago(42), failures: 2,
+      error: "token endpoint returned 503", needsLogin: false, expires: null,
+    },
   },
-  asksage: {
-    name: "AskSage",
-    type: "asksage--chat_completions",
-    base: "https://api.asksage.ai",
+  deepseek: {
+    name: "DeepSeek",
+    type: "deepseek--chat_completions",
+    base: "https://api.deepseek.com/beta",
     logo: null,
     types: ["llm"],
     endpoints: {
       llm: {
-        enabled: true, top: "asksage", baseType: "asksage · chat_completions",
+        enabled: true, top: "deepseek", baseType: "chat_completions",
         url: "{base_url}/v1/chat/completions", stream: "",
         customTools: false, hoist: true, preflight: false, maxToolDesc: "",
       },
     },
-    source: "config",
-    command: ["python3", "/opt/asksage/token.py", "--json"],
-    interval: 86400, env: "ASKSAGE_ACCOUNT_KEY", key: "", sentinel: false,
-    shimName: null,
-    status: { state: "ready", last: ago(90), failures: 0, error: null, needsLogin: false, expires: null },
+    source: "static",
+    command: null,
+    interval: 3600, env: null, key: "sk-af0…（已保存）", sentinel: false,
+    shimName: null, status: null,
   },
   chatgpt: {
     name: "OpenAI ChatGPT",
@@ -496,7 +500,7 @@ const providers = {
     name: "SiliconFlow CN",
     type: "openai--chat_completions",
     base: "https://api.siliconflow.cn",
-    logo: null,
+    logo: "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/siliconcloud-color.svg",
     types: ["llm", "embeddings", "rerank"],
     endpoints: {
       llm: {
@@ -513,43 +517,18 @@ const providers = {
     shimName: null, status: null,
   },
   typesafe: {
-    name: "TypeSafe Jev",
+    name: "Typesafe",
     type: "typesafe--systemone",
     base: "https://api.typesafe.ai",
-    logo: null,
+    logo: "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/typesafeai.svg",
     types: ["decisions"],
     endpoints: {
-      decisions: { enabled: true, source: "systemone", path: "/v1/systemone" },
+      decisions: { enabled: true, source: "typesafe--systemone", path: "/v1/systemone" },
     },
     source: "static",
     command: null,
-    interval: 3600, env: null, key: "ts-live…（已保存）", sentinel: false,
+    interval: 3600, env: null, key: "apikey_22…（已保存）", sentinel: false,
     shimName: null, status: null,
-  },
-  nebius: {
-    name: "Nebius（连接失效）",
-    type: "nebius--chat_completions",
-    base: "https://api.studio.nebius.ai/v1",
-    logo: null,
-    degraded: true,
-    types: ["llm", "embeddings", "rerank"],
-    endpoints: {
-      llm: {
-        enabled: true, top: "nebius", baseType: "chat_completions",
-        url: "{base_url}/v1/chat/completions", stream: "",
-        customTools: false, hoist: true, preflight: false, maxToolDesc: "",
-      },
-      embeddings: { enabled: true, source: "openai", path: "/v1/embeddings" },
-      rerank: { enabled: true, source: "jina", path: "/v1/rerank" },
-    },
-    source: "config",
-    command: ["python3", "/opt/nebius/token.py"],
-    interval: 3600, env: null, key: "", sentinel: false,
-    shimName: null,
-    status: {
-      state: "failing", last: ago(120), failures: 2,
-      error: "token endpoint returned 503", needsLogin: false, expires: null,
-    },
   },
 };
 
