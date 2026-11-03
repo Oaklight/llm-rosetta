@@ -445,7 +445,7 @@ A subscription lane with paid backups is `ordered`: list the subscription first 
 | `strategy` | One of the values above. |
 | `affinity` | `off` or `session`. |
 | `sink` | **(default `true`)** Whether a recent 429 orders this model's provider last. The provider's *disable* is process-wide; this only says whether the model cares about the milder sink. |
-| `first_token_ms` | Reserved for the first-token deadline. Parsed and kept; the selector does not act on it yet. |
+| `first_token_ms` | The first-token deadline in milliseconds. A streaming request whose provider sends no event within it is closed before anything reaches the client: the request moves to another provider when the model allows failover, otherwise it answers `504` naming the provider and the budget. Measured from the moment the upstream request is sent; each attempt gets its own. Unset means no deadline. |
 | `rules` | Per-request rules, evaluated in order; the first match wins (see [Rules](#rules)). |
 
 #### Rules
