@@ -1489,6 +1489,13 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
         </div>
       </div>
       <hr style="border:none;border-top:1px solid var(--border);margin:16px 0">
+      <div class="form-group">
+        <label data-i18n="label.failover">Failover</label>
+        <div class="checkbox-group">
+          <label><input type="checkbox" id="failoverOnError"> <span data-i18n="label.failoverOnError">Try another provider on a refusal</span></label><span class="hint-icon">i<span class="hint-popup" style="width:360px;text-align:left" data-i18n-html="hint.failoverOnError">When this model has several providers, a refusal moves the request to the next one once: an upstream <code>402</code>/<code>429</code>, or <code>408</code>, <code>500</code>, <code>502</code>-<code>504</code>, <code>520</code>-<code>524</code> or <code>529</code>. These never demote a credential. Turning this off trades availability for a warmer prompt cache — the second provider is another cache and possibly another model build.</span></span>
+        </div>
+      </div>
+      <hr style="border:none;border-top:1px solid var(--border);margin:16px 0">
       <div class="form-group" id="modelReasoningGroup" style="display:none">
         <label><span data-i18n="label.reasoningConfig">Reasoning</span>
           <span class="badge badge-sm" id="reasoningSourceBadge" style="margin-left:6px"></span>

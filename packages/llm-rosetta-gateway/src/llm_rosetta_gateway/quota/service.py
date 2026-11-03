@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from typing import Any
 
@@ -769,4 +769,53 @@ def provider_cooldown(name: str, pinfo: Any) -> dict[str, Any] | None:
     until = QUOTA_STATE.rate_limits.latest_disable(provider_config_key(pinfo))
     if until is None:
         return None
-    return {"until": _iso(until), "reason": "repeated 429s", "window": None}
+    return {"until": _iso(until), "reason": "repeated refusals", "window": None}
+
+
+def note_transient_refusal(
+    pinfo: Any,
+    status_code: int,
+    policy: RateLimitPolicy | None = None,
+) -> str:
+    """Count one capacity refusal against the provider's own lane.
+
+    The per-request failover already serves this request from another
+    provider.  This is the cross-request half: ``policy.after`` refusals
+    inside ``policy.window_s`` disable the provider for ``policy.cooldown_s``,
+    doubling on repeats, so later requests are routed away instead of paying
+    the failed attempt again.
+
+    Unlike a ``429``, a capacity refusal does **not** sink the provider on the
+    first one.  Sinking keeps the provider out of the next request for the
+    whole window, so the count could never reach ``policy.after`` — the
+    three-strike rung would be unreachable with the sink on.
+
+    The count is provider-wide (credential ``None``) rather than per key: a
+    capacity status says the provider cannot serve, not that the key that
+    happened to answer is spent, and key rotation must not spread one outage
+    across several lanes.
+
+    Args:
+        pinfo: The provider that refused.
+        status_code: The upstream status, for the log line.
+        policy: The rule in force, or the default when the caller has none.
+
+    Returns:
+        ``"disable"`` or ``"off"``, as :meth:`RateLimitTracker.note` reports it.
+    """
+    name = provider_config_key(pinfo)
+    counting = replace(policy or RateLimitPolicy(), sink=False)
+    outcome = QUOTA_STATE.rate_limits.note(name, None, counting)
+    if outcome == "disable":
+        logger.warning(
+            "Upstream: %s disabled until %s after repeated failures (last status %s)",
+            name,
+            _iso(QUOTA_STATE.rate_limits.disabled(name, None)),
+            status_code,
+        )
+    return outcome
+
+
+def note_upstream_success(pinfo: Any) -> None:
+    """A served request clears the provider's capacity-refusal count."""
+    QUOTA_STATE.rate_limits.clear_lane(provider_config_key(pinfo), None)

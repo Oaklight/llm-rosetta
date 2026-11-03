@@ -101,6 +101,43 @@ class TestUpdateMultiProviderEntry:
         assert _declared_providers(entry) == ["a", "b"]
         assert entry["capabilities"] == ["text"]
 
+    def test_the_old_quota_key_is_normalised_away(self):
+        """On is the default, so an old opt-in leaves no key behind."""
+        entry = {"providers": [{"name": "a"}], "failover_on_quota": True}
+
+        _update_multi_provider_entry(entry, {}, "a")
+
+        assert "failover_on_error" not in entry
+        assert "failover_on_quota" not in entry
+
+    def test_a_body_that_turns_it_off_writes_false(self):
+        entry = {"providers": [{"name": "a"}]}
+
+        _update_multi_provider_entry(entry, {"failover_on_error": False}, "a")
+
+        assert entry["failover_on_error"] is False
+
+    def test_a_body_that_turns_it_on_removes_the_key(self):
+        entry = {"providers": [{"name": "a"}], "failover_on_error": False}
+
+        _update_multi_provider_entry(entry, {"failover_on_error": True}, "a")
+
+        assert "failover_on_error" not in entry
+
+    def test_an_existing_opt_out_survives_a_body_that_omits_it(self):
+        entry = {"providers": [{"name": "a"}], "failover_on_error": False}
+
+        _update_multi_provider_entry(entry, {}, "a")
+
+        assert entry["failover_on_error"] is False
+
+    def test_a_body_that_clears_the_flag_removes_it(self):
+        entry = {"providers": [{"name": "a"}], "failover_on_error": False}
+
+        _update_multi_provider_entry(entry, {"failover_on_error": None}, "a")
+
+        assert "failover_on_error" not in entry
+
 
 class TestProviderEntrySwitches:
     """``_set_provider_attrs`` turns one provider of a model on or off."""

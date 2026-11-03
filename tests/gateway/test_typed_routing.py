@@ -191,7 +191,7 @@ def _policy():
     return RateLimitPolicy()
 
 
-def _openai_raw(*, failover: bool) -> dict:
+def _openai_raw(*, failover: bool, opt_out: bool = False) -> dict:
     """Two providers on the OpenAI embedding dialect, one response shape."""
     model: dict = {
         "providers": ["jina-a", "jina-b"],
@@ -199,6 +199,8 @@ def _openai_raw(*, failover: bool) -> dict:
     }
     if failover:
         model["failover_on_quota"] = True
+    if opt_out:
+        model["failover_on_error"] = False
     raw = _raw(model=model)
     for name in ("jina-a", "jina-b"):
         raw["providers"][name]["embeddings_format"] = "openai"
@@ -267,8 +269,8 @@ class TestFailoverAfterARefusal:
         assert response.headers.get("Retry-After")
 
     @pytest.mark.asyncio
-    async def test_without_the_flag_the_refusal_is_passed_through(self):
-        config = GatewayConfig(_openai_raw(failover=False))
+    async def test_an_opted_out_model_passes_the_refusal_through(self):
+        config = GatewayConfig(_openai_raw(failover=False, opt_out=True))
         request = _request()
         request.app.transport.send = AsyncMock(return_value=_rate_limited())
 

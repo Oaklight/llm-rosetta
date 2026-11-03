@@ -52,7 +52,7 @@ export function appliedWeight(routing) {
  */
 const BLOCK_REASON_KEYS = {
   'keyless lane rate limited': 'quota.blockReason.keyless',
-  'repeated 429s': 'quota.blockReason.rateLimited',
+  'repeated refusals': 'quota.blockReason.repeatedRefusals',
 };
 
 function blockReasonLabel(reason, t) {

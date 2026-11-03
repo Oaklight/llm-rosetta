@@ -1,9 +1,11 @@
-"""Cross-provider failover when the serving provider's allowance is spent.
+"""Cross-provider failover when the serving provider cannot answer.
 
-A 429 demotes the credential that earned it.  When that leaves the provider
-with nothing to retry on, the request usually still has somewhere to go — the
-model's other providers.  That is opt-in per model, spent once per request, and
-recorded so a reader of the request log can see it happened.
+Two kinds of refusal qualify: an allowance that ran out (a 429 the quota probe
+can explain, or a 402) and a transient upstream failure (5xx, 408, 529).  When
+one leaves the provider with nothing to retry on, the request usually still has
+somewhere to go — the model's other providers.  That is opt-in per model, spent
+once per request, and recorded so a reader of the request log can see it
+happened.
 """
 
 from __future__ import annotations
@@ -94,9 +96,21 @@ def _refused() -> UpstreamResponse:
 
 
 def _server_error() -> UpstreamResponse:
-    """A plain upstream failure: no quota signal, nothing to retry."""
+    """A plain 500: no quota signal, but a transient refusal."""
     raw = b'{"error": {"message": "internal error", "type": "server_error"}}'
     return UpstreamResponse(status_code=500, body=None, raw_content=raw)
+
+
+def _unavailable() -> UpstreamResponse:
+    """A 503: the provider is up but cannot serve right now."""
+    raw = b'{"error": {"message": "Service unavailable", "type": "server_error"}}'
+    return UpstreamResponse(status_code=503, body=None, raw_content=raw)
+
+
+def _transient(status_code: int) -> UpstreamResponse:
+    """Any transient status; the body is never read for the decision."""
+    raw = b'{"error": {"message": "not now", "type": "server_error"}}'
+    return UpstreamResponse(status_code=status_code, body=None, raw_content=raw)
 
 
 def _config(
@@ -123,8 +137,8 @@ def _config(
             pinfo = config.providers[name]
             pinfo.quota_probe = "p-failover"
             pinfo.quota_probe_impl = _Probe()
-    if opt_in:
-        config.model_failover_on_quota = {"m": True}
+    # The config defaults failover on, so an opted-out test says so explicitly.
+    config.model_failover = {"m": True} if opt_in else {}
     return config
 
 
@@ -178,7 +192,7 @@ class TestTheStreamRequiredBridge:
 
     def test_an_opted_out_model_keeps_the_refusal(self):
         config = _stream_required_config()
-        config.model_failover_on_quota = {}
+        config.model_failover = {}
         transport = _StreamTransport(_stream_refused())
 
         response, profile = _run(config, transport)
@@ -250,19 +264,80 @@ class TestTheFailover:
         assert transport.calls == ["https://a.test", "https://b.test"]
         assert profile["failover"]["reason"] == "upstream answered 429"
 
-    def test_a_plain_upstream_error_is_the_answer_after_one_attempt(self):
-        """``BREAK``: report this attempt's error, and do not try again.
-
-        A decision-level test cannot tell ``BREAK`` from a handler that falls
-        out of the loop by accident; what tells them apart is that the client
-        sees the upstream's own 500 and the upstream was asked exactly once.
-        """
+    def test_a_transient_upstream_error_is_failed_over(self):
+        """A 500 says the provider cannot answer; the other one is tried."""
         config = _config()
-        transport = _Transport(_server_error())
+        transport = _Transport(_server_error(), _ok())
 
         response, profile = _run(config, transport)
 
-        assert response.status_code == 500
+        assert response.status_code == 200
+        assert transport.calls == ["https://a.test", "https://b.test"]
+        assert profile["failover"]["reason"] == "upstream 500"
+
+    def test_a_503_is_failed_over(self):
+        """The case that motivated this: DeepSeek started answering 503."""
+        config = _config()
+        transport = _Transport(_unavailable(), _ok())
+
+        response, profile = _run(config, transport)
+
+        assert response.status_code == 200
+        assert transport.calls == ["https://a.test", "https://b.test"]
+        assert profile["failover"]["reason"] == "upstream 503"
+
+    @pytest.mark.parametrize(
+        "status", (408, 500, 502, 503, 504, 520, 521, 522, 523, 524, 529)
+    )
+    def test_every_transient_status_fails_over(self, status):
+        """The set, end to end: narrowing it must red a test, not a log."""
+        config = _config()
+        transport = _Transport(_transient(status), _ok())
+
+        response, profile = _run(config, transport)
+
+        assert response.status_code == 200
+        assert transport.calls == ["https://a.test", "https://b.test"]
+        assert profile["failover"]["reason"] == f"upstream {status}"
+
+    def test_a_disabled_provider_is_routed_away(self):
+        """Three capacity refusals in the window take the provider out.
+
+        Each refusal is still served by the failover; the point of the count
+        is the next request, which should not try the provider at all.  The
+        first refusal also sinks it, so this drives the count directly rather
+        than through three requests whose order the sink decides.
+        """
+        from llm_rosetta_gateway.quota.service import (
+            note_transient_refusal,
+            provider_cooldown,
+        )
+        from llm_rosetta_gateway.quota.state import QUOTA_STATE
+
+        config = _config()
+        pinfo = config.providers["a"]
+        for _ in range(3):
+            note_transient_refusal(pinfo, 503)
+
+        assert QUOTA_STATE.rate_limits.latest_disable("a") is not None
+        cooldown = provider_cooldown("a", pinfo)
+        assert cooldown is not None
+        assert cooldown["reason"] == "repeated refusals"
+
+        transport = _Transport(_ok())
+        response, _ = _run(config, transport)
+
+        assert response.status_code == 200
+        assert transport.calls == ["https://b.test"]
+
+    def test_an_opted_out_model_keeps_a_transient_error(self):
+        """Failover is opt-in: without the flag the 503 is the answer."""
+        config = _config(opt_in=False)
+        transport = _Transport(_unavailable())
+
+        response, profile = _run(config, transport)
+
+        assert response.status_code == 503
         assert transport.calls == ["https://a.test"]
         assert "failover" not in profile
 
@@ -387,7 +462,7 @@ class TestTheKeylessLane:
             pinfo.keyless = True
             pinfo.quota_probe = "p-keyless"
             pinfo.quota_probe_impl = _Probe()
-        config.model_failover_on_quota = {"m": True}
+        config.model_failover = {"m": True}
         return config
 
     def test_a_keyless_refusal_can_fail_over(self):
@@ -564,7 +639,7 @@ class TestTheMidStreamHalf:
 class TestTheConfigFile:
     """The flag has to come from the file an operator edits.
 
-    Every other test assigns ``config.model_failover_on_quota`` by hand, which
+    Every other test assigns ``config.model_failover`` by hand, which
     leaves the parsing path — the only one production uses — untested.
     """
 
@@ -578,13 +653,47 @@ class TestTheConfigFile:
                         "base_url": "https://a.test",
                     }
                 },
+                "models": {"m": {"provider": "a", "failover_on_error": True}},
+            }
+        )
+
+        assert config.model_failover == {"m": True}
+
+    def test_the_old_quota_key_still_opts_in(self):
+        """``failover_on_quota`` is the older spelling; existing configs keep working."""
+        config = GatewayConfig(
+            {
+                "providers": {
+                    "a": {
+                        "type": "chat_completions",
+                        "api_key": "sk-a",
+                        "base_url": "https://a.test",
+                    }
+                },
                 "models": {"m": {"provider": "a", "failover_on_quota": True}},
             }
         )
 
-        assert config.model_failover_on_quota == {"m": True}
+        assert config.model_failover == {"m": True}
 
-    def test_the_default_is_off(self):
+    def test_an_explicit_false_opts_out(self):
+        """A model turns failover off with either spelling of the key."""
+        for key in ("failover_on_error", "failover_on_quota"):
+            config = GatewayConfig(
+                {
+                    "providers": {
+                        "a": {
+                            "type": "chat_completions",
+                            "api_key": "sk-a",
+                            "base_url": "https://a.test",
+                        }
+                    },
+                    "models": {"m": {"provider": "a", key: False}},
+                }
+            )
+            assert config.model_failover == {}
+
+    def test_the_default_is_on(self):
         config = GatewayConfig(
             {
                 "providers": {
@@ -598,7 +707,46 @@ class TestTheConfigFile:
             }
         )
 
-        assert config.model_failover_on_quota == {}
+        assert config.model_failover == {"m": True}
+
+    def test_a_conflicting_pair_is_refused(self):
+        """Naming both spellings with different values is an error, not a coin flip."""
+        with pytest.raises(ValueError, match="failover_on_error=True"):
+            GatewayConfig(
+                {
+                    "providers": {
+                        "a": {
+                            "type": "chat_completions",
+                            "api_key": "sk-a",
+                            "base_url": "https://a.test",
+                        }
+                    },
+                    "models": {
+                        "m": {
+                            "provider": "a",
+                            "failover_on_error": True,
+                            "failover_on_quota": False,
+                        }
+                    },
+                }
+            )
+
+    @pytest.mark.parametrize("bad", ("false", 0, 1, "true"))
+    def test_a_non_boolean_is_refused(self, bad):
+        """A quoted or numeric value must not silently enable or disable it."""
+        with pytest.raises(ValueError, match="non-boolean"):
+            GatewayConfig(
+                {
+                    "providers": {
+                        "a": {
+                            "type": "chat_completions",
+                            "api_key": "sk-a",
+                            "base_url": "https://a.test",
+                        }
+                    },
+                    "models": {"m": {"provider": "a", "failover_on_error": bad}},
+                }
+            )
 
 
 class TestTheBudgetIsOneFailover:

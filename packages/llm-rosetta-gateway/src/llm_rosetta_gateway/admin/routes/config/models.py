@@ -145,24 +145,39 @@ def _build_model_entry(
         cleaned = {k: v for k, v in reasoning_override.items() if v is not None}
         if cleaned:
             entry["reasoning_override"] = cleaned
-    if body.get("failover_on_quota") is not None:
-        entry["failover_on_quota"] = bool(body["failover_on_quota"])
-    elif existing and existing.get("failover_on_quota"):
-        entry["failover_on_quota"] = existing["failover_on_quota"]
+    failover = body.get("failover_on_error", body.get("failover_on_quota"))
+    if failover is not None:
+        # On is the default, so only an opt-out needs the key.
+        if not failover:
+            entry["failover_on_error"] = False
+    elif existing and (
+        existing.get("failover_on_error") is False
+        or existing.get("failover_on_quota") is False
+    ):
+        entry["failover_on_error"] = False
     return entry
 
 
-def _carry_flag(existing: dict[str, Any], body: dict[str, Any], key: str) -> None:
-    """Carry an optional boolean the editor may not render.
+def _merge_failover_flag(existing: dict[str, Any], body: dict[str, Any]) -> None:
+    """Merge the cross-provider failover flag, accepting the older spelling.
 
-    The model editor does not show every key the config accepts.  A save that
-    never knew about one must not drop it; a body that sets it explicitly
-    wins, and an explicit ``None`` clears it.
+    Failover is on by default, so only an explicit ``false`` writes a key; a
+    body that turns it on removes the key, and an explicit ``None`` restores
+    the default.  ``failover_on_quota`` is the older spelling, and its
+    explicit ``false`` is an opt-out too.  The old key is removed whenever the
+    entry is written.
     """
-    if body.get(key) is not None:
-        existing[key] = bool(body[key])
-    elif key in body and key in existing:
-        del existing[key]
+    value = body.get("failover_on_error", body.get("failover_on_quota"))
+    if value is not None:
+        if value:
+            existing.pop("failover_on_error", None)
+        else:
+            existing["failover_on_error"] = False
+    elif "failover_on_error" in body or "failover_on_quota" in body:
+        existing.pop("failover_on_error", None)
+    elif existing.get("failover_on_quota") is False:
+        existing["failover_on_error"] = False
+    existing.pop("failover_on_quota", None)
 
 
 #: Placeholder key for the one-entry mapping the merge helper works on.
@@ -258,7 +273,10 @@ def _update_multi_provider_entry(
             existing["reasoning_override"] = cleaned
         elif "reasoning_override" in existing:
             del existing["reasoning_override"]
-    _carry_flag(existing, body, "failover_on_quota")
+    # ``failover_on_error`` is canonical; ``failover_on_quota`` is the older
+    # spelling an existing entry may still carry.  A body that mentions
+    # neither keeps the current behaviour.
+    _merge_failover_flag(existing, body)
     _carry_routing(existing, body)
     if body.get("enabled") is not None:
         existing["enabled"] = body["enabled"]

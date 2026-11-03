@@ -217,6 +217,47 @@ class QuotaRefusal(str, Enum):
     EXHAUSTED = "exhausted"
 
 
+#: Upstream statuses that mean "not now" rather than "not this request".
+#:
+#: They are capacity or transport failures: the same body may succeed on
+#: another provider, and none of them says the credential is invalid, so no
+#: key is demoted.  ``408`` is a timeout the upstream reported instead of
+#: dropping the connection, ``529`` is Anthropic's "overloaded", and
+#: ``520``-``524`` are the Cloudflare origin errors a proxied vendor surfaces
+#: unchanged.
+#:
+#: ``501``, ``505``-``507``, ``510`` and ``511`` are deliberately absent: they
+#: describe an endpoint that is missing, unimplemented or misconfigured, not a
+#: provider that is out of capacity, and treating them as a health signal
+#: would route around a provider whose configuration is the actual problem.
+TRANSIENT_UPSTREAM_STATUSES = frozenset(
+    {408, 500, 502, 503, 504, 520, 521, 522, 523, 524, 529}
+)
+
+#: The transient statuses that mean the provider is down, not the request.
+#:
+#: These count toward the cross-request ladder that blocks a persistently
+#: failing provider.  ``500``/``502``/``504`` may be request-specific and stay
+#: out of it: they still fail over for this request, but one of them must not
+#: take a provider out of rotation on its own.
+CAPACITY_UPSTREAM_STATUSES = frozenset({503, 529, 520, 521, 522, 523, 524})
+
+#: Statuses that mean the serving account cannot pay for this request.
+#:
+#: A quota probe may explain a ``429`` and demote the credential.  Without a
+#: probe neither status names the key at fault, but another provider may still
+#: serve.
+REFUSAL_STATUSES = frozenset({402, 429})
+
+
+@dataclass(frozen=True)
+class UpstreamRefusal:
+    """A refusal no quota probe explained, carrying what to report."""
+
+    status_code: int
+    reason: str
+
+
 def _quota_refusal(
     provider_info: ProviderInfo,
     status_code: int,
@@ -242,6 +283,34 @@ def _quota_refusal(
     if has_usable_alternative(provider_info):
         return QuotaRefusal.RETRY, signal
     return QuotaRefusal.EXHAUSTED, signal
+
+
+def _count_capacity_refusal(
+    provider_info: ProviderInfo,
+    status_code: int,
+    policy: Any | None = None,
+) -> None:
+    """Feed one capacity refusal into the cross-request ladder.
+
+    Bookkeeping must not change the answer: this request still gets the
+    failover it earned, so a failure here is logged and swallowed.
+    """
+    from ..quota.service import note_transient_refusal
+
+    try:
+        note_transient_refusal(provider_info, status_code, policy)
+    except Exception:  # noqa: BLE001 - the refusal path always wins
+        logger.warning("Could not record the transient refusal", exc_info=True)
+
+
+def note_upstream_success(provider_info: ProviderInfo) -> None:
+    """Clear the capacity-refusal ladder after a served request."""
+    from ..quota.service import note_upstream_success as _note
+
+    try:
+        _note(provider_info)
+    except Exception:  # noqa: BLE001 - bookkeeping must not fail a served request
+        logger.warning("Could not clear the transient refusals", exc_info=True)
 
 
 class RefusalAction(str, Enum):
@@ -286,12 +355,16 @@ async def decide_on_refusal(
     """Classify a failed upstream attempt into one action.
 
     The order matters: a ``401`` that a credential refresh can fix is a retry,
-    not a quota refusal, and a session-policy ``401`` answers the client
-    before either is considered.
+    not a refusal, and a session-policy ``401`` answers the client before
+    either is considered.  A transient status never reaches the quota probe:
+    it says the provider could not serve, not that the key is spent.
 
     A ``429`` is counted against the lane first — every lane, whatever its
     quota declaration — so a provider that no probe can read still sinks and
-    finally disables instead of being retried as if nothing happened.
+    finally disables instead of being retried as if nothing happened.  A
+    capacity status is counted the same way, against the provider itself,
+    before the request fails over: the first refusal sinks it and a run of
+    them takes it out of rotation for later requests.
 
     Args:
         provider_info: The provider that just refused.
@@ -315,11 +388,16 @@ async def decide_on_refusal(
     )
     if err is not None:
         return RefusalDecision(RefusalAction.RETURN, response=err)
-    refusal, signal = (
-        (None, None)
-        if retry
-        else _quota_refusal(provider_info, status_code, error_text)
-    )
+    if retry:
+        return RefusalDecision(RefusalAction.RETRY)
+    if status_code in TRANSIENT_UPSTREAM_STATUSES:
+        if status_code in CAPACITY_UPSTREAM_STATUSES:
+            _count_capacity_refusal(provider_info, status_code, rate_limit)
+        return RefusalDecision(
+            RefusalAction.FAILOVER,
+            signal=UpstreamRefusal(status_code, f"upstream {status_code}"),
+        )
+    refusal, signal = _quota_refusal(provider_info, status_code, error_text)
     if refusal is None and status_code == 429:
         # No probe could classify it, but the status is unambiguous: this lane
         # is rate limited.  The refusals were counted above, so the provider
@@ -329,10 +407,19 @@ async def decide_on_refusal(
 
         refusal = QuotaRefusal.EXHAUSTED
         signal = InBandSignal(cooldown_seconds=None, reason="upstream answered 429")
-    if retry or refusal is QuotaRefusal.RETRY:
+    if refusal is QuotaRefusal.RETRY:
         return RefusalDecision(RefusalAction.RETRY)
     if refusal is QuotaRefusal.EXHAUSTED:
         return RefusalDecision(RefusalAction.FAILOVER, signal=signal)
+    if status_code in REFUSAL_STATUSES:
+        # No probe explained it, but the status alone is a refusal: count it
+        # toward the same ladder, so a provider that keeps answering 429 or
+        # 402 is taken out of rotation after a few attempts.
+        _count_capacity_refusal(provider_info, status_code, rate_limit)
+        return RefusalDecision(
+            RefusalAction.FAILOVER,
+            signal=UpstreamRefusal(status_code, f"upstream {status_code}"),
+        )
     return RefusalDecision(RefusalAction.BREAK)
 
 

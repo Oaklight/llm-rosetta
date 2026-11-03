@@ -1,12 +1,13 @@
-"""Cross-provider failover when the serving provider's allowance runs out.
+"""Cross-provider failover when the serving provider cannot answer.
 
-An in-band 429 demotes the credential that earned it.  When that leaves the
-provider with nothing to retry on, the request usually still has somewhere to
-go: the model's other providers.  Trying one of them is a product decision
-rather than a routing one — the second provider is a different prompt cache, a
+Two kinds of refusal qualify: an allowance that ran out (a ``429`` the quota
+probe can explain, or a ``402``) and a transient upstream failure (``5xx``,
+``408``, ``529``).  Either way the request usually still has somewhere to go —
+the model's other providers.  Trying one of them is a product decision rather
+than a routing one — the second provider is a different prompt cache, a
 different rate-limit bucket and possibly a different model build — so it is
-opt-in per model (``failover_on_quota`` on the model entry) and spent at most
-once per request.
+opt-in per model (``failover_on_error``, or the older ``failover_on_quota``)
+and spent at most once per request.
 
 Both handlers use this module the same way: ask :func:`prepare_failover`, and
 when it returns a target, run the whole request again against it and record the
@@ -54,7 +55,7 @@ def prepare_failover(
 
     if config is None or attempted is not None:
         return None
-    if selection.model not in getattr(config, "model_failover_on_quota", {}):
+    if selection.model not in getattr(config, "model_failover", {}):
         return None
     target = reselect_after_refusal(
         selection, exclude=route.provider_name, resolve=config.resolve
@@ -62,9 +63,9 @@ def prepare_failover(
     if target is None:
         return None
     new_route, new_pinfo = target
-    reason = getattr(signal, "reason", None) or "quota refusal"
+    reason = getattr(signal, "reason", None) or "upstream refusal"
     get_logger().warning(
-        "Quota failover for model %s: %s -> %s (%s)",
+        "Upstream failover for model %s: %s -> %s (%s)",
         selection.model,
         route.provider_name,
         new_route.provider_name,
@@ -98,7 +99,7 @@ def record_failover(
         profile["failover"] = {
             "from": route.provider_name,
             "to": new_route.provider_name,
-            "reason": getattr(signal, "reason", None) or "quota refusal",
+            "reason": getattr(signal, "reason", None) or "upstream refusal",
             "profile": sub_profile,
         }
         ctx = current_lifecycle()
