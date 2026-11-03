@@ -223,6 +223,14 @@ textarea { font-family: var(--mono); font-size: 12.5px; resize: vertical; }
 .view-btn[aria-checked="true"] { background: var(--accent); color: var(--accent-on); border-color: var(--accent); }
 .view-note { margin: 6px 0 0; color: var(--text-dim); font-size: 12.5px; min-height: 1.4em; max-width: 72ch; }
 .master-state { color: var(--red); font-size: 12.5px; line-height: 1.5; }
+.cap-boxes { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+@media (max-width: 560px) { .cap-boxes { grid-template-columns: 1fr 1fr; } }
+.cap-box { display: flex; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; cursor: pointer; font-size: 13px; }
+.cap-box:hover { background: var(--bg-hover); }
+.cap-box input { margin: 0; }
+.endpoint-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 0; border-bottom: 1px dashed var(--border); font-size: 13px; }
+.endpoint-row:last-child { border-bottom: 0; }
+.dot-live { width: 8px; height: 8px; border-radius: 50%; background: var(--green); flex: none; }
 </style>
 
 <div class="page">
@@ -256,7 +264,8 @@ textarea { font-family: var(--mono); font-size: 12.5px; resize: vertical; }
     <div class="drawer-body">
       <div class="group">
         <div class="group-title">能力</div>
-        <div class="cap-chips" id="caps"></div>
+        <div id="caps"></div>
+        <div class="hint">能力 = 该服务方服务的模型类型；text / vision / tools / reasoning 是模型条目上的设置，不在这里。</div>
       </div>
 
       <div class="grid-2">
@@ -273,6 +282,11 @@ textarea { font-family: var(--mono); font-size: 12.5px; resize: vertical; }
       <div class="group">
         <label for="f-base">Base URL</label>
         <input id="f-base" type="text">
+      </div>
+
+      <div class="group" id="endpoints-group">
+        <div class="group-title">模型类型与端点</div>
+        <div id="endpoints"></div>
       </div>
 
       <div class="group" id="credential-group">
@@ -394,7 +408,7 @@ const providers = {
     name: "ALCF Sophia",
     type: "alcf_sophia--chat_completions",
     base: "https://inference-api.alcf.anl.gov/resource_server/sophia/vllm/v1",
-    caps: ["text", "tools", "reasoning"],
+    types: ["llm"],
     source: "shim",
     command: ["python3", "-m", "llm_rosetta_shim_alcf.providers.alcf.token"],
     interval: 3600,
@@ -408,7 +422,7 @@ const providers = {
     name: "AskSage",
     type: "asksage--chat_completions",
     base: "https://api.asksage.ai",
-    caps: ["text", "tools"],
+    types: ["llm"],
     source: "config",
     command: ["python3", "/opt/asksage/token.py", "--json"],
     interval: 86400,
@@ -422,7 +436,7 @@ const providers = {
     name: "OpenAI ChatGPT",
     type: "openai_chatgpt--open_responses",
     base: "https://chatgpt.com/backend-api/codex",
-    caps: ["text", "vision", "tools"],
+    types: ["llm"],
     source: "exchange",
     command: null,
     interval: 3600,
@@ -437,7 +451,7 @@ const providers = {
     name: "ChatGPT（命令覆盖）",
     type: "openai_chatgpt--open_responses",
     base: "https://chatgpt.com/backend-api/codex",
-    caps: ["text", "vision", "tools"],
+    types: ["llm"],
     source: "config",
     command: ["python3", "/opt/vault/chatgpt-token.py"],
     interval: 1800,
@@ -453,7 +467,7 @@ const providers = {
     name: "SiliconFlow CN",
     type: "openai--chat_completions",
     base: "https://api.siliconflow.cn",
-    caps: ["text", "tools", "embeddings", "rerank"],
+    types: ["llm", "embeddings", "rerank"],
     source: "static",
     command: null,
     interval: 3600,
@@ -484,7 +498,7 @@ const state = { selected: null, draft: null, view: "new", toastTimer: null };
 function clone(p) {
   return {
     ...p,
-    caps: [...p.caps],
+    types: [...p.types],
     command: p.command ? [...p.command] : null,
     status: p.status ? { ...p.status } : null,
     commandStatus: p.commandStatus ? { ...p.commandStatus } : null,
@@ -528,7 +542,8 @@ function openDrawer(id) {
   $("f-name").value = state.draft.name;
   $("f-type").value = state.draft.type;
   $("f-base").value = state.draft.base;
-  $("caps").innerHTML = state.draft.caps.map((c) => `<span class="chip on">${c}</span>`).join("");
+  renderTypes();
+  renderEndpoints();
   renderCredential();
   $("backdrop").hidden = false;
   $("f-name").focus();
@@ -538,6 +553,62 @@ function closeDrawer() {
   $("backdrop").hidden = true;
   state.selected = null;
   state.draft = null;
+}
+
+const TYPE_LABEL = { llm: "LLM", embeddings: "Embeddings", rerank: "Rerank", decisions: "Decisions" };
+const TYPE_FORMAT = { llm: "chat_completions", embeddings: "openai", rerank: "cohere", decisions: "openai_decisions" };
+
+function renderTypes() {
+  const host = $("caps");
+  host.innerHTML = "";
+  const box = document.createElement("div");
+  box.className = "cap-boxes";
+  for (const t of ["llm", "embeddings", "rerank", "decisions"]) {
+    const label = document.createElement("label");
+    label.className = "cap-box";
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = state.draft.types.includes(t);
+    cb.addEventListener("change", () => {
+      const i = state.draft.types.indexOf(t);
+      if (cb.checked && i < 0) state.draft.types.push(t);
+      if (!cb.checked && i >= 0) state.draft.types.splice(i, 1);
+      renderEndpoints();
+    });
+    label.append(cb, document.createTextNode(TYPE_LABEL[t]));
+    box.appendChild(label);
+  }
+  host.appendChild(box);
+}
+
+function renderEndpoints() {
+  const host = $("endpoints");
+  host.innerHTML = "";
+  const types = state.draft.types;
+  if (!types.length) {
+    host.innerHTML = '<div class="hint">至少选择一种能力，否则这个服务方没有可路由的端点。</div>';
+    return;
+  }
+  for (const t of ["llm", "embeddings", "rerank", "decisions"]) {
+    if (!types.includes(t)) continue;
+    const row = document.createElement("div");
+    row.className = "endpoint-row";
+    const dot = document.createElement("span");
+    dot.className = "dot-live";
+    const name = document.createElement("b");
+    name.textContent = t === "llm" ? "LLM 端点" : TYPE_LABEL[t] + " 端点";
+    const fmt = document.createElement("span");
+    fmt.className = "hint mono";
+    fmt.textContent = TYPE_FORMAT[t];
+    const enabled = document.createElement("label");
+    enabled.className = "hint";
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = true;
+    enabled.append(cb, document.createTextNode(" 已启用"));
+    row.append(dot, name, fmt, enabled);
+    host.appendChild(row);
+  }
 }
 
 function renderSources() {

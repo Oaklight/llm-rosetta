@@ -151,6 +151,11 @@ textarea { font-family: var(--mono); font-size: 12.5px; resize: vertical; }
   border-radius: 20px; color: var(--text-dim); background: var(--bg);
 }
 .cap-chip[aria-pressed="true"] { border-color: var(--border-strong); color: var(--text); background: var(--bg-soft); font-weight: 550; }
+.cap-boxes { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+@media (max-width: 560px) { .cap-boxes { grid-template-columns: 1fr 1fr; } }
+.cap-box { display: flex; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; cursor: pointer; font-size: 13px; }
+.cap-box:hover { background: var(--bg-hover); }
+.cap-box input { margin: 0; }
 
 .rows { display: grid; grid-template-columns: max-content minmax(0,1fr); gap: 5px 16px; margin: 0; }
 .rows dt { color: var(--text-dim); font-size: 12px; }
@@ -310,14 +315,14 @@ const providers = {
   alcf: {
     name: "ALCF Sophia", type: "alcf_sophia--chat_completions",
     base: "https://inference-api.alcf.anl.gov/resource_server/sophia/vllm/v1",
-    caps: ["text", "tools", "reasoning"], source: "shim",
+    types: ["llm"], source: "shim",
     command: ["python3", "-m", "llm_rosetta_shim_alcf.providers.alcf.token"],
     interval: 3600, env: null, key: "", sentinel: true,
     status: { state: "ready", last: new Date(Date.now() - 42 * 60000), failures: 0, error: null, needsLogin: false, expires: null },
   },
   asksage: {
     name: "AskSage", type: "asksage--chat_completions", base: "https://api.asksage.ai",
-    caps: ["text", "tools"], source: "config",
+    types: ["llm"], source: "config",
     command: ["python3", "/opt/asksage/token.py", "--json"],
     interval: 86400, env: "ASKSAGE_ACCOUNT_KEY", key: "", sentinel: false,
     status: { state: "ready", last: new Date(Date.now() - 90 * 60000), failures: 0, error: null, needsLogin: false, expires: null },
@@ -325,13 +330,13 @@ const providers = {
   chatgpt: {
     name: "OpenAI ChatGPT", type: "openai_chatgpt--open_responses",
     base: "https://chatgpt.com/backend-api/codex",
-    caps: ["text", "vision", "tools"], source: "exchange",
+    types: ["llm"], source: "exchange",
     command: null, interval: 3600, env: null, key: "", sentinel: false,
     status: { state: "connected", last: new Date(Date.now() - 12 * 60000), failures: 0, error: null, needsLogin: false, expires: new Date(Date.now() + 40 * 60000) },
   },
   siliconflow: {
     name: "SiliconFlow CN", type: "openai--chat_completions", base: "https://api.siliconflow.cn",
-    caps: ["text", "tools", "embeddings", "rerank"], source: "static",
+    types: ["llm", "embeddings", "rerank"], source: "static",
     command: null, interval: 3600, env: null, key: "sk-fj…（已保存）", sentinel: false, status: null,
   },
 };
@@ -358,7 +363,7 @@ const MODE_NOTE = {
 const state = { mode: "C", selected: null, draft: null, tab: "general", credOpen: false, toastTimer: null };
 
 function clone(p) {
-  return { ...p, caps: [...p.caps], command: p.command ? [...p.command] : null, status: p.status ? { ...p.status } : null };
+  return { ...p, types: [...p.types], command: p.command ? [...p.command] : null, status: p.status ? { ...p.status } : null };
 }
 function problem(p) {
   return p.source !== "static" && p.status && p.status.state !== "ready" && p.status.state !== "connected";
@@ -477,22 +482,27 @@ function el(tag, cls, text) {
   return n;
 }
 
+const TYPE_LABEL = { llm: "LLM", embeddings: "Embeddings", rerank: "Rerank", decisions: "Decisions" };
+
 function sectionCapabilities() {
   const g = el("div", "group");
   g.append(el("div", "group-title", "能力"));
-  const chips = el("div", "cap-chips");
-  for (const cap of ["text", "vision", "tools", "reasoning", "embeddings", "rerank", "decisions"]) {
-    const b = el("button", "cap-chip", cap);
-    b.type = "button";
-    b.setAttribute("aria-pressed", String(state.draft.caps.includes(cap)));
-    b.addEventListener("click", () => {
-      const i = state.draft.caps.indexOf(cap);
-      if (i >= 0) state.draft.caps.splice(i, 1); else state.draft.caps.push(cap);
+  const boxes = el("div", "cap-boxes");
+  for (const t of ["llm", "embeddings", "rerank", "decisions"]) {
+    const label = el("label", "cap-box");
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = state.draft.types.includes(t);
+    cb.addEventListener("change", () => {
+      const i = state.draft.types.indexOf(t);
+      if (cb.checked && i < 0) state.draft.types.push(t);
+      if (!cb.checked && i >= 0) state.draft.types.splice(i, 1);
       renderDrawer();
     });
-    chips.appendChild(b);
+    label.append(cb, document.createTextNode(TYPE_LABEL[t]));
+    boxes.appendChild(label);
   }
-  g.appendChild(chips);
+  g.append(boxes, el("div", "hint", "能力 = 该服务方服务的模型类型；text / vision / tools / reasoning 在模型条目里设置。"));
   return g;
 }
 
@@ -526,10 +536,10 @@ function sectionEndpoints() {
   head.append(el("h3", "", "端点"), el("span", "hint", "模型类型设置"));
   const body = el("div", "card-body");
   const rows = [
-    ["chat", "chat_completions", true],
-    ["embeddings", "openai", state.draft.caps.includes("embeddings")],
-    ["rerank", "cohere", state.draft.caps.includes("rerank")],
-    ["decisions", "openai_decisions", state.draft.caps.includes("decisions")],
+    ["chat", "chat_completions", state.draft.types.includes("llm")],
+    ["embeddings", "openai", state.draft.types.includes("embeddings")],
+    ["rerank", "cohere", state.draft.types.includes("rerank")],
+    ["decisions", "openai_decisions", state.draft.types.includes("decisions")],
   ];
   for (const [type, fmt, on] of rows) {
     const row = el("div", "actions");
@@ -538,9 +548,9 @@ function sectionEndpoints() {
     toggle.type = "button";
     toggle.setAttribute("aria-pressed", String(on));
     toggle.addEventListener("click", () => {
-      if (type === "chat") return;
-      const i = state.draft.caps.indexOf(type);
-      if (i >= 0) state.draft.caps.splice(i, 1); else state.draft.caps.push(type);
+      const key = type === "chat" ? "llm" : type;
+      const i = state.draft.types.indexOf(key);
+      if (i >= 0) state.draft.types.splice(i, 1); else state.draft.types.push(key);
       renderDrawer();
     });
     row.append(chip, toggle);
