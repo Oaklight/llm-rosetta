@@ -61,7 +61,7 @@ The **Models** section is the model routing table: every configured model, the c
 ![Models section](images/admin-models.png)
 
 - **Filters** — provider and a status facet (**All statuses**, **Usable**, **Partial**, **Unusable**, each counting the rows the other filters leave) share the first facet row; model type sits on its own row below, the way the log filters are laid out, instead of wrapping mid-group at narrow widths.
-- **Badges** are icon-only; the capability name is the tooltip. A model served by more than one provider says **Multiple providers**, and the cell opens a list with each provider's own switch, weight, capability picker and **Test**. The picker draws the entry's capabilities as the same icon badges; clicking it opens a checklist of `text`, `vision`, `tools` and `reasoning`, and a dash means the entry inherits the provider's own capabilities.
+- **Badges** are icon-only; the capability name is the tooltip. A model served by more than one provider says **Multiple providers**, and the cell opens a list with each provider's own switch, weight, capability picker and **Test**. The picker draws the entry's capabilities as one dot each, in that capability's badge colour; clicking it opens a checklist of `text`, `vision`, `tools` and `reasoning`, and a hollow dot means the entry inherits the provider's own capabilities.
 - **Actions** — **Test** and **⋯** appear when a row is hovered; the enable switch never hides, because it is the row's state.
 - **A row opens a side panel** with the capabilities, every provider with its weight and the same capability picker, and **Edit** in the same panel — there is no separate model modal.
 - **Provider order** — a model served by several providers lists them in the order the selector tries them. The rows can be dragged by their grip, both in the cell's **Multiple providers** list and in the side panel; the drop writes the model's `providers` list. A provider that is switched off keeps its slot.
@@ -83,11 +83,13 @@ Each model can declare capabilities that determine the available test types and 
 
 | Capability | Description | Badge Color |
 |------------|-------------|-------------|
-| `text` | Text generation | Blue |
-| `vision` | Image comprehension | Green |
-| `tools` | Function/tool calling | Orange |
-| `embedding` | Text embeddings (mutually exclusive with vision/tools) | Teal |
-| `reasoning` | Extended thinking / chain-of-thought (mutually exclusive with embedding) | Purple |
+| `text` | Text generation | Grey |
+| `vision` | Image comprehension | Purple |
+| `tools` | Function/tool calling | Magenta |
+| `embedding` | Text embeddings (mutually exclusive with vision/tools) | Blue |
+| `reasoning` | Extended thinking / chain-of-thought (mutually exclusive with embedding) | Teal |
+
+The hues stay clear of the status vocabulary: red, green and orange already mean failed, healthy and warning elsewhere in the console.
 
 ### Model testing
 
