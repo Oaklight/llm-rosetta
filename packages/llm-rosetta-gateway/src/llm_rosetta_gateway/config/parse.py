@@ -316,23 +316,53 @@ def parse_model_overrides(
 
 
 def parse_model_failover(raw_models: dict[str, Any]) -> dict[str, bool]:
-    """Read the per-model ``failover_on_quota`` flags.
+    """Read the per-model cross-provider failover flags.
 
-    Only models that turn it on appear in the result.  The default is off
-    because a failover trades a warm upstream prompt cache for a served
-    request: it is a choice an operator makes per model, not a global one.
+    Failover is **on** unless a model turns it off.  A refusal it reacts to is
+    one the client would otherwise receive as an error, and a model with one
+    provider has no second attempt to make, so the default asks nothing of the
+    ordinary case.
+
+    ``failover_on_error`` is the canonical key and covers quota refusals
+    (``402``/``429``), transient upstream failures (``408``, ``500``-``504``,
+    ``520``-``524``, ``529``) and capacity refusals.  ``failover_on_quota`` is
+    the older spelling; either key set to ``false`` opts the model out.
+
+    A non-boolean value, or both keys present with different values, is a
+    config error.  Resolving either silently would switch the feature on or
+    off without telling the operator — a quoted ``"false"`` would enable it,
+    and a leftover ``failover_on_quota: false`` would override the new key.
 
     Args:
         raw_models: The ``models`` mapping as it appears in the config.
 
     Returns:
-        ``{model: True}`` for models that opt in.
+        ``{model: True}`` for models that have not opted out.
     """
-    return {
-        name: True
-        for name, value in raw_models.items()
-        if isinstance(value, dict) and value.get("failover_on_quota")
-    }
+    result: dict[str, bool] = {}
+    for name, value in raw_models.items():
+        if not isinstance(value, dict):
+            result[name] = True
+            continue
+        on_error = value.get("failover_on_error")
+        on_quota = value.get("failover_on_quota")
+        for key, flag in (
+            ("failover_on_error", on_error),
+            ("failover_on_quota", on_quota),
+        ):
+            if flag is not None and not isinstance(flag, bool):
+                raise ValueError(
+                    f"config: model '{name}' has a non-boolean {key}: {flag!r}"
+                )
+        if on_error is not None and on_quota is not None and on_error != on_quota:
+            raise ValueError(
+                f"config: model '{name}' sets failover_on_error={on_error} and "
+                f"failover_on_quota={on_quota} — remove one"
+            )
+        if on_error is False or on_quota is False:
+            continue
+        result[name] = True
+    return result
 
 
 def declared_provider_entries(value: Any) -> list[Any]:

@@ -42,6 +42,7 @@ from .errors import (
     _upstream_error_passthrough,
     decide_on_refusal,
     error_response_for_source,
+    note_upstream_success,
 )
 from .failover import prepare_failover, record_failover
 from .metadata import (
@@ -384,6 +385,7 @@ async def _non_streaming_from_stream(
             from ..quota.service import clear_upstream_rate_limit
 
             clear_upstream_rate_limit(provider_info)
+            note_upstream_success(provider_info)
             break
         error_text = await stream.read_error()
         status = stream.status_code
@@ -650,6 +652,7 @@ async def handle_non_streaming(  # noqa: C901
         from ..quota.service import clear_upstream_rate_limit
 
         clear_upstream_rate_limit(provider_info)
+        note_upstream_success(provider_info)
 
     # Check for upstream errors (HTTP 4xx/5xx) or soft-errors (HTTP 200
     # with an error embedded in the body, e.g. Argo auth warnings).

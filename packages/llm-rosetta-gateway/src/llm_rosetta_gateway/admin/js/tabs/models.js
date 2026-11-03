@@ -290,6 +290,12 @@ function openModelModal(model, provider, capabilities, upstreamModel, sourceMode
   const modelCfg = model && S.configData.models[model];
   document.getElementById('modelTimeout').value = (typeof modelCfg === 'object' && modelCfg && modelCfg.timeout != null) ? modelCfg.timeout : '';
   document.getElementById('flattenSystem').checked = fsCfg != null ? !!fsCfg : !!fsAuto;
+  // failover_on_error — on by default; an explicit false in either spelling
+  // opts the model out.
+  const foCfg = (typeof modelCfg === 'object' && modelCfg) ? modelCfg : null;
+  document.getElementById('failoverOnError').checked = !(
+    foCfg && (foCfg.failover_on_error === false || foCfg.failover_on_quota === false)
+  );
   // URL template overrides
   document.getElementById('modelUrlTemplate').value = (fsModel && fsModel.url_template) || '';
   const streamTpl = (fsModel && fsModel.stream_url_template) || '';
@@ -1360,6 +1366,7 @@ async function saveModel() {
   const modelTimeoutVal = document.getElementById('modelTimeout').value.trim();
   if (modelTimeoutVal) body.timeout = parseFloat(modelTimeoutVal);
   body.flatten_system = document.getElementById('flattenSystem').checked;
+  body.failover_on_error = document.getElementById('failoverOnError').checked;
   const originalName = document.getElementById('modelName').dataset.originalName;
   if (originalName && originalName !== name) {
     body.rename_from = originalName;

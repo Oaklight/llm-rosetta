@@ -41,6 +41,7 @@ from .errors import (
     _upstream_error_passthrough,
     DumpContext,
     decide_on_refusal,
+    note_upstream_success,
 )
 from .failover import prepare_failover, record_failover
 from .metadata import (
@@ -509,6 +510,7 @@ async def handle_streaming(  # noqa: C901
             from ..quota.service import clear_upstream_rate_limit
 
             clear_upstream_rate_limit(provider_info)
+            note_upstream_success(provider_info)
             stream_error_text = None
             break
 

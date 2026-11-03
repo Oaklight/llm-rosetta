@@ -369,6 +369,101 @@ class TestQuotaState:
         assert snapshot[0]["credential"] == credential_fingerprint(key)
 
 
+class TestTheTransientLadder:
+    """Three capacity refusals in a window take the provider out of rotation.
+
+    The per-request failover serves each of those requests from another
+    provider; this ladder is what stops later requests from paying the failed
+    attempt at all.  It is the same continuous-refusal state a 429 uses,
+    counted on the provider's own lane so key rotation cannot spread one
+    outage across several counts — but with the sink suppressed: a sunk
+    provider is routed around for the whole window, so the count could never
+    reach the third refusal.
+    """
+
+    def test_two_refusals_do_not_disable(self):
+        from llm_rosetta_gateway.quota.rate_limit import (
+            RateLimitPolicy,
+            RateLimitTracker,
+        )
+
+        tracker = RateLimitTracker()
+        policy = RateLimitPolicy(sink=False)
+        assert tracker.note("p", None, policy) == "off"
+        assert tracker.note("p", None, policy) == "off"
+        assert tracker.latest_disable("p") is None
+
+    def test_the_third_refusal_disables(self):
+        from llm_rosetta_gateway.quota.rate_limit import (
+            RateLimitPolicy,
+            RateLimitTracker,
+        )
+
+        tracker = RateLimitTracker()
+        policy = RateLimitPolicy(sink=False)
+        tracker.note("p", None, policy)
+        tracker.note("p", None, policy)
+        assert tracker.note("p", None, policy) == "disable"
+        assert tracker.latest_disable("p") is not None
+
+    def test_a_success_clears_the_count(self):
+        from llm_rosetta_gateway.quota.rate_limit import (
+            RateLimitPolicy,
+            RateLimitTracker,
+        )
+
+        tracker = RateLimitTracker()
+        policy = RateLimitPolicy(sink=False)
+        tracker.note("p", None, policy)
+        tracker.note("p", None, policy)
+        tracker.clear_lane("p", None)
+
+        assert tracker.note("p", None, policy) == "off"
+
+    def test_old_refusals_fall_out_of_the_window(self):
+        from llm_rosetta_gateway.quota.rate_limit import (
+            RateLimitPolicy,
+            RateLimitTracker,
+        )
+
+        tracker = RateLimitTracker()
+        policy = RateLimitPolicy(sink=False, window_s=1)
+        now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        tracker.note("p", None, policy, now=now)
+
+        assert tracker.note("p", None, policy, now=now + timedelta(seconds=2)) == "off"
+
+    def test_the_service_counts_the_provider_lane_without_sinking_it(self):
+        """A capacity status is the provider's failure, not a key's.
+
+        The count is written to the provider-wide lane (credential ``None``),
+        so a provider with several keys cannot spread one outage across them;
+        and the provider is not sunk, so the next request still reaches it and
+        the count can grow to the disabling third.
+        """
+        from llm_rosetta_gateway.quota.service import (
+            note_transient_refusal,
+            note_upstream_success,
+        )
+        from llm_rosetta_gateway.quota.state import QUOTA_STATE
+
+        QUOTA_STATE.rate_limits.clear()
+        try:
+            pinfo = SimpleNamespace(name="a", config_name="a")
+            assert note_transient_refusal(pinfo, 503) == "off"
+            assert QUOTA_STATE.rate_limits.sunk("a") is False
+            assert note_transient_refusal(pinfo, 503) == "off"
+            assert QUOTA_STATE.rate_limits.sunk("a") is False
+            assert note_transient_refusal(pinfo, 503) == "disable"
+            assert QUOTA_STATE.rate_limits.latest_disable("a") is not None
+            assert QUOTA_STATE.rate_limits.record("a", None) is not None
+
+            note_upstream_success(pinfo)
+            assert QUOTA_STATE.rate_limits.record("a", None) is None
+        finally:
+            QUOTA_STATE.rate_limits.clear()
+
+
 class TestQuotaIntervals:
     def test_reads_the_shim_declaration(self):
         from types import SimpleNamespace

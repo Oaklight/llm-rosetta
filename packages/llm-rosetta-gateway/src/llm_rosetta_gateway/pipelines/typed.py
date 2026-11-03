@@ -111,14 +111,15 @@ def _may_fail_over(
     """Whether a refusal from this attempt should try another provider.
 
     One retryable refusal, the same one chat fails over on: a 429.  The model
-    must have opted in with ``failover_on_quota`` — a failover trades a warm
-    upstream cache for a served request, which is a per-model choice — and the
-    handler must have a resolver that can leave the refused provider out.
+    must not have opted out with ``failover_on_error`` (failover is on by
+    default) — a failover trades a warm upstream cache for a served request,
+    which is a per-model choice — and the handler must have a resolver that
+    can leave the refused provider out.
     """
     return (
         status_code == 429
         and handler.resolve_excluding is not None
-        and model in getattr(config, "model_failover_on_quota", {})
+        and model in getattr(config, "model_failover", {})
     )
 
 

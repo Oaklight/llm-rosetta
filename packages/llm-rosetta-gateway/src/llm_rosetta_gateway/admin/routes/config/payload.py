@@ -190,7 +190,11 @@ def _resolve_model_reasoning(
 def _normalize_model_entry(value: Any) -> dict[str, Any]:
     """Normalize a single model config value to a dict for the admin UI."""
     if isinstance(value, str):
-        return {"provider": value, "capabilities": ["text"]}
+        return {
+            "provider": value,
+            "capabilities": ["text"],
+            "failover_on_error": True,
+        }
     entry: dict[str, Any] = {
         "capabilities": value.get("capabilities", ["text"]),
     }
@@ -209,12 +213,17 @@ def _normalize_model_entry(value: Any) -> dict[str, Any]:
         "upstream_model",
         "reasoning_override",
         "flatten_system",
-        "failover_on_quota",
         "url_template",
         "stream_url_template",
     ):
         if value.get(key):
             entry[key] = value[key]
+    # On is the default, so the editor gets the effective value rather than
+    # inferring it from the key's absence.
+    entry["failover_on_error"] = not (
+        value.get("failover_on_error") is False
+        or value.get("failover_on_quota") is False
+    )
     if value.get("enabled") is not None:
         entry["enabled"] = value["enabled"]
     return entry

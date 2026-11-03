@@ -129,8 +129,8 @@ test('a provider that is not sunk adds no sink row', () => {
   assert.ok(!calls.some(([key]) => key === 'quota.routingSunk'));
 });
 
-test('a repeated-429 block asks for its translated reason', () => {
+test('a repeated-refusal block asks for its translated reason', () => {
   const { t, calls } = translator();
-  blockRow({ until: '2026-11-02T12:00:00Z', reason: 'repeated 429s' }, t);
-  assert.ok(calls.some(([key]) => key === 'quota.blockReason.rateLimited'));
+  blockRow({ until: '2026-11-02T12:00:00Z', reason: 'repeated refusals' }, t);
+  assert.ok(calls.some(([key]) => key === 'quota.blockReason.repeatedRefusals'));
 });
