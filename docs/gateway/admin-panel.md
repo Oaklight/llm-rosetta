@@ -116,8 +116,8 @@ The **Routing** section answers one question per model: which lane serves it, an
 
 ![Routing section](images/admin-routing.png)
 
-- **Board** — the route in the order the selector reads it: each candidate's position, the lane and the wire format and shim behind it, a weight stepper that writes the model entry, the remaining allowance, the share it serves at, and the state with its countdown.
-- **Legend** — names the three dots (**serving**, **sunk**, **blocked by a refusal**) and the share formula: weight × (0.25 + 0.75 × headroom), normalised over the serving lanes.
+- **Board** — the route in the order the selector reads it: each candidate's position, the lane and the wire format and shim behind it, a weight stepper that writes the model entry, the remaining allowance, the share it serves at, and the state with its countdown. A row can be dragged by its grip; the drop writes the model's `providers` list, so the order the board shows is the order the selector reads.
+- **Legend** — names the three dots (**serving**, **sunk**, **blocked by a refusal**) and how this model's share is made: weight × (0.25 + 0.75 × headroom) for `weighted`, the first eligible lane for `ordered`, equal turns for `rotate` and `least_used`, and the allowance alone for `pace`.
 - **Decisions** — the last requests for this model from the request log: time, request id, client, chosen lane, any failover hop, status and latency. The client cell shows the API key's label with the `User-Agent` the request sent beneath it, so a row names the program that made the request, not only the key it used.
 - **Policy** — the model's `routing` block in a card beside the board: five presets as chips (**Balanced**, **Sticky sessions**, **Cheap first**, **Spread**, **Quota saver**), strategy and affinity, the sunk-lane switch, the first-token timeout, the rules as written, and the block as JSON. A preset writes the literal block an operator could have typed; a block that is no preset leaves every chip unpressed.
 

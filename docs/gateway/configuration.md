@@ -432,6 +432,8 @@ A multi-provider model chooses between its providers with a `routing` block:
 Every strategy still applies the allowance weight (`weight × (0.25 + 0.75 × headroom)`); `pace` is
 the one that drops the configured factor from that product.
 
+A subscription lane with paid backups is `ordered`: list the subscription first and the paid providers after it, in the order they should be tried. Each request is served by the first lane that can take it, so a spent, blocked or rate-limited subscription hands over to the next one, and a model can list as many fallbacks as it needs. The Routing panel's rows show that order, and dragging a row writes it.
+
 | Affinity | Description |
 |----------|-------------|
 | `off` | **(default)** Each request is chosen independently. |
