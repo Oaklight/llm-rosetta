@@ -61,11 +61,13 @@ The **Models** section is the model routing table: every configured model, the c
 ![Models section](images/admin-models.png)
 
 - **Filters** — provider and a status facet (**All statuses**, **Usable**, **Partial**, **Unusable**, each counting the rows the other filters leave) share the first facet row; model type sits on its own row below, the way the log filters are laid out, instead of wrapping mid-group at narrow widths.
-- **Badges** are icon-only; the capability name is the tooltip. A model served by more than one provider says **Multiple providers**, and the cell opens a list with each provider's own switch, weight and **Test**.
+- **Badges** are icon-only; the capability name is the tooltip. A model served by more than one provider says **Multiple providers**, and the cell opens a list with each provider's own switch, weight, capability picker and **Test**. The picker draws the entry's capabilities as the same icon badges; clicking it opens a checklist of `text`, `vision`, `tools` and `reasoning`, and a dash means the entry inherits the provider's own capabilities.
 - **Actions** — **Test** and **⋯** appear when a row is hovered; the enable switch never hides, because it is the row's state.
-- **A row opens a side panel** with the capabilities, every provider with its weight, and **Edit** in the same panel — there is no separate model modal.
+- **A row opens a side panel** with the capabilities, every provider with its weight and the same capability picker, and **Edit** in the same panel — there is no separate model modal.
 - **Provider order** — a model served by several providers lists them in the order the selector tries them. The rows can be dragged by their grip, both in the cell's **Multiple providers** list and in the side panel; the drop writes the model's `providers` list. A provider that is switched off keeps its slot.
 - **Ordering** — the header stays put while the table scrolls, and a model no provider can serve sorts below the usable rows.
+
+![Per-provider capability picker](images/admin-model-capabilities.png)
 
 Two actions are not in the table: **+ Add Model** in the header, and **Fetch from Provider**, which queries the upstream `/v1/models` endpoint, lists what it returns with checkboxes, and bulk-adds the selection with an optional name prefix. Its failure messages are diagnostic rather than generic:
 
