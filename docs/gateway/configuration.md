@@ -528,28 +528,37 @@ including in tier 1. See the [Architecture Guide](../contributing/architecture.m
 
 ### Quota Failover
 
-`failover_on_quota` (per model, default `false`) serves a request from another
-provider of the same model when an in-band quota refusal leaves the serving
-provider with no usable credential:
+`failover_on_error` (per model, default `false`) serves a request from another
+provider of the same model when the serving provider refuses. `failover_on_quota`
+is the older spelling of the same flag and is still read, so an existing config
+keeps working.
 
 ```jsonc
 "models": {
   "gpt-5": {
     "providers": ["openai-prod", "azure-backup"],
-    "failover_on_quota": true
+    "failover_on_error": true
   }
 }
 ```
 
-The trigger is narrow. It must be an upstream `429` that the provider's shim
-classifies as a quota refusal — some shims also classify a `403` — at a point
-where no credential of that provider can serve the request. A generic `5xx`, a
-`401`, or a `429` the gateway cannot classify is passed through as before. The budget is
-**one failover** — not one upstream call: a refusal that leaves another
-credential of the same provider usable spends the ordinary same-provider retry
-first, and only a provider with nothing left fails over. The refusing provider
-is excluded for the rest of the request, one other provider is tried, and if it
-refuses too the client receives that refusal.
+Two kinds of refusal qualify:
+
+- **Allowance.** An upstream `402`, or a `429` (some shims also classify a
+  `403`) that the provider's shim classifies as a quota refusal. When the
+  gateway can demote the credential it does so first; the failover happens only
+  once no credential of that provider can serve the request.
+- **Transient failure.** `408`, `500`, `502`, `503`, `504`, `529` and the
+  Cloudflare origin errors `520`-`524`. These say the provider could not serve
+  right now, not that the key is wrong, so no credential is demoted.
+
+A `400`, `403`, `404`, `413` or `422` answers the client unchanged: another
+provider would refuse the same request. The budget is **one failover** — not
+one upstream call: a refusal that leaves another credential of the same
+provider usable spends the ordinary same-provider retry first, and only a
+provider with nothing left fails over. The refusing provider is excluded for
+the rest of the request, one other provider is tried, and if it refuses too the
+client receives that refusal.
 
 It is off by default because it trades something real: another provider is
 another prompt cache, another rate-limit bucket and possibly another model
@@ -594,7 +603,7 @@ Embedding, rerank and decision models declared in the unified `models` section g
 }
 ```
 
-A provider that does not declare the type's endpoint is not a candidate. When no candidate can serve, the route answers `503` — or `502` after a failed startup — with `Retry-After` when an end is known, rather than `404`. With `failover_on_quota`, an upstream `429` moves the request to the next provider and counts against the same continuous-429 rule the chat route uses. The legacy `<type>_models` sections name one provider each and stay single-provider.
+A provider that does not declare the type's endpoint is not a candidate. When no candidate can serve, the route answers `503` — or `502` after a failed startup — with `Retry-After` when an end is known, rather than `404`. With `failover_on_error` (or the older `failover_on_quota`), an upstream `429`, `402` or a transient `5xx` moves the request to the next provider and counts against the same continuous-429 rule the chat route uses. The legacy `<type>_models` sections name one provider each and stay single-provider.
 
 ## Circuit Breaker
 
