@@ -474,18 +474,23 @@ llm-rosetta-gateway --socket /run/user/$(id -u)/rosetta.sock
 
 ### 配额故障转移 { #quota-failover }
 
-`failover_on_quota`（按模型配置，默认 `false`）让请求在服务方因 in-band 配额拒绝而没有任何可用凭据时，改由同一模型的另一个 provider 来服务：
+`failover_on_error`（按模型配置，默认 `false`）在服务方拒绝时，让请求改由同一模型的另一个 provider 来服务。`failover_on_quota` 是同一开关的旧拼写，仍然会被读取，已有配置不受影响：
 
 ```jsonc
 "models": {
   "gpt-5": {
     "providers": ["openai-prod", "azure-backup"],
-    "failover_on_quota": true
+    "failover_on_error": true
   }
 }
 ```
 
-触发条件刻意很窄：必须是 provider 的 shim 归类为配额拒绝的上游 `429`（部分 shim 也会归类 `403`），且该 provider 已没有凭据能服务这次请求。普通的 `5xx`、`401`，以及网关无法归类的 `429`，都照旧原样返回。预算是**一次故障转移** —— 不是一次上游调用：如果同一 provider 还有一个可用凭据，会先花掉原有的同 provider 重试，只有整个 provider 都用尽才会转移。拒绝的 provider 在本次请求余下部分被排除，改试另一个 provider；如果它也拒绝，客户端收到的就是它这次的拒绝。
+两类拒绝会触发故障转移：
+
+- **配额。** 上游 `402`，或 provider 的 shim 归类为配额拒绝的 `429`（部分 shim 也会归类 `403`）。网关能降级凭据时会先降级；只有该 provider 已没有凭据能服务这次请求时才会转移。
+- **瞬时故障。** `408`、`500`、`502`、`503`、`504`、`529`，以及 Cloudflare 源站错误 `520`-`524`。它们表示 provider 现在无法服务，而不是凭据有问题，因此不会降级任何凭据。
+
+`400`、`403`、`404`、`413`、`422` 会把上游的答复原样返回：换一个 provider 也会拒绝同一个请求。预算是**一次故障转移** —— 不是一次上游调用：如果同一 provider 还有一个可用凭据，会先花掉原有的同 provider 重试，只有整个 provider 都用尽才会转移。拒绝的 provider 在本次请求余下部分被排除，改试另一个 provider；如果它也拒绝，客户端收到的就是它这次的拒绝。
 
 默认关闭，是因为它真的有所取舍：换一个 provider 就是换一份 prompt 缓存、换一个限流桶，甚至可能是另一个模型构建。真的发生时，请求的 profile 会记录 `failover: {from, to, reason}`，请求日志行也指向实际服务的 provider。
 
@@ -522,7 +527,7 @@ llm-rosetta-gateway --socket /run/user/$(id -u)/rosetta.sock
 }
 ```
 
-没有声明该类型端点的提供方不进入候选。所有候选都无法服务时，该路由返回 `503`（启动失败后为 `502`），已知恢复时间时带 `Retry-After`，而不是 `404`。开启 `failover_on_quota` 后，上游 `429` 会把请求移到下一个提供方，并计入聊天路由使用的同一条连续 429 规则。旧版 `<type>_models` 段每个模型只写一个提供方，仍是单提供方行为。
+没有声明该类型端点的提供方不进入候选。所有候选都无法服务时，该路由返回 `503`（启动失败后为 `502`），已知恢复时间时带 `Retry-After`，而不是 `404`。开启 `failover_on_error`（或旧拼写 `failover_on_quota`）后，上游 `429`、`402` 或瞬时 `5xx` 会把请求移到下一个提供方，并计入聊天路由使用的同一条连续 429 规则。旧版 `<type>_models` 段每个模型只写一个提供方，仍是单提供方行为。
 
 ## 熔断器 { #circuit-breaker }
 
