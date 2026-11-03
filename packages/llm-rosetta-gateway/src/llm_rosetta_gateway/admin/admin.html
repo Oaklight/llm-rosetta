@@ -117,7 +117,7 @@
         <div class="facet-chips" id="providerStatusSeg" role="radiogroup" aria-label="Provider status filter" data-i18n-aria-label="providerFilter.status">
           <!-- Populated by providers.js::_buildProviderStatusSeg() with live counts -->
         </div>
-        <input id="providerSearch" placeholder="Search providers..." oninput="renderProviders()" data-i18n-placeholder="label.searchProviders" style="display:none">
+        <input id="providerSearch" placeholder="Search providers..." oninput="onProviderSearch()" data-i18n-placeholder="label.searchProviders" style="display:none">
         <span class="provider-count" id="providerCount"></span>
         <div class="view-toggle">
           <button class="btn btn-sm active" id="viewGridBtn" onclick="setProviderView('grid')" data-i18n-title="label.gridView" title="Grid view"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></button>

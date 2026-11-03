@@ -13,7 +13,7 @@ import { safeLinkUrl, parseRecord } from '../core/credential.js';
 import { initLogoPicker, setLogoPickerValue, getLogoPickerValue } from '../components/logo-picker.js';
 import { setTypeTree, getSelectedValue, selectValue, onTypeSelect, createTypePicker } from '../components/type-picker.js';
 import { buildTypeModel, buildEndpointTypeModel, endpointChoiceConfig, shimBrand } from '../core/shim-tree.js';
-import { degradedEndpoints, categoryKey, endpointState, degradedMarker, providerStatus, providerOrder } from '../core/provider-endpoints.js';
+import { degradedEndpoints, categoryKey, endpointState, degradedMarker, providerStatus, orderedProviders } from '../core/provider-endpoints.js';
 import { routingRows, blockRow } from '../core/quota-lines.js';
 import { shimHintText } from '../core/shim-hint.js';
 
@@ -1032,6 +1032,7 @@ function _activateSegChild(el) {
 function switchProviderFilter(el, filter) {
   _activateSegChild(el);
   S._providerFilter = filter;
+  _pinnedOrder = null;
   renderProviders();
 }
 
@@ -1056,9 +1057,36 @@ function _buildProviderStatusSeg(counts) {
 
 function setProviderStatus(value) {
   S._providerStatus = value;
+  _pinnedOrder = null;
   renderProviders();
 }
 window.setProviderStatus = setProviderStatus;
+
+// The order currently on screen, pinned across a switch flip so the row does
+// not jump to the tail under the pointer.  A filter change or a fresh visit to
+// the tab clears it, which is when the sort is expected to run again.
+let _pinnedOrder = null;
+
+/** The provider names in the order the active view shows them. */
+function _currentProviderOrder() {
+  const sel = _isListView()
+    ? '#providerListWrap tr.provider-row[data-provider]'
+    : '#providerGrid .provider-card[data-provider]';
+  return Array.from(document.querySelectorAll(sel), el => el.dataset.provider);
+}
+
+/** Drop the pin so the next render sorts afresh. */
+function resetProviderListOrder() {
+  _pinnedOrder = null;
+}
+window.resetProviderListOrder = resetProviderListOrder;
+
+/** Search input: a new query is a fresh view, so the list re-sorts. */
+function onProviderSearch() {
+  _pinnedOrder = null;
+  renderProviders();
+}
+window.onProviderSearch = onProviderSearch;
 
 // Below this width a row layout has no room left, so list view falls back to
 // cards. The preference is still remembered — only the class is dropped.
@@ -1113,6 +1141,8 @@ function setProviderView(mode) {
   _providerViewMode = mode;
   localStorage.setItem('provider-view', mode);
   _updateViewToggle();
+  // Deliberately keeps the pin: the two views show the same rows in another
+  // layout, so switching between them must not reorder under the pointer.
   renderProviders();
 }
 
@@ -1213,6 +1243,7 @@ function goToProviderFromModel(provName) {
   if (provTab) { provTab.click(); }
   S._providerFilter = 'all';
   S._providerStatus = 'all';
+  _pinnedOrder = null;
   const allSeg = document.querySelector('#providerSeg > div:first-child');
   if (allSeg) _activateSegChild(allSeg);
   renderProviders();
@@ -1281,14 +1312,14 @@ function renderProviders() {
   }
 
   // Problems first, switched-off last, otherwise the configured order.  A
-  // stable sort keeps that order inside each group.
-  entries = entries
-    .map((entry, index) => ({ entry, index }))
-    .sort((a, b) =>
-      providerOrder(a.entry[1], _getProviderCaps(a.entry[1], a.entry[0])) -
-      providerOrder(b.entry[1], _getProviderCaps(b.entry[1], b.entry[0])) ||
-      a.index - b.index)
-    .map(({ entry }) => entry);
+  // stable sort keeps that order inside each group — except right after a
+  // switch flip, when the on-screen order is pinned: re-sorting then is what
+  // made the row jump to the tail and vanish from view.
+  entries = orderedProviders(
+    entries,
+    (cfg, name) => _getProviderCaps(cfg, name),
+    _pinnedOrder,
+  );
 
   // Update count
   const countEl = document.getElementById('providerCount');
@@ -1609,8 +1640,16 @@ async function confirmDeleteProvider() {
 }
 
 async function toggleProvider(name) {
+  // The order on screen when the switch was clicked.  Reading it after the
+  // response would pin whatever a slow round trip left behind: an edited
+  // search clears the pin and re-renders, and the response would then pin that
+  // filtered subset past the query it came from.
+  const order = _currentProviderOrder();
   const res = await api.post(`/admin/api/config/providers/${encodeURIComponent(name)}/toggle`);
   if (res.ok) {
+    // Keep the row where the operator flipped it; the list re-sorts on the
+    // next visit or when a filter changes, not under the pointer.
+    _pinnedOrder = order;
     const stateKey = res.enabled ? 'provider.enabled' : 'provider.disabled';
     showToast(`${name}: ${t(stateKey)}`);
     loadConfig();
