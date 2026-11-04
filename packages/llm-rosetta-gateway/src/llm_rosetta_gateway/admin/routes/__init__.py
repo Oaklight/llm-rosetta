@@ -107,6 +107,8 @@ from .credential import (
     delete_provider_credential,
     get_provider_credential,
     put_provider_credential,
+    refresh_provider_credential,
+    test_provider_credential,
 )
 from .quota import get_provider_quota
 from .routing import get_model_routing, list_routable_models, put_model_routing
@@ -252,6 +254,12 @@ def register_admin_routes(app: Any) -> None:
     )
     app.route("/admin/api/config/providers/<name>/credential", methods=["DELETE"])(
         delete_provider_credential
+    )
+    app.route(
+        "/admin/api/config/providers/<name>/credential/refresh", methods=["POST"]
+    )(refresh_provider_credential)
+    app.route("/admin/api/config/providers/<name>/credential/test", methods=["POST"])(
+        test_provider_credential
     )
     # Content capture (dashboard tab)
     app.route("/admin/api/capture/status", methods=["GET"])(

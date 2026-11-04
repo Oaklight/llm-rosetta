@@ -1,32 +1,36 @@
-"""Shim-declared credentials: read, install, remove.
+"""Provider credentials: read, refresh, test, install, remove.
 
-A provider whose shim ships ``auth.py`` has no key to type into the editor —
-its credential is a record the exchange produces.  This endpoint is the way in
-for a record made somewhere else: the operator runs the sign-in on a machine
-with a browser and hands the finished record to the gateway over its
-authenticated admin API.
+A provider mints its own credential in one of two ways: an argv
+``token_command`` (declared by the shim or by the provider's own config) or a
+shim-shipped ``auth.py`` exchange.  This module is the admin surface for both.
 
-The gateway never parses the record and never stores it itself.  It hands the
-object to the exchange (:meth:`AuthExchange.install`), which owns the shape and
-the location, and returns only what the exchange says is safe to render — a
-subject and an expiry, never a token.
+The credential section of the provider editor asks four questions of the same
+endpoints — where the credential comes from, whether the last refresh worked,
+what the operator can do about it, and which fields are editable.  A record
+produced elsewhere (an OAuth profile) is installed through the exchange; the
+gateway never parses it and never renders a token, only a digest.
 """
 
 from __future__ import annotations
 
 import asyncio
+import json
 from typing import Any
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
 from llm_rosetta_gateway.providers import _account_token_for
 from llm_rosetta_gateway.transport.provider_info import TOKEN_PENDING_SENTINEL
+from llm_rosetta_gateway.transport.token_refresh import (
+    force_refresh,
+    public_token_status,
+)
 
 from ._shared import parse_json_body
 from .config.payload import _get_gateway_config
 
 
 class _NotSupported(Exception):
-    """The provider has no usable credential exchange.
+    """The provider has no usable credential channel.
 
     Carries the status the caller deserves: a lookup failure is a 404, "this
     provider has no credential channel" is a 409 — a client should be able to
@@ -38,11 +42,11 @@ class _NotSupported(Exception):
         self.status = status
 
 
-def _provider_and_exchange(request: Any, name: str) -> tuple[Any, Any]:
-    """Resolve *name* to its live ProviderInfo and the exchange it declares.
+def _provider(request: Any, name: str) -> Any:
+    """Resolve *name* to its live ProviderInfo.
 
     Raises:
-        _NotSupported: No config, unknown provider, or no exchange.
+        _NotSupported: No config loaded, or unknown (or disabled) provider.
     """
     config = _get_gateway_config(request)
     if config is None:
@@ -50,6 +54,16 @@ def _provider_and_exchange(request: Any, name: str) -> tuple[Any, Any]:
     pinfo = getattr(config, "providers", {}).get(name)
     if pinfo is None:
         raise _NotSupported(f"Provider '{name}' not found", status=404)
+    return pinfo
+
+
+def _provider_and_exchange(request: Any, name: str) -> tuple[Any, Any]:
+    """Resolve *name* to its live ProviderInfo and the exchange it declares.
+
+    Raises:
+        _NotSupported: No config, unknown provider, or no exchange.
+    """
+    pinfo = _provider(request, name)
     exchange = getattr(pinfo, "auth_exchange", None)
     if exchange is None:
         raise _NotSupported(
@@ -73,12 +87,79 @@ async def _off_loop(func: Any, *args: Any) -> Any:
     return await asyncio.get_running_loop().run_in_executor(None, func, *args)
 
 
+def _public_status(pinfo: Any) -> dict[str, Any]:
+    """The refresh log the panel may render.
+
+    The text is already clipped where it is written; clipping again here is a
+    second line of defence for a ``token_status`` built by older code or set
+    directly on the provider.  It never hides why the mint failed — the
+    sentence is bounded, not removed.
+    """
+    return public_token_status(pinfo.token_status)
+
+
+def _command_payload(pinfo: Any, name: str) -> dict[str, Any]:
+    """The credential view of a provider whose token comes from a command.
+
+    The panel renders the same section for a shim-declared command and one the
+    operator wrote into the config; ``command_editable`` is what separates
+    them.  ``state`` answers the operator's first question — is a usable token
+    in the ring, still arriving, or failing to arrive — without leaking a
+    token.
+    """
+    status = _public_status(pinfo)
+    # A failed mint is the headline even while the ring still holds the pending
+    # sentinel: "waiting for the first token" would bury the error that says
+    # why it has not arrived.
+    if status.get("last_error"):
+        state = "failing"
+    elif pinfo.credentials_pending:
+        state = "initializing"
+    else:
+        state = "connected"
+    return {
+        "provider": name,
+        "kind": "command",
+        "source": pinfo.credential_source,
+        "state": state,
+        "installed": not pinfo.credentials_pending,
+        "needs_interactive_setup": False,
+        "token_status": status,
+        # A token in the ring and a refresher that will replace it are two
+        # facts.  ``connected`` stays true when the refresher is off; the
+        # panel can say so instead of implying the token renews itself.
+        "refresher_enabled": status.get("enabled", True) is not False,
+        # The digest, not the token: ``cmd:<sha256>`` is how the gateway
+        # names this credential everywhere else.
+        "credential": pinfo.credential_token,
+        "command": list(pinfo.token_command or []),
+        "command_env": pinfo.token_command_env,
+        "refresh_interval": pinfo.token_refresh_interval,
+        "command_editable": pinfo.credential_source == "config_command",
+    }
+
+
 async def get_provider_credential(request: Any, name: str) -> Response:
-    """Report whether the provider has a credential, and whose it is."""
+    """Report where the provider's credential comes from, and its state."""
     try:
-        pinfo, exchange = _provider_and_exchange(request, name)
+        pinfo = _provider(request, name)
     except _NotSupported as exc:
         return _error(exc)
+
+    if pinfo.credential_source in ("config_command", "shim_command"):
+        return JSONResponse(_command_payload(pinfo, name))
+
+    exchange = getattr(pinfo, "auth_exchange", None)
+    if exchange is None:
+        # A static key is edited in the key box, not here.  Saying "no channel"
+        # keeps the endpoint's contract: it reports records, not ordinary keys.
+        return _error(
+            _NotSupported(
+                f"Provider '{name}' mints no credential of its own: its shim "
+                "ships no auth.py, and a static key is configured in the "
+                "provider entry"
+            )
+        )
 
     ctx = pinfo.auth_context
     describe = getattr(exchange, "describe", None)
@@ -98,10 +179,12 @@ async def get_provider_credential(request: Any, name: str) -> Response:
         state = "unreadable"
     else:
         state = "needs_setup"
+    status = _public_status(pinfo)
     return JSONResponse(
         {
             "provider": name,
             "kind": getattr(exchange, "kind", "exchange"),
+            "source": pinfo.credential_source,
             "installed": summary is not None,
             "state": state,
             "needs_interactive_setup": bool(exchange.needs_interactive_setup(ctx)),
@@ -111,8 +194,111 @@ async def get_provider_credential(request: Any, name: str) -> Response:
             # the exchange may say which account this is, in its own words.
             "account": _account_token_for(exchange.account_id(ctx)),
             "summary": summary,
+            "credential": pinfo.credential_token,
+            "refresh_interval": pinfo.token_refresh_interval,
+            "token_status": status,
+            "refresher_enabled": status.get("enabled", True) is not False,
         }
     )
+
+
+async def refresh_provider_credential(request: Any, name: str) -> Response:
+    """Mint a fresh credential now, without waiting for the scheduled refresh.
+
+    The 401 path debounces bursts; the operator's button must not.  A failed
+    mint keeps the previous credential in the ring — that is
+    :func:`force_refresh`'s contract — and reports why.
+    """
+    try:
+        pinfo = _provider(request, name)
+    except _NotSupported as exc:
+        return _error(exc)
+
+    if not pinfo.mints_credential:
+        return JSONResponse(
+            {"error": f"Provider '{name}' mints no credential of its own"},
+            status_code=409,
+        )
+
+    refreshed = await force_refresh(pinfo, debounce=False)
+    status = _public_status(pinfo)
+    payload: dict[str, Any] = {
+        "provider": name,
+        "ok": refreshed,
+        "refreshed": refreshed,
+        "token_status": status,
+    }
+    if not refreshed:
+        payload["error"] = (
+            status.get("last_error") or "the credential could not be refreshed"
+        )
+    return JSONResponse(payload)
+
+
+async def test_provider_credential(request: Any, name: str) -> Response:
+    """Refresh the credential, then let the upstream accept or reject it.
+
+    A minted token proves only that the command exited 0.  The models listing
+    is the cheapest authenticated call every format shares, and it already
+    knows the provider's declared path and headers, so the connectivity probe
+    is reused rather than copied.
+    """
+    try:
+        pinfo = _provider(request, name)
+    except _NotSupported as exc:
+        return _error(exc)
+
+    if not pinfo.mints_credential:
+        return JSONResponse(
+            {"error": f"Provider '{name}' mints no credential of its own"},
+            status_code=409,
+        )
+
+    refreshed = await force_refresh(pinfo, debounce=False)
+    status = _public_status(pinfo)
+    if not refreshed:
+        # No new token, so there is nothing to put to the upstream: probing
+        # would test the credential that just failed to renew.
+        return JSONResponse(
+            {
+                "provider": name,
+                "ok": False,
+                "refreshed": False,
+                "accepted": False,
+                "token_status": status,
+                "error": (
+                    status.get("last_error") or "the credential could not be refreshed"
+                ),
+            }
+        )
+
+    from .connectivity import test_provider_connectivity
+
+    probe = await test_provider_connectivity(request, name)
+    connectivity = json.loads(probe.body)
+    models = (connectivity.get("endpoints") or {}).get("models") or {}
+    accepted = bool(models.get("ok"))
+
+    payload: dict[str, Any] = {
+        "provider": name,
+        "ok": accepted,
+        "refreshed": True,
+        "accepted": accepted,
+        "reachable": connectivity.get("reachable"),
+        "token_status": status,
+        "connectivity": connectivity,
+    }
+    if not accepted:
+        if connectivity.get("reachable") is False:
+            # The token was minted; it was the host that did not answer.  A
+            # "rejected" message would send the operator to redo a credential
+            # that is fine.
+            reason = connectivity.get("base_error") or "no answer from the host"
+            payload["error"] = f"the upstream is unreachable: {reason}"
+        else:
+            reason = models.get("error") or models.get("status") or "no answer"
+            payload["error"] = f"the upstream rejected the credential: {reason}"
+    return JSONResponse(payload)
 
 
 async def put_provider_credential(request: Any, name: str) -> Response:

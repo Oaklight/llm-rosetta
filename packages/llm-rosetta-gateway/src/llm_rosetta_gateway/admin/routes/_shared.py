@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import functools
 import logging
+import os
 import re
 from contextlib import asynccontextmanager
 from typing import Any, overload
@@ -16,6 +17,12 @@ from ...config import ConfigIO, GatewayConfig, async_config_lock
 logger = logging.getLogger("llm-rosetta-gateway")
 
 _ENV_VAR_RE = re.compile(r"^\$\{.+\}$")
+_ENV_PLACEHOLDER_RE = re.compile(r"\$\{([^}]+)\}")
+
+# The old panel wrote this word into the key slot to say "a command mints the
+# credential".  It is a display marker, never a key, and storing it beside a
+# real command makes the provider unloadable.
+_TOKEN_COMMAND_MARKER = "token_command"
 
 
 @overload
@@ -156,6 +163,66 @@ async def config_mutate(
             },
             status_code=500,
         )
+
+
+def _expand_env(value: Any) -> Any:
+    """Return *value* with ``${ENV}`` placeholders resolved, without mutating it.
+
+    The loader substitutes placeholders in the document text before parsing;
+    the admin works on the raw document, so a preflight build has to do the
+    same or a numeric field written as ``${UPSTREAM_TIMEOUT}`` would fail here
+    while the real load succeeds.
+    """
+    if isinstance(value, str):
+        return _ENV_PLACEHOLDER_RE.sub(
+            lambda m: os.environ.get(m.group(1), m.group(0)), value
+        )
+    if isinstance(value, list):
+        return [_expand_env(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _expand_env(item) for key, item in value.items()}
+    return value
+
+
+def _config_preflight_error(data: dict[str, Any]) -> str | None:
+    """Build every enabled provider in *data* and return the first refusal.
+
+    ``config_mutate`` saves first and reloads second, so a document the loader
+    rejects used to be on disk before the 500 came back — and the next process
+    start failed on it.  A provider save or an enable can be checked first.
+    Only the providers are built, not the whole ``GatewayConfig``: the admin
+    edits the *raw* document (``${ENV}`` placeholders intact), and a full
+    build would resolve server settings the raw text does not.
+    """
+    from ...config.resolve import resolve_provider_identities
+    from ...providers import build_provider_info
+
+    providers = data.get("providers") or {}
+    enabled = {
+        str(name): _expand_env(cfg)
+        for name, cfg in providers.items()
+        if isinstance(cfg, dict) and cfg.get("enabled", True) is not False
+    }
+    if not enabled:
+        return None
+    try:
+        identities, shim_names = resolve_provider_identities(enabled)
+        for name, cfg in enabled.items():
+            identity = identities.get(name)
+            if identity is None:  # pragma: no cover - resolver covers every entry
+                continue
+            build_provider_info(
+                identity.format,
+                cfg,
+                shim_name=shim_names.get(name),
+                config_name=name,
+                # Every enabled provider is rebuilt on every save; its
+                # startup notices would otherwise repeat once per save.
+                quiet=True,
+            )
+    except Exception as exc:  # noqa: BLE001 - the message is the caller's to read
+        return str(exc)
+    return None
 
 
 def _mask_api_key(value: str) -> str:
@@ -456,6 +523,16 @@ def _shim_ships_credential_exchange(shim: Any) -> bool:
     return shim is not None and getattr(shim, "auth", None) is not None
 
 
+def _shim_ships_credential_command(shim: Any) -> bool:
+    """Whether *shim* declares the command that mints the credential.
+
+    The argv form of the same fact: the provider has no key of its own, and
+    the save path must not demand one either.
+    """
+    connection = getattr(shim, "connection", None)
+    return bool(connection is not None and connection.token_command)
+
+
 def _credential_command(body: dict[str, Any], existing: dict[str, Any] | None) -> Any:
     """Return the command that owns the credential after this save, if any.
 
@@ -481,6 +558,12 @@ def _credential_fields(
     clear it sends the key with an empty value.
     """
     fields: dict[str, Any] = {}
+    # The old panel's display marker is not a credential.  Dropping it here
+    # repairs an entry saved by that panel the next time it is edited: the
+    # command still owns the credential, and the loader no longer sees two
+    # sources where it accepts one.
+    if api_key == _TOKEN_COMMAND_MARKER:
+        api_key = ""
     if api_key or not _credential_command(body, existing):
         fields["api_key"] = api_key
     if existing is not None:

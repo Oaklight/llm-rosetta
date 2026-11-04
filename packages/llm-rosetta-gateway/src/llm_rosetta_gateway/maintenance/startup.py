@@ -337,7 +337,7 @@ class DeferredStartup:
 
     async def _seed_one_provider(self, name: str) -> None:
         """Fetch the initial credential for a single provider."""
-        from ..transport.token_refresh import mint_credential
+        from ..transport.token_refresh import clip_error_text, mint_credential
         from llm_rosetta.shims.auth_exchange import InteractiveSetupRequired
 
         pinfo = self._config.providers[name]
@@ -359,10 +359,13 @@ class DeferredStartup:
             # let the scheduled refresher pick up the record once it exists.
             self._provider_states[name] = ProviderInitState.FAILED
             pinfo.token_status = {
-                "enabled": True,
+                # No refresh loop is started for a provider that failed to
+                # seed, so the token will not renew until a human signs in and
+                # a later pass succeeds.
+                "enabled": False,
                 "last_refresh": None,
                 "consecutive_failures": 0,
-                "last_error": str(exc),
+                "last_error": clip_error_text(str(exc)),
                 "interactive_setup_required": True,
             }
             logger.warning(
@@ -373,10 +376,11 @@ class DeferredStartup:
         except Exception as exc:
             self._provider_states[name] = ProviderInitState.FAILED
             pinfo.token_status = {
-                "enabled": True,
+                # Same reason as the sign-in branch: no loop is running yet.
+                "enabled": False,
                 "last_refresh": None,
                 "consecutive_failures": 1,
-                "last_error": str(exc),
+                "last_error": clip_error_text(str(exc)),
             }
             logger.error("Failed to seed credential for '%s': %s", name, exc)
 

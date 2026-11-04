@@ -18,6 +18,7 @@ class TestBuildProviderInfo:
 
         assert info.auth_headers() == {"Authorization": "Bearer pding"}
         assert info.upstream_url("gpt5") == "https://api.openai.com/v1/chat/completions"
+        assert info.credential_source == "static_key"
 
     def test_messages_shim_uses_x_api_key_auth(self, monkeypatch):
         load_providers()
@@ -306,6 +307,7 @@ class TestShimDeclaredTokenCommand:
         assert info.token_command == ["python3", "-c", "print('minted')"]
         assert info.token_refresh_interval == 7200
         assert info.key_ring.contains_only(TOKEN_PENDING_SENTINEL)
+        assert info.credential_source == "shim_command"
 
     def test_the_providers_own_command_wins(self, vendor_shim):
         info = build_provider_info(
@@ -315,6 +317,7 @@ class TestShimDeclaredTokenCommand:
         )
 
         assert info.token_command == ["acme-token", "--json"]
+        assert info.credential_source == "config_command"
         # The interval is the vendor's token lifetime, so it still applies.
         assert info.token_refresh_interval == 7200
 
@@ -486,6 +489,7 @@ class TestShimAuthExchange:
         assert info.auth_exchange is not None
         assert info.token_command is None
         assert info.mints_credential is True
+        assert info.credential_source == "auth_exchange"
         assert info.token_refresh_interval == 1800
         assert info.key_ring.contains_only(TOKEN_PENDING_SENTINEL)
         assert info.ready is False
