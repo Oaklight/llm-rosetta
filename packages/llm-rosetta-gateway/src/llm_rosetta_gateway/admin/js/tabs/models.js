@@ -7,6 +7,8 @@ import { syncChipState } from '../core/chips.js';
 import { initLogoSelect, setLogoSelectOptions } from '../components/logo-select.js';
 import { mergeReasoningOverride } from '../core/reasoning-override.js';
 import { providerRowsHtml, syncPickerBtn, openPickerMenu } from '../components/provider-picker.js';
+import { laneGripHtml, laneSwitchHtml, laneWeightInputHtml } from '../components/provider-row.js';
+import { jsArg } from '../core/html.js';
 
 // ── helpers (module-private) ──
 
@@ -721,11 +723,16 @@ function _providerMenuRows(name, info, disabledProviders) {
       ? ` draggable="true" data-pname="${pn}" data-pmodel="${n}"`
       : '';
     const grip = details.length > 1
-      ? `<span class="pm-grip" title="${t('model.reorderHint')}" aria-hidden="true">⠿</span>`
+      ? laneGripHtml({ title: t('model.reorderHint') })
       : '';
     return `<div class="provider-menu-row${off ? ' pm-off' : ''}" role="menuitem"${drag}>
       ${grip}
-      <label class="toggle row-toggle" title="${off ? t('provider.disabled') : t('provider.enabled')}"><input type="checkbox" role="switch" ${off ? '' : 'checked'} aria-checked="${!off}" aria-label="${esc(p.name)}" onchange="toggleModelProvider('${n}','${pn}')"><span class="slider"></span></label>
+      ${laneSwitchHtml({
+        name: p.name,
+        on: !off,
+        title: off ? t('provider.disabled') : t('provider.enabled'),
+        onchange: `toggleModelProvider(${jsArg(name)},${jsArg(p.name)})`,
+      })}
       <div class="pm-id">
         <span class="provider-link pm-name" title="${esc(p.name)}" onclick="goToProviderFromModel('${pn}')">${esc(_providerLabel(p.name))}</span>
         <span class="pm-upstream">${p.upstream_model ? `→ ${esc(p.upstream_model)}` : ''}</span>
@@ -733,7 +740,7 @@ function _providerMenuRows(name, info, disabledProviders) {
       ${modelType === 'llm'
         ? _capPicker(name, p)
         : `<span class="cap-badge ${_typeBadgeClass(modelType)}" title="${esc(typeLabelAlt(modelType))}">${_CAP_ICONS[modelType] || ''}</span>`}
-      <input type="number" class="pd-weight" min="1" max="100" value="${w}" title="${t('label.weight')}" onchange="updateProviderWeight('${n}','${pn}',this)" onkeydown="if(event.key==='Enter'){this.blur()}">
+      ${laneWeightInputHtml({ model: name, provider: p.name, weight: w, title: t('label.weight') })}
       ${_testGroup(name, modelType, opts, p.name)}
       <button class="btn btn-sm pd-remove" title="${t('btn.remove')}" onclick="removeProviderFromModel('${n}','${pn}')">✕</button>
     </div>`;

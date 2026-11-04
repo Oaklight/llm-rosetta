@@ -9,6 +9,7 @@ import { S } from '../core/state.js';
 import { t } from '../core/i18n.js';
 import { api, esc, showToast } from '../core/utils.js';
 import { ROUTING_PRESETS, matchPreset, presetBlock } from '../core/routing-presets.js';
+import { laneGripHtml, laneSwitchHtml } from '../components/provider-row.js';
 import { loadConfig } from './providers.js';
 
 let _data = null;
@@ -396,16 +397,17 @@ function _renderBoard() {
       (!excluded && editable ? ' draggable="true" data-lane="' + esc(provider.name) + '"' : '') + '>' +
       '<span class="routing-pos">' +
       (!excluded && editable
-        ? '<span class="routing-grip" title="' + esc(t('routing.gripHint')) + '"' +
-          ' aria-hidden="true">⠿</span>'
+        ? laneGripHtml({ title: t('routing.gripHint'), cls: 'routing-grip' })
         : '') +
       (excluded ? '—' : index + 1) + '</span>' +
       '<span class="routing-who">' +
-      '<label class="toggle row-toggle routing-switch" title="' +
-      esc(excluded ? t('routing.enableLane') : t('routing.disableLane')) + '">' +
-      '<input type="checkbox" role="switch"' + (excluded ? '' : ' checked') +
-      ' aria-checked="' + (!excluded) + '" data-lane="' + esc(provider.name) + '">' +
-      '<span class="slider"></span></label>' +
+      laneSwitchHtml({
+        name: provider.name,
+        on: !excluded,
+        title: excluded ? t('routing.enableLane') : t('routing.disableLane'),
+        data: 'data-lane="' + esc(provider.name) + '"',
+        extraClass: 'routing-switch',
+      }) +
       '<span class="routing-lane-id"><b>' + esc(provider.name) + '</b>' +
       '<small title="' + esc(_laneSub(provider)) + '">' + esc(_laneSub(provider)) + '</small></span></span>' +
       '<span class="routing-stepper">' +
