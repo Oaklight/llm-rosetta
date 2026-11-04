@@ -6,6 +6,7 @@
 import { S, DUMP_PAGE_SIZE, LOG_LIMIT } from '../core/state.js';
 import { t } from '../core/i18n.js';
 import { pageCount, clampPage, shouldResync } from '../core/pagination.js';
+import { jsArg } from '../core/html.js';
 import { api, _adminHeaders, showToast, esc, formatDuration, openModal, closeModal, fmtBytesShort, fmtBytesLong, fmtTokens, copyText } from '../core/utils.js';
 
 // ===================== Metrics =====================
@@ -334,7 +335,7 @@ async function loadProfilingResults() {
         <td>${mode}</td>
         <td>${dur}</td>
         <td>${r.tracing ? '<span style="color:var(--orange,#f59e0b);font-weight:600">trace</span>' : 'cProfile'}</td>
-        <td style="white-space:nowrap"><button class="btn btn-sm" onclick="viewFlamegraph(${i})" title="${esc(t('btn.view'))}"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:middle"><path d="M8 14c-2.5 0-5-1.5-5-5 0-2 1-3.5 2.5-5.5C7 1.5 8 1 8 1s1 .5 2.5 2.5C12 5.5 13 7 13 9c0 3.5-2.5 5-5 5z"/><path d="M8 14c-1.5 0-2.5-1-2.5-3 0-1 .5-2 1.5-3 .5-.5 1-1 1-1s.5.5 1 1c1 1 1.5 2 1.5 3 0 2-1 3-2.5 3z"/></svg></button> <button class="btn btn-sm" onclick="downloadFlamegraph(${i}, '${esc(r.model||"profile")}')" title="${esc(t('btn.downloadFile'))}"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:middle"><path d="M8 2v8m0 0l-3-3m3 3l3-3M3 12h10"/></svg></button></td>
+        <td style="white-space:nowrap"><button class="btn btn-sm" onclick="viewFlamegraph(${i})" title="${esc(t('btn.view'))}"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:middle"><path d="M8 14c-2.5 0-5-1.5-5-5 0-2 1-3.5 2.5-5.5C7 1.5 8 1 8 1s1 .5 2.5 2.5C12 5.5 13 7 13 9c0 3.5-2.5 5-5 5z"/><path d="M8 14c-1.5 0-2.5-1-2.5-3 0-1 .5-2 1.5-3 .5-.5 1-1 1-1s.5.5 1 1c1 1 1.5 2 1.5 3 0 2-1 3-2.5 3z"/></svg></button> <button class="btn btn-sm" onclick="downloadFlamegraph(${i}, ${jsArg(r.model||'profile')})" title="${esc(t('btn.downloadFile'))}"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:middle"><path d="M8 2v8m0 0l-3-3m3 3l3-3M3 12h10"/></svg></button></td>
       </tr>`;
     }).join('');
   } catch (e) { /* ignore */ }
@@ -676,8 +677,8 @@ async function renderDumps() {
         <td class="dump-status" role="cell" aria-labelledby="dumpThStatus"><span class="badge badge-error">${e.status_code||'-'}</span></td>
         <td class="dump-error" role="cell" aria-labelledby="dumpThError"><span class="dump-error-text" title="${esc(e.response_text||'')}">${esc(errPreview)}</span></td>
         <td class="dump-actions" role="cell" aria-labelledby="dumpThActions" style="white-space:nowrap">
-          <button class="btn btn-sm" onclick="viewDump('${esc(e.dump_id||e.id)}')" title="${esc(t('btn.view'))}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></button>
-          <button class="btn btn-sm" onclick="downloadDump('${esc(e.dump_id||e.id)}')" title="${esc(t('btn.downloadFile'))}"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:middle"><path d="M8 2v8m0 0l-3-3m3 3l3-3M3 12h10"/></svg></button>${e.request_log_id ? ` <button class="btn btn-sm" onclick="jumpToRequestLog('${esc(e.request_log_id)}')" title="${esc(t('btn.viewInRequestLog'))}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></button>` : ''}
+          <button class="btn btn-sm" onclick="viewDump(${jsArg(e.dump_id||e.id)})" title="${esc(t('btn.view'))}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></button>
+          <button class="btn btn-sm" onclick="downloadDump(${jsArg(e.dump_id||e.id)})" title="${esc(t('btn.downloadFile'))}"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:middle"><path d="M8 2v8m0 0l-3-3m3 3l3-3M3 12h10"/></svg></button>${e.request_log_id ? ` <button class="btn btn-sm" onclick="jumpToRequestLog(${jsArg(e.request_log_id)})" title="${esc(t('btn.viewInRequestLog'))}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></button>` : ''}
         </td>
       </tr>`;
     }).join('');

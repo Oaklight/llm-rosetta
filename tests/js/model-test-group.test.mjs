@@ -46,8 +46,8 @@ test('a pinned test targets the provider it was clicked on', () => {
   const body = bodyOf(MODELS, 'function _testGroup(');
   assert.match(
     body,
-    /runTest\('\$\{n\}','\$\{kind\}',null,'\$\{esc\(provider\)\}'\)/,
-    'the provider name is the fourth argument of runTest',
+    /runTest\(\$\{n\},\$\{kind\},null,\$\{jsArg\(provider\)\}\)/,
+    'the provider name is the fourth argument of runTest, escaped for the attribute',
   );
 });
 

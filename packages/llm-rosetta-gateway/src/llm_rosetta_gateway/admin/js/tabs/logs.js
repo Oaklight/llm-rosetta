@@ -9,6 +9,7 @@ import { pageCount, clampPage, offsetForPage, shouldResync } from '../core/pagin
 import { api, esc, formatDuration, inlineConfirm, showToast } from '../core/utils.js';
 import { closeMenus, openMenu } from '../core/utils.js';
 import { providerRowsHtml, providerLogoHtml, openPickerMenu } from '../components/provider-picker.js';
+import { jsArg } from '../core/html.js';
 
 // ===================== Request Log =====================
 
@@ -148,7 +149,7 @@ function renderLogs(entries, total) {
         <td class="log-mode" role="cell" aria-labelledby="thLogMode">${modeBadge}</td>
         <td class="log-key" role="cell" aria-labelledby="thLogApiKey" style="font-size:12px;color:var(--text-dim)">${esc(keyLabel)}</td>
         <td class="log-ip" role="cell" aria-labelledby="thLogClientIp" style="font-size:12px;color:var(--text-dim)">${esc(clientIp)}</td>
-        <td class="log-status" role="cell" aria-labelledby="thLogStatus"><span class="badge ${statusCls}">${e.status_code}${hasError ? ' ▸' : ''}</span>${e.status_code >= 400 ? ` <button class="btn btn-sm" onclick="event.stopPropagation();jumpToErrorDump('${esc(e.id)}')" title="${esc(t('btn.viewErrorDump'))}" style="padding:2px 4px;margin-left:2px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></button>` : ''}</td>
+        <td class="log-status" role="cell" aria-labelledby="thLogStatus"><span class="badge ${statusCls}">${e.status_code}${hasError ? ' ▸' : ''}</span>${e.status_code >= 400 ? ` <button class="btn btn-sm" onclick="event.stopPropagation();jumpToErrorDump(${jsArg(e.id)})" title="${esc(t('btn.viewErrorDump'))}" style="padding:2px 4px;margin-left:2px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></button>` : ''}</td>
         <td class="log-tokens" role="cell" aria-labelledby="thLogTokens" style="font-size:12px">${e.total_tokens != null ? fmtTokens(e.total_tokens) : '—'}${e.cache_read_tokens ? `<br><span title="${t('token.cacheRead')}" style="color:var(--blue);font-size:10px;cursor:help">C↓ ${fmtTokens(e.cache_read_tokens)}</span>` : ''}${e.reasoning_tokens ? `<br><span title="${t('token.reasoning')}" style="color:var(--red);font-size:10px;cursor:help">R ${fmtTokens(e.reasoning_tokens)}</span>` : ''}</td>
         <td class="log-duration" role="cell" aria-labelledby="thLogDuration">${_durationCell(e)}${_tokensPerSecond(e)}</td>
       </tr>`;
@@ -354,7 +355,7 @@ function updateFilterOptions() {
   const menu = document.getElementById('logProviderMenu');
   if (menu) {
     menu.innerHTML = providerRowsHtml(
-      providers, n => `selectLogProvider('${esc(n)}')`,
+      providers, n => `selectLogProvider(${jsArg(n)})`,
     );
     const empty = document.createElement('div');
     empty.className = 'more-menu-item pp-row';

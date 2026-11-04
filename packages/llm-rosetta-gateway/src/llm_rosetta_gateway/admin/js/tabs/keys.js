@@ -2,6 +2,7 @@ import { S } from '../core/state.js';
 import { t } from '../core/i18n.js';
 import { api, showToast, closeModal, openModal, esc, fmtTokens, inlineConfirm } from '../core/utils.js';
 import { syncAriaSort, sortByKey } from '../core/sort.js';
+import { jsArg } from '../core/html.js';
 
 // ===================== API Keys Tab =====================
 
@@ -74,7 +75,7 @@ function renderKeyUsageControl() {
   }
   ctrl.innerHTML = windows.map(w =>
     `<label class="${w === win ? 'active' : ''}">` +
-    `<input type="radio" name="kuRange" value="${esc(w)}"${w === win ? ' checked' : ''} onchange="setKeyUsageWindow('${esc(w)}')">` +
+    `<input type="radio" name="kuRange" value="${esc(w)}"${w === win ? ' checked' : ''} onchange="setKeyUsageWindow(${jsArg(w)})">` +
     `<span>${esc(windowLabel(w))}</span></label>`
   ).join('');
 }
@@ -250,14 +251,14 @@ function renderKeys() {
     return `<tr role="row">
       <td class="col-check" role="cell"><input type="checkbox" class="row-check key-check" data-key="${esc(k.id)}" onchange="updateKeyBulk()"${(S._selectedKeyIds || new Set()).has(String(k.id)) ? ' checked' : ''}></td>
       <td class="key-label-cell" role="cell" aria-labelledby="keySortLabel"><span class="key-label-text" id="label-${k.id}">${esc(k.label || '—')}</span>
-        <button class="key-btn" style="margin-left:4px" onclick="editKeyLabel('${k.id}')" title="${esc(t('btn.edit'))}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button>${sharedMark}</td>
+        <button class="key-btn" style="margin-left:4px" onclick="editKeyLabel(${jsArg(k.id)})" title="${esc(t('btn.edit'))}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button>${sharedMark}</td>
       <td class="key-created-cell" role="cell" aria-labelledby="keySortCreated" data-label="${esc(t('col.created'))}" title="${createdFull}">${created}</td>
       <td class="key-lastused-cell" role="cell" aria-labelledby="keySortLastUsed" data-label="${esc(t('col.lastUsed'))}" title="${lastUsedFull}">${lastUsed}</td>
       <td class="key-requests-cell" role="cell" aria-labelledby="keySortRequests" data-label="${esc(t('col.requests'))}" title="${usageTip}">${reqs}</td>
       <td class="key-input-cell" role="cell" aria-labelledby="keySortInput" data-label="${esc(t('tokenUsage.col.input'))}" title="${usageTip}">${fmtTokens(w.input_tokens || 0)}</td>
       <td class="key-output-cell" role="cell" aria-labelledby="keySortOutput" data-label="${esc(t('tokenUsage.col.output'))}" title="${usageTip}">${fmtTokens(w.output_tokens || 0)}</td>
       <td class="key-total-cell" role="cell" aria-labelledby="keySortTotal" data-label="${esc(t('tokenUsage.col.total'))}" title="${usageTip}"><strong>${fmtTokens(w.total_tokens || 0)}</strong></td>
-      <td class="key-actions-cell" role="cell" style="white-space:nowrap"><button class="btn btn-sm" onclick="rotateKey('${k.id}','${esc(k.label || k.id)}', this)">${t('btn.rotate')}</button> <button class="btn btn-sm btn-danger" onclick="deleteKey('${k.id}','${esc(k.label || k.id)}', this)">${t('btn.delete')}</button></td>
+      <td class="key-actions-cell" role="cell" style="white-space:nowrap"><button class="btn btn-sm" onclick="rotateKey(${jsArg(k.id)},${jsArg(k.label || k.id)}, this)">${t('btn.rotate')}</button> <button class="btn btn-sm btn-danger" onclick="deleteKey(${jsArg(k.id)},${jsArg(k.label || k.id)}, this)">${t('btn.delete')}</button></td>
     </tr>`;
   }).join('') + extraRows.join('');
   // The rows are new; the selection is not. Keep the bar honest about it.
