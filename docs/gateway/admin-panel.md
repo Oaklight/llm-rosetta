@@ -42,9 +42,24 @@ The provider form is a right-side drawer with a sticky title and action bar. It 
 
 An API key field auto-detects comma-separated values and switches to a multi-entry list with one password row per key. **+ Add key** appends a row at any time; each row has an eye toggle and a copy button, and the footer offers view-all and copy-all for the whole comma-separated value. Masked keys on cards are never written back to the config file.
 
-### Signing in to a shim-declared credential
+### Credential sources
 
-A provider whose shim ships `auth.py` has no key to type in — the exchange mints the credential through a sign-in that needs a browser. Editing such a provider replaces the API-key box with a **Credential** section that reads `GET /admin/api/config/providers/<name>/credential`:
+A provider that mints its own token has no key to type in. Editing such a provider replaces the API-key box with a **Credential** section that reads `GET /admin/api/config/providers/<name>/credential` and names the source in effect, read-only:
+
+| Source | What it means |
+|--------|---------------|
+| command from the config | the provider entry declares `token_command`; the argv is editable here |
+| command declared by the shim | the vendor shim declares `connection.token_command`; the argv is read-only, the interval can be overridden |
+| shim sign-in (`auth.py`) | the exchange mints the credential through a browser sign-in |
+| static key | the ordinary API-key box — no Credential section |
+
+The section shows the live `token_status`: the last mint, consecutive failures, the last error, whether an interactive sign-in is required, and `initializing` while the first token has not arrived. Only a digest (`cmd:<sha256>` for a command, `key:<sha256>` for a key) and timestamps are shown, never the token itself.
+
+**Refresh now** (`POST …/credential/refresh`) mints a token out of cycle — the upstream-401 path debounces a burst, the button does not. **Test credential** (`POST …/credential/test`) mints a token and calls the provider's models endpoint with it; the answer says whether the upstream accepted the credential, so "the command exited 0" is not mistaken for "the account works".
+
+A command that comes from the config is edited in the same section: argv (a JSON array of non-empty strings), `token_command_env`, and `token_refresh_interval` (at least 60 seconds). A shim's argv stays read-only; its interval can be overridden. The panel refuses an invalid argv or interval before the request leaves the page.
+
+For a shim `auth.py` exchange the section keeps its record actions:
 
 | State | What the panel shows |
 |-------|----------------------|
@@ -52,7 +67,9 @@ A provider whose shim ships `auth.py` has no key to type in — the exchange min
 | needs setup | no credential yet — **Install a record** |
 | unreadable | a record exists but cannot be read — install a replacement or sign out |
 
-**Install a record** takes the JSON the CLI prints (`llm-rosetta-gateway credential <provider>`, see the [CLI reference](cli.md#credential-provider)) and hands it to the exchange over `PUT …/credential`; a record that does not verify is refused with the exchange's own message. **Sign out** calls `DELETE`, which revokes the grant upstream when the vendor allows it and takes the token out of the gateway's key ring immediately. The panel never renders a token: only the subject and expiry the exchange chooses to expose.
+**Install a record** takes the JSON the CLI prints (`llm-rosetta-gateway credential <provider>`, see the [CLI reference](cli.md#credential-provider)) and hands it to the exchange over `PUT …/credential`; a record that does not verify is refused with the exchange's own message. **Sign out** calls `DELETE`, which revokes the grant upstream when the vendor allows it and takes the token out of the gateway's key ring immediately.
+
+A provider save or an enable builds the affected providers in memory before anything is written. A document the loader rejects returns 400 and leaves the config file untouched, instead of reporting "Config saved but reload failed" after the damage. An old entry whose key slot holds the literal `token_command` is repaired on its next save: the literal is dropped, not written back.
 
 ## Models
 
