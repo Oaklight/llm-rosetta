@@ -1,5 +1,5 @@
 # /// zerodep
-# version = "0.7.0"
+# version = "0.7.1"
 # deps = []
 # tier = "subsystem"
 # category = "network"
@@ -133,6 +133,13 @@ _SENTINEL = object()
 # a streaming generator.  Only matters when the generator is blocked on
 # slow upstream I/O; fast generators never hit the timeout.
 _STREAMING_DISCONNECT_CHECK_INTERVAL: float = 30.0
+
+# Chunks at or below this size are framed (size line, payload, CRLF) in a
+# single transport write.  An idle transport issues a syscall per write, and
+# an SSE stream produces many small chunks, so coalescing removes two calls
+# per chunk.  A larger chunk stays in three pieces: coalescing it would copy
+# the whole payload just to save those two calls.
+_CHUNK_COALESCE_MAX: int = 64 * 1024
 
 
 # ── Exceptions ───────────────────────────────────────────────────────────────
@@ -546,6 +553,27 @@ class JSONResponse(Response):
         )
 
 
+def _write_chunk_frame(writer: asyncio.StreamWriter, chunk: bytes) -> None:
+    """Write one chunked-transfer frame to *writer*.
+
+    A small chunk is one transport write: the size line, the payload and the
+    trailing CRLF are coalesced.  A large chunk is written in pieces, because
+    building one buffer would copy the whole payload to save two calls.
+
+    An empty chunk is skipped: a zero-length frame is the terminating chunk,
+    so writing one would end the response early.  A generator that yields
+    ``""`` for a heartbeat must not stop the stream.
+    """
+    if not chunk:
+        return
+    if len(chunk) <= _CHUNK_COALESCE_MAX:
+        writer.write((b"%x\r\n" % len(chunk)) + chunk + b"\r\n")
+        return
+    writer.write(f"{len(chunk):x}\r\n".encode("latin-1"))
+    writer.write(chunk)
+    writer.write(b"\r\n")
+
+
 class StreamingResponse:
     """HTTP response streamed from an async generator.
 
@@ -752,9 +780,7 @@ class StreamingResponse:
 
                 if isinstance(chunk, str):
                     chunk = chunk.encode("utf-8")
-                writer.write(f"{len(chunk):x}\r\n".encode("latin-1"))
-                writer.write(chunk)
-                writer.write(b"\r\n")
+                _write_chunk_frame(writer, chunk)
                 await writer.drain()
             writer.write(b"0\r\n\r\n")
             await writer.drain()
