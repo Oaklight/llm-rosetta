@@ -99,6 +99,8 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### 修复
 
+- **滚到底时左侧导航栏不再上移**（议题 [#1379](https://github.com/Oaklight/llm-rosetta/issues/1379)）：`body { padding-bottom: 26px }` 为固定的状态栏预留空间，但加在 `body` 上时这段内边距位于 `.app-shell` 之外 —— 即使内容放得下，文档也比视口高 26px；而 sticky 侧栏的底边受父容器限制，滚到最底时正好被顶上去 26px（Chromium 实测：侧栏底部 800 → 774，状态栏仍贴在窗口底边，看起来像是侧栏下面多出一条）。现在这段留白放在 `.content` 上，手机布局的 84px（底部导航 + 状态栏）留白也一并移过去，侧栏与窗口底边齐平，内容放得下的页面不再出现滚动条（[管理面板](gateway/admin-panel.md)）。
+
 - **抽屉里的测试按钮带上了类型菜单**（issue [#1374](https://github.com/Oaklight/llm-rosetta/issues/1374)）：模型抽屉中只有单个提供方的行只渲染了一个测试按钮，而模型列表行和多提供方下拉框的测试按钮带一个展开流式、工具、视觉与推理测试的下拉箭头。现在三处共用同一个构建函数，抽屉也能触达所有测试类型，并把请求固定到该提供方（[管理面板](gateway/admin-panel.md#models)）。
 
 - **裸 `google_generate` 提供方显示为 LLM，而不是 Embeddings**（issue [#1364](https://github.com/Oaklight/llm-rosetta/issues/1364)）：提供方卡片的能力徽章会回退到模型类型注册表的格式列表，而 `google_generate` 既是聊天格式又是嵌入方言，于是只写 `type: google_generate` 的提供方显示成 Embeddings，并从 LLM 分面里消失。现在同时服务聊天的格式不再推断出非 LLM 类型；嵌入仍要求显式的 `embeddings_format` 或 embeddings shim 才会被网关路由，因此徽章与实际能服务的内容一致。仅属于非 LLM 的格式（`cohere`、`jina`、`voyage`、`systemone`）仍显示原徽章（[管理面板](gateway/admin-panel.md#providers)）。
