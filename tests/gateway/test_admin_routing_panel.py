@@ -261,6 +261,103 @@ class TestGetModelRouting:
         assert payload["decisions"] == []
 
     @pytest.mark.asyncio
+    async def test_a_lane_the_route_dropped_is_listed_after_the_serving_ones(self):
+        """A switched-off provider keeps its row on the board.
+
+        The route drops it at parse time, so it is not a candidate; the
+        document still declares it, and a lane missing from the page is a lane
+        nobody notices is down.
+        """
+        route = _route(ProviderEntry(name="a"))
+        request = _request(models={"m": route}, providers={"a": _provider("a")})
+        request.app.gateway_config.declared_model_lanes = {
+            "m": [{"name": "a", "weight": 1}, {"name": "off", "weight": 2}]
+        }
+        request.app.gateway_config.raw_providers = {
+            "off": {"type": "chat_completions", "enabled": False}
+        }
+
+        response = await get_model_routing(request)
+        payload = json.loads(response.body)
+
+        assert [entry["name"] for entry in payload["providers"]] == ["a", "off"]
+        off = payload["providers"][1]
+        assert off["state"] == "off"
+        assert off["excluded"] is True
+        assert off["eligible"] is False
+        assert off["share"] == 0
+        assert off["weight"] == 2
+        assert off["format"] == "chat_completions"
+        assert payload["providers"][0]["excluded"] is False
+
+        assert off["reason_kind"] == "provider"
+
+    @pytest.mark.asyncio
+    async def test_each_way_a_lane_leaves_the_route_is_named(self):
+        """The row says which switch is off: the provider's, the gateway's, or the model's."""
+        route = _route(ProviderEntry(name="a"))
+        request = _request(models={"m": route}, providers={"a": _provider("a")})
+        request.app.gateway_config.declared_model_lanes = {
+            "m": [
+                {"name": "a", "weight": 1, "enabled": True},
+                {"name": "auto", "weight": 1, "enabled": True},
+                {"name": "entry", "weight": 2, "enabled": False},
+            ]
+        }
+        request.app.gateway_config.raw_providers = {
+            "auto": {
+                "type": "argo--chat_completions",
+                "enabled": False,
+                "_auto_disabled": {"reason": "required external shim missing"},
+            },
+            "entry": {"type": "chat_completions", "enabled": True},
+        }
+
+        payload = json.loads((await get_model_routing(request)).body)
+        rows = {row["name"]: row for row in payload["providers"]}
+
+        assert rows["auto"]["reason_kind"] == "auto"
+        assert rows["auto"]["reason"] == "required external shim missing"
+        # The lane's own switch is not the provider's, so the row must not
+        # blame the providers section for it.
+        assert rows["entry"]["reason_kind"] == "entry"
+        assert rows["entry"]["reason"] == "switched off on this model"
+        assert rows["entry"]["weight"] == 2
+
+    @pytest.mark.asyncio
+    async def test_a_model_with_every_lane_off_still_has_a_board(self):
+        """An empty route is a model that stopped serving, not an unknown name.
+
+        404 here would take away the only page where the lane can be switched
+        back on — the model is still in the document.
+        """
+        request = _request(models={}, providers={"a": _provider("a")})
+        request.app.gateway_config.declared_model_lanes = {
+            "m": [{"name": "a", "weight": 1, "enabled": False}]
+        }
+        request.app.gateway_config.raw_providers = {
+            "a": {"type": "chat_completions", "enabled": False}
+        }
+
+        response = await get_model_routing(request)
+        payload = json.loads(response.body)
+
+        assert response.status_code == 200
+        assert payload["routing"] is None
+        assert [row["name"] for row in payload["providers"]] == ["a"]
+        assert payload["providers"][0]["excluded"] is True
+        assert payload["providers"][0]["reason_kind"] == "entry"
+
+    @pytest.mark.asyncio
+    async def test_an_unknown_model_is_still_a_404(self):
+        request = _request(models={}, providers={})
+        request.app.gateway_config.declared_model_lanes = {}
+
+        response = await get_model_routing(request)
+
+        assert response.status_code == 404
+
+    @pytest.mark.asyncio
     async def test_sessions_fold_recent_rows_by_client_identity(self):
         rows = [
             {

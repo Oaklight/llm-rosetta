@@ -291,6 +291,57 @@ def _lane_row(config: Any, entry: Any, answer: Any, share: float) -> dict[str, A
         # not answered yet and a lane with no probe are both ``headroom:
         # None``, and the panel words them differently.
         "probe": bool(pinfo is not None and getattr(pinfo, "quota_probe", None)),
+        # A lane the document declares but the runtime does not route.  The
+        # board shows it read-only, after the serving ones.
+        "excluded": False,
+    }
+
+
+def _excluded_lane_row(config: Any, lane: dict[str, Any]) -> dict[str, Any]:
+    """One declared lane the selector cannot offer, and why.
+
+    A lane leaves the route in three ways, and the row has to say which one:
+    the provider is switched off everywhere; the gateway disabled it itself on
+    a load-time fault (the marker says what it saw); or this model's own entry
+    turns it off, which is not the provider's switch at all.
+
+    Args:
+        config: The gateway config, for the provider's own entry.
+        lane: ``{"name", "weight", "enabled"}`` from ``declared_model_lanes``.
+
+    Returns:
+        A row shaped like :func:`_lane_row`, with no traffic figures.
+    """
+    name = lane["name"]
+    cfg = (getattr(config, "raw_providers", {}) or {}).get(name) or {}
+    marker = cfg.get("_auto_disabled")
+    if lane.get("enabled") is False:
+        kind, reason = "entry", "switched off on this model"
+    elif isinstance(marker, dict) and marker.get("reason"):
+        kind, reason = "auto", str(marker["reason"])
+    elif cfg.get("enabled", True) is False:
+        kind, reason = "provider", "switched off in the providers section"
+    else:
+        kind, reason = "missing", "provider is not declared in the providers section"
+    return {
+        "name": name,
+        "weight": lane.get("weight", 1),
+        "share": 0,
+        "headroom": None,
+        "eligible": False,
+        "state": "off",
+        "reason": reason,
+        "reason_kind": kind,
+        "until": None,
+        "sunk": False,
+        "block": None,
+        "has_allowance": False,
+        "windows": [],
+        "format": cfg.get("type"),
+        "shim": cfg.get("shim"),
+        "upstream_model": None,
+        "probe": False,
+        "excluded": True,
     }
 
 
@@ -302,6 +353,23 @@ async def get_model_routing(request: Any, **kwargs: Any) -> Response:
         return JSONResponse({"error": "Gateway config not loaded"}, status_code=500)
     route = getattr(config, "models", {}).get(model)
     if route is None:
+        # A model whose every lane is off has no route at all, but it is still
+        # in the document.  Answering 404 would take away the one page where
+        # the lane could be switched back on.
+        declared = getattr(config, "declared_model_lanes", {}).get(model)
+        if declared:
+            return JSONResponse(
+                {
+                    "model": model,
+                    "strategy": None,
+                    "routing": None,
+                    "providers": [
+                        _excluded_lane_row(config, lane) for lane in declared
+                    ],
+                    "decisions": [],
+                    "sessions": [],
+                }
+            )
         configured = ", ".join(sorted(getattr(config, "models", {})))
         return JSONResponse(
             {
@@ -324,6 +392,12 @@ async def get_model_routing(request: Any, **kwargs: Any) -> Response:
         _lane_row(config, entry, answer, shares[index])
         for index, (entry, answer, _factor, _eligible) in enumerate(lanes)
     ]
+    # A lane the document declares but the route does not carry is still the
+    # operator's lane: append it after the serving ones, marked ``off``.
+    routed = {row["name"] for row in providers}
+    for lane in getattr(config, "declared_model_lanes", {}).get(model, []):
+        if lane["name"] not in routed:
+            providers.append(_excluded_lane_row(config, lane))
 
     decisions: list[dict[str, Any]] = []
     sessions: list[dict[str, Any]] = []
