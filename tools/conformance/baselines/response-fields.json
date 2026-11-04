@@ -1344,6 +1344,18 @@
           "class": "usage",
           "reason": ""
         },
+        "usage.input_tokens_details.cache_write_tokens_details": {
+          "class": "usage",
+          "reason": ""
+        },
+        "usage.input_tokens_details.cache_write_tokens_details.ttl_12h_tokens": {
+          "class": "usage",
+          "reason": ""
+        },
+        "usage.input_tokens_details.cache_write_tokens_details.ttl_30m_tokens": {
+          "class": "usage",
+          "reason": ""
+        },
         "usage.input_tokens_details.cached_tokens": {
           "class": "usage",
           "reason": ""
@@ -1513,9 +1525,9 @@
   },
   "schema_version": 1,
   "sdk_versions": {
-    "anthropic": "2.3.0",
+    "anthropic": "2.4.0",
     "google-genai": "2.34.0",
-    "openai": "3.41.0"
+    "openai": "3.45.0"
   },
   "suite": "fields"
 }
