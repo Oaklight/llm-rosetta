@@ -511,6 +511,28 @@ function _testMenuItems(modelType, modelName, {hasTools, hasVision, hasReasoning
     <div class="test-menu-item" onclick="runTest('${n}','${esc(modelType)}'${pArg})">${t('btn.test')} ${esc(modelType)}</div>`;
 }
 
+/** The Test button with its kind menu.
+ *
+ *  One builder for every place a model is tested: the model list row, the
+ *  drawer's single-provider row and the multi-provider dropdown.  The drawer
+ *  used to render a bare button, so the only way to test streaming, tools or
+ *  vision there was to leave the drawer.
+ *
+ *  `provider` pins the request to one provider name; omit it where the test
+ *  should go through routing. */
+function _testGroup(name, modelType, opts, provider, {extraClass = '', style = ''} = {}) {
+  const n = esc(name);
+  const kind = _defaultTestKind(modelType);
+  const call = provider
+    ? `runTest('${n}','${kind}',null,'${esc(provider)}')`
+    : `runTest('${n}','${kind}')`;
+  const aria = provider ? ` ${esc(provider)}` : '';
+  return `<div class="test-group"${style ? ` style="${style}"` : ''}>` +
+    `<button class="btn btn-sm btn-test${extraClass ? ` ${extraClass}` : ''}" onclick="${call}">${t('btn.test')}</button>` +
+    `<button class="btn btn-sm btn-caret" aria-haspopup="true" aria-expanded="false" aria-label="${t('btn.test')}${aria}" onclick="toggleTestMenu(this)">&#9662;</button>` +
+    `<div class="test-menu">${_testMenuItems(modelType, name, opts, provider)}</div></div>`;
+}
+
 // ── Multi-provider helpers ──
 
 function _getAllProviders(info) {
@@ -536,6 +558,21 @@ function _getProviderDetails(info) {
     });
   }
   return [{name: info.provider || '', upstream_model: info.upstream_model, enabled: true}];
+}
+
+/** The capability set that decides the test menu: the lane's own when it
+ *  declares one, the model's otherwise.  A lane narrowed to `['text']` on a
+ *  model that declares tools and vision must not offer those tests — the
+ *  proxy refuses them. */
+function _laneOpts(info, detail) {
+  const caps = (detail && Array.isArray(detail.capabilities))
+    ? detail.capabilities
+    : (typeof info === 'string' ? ['text'] : (info.capabilities || ['text']));
+  return {
+    hasTools: caps.includes('tools'),
+    hasVision: caps.includes('vision'),
+    hasReasoning: caps.includes('reasoning'),
+  };
 }
 
 /** Label for a provider cell — "<Brand> (Free)" for a free entry, else the name.
@@ -672,14 +709,8 @@ async function toggleProviderCapability(model, provider, checkbox) {
 function _providerMenuRows(name, info, disabledProviders) {
   const details = _getProviderDetails(info);
   const modelType = _getModelType(info);
-  const kind = _defaultTestKind(modelType);
-  const caps = typeof info === 'string' ? ['text'] : (info.capabilities || ['text']);
-  const opts = {
-    hasTools: caps.includes('tools'),
-    hasVision: caps.includes('vision'),
-    hasReasoning: caps.includes('reasoning'),
-  };
   return details.map(p => {
+    const opts = _laneOpts(info, p);
     const off = _providerEntryOff(p, disabledProviders);
     const n = esc(name);
     const pn = esc(p.name);
@@ -703,7 +734,7 @@ function _providerMenuRows(name, info, disabledProviders) {
         ? _capPicker(name, p)
         : `<span class="cap-badge ${_typeBadgeClass(modelType)}" title="${esc(typeLabelAlt(modelType))}">${_CAP_ICONS[modelType] || ''}</span>`}
       <input type="number" class="pd-weight" min="1" max="100" value="${w}" title="${t('label.weight')}" onchange="updateProviderWeight('${n}','${pn}',this)" onkeydown="if(event.key==='Enter'){this.blur()}">
-      <div class="test-group"><button class="btn btn-sm btn-test" onclick="runTest('${n}','${kind}',null,'${pn}')">${t('btn.test')}</button><button class="btn btn-sm btn-caret" aria-haspopup="true" aria-expanded="false" aria-label="${t('btn.test')} ${pn}" onclick="toggleTestMenu(this)">&#9662;</button><div class="test-menu">${_testMenuItems(modelType, name, opts, p.name)}</div></div>
+      ${_testGroup(name, modelType, opts, p.name)}
       <button class="btn btn-sm pd-remove" title="${t('btn.remove')}" onclick="removeProviderFromModel('${n}','${pn}')">✕</button>
     </div>`;
   }).join('');
@@ -811,14 +842,15 @@ function _detailProviderRows(name, info, disabledProviders) {
   }
   const [p] = _getProviderDetails(info);
   if (!p) return '';
-  const kind = _defaultTestKind(_getModelType(info));
+  const modelType = _getModelType(info);
+  const opts = _laneOpts(info, p);
   const off = _providerEntryOff(p, disabledProviders);
   return `<div class="provider-menu-row pd-single${off ? ' pm-off' : ''}">
       <span class="pm-id">
         <span class="provider-link pm-name" title="${esc(p.name)}" onclick="goToProviderFromModel('${esc(p.name)}')">${esc(_providerLabel(p.name))}</span>
         <span class="pm-upstream">${p.upstream_model ? `→ ${esc(p.upstream_model)}` : ''}</span>
       </span>
-      <div class="test-group"><button class="btn btn-sm btn-test" onclick="runTest('${esc(name)}','${kind}',null,'${esc(p.name)}')">${t('btn.test')}</button></div>
+      ${_testGroup(name, modelType, opts, p.name)}
     </div>`;
 }
 
@@ -1272,13 +1304,7 @@ function renderModels() {
       <td class="model-provider-cell" role="cell" aria-labelledby="sortProvider">${_renderProviderCell(name, info, disabledProviders)}</td>
       <td class="model-actions-cell" role="cell" aria-labelledby="sortEnabled">
         <label class="toggle row-toggle" style="margin-right:6px" title="${allProvsDisabled ? t('provider.disabled') : modelEnabled ? t('model.enabled') : t('model.disabled')}"><input type="checkbox" role="switch" ${effectiveEnabled ? 'checked' : ''} aria-checked="${effectiveEnabled}" aria-label="${esc(name)}" onchange="toggleModel('${esc(name)}')"><span class="slider"></span></label>
-        <div class="test-group" style="display:inline-block">
-          <button class="btn btn-sm btn-test${modelType !== 'llm' ? ' btn-test-embed' : ''}" onclick="runTest('${esc(name)}','${_defaultTestKind(modelType)}')">${t('btn.test')}</button>
-          <button class="btn btn-sm btn-caret" aria-haspopup="true" aria-expanded="false" aria-label="${t('btn.test')} ${esc(name)}" onclick="toggleTestMenu(this)">&#9662;</button>
-          <div class="test-menu">
-            ${_testMenuItems(modelType, name, {hasTools, hasVision, hasReasoning})}
-          </div>
-        </div>
+        ${_testGroup(name, modelType, {hasTools, hasVision, hasReasoning}, null, {extraClass: modelType !== 'llm' ? 'btn-test-embed' : '', style: 'display:inline-block'})}
         <button class="btn btn-sm more-menu-toggle" aria-haspopup="true" aria-expanded="false" aria-label="${t('btn.more')} ${esc(name)}" onclick="toggleMoreMenu(this)" style="padding:3px 6px">⋯</button>
         <div class="more-menu" role="menu">
           <div class="more-menu-item" role="menuitem" aria-label="${t('btn.edit')} ${esc(name)}" onclick="closeMenus();editModel('${esc(name)}','${esc(prov)}')">${t('btn.edit')}</div>
