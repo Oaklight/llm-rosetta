@@ -99,6 +99,7 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **Google SDK 形状把 `system_instruction` 移入 `config`**（issue [#936](https://github.com/Oaklight/llm-rosetta/issues/936)）：直接构造 Google `GenerateContentConfig` 的调用方需要移动该字段。
 
 ### 修复
+- **提供方或模型名不再能弄坏控制台的按钮**（议题 [#1394](https://github.com/Oaklight/llm-rosetta/issues/1394)）：管理面板里每个内联 `onclick`/`onchange` 都用 `esc()` 拼 JS 字符串字面量，而 `esc()` 把单引号写成 `&#39;` —— HTML 解析器会在 handler 编译前把它还原成真正的引号，于是名为 `a'-alert(1)-'b` 的提供方会渲染出可执行的代码，名为 `it's` 的则渲染出点了没反应的按钮。现在参数统一走 `jsArg()`（JSON 字符串字面量，并转义属性自身的引号），即 #1392 为 lane 控件引入的辅助函数，覆盖模型列表与抽屉、提供方卡片及其菜单、测试菜单、密钥表、仪表盘与日志表、提供方选择器。带单引号的名字现在能打开对的抽屉、编辑对的提供方、跑对的测试（[管理面板](gateway/admin-panel.md)）。
 - **命令型提供方不会再以字面量 `token_command` 作为 Key 保存**（议题 [#1355](https://github.com/Oaklight/llm-rosetta/issues/1355)）：旧面板把展示用的标记写进了 `api_key`，与 Shim 的 `connection.token_command` 并存时条目无法加载（`token_command and api_key are mutually exclusive`）。保存路径现在把该字面量视为空并删除；保存或启用提供方前会先在内存中构建相关提供方，加载器拒绝的文档返回 400 且不写文件，不再先落盘再返回“Config saved but reload failed”。
 
 - **SDK drift 套件不再自我停用**（议题 [#1389](https://github.com/Oaklight/llm-rosetta/issues/1389)）：它的基线还记着 openai 2.45.0 / anthropic 0.116.0 / google-genai 2.12.0，版本不匹配让每个 case 都 skip —— 套件永远报 `skip`、从不报 `pass`，而 CI 根本没有跑它。基线已刷新为 conformance job 实际安装的版本；版本变化现在照常比较（case 记录两边的版本并注明不匹配），过期基线不能再掩盖真实的类型变化；CI 也把 `--suite drift` 加入离线套件一起跑。
