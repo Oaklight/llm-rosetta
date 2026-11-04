@@ -3,6 +3,7 @@ import { S } from '../core/state.js';
 import { t, typeLabel, typeLabelAlt } from '../core/i18n.js';
 import { api, showToast, closeModal, esc, openMenu, closeMenus } from '../core/utils.js';
 import { providerRowsHtml, syncPickerBtn, openPickerMenu } from './provider-picker.js';
+import { jsArg } from '../core/html.js';
 
 // ===================== Fetch Models from Provider =====================
 
@@ -59,7 +60,7 @@ function openFetchModelsModal() {
         .filter(([, cfg]) => cfg.enabled !== false)
         .map(([name]) => name)
     : [];
-  menu.innerHTML = providerRowsHtml(names, n => `selectFetchProvider('${esc(n)}')`);
+  menu.innerHTML = providerRowsHtml(names, n => `selectFetchProvider(${jsArg(n)})`);
   document.getElementById('fetchProvider').value = '';
   _syncFetchProviderBtn('');
   // Reset state

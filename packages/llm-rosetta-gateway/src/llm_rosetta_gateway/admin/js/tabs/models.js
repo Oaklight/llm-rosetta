@@ -86,7 +86,7 @@ function _syncFilterTypeSeg(seg, typeNames) {
     // ordinary interface text and keeps data-i18n.
     const attrs = domain === 'all' ? 'data-i18n="filter.all"' : `data-type-name="${esc(domain)}"`;
     const label = domain === 'all' ? t('filter.all') : typeLabel(domain);
-    return `<div class="${active ? 'active' : ''}" role="radio" data-domain="${esc(domain)}" aria-checked="${active}" tabindex="${active ? '0' : '-1'}" onclick="switchModelDomain(this,'${esc(domain)}')"><span ${attrs}>${esc(label)}</span></div>`;
+    return `<div class="${active ? 'active' : ''}" role="radio" data-domain="${esc(domain)}" aria-checked="${active}" tabindex="${active ? '0' : '-1'}" onclick="switchModelDomain(this,${jsArg(domain)})"><span ${attrs}>${esc(label)}</span></div>`;
   }).join('');
 }
 
@@ -108,8 +108,8 @@ function _buildStatusSeg(counts) {
     const active = (S._modelStatus || 'all') === value;
     return `<div class="${active ? 'active' : ''}" role="radio" data-status="${value}"`
       + ` aria-checked="${active}" tabindex="${active ? '0' : '-1'}"`
-      + ` onclick="setModelStatus('${value}')"`
-      + ` onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();setModelStatus('${value}')}">`
+      + ` onclick="setModelStatus(${jsArg(value)})"`
+      + ` onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();setModelStatus(${jsArg(value)})}">`
       + `<span data-i18n="${key}">${esc(t(key))}</span><span class="seg-count">${counts[value] ?? 0}</span></div>`;
   }).join('');
 }
@@ -144,7 +144,7 @@ function _syncModalTypeSeg(seg, typeNames) {
     return;
   }
   seg.innerHTML = typeNames.map((name, i) => {
-    return `<div class="${i === 0 ? 'active' : ''}" onclick="segModelType(this,'${esc(name)}')"><input type="radio" name="modelType" value="${esc(name)}"${i === 0 ? ' checked' : ''} onchange="segModelType(this)"><span data-type-name="${esc(name)}">${esc(typeLabel(name))}</span></div>`;
+    return `<div class="${i === 0 ? 'active' : ''}" onclick="segModelType(this,${jsArg(name)})"><input type="radio" name="modelType" value="${esc(name)}"${i === 0 ? ' checked' : ''} onchange="segModelType(this)"><span data-type-name="${esc(name)}">${esc(typeLabel(name))}</span></div>`;
   }).join('');
 }
 
@@ -231,7 +231,7 @@ function openModelModal(model, provider, capabilities, upstreamModel, sourceMode
   );
   document.getElementById('modelProviderMenu').innerHTML = providerRowsHtml(
     providers.map(([name]) => name),
-    n => `selectModelProvider('${esc(n)}')`,
+    n => `selectModelProvider(${jsArg(n)})`,
     muted,
   );
   document.getElementById('modelProvider').value = provider || '';
@@ -481,36 +481,36 @@ function _defaultTestKind(modelType) {
 
 /** Build test menu items HTML for a given model type. */
 function _testMenuItems(modelType, modelName, {hasTools, hasVision, hasReasoning}, provider) {
-  const n = esc(modelName);
+  const n = jsArg(modelName);
   // Fourth argument of runTest: pins the request to one provider.  Omitted on
   // the row's own test menu, where routing picks the provider.
-  const pArg = provider ? `,null,'${esc(provider)}'` : '';
+  const pArg = provider ? `,null,${jsArg(provider)}` : '';
   if (modelType === 'embeddings') {
     return `
-      <div class="test-menu-item" onclick="runTest('${n}','embedding'${pArg})">${t('test.embedding')}</div>
-      <div class="test-menu-item" onclick="runTest('${n}','embed_batch'${pArg})">${t('test.embedBatch')}</div>
-      <div class="test-menu-item" onclick="promptMatryoshka('${n}')">${t('test.matryoshka')}</div>
-      <div class="test-menu-item" onclick="runTest('${n}','embed_multimodal'${pArg})">${t('test.embedMultimodal')}</div>`;
+      <div class="test-menu-item" onclick="runTest(${n},'embedding'${pArg})">${t('test.embedding')}</div>
+      <div class="test-menu-item" onclick="runTest(${n},'embed_batch'${pArg})">${t('test.embedBatch')}</div>
+      <div class="test-menu-item" onclick="promptMatryoshka(${n})">${t('test.matryoshka')}</div>
+      <div class="test-menu-item" onclick="runTest(${n},'embed_multimodal'${pArg})">${t('test.embedMultimodal')}</div>`;
   }
   if (modelType === 'rerank') {
     return `
-      <div class="test-menu-item" onclick="runTest('${n}','rerank'${pArg})">${t('test.rerank')}</div>
-      <div class="test-menu-item" onclick="runTest('${n}','rerank_batch'${pArg})">${t('test.rerankBatch')}</div>`;
+      <div class="test-menu-item" onclick="runTest(${n},'rerank'${pArg})">${t('test.rerank')}</div>
+      <div class="test-menu-item" onclick="runTest(${n},'rerank_batch'${pArg})">${t('test.rerankBatch')}</div>`;
   }
   if (modelType === 'decisions') {
-    return `<div class="test-menu-item" onclick="runTest('${n}','decision'${pArg})">${t('test.decision')}</div>`;
+    return `<div class="test-menu-item" onclick="runTest(${n},'decision'${pArg})">${t('test.decision')}</div>`;
   }
   if (modelType === 'llm') {
     return `
-      <div class="test-menu-item" onclick="runTest('${n}','text'${pArg})">${t('test.text')}</div>
-      <div class="test-menu-item" onclick="runTest('${n}','stream'${pArg})">${t('test.stream')}</div>
-      <div class="test-menu-item${hasTools ? '' : ' disabled'}" onclick="${hasTools ? `runTest('${n}','tools'${pArg})` : ''}">${t('test.tools')}</div>
-      <div class="test-menu-item${hasVision ? '' : ' disabled'}" onclick="${hasVision ? `runTest('${n}','vision'${pArg})` : ''}">${t('test.vision')}</div>
-      <div class="test-menu-item${hasReasoning ? '' : ' disabled'}" onclick="${hasReasoning ? `runTest('${n}','reasoning'${pArg})` : ''}">${t('test.reasoning')}</div>`;
+      <div class="test-menu-item" onclick="runTest(${n},'text'${pArg})">${t('test.text')}</div>
+      <div class="test-menu-item" onclick="runTest(${n},'stream'${pArg})">${t('test.stream')}</div>
+      <div class="test-menu-item${hasTools ? '' : ' disabled'}" onclick="${hasTools ? `runTest(${n},'tools'${pArg})` : ''}">${t('test.tools')}</div>
+      <div class="test-menu-item${hasVision ? '' : ' disabled'}" onclick="${hasVision ? `runTest(${n},'vision'${pArg})` : ''}">${t('test.vision')}</div>
+      <div class="test-menu-item${hasReasoning ? '' : ' disabled'}" onclick="${hasReasoning ? `runTest(${n},'reasoning'${pArg})` : ''}">${t('test.reasoning')}</div>`;
   }
   // Fallback for unknown/new types: single test item using type name
   return `
-    <div class="test-menu-item" onclick="runTest('${n}','${esc(modelType)}'${pArg})">${t('btn.test')} ${esc(modelType)}</div>`;
+    <div class="test-menu-item" onclick="runTest(${n},${jsArg(modelType)}${pArg})">${t('btn.test')} ${esc(modelType)}</div>`;
 }
 
 /** The Test button with its kind menu.
@@ -523,11 +523,11 @@ function _testMenuItems(modelType, modelName, {hasTools, hasVision, hasReasoning
  *  `provider` pins the request to one provider name; omit it where the test
  *  should go through routing. */
 function _testGroup(name, modelType, opts, provider, {extraClass = '', style = ''} = {}) {
-  const n = esc(name);
-  const kind = _defaultTestKind(modelType);
+  const n = jsArg(name);
+  const kind = jsArg(_defaultTestKind(modelType));
   const call = provider
-    ? `runTest('${n}','${kind}',null,'${esc(provider)}')`
-    : `runTest('${n}','${kind}')`;
+    ? `runTest(${n},${kind},null,${jsArg(provider)})`
+    : `runTest(${n},${kind})`;
   const aria = provider ? ` ${esc(provider)}` : '';
   return `<div class="test-group"${style ? ` style="${style}"` : ''}>` +
     `<button class="btn btn-sm btn-test${extraClass ? ` ${extraClass}` : ''}" onclick="${call}">${t('btn.test')}</button>` +
@@ -608,10 +608,10 @@ function _renderProviderCell(name, info, disabledProviders) {
     const p = details[0] || {name: ''};
     // No "(Disabled)" word: the dimmed cell and the switch already say it, and
     // the word is what squeezes a long provider name into the switch.
-    return `<span class="provider-link" title="${esc(p.name)}" onclick="goToProviderFromModel('${esc(p.name)}')">${esc(_providerLabel(p.name))}</span>`;
+    return `<span class="provider-link" title="${esc(p.name)}" onclick="goToProviderFromModel(${jsArg(p.name)})">${esc(_providerLabel(p.name))}</span>`;
   }
   const live = details.filter(p => !_providerEntryOff(p, disabledProviders)).length;
-  return `<button class="btn btn-sm provider-multi-btn" aria-haspopup="true" aria-expanded="false" onclick="toggleProviderMenu(this,'${esc(name)}')">
+  return `<button class="btn btn-sm provider-multi-btn" aria-haspopup="true" aria-expanded="false" onclick="toggleProviderMenu(this,${jsArg(name)})">
       <span>${t('model.multipleProviders')}</span><span class="provider-multi-count">${details.length}</span>${live < details.length ? `<span class="provider-multi-off">${details.length - live} ${t('label.off')}</span>` : ''}<span aria-hidden="true">&#9662;</span>
     </button>
     <div class="more-menu provider-menu" role="menu">${_providerMenuRows(name, info, disabledProviders)}</div>`;
@@ -647,8 +647,8 @@ function _capPicker(model, provider) {
     caps.includes(capability) + '">' +
     '<input type="checkbox"' + (caps.includes(capability) ? ' checked' : '') +
     ' data-capability="' + capability + '"' +
-    ' onchange="toggleProviderCapability(\'' + esc(model) + '\',\'' +
-    esc(provider.name) + '\',this)">' +
+    ' onchange="toggleProviderCapability(' + jsArg(model) + ',' +
+    jsArg(provider.name) + ',this)">' +
     '<span class="cap-dot cap-badge-' + capability + '" aria-hidden="true"></span>' +
     '<span class="cap-menu-label">' + esc(capLabel(capability)) + '</span></label>'
   ).join('');
@@ -734,7 +734,7 @@ function _providerMenuRows(name, info, disabledProviders) {
         onchange: `toggleModelProvider(${jsArg(name)},${jsArg(p.name)})`,
       })}
       <div class="pm-id">
-        <span class="provider-link pm-name" title="${esc(p.name)}" onclick="goToProviderFromModel('${pn}')">${esc(_providerLabel(p.name))}</span>
+        <span class="provider-link pm-name" title="${esc(p.name)}" onclick="goToProviderFromModel(${jsArg(p.name)})">${esc(_providerLabel(p.name))}</span>
         <span class="pm-upstream">${p.upstream_model ? `→ ${esc(p.upstream_model)}` : ''}</span>
       </div>
       ${modelType === 'llm'
@@ -742,7 +742,7 @@ function _providerMenuRows(name, info, disabledProviders) {
         : `<span class="cap-badge ${_typeBadgeClass(modelType)}" title="${esc(typeLabelAlt(modelType))}">${_CAP_ICONS[modelType] || ''}</span>`}
       ${laneWeightInputHtml({ model: name, provider: p.name, weight: w, title: t('label.weight') })}
       ${_testGroup(name, modelType, opts, p.name)}
-      <button class="btn btn-sm pd-remove" title="${t('btn.remove')}" onclick="removeProviderFromModel('${n}','${pn}')">✕</button>
+      <button class="btn btn-sm pd-remove" title="${t('btn.remove')}" onclick="removeProviderFromModel(${jsArg(name)},${jsArg(p.name)})">✕</button>
     </div>`;
   }).join('');
 }
@@ -854,7 +854,7 @@ function _detailProviderRows(name, info, disabledProviders) {
   const off = _providerEntryOff(p, disabledProviders);
   return `<div class="provider-menu-row pd-single${off ? ' pm-off' : ''}">
       <span class="pm-id">
-        <span class="provider-link pm-name" title="${esc(p.name)}" onclick="goToProviderFromModel('${esc(p.name)}')">${esc(_providerLabel(p.name))}</span>
+        <span class="provider-link pm-name" title="${esc(p.name)}" onclick="goToProviderFromModel(${jsArg(p.name)})">${esc(_providerLabel(p.name))}</span>
         <span class="pm-upstream">${p.upstream_model ? `→ ${esc(p.upstream_model)}` : ''}</span>
       </span>
       ${_testGroup(name, modelType, opts, p.name)}
@@ -871,9 +871,9 @@ function _modelDetailHtml(name, info, disabledProviders) {
       <div class="md-row"><span class="md-label">${t('label.capabilities')}</span><span class="md-caps">${capList}</span></div>
       <div class="md-providers">${_detailProviderRows(name, info, disabledProviders)}</div>
       <div class="md-actions">
-        <button class="btn btn-sm" onclick="editModel('${esc(name)}','${esc(_getProviderDetails(info)[0]?.name || '')}')">${t('btn.edit')}</button>
-        <button class="btn btn-sm" onclick="cloneModel('${esc(name)}')">${t('btn.clone')}</button>
-        <button class="btn btn-sm btn-danger" onclick="deleteModel('${esc(name)}', this)">${t('btn.delete')}</button>
+        <button class="btn btn-sm" onclick="editModel(${jsArg(name)},${jsArg(_getProviderDetails(info)[0]?.name || '')})">${t('btn.edit')}</button>
+        <button class="btn btn-sm" onclick="cloneModel(${jsArg(name)})">${t('btn.clone')}</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteModel(${jsArg(name)}, this)">${t('btn.delete')}</button>
       </div>
     </div>`;
 }
@@ -1297,28 +1297,28 @@ function renderModels() {
     const urlTpl = (typeof info === 'object' && info.url_template) ? info.url_template : '';
     const urlTplTag = urlTpl ? ` <span style="font-size:10px;color:var(--text-dim);background:var(--bg-card);padding:1px 4px;border-radius:3px;border:1px solid var(--border)" title="${t('label.urlTemplate')}: ${esc(urlTpl)}">⛓ url</span>` : '';
     return `<tr${rowDimmed ? ' class="model-disabled"' : ''} role="row"
-      onclick="if(!event.target.closest('button,input,label,a,.more-menu,.provider-link'))openModelDrawer('${esc(name)}')">
+      onclick="if(!event.target.closest('button,input,label,a,.more-menu,.provider-link'))openModelDrawer(${jsArg(name)})">
       <td class="col-check" role="cell" aria-labelledby="thModelSelect"><input type="checkbox" class="row-check" data-model="${esc(name)}" onchange="updateModelBulk()"></td>
       <td class="model-name-cell" role="cell" aria-labelledby="sortName">
         <div class="mn-inner">
           <code class="copyable" role="button" tabindex="0"
                 title="${esc(upstream ? name + ' → ' + upstream : name)}"
-                onclick="openModelDrawer('${esc(name)}')"
-                onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openModelDrawer('${esc(name)}')}">${esc(name)}</code>
+                onclick="openModelDrawer(${jsArg(name)})"
+                onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openModelDrawer(${jsArg(name)})}">${esc(name)}</code>
           <span class="mn-badges">${typeBadge}${capBadges}</span>
         </div>
       </td>
       <td class="model-provider-cell" role="cell" aria-labelledby="sortProvider">${_renderProviderCell(name, info, disabledProviders)}</td>
       <td class="model-actions-cell" role="cell" aria-labelledby="sortEnabled">
-        <label class="toggle row-toggle" style="margin-right:6px" title="${allProvsDisabled ? t('provider.disabled') : modelEnabled ? t('model.enabled') : t('model.disabled')}"><input type="checkbox" role="switch" ${effectiveEnabled ? 'checked' : ''} aria-checked="${effectiveEnabled}" aria-label="${esc(name)}" onchange="toggleModel('${esc(name)}')"><span class="slider"></span></label>
+        <label class="toggle row-toggle" style="margin-right:6px" title="${allProvsDisabled ? t('provider.disabled') : modelEnabled ? t('model.enabled') : t('model.disabled')}"><input type="checkbox" role="switch" ${effectiveEnabled ? 'checked' : ''} aria-checked="${effectiveEnabled}" aria-label="${esc(name)}" onchange="toggleModel(${jsArg(name)})"><span class="slider"></span></label>
         ${_testGroup(name, modelType, {hasTools, hasVision, hasReasoning}, null, {extraClass: modelType !== 'llm' ? 'btn-test-embed' : '', style: 'display:inline-block'})}
         <button class="btn btn-sm more-menu-toggle" aria-haspopup="true" aria-expanded="false" aria-label="${t('btn.more')} ${esc(name)}" onclick="toggleMoreMenu(this)" style="padding:3px 6px">⋯</button>
         <div class="more-menu" role="menu">
-          <div class="more-menu-item" role="menuitem" aria-label="${t('btn.edit')} ${esc(name)}" onclick="closeMenus();editModel('${esc(name)}','${esc(prov)}')">${t('btn.edit')}</div>
-          <div class="more-menu-item" role="menuitem" aria-label="${t('btn.copy')} ${esc(name)}" onclick="closeMenus();copyText('${esc(name)}')">${t('btn.copy')}</div>
-          <div class="more-menu-item" role="menuitem" aria-label="${t('btn.clone')} ${esc(name)}" onclick="closeMenus();cloneModel('${esc(name)}')">${t('btn.clone')}</div>
+          <div class="more-menu-item" role="menuitem" aria-label="${t('btn.edit')} ${esc(name)}" onclick="closeMenus();editModel(${jsArg(name)},${jsArg(prov)})">${t('btn.edit')}</div>
+          <div class="more-menu-item" role="menuitem" aria-label="${t('btn.copy')} ${esc(name)}" onclick="closeMenus();copyText(${jsArg(name)})">${t('btn.copy')}</div>
+          <div class="more-menu-item" role="menuitem" aria-label="${t('btn.clone')} ${esc(name)}" onclick="closeMenus();cloneModel(${jsArg(name)})">${t('btn.clone')}</div>
           <div class="more-menu-sep" role="separator"></div>
-          <div class="more-menu-item danger" role="menuitem" aria-label="${t('btn.delete')} ${esc(name)}" onclick="deleteModel('${esc(name)}', this)">${t('btn.delete')}</div>
+          <div class="more-menu-item danger" role="menuitem" aria-label="${t('btn.delete')} ${esc(name)}" onclick="deleteModel(${jsArg(name)}, this)">${t('btn.delete')}</div>
         </div>
       </td>
     </tr>`;

@@ -16,6 +16,7 @@ import { buildTypeModel, buildEndpointTypeModel, endpointChoiceConfig, shimBrand
 import { degradedEndpoints, categoryKey, endpointState, degradedMarker, providerStatus, orderedProviders, nonLlmFormatType } from '../core/provider-endpoints.js';
 import { routingRows, blockRow } from '../core/quota-lines.js';
 import { shimHintText } from '../core/shim-hint.js';
+import { jsArg } from '../core/html.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
@@ -378,7 +379,7 @@ function renderFreeSourceButtons() {
   host.style.display = shims.length ? 'contents' : 'none';
   menu.innerHTML = shims.map(s => {
     const label = `${shimBrand(s)} ${t('free.suffix')}`;
-    return `<div class="more-menu-item" role="menuitem" data-free-shim="${esc(s.name)}" aria-label="${esc(label)}" onclick="closeMenus();openFreeProvider('${esc(s.name)}')">${esc(label)}</div>`;
+    return `<div class="more-menu-item" role="menuitem" data-free-shim="${esc(s.name)}" aria-label="${esc(label)}" onclick="closeMenus();openFreeProvider(${jsArg(s.name)})">${esc(label)}</div>`;
   }).join('');
 }
 
@@ -863,7 +864,9 @@ function _buildProviderSegControls() {
     div.setAttribute('aria-checked', S._providerFilter === desc.name ? 'true' : 'false');
     div.setAttribute('tabindex', S._providerFilter === desc.name ? '0' : '-1');
     if (S._providerFilter === desc.name) div.className = 'active';
-    div.setAttribute('onclick', `switchProviderFilter(this,'${desc.name}')`);
+    // A listener, not an attribute string: an apostrophe in a type name would
+    // otherwise end the literal this compiles from (issue #1394).
+    div.addEventListener('click', () => switchProviderFilter(div, desc.name));
     div.innerHTML = `<span data-type-name="${esc(desc.name)}">${esc(typeLabel(desc.name))}</span>`;
     seg.appendChild(div);
   }
@@ -1049,8 +1052,8 @@ function _buildProviderStatusSeg(counts) {
     const active = (S._providerStatus || 'all') === value;
     return `<div class="${active ? 'active' : ''}" role="radio" data-status="${value}"`
       + ` aria-checked="${active}" tabindex="${active ? '0' : '-1'}"`
-      + ` onclick="setProviderStatus('${value}')"`
-      + ` onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();setProviderStatus('${value}')}">`
+      + ` onclick="setProviderStatus(${jsArg(value)})"`
+      + ` onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();setProviderStatus(${jsArg(value)})}">`
       + `<span data-i18n="${key}">${esc(t(key))}</span><span class="seg-count">${counts[value] ?? 0}</span></div>`;
   }).join('');
 }
@@ -1404,19 +1407,19 @@ function renderProviders() {
     const modelCount = _countModelsForProvider(name);
     const nameTitle = isFree ? t('free.disclosure') : (baseUrl || shimBaseUrl || name);
     const toggleHtml = `<label class="pc-toggle toggle" title="${enabled ? t('provider.enabled') : t('provider.disabled')}">
-        <input type="checkbox" ${enabled ? 'checked' : ''} role="switch" aria-checked="${enabled}" aria-label="${esc(name)}" onchange="this.setAttribute('aria-checked',this.checked);toggleProvider('${esc(name)}')">
+        <input type="checkbox" ${enabled ? 'checked' : ''} role="switch" aria-checked="${enabled}" aria-label="${esc(name)}" onchange="this.setAttribute('aria-checked',this.checked);toggleProvider(${jsArg(name)})">
         <span class="slider"></span>
       </label>`;
     const actionsHtml = `<div class="pc-actions">
-          <button class="btn btn-sm" aria-label="${t('btn.edit')} ${esc(name)}" onclick="editProvider('${esc(name)}')">${t('btn.edit')}</button>
-          <button class="btn btn-sm btn-test-conn" aria-label="${t('btn.test')} ${esc(name)}" onclick="testProviderConnectivity('${esc(name)}')">${t('btn.test')}</button>
+          <button class="btn btn-sm" aria-label="${t('btn.edit')} ${esc(name)}" onclick="editProvider(${jsArg(name)})">${t('btn.edit')}</button>
+          <button class="btn btn-sm btn-test-conn" aria-label="${t('btn.test')} ${esc(name)}" onclick="testProviderConnectivity(${jsArg(name)})">${t('btn.test')}</button>
           <button class="btn btn-sm more-menu-toggle" aria-haspopup="true" aria-expanded="false" aria-label="${t('btn.more')} ${esc(name)}" onclick="toggleMoreMenu(this)">&#8943;</button>
           <div class="more-menu" role="menu">
-            <div class="more-menu-item" role="menuitem" onclick="closeMenus();copyProviderEntry('${esc(name)}')">${t('btn.clone')}</div>
-            ${isFree ? `<div class="more-menu-item" role="menuitem" onclick="closeMenus();refreshFreeModels('${esc(name)}')">${t('btn.refreshModels')}</div>` : ''}
-            <div class="more-menu-item" role="menuitem" onclick="closeMenus();showProviderQuota('${esc(name)}')">${t('btn.quota')}</div>
+            <div class="more-menu-item" role="menuitem" onclick="closeMenus();copyProviderEntry(${jsArg(name)})">${t('btn.clone')}</div>
+            ${isFree ? `<div class="more-menu-item" role="menuitem" onclick="closeMenus();refreshFreeModels(${jsArg(name)})">${t('btn.refreshModels')}</div>` : ''}
+            <div class="more-menu-item" role="menuitem" onclick="closeMenus();showProviderQuota(${jsArg(name)})">${t('btn.quota')}</div>
             <div class="more-menu-sep"></div>
-            <div class="more-menu-item danger" role="menuitem" onclick="closeMenus();deleteProvider('${esc(name)}')">${t('btn.delete')}</div>
+            <div class="more-menu-item danger" role="menuitem" onclick="closeMenus();deleteProvider(${jsArg(name)})">${t('btn.delete')}</div>
           </div>
         </div>`;
     return {
@@ -1433,7 +1436,7 @@ function renderProviders() {
   const cardHtml = ([name, cfg]) => {
     const p = pieces([name, cfg]);
     const modelLink = p.modelCount > 0
-      ? `<span class="pc-models" onclick="goToModelsForProvider('${esc(name)}')" title="${esc(p.modelCount + ' ' + t('col.models'))}"><span class="pc-models-n">${p.modelCount}</span><span class="pc-models-unit"> ${p.modelCount === 1 ? t('unit.model') : t('unit.models')} →</span></span>`
+      ? `<span class="pc-models" onclick="goToModelsForProvider(${jsArg(name)})" title="${esc(p.modelCount + ' ' + t('col.models'))}"><span class="pc-models-n">${p.modelCount}</span><span class="pc-models-unit"> ${p.modelCount === 1 ? t('unit.model') : t('unit.models')} →</span></span>`
       : '<span class="pc-models pc-models-empty"></span>';
     return `
     <div class="provider-card${p.enabled ? '' : ' disabled'}${p.autoDisabled ? ' auto-disabled' : ''}${p.degraded.length ? ' endpoint-degraded' : ''}" data-provider="${esc(name)}">
@@ -1464,7 +1467,7 @@ function renderProviders() {
       <td class="pc-col-cap"><div class="pc-badges">${p.capsHtml}</div></td>
       <td class="pc-col-toggle">${p.toggleHtml}</td>
       <td class="pc-col-num">${p.modelCount > 0
-        ? `<span class="pc-models" onclick="goToModelsForProvider('${esc(name)}')" title="${esc(p.modelCount + ' ' + t('col.models'))}">${p.modelCount}</span>`
+        ? `<span class="pc-models" onclick="goToModelsForProvider(${jsArg(name)})" title="${esc(p.modelCount + ' ' + t('col.models'))}">${p.modelCount}</span>`
         : ''}</td>
       <td class="pc-col-actions">${p.actionsHtml}</td>
     </tr>`;
