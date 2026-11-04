@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 
 from llm_rosetta_gateway.ops import OpsContext, OpsProviderValidation
 
@@ -47,8 +48,53 @@ def test_already_disabled_provider_is_not_modified():
 
     result = asyncio.run(OpsProviderValidation(OpsContext(), raw).execute())
 
-    assert result == {"disabled": []}
+    assert result == {"disabled": [], "recovered": []}
     assert "_auto_disabled" not in raw["providers"]["argo"]
+
+
+def test_an_auto_disabled_provider_recovers_when_its_fault_is_gone():
+    """The marker is the gateway's state, not the operator's switch."""
+    raw = {
+        "providers": {
+            "argo": {
+                "type": "chat_completions",
+                "api_key": "k",
+                "base_url": "https://argo.test",
+                "enabled": False,
+                "_auto_disabled": {"reason": "required external shim missing"},
+            }
+        },
+        "models": {},
+    }
+
+    result = asyncio.run(OpsProviderValidation(OpsContext(), raw).execute())
+
+    assert result["recovered"] == ["argo"]
+    assert result["disabled"] == []
+    assert raw["providers"]["argo"]["enabled"] is True
+    assert "_auto_disabled" not in raw["providers"]["argo"]
+
+
+def test_an_auto_disabled_provider_that_still_fails_stays_disabled():
+    raw = {
+        "providers": {
+            "argo": {
+                "type": "argo--chat_completions",
+                "api_key": "k",
+                "base_url": "https://argo.test",
+                "enabled": False,
+                "_auto_disabled": {"reason": "required external shim missing"},
+            }
+        },
+        "models": {},
+    }
+
+    result = asyncio.run(OpsProviderValidation(OpsContext(), raw).execute())
+
+    assert result["recovered"] == []
+    assert [item["provider"] for item in result["disabled"]] == ["argo"]
+    assert raw["providers"]["argo"]["enabled"] is False
+    assert raw["providers"]["argo"]["_auto_disabled"]["reason"]
 
 
 def test_invalid_provider_config_isolated_from_healthy_provider():
@@ -118,3 +164,87 @@ def test_legacy_alcf_name_gets_actionable_diagnostic():
     reason = result["disabled"][0]["reason"]
     assert "alcf_sophia--chat_completions" in reason
     assert "shims.presets: ['alcf']" in reason
+
+
+def test_a_recovery_is_written_to_the_document(tmp_path):
+    """The in-memory fix is not enough: the next load reads the file."""
+    from llm_rosetta_gateway.config import JsoncConfigIO
+
+    path = tmp_path / "config.json"
+    path.write_text(
+        json.dumps(
+            {
+                "providers": {
+                    "argo": {
+                        "type": "chat_completions",
+                        "api_key": "k",
+                        "base_url": "https://argo.test",
+                        "enabled": False,
+                        "_auto_disabled": {
+                            "reason": "required external shim missing",
+                            "category": "missing_external_shim",
+                        },
+                    },
+                    "hand": {"type": "argo--chat_completions", "enabled": False},
+                },
+                "models": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    ctx = OpsContext(config_io=JsoncConfigIO(), config_path=str(path))
+
+    result = asyncio.run(OpsProviderValidation(ctx, raw, persist=True).execute())
+
+    assert result["recovered"] == ["argo"]
+    disk = json.loads(path.read_text(encoding="utf-8"))
+    assert disk["providers"]["argo"]["enabled"] is True
+    assert "_auto_disabled" not in disk["providers"]["argo"]
+    # The hand-disabled entry is not this operation's to change.
+    assert disk["providers"]["hand"] == {
+        "type": "argo--chat_completions",
+        "enabled": False,
+    }
+
+
+def test_a_still_broken_lane_is_written_once(tmp_path):
+    """A fault that has not changed must not rewrite the document on every load."""
+    from llm_rosetta_gateway.config import JsoncConfigIO
+
+    class _CountingIO(JsoncConfigIO):
+        def __init__(self) -> None:
+            self.saves = 0
+
+        def save(self, path, data):
+            self.saves += 1
+            return super().save(path, data)
+
+    path = tmp_path / "config.json"
+    path.write_text(
+        json.dumps(
+            {"providers": {"broken": {"type": "chat_completions"}}, "models": {}}
+        ),
+        encoding="utf-8",
+    )
+    io = _CountingIO()
+    ctx = OpsContext(config_io=io, config_path=str(path))
+
+    first_raw = json.loads(path.read_text(encoding="utf-8"))
+    first = asyncio.run(OpsProviderValidation(ctx, first_raw, persist=True).execute())
+    assert [item["provider"] for item in first["disabled"]] == ["broken"]
+    assert io.saves == 1
+
+    second_raw = json.loads(path.read_text(encoding="utf-8"))
+    second = asyncio.run(OpsProviderValidation(ctx, second_raw, persist=True).execute())
+    assert [item["provider"] for item in second["disabled"]] == ["broken"]
+    assert io.saves == 1, "an unchanged fault must not rewrite the document"
+
+
+def test_a_recovery_only_run_says_so_in_its_message():
+    """The audit line must not read "passed" while the document changed."""
+    op = OpsProviderValidation(OpsContext(), {"providers": {}})
+
+    message = op._message({"disabled": [], "recovered": ["argo"]})
+
+    assert "Recovered automatically disabled providers: argo" in message

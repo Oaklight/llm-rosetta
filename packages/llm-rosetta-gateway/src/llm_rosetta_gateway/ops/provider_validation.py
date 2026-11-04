@@ -46,8 +46,9 @@ class OpsProviderValidation(OpsBase):
     async def _run(self) -> dict[str, Any]:
         providers = self._raw.get("providers", {})
         disabled: list[dict[str, str]] = []
+        recovered: list[str] = []
         if not isinstance(providers, dict):
-            return {"disabled": disabled}
+            return {"disabled": disabled, "recovered": recovered}
 
         # Scan first and apply mutations afterwards.  This keeps the decision
         # independent of iteration order and makes one persistence write enough.
@@ -66,13 +67,24 @@ class OpsProviderValidation(OpsBase):
                     )
                 )
                 continue
-            if cfg.get("enabled", True) is False:
+            # An entry the gateway disabled itself is revalidated on every
+            # load: the marker is our state, not the operator's switch.  An
+            # entry without one was turned off by hand and is left alone.
+            auto_disabled = bool(cfg.get("_auto_disabled"))
+            if cfg.get("enabled", True) is False and not auto_disabled:
                 continue
             issue = _validate_provider(
                 provider_name, cfg, self._report, _global_proxy(self._raw)
             )
             if issue is not None:
                 issues.append((provider_name, issue))
+            elif auto_disabled:
+                recovered.append(provider_name)
+
+        for name in recovered:
+            cfg = providers[name]
+            cfg.pop("_auto_disabled", None)
+            cfg["enabled"] = True
 
         for name, issue in issues:
             cfg = providers[name]
@@ -96,35 +108,76 @@ class OpsProviderValidation(OpsBase):
                 item["shim"] = issue.shim
             disabled.append(item)
 
-        if disabled and self._persist and self._ctx.config_io and self._ctx.config_path:
-            # Re-read the raw document so `${ENV_VAR}` placeholders are not
-            # replaced by values from the runtime-resolved config.
-            disk_raw = self._ctx.config_io.load_raw(self._ctx.config_path)
-            disk_providers = disk_raw.setdefault("providers", {})
-            for item in disabled:
-                disk_cfg = disk_providers.get(item["provider"])
-                if isinstance(disk_cfg, dict):
-                    disk_cfg["enabled"] = False
-                    marker = {
-                        "reason": item["reason"],
-                        "category": item["category"],
-                    }
-                    if item.get("shim"):
-                        marker["shim"] = item["shim"]
-                    disk_cfg["_auto_disabled"] = marker
+        self._persist_state(disabled, recovered)
+        return {"disabled": disabled, "recovered": recovered}
+
+    def _persist_state(
+        self, disabled: list[dict[str, str]], recovered: list[str]
+    ) -> None:
+        """Write the markers and the recoveries into the config document.
+
+        Only what differs is written.  A lane whose fault has not gone away
+        re-enters ``disabled`` on every load, and rewriting an unchanged
+        document each time moves its mtime and drops its comments for a
+        change that did not happen.
+        """
+        if not (disabled or recovered):
+            return
+        if not (self._persist and self._ctx.config_io and self._ctx.config_path):
+            return
+        # Re-read the raw document so `${ENV_VAR}` placeholders are not
+        # replaced by values from the runtime-resolved config.
+        disk_raw = self._ctx.config_io.load_raw(self._ctx.config_path)
+        disk_providers = disk_raw.setdefault("providers", {})
+        changed = False
+        for item in disabled:
+            disk_cfg = disk_providers.get(item["provider"])
+            if not isinstance(disk_cfg, dict):
+                continue
+            marker = {
+                "reason": item["reason"],
+                "category": item["category"],
+            }
+            if item.get("shim"):
+                marker["shim"] = item["shim"]
+            if disk_cfg.get("enabled") is not False or (
+                disk_cfg.get("_auto_disabled") != marker
+            ):
+                disk_cfg["enabled"] = False
+                disk_cfg["_auto_disabled"] = marker
+                changed = True
+        for name in recovered:
+            disk_cfg = disk_providers.get(name)
+            if isinstance(disk_cfg, dict) and (
+                disk_cfg.get("enabled") is not True or "_auto_disabled" in disk_cfg
+            ):
+                disk_cfg.pop("_auto_disabled", None)
+                disk_cfg["enabled"] = True
+                changed = True
+        if changed:
             self._ctx.config_io.save(self._ctx.config_path, disk_raw)
-        return {"disabled": disabled}
 
     def _message(self, result: Any) -> str:
-        disabled = (result or {}).get("disabled", [])
-        if not disabled:
-            return "Provider configuration validation passed"
-        return "Automatically disabled invalid providers: " + ", ".join(
-            item["provider"] for item in disabled
-        )
+        result = result or {}
+        disabled = result.get("disabled", [])
+        recovered = result.get("recovered", [])
+        parts = []
+        if disabled:
+            parts.append(
+                "Automatically disabled invalid providers: "
+                + ", ".join(item["provider"] for item in disabled)
+            )
+        if recovered:
+            parts.append(
+                "Recovered automatically disabled providers: " + ", ".join(recovered)
+            )
+        return "; ".join(parts) if parts else "Provider configuration validation passed"
 
     def _details(self, result: Any) -> dict[str, Any]:
-        return {"disabled": (result or {}).get("disabled", [])}
+        return {
+            "disabled": (result or {}).get("disabled", []),
+            "recovered": (result or {}).get("recovered", []),
+        }
 
 
 class ProviderIssue:
