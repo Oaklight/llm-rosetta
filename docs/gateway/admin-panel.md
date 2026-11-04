@@ -44,9 +44,24 @@ title: 管理面板
 
 API Key 字段自动识别逗号分隔的多个密钥，并切换为多条目列表 —— 每个密钥一行密码输入框。**+ Add key** 随时追加一行；每行有显示 / 隐藏切换与复制按钮，底部提供整段逗号分隔值的"查看全部"和"复制全部"。卡片上显示的脱敏 Key 不会被写回配置文件。
 
-### 登录 shim 声明的凭据
+### 凭据来源
 
-shim 随包提供 `auth.py` 的提供方没有可填写的密钥 —— 交换通过需要浏览器的登录来生成凭据。编辑这类提供方时，API Key 输入框会换成 **Credential** 区，读取 `GET /admin/api/config/providers/<name>/credential`：
+自己生成 token 的提供方没有可填写的密钥。编辑这类提供方时，API Key 输入框会换成 **Credential** 区；它读取 `GET /admin/api/config/providers/<name>/credential`，并以只读方式写明实际生效的来源：
+
+| 来源 | 含义 |
+|------|------|
+| 配置文件中的命令 | 提供方条目声明了 `token_command`；argv 可在此编辑 |
+| Shim 声明的命令 | 厂商 Shim 声明了 `connection.token_command`；argv 只读，间隔可覆盖 |
+| Shim 登录（`auth.py`） | 交换通过需要浏览器的登录来生成凭据 |
+| 静态 Key | 普通的 API Key 输入框 —— 不显示 Credential 区 |
+
+该区显示实时的 `token_status`：上次取 token、连续失败次数、最近错误、是否需要交互登录，以及首个 token 尚未返回时的 `initializing`。页面只显示指纹（命令为 `cmd:<sha256>`，密钥为 `key:<sha256>`）与时间，不显示 token 本身。
+
+**立即刷新**（`POST …/credential/refresh`）会跳过定时周期重新取 token —— 上游 401 路径会对突发去抖，这个按钮不会。**测试凭据**（`POST …/credential/test`）会取一次 token 并用它请求提供方的模型列表端点；返回值说明上游是否接受该凭据，因此不会把“命令退出码为 0”误当成“账号可用”。
+
+来自配置文件的命令在同一区里编辑：argv（字符串非空数组组成的 JSON 数组）、`token_command_env` 与 `token_refresh_interval`（至少 60 秒）。Shim 自带的 argv 只读，其间隔可覆盖。argv 或间隔不合法时，面板会在请求发出前拒绝。
+
+对于 Shim 的 `auth.py` 交换，该区保留记录操作：
 
 | 状态 | 面板显示 |
 |------|----------|
@@ -54,7 +69,9 @@ shim 随包提供 `auth.py` 的提供方没有可填写的密钥 —— 交换�
 | 需要登录 | 尚无凭据 —— **安装记录** |
 | 无法读取 | 记录存在但读不出来 —— 可安装新记录或退出登录 |
 
-**安装记录** 接收 CLI 打印的 JSON（`llm-rosetta-gateway credential <provider>`，见 [CLI 参考](cli.md#credential-provider)），经 `PUT …/credential` 交给交换；校验不通过的记录会带着交换自己的说明被拒绝。**退出登录** 调用 `DELETE`：厂商允许时会在上游撤销授权，并立刻把令牌从网关的 key ring 中移除。面板从不渲染令牌，只显示交换愿意给出的账号与到期时间。
+**安装记录** 接收 CLI 打印的 JSON（`llm-rosetta-gateway credential <provider>`，见 [CLI 参考](cli.md#credential-provider)），经 `PUT …/credential` 交给交换；校验不通过的记录会带着交换自己的说明被拒绝。**退出登录** 调用 `DELETE`：厂商允许时会在上游撤销授权，并立刻把令牌从网关的 key ring 中移除。
+
+保存或启用提供方前，会先在内存中构建相关提供方。加载器拒绝的文档返回 400 且不写配置文件，不再先落盘再返回“Config saved but reload failed”。Key 槽里存着字面量 `token_command` 的旧条目会在下次保存时被修复：该字面量被删除，而不是写回。
 
 ## 模型（Models）
 
