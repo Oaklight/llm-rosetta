@@ -45,9 +45,20 @@ def _send(sock: socket.socket, message: dict[str, Any]) -> bool:
         return False
 
 
-def _render_sample(sample: dict[str, Any], args: argparse.Namespace) -> None:
-    """Print one sample as a compact line."""
-    db = sample.get("db") or {}
+def _render_sample(
+    sample: dict[str, Any],
+    args: argparse.Namespace,
+    last: dict[str, Any] | None = None,
+) -> None:
+    """Print one sample as a compact line.
+
+    The monitor reads the request-log summary every 10 s, so most samples
+    carry ``db: None``.  *last* keeps the previous summary so the line still
+    shows the request rate and latency between reads.
+    """
+    db = sample.get("db") or (last or {}).get("db") or {}
+    if last is not None and sample.get("db"):
+        last["db"] = sample["db"]
     fields = [
         (sample.get("ts") or "")[11:19],
         f"cpu {_fmt(sample.get('cpu_pct'), '%')}",
@@ -102,18 +113,30 @@ def _render_profile(profile: dict[str, Any]) -> None:
     print(flush=True)
 
 
-def _render_snapshot(snapshot: dict[str, Any], args: argparse.Namespace) -> None:
+def _render_snapshot(
+    snapshot: dict[str, Any],
+    args: argparse.Namespace,
+    last: dict[str, Any] | None = None,
+) -> None:
     """Print the samples returned for a snapshot request."""
     samples = snapshot.get("samples") or []
     print(f"snapshot: {len(samples)} samples", flush=True)
     if samples:
-        _render_sample(samples[-1], args)
+        if last is not None:
+            for sample in samples:
+                if sample.get("db"):
+                    last["db"] = sample["db"]
+        _render_sample(samples[-1], args, last)
     profile = snapshot.get("profile")
     if profile:
         _render_profile(profile)
 
 
-def _render(message: dict[str, Any], args: argparse.Namespace) -> None:
+def _render(
+    message: dict[str, Any],
+    args: argparse.Namespace,
+    last: dict[str, Any] | None = None,
+) -> None:
     """Dispatch one server message."""
     kind = message.get("type")
     if kind == "hello":
@@ -123,9 +146,9 @@ def _render(message: dict[str, Any], args: argparse.Namespace) -> None:
             flush=True,
         )
     elif kind == "snapshot":
-        _render_snapshot(message, args)
+        _render_snapshot(message, args, last)
     elif kind == "sample":
-        _render_sample(message, args)
+        _render_sample(message, args, last)
     elif kind == "profile":
         _render_profile(message)
     elif kind == "ack":
@@ -191,6 +214,7 @@ def main(argv: list[str] | None = None) -> int:
         _send(sock, {"cmd": "profile", "seconds": args.profile})
 
     buffer = b""
+    last: dict[str, Any] = {}
     try:
         while True:
             ready, _, _ = select.select([sock], [], [], 1.0)
@@ -217,7 +241,7 @@ def main(argv: list[str] | None = None) -> int:
                     message = json.loads(line)
                 except ValueError:
                     continue
-                _render(message, args)
+                _render(message, args, last)
     except KeyboardInterrupt:
         pass
     finally:
