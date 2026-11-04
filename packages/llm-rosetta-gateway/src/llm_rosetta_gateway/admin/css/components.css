@@ -1381,7 +1381,13 @@ th.sortable:focus-visible { outline:2px solid var(--accent);outline-offset:-2px;
   -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 14px), transparent);
   mask-image: linear-gradient(to right, #000 calc(100% - 14px), transparent);
 }
-body { padding-bottom: 26px; }
+/* The clearance for the fixed status footer stays where base.css already puts
+   it (`.content { padding: 24px 24px 56px }`).  It must not move to `body`:
+   there it sits outside `.app-shell`, so the document is 26px taller than the
+   viewport even when the content fits, and the sticky rail — whose bottom is
+   bounded by the shell — is pushed up by that much at maximum scroll (issue
+   #1379).  Nor does it need a second value here: an override would lower the
+   56px the base rule reserves for exactly this bar. */
 
 /* ═══ Logo picker ═══ */
 .lp-wrapper { position:relative; }
@@ -1549,14 +1555,14 @@ body { padding-bottom: 26px; }
    which hides the last ones; five equal targets do not have that trade-off,
    and they sit in the thumb's reach. */
 @media (max-width: 768px) {
-  body { padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
-
   .header { padding: 10px 14px; flex-wrap: nowrap; gap: 8px; }
   .header > div:first-child { min-width: 0; overflow: hidden; }
   .header h1 { font-size: 15px; overflow: hidden; text-overflow: ellipsis; }
   .header-right { flex-shrink: 0; gap: 6px; }
   .header-right [data-i18n="label.systemTime"] { display: none; }
-  .content { padding: 14px; }
+  /* Same clearance rule as the desktop one, sized for the tab bar and the
+     footer stacked at the bottom; kept on `.content`, not `body`. */
+  .content { padding: 14px; padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
 
   .tabs {
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 80;
