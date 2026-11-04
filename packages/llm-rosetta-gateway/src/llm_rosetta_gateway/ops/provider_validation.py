@@ -8,6 +8,7 @@ from llm_rosetta_gateway.observability.ops_log import (
     EVENT_PROVIDER_VALIDATION,
     SEVERITY_WARNING,
     SOURCE_CONFIG,
+    OpsLogEntry,
 )
 from llm_rosetta.shims import get_shim
 
@@ -178,6 +179,32 @@ class OpsProviderValidation(OpsBase):
             "disabled": (result or {}).get("disabled", []),
             "recovered": (result or {}).get("recovered", []),
         }
+
+
+def startup_validation_entry(result: Any) -> OpsLogEntry | None:
+    """The audit row for a load-time validation run, or ``None`` if it changed nothing.
+
+    The startup path runs before the ops log exists, so the run itself cannot
+    record (issue #1386).  It leaves its result on the config instead, and the
+    gateway writes this row once the log is open — the first disable, usually
+    the decisive one, is then not the one missing from the audit trail.
+
+    Args:
+        result: ``{"disabled": [...], "recovered": [...]}`` as the op returned it.
+
+    Returns:
+        An entry to add, or ``None`` when the run disabled and recovered nothing.
+    """
+    if not result or not (result.get("disabled") or result.get("recovered")):
+        return None
+    op = OpsProviderValidation(OpsContext(), {})
+    return OpsLogEntry.create(
+        event_type=OpsProviderValidation.event_type,
+        severity=OpsProviderValidation.severity,
+        message=op._message(result),
+        details=op._details(result),
+        source=OpsProviderValidation.source,
+    )
 
 
 class ProviderIssue:

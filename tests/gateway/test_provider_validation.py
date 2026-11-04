@@ -248,3 +248,142 @@ def test_a_recovery_only_run_says_so_in_its_message():
     message = op._message({"disabled": [], "recovered": ["argo"]})
 
     assert "Recovered automatically disabled providers: argo" in message
+
+
+def test_a_startup_run_leaves_an_audit_row():
+    """The load-time run happens before the log exists; its row is written later."""
+    from llm_rosetta_gateway.ops import startup_validation_entry
+
+    entry = startup_validation_entry(
+        {
+            "disabled": [{"provider": "argo", "reason": "r", "category": "c"}],
+            "recovered": [],
+        }
+    )
+
+    assert entry is not None
+    assert entry.event_type == "provider_validation"
+    assert "Automatically disabled invalid providers: argo" in entry.message
+    assert entry.details is not None
+    assert entry.details["disabled"][0]["provider"] == "argo"
+
+
+def test_a_quiet_startup_writes_no_row():
+    from llm_rosetta_gateway.ops import startup_validation_entry
+
+    assert startup_validation_entry(None) is None
+    assert startup_validation_entry({"disabled": [], "recovered": []}) is None
+
+
+def test_a_recovery_only_startup_writes_a_row():
+    """Re-enabling a provider is a decision an operator looks for in the log.
+
+    The guard accepts a run that recovered something and disabled nothing;
+    dropping that half leaves the recovery out of the trail silently.
+    """
+    from llm_rosetta_gateway.ops import startup_validation_entry
+
+    entry = startup_validation_entry({"disabled": [], "recovered": ["argo"]})
+
+    assert entry is not None
+    assert "Recovered automatically disabled providers: argo" in entry.message
+
+
+class _StubLog:
+    def __init__(self):
+        self.entries = []
+
+    async def add(self, entry):
+        self.entries.append(entry)
+
+
+def _startup_app(result):
+    from types import SimpleNamespace
+
+    return SimpleNamespace(
+        ops_log=_StubLog(),
+        gateway_config=SimpleNamespace(
+            providers={},
+            models={},
+            provider_validation_result=result,
+        ),
+    )
+
+
+def test_the_startup_rows_land_in_validations_order():
+    """The load-time decision is written before the boot line, not after."""
+
+    from llm_rosetta_gateway.app.factory import _record_startup_entries
+
+    app = _startup_app(
+        {
+            "disabled": [{"provider": "argo", "reason": "r", "category": "c"}],
+            "recovered": [],
+        }
+    )
+    asyncio.run(_record_startup_entries(app, "127.0.0.1", 8080))
+
+    assert [entry.event_type for entry in app.ops_log.entries] == [
+        "provider_validation",
+        "startup",
+    ]
+    assert "argo" in app.ops_log.entries[0].message
+
+
+def test_a_quiet_load_writes_only_the_startup_row():
+
+    from llm_rosetta_gateway.app.factory import _record_startup_entries
+
+    app = _startup_app(None)
+    asyncio.run(_record_startup_entries(app, "127.0.0.1", 8080))
+
+    assert [entry.event_type for entry in app.ops_log.entries] == ["startup"]
+
+
+def test_an_app_without_a_log_is_left_alone():
+    from types import SimpleNamespace
+
+    from llm_rosetta_gateway.app.factory import _record_startup_entries
+
+    asyncio.run(_record_startup_entries(SimpleNamespace(), "127.0.0.1", 8080))
+
+
+def test_the_load_hands_the_validation_result_to_the_config(tmp_path):
+    """The CLI's run cannot record itself; the config carries the result.
+
+    This is the link between the load-time decision and the row the factory
+    writes: without the assignment the field stays ``None`` and the disable is
+    silently unrecorded.
+    """
+    import argparse
+
+    from llm_rosetta_gateway.cli import _load_startup_config
+
+    path = tmp_path / "gateway.jsonc"
+    path.write_text(
+        json.dumps(
+            {
+                "providers": {
+                    "broken": {"type": "chat_completions", "base_url": ""},
+                },
+                "models": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+    args = argparse.Namespace(proxy=None, data_dir=None, tls_cert=None, tls_key=None)
+
+    config, _ = _load_startup_config(str(path), args)
+
+    result = config.provider_validation_result
+    assert result is not None
+    assert result["disabled"][0]["provider"] == "broken"
+
+
+def test_a_config_that_never_ran_validation_reads_as_none():
+    """The factory reads the attribute unconditionally, so it always exists."""
+    from llm_rosetta_gateway.config import GatewayConfig
+
+    config = GatewayConfig({"providers": {}, "models": {}})
+
+    assert config.provider_validation_result is None
