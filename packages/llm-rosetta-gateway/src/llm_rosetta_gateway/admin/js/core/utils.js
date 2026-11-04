@@ -9,6 +9,7 @@
 import { S, INACTIVITY_TIMEOUT_MS } from './state.js';
 import { t } from './i18n.js';
 import { shimBrand } from './shim-tree.js';
+import { esc } from './html.js';
 
 // ===================== Scheme + Mode =====================
 const VALID_SCHEMES = ['minimal', 'emerald'];
@@ -310,16 +311,8 @@ function positionMenu(menu, trigger) {
 }
 
 // ===================== Helpers =====================
-// esc() escapes HTML special chars AND single quotes so the result is
-// safe in both HTML text nodes and single-quoted JS-string attributes
-// such as onclick="fn('${esc(name)}')".
-function esc(s) {
-  const d = document.createElement('div');
-  d.textContent = s;
-  // innerHTML escapes &, <, > and " but NOT '.  Replace ' last to avoid
-  // double-encoding the & in the &#39; entity.
-  return d.innerHTML.replace(/'/g, '&#39;');
-}
+// esc() lives in core/html.js so markup can be tested without a DOM; it is
+// re-exported here for the modules that already import it from utils.
 
 function formatDuration(seconds) {
   const sec = t('unit.secondsShort'), min = t('unit.minutesShort'), hr = t('unit.hoursShort');
