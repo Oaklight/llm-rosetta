@@ -377,3 +377,49 @@ def test_watch_marks_a_truncated_window(watch, capsys):
     watch._render_sample(sample, SimpleNamespace(threads=False, pairs=False))
 
     assert "TRUNCATED" in capsys.readouterr().out
+
+
+def _db_summary(rps: float) -> dict[str, float]:
+    return {
+        "rps": rps,
+        "stream_pct": 0.5,
+        "conversion_p95_ms": 10.0,
+        "upstream_p95_ms": 20.0,
+    }
+
+
+def test_watch_carries_the_last_db_summary(watch, capsys):
+    args = SimpleNamespace(threads=False, pairs=False)
+    last: dict = {}
+
+    watch._render_sample(
+        {"ts": "2026-11-03T00:00:00+00:00", "db": _db_summary(1.5)}, args, last
+    )
+    capsys.readouterr()
+    watch._render_sample({"ts": "2026-11-03T00:00:01+00:00", "db": None}, args, last)
+
+    assert "rps 1.5" in capsys.readouterr().out
+
+    # A later read replaces the carried summary; it is not set once.
+    watch._render_sample(
+        {"ts": "2026-11-03T00:00:02+00:00", "db": _db_summary(2.0)}, args, last
+    )
+    capsys.readouterr()
+    watch._render_sample({"ts": "2026-11-03T00:00:03+00:00", "db": None}, args, last)
+
+    assert "rps 2.0" in capsys.readouterr().out
+
+
+def test_watch_snapshot_seeds_the_summary_from_the_window(watch, capsys):
+    snapshot = {
+        "samples": [
+            {"ts": "2026-11-03T00:00:00+00:00", "db": _db_summary(2.0)},
+            {"ts": "2026-11-03T00:00:01+00:00", "db": None},
+        ]
+    }
+
+    watch._render_snapshot(
+        snapshot, SimpleNamespace(threads=False, pairs=False), last={}
+    )
+
+    assert "rps 2.0" in capsys.readouterr().out
