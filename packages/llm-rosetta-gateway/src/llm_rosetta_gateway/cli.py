@@ -732,6 +732,10 @@ def _load_startup_config(
     config = GatewayConfig(
         raw_config, maintenance=reader.last_load_registry, config_path=config_path
     )
+    # The ops log is not open yet, so the run cannot record itself.  Leave the
+    # result on the config; run_gateway writes the row once the log exists
+    # (issue #1386: the startup disable was the one missing from the audit).
+    config.provider_validation_result = recovery_result
     return config, shim_source_report
 
 

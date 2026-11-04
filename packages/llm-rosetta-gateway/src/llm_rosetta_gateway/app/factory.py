@@ -512,6 +512,51 @@ async def create_app(
     return app
 
 
+async def _record_startup_entries(app: Any, host: str, port: int) -> None:
+    """Write the load-time validation row, then the startup row.
+
+    The validation ran before this log existed (issue #1386), so its result
+    rides on the config and is written here, first: an audit reader sees the
+    reason before the boot line.  A quiet load writes only the startup row.
+
+    ``app`` is typed loosely because that is all this reads: ``ops_log`` and
+    ``gateway_config``, through ``getattr``, so a test can hand it a stand-in
+    instead of a served application.
+    """
+    ops_log = getattr(app, "ops_log", None)
+    if ops_log is None:
+        return
+
+    from llm_rosetta_gateway.observability.ops_log import (
+        EVENT_STARTUP,
+        OpsLogEntry,
+        SEVERITY_INFO,
+        SOURCE_GATEWAY,
+    )
+    from llm_rosetta_gateway.ops.provider_validation import startup_validation_entry
+
+    config = getattr(app, "gateway_config", None)
+    validation_entry = startup_validation_entry(
+        config.provider_validation_result if config is not None else None
+    )
+    if validation_entry is not None:
+        await ops_log.add(validation_entry)
+    await ops_log.add(
+        OpsLogEntry.create(
+            event_type=EVENT_STARTUP,
+            severity=SEVERITY_INFO,
+            message=f"Gateway starting on {host}:{port}",
+            details={
+                "host": host,
+                "port": port,
+                "provider_count": len(config.providers) if config else 0,
+                "model_count": len(config.models) if config else 0,
+            },
+            source=SOURCE_GATEWAY,
+        )
+    )
+
+
 async def run_gateway(
     app: App,
     host: str,
@@ -524,31 +569,7 @@ async def run_gateway(
     # Expose bind address so admin test tasks can self-call.
     setattr(app, "_bind_host", host)
     setattr(app, "_bind_port", port)
-    # Record startup event
-    ops_log = getattr(app, "ops_log", None)
-    if ops_log is not None:
-        from llm_rosetta_gateway.observability.ops_log import (
-            EVENT_STARTUP,
-            OpsLogEntry,
-            SEVERITY_INFO,
-            SOURCE_GATEWAY,
-        )
-
-        config = getattr(app, "gateway_config", None)
-        await ops_log.add(
-            OpsLogEntry.create(
-                event_type=EVENT_STARTUP,
-                severity=SEVERITY_INFO,
-                message=f"Gateway starting on {host}:{port}",
-                details={
-                    "host": host,
-                    "port": port,
-                    "provider_count": len(config.providers) if config else 0,
-                    "model_count": len(config.models) if config else 0,
-                },
-                source=SOURCE_GATEWAY,
-            )
-        )
+    await _record_startup_entries(app, host, port)
 
     flush_task = asyncio.create_task(_periodic_flush(app))
     cleanup_task = asyncio.create_task(_periodic_cleanup(app))

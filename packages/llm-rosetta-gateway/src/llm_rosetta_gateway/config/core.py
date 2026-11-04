@@ -96,6 +96,9 @@ class GatewayConfig:
     # Every lane each model names, disabled providers included: the Routing
     # board reads this so a lane the gateway took out does not disappear.
     declared_model_lanes: dict[str, list[dict[str, Any]]]
+    # What the load-time provider validation did.  Written by the CLI startup
+    # path before the ops log exists; run_gateway records it (issue #1386).
+    provider_validation_result: dict[str, Any] | None
     _same_format: SameFormatStage
     _selection: RoutingChain
     admin_cors_origins: list[str]
@@ -273,6 +276,9 @@ class GatewayConfig:
 
         raw_models = raw.get("models", {})
         self.declared_model_lanes = declared_model_lanes(raw_models, all_providers)
+        # Filled by the CLI's load-time validation run, read once by the
+        # factory when it opens the ops log (issue #1386).
+        self.provider_validation_result: dict[str, Any] | None = None
         (
             self.model_url_templates,
             self.model_stream_url_templates,
