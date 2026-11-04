@@ -19,6 +19,7 @@ from llm_rosetta_gateway.admin.routes.auth import _set_session_cookie, admin_che
 from llm_rosetta_gateway.admin.routes.config.settings import put_server_settings
 from llm_rosetta_gateway.config import GatewayConfig, JsoncConfigIO
 from llm_rosetta_gateway.middleware.auth import (
+    ADMIN_COOKIE_NAME,
     DEFAULT_SESSION_IDLE_MINUTES,
     DEFAULT_SESSION_REMEMBER_DAYS,
     AuthState,
@@ -152,7 +153,7 @@ class TestAuthCheck:
     async def test_reports_the_lifetimes(self):
         state = _state(session_idle_minutes=15, session_remember_days=7)
         state.admin_password = "pw"
-        request = SimpleNamespace(app=SimpleNamespace(auth_state=state))
+        request = SimpleNamespace(app=SimpleNamespace(auth_state=state), cookies={})
 
         payload = json.loads((await admin_check(request)).body)
 
@@ -160,7 +161,27 @@ class TestAuthCheck:
             "requires_auth": True,
             "idle_minutes": 15,
             "remember_days": 7,
+            "remembered": False,
         }
+
+    @pytest.mark.asyncio
+    async def test_reports_whether_the_callers_session_is_remembered(self):
+        """The panel needs its own answer: a remembered session arms no idle timer."""
+        state = _state(session_idle_minutes=15, session_remember_days=7)
+        state.admin_password = "pw"
+        plain = state.create_session()
+        remembered = state.create_session(remember=True)
+
+        async def _ask(cookies):
+            request = SimpleNamespace(
+                app=SimpleNamespace(auth_state=state), cookies=cookies
+            )
+            return json.loads((await admin_check(request)).body)
+
+        assert (await _ask({ADMIN_COOKIE_NAME: plain}))["remembered"] is False
+        assert (await _ask({ADMIN_COOKIE_NAME: remembered}))["remembered"] is True
+        assert (await _ask({}))["remembered"] is False
+        assert (await _ask({ADMIN_COOKIE_NAME: "stale"}))["remembered"] is False
 
 
 def _request(tmp_path, raw: dict, body: dict) -> SimpleNamespace:

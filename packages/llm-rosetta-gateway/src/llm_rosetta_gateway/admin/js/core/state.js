@@ -38,6 +38,10 @@ export const S = {
   // session lasts (0 = the login page does not offer it).
   idleMinutes: undefined,
   rememberDays: undefined,
+  // Whether the session on screen is a "stay signed in" one.  Such a session
+  // is exempt from the idle window on the server, so the panel arms no
+  // inactivity timer for it — the timer signs the session out.
+  rememberedSession: false,
   _credentialVisible: true,
   _providerFilter: 'all',
   _modelDomain: 'all',
