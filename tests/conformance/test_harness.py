@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import time
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -157,7 +158,7 @@ def test_compare_reports_only_new_fields():
     assert compare_provider(current, None) == {"T": ["a", "b"], "U": ["x"]}
 
 
-def test_drift_probe_fails_on_new_drift_and_skips_on_version_change():
+def test_drift_probe_fails_on_new_drift_and_compares_across_a_version_change():
     data = {"drift": {"T": ["b"]}, "collisions": []}
     baseline = {
         "sdk_versions": {"pkg": "1.0"},
@@ -167,11 +168,52 @@ def test_drift_probe_fails_on_new_drift_and_skips_on_version_change():
     with pytest.raises(ProbeFailure, match="new drift"):
         _DriftProbe("p", data, baseline, {"pkg": "1.0"}).run()
 
-    with pytest.raises(ProbeSkip, match="SDK versions changed"):
-        _DriftProbe("p", data, baseline, {"pkg": "2.0"}).run()
+    # A release that adds no field passes, and says which pair it compared:
+    # a stale baseline must not disable the suite (issue #1389).
+    result = _DriftProbe(
+        "p", {"drift": {"T": ["a"]}, "collisions": []}, baseline, {"pkg": "2.0"}
+    ).run()
+    assert result["new"] == {}
+    assert result["baseline_sdk_versions"] == {"pkg": "1.0"}
+    assert result["sdk_versions"] == {"pkg": "2.0"}
+    assert "compared anyway" in result["note"]
 
     with pytest.raises(ProbeSkip, match="no baseline"):
         _DriftProbe("p", data, {}, {"pkg": "1.0"}).run()
+
+
+def test_a_version_change_does_not_hide_new_drift():
+    """The two halves in one run: a moved version *and* a new field.
+
+    Comparing only when the versions match would satisfy the benign-release
+    case above and quietly restore the skip.
+    """
+    baseline = {
+        "sdk_versions": {"pkg": "1.0"},
+        "providers": {"p": {"drift": {"T": ["a"]}}},
+    }
+
+    with pytest.raises(ProbeFailure, match="new drift"):
+        _DriftProbe(
+            "p",
+            {"drift": {"T": ["a", "b"]}, "collisions": []},
+            baseline,
+            {"pkg": "2.0"},
+        ).run()
+
+
+def test_ci_runs_every_suite():
+    """A suite no job runs is asleep, and every test here stays green.
+
+    The drift step is the one that keeps this suite from silently skipping
+    (issue #1389); the same rule holds for the rest.
+    """
+    workflow = (
+        Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml"
+    ).read_text()
+
+    missing = [name for name in SUITES if f"--suite {name}" not in workflow]
+    assert not missing, f"CI runs no step for: {', '.join(missing)}"
 
 
 def test_cli_writes_the_report(monkeypatch, tmp_path):

@@ -2,8 +2,13 @@
 
 One case per provider.  A case fails when a field the baseline did not have
 appears in a replica; fields that disappear are reported but are not a
-failure.  A different SDK version means the baseline is not comparable, so
-the case is skipped rather than reported as a regression.
+failure.
+
+A version change does **not** stop the comparison.  It used to: a baseline
+recorded against older SDKs skipped every case, which meant a stale baseline
+silently disabled the whole suite (issue #1389).  The scan compares against
+the baseline regardless and records the version pair in the case, so a benign
+release passes and a real type change is still a failure.
 """
 
 from __future__ import annotations
@@ -63,12 +68,12 @@ class _DriftProbe:
     def run(self) -> dict[str, Any]:
         if not self._baseline:
             raise ProbeSkip("no baseline committed yet")
-        if self._baseline.get("sdk_versions") != self._sdk_versions:
-            raise ProbeSkip(
-                "SDK versions changed since the baseline; refresh it with "
-                "`python -c 'from tools.conformance.suites.drift import "
-                "write_baseline; write_baseline()'`"
-            )
+        baseline_versions = self._baseline.get("sdk_versions")
+        note = None
+        if baseline_versions != self._sdk_versions:
+            # Compare anyway: the baseline is a field set, and a release that
+            # adds nothing is not a reason to stop looking (issue #1389).
+            note = "SDK versions changed since the baseline; compared anyway"
 
         baseline_provider = self._baseline.get("providers", {}).get(self.name)
         added = compare_provider(self._data, baseline_provider)
@@ -79,6 +84,9 @@ class _DriftProbe:
             "drift": self._data.get("drift", {}),
             "collisions": self._data.get("collisions", []),
             "new": added,
+            "sdk_versions": self._sdk_versions,
+            "baseline_sdk_versions": baseline_versions,
+            "note": note,
         }
 
 

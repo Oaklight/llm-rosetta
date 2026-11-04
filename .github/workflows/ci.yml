@@ -233,7 +233,7 @@ jobs:
         run: python -m pytest tests/test_types/ tests/converters/ -q
 
   conformance:
-    # The wire, fields, request-fields and stream-events suites are offline and
+    # The wire, fields, drift, request-fields and stream-events suites are offline and
     # deterministic, so they can gate every PR: their committed baselines turn a
     # conversion behaviour change into a named diff (`generation.top_k: lost`)
     # or a new upstream field rather than a flaky red build.  Upstream probing —
@@ -265,6 +265,9 @@ jobs:
       - name: Run the fields suite against its ledger
         run: python -m tools.conformance run --suite fields --out fields-report.json
 
+      - name: Run the drift suite against its baseline
+        run: python -m tools.conformance run --suite drift --out drift-report.json
+
       - name: Run the request-fields suite against its ledger
         run: >-
           python -m tools.conformance run --suite request-fields
@@ -283,6 +286,7 @@ jobs:
           path: |
             wire-report.json
             fields-report.json
+            drift-report.json
             request-fields-report.json
             stream-events-report.json
           # A run that produced no report is not a run: the default warning
