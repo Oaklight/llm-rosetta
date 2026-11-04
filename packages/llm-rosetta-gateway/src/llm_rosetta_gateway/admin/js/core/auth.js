@@ -764,6 +764,9 @@ async function doLogin() {
       document.body.classList.remove('auth-pending');
       const out = document.getElementById('logoutBtn');
       if (out) out.style.display = '';
+      // The server's answer, not the checkbox: a remembered login is exempt
+      // from the idle window, and the panel arms no timer for it.
+      S.rememberedSession = !!(data && data.remember);
       _startInactivityTracking();
       window.initApp();
     } else {
@@ -790,6 +793,9 @@ async function checkAuthAndInit() {
     const authData = await authRes.json();
     if (typeof authData.idle_minutes === 'number') S.idleMinutes = authData.idle_minutes;
     if (typeof authData.remember_days === 'number') S.rememberDays = authData.remember_days;
+    // A remembered session ends with its cookie, not with the idle clock, so
+    // the panel must not arm a timer that signs it out (issue #1381).
+    S.rememberedSession = !!authData.remembered;
     if (authData.requires_auth && configRes.status === 401) {
       showLoginOverlay();
       return;

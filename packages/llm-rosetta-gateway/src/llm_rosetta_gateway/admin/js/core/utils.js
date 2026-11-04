@@ -116,6 +116,12 @@ let _inactivityTimer = null;
 const _ACTIVITY_EVENTS = ['mousemove', 'keydown', 'mousedown', 'touchstart', 'scroll', 'click'];
 
 function _idleTimeoutMs() {
+  // A remembered session is exempt from the idle window on the server, and
+  // this timer ends the session on the server (`doLogout` posts the logout).
+  // Arming it here is what signed "stay signed in" users out after half an
+  // hour of quiet (issue #1381): their cookie was still good, the panel had
+  // already destroyed the session.
+  if (S.rememberedSession) return 0;
   // undefined until /auth-check answers; the constant is the fallback so a
   // page that never reaches it still signs out.
   return typeof S.idleMinutes === 'number' ? S.idleMinutes * 60 * 1000 : INACTIVITY_TIMEOUT_MS;

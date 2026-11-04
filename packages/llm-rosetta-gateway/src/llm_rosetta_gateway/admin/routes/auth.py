@@ -233,14 +233,22 @@ async def admin_check(request: Any) -> Response:
 
     Also reports the session lifetimes, because the login page has to know
     whether "stay signed in" is on offer and how long an idle session lasts.
+
+    ``remembered`` answers for the caller's own cookie: a remembered session is
+    exempt from the idle window on the server, so the panel must not arm its
+    inactivity timer for one — that timer signs the session out, which is
+    exactly what "stay signed in" promised not to do.
     """
     auth_state = request.app.auth_state
     requires_auth = bool(auth_state.admin_password)
+    cookie_token = request.cookies.get(ADMIN_COOKIE_NAME, "")
+    session = auth_state.get_session(cookie_token) if cookie_token else None
     return JSONResponse(
         {
             "requires_auth": requires_auth,
             "idle_minutes": auth_state.session_idle_minutes,
             "remember_days": auth_state.session_remember_days,
+            "remembered": bool(session and session.remember),
         }
     )
 
