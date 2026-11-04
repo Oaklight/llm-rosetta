@@ -333,3 +333,30 @@ class TestPerProviderUpstreamModel:
             assert entry.upstream_model == "upstream-a"
         else:
             assert entry.upstream_model is None
+
+
+def test_declared_lanes_keep_a_switched_off_provider():
+    """The route drops a disabled lane; the panel's view of the document does not."""
+    providers = {
+        "a": {
+            "type": "chat_completions",
+            "api_key": "k",
+            "base_url": "https://a.example.com",
+        },
+        "b": {
+            "type": "chat_completions",
+            "api_key": "k",
+            "base_url": "https://b.example.com",
+            "enabled": False,
+        },
+    }
+    config = _make_config(
+        {"m": {"providers": [{"name": "a", "weight": 2}, {"name": "b", "weight": 3}]}},
+        providers,
+    )
+
+    assert [entry.name for entry in config.models["m"].providers] == ["a"]
+    assert config.declared_model_lanes["m"] == [
+        {"name": "a", "weight": 2, "enabled": True},
+        {"name": "b", "weight": 3, "enabled": True},
+    ]

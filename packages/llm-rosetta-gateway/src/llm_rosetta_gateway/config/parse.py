@@ -160,6 +160,61 @@ def declared_provider_names(value: Any) -> list[str]:
     return [name for name in names if name]
 
 
+def declared_model_lanes(
+    models_raw: Any, providers: dict[str, Any]
+) -> dict[str, list[dict[str, Any]]]:
+    """Every provider each model names, with its weight, in declared order.
+
+    ``parse_models`` drops a lane whose provider the operator switched off —
+    the proxy must not route it.  The admin panel needs the other view: the
+    lanes the document declares, including the ones that cannot serve, so a
+    provider the gateway took out does not vanish from the Routing board.
+
+    Args:
+        models_raw: The config document's ``models`` section, unparsed.
+        providers: Every declared provider, disabled ones included.
+
+    Returns:
+        One list per model; each item is ``{"name": ..., "weight": ...}``.
+    """
+    lanes: dict[str, list[dict[str, Any]]] = {}
+    if not isinstance(models_raw, dict):
+        return lanes
+    for model, value in models_raw.items():
+        weights: dict[str, Any] = {}
+        enabled: dict[str, bool] = {}
+        raw_list = value.get("providers") if isinstance(value, dict) else None
+        if isinstance(raw_list, list):
+            for item in raw_list:
+                if isinstance(item, dict) and isinstance(item.get("name"), str):
+                    weights.setdefault(item["name"], item.get("weight", 1))
+                    # The lane's own switch is not the provider's: a lane the
+                    # model entry turns off is a different state from a
+                    # provider that is off everywhere.
+                    enabled.setdefault(
+                        item["name"], item.get("enabled", True) is not False
+                    )
+        lanes[str(model)] = [
+            {
+                "name": name,
+                "weight": _lane_weight(weights.get(name, 1)),
+                "enabled": enabled.get(name, True),
+            }
+            for name in declared_provider_names(value)
+            if name in providers
+        ]
+    return lanes
+
+
+def _lane_weight(value: Any) -> int:
+    """A declared weight, or the default when it is not a usable one."""
+    return (
+        value
+        if isinstance(value, int) and not isinstance(value, bool) and value >= 1
+        else 1
+    )
+
+
 def extract_model_metadata(value: Any) -> tuple[list[str], str | None]:
     """Extract capabilities and upstream_model from a model entry."""
     if isinstance(value, str):

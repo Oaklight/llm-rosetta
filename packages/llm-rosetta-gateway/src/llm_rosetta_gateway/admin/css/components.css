@@ -2008,7 +2008,18 @@ button.shim-update.unknown { color: var(--yellow, #b7791f); }
 .routing-route-row.is-dragging { opacity: 0.45; }
 .routing-route-row.is-drop-before { box-shadow: inset 0 2px 0 var(--accent); }
 .routing-route-row.is-drop-after { box-shadow: inset 0 -2px 0 var(--accent); }
-.routing-who { min-width: 0; }
+.routing-who { min-width: 0; display: flex; align-items: center; gap: 8px; }
+.routing-lane-id { min-width: 0; }
+/* A lane the route does not carry keeps its row and its switch: it is still
+   the operator's lane, so the name and the switch stay legible.  Only the
+   figures that no longer apply are dimmed — a whole-row fade makes the switch
+   itself look unusable. */
+.routing-route-row.is-excluded { background: var(--bg-card); }
+.routing-route-row.is-excluded .routing-lane-id b { color: var(--text-muted); }
+.routing-route-row.is-excluded .routing-stepper,
+.routing-route-row.is-excluded .routing-allowance,
+.routing-route-row.is-excluded .routing-share { color: var(--text-dim); }
+.routing-switch { flex: none; }
 .routing-who b {
   display: block; font-weight: 500; font-size: 13px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;

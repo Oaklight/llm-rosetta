@@ -36,6 +36,11 @@ const _windowChoice = {};
 // The lane a drag started on, and the row it is over.  A drag never writes
 // until it is dropped, so an abandoned drag changes nothing.
 let _dragLane = null;
+// The lane a switch just flipped, and the row index it held when clicked.
+// The payload sorts candidates first, so without this the row the operator
+// switched off jumps to the tail — off screen when the route is long, which
+// is the same "where did it go" the provider list had.
+let _pinnedLane = null;
 // Which pane the detail column shows, and which decision row is open.
 let _pane = 'policy';
 let _openDecision = null;
@@ -228,6 +233,7 @@ function _secondsLeft(iso) {
 function _stateLabel(provider) {
   if (provider.state === 'serving') return t('routing.state.serving');
   if (provider.state === 'sunk') return t('routing.state.sunk');
+  if (provider.state === 'off') return t('routing.state.off');
   const key = 'routing.state.' + provider.state;
   const label = t(key);
   return label === key ? provider.state : label;
@@ -239,8 +245,17 @@ function _stateTone(provider) {
   return 'fail';
 }
 
-/** Where a lane actually goes: its wire format and the shim supplying it. */
+/** Where a lane actually goes: its wire format and the shim supplying it.
+ *  A lane the route does not carry says why instead: it is not going anywhere.
+ *  The server names the switch that is off; a gateway-disabled lane carries
+ *  its own diagnostic, which is the sentence worth showing. */
 function _laneSub(provider) {
+  if (provider.excluded) {
+    if (provider.reason_kind === 'auto' && provider.reason) return provider.reason;
+    return t(provider.reason_kind === 'entry'
+      ? 'routing.reason.entry'
+      : 'routing.reason.off');
+  }
   const parts = [provider.format, provider.shim || provider.upstream_model].filter(Boolean);
   return parts.join(' · ');
 }
@@ -286,6 +301,22 @@ function _statePill(provider) {
   return '';
 }
 
+/** The payload order, with the lane just toggled back where it was.
+ *
+ *  The payload puts candidates first and an off lane last, which is the right
+ *  reading order but the wrong thing to do under the pointer: the row the
+ *  operator flipped would leave the viewport.  One lane is pinned, not the
+ *  whole list, so every other change still sorts normally. */
+function _withPinnedLane(lanes) {
+  const items = lanes.slice();
+  if (!_pinnedLane) return items;
+  const from = items.findIndex((entry) => entry.name === _pinnedLane.name);
+  if (from === -1) return items;
+  const [row] = items.splice(from, 1);
+  items.splice(Math.min(_pinnedLane.index, items.length), 0, row);
+  return items;
+}
+
 /** The board: one row per candidate, in the model's declared order. */
 function _renderBoard() {
   const el = document.getElementById('routingBoard');
@@ -304,8 +335,12 @@ function _renderBoard() {
     '<span>' + esc(t('routing.col.share')) + '</span>' +
     '<span>' + esc(t('routing.col.state')) + '</span>' +
     '</div>';
-  const editable = _data.providers.length > 1;
-  const rows = _data.providers.map((provider, index) => {
+  // Drag and weights act on the lanes the route carries: an excluded lane has
+  // no share to reorder or weight, and its row stays where it is.
+  const included = _data.providers.filter((provider) => !provider.excluded);
+  const editable = included.length > 1;
+  const rows = _withPinnedLane(_data.providers).map((provider, index) => {
+    const excluded = !!provider.excluded;
     const left = _secondsLeft(provider.until);
     const until = left === null
       ? ''
@@ -347,24 +382,36 @@ function _renderBoard() {
         (shown ? ' · ' + esc(shown.name) : '') + '</small>';
     // The tooltip sits on the cell, not on the sub-line, so hovering the bar
     // itself says which windows the figure came from.
-    const allowanceTitle = headroom === null
-      ? t('routing.allowance.hint') + (windowTitle ? '\n' + windowTitle : '')
-      : (windowTitle ? windowTitle + '\n' : '') + t('routing.allowance.cycleHint');
+    const allowanceCell = excluded
+      ? '<small class="routing-sub routing-sub-muted">—</small>'
+      : allowance;
+    const allowanceTitle = excluded
+      ? t('routing.reason.off')
+      : (headroom === null
+        ? t('routing.allowance.hint') + (windowTitle ? '\n' + windowTitle : '')
+        : (windowTitle ? windowTitle + '\n' : '') + t('routing.allowance.cycleHint'));
     return (
-      '<div class="routing-route-row' + (editable ? ' is-draggable' : '') + '"' +
-      (editable ? ' draggable="true" data-lane="' + esc(provider.name) + '"' : '') + '>' +
+      '<div class="routing-route-row' + (excluded ? ' is-excluded' : '') +
+      (!excluded && editable ? ' is-draggable' : '') + '"' +
+      (!excluded && editable ? ' draggable="true" data-lane="' + esc(provider.name) + '"' : '') + '>' +
       '<span class="routing-pos">' +
-      (editable
+      (!excluded && editable
         ? '<span class="routing-grip" title="' + esc(t('routing.gripHint')) + '"' +
           ' aria-hidden="true">⠿</span>'
         : '') +
-      (index + 1) + '</span>' +
-      '<span class="routing-who"><b>' + esc(provider.name) + '</b>' +
-      '<small>' + esc(_laneSub(provider)) + '</small></span>' +
+      (excluded ? '—' : index + 1) + '</span>' +
+      '<span class="routing-who">' +
+      '<label class="toggle row-toggle routing-switch" title="' +
+      esc(excluded ? t('routing.enableLane') : t('routing.disableLane')) + '">' +
+      '<input type="checkbox" role="switch"' + (excluded ? '' : ' checked') +
+      ' aria-checked="' + (!excluded) + '" data-lane="' + esc(provider.name) + '">' +
+      '<span class="slider"></span></label>' +
+      '<span class="routing-lane-id"><b>' + esc(provider.name) + '</b>' +
+      '<small title="' + esc(_laneSub(provider)) + '">' + esc(_laneSub(provider)) + '</small></span></span>' +
       '<span class="routing-stepper">' +
       // A weight only means something between lanes: a model with one
       // provider always serves 100%, and the config refuses the edit.
-      (editable
+      (!excluded && editable
         ? '<button type="button" aria-label="' + esc(t('routing.weightLower')) + '"' +
           ' data-weight="-1" data-provider="' + esc(provider.name) + '">−</button>' +
           '<span>' + esc(String(provider.weight)) + '</span>' +
@@ -376,8 +423,8 @@ function _renderBoard() {
       (windows.length > 1 ? ' is-cyclable' : '') + '"' +
       ' title="' + esc(allowanceTitle) + '"' +
       (windows.length > 1 ? ' data-windows="' + esc(provider.name) + '"' : '') + '>' +
-      allowance + '</span>' +
-      '<span class="routing-share">' + _sharePct(provider) + '%</span>' +
+      allowanceCell + '</span>' +
+      '<span class="routing-share">' + (excluded ? '—' : _sharePct(provider) + '%') + '</span>' +
       '<span class="routing-state">' +
       '<span class="conn-' + _stateTone(provider) + '"></span>' +
       esc(_stateLabel(provider)) + until +
@@ -386,6 +433,11 @@ function _renderBoard() {
     );
   });
   el.innerHTML = '<div class="routing-route">' + head + rows.join('') + '</div>';
+  // The switch writes the provider's own entry; a lane switched off here
+  // leaves the route the same way it would from the Providers page.
+  el.querySelectorAll('.routing-switch input').forEach((input) => {
+    input.addEventListener('change', () => _toggleLane(input.dataset.lane));
+  });
   // A model name is arbitrary text, so the weight buttons carry their
   // provider in a data attribute and a listener reads it.
   el.querySelectorAll('.routing-allowance.is-cyclable').forEach((cell) => {
@@ -461,7 +513,11 @@ function _wireDrag(el) {
 
 /** Move *lane* beside *target* and write the order the panel now shows. */
 async function _reorderLane(lane, target, after) {
-  const names = (_data.providers || []).map((entry) => entry.name);
+  // Only the lanes the route carries: an excluded lane keeps the slot it
+  // holds in the document, which is what the endpoint's short list means.
+  const names = (_data.providers || [])
+    .filter((entry) => !entry.excluded)
+    .map((entry) => entry.name);
   if (!names.includes(lane) || !names.includes(target)) return;
   names.splice(names.indexOf(lane), 1);
   const at = names.indexOf(target) + (after ? 1 : 0);
@@ -499,6 +555,39 @@ function _renderLegend() {
     '<span class="routing-legend-item"><span class="conn-fail"></span>' +
     esc(t('routing.legend.blocked')) + '</span>' +
     '<span class="routing-legend-formula">' + esc(_shareFormula()) + '</span>';
+}
+
+/** Flip one provider's switch and repaint the board from the new config.
+ *
+ *  The write goes to the provider's entry, the same call the Providers page
+ *  makes, so the two pages cannot disagree about what "off" means. */
+async function _toggleLane(name) {
+  // The row the switch sits on, read before the write: the payload that comes
+  // back sorts an off lane after the candidates, and the row must not move.
+  const index = _data
+    ? _withPinnedLane(_data.providers).findIndex((entry) => entry.name === name)
+    : -1;
+  const lane = _data ? (_data.providers || []).find((entry) => entry.name === name) : null;
+  // A lane can be off through the model's own entry, which the provider
+  // switch does not touch: write the entry when that is the switch that is off.
+  const entryOff = !!(lane && lane.excluded && lane.reason_kind === 'entry');
+  const res = entryOff
+    ? await api.post(
+        '/admin/api/config/models/' + encodeURIComponent(_model) + '/update-provider',
+        { provider: name, enabled: true }
+      )
+    : await api.post(
+        '/admin/api/config/providers/' + encodeURIComponent(name) + '/toggle'
+      );
+  if (!res.ok) {
+    showToast(res.error || t('toast.error'), 'error');
+    return;
+  }
+  const on = entryOff || !!res.enabled;
+  showToast(name + ': ' + t(on ? 'provider.enabled' : 'provider.disabled'));
+  await loadConfig();
+  _pinnedLane = index === -1 ? null : { name, index };
+  if (_model) await loadRouting(_model);
 }
 
 /** Raise or lower one lane's weight, then show what the config accepted. */
@@ -834,6 +923,9 @@ export async function loadRouting(model) {
   // The first open selects the top of the list, which is the model requested
   // most recently; a later visit keeps the model already on screen.
   const asked = model || _model || _visibleModels()[0] || '';
+  // Entering the tab (no explicit model) or switching models re-sorts the
+  // board; a pin only belongs to the toggle that was just clicked.
+  if (!model || asked !== _model) _pinnedLane = null;
   _model = models.includes(asked) ? asked : (_visibleModels()[0] || '');
   _setModel(_model);
   _renderModelList();

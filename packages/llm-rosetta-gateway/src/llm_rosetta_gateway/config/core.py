@@ -29,6 +29,7 @@ from .parse import (
     DEFAULT_CAPABILITIES as _DEFAULT_CAPABILITIES,
 )
 from .parse import (
+    declared_model_lanes,
     distribute_typed_models,
     parse_model_failover,
     parse_model_overrides,
@@ -92,6 +93,9 @@ class GatewayConfig:
 
     # Runtime state, filled by the parsing and resolution modules.
     _raw_providers: dict[str, dict[str, str]]
+    # Every lane each model names, disabled providers included: the Routing
+    # board reads this so a lane the gateway took out does not disappear.
+    declared_model_lanes: dict[str, list[dict[str, Any]]]
     _same_format: SameFormatStage
     _selection: RoutingChain
     admin_cors_origins: list[str]
@@ -268,6 +272,7 @@ class GatewayConfig:
         )
 
         raw_models = raw.get("models", {})
+        self.declared_model_lanes = declared_model_lanes(raw_models, all_providers)
         (
             self.model_url_templates,
             self.model_stream_url_templates,
