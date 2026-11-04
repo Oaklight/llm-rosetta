@@ -380,7 +380,10 @@ function _renderCredentialState(source) {
     if (st.last_error) {
       line(_credentialText('label.credentialLastError', 'Last error') + ' ' + st.last_error, true);
     }
-    if (st.interactive_setup_required) {
+    if (st.interactive_setup_required
+        && data.state !== 'needs_setup' && data.state !== 'unreadable') {
+      // The state branches above already say this; repeating it made the
+      // section read as two identical instructions.
       line(_credentialText('label.credentialNeedsSetup', 'No credential yet — a sign-in is needed.'));
     }
     const fingerprint = shortCredential(data.credential);
