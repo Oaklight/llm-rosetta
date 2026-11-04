@@ -99,6 +99,8 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### 修复
 
+- **启动时被网关禁用的提供方现在会进审计日志**（议题 [#1386](https://github.com/Oaklight/llm-rosetta/issues/1386)）：加载时的校验发生在 ops log 打开之前，所以第一次 —— 通常也是决定性的那次 —— 禁用没有留下记录，恢复（#1376）同样不可见；同样的校验从面板触发时会记录。现在这次运行把结果留在配置对象上，网关在日志可用后补写 `provider_validation` 行；没有任何变化时仍然不写（[管理面板](gateway/admin-panel.md)）。
+
 - **面板自己的空闲计时器不再提前终结「保持登录」**（议题 [#1381](https://github.com/Oaklight/llm-rosetta/issues/1381)）：服务端本来就把被记住的会话当作随 30 天 cookie 结束、而不是空闲 30 分钟结束，但 `admin/js/core/utils.js` 给每个会话都装了 `setTimeout(doLogout, idle_minutes)`，而 `doLogout` 会 POST `/admin/api/logout` —— 安静半小时后，面板亲手销毁了 cookie 仍在担保的会话。现在 `/admin/api/auth-check` 会报告当前会话是否被记住，被记住的会话不再安装空闲计时器；未勾选的会话仍按空闲窗口退出（用 `idle_minutes: 1` 端到端验证：记住的会话安静 70 秒后 API 仍返回 200，普通会话在 65 秒时显示登录浮层）([管理面板](gateway/admin-panel.md#authentication))。
 
 - **滚到底时左侧导航栏不再上移**（议题 [#1379](https://github.com/Oaklight/llm-rosetta/issues/1379)）：`body { padding-bottom: 26px }` 为固定的状态栏预留空间，但加在 `body` 上时这段内边距位于 `.app-shell` 之外 —— 即使内容放得下，文档也比视口高 26px；而 sticky 侧栏的底边受父容器限制，滚到最底时正好被顶上去 26px（Chromium 实测：侧栏底部 800 → 774，状态栏仍贴在窗口底边，看起来像是侧栏下面多出一条）。现在 `body` 上的规则已删除：`base.css` 本来就在 `.content` 上预留的 56px 留白保持不变，手机布局的 84px（底部导航 + 状态栏）留白也从 `body` 移到 `.content`，侧栏与窗口底边齐平，内容放得下的页面不再出现滚动条（[管理面板](gateway/admin-panel.md)）。
