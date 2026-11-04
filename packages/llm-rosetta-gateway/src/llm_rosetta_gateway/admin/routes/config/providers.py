@@ -10,7 +10,9 @@ from llm_rosetta.shims import get_shim
 
 from .._shared import (
     _build_provider_entry,
+    _config_preflight_error,
     _handle_provider_rename,
+    _shim_ships_credential_command,
     _shim_ships_credential_exchange,
     config_mutate,
     parse_json_body,
@@ -19,6 +21,77 @@ from .._shared import (
 from .bulk import _merge_provider_into_model
 
 logger = logging.getLogger("llm-rosetta-gateway")
+
+
+def _missing_provider_fields_error(
+    body: dict[str, Any],
+    api_key: str,
+    base_url: str,
+    resolve_name: str,
+    existing_providers: dict[str, Any],
+) -> Response | None:
+    """Refuse a body that names no usable connection, if it does not.
+
+    A shim can supply the connection defaults, so neither field is mandatory
+    when the selected type is one: the shim's base_url, and — for a keyless
+    shim (free resource) — no credential at all.  A non-LLM endpoint shim
+    (``embeddings_shim``, …) counts too, so a provider defined only by that
+    shim needs no duplicated credentials.
+    """
+    from ....model_types import all_model_types
+
+    shims = [get_shim(body.get("type") or resolve_name)]
+    for desc in all_model_types():
+        if desc.is_llm or not desc.config_shim_key:
+            continue
+        shims.append(get_shim(body.get(desc.config_shim_key) or ""))
+    shim_base = any(s is not None and s.connection.base_url for s in shims)
+    keyless_ok = any(s is not None and s.connection.keyless for s in shims)
+    # A shim that ships ``auth.py`` mints the credential itself, so the
+    # operator has no key to type here either.
+    shim_exchange_ok = any(_shim_ships_credential_exchange(s) for s in shims)
+    # The argv form of the same declaration: the shim's own command is the
+    # credential source, so an empty key is the correct body.
+    shim_command_ok = any(_shim_ships_credential_command(s) for s in shims)
+    # A provider that mints its credential from a command stores no key — the
+    # two sources are mutually exclusive, so demanding one here made every
+    # ``token_command`` provider unsaveable from the panel: the editor
+    # legitimately sends an empty key and the save came back 400.
+    token_command = body.get("token_command")
+    if token_command is None and resolve_name in existing_providers:
+        token_command = existing_providers[resolve_name].get("token_command")
+    missing = []
+    if not base_url and not shim_base:
+        missing.append("base_url")
+    if (
+        not api_key
+        and not keyless_ok
+        and not token_command
+        and not shim_exchange_ok
+        and not shim_command_ok
+    ):
+        missing.append("api_key")
+    if not missing:
+        return None
+    # The editor has no key box for a command provider, so "missing api_key"
+    # names a field the operator cannot see.  When the save just cleared the
+    # command, say what the save would leave behind — and still name any other
+    # missing field, so clearing the command and the base_url together does
+    # not hide the second problem.
+    clearing = "token_command" in body and not body.get("token_command")
+    if clearing and "api_key" in missing:
+        message = (
+            "This provider would have no credential: the token command is "
+            "empty and no API key is set."
+        )
+        others = [field for field in missing if field != "api_key"]
+        if others:
+            message += f" Missing required field(s): {', '.join(others)}."
+        return JSONResponse({"error": message}, status_code=400)
+    return JSONResponse(
+        {"error": f"Missing required field(s): {', '.join(missing)}"},
+        status_code=400,
+    )
 
 
 async def put_provider(request: Any, **kwargs: Any) -> Response:
@@ -43,45 +116,11 @@ async def put_provider(request: Any, **kwargs: Any) -> Response:
         if not api_key and resolve_name in existing_providers:
             api_key = existing_providers[resolve_name].get("api_key", "")
 
-        # A shim can supply the connection defaults, so neither field is
-        # mandatory when the selected type is one: the shim's base_url, and —
-        # for a keyless shim (free resource) — no credential at all.  A
-        # non-LLM endpoint shim (``embeddings_shim``, …) counts too, so a
-        # provider defined only by that shim needs no duplicated credentials.
-        from ....model_types import all_model_types
-
-        shims = [get_shim(body.get("type") or resolve_name)]
-        for desc in all_model_types():
-            if desc.is_llm or not desc.config_shim_key:
-                continue
-            shims.append(get_shim(body.get(desc.config_shim_key) or ""))
-        shim_base = any(s is not None and s.connection.base_url for s in shims)
-        keyless_ok = any(s is not None and s.connection.keyless for s in shims)
-        # A shim that ships ``auth.py`` mints the credential itself, so the
-        # operator has no key to type here either.
-        shim_exchange_ok = any(_shim_ships_credential_exchange(s) for s in shims)
-        # A provider that mints its credential from a command stores no key —
-        # the two sources are mutually exclusive, so demanding one here made
-        # every ``token_command`` provider unsaveable from the panel: the editor
-        # legitimately sends an empty key and the save came back 400.
-        token_command = body.get("token_command")
-        if token_command is None and resolve_name in existing_providers:
-            token_command = existing_providers[resolve_name].get("token_command")
-        missing = []
-        if not base_url and not shim_base:
-            missing.append("base_url")
-        if (
-            not api_key
-            and not keyless_ok
-            and not token_command
-            and not shim_exchange_ok
-        ):
-            missing.append("api_key")
-        if missing:
-            return JSONResponse(
-                {"error": f"Missing required field(s): {', '.join(missing)}"},
-                status_code=400,
-            )
+        missing_err = _missing_provider_fields_error(
+            body, api_key, base_url, resolve_name, existing_providers
+        )
+        if missing_err is not None:
+            return missing_err
 
         provider_entry = _build_provider_entry(
             body, api_key, base_url, existing_providers, resolve_name
@@ -95,6 +134,14 @@ async def put_provider(request: Any, **kwargs: Any) -> Response:
                 return rename_err
 
         ctx.data.setdefault("providers", {})[name] = provider_entry
+
+        # Write only what the loader will accept.  Saving first and reloading
+        # second left a rejected document on disk, and the next process start
+        # failed on it; this turns that 500 into a 400 that writes nothing.
+        load_error = _config_preflight_error(ctx.data)
+        if load_error is not None:
+            return JSONResponse({"error": load_error}, status_code=400)
+
         ctx.commit()
 
     if ctx.error:
@@ -204,6 +251,11 @@ async def toggle_provider(request: Any, **kwargs: Any) -> Response:
             # explicit operator action; the next reload will revalidate it.
             providers[name].pop("enabled", None)
             providers[name].pop("_auto_disabled", None)
+            # Enabling is the moment a broken entry becomes loadable — or
+            # fatal.  Validate before the switch is written, not after.
+            load_error = _config_preflight_error(ctx.data)
+            if load_error is not None:
+                return JSONResponse({"error": load_error}, status_code=400)
         else:
             providers[name]["enabled"] = False
 

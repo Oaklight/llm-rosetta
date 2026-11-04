@@ -9,7 +9,7 @@
 import { S, _CAP_ICONS, populateCapIcons } from '../core/state.js';
 import { t, capLabel, typeLabel, typeLabelAlt } from '../core/i18n.js';
 import { api, showToast, showToastHtml, closeModal, esc, copyText, inlineConfirm, isFreeEntry, freeEntryLabel, providerTypeName } from '../core/utils.js';
-import { safeLinkUrl, parseRecord } from '../core/credential.js';
+import { safeLinkUrl, parseRecord, credentialSource, credentialNeedsKey, credentialLoadedFor, credentialSaveFields, shortCredential } from '../core/credential.js';
 import { initLogoPicker, setLogoPickerValue, getLogoPickerValue } from '../components/logo-picker.js';
 import { setTypeTree, getSelectedValue, selectValue, onTypeSelect, createTypePicker } from '../components/type-picker.js';
 import { buildTypeModel, buildEndpointTypeModel, endpointChoiceConfig, shimBrand } from '../core/shim-tree.js';
@@ -121,17 +121,37 @@ function _selectedShim() {
   return (S.configData?.registered_shims || []).find(s => s.name === typeSel.value) || null;
 }
 
-/** True when the provider being edited mints its credential via the shim. */
+/** The provider entry being edited, or null for a new one. */
+function _editingCfg() {
+  return _editingProviderName && S.configData
+    ? S.configData.providers[_editingProviderName] : null;
+}
+
+/** Metadata for the provider being edited when it mints its credential. */
 function _credentialShim() {
   const shim = _selectedShim();
+  const cfg = _editingCfg();
+  if (credentialSource(shim, cfg) === 'static_key') return null;
   if (shim && shim.mints_credential) return shim;
-  const cfg = _editingProviderName && S.configData
-    ? S.configData.providers[_editingProviderName] : null;
-  if (cfg && cfg.mints_credential) {
-    const type = cfg.type || _editingProviderName;
-    return (S.configData?.registered_shims || []).find(s => s.name === type) || { manage_usage_url: null };
-  }
-  return null;
+  const type = (cfg && cfg.type) || _editingProviderName;
+  return (S.configData?.registered_shims || []).find(s => s.name === type)
+    || { manage_usage_url: null };
+}
+
+/** Which of the four credential sources is in effect for this edit. */
+function _credentialSource() {
+  return credentialSource(_selectedShim(), _editingCfg());
+}
+
+/**
+ * Whether the API-key box must stay visible beside the credential section.
+ *
+ * A command that reads the operator's key from ``token_command_env`` takes it
+ * as *input* — the key is not a second credential — so hiding the box would
+ * leave the account key uneditable.
+ */
+function _credentialNeedsKey(source) {
+  return credentialNeedsKey(source, _selectedShim() || {}, _editingCfg() || {});
 }
 
 function _credentialText(key, fallback) {
@@ -143,10 +163,10 @@ function _syncCredentialUI() {
   const group = document.getElementById('provCredentialGroup');
   const keyGroup = document.getElementById('provApiKeyGroup');
   if (!group) return;
-  const shim = _credentialShim();
-  const on = !!shim;
+  const source = _credentialSource();
+  const on = source !== 'static_key';
   group.style.display = on ? '' : 'none';
-  if (keyGroup) keyGroup.style.display = on ? 'none' : '';
+  if (keyGroup) keyGroup.style.display = on && !_credentialNeedsKey(source) ? 'none' : '';
   if (!on) {
     _credentialFor = null;
     _resetCredentialBox();
@@ -158,7 +178,8 @@ function _syncCredentialUI() {
     _credentialFor = null;
     _credentialData = null;
     _resetCredentialBox();
-    _renderCredentialState();
+    _renderCredentialConfig(source, null);
+    _renderCredentialState(source);
     return;
   }
   if (_credentialFor !== name) {
@@ -168,7 +189,8 @@ function _syncCredentialUI() {
     // this one: two providers of one shim share a client id, so the exchange
     // would accept it and sign this provider in as the other account.
     _resetCredentialBox();
-    _renderCredentialState();
+    _renderCredentialConfig(source, null);
+    _renderCredentialState(source);
     loadProviderCredential(name);
   }
 }
@@ -182,7 +204,7 @@ async function loadProviderCredential(name) {
     if (_credentialFor !== name) return;
     _credentialData = { state: 'error', error: String(err && err.message || err) };
   }
-  _renderCredentialState();
+  _renderCredentialState(_credentialSource());
 }
 
 function _setCredentialError(message) {
@@ -192,7 +214,70 @@ function _setCredentialError(message) {
   box.style.display = message ? '' : 'none';
 }
 
-function _renderCredentialState() {
+function _credentialSourceLabel(source) {
+  switch (source) {
+    case 'config_command':
+      return _credentialText('label.credentialSourceConfigCommand', 'Command from the config');
+    case 'shim_command':
+      return _credentialText('label.credentialSourceShimCommand', 'Command declared by the shim');
+    case 'auth_exchange':
+      return _credentialText('label.credentialSourceAuthExchange', 'Shim sign-in (auth.py)');
+    default:
+      return _credentialText('label.credentialSourceStaticKey', 'Static API key');
+  }
+}
+
+/**
+ * Fill the editable credential fields for the source in effect.
+ *
+ * A command the shim declares is the vendor's argv, so it is shown read-only;
+ * the interval is a default in both cases and stays editable.  Only a command
+ * written into the provider entry can be changed here.
+ */
+function _renderCredentialConfig(source, data) {
+  const box = document.getElementById('provCredentialConfig');
+  if (!box) return;
+  const shim = _credentialShim() || _selectedShim() || {};
+  const cmdRow = document.getElementById('provTokenCommandRow');
+  const envRow = document.getElementById('provTokenCommandEnvRow');
+  const cmd = document.getElementById('provTokenCommand');
+  const interval = document.getElementById('provTokenRefreshInterval');
+  const env = document.getElementById('provTokenCommandEnv');
+  if (!cmd || !interval || !env) return;
+
+  const commandSource = source === 'config_command' || source === 'shim_command';
+  box.style.display = source === 'static_key' ? 'none' : '';
+  if (cmdRow) cmdRow.style.display = commandSource ? '' : 'none';
+  if (envRow) {
+    const hasEnv = source === 'config_command'
+      || (source === 'shim_command' && !!shim.default_token_command_env);
+    envRow.style.display = hasEnv ? '' : 'none';
+  }
+
+  const argv = (data && data.command && data.command.length)
+    ? data.command
+    : (shim.default_token_command || []);
+  cmd.value = argv.length ? JSON.stringify(argv) : '';
+  cmd.readOnly = source !== 'config_command';
+  cmd.placeholder = source === 'shim_command'
+    ? _credentialText('label.tokenCommandShimPlaceholder', 'Declared by the shim')
+    : '["python3", "token.py"]';
+
+  const stored = (_editingProviderName && S.configData
+    ? S.configData.providers[_editingProviderName] : null) || {};
+  const intervalValue = (data && data.refresh_interval)
+    || stored.token_refresh_interval
+    || shim.default_token_refresh_interval
+    || 3600;
+  interval.value = String(intervalValue);
+  interval.readOnly = false;
+
+  env.value = (data && data.command_env) || shim.default_token_command_env || '';
+  env.readOnly = source !== 'config_command';
+  env.placeholder = shim.default_token_command_env || 'VENDOR_ACCOUNT_KEY';
+}
+
+function _renderCredentialState(source) {
   const host = document.getElementById('provCredentialState');
   const actions = document.getElementById('provCredentialActions');
   const hint = document.getElementById('provCredentialHint');
@@ -215,8 +300,9 @@ function _renderCredentialState() {
   };
 
   if (!_editingProviderName) {
+    _renderCredentialConfig(source, null);
     line(_credentialText('label.credentialSaveFirst',
-      'Save this provider, then come back to sign in.'), true);
+      'Save this provider, then come back to manage its credential.'), true);
     if (hint) hint.style.display = 'none';
     return;
   }
@@ -224,10 +310,24 @@ function _renderCredentialState() {
     line(_credentialText('label.loading', 'Loading…'), true);
     return;
   }
-  if (hint) hint.style.display = data.state === 'connected' ? 'none' : '';
+
+  const sourceOf = data.source || source || _credentialSource();
+  const isCommand = sourceOf === 'config_command' || sourceOf === 'shim_command';
+  _renderCredentialConfig(sourceOf, data);
+  if (hint) hint.style.display = (isCommand || data.state === 'connected') ? 'none' : '';
+
+  // The source is the first fact: it decides which actions and fields below
+  // mean anything.
+  line(_credentialText('label.credentialSource', 'Source') + ': ' + _credentialSourceLabel(sourceOf));
+  // A usable token and a refresher that will replace it are two facts; saying
+  // "connected" alone would imply the token renews itself.
+  if (data.refresher_enabled === false) {
+    line(_credentialText('label.credentialRefresherOff',
+      'Automatic refresh is off — this token will not renew.'), true);
+  }
 
   const actions_ = [];
-  if (data.state === 'connected') {
+  if (data.state === 'connected' && sourceOf === 'auth_exchange') {
     const summary = data.summary || {};
     // ``data.account`` is a digest, not a name — only the exchange's own
     // summary can say which account this is.
@@ -251,8 +351,51 @@ function _renderCredentialState() {
       'A record exists but cannot be read. Sign in again to replace it.'), true);
     actions_.push({ label: _credentialText('btn.installRecord', 'Install a record'), kind: 'primary', fn: 'toggleProviderCredentialBox(true)' });
     actions_.push({ label: _credentialText('btn.signOut', 'Sign out'), kind: 'danger', fn: 'signOutProviderCredential()' });
-  } else {
+  } else if (data.state === 'initializing') {
+    line(_credentialText('label.credentialInitializing',
+      'Waiting for the first token from the command…'), true);
+  } else if (data.state === 'failing') {
+    // The command has run and failed.  The error itself is in the refresh log
+    // below; this line says what the state means for the provider.
+    line(_credentialText('label.credentialFailing',
+      'The command has not produced a usable token yet.'), true);
+  } else if (data.state === 'error') {
     line(_credentialText('label.credentialError', 'Could not read the credential:') + ' ' + (data.error || ''), true);
+  }
+
+  // The refresh log is a fact of every minting source, including a failed one.
+  const st = data.token_status || {};
+  if (data.state !== 'error') {
+    if (st.last_refresh) {
+      line(_credentialText('label.credentialLastRefresh', 'Last token') + ' ' +
+        new Date(st.last_refresh).toLocaleString(), true);
+    } else if (st.last_error) {
+      line(_credentialText('label.credentialNever', 'No token yet'), true);
+    }
+    const failures = Number(st.consecutive_failures || 0);
+    if (failures > 0) {
+      line(_credentialText('label.credentialFailures', 'Consecutive failures') + ' ' + failures);
+    }
+    if (st.last_error) {
+      line(_credentialText('label.credentialLastError', 'Last error') + ' ' + st.last_error, true);
+    }
+    if (st.interactive_setup_required) {
+      line(_credentialText('label.credentialNeedsSetup', 'No credential yet — a sign-in is needed.'));
+    }
+    const fingerprint = shortCredential(data.credential);
+    if (fingerprint) {
+      line(_credentialText('label.credentialFingerprint', 'Fingerprint') + ' ' + fingerprint, true);
+    }
+  }
+
+  if (sourceOf !== 'static_key' && data.state !== 'error') {
+    // The auth-exchange branches above already offer this link; a command
+    // shim can name one too, and it belongs beside the actions either way.
+    if (manage && isCommand) {
+      actions_.push({ label: _credentialText('btn.manageUsage', 'Manage usage'), kind: 'link', href: manage });
+    }
+    actions_.push({ label: _credentialText('btn.refreshCredential', 'Refresh now'), fn: 'refreshProviderCredential()' });
+    actions_.push({ label: _credentialText('btn.testCredential', 'Test credential'), fn: 'testProviderCredential()' });
   }
 
   for (const a of actions_) {
@@ -271,6 +414,40 @@ function _renderCredentialState() {
     }
     el.textContent = a.label;
     actions.appendChild(el);
+  }
+}
+
+/** Re-mint the credential now and re-read the section. */
+async function refreshProviderCredential() {
+  const name = _credentialFor;
+  if (!name) return;
+  try {
+    const res = await api.post(`/admin/api/config/providers/${encodeURIComponent(name)}/credential/refresh`);
+    await loadProviderCredential(name);
+    if (res && res.ok) {
+      showToast?.(_credentialText('label.credentialRefreshed', 'Credential refreshed'), 'success');
+    } else {
+      _setCredentialError((res && res.error) || _credentialText('label.credentialRefreshFailed', 'The credential could not be refreshed.'));
+    }
+  } catch (err) {
+    _setCredentialError(String(err && err.message || err));
+  }
+}
+
+/** Mint a credential and let the upstream accept or reject it. */
+async function testProviderCredential() {
+  const name = _credentialFor;
+  if (!name) return;
+  try {
+    const res = await api.post(`/admin/api/config/providers/${encodeURIComponent(name)}/credential/test`);
+    await loadProviderCredential(name);
+    if (res && res.ok) {
+      showToast?.(_credentialText('label.credentialAccepted', 'The upstream accepted the credential'), 'success');
+    } else {
+      _setCredentialError((res && res.error) || _credentialText('label.credentialRejected', 'The credential test failed.'));
+    }
+  } catch (err) {
+    _setCredentialError(String(err && err.message || err));
   }
 }
 
@@ -1562,6 +1739,32 @@ async function saveProvider() {
   body.max_tool_description_length = maxToolDescVal !== '' ? parseInt(maxToolDescVal, 10) : '';
   body.models_path = document.getElementById('provModelsPath').value.trim();
   body.logo = getLogoPickerValue();
+  // Credential fields the section owns.  Only a command written into the
+  // config is editable; a shim's argv is the vendor's, and the interval is a
+  // default in every minting source.  A command is sent only after the section
+  // actually read this provider — an empty box after a failed read is not the
+  // operator clearing anything, and sending [] would delete it.
+  const credSource = _credentialSource();
+  const credentialLoaded = credentialLoadedFor(
+    _credentialFor, _editingProviderName, _credentialData);
+  const credFields = credentialSaveFields({
+    source: credSource,
+    loaded: credentialLoaded,
+    command: document.getElementById('provTokenCommand')?.value,
+    env: document.getElementById('provTokenCommandEnv')?.value,
+    interval: document.getElementById('provTokenRefreshInterval')?.value,
+  });
+  if (credFields.error === 'token_command_argv') {
+    showToast(t('error.tokenCommandArgv',
+      'The token command must be a JSON array of non-empty strings.'), 'error');
+    return;
+  }
+  if (credFields.error === 'token_refresh_interval') {
+    showToast(t('error.tokenRefreshInterval',
+      'The refresh interval must be at least 60 seconds.'), 'error');
+    return;
+  }
+  Object.assign(body, credFields.fields);
   // When api_key is empty and we're editing, omit it so backend keeps the original
   if (apiKey) body.api_key = apiKey;
   // If editing and name changed, include rename_from so backend updates model references
@@ -1777,6 +1980,7 @@ Object.assign(window, {
   goToModelsForProvider, goToProviderFromModel, testProviderConnectivity,
   showProviderQuota,
   installProviderCredential, signOutProviderCredential, toggleProviderCredentialBox,
+  refreshProviderCredential, testProviderCredential,
   _activateSegChild,
   openFreeProvider, refreshFreeModels, revealProviderKey,
   refreshShimHint,

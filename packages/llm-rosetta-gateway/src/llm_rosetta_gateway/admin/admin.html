@@ -1284,6 +1284,23 @@
       <label data-i18n="label.credential">Credential</label>
       <div id="provCredentialState" class="prov-credential-state" style="font-size:0.88em;line-height:1.5"></div>
       <div id="provCredentialActions" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px"></div>
+      <div id="provCredentialConfig" style="display:none;margin-top:8px">
+        <div class="form-group" id="provTokenCommandRow">
+          <label data-i18n="label.tokenCommand">Token command</label>
+          <input id="provTokenCommand" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder='["python3", "token.py"]'>
+          <div style="font-size:0.8em;color:var(--text-dim);margin-top:2px" data-i18n="label.tokenCommandHint">A JSON array: the executable first, then its arguments.</div>
+        </div>
+        <div class="form-row">
+          <div class="form-group" style="flex:0 0 49%">
+            <label data-i18n="label.tokenRefreshInterval">Refresh interval (s)</label>
+            <input id="provTokenRefreshInterval" type="number" min="60" step="1">
+          </div>
+          <div class="form-group" id="provTokenCommandEnvRow" style="flex:0 0 49%">
+            <label data-i18n="label.tokenCommandEnv">Command env var</label>
+            <input id="provTokenCommandEnv" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="VENDOR_ACCOUNT_KEY">
+          </div>
+        </div>
+      </div>
       <div id="provCredentialBox" style="display:none;margin-top:6px">
         <textarea id="provCredentialRecord" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder='{"access_token": "...", "refresh_token": "...", "id_token": "..."}' style="width:100%;min-height:96px;font-family:var(--mono,monospace);font-size:0.78em"></textarea>
         <div style="display:flex;gap:6px;margin-top:4px">

@@ -121,15 +121,51 @@ class TestTheConfigPayload:
         assert "zen/v1" in hint["en"]
         assert by_name["openai--open_responses"]["hint_msg"] is None
 
-    def test_a_provider_entry_says_whether_it_mints_its_own(self, monkeypatch):
+    def test_the_refresh_log_is_bounded_here_too(self, monkeypatch):
+        """The panel loads this payload on open.
+
+        The credential endpoints clip the error text; this surface must clip
+        it as well, or the bounded copy is not the one the browser sees first.
+        """
         config = SimpleNamespace(
             providers={
                 "chatgpt": SimpleNamespace(
-                    mints_credential=True, keyless=False, token_status=None
+                    mints_credential=True,
+                    keyless=False,
+                    token_status={
+                        "consecutive_failures": 1,
+                        "last_error": "x" * 900,
+                    },
+                    credentials_pending=False,
+                    credential_source="config_command",
                 )
             }
         )
 
         payload = self._payload(monkeypatch, config)
 
-        assert payload["providers"]["chatgpt"]["mints_credential"] is True
+        status = payload["providers"]["chatgpt"]["token_status"]
+        assert len(status["last_error"]) == 300
+        assert status["last_error"].endswith("…")
+        # The rest of the log is untouched.
+        assert status["consecutive_failures"] == 1
+
+    def test_a_provider_entry_says_whether_it_mints_its_own(self, monkeypatch):
+        config = SimpleNamespace(
+            providers={
+                "chatgpt": SimpleNamespace(
+                    mints_credential=True,
+                    keyless=False,
+                    token_status=None,
+                    credentials_pending=True,
+                    credential_source="auth_exchange",
+                )
+            }
+        )
+
+        payload = self._payload(monkeypatch, config)
+
+        entry = payload["providers"]["chatgpt"]
+        assert entry["mints_credential"] is True
+        assert entry["credentials_pending"] is True
+        assert entry["credential_source"] == "auth_exchange"

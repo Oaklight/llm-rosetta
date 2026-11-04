@@ -235,6 +235,7 @@ class ProviderInfo:
         keyless: bool = False,
         session_header: str | None = None,
         credential_token: str | None = None,
+        credential_source: str = "static_key",
         extra_headers: dict[str, str] | None = None,
         request_header: str | None = None,
         session_id_format: str | None = None,
@@ -290,6 +291,12 @@ class ProviderInfo:
         # has no stable one.  Compared by :meth:`account_token` to detect two
         # providers that front the same upstream account.  Never the raw key.
         self.credential_token = credential_token
+        # Where the credential comes from, as the admin editor must name it:
+        # ``static_key``, ``config_command``, ``shim_command`` or
+        # ``auth_exchange``.  A provider-level ``token_command`` outranks a
+        # shim's declaration, which is why the builder decides this rather than
+        # the panel guessing from the shim.
+        self.credential_source = credential_source
 
         # Static headers a shim adds to every upstream request (a client
         # fingerprint, for instance) and the per-request identifier header.

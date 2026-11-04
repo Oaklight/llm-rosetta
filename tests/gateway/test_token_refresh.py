@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import subprocess
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
@@ -165,6 +166,56 @@ class TestStartTokenRefreshers:
 
         asyncio.run(_run())
 
+    def test_the_status_follows_the_loop(self):
+        """The panel's "will renew" claim comes from a task that is alive.
+
+        Before this, every writer set ``enabled`` True and nothing cleared it,
+        so a cancelled loop still read as renewing the token.
+        """
+
+        async def _run():
+            p = _make_provider_info(token_command=["echo", "key1"])
+            tasks = await start_token_refreshers({"p": p})
+            assert (p.token_status or {})["enabled"] is True
+
+            tasks[0].cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await tasks[0]
+            # Done callbacks run on the next loop turn.
+            await asyncio.sleep(0)
+
+            assert (p.token_status or {})["enabled"] is False
+
+        asyncio.run(_run())
+
+    def test_an_older_loop_finishing_does_not_clear_a_newer_one(self):
+        """The flag speaks for the newest task, the one its callers keep.
+
+        A reload can start a second set before the first has fully stopped;
+        the older task finishing must not claim the provider stopped renewing
+        while the newer one is alive.
+        """
+
+        async def _run():
+            p = _make_provider_info(token_command=["echo", "key1"])
+            first = await start_token_refreshers({"p": p})
+            second = await start_token_refreshers({"p": p})
+            assert (p.token_status or {})["enabled"] is True
+
+            first[0].cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await first[0]
+            await asyncio.sleep(0)
+            assert (p.token_status or {})["enabled"] is True
+
+            second[0].cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await second[0]
+            await asyncio.sleep(0)
+            assert (p.token_status or {})["enabled"] is False
+
+        asyncio.run(_run())
+
     def test_no_tasks_without_token_command(self):
         async def _run():
             p = _make_provider_info()
@@ -232,6 +283,76 @@ class TestRefreshLoop:
             assert pinfo.key_ring.next() == "initial-key"
             assert pinfo.token_status is not None
             assert pinfo.token_status["consecutive_failures"] >= 1
+
+        asyncio.run(_run())
+
+    def test_a_loop_failure_keeps_a_pending_sign_in(self):
+        """The loop is the writer that ticks most often.
+
+        If it took the key from this attempt's outcome, one unrelated 502
+        would erase a sign-in that is still needed.
+        """
+
+        async def _run():
+            pinfo = _make_provider_info(
+                token_command=["false"], token_refresh_interval=1
+            )
+            pinfo.token_status = {
+                "enabled": True,
+                "interactive_setup_required": True,
+                "consecutive_failures": 0,
+            }
+
+            with patch(
+                "llm_rosetta_gateway.transport.token_refresh.run_token_command",
+                new_callable=AsyncMock,
+                side_effect=RuntimeError("upstream 502"),
+            ):
+                pinfo.token_refresh_interval = 0
+                task = asyncio.create_task(_refresh_loop(pinfo))
+                await asyncio.sleep(0.1)
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+
+            status = pinfo.token_status or {}
+            assert status["interactive_setup_required"] is True
+            # The loop is alive, so its own flag stays true.
+            assert status["enabled"] is True
+
+        asyncio.run(_run())
+
+    def test_an_ordinary_loop_failure_does_not_invent_a_sign_in_wait(self):
+        """The loop's negative direction: never waiting stays not waiting.
+
+        Without this case the branch can be hardcoded to ``True`` and the
+        suite stays green, inventing a sign-in wait for every provider whose
+        loop sees one timeout.
+        """
+
+        async def _run():
+            pinfo = _make_provider_info(
+                token_command=["false"], token_refresh_interval=1
+            )
+            pinfo.token_status = {"enabled": True}
+
+            with patch(
+                "llm_rosetta_gateway.transport.token_refresh.run_token_command",
+                new_callable=AsyncMock,
+                side_effect=RuntimeError("upstream 502"),
+            ):
+                pinfo.token_refresh_interval = 0
+                task = asyncio.create_task(_refresh_loop(pinfo))
+                await asyncio.sleep(0.1)
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+
+            assert not (pinfo.token_status or {}).get("interactive_setup_required")
 
         asyncio.run(_run())
 
@@ -535,6 +656,180 @@ class TestForceRefreshAcrossForms:
         from llm_rosetta_gateway.transport.token_refresh import force_refresh
 
         assert asyncio.run(force_refresh(_make_provider_info())) is False
+
+    def test_a_long_failure_text_is_clipped_where_it_is_written(self):
+        """The bound lives at the source, so every reader gets it.
+
+        A command that writes its own diagnostics to stderr can quote a
+        token.  Clipping only in the endpoint that renders the log would leave
+        the same text in ``/admin/api/config``.
+        """
+        from llm_rosetta_gateway.transport.token_refresh import force_refresh
+
+        pinfo = _make_provider_info(
+            token_command=[
+                "python3",
+                "-c",
+                "import sys; sys.stderr.write('E' * 900); sys.exit(3)",
+            ]
+        )
+
+        assert asyncio.run(force_refresh(pinfo)) is False
+        error = (pinfo.token_status or {})["last_error"]
+        assert len(error) == 300
+        assert error.endswith("…")
+
+    def test_a_manual_refresh_does_not_claim_a_loop_exists(self):
+        """The button mints a token; it does not start a refresher.
+
+        A provider that failed to seed has ``enabled: False`` and no loop.
+        Pressing Refresh must not make the panel stop saying the token will
+        not renew while nothing has started renewing it.
+        """
+        from llm_rosetta_gateway.transport.token_refresh import force_refresh
+
+        exchange = _FakeExchange(token="fresh")
+        pinfo = _exchange_pinfo(exchange)
+        pinfo.token_status = {
+            "enabled": False,
+            "last_refresh": None,
+            "consecutive_failures": 1,
+            "last_error": "the seed failed",
+        }
+
+        assert asyncio.run(force_refresh(pinfo, debounce=False)) is True
+        assert (pinfo.token_status or {})["enabled"] is False
+
+    def test_a_failed_manual_refresh_does_not_claim_a_loop_exists(self):
+        from llm_rosetta_gateway.transport.token_refresh import force_refresh
+
+        pinfo = _make_provider_info(
+            token_command=["python3", "-c", "import sys; sys.exit(3)"]
+        )
+        pinfo.token_status = {"enabled": False, "consecutive_failures": 1}
+
+        assert asyncio.run(force_refresh(pinfo, debounce=False)) is False
+        assert (pinfo.token_status or {})["enabled"] is False
+
+    def test_a_wait_for_sign_in_survives_an_unrelated_failure(self):
+        """A timeout does not cancel the fact that a human must sign in.
+
+        ``interactive_setup_required`` is rendered by the panel's "sign-in
+        needed" line; overwriting it from this attempt's outcome would hide a
+        wait that is still true.
+        """
+        from llm_rosetta_gateway.transport.token_refresh import force_refresh
+
+        pinfo = _make_provider_info(
+            token_command=["python3", "-c", "import sys; sys.exit(3)"]
+        )
+        pinfo.token_status = {
+            "enabled": False,
+            "interactive_setup_required": True,
+            "consecutive_failures": 0,
+        }
+
+        assert asyncio.run(force_refresh(pinfo, debounce=False)) is False
+        status = pinfo.token_status or {}
+        assert status["interactive_setup_required"] is True
+        assert status["enabled"] is False
+
+    def test_an_ordinary_failure_does_not_invent_a_sign_in_wait(self):
+        """The other direction of the ``or``: never waiting stays not waiting."""
+        from llm_rosetta_gateway.transport.token_refresh import force_refresh
+
+        pinfo = _make_provider_info(
+            token_command=["python3", "-c", "import sys; sys.exit(3)"]
+        )
+        pinfo.token_status = {"enabled": False, "consecutive_failures": 0}
+
+        assert asyncio.run(force_refresh(pinfo, debounce=False)) is False
+        assert not (pinfo.token_status or {}).get("interactive_setup_required")
+
+    def test_a_successful_mint_clears_the_sign_in_wait(self):
+        """Only a token clears the wait; a failure must not."""
+        from llm_rosetta_gateway.transport.token_refresh import force_refresh
+
+        pinfo = _exchange_pinfo(_FakeExchange(token="fresh"))
+        pinfo.token_status = {
+            "enabled": False,
+            "interactive_setup_required": True,
+        }
+
+        assert asyncio.run(force_refresh(pinfo, debounce=False)) is True
+        assert "interactive_setup_required" not in (pinfo.token_status or {})
+
+    def test_a_manual_refresh_ignores_the_debounce(self):
+        """The 401 path debounces a burst; the operator's button must not."""
+        from llm_rosetta_gateway.transport.token_refresh import force_refresh
+
+        exchange = _FakeExchange(token="fresh")
+        pinfo = _exchange_pinfo(exchange)
+
+        assert asyncio.run(force_refresh(pinfo)) is True
+        assert exchange.calls == 1
+        # Inside the debounce window the reactive path is a no-op...
+        assert asyncio.run(force_refresh(pinfo)) is True
+        assert exchange.calls == 1
+        # ...but a manual refresh mints again.
+        assert asyncio.run(force_refresh(pinfo, debounce=False)) is True
+        assert exchange.calls == 2
+
+
+class TestSeedFailureText:
+    def test_a_seed_failure_is_clipped_at_the_startup_door(self):
+        """Startup writes the same log the refresher does.
+
+        The endpoints clip on the way out, so an assertion made through them
+        would pass even if this writer stopped clipping.  The stored value is
+        what has to be bounded.
+        """
+        from llm_rosetta_gateway.maintenance.startup import DeferredStartup
+        from llm_rosetta_gateway.transport.provider_info import (
+            ProviderInfo,
+            openai_auth,
+        )
+
+        pinfo = ProviderInfo(
+            name="p",
+            api_key="old-key",
+            base_url="https://example.com/v1",
+            auth_header_fn=openai_auth,
+            url_template="{base_url}/chat/completions",
+            token_command=[
+                "python3",
+                "-c",
+                "import sys; sys.stderr.write('E' * 900); sys.exit(3)",
+            ],
+        )
+        startup = DeferredStartup(SimpleNamespace(providers={"p": pinfo}), app=None)
+
+        asyncio.run(startup._seed_one_provider("p"))
+
+        error = (pinfo.token_status or {})["last_error"]
+        assert len(error) == 300
+        assert error.endswith("…")
+        # No loop is started for a provider that failed to seed.
+        assert (pinfo.token_status or {})["enabled"] is False
+
+    def test_a_sign_in_wait_is_not_a_renewing_token(self):
+        """The branch the retry loop skips is the one that must say "off".
+
+        Nothing later corrects it: no refresher is started, and the retry
+        explicitly skips a provider waiting for a human.
+        """
+        from llm_rosetta_gateway.maintenance.startup import DeferredStartup
+
+        pinfo = _exchange_pinfo(_FakeExchange(interactive=True))
+        startup = DeferredStartup(
+            SimpleNamespace(providers={"vendor": pinfo}), app=None
+        )
+
+        asyncio.run(startup._seed_one_provider("vendor"))
+
+        status = pinfo.token_status or {}
+        assert status["interactive_setup_required"] is True
+        assert status["enabled"] is False
 
 
 class TestRefresherSchedulingAcrossForms:

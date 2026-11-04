@@ -13,11 +13,15 @@ import json
 from types import SimpleNamespace
 from typing import Any
 
+import pytest
+
 
 from llm_rosetta_gateway.admin.routes.credential import (
     delete_provider_credential,
     get_provider_credential,
     put_provider_credential,
+    refresh_provider_credential,
+    test_provider_credential as check_provider_credential,
 )
 from llm_rosetta_gateway.transport.provider_info import (
     TOKEN_PENDING_SENTINEL,
@@ -152,6 +156,8 @@ class TestGet:
         assert payload["needs_interactive_setup"] is True
         assert payload["account"] is None
         assert payload["kind"] == "oauth"
+        # No status yet reads as "the refresher will run", not "off".
+        assert payload["refresher_enabled"] is True
 
     def test_a_record_that_cannot_be_read_is_its_own_state(self):
         """Neither "connected" nor "sign in" — the operator would take the
@@ -349,3 +355,289 @@ class TestDelete:
         response = _call(delete_provider_credential, _Request(_config(key="sk-static")))
 
         assert response.status_code == 409
+
+
+def _command_pinfo(
+    source: str = "config_command",
+    *,
+    key: str = TOKEN_PENDING_SENTINEL,
+    command: list[str] | None = None,
+) -> ProviderInfo:
+    """A provider whose credential is an argv command, not a record."""
+    return ProviderInfo(
+        name="chat_completions",
+        api_key=key,
+        base_url="https://api.example/v1",
+        auth_header_fn=openai_auth,
+        url_template="{base_url}/chat/completions",
+        token_command=command or ["python3", "token.py"],
+        token_refresh_interval=3600,
+        credential_token="cmd:" + "a" * 64,
+        credential_source=source,
+    )
+
+
+class TestCommandCredential:
+    def test_a_waited_for_token_is_its_own_state(self):
+        payload = json.loads(
+            _call(
+                get_provider_credential,
+                _Request(SimpleNamespace(providers={"chatgpt": _command_pinfo()})),
+            ).body
+        )
+
+        assert payload["source"] == "config_command"
+        assert payload["kind"] == "command"
+        assert payload["state"] == "initializing"
+        assert payload["installed"] is False
+        assert payload["command"] == ["python3", "token.py"]
+        assert payload["command_editable"] is True
+        assert payload["refresher_enabled"] is True
+        # The digest, never a token.
+        assert payload["credential"].startswith("cmd:")
+        assert "token.py" not in payload["credential"]
+
+    def test_a_shim_command_is_read_only_but_its_interval_is_not(self):
+        payload = json.loads(
+            _call(
+                get_provider_credential,
+                _Request(
+                    SimpleNamespace(
+                        providers={"chatgpt": _command_pinfo("shim_command")}
+                    )
+                ),
+            ).body
+        )
+
+        assert payload["source"] == "shim_command"
+        assert payload["command_editable"] is False
+        assert payload["refresh_interval"] == 3600
+
+    def test_a_live_token_is_connected(self):
+        pinfo = _command_pinfo(key="live-token")
+        pinfo.token_status = {
+            "enabled": True,
+            "last_refresh": "2026-11-04T00:00:00+00:00",
+            "consecutive_failures": 0,
+            "last_error": None,
+        }
+
+        payload = json.loads(
+            _call(
+                get_provider_credential,
+                _Request(SimpleNamespace(providers={"chatgpt": pinfo})),
+            ).body
+        )
+
+        assert payload["state"] == "connected"
+        assert payload["token_status"]["last_refresh"].startswith("2026-")
+
+    def test_a_failed_refresh_is_named(self):
+        pinfo = _command_pinfo(key="old-token")
+        pinfo.token_status = {
+            "enabled": True,
+            "last_refresh": None,
+            "consecutive_failures": 2,
+            "last_error": "the command exited 3",
+        }
+
+        payload = json.loads(
+            _call(
+                get_provider_credential,
+                _Request(SimpleNamespace(providers={"chatgpt": pinfo})),
+            ).body
+        )
+
+        assert payload["state"] == "failing"
+        assert payload["token_status"]["consecutive_failures"] == 2
+
+    def test_a_pending_command_that_failed_is_failing_not_initializing(self):
+        """The sentinel is still in the ring, but there is an error to read.
+
+        "Waiting for the first token" would bury the sentence that says why
+        none has arrived.
+        """
+        pinfo = _command_pinfo()
+        pinfo.token_status = {
+            "enabled": True,
+            "last_refresh": None,
+            "consecutive_failures": 2,
+            "last_error": "the command exited 3",
+        }
+
+        payload = json.loads(
+            _call(
+                get_provider_credential,
+                _Request(SimpleNamespace(providers={"chatgpt": pinfo})),
+            ).body
+        )
+
+        assert pinfo.credentials_pending is True
+        assert payload["state"] == "failing"
+
+    def test_a_switched_off_refresher_is_named(self):
+        """A token that will not renew is still connected — say both.
+
+        ``connected`` answers "is there a token"; the refresher is a second
+        fact, and without it the panel implies the token renews itself.
+        """
+        pinfo = _command_pinfo(key="live-token")
+        pinfo.token_status = {
+            "enabled": False,
+            "last_refresh": "2026-11-04T00:00:00+00:00",
+            "consecutive_failures": 0,
+            "last_error": None,
+        }
+
+        payload = json.loads(
+            _call(
+                get_provider_credential,
+                _Request(SimpleNamespace(providers={"chatgpt": pinfo})),
+            ).body
+        )
+
+        assert payload["state"] == "connected"
+        assert payload["refresher_enabled"] is False
+
+    def test_the_last_error_is_bounded(self):
+        """A command can put a token in its own diagnostics.
+
+        The token never leaves the process; the error text is the one field
+        that could carry it, so it is truncated rather than rendered whole.
+        """
+        pinfo = _command_pinfo()
+        pinfo.token_status = {"last_error": "x" * 800}
+
+        payload = json.loads(
+            _call(
+                get_provider_credential,
+                _Request(SimpleNamespace(providers={"chatgpt": pinfo})),
+            ).body
+        )
+
+        rendered = payload["token_status"]["last_error"]
+        assert len(rendered) <= 300
+        assert rendered.endswith("…")
+
+
+class TestRefresh:
+    @pytest.mark.asyncio
+    async def test_refresh_mints_a_new_token_now(self):
+        pinfo = _command_pinfo(command=["python3", "-c", "print('fresh-token')"])
+        request = _Request(SimpleNamespace(providers={"chatgpt": pinfo}))
+
+        payload = json.loads(
+            (await refresh_provider_credential(request, "chatgpt")).body
+        )
+
+        assert payload["ok"] is True
+        assert pinfo.key_ring.next() == "fresh-token"
+        assert payload["token_status"]["last_refresh"]
+
+    @pytest.mark.asyncio
+    async def test_a_failed_mint_keeps_the_old_key_and_says_why(self):
+        pinfo = _command_pinfo(
+            command=["python3", "-c", "import sys; sys.exit(3)"], key="old-token"
+        )
+        request = _Request(SimpleNamespace(providers={"chatgpt": pinfo}))
+
+        payload = json.loads(
+            (await refresh_provider_credential(request, "chatgpt")).body
+        )
+
+        assert payload["ok"] is False
+        assert "exited with 3" in payload["error"]
+        # The previous credential stays in the ring.
+        assert pinfo.key_ring.next() == "old-token"
+
+    @pytest.mark.asyncio
+    async def test_a_static_key_has_nothing_to_refresh(self):
+        request = _Request(_config(key="sk-static"))
+
+        response = await refresh_provider_credential(request, "chatgpt")
+
+        assert response.status_code == 409
+
+
+class TestCredentialTest:
+    @staticmethod
+    def _probe(monkeypatch, payload: dict[str, Any]) -> None:
+        from llm_rosetta_gateway.admin.routes import connectivity
+
+        class _Probe:
+            body = json.dumps(payload).encode()
+
+        async def fake(request: Any, name: str) -> Any:
+            return _Probe()
+
+        monkeypatch.setattr(connectivity, "test_provider_connectivity", fake)
+
+    @pytest.mark.asyncio
+    async def test_an_accepted_token_is_reported(self, monkeypatch):
+        self._probe(monkeypatch, {"endpoints": {"models": {"ok": True, "status": 200}}})
+        pinfo = _command_pinfo(command=["python3", "-c", "print('fresh')"])
+        request = _Request(SimpleNamespace(providers={"chatgpt": pinfo}))
+
+        payload = json.loads((await check_provider_credential(request, "chatgpt")).body)
+
+        assert payload["ok"] is True
+        assert payload["accepted"] is True
+
+    @pytest.mark.asyncio
+    async def test_a_rejected_token_names_the_upstream_status(self, monkeypatch):
+        self._probe(
+            monkeypatch,
+            {"endpoints": {"models": {"ok": False, "status": 401}}},
+        )
+        pinfo = _command_pinfo(command=["python3", "-c", "print('stale')"])
+        request = _Request(SimpleNamespace(providers={"chatgpt": pinfo}))
+
+        payload = json.loads((await check_provider_credential(request, "chatgpt")).body)
+
+        assert payload["ok"] is False
+        assert "401" in payload["error"]
+
+    @pytest.mark.asyncio
+    async def test_an_unreachable_host_is_not_a_rejected_token(self, monkeypatch):
+        """The token was minted; the host did not answer.
+
+        Reporting "rejected" would send the operator to redo a credential that
+        is fine.
+        """
+        self._probe(
+            monkeypatch,
+            {
+                "reachable": False,
+                "base_error": "Connection to 127.0.0.1:9974 failed",
+                "endpoints": {"models": {"ok": False, "error": "connection refused"}},
+            },
+        )
+        pinfo = _command_pinfo(command=["python3", "-c", "print('fresh')"])
+        request = _Request(SimpleNamespace(providers={"chatgpt": pinfo}))
+
+        payload = json.loads((await check_provider_credential(request, "chatgpt")).body)
+
+        assert payload["ok"] is False
+        assert payload["reachable"] is False
+        assert "unreachable" in payload["error"]
+        assert "rejected" not in payload["error"]
+
+    @pytest.mark.asyncio
+    async def test_a_failed_mint_does_not_probe_the_upstream(self, monkeypatch):
+        called = []
+
+        async def fake(request: Any, name: str) -> Any:  # pragma: no cover
+            called.append(name)
+            raise AssertionError("the upstream must not be probed")
+
+        from llm_rosetta_gateway.admin.routes import connectivity
+
+        monkeypatch.setattr(connectivity, "test_provider_connectivity", fake)
+        pinfo = _command_pinfo(command=["python3", "-c", "import sys; sys.exit(3)"])
+        request = _Request(SimpleNamespace(providers={"chatgpt": pinfo}))
+
+        payload = json.loads((await check_provider_credential(request, "chatgpt")).body)
+
+        assert payload["ok"] is False
+        assert "exited with 3" in payload["error"]
+        assert called == []

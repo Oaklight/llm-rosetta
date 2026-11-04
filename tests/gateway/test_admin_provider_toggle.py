@@ -57,16 +57,20 @@ async def test_toggle_off_then_on_returns_the_effective_state(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_turning_on_a_still_invalid_provider_reports_it_disabled(tmp_path):
+async def test_turning_on_a_still_invalid_provider_writes_nothing(tmp_path):
+    """Enable is the moment a broken entry becomes loadable, or fatal.
+
+    The document is built in memory first: a config the loader rejects must
+    not reach the file, because the next process start would fail on it.
+    """
     raw = {
         "providers": {"p": {"type": "open_responses", "enabled": False}},
         "models": {},
     }
     request = _request(tmp_path, raw)
 
-    resp = json.loads((await toggle_provider(request)).body)
+    response = await toggle_provider(request)
 
-    assert resp["ok"] is True
-    assert resp["enabled"] is False
-    assert resp["provider_warnings"][0]["provider"] == "p"
-    assert resp["provider_warnings"][0]["category"] == "missing_base_url"
+    assert response.status_code == 400
+    assert b"base_url" in response.body
+    assert _on_disk(request)["providers"]["p"]["enabled"] is False

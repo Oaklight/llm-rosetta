@@ -167,7 +167,7 @@ BASE_FORMATS: tuple[str, ...] = tuple(
 
 
 def _resolve_token_command(
-    name: str, cfg: dict[str, Any]
+    name: str, cfg: dict[str, Any], *, quiet: bool = False
 ) -> tuple[str, list[str] | None, int]:
     """Resolve token_command config into (api_key, token_command, interval).
 
@@ -220,15 +220,20 @@ def _resolve_token_command(
         raise ValueError(
             f"Provider '{name}': token_command and api_key are mutually exclusive"
         )
+    # The admin's pre-write validation rebuilds every enabled provider on each
+    # save.  These two lines describe the *provider*, not that save, so they
+    # would repeat once per save; the validator asks for them at DEBUG.
     if shutil.which(token_command[0]) is None:
-        logger.warning(
+        logger.log(
+            logging.DEBUG if quiet else logging.WARNING,
             "Provider '%s': token_command executable '%s' not found on "
             "PATH — the command may still work if the binary is available "
             "at runtime (e.g. via volume mount)",
             name,
             token_command[0],
         )
-    logger.info(
+    logger.log(
+        logging.DEBUG if quiet else logging.INFO,
         "Provider '%s' uses token_command — token will be fetched "
         "asynchronously after startup",
         name,
@@ -424,12 +429,37 @@ def _is_keyless(keyless_shim: bool, exchange: Any | None, cfg: dict[str, Any]) -
     )
 
 
+def _credential_source_name(
+    *,
+    keyless: bool,
+    provider_owns_command: bool,
+    exchange: Any | None,
+    token_command: list[str] | None,
+) -> str:
+    """Name the effective credential source for the admin editor.
+
+    The builder, not the panel, knows the precedence: a provider-level command
+    outranks the shim's declaration, and a shim ships either ``auth.py`` or a
+    command, never both.
+    """
+    if keyless:
+        return "none"
+    if provider_owns_command:
+        return "config_command"
+    if exchange is not None:
+        return "auth_exchange"
+    if token_command is not None:
+        return "shim_command"
+    return "static_key"
+
+
 def _resolve_credential(
     name: str,
     cfg: dict[str, Any],
     exchange: Any | None,
     *,
     keyless: bool,
+    quiet: bool = False,
 ) -> tuple[str, list[str] | None, int, bool]:
     """Decide where the provider's credential comes from.
 
@@ -464,7 +494,8 @@ def _resolve_credential(
                 f"Provider '{name}': token_refresh_interval must be >= 60, "
                 f"got {interval}"
             )
-        logger.info(
+        logger.log(
+            logging.DEBUG if quiet else logging.INFO,
             "Provider '%s' mints its credential in the shim's auth.py — "
             "credential will be fetched asynchronously after startup",
             name,
@@ -473,7 +504,7 @@ def _resolve_credential(
         # the provider is not ready.
         return TOKEN_PENDING_SENTINEL, None, interval, exchange_takes_key
 
-    api_key, token_command, interval = _resolve_token_command(name, cfg)
+    api_key, token_command, interval = _resolve_token_command(name, cfg, quiet=quiet)
     return api_key, token_command, interval, exchange_takes_key
 
 
@@ -512,6 +543,7 @@ def build_provider_info(
     shim_name: str | None = None,
     data_dir: str | None = None,
     config_name: str | None = None,
+    quiet: bool = False,
 ) -> ProviderInfo:
     """Create a :class:`ProviderInfo` from a provider config dict.
 
@@ -543,6 +575,11 @@ def build_provider_info(
     as opposed to *provider_type* (the format, ``"open_responses"``).  A shim
     that mints its own credential needs it to tell two configured providers of
     the same shim apart — they are two accounts, not one.
+
+    *quiet* asks the builder not to repeat its per-provider notices (the
+    ``token_command`` executable check, the exchange notice) at their normal
+    level.  The admin's pre-write validation rebuilds every enabled provider
+    on each save, and those lines describe the provider rather than that save.
 
     For known provider types the auth and URL logic is looked up from the
     registry.  Unknown types fall back to Bearer-token auth and a simple
@@ -634,7 +671,9 @@ def build_provider_info(
 
     # -- the credential: static key, command, or shim exchange -----------------
     api_key, token_command, token_refresh_interval, exchange_takes_key = (
-        _resolve_credential(shim_name or provider_type, cfg, exchange, keyless=keyless)
+        _resolve_credential(
+            shim_name or provider_type, cfg, exchange, keyless=keyless, quiet=quiet
+        )
     )
 
     if not cfg.get("base_url"):
@@ -672,6 +711,14 @@ def build_provider_info(
     )
 
     command_takes_key = bool(token_command and cfg.get("token_command_env"))
+
+    # Name the effective source for the admin editor.
+    credential_source = _credential_source_name(
+        keyless=keyless,
+        provider_owns_command=provider_owns_command,
+        exchange=exchange,
+        token_command=token_command,
+    )
 
     # The config key, when the caller has one: two providers of the same shim
     # are two accounts, and the exchange must be able to tell them apart.
@@ -714,6 +761,7 @@ def build_provider_info(
             exchange=exchange is not None,
             account_id=auth_account_id,
         ),
+        credential_source=credential_source,
         session_header=cfg.get("session_header")
         or (shim.connection.session_header if shim is not None else None),
         extra_headers=(shim.connection.headers if shim is not None else None),
