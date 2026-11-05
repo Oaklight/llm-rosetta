@@ -77,7 +77,9 @@ Each leaf directory contains:
 - **`provider.yaml`** (required) — declares `name`, `model_type`, `format`, connection settings (`connection.base_url`, `connection.api_key_env`, `connection.auth_header`, `connection.keyless`, `connection.models_path`, `connection.default_path`, `connection.token_command`), plus optional `logo`, `display_name`, `hint_msg`, and `free_source`.  `base` is the deprecated alias for `format`; the loader validates the `(model_type, format)` pair against the converter registry.  `model_type` is required whenever `format` is used — only a shim that declares `base` and no `format` may omit it.  A non-chat shim declares `connection.default_path` for the endpoint it serves (e.g. `/v1/embeddings`), and a provider can name it through `embeddings_shim` / `rerank_shim` / `decisions_shim` instead of a bare format.
 - **`transforms.py`** (optional) — exports `post_ir_transforms` and/or `pre_ir_transforms` tuples (the old names `to_transforms` / `from_transforms` also work)
 
-**The vendor manifest (optional).** A `provider.yaml` at the vendor root — one
+#### The vendor manifest (optional)
+
+A `provider.yaml` at the vendor root — one
 that declares no `name` and no `format` — is a *manifest*, not a shim: it holds
 the `connection:` defaults every leaf below it inherits. Authentication is a
 fact about the provider, not about each dialect it speaks, so that is where a
