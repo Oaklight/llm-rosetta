@@ -36,6 +36,7 @@ ProviderShim ("deepseek--chat_completions")
 packages/llm-rosetta/src/llm_rosetta/shims/providers/
 ├── __init__.py                  # 自动发现：扫描子目录
 ├── openai/
+│   ├── provider.yaml            # 厂商清单：共用的凭据
 │   ├── quota.py                 # 厂商级探针，该厂商每种类型共用
 │   ├── llm/
 │   │   ├── chat_completions/
@@ -48,10 +49,17 @@ packages/llm-rosetta/src/llm_rosetta/shims/providers/
 │   └── decisions/
 │       └── provider.yaml        # format: openai_decisions
 ├── cohere/
+│   ├── provider.yaml            # 厂商清单：base_url + 凭据
 │   ├── embeddings/
 │   │   └── provider.yaml        # format: cohere
 │   └── rerank/
 │       └── provider.yaml
+├── openai_chatgpt/
+│   ├── provider.yaml            # 厂商清单：只有注释
+│   ├── auth.py                  # 厂商级凭据交换
+│   └── llm/
+│       └── open_responses/
+│           └── provider.yaml
 └── ...
 ```
 
@@ -65,6 +73,35 @@ packages/llm-rosetta/src/llm_rosetta/shims/providers/
 
 - **`provider.yaml`**（必需）—— 声明 `name`、`model_type`、`format`、连接设置（`connection.base_url`、`connection.api_key_env`、`connection.auth_header`、`connection.keyless`、`connection.models_path`、`connection.default_path`、`connection.token_command`），以及可选的 `logo`、`display_name`、`hint_msg`、`free_source`。`base` 是 `format` 的弃用别名；loader 会校验 `(model_type, format)` 对。使用 `format` 时必须同时声明 `model_type` —— 只有声明 `base` 且不写 `format` 的 shim 可以省略。非 chat shim 用 `connection.default_path` 声明它服务的端点（例如 `/v1/embeddings`），提供方可以通过 `embeddings_shim` / `rerank_shim` / `decisions_shim` 指向它，而不必写裸格式。
 - **`transforms.py`**（可选）—— 导出 `post_ir_transforms` 和/或 `pre_ir_transforms` 元组（旧名 `to_transforms` / `from_transforms` 也可用）
+
+**厂商清单（可选）。** 放在厂商根目录、不声明 `name` 也不声明 `format` 的
+`provider.yaml` 是**清单**而不是 shim：它保存下面每个叶子都继承的 `connection:` 默认值。
+认证是提供方的事实，而不是它说多少种方言的事实，所以凭据放在这里：OpenAI 各条 lane
+共用一份 `api_key_env`，ALCF 三个集群共用一条 Globus `token_command`，AskSage 四种
+方言共用一份 `token_command_env`。
+
+```yaml
+# alcf/provider.yaml
+connection:
+  api_key_env: ALCF_API_KEY
+  token_command: [python3, token.py]   # 相对路径按本文件所在目录解析
+  token_refresh_interval: 3600
+```
+
+合并规则统一：清单提供默认值，叶子逐字段覆盖，`headers` 按 key 合并。lane 之间确实不同
+的厂商把差异留在该留的地方 —— ALCF 每个集群各自声明 `base_url`，AskSage 只在
+`google_generate` 叶子上保留 `auth_header: x-access-tokens`。清单不能携带的字段
+（`name`、`format`、`tools` 等）在加载时会被拒绝。
+
+清单是可选的，也可以只声明一部分。没有清单时，厂商照旧在每个叶子里声明全部内容，已有的
+shim 不需要任何改动。叶子也可以为某条 lane 覆盖凭据字段；内置树只把凭据放在清单里，并有
+测试守卫，防止副本重新出现。
+
+`token_command` 的相对参数按**声明它的目录**解析 —— 清单里的命令按厂商目录，叶子覆盖的
+命令按叶子目录 —— 所以 `token.py` 与声明它的文件放在一起。
+
+`auth.py` 遵循同样的规则：与厂商清单放在一起时它是厂商的交换，附加到每个叶子；放在叶子里
+时它属于该叶子。一个厂商只声明一个交换，某个叶子再声明一个会加载失败。
 
 **按类型声明的参数默认值。** 非 chat shim 可以在以自身模型类型命名的段里，声明该 vendor 真正有差异的请求字段：
 
@@ -97,11 +134,12 @@ hint_msg:
 
 **凭据交换（Credential exchange）。** 有些上游的推理端点不接受账号 API key —— AskSage
 接受由账号 key 换来的短期 access token，ALCF 接受会过期的 Globus bearer token 并需要
-定时刷新。这个交换是厂商的事实，因此可以由 shim 自己声明，而不是让每个运维各写一遍：
+定时刷新。这个交换是厂商的事实，因此可以由厂商清单声明一次，而不是让每个运维、每个叶子
+各写一遍：
 
 ```yaml
+# <vendor>/provider.yaml —— 下面每个叶子都继承
 connection:
-  base_url: https://api.vendor.example/v1
   api_key_env: VENDOR_API_KEY
   token_command: [python3, token.py]
   token_refresh_interval: 7200
@@ -109,16 +147,16 @@ connection:
 
 网关在启动时运行该命令，之后每 `token_refresh_interval` 秒再运行一次（shim 与提供方都
 未声明时为 `3600`，最小 `60`），并在上游返回 `401` 后立即重跑；命令的 stdout 就是发往
-上游的凭据。参数中指向 shim 自身目录内文件的相对路径会被解析为绝对路径，因此 shim 可以
-把脚本与 `provider.yaml` 放在一起；`python3` 之类的裸命令名与各种参数保持原样。提供方
-自己声明的 `token_command` 仍然优先；当命令掌管凭据时，shim 的 `api_key_env` 不会被当作
-静态密钥使用。
+上游的凭据。参数中指向**声明目录**内文件的相对路径会被解析为绝对路径，因此厂商可以把
+脚本与声明它的 `provider.yaml` 放在一起；`python3` 之类的裸命令名与各种参数保持原样。
+提供方自己声明的 `token_command` 仍然优先；当命令掌管凭据时，shim 的 `api_key_env`
+不会被当作静态密钥使用。
 
 **需要读取运维所填 key 的交换**再声明一个变量名，网关据此把 key 递进去：
 
 ```yaml
+# <vendor>/provider.yaml
 connection:
-  base_url: https://api.vendor.example/v1
   api_key_env: VENDOR_API_KEY
   token_command: [python3, token.py]
   token_command_env: VENDOR_ACCOUNT_KEY
@@ -132,8 +170,8 @@ ALCF 的情形（`~/.globus`）。
 
 **需要写代码的交换。** `token_command` 描述的是能用一条命令表达的交换。Sign in with
 ChatGPT 不行：它有交互式首次登录、每次使用都会轮换的 refresh token，保存下来的是一个凭据
-记录而不是一个字符串。这类 shim 在 `provider.yaml` 旁边附带 `auth.py` —— 与 `transforms.py`、
-`quota.py` 同级同信任，走同一条加载路径 —— 并导出 `EXCHANGE`：
+记录而不是一个字符串。这类厂商把 `auth.py` 放在 `provider.yaml`（厂商清单）旁边 —— 与
+`transforms.py`、`quota.py` 同级同信任，走同一条加载路径 —— 并导出 `EXCHANGE`：
 
 ```python
 # auth.py
@@ -188,7 +226,7 @@ shim 下的两个提供方是两个账号，因此自行决定 `state_dir` 默�
 让每个请求都在上游失败。
 
 已随包发布的参考实现是 OpenAI 套餐通道的
-`openai_chatgpt/open_responses/auth.py`（issue
+`openai_chatgpt/auth.py`（issue
 [#1057](https://github.com/Oaklight/llm-rosetta/issues/1057)）：动态客户端注册、PKCE、
 loopback 回调、基于 discovery JWKS 的 ID token 验签、在排他锁下原子写入的 `0600`
 凭据记录、轮换的 refresh token，以及跨重新登录保留的 host id。它只用标准库 —— RS256
@@ -202,7 +240,7 @@ loopback 回调、基于 discovery JWKS 的 ID token 验签、在排他锁下原
 `credential()` 会读取的位置。记录要尽快粘贴：校验在收到时进行，放了一夜的记录会被拒绝，
 只能重新登录。
 
-一个 shim 只能声明其中一种形式：同时提供 `auth.py` 与 `connection.token_command` 会加载
+一个厂商只能声明其中一种形式：同时提供 `auth.py` 与 `connection.token_command` 会加载
 失败。提供方自己写的 `token_command` 仍然优先；若交换未声明 `consumes_key`，在同一提供方
 再配置 `api_key` 会被拒绝 —— 两者是同一个凭据的两种来源。
 
@@ -777,18 +815,27 @@ register_shim(my_shim)
 要向内置注册表添加新提供方：
 
 1. 在 `packages/llm-rosetta/src/llm_rosetta/shims/providers/<vendor>/` 下创建目录：chat 用 `<vendor>/llm/<format>/`，embedding、rerank 或 decision 用 `<vendor>/<model-type>/`
-2. 添加 `provider.yaml`，包含必填字段：
+2. 若该厂商的叶子共用连接信息（通常就是凭据），添加不带 `name` 的 `<vendor>/provider.yaml`：它是厂商清单，每个叶子都继承它。
+
+    ```yaml
+    # <vendor>/provider.yaml
+    connection:
+      api_key_env: MY_PROVIDER_API_KEY
+    ```
+
+3. 为每个叶子添加 `provider.yaml`，包含必填字段：
 
     ```yaml
     name: my-provider
     model_type: llm
     format: chat_completions
-    default_base_url: https://api.my-provider.com/v1
-    default_api_key_env: MY_PROVIDER_API_KEY
     logo: https://example.com/logo.svg
+
+    connection:
+      base_url: https://api.my-provider.com/v1
     ```
 
-3. 如果提供方有字段级差异，可选添加 `transforms.py`：
+4. 如果提供方有字段级差异，可选添加 `transforms.py`：
 
     ```python
     from llm_rosetta.transforms import strip_fields

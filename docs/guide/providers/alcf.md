@@ -69,7 +69,7 @@ Metis 和 Minerva 目前没有支持推理的模型。
 
 ALCF 使用 Globus OAuth 进行认证。访问令牌的有效期较短（约 48 小时），需要定期刷新。刷新令牌本身在 **30 天**后因 ALCF 的会话策略过期 — 届时需要交互式重新登录。
 
-Globus 交换随 **shim 包一起发布**：`llm-rosetta-shim-alcf` 内含这个零依赖（仅标准库）的辅助脚本，模块路径为 `llm_rosetta_shim_alcf.providers.alcf.token`，每个 `alcf_<cluster>--chat_completions` shim 都把它声明为自己的 `connection.token_command`。因此无需下载脚本，配置里也不必写 `token_command` —— 网关会在启动时、按 shim 声明的间隔、以及收到上游 401 之后运行它。
+Globus 交换随 **shim 包一起发布**：`llm-rosetta-shim-alcf` 内含这个零依赖（仅标准库）的辅助脚本，模块路径为 `llm_rosetta_shim_alcf.providers.alcf.token`，厂商清单（`providers/alcf/provider.yaml`）把它声明为 `connection.token_command`，三个集群 shim 共同继承，各自只保留自己的 `base_url` 与 `models_path`。因此无需下载脚本，配置里也不必写 `token_command` —— 网关会在启动时、按 shim 声明的间隔、以及收到上游 401 之后运行它。
 
 ### 初始登录
 
