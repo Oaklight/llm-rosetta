@@ -74,7 +74,9 @@ packages/llm-rosetta/src/llm_rosetta/shims/providers/
 - **`provider.yaml`**（必需）—— 声明 `name`、`model_type`、`format`、连接设置（`connection.base_url`、`connection.api_key_env`、`connection.auth_header`、`connection.keyless`、`connection.models_path`、`connection.default_path`、`connection.token_command`），以及可选的 `logo`、`display_name`、`hint_msg`、`free_source`。`base` 是 `format` 的弃用别名；loader 会校验 `(model_type, format)` 对。使用 `format` 时必须同时声明 `model_type` —— 只有声明 `base` 且不写 `format` 的 shim 可以省略。非 chat shim 用 `connection.default_path` 声明它服务的端点（例如 `/v1/embeddings`），提供方可以通过 `embeddings_shim` / `rerank_shim` / `decisions_shim` 指向它，而不必写裸格式。
 - **`transforms.py`**（可选）—— 导出 `post_ir_transforms` 和/或 `pre_ir_transforms` 元组（旧名 `to_transforms` / `from_transforms` 也可用）
 
-**厂商清单（可选）。** 放在厂商根目录、不声明 `name` 也不声明 `format` 的
+#### 厂商清单（可选）
+
+放在厂商根目录、不声明 `name` 也不声明 `format` 的
 `provider.yaml` 是**清单**而不是 shim：它保存下面每个叶子都继承的 `connection:` 默认值。
 认证是提供方的事实，而不是它说多少种方言的事实，所以凭据放在这里：OpenAI 各条 lane
 共用一份 `api_key_env`，ALCF 三个集群共用一条 Globus `token_command`，AskSage 四种
