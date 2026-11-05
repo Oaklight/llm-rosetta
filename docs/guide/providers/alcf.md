@@ -73,7 +73,7 @@ All three clusters also export a `model_list_transform` that normalizes the mode
 
 ALCF uses Globus OAuth for authentication. Access tokens are short-lived (~48 hours) and must be refreshed periodically. The refresh token itself expires after **30 days** due to ALCF's session policy — after that, interactive re-login is required.
 
-The Globus exchange ships **inside the shim package**: `llm-rosetta-shim-alcf` carries the zero-dependency (stdlib only) helper at `llm_rosetta_shim_alcf.providers.alcf.token`, and every `alcf_<cluster>--chat_completions` shim declares it as its `connection.token_command`. There is nothing to download and no `token_command` to write in your config — the gateway runs the exchange at startup, on the shim's interval and after an upstream 401.
+The Globus exchange ships **inside the shim package**: `llm-rosetta-shim-alcf` carries the zero-dependency (stdlib only) helper at `llm_rosetta_shim_alcf.providers.alcf.token`, and the vendor manifest (`providers/alcf/provider.yaml`) declares it once as `connection.token_command` — the three cluster shims inherit it, and each keeps its own `base_url` and `models_path`. There is nothing to download and no `token_command` to write in your config — the gateway runs the exchange at startup, on the shim's interval and after an upstream 401.
 
 ### Initial login
 

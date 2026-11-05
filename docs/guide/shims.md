@@ -36,6 +36,7 @@ Built-in shims are defined as a directory structure under `shims/providers/`:
 packages/llm-rosetta/src/llm_rosetta/shims/providers/
 ├── __init__.py                  # Auto-discovery: scans subdirectories
 ├── openai/
+│   ├── provider.yaml            # Vendor manifest: the shared credential
 │   ├── quota.py                 # vendor-level probe, shared by every type
 │   ├── llm/
 │   │   ├── chat_completions/
@@ -48,10 +49,17 @@ packages/llm-rosetta/src/llm_rosetta/shims/providers/
 │   └── decisions/
 │       └── provider.yaml        # format: openai_decisions
 ├── cohere/
+│   ├── provider.yaml            # Vendor manifest: base_url + credential
 │   ├── embeddings/
 │   │   └── provider.yaml        # format: cohere
 │   └── rerank/
 │       └── provider.yaml
+├── openai_chatgpt/
+│   ├── provider.yaml            # Vendor manifest: comments only
+│   ├── auth.py                  # Vendor-level credential exchange
+│   └── llm/
+│       └── open_responses/
+│           └── provider.yaml
 └── ...
 ```
 
@@ -68,6 +76,43 @@ Each leaf directory contains:
 
 - **`provider.yaml`** (required) — declares `name`, `model_type`, `format`, connection settings (`connection.base_url`, `connection.api_key_env`, `connection.auth_header`, `connection.keyless`, `connection.models_path`, `connection.default_path`, `connection.token_command`), plus optional `logo`, `display_name`, `hint_msg`, and `free_source`.  `base` is the deprecated alias for `format`; the loader validates the `(model_type, format)` pair against the converter registry.  `model_type` is required whenever `format` is used — only a shim that declares `base` and no `format` may omit it.  A non-chat shim declares `connection.default_path` for the endpoint it serves (e.g. `/v1/embeddings`), and a provider can name it through `embeddings_shim` / `rerank_shim` / `decisions_shim` instead of a bare format.
 - **`transforms.py`** (optional) — exports `post_ir_transforms` and/or `pre_ir_transforms` tuples (the old names `to_transforms` / `from_transforms` also work)
+
+**The vendor manifest (optional).** A `provider.yaml` at the vendor root — one
+that declares no `name` and no `format` — is a *manifest*, not a shim: it holds
+the `connection:` defaults every leaf below it inherits. Authentication is a
+fact about the provider, not about each dialect it speaks, so that is where a
+credential goes: one `api_key_env` for every OpenAI lane, one Globus
+`token_command` for the three ALCF clusters, one `token_command_env` for the
+four AskSage dialects.
+
+```yaml
+# alcf/provider.yaml
+connection:
+  api_key_env: ALCF_API_KEY
+  token_command: [python3, token.py]   # resolved against this file's directory
+  token_refresh_interval: 3600
+```
+
+The merge is uniform: the manifest supplies the defaults, the leaf wins per
+field, and `headers` merges per key. A vendor whose lanes genuinely differ keeps
+the difference where it belongs — ALCF declares `base_url` per cluster, AskSage
+keeps `auth_header: x-access-tokens` on its `google_generate` leaf only.
+Anything a manifest cannot carry (`name`, `format`, `tools`, …) is refused at
+load time.
+
+The manifest is optional and may declare any subset. Without one, a vendor keeps
+declaring everything per leaf exactly as before, so an existing shim needs no
+change. A leaf may also override a credential field for one lane; the built-in
+tree keeps credentials in the manifest only, and a test enforces that so the
+copies cannot come back.
+
+A relative `token_command` argument resolves against the directory that
+declared it — the vendor directory for a manifest command, the leaf directory
+for an override — so `token.py` sits beside whichever file names it.
+
+`auth.py` follows the same rule: beside the vendor manifest it is the vendor's
+exchange, attached to every leaf; beside a leaf it belongs to that leaf. A
+vendor declares one exchange, and one leaf declaring another is a load error.
 
 **Per-type parameter defaults.** A non-chat shim may declare the request fields its vendor differs on, in a section named after its own model type:
 
@@ -104,12 +149,12 @@ text appears on hover. Nothing in the proxy path reads it.
 **Credential exchange.** Some upstreams do not accept an account API key on their
 inference endpoints — AskSage takes a short-lived access token minted from the
 account key, ALCF a Globus bearer token that expires and has to be refreshed. The
-exchange is a fact about the vendor, so a shim can declare it instead of leaving
-every operator to write it:
+exchange is a fact about the vendor, so the vendor manifest can declare it once
+instead of leaving every operator — and every leaf — to write it:
 
 ```yaml
+# <vendor>/provider.yaml — inherited by every leaf below it
 connection:
-  base_url: https://api.vendor.example/v1
   api_key_env: VENDOR_API_KEY
   token_command: [python3, token.py]
   token_refresh_interval: 7200
@@ -118,18 +163,18 @@ connection:
 The gateway runs the command at startup, again every `token_refresh_interval`
 seconds (`3600` when the shim and the provider both stay silent, minimum `60`),
 and immediately after an upstream `401`; its stdout becomes the credential sent
-upstream. A relative argument that names a file in the shim's own directory is
-resolved to its absolute path, so the shim ships the script beside its
-`provider.yaml` — `python3` and any flag stay as written. A provider that names
-its own `token_command` still wins, and while a command owns the credential the
-shim's `api_key_env` is not used as a static key.
+upstream. A relative argument that names a file in the declaring directory is
+resolved to its absolute path, so the vendor ships the script beside the
+`provider.yaml` that names it — `python3` and any flag stay as written. A
+provider that names its own `token_command` still wins, and while a command owns
+the credential the shim's `api_key_env` is not used as a static key.
 
 **An exchange that consumes the operator's key** declares the variable to hand
 it over in:
 
 ```yaml
+# <vendor>/provider.yaml
 connection:
-  base_url: https://api.vendor.example/v1
   api_key_env: VENDOR_API_KEY
   token_command: [python3, token.py]
   token_command_env: VENDOR_ACCOUNT_KEY
@@ -146,9 +191,9 @@ which is the ALCF case (`~/.globus`).
 **An exchange that needs code.** `token_command` describes an exchange that fits
 in an argv. Sign in with ChatGPT does not: it has an interactive first run, a
 refresh token that rotates on every use, and a credential record rather than one
-string. A shim in that position ships `auth.py` beside its `provider.yaml` — the
-same trust level and loading path as `transforms.py` and `quota.py` — and exports
-`EXCHANGE`:
+string. A vendor in that position ships `auth.py` beside its `provider.yaml` —
+the same trust level and loading path as `transforms.py` and `quota.py` — and
+exports `EXCHANGE`:
 
 ```python
 # auth.py
@@ -211,7 +256,7 @@ instead of failing upstream on every request, and it is not retried on the seed
 pass.
 
 The shipped reference implementation is the OpenAI plan route's
-`openai_chatgpt/open_responses/auth.py` (issue
+`openai_chatgpt/auth.py` (issue
 [#1057](https://github.com/Oaklight/llm-rosetta/issues/1057)): dynamic client
 registration, PKCE, a loopback callback, ID-token verification against the
 discovery JWKS, a `0600` credential record written atomically under an exclusive
@@ -232,7 +277,7 @@ and stores it where its own `credential()` will look. Paste the record promptly:
 verification happens on arrival, so a record left lying around overnight is
 refused and the sign-in has to be repeated.
 
-A shim declares one form or the other: `auth.py` and `connection.token_command`
+A vendor declares one form or the other: `auth.py` and `connection.token_command`
 together is a load error. A provider's own `token_command` still wins, and an
 `api_key` beside an exchange that does not declare `consumes_key` is rejected —
 the two are alternative sources for one credential.
@@ -847,18 +892,27 @@ After registration the shim name works everywhere — `get_converter_for_provide
 To add a new provider to the built-in registry:
 
 1. Create a directory under `packages/llm-rosetta/src/llm_rosetta/shims/providers/<vendor>/`: `<vendor>/llm/<format>/` for chat, `<vendor>/<model-type>/` for embedding, rerank or decision.
-2. Add a `provider.yaml` with required fields:
+2. If the vendor's leaves share connection facts — the credential, usually — add `<vendor>/provider.yaml` with no `name`: it is the vendor manifest, and every leaf inherits it.
+
+    ```yaml
+    # <vendor>/provider.yaml
+    connection:
+      api_key_env: MY_PROVIDER_API_KEY
+    ```
+
+3. Add a `provider.yaml` per leaf with required fields:
 
     ```yaml
     name: my-provider
     model_type: llm
     format: chat_completions
-    default_base_url: https://api.my-provider.com/v1
-    default_api_key_env: MY_PROVIDER_API_KEY
     logo: https://example.com/logo.svg
+
+    connection:
+      base_url: https://api.my-provider.com/v1
     ```
 
-3. Optionally add a `transforms.py` if the provider has field-level quirks:
+4. Optionally add a `transforms.py` if the provider has field-level quirks:
 
     ```python
     from llm_rosetta.transforms import strip_fields

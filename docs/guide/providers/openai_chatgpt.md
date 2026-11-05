@@ -22,8 +22,9 @@ refuses.
 |:---|:---|:---|:---|
 | `openai_chatgpt--open_responses` | `open_responses` | `https://api.openai.com/v1` | none — signed in |
 
-There is deliberately no `api_key_env`: the credential is minted by the shim's
-own `auth.py`. An `api_key` beside an exchange that does not consume one is
+There is deliberately no `api_key_env`: the credential is minted by the vendor's
+own `auth.py` (`shims/providers/openai_chatgpt/auth.py`, beside the vendor
+manifest). An `api_key` beside an exchange that does not consume one is
 rejected at config load, because the two are alternative sources for one
 credential.
 
