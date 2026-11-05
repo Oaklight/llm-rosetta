@@ -8,6 +8,4 @@ logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/zhipu.
 # (results[].index/relevance_score, document as a plain string when
 # return_documents is set).  Both optional parameters are honoured.
 connection:
-  base_url: https://open.bigmodel.cn/api/paas/v4
-  api_key_env: ZHIPU_API_KEY
   default_path: /rerank

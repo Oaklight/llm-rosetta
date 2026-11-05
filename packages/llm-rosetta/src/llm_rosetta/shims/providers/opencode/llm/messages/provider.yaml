@@ -11,12 +11,6 @@ hint_msg:
   en: "For the Zen balance lane set Base URL to https://opencode.ai/zen/v1 — the default is the Go subscription lane, and one API key signs both. The keyless free pool ships as its own package — declare shims.presets: ["opencode_zen_free"] to load opencode_zen_free--chat_completions."
   zh: "默认走 Go 订阅 lane。Zen 余额 lane 请把 Base URL 改为 https://opencode.ai/zen/v1，两者共用同一个 API Key。无密钥免费池是独立包：声明 shims.presets: ["opencode_zen_free"] 后即可加载 opencode_zen_free--chat_completions。"
 
-connection:
-  base_url: https://opencode.ai/zen/go/v1
-  api_key_env: OPENCODE_API_KEY
-  models_path: https://opencode.ai/zen/go/v1/models
-  session_header: x-opencode-session
-
 # Subscription windows are read from the Go lane's usage endpoint.  The probe
 # lives in the gateway (`gateway/quota/probes.py`); the shim only names it.
 quota:

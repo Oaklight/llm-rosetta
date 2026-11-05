@@ -4,5 +4,4 @@ format: systemone
 
 connection:
   base_url: https://api.typesafe.ai
-  api_key_env: TYPESAFE_API_KEY
   default_path: /v1/systemone

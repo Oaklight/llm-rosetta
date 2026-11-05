@@ -1,0 +1,5 @@
+# Cohere's account key is one credential for every endpoint.  The paths differ
+# per model type (``/v2/embed``, ``/v2/rerank``) and stay on the leaf.
+connection:
+  base_url: https://api.cohere.com
+  api_key_env: COHERE_API_KEY

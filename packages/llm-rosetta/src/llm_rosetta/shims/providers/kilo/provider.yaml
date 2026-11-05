@@ -1,0 +1,5 @@
+# The free pool needs no credential while no key is configured; supplying one
+# switches the same shim back to Bearer auth.  The gateway side of that rule is
+# described in the leaf, which keeps the vendor's ``base_url``.
+connection:
+  keyless: true

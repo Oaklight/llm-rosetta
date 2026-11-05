@@ -4,8 +4,6 @@ format: cohere
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/cohere.svg
 
 connection:
-  base_url: https://api.cohere.com
-  api_key_env: COHERE_API_KEY
   default_path: /v2/embed
 
 # Cohere rejects a /v2/embed request without input_type (measured: 400

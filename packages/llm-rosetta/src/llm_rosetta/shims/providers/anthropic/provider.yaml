@@ -1,0 +1,5 @@
+# One account key signs every Anthropic endpoint, so the credential is declared
+# once here rather than in each leaf.  ``base_url`` stays on the leaf: it is
+# what the lane actually answers on.
+connection:
+  api_key_env: ANTHROPIC_API_KEY

@@ -6,7 +6,6 @@ logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/moonsh
 # Domestic (China mainland): api.moonshot.cn; international: api.moonshot.ai
 connection:
   base_url: https://api.moonshot.cn/v1
-  api_key_env: MOONSHOT_API_KEY
 reasoning:
   thinking_modes:
     enabled: enabled

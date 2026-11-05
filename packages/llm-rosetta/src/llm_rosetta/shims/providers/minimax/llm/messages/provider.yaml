@@ -6,7 +6,6 @@ logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/minima
 # Domestic (China mainland): api.minimaxi.com; international: api.minimax.io
 connection:
   base_url: https://api.minimaxi.com/anthropic
-  api_key_env: MINIMAX_API_KEY
 
 tools:
   # Measured live 2026-10-23: declaring

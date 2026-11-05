@@ -5,7 +5,6 @@ logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/anthro
 
 connection:
   base_url: https://api.anthropic.com
-  api_key_env: ANTHROPIC_API_KEY
 response_id_prefix: "msg_"
 reasoning:
   thinking_modes:

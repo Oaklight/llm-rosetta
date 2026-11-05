@@ -309,6 +309,47 @@ def typed_path(
     return path or keys.default_path
 
 
+def _refuse_minted_credential(name: str, effective: dict[str, Any], shim: Any) -> None:
+    """Refuse a typed endpoint whose credential would be minted, not stored.
+
+    A shim can mint its credential from a command (``connection.token_command``)
+    or from an exchange (``auth.py``).  This path installs a static key only, so
+    forwarding the request would send an empty ``Authorization`` header and fail
+    as a 401 far from the cause.  Until the typed pools share the gateway's
+    minting (follow-up on #1355), say so here: ``parse_typed_config`` catches
+    the ``ValueError`` and auto-disables the endpoint with this reason, which the
+    admin panel shows.
+
+    **Every** command is refused, including one that takes the operator's key
+    as its input (``token_command_env``).  The LLM path accepts that shape
+    because the key is the command's input and the command's output is the
+    credential; a typed endpoint never runs the command, so the key would be
+    sent as the credential instead — which is the 401 this refusal exists to
+    prevent.  An operator who does want the account key on a typed endpoint
+    declares that endpoint without the shim (a ``format``, a ``base_url`` and
+    the key), which is the static path this function lets through.
+
+    Args:
+        name: The configured provider, named in the message.
+        effective: The entry after shim defaults are applied.
+        shim: The resolved endpoint shim, or ``None``.
+
+    Raises:
+        ValueError: The effective credential is produced by a command or an
+            exchange.
+    """
+    exchange = getattr(shim, "auth", None) if shim is not None else None
+    command = effective.get("token_command")
+    if exchange is None and command is None:
+        return
+    kind = getattr(exchange, "kind", None) or "auth.py"
+    source = "a token_command" if command is not None else f"an {kind} exchange"
+    raise ValueError(
+        f"provider {name!r} mints its credential with {source}; non-LLM "
+        f"endpoints support a static key only, so this endpoint stays disabled"
+    )
+
+
 def typed_provider_info(
     name: str,
     cfg: dict[str, Any],
@@ -323,6 +364,7 @@ def typed_provider_info(
     from ..transport.provider_info import google_auth, openai_auth
 
     effective = _apply_shim_defaults(cfg, shim) if shim is not None else cfg
+    _refuse_minted_credential(name, effective, shim)
     return ProviderInfo(
         name=f"{keys.type_name}:{name}",
         api_key=effective.get("api_key", ""),

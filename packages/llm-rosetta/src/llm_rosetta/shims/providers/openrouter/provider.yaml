@@ -1,0 +1,4 @@
+# ``openrouter--messages`` answers on ``https://openrouter.ai/api`` while the
+# other lanes carry ``/api/v1``, so ``base_url`` stays on each leaf.
+connection:
+  api_key_env: OPENROUTER_API_KEY

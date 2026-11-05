@@ -34,6 +34,15 @@ usual non-chat shape) or it groups format directories
 several dialects).  A shim filed under a model-type directory must declare the
 matching ``model_type``; a mismatch is refused at load time.
 
+**Vendor manifests** are optional: a ``provider.yaml`` at a vendor root that
+declares no ``name`` / ``format`` is a defaults file for every leaf below it.
+It may carry any subset of the ``connection:`` block — in practice the
+credential declaration, which is a provider fact rather than a per-dialect
+one — and each leaf overrides any field it names, so a vendor whose lanes
+differ keeps the difference on the leaf.  ``auth.py`` beside the manifest is
+the vendor's credential exchange, attached to every leaf.  A vendor that ships
+no manifest keeps declaring everything in each leaf, unchanged.
+
 Plugin shims
 ------------
 Downstream packages register shims via entry points::
@@ -59,6 +68,7 @@ in ``load_providers()``'s combined result.
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import importlib.machinery
 import importlib.util
@@ -81,6 +91,7 @@ from ..provider_shim import (
     ReasoningCapability,
     SoftErrorPattern,
     ToolsConfig,
+    VendorManifest,
     register_shim,
 )
 
@@ -101,6 +112,21 @@ _TYPE_DIRS: dict[str, str] = {
     "rerank": "rerank",
     "decisions": "decisions",
 }
+
+#: ``connection:`` keys a vendor manifest may declare, read off the config
+#: object so the two lists cannot drift.
+_CONNECTION_KEYS: tuple[str, ...] = tuple(
+    f.name for f in dataclasses.fields(ConnectionConfig)
+)
+
+#: Pre-``connection:`` spellings still read from a flat shim declaration.
+_FLAT_CONNECTION_ALIASES: dict[str, str] = {
+    "default_base_url": "base_url",
+    "default_api_key_env": "api_key_env",
+}
+
+#: Keys that make a ``provider.yaml`` a shim rather than a vendor manifest.
+_IDENTITY_KEYS: tuple[str, ...] = ("name", "format", "base")
 
 # Convention-based model list transforms registered by shim transforms modules.
 # Each entry maps a shim name to a callable that converts upstream model
@@ -700,6 +726,160 @@ def _parse_type_params(
     return dict(raw)
 
 
+def _declares_identity(cfg: Any) -> bool:
+    """Whether a parsed ``provider.yaml`` names a shim."""
+    return isinstance(cfg, dict) and any(key in cfg for key in _IDENTITY_KEYS)
+
+
+def _vendor_manifest(vendor_dir: Path) -> VendorManifest | None:
+    """Read *vendor_dir*'s vendor manifest, when the file there is one.
+
+    A ``provider.yaml`` at a vendor root is either a shim (it declares
+    ``name`` / ``format``) or a manifest of the defaults its leaves share.  The
+    two are told apart by identity rather than by layout, because a flat leaf
+    and a vendor root both sit directly under the scan root.
+
+    Args:
+        vendor_dir: A directory the caller has not recognised as a leaf.
+
+    Returns:
+        The manifest, or ``None`` when the directory has no ``provider.yaml``,
+        when that file declares a shim, or when the directory holds neither a
+        leaf nor an ``auth.py`` (the leaf loader then reports the missing
+        identity).
+
+    Raises:
+        ValueError: A manifest declares something a manifest cannot carry.
+    """
+    path = vendor_dir / "provider.yaml"
+    if not path.exists():
+        return None
+    with open(path, encoding="utf-8") as f:
+        cfg = yaml_load(f.read())
+    if cfg is None:
+        # A comment-only manifest is a legitimate marker: the vendor's shared
+        # facts are its ``auth.py`` beside it, and the comments say why.
+        cfg = {}
+    if _declares_identity(cfg):
+        return None
+    if not isinstance(cfg, dict):
+        raise ValueError(
+            f"{path}: a provider.yaml must be a mapping; a shim declares "
+            f"'name' and 'format', a vendor manifest declares 'connection'"
+        )
+    has_leaf = any(
+        child.resolve() != path.resolve() for child in vendor_dir.rglob("provider.yaml")
+    )
+    if not has_leaf and not (vendor_dir / "auth.py").exists():
+        # Nothing below it to inherit: let the leaf loader report the missing
+        # identity with its own (skip-and-warn) behaviour, rather than turning
+        # one malformed third-party directory into a failed scan.
+        return None
+    unknown = set(cfg) - {"connection"}
+    if unknown:
+        raise ValueError(
+            f"{path}: a vendor manifest may declare only a 'connection:' "
+            f"block; found {', '.join(sorted(unknown))}. Identity belongs in "
+            f"a leaf's provider.yaml"
+        )
+    connection = cfg.get("connection")
+    if connection is not None and not isinstance(connection, dict):
+        raise ValueError(f"{path}: connection must be a mapping")
+    unknown = set(connection or {}) - set(_CONNECTION_KEYS)
+    if unknown:
+        # A typo here is worse than in a leaf: the value is dropped silently
+        # for every lane of the vendor at once, in the file that is supposed
+        # to be the single source.
+        raise ValueError(
+            f"{path}: unknown connection key(s) {', '.join(sorted(unknown))}; "
+            f"a vendor manifest may declare {', '.join(_CONNECTION_KEYS)}"
+        )
+    return VendorManifest(
+        vendor=vendor_dir.name,
+        path=path,
+        connection=dict(connection or {}),
+        auth=_load_auth_exchange(vendor_dir / "auth.py"),
+    )
+
+
+def _leaf_connection(cfg: dict[str, Any]) -> dict[str, Any]:
+    """Return a shim's connection values under their ``connection:`` names.
+
+    A shim declares them under ``connection:`` or, in the pre-rename spelling,
+    at the top level.  Both are read into one mapping so a vendor manifest
+    merges the same way for either form.
+    """
+    connection = cfg.get("connection")
+    if isinstance(connection, dict):
+        return dict(connection)
+    flat = {key: cfg[key] for key in _CONNECTION_KEYS if key in cfg}
+    for legacy, canonical in _FLAT_CONNECTION_ALIASES.items():
+        if legacy in cfg:
+            flat[canonical] = cfg[legacy]
+    return flat
+
+
+def _merged_connection(
+    leaf: dict[str, Any], manifest: VendorManifest | None
+) -> tuple[dict[str, Any], Path | None]:
+    """Merge a leaf's connection values over its vendor manifest's.
+
+    The leaf wins per field, and ``headers`` merges per key, so a lane that
+    needs one extra header adds it without restating the rest.  A vendor whose
+    lanes genuinely differ (ALCF's per-cluster ``base_url``) keeps the
+    difference on the leaf.
+
+    Args:
+        leaf: The leaf's own ``connection`` values.
+        manifest: The vendor manifest, or ``None`` for a standalone shim.
+
+    Returns:
+        The merged mapping and the directory a relative ``token_command``
+        argument must resolve against — the manifest's when the command came
+        from there, else ``None`` so the caller uses the leaf's own directory.
+    """
+    if manifest is None:
+        return leaf, None
+    merged = {**manifest.connection, **leaf}
+    manifest_headers = manifest.connection.get("headers")
+    leaf_headers = leaf.get("headers")
+    if isinstance(manifest_headers, dict) or isinstance(leaf_headers, dict):
+        merged["headers"] = {**(manifest_headers or {}), **(leaf_headers or {})}
+    from_manifest = (
+        "token_command" not in leaf and "token_command" in manifest.connection
+    )
+    return merged, manifest.path.parent if from_manifest else None
+
+
+def _leaf_exchange(provider_dir: Path, manifest: VendorManifest | None) -> Any | None:
+    """The exchange a leaf authenticates with: its own ``auth.py`` or the vendor's.
+
+    A vendor declares one exchange, beside its manifest, and every leaf
+    inherits it.  A leaf that ships its own is a second answer to the same
+    question, so it is refused rather than allowed to shadow the vendor's.
+
+    Args:
+        provider_dir: The leaf directory.
+        manifest: The vendor manifest, or ``None`` for a standalone shim.
+
+    Returns:
+        The exchange object, or ``None`` when neither file exists.
+
+    Raises:
+        ValueError: The leaf and the vendor both declare an exchange.
+    """
+    exchange = _load_auth_exchange(provider_dir / "auth.py")
+    if manifest is None or manifest.auth is None:
+        return exchange
+    if exchange is not None:
+        raise ValueError(
+            f"{provider_dir / 'auth.py'}: the vendor already ships its "
+            f"exchange in {manifest.path.parent / 'auth.py'}; a vendor "
+            f"declares one exchange"
+        )
+    return manifest.auth
+
+
 def _load_single_provider(
     provider_dir: Path,
     *,
@@ -708,6 +888,7 @@ def _load_single_provider(
     root: Path | None = None,
     quota_probes: tuple[Any, ...] = (),
     expected_type: str | None = None,
+    manifest: VendorManifest | None = None,
 ) -> ProviderShim | None:
     """Load a single provider from *provider_dir* and register it.
 
@@ -717,6 +898,8 @@ def _load_single_provider(
         _builtin: Whether this is a built-in provider directory.
         expected_type: The model type the enclosing model-type directory
             names.  When set, the shim's own ``model_type`` must match it.
+        manifest: The vendor manifest whose connection defaults this leaf
+            inherits and may override.
 
     Returns:
         The registered :class:`ProviderShim`, or ``None`` on failure.
@@ -730,7 +913,10 @@ def _load_single_provider(
         or ("format" not in cfg and "base" not in cfg)
     ):
         logger.warning(
-            "Skipping %s: missing 'name' or 'format' (legacy 'base')", yaml_path
+            "Skipping %s: missing 'name' or 'format' (legacy 'base'). A "
+            "vendor manifest belongs at the vendor root, not in a leaf "
+            "directory",
+            yaml_path,
         )
         return None
 
@@ -758,8 +944,9 @@ def _load_single_provider(
     # A credential exchange that does not fit in an argv.  It is the module
     # form of the same declaration as ``connection.token_command``, so a shim
     # that ships both leaves the loader with no single answer: reject it here
-    # rather than let one silently shadow the other.
-    exchange = _load_auth_exchange(provider_dir / "auth.py")
+    # rather than let one silently shadow the other.  A vendor declares its
+    # exchange once, beside the manifest, so every lane authenticates alike.
+    exchange = _leaf_exchange(provider_dir, manifest)
 
     # Parse optional reasoning capability config from YAML.
     reasoning_cfg = cfg.get("reasoning")
@@ -781,51 +968,34 @@ def _load_single_provider(
                 overrides, base=reasoning_cap
             )
 
-    # Parse connection config (grouped or flat fallback).
-    conn_raw = cfg.get("connection")
-    if isinstance(conn_raw, dict):
-        connection = ConnectionConfig(
-            base_url=conn_raw.get("base_url"),
-            api_key_env=conn_raw.get("api_key_env"),
-            models_path=conn_raw.get("models_path"),
-            default_path=conn_raw.get("default_path"),
-            model_id_field=conn_raw.get("model_id_field"),
-            auth_header=conn_raw.get("auth_header"),
-            keyless=conn_raw.get("keyless", False),
-            session_header=conn_raw.get("session_header"),
-            headers=conn_raw.get("headers"),
-            request_header=conn_raw.get("request_header"),
-            session_id_format=conn_raw.get("session_id_format"),
-            request_id_format=conn_raw.get("request_id_format"),
-            stream_required=bool(conn_raw.get("stream_required", False)),
-            token_command=_parse_connection_token_command(
-                conn_raw.get("token_command"), provider_dir, cfg.get("name", "")
-            ),
-            token_refresh_interval=conn_raw.get("token_refresh_interval"),
-            token_command_env=conn_raw.get("token_command_env"),
-            manage_usage_url=conn_raw.get("manage_usage_url"),
-        )
-    else:
-        connection = ConnectionConfig(
-            base_url=cfg.get("default_base_url"),
-            api_key_env=cfg.get("default_api_key_env"),
-            models_path=cfg.get("models_path"),
-            default_path=cfg.get("default_path"),
-            model_id_field=cfg.get("model_id_field"),
-            keyless=cfg.get("keyless", False),
-            session_header=cfg.get("session_header"),
-            headers=cfg.get("headers"),
-            request_header=cfg.get("request_header"),
-            session_id_format=cfg.get("session_id_format"),
-            request_id_format=cfg.get("request_id_format"),
-            stream_required=bool(cfg.get("stream_required", False)),
-            token_command=_parse_connection_token_command(
-                cfg.get("token_command"), provider_dir, cfg.get("name", "")
-            ),
-            token_refresh_interval=cfg.get("token_refresh_interval"),
-            token_command_env=cfg.get("token_command_env"),
-            manage_usage_url=cfg.get("manage_usage_url"),
-        )
+    # Parse connection config: the vendor manifest's defaults first, then the
+    # leaf's own values, which win per field.  A field the leaf omits is the
+    # shared one — that is how a vendor keeps one credential declaration for
+    # every lane while each lane keeps its own base URL.
+    conn_raw, command_dir = _merged_connection(_leaf_connection(cfg), manifest)
+    connection = ConnectionConfig(
+        base_url=conn_raw.get("base_url"),
+        api_key_env=conn_raw.get("api_key_env"),
+        models_path=conn_raw.get("models_path"),
+        default_path=conn_raw.get("default_path"),
+        model_id_field=conn_raw.get("model_id_field"),
+        auth_header=conn_raw.get("auth_header"),
+        keyless=bool(conn_raw.get("keyless", False)),
+        session_header=conn_raw.get("session_header"),
+        headers=conn_raw.get("headers"),
+        request_header=conn_raw.get("request_header"),
+        session_id_format=conn_raw.get("session_id_format"),
+        request_id_format=conn_raw.get("request_id_format"),
+        stream_required=bool(conn_raw.get("stream_required", False)),
+        token_command=_parse_connection_token_command(
+            conn_raw.get("token_command"),
+            command_dir or provider_dir,
+            cfg.get("name", ""),
+        ),
+        token_refresh_interval=conn_raw.get("token_refresh_interval"),
+        token_command_env=conn_raw.get("token_command_env"),
+        manage_usage_url=conn_raw.get("manage_usage_url"),
+    )
 
     if exchange is not None and connection.token_command:
         raise ValueError(
@@ -896,6 +1066,7 @@ def _load_single_provider(
         free_source=cfg.get("free_source", False),
         connection=connection,
         auth=exchange,
+        manifest=manifest,
         quota=quota_decl,
         quota_probes=all_quota_probes,
         tools=tools,
@@ -940,6 +1111,7 @@ def _load_provider_tolerant(
     on_error: str,
     quota_probes: tuple[Any, ...] = (),
     expected_type: str | None = None,
+    manifest: VendorManifest | None = None,
 ) -> ProviderShim | None:
     """Load one provider directory, optionally downgrading errors to a warning.
 
@@ -955,6 +1127,7 @@ def _load_provider_tolerant(
             root=root,
             quota_probes=quota_probes,
             expected_type=expected_type,
+            manifest=manifest,
         )
     except Exception as exc:
         if on_error == "warn":
@@ -972,6 +1145,7 @@ def _load_type_folder(
     root: Path,
     on_error: str,
     quota_probes: tuple[Any, ...] = (),
+    manifest: VendorManifest | None = None,
 ) -> list[ProviderShim]:
     """Load the leaves under a model-type directory.
 
@@ -988,6 +1162,7 @@ def _load_type_folder(
             on_error=on_error,
             quota_probes=quota_probes,
             expected_type=expected_type,
+            manifest=manifest,
         )
         return [shim] if shim is not None else []
 
@@ -1005,6 +1180,7 @@ def _load_type_folder(
                 on_error=on_error,
                 quota_probes=quota_probes,
                 expected_type=expected_type,
+                manifest=manifest,
             )
             if shim is not None:
                 loaded.append(shim)
@@ -1019,12 +1195,14 @@ def _load_group_folder(
     root: Path,
     on_error: str,
     quota_probes: tuple[Any, ...] = (),
+    manifest: VendorManifest | None = None,
 ) -> list[ProviderShim]:
     """Load every leaf provider inside a *group_dir*.
 
     A child is a leaf (``<group>/<leaf>/provider.yaml``) or a model-type
     directory (``<group>/llm/...``, ``<group>/embeddings/...``); a child that
-    is neither is not a provider directory and is skipped.
+    is neither is not a provider directory and is skipped.  *manifest* is the
+    vendor manifest read from *group_dir* itself, if it has one.
     """
     child_group = f"{group}.{group_dir.name}" if group else group_dir.name
     loaded: list[ProviderShim] = []
@@ -1042,6 +1220,7 @@ def _load_group_folder(
                     root=root,
                     on_error=on_error,
                     quota_probes=quota_probes,
+                    manifest=manifest,
                 )
             )
             continue
@@ -1053,6 +1232,7 @@ def _load_group_folder(
                 root=root,
                 on_error=on_error,
                 quota_probes=quota_probes,
+                manifest=manifest,
             )
             if shim is not None:
                 loaded.append(shim)
@@ -1082,6 +1262,12 @@ def load_providers_from_dir(
       the directory itself holds the leaf, or it groups format directories.
       Every shim below it must declare the matching ``model_type``.
 
+    Either of the last two may also carry a **vendor manifest**: a
+    ``provider.yaml`` at the vendor root that declares no ``name``/``format``,
+    holding the ``connection:`` defaults every leaf inherits (the credential,
+    usually) and optionally an ``auth.py`` beside it.  The manifest is
+    optional, and a leaf overrides any field it names.
+
     Args:
         providers_dir: Root directory to scan for provider subdirectories.
         group: Optional group name prefix for all shims loaded from this
@@ -1102,31 +1288,49 @@ def load_providers_from_dir(
         if not d.is_dir() or d.name.startswith(("_", ".")):
             continue
         if (d / "provider.yaml").exists():
-            shim = _load_provider_tolerant(
-                d, group, builtin=builtin, root=providers_dir, on_error=on_error
-            )
-            if shim is not None:
-                shims.append(shim)
-        else:
-            # Potential group folder — load the vendor's shared quota probes
-            # once, then scan its leaf providers.
-            group_probes: tuple[Any, ...] = ()
+            # A shim (it declares ``name``/``format``) or a vendor manifest
+            # (it declares only ``connection:``).  A leaf stands alone; a
+            # manifest supplies the defaults for the leaves below it.
             try:
-                group_probes = _load_quota_probes(d / "quota.py")
+                manifest = _vendor_manifest(d)
             except Exception as exc:
                 if on_error == "raise":
                     raise
-                logger.warning("Skipping quota probes in %s: %s", d, exc)
-            shims.extend(
-                _load_group_folder(
+                logger.warning("Skipping vendor directory %s: %s", d, exc)
+                continue
+            if manifest is None:
+                shim = _load_provider_tolerant(
                     d,
                     group,
                     builtin=builtin,
                     root=providers_dir,
                     on_error=on_error,
-                    quota_probes=group_probes,
                 )
+                if shim is not None:
+                    shims.append(shim)
+                continue
+        else:
+            manifest = None
+        # Group folder — load the vendor's shared quota probes once, then scan
+        # its leaf providers.
+        group_probes: tuple[Any, ...] = ()
+        try:
+            group_probes = _load_quota_probes(d / "quota.py")
+        except Exception as exc:
+            if on_error == "raise":
+                raise
+            logger.warning("Skipping quota probes in %s: %s", d, exc)
+        shims.extend(
+            _load_group_folder(
+                d,
+                group,
+                builtin=builtin,
+                root=providers_dir,
+                on_error=on_error,
+                quota_probes=group_probes,
+                manifest=manifest,
             )
+        )
     return shims
 
 

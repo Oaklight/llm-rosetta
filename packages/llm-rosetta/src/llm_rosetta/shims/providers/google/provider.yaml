@@ -1,0 +1,5 @@
+# Both chat dialects and the embeddings endpoint answer on one host; the path
+# and the request shape are what differ, and those stay on the leaf.
+connection:
+  base_url: https://generativelanguage.googleapis.com
+  api_key_env: GOOGLE_API_KEY

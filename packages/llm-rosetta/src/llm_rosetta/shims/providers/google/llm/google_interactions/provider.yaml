@@ -3,9 +3,6 @@ model_type: llm
 format: google_interactions
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/google.svg
 
-connection:
-  base_url: https://generativelanguage.googleapis.com
-  api_key_env: GOOGLE_API_KEY
 reasoning:
   effort_field: thinking_level
   effort_range: [minimal, high]
