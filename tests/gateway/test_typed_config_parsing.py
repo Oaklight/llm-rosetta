@@ -505,3 +505,98 @@ class TestDecisionSection:
             }
         )
         assert cfg.decisions_models["m"] == "on"
+
+
+class TestMintedCredential:
+    """A typed endpoint installs a static key, so a minting shim cannot serve it.
+
+    A shim whose credential comes from ``token_command`` or ``auth.py`` would
+    reach the upstream with an empty ``Authorization`` header.  Until the typed
+    pools share the gateway's minting (#1355), the endpoint is disabled with a
+    reason the admin panel shows.
+    """
+
+    @staticmethod
+    def _register(
+        *,
+        command: str | None = "token-helper",
+        exchange: Any = None,
+        env: str | None = None,
+    ) -> None:
+        from llm_rosetta.shims.provider_shim import (
+            ConnectionConfig,
+            ProviderShim,
+            register_shim,
+        )
+
+        register_shim(
+            ProviderShim(
+                name="minty--systemone",
+                format="systemone",
+                model_type="decisions",
+                connection=ConnectionConfig(
+                    base_url="https://minty.example",
+                    token_command=(command,) if command else None,
+                    token_command_env=env,
+                ),
+                auth=exchange,
+            )
+        )
+
+    def test_a_command_shim_disables_the_endpoint_with_a_reason(self) -> None:
+        self._register()
+        raw: dict[str, Any] = {
+            "decisions_providers": {"p": {"decisions_shim": "minty--systemone"}}
+        }
+
+        cfg = GatewayConfig(raw)
+
+        assert "p" not in cfg.decisions_providers
+        marker: Any = raw["decisions_providers"]["p"]["_auto_disabled_endpoints"]
+        assert (
+            "mints its credential with a token_command" in marker["decisions"]["reason"]
+        )
+
+    def test_an_exchange_shim_disables_the_endpoint(self) -> None:
+        class Exchange:
+            kind = "oauth"
+
+            async def credential(self, ctx):  # pragma: no cover - never called
+                return "x"
+
+        self._register(command=None, exchange=Exchange())
+        raw: dict[str, Any] = {
+            "decisions_providers": {"p": {"decisions_shim": "minty--systemone"}}
+        }
+
+        cfg = GatewayConfig(raw)
+
+        assert "p" not in cfg.decisions_providers
+        marker: Any = raw["decisions_providers"]["p"]["_auto_disabled_endpoints"]
+        assert "oauth exchange" in marker["decisions"]["reason"]
+
+    def test_a_command_that_consumes_the_key_is_refused_too(self) -> None:
+        """The key is the command's input, not the credential a typed call sends.
+
+        The LLM path accepts this shape because it runs the command; a typed
+        endpoint never does, so the account key would go upstream as the
+        credential.  Refusing is the same call as for a plain command, and the
+        reason says so.
+        """
+        self._register(env="ACME_KEY")
+        raw: dict[str, Any] = {
+            "decisions_providers": {"p": {"decisions_shim": "minty--systemone"}}
+        }
+
+        cfg = GatewayConfig(raw)
+
+        assert "p" not in cfg.decisions_providers
+        marker: Any = raw["decisions_providers"]["p"]["_auto_disabled_endpoints"]
+        assert "token_command" in marker["decisions"]["reason"]
+
+    def test_a_static_key_shim_still_parses(self) -> None:
+        cfg = GatewayConfig(
+            {"decisions_providers": {"p": {"decisions_shim": "typesafe--systemone"}}}
+        )
+
+        assert "p" in cfg.decisions_providers

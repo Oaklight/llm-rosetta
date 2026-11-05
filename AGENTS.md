@@ -119,6 +119,7 @@ declare the differences.
 | `QuotaProbe` | `shims/quota_probe.py` | Allowance-probe contract a shim ships in `quota.py` |
 | `Transform` primitives | `shims/transforms.py` | `strip_fields`, `rename_field`, `set_defaults` |
 | Built-in shims | `shims/providers/<vendor>/<type>/provider.yaml` | One shim per vendor/format pair, grouped by model type (38 built in) |
+| Vendor manifest | `shims/providers/<vendor>/provider.yaml` | Optional per-vendor `connection:` defaults (the credential) every leaf inherits; `auth.py` sits beside it |
 | External shim sources | `llm_rosetta_gateway/shims/` | Directory/archive loaders, standalone catalog, scheduled removals |
 
 ### Gateway

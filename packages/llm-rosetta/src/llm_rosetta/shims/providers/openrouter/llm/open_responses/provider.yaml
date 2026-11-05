@@ -5,7 +5,6 @@ logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/openro
 
 connection:
   base_url: https://openrouter.ai/api/v1
-  api_key_env: OPENROUTER_API_KEY
 
 # Vendor-neutral spec behavior, confirmed live 2026-10-12 (see #899):
 # OpenRouter rejects ``store: true`` with HTTP 400 ("store: true is not

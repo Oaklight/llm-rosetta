@@ -1129,6 +1129,286 @@ class TestAuthExchange:
         assert load_providers_from_dir(tmp_path, on_error="warn") == []
 
 
+def _exchange_source(kind: str = "oauth") -> str:
+    """A minimal ``auth.py`` body the loader accepts."""
+    return (
+        "from llm_rosetta.shims.auth_exchange import BaseAuthExchange\n"
+        "\n"
+        "class Exchange(BaseAuthExchange):\n"
+        f'    kind = "{kind}"\n'
+        "\n"
+        "    async def credential(self, ctx):\n"
+        '        return "access-token"\n'
+        "\n"
+        "EXCHANGE = Exchange()\n"
+    )
+
+
+class TestVendorManifest:
+    """A vendor declares its shared connection defaults once, beside its leaves.
+
+    Authentication is a provider fact, not a per-dialect one: ALCF mints one
+    Globus token for three clusters, AskSage one access token for four
+    dialects.  The manifest is optional and may declare any subset; a leaf
+    overrides any field it names, so a vendor whose lanes differ (a different
+    ``base_url`` per cluster) keeps the difference where it belongs.
+    """
+
+    def _vendor(
+        self,
+        tmp_path: Path,
+        manifest: str | None,
+        leaves: dict[str, str],
+    ) -> Path:
+        vendor = tmp_path / "acme"
+        for name, body in leaves.items():
+            leaf = vendor / name
+            leaf.mkdir(parents=True, exist_ok=True)
+            (leaf / "provider.yaml").write_text(textwrap.dedent(body))
+        if manifest is not None:
+            (vendor / "provider.yaml").write_text(textwrap.dedent(manifest))
+        return vendor
+
+    @staticmethod
+    def _leaf(name: str, extra: str = "") -> str:
+        return f"name: acme_{name}\nmodel_type: llm\nformat: chat_completions\n" + (
+            f"connection:\n{extra}" if extra else ""
+        )
+
+    def test_the_manifest_supplies_every_leaf(self, tmp_path):
+        self._vendor(
+            tmp_path,
+            "connection:\n  api_key_env: ACME_KEY\n",
+            {"a": self._leaf("a"), "b": self._leaf("b")},
+        )
+
+        shims = load_providers_from_dir(tmp_path)
+
+        assert [s.connection.api_key_env for s in shims] == ["ACME_KEY", "ACME_KEY"]
+        assert all(s.manifest is not None for s in shims)
+
+    def test_a_leaf_overrides_the_manifest(self, tmp_path):
+        """The ALCF/AskSage shape: shared credential, per-lane transport."""
+        self._vendor(
+            tmp_path,
+            "connection:\n"
+            "  base_url: https://shared.example\n"
+            "  auth_header: x-api-key\n"
+            "  headers:\n"
+            '    X-Shared: "1"\n',
+            {
+                "a": self._leaf("a"),
+                "b": self._leaf(
+                    "b",
+                    "  base_url: https://b.example\n"
+                    "  auth_header: x-access-tokens\n"
+                    "  headers:\n"
+                    '    X-Lane: "2"\n',
+                ),
+            },
+        )
+
+        shims = {s.name: s for s in load_providers_from_dir(tmp_path)}
+
+        assert shims["acme_a"].connection.base_url == "https://shared.example"
+        assert shims["acme_a"].connection.auth_header == "x-api-key"
+        assert shims["acme_b"].connection.base_url == "https://b.example"
+        assert shims["acme_b"].connection.auth_header == "x-access-tokens"
+        assert shims["acme_a"].connection.headers == {"X-Shared": "1"}
+        assert shims["acme_b"].connection.headers == {"X-Shared": "1", "X-Lane": "2"}
+
+    def test_a_vendor_without_a_manifest_still_loads(self, tmp_path):
+        """The manifest is optional: an existing third-party shim keeps working."""
+        self._vendor(
+            tmp_path,
+            None,
+            {"a": self._leaf("a", "  api_key_env: ACME_KEY\n")},
+        )
+
+        shim = load_providers_from_dir(tmp_path)[0]
+
+        assert shim.connection.api_key_env == "ACME_KEY"
+        assert shim.manifest is None
+
+    def test_a_partial_manifest_leaves_the_rest_to_the_leaf(self, tmp_path):
+        self._vendor(
+            tmp_path,
+            "connection:\n  api_key_env: ACME_KEY\n",
+            {"a": self._leaf("a", "  base_url: https://a.example\n")},
+        )
+
+        shim = load_providers_from_dir(tmp_path)[0]
+
+        assert shim.connection.api_key_env == "ACME_KEY"
+        assert shim.connection.base_url == "https://a.example"
+
+    def test_the_manifest_command_resolves_at_the_vendor_root(self, tmp_path):
+        vendor = self._vendor(
+            tmp_path,
+            "connection:\n  token_command: [python3, token.py]\n",
+            {"a": self._leaf("a")},
+        )
+        (vendor / "token.py").write_text("print('tok')\n")
+
+        shim = load_providers_from_dir(tmp_path)[0]
+
+        assert shim.connection.token_command == (
+            "python3",
+            str((vendor / "token.py").resolve()),
+        )
+
+    def test_a_leaf_command_resolves_against_the_leaf(self, tmp_path):
+        """An override is the leaf's own file, not the vendor's."""
+        vendor = self._vendor(
+            tmp_path,
+            "connection:\n  token_command: [python3, token.py]\n",
+            {
+                "a": self._leaf("a"),
+                "b": self._leaf("b", "  token_command: [python3, token.py]\n"),
+            },
+        )
+        (vendor / "token.py").write_text("print('shared')\n")
+        (vendor / "b" / "token.py").write_text("print('own')\n")
+
+        shims = {s.name: s for s in load_providers_from_dir(tmp_path)}
+
+        assert shims["acme_a"].connection.token_command == (
+            "python3",
+            str((vendor / "token.py").resolve()),
+        )
+        assert shims["acme_b"].connection.token_command == (
+            "python3",
+            str((vendor / "b" / "token.py").resolve()),
+        )
+
+    def test_the_vendor_exchange_reaches_every_leaf(self, tmp_path):
+        vendor = self._vendor(
+            tmp_path,
+            "connection:\n  api_key_env: ACME_KEY\n",
+            {"a": self._leaf("a"), "b": self._leaf("b")},
+        )
+        (vendor / "auth.py").write_text(_exchange_source())
+
+        shims = load_providers_from_dir(tmp_path)
+
+        assert [getattr(s.auth, "kind", None) for s in shims] == ["oauth", "oauth"]
+
+    def test_a_leaf_exchange_beside_the_vendor_one_is_rejected(self, tmp_path):
+        """One exchange per vendor: two would leave the loader picking a winner."""
+        vendor = self._vendor(tmp_path, "", {"a": self._leaf("a")})
+        (vendor / "auth.py").write_text(_exchange_source())
+        (vendor / "a" / "auth.py").write_text(_exchange_source("device"))
+
+        with pytest.raises(ValueError, match="declares one exchange"):
+            load_providers_from_dir(tmp_path)
+
+    def test_a_vendor_exchange_beside_a_manifest_command_is_rejected(self, tmp_path):
+        vendor = self._vendor(
+            tmp_path,
+            "connection:\n  token_command: [token-helper]\n",
+            {"a": self._leaf("a")},
+        )
+        (vendor / "auth.py").write_text(_exchange_source())
+
+        with pytest.raises(
+            ValueError, match="both auth.py and connection.token_command"
+        ):
+            load_providers_from_dir(tmp_path)
+
+    def test_a_manifest_may_not_carry_shim_facts(self, tmp_path):
+        """A manifest is connection defaults only; anything else is a mistake."""
+        self._vendor(
+            tmp_path,
+            "tools:\n  custom_tools: true\n",
+            {"a": self._leaf("a")},
+        )
+
+        with pytest.raises(ValueError, match="vendor manifest may declare only"):
+            load_providers_from_dir(tmp_path)
+
+    def test_a_manifest_connection_key_must_be_known(self, tmp_path):
+        """A typo would drop the value for every lane at once, silently."""
+        self._vendor(
+            tmp_path,
+            "connection:\n  api_key_envs: ACME_KEY\n",
+            {"a": self._leaf("a")},
+        )
+
+        with pytest.raises(ValueError, match="unknown connection key"):
+            load_providers_from_dir(tmp_path)
+
+    def test_a_manifest_is_not_a_shim(self):
+        """``openai/provider.yaml`` must not register as a provider ``openai``."""
+        load_providers()
+
+        assert "openai" not in {s.name for s in list_shims()}
+        assert get_shim("openai--chat_completions") is not None
+
+    def test_a_broken_manifest_skips_only_its_vendor(self, tmp_path):
+        self._vendor(
+            tmp_path,
+            "tools:\n  custom_tools: true\n",
+            {"a": self._leaf("a")},
+        )
+        good = tmp_path / "other"
+        (good / "leaf").mkdir(parents=True)
+        (good / "leaf" / "provider.yaml").write_text(
+            "name: other--chat_completions\nmodel_type: llm\nformat: chat_completions\n"
+        )
+
+        shims = load_providers_from_dir(tmp_path, on_error="warn")
+
+        assert [s.name for s in shims] == ["other--chat_completions"]
+
+
+class TestBuiltinVendorManifests:
+    """The shipped tree keeps one credential declaration per vendor."""
+
+    @staticmethod
+    def _vendors() -> list[Path]:
+        from llm_rosetta.shims import providers as providers_mod
+
+        root = providers_mod._PROVIDERS_DIR
+        return [
+            d
+            for d in sorted(root.iterdir())
+            if d.is_dir() and not d.name.startswith(("_", "."))
+        ]
+
+    def test_every_builtin_vendor_declares_a_manifest(self):
+        missing = [
+            d.name for d in self._vendors() if not (d / "provider.yaml").exists()
+        ]
+        assert missing == []
+
+    def test_no_builtin_leaf_declares_a_credential(self):
+        """The copies must not come back: the manifest is the only home."""
+        from llm_rosetta._vendor.yaml import load as yaml_load
+
+        credential_keys = {
+            "api_key_env",
+            "default_api_key_env",
+            "keyless",
+            "token_command",
+            "token_command_env",
+            "token_refresh_interval",
+        }
+        offenders: list[str] = []
+        for vendor in self._vendors():
+            manifest = vendor / "provider.yaml"
+            for leaf in sorted(vendor.rglob("provider.yaml")):
+                if leaf == manifest:
+                    continue
+                cfg = yaml_load(leaf.read_text(encoding="utf-8")) or {}
+                declared = credential_keys & set(cfg)
+                declared |= credential_keys & set(cfg.get("connection") or {})
+                if declared:
+                    offenders.append(f"{leaf}: {', '.join(sorted(declared))}")
+                if (leaf.parent / "auth.py").exists():
+                    offenders.append(f"{leaf.parent}: auth.py")
+        assert offenders == []
+
+
 def _snapshot_rows() -> list[dict]:
     """The registry facts a directory move must not change."""
     from llm_rosetta.shims import list_shims

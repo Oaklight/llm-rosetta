@@ -179,6 +179,32 @@ def _read_only_reason(row: dict[str, Any]) -> str | None:
     return None
 
 
+def _manifest_above(entry: dict[str, Any]) -> str | None:
+    """The vendor manifest a leaf inherits from, when one sits above it.
+
+    A disabled shim is not in the registry, so its row cannot read
+    :attr:`ProviderShim.manifest`; the file walk answers the same question.
+    A ``provider.yaml`` with no ``name`` is a manifest, not a shim.
+    """
+    path, root = entry.get("path"), entry.get("root")
+    if not path or not root:
+        return None
+    try:
+        leaf = Path(path).resolve()
+        root_path = Path(root).resolve()
+    except OSError:
+        return None
+    for parent in leaf.parents:
+        if parent == root_path:
+            break
+        candidate = parent / "provider.yaml"
+        if candidate == leaf or not candidate.is_file():
+            continue
+        if _yaml_meta(candidate) is None:
+            return str(candidate)
+    return None
+
+
 def _shim_rows(request: Any) -> list[dict[str, Any]]:
     """Return one row per shim the sources define, sources first.
 
@@ -204,6 +230,9 @@ def _shim_rows(request: Any) -> list[dict[str, Any]]:
             "origin": origin,
             "source": entry.get("source", ""),
             "path": entry.get("path"),
+            "manifest_path": (
+                str(shim.manifest.path) if shim.manifest is not None else None
+            ),
             "enabled": shim.name not in disabled,
             "editable": writable,
             "deletable": writable,
@@ -225,6 +254,7 @@ def _shim_rows(request: Any) -> list[dict[str, Any]]:
             "origin": origin,
             "source": entry.get("source", ""),
             "path": entry.get("path"),
+            "manifest_path": _manifest_above(entry),
             "enabled": False,
             "editable": writable,
             "deletable": writable,

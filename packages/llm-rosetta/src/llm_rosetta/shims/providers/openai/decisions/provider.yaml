@@ -4,5 +4,4 @@ format: openai_decisions
 
 connection:
   base_url: https://api.openai.com
-  api_key_env: OPENAI_API_KEY
   default_path: /v1/decisions

@@ -1,0 +1,2 @@
+connection:
+  api_key_env: DASHSCOPE_API_KEY

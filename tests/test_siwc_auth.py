@@ -1,10 +1,10 @@
 """Sign in with ChatGPT — the shim's OAuth credential exchange.
 
-The exchange is a shim module (``providers/openai_chatgpt/open_responses/auth.py``)
-loaded by path, so these tests load it the same way the shim loader does and
-drive it through a fake transport.  Nothing here reaches the network: the
-issuer, its JWKS and the token endpoint are all answered locally, and the ID
-tokens are signed with a throwaway RSA key.
+The exchange is a vendor module (``providers/openai_chatgpt/auth.py``) loaded by
+path, so these tests load it the same way the shim loader does and drive it
+through a fake transport.  Nothing here reaches the network: the issuer, its
+JWKS and the token endpoint are all answered locally, and the ID tokens are
+signed with a throwaway RSA key.
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ from llm_rosetta.shims.auth_exchange import AuthContext, InteractiveSetupRequire
 
 MODULE_PATH = (
     Path(__file__).resolve().parent.parent
-    / "packages/llm-rosetta/src/llm_rosetta/shims/providers/openai_chatgpt/llm/open_responses/auth.py"
+    / "packages/llm-rosetta/src/llm_rosetta/shims/providers/openai_chatgpt/auth.py"
 )
 
 # A throwaway 2048-bit key, generated for these tests only.  The exchange
@@ -619,10 +619,10 @@ class TestInteractiveSignIn:
 
 
 def test_the_shim_loader_loads_the_shipped_exchange():
-    """The module is a shim's ``auth.py``, so the loader must find it there.
+    """The module is the vendor's ``auth.py``, so the loader must find it there.
 
-    #1058 adds the ``provider.yaml`` beside it; until then the directory has
-    no shim, and the built-in scan must skip it rather than fail on it.
+    It sits beside ``openai_chatgpt/provider.yaml`` — the vendor manifest — and
+    the loader attaches it to every leaf of that vendor.
     """
     from llm_rosetta.shims.providers import _load_auth_exchange
 

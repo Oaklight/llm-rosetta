@@ -1,0 +1,2 @@
+connection:
+  api_key_env: MOONSHOT_API_KEY

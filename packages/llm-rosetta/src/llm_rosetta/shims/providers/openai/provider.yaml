@@ -1,0 +1,4 @@
+# ``openai--decisions`` answers on the bare host while the chat and embedding
+# lanes carry ``/v1``, so ``base_url`` stays on each leaf; the key does not.
+connection:
+  api_key_env: OPENAI_API_KEY

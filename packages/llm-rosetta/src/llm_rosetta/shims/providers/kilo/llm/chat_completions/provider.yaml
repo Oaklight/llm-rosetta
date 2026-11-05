@@ -18,4 +18,3 @@ free_source: true
 connection:
   base_url: https://api.kilo.ai/api/gateway
   models_path: /models
-  keyless: true

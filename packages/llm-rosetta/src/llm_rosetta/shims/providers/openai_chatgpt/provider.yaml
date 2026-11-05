@@ -1,0 +1,5 @@
+# The ChatGPT *plan* lane authenticates with a credential this vendor's
+# ``auth.py`` mints — an interactive first sign-in, a rotating refresh token and
+# a stored record — not with an API key.  There is deliberately no
+# ``api_key_env`` here: inheriting OPENAI_API_KEY would hand the loader a static
+# key beside an exchange, which it refuses.

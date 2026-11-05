@@ -21,6 +21,7 @@ import threading
 import warnings
 from collections.abc import Iterator
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Literal
 
 from ..types.ir.configs import IREffort, IRMode  # re-exported
@@ -255,6 +256,36 @@ class ConnectionConfig:
     ``api_key`` / ``token_command`` mutual exclusion for this shim, because the
     key is an input rather than a second credential.
     """
+
+
+@dataclass(frozen=True)
+class VendorManifest:
+    """Vendor-level defaults shared by every shim in one directory.
+
+    A provider's credential is a fact about the provider, not about each wire
+    format it serves: ALCF mints one Globus token for three clusters, AskSage
+    one access token for four dialects.  Declaring it once in
+    ``<vendor>/provider.yaml`` keeps the copies from drifting.
+
+    The file is optional and may declare any subset of
+    :class:`ConnectionConfig`: a leaf overrides any field it names, so a
+    vendor whose lanes differ (a different ``base_url`` per cluster) keeps the
+    differing field on the leaf.  The manifest carries no identity — a file
+    that declares ``name`` or ``format`` is a shim, not a manifest.
+
+    Attributes:
+        vendor: Directory name the manifest sits in, for error messages.
+        path: The ``provider.yaml`` itself.  A relative ``token_command``
+            argument resolves against its directory.
+        connection: Raw ``connection:`` mapping, before leaf merging.
+        auth: The exchange the vendor ships in ``auth.py`` beside the
+            manifest, attached to every leaf.
+    """
+
+    vendor: str
+    path: Path
+    connection: dict[str, Any] = field(default_factory=dict)
+    auth: Any | None = None
 
 
 @dataclass(frozen=True)
@@ -549,6 +580,15 @@ class ProviderShim:
     attached here.  A provider-level ``token_command`` still wins; a shim
     declares this form or ``connection.token_command``, never both.
     """
+    manifest: VendorManifest | None = None
+    """Vendor manifest whose defaults this shim was merged with.
+
+    ``None`` for a shim that stands alone (a flat leaf, or a vendor that ships
+    no ``provider.yaml`` at the vendor level).  The admin panel reads
+    :attr:`VendorManifest.path` to point an operator at the file that owns the
+    shared connection defaults; the merged values themselves live in
+    :attr:`connection`.
+    """
     tools: ToolsConfig = ToolsConfig()
     pre_ir_transforms: tuple[Transform, ...] = ()
     post_ir_transforms: tuple[Transform, ...] = ()
@@ -650,6 +690,7 @@ class ProviderShim:
             "quota": None,
             "quota_probes": (),
             "auth": None,
+            "manifest": None,
             "tools": ToolsConfig(),
             "pre_ir_transforms": (),
             "post_ir_transforms": (),

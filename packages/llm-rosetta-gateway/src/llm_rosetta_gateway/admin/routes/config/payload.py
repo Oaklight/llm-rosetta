@@ -502,6 +502,17 @@ async def get_config(request: Any) -> Response:
                     "default_base_url": s.connection.base_url,
                     "default_api_key_env": s.connection.api_key_env,
                     "default_path": s.connection.default_path,
+                    # The vendor manifest that supplied the shared defaults,
+                    # when the shim inherits one.  The editor points an
+                    # operator at the file that owns the credential rather
+                    # than at the leaf that only inherits it.
+                    "manifest_path": (
+                        str(s.manifest.path) if s.manifest is not None else None
+                    ),
+                    # An exchange that takes the operator's key as its *input*
+                    # (AskSage mints a token from the account key) keeps the
+                    # key field: the key is not a second credential.
+                    "consumes_key": bool(getattr(s.auth, "consumes_key", False)),
                     "supports_custom_tools": s.tools.custom_tools,
                     "hoist_system_messages": s.hoist_system_messages,
                     "max_tool_description_length": s.tools.max_description_length,

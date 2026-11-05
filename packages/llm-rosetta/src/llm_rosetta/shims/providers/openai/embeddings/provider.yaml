@@ -5,5 +5,4 @@ logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/openai
 
 connection:
   base_url: https://api.openai.com/v1
-  api_key_env: OPENAI_API_KEY
   default_path: /v1/embeddings

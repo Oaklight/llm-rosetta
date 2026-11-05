@@ -2,138 +2,428 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://llm-rosetta.readthedocs.io/schemas/provider.schema.json",
   "title": "LLM-Rosetta Provider Shim",
-  "description": "Schema for provider.yaml shim configuration files.",
-  "type": "object",
-  "required": [
-    "name"
-  ],
-  "anyOf": [
+  "description": "Schema for provider.yaml files: either a shim definition (one provider) or a vendor manifest (the connection defaults shared by every shim in the vendor's directory).",
+  "oneOf": [
     {
-      "required": [
-        "format",
-        "model_type"
-      ]
+      "$ref": "#/definitions/shim"
     },
     {
-      "required": [
-        "base"
-      ],
-      "not": {
-        "required": [
-          "format"
-        ]
-      }
+      "$ref": "#/definitions/vendorManifest"
     }
   ],
-  "additionalProperties": false,
-  "properties": {
-    "name": {
-      "type": "string",
-      "description": "Canonical provider identifier (e.g. 'deepseek', 'openai--chat_completions')."
-    },
-    "model_type": {
-      "type": "string",
-      "description": "Capability category this shim serves. Required whenever 'format' is declared: a format name is scoped by this category, so the same spelling may name a chat format and an embedding format. Only a shim that declares 'base' and no 'format' may omit it; the base name then identifies the category (or it defaults to 'llm'). 'embedding' is the deprecated spelling of 'embeddings' and 'decision' of 'decisions'; the loader rewrites either with a warning.",
-      "enum": [
-        "llm",
-        "embeddings",
-        "embedding",
-        "rerank",
-        "decisions",
-        "decision"
+  "definitions": {
+    "shim": {
+      "type": "object",
+      "required": [
+        "name"
       ],
-      "default": "llm"
-    },
-    "format": {
-      "type": "string",
-      "description": "Wire format within model_type. Validated against the converter registry for that category (see the (model_type, format) pair).",
-      "enum": [
-        "chat_completions",
-        "messages",
-        "open_responses",
-        "google_generate",
-        "google_interactions",
-        "openai",
-        "cohere",
-        "jina",
-        "voyage",
-        "systemone",
-        "openai_decisions"
-      ]
-    },
-    "base": {
-      "type": "string",
-      "deprecated": true,
-      "description": "Deprecated alias for 'format'. When it names a model type (the old decision shims declared base: decision), model_type is taken from it and a format is still required."
-    },
-    "logo": {
-      "type": "string",
-      "format": "uri",
-      "description": "URL to the provider's logo image (SVG preferred)."
-    },
-    "display_name": {
-      "type": "string",
-      "description": "This shim's own human-readable label (e.g. 'cluster_a' on 'acme_cluster_a--chat_completions'). Shown as the shim's row inside its group, for a shim that also declares 'group' or 'group_label'. A shim declaring neither was written against the older schema, where 'display_name' titled the group instead; that reading is kept, so its row label still comes from the name. Falls back to the segment after '--' in the name."
-    },
-    "group": {
-      "type": "string",
-      "description": "Top-level group this shim appears under in the admin provider-type picker. Falls back to the segment before '--' in the name, so a shim usually needs no declaration; declare it when one vendor spans several name prefixes (e.g. 'acme_cluster_a' and 'acme_cluster_b' both declaring 'acme'). The group's title — which is also the brand on free-source affordances — falls back to the capitalized group key, so a vendor that wants more than that declares 'group_label'."
-    },
-    "group_label": {
-      "type": "string",
-      "description": "Title of the shim's top-level group. Falls back to the group key. Keep it identical across the members of one group; as with 'logo', the last shim loaded wins."
-    },
-    "free_source": {
-      "type": "boolean",
-      "description": "Mark this provider as a source with a free model pool. The admin UI groups its keyless entry under a 'Free Resource' section.",
-      "default": false
-    },
-    "response_id_prefix": {
-      "type": "string",
-      "description": "Provider-specific prefix for response IDs (e.g. 'chatcmpl-', 'msg_', 'resp_'). Empty string means passthrough.",
-      "default": ""
-    },
-    "preserve_fields": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      },
-      "description": "Extra response/echo fields this provider adds to the base format's preserve set (e.g. the OpenAI-only lifecycle fields). Additive; the base format's spec-level set always applies.",
-      "default": []
-    },
-    "soft_error_patterns": {
-      "type": "array",
-      "description": "A 200 response whose body matches 'pattern' is treated as this status code and message.",
-      "items": {
-        "type": "object",
-        "required": [
-          "pattern",
-          "status_code",
-          "message"
-        ],
-        "additionalProperties": false,
-        "properties": {
-          "pattern": {
-            "type": "string"
-          },
-          "status_code": {
-            "type": "integer"
-          },
-          "message": {
-            "type": "string"
+      "anyOf": [
+        {
+          "required": [
+            "format",
+            "model_type"
+          ]
+        },
+        {
+          "required": [
+            "base"
+          ],
+          "not": {
+            "required": [
+              "format"
+            ]
           }
         }
+      ],
+      "additionalProperties": false,
+      "description": "A shim definition: one provider, one (model_type, format) pair. 'name' identifies it; the loader reads it from any provider.yaml that declares an identity.",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Canonical provider identifier (e.g. 'deepseek', 'openai--chat_completions')."
+        },
+        "model_type": {
+          "type": "string",
+          "description": "Capability category this shim serves. Required whenever 'format' is declared: a format name is scoped by this category, so the same spelling may name a chat format and an embedding format. Only a shim that declares 'base' and no 'format' may omit it; the base name then identifies the category (or it defaults to 'llm'). 'embedding' is the deprecated spelling of 'embeddings' and 'decision' of 'decisions'; the loader rewrites either with a warning.",
+          "enum": [
+            "llm",
+            "embeddings",
+            "embedding",
+            "rerank",
+            "decisions",
+            "decision"
+          ],
+          "default": "llm"
+        },
+        "format": {
+          "type": "string",
+          "description": "Wire format within model_type. Validated against the converter registry for that category (see the (model_type, format) pair).",
+          "enum": [
+            "chat_completions",
+            "messages",
+            "open_responses",
+            "google_generate",
+            "google_interactions",
+            "openai",
+            "cohere",
+            "jina",
+            "voyage",
+            "systemone",
+            "openai_decisions"
+          ]
+        },
+        "base": {
+          "type": "string",
+          "deprecated": true,
+          "description": "Deprecated alias for 'format'. When it names a model type (the old decision shims declared base: decision), model_type is taken from it and a format is still required."
+        },
+        "logo": {
+          "type": "string",
+          "format": "uri",
+          "description": "URL to the provider's logo image (SVG preferred)."
+        },
+        "display_name": {
+          "type": "string",
+          "description": "This shim's own human-readable label (e.g. 'cluster_a' on 'acme_cluster_a--chat_completions'). Shown as the shim's row inside its group, for a shim that also declares 'group' or 'group_label'. A shim declaring neither was written against the older schema, where 'display_name' titled the group instead; that reading is kept, so its row label still comes from the name. Falls back to the segment after '--' in the name."
+        },
+        "group": {
+          "type": "string",
+          "description": "Top-level group this shim appears under in the admin provider-type picker. Falls back to the segment before '--' in the name, so a shim usually needs no declaration; declare it when one vendor spans several name prefixes (e.g. 'acme_cluster_a' and 'acme_cluster_b' both declaring 'acme'). The group's title — which is also the brand on free-source affordances — falls back to the capitalized group key, so a vendor that wants more than that declares 'group_label'."
+        },
+        "group_label": {
+          "type": "string",
+          "description": "Title of the shim's top-level group. Falls back to the group key. Keep it identical across the members of one group; as with 'logo', the last shim loaded wins."
+        },
+        "free_source": {
+          "type": "boolean",
+          "description": "Mark this provider as a source with a free model pool. The admin UI groups its keyless entry under a 'Free Resource' section.",
+          "default": false
+        },
+        "response_id_prefix": {
+          "type": "string",
+          "description": "Provider-specific prefix for response IDs (e.g. 'chatcmpl-', 'msg_', 'resp_'). Empty string means passthrough.",
+          "default": ""
+        },
+        "preserve_fields": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Extra response/echo fields this provider adds to the base format's preserve set (e.g. the OpenAI-only lifecycle fields). Additive; the base format's spec-level set always applies.",
+          "default": []
+        },
+        "soft_error_patterns": {
+          "type": "array",
+          "description": "A 200 response whose body matches 'pattern' is treated as this status code and message.",
+          "items": {
+            "type": "object",
+            "required": [
+              "pattern",
+              "status_code",
+              "message"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "pattern": {
+                "type": "string"
+              },
+              "status_code": {
+                "type": "integer"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          },
+          "default": []
+        },
+        "store_default": {
+          "type": "boolean",
+          "description": "Value for the 'store' field injected into a response resource when the upstream echo omits it. Omit to keep the base format's spec behavior (no forced store); true selects OpenAI's server-side-storage default."
+        },
+        "hoist_system_messages": {
+          "type": "boolean",
+          "description": "Whether to hoist late system messages for prompt cache prefix stability.",
+          "default": true
+        },
+        "quota": {
+          "type": "object",
+          "description": "Where this lane's allowance can be read. The probe parsers live in the gateway; the shim only names one.",
+          "additionalProperties": false,
+          "properties": {
+            "probe": {
+              "type": "string",
+              "description": "Probe identifier: 'opencode_go' or 'openai_codex'."
+            },
+            "url": {
+              "type": "string",
+              "format": "uri",
+              "description": "Explicit usage URL when it is not derivable from base_url."
+            },
+            "interval": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Background probe interval in seconds. 0 reads on demand only.",
+              "default": 0
+            },
+            "demote_at": {
+              "type": "number",
+              "description": "Used share at which a window demotes the credential. 100 keeps the vendor's own rule.",
+              "default": 100
+            }
+          }
+        },
+        "tools": {
+          "type": "object",
+          "description": "Tool handling behavior.",
+          "additionalProperties": false,
+          "properties": {
+            "custom_tools": {
+              "type": "boolean",
+              "description": "Whether the provider natively accepts custom tool definitions ({type: 'custom'}). When false, custom tools are downgraded to function wrappers.",
+              "default": false
+            },
+            "max_description_length": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Maximum length for tool description strings. Longer descriptions are truncated."
+            },
+            "search_mode": {
+              "type": "string",
+              "enum": [
+                "disabled",
+                "native",
+                "bridge"
+              ],
+              "description": "'disabled' drops tool_search items. 'native' passes through. 'bridge' emulates via BM25 search.",
+              "default": "disabled"
+            },
+            "multimodal_result": {
+              "type": "boolean",
+              "description": "Whether the provider supports multimodal content in tool results natively. null defers to the converter default."
+            },
+            "intrinsic_tools": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Provider-hosted server tools this provider supports natively (e.g. web_search, code_execution, google_search). Empty means no intrinsic tool support — the provider must opt in. Declaring a kind lets clients request it and lets cross-format conversion map it to this provider's native server tool.",
+              "default": []
+            },
+            "tool_groups": {
+              "type": "boolean",
+              "default": false,
+              "description": "Whether the provider carries a named group of client-declared tools ({'type': 'namespace', ...} on the Responses family). False means the converter folds group names into the flat tool names instead."
+            }
+          }
+        },
+        "default_base_url": {
+          "type": "string",
+          "format": "uri",
+          "description": "Deprecated: use connection.base_url instead."
+        },
+        "default_api_key_env": {
+          "type": "string",
+          "description": "Deprecated: use connection.api_key_env instead."
+        },
+        "models_path": {
+          "type": "string",
+          "description": "Deprecated: use connection.models_path instead."
+        },
+        "default_path": {
+          "type": "string",
+          "description": "Deprecated: use connection.default_path instead."
+        },
+        "model_id_field": {
+          "type": "string",
+          "description": "Deprecated: use connection.model_id_field instead."
+        },
+        "supports_custom_tools": {
+          "type": "boolean",
+          "description": "Deprecated: use tools.custom_tools instead."
+        },
+        "max_tool_description_length": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Deprecated: use tools.max_description_length instead."
+        },
+        "tool_search_mode": {
+          "type": "string",
+          "enum": [
+            "disabled",
+            "native",
+            "bridge"
+          ],
+          "description": "Deprecated: use tools.search_mode instead."
+        },
+        "multimodal_tool_result": {
+          "type": "boolean",
+          "description": "Deprecated: use tools.multimodal_result instead."
+        },
+        "reasoning": {
+          "type": "object",
+          "description": "Reasoning / thinking capability configuration.",
+          "properties": {
+            "thinking_modes": {
+              "type": "object",
+              "description": "Maps IR mode (auto/enabled/disabled) to provider thinking type value.",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "thinking_default": {
+              "type": "string",
+              "enum": [
+                "auto",
+                "enabled",
+                "disabled"
+              ],
+              "description": "Default IR mode when the request has no explicit mode."
+            },
+            "effort_field": {
+              "type": "string",
+              "description": "Provider-side field path for the effort value (e.g. 'reasoning_effort', 'output_config.effort'). 'none' means provider does not accept effort.",
+              "default": "reasoning_effort"
+            },
+            "effort_range": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 2,
+              "maxItems": 2,
+              "description": "Supported IR effort range [floor, ceiling]. Values: minimal, low, medium, high, xhigh, max."
+            },
+            "budget_ratio": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Derive budget_tokens as max(1024, int(max_tokens * ratio))."
+            },
+            "visibility_modes": {
+              "type": "object",
+              "description": "Maps IR summary value to provider visibility value.",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "unsigned_blocks": {
+              "type": "string",
+              "enum": [
+                "as_is",
+                "preserve"
+              ],
+              "description": "How to handle unsigned reasoning blocks in responses.",
+              "default": "as_is"
+            },
+            "model_overrides": {
+              "type": "object",
+              "description": "Per-model reasoning overrides keyed by upstream model ID. Each entry inherits from the provider-level reasoning config.",
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "thinking_modes": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
+                  "effort_field": {
+                    "type": "string"
+                  },
+                  "effort_range": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "minItems": 2,
+                    "maxItems": 2
+                  },
+                  "budget_ratio": {
+                    "type": "number"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "embeddings": {
+          "type": "object",
+          "description": "Default request parameters for an embeddings shim, keyed by IR field name. A default fills only a field the client omitted. Only fields measured against the live endpoint belong here.",
+          "additionalProperties": false,
+          "properties": {
+            "task_type": {
+              "type": "string",
+              "description": "IR task type (e.g. retrieval_document); the converter maps it to the vendor's word."
+            },
+            "dimensions": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Output vector size."
+            },
+            "encoding_format": {
+              "type": "string",
+              "description": "IR encoding format (e.g. float, base64, int8)."
+            },
+            "truncation": {
+              "type": "boolean",
+              "description": "Whether an over-long input is truncated."
+            }
+          }
+        },
+        "embedding": {
+          "$ref": "#/properties/embeddings"
+        },
+        "rerank": {
+          "type": "object",
+          "description": "Default request parameters for a rerank shim, keyed by IR field name. A default fills only a field the client omitted. Only fields measured against the live endpoint belong here.",
+          "additionalProperties": false,
+          "properties": {
+            "top_n": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "How many documents to return."
+            },
+            "return_documents": {
+              "type": "boolean",
+              "description": "Whether the response carries the document text."
+            },
+            "max_tokens_per_doc": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Per-document token cap."
+            },
+            "truncation": {
+              "type": "boolean",
+              "description": "Whether an over-long document is truncated."
+            }
+          }
+        },
+        "decision": {
+          "type": "object",
+          "description": "Default request parameters for a decision shim. No parameter beyond the connection is measured for the decision formats today.",
+          "additionalProperties": false,
+          "properties": {}
+        },
+        "connection": {
+          "$ref": "#/definitions/connection"
+        }
+      }
+    },
+    "vendorManifest": {
+      "type": "object",
+      "description": "A vendor manifest: the connection defaults every shim in this directory inherits, and the only home for a shared credential. It declares no identity, so a leaf overrides any field it names and a vendor whose lanes differ keeps the difference on the leaf. Optional: a vendor without one keeps declaring everything per leaf.",
+      "additionalProperties": false,
+      "not": {
+        "required": [
+          "name"
+        ]
       },
-      "default": []
-    },
-    "store_default": {
-      "type": "boolean",
-      "description": "Value for the 'store' field injected into a response resource when the upstream echo omits it. Omit to keep the base format's spec behavior (no forced store); true selects OpenAI's server-side-storage default."
-    },
-    "hoist_system_messages": {
-      "type": "boolean",
-      "description": "Whether to hoist late system messages for prompt cache prefix stability.",
-      "default": true
+      "properties": {
+        "connection": {
+          "$ref": "#/definitions/connection"
+        }
+      }
     },
     "connection": {
       "type": "object",
@@ -187,279 +477,46 @@
         },
         "session_id_format": {
           "type": "string",
-          "enum": ["opencode"],
+          "enum": [
+            "opencode"
+          ],
           "description": "Encoding for the session header's value. Omit for the gateway's plain sha256 digest; 'opencode' mints the vendor's timestamp-bearing identifier."
         },
         "request_id_format": {
           "type": "string",
-          "enum": ["opencode"],
+          "enum": [
+            "opencode"
+          ],
           "description": "Encoding for the per-request identifier header's value."
         },
         "stream_required": {
           "type": "boolean",
           "description": "The upstream refuses non-streaming inference (stream: false). The gateway forces streaming upstream and reassembles the reply for a non-streaming client.",
           "default": false
-        }
-      }
-    },
-    "quota": {
-      "type": "object",
-      "description": "Where this lane's allowance can be read. The probe parsers live in the gateway; the shim only names one.",
-      "additionalProperties": false,
-      "properties": {
-        "probe": {
-          "type": "string",
-          "description": "Probe identifier: 'opencode_go' or 'openai_codex'."
         },
-        "url": {
+        "token_command": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "description": "Command that mints the upstream credential, as argv. A relative argument naming a file in the declaring directory is rewritten to its absolute path, so the script can ship beside the declaration. The operator's provider config may override it."
+        },
+        "token_command_env": {
+          "type": "string",
+          "description": "Environment variable the command reads the operator's key from. Declaring it says the key is the command's input rather than a second credential, so a configured api_key is passed under this name and the command's stdout is what goes upstream."
+        },
+        "token_refresh_interval": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Scheduled refresh interval for token_command, in seconds. Omit for the gateway's default (3600)."
+        },
+        "manage_usage_url": {
           "type": "string",
           "format": "uri",
-          "description": "Explicit usage URL when it is not derivable from base_url."
-        },
-        "interval": {
-          "type": "integer",
-          "minimum": 0,
-          "description": "Background probe interval in seconds. 0 reads on demand only.",
-          "default": 0
-        },
-        "demote_at": {
-          "type": "number",
-          "description": "Used share at which a window demotes the credential. 100 keeps the vendor's own rule.",
-          "default": 100
+          "description": "Where the operator changes this account's plan usage, when the vendor has a page for it."
         }
       }
-    },
-    "tools": {
-      "type": "object",
-      "description": "Tool handling behavior.",
-      "additionalProperties": false,
-      "properties": {
-        "custom_tools": {
-          "type": "boolean",
-          "description": "Whether the provider natively accepts custom tool definitions ({type: 'custom'}). When false, custom tools are downgraded to function wrappers.",
-          "default": false
-        },
-        "max_description_length": {
-          "type": "integer",
-          "minimum": 1,
-          "description": "Maximum length for tool description strings. Longer descriptions are truncated."
-        },
-        "search_mode": {
-          "type": "string",
-          "enum": [
-            "disabled",
-            "native",
-            "bridge"
-          ],
-          "description": "'disabled' drops tool_search items. 'native' passes through. 'bridge' emulates via BM25 search.",
-          "default": "disabled"
-        },
-        "multimodal_result": {
-          "type": "boolean",
-          "description": "Whether the provider supports multimodal content in tool results natively. null defers to the converter default."
-        },
-        "intrinsic_tools": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "description": "Provider-hosted server tools this provider supports natively (e.g. web_search, code_execution, google_search). Empty means no intrinsic tool support \u2014 the provider must opt in. Declaring a kind lets clients request it and lets cross-format conversion map it to this provider's native server tool.",
-          "default": []
-        },
-        "tool_groups": {
-          "type": "boolean",
-          "default": false,
-          "description": "Whether the provider carries a named group of client-declared tools ({'type': 'namespace', ...} on the Responses family). False means the converter folds group names into the flat tool names instead."
-        }
-      }
-    },
-    "default_base_url": {
-      "type": "string",
-      "format": "uri",
-      "description": "Deprecated: use connection.base_url instead."
-    },
-    "default_api_key_env": {
-      "type": "string",
-      "description": "Deprecated: use connection.api_key_env instead."
-    },
-    "models_path": {
-      "type": "string",
-      "description": "Deprecated: use connection.models_path instead."
-    },
-    "default_path": {
-      "type": "string",
-      "description": "Deprecated: use connection.default_path instead."
-    },
-    "model_id_field": {
-      "type": "string",
-      "description": "Deprecated: use connection.model_id_field instead."
-    },
-    "supports_custom_tools": {
-      "type": "boolean",
-      "description": "Deprecated: use tools.custom_tools instead."
-    },
-    "max_tool_description_length": {
-      "type": "integer",
-      "minimum": 1,
-      "description": "Deprecated: use tools.max_description_length instead."
-    },
-    "tool_search_mode": {
-      "type": "string",
-      "enum": [
-        "disabled",
-        "native",
-        "bridge"
-      ],
-      "description": "Deprecated: use tools.search_mode instead."
-    },
-    "multimodal_tool_result": {
-      "type": "boolean",
-      "description": "Deprecated: use tools.multimodal_result instead."
-    },
-    "reasoning": {
-      "type": "object",
-      "description": "Reasoning / thinking capability configuration.",
-      "properties": {
-        "thinking_modes": {
-          "type": "object",
-          "description": "Maps IR mode (auto/enabled/disabled) to provider thinking type value.",
-          "additionalProperties": {
-            "type": "string"
-          }
-        },
-        "thinking_default": {
-          "type": "string",
-          "enum": [
-            "auto",
-            "enabled",
-            "disabled"
-          ],
-          "description": "Default IR mode when the request has no explicit mode."
-        },
-        "effort_field": {
-          "type": "string",
-          "description": "Provider-side field path for the effort value (e.g. 'reasoning_effort', 'output_config.effort'). 'none' means provider does not accept effort.",
-          "default": "reasoning_effort"
-        },
-        "effort_range": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "minItems": 2,
-          "maxItems": 2,
-          "description": "Supported IR effort range [floor, ceiling]. Values: minimal, low, medium, high, xhigh, max."
-        },
-        "budget_ratio": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 1,
-          "description": "Derive budget_tokens as max(1024, int(max_tokens * ratio))."
-        },
-        "visibility_modes": {
-          "type": "object",
-          "description": "Maps IR summary value to provider visibility value.",
-          "additionalProperties": {
-            "type": "string"
-          }
-        },
-        "unsigned_blocks": {
-          "type": "string",
-          "enum": [
-            "as_is",
-            "preserve"
-          ],
-          "description": "How to handle unsigned reasoning blocks in responses.",
-          "default": "as_is"
-        },
-        "model_overrides": {
-          "type": "object",
-          "description": "Per-model reasoning overrides keyed by upstream model ID. Each entry inherits from the provider-level reasoning config.",
-          "additionalProperties": {
-            "type": "object",
-            "properties": {
-              "thinking_modes": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string"
-                }
-              },
-              "effort_field": {
-                "type": "string"
-              },
-              "effort_range": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                },
-                "minItems": 2,
-                "maxItems": 2
-              },
-              "budget_ratio": {
-                "type": "number"
-              }
-            }
-          }
-        }
-      }
-    },
-    "embeddings": {
-      "type": "object",
-      "description": "Default request parameters for an embeddings shim, keyed by IR field name. A default fills only a field the client omitted. Only fields measured against the live endpoint belong here.",
-      "additionalProperties": false,
-      "properties": {
-        "task_type": {
-          "type": "string",
-          "description": "IR task type (e.g. retrieval_document); the converter maps it to the vendor's word."
-        },
-        "dimensions": {
-          "type": "integer",
-          "minimum": 1,
-          "description": "Output vector size."
-        },
-        "encoding_format": {
-          "type": "string",
-          "description": "IR encoding format (e.g. float, base64, int8)."
-        },
-        "truncation": {
-          "type": "boolean",
-          "description": "Whether an over-long input is truncated."
-        }
-      }
-    },
-    "embedding": {
-      "$ref": "#/properties/embeddings"
-    },
-    "rerank": {
-      "type": "object",
-      "description": "Default request parameters for a rerank shim, keyed by IR field name. A default fills only a field the client omitted. Only fields measured against the live endpoint belong here.",
-      "additionalProperties": false,
-      "properties": {
-        "top_n": {
-          "type": "integer",
-          "minimum": 1,
-          "description": "How many documents to return."
-        },
-        "return_documents": {
-          "type": "boolean",
-          "description": "Whether the response carries the document text."
-        },
-        "max_tokens_per_doc": {
-          "type": "integer",
-          "minimum": 1,
-          "description": "Per-document token cap."
-        },
-        "truncation": {
-          "type": "boolean",
-          "description": "Whether an over-long document is truncated."
-        }
-      }
-    },
-    "decision": {
-      "type": "object",
-      "description": "Default request parameters for a decision shim. No parameter beyond the connection is measured for the decision formats today.",
-      "additionalProperties": false,
-      "properties": {}
     }
   }
 }

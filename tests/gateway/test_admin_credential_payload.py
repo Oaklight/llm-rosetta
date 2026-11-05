@@ -111,6 +111,25 @@ class TestTheConfigPayload:
         assert plain["credential_kind"] is None
         assert plain["manage_usage_url"] is None
 
+    def test_registered_shims_name_the_vendor_manifest(self, monkeypatch):
+        """The credential lives in the vendor file now, so the payload names it.
+
+        The Basic/Auth drawer reads both fields: the manifest path is what an
+        operator is pointed at, and ``consumes_key`` keeps the key field for an
+        exchange that takes the operator's key as its input.
+        """
+        payload = self._payload(monkeypatch, SimpleNamespace(providers={}))
+
+        by_name = {s["name"]: s for s in payload["registered_shims"]}
+        assert by_name[PLAN_SHIM]["manifest_path"].endswith(
+            "openai_chatgpt/provider.yaml"
+        )
+        assert by_name["openai--open_responses"]["manifest_path"].endswith(
+            "openai/provider.yaml"
+        )
+        assert all(s["manifest_path"] for s in payload["registered_shims"])
+        assert all(s["consumes_key"] is False for s in payload["registered_shims"])
+
     def test_registered_shims_carry_the_language_mapped_hint(self, monkeypatch):
         """A shim's panel note travels as one entry per language."""
         payload = self._payload(monkeypatch, SimpleNamespace(providers={}))

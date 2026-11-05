@@ -5,7 +5,6 @@ logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/openro
 
 connection:
   base_url: https://openrouter.ai/api
-  api_key_env: OPENROUTER_API_KEY
 reasoning:
   thinking_modes:
     auto: adaptive
