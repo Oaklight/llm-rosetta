@@ -1,5 +1,5 @@
 {
-  "generated": "2026-11-04 07:17 UTC",
+  "generated": "2026-11-05 04:52 UTC",
   "providers": {
     "google_genai": {
       "collisions": [
@@ -189,6 +189,7 @@
         "Response": [
           "access_programs",
           "completed_at",
+          "image",
           "moderation",
           "prompt_cache_diagnostics",
           "prompt_cache_options",
@@ -263,9 +264,9 @@
   },
   "schema_version": 1,
   "sdk_versions": {
-    "anthropic": "2.4.0",
+    "anthropic": "2.5.0",
     "google-genai": "2.34.0",
-    "openai": "3.45.0"
+    "openai": "3.46.0"
   },
   "suite": "drift"
 }

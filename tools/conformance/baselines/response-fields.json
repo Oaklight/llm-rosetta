@@ -996,6 +996,10 @@
           "class": "envelope",
           "reason": ""
         },
+        "image": {
+          "class": "echoed_request",
+          "reason": "the Responses API echoes the request configuration; it is not a translated output field"
+        },
         "incomplete_details": {
           "class": "terminal",
           "reason": ""
@@ -1525,9 +1529,9 @@
   },
   "schema_version": 1,
   "sdk_versions": {
-    "anthropic": "2.4.0",
+    "anthropic": "2.5.0",
     "google-genai": "2.34.0",
-    "openai": "3.45.0"
+    "openai": "3.46.0"
   },
   "suite": "fields"
 }

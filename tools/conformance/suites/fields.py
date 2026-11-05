@@ -135,6 +135,7 @@ _RESPONSES_ECHOED = frozenset(
         "safety_identifier",
         "max_tool_calls",
         "top_logprobs",
+        "image",
     }
 )
 _GOOGLE_SDK_ONLY = frozenset(
