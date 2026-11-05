@@ -255,9 +255,13 @@ jobs:
         # `[all]` pulls the `gateway` extra, which names `llm-rosetta-gateway` by
         # distribution; the gateway is not on PyPI, so its local path has to be
         # installed beside it (and `tools/conformance/redact.py` imports it).
+        # The SDKs are pinned: the baselines are only comparable against the
+        # versions they were generated with, so an upstream release must not
+        # turn every PR red; bump the pins with a regenerated baseline.
         run: |
           python -m pip install --upgrade pip
-          pip install -e "packages/llm-rosetta[all]" -e packages/llm-rosetta-gateway
+          pip install -c tools/conformance/sdk-pins.txt \
+            -e "packages/llm-rosetta[all]" -e packages/llm-rosetta-gateway
 
       - name: Run the wire suite against its baseline
         run: python -m tools.conformance run --suite wire --out wire-report.json

@@ -204,3 +204,15 @@ since a case has to be reviewed rather than trusted. Run it once, decide the
 losses are the ones you meant, then re-baseline.
 
 CI runs this suite on every PR that touches the core, and uploads the report.
+
+## Pinned SDKs
+
+CI installs the SDKs with `-c tools/conformance/sdk-pins.txt`, so the baselines
+are compared against the versions they were generated with. To adopt a newer SDK,
+bump the pins, regenerate the drift, fields, request-fields and stream-events
+baselines, classify every `unclassified` entry, and commit all of it together.
+
+A local venv that resolved other versions prints the mismatch and skips the
+baseline suites (`tests/conformance`), because a ledger compared against a
+different SDK reports the difference as a conversion regression. CI never hits
+this: the `conformance` job installs with the pins.

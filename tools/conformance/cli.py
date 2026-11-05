@@ -5,9 +5,11 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from pathlib import Path
 from collections.abc import Sequence
 
+from .pins import describe, mismatch
 from .runner import run_suite
 from .suites import SUITES
 
@@ -35,6 +37,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
 
     args = parser.parse_args(argv)
+
+    differing = mismatch()
+    if differing:
+        print(f"warning: {describe(differing)}", file=sys.stderr)
 
     probes, environment = SUITES[args.suite]()
     secrets = [os.environ[name] for name in args.secret_env if name in os.environ]

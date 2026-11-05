@@ -622,6 +622,14 @@
           "class": "mapped",
           "reason": "provider_extensions passthrough"
         },
+        "image": {
+          "class": "dropped",
+          "reason": "no IR field for request-level image options; measured: dropped by the open_responses request path"
+        },
+        "image.context_compression": {
+          "class": "dropped",
+          "reason": "no IR field for image context compression; measured: dropped by the open_responses request path"
+        },
         "include": {
           "class": "mapped",
           "reason": "provider_extensions passthrough"
@@ -771,9 +779,9 @@
   },
   "schema_version": 1,
   "sdk_versions": {
-    "anthropic": "2.4.0",
+    "anthropic": "2.5.0",
     "google-genai": "2.34.0",
-    "openai": "3.45.0"
+    "openai": "3.46.0"
   },
   "suite": "request-fields"
 }
