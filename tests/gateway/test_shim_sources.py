@@ -18,11 +18,17 @@ from llm_rosetta_gateway.config import GatewayConfig
 from llm_rosetta_gateway.shim_sources import (
     apply_shim_section,
     apply_shim_sources,
+    describe_shim_sources,
+    parse_shims_section,
     resolve_disabled,
     resolve_source_config,
     shims_signature,
 )
-from llm_rosetta_gateway.shims.sources import check_remote_updates
+from llm_rosetta_gateway.shims.sources import (
+    ShimLoadReport,
+    ShimSourceStatus,
+    check_remote_updates,
+)
 from llm_rosetta.shims.provider_shim import _reset_registry
 
 
@@ -672,3 +678,104 @@ class TestDisabledShims:
 
         assert report.failures() == []
         assert report.sources == []
+
+
+class TestMirrorConfig:
+    """A mirror is a config declaration, judged at parse, not at fetch."""
+
+    def _section(self, **remote):
+        return {"remotes": [{"url": "https://github.com/acme/repo", **remote}]}
+
+    def test_a_template_string_is_accepted(self, tmp_path: Path):
+        sources = parse_shims_section(
+            self._section(mirror="https://m.example/shims@{ref}.tar.gz"),
+            str(tmp_path / "c.jsonc"),
+        )
+        assert sources.remotes[0]["mirror"] == "https://m.example/shims@{ref}.tar.gz"
+
+    def test_an_object_with_a_pin_is_accepted(self, tmp_path: Path):
+        mirror = {"url_template": "https://m.example/x.tar.gz", "sha256": "a" * 64}
+        sources = parse_shims_section(
+            self._section(mirror=mirror), str(tmp_path / "c.jsonc")
+        )
+        assert sources.remotes[0]["mirror"] == mirror
+
+    @pytest.mark.parametrize(
+        "mirror",
+        [
+            5,
+            "",
+            {},
+            {"sha256": "a" * 64},
+            {"url_template": "https://m.example/not-an-archive"},
+            {"url_template": "https://m.example/x.tar.gz", "sha256": "nope"},
+        ],
+    )
+    def test_a_bad_mirror_is_refused_at_parse(self, mirror, tmp_path: Path):
+        with pytest.raises(ValueError) as excinfo:
+            parse_shims_section(self._section(mirror=mirror), str(tmp_path / "c.jsonc"))
+        assert "shims.remotes[0].mirror" in str(excinfo.value)
+
+    def test_the_admin_save_path_rejects_a_bad_mirror(self, tmp_path: Path):
+        response = _validate_shim_sources_body(
+            self._section(mirror={"url_template": "https://m.example/plain"}),
+            str(tmp_path / "c.jsonc"),
+        )
+        assert response is not None
+        assert response.status_code == 400
+
+    def test_a_preset_merge_keeps_the_explicit_mirror(self, tmp_path: Path):
+        preset = {
+            "url": "https://github.com/Oaklight/llm-rosetta-shim-alcf",
+            "ref": "v0.1.0",
+        }
+        section = {
+            "presets": ["alcf"],
+            "remotes": [
+                {
+                    **preset,
+                    "sha256": "b" * 64,
+                    "mirror": "https://m.example/alcf.tar.gz",
+                }
+            ],
+        }
+        sources = parse_shims_section(section, str(tmp_path / "c.jsonc"))
+        merged = sources.remotes[0]
+        assert merged["mirror"] == "https://m.example/alcf.tar.gz"
+        assert merged["sha256"] == "b" * 64
+        # The preset's own keys survive the merge.
+        assert merged["ref"] == "v0.1.0"
+
+    def test_describe_names_the_leg(self):
+        report = ShimLoadReport(
+            sources=[
+                ShimSourceStatus(
+                    kind="remote",
+                    location="https://github.com/acme/repo",
+                    ok=True,
+                    leg="mirror",
+                    from_cache=True,
+                ),
+                ShimSourceStatus(
+                    kind="remote",
+                    location="https://github.com/acme/other",
+                    ok=True,
+                    leg="primary",
+                ),
+                ShimSourceStatus(
+                    kind="remote",
+                    location="https://github.com/acme/broken",
+                    ok=False,
+                    error="ShimSourceUnreachable: nope",
+                ),
+            ]
+        )
+        assert describe_shim_sources(report) == [
+            "https://github.com/acme/repo: loaded via mirror (cache)",
+            "https://github.com/acme/other: loaded via primary (network)",
+            "https://github.com/acme/broken: failed",
+        ]
+
+    def test_describe_is_empty_without_a_section(self):
+        assert describe_shim_sources(None) == []
+        assert describe_shim_sources(ShimLoadReport()) == []
