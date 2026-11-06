@@ -17,6 +17,7 @@ Anything not listed in ``__all__`` is internal.
 from __future__ import annotations
 
 from .context import Identity, SelectionContext
+from .conversation import ConversationIdentity, conversation_id
 from .eligibility import (
     BLOCKED,
     CAPABILITY,
@@ -73,6 +74,7 @@ __all__ = [
     "SPENT",
     "AffinityRoundRobinStrategy",
     "AnchorStage",
+    "ConversationIdentity",
     "Eligibility",
     "EligibilityStage",
     "Identity",
@@ -99,6 +101,7 @@ __all__ = [
     "CAPABILITY",
     "classify_unavailable",
     "compute_affinity_identity",
+    "conversation_id",
     "create_strategy",
     "extract_prefix_from_ir",
     "facts_from_ir",

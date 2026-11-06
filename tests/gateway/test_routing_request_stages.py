@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from llm_rosetta_gateway.routing import (
+    ConversationIdentity,
     ProviderKeyAffinity,
     SelectionContext,
     SessionHeaderAffinity,
 )
+from llm_rosetta_gateway.routing.conversation import conversation_id
 from llm_rosetta_gateway.transport.provider_info import ProviderInfo, openai_auth
 
 
@@ -77,6 +79,54 @@ class TestProviderKeyAffinity:
         assert ctx.provider_info is pi
 
 
+class TestConversationIdentity:
+    """The id the request log keeps, whatever lane the request takes."""
+
+    def test_derives_a_digest_from_the_client_and_first_message(self):
+        ctx = _ctx(_pi(), _ir("hello"))
+        ConversationIdentity().run(ctx)
+        assert ctx.identity.conversation == conversation_id("clienthash", _ir("hello"))
+        assert len(ctx.identity.conversation) == 32
+
+    def test_runs_for_a_provider_without_a_session_header(self):
+        """The log needs the id even when the upstream is told nothing."""
+        ctx = _ctx(_pi(), _ir("hello"))
+        ConversationIdentity().run(ctx)
+        assert ctx.identity.conversation is not None
+
+    def test_a_conversation_keeps_one_id_across_turns(self):
+        first = _ctx(_pi(), _ir("hello"))
+        later = _ctx(
+            _pi(),
+            {
+                "messages": [
+                    {"role": "user", "content": "hello"},
+                    {"role": "assistant", "content": "hi"},
+                    {"role": "user", "content": "more"},
+                ]
+            },
+        )
+        ConversationIdentity().run(first)
+        ConversationIdentity().run(later)
+        assert first.identity.conversation == later.identity.conversation
+
+    def test_two_conversations_from_one_client_get_two_ids(self):
+        a, b = _ctx(_pi(), _ir("hello")), _ctx(_pi(), _ir("different"))
+        ConversationIdentity().run(a)
+        ConversationIdentity().run(b)
+        assert a.identity.conversation != b.identity.conversation
+
+    def test_declines_without_a_client(self):
+        ctx = _ctx(_pi(), _ir("hello"), client=None)
+        ConversationIdentity().run(ctx)
+        assert ctx.identity.conversation is None
+
+    def test_declines_without_a_message_prefix(self):
+        ctx = _ctx(_pi(), {})
+        ConversationIdentity().run(ctx)
+        assert ctx.identity.conversation is None
+
+
 class TestSessionHeaderAffinity:
     def test_declines_without_a_declared_header(self):
         pi = _pi()
@@ -120,4 +170,19 @@ class TestSessionHeaderAffinity:
         ctx = _ctx(_pi(session_header="x-s"), {}, client=None)
         SessionHeaderAffinity().run(ctx)
         assert ctx.upstream_session_id
+        assert ctx.provider_info.session_headers()["x-s"]
+
+    def test_the_header_is_the_conversation_the_log_records(self):
+        """One derived value serves both, so the panel names the session sent."""
+        ctx = _ctx(_pi(session_header="x-s"), _ir("hello"))
+        ConversationIdentity().run(ctx)
+        SessionHeaderAffinity().run(ctx)
+        assert ctx.upstream_session_id == ctx.identity.conversation
+
+    def test_the_header_still_resolves_without_a_conversation(self):
+        """No client means no conversation, but the header must still be set."""
+        ctx = _ctx(_pi(session_header="x-s"), _ir("hello"), client=None)
+        ConversationIdentity().run(ctx)
+        SessionHeaderAffinity().run(ctx)
+        assert ctx.identity.conversation is None
         assert ctx.provider_info.session_headers()["x-s"]

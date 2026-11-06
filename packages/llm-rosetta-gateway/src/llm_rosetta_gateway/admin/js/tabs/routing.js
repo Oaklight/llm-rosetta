@@ -720,23 +720,31 @@ function _strategyName() {
   return (_data && _data.routing && _data.routing.strategy) || 'weighted';
 }
 
-/** The sessions table: each client identity and the lane it last reached.
+/** The sessions table: one line per conversation and the lane it last reached.
  *
- *  A gateway session id is derived per conversation and not stored, so the
- *  table groups the request log by the client identity it does keep — the key
- *  label and the User-Agent — which is what the affinity setting keys on.
+ *  A conversation is identified by the id the gateway derives from the client
+ *  and the request's first message, so concurrent sessions behind one key
+ *  stay apart.  A line with no id — an older row, or a request with nothing to
+ *  derive one from — is the client identity, marked as such.  Two
+ *  conversations that share a client and a first message derive the same id;
+ *  the note states the count rather than claiming it exact.
  */
 function _renderSessions() {
   const el = document.getElementById('routingSessions');
   const note = document.getElementById('routingSessionsNote');
   if (!el || !_data) return;
   const sessions = Array.isArray(_data.sessions) ? _data.sessions : [];
+  const count = Number.isInteger(_data.session_count) ? _data.session_count : sessions.length;
+  const sample = Number.isInteger(_data.session_sample) ? _data.session_sample : 0;
   if (note) {
-    note.textContent = t(
+    const affinity = t(
       _strategyName() && _data.routing && _data.routing.affinity === 'session'
         ? 'routing.sessionsSticky'
         : 'routing.sessionsFree'
     );
+    note.textContent = sessions.length
+      ? affinity + ' · ' + t('routing.sessionsCount', { count, sample })
+      : affinity;
   }
   if (!sessions.length) {
     el.innerHTML = '<div class="conn-row"><span class="conn-warn"></span><span class="conn-detail">' +
@@ -755,6 +763,9 @@ function _renderSessions() {
     '<span class="routing-mono routing-client" title="' + esc(session.user_agent || '') + '">' +
     esc(session.client || '—') +
     (session.user_agent ? '<small>' + esc(_shortUa(session.user_agent)) + '</small>' : '') +
+    (session.derived === false
+      ? '<small class="routing-session-group">' + esc(t('routing.sessionsGroup')) + '</small>'
+      : '') +
     '</span>' +
     '<span>' + esc(session.provider || '—') + '</span>' +
     '<span class="routing-mono">' + esc(String(session.requests || 0)) + '</span>' +
