@@ -31,13 +31,12 @@ Recording is one act, so a converter that reports does not also log.
 from __future__ import annotations
 
 import logging
-from contextlib import contextmanager
 from contextvars import ContextVar
 from functools import wraps
 from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterator
+    from collections.abc import Callable
     from contextvars import Token
 
 _F = TypeVar("_F", bound="Callable[..., Any]")
@@ -356,22 +355,41 @@ def records_on_leg(leg: str) -> Callable[[_F], _F]:
     return decorate
 
 
-@contextmanager
-def recording_to(sink: WarningSink | None) -> Iterator[WarningSink | None]:
+class _RecordingTo:
+    """Context manager that makes *sink* the ambient conversion sink.
+
+    A hand-written class rather than ``@contextmanager``: the stream path
+    enters this twice per upstream chunk (400+ chunks per request), and the
+    generator driver's frames were a measurable share of the per-chunk cost
+    (#1410).  Behaviour is unchanged — enter installs, exit resets.
+    """
+
+    __slots__ = ("_sink", "_token")
+
+    def __init__(self, sink: WarningSink | None) -> None:
+        self._sink = sink
+        self._token: Any = None
+
+    def __enter__(self) -> WarningSink | None:
+        self._token = use_sink(self._sink)
+        return self._sink
+
+    def __exit__(self, *exc_info: Any) -> bool:
+        reset_sink(self._token)
+        return False
+
+
+def recording_to(sink: WarningSink | None) -> _RecordingTo:
     """Run a converter call with *sink* as the conversion in progress.
 
     Args:
         sink: The sink the conversion's losses belong to, or ``None`` to
             record nothing ambiently.
 
-    Yields:
-        *sink*, for the caller's convenience.
+    Returns:
+        A context manager that yields *sink*, for the caller's convenience.
     """
-    token = use_sink(sink)
-    try:
-        yield sink
-    finally:
-        reset_sink(token)
+    return _RecordingTo(sink)
 
 
 def report_loss(
