@@ -17,8 +17,25 @@ event loop.
 
 Mutation safety: cached values are returned **without deep copy**.
 The conversion pipeline is read-only after each stage produces its
-output.  Use :func:`check_integrity` (called by the test conftest on
-teardown) to catch code bugs that accidentally mutate cached objects.
+output.  :meth:`LRUCache.check_integrity` (called by the test conftest
+on teardown) catches code bugs that accidentally mutate cached objects.
+It compares against a fingerprint recorded at ``put()`` time, and that
+recording is **off** unless :data:`RECORD_FINGERPRINTS` is set (the test
+conftest does) or the cache was built with ``verify=True`` — production
+does not pay a serialization per insert for a check it never runs.
+
+Cache keys: tool entries are keyed by canonical JSON + ``hash()``
+(#1415).  #1419 closed the search for a faster zero-dependency canonical
+key, and #1420 measured the alternatives on production payloads: a
+pickle key costs ~72% less to compute (37.4 → 13.5 µs per tool) but
+partitions the cache by dict key order — two clients ordering one
+374-tool request differently overflow ``maxsize=512`` and evict each
+other completely (87.5% → 0% hit rate, +37 ms per request, against the
+3–4 ms saved).  32-bit hashes collide (8 crc32 collisions over 300k
+client-controlled nonces) and a collision is silent: the slot is
+overwritten, so a later ``get`` returns another tool's result.  Keep
+canonical JSON; what is worth removing is redundant work on the miss
+path, not the serializer.
 """
 
 from __future__ import annotations
@@ -32,10 +49,22 @@ from typing import Any
 _SENTINEL = object()
 """Cache miss sentinel — distinct from any valid cached value."""
 
+_MISSING = object()
+"""Fingerprint sentinel — "no fingerprint recorded", distinct from any hash."""
+
 # Default TTL: 30 minutes.  Long enough to cover most agent sessions
 # without a miss; short enough that idle entries don't linger for days.
 # The miss penalty is ~2ms, so even aggressive TTL is harmless.
 DEFAULT_TTL: float = 1800.0
+
+#: Record a canonical-JSON fingerprint of every value ``LRUCache.put`` stores,
+#: so :meth:`LRUCache.check_integrity` can detect a mutated entry.
+#:
+#: Off in production: the fingerprint is a full serialization of the converted
+#: result on every insert, for a check only the test suite runs.  ``tests/
+#: conftest.py`` turns it on for the session; ``LRUCache(verify=True)`` implies
+#: it, because the per-hit guard compares against the stored fingerprint.
+RECORD_FINGERPRINTS: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -44,13 +73,17 @@ DEFAULT_TTL: float = 1800.0
 
 
 def _content_hash_bytes(obj: Any) -> bytes:
-    """Serialize *obj* to bytes for cache key computation.
+    """Serialize *obj* to bytes for the IR validation key.
 
-    Uses ``pickle.dumps(protocol=5)`` which is ~4-5x faster than
-    ``json.dumps(sort_keys=True)`` for nested dicts.  Key-order
-    dependent, but all IR converters produce identical key order
-    (verified empirically).  Worst case on key-order divergence:
-    cache miss → re-validate (safe, not a false positive).
+    ``pickle.dumps(protocol=5)`` is much faster than canonical JSON.  This key
+    feeds :class:`GenerationalSet`, a validation-status set, where a key-order
+    divergence costs a re-validation and never a wrong answer.
+
+    It is key-order dependent, and the older note here claimed every converter
+    produced identical IR key order.  #1420 measured that this is false:
+    ``messages`` propagates the source key order into IR, so this key
+    partitions by source format.  Accepted for a status set; the tool key does
+    not take this route — see :func:`entry_cache_key`.
     """
     return pickle.dumps(obj, protocol=5)
 
@@ -71,6 +104,11 @@ def entry_cache_key(tag: str, entry: Any) -> int:
     never collide) and the canonical JSON of *entry*.  Uses Python's
     built-in ``hash()`` on bytes — 64-bit SipHash, collision probability
     ~10⁻¹⁵ at n=512 entries, more than sufficient for a bounded LRU.
+
+    Canonical JSON is deliberate, not incidental: #1420 measured a pickle key
+    at 13.5 µs against 37.4 µs per tool and kept this one anyway, because the
+    faster key partitions the cache by dict key order and stops sharing between
+    clients.  Re-run that measurement before replacing it (module docstring).
 
     Args:
         tag: Namespace string (e.g. ``"anthropic:from_p"``).
@@ -118,7 +156,10 @@ class LRUCache:
     Callers **must not** mutate the returned objects — doing so silently
     corrupts the cache for all subsequent requests.  Use
     :meth:`check_integrity` (called by the test conftest on teardown) to
-    detect violations.
+    detect violations; it needs fingerprints, which are recorded only when
+    :data:`RECORD_FINGERPRINTS` is on or *verify* is set.  Production
+    therefore stores values only, and ``check_integrity`` there answers
+    "nothing recorded" rather than "clean".
 
     Not thread-safe (single-threaded async event loop assumed).
 
@@ -206,20 +247,39 @@ class LRUCache:
     def put(self, key: int, value: Any) -> None:
         """Store *value* under *key*, evicting the LRU entry if full.
 
-        The TTL deadline is set (or reset) on every ``put``.
-        A content fingerprint is recorded for :meth:`check_integrity`.
+        The TTL deadline is set (or reset) on every ``put``.  A content
+        fingerprint is recorded only when :data:`RECORD_FINGERPRINTS` is on
+        or the cache was built with ``verify=True``: the serialization is
+        paid per insert and only :meth:`check_integrity` / the verify guard
+        ever read it.
         """
         deadline = (time.monotonic() + self._ttl) if self._ttl is not None else 0.0
         if key in self._cache:
             self._cache.move_to_end(key)
             self._cache[key] = (value, deadline)
-            self._fingerprints[key] = hash(_canonical_json_bytes(value))
+            self._record_fingerprint(key, value)
             return
         if len(self._cache) >= self._maxsize:
             evicted_key, _ = self._cache.popitem(last=False)  # evict oldest
             self._fingerprints.pop(evicted_key, None)
         self._cache[key] = (value, deadline)
-        self._fingerprints[key] = hash(_canonical_json_bytes(value))
+        self._record_fingerprint(key, value)
+
+    def _fingerprinting(self) -> bool:
+        """Whether this put/get needs a mutation fingerprint."""
+        return RECORD_FINGERPRINTS or self._verify
+
+    def _record_fingerprint(self, key: int, value: Any) -> None:
+        """Store or drop the fingerprint for *key*, following the switch.
+
+        Dropping matters when the switch is flipped mid-session (a test that
+        disables recording must not leave stale fingerprints behind for
+        :meth:`check_integrity` to compare against).
+        """
+        if self._fingerprinting():
+            self._fingerprints[key] = hash(_canonical_json_bytes(value))
+        else:
+            self._fingerprints.pop(key, None)
 
     def clear(self) -> None:
         """Remove all entries and reset counters."""
@@ -241,11 +301,26 @@ class LRUCache:
         teardown to catch code bugs that accidentally mutate cached
         objects.  Production ``get()`` does not check — mutations are a
         code bug (users never touch Python objects), not a runtime event.
+
+        With fingerprint recording off (the production default, see
+        :data:`RECORD_FINGERPRINTS`) there is nothing to compare, so this
+        returns an empty list: "nothing recorded", not "verified clean".
+
+        An entry stored while recording was off is skipped for the same
+        reason, so turning the switch on later cannot report it as corrupted.
+        The cost is that such an entry is never checked; the test suite turns
+        recording on before the first ``put``, so in the suite every entry is.
         """
+        if not self._fingerprinting():
+            return []
         corrupted: list[int] = []
         for key, (value, _deadline) in self._cache.items():
-            current = hash(_canonical_json_bytes(value))
-            if current != self._fingerprints.get(key):
+            recorded = self._fingerprints.get(key, _MISSING)
+            if recorded is _MISSING:
+                # Not recorded is not modified — and hashing a value we have
+                # nothing to compare against would only cost time.
+                continue
+            if hash(_canonical_json_bytes(value)) != recorded:
                 corrupted.append(key)
         return corrupted
 
@@ -577,8 +652,29 @@ def cache_info() -> dict[str, dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 
+def get_cached_tool_with_key(tag: str, tool: dict[str, Any]) -> tuple[int, Any]:
+    """Look up a single tool conversion result and return its cache key.
+
+    The key is what the caller hands back to :func:`put_cached_tool` on a
+    miss, so a get+put pair computes it once instead of twice — the tool
+    definition is the largest thing either of them serializes (#1420).
+
+    Args:
+        tag: Namespace (e.g. ``"anthropic:from_p"``).
+        tool: Single tool definition dict.
+
+    Returns:
+        ``(key, cached)`` — *cached* is :data:`_SENTINEL` on a miss.
+    """
+    key = entry_cache_key(tag, tool)
+    return key, tool_entry_cache.get(key)
+
+
 def get_cached_tool(tag: str, tool: dict[str, Any]) -> Any:
     """Look up a single tool conversion result.
+
+    Convenience form for callers with no matching ``put``; the conversion path
+    uses :func:`get_cached_tool_with_key` so the key is computed once.
 
     Args:
         tag: Namespace (e.g. ``"anthropic:from_p"``).
@@ -587,18 +683,27 @@ def get_cached_tool(tag: str, tool: dict[str, Any]) -> Any:
     Returns:
         Cached conversion result, or :data:`_SENTINEL` on miss.
     """
-    return tool_entry_cache.get(entry_cache_key(tag, tool))
+    return get_cached_tool_with_key(tag, tool)[1]
 
 
-def put_cached_tool(tag: str, tool: dict[str, Any], result: Any) -> None:
+def put_cached_tool(
+    tag: str,
+    tool: dict[str, Any],
+    result: Any,
+    *,
+    key: int | None = None,
+) -> None:
     """Cache a single tool conversion result.
 
     Args:
         tag: Namespace (e.g. ``"anthropic:from_p"``).
-        tool: Single tool definition dict (used to compute key).
+        tool: Single tool definition dict (hashed only when *key* is omitted).
         result: The conversion result to cache.
+        key: The key :func:`get_cached_tool_with_key` already computed for
+            *tool*.  Passing it makes the miss path serialize the tool once
+            instead of twice; omitting it recomputes the key.
     """
-    tool_entry_cache.put(entry_cache_key(tag, tool), result)
+    tool_entry_cache.put(key if key is not None else entry_cache_key(tag, tool), result)
 
 
 def _ir_validation_key(tag: str, entry: Any) -> int:
