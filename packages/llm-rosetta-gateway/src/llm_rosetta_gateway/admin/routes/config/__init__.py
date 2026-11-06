@@ -11,6 +11,7 @@ each handler lives in the module for the resource it edits:
 :mod:`.settings`              server settings, rate limits, log format
 :mod:`.shims`                 shim sources, reload, removal advisories
 :mod:`.shim_files`            loaded shims: inventory, view, edit, delete
+:mod:`.shim_manifests`        vendor manifests: rows, view, edit, blast radius
 :mod:`.upstream`              upstream model discovery and routing loops
 :mod:`.bulk`                  bulk add: merge a provider into a model entry
 ============================  ============================================
@@ -51,6 +52,12 @@ from .shim_files import (
     get_loaded_shims,
     post_shim_enabled,
     put_loaded_shim,
+)
+from .shim_manifests import (
+    get_shim_manifest,
+    get_shim_manifests,
+    post_preview_shim_manifest,
+    put_shim_manifest,
 )
 from .shims import (
     _merge_shim_sources_body,
@@ -94,10 +101,14 @@ __all__ = [
     "get_config",
     "get_loaded_shim",
     "get_loaded_shims",
+    "get_shim_manifest",
+    "get_shim_manifests",
+    "post_preview_shim_manifest",
     "post_shims_check_updates",
     "post_shims_reload",
     "post_shim_enabled",
     "put_loaded_shim",
+    "put_shim_manifest",
     "put_model",
     "put_provider",
     "put_server_settings",
@@ -182,5 +193,21 @@ def register_config_routes(app: Any) -> None:
     )
     app.route("/admin/api/config/shims/check-updates", methods=["POST"])(
         _guard("providers", post_shims_check_updates)
+    )
+    # Vendor manifests: not shims, so a separate resource.  The path travels in
+    # the query or the body rather than in the URL, because a filesystem path
+    # is not a URL segment; either way it is matched against the manifests the
+    # sources define before anything is read or written.
+    app.route("/admin/api/config/shim-manifests", methods=["GET"])(
+        _guard("providers", get_shim_manifests)
+    )
+    app.route("/admin/api/config/shim-manifests", methods=["PUT"])(
+        _guard("providers", put_shim_manifest)
+    )
+    app.route("/admin/api/config/shim-manifests/detail", methods=["GET"])(
+        _guard("providers", get_shim_manifest)
+    )
+    app.route("/admin/api/config/shim-manifests/preview", methods=["POST"])(
+        _guard("providers", post_preview_shim_manifest)
     )
     app.route("/admin/api/config/reload", methods=["POST"])(reload_config)

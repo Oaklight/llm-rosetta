@@ -1180,7 +1180,7 @@
               <h4 data-i18n="shim.inventory.title">Loaded shims</h4>
               <span id="shimInventoryCount" class="shim-count"></span>
             </div>
-            <p data-i18n="shim.inventory.hint">Every shim the gateway has registered. One from a local directory can be edited or deleted here; built-in and remote shims are read-only.</p>
+            <p data-i18n="shim.inventory.hint">Every shim the gateway has registered. One from a local directory can be edited or deleted here; built-in and remote shims are read-only. A vendor manifest heads the shims that inherit its connection defaults.</p>
           </div>
           <div class="shim-inventory-head">
             <input type="search" id="shimFilterInput" class="shim-filter" oninput="renderLoadedShims()" data-i18n-placeholder="shim.filterPlaceholder" placeholder="Filter by shim or provider">
@@ -1863,10 +1863,18 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
     <div class="shim-modal-meta" id="shimModalMeta"></div>
     <textarea id="shimModalYaml" class="shim-yaml" spellcheck="false" rows="18"></textarea>
     <div class="field-hint" id="shimModalNote"></div>
+    <div class="field-hint" id="shimModalProblem" style="color:var(--red)" hidden></div>
+    <div class="shim-inherit" id="shimModalInherit" hidden>
+      <div class="shim-inherit-head">
+        <span class="shim-inherit-title" data-i18n="shim.manifest.fields">Fields and who inherits them</span>
+        <span class="shim-inherit-summary" id="shimModalInheritSummary"></span>
+      </div>
+      <div class="shim-inherit-list" id="shimModalInheritList"></div>
+    </div>
     <div class="modal-actions">
       <button class="btn" onclick="copyShimYaml()" data-i18n="btn.copyDefinition">Copy</button>
       <button class="btn" onclick="closeModal('shimModal')" data-i18n="btn.cancel">Cancel</button>
-      <button class="btn btn-primary" id="shimModalSave" onclick="saveShimYaml()" data-i18n="btn.save">Save</button>
+      <button class="btn btn-primary" id="shimModalSave" onclick="saveShimModal()" data-i18n="btn.save">Save</button>
     </div>
   </div>
 </div>
