@@ -526,7 +526,7 @@ class OpenResponsesConverter(BaseConverter):
                 if not (isinstance(t, dict) and t.get("external_web_access") is False)
             ]
             if active_tools:
-                ir_tools = self._get_cached_p_tools_to_ir(active_tools)
+                ir_tools = self._convert_p_tools_to_ir(active_tools)
                 if ir_tools:
                     # Naming is the target's call and happens there; this
                     # leg only reports the containers that arrived unnamed.
