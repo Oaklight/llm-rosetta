@@ -1,7 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { safeLinkUrl, parseRecord, credentialSource, credentialNeedsKey, credentialLoadedFor, credentialSaveFields, parseCommandArgv, shortCredential } from '../../packages/llm-rosetta-gateway/src/llm_rosetta_gateway/admin/js/core/credential.js';
+import {
+  safeLinkUrl, parseRecord, credentialSource, credentialNeedsKey,
+  credentialLoadedFor, credentialSaveFields, parseCommandArgv, shortCredential,
+  credentialSourceId, credentialUiSource, availableCredentialSources,
+  credentialFallbackSource, credentialSourceFields, credentialNeedsAttention,
+} from '../../packages/llm-rosetta-gateway/src/llm_rosetta_gateway/admin/js/core/credential.js';
 
 test('a link keeps https and normalises it', () => {
   assert.equal(safeLinkUrl('https://chatgpt.com/settings/usage'), 'https://chatgpt.com/settings/usage');
@@ -100,14 +105,37 @@ test('a save sends a command only after the section read the provider', () => {
     credentialSaveFields({ source: 'config_command', loaded: true, command: '', interval: '3600', env: 'KEY' }),
     { fields: { token_command: [], token_command_env: '', token_refresh_interval: 3600 } },
   );
-  // A shim's argv is read-only, so there is nothing to send for it.
+  // An explicit argv is sent even when the live credential could not be read:
+  // switching a static provider to a command has no credential to read.
+  assert.deepEqual(
+    credentialSaveFields({ source: 'config_command', loaded: false, command: '["v","x"]', interval: '60', env: '' }),
+    { fields: { token_command: ['v', 'x'], token_command_env: '', token_refresh_interval: 60 } },
+  );
+  // A shim's argv is read-only, so there is nothing to send for it — but a
+  // stored override is cleared, because choosing the shim means "the shim's
+  // command", and an entry cannot carry both.  The env var is left alone:
+  // the entry has none, and an empty one would override the shim's own.
   assert.deepEqual(
     credentialSaveFields({ source: 'shim_command', loaded: true, command: '["v","x"]', interval: '90', env: '' }),
-    { fields: { token_refresh_interval: 90 } },
+    { fields: { token_command: [], token_refresh_interval: 90 } },
   );
-  // A static key has no credential fields at all.
+  // A static key clears a stored command and has no interval of its own.
   assert.deepEqual(
     credentialSaveFields({ source: 'static_key', loaded: true, command: '', interval: '', env: '' }),
+    { fields: { token_command: [] } },
+  );
+  // An entry that *does* carry an override env is the one case that removes
+  // it; otherwise the field is not written at all.
+  assert.deepEqual(
+    credentialSaveFields({
+      source: 'shim_command', loaded: true, command: '', interval: '60', env: '',
+      clearCommandEnv: true,
+    }),
+    { fields: { token_command: [], token_command_env: '', token_refresh_interval: 60 } },
+  );
+  // An unread section leaves the stored command alone, whatever the source.
+  assert.deepEqual(
+    credentialSaveFields({ source: 'static_key', loaded: false, command: '', interval: '', env: '' }),
     { fields: {} },
   );
 });
@@ -153,4 +181,116 @@ test('a fingerprint names the kind and the first bytes of the digest', () => {
     assert.equal(shortCredential(bad), null, bad);
   }
   assert.equal(shortCredential(null), null);
+});
+
+
+test('the card ids and the loader source ids map both ways', () => {
+  assert.equal(credentialSourceId('static'), 'static_key');
+  assert.equal(credentialSourceId('config'), 'config_command');
+  assert.equal(credentialSourceId('shim'), 'shim_command');
+  assert.equal(credentialSourceId('exchange'), 'auth_exchange');
+  // An unknown card never becomes a minting source by accident.
+  assert.equal(credentialSourceId('nope'), 'static_key');
+
+  assert.equal(credentialUiSource('static_key'), 'static');
+  assert.equal(credentialUiSource('config_command'), 'config');
+  assert.equal(credentialUiSource('shim_command'), 'shim');
+  assert.equal(credentialUiSource('auth_exchange'), 'exchange');
+  assert.equal(credentialUiSource(undefined), 'static');
+});
+
+test('a source card is offered only when the loader can honour it', () => {
+  const keyed = { mints_credential: false, credential_kind: null };
+  assert.deepEqual(availableCredentialSources(keyed, {}), {
+    static: true, config: true, shim: false, exchange: false,
+  });
+
+  const command = { mints_credential: true, credential_kind: 'command' };
+  assert.deepEqual(availableCredentialSources(command, {}), {
+    static: false, config: true, shim: true, exchange: false,
+  });
+
+  const oauth = { mints_credential: true, credential_kind: 'oauth' };
+  assert.deepEqual(availableCredentialSources(oauth, {}), {
+    static: false, config: true, shim: false, exchange: true,
+  });
+
+  // A keyless shim mints nothing, so a paid key is still a legal choice.
+  const keyless = { mints_credential: false, credential_kind: null, keyless: true };
+  assert.equal(availableCredentialSources(keyless, {}).static, true);
+
+  // The shim stopped loading: the entry's live source still gets a card.
+  assert.equal(
+    availableCredentialSources(null, { credential_source: 'auth_exchange', mints_credential: true }).exchange,
+    true,
+  );
+  // ...but a provider whose command lives in the entry has no exchange to
+  // install a record into, even though it mints and its shim is gone.
+  assert.deepEqual(
+    availableCredentialSources(null, { credential_source: 'config_command', mints_credential: true }),
+    { static: false, config: true, shim: false, exchange: false },
+  );
+  // A registered shim that ships an exchange keeps the card available while
+  // the entry is on a command override.
+  assert.equal(
+    availableCredentialSources(oauth, { credential_source: 'config_command', mints_credential: true }).exchange,
+    true,
+  );
+  // No shim at all: an argv override and a key are the only real choices.
+  assert.deepEqual(availableCredentialSources(null, null), {
+    static: true, config: true, shim: false, exchange: false,
+  });
+});
+
+test('a selection that becomes unavailable falls back where the save is honest', () => {
+  const oauth = { static: false, config: true, shim: false, exchange: true };
+  assert.equal(credentialFallbackSource(oauth, 'static'), 'exchange');
+  assert.equal(credentialFallbackSource(oauth, 'exchange'), 'exchange');
+  const plain = { static: true, config: true, shim: false, exchange: false };
+  assert.equal(credentialFallbackSource(plain, 'static'), 'static');
+  assert.equal(credentialFallbackSource(plain, 'shim'), 'config');
+});
+
+test('leaving the static source removes the stored key', () => {
+  // An empty api_key has always meant "keep it"; deleting needs a flag.
+  assert.deepEqual(
+    credentialSourceFields({ to: 'config_command', needsKey: false }),
+    { fields: { clear_api_key: true } },
+  );
+  assert.deepEqual(
+    credentialSourceFields({ to: 'auth_exchange', needsKey: false }),
+    { fields: { clear_api_key: true } },
+  );
+  // The exchange takes the operator's key as input: clearing it would break
+  // the sign-in it is meant to enable.
+  assert.deepEqual(
+    credentialSourceFields({ to: 'auth_exchange', needsKey: true }),
+    { fields: {} },
+  );
+  assert.deepEqual(
+    credentialSourceFields({ to: 'static_key', needsKey: false }),
+    { fields: {} },
+  );
+});
+
+test('an exchange that consumes the key keeps the key box', () => {
+  assert.equal(
+    credentialNeedsKey('auth_exchange', { consumes_key: true }, {}),
+    true,
+  );
+  assert.equal(credentialNeedsKey('auth_exchange', { consumes_key: false }, {}), false);
+  assert.equal(credentialNeedsKey('auth_exchange', null, {}), false);
+});
+
+test('only a credential that needs an action badges the Auth tab', () => {
+  assert.equal(credentialNeedsAttention('static', { state: 'error' }, false), false);
+  assert.equal(credentialNeedsAttention('exchange', null, false), false);
+  for (const state of ['needs_setup', 'unreadable', 'failing', 'error']) {
+    assert.equal(credentialNeedsAttention('exchange', { state }, false), true, state);
+  }
+  for (const state of ['connected', 'initializing']) {
+    assert.equal(credentialNeedsAttention('config', { state }, false), false, state);
+  }
+  // The legacy marker is worth a badge even on a static entry.
+  assert.equal(credentialNeedsAttention('static', null, true), true);
 });

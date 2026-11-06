@@ -205,6 +205,96 @@ tr:hover td { background: var(--bg-hover); }
 .cap-checks { display:flex;gap:16px;margin-bottom:14px; }
 .cap-checks label { display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;color:var(--text);user-select:none; }
 .cap-checks input[type="checkbox"] { accent-color:var(--accent);width:16px;height:16px; }
+
+/* ── Provider drawer: Basic / Auth panes ──
+   The drawer is one static form split into two panes.  The panes are toggled
+   with `hidden`, never rebuilt, so a multi-key row or a pasted credential
+   record survives a tab switch, a language switch and a failed request. */
+.prov-tabs { display:flex; gap:2px; margin:0 -24px 16px; padding:0 24px; border-bottom:1px solid var(--border); }
+.prov-tab {
+  appearance:none; border:0; background:transparent; color:var(--text-dim);
+  padding:10px 12px 8px; border-bottom:2px solid transparent; font-size:13px;
+  font-family:inherit; cursor:pointer; display:inline-flex; align-items:center; gap:6px;
+}
+.prov-tab:hover { color:var(--text); }
+.prov-tab.active { color:var(--text); border-bottom-color:var(--accent); font-weight:600; }
+.prov-tab:focus-visible { outline:2px solid var(--blue); outline-offset:2px; }
+.prov-tab-badge { width:7px; height:7px; border-radius:50%; background:var(--red); display:inline-block; }
+.prov-tab-badge[hidden] { display:none; }
+.prov-pane[hidden] { display:none; }
+.prov-type-summary {
+  font-family:var(--mono); font-size:12px; color:var(--text-dim);
+  padding:7px 12px; background:var(--bg); border:1px solid var(--border);
+  border-radius:var(--radius); overflow-wrap:anywhere;
+}
+.prov-group { margin-bottom:16px; }
+.prov-group-title { font-size:12px; font-weight:600; color:var(--text-dim); text-transform:uppercase; letter-spacing:.5px; }
+.prov-auth-summary { margin-bottom:14px; padding:12px; border:1px solid var(--border); border-radius:var(--radius); background:var(--bg-card); }
+.prov-auth-summary-head { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:8px; }
+.prov-mode-chips { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:6px; }
+.prov-mode-chip {
+  appearance:none; font-family:inherit; cursor:pointer; font-size:12px;
+  padding:3px 10px; border:1px solid var(--border); border-radius:20px;
+  color:var(--text-dim); background:var(--bg);
+}
+.prov-mode-chip:hover { border-color:var(--border-strong,var(--border)); color:var(--text); }
+.prov-mode-chip[aria-pressed="true"] { border-color:var(--accent); color:var(--text); font-weight:600; box-shadow:inset 0 0 0 1px var(--accent); }
+.prov-auth-detail { font-size:12px; color:var(--text-dim); margin-bottom:8px; overflow-wrap:anywhere; }
+.prov-pill {
+  display:inline-flex; align-items:center; gap:6px; font-size:11.5px; font-weight:600;
+  padding:1px 8px; border-radius:20px; border:1px solid var(--border);
+  color:var(--text-dim); background:var(--bg);
+}
+.prov-pill.connected { color:var(--green); border-color:var(--green); background:var(--green-subtle); }
+.prov-pill.failing, .prov-pill.needs_setup, .prov-pill.unreadable, .prov-pill.error {
+  color:var(--red); border-color:var(--red); background:var(--red-subtle);
+}
+.prov-pill.initializing { color:var(--orange); border-color:var(--orange); }
+.prov-sources { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px; }
+.prov-source {
+  appearance:none; text-align:left; cursor:pointer; display:flex; flex-direction:column;
+  gap:2px; padding:10px 11px; border:1px solid var(--border); border-radius:var(--radius);
+  background:var(--bg); color:var(--text); font-family:inherit; min-width:0;
+}
+.prov-source:hover { border-color:var(--border-strong,var(--border)); background:var(--bg-hover); }
+.prov-source[aria-checked="true"] { border-color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent); background:var(--bg-card); }
+.prov-source:focus-visible { outline:2px solid var(--blue); outline-offset:2px; }
+.prov-source[hidden] { display:none; }
+.prov-source .t { font-weight:600; font-size:13px; }
+.prov-source .d { font-size:11.5px; color:var(--text-dim); }
+.prov-source .m { font-family:var(--mono); font-size:10.5px; color:var(--text-muted); overflow-wrap:anywhere; }
+.prov-source-note { font-size:12px; color:var(--text-dim); margin-top:8px; }
+.prov-card { border:1px solid var(--border); border-radius:var(--radius); margin-bottom:14px; background:var(--bg-card); }
+.prov-card-head { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:9px 12px; border-bottom:1px solid var(--border); }
+.prov-card-head h4 { margin:0; font-size:12.5px; font-weight:600; }
+.prov-card-note { font-size:11.5px; color:var(--text-muted); font-family:var(--mono); }
+.prov-card-body { padding:11px 12px; }
+.prov-card-body .form-group:last-child { margin-bottom:0; }
+.prov-argv { display:flex; flex-direction:column; gap:6px; }
+.prov-arg-row { display:flex; gap:6px; align-items:center; }
+.prov-arg-row input { flex:1; min-width:0; }
+.prov-icon-btn {
+  appearance:none; cursor:pointer; border:1px solid var(--border); background:var(--bg);
+  color:var(--text-dim); border-radius:4px; width:28px; height:28px; flex:none;
+  font-size:14px; line-height:1; font-family:inherit;
+}
+.prov-icon-btn:hover { background:var(--bg-hover); color:var(--text); }
+.prov-add-arg { margin-top:6px; }
+.prov-field-hint { font-size:0.8em; color:var(--text-dim); margin-top:2px; overflow-wrap:anywhere; }
+.prov-rows { display:grid; grid-template-columns:max-content minmax(0,1fr); gap:5px 16px; margin:0 0 8px; }
+.prov-rows dt { color:var(--text-dim); font-size:12px; }
+.prov-rows dd { margin:0; min-width:0; overflow-wrap:anywhere; }
+.prov-actions { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+.prov-error { color:var(--red); font-size:0.82em; margin-top:4px; overflow-wrap:anywhere; }
+.prov-warn { border:1px solid var(--orange); border-radius:var(--radius); padding:10px 12px; margin-bottom:14px; }
+.prov-warn h4 { margin:0 0 4px; font-size:12.5px; color:var(--orange); }
+.prov-warn p { margin:0; font-size:12.5px; color:var(--text); }
+.prov-preview { border:1px solid var(--border); border-radius:var(--radius); margin-bottom:14px; }
+.prov-preview summary { cursor:pointer; padding:9px 12px; font-size:12.5px; font-weight:600; background:var(--bg-card); }
+.prov-preview pre { margin:0; padding:10px 12px; overflow-x:auto; background:var(--bg); }
+.prov-preview code { font-family:var(--mono); font-size:11.5px; white-space:pre; }
+.prov-credential-state { font-size:0.88em; line-height:1.5; }
+@media (max-width: 520px) { .prov-sources { grid-template-columns:1fr; } }
 .chip-group { display:flex;gap:6px;flex-wrap:wrap; }
 .chip { display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border:1px solid var(--border);border-radius:20px;font-size:13px;cursor:pointer;user-select:none;transition:all 0.15s;background:var(--bg-card);color:var(--text-dim); }
 .chip:hover { border-color:var(--accent);color:var(--accent); }

@@ -9,7 +9,12 @@
 import { S, _CAP_ICONS, populateCapIcons } from '../core/state.js';
 import { t, capLabel, typeLabel, typeLabelAlt } from '../core/i18n.js';
 import { api, showToast, showToastHtml, closeModal, esc, copyText, inlineConfirm, isFreeEntry, freeEntryLabel, providerTypeName } from '../core/utils.js';
-import { safeLinkUrl, parseRecord, credentialSource, credentialNeedsKey, credentialLoadedFor, credentialSaveFields, shortCredential } from '../core/credential.js';
+import {
+  safeLinkUrl, parseRecord, credentialSource, credentialNeedsKey,
+  credentialLoadedFor, credentialSaveFields, shortCredential,
+  credentialSourceId, credentialUiSource, availableCredentialSources,
+  credentialFallbackSource, credentialSourceFields, credentialNeedsAttention,
+} from '../core/credential.js';
 import { initLogoPicker, setLogoPickerValue, getLogoPickerValue } from '../components/logo-picker.js';
 import { setTypeTree, getSelectedValue, selectValue, onTypeSelect, createTypePicker } from '../components/type-picker.js';
 import { buildTypeModel, buildEndpointTypeModel, endpointChoiceConfig, shimBrand } from '../core/shim-tree.js';
@@ -50,6 +55,21 @@ function _applyShimHint(shim) {
   el.textContent = text;
   el.title = text;
   el.hidden = !text;
+}
+
+/** Name the selected type in the Basic pane's read-only summary.
+ *
+ *  The picker stays in the LLM endpoint card; this only says which choice it
+ *  holds, so an operator reading the top of the form sees the type without
+ *  scrolling to the endpoint. */
+function _updateTypeSummary(value, shim) {
+  const el = document.getElementById('provTypeSummary');
+  if (!el) return;
+  if (!value) { el.textContent = '—'; return; }
+  // The full type id is the unambiguous name: a vendor shim's display name
+  // alone loses the dialect, and appending the format repeats it for
+  // ``<vendor>--<format>`` shims.
+  el.textContent = (shim && shim.name) || value;
 }
 
 /** Re-render the hint for the picker's current selection.
@@ -107,14 +127,23 @@ function revealProviderKey() {
   _syncKeylessUI();
 }
 
-// ── Shim-declared credentials ──────────────────────────────────────
-// A provider whose shim ships `auth.py` has no key to type in: the exchange
-// mints the credential through a sign-in that needs a browser.  The editor
-// shows its state instead of the key box, and installs a record produced
-// elsewhere over the admin API (#1062).
+// ── Provider drawer: Basic / Auth ──────────────────────────────────
+// One drawer, two panes.  Basic carries identity, transport, a read-only
+// summary of where the credential comes from, the model-type checkboxes and
+// the endpoint cards.  Auth carries the credential itself: the source cards,
+// the key box, the command editor, the sign-in record and the refresh log.
+//
+// The DOM is static.  Panes are toggled with `hidden`, never rebuilt: an
+// innerHTML rebuild of a pane would drop the multi-key rows a source switch
+// has to preserve, and a credential record pasted for install.
 
 let _credentialFor = null;   // provider name whose credential is on screen
 let _credentialData = null;  // last GET /credential response
+let _credSource = null;      // card id: static | config | shim | exchange
+let _credSourceOriginal = null;  // card id in effect when the drawer opened
+let _credArgv = [];          // editable argv rows
+let _credFormDirty = false;  // the operator touched a credential field
+let _provPane = 'basic';
 
 function _selectedShim() {
   const typeSel = document.getElementById('provType');
@@ -144,33 +173,117 @@ function _credentialSource() {
   return credentialSource(_selectedShim(), _editingCfg());
 }
 
-/**
- * Whether the API-key box must stay visible beside the credential section.
- *
- * A command that reads the operator's key from ``token_command_env`` takes it
- * as *input* — the key is not a second credential — so hiding the box would
- * leave the account key uneditable.
- */
-function _credentialNeedsKey(source) {
-  return credentialNeedsKey(source, _selectedShim() || {}, _editingCfg() || {});
+/** The source card the Auth pane is showing. */
+function _uiSource() {
+  return _credSource || credentialUiSource(_credentialSource());
+}
+
+function _availableSources() {
+  return availableCredentialSources(_selectedShim(), _editingCfg());
+}
+
+/** Whether the Auth pane shows a source the entry does not have yet. */
+function _draftSourceDiffers() {
+  return _uiSource() !== credentialUiSource(_credentialSource());
+}
+
+/** Whether the source in effect keeps the operator's key as an *input*. */
+function _needsKey(ui) {
+  const canonical = credentialSourceId(ui || _uiSource());
+  if (credentialNeedsKey(canonical, _selectedShim() || {}, _editingCfg() || {})) {
+    return true;
+  }
+  // A command the operator is still typing may introduce an env var that the
+  // stored entry does not mention yet.
+  return canonical === 'config_command'
+    && !!(document.getElementById('provTokenCommandEnv')?.value || '').trim();
 }
 
 function _credentialText(key, fallback) {
   return (typeof t === 'function' ? t(key, fallback) : fallback);
 }
 
-/** Render the section: key box hidden, state and actions in its place. */
+function _clearProviderDrawerState(cfg) {
+  _credentialFor = null;
+  _credentialData = null;
+  _credFormDirty = false;
+  _credSourceOriginal = credentialUiSource(credentialSource(_selectedShim(), cfg));
+  _credSource = _credSourceOriginal;
+  _credArgv = Array.isArray(cfg && cfg.token_command) ? [...cfg.token_command] : [];
+  _setCredentialError('');
+  _setCommandError('');
+  _resetCredentialBox();
+}
+
+/** Switch panes without touching the type picker or its `_applyType` closure. */
+function setProviderPane(pane) {
+  _provPane = pane === 'auth' ? 'auth' : 'basic';
+  const basic = document.getElementById('provPaneBasic');
+  const auth = document.getElementById('provPaneAuth');
+  if (!basic || !auth) return;
+  basic.hidden = _provPane !== 'basic';
+  auth.hidden = _provPane !== 'auth';
+  for (const [id, on] of [['provTabBasic', _provPane === 'basic'],
+    ['provTabAuth', _provPane === 'auth']]) {
+    const tab = document.getElementById(id);
+    if (!tab) continue;
+    tab.classList.toggle('active', on);
+    tab.setAttribute('aria-selected', String(on));
+  }
+  if (_provPane === 'auth') {
+    // Re-render what the payload already owns; the panes' inputs keep their
+    // values because nothing is rebuilt.
+    _syncCredentialUI();
+    _renderPreview();
+  }
+  _renderAuthSummary();
+}
+
+function selectCredentialSource(ui) {
+  if (_uiSource() === ui) return;
+  _credSource = ui;
+  _syncCredentialUI();
+}
+
+// ── Auth pane: source cards, key, command, exchange, status ────────
+
 function _syncCredentialUI() {
-  const group = document.getElementById('provCredentialGroup');
-  const keyGroup = document.getElementById('provApiKeyGroup');
-  if (!group) return;
-  const source = _credentialSource();
-  const on = source !== 'static_key';
-  group.style.display = on ? '' : 'none';
-  if (keyGroup) keyGroup.style.display = on && !_credentialNeedsKey(source) ? 'none' : '';
-  if (!on) {
+  const shim = _selectedShim();
+  const cfg = _editingCfg();
+  const avail = availableCredentialSources(shim, cfg);
+  const derived = credentialUiSource(credentialSource(shim, cfg));
+  if (!_credSource) _credSource = derived;
+  // A type change can leave the chosen card unavailable.  Falling back is
+  // better than showing a hidden selection the save would silently ignore.
+  if (!avail[_credSource]) _credSource = credentialFallbackSource(avail, derived);
+  const ui = _uiSource();
+
+  _renderSourceCards(avail, ui);
+  // The old panel's literal marker is a repair the operator should see; the
+  // save path drops it, so the warning says so.
+  const legacy = document.getElementById('provLegacyMarker');
+  if (legacy) legacy.hidden = !(cfg && cfg.legacy_credential_marker);
+  _renderKeyPanel(ui, shim, cfg);
+  _renderCommandPanel(ui, shim, cfg);
+  _renderPreview();
+
+  if (ui === 'static') {
     _credentialFor = null;
+    _credentialData = null;
     _resetCredentialBox();
+    _renderCredentialPanels();
+    _renderAuthSummary();
+    return;
+  }
+  if (_draftSourceDiffers()) {
+    // The endpoint reports the credential the entry has *now*.  Asking it
+    // about a source the operator has only selected answers for the old one
+    // (or 409s); the pane says "save first" instead.
+    _credentialFor = null;
+    _credentialData = null;
+    _resetCredentialBox();
+    _renderCredentialPanels();
+    _renderAuthSummary();
     return;
   }
   const name = _editingProviderName;
@@ -179,21 +292,24 @@ function _syncCredentialUI() {
     _credentialFor = null;
     _credentialData = null;
     _resetCredentialBox();
-    _renderCredentialConfig(source, null);
-    _renderCredentialState(source);
+    _renderCredentialPanels();
+    _renderAuthSummary();
     return;
   }
   if (_credentialFor !== name) {
     _credentialFor = name;
     _credentialData = null;
-    // A record pasted for the *previous* provider must not be installable into
-    // this one: two providers of one shim share a client id, so the exchange
-    // would accept it and sign this provider in as the other account.
+    _credFormDirty = false;
+    // A record pasted for the *previous* provider must not be installable
+    // into this one: two providers of one shim share a client id.
     _resetCredentialBox();
-    _renderCredentialConfig(source, null);
-    _renderCredentialState(source);
+    _renderCredentialPanels();
+    _renderAuthSummary();
     loadProviderCredential(name);
+    return;
   }
+  _renderCredentialPanels();
+  _renderAuthSummary();
 }
 
 async function loadProviderCredential(name) {
@@ -205,7 +321,11 @@ async function loadProviderCredential(name) {
     if (_credentialFor !== name) return;
     _credentialData = { state: 'error', error: String(err && err.message || err) };
   }
-  _renderCredentialState(_credentialSource());
+  _seedArgv();
+  _renderCommandPanel(_uiSource(), _selectedShim(), _editingCfg());
+  _renderCredentialPanels();
+  _renderAuthSummary();
+  _renderPreview();
 }
 
 function _setCredentialError(message) {
@@ -215,216 +335,656 @@ function _setCredentialError(message) {
   box.style.display = message ? '' : 'none';
 }
 
-function _credentialSourceLabel(source) {
-  switch (source) {
-    case 'config_command':
-      return _credentialText('label.credentialSourceConfigCommand', 'Command from the config');
-    case 'shim_command':
-      return _credentialText('label.credentialSourceShimCommand', 'Command declared by the shim');
-    case 'auth_exchange':
-      return _credentialText('label.credentialSourceAuthExchange', 'Shim sign-in (auth.py)');
-    default:
-      return _credentialText('label.credentialSourceStaticKey', 'Static API key');
-  }
-}
-
-/**
- * Fill the editable credential fields for the source in effect.
- *
- * A command the shim declares is the vendor's argv, so it is shown read-only;
- * the interval is a default in both cases and stays editable.  Only a command
- * written into the provider entry can be changed here.
- */
-function _renderCredentialConfig(source, data) {
-  const box = document.getElementById('provCredentialConfig');
+function _setCommandError(message) {
+  const box = document.getElementById('provCommandError');
   if (!box) return;
-  const shim = _credentialShim() || _selectedShim() || {};
-  const cmdRow = document.getElementById('provTokenCommandRow');
-  const envRow = document.getElementById('provTokenCommandEnvRow');
-  const cmd = document.getElementById('provTokenCommand');
-  const interval = document.getElementById('provTokenRefreshInterval');
-  const env = document.getElementById('provTokenCommandEnv');
-  if (!cmd || !interval || !env) return;
-
-  const commandSource = source === 'config_command' || source === 'shim_command';
-  box.style.display = source === 'static_key' ? 'none' : '';
-  if (cmdRow) cmdRow.style.display = commandSource ? '' : 'none';
-  if (envRow) {
-    const hasEnv = source === 'config_command'
-      || (source === 'shim_command' && !!shim.default_token_command_env);
-    envRow.style.display = hasEnv ? '' : 'none';
-  }
-
-  const argv = (data && data.command && data.command.length)
-    ? data.command
-    : (shim.default_token_command || []);
-  cmd.value = argv.length ? JSON.stringify(argv) : '';
-  cmd.readOnly = source !== 'config_command';
-  cmd.placeholder = source === 'shim_command'
-    ? _credentialText('label.tokenCommandShimPlaceholder', 'Declared by the shim')
-    : '["python3", "token.py"]';
-
-  const stored = (_editingProviderName && S.configData
-    ? S.configData.providers[_editingProviderName] : null) || {};
-  const intervalValue = (data && data.refresh_interval)
-    || stored.token_refresh_interval
-    || shim.default_token_refresh_interval
-    || 3600;
-  interval.value = String(intervalValue);
-  interval.readOnly = false;
-
-  env.value = (data && data.command_env) || shim.default_token_command_env || '';
-  env.readOnly = source !== 'config_command';
-  env.placeholder = shim.default_token_command_env || 'VENDOR_ACCOUNT_KEY';
+  box.textContent = message || '';
+  box.style.display = message ? '' : 'none';
 }
 
-function _renderCredentialState(source) {
-  const host = document.getElementById('provCredentialState');
-  const actions = document.getElementById('provCredentialActions');
-  const hint = document.getElementById('provCredentialHint');
-  if (!host || !actions) return;
+function _renderSourceCards(avail, ui) {
+  for (const id of ['static', 'config', 'shim', 'exchange']) {
+    const card = document.getElementById('provSourceCard_' + id);
+    if (!card) continue;
+    card.hidden = !avail[id];
+    card.setAttribute('aria-checked', String(id === ui));
+  }
+  const note = document.getElementById('provSourceNote');
+  if (note) note.textContent = _sourceNote(ui, _selectedShim(), _editingCfg());
+}
+
+/** Why this source is the one the loader will honour, in one sentence. */
+function _sourceNote(ui, shim, cfg) {
+  const mints = !!(shim ? shim.mints_credential : (cfg && cfg.mints_credential));
+  if (ui === 'static') {
+    if (shim && shim.keyless) {
+      return _credentialText('prov.noteStaticKeyless',
+        'This shim needs no key. A paid key stored here would be sent instead.');
+    }
+    return _credentialText('prov.noteStatic',
+      'Stored in this entry, or written as ${VENDOR_API_KEY} for the server to resolve.');
+  }
+  if (ui === 'config') {
+    if (mints) {
+      return _credentialText('prov.noteConfigOverrides',
+        'This command replaces what the shim declares; sign-in and install do not apply.');
+    }
+    return _credentialText('prov.noteConfig',
+      'The gateway runs this command on start and on each interval. It stores no key.');
+  }
+  if (ui === 'shim') {
+    return _credentialText('prov.noteShim',
+      'The command ships with the shim. This entry can only change how often it runs.');
+  }
+  return _credentialText('prov.noteExchange',
+    'The shim signs in. Produce the record where a browser is and install it here.');
+}
+
+function _renderKeyPanel(ui, shim, cfg) {
+  const panel = document.getElementById('provKeyPanel');
+  const needsKey = _needsKey(ui);
+  if (panel) panel.hidden = !(ui === 'static' || needsKey);
+  const hint = document.getElementById('provKeyHint');
+  if (!hint) return;
+  hint.textContent = ui === 'static'
+    ? _credentialText('prov.keyStaticHint',
+      'Stored in the entry, or written as ${VENDOR_API_KEY}.')
+    : _credentialText('prov.keyInputHint',
+      'The command receives this key through its env var. It is not a second credential.');
+}
+
+/** The value the save will use for each editable field, already validated. */
+function _draftCredentialFields() {
+  const ui = _uiSource();
+  const canonical = credentialSourceId(ui);
+  const loaded = credentialLoadedFor(
+    _credentialFor, _editingProviderName, _credentialData) || !_editingProviderName;
+  const argv = _normalisedArgv();
+  const result = credentialSaveFields({
+    source: canonical,
+    loaded,
+    // A config save always sends the rows on screen: they are the command.
+    command: canonical === 'config_command' && argv ? JSON.stringify(argv) : '',
+    env: document.getElementById('provTokenCommandEnv')?.value,
+    interval: document.getElementById('provTokenRefreshInterval')?.value,
+  });
+  if (result.fields) {
+    Object.assign(result.fields, credentialSourceFields({
+      to: canonical,
+      needsKey: _needsKey(ui),
+    }).fields);
+  }
+  return result;
+}
+
+/** The argv on screen, or null when a row is empty: argv are not filtered. */
+function _normalisedArgv() {
+  const rows = _credArgv.map(a => String(a || '').trim());
+  if (!rows.length) return null;
+  if (rows.some(a => a === '')) return null;
+  return rows;
+}
+
+/** Seed the rows once, from the entry, the live provider, then the shim. */
+function _seedArgv() {
+  if (_credArgv.length) return;
+  const shim = _selectedShim() || {};
+  const cfg = _editingCfg();
+  const stored = cfg && Array.isArray(cfg.token_command) ? cfg.token_command : null;
+  const live = _credentialData && Array.isArray(_credentialData.command)
+    ? _credentialData.command : null;
+  const fallback = stored || live || (Array.isArray(shim.default_token_command)
+    ? shim.default_token_command : []);
+  _credArgv = [...fallback];
+}
+
+function _renderCommandPanel(ui, shim, cfg) {
+  const panel = document.getElementById('provCommandPanel');
+  const command = ui === 'config' || ui === 'shim';
+  if (panel) panel.hidden = !command;
+  // The interval belongs to every minting source, including a sign-in whose
+  // command editor is not shown: the save still carries the cadence.
+  _fillCommandFields(ui, shim || {}, cfg || {});
+  const readonly = ui === 'shim';
+  // Repaint the rows even while the panel is hidden: otherwise the previous
+  // provider's argv stays in the DOM and shows up on the next source switch.
+  _renderArgv(readonly);
+  if (!command) return;
+  const mode = document.getElementById('provCommandMode');
+  if (mode) {
+    mode.textContent = readonly
+      ? t('prov.commandModeShim', {shim: (shim && (shim.display_name || shim.name)) || 'shim'})
+      : _credentialText('prov.commandModeConfig', 'Editable in this entry');
+  }
+  const envHint = document.getElementById('provCommandEnvHint');
+  const env = document.getElementById('provTokenCommandEnv');
+  if (envHint) envHint.hidden = !(env && env.value.trim());
+}
+
+function _fillCommandFields(ui, shim, cfg) {
+  if (_credFormDirty) return;
+  const data = _credentialData || {};
+  const interval = document.getElementById('provTokenRefreshInterval');
+  if (interval) {
+    interval.value = String(
+      (data.refresh_interval != null ? data.refresh_interval : null)
+      || cfg.token_refresh_interval
+      || shim.default_token_refresh_interval
+      || 3600);
+  }
+  const env = document.getElementById('provTokenCommandEnv');
+  if (env) {
+    // On the shim card the field names what the *shim* declares.  The live
+    // ``command_env`` can be a leftover override; showing it read-only would
+    // describe a value the operator can neither keep nor remove here.
+    env.value = ui === 'shim'
+      ? (shim.default_token_command_env || '')
+      : ((data.command_env != null ? data.command_env : null)
+        || cfg.token_command_env
+        || shim.default_token_command_env
+        || '');
+    env.readOnly = ui !== 'config';
+  }
+  const envRow = document.getElementById('provTokenCommandEnvRow');
+  if (envRow) {
+    envRow.style.display = (ui === 'config' || (ui === 'shim' && shim.default_token_command_env))
+      ? '' : 'none';
+  }
+}
+
+/** Attach the command form's listeners once; the drawer is static DOM. */
+function _wireCredentialFields() {
+  const keyInput = document.getElementById('provApiKey');
+  if (keyInput && !keyInput.dataset.previewWired) {
+    keyInput.dataset.previewWired = '1';
+    keyInput.addEventListener('input', () => _renderPreview());
+  }
+  // The multi-key rows are rebuilt on every edit, so the listener sits on
+  // their container and lets the event bubble.
+  const multi = document.getElementById('provApiKeyMultiBox');
+  if (multi && !multi.dataset.previewWired) {
+    multi.dataset.previewWired = '1';
+    multi.addEventListener('input', () => _renderPreview());
+  }
+  const interval = document.getElementById('provTokenRefreshInterval');
+  if (interval && !interval.dataset.wired) {
+    interval.dataset.wired = '1';
+    interval.addEventListener('input', () => {
+      _credFormDirty = true;
+      // Refresh/Test run the saved command: a draft interval must disable
+      // them at once, not on the next pane render.
+      _renderCredentialPanels();
+      _renderPreview();
+    });
+  }
+  const env = document.getElementById('provTokenCommandEnv');
+  if (env && !env.dataset.wired) {
+    env.dataset.wired = '1';
+    env.addEventListener('input', () => {
+      _credFormDirty = true;
+      const hint = document.getElementById('provCommandEnvHint');
+      if (hint) hint.hidden = !env.value.trim();
+      // An env var turns the key into the command's input, so the key panel
+      // has to appear for a source that would otherwise store no key.
+      _renderKeyPanel(_uiSource(), _selectedShim(), _editingCfg());
+      _renderCredentialPanels();
+      _renderPreview();
+    });
+  }
+}
+
+function _renderArgv(readonly) {
+  const host = document.getElementById('provArgvRows');
+  const addBtn = document.getElementById('provAddArgBtn');
+  if (!host) return;
+  _seedArgv();
   host.textContent = '';
-  actions.textContent = '';
-  _setCredentialError('');
-  const data = _credentialData;
+  _credArgv.forEach((arg, i) => {
+    const row = document.createElement('div');
+    row.className = 'prov-arg-row';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = arg;
+    input.spellcheck = false;
+    input.autocomplete = 'off';
+    input.readOnly = readonly;
+    input.setAttribute('aria-label', t('prov.argLabel', {n: i + 1}));
+    input.addEventListener('input', () => {
+      _credArgv[i] = input.value;
+      _credFormDirty = true;
+      _renderCredentialPanels();
+      _renderPreview();
+    });
+    row.appendChild(input);
+    // A command needs at least one argument, so the last row keeps its ×
+    // hidden: emptying the list could only be undone by another save, and
+    // the operator would see the stored argv reappear with no explanation.
+    if (!readonly && _credArgv.length > 1) {
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'prov-icon-btn';
+      del.textContent = '×';
+      del.setAttribute('aria-label', t('prov.removeArg', {n: i + 1}));
+      del.addEventListener('click', () => {
+        _credArgv.splice(i, 1);
+        _credFormDirty = true;
+        _renderArgv(false);
+        _renderCredentialPanels();
+        _renderPreview();
+      });
+      row.appendChild(del);
+    }
+    host.appendChild(row);
+  });
+  if (!_credArgv.length) {
+    const empty = document.createElement('div');
+    empty.className = 'prov-field-hint';
+    empty.textContent = _credentialText('prov.commandEmpty',
+      'No command yet — add its executable and arguments.');
+    host.appendChild(empty);
+  }
+  if (addBtn) addBtn.hidden = readonly;
+  const clearHint = document.getElementById('provArgvClearHint');
+  if (clearHint) clearHint.hidden = readonly || _credArgv.length !== 1;
+}
+
+function addProviderArg() {
+  if (_uiSource() !== 'config') return;
+  _credFormDirty = true;
+  _credArgv.push('');
+  _renderArgv(false);
+  _renderCredentialPanels();
+  _renderPreview();
+  const inputs = document.querySelectorAll('#provArgvRows input');
+  inputs[inputs.length - 1]?.focus();
+}
+
+// ── Auth pane: state that comes from the server ────────────────────
+
+function _renderCredentialPanels() {
+  const ui = _uiSource();
+  _renderExchangePanel(_credentialData, ui);
+  _renderStatusCard(_credentialData, ui);
+}
+
+function _stateLabel(state) {
+  return _credentialText('prov.state.' + state, state);
+}
+
+/** `<dl>` pairs the exchange panel and the status card share. */
+function _appendRow(host, key, value, bad) {
+  const dt = document.createElement('dt');
+  dt.textContent = key;
+  const dd = document.createElement('dd');
+  dd.textContent = value;
+  if (bad) dd.className = 'bad';
+  host.append(dt, dd);
+}
+
+function _appendAction(host, action) {
+  let el;
+  if (action.kind === 'link') {
+    el = document.createElement('a');
+    el.href = action.href;
+    el.target = '_blank';
+    el.rel = 'noopener noreferrer';
+    el.className = 'btn btn-sm';
+  } else {
+    el = document.createElement('button');
+    el.type = 'button';
+    el.className = 'btn btn-sm' + (action.kind === 'primary' ? ' btn-primary'
+      : action.kind === 'danger' ? ' btn-danger' : '');
+    if (action.fn) el.setAttribute('onclick', action.fn);
+    if (action.disabled) {
+      el.disabled = true;
+      el.title = action.title || '';
+    }
+  }
+  el.textContent = action.label;
+  host.appendChild(el);
+}
+
+function _renderExchangePanel(data, ui) {
+  const panel = document.getElementById('provExchangePanel');
+  if (panel) panel.hidden = ui !== 'exchange';
+  if (ui !== 'exchange') return;
+  const rows = document.getElementById('provExchangeRows');
+  const acts = document.getElementById('provExchangeActions');
+  if (!rows || !acts) return;
+  rows.textContent = '';
+  acts.textContent = '';
+
+  if (!_editingProviderName) {
+    _appendRow(rows, _credentialText('prov.stateLabel', 'State'),
+      _credentialText('label.credentialSaveFirst',
+        'Save this provider, then come back to manage its credential.'), true);
+    return;
+  }
+  if (!data) {
+    _appendRow(rows, _credentialText('prov.stateLabel', 'State'),
+      _draftSourceDiffers()
+        ? _credentialText('label.credentialSaveFirst',
+          'Save this provider, then come back to manage its credential.')
+        : _credentialText('label.loading', 'Loading…'), true);
+    return;
+  }
+  if (data.state === 'error') {
+    _appendRow(rows, _credentialText('prov.stateLabel', 'State'), data.error || '', true);
+    return;
+  }
+  // The server describes the credential the entry has now; a source the
+  // operator has only selected does not exist until it is saved.
+  if (data.source && credentialUiSource(data.source) !== ui) {
+    _appendRow(rows, _credentialText('prov.stateLabel', 'State'),
+      _credentialText('label.credentialSaveFirst',
+        'Save this provider, then come back to manage its credential.'), true);
+    return;
+  }
+  _appendRow(rows, _credentialText('prov.stateLabel', 'State'), _stateLabel(data.state));
+  const summary = data.summary || {};
+  if (data.state === 'connected') {
+    // ``data.account`` is a digest, not a name — only the exchange's own
+    // summary can say which account this is.
+    _appendRow(rows, _credentialText('label.credentialConnected', 'Connected as'),
+      summary.subject || _credentialText('label.thisAccount', 'this account'));
+    if (summary.expires_at) {
+      _appendRow(rows, _credentialText('label.credentialExpires', 'Access token expires'),
+        summary.expires_at);
+    }
+  }
   const shim = _credentialShim() || {};
   // A shim is trusted code, but this href lives in the admin origin: keep a
   // `javascript:` value out of it even so.
   const manage = safeLinkUrl(shim.manage_usage_url);
+  if (manage && data.state === 'connected') {
+    _appendAction(acts, {kind: 'link', href: manage,
+      label: _credentialText('btn.manageUsage', 'Manage usage')});
+  }
+  // 501 is what an exchange that never implemented install()/revoke()
+  // answers; the panel asks the endpoint instead of offering a dead button.
+  if (data.can_install !== false) {
+    _appendAction(acts, {kind: 'primary',
+      label: _credentialText('btn.installRecord', 'Install a record'),
+      fn: 'toggleProviderCredentialBox(true)'});
+  }
+  if (data.state === 'connected' && data.can_revoke !== false) {
+    _appendAction(acts, {kind: 'danger',
+      label: _credentialText('btn.signOut', 'Sign out'),
+      fn: 'signOutProviderCredential()'});
+  }
+}
+
+/** Whether a refresh or test would run something other than the saved state. */
+function _credentialDraftDirty() {
+  const data = _credentialData;
+  if (!data || data.state === 'error') return false;
+  const ui = _uiSource();
+  if (ui === 'static') return false;
+  const interval = parseInt(document.getElementById('provTokenRefreshInterval')?.value || '', 10);
+  if (Number.isFinite(interval) && data.refresh_interval != null
+      && interval !== data.refresh_interval) return true;
+  if (ui === 'config') {
+    const saved = Array.isArray(data.command) ? data.command.map(String) : [];
+    if (JSON.stringify(_normalisedArgv() || _credArgv.map(a => String(a || '').trim()))
+        !== JSON.stringify(saved)) return true;
+    if (!_normalisedArgv()) return true;
+    const env = (document.getElementById('provTokenCommandEnv')?.value || '').trim();
+    if (env !== (data.command_env || '')) return true;
+  }
+  return false;
+}
+
+function _renderStatusCard(data, ui) {
+  const card = document.getElementById('provStatusCard');
+  if (card) card.hidden = ui === 'static';
+  const host = document.getElementById('provCredentialState');
+  const actions = document.getElementById('provCredentialActions');
+  if (!host || !actions) return;
+  if (ui === 'static') {
+    host.textContent = '';
+    actions.textContent = '';
+    return;
+  }
+  host.textContent = '';
+  actions.textContent = '';
+  _setCredentialError('');
 
   const line = (text, muted) => {
     const div = document.createElement('div');
     div.textContent = text;
     if (muted) div.className = 'text-muted';
     host.appendChild(div);
-    return div;
   };
 
   if (!_editingProviderName) {
-    _renderCredentialConfig(source, null);
     line(_credentialText('label.credentialSaveFirst',
       'Save this provider, then come back to manage its credential.'), true);
-    if (hint) hint.style.display = 'none';
     return;
   }
   if (!data) {
-    line(_credentialText('label.loading', 'Loading…'), true);
+    line(_draftSourceDiffers()
+      ? _credentialText('label.credentialSaveFirst',
+        'Save this provider, then come back to manage its credential.')
+      : _credentialText('label.loading', 'Loading…'), true);
+    return;
+  }
+  if (data.state === 'error') {
+    // A provider that failed to load is absent from the live config, so the
+    // credential endpoint answers 404.  Saying "not found" about an entry the
+    // operator is editing is misleading; the truth is that it did not load.
+    const notLive = !(_editingCfg() && 'mints_credential' in _editingCfg());
+    line(notLive
+      ? _credentialText('prov.notLoaded',
+        'This provider did not load, so the gateway reports no credential state. Fix the configuration, then save.')
+      : _credentialText('label.credentialError', 'Could not read the credential:')
+        + ' ' + (data.error || ''), true);
+    return;
+  }
+  if (data.source && credentialUiSource(data.source) !== ui) {
+    // The live credential belongs to the source the entry has now.  Actions
+    // here would refresh or test something other than the draft.
+    line(_credentialText('label.credentialSaveFirst',
+      'Save this provider, then come back to manage its credential.'), true);
     return;
   }
 
-  const sourceOf = data.source || source || _credentialSource();
-  const isCommand = sourceOf === 'config_command' || sourceOf === 'shim_command';
-  _renderCredentialConfig(sourceOf, data);
-  if (hint) hint.style.display = (isCommand || data.state === 'connected') ? 'none' : '';
-
-  // The source is the first fact: it decides which actions and fields below
-  // mean anything.
-  line(_credentialText('label.credentialSource', 'Source') + ': ' + _credentialSourceLabel(sourceOf));
+  const st = data.token_status || {};
   // A usable token and a refresher that will replace it are two facts; saying
-  // "connected" alone would imply the token renews itself.
-  if (data.refresher_enabled === false) {
+  // "connected" alone would imply the token renews itself.  With no token at
+  // all, "will not renew" is noise: there is nothing to renew.
+  const hasToken = data.state === 'connected' || data.state === 'failing';
+  if (hasToken && data.refresher_enabled === false) {
     line(_credentialText('label.credentialRefresherOff',
       'Automatic refresh is off — this token will not renew.'), true);
   }
-
-  const actions_ = [];
-  if (data.state === 'connected' && sourceOf === 'auth_exchange') {
-    const summary = data.summary || {};
-    // ``data.account`` is a digest, not a name — only the exchange's own
-    // summary can say which account this is.
-    const who = summary.subject || _credentialText('label.thisAccount', 'this account');
-    line(_credentialText('label.credentialConnected', 'Connected as') + ' ' + who);
-    if (summary.expires_at) {
-      line(_credentialText('label.credentialExpires', 'Access token expires') + ' ' + summary.expires_at, true);
-    }
-    if (manage) {
-      actions_.push({ label: _credentialText('btn.manageUsage', 'Manage usage'), kind: 'link', href: manage });
-    }
-    actions_.push({ label: _credentialText('btn.signOut', 'Sign out'), kind: 'danger', fn: 'signOutProviderCredential()' });
-  } else if (data.state === 'needs_setup') {
-    line(_credentialText('label.credentialNeedsSetup', 'No credential yet — a sign-in is needed.'));
-    if (manage) {
-      actions_.push({ label: _credentialText('btn.manageUsage', 'Manage usage'), kind: 'link', href: manage });
-    }
-    actions_.push({ label: _credentialText('btn.installRecord', 'Install a record'), kind: 'primary', fn: 'toggleProviderCredentialBox(true)' });
-  } else if (data.state === 'unreadable') {
-    line(_credentialText('label.credentialUnreadable',
-      'A record exists but cannot be read. Sign in again to replace it.'), true);
-    actions_.push({ label: _credentialText('btn.installRecord', 'Install a record'), kind: 'primary', fn: 'toggleProviderCredentialBox(true)' });
-    actions_.push({ label: _credentialText('btn.signOut', 'Sign out'), kind: 'danger', fn: 'signOutProviderCredential()' });
-  } else if (data.state === 'initializing') {
-    line(_credentialText('label.credentialInitializing',
-      'Waiting for the first token from the command…'), true);
-  } else if (data.state === 'failing') {
-    // The command has run and failed.  The error itself is in the refresh log
-    // below; this line says what the state means for the provider.
-    line(_credentialText('label.credentialFailing',
-      'The command has not produced a usable token yet.'), true);
-  } else if (data.state === 'error') {
-    line(_credentialText('label.credentialError', 'Could not read the credential:') + ' ' + (data.error || ''), true);
+  if (st.last_refresh) {
+    line(_credentialText('label.credentialLastRefresh', 'Last token') + ' '
+      + new Date(st.last_refresh).toLocaleString(), true);
+  } else if (!st.last_error) {
+    line(_credentialText('label.credentialNever', 'No token yet'), true);
+  }
+  const failures = Number(st.consecutive_failures || 0);
+  if (failures > 0) {
+    line(_credentialText('label.credentialFailures', 'Consecutive failures') + ' ' + failures);
+  }
+  if (st.last_error) {
+    line(_credentialText('label.credentialLastError', 'Last error') + ' ' + st.last_error, true);
+  }
+  if (st.interactive_setup_required && data.state !== 'needs_setup'
+      && data.state !== 'unreadable') {
+    line(_credentialText('label.credentialNeedsSetup',
+      'No credential yet — a sign-in is needed.'));
+  }
+  const fingerprint = shortCredential(data.credential);
+  if (fingerprint) {
+    line(_credentialText('label.credentialFingerprint', 'Fingerprint') + ' ' + fingerprint, true);
   }
 
-  // The refresh log is a fact of every minting source, including a failed one.
-  const st = data.token_status || {};
-  if (data.state !== 'error') {
-    if (st.last_refresh) {
-      line(_credentialText('label.credentialLastRefresh', 'Last token') + ' ' +
-        new Date(st.last_refresh).toLocaleString(), true);
-    } else if (st.last_error) {
-      line(_credentialText('label.credentialNever', 'No token yet'), true);
-    }
-    const failures = Number(st.consecutive_failures || 0);
-    if (failures > 0) {
-      line(_credentialText('label.credentialFailures', 'Consecutive failures') + ' ' + failures);
-    }
-    if (st.last_error) {
-      line(_credentialText('label.credentialLastError', 'Last error') + ' ' + st.last_error, true);
-    }
-    if (st.interactive_setup_required
-        && data.state !== 'needs_setup' && data.state !== 'unreadable') {
-      // The state branches above already say this; repeating it made the
-      // section read as two identical instructions.
-      line(_credentialText('label.credentialNeedsSetup', 'No credential yet — a sign-in is needed.'));
-    }
-    const fingerprint = shortCredential(data.credential);
-    if (fingerprint) {
-      line(_credentialText('label.credentialFingerprint', 'Fingerprint') + ' ' + fingerprint, true);
-    }
+  // Refresh and Test run the *saved* command.  While the draft differs they
+  // would test something else, so they are disabled rather than misleading.
+  const stale = _credentialDraftDirty();
+  const shim = _credentialShim() || {};
+  const manage = safeLinkUrl(shim.manage_usage_url);
+  if (manage && !stale && ui === 'config') {
+    _appendAction(actions, {kind: 'link', href: manage,
+      label: _credentialText('btn.manageUsage', 'Manage usage')});
+  }
+  const saveFirst = _credentialText('prov.saveFirst',
+    'Save this provider first — refresh and test run the saved command.');
+  _appendAction(actions, {
+    label: _credentialText('btn.refreshCredential', 'Refresh now'),
+    fn: 'refreshProviderCredential()', disabled: stale, title: saveFirst,
+  });
+  _appendAction(actions, {
+    label: _credentialText('btn.testCredential', 'Test credential'),
+    fn: 'testProviderCredential()', disabled: stale, title: saveFirst,
+  });
+}
+
+/** The Basic pane's read-only summary of the credential source. */
+function _renderAuthSummary() {
+  const ui = _uiSource();
+  const data = _credentialData;
+  const shim = _selectedShim() || {};
+  document.querySelectorAll('#provAuthChips .prov-mode-chip').forEach(chip => {
+    chip.setAttribute('aria-pressed', String(chip.dataset.source === ui));
+  });
+  // The Basic summary names only the sources the Auth pane offers.
+  const avail = _availableSources();
+  for (const id of ['static', 'shim', 'exchange']) {
+    const chip = document.querySelector(`#provAuthChips .prov-mode-chip[data-source="${id}"]`);
+    if (chip) chip.hidden = !avail[id];
   }
 
-  if (sourceOf !== 'static_key' && data.state !== 'error') {
-    // The auth-exchange branches above already offer this link; a command
-    // shim can name one too, and it belongs beside the actions either way.
-    if (manage && isCommand) {
-      actions_.push({ label: _credentialText('btn.manageUsage', 'Manage usage'), kind: 'link', href: manage });
-    }
-    actions_.push({ label: _credentialText('btn.refreshCredential', 'Refresh now'), fn: 'refreshProviderCredential()' });
-    actions_.push({ label: _credentialText('btn.testCredential', 'Test credential'), fn: 'testProviderCredential()' });
-  }
+  const pill = document.getElementById('provAuthPill');
+  const detail = document.getElementById('provAuthDetail');
+  const badge = document.getElementById('provAuthBadge');
+  const legacy = !!(_editingCfg() && _editingCfg().legacy_credential_marker);
 
-  for (const a of actions_) {
-    let el;
-    if (a.kind === 'link') {
-      el = document.createElement('a');
-      el.href = a.href;
-      el.target = '_blank';
-      el.rel = 'noopener noreferrer';
-      el.className = 'btn btn-sm';
-    } else {
-      el = document.createElement('button');
-      el.type = 'button';
-      el.className = 'btn btn-sm' + (a.kind === 'primary' ? ' btn-primary' : '');
-      el.setAttribute('onclick', a.fn);
-    }
-    el.textContent = a.label;
-    actions.appendChild(el);
+  let state = null;
+  if (ui === 'static') {
+    state = null;
+  } else if (_draftSourceDiffers()) {
+    state = 'unsaved';
+  } else if (!data) {
+    state = _editingProviderName ? 'loading' : 'unsaved';
+  } else if (data.source && credentialUiSource(data.source) !== ui) {
+    state = 'unsaved';
+  } else {
+    state = data.state || null;
   }
+  // The dot is decorative until it is named: its accessible name says what
+  // the credential state is, and changes with it.
+  if (badge) {
+    badge.hidden = !credentialNeedsAttention(ui, data, legacy);
+    const label = badge.hidden ? ''
+      : _credentialText('prov.authNeedsAttention',
+        'This credential needs attention.')
+        + (state ? ' · ' + _stateLabel(state) : '');
+    badge.title = label;
+    badge.setAttribute('aria-label', label);
+  }
+  if (pill) {
+    pill.className = 'prov-pill ' + (state || 'plain');
+    pill.textContent = state
+      ? _stateLabel(state)
+      : _credentialText('prov.state.none', 'No status');
+  }
+  if (!detail) return;
+  if (ui === 'static') {
+    detail.textContent = shim.keyless
+      ? _credentialText('prov.detailKeyless', 'No key needed.')
+      : _credentialText('prov.detailStatic', 'No refresh; there is no token status.');
+    return;
+  }
+  if (state === 'unsaved') {
+    detail.textContent = _credentialText('label.credentialSaveFirst',
+      'Save this provider, then come back to manage its credential.');
+    return;
+  }
+  if (state === 'loading') {
+    detail.textContent = _credentialText('label.loading', 'Loading…');
+    return;
+  }
+  const st = (data && data.token_status) || {};
+  if (state === 'connected') {
+    detail.textContent = st.last_refresh
+      ? t('prov.detailLastToken', {time: new Date(st.last_refresh).toLocaleString()})
+      : _credentialText('prov.detailNoToken', 'No token minted yet.');
+  } else if (state === 'failing') {
+    const n = Number(st.consecutive_failures || 0);
+    detail.textContent = t('prov.detailFailures', {count: n})
+      + (st.last_error ? ' · ' + st.last_error : '');
+  } else if (state === 'initializing') {
+    detail.textContent = _credentialText('prov.detailWaiting',
+      'Waiting for the first token from the command…');
+  } else if (state === 'needs_setup') {
+    detail.textContent = _credentialText('label.credentialNeedsSetup',
+      'No credential yet — a sign-in is needed.');
+  } else if (state === 'unreadable') {
+    detail.textContent = _credentialText('label.credentialUnreadable',
+      'A record exists but cannot be read. Sign in again to replace it.');
+  } else if (state === 'error') {
+    const notLive = !(_editingCfg() && 'mints_credential' in _editingCfg());
+    detail.textContent = notLive
+      ? _credentialText('prov.notLoaded',
+        'This provider did not load, so the gateway reports no credential state. Fix the configuration, then save.')
+      : (data && data.error) || '';
+  } else {
+    detail.textContent = (data && data.error) || '';
+  }
+}
+
+/** The fields the save will write.  A key is named, never rendered. */
+function _renderPreview() {
+  const host = document.getElementById('provPreviewCode');
+  if (!host) return;
+  const ui = _uiSource();
+  const cfg = _editingCfg();
+  const result = _draftCredentialFields();
+  const entry = {};
+  if (ui === 'static') {
+    if (_getKeyFieldValue()) entry.api_key = '<set>';
+    else if (cfg && cfg.api_key) entry.api_key = '<kept>';
+  } else if (result.fields && result.fields.clear_api_key) {
+    entry.api_key = '<cleared>';
+  } else if (cfg && cfg.api_key) {
+    entry.api_key = '<kept>';
+  }
+  for (const [key, value] of Object.entries(result.fields || {})) {
+    if (key === 'clear_api_key') continue;
+    entry[key] = value;
+  }
+  host.textContent = result.error
+    ? JSON.stringify({error: result.error}, null, 2)
+    : JSON.stringify(entry, null, 2);
+}
+
+/** Repaint text on a language switch; inputs and the record are untouched. */
+function refreshProviderAuthPane() {
+  if (!document.getElementById('providerModal')?.classList.contains('open')) return;
+  // The title carries data-i18n="modal.addProvider", which a language switch
+  // repaints; an edit in progress has to say so again.
+  const title = document.getElementById('providerModalTitle');
+  if (title) {
+    title.textContent = _editingProviderName
+      ? t('modal.editProvider') : t('modal.addProvider');
+  }
+  _renderCommandPanel(_uiSource(), _selectedShim(), _editingCfg());
+  _renderCredentialPanels();
+  _renderAuthSummary();
+  _renderPreview();
 }
 
 /** Re-mint the credential now and re-read the section. */
 async function refreshProviderCredential() {
   const name = _credentialFor;
   if (!name) return;
+  if (_credentialDraftDirty()) {
+    _setCredentialError(_credentialText('prov.saveFirst',
+      'Save this provider first — refresh and test run the saved command.'));
+    return;
+  }
   try {
     const res = await api.post(`/admin/api/config/providers/${encodeURIComponent(name)}/credential/refresh`);
     await loadProviderCredential(name);
@@ -442,6 +1002,11 @@ async function refreshProviderCredential() {
 async function testProviderCredential() {
   const name = _credentialFor;
   if (!name) return;
+  if (_credentialDraftDirty()) {
+    _setCredentialError(_credentialText('prov.saveFirst',
+      'Save this provider first — refresh and test run the saved command.'));
+    return;
+  }
   try {
     const res = await api.post(`/admin/api/config/providers/${encodeURIComponent(name)}/credential/test`);
     await loadProviderCredential(name);
@@ -615,6 +1180,17 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
   // placeholder (never a value) — see _applyTypePlaceholders.
   let _prevShimUrl = (shimMap[provType || ''] || {}).default_base_url || '';
   function _applyType(value) {
+    // A different type may declare a different credential, so the Auth pane
+    // restarts on the new shim's source rather than carrying the old
+    // selection into a card the loader would hide.
+    _credSource = null;
+    _credSourceOriginal = credentialUiSource(credentialSource(shimMap[value], _editingCfg()));
+    _credSource = _credSourceOriginal;
+    _credArgv = [];
+    _credFormDirty = false;
+    _credentialFor = null;
+    _credentialData = null;
+    _updateTypeSummary(value, shimMap[value]);
     _syncBaseTypeDropdown(typeModel.rootOf(value), value);
     _syncKeylessUI();
     const s = shimMap[value];
@@ -645,6 +1221,11 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
 
   // The rich Top-level dropdown and the plain Base type dropdown drive one value.
   setTypeTree(typeModel.roots, provType || '');
+  // Reset the Auth pane for this provider before the first `_syncKeylessUI`
+  // paints it: the drawer always opens on Basic, on the source the entry's
+  // shim declares.
+  _clearProviderDrawerState(_editingCfg());
+  _updateTypeSummary(getSelectedValue(), shimMap[getSelectedValue()] || null);
   onTypeSelect(_applyType);
   document.getElementById('provBaseType').onchange = function () { selectValue(this.value); };
 
@@ -773,6 +1354,10 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
   // Reveal the key field for a free provider that already carries a key.
   _freeKeyRevealed = !!(provCfg && (provCfg.api_key || provCfg.token_command));
   _syncKeylessUI();
+  // Reset to Basic on every open; the type closure is never re-run by a tab
+  // switch, so choosing a type here and then visiting Auth changes nothing.
+  _wireCredentialFields();
+  setProviderPane('basic');
   openModal('providerModal');
   // When editing, fetch the real (unmasked) key
   if (name && S._credentialVisible) {
@@ -1745,32 +2330,59 @@ async function saveProvider() {
   body.max_tool_description_length = maxToolDescVal !== '' ? parseInt(maxToolDescVal, 10) : '';
   body.models_path = document.getElementById('provModelsPath').value.trim();
   body.logo = getLogoPickerValue();
-  // Credential fields the section owns.  Only a command written into the
-  // config is editable; a shim's argv is the vendor's, and the interval is a
-  // default in every minting source.  A command is sent only after the section
-  // actually read this provider — an empty box after a failed read is not the
-  // operator clearing anything, and sending [] would delete it.
-  const credSource = _credentialSource();
+  // Credential fields the Auth pane owns.  A static key is stored in the
+  // entry; a command or a sign-in stores none of the key box contents, so the
+  // pane's choice of source decides which fields exist at all.
+  const credUi = _uiSource();
+  const credSource = credentialSourceId(credUi);
+  // A new provider has no stored command to destroy, so its rows are always
+  // the command; an edited one is trusted only after the section read it.
   const credentialLoaded = credentialLoadedFor(
-    _credentialFor, _editingProviderName, _credentialData);
+    _credentialFor, _editingProviderName, _credentialData) || !_editingProviderName;
+  if (credUi === 'config' && _normalisedArgv() === null) {
+    showToast(t('error.tokenCommandArgv',
+      'The token command needs a non-empty argument on every row.'), 'error');
+    setProviderPane('auth');
+    return;
+  }
+  const storedKey = !!(_editingCfg() && _editingCfg().api_key);
+  const keylessShim = !!(_selectedShim() && _selectedShim().keyless);
+  if (credUi === 'static' && !apiKey && !storedKey && !keylessShim) {
+    showToast(t('error.staticKeyRequired', 'A static source needs an API key.'), 'error');
+    setProviderPane('auth');
+    return;
+  }
+  const needsKey = _needsKey(credUi);
   const credFields = credentialSaveFields({
     source: credSource,
     loaded: credentialLoaded,
-    command: document.getElementById('provTokenCommand')?.value,
+    command: credUi === 'config' ? JSON.stringify(_normalisedArgv()) : '',
     env: document.getElementById('provTokenCommandEnv')?.value,
     interval: document.getElementById('provTokenRefreshInterval')?.value,
+    // Only an override the entry actually has is removed; a shim's own env
+    // var stays the shim's.
+    clearCommandEnv: !!(_editingCfg() && _editingCfg().token_command_env),
   });
   if (credFields.error === 'token_command_argv') {
     showToast(t('error.tokenCommandArgv',
-      'The token command must be a JSON array of non-empty strings.'), 'error');
+      'The token command needs a non-empty argument on every row.'), 'error');
+    setProviderPane('auth');
     return;
   }
   if (credFields.error === 'token_refresh_interval') {
     showToast(t('error.tokenRefreshInterval',
       'The refresh interval must be at least 60 seconds.'), 'error');
+    setProviderPane('auth');
     return;
   }
   Object.assign(body, credFields.fields);
+  Object.assign(body, credentialSourceFields({ to: credSource, needsKey }).fields);
+  // An override that the section never read is still in the entry: moving
+  // off "config" must remove it even though no empty box could say so.
+  if (credUi !== 'config' && !credentialLoaded && _credSourceOriginal === 'config') {
+    body.token_command = [];
+    body.token_command_env = '';
+  }
   // When api_key is empty and we're editing, omit it so backend keeps the original
   if (apiKey) body.api_key = apiKey;
   // If editing and name changed, include rename_from so backend updates model references
@@ -1987,6 +2599,7 @@ Object.assign(window, {
   showProviderQuota,
   installProviderCredential, signOutProviderCredential, toggleProviderCredentialBox,
   refreshProviderCredential, testProviderCredential,
+  setProviderPane, selectCredentialSource, addProviderArg, refreshProviderAuthPane,
   _activateSegChild,
   openFreeProvider, refreshFreeModels, revealProviderKey,
   refreshShimHint,

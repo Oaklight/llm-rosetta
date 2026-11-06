@@ -21,6 +21,7 @@ from ....providers import (
 from ....shims import SHIM_SOURCE_PACKAGES
 from ....transport.token_refresh import public_token_status
 from .._shared import (
+    _TOKEN_COMMAND_MARKER,
     _get_config_io,
     _get_config_path,
     _mask_api_key,
@@ -349,6 +350,12 @@ def _mask_provider_entry(name: str, cfg: Any) -> dict[str, Any]:
     proxy userinfo, or any other field a diagnostic mapping might carry.
     """
     masked = dict(cfg)
+    # The old panel stored the literal word ``token_command`` in the key slot
+    # as a card label.  Masking hides even that, so the flag the drawer needs
+    # to offer the repair is recorded before the value is masked.  It says
+    # nothing about a real key: the marker is a fixed string.
+    if masked.get("api_key") == _TOKEN_COMMAND_MARKER:
+        masked["legacy_credential_marker"] = True
     if "api_key" in masked:
         masked["api_key"] = _mask_api_key(masked["api_key"])
     if "proxy" in masked:

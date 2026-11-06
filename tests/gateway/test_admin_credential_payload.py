@@ -188,3 +188,33 @@ class TestTheConfigPayload:
         assert entry["mints_credential"] is True
         assert entry["credentials_pending"] is True
         assert entry["credential_source"] == "auth_exchange"
+
+
+class TestTheLegacyMarker:
+    """The old panel stored the literal word ``token_command`` in the key slot.
+
+    Masking hides even that, so the drawer needs a flag recorded before the
+    value is masked — otherwise the repair it offers can never appear.
+    """
+
+    def test_a_marker_becomes_a_flag_not_a_key(self):
+        from llm_rosetta_gateway.admin.routes.config.payload import (
+            _mask_provider_entry,
+        )
+
+        masked = _mask_provider_entry(
+            "p", {"api_key": "token_command", "base_url": "https://x.test/v1"}
+        )
+
+        assert masked["legacy_credential_marker"] is True
+        assert masked["api_key"] != "token_command"
+
+    def test_a_real_key_has_no_marker(self):
+        from llm_rosetta_gateway.admin.routes.config.payload import (
+            _mask_provider_entry,
+        )
+
+        assert "legacy_credential_marker" not in _mask_provider_entry(
+            "p", {"api_key": "sk-abcdefgh", "base_url": "https://x.test/v1"}
+        )
+        assert "legacy_credential_marker" not in _mask_provider_entry("p", {})

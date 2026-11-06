@@ -115,6 +115,11 @@ async def put_provider(request: Any, **kwargs: Any) -> Response:
         # When api_key is omitted/empty and we're editing, keep the existing key
         if not api_key and resolve_name in existing_providers:
             api_key = existing_providers[resolve_name].get("api_key", "")
+        # ...unless the editor switched away from the static key, which asks
+        # for the stored one to be removed.  The save then has to be judged on
+        # the credential it will actually leave behind, not on the old key.
+        if body.get("clear_api_key") is True:
+            api_key = ""
 
         missing_err = _missing_provider_fields_error(
             body, api_key, base_url, resolve_name, existing_providers

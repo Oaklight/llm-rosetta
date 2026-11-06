@@ -75,11 +75,154 @@ def test_an_empty_key_is_not_stored_beside_a_command():
     assert "api_key" not in entry
 
 
+def test_an_explicitly_empty_command_stores_no_empty_key():
+    """``token_command: []`` means "no command", not "no key either".
+
+    The editor sends it for a source that stores no command (a shim command or
+    a sign-in).  Writing ``api_key: ""`` as well would stop the loader from
+    filling the shim's ``api_key_env``, which is how AskSage receives the
+    account key its token command reads.
+    """
+    entry = _save({"base_url": "https://api.example/v1", "token_command": []})
+
+    assert "api_key" not in entry
+    assert "token_command" not in entry
+
+
 def test_an_empty_key_is_still_stored_for_an_ordinary_provider():
     """The rule is about the command, not about empty keys in general."""
     entry = _save({"base_url": "https://api.example/v1", "type": "chat_completions"})
 
     assert entry["api_key"] == ""
+
+
+def test_clear_api_key_removes_a_stored_key_the_body_never_mentions():
+    """Switching static -> command/exchange deletes the key.
+
+    An empty ``api_key`` has always meant "keep the stored one", so the editor
+    needs a word of its own for the other instruction.
+    """
+    stored = {
+        "type": "chat_completions",
+        "base_url": "https://api.example/v1",
+        "api_key": "sk-old",
+    }
+
+    entry = _save(
+        {
+            "base_url": "https://api.example/v1",
+            "type": "chat_completions",
+            "clear_api_key": True,
+            "token_command": COMMAND,
+        },
+        {"p": stored},
+        name="p",
+    )
+
+    assert "api_key" not in entry
+    assert entry["token_command"] == COMMAND
+    # The flag is an instruction, not a setting.
+    assert "clear_api_key" not in entry
+
+
+def test_clear_api_key_without_another_source_stores_an_empty_key():
+    """The key is gone; the entry says so rather than keeping the old one."""
+    stored = {"base_url": "https://api.example/v1", "api_key": "sk-old"}
+
+    entry = _save(
+        {"base_url": "https://api.example/v1", "clear_api_key": True},
+        {"p": stored},
+        name="p",
+    )
+
+    assert entry["api_key"] == ""
+
+
+def test_an_empty_command_env_removes_the_entry_override():
+    """The editor clears a command env by sending ``""``.
+
+    The loader treats a *present* ``token_command_env`` as the override, even
+    when it is empty, so this pop is what lets a shim's own env var apply
+    again.  The command itself is untouched when the body omits it.
+    """
+    stored = {
+        "base_url": "https://api.example/v1",
+        "token_command": COMMAND,
+        "token_command_env": "OLD_ACCOUNT_KEY",
+    }
+
+    entry = _save(
+        {"base_url": "https://api.example/v1", "token_command_env": ""},
+        {"p": stored},
+        name="p",
+    )
+
+    assert "token_command_env" not in entry
+    assert entry["token_command"] == COMMAND
+
+
+def test_an_omitted_command_env_keeps_the_stored_one():
+    stored = {
+        "base_url": "https://api.example/v1",
+        "token_command": COMMAND,
+        "token_command_env": "ACCOUNT_KEY",
+    }
+
+    entry = _save({"base_url": "https://api.example/v1"}, {"p": stored}, name="p")
+
+    assert entry["token_command_env"] == "ACCOUNT_KEY"
+
+
+def test_an_ordinary_save_keeps_the_key_the_caller_resolved():
+    """Without the flag the resolved key is stored as given.
+
+    ``put_provider`` reads the stored key when the body omits one; the builder
+    must not invent a second rule for the same field.
+    """
+    stored = {"base_url": "https://api.example/v1", "api_key": "sk-old"}
+
+    entry = _build_provider_entry(
+        {"base_url": "https://api.example/v1"},
+        api_key="sk-old",
+        base_url="https://api.example/v1",
+        existing_providers={"p": stored},
+        resolve_name="p",
+    )
+
+    assert entry["api_key"] == "sk-old"
+
+
+@pytest.mark.asyncio
+async def test_clearing_the_key_is_judged_on_the_entry_it_leaves(tmp_path):
+    """A source switch that leaves no credential is refused, and the old key
+    with it: the save must not pass validation on a credential it deletes."""
+    from llm_rosetta_gateway.admin.routes.config.providers import put_provider
+
+    raw = {
+        "providers": {
+            "p": {
+                "type": "chat_completions",
+                "base_url": "https://api.example/v1",
+                "api_key": "sk-old",
+            }
+        },
+        "models": {},
+    }
+    request = _save_request(
+        tmp_path,
+        raw,
+        {
+            "type": "chat_completions",
+            "base_url": "https://api.example/v1",
+            "clear_api_key": True,
+        },
+    )
+
+    response = await put_provider(request)
+
+    assert response.status_code == 400
+    assert b"api_key" in response.body
+    assert _saved_file(request)["providers"]["p"]["api_key"] == "sk-old"
 
 
 def test_a_shim_that_ships_an_exchange_needs_no_key():

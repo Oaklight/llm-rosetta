@@ -176,6 +176,28 @@ class TestGet:
         assert payload["state"] == "unreadable"
         assert payload["installed"] is False
 
+    def test_the_exchange_says_which_actions_would_work(self):
+        """The card must not offer an install/sign-out that answers 501."""
+        exchange = _Exchange()
+
+        payload = json.loads(
+            _call(get_provider_credential, _Request(_config(exchange=exchange))).body
+        )
+
+        assert payload["can_install"] is True
+        assert payload["can_revoke"] is True
+
+    def test_a_legacy_exchange_offers_neither_action(self):
+        payload = json.loads(
+            _call(
+                get_provider_credential,
+                _Request(_config(exchange=_LegacyExchange())),
+            ).body
+        )
+
+        assert payload["can_install"] is False
+        assert payload["can_revoke"] is False
+
     def test_the_summary_never_carries_a_token(self):
         exchange = _Exchange()
         exchange.install(AuthContext(provider="chatgpt"), dict(RECORD))
@@ -378,6 +400,17 @@ def _command_pinfo(
 
 
 class TestCommandCredential:
+    def test_a_command_offers_no_record_actions(self):
+        payload = json.loads(
+            _call(
+                get_provider_credential,
+                _Request(SimpleNamespace(providers={"chatgpt": _command_pinfo()})),
+            ).body
+        )
+
+        assert payload["can_install"] is False
+        assert payload["can_revoke"] is False
+
     def test_a_waited_for_token_is_its_own_state(self):
         payload = json.loads(
             _call(
