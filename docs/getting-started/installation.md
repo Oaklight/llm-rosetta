@@ -55,5 +55,5 @@ Or use Docker Compose — see `docker/docker-compose.yaml` in the repository.
 ```bash
 git clone https://github.com/Oaklight/llm-rosetta.git
 cd llm-rosetta
-pip install -e "packages/llm-rosetta[openai,anthropic,google]" -e packages/llm-rosetta-gateway
+pip install -e "packages/llm-rosetta[conformance]" -e packages/llm-rosetta-gateway
 ```
