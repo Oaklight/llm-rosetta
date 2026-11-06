@@ -28,6 +28,7 @@ New here? Start with the [Gateway Quick Start](../getting-started/gateway-quicks
 | `POST /v1/messages` | Anthropic | Drop-in for Anthropic SDK |
 | `POST /v1/responses` | OpenAI Responses | Drop-in for OpenAI Responses SDK |
 | `POST /v1/responses/compact` | OpenAI Responses | Context compaction, relayed unchanged; needs an `open_responses` upstream (`501` otherwise) |
+| `POST /v1/messages/count_tokens` | Anthropic | Exact input-token count, delegated to the target's own endpoint; needs a `messages` upstream (`501` otherwise) |
 | `POST /v1/embeddings` | OpenAI Embeddings | Cross-format conversion via IR (OpenAI, Cohere, Jina, Voyage) |
 | `POST /v1/rerank` | Rerank (Jina default) | Cross-format conversion via IR (Jina, Cohere, Voyage) |
 | `POST /v2/rerank` | Rerank (Cohere) | Auto-detected Cohere format; same handler as `/v1/rerank` |
@@ -56,6 +57,32 @@ curl http://localhost:8765/v1/chat/completions \
 ```
 
 The gateway converts SSE chunks in real time between provider formats.
+
+## Token counting
+
+`POST /v1/messages/count_tokens` answers the Anthropic counting endpoint for
+clients that count before sending a request (Claude Code is one). The gateway
+does not estimate: it forwards the body — the `model` name rewritten to the
+route's upstream model, nothing else touched — to the target provider's own
+`/count_tokens` endpoint and relays the answer verbatim
+(`x-rosetta-conversion: passthrough`).
+
+The count is therefore exact whenever the target implements the Messages
+counting endpoint, and identical to what that provider's own SDK reports. Two
+limits follow from delegating rather than estimating:
+
+- The body must be a valid counting request. Anthropic rejects generation-only
+  fields there (`max_tokens`, `stream`), and the gateway relays that `400`
+  unchanged instead of stripping the fields for you.
+- A model routed to a provider that does not speak Messages cannot be counted
+  this way, and the route answers `501` in the Messages error envelope. OpenAI
+  Chat and OpenAI Responses targets have no counting endpoint at all; a Google
+  target has `:countTokens`, but it consumes a Google-shaped request and
+  reports `totalTokens`, so the gateway does not use it for a Messages-shaped
+  count in this release.
+
+The route is recorded in the request log and metrics like any other, with no
+token usage — a count spends nothing.
 
 ## Authentication
 
