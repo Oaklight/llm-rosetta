@@ -207,6 +207,83 @@ class TestSchemaVersioning:
         entries, _total = await pm.query_log_entries(limit=10)
         assert entries[0]["user_agent"] == "claude-cli/1.2.3 (external, cli)"
 
+    async def test_request_log_has_conversation_id_column(self, pm):
+        """Migration v12 adds the id the routing page groups by."""
+        cursor = await pm._conn.execute("PRAGMA table_info(request_log)")
+        columns = {r[1] for r in await cursor.fetchall()}
+        assert "conversation_id" in columns
+
+    async def test_conversation_id_round_trips(self, pm):
+        conversation = "0123456789abcdef0123456789abcdef"
+        entry = RequestLogEntry.create(
+            model="gpt-4o",
+            source_provider="openai_chat",
+            target_provider="anthropic",
+            is_stream=False,
+            status_code=200,
+            duration_ms=50.0,
+            conversation_id=conversation,
+        )
+        await pm.insert_log_entries([entry.to_dict()])
+        entries, _total = await pm.query_log_entries(limit=10)
+        assert entries[0]["conversation_id"] == conversation
+
+    async def test_a_row_without_a_conversation_omits_the_key(self, pm):
+        """A NULL column reads as absent, so a reader can tell it was not measured."""
+        entry = RequestLogEntry.create(
+            model="gpt-4o",
+            source_provider="openai_chat",
+            target_provider="anthropic",
+            is_stream=False,
+            status_code=200,
+            duration_ms=50.0,
+        )
+        await pm.insert_log_entries([entry.to_dict()])
+        entries, _total = await pm.query_log_entries(limit=10)
+        assert entries[0].get("conversation_id") is None
+
+    async def test_a_store_from_before_the_column_migrates_and_keeps_its_rows(
+        self, tmp_path
+    ):
+        """A gateway on an older database gains the column without losing rows."""
+        pm = await PersistenceManager.create(str(tmp_path))
+        entry = RequestLogEntry.create(
+            model="gpt-4o",
+            source_provider="openai_chat",
+            target_provider="anthropic",
+            is_stream=False,
+            status_code=200,
+            duration_ms=50.0,
+        )
+        await pm.insert_log_entries([entry.to_dict()])
+        # Rewind the store to the release before the column: drop it and the
+        # migration record, keeping the row a user's database would hold.
+        await pm._conn.execute("ALTER TABLE request_log DROP COLUMN conversation_id")
+        await pm._conn.execute("DELETE FROM schema_version WHERE version = 12")
+        await pm._conn.commit()
+        await pm.close()
+
+        reopened = await PersistenceManager.create(str(tmp_path))
+        assert await reopened.schema_version() == PersistenceManager._MIGRATIONS[-1][0]
+        entries, _total = await reopened.query_log_entries(limit=10)
+        assert [e["id"] for e in entries] == [entry.id]
+        # The historical row is readable and carries no invented id.
+        assert entries[0].get("conversation_id") is None
+        # A row written after the upgrade carries one.
+        fresh = RequestLogEntry.create(
+            model="gpt-4o",
+            source_provider="openai_chat",
+            target_provider="anthropic",
+            is_stream=False,
+            status_code=200,
+            duration_ms=50.0,
+            conversation_id="f" * 32,
+        )
+        await reopened.insert_log_entries([fresh.to_dict()])
+        entries, _total = await reopened.query_log_entries(limit=10)
+        assert entries[0]["conversation_id"] == "f" * 32
+        await reopened.close()
+
     async def test_foreign_keys_enabled(self, pm):
         row = await pm._conn.execute_fetchone("PRAGMA foreign_keys")
         assert row[0] == 1

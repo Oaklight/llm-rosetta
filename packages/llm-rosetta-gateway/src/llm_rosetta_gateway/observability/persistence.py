@@ -462,6 +462,20 @@ class PersistenceManager:
                 "ALTER TABLE request_log ADD COLUMN user_agent TEXT",
             ],
         ),
+        (
+            12,
+            "add request_log.conversation_id so the routing page groups by "
+            "conversation",
+            [
+                # The panel folded rows by (client, User-Agent), so concurrent
+                # sessions on one key collapsed into one line.  The id is the
+                # digest the routing stages already derive for the upstream
+                # session header; historical rows stay NULL and are read the
+                # old way.  No index: the panel folds the newest few hundred
+                # rows of one model, which the timestamp index already serves.
+                "ALTER TABLE request_log ADD COLUMN conversation_id TEXT",
+            ],
+        ),
     ]
 
     async def _run_migrations(self) -> None:
@@ -632,6 +646,7 @@ class PersistenceManager:
         "request_id",
         "ttft_ms",
         "user_agent",
+        "conversation_id",
     ]
 
     async def insert_log_entries(self, entries: list[dict[str, Any]]) -> None:
@@ -645,8 +660,9 @@ class PersistenceManager:
             "target_provider_name, client_ip, profile, "
             "input_tokens, output_tokens, total_tokens, "
             "cache_read_tokens, cache_creation_tokens, reasoning_tokens, "
-            "api_key_bucket, model_type, request_id, ttft_ms, user_agent) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "api_key_bucket, model_type, request_id, ttft_ms, user_agent, "
+            "conversation_id) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 (
                     e["id"],
@@ -679,6 +695,7 @@ class PersistenceManager:
                     # before the column existed.
                     e.get("ttft_ms"),
                     e.get("user_agent"),
+                    e.get("conversation_id"),
                 )
                 for e in entries
             ],
@@ -2480,6 +2497,7 @@ class PersistenceManager:
                     "api_key_bucket",
                     "request_id",
                     "ttft_ms",
+                    "conversation_id",
                 )
                 and val is None
             ):

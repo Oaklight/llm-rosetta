@@ -2219,6 +2219,9 @@ button.shim-update.unknown { color: var(--yellow, #b7791f); }
   display: block; font-size: 10px; color: var(--text-muted);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+/* A line with no conversation id is a client group, not one session: the
+   italic word says the row covers at least one conversation, not exactly one. */
+.routing-session-group { font-style: italic; }
 .routing-status { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 .routing-status.is-fail { color: var(--red); }
 .routing-status.is-ok { color: var(--green); }

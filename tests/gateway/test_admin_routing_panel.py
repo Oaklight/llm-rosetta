@@ -358,7 +358,8 @@ class TestGetModelRouting:
         assert response.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_sessions_fold_recent_rows_by_client_identity(self):
+    async def test_a_row_without_a_conversation_folds_by_client_identity(self):
+        """Rows written before the log kept an id read the way they always did."""
         rows = [
             {
                 "timestamp": "2026-11-02T12:00:00Z",
@@ -397,6 +398,7 @@ class TestGetModelRouting:
                 "provider": "b",
                 "requests": 2,
                 "last": "2026-11-02T12:00:00Z",
+                "derived": False,
             },
             {
                 "client": "10.0.0.7",
@@ -404,8 +406,88 @@ class TestGetModelRouting:
                 "provider": "a",
                 "requests": 1,
                 "last": "2026-11-02T11:58:00Z",
+                "derived": False,
             },
         ]
+        # Every row is a fallback group rather than one conversation.
+        assert payload["session_count"] == 2
+        assert payload["session_sample"] == 3
+
+    @pytest.mark.asyncio
+    async def test_two_conversations_from_one_key_get_two_rows(self):
+        """The case the old grouping could not show: one key, two sessions."""
+        rows = [
+            {
+                "timestamp": "2026-11-02T12:00:00Z",
+                "model": "m",
+                "api_key_label": "claude-code",
+                "user_agent": "claude-cli/2.0",
+                "conversation_id": "b" * 32,
+                "target_provider_name": "b",
+            },
+            {
+                "timestamp": "2026-11-02T11:59:00Z",
+                "model": "m",
+                "api_key_label": "claude-code",
+                "user_agent": "claude-cli/2.0",
+                "conversation_id": "a" * 32,
+                "target_provider_name": "a",
+            },
+            {
+                "timestamp": "2026-11-02T11:58:00Z",
+                "model": "m",
+                "api_key_label": "claude-code",
+                "user_agent": "claude-cli/2.0",
+                "conversation_id": "b" * 32,
+                "target_provider_name": "b",
+            },
+        ]
+
+        class _Log:
+            async def get_entries(self, **_kwargs: Any):
+                return rows, len(rows)
+
+        request = _request(request_log=_Log())
+
+        payload = json.loads((await get_model_routing(request)).body)
+
+        assert [(row["provider"], row["requests"]) for row in payload["sessions"]] == [
+            ("b", 2),
+            ("a", 1),
+        ]
+        assert all(row["derived"] for row in payload["sessions"])
+        assert payload["session_count"] == 2
+        assert payload["session_sample"] == 3
+
+    @pytest.mark.asyncio
+    async def test_a_fallback_row_never_merges_with_a_conversation(self):
+        """A row with an id and a row without stay on separate lines."""
+        rows = [
+            {
+                "timestamp": "2026-11-02T12:00:00Z",
+                "model": "m",
+                "api_key_label": "codex",
+                "conversation_id": "c" * 32,
+                "target_provider_name": "b",
+            },
+            {
+                "timestamp": "2026-11-02T11:59:00Z",
+                "model": "m",
+                "api_key_label": "codex",
+                "target_provider_name": "a",
+            },
+        ]
+
+        class _Log:
+            async def get_entries(self, **_kwargs: Any):
+                return rows, len(rows)
+
+        payload = json.loads(
+            (await get_model_routing(_request(request_log=_Log()))).body
+        )
+
+        assert [row["derived"] for row in payload["sessions"]] == [True, False]
+        assert payload["session_count"] == 2
 
     @pytest.mark.asyncio
     async def test_a_lane_reports_where_it_goes(self):
