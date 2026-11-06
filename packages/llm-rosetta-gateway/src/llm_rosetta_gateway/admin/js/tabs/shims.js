@@ -9,6 +9,9 @@ import { t } from '../core/i18n.js';
 import { api, showToast, esc, copyText, openModal, closeModal } from '../core/utils.js';
 import { parsePresets, togglePreset, presetGroups } from '../core/shim-presets.js';
 import { shimHintText } from '../core/shim-hint.js';
+import {
+  inheritanceRows, annotateBlast, changedLeaves, nameList,
+} from '../core/manifest-inherit.js';
 
 function _section() {
   const sec = S.configData && S.configData.shims;
@@ -370,6 +373,14 @@ function addShimPresetFromRow(button) {
 
 let _shimRows = [];
 let _shimDetail = null;
+// Vendor manifests ride in the same payload under their own key: they have no
+// shim name, so they are never entries of `_shimRows`.
+let _manifests = [];
+let _manifestDetail = null;
+let _manifestFields = [];
+let _manifestTimer = null;
+// Which shape the shared modal is editing: a shim definition or a manifest.
+let _modalKind = 'shim';
 // location -> {current, head, update, error}, from the last check.
 let _shimUpdates = new Map();
 
@@ -379,8 +390,10 @@ async function loadLoadedShims() {
   try {
     const d = await api.get('/admin/api/config/shims');
     _shimRows = Array.isArray(d.shims) ? d.shims : [];
+    _manifests = Array.isArray(d.manifests) ? d.manifests : [];
   } catch {
     _shimRows = [];
+    _manifests = [];
   }
   renderLoadedShims();
 }
@@ -507,9 +520,67 @@ function renderLoadedShims() {
         ${_updateBadge(g)}
       </div>
       ${note ? `<div class="shim-group-note" title="${esc(note)}">${esc(note)}</div>` : ''}
-      ${g.shown.map(_shimRowHtml).join('')}
+      ${_groupBodyHtml(g.shown, q, showBuiltin)}
     </div>`;
   }).join('');
+}
+
+/**
+ * One source group's rows, with each vendor manifest above its leaves.
+ *
+ * A manifest is not a shim: it has no name to resolve and no enable switch of
+ * its own.  It heads the leaves it feeds, so the defaults they share are
+ * visible where they apply rather than only inside the editor.
+ */
+function _groupBodyHtml(rows, query, showBuiltin) {
+  const byPath = new Map(_manifests.map(m => [m.path, m]));
+  const blocks = [];
+  const seen = new Map();
+  for (const row of rows) {
+    const manifest = row.manifest_path ? byPath.get(row.manifest_path) : null;
+    if (!manifest) {
+      blocks.push({ manifest: null, rows: [row] });
+      continue;
+    }
+    if (!seen.has(manifest.path)) {
+      const block = { manifest, rows: [] };
+      seen.set(manifest.path, block);
+      blocks.push(block);
+    }
+    seen.get(manifest.path).rows.push(row);
+  }
+  // A manifest whose leaves are all filtered out still answers the filter
+  // when the filter names the vendor.
+  for (const manifest of byPath.values()) {
+    if (seen.has(manifest.path)) continue;
+    if (!query || !String(manifest.vendor || '').toLowerCase().includes(query)) {
+      continue;
+    }
+    if (manifest.origin === 'builtin' && !showBuiltin) continue;
+    blocks.push({ manifest, rows: [] });
+  }
+  return blocks.map(b => (b.manifest
+    ? `<div class="shim-vendor">${_manifestRowHtml(b.manifest)}`
+      + `${b.rows.map(_shimRowHtml).join('')}</div>`
+    : b.rows.map(_shimRowHtml).join(''))).join('');
+}
+
+/** The vendor manifest's row: a heading for the leaves below it. */
+function _manifestRowHtml(m) {
+  const count = (m.leaves || []).length;
+  const meta = `${t('shim.manifest.meta', { count })} \u00b7 ${m.path || ''}`;
+  return `<div class="shim-row shim-manifest-row">
+    <div class="shim-row-main">
+      <div class="shim-row-id">
+        <code class="shim-name">${esc(m.vendor || '')}/</code>
+        <span class="shim-pill manifest">${esc(t('shim.manifest.pill'))}</span>
+      </div>
+      <div class="shim-row-meta" title="${esc(meta)}">${esc(meta)}</div>
+    </div>
+    <div class="shim-row-actions">
+      <button class="btn btn-sm" data-manifest="${esc(m.path)}" onclick="openManifestDetail(this.dataset.manifest)">${esc(t(m.editable ? 'shim.edit' : 'shim.open'))}</button>
+    </div>
+  </div>`;
 }
 
 /** One inventory row. */
@@ -546,6 +617,10 @@ async function openShimDetail(name) {
   try {
     const d = await api.get('/admin/api/config/shims/' + encodeURIComponent(name));
     _shimDetail = d;
+    _modalKind = 'shim';
+    _manifestDetail = null;
+    document.getElementById('shimModalInherit').hidden = true;
+    _showManifestProblem('');
     document.getElementById('shimModalTitle').textContent = d.name;
     document.getElementById('shimModalMeta').textContent =
       [t('shim.origin.' + d.origin), d.path || d.source || ''].filter(Boolean).join(' \u00b7 ');
@@ -560,6 +635,11 @@ async function openShimDetail(name) {
   } catch (e) {
     showToast(String(e.message || e), 'error');
   }
+}
+
+/** Save whichever shape the modal holds: a shim definition or a manifest. */
+function saveShimModal() {
+  return _modalKind === 'manifest' ? saveManifestYaml() : saveShimYaml();
 }
 
 /** Save the edited definition; the server rolls back if it does not load. */
@@ -618,12 +698,182 @@ async function deleteLoadedShim(name) {
   }
 }
 
+// ── Vendor manifests ──────────────────────────────────────────────────
+//
+// A manifest sets the connection defaults every leaf below it inherits.  The
+// editor is the same modal as a shim's, plus an inheritance panel: which
+// leaves take each field from here, which override it, and — while an unsaved
+// edit is in the textarea — which leaves the edit would actually change.
+
+/** Show or clear the manifest's validation message. */
+function _showManifestProblem(message) {
+  const el = document.getElementById('shimModalProblem');
+  if (!el) return;
+  el.textContent = message || '';
+  el.hidden = !message;
+}
+
+/** Open one vendor manifest for viewing or editing. */
+async function openManifestDetail(path) {
+  try {
+    const d = await api.get(
+      '/admin/api/config/shim-manifests/detail?path=' + encodeURIComponent(path));
+    if (d && d.error) throw new Error(d.error);
+    _modalKind = 'manifest';
+    _manifestDetail = d;
+    _shimDetail = null;
+    _bindManifestEditor();
+    document.getElementById('shimModalTitle').textContent = (d.vendor || '') + '/';
+    document.getElementById('shimModalMeta').textContent =
+      [t('shim.origin.' + d.origin), d.path || ''].filter(Boolean).join(' \u00b7 ');
+    const ta = document.getElementById('shimModalYaml');
+    ta.value = d.yaml || '';
+    ta.readOnly = !d.editable;
+    document.getElementById('shimModalSave').style.display = d.editable ? '' : 'none';
+    document.getElementById('shimModalNote').textContent = d.editable
+      ? t('shim.manifest.editHint')
+      : (d.read_only_reason || '');
+    _manifestFields = inheritanceRows(d.fields);
+    _paintManifestRows(_manifestFields, (d.leaves || []).length, null);
+    _showManifestProblem('');
+    document.getElementById('shimModalInherit').hidden = false;
+    openModal('shimModal');
+  } catch (e) {
+    showToast(String(e.message || e), 'error');
+  }
+}
+
+/** Re-run the preview shortly after typing stops, not on every keystroke. */
+function _bindManifestEditor() {
+  const ta = document.getElementById('shimModalYaml');
+  if (!ta || ta.dataset.manifestBound) return;
+  ta.dataset.manifestBound = '1';
+  ta.addEventListener('input', () => {
+    if (_modalKind !== 'manifest') return;
+    clearTimeout(_manifestTimer);
+    _manifestTimer = setTimeout(previewManifestYaml, 450);
+  });
+}
+
+/**
+ * Ask the gateway which leaves the unsaved text would change.
+ *
+ * Nothing is written: the panel shows the blast radius before Save, because a
+ * manifest field reaches every leaf that does not override it.
+ */
+async function previewManifestYaml() {
+  if (_modalKind !== 'manifest' || !_manifestDetail) return;
+  const yaml = document.getElementById('shimModalYaml').value;
+  try {
+    const r = await api.post('/admin/api/config/shim-manifests/preview',
+      { path: _manifestDetail.path, yaml });
+    // `api.post` resolves with the body on 400 too: a manifest that does not
+    // validate says so here rather than only on Save.
+    // The modal may have been closed, or reopened on a shim, while the
+    // preview was in flight; a stale answer must not paint the hidden panel.
+    if (_modalKind !== 'manifest') return;
+    if (r && r.error) { _showManifestProblem(r.error); return; }
+    _showManifestProblem('');
+    _paintManifestRows(
+      annotateBlast(_manifestFields, r.changes),
+      (_manifestDetail.leaves || []).length,
+      changedLeaves(r.changes));
+  } catch (e) {
+    _showManifestProblem(String(e.message || e));
+  }
+}
+
+/**
+ * Paint the inheritance rows.
+ *
+ * Rows are built as nodes rather than markup, so a leaf name is text and never
+ * something the parser could read back as HTML.  `blast` names the leaves the
+ * unsaved edit changes; `null` means no edit is being previewed yet.
+ */
+function _paintManifestRows(rows, total, blast) {
+  const list = document.getElementById('shimModalInheritList');
+  if (!list) return;
+  list.replaceChildren();
+  if (!rows.length) {
+    const empty = document.createElement('div');
+    empty.className = 'shim-inherit-empty';
+    empty.textContent = t('shim.manifest.none');
+    list.append(empty);
+  }
+  for (const row of rows) {
+    const el = document.createElement('div');
+    el.className = 'shim-inherit-row' + (row.touched ? ' is-touched' : '');
+    el.dataset.field = row.id;
+    const name = document.createElement('code');
+    name.className = 'shim-inherit-field';
+    name.textContent = row.label;
+    const who = document.createElement('span');
+    who.className = 'shim-inherit-who';
+    const parts = [];
+    if (row.inherited.length) {
+      parts.push(t('shim.manifest.inheritedBy', { names: nameList(row.inherited) }));
+    }
+    if (row.overridden.length) {
+      parts.push(t('shim.manifest.overriddenBy', { names: nameList(row.overridden) }));
+    }
+    who.textContent = parts.join(' \u00b7 ');
+    el.append(name, who);
+    if (row.touched) {
+      const mark = document.createElement('span');
+      mark.className = 'shim-inherit-mark';
+      mark.textContent = t(row.removed
+        ? 'shim.manifest.willEmpty'
+        : 'shim.manifest.willChange', { count: row.affected.length });
+      el.append(mark);
+    }
+    list.append(el);
+  }
+  const summary = document.getElementById('shimModalInheritSummary');
+  if (!summary) return;
+  if (blast === null) {
+    summary.textContent = t('shim.manifest.leafCount', { count: total });
+  } else {
+    summary.textContent = blast.length
+      ? t('shim.manifest.blast', { count: blast.length, total })
+      : t('shim.manifest.noChange');
+  }
+}
+
+/**
+ * Save the manifest, then re-apply the shim sources through the panel's own
+ * reload endpoint and name the leaves whose effective values changed.
+ */
+async function saveManifestYaml() {
+  if (!_manifestDetail) return;
+  const btn = document.getElementById('shimModalSave');
+  const yaml = document.getElementById('shimModalYaml').value;
+  if (btn) btn.disabled = true;
+  try {
+    const res = await api.put('/admin/api/config/shim-manifests',
+      { path: _manifestDetail.path, yaml });
+    if (res && res.error) { _showManifestProblem(res.error); return; }
+    await api.post('/admin/api/config/shims/reload', {});
+    closeModal('shimModal');
+    const changed = (res && res.changed_leaves) || [];
+    showToast(changed.length
+      ? t('shim.manifest.saved', { count: changed.length, leaves: nameList(changed) })
+      : t('shim.manifest.savedNone'));
+    await loadLoadedShims();
+    await window.loadConfig();
+  } catch (e) {
+    showToast(String(e.message || e), 'error');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 Object.assign(window, {
   renderShimSources, saveShimSources, reloadShimSources,
   setPresetDropdown, checkShimUpdates,
   addShimPresetFromRow, appendShimPreset,
   loadLoadedShims, renderLoadedShims, openShimDetail, saveShimYaml,
   copyShimYaml, deleteLoadedShim, toggleShimEnabled,
+  openManifestDetail, saveShimModal, previewManifestYaml,
   // Repainted on a language change; the chips carry translated labels and
   // the update badges are built from translated strings.
   renderShimPresetPicker: _renderPresetPicker,

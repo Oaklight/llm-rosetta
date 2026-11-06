@@ -75,12 +75,25 @@ def _yaml_meta(path: Path) -> dict[str, Any] | None:
     }
 
 
-def _shim_index(request: Any) -> dict[str, dict[str, Any]]:
-    """Map every shim name to the file that defines it.
+def _shim_roots(request: Any) -> list[tuple[str, str, Path]]:
+    """Every root a definition may live under, in the order the loader reads.
 
     Built-ins first, then the declared sources in report order, so a source
     that shadows a built-in name wins — the registry keeps the later
     registration, and the panel must show the file that is actually in force.
+    """
+    report = getattr(request.app, "shim_source_report", None)
+    roots: list[tuple[str, str, Path]] = [("builtin", "", _builtin_root())]
+    for status in getattr(report, "sources", []) or []:
+        resolved = getattr(status, "resolved_dir", None)
+        if not getattr(status, "ok", False) or not resolved:
+            continue
+        roots.append((status.kind, status.location, Path(resolved)))
+    return roots
+
+
+def _shim_index(request: Any) -> dict[str, dict[str, Any]]:
+    """Map every shim name to the file that defines it.
 
     Cached on the app, keyed by the last rebuild time: the walk reads one file
     per shim, and the report only changes when the sources are rebuilt.
@@ -91,15 +104,8 @@ def _shim_index(request: Any) -> dict[str, dict[str, Any]]:
     if cached is not None and cached[0] == stamp:
         return cached[1]
 
-    roots: list[tuple[str, str, Path]] = [("builtin", "", _builtin_root())]
-    for status in getattr(report, "sources", []) or []:
-        resolved = getattr(status, "resolved_dir", None)
-        if not getattr(status, "ok", False) or not resolved:
-            continue
-        roots.append((status.kind, status.location, Path(resolved)))
-
     index: dict[str, dict[str, Any]] = {}
-    for origin, location, root in roots:
+    for origin, location, root in _shim_roots(request):
         if not root.is_dir():
             continue
         for yaml_path in sorted(root.rglob("provider.yaml")):
@@ -401,8 +407,17 @@ async def post_shim_enabled(request: Any, name: str) -> Response:
 
 
 async def get_loaded_shims(request: Any) -> Response:
-    """List every loaded shim with its origin and the providers that use it."""
-    return JSONResponse({"shims": _shim_rows(request)})
+    """List every loaded shim with its origin and the providers that use it.
+
+    Vendor manifests ride along under their own key: they have no shim name,
+    so they are not rows of ``shims`` — that list is what resolves a shim —
+    but the inventory renders them above the leaves they feed.
+    """
+    from .shim_manifests import manifest_rows
+
+    return JSONResponse(
+        {"shims": _shim_rows(request), "manifests": manifest_rows(request)}
+    )
 
 
 async def get_loaded_shim(request: Any, name: str) -> Response:
