@@ -58,7 +58,7 @@ The **Auth** pane opens on the source the entry actually uses, derived from the 
 
 Choosing a source is a statement about the others: selecting a shim command, a sign-in or a static key clears the entry's `token_command`, and moving off a static key sends `clear_api_key` so the old key is deleted rather than kept. The preview under the cards names what the save will write — `<set>`, `<kept>` or `<cleared>` for a key, never a value or its prefix.
 
-The command editor works in argv rows: one argument per row, the executable first. `token_refresh_interval` must be at least 60 seconds. A command that receives the operator's key through `token_command_env` keeps the key box — there the key is the command's input, not a second credential. The same rule keeps the box for an exchange that declares `consumes_key`.
+The command editor works in argv rows: one argument per row, the executable first. A command keeps at least one argument — the × disappears on the last row, and removing a command means choosing another credential source. `token_refresh_interval` must be at least 60 seconds. A command that receives the operator's key through `token_command_env` keeps the key box — there the key is the command's input, not a second credential. The same rule keeps the box for an exchange that declares `consumes_key`.
 
 The status card shows the live `token_status`: the last mint, consecutive failures, the last error, whether an interactive sign-in is required, and `initializing` while the first token has not arrived. Only a digest (`cmd:<sha256>` for a command, `key:<sha256>` for a key) and timestamps are shown, never the token itself.
 
