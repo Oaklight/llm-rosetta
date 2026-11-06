@@ -1,5 +1,7 @@
 """Unit tests for the per-entry LRU cache infrastructure."""
 
+import subprocess
+import sys
 from unittest.mock import patch
 
 from llm_rosetta.converters.base.helpers.cache import (
@@ -11,6 +13,7 @@ from llm_rosetta.converters.base.helpers.cache import (
     clear_all_caches,
     entry_cache_key,
     get_cached_tool,
+    get_cached_tool_with_key,
     is_ir_validated,
     mark_ir_validated,
     put_cached_tool,
@@ -769,3 +772,148 @@ class TestEpochCacheIntegration:
         )
         # Both results should be identical
         assert ir1["messages"] == ir2["messages"]
+
+
+# ---------------------------------------------------------------------------
+# #1420 — one key per get+put pair, and fingerprints only where they are read
+# ---------------------------------------------------------------------------
+
+
+def _count_entry_cache_key(monkeypatch):
+    """Replace ``entry_cache_key`` with a counting wrapper, and return the log."""
+    from llm_rosetta.converters.base.helpers import cache as cache_module
+
+    real = cache_module.entry_cache_key
+    calls: list[str] = []
+
+    def counting(tag, entry):
+        calls.append(tag)
+        return real(tag, entry)
+
+    monkeypatch.setattr(cache_module, "entry_cache_key", counting)
+    return calls
+
+
+class TestOneKeyPerGetPutPair:
+    """The miss path must serialize the tool once, not twice (#1420)."""
+
+    def test_the_helper_pair_computes_the_key_once(self, monkeypatch):
+        calls = _count_entry_cache_key(monkeypatch)
+        tool = {"name": "foo", "description": "bar", "parameters": {"type": "object"}}
+
+        key, cached = get_cached_tool_with_key("test:from_p", tool)
+        assert cached is _SENTINEL
+        put_cached_tool("test:from_p", tool, {"ir": True}, key=key)
+
+        assert len(calls) == 1
+        assert get_cached_tool("test:from_p", tool) == {"ir": True}
+
+    def test_a_cold_converter_pass_computes_one_key_per_tool(self, monkeypatch):
+        """The real call site: five tools on a cold cache cost five keys."""
+        from llm_rosetta.converters import ChatCompletionsConverter
+
+        clear_all_caches()
+        tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": f"tool_{i}",
+                    "description": f"tool number {i}",
+                    "parameters": {"type": "object", "properties": {}},
+                },
+            }
+            for i in range(5)
+        ]
+        conv = ChatCompletionsConverter()
+        calls = _count_entry_cache_key(monkeypatch)
+
+        ir_tools = conv._get_cached_p_tools_to_ir(tools)
+
+        assert len(ir_tools) == len(tools)
+        assert len(calls) == len(tools)
+
+
+class TestFingerprintsAreOptIn:
+    """The mutation fingerprint is recorded only where something reads it."""
+
+    def test_put_records_no_fingerprint_when_the_switch_is_off(self, monkeypatch):
+        from llm_rosetta.converters.base.helpers import cache as cache_module
+
+        real = cache_module._canonical_json_bytes
+        serialized: list[object] = []
+
+        def counting(value):
+            serialized.append(value)
+            return real(value)
+
+        monkeypatch.setattr(cache_module, "_canonical_json_bytes", counting)
+        monkeypatch.setattr(cache_module, "RECORD_FINGERPRINTS", False)
+        cache = LRUCache(maxsize=4, ttl=None)
+
+        cache.put(1, [{"name": "foo"}])
+
+        assert serialized == []
+        assert cache._fingerprints == {}
+        assert cache.check_integrity() == []
+
+    def test_verify_mode_fingerprints_on_its_own(self, monkeypatch):
+        """``verify=True`` compares per hit, so it must record even when off."""
+        from llm_rosetta.converters.base.helpers import cache as cache_module
+
+        monkeypatch.setattr(cache_module, "RECORD_FINGERPRINTS", False)
+        cache = LRUCache(maxsize=4, ttl=None, verify=True)
+        data = [{"name": "foo"}]
+
+        cache.put(1, data)
+        assert cache.check_integrity() == []
+        data[0]["name"] = "MUTATED"
+        assert cache.check_integrity() == [1]
+        assert cache.get(1) is _SENTINEL
+
+    def test_check_integrity_skips_entries_stored_with_recording_off(self, monkeypatch):
+        """Switching recording on later must not invent corruption.
+
+        ``_fingerprints.get(key)`` would answer ``None`` for an entry stored
+        while the switch was off, and ``None != hash(...)`` reported it as
+        mutated — a false alarm for an entry that was simply never recorded.
+        """
+        from llm_rosetta.converters.base.helpers import cache as cache_module
+
+        monkeypatch.setattr(cache_module, "RECORD_FINGERPRINTS", False)
+        cache = LRUCache(maxsize=4, ttl=None)
+        data = [{"name": "foo"}]
+        cache.put(1, data)
+
+        monkeypatch.setattr(cache_module, "RECORD_FINGERPRINTS", True)
+        assert cache.check_integrity() == []
+
+        # It stays outside the check, by the same rule: no fingerprint, no
+        # verdict.  The suite never relies on this — it records from the start.
+        data[0]["name"] = "MUTATED"
+        assert cache.check_integrity() == []
+
+    def test_the_default_is_off_in_a_fresh_interpreter(self):
+        """The conftest cannot testify for the default: it sets the switch.
+
+        A separate interpreter imports the module as production does, so this
+        pins the source default rather than this session's state.  Without it,
+        flipping ``RECORD_FINGERPRINTS`` to ``True`` at the definition quietly
+        gives the performance win back and every test still passes.
+        """
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "from llm_rosetta.converters.base.helpers import cache; "
+                "assert cache.RECORD_FINGERPRINTS is False, cache.RECORD_FINGERPRINTS",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, result.stderr
+
+    def test_the_suite_turns_recording_on(self):
+        """The conftest switch is what keeps the teardown check alive."""
+        from llm_rosetta.converters.base.helpers import cache as cache_module
+
+        assert cache_module.RECORD_FINGERPRINTS is True

@@ -2,6 +2,14 @@
 
 import pytest
 
+# The teardown check below is only as good as the fingerprints it compares,
+# and recording them is opt-in: production pays a canonical serialization per
+# insert for a check it never runs (#1420).  The suite needs them, so the
+# switch is turned on for the whole session before any test runs.
+from llm_rosetta.converters.base.helpers import cache as _cache_module
+
+_cache_module.RECORD_FINGERPRINTS = True
+
 
 @pytest.hookimpl(wrapper=True)
 def pytest_runtest_protocol(item, nextitem):

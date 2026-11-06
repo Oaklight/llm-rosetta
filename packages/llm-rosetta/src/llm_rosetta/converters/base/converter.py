@@ -1016,13 +1016,13 @@ class BaseConverter(ABC):
         Returns:
             IR tool definition list.
         """
-        from .helpers.cache import _SENTINEL, get_cached_tool, put_cached_tool
+        from .helpers.cache import _SENTINEL, get_cached_tool_with_key, put_cached_tool
 
         tag = self._CONVERTER_TAG + ":from_p"
         ir_tools: list[Any] = []
 
         for t in tools:
-            cached = get_cached_tool(tag, t)
+            key, cached = get_cached_tool_with_key(tag, t)
             if cached is not _SENTINEL:
                 if isinstance(cached, list):
                     ir_tools.extend(cached)
@@ -1047,7 +1047,7 @@ class BaseConverter(ABC):
                     f"Unsupported tool type={tool_type!r} name={tool_name!r}: {e}"
                 ) from e
 
-            put_cached_tool(tag, t, result)
+            put_cached_tool(tag, t, result, key=key)
             if isinstance(result, list):
                 ir_tools.extend(result)
             elif result is not None:
@@ -1078,13 +1078,13 @@ class BaseConverter(ABC):
         Returns:
             Provider-format tool definition list.
         """
-        from .helpers.cache import _SENTINEL, get_cached_tool, put_cached_tool
+        from .helpers.cache import _SENTINEL, get_cached_tool_with_key, put_cached_tool
 
         tag = self._CONVERTER_TAG + ":to_p"
         results: list[Any] = []
 
         for t in ir_tools:
-            cached = get_cached_tool(tag, t)
+            key, cached = get_cached_tool_with_key(tag, t)
             if cached is not _SENTINEL:
                 converted = cached
             else:
@@ -1094,7 +1094,7 @@ class BaseConverter(ABC):
                 # not cached: the conversion declines the tool every time, and
                 # its report has to be recorded every time too.
                 if converted:
-                    put_cached_tool(tag, t, converted)
+                    put_cached_tool(tag, t, converted, key=key)
             if converted:
                 results.append(converted)
 
