@@ -284,6 +284,11 @@ conda activate llm-rosetta
 pip install -e "packages/llm-rosetta[all]" -e packages/llm-rosetta-gateway
 ```
 
+The provider SDKs (`openai`, `anthropic`, `google-genai`) are not runtime
+dependencies; only `tools/conformance` reads their types. Install them with
+`-e "packages/llm-rosetta[conformance]"` when you run that harness (the
+version they are pinned to lives in `tools/conformance/sdk-pins.txt`).
+
 Run `make help` for all targets. Key ones:
 
 ```bash

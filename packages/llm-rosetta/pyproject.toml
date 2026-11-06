@@ -39,9 +39,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-openai = ["openai>=2.0.0"]
-anthropic = ["anthropic>=0.84.0"]
-google = ["google-genai>=1.67.0"]
+# Provider SDKs are not imported at runtime.  The conformance harness
+# (tools/conformance) reads their types, so it owns the dependency; the
+# committed baselines are only comparable against the versions the CI job
+# pins in tools/conformance/sdk-pins.txt, so these are floors only.
+conformance = ["openai>=2.0.0", "anthropic>=0.84.0", "google-genai>=1.67.0"]
 # One-release meta alias: the gateway is its own distribution now.
 gateway = ["llm-rosetta-gateway"]
 
@@ -59,7 +61,7 @@ dev = [
     "twine>=6.1.0",
 ]
 
-all = ["llm-rosetta[openai,anthropic,google,gateway,dev]"]
+all = ["llm-rosetta[conformance,gateway,dev]"]
 
 [project.urls]
 Documentation = "https://llm-rosetta.readthedocs.io"

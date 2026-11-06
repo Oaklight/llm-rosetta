@@ -14,7 +14,7 @@ import pytest
 
 # The suite reads provider SDK types.  `dev-extras-test` installs the `[dev]`
 # extra alone, so the SDKs are absent there; the `conformance` job installs
-# `[all]` and is where this file actually runs.
+# `[conformance]` and is where this file actually runs.
 pytest.importorskip("openai")
 pytest.importorskip("anthropic")
 pytest.importorskip("google.genai")
