@@ -76,6 +76,7 @@ HTTP_TIMEOUT = 30.0
 DEFAULT_CACHE_DIRNAME = "shims-cache"
 
 _SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+_SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 _DRIVE_RE = re.compile(r"^[A-Za-z]:$")
 _GITHUB_RE = re.compile(
     r"^https?://github\.com/(?P<owner>[^/]+)/(?P<repo>[^/]+?)(?:\.git)?/?$"
@@ -94,6 +95,13 @@ _rebuild_lock = threading.Lock()
 #: leaving shims registered in-process via ``register_shim`` alone.
 _source_shims: set[str] = set()
 
+#: The leg that last served each remote source, keyed by its cache directory
+#: name, so a working mirror is not re-probed on every fetch.  Process-local:
+#: a restart costs one failed connect, which is the documented cost of the
+#: lazy (non-pre-probing) selection.
+_chosen_legs: dict[str, str] = {}
+_chosen_legs_lock = threading.Lock()
+
 
 class ShimSourceError(RuntimeError):
     """Raised when a declared shim source cannot be loaded (``strict`` mode)."""
@@ -104,6 +112,17 @@ class ShimArchiveMismatch(ShimSourceError):
 
     Distinct from a transient fetch failure: the bytes are *wrong*, not
     missing, so the stale-cache fallback must not paper over it.
+    """
+
+
+class ShimSourceUnreachable(ShimSourceError):
+    """No configured leg could be reached (a transport failure on every leg).
+
+    A transport failure — connection refused, DNS failure, timeout — is the
+    only condition that makes the loader try a declared mirror.  A server that
+    answers (even with an error) or bytes that do not match their pin are the
+    source's verdict, not a network symptom, so they raise a plain
+    :class:`ShimSourceError` instead.
     """
 
 
@@ -132,6 +151,12 @@ class ShimSourceStatus:
         token_env: The environment variable the declaration names for its
             credential (the name, never the token), so a private repository is
             checked with the same credential it was fetched with.
+        leg: Which URL served the archive: ``"primary"`` or ``"mirror"``.
+            ``None`` when the source never resolved.
+        archive_url: The concrete URL the archive was fetched from (the
+            expanded mirror template when ``leg`` is ``"mirror"``).
+        unreachable: Whether the source failed because no leg could be
+            reached, as opposed to a server answer or a bad archive.
     """
 
     kind: Literal["path", "remote"]
@@ -149,6 +174,9 @@ class ShimSourceStatus:
     checksum_ok: bool | None = None
     ref: str | None = None
     token_env: str | None = None
+    leg: Literal["primary", "mirror"] | None = None
+    archive_url: str | None = None
+    unreachable: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-safe view for the admin API."""
@@ -168,6 +196,9 @@ class ShimSourceStatus:
             "checksum_ok": self.checksum_ok,
             "ref": self.ref,
             "token_env": self.token_env,
+            "leg": self.leg,
+            "archive_url": self.archive_url,
+            "unreachable": self.unreachable,
         }
 
 
@@ -332,8 +363,14 @@ def resolve_remote(
     """Fetch, cache and scan one remote shim archive.
 
     The spec keys are: ``url`` (required), ``name``, ``ref``, ``path``,
-    ``archive`` (``auto`` / ``tar.gz`` / ``zip``), ``sha256``, ``token_env``
-    and ``refresh`` (``auto`` / ``always`` / ``never``).
+    ``archive`` (``auto`` / ``tar.gz`` / ``zip``), ``sha256``, ``token_env``,
+    ``refresh`` (``auto`` / ``always`` / ``never``) and ``mirror``.
+
+    A ``mirror`` is a second URL for the same source — a template string or an
+    object with ``url_template`` and its own ``sha256``.  It is consulted only
+    when the primary fails with a transport error (connection, DNS, timeout);
+    an HTTP error or a bad archive from the primary is the source's verdict
+    and does not fall back.
 
     When ``ref`` is omitted and ``url`` is a GitHub repository URL, ``HEAD`` is
     resolved to a concrete commit SHA via the GitHub API and recorded as
@@ -433,6 +470,8 @@ def _resolve_remote_source(
             resolved_ref=cached.get("resolved_ref") or parsed.ref,
             ref=parsed.ref,
             token_env=parsed.token_env,
+            leg=_stamp_leg(cached),
+            archive_url=cached.get("archive_url"),
         )
     except Exception as exc:
         logger.warning("Shim remote %s: %s", location, exc)
@@ -443,7 +482,7 @@ def _scan_status(status: ShimSourceStatus) -> ShimSourceStatus:
     """Load the provider directory a resolved remote status points at."""
     if not status.ok or not status.resolved_dir:
         return status
-    return _scan_dir(
+    scanned = _scan_dir(
         Path(status.resolved_dir),
         kind=status.kind,
         location=status.location,
@@ -455,6 +494,7 @@ def _scan_status(status: ShimSourceStatus) -> ShimSourceStatus:
         ref=status.ref,
         token_env=status.token_env,
     )
+    return replace(scanned, leg=status.leg, archive_url=status.archive_url)
 
 
 @dataclass(frozen=True)
@@ -472,6 +512,74 @@ class _RemoteSpec:
     github: tuple[str, str] | None
     source_dir: Path
     stamp_path: Path
+    mirror_url: str | None = None
+    mirror_sha256: str | None = None
+
+
+def normalize_mirror(value: Any) -> tuple[str, str | None] | None:
+    """Validate a ``mirror`` declaration and return its template and pin.
+
+    A mirror is a second URL for the same source, used only when the primary
+    is unreachable.  It is an ordinary archive URL template, so any host can
+    serve it — a public CDN and an internal mirror are declared the same way.
+
+    Accepted shapes::
+
+        "mirror": "https://mirror.example/shims@{ref}.tar.gz"
+        "mirror": {"url_template": "https://cdn.example/gh/o/r@{ref}/dist/shims.tar.gz",
+                   "sha256": "0123…abcd"}
+
+    The bytes a mirror serves need not be the primary's bytes (a CDN serving a
+    committed ``dist/<name>.tar.gz`` differs from the forge's repository
+    tarball), so the mirror carries its own ``sha256``.
+
+    Args:
+        value: The declared ``mirror``: ``None``, a template string, or an
+            object with ``url_template`` and an optional ``sha256``.
+
+    Returns:
+        ``(url_template, sha256 or None)``, or ``None`` when no mirror is
+        declared.
+
+    Raises:
+        ValueError: On an unknown shape, an unknown key, a template that is
+            not an archive URL the loader accepts, or a malformed digest.
+    """
+    if value is None:
+        return None
+    pin: Any = None
+    if isinstance(value, str):
+        template = value
+    elif isinstance(value, Mapping):
+        unknown = set(value) - {"url_template", "sha256"}
+        if unknown:
+            names = ", ".join(sorted(str(key) for key in unknown))
+            raise ValueError(
+                f"unknown mirror key(s): {names} (expected url_template, sha256)"
+            )
+        template = value.get("url_template")
+        pin = value.get("sha256")
+        if not isinstance(template, str) or not template:
+            raise ValueError("mirror requires a non-empty 'url_template'")
+    else:
+        raise ValueError(
+            "mirror must be a URL template string or an object with 'url_template'"
+        )
+    if not template:
+        raise ValueError("mirror requires a non-empty 'url_template'")
+    if pin is not None and (not isinstance(pin, str) or not _SHA256_RE.match(pin)):
+        raise ValueError("mirror 'sha256' must be 64 hexadecimal characters")
+    if not is_supported_archive_url(template):
+        raise ValueError(
+            "mirror 'url_template' must be an archive URL "
+            "(.tar.gz/.tgz/.tar/.zip), a GitHub repository URL, or contain "
+            "'{ref}'"
+        )
+    try:
+        _validate_url_scheme(template)
+    except ShimSourceError as exc:
+        raise ValueError(str(exc)) from None
+    return template, pin
 
 
 def _parse_remote_spec(
@@ -503,6 +611,11 @@ def _parse_remote_spec(
 
     _validate_url_scheme(url)
     github = _parse_github(url)
+    try:
+        mirror = normalize_mirror(spec.get("mirror"))
+    except ValueError as exc:
+        raise ShimSourceError(str(exc)) from None
+    mirror_url, mirror_sha256 = mirror or (None, None)
     name = spec.get("name") or _derive_name(url, github)
     ref = spec.get("ref") or None
     root = Path(cache_root)
@@ -519,6 +632,8 @@ def _parse_remote_spec(
         github=github,
         source_dir=root / key,
         stamp_path=root / f"{key}.stamp.json",
+        mirror_url=mirror_url,
+        mirror_sha256=mirror_sha256,
     )
 
 
@@ -537,10 +652,16 @@ def _needs_fetch(
     cache.  A mismatch always forces a re-fetch (which then fails loudly) even
     under ``refresh: "never"`` — serving bytes that are not the pinned ones is
     never the intent of a pin.
+
+    The pin checked is the one belonging to the leg that produced the cache: a
+    cache fetched through the mirror is judged by the mirror's pin, because the
+    two legs legitimately serve different bytes.  A stamp written before legs
+    were recorded came from the primary.
     """
-    if has_cache and spec.sha256 is not None:
+    pinned = spec.mirror_sha256 if _stamp_leg(cached) == "mirror" else spec.sha256
+    if has_cache and pinned is not None:
         cached_digest = str(cached.get("sha256") or "")
-        if cached_digest.lower() != spec.sha256.lower():
+        if cached_digest.lower() != pinned.lower():
             return True
     if spec.refresh == "never":
         return not has_cache
@@ -553,7 +674,7 @@ def _needs_fetch(
             return True
     if spec.refresh == "always":
         return True
-    if spec.sha256 is not None:
+    if spec.sha256 is not None or spec.mirror_sha256 is not None:
         return not has_cache
     if spec.ref and _SHA_RE.match(spec.ref):
         return not has_cache
@@ -566,6 +687,11 @@ def _remote_subdir(spec: _RemoteSpec) -> Path:
     return spec.source_dir / spec.subpath if spec.subpath else spec.source_dir
 
 
+def _stamp_leg(stamp: Mapping[str, Any]) -> Literal["primary", "mirror"]:
+    """Return the leg a cache stamp records; pre-leg stamps were primary."""
+    return "mirror" if stamp.get("leg") == "mirror" else "primary"
+
+
 def _remote_failure(
     location: str, name: str | None, exc: Exception
 ) -> ShimSourceStatus:
@@ -576,6 +702,7 @@ def _remote_failure(
         name=name,
         ok=False,
         error=f"{type(exc).__name__}: {exc}",
+        unreachable=isinstance(exc, ShimSourceUnreachable),
     )
 
 
@@ -666,7 +793,15 @@ def _fetch_remote(
     now_fn: Callable[[], float],
     proxy: str | None,
 ) -> dict[str, Any]:
-    """Fetch, verify and atomically install one archive; return its stamp."""
+    """Fetch, verify and atomically install one archive; return its stamp.
+
+    The primary URL is attempted first.  A transport failure (connection
+    refused, DNS failure, timeout) moves on to the declared mirror; a server
+    answer (an HTTP error, a digest mismatch) or a corrupt archive is the
+    source's verdict and never triggers the fallback.  The leg that last
+    worked is remembered per source, so a working mirror costs one failed
+    connect for the process lifetime, not one per fetch.
+    """
     ref = spec.ref
     resolved_ref = ref
     if spec.github is not None:
@@ -697,25 +832,24 @@ def _fetch_remote(
             )
             resolved_ref = ref
 
-    archive_url = _archive_url(
-        spec.url, resolved_ref if spec.github else ref, spec.github
-    )
+    effective_ref = resolved_ref if spec.github else ref
+    primary_url = _archive_url(spec.url, effective_ref, spec.github)
+    legs = _leg_plan(spec, primary_url, ref=effective_ref)
 
     with _file_lock(spec.source_dir.parent / f"{spec.source_dir.name}.lock"):
-        data = http_get(archive_url, headers=headers, timeout=HTTP_TIMEOUT, proxy=proxy)
-        if not isinstance(data, (bytes, bytearray)):
-            raise ShimSourceError("http_get must return bytes")
-        data = bytes(data)
+        data, leg, archive_url, pin = _download(
+            legs, spec, headers=headers, http_get=http_get, proxy=proxy
+        )
         if len(data) > MAX_ARCHIVE_BYTES:
             raise ShimSourceError(
                 f"archive exceeds {MAX_ARCHIVE_BYTES} bytes ({len(data)})"
             )
-        if spec.sha256:
-            digest = hashlib.sha256(data).hexdigest()
-            if digest.lower() != spec.sha256.lower():
-                raise ShimArchiveMismatch(
-                    f"sha256 mismatch: expected {spec.sha256}, got {digest}"
-                )
+        digest = hashlib.sha256(data).hexdigest()
+        if pin and digest.lower() != pin.lower():
+            raise ShimArchiveMismatch(
+                f"sha256 mismatch for source {spec.url} via {leg} "
+                f"({archive_url}): expected {pin}, got {digest}"
+            )
 
         tmp_root = spec.source_dir.parent / ".tmp"
         tmp_root.mkdir(parents=True, exist_ok=True)
@@ -739,10 +873,126 @@ def _fetch_remote(
             "resolved_ref": resolved_ref,
             "subpath": spec.subpath,
             "fetched_at": now_fn(),
-            "sha256": hashlib.sha256(data).hexdigest(),
+            "sha256": digest,
+            "leg": leg,
+            "archive_url": archive_url,
         }
         _write_stamp(spec.stamp_path, stamp)
+        with _chosen_legs_lock:
+            _chosen_legs[spec.source_dir.name] = leg
         return stamp
+
+
+def _leg_plan(
+    spec: _RemoteSpec, primary_url: str, *, ref: str | None
+) -> list[tuple[str, str, str | None]]:
+    """Return the legs to try, in order, as ``(leg, url, sha256 pin)``.
+
+    The leg that last served this source is tried first, so a mirror chosen
+    because the primary was unreachable is not re-probed on every fetch.  If
+    the remembered leg fails with a transport error, the other leg is still
+    tried — the mirror may be down while the primary has recovered.
+    """
+    legs: list[tuple[str, str, str | None]] = [("primary", primary_url, spec.sha256)]
+    if spec.mirror_url:
+        legs.append(
+            (
+                "mirror",
+                spec.mirror_url.replace("{ref}", ref or "HEAD"),
+                spec.mirror_sha256,
+            )
+        )
+    with _chosen_legs_lock:
+        chosen = _chosen_legs.get(spec.source_dir.name)
+    if chosen == "mirror" and len(legs) == 2:
+        legs.reverse()
+    return legs
+
+
+def _download(
+    legs: Sequence[tuple[str, str, str | None]],
+    spec: _RemoteSpec,
+    *,
+    headers: dict[str, str],
+    http_get: HttpGet,
+    proxy: str | None,
+) -> tuple[bytes, str, str, str | None]:
+    """Fetch the first leg that answers.
+
+    Returns:
+        ``(data, leg, archive_url, pin)``.
+
+    Raises:
+        ShimSourceUnreachable: No leg answered (a transport failure on each).
+        ShimSourceError: A leg answered with an error, or the getter returned
+            the wrong type.
+    """
+    failures: list[str] = []
+    all_unreachable = True
+    for index, (leg, url, pin) in enumerate(legs):
+        try:
+            data = http_get(url, headers=headers, timeout=HTTP_TIMEOUT, proxy=proxy)
+        except Exception as exc:
+            unreachable = _is_unreachable(exc)
+            all_unreachable = all_unreachable and unreachable
+            failures.append(f"{leg} {url}: {type(exc).__name__}: {exc}")
+            if index + 1 < len(legs) and unreachable:
+                next_leg, next_url, _ = legs[index + 1]
+                logger.warning(
+                    "Shim source %s: %s unreachable (%s); trying the %s %s",
+                    spec.url,
+                    url,
+                    exc,
+                    next_leg,
+                    next_url,
+                )
+                continue
+            if all_unreachable:
+                if len(failures) == 1:
+                    where = url if url == spec.url else f"{url} (source {spec.url})"
+                    message = f"cannot reach {where}: {type(exc).__name__}: {exc}"
+                else:
+                    message = f"no leg reachable for source {spec.url}: " + "; ".join(
+                        failures
+                    )
+                raise ShimSourceUnreachable(message) from exc
+            raise ShimSourceError(f"{leg} {url}: {type(exc).__name__}: {exc}") from exc
+        if not isinstance(data, (bytes, bytearray)):
+            raise ShimSourceError("http_get must return bytes")
+        return bytes(data), leg, url, pin
+    raise ShimSourceError("remote source has no URL to fetch")  # pragma: no cover
+
+
+def _is_unreachable(exc: BaseException) -> bool:
+    """Whether *exc* is a transport failure — no response from the server.
+
+    Only this class of failure falls back to the mirror.  An HTTP status is a
+    response from the source itself, and a bad archive is the source's
+    verdict; neither is a network symptom to route around.
+    """
+    from llm_rosetta_gateway._vendor.httpclient import (
+        HTTPError,
+        HttpConnectionError,
+        HttpTimeoutError,
+    )
+
+    if isinstance(exc, HTTPError):
+        return False
+    return isinstance(exc, (HttpConnectionError, HttpTimeoutError, OSError))
+
+
+def is_supported_archive_url(url: str) -> bool:
+    """Whether the loader can turn *url* into a fetchable archive.
+
+    The rule :func:`_archive_url` applies, exposed so a declared mirror is
+    validated by the same code that will fetch it: a GitHub repository URL, a
+    URL containing ``{ref}``, or a URL ending in one of the archive suffixes.
+    """
+    return (
+        _parse_github(url) is not None
+        or "{ref}" in url
+        or url.lower().endswith(_ARCHIVE_SUFFIXES)
+    )
 
 
 def _archive_url(url: str, ref: str | None, github: tuple[str, str] | None) -> str:
@@ -752,7 +1002,7 @@ def _archive_url(url: str, ref: str | None, github: tuple[str, str] | None) -> s
         return f"https://codeload.github.com/{owner}/{repo}/tar.gz/{ref or 'HEAD'}"
     if "{ref}" in url:
         return url.replace("{ref}", ref or "HEAD")
-    if url.lower().endswith(_ARCHIVE_SUFFIXES):
+    if is_supported_archive_url(url):
         return url
     raise ShimSourceError(
         "not a GitHub repository URL and not an archive URL; give an explicit "
@@ -1155,10 +1405,13 @@ def _default_http_get(
 __all__ = [
     "ShimSourceError",
     "ShimArchiveMismatch",
+    "ShimSourceUnreachable",
     "ShimSourceStatus",
     "ShimLoadReport",
     "rebuild_shims",
     "resolve_remote",
+    "is_supported_archive_url",
+    "normalize_mirror",
     "DEFAULT_CACHE_DIRNAME",
     "REMOTE_TTL_SECONDS",
 ]

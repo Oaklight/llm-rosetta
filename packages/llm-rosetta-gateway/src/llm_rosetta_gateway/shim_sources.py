@@ -22,7 +22,7 @@ import hashlib
 import json
 import logging
 import os
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -38,6 +38,7 @@ from .shims.sources import (
     DEFAULT_CACHE_DIRNAME,
     REMOTE_TTL_SECONDS,
     HttpGet,
+    normalize_mirror,
 )
 
 logger = logging.getLogger("llm-rosetta-gateway")
@@ -189,6 +190,26 @@ def _resolve_remotes(
     return remotes
 
 
+def _validate_remote_specs(remotes: Sequence[Mapping[str, Any]]) -> None:
+    """Validate the per-remote fields the config layer owns.
+
+    The loader checks the primary URL shape and the cache paths at fetch time.
+    A ``mirror`` is checked here, at parse, because it is a declaration this
+    layer can judge without a network: startup and the admin save path share
+    this parser, so a bad mirror is refused before it is persisted or served.
+
+    Raises:
+        ValueError: If a remote's ``mirror`` declaration is invalid.
+    """
+    for index, entry in enumerate(remotes):
+        try:
+            normalize_mirror(entry.get("mirror"))
+        except ValueError as exc:
+            raise ValueError(
+                f"config: 'shims.remotes[{index}].mirror' is invalid: {exc}"
+            ) from None
+
+
 def _validate_knobs(section: Mapping[str, Any]) -> None:
     """Validate the scalar ``shims`` knobs in place."""
     cache_dir = section.get("cache_dir")
@@ -281,6 +302,7 @@ def parse_shims_section(
     remotes = _resolve_remotes(
         section.get("remotes") or [], _resolve_presets(raw_presets, on_unknown=mode)
     )
+    _validate_remote_specs(remotes)
     _validate_knobs(section)
     return ShimSources(
         presets=tuple(raw_presets),
@@ -347,6 +369,36 @@ def resolve_disabled(section: Mapping[str, Any] | None) -> list[str]:
     if not isinstance(raw, list) or any(not isinstance(n, str) for n in raw):
         raise ValueError("config: 'shims.disabled' must be an array of strings")
     return [name for name in raw if name]
+
+
+def describe_shim_sources(report: ShimLoadReport | None) -> list[str]:
+    """One line per declared remote source, naming the leg it loaded from.
+
+    Local ``paths`` entries are left out: they have no legs to choose between.
+    The lines are what the startup output prints under the banner, next to the
+    matching log line.
+
+    Args:
+        report: The applied load report, or ``None`` when no section applied.
+
+    Returns:
+        The lines, in declaration order.
+    """
+    if report is None:
+        return []
+    lines: list[str] = []
+    for status in report.sources:
+        if status.kind != "remote":
+            continue
+        if not status.ok:
+            lines.append(f"{status.location}: failed")
+            continue
+        leg = status.leg or "primary"
+        origin = "cache" if status.from_cache else "network"
+        if status.stale:
+            origin += ", stale"
+        lines.append(f"{status.location}: loaded via {leg} ({origin})")
+    return lines
 
 
 def apply_shim_sources(
@@ -566,6 +618,7 @@ __all__ = [
     "ShimSources",
     "apply_shim_section",
     "apply_shim_sources",
+    "describe_shim_sources",
     "parse_shims_section",
     "report_shim_removals",
     "resolve_source_config",
