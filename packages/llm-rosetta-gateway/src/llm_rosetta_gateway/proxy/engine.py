@@ -23,11 +23,13 @@ from ..logging import (
     log_response,
 )
 from ..routing import (
+    ConversationIdentity,
     ProviderKeyAffinity,
     RoutingChain,
     SelectionContext,
     SessionHeaderAffinity,
 )
+from ..routing.conversation import note_conversation
 from ..transport import (
     ProviderInfo,
     UpstreamConnectionError,
@@ -101,16 +103,21 @@ def extract_model(source_provider: ProviderType, body: dict[str, Any]) -> str | 
     return body.get("model")
 
 
-_REQUEST_STAGES = RoutingChain([ProviderKeyAffinity(), SessionHeaderAffinity()])
+_REQUEST_STAGES = RoutingChain(
+    [ConversationIdentity(), ProviderKeyAffinity(), SessionHeaderAffinity()]
+)
 
 
 def _apply_request_stages(ctx: SelectionContext) -> ProviderInfo:
     """Fill in the stage-2 decisions and return the transport config to use.
 
     The caller sets ``ctx.provider_info`` and ``ctx.ir_request`` first; what
-    comes back is the transport config to send with.
+    comes back is the transport config to send with.  The conversation id the
+    first stage derived is published for the request log, which is written
+    after the handler returns and has no other way to reach it.
     """
     _REQUEST_STAGES.run(ctx)
+    note_conversation(ctx.identity.conversation)
     provider_info = ctx.provider_info
     assert provider_info is not None  # the caller sets it before running these
     return provider_info

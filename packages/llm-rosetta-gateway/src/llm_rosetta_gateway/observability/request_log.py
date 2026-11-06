@@ -59,6 +59,11 @@ class RequestLogEntry:
     #: stream chunk.  Only a stream has one, and a row written before the
     #: column existed has none: ``None`` means "not measured", never zero.
     ttft_ms: float | None = None
+    #: The conversation the request belongs to, as a 32-character digest.
+    #: ``None`` when the request carried nothing to derive one from, and on
+    #: every row written before the column existed: a reader groups such a
+    #: row the way it grouped every row before this value existed.
+    conversation_id: str | None = None
 
     @classmethod
     def create(
@@ -86,6 +91,7 @@ class RequestLogEntry:
         request_id: str | None = None,
         ttft_ms: float | None = None,
         user_agent: str | None = None,
+        conversation_id: str | None = None,
     ) -> RequestLogEntry:
         """Factory with auto-generated id and timestamp."""
         return cls(
@@ -113,6 +119,7 @@ class RequestLogEntry:
             request_id=request_id,
             ttft_ms=None if ttft_ms is None else round(float(ttft_ms), 2),
             user_agent=user_agent,
+            conversation_id=conversation_id,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -148,6 +155,7 @@ class RequestLogEntry:
             ("api_key_bucket", self.api_key_bucket),
             ("request_id", self.request_id),
             ("user_agent", self.user_agent),
+            ("conversation_id", self.conversation_id),
         ):
             if value is not None:
                 d[key] = value

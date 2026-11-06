@@ -57,6 +57,34 @@ class TestOpsProxyRequest:
         assert op.entry_id is not None
 
     @pytest.mark.asyncio
+    async def test_records_the_conversation_the_routing_stage_derived(self):
+        """The log row names the conversation, so the routing page can group."""
+        from llm_rosetta_gateway.routing.conversation import note_conversation
+
+        rl = MagicMock()
+        rl.add = AsyncMock()
+        ctx = _make_ctx(request_log=rl)
+        note_conversation("c" * 32)
+        try:
+            op = OpsProxyRequest(
+                ctx,
+                model="gpt-4",
+                source_provider="chat_completions",
+                target_provider="chat_completions",
+                provider_name="openai",
+                is_stream=False,
+                status_code=200,
+                duration_ms=1.0,
+                error_detail=None,
+            )
+            await op.execute()
+        finally:
+            note_conversation(None)
+
+        entry = rl.add.call_args[0][0]
+        assert entry.conversation_id == "c" * 32
+
+    @pytest.mark.asyncio
     async def test_records_to_metrics(self):
         m = MagicMock()
         ctx = _make_ctx(metrics=m)

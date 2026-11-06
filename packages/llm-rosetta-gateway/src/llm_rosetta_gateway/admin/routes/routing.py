@@ -102,26 +102,41 @@ def _sunk(lane: tuple[Any, Any, float, bool]) -> bool:
     return bool(answer is not None and getattr(answer, "sunk", False))
 
 
-def _sessions(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Fold recent log rows into one line per client identity.
+def _sessions(entries: list[dict[str, Any]]) -> dict[str, Any]:
+    """Fold recent log rows into one line per conversation.
 
-    The gateway's session id is derived from the conversation and not stored
-    (see ``routing/session.py``), so the identity it can show is the one the
-    request log keeps: the key label or client address, and the User-Agent.
-    The rows arrive newest first, so the first one seen for an identity names
-    the lane it last reached.
+    A row that carries a conversation id folds by that id, so concurrent
+    sessions behind one key and one User-Agent stay apart.  A row without one
+    — a row written before the log kept the id, or a request whose client or
+    first message could not be read — folds by the client identity, which is
+    how this table folded every row before the id existed.  The two kinds
+    never merge: a fallback line is not one conversation, it is at least one.
+
+    Two conversations that share a client and a first message derive the same
+    id and fold into one line.  That is inherent to an identity derived from
+    content, so the count is reported as what it is rather than as an exact
+    session count.
+
+    The rows arrive newest first, so the first row seen for a group names the
+    lane it last reached.
 
     Args:
         entries: Log rows, newest first.
 
     Returns:
-        One dict per identity, in the order the identities were last seen.
+        ``{"sessions": rows, "count": n, "sample": len(entries)}``.  Each row
+        is one conversation (``"derived": True``) or one fallback client
+        identity, in the order the groups were last seen; ``count`` is the
+        number of rows and ``sample`` the number of log rows they fold.
     """
-    grouped: dict[tuple[str, str], dict[str, Any]] = {}
+    grouped: dict[tuple[str, str, str], dict[str, Any]] = {}
     for entry in entries:
         client = entry.get("api_key_label") or entry.get("client_ip") or ""
         agent = entry.get("user_agent") or ""
-        key = (client, agent)
+        conversation = entry.get("conversation_id")
+        # The kind is part of the key so a conversation and a fallback group
+        # that happen to spell the same client never collapse into each other.
+        key = ("c", conversation, "") if conversation else ("g", client, agent)
         row = grouped.get(key)
         if row is None:
             grouped[key] = {
@@ -131,10 +146,12 @@ def _sessions(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 or entry.get("target_provider"),
                 "requests": 1,
                 "last": entry.get("timestamp"),
+                "derived": bool(conversation),
             }
         else:
             row["requests"] += 1
-    return list(grouped.values())
+    rows = list(grouped.values())
+    return {"sessions": rows, "count": len(rows), "sample": len(entries)}
 
 
 def _decision(entry: dict[str, Any]) -> dict[str, Any]:
@@ -368,6 +385,8 @@ async def get_model_routing(request: Any, **kwargs: Any) -> Response:
                     ],
                     "decisions": [],
                     "sessions": [],
+                    "session_count": 0,
+                    "session_sample": 0,
                 }
             )
         configured = ", ".join(sorted(getattr(config, "models", {})))
@@ -400,7 +419,7 @@ async def get_model_routing(request: Any, **kwargs: Any) -> Response:
             providers.append(_excluded_lane_row(config, lane))
 
     decisions: list[dict[str, Any]] = []
-    sessions: list[dict[str, Any]] = []
+    sessions: dict[str, Any] = {"sessions": [], "count": 0, "sample": 0}
     log = getattr(request.app, "request_log", None)
     if log is not None:
         try:
@@ -411,7 +430,7 @@ async def get_model_routing(request: Any, **kwargs: Any) -> Response:
             sessions = _sessions(entries)
         except Exception:  # noqa: BLE001 - the board must render without a log
             decisions = []
-            sessions = []
+            sessions = {"sessions": [], "count": 0, "sample": 0}
 
     return JSONResponse(
         {
@@ -420,7 +439,12 @@ async def get_model_routing(request: Any, **kwargs: Any) -> Response:
             "routing": route.routing.describe(),
             "providers": providers,
             "decisions": decisions,
-            "sessions": sessions,
+            "sessions": sessions["sessions"],
+            # One row per conversation, plus one per fallback client identity
+            # for the rows that carry no id; the panel states both numbers
+            # rather than implying the count is exact.
+            "session_count": sessions["count"],
+            "session_sample": sessions["sample"],
         }
     )
 

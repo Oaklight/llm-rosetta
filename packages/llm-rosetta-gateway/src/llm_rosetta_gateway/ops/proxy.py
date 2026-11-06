@@ -22,6 +22,7 @@ from llm_rosetta.observability.usage.normalize import DEFAULT_MODEL_TYPE
 
 from ..middleware.auth import api_key_context_var
 from ..middleware.request_context import request_context_var
+from ..routing.conversation import current_conversation
 from .base import OpsBase, OpsContext
 
 
@@ -157,6 +158,7 @@ class OpsProxyRequest(OpsBase):
                 profile=self.profile,
                 model_type=self.model_type,
                 request_id=self.request_id,
+                conversation_id=current_conversation(),
                 **columns,
             )
             if self.entry_id_override:

@@ -10,7 +10,10 @@ between turn one and turn two and hand the opening request a different session
 than the rest of the conversation.
 
 Nothing here is stored.  The value is recomputed from the request every time,
-so any worker, and any restart, derives the same one.
+so any worker, and any restart, derives the same one.  The digest is the
+conversation id :mod:`~llm_rosetta_gateway.routing.conversation` records in the
+request log, so the routing page's session is the session the upstream was
+told, not a second derivation of it.
 """
 
 from __future__ import annotations
@@ -48,20 +51,28 @@ class SessionHeaderAffinity(RoutingStage):
         provider_info = ctx.provider_info
         if provider_info is None or not provider_info.session_header:
             return
-        first_prefix = extract_prefix_from_ir(ctx.ir_request, max_messages=1)
-        seed = (
-            compute_affinity_identity(ctx.identity.client or "", first_prefix)
-            or first_prefix
-            or _SESSION_FALLBACK
-        )
-        if provider_info.session_id_format == "opencode":
-            # The free lane decodes the id back into a timestamp and refuses
-            # one outside a recent window, so the minted value must follow
-            # OpenCode's identifier layout rather than a bare digest.
-            from ..transport.provider_info import opencode_identifier
-
-            session_id = opencode_identifier("ses", seed)
+        opencode = provider_info.session_id_format == "opencode"
+        # The conversation identity is already this value's digest (see
+        # ``conversation.py``), so a request that has one needs no second read
+        # of the request.  OpenCode's layout is not a digest, so it always
+        # needs the seed.
+        if ctx.identity.conversation is not None and not opencode:
+            session_id = ctx.identity.conversation
         else:
-            session_id = hashlib.sha256(seed.encode("utf-8")).hexdigest()[:32]
+            first_prefix = extract_prefix_from_ir(ctx.ir_request, max_messages=1)
+            seed = (
+                compute_affinity_identity(ctx.identity.client or "", first_prefix)
+                or first_prefix
+                or _SESSION_FALLBACK
+            )
+            if opencode:
+                # The free lane decodes the id back into a timestamp and refuses
+                # one outside a recent window, so the minted value must follow
+                # OpenCode's identifier layout rather than a bare digest.
+                from ..transport.provider_info import opencode_identifier
+
+                session_id = opencode_identifier("ses", seed)
+            else:
+                session_id = hashlib.sha256(seed.encode("utf-8")).hexdigest()[:32]
         ctx.with_upstream_session_id(session_id)
         ctx.with_provider_info(provider_info.with_session(session_id))

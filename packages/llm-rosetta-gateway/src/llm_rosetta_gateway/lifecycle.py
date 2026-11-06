@@ -39,6 +39,7 @@ from .middleware.error_format import detect_api_format, format_error_response
 from .middleware.headers import get_request_id
 from .middleware.request_context import request_context_var
 from .ops.proxy import record_proxy_request
+from .routing.conversation import note_conversation
 
 if TYPE_CHECKING:
     from .config import GatewayConfig
@@ -377,6 +378,10 @@ async def instrumented_handler(
         getattr(app, "persistence", None) if config.error_dumps_enabled else None
     )
     request.state.log_entry_id = ctx.entry_id
+    # Cleared here rather than left to the routing stage: the stage runs only
+    # once a request has been converted, and a task that serves the next
+    # request on the same connection must not inherit the last one's id.
+    note_conversation(None)
 
     token = _lifecycle_var.set(ctx)
     profiler = try_start_profiler(app)
