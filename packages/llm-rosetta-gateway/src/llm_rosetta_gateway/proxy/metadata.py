@@ -124,8 +124,11 @@ def _strip_internal_metadata(obj: dict | list) -> None:
 
     Thin wrapper over
     :func:`llm_rosetta.converters.base.helpers.strip_internal_metadata`, kept
-    as a defensive guard at the HTTP boundary: the converters already strip the
-    carrier from their ``*_to_provider`` output (issue #941), so this is a
-    belt-and-braces pass over bodies that may have been post-processed.
+    as a utility for callers that post-process a body.
+
+    The proxy itself no longer calls it: the converters strip the carrier from
+    their ``*_to_provider`` output at the conversion boundary (#941), and the
+    extra walk here was a full pass over a production-sized history for
+    nothing (#1410).  A body that reaches the transport is wire-ready.
     """
     strip_internal_metadata(obj)

@@ -50,7 +50,6 @@ from .failover import prepare_failover, record_failover
 from .metadata import (
     ProviderMetadataStore,
     _default_metadata_store,
-    _strip_internal_metadata,
 )
 from .fidelity import (
     _fidelity_check_and_dump,
@@ -166,8 +165,14 @@ async def prepare_request(
     The steps here are the same whatever the response mode: build the
     pipeline, convert the request to the target dialect, report a conversion
     failure as the source's ``400``, record the request's fidelity, flatten
-    the system message when the model asks for it, strip the gateway's own
-    metadata, and run the request stages that pick the transport config.
+    the system message when the model asks for it, and run the request
+    stages that pick the transport config.
+
+    The body is already wire-ready when the conversion returns: every
+    ``*_to_provider`` strips the internal ``_llm_rosetta_provider_metadata``
+    carrier at the converter boundary (#941).  The gateway used to repeat
+    that walk here; on a production-sized body it was a second full pass
+    over the whole history that always found nothing (#1410).
 
     Args:
         route: The resolved route the request will take.
@@ -240,7 +245,6 @@ async def prepare_request(
         target_body = flatten_system_content()(target_body)
 
     log_converted_request(target_body)
-    _strip_internal_metadata(target_body)
 
     selection.with_provider_info(provider_info)
     selection.with_ir_request(pipeline.ir_request)
@@ -770,7 +774,6 @@ async def handle_non_streaming(  # noqa: C901
             )
         )
 
-    _strip_internal_metadata(source_response)
     if ir_usage:
         profile["usage"] = ir_usage
     return JSONResponse(source_response), profile
