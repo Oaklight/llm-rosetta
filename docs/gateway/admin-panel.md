@@ -34,42 +34,49 @@ The card omits the type row and the base URL on purpose: one provider can serve 
 
 ### Adding and editing
 
-The provider form is a right-side drawer with a sticky title and action bar. It holds the name, the provider type or shim, the base URL, the API key, an optional proxy and the logo.
+The provider form is a right-side drawer with a sticky title, a tab bar and a sticky action bar. It is split into two panes: **Basic** holds identity, transport and routing; **Auth** holds the credential. The drawer always opens on **Basic**, and the **Auth** tab carries a red dot while its credential needs an action — a missing sign-in, a failure, an unreadable record or a legacy marker. Switching tabs never touches the type picker, so the endpoint choice does not change under the operator.
+
+- **Basic** — logo, name, a read-only model-type summary, Base URL, models path, proxy and timeout, a read-only credential summary (the source in effect, a status pill and its detail, with **Change in Auth**), the model-type checkboxes, and the endpoint cards. The LLM endpoint card keeps the type picker, the URL templates, the tool flags and the max tool-description length.
+- **Auth** — the credential source cards, the key box, the command editor, the sign-in record panel, the refresh log and a preview of the fields the save will write.
 
 - **Rename** rewrites every model reference automatically.
 - **Clone** pre-fills the drawer with the source provider's settings and the name `<name> Clone` (`<name> 克隆` in Chinese).
 - **Delete** opens a type-to-confirm dialog that warns about the cascade: the provider's models go with it.
 
-An API key field auto-detects comma-separated values and switches to a multi-entry list with one password row per key. **+ Add key** appends a row at any time; each row has an eye toggle and a copy button, and the footer offers view-all and copy-all for the whole comma-separated value. Masked keys on cards are never written back to the config file.
+An API key field auto-detects comma-separated values and switches to a multi-entry list with one password row per key. **+ Add key** appends a row at any time; each row has an eye toggle and a copy button, and the footer offers view-all and copy-all for the whole comma-separated value. Masked keys on cards are never written back to the config file. The panes are static DOM: switching tabs, languages or providers never rebuilds the key rows or a pasted record.
 
 ### Credential sources
 
-A provider that mints its own token has no key to type in. Editing such a provider replaces the API-key box with a **Credential** section that reads `GET /admin/api/config/providers/<name>/credential` and names the source in effect, read-only:
+The **Auth** pane opens on the source the entry actually uses, derived from the loader's own precedence: a `token_command` written into the entry outranks the shim, then the shim's command, then its `auth.py`, then a static key. Four cards offer the sources, and only the ones the loader can honour are shown:
 
-| Source | What it means |
-|--------|---------------|
-| command from the config | the provider entry declares `token_command`; the argv is editable here |
-| command declared by the shim | the vendor shim declares `connection.token_command`; the argv is read-only, the interval can be overridden |
-| shim sign-in (`auth.py`) | the exchange mints the credential through a browser sign-in |
-| static key | the ordinary API-key box — no Credential section |
+| Source | When it is offered | What it stores |
+|--------|--------------------|----------------|
+| static API key | the shim mints no credential (a keyless shim still gets the card, for a paid key) | `api_key` |
+| command from the config | always | `token_command`, `token_command_env`, `token_refresh_interval` |
+| command from the shim | the shim declares `connection.token_command` | `token_refresh_interval` only; the argv is read-only |
+| sign-in (`auth.py`) | the shim ships an exchange, or the entry already uses one | the record the exchange owns |
 
-The section shows the live `token_status`: the last mint, consecutive failures, the last error, whether an interactive sign-in is required, and `initializing` while the first token has not arrived. Only a digest (`cmd:<sha256>` for a command, `key:<sha256>` for a key) and timestamps are shown, never the token itself.
+Choosing a source is a statement about the others: selecting a shim command, a sign-in or a static key clears the entry's `token_command`, and moving off a static key sends `clear_api_key` so the old key is deleted rather than kept. The preview under the cards names what the save will write — `<set>`, `<kept>` or `<cleared>` for a key, never a value or its prefix.
 
-**Refresh now** (`POST …/credential/refresh`) mints a token out of cycle — the upstream-401 path debounces a burst, the button does not. **Test credential** (`POST …/credential/test`) mints a token and calls the provider's models endpoint with it; the answer says whether the upstream accepted the credential, so "the command exited 0" is not mistaken for "the account works".
+The command editor works in argv rows: one argument per row, the executable first. `token_refresh_interval` must be at least 60 seconds. A command that receives the operator's key through `token_command_env` keeps the key box — there the key is the command's input, not a second credential. The same rule keeps the box for an exchange that declares `consumes_key`.
 
-A command that comes from the config is edited in the same section: argv (a JSON array of non-empty strings), `token_command_env`, and `token_refresh_interval` (at least 60 seconds). A shim's argv stays read-only; its interval can be overridden. The panel refuses an invalid argv or interval before the request leaves the page.
+The status card shows the live `token_status`: the last mint, consecutive failures, the last error, whether an interactive sign-in is required, and `initializing` while the first token has not arrived. Only a digest (`cmd:<sha256>` for a command, `key:<sha256>` for a key) and timestamps are shown, never the token itself.
 
-For a shim `auth.py` exchange the section keeps its record actions:
+**Refresh now** (`POST …/credential/refresh`) mints a token out of cycle — the upstream-401 path debounces a burst, the button does not. **Test credential** (`POST …/credential/test`) mints a token and calls the provider's models endpoint with it; the answer says whether the upstream accepted the credential, so "the command exited 0" is not mistaken for "the account works". Both run the **saved** command: while the draft differs they are disabled and say so, rather than testing something the operator has not saved.
+
+For a shim `auth.py` exchange the same pane holds the record actions, rendered only when the exchange reports `can_install` / `can_revoke` — a button that would answer 501 is not offered:
 
 | State | What the panel shows |
 |-------|----------------------|
 | connected | the account the exchange's summary names, the access token's expiry, **Manage usage** (when the shim declares a page) and **Sign out** |
-| needs setup | no credential yet — **Install a record** |
+| needs setup | no credential yet — **Install a record**; the provider may still be saved in this state, so the CLI has something to sign in to |
 | unreadable | a record exists but cannot be read — install a replacement or sign out |
 
 **Install a record** takes the JSON the CLI prints (`llm-rosetta-gateway credential <provider>`, see the [CLI reference](cli.md#credential-provider)) and hands it to the exchange over `PUT …/credential`; a record that does not verify is refused with the exchange's own message. **Sign out** calls `DELETE`, which revokes the grant upstream when the vendor allows it and takes the token out of the gateway's key ring immediately.
 
-A provider save or an enable builds the affected providers in memory before anything is written. A document the loader rejects returns 400 and leaves the config file untouched, instead of reporting "Config saved but reload failed" after the damage. An old entry whose key slot holds the literal `token_command` is repaired on its next save: the literal is dropped, not written back.
+An entry whose key slot holds the literal `token_command` — a label the previous editor wrote — gets a warning in the Auth pane. The next save drops the literal; beside a command the loader would reject the pair.
+
+A provider save or an enable builds the affected providers in memory before anything is written. A document the loader rejects returns 400 and leaves the config file untouched, instead of reporting "Config saved but reload failed" after the damage.
 
 ## Models
 
