@@ -42,6 +42,10 @@ from ..proxy import (
 from .routes_compact import (
     route_responses_compact,
 )
+from .routes_count_tokens import (
+    COUNT_TOKENS_PATH,
+    route_messages_count_tokens,
+)
 from .routes_llm import (
     _register_llm_routes,
 )
@@ -414,6 +418,10 @@ async def create_app(
         # Context compaction: an open_responses-family operation with no
         # neutral form, so it is relayed rather than converted (see the module).
         app.route("/v1/responses/compact", methods=["POST"])(route_responses_compact)
+
+        # Anthropic-format token counting: delegated to the target's own
+        # counting endpoint, relayed rather than converted (see the module).
+        app.route(COUNT_TOKENS_PATH, methods=["POST"])(route_messages_count_tokens)
 
         # Utility / listing / health routes
         app.route("/v1/models", methods=["GET"])(handle_list_models)

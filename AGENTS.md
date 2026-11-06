@@ -129,7 +129,7 @@ supported format and forwards them to any configured upstream provider.
 
 | Module | Purpose |
 |--------|---------|
-| `gateway/app/` | Route handlers (chat/models/health/typed), app factory, tasks |
+| `gateway/app/` | Route handlers (chat/models/health/typed plus the relayed `compact` and `count_tokens` routes), app factory, tasks |
 | `gateway/proxy/` | Core proxy engine: errors, metadata, fidelity, preflight, engine, streaming |
 | `gateway/config/` | Config package: JSONC loading, locking, parsing, resolution |
 | `gateway/providers.py` | Provider info, auth headers, key rotation |
