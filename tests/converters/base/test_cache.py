@@ -809,28 +809,29 @@ class TestOneKeyPerGetPutPair:
         assert get_cached_tool("test:from_p", tool) == {"ir": True}
 
     def test_a_cold_converter_pass_computes_one_key_per_tool(self, monkeypatch):
-        """The real call site: five tools on a cold cache cost five keys."""
+        """The real call site: five tools on a cold cache cost five keys.
+
+        The provider→IR leg stopped being cached in #1410, so the remaining
+        cached direction is IR→provider; it is the one this pins.
+        """
         from llm_rosetta.converters import ChatCompletionsConverter
 
         clear_all_caches()
-        tools = [
+        ir_tools = [
             {
-                "type": "function",
-                "function": {
-                    "name": f"tool_{i}",
-                    "description": f"tool number {i}",
-                    "parameters": {"type": "object", "properties": {}},
-                },
+                "name": f"tool_{i}",
+                "description": f"tool number {i}",
+                "parameters": {"type": "object", "properties": {}},
             }
             for i in range(5)
         ]
         conv = ChatCompletionsConverter()
         calls = _count_entry_cache_key(monkeypatch)
 
-        ir_tools = conv._get_cached_p_tools_to_ir(tools)
+        written = conv._get_cached_ir_tools_to_p(ir_tools)
 
-        assert len(ir_tools) == len(tools)
-        assert len(calls) == len(tools)
+        assert len(written) == len(ir_tools)
+        assert len(calls) == len(ir_tools)
 
 
 class TestFingerprintsAreOptIn:

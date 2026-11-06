@@ -539,8 +539,9 @@ class TestShimEmitConsistency:
 class TestUnsupportedKindNotCachedAsEmpty:
     """A dropped (`{}`) tool must not resurface on a cache hit (PR #878 review).
 
-    The tool-conversion cache stores the falsy result too, so the truthiness
-    check has to run on the cache-hit branch as well.
+    The tool-conversion cache never stores a falsy result — a declined tool is
+    not cached, so its report happens again on every call.  This pins that: a
+    repeat call keeps returning nothing instead of a stale truthy entry.
     """
 
     def _calls(self, converter, tool, n=3):

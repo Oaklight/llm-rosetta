@@ -27,7 +27,7 @@ does not pay a serialization per insert for a check it never runs.
 Cache keys: tool entries are keyed by canonical JSON + ``hash()``
 (#1415).  #1419 closed the search for a faster zero-dependency canonical
 key, and #1420 measured the alternatives on production payloads: a
-pickle key costs ~72% less to compute (37.4 → 13.5 µs per tool) but
+pickle key costs ~64% less to compute (37.4 → 13.5 µs per tool) but
 partitions the cache by dict key order — two clients ordering one
 374-tool request differently overflow ``maxsize=512`` and evict each
 other completely (87.5% → 0% hit rate, +37 ms per request, against the
@@ -101,14 +101,35 @@ def entry_cache_key(tag: str, entry: Any) -> int:
     """Compute a cache key for a single entry (tool, message, schema, etc.).
 
     The key incorporates *tag* (so different converters / directions
-    never collide) and the canonical JSON of *entry*.  Uses Python's
+    never collide) and canonical JSON bytes of *entry*.  Uses Python's
     built-in ``hash()`` on bytes — 64-bit SipHash, collision probability
     ~10⁻¹⁵ at n=512 entries, more than sufficient for a bounded LRU.
 
-    Canonical JSON is deliberate, not incidental: #1420 measured a pickle key
-    at 13.5 µs against 37.4 µs per tool and kept this one anyway, because the
-    faster key partitions the cache by dict key order and stops sharing between
-    clients.  Re-run that measurement before replacing it (module docstring).
+    The serializer stays ``json.dumps(sort_keys=True)`` even though pickle is
+    2.8–3.6x faster.  Pickle bytes depend on dict key order and on object identity
+    — a shared container is written once and referenced back — so two
+    structurally identical requests can serialize differently.  On this path
+    the back-reference is what bites: of 93 equal-content IR tool pairs from
+    consecutive requests, all had identical key order, all 93 pickled to
+    different bytes, and all 93 pickled equal again after a JSON round-trip
+    (which keeps key order and drops shared identity).  Pickle's memo can be
+    switched off — a C ``_pickle.Pickler`` with ``fast=True`` removes the
+    back-reference, 2.09/3.97 µs per key against 6.88/14.39 µs for canonical
+    JSON at 93 tools — but it exposes no hook that could impose dict order, so
+    key order still changes the bytes and pickle cannot be made canonical
+    (#1419).  That is also why the provider→IR cache stays removed rather than
+    returning with a faster key: a key has to land in 0.23–0.92 µs to pay for
+    itself, against a 0.51 µs LRU hit and a 0.74–1.43 µs conversion per tool
+    (#1419).  Under pickle keys, 31 of the 186 tool lookups per request (93
+    tools, both directions) became re-conversions (#1410).  The split — pickle for the IR-validation key,
+    canonical JSON for entry keys — was set in #842 / #847 and is deliberate.
+
+    #1420 measured this key again on production payloads and kept it: 37.4 µs
+    per real tool (median 944 B) against 13.5 µs for a pickle key, and a
+    key-order permutation changes the pickle bytes of 620 of 621 real tools —
+    two clients that order one 374-tool request differently overflow
+    ``maxsize=512`` and evict each other completely (87.5% → 0% hit rate).
+    Re-run that measurement before replacing the serializer.
 
     Args:
         tag: Namespace string (e.g. ``"anthropic:from_p"``).

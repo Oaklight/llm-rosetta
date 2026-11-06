@@ -839,7 +839,7 @@ class GoogleGenerateConverter(BaseConverter):
         # Tools — check SDK config first, then REST top-level (with cache)
         tools = config.get("tools") or provider_request.get("tools")
         if tools:
-            ir_request["tools"] = self._get_cached_p_tools_to_ir(tools)
+            ir_request["tools"] = self._convert_p_tools_to_ir(tools)
             # A client replays the model turn it received, where a hosted
             # tool's call is the same ``functionCall`` part a client function
             # uses.  The history has no recorded vocabulary to consult, but

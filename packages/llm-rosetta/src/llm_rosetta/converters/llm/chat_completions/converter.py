@@ -462,10 +462,10 @@ class ChatCompletionsConverter(BaseConverter):
         if system_parts:
             ir_request["system_instruction"] = system_parts
 
-        # 2. Tools (with process-level cache)
+        # 2. Tools (provider→IR, uncached after #1410)
         tools = provider_request.get("tools")
         if tools:
-            ir_request["tools"] = self._get_cached_p_tools_to_ir(tools)
+            ir_request["tools"] = self._convert_p_tools_to_ir(tools)
 
         # 3. Tool choice
         tool_choice = provider_request.get("tool_choice")
