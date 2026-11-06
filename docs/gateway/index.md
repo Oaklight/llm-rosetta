@@ -28,6 +28,7 @@ graph LR
 | `POST /v1/messages` | Anthropic | 兼容 Anthropic SDK |
 | `POST /v1/responses` | OpenAI Responses | 兼容 OpenAI Responses SDK |
 | `POST /v1/responses/compact` | OpenAI Responses | 上下文压缩，原样转发；需要 `open_responses` 上游（否则返回 `501`） |
+| `POST /v1/messages/count_tokens` | Anthropic | 精确的输入 token 计数，委托给目标方自己的端点；需要 `messages` 上游（否则返回 `501`） |
 | `POST /v1/embeddings` | OpenAI Embeddings | 通过 IR 跨格式转换（OpenAI、Cohere、Jina、Voyage） |
 | `POST /v1/rerank` | Rerank（默认 Jina） | 通过 IR 跨格式转换（Jina、Cohere、Voyage） |
 | `POST /v2/rerank` | Rerank（Cohere） | 自动检测 Cohere 格式；与 `/v1/rerank` 共用处理器 |
@@ -56,6 +57,17 @@ curl http://localhost:8765/v1/chat/completions \
 ```
 
 网关会实时转换 SSE 数据块。
+
+## Token 计数 {: #token-counting }
+
+`POST /v1/messages/count_tokens` 服务于在发送请求前先计数的 Anthropic 客户端（Claude Code 就是其中之一）。网关不做估算：它把请求体 —— 只把 `model` 改写为该路由的上游模型，其余字段不动 —— 转发到目标提供方自己的 `/count_tokens` 端点，再把应答原样返回（`x-rosetta-conversion: passthrough`）。
+
+因此，只要目标实现 Messages 计数端点，计数就是精确的，与该提供方 SDK 报告的结果一致。委托而非估算带来两点限制：
+
+- 请求体必须是合法的计数请求。Anthropic 在该端点拒绝仅用于生成的字段（`max_tokens`、`stream`），网关原样转发这个 `400`，不会替你删除字段。
+- 模型被路由到不支持 Messages 的提供方时无法这样计数，该路由在 Messages 错误信封中返回 `501`。OpenAI Chat 与 OpenAI Responses 目标没有计数端点；Google 目标有 `:countTokens`，但它接受 Google 格式的请求并返回 `totalTokens`，本版本不用它服务 Messages 格式的计数。
+
+该路由与其他路由一样记入请求日志与指标，token 用量记为空 —— 计数不消耗 token。
 
 ## 认证
 
