@@ -373,7 +373,7 @@ across Anthropic Messages API and OpenAI Chat Completions API,
 with image analysis and tool calling.
 
 Requirements:
-    pip install -e ".[openai,anthropic]"
+    pip install -e ".[conformance]"
 
 Proxy Note:
     OpenAI API calls may require proxy configuration.

@@ -222,10 +222,11 @@ jobs:
           pip install -e "packages/llm-rosetta[all]" -e packages/llm-rosetta-gateway
 
       - name: Check the 3.10 typing backport marker
-        # The SDK extras declare typing_extensions unconditionally, so an
-        # import check would pass even if our own marker were dropped.  Assert
-        # the project's metadata instead: types/ir/* and the vendored
-        # create_struct() import it on 3.10.
+        # A transitive dependency (the conformance extra's SDKs) may declare
+        # typing_extensions unconditionally, so an import check would pass even
+        # if our own marker were dropped.  Assert the project's metadata
+        # instead: types/ir/* and the vendored create_struct() import it on
+        # 3.10.
         run: |
           python -c "import importlib.metadata as m; reqs = m.requires('llm-rosetta') or []; assert any('typing_extensions' in r and 'python_version' in r for r in reqs), 'typing_extensions marker missing from llm-rosetta metadata'"
 
@@ -252,16 +253,17 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        # `[all]` pulls the `gateway` extra, which names `llm-rosetta-gateway` by
-        # distribution; the gateway is not on PyPI, so its local path has to be
-        # installed beside it (and `tools/conformance/redact.py` imports it).
-        # The SDKs are pinned: the baselines are only comparable against the
-        # versions they were generated with, so an upstream release must not
-        # turn every PR red; bump the pins with a regenerated baseline.
+        # `[conformance]` carries the provider SDKs this job needs and nothing
+        # else (they are not runtime dependencies of the library), and the
+        # gateway is installed from its local path because it is not on PyPI
+        # (`tools/conformance/redact.py` imports it).  The SDKs are pinned: the
+        # baselines are only comparable against the versions they were
+        # generated with, so an upstream release must not turn every PR red;
+        # bump the pins with a regenerated baseline.
         run: |
           python -m pip install --upgrade pip
           pip install -c tools/conformance/sdk-pins.txt \
-            -e "packages/llm-rosetta[all]" -e packages/llm-rosetta-gateway
+            -e "packages/llm-rosetta[conformance]" -e packages/llm-rosetta-gateway
 
       - name: Run the wire suite against its baseline
         run: python -m tools.conformance run --suite wire --out wire-report.json
