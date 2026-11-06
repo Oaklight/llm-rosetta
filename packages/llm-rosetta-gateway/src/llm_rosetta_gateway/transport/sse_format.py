@@ -20,10 +20,17 @@ from .error_class import classify_status
 # Per-provider SSE formatters
 # ---------------------------------------------------------------------------
 
+#: One encoder for every SSE line.  ``json.dumps`` builds a fresh
+#: :class:`json.JSONEncoder` per call, which is ~30% of the cost of encoding a
+#: small event; a stream of 400 events pays that 400 times (#1410).  The
+#: options are the ones ``json.dumps`` would pass anyway, so the bytes are the
+#: same.
+_JSON_ENCODER = json.JSONEncoder(ensure_ascii=False)
+
 
 def _format_sse_chat_completions(chunk: dict[str, Any]) -> str:
     """Format a chunk as OpenAI Chat SSE line."""
-    return f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+    return f"data: {_JSON_ENCODER.encode(chunk)}\n\n"
 
 
 def format_sse_done() -> str:
@@ -34,24 +41,24 @@ def format_sse_done() -> str:
 def _format_sse_messages(chunk: dict[str, Any]) -> str:
     """Format a chunk as Anthropic SSE (``event: type\\ndata: json``)."""
     event_type = chunk.get("type", "unknown")
-    return f"event: {event_type}\ndata: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+    return f"event: {event_type}\ndata: {_JSON_ENCODER.encode(chunk)}\n\n"
 
 
 def _format_sse_open_responses(chunk: dict[str, Any]) -> str:
     """Format a chunk as OpenAI Responses SSE (``event: type\\ndata: json``)."""
     event_type = chunk.get("type", "unknown")
-    return f"event: {event_type}\ndata: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+    return f"event: {event_type}\ndata: {_JSON_ENCODER.encode(chunk)}\n\n"
 
 
 def _format_sse_google(chunk: dict[str, Any]) -> str:
     """Format a chunk as Google SSE line."""
-    return f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+    return f"data: {_JSON_ENCODER.encode(chunk)}\n\n"
 
 
 def _format_sse_google_interactions(chunk: dict[str, Any]) -> str:
     """Format a chunk as Google Interactions SSE (``event: type\\ndata: json``)."""
     event_type = chunk.get("event_type", "unknown")
-    return f"event: {event_type}\ndata: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+    return f"event: {event_type}\ndata: {_JSON_ENCODER.encode(chunk)}\n\n"
 
 
 _SSE_BY_KEY: dict[str, Any] = {
