@@ -20,7 +20,7 @@ from .shims import ShimSourceError
 if TYPE_CHECKING:
     from .shims import ShimLoadReport
 
-from .banner import print_banner
+from .banner import print_banner, print_shim_sources
 from .config import (
     PATHS_TO_TRY,
     GatewayConfig,
@@ -36,7 +36,7 @@ from .providers import (
     get_default_base_url,
     known_provider_types,
 )
-from .shim_sources import apply_shim_sources
+from .shim_sources import apply_shim_sources, describe_shim_sources
 
 logger = get_logger()
 
@@ -671,7 +671,12 @@ def _apply_shim_sources_or_exit(
 
 
 def _report_shim_sources(report: ShimLoadReport | None) -> None:
-    """Log the shim-source outcome (called once a log handler is attached)."""
+    """Log the shim-source outcome (called once a log handler is attached).
+
+    Each remote source gets one line naming the leg it loaded from, so an
+    operator can tell a primary fetch from a mirror that took over.  A source
+    that failed because nothing could be reached gets the remedies next to it.
+    """
     if report is None:
         return
     for status in report.failures():
@@ -681,12 +686,33 @@ def _report_shim_sources(report: ShimLoadReport | None) -> None:
             status.location,
             status.error,
         )
+        if status.unreachable:
+            logger.warning(
+                "  %s is unreachable; declare a mirror for it "
+                "(shims.remotes[].mirror), point shims.paths at a local copy, "
+                "or restore access to the host",
+                status.location,
+            )
+    for status in report.sources:
+        if status.kind == "remote" and status.ok:
+            logger.info(
+                "Shim source %s: loaded via %s%s",
+                status.location,
+                status.leg or "primary",
+                " (cache)" if status.from_cache else "",
+            )
     if report.sources:
         loaded = sum(s.shim_count for s in report.sources if s.ok)
+        mirror = sum(
+            1
+            for s in report.sources
+            if s.kind == "remote" and s.ok and s.leg == "mirror"
+        )
         logger.info(
-            "Shim sources: %d external source(s), %d shim(s) loaded",
+            "Shim sources: %d external source(s), %d shim(s) loaded%s",
             len(report.sources),
             loaded,
+            f", {mirror} via mirror" if mirror else "",
         )
 
 
@@ -966,6 +992,8 @@ def main() -> None:  # noqa: C901
     # sources are applied before setup_logging (they must be registered before
     # GatewayConfig), so their own log records would otherwise be dropped.
     _report_shim_sources(shim_source_report)
+    if not args.no_banner:
+        print_shim_sources(describe_shim_sources(shim_source_report))
 
     host = args.host or config.host
     port = args.port or config.port
