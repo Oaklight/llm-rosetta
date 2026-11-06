@@ -60,7 +60,7 @@ API Key 字段自动识别逗号分隔的多个密钥，并切换为多条目列
 
 选择一种来源就是对其他来源的表态：选择 Shim 命令、登录或静态 Key 会清空条目的 `token_command`；离开静态 Key 会发送 `clear_api_key`，旧密钥被删除而不是保留。卡片下方的预览写明保存将写入什么 —— Key 只显示 `<set>`、`<kept>` 或 `<cleared>`，从不显示值或前缀。
 
-命令编辑器按 argv 行编辑：一行一个参数，第一行是可执行文件。`token_refresh_interval` 至少 60 秒。命令通过 `token_command_env` 接收操作者密钥时，密钥输入框保留 —— 那里密钥是命令的输入，不是第二个凭据。声明了 `consumes_key` 的交换同样保留该输入框。
+命令编辑器按 argv 行编辑：一行一个参数，第一行是可执行文件。命令至少保留一个参数 —— 最后一行不显示 ×，要移除命令请改选其他凭据来源。`token_refresh_interval` 至少 60 秒。命令通过 `token_command_env` 接收操作者密钥时，密钥输入框保留 —— 那里密钥是命令的输入，不是第二个凭据。声明了 `consumes_key` 的交换同样保留该输入框。
 
 状态卡显示实时的 `token_status`：上次取 token、连续失败次数、最近错误、是否需要交互登录，以及首个 token 尚未返回时的 `initializing`。页面只显示指纹（命令为 `cmd:<sha256>`，密钥为 `key:<sha256>`）与时间，不显示 token 本身。
 
