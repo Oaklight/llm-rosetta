@@ -77,6 +77,30 @@ def _error(exc: _NotSupported) -> Response:
     return JSONResponse({"error": str(exc)}, status_code=exc.status)
 
 
+def exchange_can_install(exchange: Any) -> bool:
+    """Whether the exchange accepts a record produced elsewhere.
+
+    ``BaseAuthExchange`` defines ``install`` and raises, so presence is not the
+    question — whether the exchange overrode it is.  Callable rather than
+    present because a shim could expose either name as a property, and a
+    ``TypeError`` raised while rendering the panel would be a 500.
+    """
+    install = getattr(exchange, "install", None)
+    can_install = getattr(exchange, "can_install", None)
+    return install is not None and (can_install() if callable(can_install) else True)
+
+
+def exchange_can_revoke(exchange: Any) -> bool:
+    """Whether sign-out can reach the vendor and remove the record.
+
+    Same split as :func:`exchange_can_install`: the base class raises, so an
+    exchange that did not override ``revoke`` cannot sign out.
+    """
+    revoke = getattr(exchange, "revoke", None)
+    can_revoke = getattr(exchange, "can_revoke", None)
+    return revoke is not None and (can_revoke() if callable(can_revoke) else True)
+
+
 async def _off_loop(func: Any, *args: Any) -> Any:
     """Run a blocking exchange call on the executor.
 
@@ -136,6 +160,10 @@ def _command_payload(pinfo: Any, name: str) -> dict[str, Any]:
         "command_env": pinfo.token_command_env,
         "refresh_interval": pinfo.token_refresh_interval,
         "command_editable": pinfo.credential_source == "config_command",
+        # A command provider has no record to install and nothing to sign out
+        # of; the panel's exchange actions are not offered for it.
+        "can_install": False,
+        "can_revoke": False,
     }
 
 
@@ -198,6 +226,10 @@ async def get_provider_credential(request: Any, name: str) -> Response:
             "refresh_interval": pinfo.token_refresh_interval,
             "token_status": status,
             "refresher_enabled": status.get("enabled", True) is not False,
+            # The panel renders install/sign-out only when the action would
+            # not come back 501.  The exchange owns both answers.
+            "can_install": exchange_can_install(exchange),
+            "can_revoke": exchange_can_revoke(exchange),
         }
     )
 
@@ -315,10 +347,9 @@ async def put_provider_credential(request: Any, name: str) -> Response:
         return _error(exc)
 
     install = getattr(exchange, "install", None)
-    can_install = getattr(exchange, "can_install", None)
     # ``BaseAuthExchange`` defines ``install`` and raises, so presence is not
     # the question — whether the exchange overrode it is.
-    usable = install is not None and (can_install() if can_install else True)
+    usable = exchange_can_install(exchange)
     if not usable:
         return JSONResponse(
             {
@@ -365,11 +396,9 @@ async def delete_provider_credential(request: Any, name: str) -> Response:
         return _error(exc)
 
     revoke = getattr(exchange, "revoke", None)
-    can_revoke = getattr(exchange, "can_revoke", None)
     # ``BaseAuthExchange.revoke`` raises, so presence is not the question —
-    # whether the exchange overrode it is.  ``callable`` because a shim could
-    # expose the name as a property, and a TypeError here would be a 500.
-    revocable = revoke is not None and (can_revoke() if callable(can_revoke) else True)
+    # whether the exchange overrode it is.
+    revocable = exchange_can_revoke(exchange)
     revoked = False
     error = None
     if revocable:

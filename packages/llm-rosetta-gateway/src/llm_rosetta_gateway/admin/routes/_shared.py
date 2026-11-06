@@ -555,7 +555,8 @@ def _credential_fields(
     credential sources where it accepts one, and the provider comes back
     unusable.  The command itself is not something the editor can express, so
     an absent key in *body* means "keep what is stored"; a caller that wants to
-    clear it sends the key with an empty value.
+    clear it sends ``clear_api_key: true``, which also works when the key was
+    not in the body at all.
     """
     fields: dict[str, Any] = {}
     # The old panel's display marker is not a credential.  Dropping it here
@@ -564,7 +565,18 @@ def _credential_fields(
     # sources where it accepts one.
     if api_key == _TOKEN_COMMAND_MARKER:
         api_key = ""
-    if api_key or not _credential_command(body, existing):
+    # Switching away from a static key removes it.  The editor sends this
+    # flag, not an empty key: an empty key has always meant "keep what is
+    # stored", and overloading it would clear a key on every ordinary save.
+    # The flag itself is never copied into the entry.
+    if body.get("clear_api_key") is True:
+        api_key = ""
+    # An explicit ``token_command`` — including the empty list the editor sends
+    # for a source that stores no command — says this provider has no static
+    # key.  Storing ``""`` anyway would defeat the shim's own ``api_key_env``:
+    # the loader only fills that default when the entry leaves ``api_key``
+    # unset.
+    if api_key or _credential_command(body, existing) is None:
         fields["api_key"] = api_key
     if existing is not None:
         for carry in ("token_command", "token_refresh_interval", "token_command_env"):
