@@ -185,56 +185,44 @@ CONVERTER_CONFIGS = [
 
 
 @pytest.mark.parametrize("conv_cls,tools,make_req", CONVERTER_CONFIGS)
-class TestFromProviderCache:
-    """Tests for _convert_p_tools_to_ir caching in request_from_provider."""
+class TestFromProviderUncached:
+    """The provider→IR tool reader is deliberately uncached (#1410).
 
-    def test_cache_hit_on_second_call(self, conv_cls, tools, make_req):
-        """Second call with same tools should hit the per-entry cache."""
-        clear_all_caches()
-        conv = conv_cls()
-        req = make_req(tools)
-        n_tools = len(tools)
+    A per-tool key is a canonical-JSON hash of the declaration and costs
+    more than the read it would skip in every chat dialect, so
+    ``request_from_provider`` must leave the entry cache untouched.
+    """
 
-        # First call — cold (each tool is a cache miss)
-        conv.request_from_provider(copy.deepcopy(req))
-        info1 = cache_info()["tool_entry"]
-        assert info1["misses"] >= n_tools
-        assert info1["hits"] == 0
-
-        # Second call — warm (each tool is a hit)
-        conv2 = conv_cls()
-        conv2.request_from_provider(copy.deepcopy(req))
-        info2 = cache_info()["tool_entry"]
-        assert info2["hits"] >= n_tools
-
-    def test_cache_miss_on_different_tools(self, conv_cls, tools, make_req):
-        """Different tools should not hit the cache."""
+    def test_first_call_populates_nothing(self, conv_cls, tools, make_req):
+        """The reader never consults or fills the per-entry cache."""
         clear_all_caches()
         conv = conv_cls()
         conv.request_from_provider(copy.deepcopy(make_req(tools)))
 
-        # Modify one tool — it should miss, the other should still hit
-        modified_tools = copy.deepcopy(tools)
-        modified_tools[0]["description"] = "MODIFIED"
-        conv2 = conv_cls()
-        conv2.request_from_provider(copy.deepcopy(make_req(modified_tools)))
+        info = cache_info()["tool_entry"]
+        assert info["hits"] == 0
+        assert info["misses"] == 0
+        assert info["currsize"] == 0
+
+    def test_repeated_calls_stay_out_of_the_cache(self, conv_cls, tools, make_req):
+        """A second identical read still does not touch the cache."""
+        clear_all_caches()
+        req = make_req(tools)
+        conv_cls().request_from_provider(copy.deepcopy(req))
+        conv_cls().request_from_provider(copy.deepcopy(req))
 
         info = cache_info()["tool_entry"]
-        # First call: all misses. Second call: 1 miss (modified) + rest hits
-        assert info["hits"] >= 1  # at least the unmodified tool(s) hit
+        assert info["hits"] == 0
+        assert info["misses"] == 0
 
-    def test_cached_matches_uncached(self, conv_cls, tools, make_req):
-        """Cached result should be identical to a fresh conversion."""
+    def test_repeated_requests_match(self, conv_cls, tools, make_req):
+        """Two identical reads produce the same IR tools."""
         clear_all_caches()
         conv = conv_cls()
         req = make_req(tools)
 
-        # Cold path
         ir1 = conv.request_from_provider(copy.deepcopy(req))
-
-        # Warm path
-        conv2 = conv_cls()
-        ir2 = conv2.request_from_provider(copy.deepcopy(req))
+        ir2 = conv_cls().request_from_provider(copy.deepcopy(req))
 
         assert ir1.get("tools") == ir2.get("tools")
         assert ir1["model"] == ir2["model"]
@@ -264,8 +252,9 @@ class TestToProviderCache:
         ir2 = conv2.request_from_provider(copy.deepcopy(req))
         conv2.request_to_provider(ir2)
         info2 = cache_info()["tool_entry"]
-        # All tools should hit on second roundtrip (both directions)
-        assert info2["hits"] >= len(tools) * 2
+        # Every tool hits on the second roundtrip; the provider→IR direction
+        # is uncached, so the IR→provider hits are the whole count (#1410).
+        assert info2["hits"] >= len(tools)
 
 
 # ---------------------------------------------------------------------------
@@ -274,7 +263,12 @@ class TestToProviderCache:
 
 
 def test_cross_converter_no_pollution():
-    """Cache entries from one converter should not leak to another."""
+    """Cache entries from one converter should not leak to another.
+
+    No chat dialect caches provider→IR tools (#1410), so the per-entry cache
+    stays empty; the tag isolation itself is covered in
+    ``tests/converters/base/test_cache.py``.
+    """
     clear_all_caches()
 
     anth = MessagesConverter()
@@ -283,10 +277,8 @@ def test_cross_converter_no_pollution():
     oai = ChatCompletionsConverter()
     oai.request_from_provider(copy.deepcopy(_openai_chat_request(OPENAI_CHAT_TOOLS)))
 
-    # Per-entry: both converters have 2 tools each → 4 misses total
-    # (different converter tags ensure no cross-pollution)
     info = cache_info()["tool_entry"]
-    assert info["misses"] == 4  # 2 tools × 2 converters
+    assert info["misses"] == 0
     assert info["hits"] == 0
 
 
@@ -299,16 +291,16 @@ def test_cache_survives_new_instance():
     """Module-level cache persists across converter instances."""
     clear_all_caches()
 
-    conv1 = MessagesConverter()
-    req = _anthropic_request(ANTHROPIC_TOOLS)
-    conv1.request_from_provider(copy.deepcopy(req))
+    conv1 = GoogleConverter()
+    req = _google_request(GOOGLE_TOOLS)
+    conv1.request_to_provider(conv1.request_from_provider(copy.deepcopy(req)))
 
     # Brand new instance
-    conv2 = MessagesConverter()
-    conv2.request_from_provider(copy.deepcopy(req))
+    conv2 = GoogleConverter()
+    conv2.request_to_provider(conv2.request_from_provider(copy.deepcopy(req)))
 
     info = cache_info()["tool_entry"]
-    # 2 tools × first call miss + 2 tools × second call hit
+    # 2 declarations × first roundtrip miss + 2 declarations × second hit
     assert info["hits"] == 2
 
 
