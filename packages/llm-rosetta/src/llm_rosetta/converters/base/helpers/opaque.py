@@ -185,19 +185,36 @@ def strip_internal_metadata(obj: Any) -> None:
     same name is removed wherever it appears, including inside a tool schema or
     tool arguments.
 
-    Operates in-place for zero-copy overhead, recursing through nested dicts
-    and lists.
+    Operates in-place for zero-copy overhead, walking nested dicts and
+    lists with an explicit stack (#1410): a body is mostly scalars, and a
+    recursive call per scalar spends more time in the call than in the
+    check.  Only containers are pushed.  Their type is compared by identity
+    first — what a JSON decoder and the converters produce is always a plain
+    ``dict``/``list`` — and anything else that is not a string falls back to
+    ``isinstance``, so a container subclass is still walked.
 
     Args:
         obj: Provider-format value (dict, list, or scalar) to clean.
     """
-    if isinstance(obj, dict):
-        obj.pop(CARRIER_KEY, None)
-        for value in obj.values():
-            strip_internal_metadata(value)
-    elif isinstance(obj, list):
-        for item in obj:
-            strip_internal_metadata(item)
+    containers = (dict, list)
+    stack: list[Any] = [obj]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, dict):
+            node.pop(CARRIER_KEY, None)
+            for value in node.values():
+                value_type = type(value)
+                if value_type is dict or value_type is list:
+                    stack.append(value)
+                elif value_type is not str and isinstance(value, containers):
+                    stack.append(value)
+        elif isinstance(node, list):
+            for item in node:
+                item_type = type(item)
+                if item_type is dict or item_type is list:
+                    stack.append(item)
+                elif item_type is not str and isinstance(item, containers):
+                    stack.append(item)
 
 
 def google_thought_signature(part: Any) -> str | None:
