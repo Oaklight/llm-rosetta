@@ -11,7 +11,6 @@ and after on the same payloads:
 
 1. ``json.loads`` of the raw request body            (request decode)
 2. ``ConversionPipeline.convert_request``            (source → IR → target)
-3. ``_strip_internal_metadata`` on the target body   (gateway boundary)
 4. ``json.dumps`` of the target body                 (upstream encode)
 5. per upstream chunk: ``json.loads`` → ``process_chunk`` → ``json.dumps``
    per emitted event                                 (stream decode, convert, encode)
@@ -55,7 +54,6 @@ PRODUCTION_SHAPE: dict[str, int] = {
 _STAGES = (
     "request_decode",
     "convert",
-    "gateway_strip",
     "upstream_encode",
     "chunk_decode",
     "process_chunk",
@@ -256,18 +254,16 @@ def build_chunks(n: int) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-def _run_one(
-    raw: str, chunk_texts: list[str], *, gateway_strip: bool = True
-) -> dict[str, float]:
+def _run_one(raw: str, chunk_texts: list[str]) -> dict[str, float]:
     """Run one request through the full local hot path, timing each stage.
 
     Payload construction happens outside the timed region so the numbers are
-    the gateway's work, not the generator's.  *gateway_strip* mirrors the
-    engine's boundary pass (``prepare_request``), which the benchmark can
-    switch off to measure its cost.
+    the gateway's work, not the generator's.  The engine's boundary strip is
+    not timed: #1410 removed the gateway's ``_strip_internal_metadata`` pass,
+    because every body reaching it was already stripped at the converter
+    boundary.
     """
     from llm_rosetta.pipeline import ConversionPipeline
-    from llm_rosetta_gateway.proxy.metadata import _strip_internal_metadata
     from llm_rosetta_gateway.transport.sse_format import SSE_FORMATTERS
 
     format_sse = SSE_FORMATTERS["messages"]
@@ -283,11 +279,6 @@ def _run_one(
     )
     target_body = pipeline.convert_request(parsed)
     convert = time.perf_counter() - t
-
-    t = time.perf_counter()
-    if gateway_strip:
-        _strip_internal_metadata(target_body)
-    gateway_strip_seconds = time.perf_counter() - t
 
     t = time.perf_counter()
     json.dumps(target_body)
@@ -318,7 +309,6 @@ def _run_one(
     return {
         "request_decode": request_decode,
         "convert": convert,
-        "gateway_strip": gateway_strip_seconds,
         "upstream_encode": upstream_encode,
         "chunk_decode": chunk_decode,
         "process_chunk": process_chunk,
@@ -335,7 +325,6 @@ def benchmark(
     rounds: int,
     *,
     profile: bool = False,
-    gateway_strip: bool = True,
 ) -> dict[str, Any]:
     """Run the benchmark and return per-stage means in milliseconds."""
     # Payloads are built once, outside every timed region.
@@ -343,7 +332,7 @@ def benchmark(
     chunk_texts = build_chunks(shape["n_chunks"])
 
     # Warmup: import cost, cache fill, allocator warm-up.
-    _run_one(raws[0], chunk_texts, gateway_strip=gateway_strip)
+    _run_one(raws[0], chunk_texts)
 
     samples: dict[str, list[float]] = {stage: [] for stage in _STAGES}
     cpu_samples: list[float] = []
@@ -354,7 +343,7 @@ def benchmark(
         if profiler is not None:
             profiler.enable()
         cpu0, wall0 = time.process_time(), time.perf_counter()
-        stage_times = _run_one(raws[i], chunk_texts, gateway_strip=gateway_strip)
+        stage_times = _run_one(raws[i], chunk_texts)
         wall_samples.append(time.perf_counter() - wall0)
         cpu_samples.append(time.process_time() - cpu0)
         if profiler is not None:
@@ -365,7 +354,6 @@ def benchmark(
     result: dict[str, Any] = {
         "shape": dict(shape),
         "rounds": rounds,
-        "gateway_strip": gateway_strip,
         # Median is the headline: the machine is shared, and a single
         # contended round moves the mean without moving the code.
         "cpu_ms_median": round(statistics.median(cpu_samples) * 1000.0, 2),
@@ -449,11 +437,6 @@ def main() -> None:
         "--cache-stats", action="store_true", help="Report conversion cache hit rates"
     )
     parser.add_argument(
-        "--no-gateway-strip",
-        action="store_true",
-        help="Skip the engine's boundary _strip_internal_metadata pass",
-    )
-    parser.add_argument(
         "--n-messages", type=int, default=PRODUCTION_SHAPE["n_messages"]
     )
     parser.add_argument("--n-tools", type=int, default=PRODUCTION_SHAPE["n_tools"])
@@ -471,7 +454,6 @@ def main() -> None:
         shape,
         args.rounds,
         profile=args.profile,
-        gateway_strip=not args.no_gateway_strip,
     )
     if args.cache_stats:
         result["caches"] = _cache_report(shape, args.rounds)

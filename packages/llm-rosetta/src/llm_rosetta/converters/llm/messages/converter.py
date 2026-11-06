@@ -327,10 +327,10 @@ class MessagesConverter(BaseConverter):
         ir_messages = self.message_ops.p_messages_to_ir(messages)
         ir_request["messages"] = ir_messages
 
-        # 3. Tools (with process-level cache)
+        # 3. Tools (provider→IR, uncached after #1410)
         tools = provider_request.get("tools")
         if tools:
-            ir_request["tools"] = self._get_cached_p_tools_to_ir(tools)
+            ir_request["tools"] = self._convert_p_tools_to_ir(tools)
 
         # 4. Tool choice
         tool_choice = provider_request.get("tool_choice")

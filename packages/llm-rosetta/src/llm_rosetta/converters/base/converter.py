@@ -744,15 +744,17 @@ class BaseConverter(ABC):
     def _convert_p_tools_to_ir(self, tools: list[Any]) -> list[Any]:
         """Convert provider tool definitions to IR ToolDefinition list.
 
-        Default implementation iterates *tools* and calls
-        ``self.tool_ops.p_tool_definition_to_ir()`` for each entry.
-        Handles Google's list/None return transparently.
+        Iterates *tools* and calls ``self.tool_ops.p_tool_definition_to_ir()``
+        for each entry, handling Google's list/None return transparently.
 
-        .. note::
-            This is the **uncached** fallback.  In normal operation,
-            ``_get_cached_p_tools_to_ir`` calls ``tool_ops`` directly
-            with per-entry caching.  This method is retained for
-            direct use in tests or subclass customisation.
+        Deliberately uncached (#1410).  A per-tool cache key is a canonical
+        JSON hash of the declaration — 7-11 us per tool on the production
+        shape — while the reader it would skip is cheaper in every chat
+        dialect: for 93 tools, lookups cost 0.64-1.10 ms against 0.04-0.45 ms
+        of conversion, measured for all five dialects on both light and heavy
+        tool sets.  The IR→provider direction keeps its cache
+        (:meth:`_get_cached_ir_tools_to_p`), where a conversion costs about
+        what its key does.
         """
         ir_tools: list[Any] = []
         for t in tools:
@@ -993,67 +995,6 @@ class BaseConverter(ABC):
         return cast(IRResponse, data)
 
     # ==================== Per-entry conversion caching ====================
-
-    def _get_cached_p_tools_to_ir(self, tools: list[Any]) -> list[Any]:
-        """Per-entry provider→IR tool conversion with caching.
-
-        Looks up each tool individually in the conversion cache (spoke).
-        On hit, also marks the IR tool in the validation hub cache so
-        ``_validate_ir_request`` can skip re-hashing it.  On miss,
-        converts and caches (the hub mark happens later in
-        ``_validate_ir_request`` after successful validation).
-
-        Handles Google's list/None return from ``p_tool_definition_to_ir``
-        transparently.
-
-        .. warning::
-            Returned dicts are **shared references** into the cache.
-            Callers **must not** mutate them.
-
-        Args:
-            tools: Provider-format tool definition list.
-
-        Returns:
-            IR tool definition list.
-        """
-        from .helpers.cache import _SENTINEL, get_cached_tool_with_key, put_cached_tool
-
-        tag = self._CONVERTER_TAG + ":from_p"
-        ir_tools: list[Any] = []
-
-        for t in tools:
-            key, cached = get_cached_tool_with_key(tag, t)
-            if cached is not _SENTINEL:
-                if isinstance(cached, list):
-                    ir_tools.extend(cached)
-                elif cached is not None:
-                    ir_tools.append(cached)
-                continue
-
-            try:
-                result = self.tool_ops.p_tool_definition_to_ir(t)
-            except Exception as e:
-                tool_type = (
-                    t.get("type", "unknown")
-                    if isinstance(t, dict)
-                    else type(t).__name__
-                )
-                tool_name = (
-                    (t.get("function", {}).get("name") or t.get("name", "unnamed"))
-                    if isinstance(t, dict)
-                    else str(t)
-                )
-                raise ValueError(
-                    f"Unsupported tool type={tool_type!r} name={tool_name!r}: {e}"
-                ) from e
-
-            put_cached_tool(tag, t, result, key=key)
-            if isinstance(result, list):
-                ir_tools.extend(result)
-            elif result is not None:
-                ir_tools.append(result)
-
-        return ir_tools
 
     def _get_cached_ir_tools_to_p(
         self, ir_tools: list[Any], *, warnings: Any = None
