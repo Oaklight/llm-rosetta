@@ -9,9 +9,10 @@ blast radius before it is written.
 from __future__ import annotations
 
 import json
+import threading
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Literal
+from typing import Any, Literal
 
 import pytest
 
@@ -441,6 +442,106 @@ def test_a_nested_manifest_does_not_borrow_the_outer_one_s_leaves(tmp_path):
         {"api_key_env": "DEMO_KEY"}, _leaf_entries(outer / "provider.yaml")
     )
     assert fields["api_key_env"]["inherited_by"] == ["demo--alpha"]
+
+
+def _within(seconds: float, call: Any) -> Any:
+    """Run *call* in a thread and fail the test if it is still running.
+
+    A termination assertion cannot sit after the call: with the loop guard
+    removed the call never returns, so the suite would hang instead of a test
+    going red.
+    """
+    box: dict[str, Any] = {}
+
+    def runner() -> None:
+        box["value"] = call()
+
+    thread = threading.Thread(target=runner, daemon=True)
+    thread.start()
+    thread.join(seconds)
+    assert not thread.is_alive(), f"call did not return within {seconds}s"
+    return box["value"]
+
+
+def _symlink(target: Path, link: Path) -> None:
+    """Create a directory symlink, or skip where the platform refuses one."""
+    try:
+        link.symlink_to(target, target_is_directory=True)
+    except (OSError, NotImplementedError):  # pragma: no cover - platform
+        pytest.skip("directory symlinks are not available here")
+
+
+def test_a_leaf_reached_through_a_symlink_still_inherits(tmp_path):
+    """The loader follows a directory link, so the view must too.
+
+    ``demo/beta`` points at a vendor directory elsewhere.  The loader loads
+    ``demo--beta`` and merges the manifest into it, so a row that listed only
+    ``demo--alpha`` would answer "nobody inherits this" for a leaf that does.
+    """
+    elsewhere = tmp_path / "elsewhere"
+    (elsewhere / "beta").mkdir(parents=True)
+    (elsewhere / "beta" / "provider.yaml").write_text(
+        _leaf("demo--beta", "  display_name: beta\n"), encoding="utf-8"
+    )
+    root = tmp_path / "shims"
+    demo = root / "demo"
+    (demo / "alpha").mkdir(parents=True)
+    (demo / "provider.yaml").write_text(
+        _manifest("  api_key_env: DEMO_KEY\n"), encoding="utf-8"
+    )
+    (demo / "alpha" / "provider.yaml").write_text(
+        _leaf("demo--alpha", "  display_name: alpha\n"), encoding="utf-8"
+    )
+    _symlink(elsewhere / "beta", demo / "beta")
+
+    rows = manifest_rows(_request(tmp_path, root))
+
+    row = next(r for r in rows if r["vendor"] == "demo")
+    assert row["leaves"] == ["demo--alpha", "demo--beta"]
+
+    # And the view agrees with the loader, field by field, for the linked leaf.
+    from llm_rosetta.shims import load_providers_from_dir
+
+    loaded = {shim.name: shim for shim in load_providers_from_dir(root)}
+    beta = _merged_connection(
+        {"api_key_env": "DEMO_KEY"},
+        next(
+            leaf["own"]
+            for leaf in _leaf_entries(demo / "provider.yaml")
+            if leaf["name"] == "demo--beta"
+        ),
+        demo / "provider.yaml",
+    )
+    assert beta["api_key_env"] == loaded["demo--beta"].connection.api_key_env
+
+
+def test_a_symlink_loop_terminates_without_duplicates(tmp_path):
+    """A link back to an ancestor must not expand forever.
+
+    ``demo/loop`` points at ``demo``: two names, one real directory.  The
+    visited set is keyed on the resolved path, so the second visit is dropped;
+    the timeout is what makes removing that guard a failing test rather than a
+    hung suite.
+    """
+    root = tmp_path / "shims"
+    demo = root / "demo"
+    (demo / "alpha").mkdir(parents=True)
+    (demo / "provider.yaml").write_text(
+        _manifest("  api_key_env: DEMO_KEY\n"), encoding="utf-8"
+    )
+    (demo / "alpha" / "provider.yaml").write_text(
+        _leaf("demo--alpha", "  display_name: alpha\n"), encoding="utf-8"
+    )
+    _symlink(demo, demo / "loop")
+
+    rows = _within(5.0, lambda: manifest_rows(_request(tmp_path, root)))
+    row = next(r for r in rows if r["vendor"] == "demo")
+    assert row["leaves"] == ["demo--alpha"]
+
+    # No duplicates in the walk itself: a repeated real directory would show
+    # up here even where a set comparison would hide it.
+    paths = _within(5.0, lambda: shim_manifests._walk_definitions(demo, prune=False))
+    assert len(paths) == len(set(paths))
 
 
 def test_the_effective_connection_is_the_loader_s_merge(tmp_path, source):

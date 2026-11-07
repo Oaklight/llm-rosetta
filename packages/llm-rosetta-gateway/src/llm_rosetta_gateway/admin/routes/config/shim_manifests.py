@@ -18,7 +18,6 @@ none.
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 from typing import Any
 
@@ -219,35 +218,74 @@ def _read_definition(path: Path) -> dict[str, Any] | None:
     return cfg if isinstance(cfg, dict) else None
 
 
-def _definitions_below(directory: Path, *, skip: Path) -> list[Path]:
-    """Every ``provider.yaml`` below *directory*, not descending past one.
+def _real(path: Path | None) -> Path | None:
+    """The resolved path, or ``None`` when it cannot be resolved."""
+    if path is None:
+        return None
+    try:
+        return path.resolve()
+    except OSError:
+        return None
 
-    A definition owns its subtree, because the loader does not nest: a leaf
-    resolves against the manifest in its own vendor directory, and a
-    directory holding a ``provider.yaml`` is a leaf or a manifest, never a
-    level to walk through.  A plain ``rglob`` ignored that, so an outer
-    manifest claimed a nested vendor's leaves — an inheritance view of
-    something the loader never does.
+
+def _walk_definitions(
+    directory: Path, *, skip: Path | None = None, prune: bool = True
+) -> list[Path]:
+    """Every ``provider.yaml`` below *directory*, following directory links.
+
+    Two rules, both taken from the loader:
+
+    - It follows a symlinked directory (``iterdir`` and ``is_dir`` do), so a
+      walk that stopped at real directories answered "nobody inherits from
+      this manifest" for a leaf the loader does load and merge.  ``seen``
+      holds the resolved directories, so a link back to an ancestor cannot
+      loop.
+    - A definition owns its subtree: the loader does not nest, so a nested
+      manifest's leaves belong to it and not to an outer one.  That is what
+      *prune* stops at.
 
     Args:
-        directory: The directory to walk (the manifest's own directory).
-        skip: The definition being described.  It is not a member of the
-            result and does not stop the walk at its own level.
+        directory: The directory to walk.
+        skip: A definition to leave out of the result — the one being
+            described.  It does not stop the walk at its own level.
+        prune: Stop at each definition found.  False is for the inventory's
+            own scan, which wants a nested manifest listed as well.
 
     Returns:
         The definition paths, sorted.
     """
     found: list[Path] = []
-    for current, dirnames, filenames in os.walk(directory):
-        dirnames.sort()
-        if "provider.yaml" not in filenames:
+    seen: set[Path] = set()
+    skip_real = _real(skip)
+    stack = [directory]
+    while stack:
+        current = stack.pop()
+        real = _real(current)
+        if real is None or real in seen:
             continue
-        definition = Path(current) / "provider.yaml"
-        if definition == skip:
+        seen.add(real)
+        definition = current / "provider.yaml"
+        try:
+            entries = sorted(current.iterdir())
+        except OSError:
             continue
-        found.append(definition)
-        dirnames[:] = []
+        if definition.is_file() and _real(definition) != skip_real:
+            found.append(definition)
+            if prune:
+                continue
+        for entry in reversed(entries):
+            if entry.is_dir():
+                stack.append(entry)
     return sorted(found)
+
+
+def _definitions_below(directory: Path, *, skip: Path) -> list[Path]:
+    """Every definition below *directory*, stopping at the first one on a path.
+
+    The manifest's own leaves: a nested vendor's manifest owns everything
+    under it, so this is the set the loader would merge *skip* into.
+    """
+    return _walk_definitions(directory, skip=skip)
 
 
 def _leaves_below(path: Path) -> list[Path]:
@@ -264,7 +302,7 @@ def _root_manifests(origin: str, location: str, root: Path) -> list[dict[str, An
     entries: list[dict[str, Any]] = []
     if not root.is_dir():
         return entries
-    for path in sorted(root.rglob("provider.yaml")):
+    for path in _walk_definitions(root, prune=False):
         cfg = _read_definition(path)
         if cfg is None or any(key in cfg for key in _identity_keys()):
             continue
