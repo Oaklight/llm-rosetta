@@ -203,11 +203,20 @@ def _validate_remote_specs(remotes: Sequence[Mapping[str, Any]]) -> None:
     """
     for index, entry in enumerate(remotes):
         try:
-            normalize_mirror(entry.get("mirror"))
+            mirror = normalize_mirror(entry.get("mirror"))
         except ValueError as exc:
             raise ValueError(
                 f"config: 'shims.remotes[{index}].mirror' is invalid: {exc}"
             ) from None
+        if mirror is not None and entry.get("sha256") and mirror[1] is None:
+            # The mirror is the path an attacker can force (make the primary
+            # unreachable); without its own digest it would serve bytes the
+            # primary's pin never approved.
+            raise ValueError(
+                f"config: 'shims.remotes[{index}].mirror' needs its own 'sha256' "
+                "when the remote pins its primary: the two legs serve different "
+                "bytes, and an unpinned mirror would bypass the pin"
+            )
 
 
 def _validate_knobs(section: Mapping[str, Any]) -> None:
