@@ -517,7 +517,7 @@ class OpenResponsesConverter(BaseConverter):
             ir_request["messages"] = ir_messages
 
         # 3. Tools (provider→IR, uncached after #1410)
-        # Filter out disabled tools before caching (external_web_access=False)
+        # Filter out disabled tools before converting (external_web_access=False)
         tools = top_level_tools + nested_tools
         if tools:
             active_tools = [
@@ -979,11 +979,10 @@ class OpenResponsesConverter(BaseConverter):
         all reject a missing or empty name — so the client should hear that
         their tools are now addressed under a name we chose.
 
-        Emitted here rather than where the id is generated, because the
-        flatten is process-cached: the first request carrying a given
-        container would hear about it and every later one would not.  Once
-        per group, not once per child: the children of one container share the
-        name and the cause.
+        Emitted here, where the marker and the grouping are on hand, so
+        every request carrying such a container reports it.  Once per group,
+        not once per child: the children of one container share the name and
+        the cause.
         """
         reported: set[str] = set()
         for tool in ir_tools:

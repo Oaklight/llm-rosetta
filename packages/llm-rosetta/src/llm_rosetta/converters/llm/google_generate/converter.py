@@ -836,7 +836,7 @@ class GoogleGenerateConverter(BaseConverter):
         # and REST format (tools/tool_config at top level, generation params
         # inside "generationConfig").  ``config`` was extracted above.
 
-        # Tools — check SDK config first, then REST top-level (with cache)
+        # Tools — check SDK config first, then REST top-level (uncached, #1410)
         tools = config.get("tools") or provider_request.get("tools")
         if tools:
             ir_request["tools"] = self._convert_p_tools_to_ir(tools)

@@ -228,8 +228,7 @@ def _tag_child_group(
     if generated:
         # Marks the name as ours, so the passes that must treat a nameless
         # container differently from a named one can tell — and so a
-        # per-request warning can report it, which the flatten cannot: this
-        # conversion is process-cached.
+        # per-request warning can report it.
         meta[GENERATED_GROUP_MARKER] = True
     if defer_loading:
         meta["defer_loading"] = True
