@@ -11,8 +11,8 @@ and after on the same payloads:
 
 1. ``json.loads`` of the raw request body            (request decode)
 2. ``ConversionPipeline.convert_request``            (source → IR → target)
-4. ``json.dumps`` of the target body                 (upstream encode)
-5. per upstream chunk: ``json.loads`` → ``process_chunk`` → ``json.dumps``
+3. ``json.dumps`` of the target body                 (upstream encode)
+4. per upstream chunk: ``json.loads`` → ``process_chunk`` → ``json.dumps``
    per emitted event                                 (stream decode, convert, encode)
 
 Reported per stage: CPU time (``time.process_time``, the metric the change is

@@ -623,7 +623,9 @@ tool_entry_cache = LRUCache(maxsize=512)
 """Per-entry tool conversion cache.
 
 Keyed by ``(converter_tag:direction, single_tool_json)``.
-Stores individual tool conversion results (provider→IR or IR→provider).
+Stores individual tool conversion results for the IR→provider leg; the
+provider→IR leg is uncached since #1410, where a key costs more than the
+conversion it skips.
 At ~3KB per tool, 512 entries ≈ 1.5MB max.
 """
 
