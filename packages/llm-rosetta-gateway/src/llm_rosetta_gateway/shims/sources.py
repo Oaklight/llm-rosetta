@@ -937,7 +937,9 @@ def _install_archive(
 
     Raises:
         ShimArchiveMismatch: The bytes do not match the leg's pin.
-        ShimSourceError: The body is oversized, not an archive, or unsafe.
+        ShimArchiveUnusable: The body is oversized, not an archive, or unsafe.
+        OSError: This host could not create or write the extracted tree — a
+            local condition, not a verdict on the body.
     """
     if len(data) > MAX_ARCHIVE_BYTES:
         raise ShimArchiveUnusable(
@@ -1068,7 +1070,17 @@ def _fetch_first_usable(
             )
         except ShimArchiveMismatch:
             raise
-        except Exception as exc:
+        except OSError as exc:
+            # A local wall — a full disk, a permission, a read-only tree — says
+            # nothing about the body: the bytes may be perfect and this host
+            # cannot write them.  It is not a corruption signal (the class the
+            # stale cache must not soften), it is not a transport failure, and
+            # asking the other leg would need the same disk, so it is neither
+            # retried nor reported as the source's verdict.
+            raise ShimSourceError(
+                f"cannot install {leg} {url} locally: {type(exc).__name__}: {exc}"
+            ) from exc
+        except ShimSourceError as exc:
             # The server answered with something that is not the source.  On
             # an unpinned mirror that is a bad replica — the primary is still
             # asked.  Everywhere else it is final: the primary's answer, or a

@@ -1815,6 +1815,150 @@ class TestMirror:
         assert sources_mod._is_unreachable(TimeoutError("timed out")) is True
 
 
+class TestLocalInstallFailure:
+    """A host that cannot write is not a source that served the wrong bytes.
+
+    ENOSPC, EPERM and EROFS say nothing about the body: the bytes may be
+    perfect and this machine still cannot install them.  Such a failure must
+    degrade to the stale cache like a transport failure, keep a plain
+    :class:`ShimSourceError` class when there is nothing to degrade to — never
+    :class:`ShimArchiveUnusable`, which the cache must not soften — and never
+    try another leg, because the other leg needs the same disk.
+    """
+
+    @staticmethod
+    def _warnings(monkeypatch) -> list[str]:
+        seen: list[str] = []
+        monkeypatch.setattr(
+            sources_mod.logger, "warning", lambda msg, *args: seen.append(msg % args)
+        )
+        return seen
+
+    @staticmethod
+    def _http_get(calls: list[str] | None = None):
+        def get(url, **_kw):
+            if calls is not None:
+                calls.append(url)
+            return _provider_archive()
+
+        return get
+
+    def test_a_full_disk_degrades_to_the_stale_cache(self, tmp_path, monkeypatch):
+        """Warm cache + ENOSPC: the old bytes are still the answer."""
+        state = {"fail": False}
+        real_replace = sources_mod._atomic_replace
+
+        def replace(src, dest):
+            if state["fail"]:
+                raise OSError(28, "No space left on device")
+            real_replace(src, dest)
+
+        monkeypatch.setattr(sources_mod, "_atomic_replace", replace)
+        warnings = self._warnings(monkeypatch)
+        spec = {"url": "https://primary.example/shims.tar.gz", "refresh": "always"}
+        cache = tmp_path / "cache"
+        first = rebuild_shims(
+            extra_remotes=[spec], cache_root=cache, http_get=self._http_get()
+        )
+        assert first.sources[0].ok, first.sources[0].error
+
+        state["fail"] = True
+        src = rebuild_shims(
+            extra_remotes=[spec], cache_root=cache, http_get=self._http_get()
+        ).sources[0]
+        assert src.ok is True
+        assert src.stale is True
+        assert src.from_cache is True
+        assert any("using stale cache" in w and "[Errno 28]" in w for w in warnings)
+
+    def test_a_cold_full_disk_is_a_plain_source_error(self, tmp_path, monkeypatch):
+        """No cache to soften it: the class must stay distinguishable."""
+
+        def replace(src, dest):
+            raise OSError(28, "No space left on device")
+
+        monkeypatch.setattr(sources_mod, "_atomic_replace", replace)
+        src = rebuild_shims(
+            extra_remotes=[{"url": "https://primary.example/shims.tar.gz"}],
+            cache_root=tmp_path / "cache",
+            http_get=self._http_get(),
+        ).sources[0]
+        assert src.ok is False
+        assert (src.error or "").startswith("ShimSourceError:")
+        assert "ShimArchiveUnusable" not in (src.error or "")
+        assert "No space left on device" in (src.error or "")
+        assert src.unreachable is False
+
+    def test_a_write_denied_during_extraction_also_degrades(
+        self, tmp_path, monkeypatch
+    ):
+        """EPERM while writing a member is the same local wall as ENOSPC."""
+        state = {"fail": False}
+        real_extract = sources_mod._extract_archive
+
+        def extract(*args, **kwargs):
+            if state["fail"]:
+                raise PermissionError(13, "Permission denied")
+            return real_extract(*args, **kwargs)
+
+        monkeypatch.setattr(sources_mod, "_extract_archive", extract)
+        warnings = self._warnings(monkeypatch)
+        spec = {"url": "https://primary.example/shims.tar.gz", "refresh": "always"}
+        cache = tmp_path / "cache"
+        first = rebuild_shims(
+            extra_remotes=[spec], cache_root=cache, http_get=self._http_get()
+        )
+        assert first.sources[0].ok, first.sources[0].error
+
+        state["fail"] = True
+        src = rebuild_shims(
+            extra_remotes=[spec], cache_root=cache, http_get=self._http_get()
+        ).sources[0]
+        assert src.ok is True
+        assert src.stale is True
+        assert any("[Errno 13]" in w for w in warnings)
+
+    def test_a_local_failure_does_not_request_the_other_leg(
+        self, tmp_path, monkeypatch
+    ):
+        """The remembered mirror goes first; a local wall must stop there."""
+        state = {"primary_up": False, "fail": False}
+        calls: list[str] = []
+        real_replace = sources_mod._atomic_replace
+
+        def http_get(url, **_kw):
+            calls.append(url)
+            if "primary" in url and not state["primary_up"]:
+                raise ConnectionRefusedError("no route")
+            return _provider_archive()
+
+        def replace(src, dest):
+            if state["fail"]:
+                raise OSError(28, "No space left on device")
+            real_replace(src, dest)
+
+        monkeypatch.setattr(sources_mod, "_atomic_replace", replace)
+        spec = {
+            "url": "https://primary.example/shims.tar.gz",
+            "mirror": "https://mirror.example/shims.tar.gz",
+            "refresh": "always",
+        }
+        cache = tmp_path / "cache"
+        first = rebuild_shims(extra_remotes=[spec], cache_root=cache, http_get=http_get)
+        assert first.sources[0].ok, first.sources[0].error
+        assert first.sources[0].leg == "mirror"
+
+        state["primary_up"] = True
+        state["fail"] = True
+        calls.clear()
+        src = rebuild_shims(
+            extra_remotes=[spec], cache_root=cache, http_get=http_get
+        ).sources[0]
+        assert src.ok is True
+        assert src.stale is True
+        assert calls == ["https://mirror.example/shims.tar.gz"]
+
+
 class TestMirrorValidation:
     def test_a_template_string_is_accepted(self):
         assert sources_mod.normalize_mirror("https://m.example/x.tar.gz") == (
