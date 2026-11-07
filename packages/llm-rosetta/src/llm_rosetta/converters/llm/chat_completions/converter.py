@@ -35,6 +35,7 @@ from ....types.ir.stream import (
     ToolCallStartEvent,
     UsageEvent,
 )
+from ....ir.passes.tool_names import STRICT_TOOL_NAME_PATTERN
 from ...base import BaseConverter
 from ...base.errors import require_representable_finish_reason
 from ...base.helpers.stream import stream_opened_client_call
@@ -160,6 +161,9 @@ class ChatCompletionsConverter(BaseConverter):
     # Chat Completions has no native syntax for server-side tools: a client
     # asks for one by naming a function after the kind (see tool_ops.py).
     _SUPPORTS_NATIVE_SERVER_TOOLS = False
+    # OpenAI publishes ``^[a-zA-Z0-9_-]{1,64}$`` for a function name and
+    # rejects the request before the model runs when one does not match.
+    _TOOL_NAME_PATTERN = STRICT_TOOL_NAME_PATTERN
 
     def __init__(self):
         self.content_ops = self.content_ops_class()

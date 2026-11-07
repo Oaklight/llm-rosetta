@@ -44,6 +44,7 @@ from ...base import BaseConverter
 from ...base.context import ConversionContext, StreamContext
 from ....ir.primitives import expand_response
 from ....ir.primitives.finish_reason import reason_for_completed_turn
+from ....ir.passes.tool_names import STRICT_TOOL_NAME_PATTERN
 from ...base.helpers.citations import report_dropped_citation
 from ...base.helpers.extensions import extension_loss_warning, wire_extensions
 from llm_rosetta.conversion_warnings import DOWNGRADED, report_loss
@@ -284,6 +285,8 @@ class OpenResponsesConverter(BaseConverter):
     config_ops_class = OpenResponsesConfigOps
     _CONVERTER_TAG = "open_responses"
     _PASSTHROUGH_RESTORE_KEY = "output"
+    # The spec publishes ``^[a-zA-Z0-9_-]{1,64}$`` for a function name.
+    _TOOL_NAME_PATTERN = STRICT_TOOL_NAME_PATTERN
 
     # Preserve-mode echo fields and required response defaults.  These are the
     # spec-level defaults (no OpenAI-only lifecycle fields, no forced

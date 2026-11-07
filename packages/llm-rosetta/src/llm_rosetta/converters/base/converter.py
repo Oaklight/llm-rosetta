@@ -7,6 +7,7 @@ Defines the basic interface for converters (abstract base class, functional doma
 
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator, Mapping, Sequence
+import re
 from typing import Any, cast
 
 from ...types.ir.passthrough import ProviderPassthroughEvent
@@ -88,6 +89,13 @@ class BaseConverter(ABC):
     # request for that capability and promoted by the pipeline.  Chat
     # Completions overrides to False.
     _SUPPORTS_NATIVE_SERVER_TOOLS: bool = True
+
+    # What the format accepts as a function name, matched in full, or None
+    # when it imposes no shape.  Chat Completions, Messages and Responses all
+    # publish ``^[a-zA-Z0-9_-]{1,64}$``; a target declaring it has every tool
+    # name rewritten to match, and the client's own spelling restored on the
+    # response leg (``sanitize_tool_names``).
+    _TOOL_NAME_PATTERN: re.Pattern[str] | None = None
 
     # Enable/disable IR validation on from_provider output
     validate_output: bool = True
@@ -1024,12 +1032,14 @@ class BaseConverter(ABC):
         tag = self._CONVERTER_TAG + ":to_p"
         results: list[Any] = []
 
-        for t in ir_tools:
+        for index, t in enumerate(ir_tools):
             key, cached = get_cached_tool_with_key(tag, t)
             if cached is not _SENTINEL:
                 converted = cached
             else:
-                converted = self.tool_ops.ir_tool_definition_to_p(t, warnings=warnings)
+                converted = self.tool_ops.ir_tool_definition_to_p(
+                    t, warnings=warnings, tool_index=index
+                )
                 # A falsy result means the target cannot express this tool (e.g.
                 # an intrinsic tool on a provider without server tools).  It is
                 # not cached: the conversion declines the tool every time, and

@@ -30,8 +30,8 @@ from ...base.helpers.opaque import CARRIER_KEY
 from ...base.tools import (
     allowed_tool_names,
     allowed_tool_refs,
-    sanitize_schema,
     sanitize_tool_call_id,
+    sanitize_tool_parameters,
 )
 from ...base.tools.intrinsic import (
     get_native_definition,
@@ -220,9 +220,11 @@ class GoogleGenerateToolOps(BaseToolOps):
         parameters = ir_tool.get("parameters")
         if parameters:
             sanitized = (
-                sanitize_schema(
+                sanitize_tool_parameters(
                     parameters,
+                    tool=ir_tool,
                     extra_strip_keys={"additionalProperties", "title"},
+                    warnings=kwargs.get("warnings"),
                 )
                 if isinstance(parameters, dict)
                 else parameters

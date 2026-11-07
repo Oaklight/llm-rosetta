@@ -10,6 +10,7 @@ from __future__ import annotations
 
 
 import logging
+import re
 from collections import Counter, defaultdict
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -124,6 +125,58 @@ class ToolNameMap:
                 return grouped
         return self._client.get(upstream_name, (upstream_name, None))
 
+    def record_rename(
+        self,
+        client_name: str,
+        namespace: str | None,
+        upstream_name: str,
+        *,
+        client_group: str | None = None,
+        previous: str | None = None,
+    ) -> None:
+        """Register a rename this map did not derive from a group or a collision.
+
+        A name the target's own rule rejected — a ``/`` in an MCP tool name,
+        say — is rewritten to a spelling the target accepts; this records the
+        pair so both legs of the conversion agree.  The request leg finds the
+        new spelling through :meth:`to_upstream`, and the response leg restores
+        the client's own through :meth:`to_client`.
+
+        Args:
+            client_name: The name the client wrote.
+            namespace: The tool's group as map keys spell it — the real one,
+                generated or not, because that is what a history call's key
+                is built from.
+            upstream_name: The name the target will see.
+            client_group: The group the client itself named, or ``None`` when
+                the group is one we generated and must not hand back.
+            previous: The tool's upstream name before the rename, dropped from
+                the reverse index so it cannot answer for a name that is no
+                longer sent.
+        """
+        if previous is not None and previous != upstream_name:
+            if self._client.get(previous, (None, None))[0] == client_name:
+                del self._client[previous]
+            self._client_grouped.pop((previous, client_group), None)
+        self._upstream[(client_name, namespace)] = upstream_name
+        self._client[upstream_name] = (client_name, client_group)
+        self._bare[client_name] = upstream_name
+        if client_group is not None:
+            self._client_grouped[(upstream_name, client_group)] = (
+                client_name,
+                client_group,
+            )
+
+    def record_ambiguous(self, client_name: str) -> None:
+        """Mark a bare client name as one that resolves to no single tool.
+
+        Several tools answering to one name reach the wire under different
+        spellings, so a call naming it with no namespace belongs to none of
+        them — :meth:`to_upstream` falls back to the name itself, and the
+        ambiguity is what the reports say.
+        """
+        self._bare[client_name] = None
+
     def __bool__(self) -> bool:
         return bool(self._client or self._upstream)
 
@@ -132,6 +185,12 @@ class ToolNameMap:
 #: publish ``^[a-zA-Z0-9_-]+$`` with a cap of this length; every other target is
 #: more permissive, so one budget covers them all.
 MAX_TOOL_NAME_LEN = 64
+
+#: The shape those same targets publish, as a target declares it: ASCII
+#: letters, digits, ``_`` and ``-``, at most :data:`MAX_TOOL_NAME_LEN` long.
+#: A format that accepts this shape only sets it as its ``_TOOL_NAME_PATTERN``,
+#: and every tool name is rewritten to match before it goes upstream.
+STRICT_TOOL_NAME_PATTERN = re.compile(rf"[a-zA-Z0-9_-]{{1,{MAX_TOOL_NAME_LEN}}}")
 
 
 def _is_generated_group(tool: Mapping[str, Any]) -> bool:
@@ -476,6 +535,140 @@ def build_tool_name_map(ir_request: dict[str, Any]) -> ToolNameMap:
         frozenset(generated_claim - named_claim),
         client_grouped,
     )
+
+
+#: Characters a strict target accepts in a tool name; OpenAI and Anthropic both
+#: publish ``^[a-zA-Z0-9_-]+$``.  An illegal character becomes ``_`` rather
+#: than disappearing, so ``mcp__srv/fs__read`` keeps its shape.
+_ILLEGAL_TOOL_NAME_CHAR = re.compile(r"[^A-Za-z0-9_-]")
+_EMPTY_NAME_FALLBACK = "_"
+
+
+def _legal_tool_name(
+    client_name: str, used_names: set[str], pattern: re.Pattern[str]
+) -> str:
+    """Build a name *pattern* accepts and no other tool upstream has.
+
+    Always succeeds.  The upstream spelling is ours to choose — the client
+    never sees it, addressing its tool by the name it wrote and receiving that
+    name back through :class:`ToolNameMap` — so a name is only ever rewritten,
+    never dropped.  The first candidate is the client's name with every
+    character the target rejects replaced by ``_``, which keeps it readable.
+    A candidate already taken, or one still too long, falls back to the digest
+    suffix of ``truncate_with_digest``, seeded from the original name so
+    identical requests produce identical spellings and the target's cache is
+    not invalidated per call.
+    """
+    base = _ILLEGAL_TOOL_NAME_CHAR.sub("_", client_name) or _EMPTY_NAME_FALLBACK
+    if pattern.fullmatch(base) and base not in used_names:
+        return base
+
+    max_attempts = 1000
+    for attempt in range(max_attempts):
+        seed = f"{client_name}\0{attempt}" if attempt else client_name
+        candidate = truncate_with_digest(base, MAX_TOOL_NAME_LEN, seed=seed, force=True)
+        if pattern.fullmatch(candidate) and candidate not in used_names:
+            return candidate
+    else:
+        raise RuntimeError(
+            f"Tool name sanitization exhausted {max_attempts} attempts for "
+            f"{client_name!r}"
+        )
+
+
+def sanitize_tool_names(
+    ir_request: dict[str, Any],
+    *,
+    pattern: re.Pattern[str],
+    name_map: ToolNameMap,
+    warnings: list[str],
+) -> bool:
+    """Rewrite every tool name *pattern* rejects, recording each rename.
+
+    A Model Context Protocol server exports its tools under names like
+    ``mcp_toolregistry-server-local_fs/file_search-glob``: fine in a URL and
+    in most JSON, but not in the ``^[a-zA-Z0-9_-]+$`` that every OpenAI- and
+    Anthropic-shaped endpoint publishes for a function name.  Such an upstream
+    rejects the whole request over it (#1426).
+
+    The rename happens here, against the *target*, because only the target
+    knows the shape it accepts.  Each rename is recorded in *name_map*, which
+    is what the history rewrite and the response leg read, so the client keeps
+    addressing the tool by the name it declared and gets that name back in
+    every call and result.
+
+    A name that already matches is left exactly as it is — rewriting it would
+    cost the target's prompt cache for nothing.  A name is only ever renamed,
+    never dropped: the target's rule is about spelling, and the client still
+    owns the tool it declared.
+
+    Args:
+        ir_request: The IR request dict.  Mutated in place, like the other
+            name passes.
+        pattern: What the target accepts, matched in full.
+        name_map: The map to record renames in.
+        warnings: Receives one line per renamed tool.
+
+    Returns:
+        Whether anything was renamed.
+    """
+    tools = ir_request.get("tools")
+    if not tools:
+        return False
+
+    used_names = {
+        tool["name"]
+        for tool in tools
+        if isinstance(tool, dict) and isinstance(tool.get("name"), str)
+    }
+
+    renamed_names: Counter[str] = Counter()
+    for tool in tools:
+        if not isinstance(tool, dict):
+            continue
+        wire_name = tool.get("name")
+        if not isinstance(wire_name, str) or pattern.fullmatch(wire_name):
+            continue
+        metadata = tool.get("metadata") or {}
+        # The client's own name, which a collision pass may already have
+        # rewritten; that spelling is what the response leg has to restore.
+        client_name = metadata.get("_original_name") or wire_name
+        upstream_name = _legal_tool_name(client_name, used_names, pattern)
+
+        tool["name"] = upstream_name
+        used_names.discard(wire_name)
+        used_names.add(upstream_name)
+        renamed_names[client_name] += 1
+        if metadata.get("_original_name") != client_name:
+            # Record the client's spelling where every other rename records
+            # it (`qualify_tool_names`), so a warning or a reader further down
+            # the conversion can name the tool the way the client wrote it
+            # while the body carries the upstream spelling.
+            tool["metadata"] = {**metadata, "_original_name": client_name}
+
+        tool_group = tool.get("tool_group")
+        name_map.record_rename(
+            client_name,
+            tool_group,
+            upstream_name,
+            client_group=None if _is_generated_group(tool) else tool_group,
+            previous=wire_name,
+        )
+        warnings.append(
+            f"Tool {client_name!r} is not a legal name for the target (it "
+            f"must match {pattern.pattern!r}), so it goes upstream as "
+            f"{upstream_name!r}; calls and results are translated back to the "
+            "name the client wrote"
+        )
+
+    # A client name two tools answer to cannot resolve to one upstream
+    # spelling, so it is recorded as ambiguous rather than pointing at one of
+    # them — the same treatment `build_tool_name_map` gives it.
+    for client_name, count in renamed_names.items():
+        if count > 1:
+            name_map.record_ambiguous(client_name)
+
+    return bool(renamed_names)
 
 
 def _drop_legacy_namespace(target: dict[str, Any]) -> None:

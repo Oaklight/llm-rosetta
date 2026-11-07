@@ -33,8 +33,8 @@ from ...base.tools import (
     ir_strict,
     make_intrinsic_tool_definition,
     prefixed_tool_call_id,
-    sanitize_schema,
     sanitize_tool_call_id,
+    sanitize_tool_parameters,
     write_ir_strict,
 )
 
@@ -178,7 +178,12 @@ class MessagesToolOps(BaseToolOps):
             result["strict"] = strict
         raw_schema = ir_tool.get("parameters", {})
         schema = (
-            sanitize_schema(raw_schema, extra_strip_keys={"title"})
+            sanitize_tool_parameters(
+                raw_schema,
+                tool=ir_tool,
+                extra_strip_keys={"title"},
+                warnings=kwargs.get("warnings"),
+            )
             if isinstance(raw_schema, dict)
             else raw_schema
         )

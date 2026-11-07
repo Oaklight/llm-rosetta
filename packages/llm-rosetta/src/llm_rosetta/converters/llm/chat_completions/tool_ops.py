@@ -29,8 +29,8 @@ from ...base.tools import (
     mark_tool_error,
     mark_tool_error_text,
     provider_allowed_tools_to_ir,
-    sanitize_schema,
     sanitize_tool_call_id,
+    sanitize_tool_parameters,
     warn_tool_error,
     write_ir_strict,
 )
@@ -160,7 +160,12 @@ class ChatCompletionsToolOps(BaseToolOps):
             }
             parameters = ir_tool.get("parameters")
             if parameters and isinstance(parameters, dict):
-                func_def["parameters"] = sanitize_schema(parameters)
+                func_def["parameters"] = sanitize_tool_parameters(
+                    parameters,
+                    tool=ir_tool,
+                    tool_index=kwargs.get("tool_index"),
+                    warnings=kwargs.get("warnings"),
+                )
             elif parameters:
                 func_def["parameters"] = parameters
             strict = ir_strict(ir_tool)
@@ -171,7 +176,14 @@ class ChatCompletionsToolOps(BaseToolOps):
         # Unknown tool types: wrap as Chat Completions function.
         raw_params = ir_tool.get("parameters", {})
         params = (
-            sanitize_schema(raw_params) if isinstance(raw_params, dict) else raw_params
+            sanitize_tool_parameters(
+                raw_params,
+                tool=ir_tool,
+                tool_index=kwargs.get("tool_index"),
+                warnings=kwargs.get("warnings"),
+            )
+            if isinstance(raw_params, dict)
+            else raw_params
         )
         return {
             "type": "function",

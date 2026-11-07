@@ -46,6 +46,7 @@ from ....types.ir.stream import (
     ToolResultEvent,
     UsageEvent,
 )
+from ....ir.passes.tool_names import STRICT_TOOL_NAME_PATTERN
 from ...base import BaseConverter
 from ...base.errors import require_representable_finish_reason
 from llm_rosetta.conversion_warnings import DOWNGRADED, report_loss
@@ -196,6 +197,9 @@ class MessagesConverter(BaseConverter):
     config_ops_class = MessagesConfigOps
     _CONVERTER_TAG = "messages"
     _PASSTHROUGH_RESTORE_KEY = "content"
+    # Anthropic publishes ``^[a-zA-Z0-9_-]{1,64}$`` for a tool name and
+    # rejects the request when one does not match.
+    _TOOL_NAME_PATTERN = STRICT_TOOL_NAME_PATTERN
     _INTRINSIC_IR_TRANSFORMS = (hoist_late_system_messages(), auto_cache_breakpoints())
 
     def __init__(self):
