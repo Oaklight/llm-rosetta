@@ -15,12 +15,15 @@ from typing import Literal
 
 import pytest
 
-from llm_rosetta_gateway.admin.routes.config import shim_files, shim_manifests
+from llm_rosetta_gateway.admin.routes.config import shim_manifests
 from llm_rosetta_gateway.admin.routes.config.shim_manifests import (
     _fields,
+    _leaf_entries,
+    _merged_connection,
     get_shim_manifest,
     get_shim_manifests,
     manifest_problem,
+    manifest_rows,
     post_preview_shim_manifest,
     put_shim_manifest,
 )
@@ -384,9 +387,85 @@ async def test_a_manifest_path_outside_the_sources_cannot_be_written(tmp_path, s
     assert outside.read_text(encoding="utf-8").startswith("connection:\n  keyless")
 
 
-def test_a_manifest_above_no_leaf_is_not_listed():
-    """The walk needs a leaf to inherit: a stray file is not a manifest."""
-    assert _fields({}, []) == {}
+def test_a_manifest_above_no_leaf_is_not_listed(tmp_path):
+    """A ``provider.yaml`` nothing inherits from is not a manifest row.
+
+    Without the guard every vendor directory a source root happens to hold
+    becomes an editable manifest, at a path the loader does not read as one.
+    Drive the walk rather than the field formatter: this test used to assert
+    ``_fields({}, []) == {}`` and could not fail.
+    """
+    root = tmp_path / "shims"
+    (root / "demo").mkdir(parents=True)
+    (root / "demo" / "provider.yaml").write_text(
+        _manifest("  api_key_env: DEMO_KEY\n"), encoding="utf-8"
+    )
+
+    rows = manifest_rows(_request(tmp_path, root))
+
+    assert not [row for row in rows if Path(row["path"]).is_relative_to(root)]
+
+
+def test_a_nested_manifest_does_not_borrow_the_outer_one_s_leaves(tmp_path):
+    """The loader does not nest: a leaf belongs to its own vendor's manifest.
+
+    A plain ``rglob`` let the outer manifest claim ``nested/beta`` as well, so
+    the inheritance view said one leaf inherited two manifests' ``api_key_env``
+    at once — an inheritance the loader never performs.
+    """
+    root = tmp_path / "shims"
+    outer = root / "demo"
+    nested = outer / "nested"
+    (outer / "alpha").mkdir(parents=True)
+    (nested / "beta").mkdir(parents=True)
+    (outer / "provider.yaml").write_text(
+        _manifest("  api_key_env: DEMO_KEY\n"), encoding="utf-8"
+    )
+    (nested / "provider.yaml").write_text(
+        _manifest("  api_key_env: NESTED_KEY\n"), encoding="utf-8"
+    )
+    (outer / "alpha" / "provider.yaml").write_text(
+        _leaf("demo--alpha", "  display_name: alpha\n"), encoding="utf-8"
+    )
+    (nested / "beta" / "provider.yaml").write_text(
+        _leaf("nested--beta", "  display_name: beta\n"), encoding="utf-8"
+    )
+
+    rows = {row["vendor"]: row for row in manifest_rows(_request(tmp_path, root))}
+
+    assert rows["demo"]["leaves"] == ["demo--alpha"]
+    assert rows["nested"]["leaves"] == ["nested--beta"]
+    # The same rule one level down: beta inherits from `nested`, not from
+    # `demo`, so the outer field view must not name it.
+    fields = _fields(
+        {"api_key_env": "DEMO_KEY"}, _leaf_entries(outer / "provider.yaml")
+    )
+    assert fields["api_key_env"]["inherited_by"] == ["demo--alpha"]
+
+
+def test_the_effective_connection_is_the_loader_s_merge(tmp_path, source):
+    """The preview believes this merge, so pin it to what the loader produces.
+
+    ``_merged_connection`` delegates to the loader today; a second rule that
+    drifted from it would name the wrong leaves after a save, and nothing else
+    in this file loads the fixture through the core.
+    """
+    from llm_rosetta.shims import load_providers_from_dir
+
+    manifest_path = source / "demo" / "provider.yaml"
+    connection = {
+        "base_url": "https://demo.example/v1",
+        "api_key_env": "DEMO_KEY",
+        "headers": {"x-api-version": "2024-01"},
+    }
+    loaded = {shim.name: shim for shim in load_providers_from_dir(source)}
+
+    for leaf in _leaf_entries(manifest_path):
+        view = _merged_connection(connection, leaf["own"], manifest_path)
+        shim = loaded[leaf["name"]]
+        assert view["base_url"] == shim.connection.base_url
+        assert view["api_key_env"] == shim.connection.api_key_env
+        assert view["headers"] == shim.connection.headers
 
 
 def test_fields_reports_a_header_override_that_is_not_a_field_override():
@@ -399,6 +478,17 @@ def test_fields_reports_a_header_override_that_is_not_a_field_override():
     assert fields["headers"]["x-b"]["inherited_by"] == ["leaf"]
 
 
-def test_shim_files_still_lists_only_shims(tmp_path, source):
+@pytest.mark.asyncio
+async def test_shim_files_still_lists_only_shims(tmp_path, source):
     """The split is a contract: `shims` resolves a shim, `manifests` does not."""
-    assert shim_files._shim_roots  # imported for the manifest walk
+    payload = _body(await get_loaded_shims(_request(tmp_path, source)))
+
+    names = {row["name"] for row in payload["shims"]}
+    assert {"demo--alpha", "demo--beta", "demo--gamma"} <= names
+    # A manifest has no identity, so folding it into `shims` would put a row
+    # there that no picker can resolve.
+    assert "demo" not in names
+    assert "demo" in {row["vendor"] for row in payload["manifests"]}
+    # The manifest's own file never appears among the shim rows.
+    manifest_paths = {row["path"] for row in payload["manifests"]}
+    assert not manifest_paths & {row["path"] for row in payload["shims"]}

@@ -18,6 +18,7 @@ none.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -218,12 +219,43 @@ def _read_definition(path: Path) -> dict[str, Any] | None:
     return cfg if isinstance(cfg, dict) else None
 
 
+def _definitions_below(directory: Path, *, skip: Path) -> list[Path]:
+    """Every ``provider.yaml`` below *directory*, not descending past one.
+
+    A definition owns its subtree, because the loader does not nest: a leaf
+    resolves against the manifest in its own vendor directory, and a
+    directory holding a ``provider.yaml`` is a leaf or a manifest, never a
+    level to walk through.  A plain ``rglob`` ignored that, so an outer
+    manifest claimed a nested vendor's leaves — an inheritance view of
+    something the loader never does.
+
+    Args:
+        directory: The directory to walk (the manifest's own directory).
+        skip: The definition being described.  It is not a member of the
+            result and does not stop the walk at its own level.
+
+    Returns:
+        The definition paths, sorted.
+    """
+    found: list[Path] = []
+    for current, dirnames, filenames in os.walk(directory):
+        dirnames.sort()
+        if "provider.yaml" not in filenames:
+            continue
+        definition = Path(current) / "provider.yaml"
+        if definition == skip:
+            continue
+        found.append(definition)
+        dirnames[:] = []
+    return sorted(found)
+
+
 def _leaves_below(path: Path) -> list[Path]:
     """The leaf definitions strictly below the directory holding *path*."""
     return [
         child
-        for child in path.parent.rglob("provider.yaml")
-        if child != path and _yaml_meta(child) is not None
+        for child in _definitions_below(path.parent, skip=path)
+        if _yaml_meta(child) is not None
     ]
 
 
@@ -305,12 +337,12 @@ def _leaf_entries(manifest_path: Path) -> list[dict[str, Any]]:
     """Every leaf below *manifest_path*, with the connection values it declares.
 
     Read from the files rather than the registry: a leaf the loader skipped
-    still inherits nothing, and showing it is how the operator finds out.
+    still inherits nothing, and showing it is how the operator finds out.  The
+    walk stops at a nested definition, because the loader would attribute its
+    leaves to it rather than to this manifest.
     """
     leaves: list[dict[str, Any]] = []
-    for path in sorted(manifest_path.parent.rglob("provider.yaml")):
-        if path == manifest_path:
-            continue
+    for path in _definitions_below(manifest_path.parent, skip=manifest_path):
         meta = _yaml_meta(path)
         if meta is None:
             continue
