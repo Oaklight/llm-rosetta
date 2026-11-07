@@ -1067,8 +1067,10 @@ class TestMirror:
         data = _provider_archive()
         actual = hashlib.sha256(data).hexdigest()
         expected = "0" * 64
+        calls: list[str] = []
 
         def http_get(url, **_kw):
+            calls.append(url)
             if "primary" in url:
                 raise ConnectionRefusedError("no route")
             return data
@@ -1091,6 +1093,11 @@ class TestMirror:
         assert "via mirror" in error
         assert expected in error
         assert actual in error
+        # A pin mismatch is final: the primary it replaced is never asked.
+        assert calls == [
+            "https://primary.example/shims.tar.gz",
+            "https://mirror.example/shims.tar.gz",
+        ]
 
         with pytest.raises(ShimSourceError):
             rebuild_shims(
@@ -1289,11 +1296,530 @@ class TestMirror:
         assert second.sources[0].ok, second.sources[0].error
         assert len(calls) == before  # no refetch forced by the other leg's pin
 
+    def test_the_primary_token_is_not_sent_to_the_mirror(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        """A bearer token belongs to the origin that declared it."""
+        monkeypatch.setenv("PRIMARY_TOKEN", "SECRET-CANARY-TOKEN")
+        seen: dict[str, dict[str, str]] = {}
+
+        def http_get(url, *, headers=None, **_kw):
+            seen[url] = dict(headers or {})
+            if "primary" in url:
+                raise ConnectionRefusedError("no route")
+            return _provider_archive()
+
+        report = rebuild_shims(
+            extra_remotes=[
+                {
+                    "url": "https://primary.example/shims.tar.gz",
+                    "token_env": "PRIMARY_TOKEN",
+                    "mirror": "https://mirror.example/shims.tar.gz",
+                }
+            ],
+            cache_root=tmp_path / "cache",
+            http_get=http_get,
+        )
+        src = report.sources[0]
+        assert src.ok, src.error
+        assert src.leg == "mirror"
+        # The half that was already right, pinned again: the primary gets it.
+        assert (
+            seen["https://primary.example/shims.tar.gz"]["Authorization"]
+            == "Bearer SECRET-CANARY-TOKEN"
+        )
+        # The mirror is another origin, so it never sees the credential.
+        assert "Authorization" not in seen["https://mirror.example/shims.tar.gz"]
+
+    def test_a_mirror_on_the_primary_origin_keeps_the_token(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        """The same host is the same trust boundary, so the token still rides."""
+        monkeypatch.setenv("PRIMARY_TOKEN", "sekret")
+        seen: dict[str, dict[str, str]] = {}
+
+        def http_get(url, *, headers=None, **_kw):
+            seen[url] = dict(headers or {})
+            if "/repo/" in url:
+                raise ConnectionRefusedError("no route")
+            return _provider_archive()
+
+        report = rebuild_shims(
+            extra_remotes=[
+                {
+                    "url": "https://primary.example/repo/shims.tar.gz",
+                    "token_env": "PRIMARY_TOKEN",
+                    "mirror": "https://primary.example/mirror/shims.tar.gz",
+                }
+            ],
+            cache_root=tmp_path / "cache",
+            http_get=http_get,
+        )
+        assert report.sources[0].ok, report.sources[0].error
+        assert (
+            seen["https://primary.example/mirror/shims.tar.gz"]["Authorization"]
+            == "Bearer sekret"
+        )
+
+    @pytest.mark.parametrize(
+        "first, second, same",
+        [
+            ("https://h/p", "https://h:443/m", True),
+            ("https://h:443/p", "https://h/m", True),
+            ("http://h/p", "http://h:80/m", True),
+            ("https://h/p", "https://h:8443/m", False),
+            ("https://h/p", "http://h:443/m", False),
+            ("https://h/p", "https://other/m", False),
+            # A host is compared case-insensitively, and an IPv6 literal keeps
+            # its brackets out of the comparison.
+            ("https://H/p", "https://h:443/m", True),
+            ("https://[::1]/p", "https://[::1]:443/m", True),
+            ("https://[::1]:8443/p", "https://[::1]/m", False),
+        ],
+    )
+    def test_an_origin_compares_the_effective_port(self, first, second, same):
+        """An explicit default port is the same origin, not another one."""
+        assert sources_mod._same_origin(first, second) is same
+
+    def test_a_mirror_on_the_default_port_keeps_the_token(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        """Writing :443 explicitly must not cost the credential."""
+        monkeypatch.setenv("PRIMARY_TOKEN", "sekret")
+        seen: dict[str, dict[str, str]] = {}
+
+        def http_get(url, *, headers=None, **_kw):
+            seen[url] = dict(headers or {})
+            if "/repo/" in url:
+                raise ConnectionRefusedError("no route")
+            return _provider_archive()
+
+        report = rebuild_shims(
+            extra_remotes=[
+                {
+                    "url": "https://primary.example/repo/shims.tar.gz",
+                    "token_env": "PRIMARY_TOKEN",
+                    "mirror": "https://primary.example:443/mirror/shims.tar.gz",
+                }
+            ],
+            cache_root=tmp_path / "cache",
+            http_get=http_get,
+        )
+        assert report.sources[0].ok, report.sources[0].error
+        assert (
+            seen["https://primary.example:443/mirror/shims.tar.gz"]["Authorization"]
+            == "Bearer sekret"
+        )
+
+    def test_a_mirror_can_carry_its_own_credential(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        """A mirror that needs a credential declares its own token_env."""
+        monkeypatch.setenv("PRIMARY_TOKEN", "primary-secret")
+        monkeypatch.setenv("MIRROR_TOKEN", "mirror-secret")
+        seen: dict[str, dict[str, str]] = {}
+
+        def http_get(url, *, headers=None, **_kw):
+            seen[url] = dict(headers or {})
+            if "primary" in url:
+                raise ConnectionRefusedError("no route")
+            return _provider_archive()
+
+        report = rebuild_shims(
+            extra_remotes=[
+                {
+                    "url": "https://primary.example/shims.tar.gz",
+                    "token_env": "PRIMARY_TOKEN",
+                    "mirror": {
+                        "url_template": "https://mirror.example/shims.tar.gz",
+                        "token_env": "MIRROR_TOKEN",
+                    },
+                }
+            ],
+            cache_root=tmp_path / "cache",
+            http_get=http_get,
+        )
+        assert report.sources[0].ok, report.sources[0].error
+        assert (
+            seen["https://primary.example/shims.tar.gz"]["Authorization"]
+            == "Bearer primary-secret"
+        )
+        assert (
+            seen["https://mirror.example/shims.tar.gz"]["Authorization"]
+            == "Bearer mirror-secret"
+        )
+
+    def test_a_pinned_primary_refuses_an_unpinned_mirror(self, tmp_path: Path):
+        """An unpinned mirror would serve bytes the primary's pin never approved."""
+
+        def http_get(url, **_kw):
+            if "primary" in url:
+                raise ConnectionRefusedError("no route")
+            return _provider_archive()
+
+        report = rebuild_shims(
+            extra_remotes=[
+                {
+                    "url": "https://primary.example/shims.tar.gz",
+                    "sha256": "1" * 64,
+                    "mirror": "https://mirror.example/shims.tar.gz",
+                }
+            ],
+            cache_root=tmp_path / "cache",
+            http_get=http_get,
+        )
+        src = report.sources[0]
+        assert src.ok is False
+        error = src.error or ""
+        assert "mirror" in error
+        assert "sha256" in error
+
+    def test_a_mirror_http_error_falls_through_to_the_primary(self, tmp_path: Path):
+        """A remembered mirror's 404 must not outrank a primary nobody asked."""
+        data = _provider_archive()
+        state = {"primary": "refuse", "mirror": "serve"}
+
+        def http_get(url, **_kw):
+            leg = "primary" if "primary" in url else "mirror"
+            if state[leg] == "refuse":
+                raise ConnectionRefusedError(f"{leg} down")
+            if state[leg] == "404":
+                raise HTTPError(404, "", url)
+            return data
+
+        spec = {
+            "url": "https://primary.example/shims.tar.gz",
+            "mirror": "https://mirror.example/shims.tar.gz",
+            "refresh": "always",
+        }
+        cache = tmp_path / "cache"
+        first = rebuild_shims(extra_remotes=[spec], cache_root=cache, http_get=http_get)
+        assert first.sources[0].leg == "mirror"
+
+        state.update(primary="serve", mirror="404")
+        calls: list[str] = []
+
+        def recording_get(url, **kw):
+            calls.append(url)
+            return http_get(url, **kw)
+
+        second = rebuild_shims(
+            extra_remotes=[spec], cache_root=cache, http_get=recording_get
+        )
+        src = second.sources[0]
+        assert src.ok, src.error
+        assert src.leg == "primary"
+        assert calls == [
+            "https://mirror.example/shims.tar.gz",
+            "https://primary.example/shims.tar.gz",
+        ]
+
+    def test_no_usable_leg_names_both(self, tmp_path: Path):
+        """A mirror error on top of an unreachable primary says both."""
+
+        def http_get(url, **_kw):
+            if "mirror" in url:
+                raise HTTPError(404, "", url)
+            raise ConnectionRefusedError("no route")
+
+        report = rebuild_shims(
+            extra_remotes=[
+                {
+                    "url": "https://primary.example/shims.tar.gz",
+                    "mirror": "https://mirror.example/shims.tar.gz",
+                }
+            ],
+            cache_root=tmp_path / "cache",
+            http_get=http_get,
+        )
+        src = report.sources[0]
+        assert src.ok is False
+        error = src.error or ""
+        assert "no usable leg" in error
+        assert "https://mirror.example/shims.tar.gz" in error
+        assert "https://primary.example/shims.tar.gz" in error
+        assert "ConnectionRefusedError" in error
+
+    def test_a_transport_failure_is_still_masked_by_the_cache(self, tmp_path: Path):
+        """stale covers "cannot reach": the last good bytes are still served."""
+        state = {"up": True}
+
+        def http_get(url, **_kw):
+            if not state["up"]:
+                raise ConnectionRefusedError("no route")
+            return _provider_archive()
+
+        spec = {
+            "url": "https://primary.example/shims.tar.gz",
+            "mirror": "https://mirror.example/shims.tar.gz",
+            "refresh": "always",
+        }
+        cache = tmp_path / "cache"
+        first = rebuild_shims(extra_remotes=[spec], cache_root=cache, http_get=http_get)
+        assert first.sources[0].ok, first.sources[0].error
+
+        state["up"] = False
+        second = rebuild_shims(
+            extra_remotes=[spec], cache_root=cache, http_get=http_get
+        )
+        src = second.sources[0]
+        assert src.ok is True
+        assert src.stale is True
+        assert src.from_cache is True
+
+    def test_an_http_error_is_still_masked_by_the_cache(self, tmp_path: Path):
+        """An HTTP status may be a publish window: stale is still the answer."""
+        state = {"status": "ok"}
+
+        def http_get(url, **_kw):
+            if state["status"] == "404":
+                raise HTTPError(404, "", url)
+            return _provider_archive()
+
+        spec = {
+            "url": "https://primary.example/shims.tar.gz",
+            "refresh": "always",
+        }
+        cache = tmp_path / "cache"
+        first = rebuild_shims(extra_remotes=[spec], cache_root=cache, http_get=http_get)
+        assert first.sources[0].ok, first.sources[0].error
+
+        state["status"] = "404"
+        second = rebuild_shims(
+            extra_remotes=[spec], cache_root=cache, http_get=http_get
+        )
+        src = second.sources[0]
+        assert src.ok is True
+        assert src.stale is True
+
+    def test_a_junk_mirror_is_not_masked_by_a_stale_cache(self, tmp_path: Path):
+        """Warm cache or not, a body that is not the source is a hard failure."""
+        data = _provider_archive()
+        state = {"primary": "refuse", "mirror": "serve"}
+
+        def http_get(url, **_kw):
+            leg = "primary" if "primary" in url else "mirror"
+            if state[leg] == "refuse":
+                raise ConnectionRefusedError(f"{leg} down")
+            if state[leg] == "junk":
+                return b"<html>nope</html>"
+            return data
+
+        spec = {
+            "url": "https://primary.example/shims.tar.gz",
+            "mirror": "https://mirror.example/shims.tar.gz",
+            "refresh": "always",
+        }
+        cache = tmp_path / "cache"
+        first = rebuild_shims(extra_remotes=[spec], cache_root=cache, http_get=http_get)
+        assert first.sources[0].leg == "mirror"
+
+        state.update(mirror="junk")
+        second = rebuild_shims(
+            extra_remotes=[spec], cache_root=cache, http_get=http_get
+        )
+        src = second.sources[0]
+        # Not `ok=True stale=True`: the cache must not paper over a bad body.
+        assert src.ok is False
+        assert "no usable leg" in (src.error or "")
+        # And the class survives: a plain source error would be masked again.
+        assert (src.error or "").startswith("ShimArchiveUnusable")
+        # Each attempt extracts into its own directory and removes it, even
+        # when the bytes never became an archive.
+        residue = cache / ".tmp"
+        assert not residue.exists() or not any(residue.iterdir())
+
+    def test_a_corrupt_body_is_not_masked_by_the_cache(self, tmp_path: Path):
+        """The same rule on the primary: corruption is not a network symptom."""
+        state = {"body": _provider_archive()}
+
+        def http_get(url, **_kw):
+            return state["body"]
+
+        spec = {
+            "url": "https://primary.example/shims.tar.gz",
+            "mirror": "https://mirror.example/shims.tar.gz",
+            "refresh": "always",
+        }
+        cache = tmp_path / "cache"
+        first = rebuild_shims(extra_remotes=[spec], cache_root=cache, http_get=http_get)
+        assert first.sources[0].ok, first.sources[0].error
+
+        # The cache is warm and usable: without a refetch it serves from it.
+        warm = rebuild_shims(
+            extra_remotes=[{**spec, "refresh": "never"}],
+            cache_root=cache,
+            http_get=http_get,
+        )
+        assert warm.sources[0].from_cache is True
+        assert warm.sources[0].stale is False
+
+        state["body"] = b"<html>nope</html>"
+        second = rebuild_shims(
+            extra_remotes=[spec], cache_root=cache, http_get=http_get
+        )
+        src = second.sources[0]
+        assert src.ok is False
+        assert src.stale is False
+        assert "archive" in (src.error or "")
+
+    def test_a_pinned_mirror_fails_even_when_a_leg_follows_it(self, tmp_path: Path):
+        """The pin guard holds wherever the mirror sits in the leg order."""
+        junk = b"<html>nope</html>"
+        pin = hashlib.sha256(junk).hexdigest()
+        calls: list[str] = []
+
+        def http_get(url, **_kw):
+            calls.append(url)
+            return _provider_archive() if "primary" in url else junk
+
+        parsed = sources_mod._parse_remote_spec(
+            {
+                "url": "https://primary.example/shims.tar.gz",
+                "mirror": {
+                    "url_template": "https://mirror.example/shims.tar.gz",
+                    "sha256": pin,
+                },
+            },
+            tmp_path / "cache",
+        )
+        # The mirror is first, as a remembered leg would be, and each leg
+        # carries its own pin.
+        legs = [
+            ("mirror", "https://mirror.example/shims.tar.gz", pin),
+            ("primary", "https://primary.example/shims.tar.gz", None),
+        ]
+        with pytest.raises(ShimSourceError) as excinfo:
+            sources_mod._fetch_first_usable(
+                legs, parsed, headers={}, http_get=http_get, proxy=None
+            )
+        assert "archive" in str(excinfo.value)
+        # Pinned bytes are the operator's declaration: no fallback, ever.
+        assert calls == ["https://mirror.example/shims.tar.gz"]
+
+    def test_a_remembered_mirror_with_an_unusable_body_falls_through(
+        self, tmp_path: Path
+    ):
+        """A 200 that is not an archive is a bad replica, not a verdict."""
+        data = _provider_archive()
+        state = {"primary": "refuse", "mirror": "serve"}
+
+        def http_get(url, **_kw):
+            leg = "primary" if "primary" in url else "mirror"
+            if state[leg] == "refuse":
+                raise ConnectionRefusedError(f"{leg} down")
+            if state[leg] == "junk":
+                return b"<html>your session has expired</html>"
+            return data
+
+        spec = {
+            "url": "https://primary.example/shims.tar.gz",
+            "mirror": "https://mirror.example/shims.tar.gz",
+            "refresh": "always",
+        }
+        cache = tmp_path / "cache"
+        first = rebuild_shims(extra_remotes=[spec], cache_root=cache, http_get=http_get)
+        assert first.sources[0].leg == "mirror"
+
+        state.update(primary="serve", mirror="junk")
+        calls: list[str] = []
+
+        def recording_get(url, **kw):
+            calls.append(url)
+            return http_get(url, **kw)
+
+        second = rebuild_shims(
+            extra_remotes=[spec], cache_root=cache, http_get=recording_get
+        )
+        src = second.sources[0]
+        assert src.ok, src.error
+        assert src.leg == "primary"
+        assert src.stale is False
+        assert src.from_cache is False
+        assert calls == [
+            "https://mirror.example/shims.tar.gz",
+            "https://primary.example/shims.tar.gz",
+        ]
+
+    def test_a_cold_fetch_names_both_legs_when_the_mirror_serves_junk(
+        self, tmp_path: Path
+    ):
+        """No cache to fall back on: the error still names the refused primary."""
+
+        def http_get(url, **_kw):
+            if "primary" in url:
+                raise ConnectionRefusedError("no route")
+            return b"<html>nope</html>"
+
+        report = rebuild_shims(
+            extra_remotes=[
+                {
+                    "url": "https://primary.example/shims.tar.gz",
+                    "mirror": "https://mirror.example/shims.tar.gz",
+                }
+            ],
+            cache_root=tmp_path / "cache",
+            http_get=http_get,
+        )
+        src = report.sources[0]
+        assert src.ok is False
+        error = src.error or ""
+        assert "no usable leg" in error
+        assert "https://mirror.example/shims.tar.gz" in error
+        # The primary's own failure, not just its URL (which is the source URL):
+        # "ConnectionRefusedError" only comes from the other leg's attempt.
+        assert "ConnectionRefusedError" in error
+        assert error.startswith("ShimArchiveUnusable")
+
+    def test_a_pinned_mirror_with_an_unusable_body_fails_hard(self, tmp_path: Path):
+        """Pinned bytes are the operator's declaration: no fallback, ever."""
+        junk = b"<html>nope</html>"
+        calls: list[str] = []
+
+        def http_get(url, **_kw):
+            calls.append(url)
+            if "primary" in url:
+                raise ConnectionRefusedError("no route")
+            return junk
+
+        report = rebuild_shims(
+            extra_remotes=[
+                {
+                    "url": "https://primary.example/shims.tar.gz",
+                    "mirror": {
+                        "url_template": "https://mirror.example/shims.tar.gz",
+                        "sha256": hashlib.sha256(junk).hexdigest(),
+                    },
+                }
+            ],
+            cache_root=tmp_path / "cache",
+            http_get=http_get,
+        )
+        src = report.sources[0]
+        assert src.ok is False
+        assert "archive" in (src.error or "")
+        # Primary first for transport, then the mirror — and no third attempt:
+        # a pinned body that will not extract is final.
+        assert calls == [
+            "https://primary.example/shims.tar.gz",
+            "https://mirror.example/shims.tar.gz",
+        ]
+
+    def test_a_local_oserror_is_not_a_transport_failure(self):
+        """Only transport failures fall back; a local error is not one."""
+        assert sources_mod._is_unreachable(PermissionError("denied")) is False
+        assert sources_mod._is_unreachable(FileNotFoundError("gone")) is False
+
+    def test_transport_errors_are_recognized(self):
+        assert sources_mod._is_unreachable(ConnectionRefusedError("no route")) is True
+        assert sources_mod._is_unreachable(TimeoutError("timed out")) is True
+
 
 class TestMirrorValidation:
     def test_a_template_string_is_accepted(self):
         assert sources_mod.normalize_mirror("https://m.example/x.tar.gz") == (
             "https://m.example/x.tar.gz",
+            None,
             None,
         )
 
@@ -1301,7 +1827,15 @@ class TestMirrorValidation:
         pin = "a" * 64
         assert sources_mod.normalize_mirror(
             {"url_template": "https://m.example/x@{ref}.tar.gz", "sha256": pin}
-        ) == ("https://m.example/x@{ref}.tar.gz", pin)
+        ) == ("https://m.example/x@{ref}.tar.gz", pin, None)
+
+    def test_an_object_can_carry_its_own_credential(self):
+        assert sources_mod.normalize_mirror(
+            {
+                "url_template": "https://m.example/x.tar.gz",
+                "token_env": "MIRROR_TOKEN",
+            }
+        ) == ("https://m.example/x.tar.gz", None, "MIRROR_TOKEN")
 
     def test_absent_is_none(self):
         assert sources_mod.normalize_mirror(None) is None
@@ -1317,6 +1851,8 @@ class TestMirrorValidation:
             {"url_template": "https://m.example/x.tar.gz", "sha256": "nope"},
             {"url_template": "https://m.example/x.tar.gz", "url": "x"},
             {"url_template": "http://m.example/x.tar.gz"},
+            {"url_template": "https://m.example/x.tar.gz", "token_env": ""},
+            {"url_template": "https://m.example/x.tar.gz", "token_env": 5},
         ],
     )
     def test_bad_shapes_are_rejected(self, value):

@@ -716,13 +716,37 @@ class TestMirrorConfig:
             parse_shims_section(self._section(mirror=mirror), str(tmp_path / "c.jsonc"))
         assert "shims.remotes[0].mirror" in str(excinfo.value)
 
-    def test_the_admin_save_path_rejects_a_bad_mirror(self, tmp_path: Path):
+    def test_an_unpinned_mirror_under_a_pinned_primary_is_refused(self, tmp_path: Path):
+        """The mirror is the leg an attacker can force, so it needs its own pin."""
+        with pytest.raises(ValueError) as excinfo:
+            parse_shims_section(
+                self._section(sha256="1" * 64, mirror="https://m.example/x.tar.gz"),
+                str(tmp_path / "c.jsonc"),
+            )
+        assert "shims.remotes[0].mirror" in str(excinfo.value)
+        assert "sha256" in str(excinfo.value)
+
+    def test_an_unpinned_mirror_without_a_primary_pin_is_accepted(self, tmp_path: Path):
+        sources = parse_shims_section(
+            self._section(mirror="https://m.example/x.tar.gz"),
+            str(tmp_path / "c.jsonc"),
+        )
+        assert sources.remotes[0]["mirror"] == "https://m.example/x.tar.gz"
+
+    def test_the_admin_save_path_rejects_bad_mirrors(self, tmp_path: Path):
         response = _validate_shim_sources_body(
             self._section(mirror={"url_template": "https://m.example/plain"}),
             str(tmp_path / "c.jsonc"),
         )
         assert response is not None
         assert response.status_code == 400
+
+        unpinned = _validate_shim_sources_body(
+            self._section(sha256="1" * 64, mirror="https://m.example/x.tar.gz"),
+            str(tmp_path / "c.jsonc"),
+        )
+        assert unpinned is not None
+        assert unpinned.status_code == 400
 
     def test_a_preset_merge_keeps_the_explicit_mirror(self, tmp_path: Path):
         preset = {
@@ -735,13 +759,17 @@ class TestMirrorConfig:
                 {
                     **preset,
                     "sha256": "b" * 64,
-                    "mirror": "https://m.example/alcf.tar.gz",
+                    "mirror": {
+                        "url_template": "https://m.example/alcf.tar.gz",
+                        "sha256": "c" * 64,
+                    },
                 }
             ],
         }
         sources = parse_shims_section(section, str(tmp_path / "c.jsonc"))
         merged = sources.remotes[0]
-        assert merged["mirror"] == "https://m.example/alcf.tar.gz"
+        assert merged["mirror"]["url_template"] == "https://m.example/alcf.tar.gz"
+        assert merged["mirror"]["sha256"] == "c" * 64
         assert merged["sha256"] == "b" * 64
         # The preset's own keys survive the merge.
         assert merged["ref"] == "v0.1.0"

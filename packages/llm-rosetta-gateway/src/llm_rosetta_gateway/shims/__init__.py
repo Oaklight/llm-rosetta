@@ -31,6 +31,7 @@ from .removals import (
 )
 from .sources import (
     ShimArchiveMismatch,
+    ShimArchiveUnusable,
     ShimLoadReport,
     ShimSourceError,
     ShimSourceStatus,
@@ -47,6 +48,7 @@ __all__ = [
     "source_package_advice",
     "RemovalReference",
     "ShimArchiveMismatch",
+    "ShimArchiveUnusable",
     "ShimLoadReport",
     "ShimRemoval",
     "ShimRemovalAdvisory",
