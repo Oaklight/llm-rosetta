@@ -515,6 +515,45 @@ def test_a_leaf_reached_through_a_symlink_still_inherits(tmp_path):
     assert beta["api_key_env"] == loaded["demo--beta"].connection.api_key_env
 
 
+def test_a_manifest_behind_a_symlinked_vendor_is_still_listed(tmp_path):
+    """A whole vendor directory behind a link is still a manifest row.
+
+    The inventory's own scan used ``rglob``, which does not follow the link:
+    no row appeared, while the loader still loaded ``linked--alpha`` and
+    merged the manifest into it.  Listing the leaves was half the fix; this is
+    the other half.
+    """
+    vendor = tmp_path / "elsewhere" / "demo"
+    (vendor / "alpha").mkdir(parents=True)
+    (vendor / "provider.yaml").write_text(
+        _manifest("  api_key_env: LINKED_KEY\n"), encoding="utf-8"
+    )
+    (vendor / "alpha" / "provider.yaml").write_text(
+        _leaf("linked--alpha", "  display_name: alpha\n"), encoding="utf-8"
+    )
+    root = tmp_path / "shims"
+    root.mkdir()
+    _symlink(vendor, root / "linked")
+
+    rows = manifest_rows(_request(tmp_path, root))
+
+    row = next(r for r in rows if r["vendor"] == "linked")
+    assert row["leaves"] == ["linked--alpha"]
+
+    # The row exists because the loader loads this shim; the merge it shows is
+    # the merge the loader applies, field by field.
+    from llm_rosetta.shims import load_providers_from_dir
+
+    loaded = {shim.name: shim for shim in load_providers_from_dir(root)}
+    manifest_path = root / "linked" / "provider.yaml"
+    leaf = next(
+        leaf for leaf in _leaf_entries(manifest_path) if leaf["name"] == "linked--alpha"
+    )
+    view = _merged_connection({"api_key_env": "LINKED_KEY"}, leaf["own"], manifest_path)
+    assert view["api_key_env"] == loaded["linked--alpha"].connection.api_key_env
+    assert view["api_key_env"] == "LINKED_KEY"
+
+
 def test_a_symlink_loop_terminates_without_duplicates(tmp_path):
     """A link back to an ancestor must not expand forever.
 
