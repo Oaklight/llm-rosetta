@@ -26,6 +26,7 @@ from .enforcement import (  # noqa: F401
 from .intrinsic_history import degrade_intrinsic_history  # noqa: F401
 from .tool_names import (  # noqa: F401
     MAX_TOOL_NAME_LEN,
+    STRICT_TOOL_NAME_PATTERN,
     ToolNameMap,
     apply_upstream_tool_names,
     build_tool_name_map,
@@ -33,10 +34,12 @@ from .tool_names import (  # noqa: F401
     qualify_tool_names,
     restore_client_tool_name_events,
     restore_client_tool_names,
+    sanitize_tool_names,
 )
 
 __all__ = [
     "MAX_TOOL_NAME_LEN",
+    "STRICT_TOOL_NAME_PATTERN",
     "CustomToolRestorer",
     "ToolNameMap",
     "apply_upstream_tool_names",
@@ -54,6 +57,7 @@ __all__ = [
     "resolve_intrinsic_tools",
     "restore_client_tool_name_events",
     "restore_client_tool_names",
+    "sanitize_tool_names",
     "restore_custom_tool_calls",
     "strip_reasoning_for_non_reasoning",
     "unwrap_custom_tool_input",

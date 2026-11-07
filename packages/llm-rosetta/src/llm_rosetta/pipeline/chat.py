@@ -44,6 +44,7 @@ from llm_rosetta.capabilities import (
     build_tool_name_map,
     get_custom_tool_names,
     restore_client_tool_names,
+    sanitize_tool_names,
     CustomToolRestorer,
     restore_custom_tool_calls,
     strip_reasoning_for_non_reasoning,
@@ -915,6 +916,19 @@ class ConversionPipeline:
         # allowed_tools name a declared tool, which is worth reporting even
         # when nothing was renamed.  It skips its own rewrite on an empty map.
         self._name_map = build_tool_name_map(ir_request)
+        # A target that publishes a name shape it enforces gets every name
+        # rewritten to it — an MCP tool exported as ``srv/fs__read`` is legal
+        # everywhere but the OpenAI and Anthropic function-name rules — and
+        # the pair is recorded in the map, so the history rewrite below and
+        # the response leg both use the client's spelling again.
+        target_name_pattern = self._target_converter._TOOL_NAME_PATTERN
+        if target_name_pattern is not None:
+            sanitize_tool_names(
+                ir_request,
+                pattern=target_name_pattern,
+                name_map=self._name_map,
+                warnings=ctx.warnings,
+            )
         apply_upstream_tool_names(
             ir_request, name_map=self._name_map, warnings=ctx.warnings
         )

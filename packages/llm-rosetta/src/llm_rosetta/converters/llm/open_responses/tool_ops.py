@@ -45,9 +45,9 @@ from ...base.tools import (
     make_intrinsic_tool_call,
     mark_tool_error,
     provider_allowed_tools_to_ir,
-    sanitize_schema,
     prefixed_tool_call_id,
     sanitize_tool_call_id,
+    sanitize_tool_parameters,
     warn_tool_error,
     warn_tool_error_dropped,
     write_ir_strict,
@@ -900,7 +900,11 @@ class OpenResponsesToolOps(BaseToolOps):
 
         parameters = ir_tool.get("parameters", {})
         if isinstance(parameters, dict):
-            parameters = sanitize_schema(parameters)
+            parameters = sanitize_tool_parameters(
+                parameters,
+                tool=ir_tool,
+                warnings=kwargs.get("warnings"),
+            )
         metadata = ir_tool.get("metadata") or {}
         strict = ir_strict(ir_tool)
         result: dict[str, Any] = {

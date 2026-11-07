@@ -32,10 +32,12 @@ from llm_rosetta.ir.passes.enforcement import (
 from llm_rosetta.ir.passes.intrinsic_history import degrade_intrinsic_history
 from llm_rosetta.ir.passes.tool_names import (
     MAX_TOOL_NAME_LEN,
+    STRICT_TOOL_NAME_PATTERN,
     qualify_tool_names,
     build_tool_name_map,
     apply_upstream_tool_names,
     restore_client_tool_names,
+    sanitize_tool_names,
     restore_client_tool_name_events,
     dedupe_tool_definitions,
     ToolNameMap,
@@ -43,6 +45,7 @@ from llm_rosetta.ir.passes.tool_names import (
 
 __all__ = [
     "MAX_TOOL_NAME_LEN",
+    "STRICT_TOOL_NAME_PATTERN",
     "CustomToolRestorer",
     "backfill_reasoning_replay",
     "drop_nameless_tools",
@@ -59,6 +62,7 @@ __all__ = [
     "build_tool_name_map",
     "apply_upstream_tool_names",
     "restore_client_tool_names",
+    "sanitize_tool_names",
     "restore_client_tool_name_events",
     "dedupe_tool_definitions",
     "relocate_oversized_tool_descriptions",

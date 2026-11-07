@@ -25,7 +25,12 @@ that needs converter internals:
 from .ops import BaseToolOps, IntrinsicLeg, sink_leg
 
 # -- Schema --
-from .schema import convert_nullable_to_type_array, sanitize_schema
+from .schema import (
+    convert_nullable_to_type_array,
+    normalize_numeric_constraints,
+    sanitize_schema,
+    sanitize_tool_parameters,
+)
 
 # -- Call ID --
 from llm_rosetta.ir.tools.call_id import prefixed_tool_call_id, sanitize_tool_call_id
@@ -102,7 +107,9 @@ __all__ = [
     "sink_leg",
     # schema
     "convert_nullable_to_type_array",
+    "normalize_numeric_constraints",
     "sanitize_schema",
+    "sanitize_tool_parameters",
     # call_id
     "prefixed_tool_call_id",
     "sanitize_tool_call_id",
