@@ -847,13 +847,10 @@ on the authenticated surface above.
 
 ## Profiling
 
-On-demand deep profiling powered by [pyinstrument](https://github.com/joerick/pyinstrument).
-When enabled, the gateway profiles the next *N* requests and stores interactive
-flamegraph results.
-
-!!! note "Optional dependency"
-    Profiling requires `pyinstrument`.  Install with:
-    `pip install llm-rosetta[profiling]`
+On-demand deep profiling, built in and always available: the analyzer is the
+vendored cProfile-based profiler, so there is nothing to install.  When enabled,
+the gateway profiles the next *N* requests and stores the results — formatted
+text and a self-contained HTML flamegraph per request.
 
 ### Get status
 
@@ -907,8 +904,6 @@ POST /admin/api/profiling/enable
   "max_results": 20
 }
 ```
-
-**Errors**: 400 (`pyinstrument` is not installed).
 
 ---
 
@@ -981,7 +976,7 @@ Returns the full result object including `html` and `text` fields.
 
 **Response (HTML)**
 
-Returns the pyinstrument flamegraph HTML page directly (content type
+Returns the flamegraph HTML page directly (content type
 `text/html`), suitable for viewing in a browser.
 
 **Errors**: 400 (invalid index), 404 (index out of range).
