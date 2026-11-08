@@ -206,6 +206,32 @@ def declared_model_lanes(
     return lanes
 
 
+def _reject_duplicate_lanes(entries: list[Any], label: str) -> None:
+    """Refuse a route that names one candidate twice.
+
+    A candidate is identified by ``(provider, upstream model)`` — see
+    :attr:`~.routing.strategy.ProviderEntry.key`.  Two lanes of one provider
+    are two candidates; the same pair written twice is one candidate written
+    twice, which would double its share of the traffic and make "which lane
+    served" arbitrary.  This is the load-time half of the rule the admin's
+    merge predicate applies on write.
+
+    Raises:
+        ValueError: If two entries share a key.
+    """
+    seen: set[tuple[str, str | None]] = set()
+    for entry in entries:
+        if entry.key in seen:
+            upstream = entry.upstream_model
+            suffix = f" with upstream_model {upstream!r}" if upstream else ""
+            raise ValueError(
+                f"config: {label} lists provider {entry.name!r}{suffix} more "
+                "than once; one provider may serve several upstream models, "
+                "but the same one only once"
+            )
+        seen.add(entry.key)
+
+
 def _lane_weight(value: Any) -> int:
     """A declared weight, or the default when it is not a usable one."""
     return (
@@ -284,6 +310,7 @@ def parse_multi_provider(
     if not entries:
         return None
 
+    _reject_duplicate_lanes(entries, f"model '{model_name}'")
     routing = _model_routing(model_name, value, {entry.name for entry in entries})
     return ModelRoute(entries, model_name, strategy_for(routing), routing=routing)
 
@@ -420,7 +447,7 @@ def parse_model_failover(raw_models: dict[str, Any]) -> dict[str, bool]:
     return result
 
 
-def declared_provider_entries(value: Any) -> list[Any]:
+def declared_provider_entries(value: Any, *, label: str = "model") -> list[Any]:
     """The providers a model entry names, with the weight each one carries.
 
     The same shapes :func:`declared_provider_names` reads, kept as entries so
@@ -466,7 +493,9 @@ def declared_provider_entries(value: Any) -> list[Any]:
                     ),
                 )
             )
-    return [entry for entry in entries if entry.name]
+    kept = [entry for entry in entries if entry.name]
+    _reject_duplicate_lanes(kept, label)
+    return kept
 
 
 def declared_model_type(value: Any) -> str:
@@ -561,7 +590,7 @@ def distribute_typed_models(config: GatewayConfig, raw_models: dict[str, Any]) -
             # first one only.
             candidates = [
                 entry
-                for entry in declared_provider_entries(value)
+                for entry in declared_provider_entries(value, label=f"model '{name}'")
                 if entry.name in type_providers
             ]
             config.typed_model_candidates.setdefault(model_type, {})[name] = candidates

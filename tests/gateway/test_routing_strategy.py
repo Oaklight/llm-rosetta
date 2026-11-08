@@ -31,13 +31,13 @@ class TestWeightedRoundRobinStrategy:
     def test_single_provider(self):
         s = WeightedRoundRobinStrategy()
         providers = [ProviderEntry("a")]
-        assert s.select(providers, route_id=ROUTE) == "a"
-        assert s.select(providers, route_id=ROUTE) == "a"
+        assert pick(s, providers, route_id=ROUTE) == "a"
+        assert pick(s, providers, route_id=ROUTE) == "a"
 
     def test_equal_weight_alternates(self):
         s = WeightedRoundRobinStrategy()
         providers = [ProviderEntry("a"), ProviderEntry("b")]
-        results = [s.select(providers, route_id=ROUTE) for _ in range(6)]
+        results = [pick(s, providers, route_id=ROUTE) for _ in range(6)]
         assert results.count("a") == 3
         assert results.count("b") == 3
 
@@ -45,13 +45,13 @@ class TestWeightedRoundRobinStrategy:
         """The exact order, not just the counts."""
         s = WeightedRoundRobinStrategy()
         providers = [ProviderEntry("a"), ProviderEntry("b")]
-        results = [s.select(providers, route_id=ROUTE) for _ in range(6)]
+        results = [pick(s, providers, route_id=ROUTE) for _ in range(6)]
         assert results == ["a", "b", "a", "b", "a", "b"]
 
     def test_weighted_distribution(self):
         s = WeightedRoundRobinStrategy()
         providers = [ProviderEntry("a", weight=3), ProviderEntry("b", weight=1)]
-        results = [s.select(providers, route_id=ROUTE) for _ in range(4)]
+        results = [pick(s, providers, route_id=ROUTE) for _ in range(4)]
         assert results.count("a") == 3
         assert results.count("b") == 1
 
@@ -59,7 +59,7 @@ class TestWeightedRoundRobinStrategy:
         """Smooth WRR should interleave, not burst."""
         s = WeightedRoundRobinStrategy()
         providers = [ProviderEntry("a", weight=2), ProviderEntry("b", weight=1)]
-        results = [s.select(providers, route_id=ROUTE) for _ in range(6)]
+        results = [pick(s, providers, route_id=ROUTE) for _ in range(6)]
         # Should produce a-a-b-a-a-b or a-b-a-a-b-a pattern, not a-a-a-a-b-b
         # Key invariant: no more than 2 consecutive "a"s
         for i in range(len(results) - 2):
@@ -71,7 +71,7 @@ class TestWeightedRoundRobinStrategy:
         """The exact interleaving, not just the counts."""
         s = WeightedRoundRobinStrategy()
         providers = [ProviderEntry("a", weight=2), ProviderEntry("b", weight=1)]
-        results = [s.select(providers, route_id=ROUTE) for _ in range(6)]
+        results = [pick(s, providers, route_id=ROUTE) for _ in range(6)]
         assert results == ["a", "b", "a", "a", "b", "a"]
 
     def test_three_providers(self):
@@ -81,7 +81,7 @@ class TestWeightedRoundRobinStrategy:
             ProviderEntry("b", weight=2),
             ProviderEntry("c", weight=1),
         ]
-        results = [s.select(providers, route_id=ROUTE) for _ in range(6)]
+        results = [pick(s, providers, route_id=ROUTE) for _ in range(6)]
         assert results.count("a") == 3
         assert results.count("b") == 2
         assert results.count("c") == 1
@@ -89,21 +89,21 @@ class TestWeightedRoundRobinStrategy:
     def test_empty_raises(self):
         s = WeightedRoundRobinStrategy()
         with pytest.raises(ValueError, match="No providers"):
-            s.select([], route_id=ROUTE)
+            pick(s, [], route_id=ROUTE)
 
     def test_deterministic(self):
         """Same sequence of selections every time."""
         s1 = WeightedRoundRobinStrategy()
         s2 = WeightedRoundRobinStrategy()
         providers = [ProviderEntry("a", weight=3), ProviderEntry("b", weight=1)]
-        r1 = [s1.select(providers, route_id=ROUTE) for _ in range(8)]
-        r2 = [s2.select(providers, route_id=ROUTE) for _ in range(8)]
+        r1 = [pick(s1, providers, route_id=ROUTE) for _ in range(8)]
+        r2 = [pick(s2, providers, route_id=ROUTE) for _ in range(8)]
         assert r1 == r2
 
     def test_large_weight_ratio(self):
         s = WeightedRoundRobinStrategy()
         providers = [ProviderEntry("a", weight=99), ProviderEntry("b", weight=1)]
-        results = [s.select(providers, route_id=ROUTE) for _ in range(100)]
+        results = [pick(s, providers, route_id=ROUTE) for _ in range(100)]
         assert results.count("a") == 99
         assert results.count("b") == 1
 
@@ -112,7 +112,7 @@ class TestWeightedRoundRobinStrategy:
         s = WeightedRoundRobinStrategy()
         providers = [ProviderEntry("a"), ProviderEntry("b")]
         results = [
-            s.select(providers, route_id=ROUTE, identity="client-1") for _ in range(6)
+            pick(s, providers, route_id=ROUTE, identity="client-1") for _ in range(6)
         ]
         assert results.count("a") == 3
         assert results.count("b") == 3
@@ -125,13 +125,13 @@ class TestPerRouteCounters:
         """Another route advancing must not move this route's sequence."""
         providers = [ProviderEntry("a"), ProviderEntry("b")]
         solo = WeightedRoundRobinStrategy()
-        expected = [solo.select(providers, route_id="alone") for _ in range(6)]
+        expected = [pick(solo, providers, route_id="alone") for _ in range(6)]
 
         shared = WeightedRoundRobinStrategy()
         got = []
         for _ in range(6):
-            shared.select(providers, route_id="other")
-            got.append(shared.select(providers, route_id="one"))
+            pick(shared, providers, route_id="other")
+            got.append(pick(shared, providers, route_id="one"))
 
         assert got == expected
 
@@ -140,8 +140,8 @@ class TestPerRouteCounters:
         s = WeightedRoundRobinStrategy()
         two = [ProviderEntry("a"), ProviderEntry("b")]
         three = [ProviderEntry("a"), ProviderEntry("b"), ProviderEntry("c")]
-        s.select(two, route_id=ROUTE)
-        results = [s.select(three, route_id=ROUTE) for _ in range(3)]
+        pick(s, two, route_id=ROUTE)
+        results = [pick(s, three, route_id=ROUTE) for _ in range(3)]
         assert results == ["a", "b", "c"]
 
 
@@ -150,16 +150,16 @@ class TestAffinityRoundRobinStrategy:
         """Same identity always picks the same provider."""
         s = AffinityRoundRobinStrategy()
         providers = [ProviderEntry("a"), ProviderEntry("b"), ProviderEntry("c")]
-        first = s.select(providers, route_id=ROUTE, identity="user-42")
+        first = pick(s, providers, route_id=ROUTE, identity="user-42")
         for _ in range(20):
-            assert s.select(providers, route_id=ROUTE, identity="user-42") == first
+            assert pick(s, providers, route_id=ROUTE, identity="user-42") == first
 
     def test_no_identity_fallback(self):
         """Without identity, falls back to weighted round-robin."""
         s = AffinityRoundRobinStrategy()
         providers = [ProviderEntry("a"), ProviderEntry("b")]
         # No identity — should alternate like WRR
-        results = [s.select(providers, route_id=ROUTE) for _ in range(6)]
+        results = [pick(s, providers, route_id=ROUTE) for _ in range(6)]
         assert results.count("a") == 3
         assert results.count("b") == 3
 
@@ -167,7 +167,7 @@ class TestAffinityRoundRobinStrategy:
         """Explicit identity=None falls back to weighted round-robin."""
         s = AffinityRoundRobinStrategy()
         providers = [ProviderEntry("a"), ProviderEntry("b")]
-        results = [s.select(providers, route_id=ROUTE, identity=None) for _ in range(6)]
+        results = [pick(s, providers, route_id=ROUTE, identity=None) for _ in range(6)]
         assert results.count("a") == 3
         assert results.count("b") == 3
 
@@ -176,12 +176,12 @@ class TestAffinityRoundRobinStrategy:
         s = AffinityRoundRobinStrategy()
         providers = [ProviderEntry("a"), ProviderEntry("b")]
         solo = WeightedRoundRobinStrategy()
-        expected = [solo.select(providers, route_id="alone") for _ in range(6)]
+        expected = [pick(solo, providers, route_id="alone") for _ in range(6)]
 
         got = []
         for _ in range(6):
-            s.select(providers, route_id="other")
-            got.append(s.select(providers, route_id="one"))
+            pick(s, providers, route_id="other")
+            got.append(pick(s, providers, route_id="one"))
 
         assert got == expected
 
@@ -189,20 +189,20 @@ class TestAffinityRoundRobinStrategy:
         """Single provider always returns it regardless of identity."""
         s = AffinityRoundRobinStrategy()
         providers = [ProviderEntry("only")]
-        assert s.select(providers, route_id=ROUTE, identity="x") == "only"
-        assert s.select(providers, route_id=ROUTE) == "only"
+        assert pick(s, providers, route_id=ROUTE, identity="x") == "only"
+        assert pick(s, providers, route_id=ROUTE) == "only"
 
     def test_empty_raises(self):
         s = AffinityRoundRobinStrategy()
         with pytest.raises(ValueError, match="No providers"):
-            s.select([], route_id=ROUTE, identity="x")
+            pick(s, [], route_id=ROUTE, identity="x")
 
     def test_distribution(self):
         """Different identities distribute across providers."""
         s = AffinityRoundRobinStrategy()
         providers = [ProviderEntry("a"), ProviderEntry("b"), ProviderEntry("c")]
         chosen = {
-            s.select(providers, route_id=ROUTE, identity=f"id-{i}") for i in range(100)
+            pick(s, providers, route_id=ROUTE, identity=f"id-{i}") for i in range(100)
         }
         # With 100 distinct identities across 3 providers, all should appear
         assert chosen == {"a", "b", "c"}
@@ -219,7 +219,7 @@ class TestAffinityRoundRobinStrategy:
 
         picks = {"a": 0, "b": 0}
         for i in range(2000):
-            picks[s.select(providers, route_id=ROUTE, identity=f"id-{i}")] += 1
+            picks[pick(s, providers, route_id=ROUTE, identity=f"id-{i}")] += 1
 
         assert picks["a"] > picks["b"] * 5
         assert picks["b"] > 0
@@ -231,7 +231,7 @@ class TestAffinityRoundRobinStrategy:
 
         picks = {"a": 0, "b": 0}
         for i in range(2000):
-            picks[s.select(providers, route_id=ROUTE, identity=f"id-{i}")] += 1
+            picks[pick(s, providers, route_id=ROUTE, identity=f"id-{i}")] += 1
 
         assert picks["a"] > picks["b"]
         assert picks["b"] > 0
@@ -242,15 +242,15 @@ class TestAffinityRoundRobinStrategy:
         s2 = AffinityRoundRobinStrategy()
         providers = [ProviderEntry("a"), ProviderEntry("b")]
         for identity in ("alice", "bob", "charlie", "key-hash-abc123"):
-            assert s1.select(providers, route_id=ROUTE, identity=identity) == s2.select(
-                providers, route_id=ROUTE, identity=identity
+            assert pick(s1, providers, route_id=ROUTE, identity=identity) == pick(
+                s2, providers, route_id=ROUTE, identity=identity
             )
 
 
 class TestModelRoute:
     def test_single_provider(self):
         route = ModelRoute([ProviderEntry("openai")], "m")
-        assert route.select() == "openai"
+        assert route.select().name == "openai"
         assert not route.is_multi
         assert route.provider_names == ["openai"]
 
@@ -259,7 +259,7 @@ class TestModelRoute:
         assert route.is_multi
         assert set(route.provider_names) == {"a", "b"}
         # Should return both over multiple calls
-        results = {route.select() for _ in range(10)}
+        results = {route.select().name for _ in range(10)}
         assert results == {"a", "b"}
 
     def test_custom_strategy(self):
@@ -269,7 +269,7 @@ class TestModelRoute:
             "m",
             strategy=strategy,
         )
-        results = [route.select() for _ in range(4)]
+        results = [route.select().name for _ in range(4)]
         assert results.count("a") == 2
         assert results.count("b") == 2
 
@@ -277,15 +277,26 @@ class TestModelRoute:
         """The route id, not the instance, decides where the counter lives."""
         providers = [ProviderEntry("a"), ProviderEntry("b")]
         solo = ModelRoute(providers, "alone")
-        expected = [solo.select() for _ in range(6)]
+        expected = [
+            pick(
+                solo,
+            )
+            for _ in range(6)
+        ]
 
         strategy = WeightedRoundRobinStrategy()
         one = ModelRoute(providers, "one", strategy=strategy)
         other = ModelRoute(providers, "other", strategy=strategy)
         got = []
         for _ in range(6):
-            other.select()
-            got.append(one.select())
+            pick(
+                other,
+            )
+            got.append(
+                pick(
+                    one,
+                )
+            )
         assert got == expected
 
     def test_select_with_identity(self):
@@ -295,21 +306,21 @@ class TestModelRoute:
             "m",
             strategy=AffinityRoundRobinStrategy(),
         )
-        first = route.select(identity="client-x")
+        first = pick(route, identity="client-x")
         for _ in range(10):
-            assert route.select(identity="client-x") == first
+            assert pick(route, identity="client-x") == first
 
-    def test_select_entry_with_identity(self):
-        """ModelRoute.select_entry passes identity through to strategy."""
+    def test_select_returns_the_entry_with_identity(self):
+        """ModelRoute.select returns the entry and passes identity through."""
         route = ModelRoute(
             [ProviderEntry("a"), ProviderEntry("b")],
             "m",
             strategy=AffinityRoundRobinStrategy(),
         )
-        entry = route.select_entry(identity="client-y")
+        entry = route.select(identity="client-y")
         assert isinstance(entry, ProviderEntry)
         for _ in range(10):
-            assert route.select_entry(identity="client-y").name == entry.name
+            assert route.select(identity="client-y").name == entry.name
 
 
 class TestCreateStrategy:
@@ -328,3 +339,16 @@ class TestCreateStrategy:
     def test_unknown_raises(self):
         with pytest.raises(ValueError, match="Unknown routing strategy"):
             create_strategy("does_not_exist")
+
+
+def pick(strategy, providers=None, **kwargs) -> str:
+    """The name of the candidate the strategy chose.
+
+    Strategies and routes return the entry (two lanes of one provider must
+    stay apart), so a test that only cares which provider won asks for its
+    name here.  A route already holds its candidates; a bare strategy is
+    handed them.
+    """
+    if providers is None:
+        return strategy.select(**kwargs).name
+    return strategy.select(providers, **kwargs).name

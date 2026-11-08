@@ -23,12 +23,13 @@ composes those facts; it never writes them.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from ..quota.state import QUOTA_STATE
 from .stage import RoutingStage
+from .strategy import EntryKey
 
 if TYPE_CHECKING:
     from .context import SelectionContext
@@ -113,6 +114,16 @@ class Eligibility:
     until: datetime | None = None
     headroom: float | None = None
     sunk: bool = False
+    #: The upstream model the entry asks for, when it names one.  The answer
+    #: itself is provider-level — credentials, quota and rate limits are —
+    #: but it is stored per lane, so two lanes of one provider keep separate
+    #: answers.
+    upstream: str | None = None
+
+    @property
+    def key(self) -> EntryKey:
+        """What this answer is filed under: the candidate's key."""
+        return (self.name, self.upstream or None)
 
     @property
     def weight_factor(self) -> float:
@@ -235,16 +246,18 @@ class EligibilityStage(RoutingStage):
 
     def run(self, ctx: SelectionContext) -> None:
         """Fill ``ctx.eligibility`` and the two quota views from it."""
-        answers: dict[str, Eligibility] = {}
-        headroom: dict[str, float] = {}
+        answers: dict[EntryKey, Eligibility] = {}
+        headroom: dict[EntryKey, float] = {}
         excluded: set[str] = set()
         for entry in ctx.candidates:
             pinfo = ctx.providers.get(entry.name)
             if pinfo is None:
                 # A candidate with no transport config cannot be asked; it
                 # stays a candidate, as it did before this stage existed.
-                answers[entry.name] = Eligibility(name=entry.name, eligible=True)
-                headroom[entry.name] = 1.0
+                answers[entry.key] = Eligibility(
+                    name=entry.name, eligible=True, upstream=entry.upstream_model
+                )
+                headroom[entry.key] = 1.0
                 continue
             answer = provider_eligibility(pinfo, entry.name)
             # A provider entry may declare what it serves for this model.  The
@@ -259,9 +272,12 @@ class EligibilityStage(RoutingStage):
                     until=answer.until,
                     headroom=answer.headroom,
                     sunk=answer.sunk,
+                    upstream=entry.upstream_model,
                 )
-            answers[entry.name] = answer
-            headroom[entry.name] = 1.0 if answer.headroom is None else answer.headroom
+            elif entry.upstream_model:
+                answer = replace(answer, upstream=entry.upstream_model)
+            answers[entry.key] = answer
+            headroom[entry.key] = 1.0 if answer.headroom is None else answer.headroom
             if answer.reason == SPENT:
                 excluded.add(entry.name)
         ctx.with_eligibility(answers)

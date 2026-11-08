@@ -38,6 +38,7 @@ from llm_rosetta_gateway.routing import (
 from llm_rosetta_gateway.routing.strategy import ModelRoute, ProviderEntry
 from llm_rosetta_gateway.transport.provider_info import ProviderInfo
 
+
 # The tracker judges a disable against the wall clock, so the timeline this
 # file builds starts when the file is imported: a fixed date would age out
 # of its own cooldown between two runs.
@@ -281,10 +282,10 @@ class TestTheStage:
 
         EligibilityStage().run(ctx)
 
-        assert set(ctx.eligibility) == {"a", "b"}
-        assert ctx.eligibility["a"].eligible is False
-        assert ctx.eligibility["b"].eligible is True
-        assert ctx.excluded_providers() == frozenset({"a"})
+        assert set(ctx.eligibility) == {("a", None), ("b", None)}
+        assert ctx.eligibility[("a", None)].eligible is False
+        assert ctx.eligibility[("b", None)].eligible is True
+        assert ctx.excluded_providers() == frozenset({("a", None)})
 
 
 class TestTheRoute:
@@ -344,7 +345,9 @@ class TestTheStrategySeesIt:
             route_id="r-sunk-order",
         )
 
-        assert [route.select(sunk=frozenset({"a"})) for _ in range(4)] == ["b"] * 4
+        assert [pick(route, sunk=frozenset({("a", None)})) for _ in range(4)] == [
+            "b"
+        ] * 4
 
     def test_two_sunk_providers_keep_their_share(self):
         route = ModelRoute(
@@ -352,6 +355,21 @@ class TestTheStrategySeesIt:
             route_id="r-sunk-share",
         )
 
-        picks = [route.select(sunk=frozenset({"a", "b"})) for _ in range(10)]
+        picks = [
+            pick(route, sunk=frozenset({("a", None), ("b", None)})) for _ in range(10)
+        ]
 
         assert picks.count("a") == picks.count("b") == 5
+
+
+def pick(strategy, providers=None, **kwargs) -> str:
+    """The name of the candidate the strategy chose.
+
+    Strategies and routes return the entry (two lanes of one provider must
+    stay apart), so a test that only cares which provider won asks for its
+    name here.  A route already holds its candidates; a bare strategy is
+    handed them.
+    """
+    if providers is None:
+        return strategy.select(**kwargs).name
+    return strategy.select(providers, **kwargs).name

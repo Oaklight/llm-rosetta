@@ -10,6 +10,15 @@ selection chain runs again over what is left.
 The proxy keeps the consequences — a rewritten body, a log line, a profile
 entry — because none of them is a routing fact.
 
+The exclusion is by provider **name**, and with lane identity (#1430) that
+means every lane of that provider is out for the retry.  That is the right
+answer for the refusals this reacts to — a 429 or a spent allowance is one
+credential's state, so a healthy second lane of the same provider would be
+refused by the same key.  A refusal that is really about one upstream model
+(a 404 for that model id, say) would want lane-scoped exclusion instead; the
+API does not express that yet, so such a refusal currently cascades too.
+Reasoning: a refusal this reacts to is credential-level, not capability-level.
+
 Resolving is passed in rather than imported: routing must not depend on the
 config package, and the one thing this function does with a resolver is call
 it and treat "nothing left to choose" as an answer.

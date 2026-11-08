@@ -410,20 +410,22 @@ class RulesStage(RoutingStage):
             # budget on the lane that just refused.
             if rule.use in ctx.failover_excluded:
                 return
-            answer = ctx.eligibility.get(rule.use)
-            if answer is None or not answer.eligible:
-                # The rule named a provider that cannot serve this request;
-                # the anchor stands rather than the request failing.
-                return
-            for entry in ctx.model_route.providers:
-                if entry.name == rule.use:
-                    ctx.choose(entry)
-                    return
+            # A rule names a provider, and a provider may appear as several
+            # lanes: the rule promotes the first lane of it that may serve.
+            entry = ctx.first_eligible_lane(rule.use)
+            if entry is not None:
+                ctx.choose(entry)
             return
 
         paused = rule.pause
         assert paused is not None  # the parser guarantees exactly one action
-        excluded = ctx.excluded_providers() | {paused}
+        # Dropping a provider drops every lane of it, which is what naming a
+        # provider in a rule means.  A rule cannot empty the route, though: if
+        # nothing is left, the anchor chosen before this stage stands — a
+        # pause is a preference, not a veto.
+        excluded = ctx.excluded_providers() | {
+            lane.key for lane in ctx.lanes_of(paused)
+        }
         entry = select_ready_entry(
             ctx.model_route,
             eligibility=ctx.eligibility,

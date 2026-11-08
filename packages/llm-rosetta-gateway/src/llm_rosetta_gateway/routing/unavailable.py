@@ -175,9 +175,8 @@ def classify(
     from .eligibility import CAPABILITY
 
     if remaining and all(
-        ctx.eligibility.get(p.name) is not None
-        and ctx.eligibility[p.name].reason == CAPABILITY
-        for p in remaining
+        answer is not None and answer.reason == CAPABILITY
+        for answer in (ctx.eligibility.get(p.key) for p in remaining)
     ):
         return Unavailable(
             "capability", unsupported=tuple(sorted(ctx.required_capabilities))

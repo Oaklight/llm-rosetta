@@ -16,7 +16,7 @@ from .stage import RoutingStage
 
 if TYPE_CHECKING:
     from .context import SelectionContext
-    from .strategy import ModelRoute, ProviderEntry
+    from .strategy import EntryKey, ModelRoute, ProviderEntry
 
 __all__ = [
     "HEADROOM_FLOOR",
@@ -29,9 +29,9 @@ __all__ = [
 def select_ready_entry(
     model_route: ModelRoute,
     *,
-    eligibility: Mapping[str, Eligibility],
+    eligibility: Mapping[EntryKey, Eligibility],
     identity: str | None = None,
-    excluded: frozenset[str] = frozenset(),
+    excluded: frozenset[EntryKey] = frozenset(),
 ) -> ProviderEntry | None:
     """Pick an eligible provider from *model_route*, or ``None`` when none is.
 
@@ -46,7 +46,8 @@ def select_ready_entry(
     Args:
         model_route: The model's candidates and how they are chosen between.
         eligibility: The one predicate's answer for every candidate, keyed by
-            provider name.  A candidate without an answer is not a candidate.
+            the candidate's :attr:`~.strategy.ProviderEntry.key`.  A candidate
+            without an answer is not a candidate.
         identity: Optional client identity for affinity routing.
         excluded: Providers this request must not be served by, on top of the
             ineligible ones — the ones it already failed over from, and every
@@ -55,23 +56,23 @@ def select_ready_entry(
     Returns:
         The chosen entry, or ``None`` when nothing may serve.
     """
-    weights: dict[str, float] = {}
-    sunk: set[str] = set()
+    weights: dict[EntryKey, float] = {}
+    sunk: set[EntryKey] = set()
     blocked = set(excluded)
     for entry in model_route.providers:
-        answer = eligibility.get(entry.name)
+        answer = eligibility.get(entry.key)
         if answer is None or not answer.eligible:
-            blocked.add(entry.name)
+            blocked.add(entry.key)
             continue
         if answer.sunk:
-            sunk.add(entry.name)
+            sunk.add(entry.key)
         factor = answer.weight_factor
         if factor != 1.0:
-            weights[entry.name] = factor
+            weights[entry.key] = factor
 
-    if all(p.name in blocked for p in model_route.providers):
+    if all(p.key in blocked for p in model_route.providers):
         return None
-    return model_route.select_entry(
+    return model_route.select(
         identity=identity,
         weights=weights or None,
         excluded=frozenset(blocked),

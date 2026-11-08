@@ -26,6 +26,13 @@ from .model_routing import ModelRouting
 
 _U64 = float(1 << 64)
 
+#: What identifies one candidate lane: the provider's config key and the
+#: upstream model it asks for.  Two lanes of one provider differ only in the
+#: second half, so a map that distinguishes candidates is keyed on this, while
+#: a lookup of the provider's config, credentials or base URL keeps using
+#: :attr:`ProviderEntry.name`.
+EntryKey = tuple[str, str | None]
+
 
 @dataclass(slots=True)
 class ProviderEntry:
@@ -45,6 +52,23 @@ class ProviderEntry:
     #: apply and the candidate is never filtered for a request's needs.
     capabilities: tuple[str, ...] | None = None
 
+    def __post_init__(self) -> None:
+        # "No override" has one spelling in a candidate.  An empty string and
+        # an absent field mean the same thing, and the key already folds them;
+        # folding the field too keeps the entry itself consistent.
+        self.upstream_model = self.upstream_model or None
+
+    @property
+    def key(self) -> EntryKey:
+        """What distinguishes this candidate from its peers on the route.
+
+        The name finds the provider's config; the upstream model is what makes
+        two entries naming one provider different candidates.  ``None`` and the
+        empty string mean "no override" alike, so a key does not depend on how
+        the config spelled it.
+        """
+        return (self.name, self.upstream_model or None)
+
 
 class RoutingStrategy(Protocol):
     """Interface for selecting a provider from a weighted list."""
@@ -55,8 +79,12 @@ class RoutingStrategy(Protocol):
         *,
         route_id: str,
         identity: str | None = None,
-    ) -> str:
-        """Return the name of the chosen provider.
+    ) -> ProviderEntry:
+        """Return the chosen candidate.
+
+        The entry, not its name: two candidates may name one provider and
+        differ in the upstream model they ask for, so the name alone cannot
+        say which of them won.
 
         Args:
             providers: Candidate providers with weights.
@@ -91,12 +119,12 @@ class WeightedRoundRobinStrategy:
         *,
         route_id: str,
         identity: str | None = None,
-    ) -> str:
+    ) -> ProviderEntry:
         n = len(providers)
         if n == 0:
             raise ValueError("No providers configured")
         if n == 1:
-            return providers[0].name
+            return providers[0]
 
         weights = self._current_weights.get(route_id)
         if weights is None or len(weights) != n:
@@ -113,7 +141,7 @@ class WeightedRoundRobinStrategy:
                 best_idx = i
 
         weights[best_idx] -= total
-        return providers[best_idx].name
+        return providers[best_idx]
 
 
 class AffinityRoundRobinStrategy:
@@ -142,25 +170,31 @@ class AffinityRoundRobinStrategy:
         *,
         route_id: str,
         identity: str | None = None,
-    ) -> str:
+    ) -> ProviderEntry:
         if not providers:
             raise ValueError("No providers configured")
         if len(providers) == 1:
-            return providers[0].name
+            return providers[0]
         if identity is None:
             return self._fallback.select(providers, route_id=route_id)
 
-        best = providers[0].name
+        best = providers[0]
         best_score = float("inf")
         for provider in providers:
-            digest = hashlib.sha256(f"{identity}\0{provider.name}".encode()).digest()
+            # A lane without an upstream model hashes exactly as it did before
+            # lanes existed, so adding the second lane of a provider moves no
+            # existing session; only the lanes themselves are told apart.
+            seed = f"{identity}\0{provider.name}"
+            if provider.upstream_model:
+                seed += f"\0{provider.upstream_model}"
+            digest = hashlib.sha256(seed.encode()).digest()
             # A uniform draw from (0, 1]; the +1 keeps it away from zero, where
             # the logarithm would be infinite.
             draw = (int.from_bytes(digest[:8], "big") + 1) / _U64
             score = -math.log(draw) / max(provider.weight, 1e-9)
             if score < best_score:
                 best_score = score
-                best = provider.name
+                best = provider
         return best
 
 
@@ -179,10 +213,10 @@ class OrderedStrategy:
         *,
         route_id: str,
         identity: str | None = None,
-    ) -> str:
+    ) -> ProviderEntry:
         if not providers:
             raise ValueError("No providers configured")
-        return providers[0].name
+        return providers[0]
 
 
 class RotateStrategy:
@@ -202,13 +236,13 @@ class RotateStrategy:
         *,
         route_id: str,
         identity: str | None = None,
-    ) -> str:
+    ) -> ProviderEntry:
         n = len(providers)
         if n == 0:
             raise ValueError("No providers configured")
         index = self._next.get(route_id, 0) % n
         self._next[route_id] = (index + 1) % n
-        return providers[index].name
+        return providers[index]
 
 
 class LeastUsedStrategy:
@@ -229,7 +263,7 @@ class LeastUsedStrategy:
         *,
         route_id: str,
         identity: str | None = None,
-    ) -> str:
+    ) -> ProviderEntry:
         n = len(providers)
         if n == 0:
             raise ValueError("No providers configured")
@@ -239,7 +273,7 @@ class LeastUsedStrategy:
             self._counts[route_id] = counts
         best = min(range(n), key=lambda i: counts[i])
         counts[best] += 1
-        return providers[best].name
+        return providers[best]
 
 
 class PaceStrategy:
@@ -263,7 +297,7 @@ class PaceStrategy:
         *,
         route_id: str,
         identity: str | None = None,
-    ) -> str:
+    ) -> ProviderEntry:
         return self._fallback.select(providers, route_id=route_id)
 
 
@@ -329,14 +363,11 @@ class ModelRoute:
     strategy: RoutingStrategy = field(default_factory=WeightedRoundRobinStrategy)
     routing: ModelRouting = field(default_factory=ModelRouting)
 
-    def __post_init__(self) -> None:
-        self._entry_by_name = {p.name: p for p in self.providers}
-
     def _candidates(
         self,
-        weights: Mapping[str, float] | None,
-        excluded: frozenset[str] = frozenset(),
-        sunk: frozenset[str] = frozenset(),
+        weights: Mapping[EntryKey, float] | None,
+        excluded: frozenset[EntryKey] = frozenset(),
+        sunk: frozenset[EntryKey] = frozenset(),
     ) -> list[ProviderEntry]:
         """The entries the strategy sees, with this request's weights applied.
 
@@ -359,9 +390,9 @@ class ModelRoute:
         """
         entries = self.providers
         if excluded:
-            entries = [p for p in entries if p.name not in excluded]
+            entries = [p for p in entries if p.key not in excluded]
         if sunk and self.routing.sink:
-            standing = [p for p in entries if p.name not in sunk]
+            standing = [p for p in entries if p.key not in sunk]
             if standing:
                 entries = standing
         headroom_only = getattr(self.strategy, "uses_headroom_only", False)
@@ -374,7 +405,7 @@ class ModelRoute:
             return [
                 ProviderEntry(
                     name=p.name,
-                    weight=max(0.05, factors.get(p.name, 1.0)),
+                    weight=max(0.05, factors.get(p.key, 1.0)),
                     upstream_model=p.upstream_model,
                     capabilities=p.capabilities,
                 )
@@ -385,7 +416,7 @@ class ModelRoute:
                 name=p.name,
                 # Never zero: a provider with a spent window is still a
                 # candidate — the quota state, not this factor, removes one.
-                weight=max(0.05, p.weight * factors.get(p.name, 1.0)),
+                weight=max(0.05, p.weight * factors.get(p.key, 1.0)),
                 upstream_model=p.upstream_model,
                 capabilities=p.capabilities,
             )
@@ -396,48 +427,28 @@ class ModelRoute:
         self,
         *,
         identity: str | None = None,
-        weights: Mapping[str, float] | None = None,
-        excluded: frozenset[str] = frozenset(),
-        sunk: frozenset[str] = frozenset(),
-    ) -> str:
+        weights: Mapping[EntryKey, float] | None = None,
+        excluded: frozenset[EntryKey] = frozenset(),
+        sunk: frozenset[EntryKey] = frozenset(),
+    ) -> ProviderEntry:
         """Pick the next provider according to the strategy.
 
         Args:
             identity: Optional client identity for affinity routing.
-            weights: Optional per-provider multiplier for this selection, e.g.
+            weights: Optional per-candidate multiplier for this selection, e.g.
                 an allowance headroom.  Absent means the configured weights.
-            excluded: Providers that are not candidates at all this time.
-            sunk: Providers that are candidates but are tried last.
+            excluded: Candidates that are not candidates at all this time.
+            sunk: Candidates that are candidates but are tried last.
+
+        Returns:
+            The chosen entry.  Two entries may name one provider, so the entry
+            — not the name — is what says which lane won.
         """
         return self.strategy.select(
             self._candidates(weights, excluded, sunk),
             route_id=self.route_id,
             identity=identity,
         )
-
-    def select_entry(
-        self,
-        *,
-        identity: str | None = None,
-        weights: Mapping[str, float] | None = None,
-        excluded: frozenset[str] = frozenset(),
-        sunk: frozenset[str] = frozenset(),
-    ) -> ProviderEntry:
-        """Pick the next provider and return the full entry.
-
-        Args:
-            identity: Optional client identity for affinity routing.
-            weights: Optional per-provider multiplier, as in :meth:`select`.
-            excluded: Providers that are not candidates at all this time.
-            sunk: Providers that are candidates but are tried last.
-        """
-        return self._entry_by_name[
-            self.strategy.select(
-                self._candidates(weights, excluded, sunk),
-                route_id=self.route_id,
-                identity=identity,
-            )
-        ]
 
     @property
     def provider_names(self) -> list[str]:

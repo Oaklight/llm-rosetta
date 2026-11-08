@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 
     from ..transport.provider_info import ProviderInfo
     from .eligibility import Eligibility
-    from .strategy import ModelRoute, ProviderEntry
+    from .strategy import EntryKey, ModelRoute, ProviderEntry
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,9 +104,11 @@ class SelectionContext:
 
         self.identity = Identity()
         # The one eligibility predicate's answer for every candidate, keyed by
-        # provider name.  Computed once by the stage that runs first; nothing
-        # after it re-derives whether a provider may serve.
-        self.eligibility: Mapping[str, Eligibility] = {}
+        # the candidate's key — (provider, upstream model) — because two lanes
+        # of one provider are distinct candidates.  Computed once by the stage
+        # that runs first; nothing after it re-derives whether a lane may
+        # serve.
+        self.eligibility: Mapping[EntryKey, Eligibility] = {}
         # What a rule sees: the source request in IR form, reduced to the
         # facts rules read.  Built by the caller only when the model has
         # rules, so a model without them pays nothing for the feature.
@@ -120,9 +122,9 @@ class SelectionContext:
         self.provider_info: ProviderInfo | None = None
 
         self.ir_request: dict[str, Any] | None = None
-        # Smallest remaining share per provider, 0..1; absent means "not
+        # Smallest remaining share per candidate, 0..1; absent means "not
         # measured", which is deliberately not the same as "spent".
-        self.quota_headroom: Mapping[str, float] = {}
+        self.quota_headroom: Mapping[EntryKey, float] = {}
         # Providers whose every fresh reading says the allowance is spent.
         # Distinct from a provider block: this is a reading, not a decision.
         self.quota_excluded: frozenset[str] = frozenset()
@@ -204,7 +206,7 @@ class SelectionContext:
         """
         self.required_capabilities = frozenset(capabilities)
 
-    def with_eligibility(self, answers: Mapping[str, Eligibility]) -> None:
+    def with_eligibility(self, answers: Mapping[EntryKey, Eligibility]) -> None:
         """Record the one predicate's answer for every candidate.
 
         The stage that fills this runs first, so every later stage reads a
@@ -214,15 +216,26 @@ class SelectionContext:
 
     def with_quota_headroom(
         self,
-        headroom: Mapping[str, float],
+        headroom: Mapping[EntryKey, float],
         excluded: frozenset[str] = frozenset(),
     ) -> None:
-        """Record how much allowance each provider has left, and who has none."""
+        """Record how much allowance each candidate has left, and who has none.
+
+        The excluded set is provider names: a spent allowance is one
+        credential's state, and every lane of that provider shares it — the
+        same credential-level reading as failover exclusion.
+        """
         self.quota_headroom = dict(headroom)
         self.quota_excluded = excluded
 
     def with_failover_excluded(self, names: frozenset[str] | set[str]) -> None:
         """Record providers this request must not be served by again.
+
+        Names, not candidate keys: a refusal this reacts to is credential-level
+        (429, quota), and every lane of a provider shares its credentials, so
+        excluding the name excludes all of its lanes.  Lane-level exclusion is
+        a different fact — one upstream model refusing for its own reason —
+        and would have to say which lane refused.
 
         The previous choice is voided along with it: the caller is about to
         re-run selection, and a stage that finds nothing must not leave the
@@ -240,23 +253,27 @@ class SelectionContext:
         """
         self.pinned = name or None
 
-    def excluded_providers(self) -> frozenset[str]:
-        """Every provider selection must skip: ineligible, spent, failed over.
+    def excluded_providers(self) -> frozenset[EntryKey]:
+        """Every candidate selection must skip: ineligible, spent, failed over.
+
+        The answer is candidate keys.  The quota and failover sets are provider
+        names — both are credential-level facts — so each name is widened to
+        every lane it names.
 
         A pin excludes every other candidate, so a pinned request cannot be
-        served by a provider the caller did not name.
+        served by a provider the caller did not name; pinning a provider keeps
+        all of its lanes.
         """
-        excluded = (
-            frozenset(
-                n for n, answer in self.eligibility.items() if not answer.eligible
-            )
-            | self.quota_excluded
-            | self.failover_excluded
+        excluded = frozenset(
+            answer.key for answer in self.eligibility.values() if not answer.eligible
         )
+        by_name = self.quota_excluded | self.failover_excluded
+        if by_name:
+            excluded |= frozenset(p.key for p in self.candidates if p.name in by_name)
         if not self.pinned:
             return excluded
         return frozenset(
-            {p.name for p in self.candidates if p.name != self.pinned} | excluded
+            {p.key for p in self.candidates if p.name != self.pinned} | excluded
         )
 
     def with_ir_request(self, ir_request: dict[str, Any]) -> None:
@@ -281,9 +298,24 @@ class SelectionContext:
         self.upstream_session_id = session_id
 
     def is_eligible(self, provider_name: str) -> bool:
-        """Whether *provider_name* is a candidate for this request."""
-        answer = self.eligibility.get(provider_name)
-        return answer is not None and answer.eligible
+        """Whether any lane of *provider_name* is a candidate for this request."""
+        return any(
+            answer.eligible
+            for answer in self.eligibility.values()
+            if answer.name == provider_name
+        )
+
+    def lanes_of(self, provider_name: str) -> list[ProviderEntry]:
+        """Every candidate naming *provider_name*, in route order."""
+        return [p for p in self.candidates if p.name == provider_name]
+
+    def first_eligible_lane(self, provider_name: str) -> ProviderEntry | None:
+        """The first lane of *provider_name* this request may be served by."""
+        for entry in self.lanes_of(provider_name):
+            answer = self.eligibility.get(entry.key)
+            if answer is not None and answer.eligible:
+                return entry
+        return None
 
     @property
     def candidates(self) -> list[ProviderEntry]:
