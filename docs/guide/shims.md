@@ -485,11 +485,16 @@ cache and reported as `stale` after a transport failure on every leg, an HTTP
 error from a leg, a disk that cannot be written (`ENOSPC`, `EPERM`, a read-only
 tree) and a `token_env` variable that is not set. It is **not** used for the two
 failures that say the bytes are wrong: a `sha256` mismatch, and a body that is
-not an installable archive (a page served in place of the archive, a truncated
-archive, an unsafe member). With nothing cached, every one of them fails the
-source.
+not an installable archive — a page served in place of the archive, a truncated
+archive, an unsafe member, or more bytes than the download cap allows, whichever
+check notices it first. Every other failure is one the cache covers. With
+nothing cached, every one of them fails the source.
 
-The mirror is asked in exactly one of those cases:
+The mirror is asked only when the primary could not be connected to. One
+exception: the leg that served last is tried first, so once a mirror has taken
+over it is asked before the primary, and a failure of the mirror then moves on
+to the primary instead. The table holds for the state a fresh process starts in,
+with the primary first:
 
 | What the primary did | Mirror tried? | With a warm cache |
 |:---|:---|:---|
@@ -498,6 +503,7 @@ The mirror is asked in exactly one of those cases:
 | could not be reached with its credential (`token_env` unset) | no | the stale copy is used, `stale: true` |
 | sent a body that is not an installable archive (a page served instead of it, a truncated archive, an unsafe member) | no | not masked; the source fails |
 | sent bytes that do not match its `sha256` | no | not masked; the source fails |
+| sent more bytes than the download cap allows | no | not masked; the source fails |
 | could not be written to disk (full disk, permissions) | not retried — the other leg needs the same disk | the stale copy is used, `stale: true` |
 
 The mirror is a stand-in, not an authority: a failure of the mirror itself — a

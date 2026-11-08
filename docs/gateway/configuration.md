@@ -152,7 +152,8 @@ bytes: a transport failure, an HTTP error, a disk that cannot be written and an
 unset `token_env` are all served from the cache and reported as stale. Two are
 never masked — a `sha256` mismatch, and a body that is not an installable
 archive (a page served in place of the archive, a truncated archive, an unsafe
-member) — and with nothing cached every failure fails the source. The cache
+member) — while a body over the download cap is a fetch failure like any other
+today. With nothing cached every failure fails the source. The cache
 means "the source is unreachable or unhappy, use the last good copy", not "the
 bytes are wrong, ignore it"; see [Shims → Mirrors](../guide/shims.md#mirrors).
 
