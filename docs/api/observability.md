@@ -179,8 +179,9 @@ pm = PersistenceManager(
 
 ## ProfilerState
 
-管理按需的请求级 pyinstrument 性能分析会话。与框架无关的数据层——将
-`ProfilerState` 接入 Web 框架的路由处理器由消费者实现。
+管理按需的请求级性能分析会话，每个会话都由内置的 cProfile 分析器（`DeepProfiler`，
+无额外依赖）实现。与框架无关的数据层——将 `ProfilerState` 接入 Web 框架的路由处理器
+由消费者实现。
 
 ```python
 state = ProfilerState(max_results=20)
