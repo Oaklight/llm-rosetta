@@ -185,7 +185,8 @@ pm = PersistenceManager(
 
 ## ProfilerState
 
-Manages on-demand per-request pyinstrument profiling sessions.  Framework-agnostic
+Manages on-demand per-request profiling sessions, each backed by the built-in
+cProfile profiler (`DeepProfiler`, no optional dependency).  Framework-agnostic
 data layer — route handlers that wire `ProfilerState` into a web framework live
 in the consumer.
 
