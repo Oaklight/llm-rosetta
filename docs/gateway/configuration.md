@@ -147,13 +147,14 @@ reproducible deployments.
 `<config_dir>/shims-cache`, next to the config file). A pinned ref, a `sha256`,
 or `refresh: "never"` is fetched once; `refresh: "always"` always re-fetches;
 the default `auto` re-fetches when the cached copy is older than `remote_ttl`.
-A **transport** failure (connection, DNS, timeout) with a cache present is
-served from that cache with a warning and reported as stale; with nothing cached
-the source fails. A body that arrived but is wrong — an HTTP error page, a
-truncated or unsafe archive, a `sha256` mismatch — fails whether or not a cache
-exists. The cache means "the source is unreachable, use the last good copy", not
-"the source answered with something wrong, ignore it"; see
-[Shims → Mirrors](../guide/shims.md#mirrors).
+A warm cache covers every failure except the source's verdict on its own
+bytes: a transport failure, an HTTP error, a disk that cannot be written and an
+unset `token_env` are all served from the cache and reported as stale. Two are
+never masked — a `sha256` mismatch, and a body that is not an installable
+archive (a page served in place of the archive, a truncated archive, an unsafe
+member) — and with nothing cached every failure fails the source. The cache
+means "the source is unreachable or unhappy, use the last good copy", not "the
+bytes are wrong, ignore it"; see [Shims → Mirrors](../guide/shims.md#mirrors).
 
 **Precedence.** On a shim-name collision, later sources win: built-ins, then
 entry-point plugins, then `paths` in order, then `remotes` in order.

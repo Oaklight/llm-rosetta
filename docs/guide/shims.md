@@ -479,23 +479,37 @@ serves are not the forge's repository tarball. Declaring a mirror beside a
 primary that pins `sha256` without pinning the mirror is refused when the config
 loads, because the mirror is the path an on-path attacker can force.
 
-What falls back to what:
+What falls back to what. The rule first: **a warm cache covers every failure
+except the source's verdict on its own bytes.** The fetch is served from the
+cache and reported as `stale` after a transport failure on every leg, an HTTP
+error from a leg, a disk that cannot be written (`ENOSPC`, `EPERM`, a read-only
+tree) and a `token_env` variable that is not set. It is **not** used for the two
+failures that say the bytes are wrong: a `sha256` mismatch, and a body that is
+not an installable archive (a page served in place of the archive, a truncated
+archive, an unsafe member). With nothing cached, every one of them fails the
+source.
 
-| The primary … | Mirror tried? | With a warm cache |
+The mirror is asked in exactly one of those cases:
+
+| What the primary did | Mirror tried? | With a warm cache |
 |:---|:---|:---|
-| cannot be connected to (refused, DNS, timeout) | **yes** — the one case a mirror exists for | the stale copy is used if no leg serves |
-| answers with an HTTP error (`403`, `404`, `5xx`) | no — the source's own verdict | not masked; the source fails |
-| sends a body that cannot be installed (an HTML error page, a truncated archive, an unsafe member) | no | not masked; the source fails |
-| sends bytes that do not match its `sha256` | no | not masked; the source fails |
+| could not be connected to (refused, DNS, timeout) | **yes** — the one case a mirror exists for | the stale copy is used if no leg serves |
+| answered with an HTTP error (`403`, `404`, `5xx`) | no — the source's own verdict | the stale copy is used, `stale: true` |
+| could not be reached with its credential (`token_env` unset) | no | the stale copy is used, `stale: true` |
+| sent a body that is not an installable archive (a page served instead of it, a truncated archive, an unsafe member) | no | not masked; the source fails |
+| sent bytes that do not match its `sha256` | no | not masked; the source fails |
+| could not be written to disk (full disk, permissions) | not retried — the other leg needs the same disk | the stale copy is used, `stale: true` |
 
-The mirror is a stand-in, not an authority: any failure of the mirror itself —
-a transport error, an HTTP error, an unusable body — moves on to the other leg
+The mirror is a stand-in, not an authority: a failure of the mirror itself — a
+transport error, an HTTP error, an unusable body — moves on to the other leg
 rather than deciding for the primary, because a CDN that has not got the version
-yet says nothing about the forge. The leg that last served is remembered for the
-process lifetime, so a working mirror costs one failed connect, not one per
-fetch, and a restart costs one. The startup log says which leg each source
-loaded from (`loaded via mirror`); the `leg` and the expanded `archive_url` are
-also part of the source status the admin API returns.
+yet says nothing about the forge. A mirror that *pins* its bytes is the
+operator's declaration, though: an unusable body or a mismatch there is final,
+while a transport or HTTP failure still moves on. The leg that last served is
+remembered for the process lifetime, so a working mirror costs one failed
+connect, not one per fetch, and a restart costs one. The startup log says which
+leg each source loaded from (`loaded via mirror`); the `leg` and the expanded
+`archive_url` are also part of the source status the admin API returns.
 
 A mirror is declared per remote; the `presets` catalog entries carry none, so a
 mirror is added by writing the remote out (an explicit remote with the same URL
