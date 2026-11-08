@@ -99,7 +99,7 @@ Two actions are not in the table: **+ Add Model** in the header, and **Fetch fro
 - **Timeout** — the upstream host is not reachable from the gateway
 - **DNS failure** — the Base URL hostname does not resolve
 
-Renaming a model onto a name that already exists merges the providers instead of failing: the confirm dialog adds the new provider to `providers[]` rather than replacing the entry that already held the name.
+Renaming a model onto a name that already exists merges the providers instead of failing: the confirm dialog adds the new provider to `providers[]` rather than replacing the entry that already held the name. The merge is only offered when it can add a provider. If the name is already routed through the provider being merged, the rename is refused with `409` and both models stay as they were — the target keeps its `upstream_model`, and the panel shows the reason naming each provider the target already uses — because one provider cannot appear twice under one model name.
 
 ### Model capabilities
 
