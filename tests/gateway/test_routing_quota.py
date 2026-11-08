@@ -33,10 +33,15 @@ def _eligible(
     *,
     headroom: dict[str, float] | None = None,
     sunk: frozenset[str] = frozenset(),
-) -> dict[str, Eligibility]:
-    """The predicate's answer for a list of names, all eligible."""
+) -> dict[tuple[str, str | None], Eligibility]:
+    """The predicate's answer for a list of names, all eligible.
+
+    Keyed by candidate key: with lane identity in place (#1430), the map a
+    stage produces is keyed by ``(provider, upstream model)``, and these
+    helpers build routes with no per-entry upstream.
+    """
     return {
-        name: Eligibility(
+        (name, None): Eligibility(
             name=name,
             eligible=True,
             headroom=(headroom or {}).get(name),
@@ -208,14 +213,14 @@ class TestTheStage:
 
         EligibilityStage().run(ctx)
 
-        assert ctx.quota_headroom["a"] == 0.1
+        assert ctx.quota_headroom[("a", None)] == 0.1
 
     def test_an_unmeasured_provider_is_one_not_zero(self):
         ctx = self._ctx({"a": _pinfo("a"), "b": _pinfo("b")}, ["a", "b"])
 
         EligibilityStage().run(ctx)
 
-        assert ctx.quota_headroom == {"a": 1.0, "b": 1.0}
+        assert ctx.quota_headroom == {("a", None): 1.0, ("b", None): 1.0}
 
 
 class TestTheAnchor:
@@ -350,7 +355,7 @@ class TestExclusionByReading:
             entry = select_ready_entry(
                 route,
                 eligibility=_eligible(["spent", "fresh"]),
-                excluded=frozenset({"spent"}),
+                excluded=frozenset({("spent", None)}),
             )
             assert entry is not None
             picks.add(entry.name)

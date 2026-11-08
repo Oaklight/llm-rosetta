@@ -102,8 +102,8 @@ class TestSelectionContext:
         ctx = _ctx()
         ctx.with_eligibility(
             {
-                "a": Eligibility(name="a", eligible=False, reason=BLOCKED),
-                "b": Eligibility(name="b", eligible=True),
+                ("a", None): Eligibility(name="a", eligible=False, reason=BLOCKED),
+                ("b", None): Eligibility(name="b", eligible=True),
             }
         )
 

@@ -139,9 +139,9 @@ class TestTheEligibilityStage:
 
         EligibilityStage().run(ctx)
 
-        assert ctx.eligibility["a"].eligible is False
-        assert ctx.eligibility["a"].reason == CAPABILITY
-        assert ctx.eligibility["b"].eligible is True
+        assert ctx.eligibility[("a", None)].eligible is False
+        assert ctx.eligibility[("a", None)].reason == CAPABILITY
+        assert ctx.eligibility[("b", None)].eligible is True
 
     def test_the_same_entry_stays_a_candidate_for_other_requests(self):
         entries = [
@@ -152,8 +152,8 @@ class TestTheEligibilityStage:
 
         EligibilityStage().run(ctx)
 
-        assert ctx.eligibility["a"].eligible is True
-        assert ctx.eligibility["b"].eligible is True
+        assert ctx.eligibility[("a", None)].eligible is True
+        assert ctx.eligibility[("b", None)].eligible is True
 
     def test_an_undeclared_entry_is_never_filtered(self):
         ctx = _context(
@@ -163,8 +163,8 @@ class TestTheEligibilityStage:
 
         EligibilityStage().run(ctx)
 
-        assert ctx.eligibility["a"].eligible is True
-        assert ctx.eligibility["b"].eligible is False
+        assert ctx.eligibility[("a", None)].eligible is True
+        assert ctx.eligibility[("b", None)].eligible is False
 
     def test_the_answer_keeps_what_the_predicate_said(self):
         ctx = _context(
@@ -174,7 +174,7 @@ class TestTheEligibilityStage:
 
         EligibilityStage().run(ctx)
 
-        answer = ctx.eligibility["a"]
+        answer = ctx.eligibility[("a", None)]
         assert isinstance(answer, Eligibility)
         assert answer.headroom is None
 

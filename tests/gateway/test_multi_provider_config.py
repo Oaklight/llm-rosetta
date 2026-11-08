@@ -40,13 +40,13 @@ class TestSingleProviderBackwardCompat:
         assert isinstance(route, ModelRoute)
         assert not route.is_multi
         assert route.provider_names == ["openai_a"]
-        assert route.select() == "openai_a"
+        assert route.select().name == "openai_a"
 
     def test_dict_form(self):
         config = _make_config({"gpt-4o": {"provider": "openai_a"}})
         route = config.models["gpt-4o"]
         assert not route.is_multi
-        assert route.select() == "openai_a"
+        assert route.select().name == "openai_a"
 
     def test_dict_with_capabilities(self):
         config = _make_config(
@@ -311,7 +311,7 @@ class TestPerProviderUpstreamModel:
         route, _ = config.resolve(config.selection_context("gpt-4o", "openai_chat"))
         assert route.upstream_model == "model-level-name"
 
-    def test_select_entry_returns_provider_entry(self):
+    def test_select_returns_the_provider_entry(self):
         config = _make_config(
             {
                 "gpt-4o": {
@@ -327,7 +327,7 @@ class TestPerProviderUpstreamModel:
             }
         )
         route = config.models["gpt-4o"]
-        entry = route.select_entry()
+        entry = route.select()
         assert entry.name in ("openai_a", "openai_b")
         if entry.name == "openai_a":
             assert entry.upstream_model == "upstream-a"
@@ -360,3 +360,16 @@ def test_declared_lanes_keep_a_switched_off_provider():
         {"name": "a", "weight": 2, "enabled": True},
         {"name": "b", "weight": 3, "enabled": True},
     ]
+
+
+def pick(strategy, providers=None, **kwargs) -> str:
+    """The name of the candidate the strategy chose.
+
+    Strategies and routes return the entry (two lanes of one provider must
+    stay apart), so a test that only cares which provider won asks for its
+    name here.  A route already holds its candidates; a bare strategy is
+    handed them.
+    """
+    if providers is None:
+        return strategy.select(**kwargs).name
+    return strategy.select(providers, **kwargs).name

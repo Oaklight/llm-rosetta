@@ -202,12 +202,12 @@ class TestTheStrategies:
     def test_ordered_is_the_first_candidate_every_time(self):
         route = _route("ordered", weights=(5, 1))
 
-        assert [route.select() for _ in range(5)] == ["p0"] * 5
+        assert [route.select().name for _ in range(5)] == ["p0"] * 5
 
     def test_rotate_ignores_the_weights(self):
         route = _route("rotate", weights=(5, 1))
 
-        picks = [route.select() for _ in range(6)]
+        picks = [route.select().name for _ in range(6)]
 
         assert picks.count("p0") == 3
         assert picks.count("p1") == 3
@@ -215,7 +215,7 @@ class TestTheStrategies:
     def test_least_used_lets_the_fresh_provider_catch_up(self):
         route = _route("least_used", weights=(5, 1))
 
-        picks = [route.select() for _ in range(6)]
+        picks = [route.select().name for _ in range(6)]
 
         assert picks.count("p0") == 3
         assert picks.count("p1") == 3
@@ -230,7 +230,7 @@ class TestTheStrategies:
             entry = select_ready_entry(
                 route,
                 eligibility={
-                    name: Eligibility(name=name, eligible=True, headroom=share)
+                    (name, None): Eligibility(name=name, eligible=True, headroom=share)
                     for name, share in headroom.items()
                 },
             )
@@ -248,8 +248,8 @@ class TestTheStrategies:
             entry = select_ready_entry(
                 route,
                 eligibility={
-                    "p0": Eligibility(name="p0", eligible=True),
-                    "p1": Eligibility(name="p1", eligible=True),
+                    ("p0", None): Eligibility(name="p0", eligible=True),
+                    ("p1", None): Eligibility(name="p1", eligible=True),
                 },
             )
             assert entry is not None
@@ -262,8 +262,8 @@ class TestTheSwitches:
     def test_sink_true_orders_a_sunk_provider_last(self):
         route = _route("weighted", routing=ModelRouting(sink=True))
         eligibility = {
-            "p0": Eligibility(name="p0", eligible=True, sunk=True),
-            "p1": Eligibility(name="p1", eligible=True),
+            ("p0", None): Eligibility(name="p0", eligible=True, sunk=True),
+            ("p1", None): Eligibility(name="p1", eligible=True),
         }
 
         picks = set()
@@ -278,8 +278,8 @@ class TestTheSwitches:
         """A model that opted out of sinking still splits the traffic."""
         route = _route("weighted", routing=ModelRouting(sink=False))
         eligibility = {
-            "p0": Eligibility(name="p0", eligible=True, sunk=True),
-            "p1": Eligibility(name="p1", eligible=True),
+            ("p0", None): Eligibility(name="p0", eligible=True, sunk=True),
+            ("p1", None): Eligibility(name="p1", eligible=True),
         }
 
         picks = []
@@ -308,3 +308,16 @@ class TestTheSwitches:
         assert isinstance(create_strategy("ordered"), OrderedStrategy)
         assert isinstance(create_strategy("rotate"), RotateStrategy)
         assert isinstance(create_strategy("pace"), PaceStrategy)
+
+
+def pick(strategy, providers=None, **kwargs) -> str:
+    """The name of the candidate the strategy chose.
+
+    Strategies and routes return the entry (two lanes of one provider must
+    stay apart), so a test that only cares which provider won asks for its
+    name here.  A route already holds its candidates; a bare strategy is
+    handed them.
+    """
+    if providers is None:
+        return strategy.select(**kwargs).name
+    return strategy.select(providers, **kwargs).name

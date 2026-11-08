@@ -22,7 +22,7 @@ def test_a_headroom_scaled_entry_keeps_its_capabilities():
         ROUTE,
     )
 
-    scaled = route._candidates({"p": 0.5})
+    scaled = route._candidates({("p", "fast"): 0.5})
 
     assert scaled[0].capabilities == ("text",)
     assert scaled[0].upstream_model == "fast"
@@ -36,6 +36,6 @@ def test_the_pace_scaling_keeps_them_too():
         strategy=PaceStrategy(),
     )
 
-    scaled = route._candidates({"p": 1.0})
+    scaled = route._candidates({("p", "fast"): 1.0})
 
     assert scaled[0].capabilities == ("text", "vision")

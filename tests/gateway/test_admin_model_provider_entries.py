@@ -334,10 +334,10 @@ class TestPinnedProvider:
         assert self._context(None).excluded_providers() == frozenset()
 
     def test_pin_excludes_every_other_provider(self):
-        assert self._context("b").excluded_providers() == frozenset({"a"})
+        assert self._context("b").excluded_providers() == frozenset({("a", None)})
 
     def test_pin_stacks_with_failover_exclusions(self):
         ctx = self._context("b")
         ctx.with_failover_excluded({"a"})
 
-        assert ctx.excluded_providers() == frozenset({"a"})
+        assert ctx.excluded_providers() == frozenset({("a", None)})
