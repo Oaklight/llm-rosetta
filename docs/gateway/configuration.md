@@ -659,6 +659,23 @@ A `providers[]` entry may declare what that provider serves **for this model**, 
 
 A request that carries an image needs `vision`, one that declares tools needs `tools`, and one that asks for a reasoning effort needs `reasoning`. An entry whose list lacks a needed capability is not a candidate **for that request**, and stays a candidate for every other one. An entry that declares nothing inherits the provider's own capabilities, so a config without the field behaves exactly as before. When every candidate lacks the capability the route answers `400` and names it — a retry cannot add one. The model drawer has the same field on each provider row; blank means inherit ([admin panel](admin-panel.md)).
 
+### Several Upstream Models of One Provider { #provider-lanes }
+
+A model may list the same provider more than once, each entry naming a different `upstream_model`:
+
+```jsonc
+"models": {
+  "deepseek-v4.1-flash": {
+    "providers": [
+      {"name": "opendesign-go", "upstream_model": "deepseek-v4.1-flash", "weight": 3},
+      {"name": "opendesign-go", "upstream_model": "deepseek-v4.1-flash-eco", "weight": 1}
+    ]
+  }
+}
+```
+
+Each entry is a candidate of its own: the strategy counts it separately, eligibility and capability filtering judge it separately, and the server record names the `upstream_model` that served. Two entries naming the same provider **and** the same `upstream_model` are one candidate written twice, and the config refuses to load. Failover and a spent allowance remain provider-level: every entry of one provider shares its credentials, so a 429 or exhausted quota removes all of them at once.
+
 ### Typed Routes { #typed-routes }
 
 Embedding, rerank and decision models declared in the unified `models` section go through the same two stages as the chat route — eligibility, then the anchor over the declared weights. A typed model with several providers therefore serves them by weight and skips one the state has removed (spent, blocked, or disabled by a run of 429s):
