@@ -124,6 +124,15 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Check that every documented extra is declared
+        # The docs name extras in install lines and nothing else compares them
+        # with the packaging — that is how `llm-rosetta[profiling]` outlived the
+        # extra (#1407).  It runs here because this is the one job with both
+        # trees checked out: the docs are orphan branches, so a test under
+        # tests/ could only ever skip.  Known gap, same as the build below: a
+        # commit to a docs branch is not covered until the next PR to master.
+        run: python scripts/dev/check_doc_extras.py
+
       - name: Install the docs toolchain
         # Deliberately not the packages: RTD imports the source the branch
         # copies, and an editable install here would hide a missing copy.
