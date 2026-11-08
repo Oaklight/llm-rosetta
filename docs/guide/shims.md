@@ -450,6 +450,57 @@ which refuses it, so a config written by a newer build still starts on an
 older one. A malformed section (a `presets` string, say) is refused when the
 config loads rather than at startup.
 
+#### Mirrors { #mirrors }
+
+A remote source dies wherever its host is unreachable: `github.com` behind a
+firewall, a forge under maintenance, a DNS name that does not resolve from this
+network. A `mirror` gives the same archive a second URL, tried when the primary
+cannot be connected to:
+
+```jsonc
+"remotes": [
+  {
+    "url": "https://github.com/Oaklight/llm-rosetta-shim-alcf",
+    "ref": "v0.1.0",
+    "sha256": "0123…abcd",
+    "mirror": {
+      "url_template": "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-alcf@dist/v0.1.0/alcf.tar.gz",
+      "sha256": "89ab…cdef"
+    }
+  }
+]
+```
+
+The two situations it is meant for are a public CDN in front of the forge — the
+`dist` archive the standalone packages publish, which jsDelivr serves — and an
+internal mirror on the network the gateway runs in. The template takes the same
+`{ref}` as the primary, and the mirror pins its **own** `sha256`: the bytes a CDN
+serves are not the forge's repository tarball. Declaring a mirror beside a
+primary that pins `sha256` without pinning the mirror is refused when the config
+loads, because the mirror is the path an on-path attacker can force.
+
+What falls back to what:
+
+| The primary … | Mirror tried? | With a warm cache |
+|:---|:---|:---|
+| cannot be connected to (refused, DNS, timeout) | **yes** — the one case a mirror exists for | the stale copy is used if no leg serves |
+| answers with an HTTP error (`403`, `404`, `5xx`) | no — the source's own verdict | not masked; the source fails |
+| sends a body that cannot be installed (an HTML error page, a truncated archive, an unsafe member) | no | not masked; the source fails |
+| sends bytes that do not match its `sha256` | no | not masked; the source fails |
+
+The mirror is a stand-in, not an authority: any failure of the mirror itself —
+a transport error, an HTTP error, an unusable body — moves on to the other leg
+rather than deciding for the primary, because a CDN that has not got the version
+yet says nothing about the forge. The leg that last served is remembered for the
+process lifetime, so a working mirror costs one failed connect, not one per
+fetch, and a restart costs one. The startup log says which leg each source
+loaded from (`loaded via mirror`); the `leg` and the expanded `archive_url` are
+also part of the source status the admin API returns.
+
+A mirror is declared per remote; the `presets` catalog entries carry none, so a
+mirror is added by writing the remote out (an explicit remote with the same URL
+is merged onto its preset).
+
 !!! warning
     A declared source may ship a `transforms.py` that is executed on load — the
     same trust level as installing a plugin package. Pin a ref and only add

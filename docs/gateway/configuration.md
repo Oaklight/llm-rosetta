@@ -94,6 +94,49 @@ codeload tarball endpoint; any other host works by giving an explicit archive
 URL (optionally containing `{ref}`), so GitLab and self-hosted forges need no
 per-host code path. Only HTTPS is accepted (loopback may use HTTP).
 
+**Mirrors.** A source whose host may be unreachable — `github.com` behind a
+firewall, a forge under maintenance — can declare a second URL for the same
+archive. `mirror` is either a URL template string or an object carrying its own
+pin and credential:
+
+```jsonc
+"remotes": [
+  {
+    "url": "https://github.com/Oaklight/llm-rosetta-shim-alcf",
+    "ref": "v0.1.0",
+    "sha256": "0123…abcd",
+    "mirror": {
+      // expanded with the same {ref} as the primary
+      "url_template": "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-alcf@dist/v0.1.0/alcf.tar.gz",
+      "sha256": "89ab…cdef",
+      "token_env": "MIRROR_TOKEN"        // optional; the mirror's own credential
+    }
+  }
+]
+```
+
+The template must be an archive URL — a GitHub repository URL, a URL containing
+`{ref}`, or one ending in `.tar.gz`, `.tgz`, `.tar` or `.zip`. A mirror is
+consulted **only when the primary cannot be connected to**; see
+[Shims → Mirrors](../guide/shims.md#mirrors) for the full fallback rules.
+
+The mirror carries its own `sha256` because the bytes a mirror serves need not
+be the primary's — a CDN serves the archive the project committed to its `dist`
+branch, not the forge's repository tarball. **When the source pins `sha256`, the
+mirror must declare its own**, and the config is refused otherwise: an unpinned
+mirror beside a pinned primary would let exactly the path an attacker can force
+(make the primary unreachable, answer as the mirror) serve bytes the pin never
+approved.
+
+**Credentials are per leg.** `token_env` names an environment variable whose
+value the primary's request carries as a bearer token. It is sent only to a leg
+whose origin — scheme, host and port, with a scheme's default port filled in, so
+`https://h` and `https://h:443` are one origin — matches the primary's. A mirror
+on another host therefore never receives the primary's token; a mirror that
+needs a credential declares its own `token_env`. If the named variable is unset,
+that leg's request fails with an error naming the variable rather than falling
+back to an anonymous one.
+
 **Ref resolution.** With `ref` set (a tag, branch, or commit SHA) that ref is
 fetched. With `ref` omitted, `HEAD` is resolved to a concrete commit SHA through
 the host API (GitHub) and recorded in the cache stamp, so later runs reuse the
@@ -104,8 +147,13 @@ reproducible deployments.
 `<config_dir>/shims-cache`, next to the config file). A pinned ref, a `sha256`,
 or `refresh: "never"` is fetched once; `refresh: "always"` always re-fetches;
 the default `auto` re-fetches when the cached copy is older than `remote_ttl`.
-If a fetch fails and a cache exists, the stale cache is used with a warning; the
-source only fails when there is nothing cached.
+A **transport** failure (connection, DNS, timeout) with a cache present is
+served from that cache with a warning and reported as stale; with nothing cached
+the source fails. A body that arrived but is wrong — an HTTP error page, a
+truncated or unsafe archive, a `sha256` mismatch — fails whether or not a cache
+exists. The cache means "the source is unreachable, use the last good copy", not
+"the source answered with something wrong, ignore it"; see
+[Shims → Mirrors](../guide/shims.md#mirrors).
 
 **Precedence.** On a shim-name collision, later sources win: built-ins, then
 entry-point plugins, then `paths` in order, then `remotes` in order.
