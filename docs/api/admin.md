@@ -830,14 +830,11 @@ POST /admin/api/maintenance/<name>
 
 ---
 
-## 性能分析
+## 性能分析 { #profiling }
 
-基于 [pyinstrument](https://github.com/joerick/pyinstrument) 的按需深度性能分析。
-启用后，网关会对接下来的 *N* 个请求进行性能分析，并保存交互式火焰图结果。
-
-!!! note "可选依赖"
-    性能分析需要 `pyinstrument`。安装方式：
-    `pip install llm-rosetta[profiling]`
+按需的深度性能分析，内置、开箱即用：分析器是随包提供的 cProfile 实现，不需要安装任何东西。
+启用后，网关会对接下来的 *N* 个请求进行性能分析，并保存每次请求的结果 —— 格式化文本与一份
+自包含的 HTML 火焰图。
 
 ### 获取状态
 
@@ -891,8 +888,6 @@ POST /admin/api/profiling/enable
   "max_results": 20
 }
 ```
-
-**错误**：400（未安装 `pyinstrument`）。
 
 ---
 
@@ -964,7 +959,7 @@ GET /admin/api/profiling/results/<index>
 
 **响应（HTML）**
 
-直接返回 pyinstrument 火焰图 HTML 页面（Content-Type 为 `text/html`），可在浏览器中查看。
+直接返回火焰图 HTML 页面（Content-Type 为 `text/html`），可在浏览器中查看。
 
 **错误**：400（无效索引）、404（索引超出范围）。
 
