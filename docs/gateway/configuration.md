@@ -103,7 +103,7 @@ shim 不必放在包内。顶层 `shims` 段可以让 gateway 额外扫描若干
     "ref": "v0.1.0",
     "sha256": "0123…abcd",
     "mirror": {
-      // 与主 URL 用同一个 {ref} 展开
+      // {ref} 取上面写的 ref，不是它解析出的 commit
       "url_template": "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-alcf@dist/{ref}/alcf.tar.gz",
       "sha256": "89ab…cdef",
       "path": ".",                        // 可选；在该归档内扫描的目录
@@ -114,8 +114,9 @@ shim 不必放在包内。顶层 `shims` 段可以让 gateway 额外扫描若干
 ```
 
 模板必须是归档 URL —— GitHub 仓库 URL、含 `{ref}` 的 URL，或以 `.tar.gz`、`.tgz`、`.tar`、
-`.zip` 结尾的 URL。**只有在主 URL 连不上时**才会用到镜像；完整的回退规则见
-[Shim → 镜像](../guide/shims.md#mirrors)。
+`.zip` 结尾的 URL。`{ref}` 填入的是写在源上的 `ref`，**不是** GitHub 主 URL 解析出的 commit：
+镜像按发布版本一个目录，它的 URL 不能取决于 forge 的 API 有没有应答。**只有在主 URL 连不上时**
+才会用到镜像；完整的回退规则见 [Shim → 镜像](../guide/shims.md#mirrors)。
 
 `path` 是**在该归档内**扫描的目录，默认取源的 `path`。它之所以存在，是因为两条腿的布局
 未必相同：独立包发布的归档从 providers 目录构建（根的下一层就是 `providers/`），而 forge 的
