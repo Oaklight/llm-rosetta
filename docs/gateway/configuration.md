@@ -106,7 +106,7 @@ shim 不必放在包内。顶层 `shims` 段可以让 gateway 额外扫描若干
       // {ref} 取上面写的 ref，不是它解析出的 commit
       "url_template": "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-alcf@dist/{ref}/alcf.tar.gz",
       "sha256": "89ab…cdef",
-      "path": ".",                        // 可选；在该归档内扫描的目录
+      "path": "providers",               // 可选；在该归档内扫描的目录
       "token_env": "MIRROR_TOKEN"        // 可选；镜像自己的凭据
     }
   }
