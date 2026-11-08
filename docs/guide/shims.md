@@ -464,8 +464,9 @@ cannot be connected to:
     "ref": "v0.1.0",
     "sha256": "0123…abcd",
     "mirror": {
-      "url_template": "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-alcf@dist/v0.1.0/alcf.tar.gz",
-      "sha256": "89ab…cdef"
+      "url_template": "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-alcf@dist/{ref}/alcf.tar.gz",
+      "sha256": "89ab…cdef",
+      "path": "."
     }
   }
 ]
@@ -517,9 +518,12 @@ connect, not one per fetch, and a restart costs one. The startup log says which
 leg each source loaded from (`loaded via mirror`); the `leg` and the expanded
 `archive_url` are also part of the source status the admin API returns.
 
-A mirror is declared per remote; the `presets` catalog entries carry none, so a
-mirror is added by writing the remote out (an explicit remote with the same URL
-is merged onto its preset).
+Every published package's `presets` entry already carries a mirror: the tag it
+pins, the `dist` archive on jsDelivr with `{ref}` in the template, and
+`path: "."` for that archive's layout. The mirror stays a template, not a
+dependency — replacing the CDN with an internal mirror is a matter of writing
+the remote out, and an explicit remote with the same URL is merged onto its
+preset (explicit keys win).
 
 !!! warning
     A declared source may ship a `transforms.py` that is executed on load — the

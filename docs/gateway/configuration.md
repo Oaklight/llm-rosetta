@@ -97,7 +97,7 @@ per-host code path. Only HTTPS is accepted (loopback may use HTTP).
 **Mirrors.** A source whose host may be unreachable — `github.com` behind a
 firewall, a forge under maintenance — can declare a second URL for the same
 archive. `mirror` is either a URL template string or an object carrying its own
-pin and credential:
+pin, credential and scan directory:
 
 ```jsonc
 "remotes": [
@@ -107,8 +107,9 @@ pin and credential:
     "sha256": "0123…abcd",
     "mirror": {
       // expanded with the same {ref} as the primary
-      "url_template": "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-alcf@dist/v0.1.0/alcf.tar.gz",
+      "url_template": "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-alcf@dist/{ref}/alcf.tar.gz",
       "sha256": "89ab…cdef",
+      "path": ".",                        // optional; directory to scan in this archive
       "token_env": "MIRROR_TOKEN"        // optional; the mirror's own credential
     }
   }
@@ -119,6 +120,14 @@ The template must be an archive URL — a GitHub repository URL, a URL containin
 `{ref}`, or one ending in `.tar.gz`, `.tgz`, `.tar` or `.zip`. A mirror is
 consulted **only when the primary cannot be connected to**; see
 [Shims → Mirrors](../guide/shims.md#mirrors) for the full fallback rules.
+
+`path` is the directory to scan inside *this* archive, and it defaults to the
+source's `path`. It exists because the two legs need not be laid out the same
+way: the archive the standalone packages publish is built from the providers
+directory (`providers/` at its root), while the forge's tarball keeps the
+repository's `src/<package>/providers`. `"."` or `""` means the archive root;
+an absolute path or one with a `..` component is refused when the config loads.
+The [built-in presets](../guide/shims.md#standalone-shim-packages) set it.
 
 The mirror carries its own `sha256` because the bytes a mirror serves need not
 be the primary's — a CDN serves the archive the project committed to its `dist`
