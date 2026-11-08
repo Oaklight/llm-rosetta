@@ -280,7 +280,16 @@ class TestAdminPayload:
                 "free",
                 "note",
             }
-            assert set(entry["remote"]) == {"url", "path"}
+            # Every published package resolves to a pinned primary plus a
+            # mirror (#1411 Phase 4); the picker writes the key, so the extra
+            # keys ride along without a front-end change.
+            assert set(entry["remote"]) == {"url", "path", "ref", "mirror"}
+            assert entry["remote"]["ref"] == "v0.1.0"
+            assert set(entry["remote"]["mirror"]) == {
+                "url_template",
+                "sha256",
+                "path",
+            }
             assert entry["shims"]
 
     def test_the_free_package_carries_the_flag_the_picker_groups_on(self):
