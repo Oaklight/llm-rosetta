@@ -478,7 +478,7 @@ def _resolve_remote_source(
             location=location,
             name=name,
             ok=True,
-            resolved_dir=str(_remote_subdir(parsed)),
+            resolved_dir=str(_remote_subdir(parsed, _stamp_leg(cached))),
             from_cache=from_cache,
             stale=stale,
             fetched_at=cached.get("fetched_at"),
@@ -530,10 +530,58 @@ class _RemoteSpec:
     mirror_url: str | None = None
     mirror_sha256: str | None = None
     mirror_token_env: str | None = None
+    #: Scan directory inside the *mirror's* archive.  ``None`` inherits
+    #: ``subpath``: the legs need different paths only when the archives they
+    #: serve are laid out differently.
+    mirror_subpath: str | None = None
 
 
-def normalize_mirror(value: Any) -> tuple[str, str | None, str | None] | None:
-    """Validate a ``mirror`` declaration and return its template, pin and credential.
+def _normalize_subpath(value: Any, *, where: str) -> str:
+    """Normalize a declared scan directory, refusing anything that can escape.
+
+    Both a source's ``path`` and a mirror's ``path`` name a directory inside an
+    extracted archive.  ``None`` and ``""`` mean the extraction root, as does
+    ``"."``; anything else must be a relative path of ordinary components, so a
+    declaration cannot point at an absolute location or walk out of the cache
+    directory (the extractor already refuses such members; this refuses the
+    *declaration*).
+
+    Args:
+        value: The declared value.
+        where: The config key, for the error message.
+
+    Returns:
+        The normalized relative path, or ``""`` for the archive root.
+
+    Raises:
+        ValueError: On a non-string, an absolute path, a backslash spelling, or
+            a ``..`` component.
+    """
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        raise ValueError(f"{where} must be a string path")
+    if "\\" in value:
+        raise ValueError(f"{where} must use '/' separators")
+    text = value
+    if text in ("", ".", "./"):
+        return ""
+    if text.startswith("/"):
+        raise ValueError(f"{where} must be a relative path inside the archive")
+    if len(text) > 1 and text[1] == ":":
+        raise ValueError(f"{where} must be a relative path inside the archive")
+    parts = [part for part in text.split("/") if part not in ("", ".")]
+    if not parts:
+        return ""
+    if any(part == ".." for part in parts):
+        raise ValueError(f"{where} must not contain '..'")
+    return "/".join(parts)
+
+
+def normalize_mirror(
+    value: Any,
+) -> tuple[str, str | None, str | None, str | None] | None:
+    """Validate a ``mirror`` declaration and return its parts.
 
     A mirror is a second URL for the same source, used only when the primary
     is unreachable.  It is an ordinary archive URL template, so any host can
@@ -544,7 +592,8 @@ def normalize_mirror(value: Any) -> tuple[str, str | None, str | None] | None:
         "mirror": "https://mirror.example/shims@{ref}.tar.gz"
         "mirror": {"url_template": "https://cdn.example/gh/o/r@{ref}/dist/shims.tar.gz",
                    "sha256": "0123…abcd",
-                   "token_env": "MIRROR_TOKEN"}
+                   "token_env": "MIRROR_TOKEN",
+                   "path": "."}
 
     The bytes a mirror serves need not be the primary's bytes (a CDN serving a
     committed ``dist/<name>.tar.gz`` differs from the forge's repository
@@ -554,36 +603,47 @@ def normalize_mirror(value: Any) -> tuple[str, str | None, str | None] | None:
     belongs to the primary's origin.  A mirror that needs its own declares it
     here.
 
+    ``path`` is the directory to scan inside the mirror's archive.  Omitted, it
+    inherits the source's ``path`` — the common case, where both legs serve the
+    same tree.  It exists because a committed ``dist`` archive is laid out from
+    the providers directory (``providers/`` at its root) while the forge
+    tarball keeps the repository's ``src/<package>/providers``: one path cannot
+    address both, and the mirror descriptor is what describes the mirror's
+    bytes.
+
     Args:
         value: The declared ``mirror``: ``None``, a template string, or an
             object with ``url_template`` and optional ``sha256`` /
-            ``token_env``.
+            ``token_env`` / ``path``.
 
     Returns:
-        ``(url_template, sha256 or None, token_env or None)``, or ``None``
-        when no mirror is declared.
+        ``(url_template, sha256 or None, token_env or None, path or None)``,
+        or ``None`` when no mirror is declared.
 
     Raises:
         ValueError: On an unknown shape, an unknown key, a template that is
-            not an archive URL the loader accepts, or a malformed digest.
+            not an archive URL the loader accepts, a malformed digest, or a
+            ``path`` that is not a relative directory inside the archive.
     """
     if value is None:
         return None
     pin: Any = None
     token_env: Any = None
+    subpath: Any = None
     if isinstance(value, str):
         template = value
     elif isinstance(value, Mapping):
-        unknown = set(value) - {"url_template", "sha256", "token_env"}
+        unknown = set(value) - {"url_template", "sha256", "token_env", "path"}
         if unknown:
             names = ", ".join(sorted(str(key) for key in unknown))
             raise ValueError(
                 f"unknown mirror key(s): {names} "
-                "(expected url_template, sha256, token_env)"
+                "(expected url_template, sha256, token_env, path)"
             )
         template = value.get("url_template")
         pin = value.get("sha256")
         token_env = value.get("token_env")
+        subpath = value.get("path")
         if not isinstance(template, str) or not template:
             raise ValueError("mirror requires a non-empty 'url_template'")
     else:
@@ -606,7 +666,12 @@ def normalize_mirror(value: Any) -> tuple[str, str | None, str | None] | None:
         _validate_url_scheme(template)
     except ShimSourceError as exc:
         raise ValueError(str(exc)) from None
-    return template, pin, token_env
+    # An absent ``path`` inherits the source's (``None``); a declared one — even
+    # ``"."`` or ``""`` — names the mirror's own scan directory.
+    declared_path = (
+        None if subpath is None else _normalize_subpath(subpath, where="mirror 'path'")
+    )
+    return template, pin, token_env, declared_path
 
 
 def _parse_remote_spec(
@@ -639,10 +704,16 @@ def _parse_remote_spec(
     _validate_url_scheme(url)
     github = _parse_github(url)
     try:
+        subpath = _normalize_subpath(spec.get("path"), where="'path'")
         mirror = normalize_mirror(spec.get("mirror"))
     except ValueError as exc:
         raise ShimSourceError(str(exc)) from None
-    mirror_url, mirror_sha256, mirror_token_env = mirror or (None, None, None)
+    mirror_url, mirror_sha256, mirror_token_env, mirror_subpath = mirror or (
+        None,
+        None,
+        None,
+        None,
+    )
     if mirror_url and spec.get("sha256") and not mirror_sha256:
         # A pinned source relies on the pin to notice bytes it did not approve.
         # The mirror is the path an on-path attacker can force (make the
@@ -661,7 +732,7 @@ def _parse_remote_spec(
         url=url,
         name=name,
         ref=ref,
-        subpath=spec.get("path") or "",
+        subpath=subpath,
         archive=archive,
         sha256=spec.get("sha256") or None,
         token_env=spec.get("token_env") or None,
@@ -672,6 +743,7 @@ def _parse_remote_spec(
         mirror_url=mirror_url,
         mirror_sha256=mirror_sha256,
         mirror_token_env=mirror_token_env,
+        mirror_subpath=mirror_subpath,
     )
 
 
@@ -720,9 +792,22 @@ def _needs_fetch(
     return not has_cache or (now - fetched_at) > ttl
 
 
-def _remote_subdir(spec: _RemoteSpec) -> Path:
+def _leg_subpath(spec: _RemoteSpec, leg: str) -> str:
+    """Return the scan directory for *leg* inside its archive.
+
+    A mirror that declares its own ``path`` is described by it; otherwise the
+    two legs share the source's path, which is the case when both serve the
+    same tree.
+    """
+    if leg == "mirror" and spec.mirror_subpath is not None:
+        return spec.mirror_subpath
+    return spec.subpath
+
+
+def _remote_subdir(spec: _RemoteSpec, leg: str) -> Path:
     """Return the cache subdirectory that holds the provider directories."""
-    return spec.source_dir / spec.subpath if spec.subpath else spec.source_dir
+    subpath = _leg_subpath(spec, leg)
+    return spec.source_dir / subpath if subpath else spec.source_dir
 
 
 def _stamp_leg(stamp: Mapping[str, Any]) -> Literal["primary", "mirror"]:
@@ -966,7 +1051,7 @@ def _install_archive(
                 tmp_dir,
                 archive=spec.archive,
                 url=archive_url,
-                declared_path=spec.subpath,
+                declared_path=_leg_subpath(spec, leg),
             )
         except ShimSourceError as exc:
             # The bytes arrived and are not the source: a corruption signal
