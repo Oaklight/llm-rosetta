@@ -466,7 +466,7 @@ cannot be connected to:
     "mirror": {
       "url_template": "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-alcf@dist/{ref}/alcf.tar.gz",
       "sha256": "89ab…cdef",
-      "path": "."
+      "path": "providers"
     }
   }
 ]
