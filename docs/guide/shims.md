@@ -412,8 +412,9 @@ forge、在本网络解析不了的 DNS 名。`mirror` 为同一份归档再给�
     "ref": "v0.1.0",
     "sha256": "0123…abcd",
     "mirror": {
-      "url_template": "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-alcf@dist/v0.1.0/alcf.tar.gz",
-      "sha256": "89ab…cdef"
+      "url_template": "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-alcf@dist/{ref}/alcf.tar.gz",
+      "sha256": "89ab…cdef",
+      "path": "."
     }
   }
 ]
@@ -453,8 +454,9 @@ forge、在本网络解析不了的 DNS 名。`mirror` 为同一份归档再给�
 哪一侧加载的（`loaded via mirror`）；`leg` 与展开后的 `archive_url` 也在管理 API 返回的源
 状态里。
 
-镜像按 remote 声明；`presets` 目录条目本身不带镜像，要加就显式写出 remote（同一 URL 的显式
-remote 会合并到对应预设上）。
+每个已发布包的 `presets` 条目本身就带镜像：钉住的 tag、jsDelivr 上 `{ref}` 模板化的 `dist`
+归档，以及适配该归档布局的 `path: "."`。镜像仍然是模板而不是依赖 —— 用内网镜像替换 CDN 只需
+把 remote 显式写出，同一 URL 的显式 remote 会合并到对应预设上（显式键优先）。
 
 !!! warning
     声明的源可能携带在加载时被执行的 `transforms.py` —— 与安装插件包是同一信任级别。

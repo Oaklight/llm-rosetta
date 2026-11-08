@@ -93,7 +93,7 @@ shim 不必放在包内。顶层 `shims` 段可以让 gateway 额外扫描若干
 写代码。只接受 HTTPS（回环地址可用 HTTP）。
 
 **镜像。** 源的宿主可能够不着 —— 防火墙后的 `github.com`、正在维护的 forge —— 这时可以为
-同一份归档声明第二个 URL。`mirror` 可以是一个 URL 模板字符串，也可以是带自己的校验与凭据
+同一份归档声明第二个 URL。`mirror` 可以是一个 URL 模板字符串，也可以是带自己的校验、凭据与扫描目录
 的对象：
 
 ```jsonc
@@ -104,8 +104,9 @@ shim 不必放在包内。顶层 `shims` 段可以让 gateway 额外扫描若干
     "sha256": "0123…abcd",
     "mirror": {
       // 与主 URL 用同一个 {ref} 展开
-      "url_template": "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-alcf@dist/v0.1.0/alcf.tar.gz",
+      "url_template": "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-alcf@dist/{ref}/alcf.tar.gz",
       "sha256": "89ab…cdef",
+      "path": ".",                        // 可选；在该归档内扫描的目录
       "token_env": "MIRROR_TOKEN"        // 可选；镜像自己的凭据
     }
   }
@@ -115,6 +116,12 @@ shim 不必放在包内。顶层 `shims` 段可以让 gateway 额外扫描若干
 模板必须是归档 URL —— GitHub 仓库 URL、含 `{ref}` 的 URL，或以 `.tar.gz`、`.tgz`、`.tar`、
 `.zip` 结尾的 URL。**只有在主 URL 连不上时**才会用到镜像；完整的回退规则见
 [Shim → 镜像](../guide/shims.md#mirrors)。
+
+`path` 是**在该归档内**扫描的目录，默认取源的 `path`。它之所以存在，是因为两条腿的布局
+未必相同：独立包发布的归档从 providers 目录构建（根的下一层就是 `providers/`），而 forge 的
+tarball 保留仓库里的 `src/<package>/providers`。`"."` 或 `""` 表示归档根目录；绝对路径或
+含 `..` 的路径会在加载配置时被拒绝。内置预设已经设置了它（见
+[Shim → 独立 Shim 包](../guide/shims.md#standalone-shim-packages)）。
 
 镜像要带自己的 `sha256`，因为镜像提供的字节未必是主 URL 的 —— CDN 提供的是项目提交到
 `dist` 分支的归档，不是 forge 的仓库 tarball。**主 URL 固定了 `sha256` 时，镜像必须也声明
