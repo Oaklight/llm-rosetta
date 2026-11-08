@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from llm_rosetta_gateway.admin.routes.config import (
     _add_new_models,
     _append_provider_to_model,
@@ -108,6 +110,15 @@ class TestAppendProviderToModel:
         )
         assert result == "skipped"
 
+    def test_string_entry_naming_the_same_provider_is_skipped(self):
+        """A second copy of one provider under one model name is never right."""
+        models = {"gpt-4o": "provider_a"}
+        result = _append_provider_to_model(
+            models, "gpt-4o", "provider_a", "gpt-4o", "", {}, ["text"]
+        )
+        assert result == "skipped"
+        assert models["gpt-4o"] == "provider_a"
+
     def test_prefix_adds_upstream(self):
         models = {"gpt-4o": {"provider": "provider_a", "capabilities": ["text"]}}
         result = _append_provider_to_model(
@@ -148,7 +159,8 @@ class TestMergeProviderIntoModel:
     def test_merge_into_string_entry(self):
         models = {"gpt-4o": "provider_a"}
         new_p = {"name": "provider_b", "weight": 1, "upstream_model": "openai/gpt-4o"}
-        _merge_provider_into_model(models, "gpt-4o", new_p, ["text", "tools"])
+        result = _merge_provider_into_model(models, "gpt-4o", new_p, ["text", "tools"])
+        assert result == "merged"
         entry = models["gpt-4o"]
         assert "providers" in entry
         assert len(entry["providers"]) == 2
@@ -164,7 +176,8 @@ class TestMergeProviderIntoModel:
             }
         }
         new_p = {"name": "provider_b", "weight": 1, "upstream_model": "openai/gpt-4o"}
-        _merge_provider_into_model(models, "gpt-4o", new_p, ["text"])
+        result = _merge_provider_into_model(models, "gpt-4o", new_p, ["text"])
+        assert result == "merged"
         entry = models["gpt-4o"]
         assert "providers" in entry
         assert "provider" not in entry
@@ -181,7 +194,8 @@ class TestMergeProviderIntoModel:
             }
         }
         new_p = {"name": "provider_b", "weight": 1}
-        _merge_provider_into_model(models, "gpt-4o", new_p, ["text"])
+        result = _merge_provider_into_model(models, "gpt-4o", new_p, ["text"])
+        assert result == "merged"
         entry = models["gpt-4o"]
         old_p = entry["providers"][0]
         assert isinstance(old_p, dict)
@@ -199,7 +213,8 @@ class TestMergeProviderIntoModel:
             }
         }
         new_p = {"name": "provider_c", "weight": 1}
-        _merge_provider_into_model(models, "gpt-4o", new_p, ["text"])
+        result = _merge_provider_into_model(models, "gpt-4o", new_p, ["text"])
+        assert result == "merged"
         assert len(models["gpt-4o"]["providers"]) == 3
         assert models["gpt-4o"]["providers"][-1] == new_p
 
@@ -213,26 +228,34 @@ class TestMergeProviderIntoModel:
             }
         }
         new_p = {"name": "provider_a", "weight": 1, "upstream_model": "x"}
-        _merge_provider_into_model(models, "gpt-4o", new_p, ["text"])
+        assert (
+            _merge_provider_into_model(models, "gpt-4o", new_p, ["text"]) == "skipped"
+        )
         assert len(models["gpt-4o"]["providers"]) == 1
 
     def test_merge_skips_duplicate_string_entry(self):
         models = {"gpt-4o": "provider_a"}
         new_p = {"name": "provider_a", "weight": 1, "upstream_model": "x"}
-        _merge_provider_into_model(models, "gpt-4o", new_p, ["text"])
+        assert (
+            _merge_provider_into_model(models, "gpt-4o", new_p, ["text"]) == "skipped"
+        )
         assert models["gpt-4o"] == "provider_a"
 
     def test_merge_skips_duplicate_single_provider_dict(self):
         models = {"gpt-4o": {"provider": "provider_a", "capabilities": ["text"]}}
         new_p = {"name": "provider_a", "weight": 1}
-        _merge_provider_into_model(models, "gpt-4o", new_p, ["text"])
+        assert (
+            _merge_provider_into_model(models, "gpt-4o", new_p, ["text"]) == "skipped"
+        )
         assert "providers" not in models["gpt-4o"]
         assert models["gpt-4o"]["provider"] == "provider_a"
 
     def test_merge_non_dict_is_noop(self):
         models = {"gpt-4o": 42}  # type: ignore[dict-item]
         new_p = {"name": "provider_b", "weight": 1}
-        _merge_provider_into_model(models, "gpt-4o", new_p, ["text"])
+        assert (
+            _merge_provider_into_model(models, "gpt-4o", new_p, ["text"]) == "ignored"
+        )
         assert models["gpt-4o"] == 42
 
 
@@ -279,3 +302,61 @@ class TestAddNewModels:
         )
         assert added == ["pfx/gpt-4o"]
         assert models["pfx/gpt-4o"]["upstream_model"] == "gpt-4o"
+
+
+class TestBulkAddReportsAnIgnoredEntry:
+    """A model entry that cannot take a lane is reported, not skipped silently.
+
+    The admin reads the raw document, so a hand-written entry that is neither
+    a provider name nor an object naming one reaches this path.  `models_append`
+    cannot add to it; the batch result names it instead of pretending the
+    batch was complete.
+    """
+
+    @staticmethod
+    def _request(tmp_path, raw):
+        import json
+        from types import SimpleNamespace
+
+        from llm_rosetta_gateway.config import JsoncConfigIO
+
+        path = tmp_path / "config.json"
+        path.write_text(json.dumps(raw), encoding="utf-8")
+        app = SimpleNamespace(
+            config_path=str(path),
+            config_io=JsoncConfigIO(),
+            gateway_config=None,
+            provider_validation_warnings=[],
+            shim_source_signature=None,
+            rate_limit_state=None,
+        )
+        body = {"provider": "p", "models_append": ["broken"]}
+        return SimpleNamespace(
+            app=app,
+            path_params={},
+            method="POST",
+            headers={},
+            json=lambda: dict(body),
+        )
+
+    @pytest.mark.asyncio
+    async def test_the_ignored_name_comes_back_in_the_result(self, tmp_path):
+        import json
+
+        from llm_rosetta_gateway.admin.routes.config.bulk import bulk_add_models
+
+        raw = {
+            "providers": {"p": {"type": "openai", "base_url": "https://p.test"}},
+            # 42 is a shape no lane can be added to; it must not be dropped.
+            "models": {"broken": 42},
+        }
+        request = self._request(tmp_path, raw)
+
+        payload = json.loads((await bulk_add_models(request)).body)
+
+        assert payload["ok"] is True
+        assert payload["ignored"] == ["broken"]
+        assert payload["appended"] == []
+        assert "message" not in payload
+        on_disk = json.loads((tmp_path / "config.json").read_text(encoding="utf-8"))
+        assert on_disk["models"]["broken"] == 42
