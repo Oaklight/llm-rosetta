@@ -414,7 +414,7 @@ forge、在本网络解析不了的 DNS 名。`mirror` 为同一份归档再给�
     "mirror": {
       "url_template": "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-alcf@dist/{ref}/alcf.tar.gz",
       "sha256": "89ab…cdef",
-      "path": "."
+      "path": "providers"
     }
   }
 ]
