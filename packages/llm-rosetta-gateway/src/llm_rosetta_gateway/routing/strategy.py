@@ -376,6 +376,7 @@ class ModelRoute:
                     name=p.name,
                     weight=max(0.05, factors.get(p.name, 1.0)),
                     upstream_model=p.upstream_model,
+                    capabilities=p.capabilities,
                 )
                 for p in entries
             ]
@@ -386,6 +387,7 @@ class ModelRoute:
                 # candidate — the quota state, not this factor, removes one.
                 weight=max(0.05, p.weight * factors.get(p.name, 1.0)),
                 upstream_model=p.upstream_model,
+                capabilities=p.capabilities,
             )
             for p in entries
         ]
