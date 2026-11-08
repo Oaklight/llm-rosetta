@@ -109,7 +109,7 @@ pin, credential and scan directory:
       // {ref} is the ref written above, not the commit it resolved to
       "url_template": "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-alcf@dist/{ref}/alcf.tar.gz",
       "sha256": "89ab…cdef",
-      "path": ".",                        // optional; directory to scan in this archive
+      "path": "providers",               // optional; directory to scan in this archive
       "token_env": "MIRROR_TOKEN"        // optional; the mirror's own credential
     }
   }
