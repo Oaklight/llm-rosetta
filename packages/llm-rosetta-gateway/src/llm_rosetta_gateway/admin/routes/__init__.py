@@ -7,7 +7,7 @@ This package splits the admin route handlers into focused modules:
 - keys        — Gateway API key management
 - observability — Metrics, request log, network diagnostics
 - testing     — Async model test tasks
-- profiling   — On-demand pyinstrument profiling
+- profiling   — On-demand cProfile profiling (vendored, always available)
 """
 
 from __future__ import annotations
