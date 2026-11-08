@@ -130,7 +130,9 @@ way: the archive the standalone packages publish is built from the providers
 directory (`providers/` at its root), while the forge's tarball keeps the
 repository's `src/<package>/providers`. `"."` or `""` means the archive root;
 an absolute path or one with a `..` component is refused when the config loads.
-The [built-in presets](../guide/shims.md#standalone-shim-packages) set it.
+The [built-in presets](../guide/shims.md#standalone-shim-packages) name
+`providers` there rather than `"."`, so the archive's top-directory strip rule
+never decides whether the preset loads.
 
 The mirror carries its own `sha256` because the bytes a mirror serves need not
 be the primary's — a CDN serves the archive the project committed to its `dist`

@@ -523,7 +523,9 @@ leg each source loaded from (`loaded via mirror`); the `leg` and the expanded
 
 Every published package's `presets` entry already carries a mirror: the tag it
 pins, the `dist` archive on jsDelivr with `{ref}` in the template, and
-`path: "."` for that archive's layout. The mirror stays a template, not a
+and `path: "providers"` for that archive's layout (a name, not `"."`, so a
+release that wraps the tree in one more directory still loads). The mirror
+stays a template, not a
 dependency — replacing the CDN with an internal mirror is a matter of writing
 the remote out, and an explicit remote with the same URL is merged onto its
 preset (explicit keys win).
