@@ -106,7 +106,7 @@ pin, credential and scan directory:
     "ref": "v0.1.0",
     "sha256": "0123…abcd",
     "mirror": {
-      // expanded with the same {ref} as the primary
+      // {ref} is the ref written above, not the commit it resolved to
       "url_template": "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-alcf@dist/{ref}/alcf.tar.gz",
       "sha256": "89ab…cdef",
       "path": ".",                        // optional; directory to scan in this archive
@@ -117,7 +117,10 @@ pin, credential and scan directory:
 ```
 
 The template must be an archive URL — a GitHub repository URL, a URL containing
-`{ref}`, or one ending in `.tar.gz`, `.tgz`, `.tar` or `.zip`. A mirror is
+`{ref}`, or one ending in `.tar.gz`, `.tgz`, `.tar` or `.zip`. `{ref}` is filled
+with the `ref` written on the source, **not** with the commit a GitHub primary
+resolved it to: a mirror publishes one directory per release, and its URL must
+not change depending on whether the forge's API answered. A mirror is
 consulted **only when the primary cannot be connected to**; see
 [Shims → Mirrors](../guide/shims.md#mirrors) for the full fallback rules.
 

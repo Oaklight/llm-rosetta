@@ -474,11 +474,14 @@ cannot be connected to:
 
 The two situations it is meant for are a public CDN in front of the forge — the
 `dist` archive the standalone packages publish, which jsDelivr serves — and an
-internal mirror on the network the gateway runs in. The template takes the same
-`{ref}` as the primary, and the mirror pins its **own** `sha256`: the bytes a CDN
-serves are not the forge's repository tarball. Declaring a mirror beside a
-primary that pins `sha256` without pinning the mirror is refused when the config
-loads, because the mirror is the path an on-path attacker can force.
+internal mirror on the network the gateway runs in. The template takes the
+source's declared `ref` — not the commit a GitHub primary resolved it to, so a
+mirror published one directory per release keeps working even when the forge's
+API is rate-limited or unreachable — and the mirror pins its **own** `sha256`:
+the bytes a CDN serves are not the forge's repository tarball. Declaring a
+mirror beside a primary that pins `sha256` without pinning the mirror is
+refused when the config loads, because the mirror is the path an on-path
+attacker can force.
 
 What falls back to what. The rule first: **a warm cache covers every failure
 except the source's verdict on its own bytes.** The fetch is served from the
