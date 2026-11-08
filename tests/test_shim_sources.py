@@ -10,7 +10,9 @@ import tarfile
 import threading
 import time
 import zipfile
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -940,6 +942,45 @@ def _closed_port() -> int:
         return int(sock.getsockname()[1])
 
 
+class _LoopbackArchive:
+    """A loopback server serving whatever ``body`` holds at request time.
+
+    Used where a test must exercise the **default** getter — its streaming
+    read and the cap that aborts it — rather than an injected stand-in.  The
+    test rewrites ``body`` between fetches to move from a warm, valid cache to
+    an oversized response on the same URL.
+    """
+
+    def __init__(self) -> None:
+        self.body = b""
+        outer = self
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:  # noqa: N802 - the base class names it
+                payload = outer.body
+                self.send_response(200)
+                self.send_header("Content-Type", "application/octet-stream")
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+
+            def log_message(self, format: str, *args: Any) -> None:
+                pass
+
+        self._server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.url = f"http://127.0.0.1:{self._server.server_address[1]}/shims.tar.gz"
+        self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
+
+    def __enter__(self) -> _LoopbackArchive:
+        self._thread.start()
+        return self
+
+    def __exit__(self, *_exc: object) -> None:
+        self._server.shutdown()
+        self._server.server_close()
+        self._thread.join(timeout=5)
+
+
 def _provider_archive() -> bytes:
     """A one-shim tar.gz in the shape every remote test expects."""
     return _tar_bytes(
@@ -1813,6 +1854,188 @@ class TestMirror:
     def test_transport_errors_are_recognized(self):
         assert sources_mod._is_unreachable(ConnectionRefusedError("no route")) is True
         assert sources_mod._is_unreachable(TimeoutError("timed out")) is True
+
+
+class TestOversizeArchive:
+    """The size cap is one rule, whichever layer notices it first.
+
+    A body past :data:`MAX_ARCHIVE_BYTES` is the source answering with
+    something that cannot be installed, not a network symptom.  Both layers
+    that enforce the cap — the default getter, which aborts the read, and
+    :func:`_install_archive`, which measures the finished body — must raise
+    :class:`ShimArchiveUnusable`, and a warm cache must not mask either.
+    """
+
+    @staticmethod
+    def _spec(url: str = "https://primary.example/shims.tar.gz") -> dict:
+        return {"url": url, "refresh": "always"}
+
+    @staticmethod
+    def _oversized() -> bytes:
+        return b"x" * 2048
+
+    @staticmethod
+    def _class_of(src) -> str:
+        """The exception class the failed status was built from."""
+        return (src.error or "").split(":", 1)[0]
+
+    def _warm(self, tmp_path: Path, http_get) -> None:
+        """Install a valid archive first, so the next fetch has a cache."""
+        first = rebuild_shims(
+            extra_remotes=[self._spec()],
+            cache_root=tmp_path / "cache",
+            http_get=http_get,
+        )
+        assert first.sources[0].ok, first.sources[0].error
+
+    # -- the default getter aborts the stream ---------------------------
+
+    def test_the_stream_abort_is_unusable(self, tmp_path, monkeypatch):
+        """Cold: the reader stops at the cap and the class says why."""
+        monkeypatch.setattr(sources_mod, "MAX_ARCHIVE_BYTES", 1024)
+        with _LoopbackArchive() as server:
+            server.body = self._oversized()
+            src = rebuild_shims(
+                extra_remotes=[self._spec(server.url)],
+                cache_root=tmp_path / "cache",
+            ).sources[0]
+        assert src.ok is False
+        assert src.stale is False
+        assert src.from_cache is False
+        assert self._class_of(src) == "ShimArchiveUnusable"
+
+    def test_the_stream_abort_is_not_masked_by_a_warm_cache(
+        self, tmp_path, monkeypatch
+    ):
+        """Warm: the cache holds good bytes and still must not answer."""
+        monkeypatch.setattr(sources_mod, "MAX_ARCHIVE_BYTES", 1024)
+        with _LoopbackArchive() as server:
+            server.body = _provider_archive()
+            # The warm-up archive is itself over the lowered cap, so warm the
+            # cache at the real cap and only then lower it.
+            monkeypatch.setattr(sources_mod, "MAX_ARCHIVE_BYTES", 50 * 1024 * 1024)
+            first = rebuild_shims(
+                extra_remotes=[self._spec(server.url)],
+                cache_root=tmp_path / "cache",
+            )
+            assert first.sources[0].ok, first.sources[0].error
+
+            monkeypatch.setattr(sources_mod, "MAX_ARCHIVE_BYTES", 1024)
+            server.body = self._oversized()
+            src = rebuild_shims(
+                extra_remotes=[self._spec(server.url)],
+                cache_root=tmp_path / "cache",
+            ).sources[0]
+        assert src.ok is False
+        assert src.stale is False
+        assert src.from_cache is False
+        assert self._class_of(src) == "ShimArchiveUnusable"
+
+    # -- an injected getter hands back the oversized bytes --------------
+
+    def test_an_oversized_body_is_unusable(self, tmp_path, monkeypatch):
+        """Cold: the install step measures the body and refuses it."""
+        monkeypatch.setattr(sources_mod, "MAX_ARCHIVE_BYTES", 1024)
+        body = self._oversized()
+        src = rebuild_shims(
+            extra_remotes=[self._spec()],
+            cache_root=tmp_path / "cache",
+            http_get=lambda url, **_kw: body,
+        ).sources[0]
+        assert src.ok is False
+        assert src.stale is False
+        assert self._class_of(src) == "ShimArchiveUnusable"
+
+    def test_an_oversized_body_is_not_masked_by_a_warm_cache(
+        self, tmp_path, monkeypatch
+    ):
+        """Warm: same class, same decision — the cache does not answer."""
+        state = {"body": _provider_archive()}
+
+        def http_get(url, **_kw):
+            return state["body"]
+
+        self._warm(tmp_path, http_get)
+        monkeypatch.setattr(sources_mod, "MAX_ARCHIVE_BYTES", 1024)
+        state["body"] = self._oversized()
+        src = rebuild_shims(
+            extra_remotes=[self._spec()],
+            cache_root=tmp_path / "cache",
+            http_get=http_get,
+        ).sources[0]
+        assert src.ok is False
+        assert src.stale is False
+        assert self._class_of(src) == "ShimArchiveUnusable"
+
+    def test_both_layers_raise_the_same_class(self, tmp_path, monkeypatch):
+        """The issue in one assertion: which layer notices must not matter."""
+        monkeypatch.setattr(sources_mod, "MAX_ARCHIVE_BYTES", 1024)
+        body = self._oversized()
+        through_install = rebuild_shims(
+            extra_remotes=[self._spec()],
+            cache_root=tmp_path / "injected",
+            http_get=lambda url, **_kw: body,
+        ).sources[0]
+        with _LoopbackArchive() as server:
+            server.body = body
+            through_stream = rebuild_shims(
+                extra_remotes=[self._spec(server.url)],
+                cache_root=tmp_path / "streamed",
+            ).sources[0]
+        assert self._class_of(through_install) == self._class_of(through_stream)
+        assert self._class_of(through_install) == "ShimArchiveUnusable"
+
+    # -- what a getter's own exception means ----------------------------
+
+    def test_a_getter_raising_the_unusable_class_is_not_masked(
+        self, tmp_path, monkeypatch
+    ):
+        """A custom getter may reach the verdict itself; the class carries it."""
+        state = {"body": _provider_archive()}
+
+        def http_get(url, **_kw):
+            if state["body"] is None:
+                raise sources_mod.ShimArchiveUnusable("oversized, says the getter")
+            return state["body"]
+
+        self._warm(tmp_path, http_get)
+        state["body"] = None
+        src = rebuild_shims(
+            extra_remotes=[self._spec()],
+            cache_root=tmp_path / "cache",
+            http_get=http_get,
+        ).sources[0]
+        assert src.ok is False
+        assert src.stale is False
+        assert self._class_of(src) == "ShimArchiveUnusable"
+
+    def test_a_plain_source_error_from_a_getter_is_still_masked(
+        self, tmp_path, monkeypatch
+    ):
+        """Only a verdict about the body is final; a plain error is not one.
+
+        The class is the rule (see :func:`_exhausted_error`): a getter that
+        raises the base class says "this fetch failed", not "these bytes are
+        not the source", so a warm cache may still answer — the same way an
+        HTTP status does.
+        """
+        state = {"fail": False}
+
+        def http_get(url, **_kw):
+            if state["fail"]:
+                raise sources_mod.ShimSourceError("getter gave up")
+            return _provider_archive()
+
+        self._warm(tmp_path, http_get)
+        state["fail"] = True
+        src = rebuild_shims(
+            extra_remotes=[self._spec()],
+            cache_root=tmp_path / "cache",
+            http_get=http_get,
+        ).sources[0]
+        assert src.ok is True
+        assert src.stale is True
+        assert src.from_cache is True
 
 
 class TestLocalInstallFailure:

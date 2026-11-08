@@ -119,8 +119,11 @@ class ShimArchiveUnusable(ShimSourceError):
     """A downloaded body is not an archive the loader can install.
 
     A corruption signal, not a network symptom: the server answered and the
-    bytes arrived, they just are not the source.  Like a digest mismatch, this
-    is never masked with the stale cache.
+    bytes arrived, they just are not the source.  A body the reader aborts for
+    crossing :data:`MAX_ARCHIVE_BYTES` is the same verdict reached earlier, so
+    it is raised while the stream is still being read, not only after the
+    download.  Like a digest mismatch, this is never masked with the stale
+    cache.
     """
 
 
@@ -1043,6 +1046,12 @@ def _fetch_first_usable(
             )
         except Exception as exc:
             unreachable = _is_unreachable(exc)
+            # A getter that raises the unusable class — the default one does
+            # when the stream crosses the size cap — made the same judgement
+            # the install step makes: the body is not the source.  Carry it,
+            # so the error this loop returns keeps the class the cache reads
+            # as "do not mask".
+            unusable = unusable or isinstance(exc, ShimArchiveUnusable)
             all_unreachable = all_unreachable and unreachable
             failures.append(f"{leg} {url}: {type(exc).__name__}: {exc}")
             # A transport failure moves on to the other leg.  So does any
@@ -1647,8 +1656,12 @@ def _default_http_get(
 
     The body is read incrementally and the read is aborted as soon as it would
     exceed :data:`MAX_ARCHIVE_BYTES`, so the cap is a real memory bound for the
-    default getter rather than a post-hoc sanity check.  (An injected
-    ``http_get`` still only gets the backstop check in :func:`_fetch_remote`.)
+    default getter rather than a post-hoc sanity check.  The abort raises
+    :class:`ShimArchiveUnusable`, the same verdict :func:`_install_archive`
+    gives an oversized body, so the two layers cannot disagree about whether a
+    warm cache may mask it.  (An injected ``http_get`` still only gets the
+    backstop check in :func:`_fetch_remote`, unless it raises that class
+    itself.)
     """
     from llm_rosetta_gateway._vendor.httpclient import Client, Response
 
@@ -1664,7 +1677,10 @@ def _default_http_get(
             for chunk in response.iter_bytes(chunk_size):
                 total += len(chunk)
                 if total > MAX_ARCHIVE_BYTES:
-                    raise ShimSourceError(
+                    # The same verdict the post-download check gives, raised
+                    # earlier: the source answered with bytes that cannot be
+                    # the archive, so the stale cache must not mask them.
+                    raise ShimArchiveUnusable(
                         f"archive exceeds {MAX_ARCHIVE_BYTES} bytes; download aborted"
                     )
                 chunks.append(chunk)
