@@ -92,14 +92,52 @@ shim 不必放在包内。顶层 `shims` 段可以让 gateway 额外扫描若干
 给出显式归档 URL 即可（可含 `{ref}` 占位符），所以 GitLab 和自建 forge 都不需要按站点
 写代码。只接受 HTTPS（回环地址可用 HTTP）。
 
+**镜像。** 源的宿主可能够不着 —— 防火墙后的 `github.com`、正在维护的 forge —— 这时可以为
+同一份归档声明第二个 URL。`mirror` 可以是一个 URL 模板字符串，也可以是带自己的校验与凭据
+的对象：
+
+```jsonc
+"remotes": [
+  {
+    "url": "https://github.com/Oaklight/llm-rosetta-shim-alcf",
+    "ref": "v0.1.0",
+    "sha256": "0123…abcd",
+    "mirror": {
+      // 与主 URL 用同一个 {ref} 展开
+      "url_template": "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-alcf@dist/v0.1.0/alcf.tar.gz",
+      "sha256": "89ab…cdef",
+      "token_env": "MIRROR_TOKEN"        // 可选；镜像自己的凭据
+    }
+  }
+]
+```
+
+模板必须是归档 URL —— GitHub 仓库 URL、含 `{ref}` 的 URL，或以 `.tar.gz`、`.tgz`、`.tar`、
+`.zip` 结尾的 URL。**只有在主 URL 连不上时**才会用到镜像；完整的回退规则见
+[Shim → 镜像](../guide/shims.md#mirrors)。
+
+镜像要带自己的 `sha256`，因为镜像提供的字节未必是主 URL 的 —— CDN 提供的是项目提交到
+`dist` 分支的归档，不是 forge 的仓库 tarball。**主 URL 固定了 `sha256` 时，镜像必须也声明
+自己的 `sha256`**，否则配置会被拒绝：主 URL 有校验而镜像没有，恰好让攻击者能强制的路径
+（让主 URL 连不上、由镜像作答）交出校验从未批准的字节。
+
+**凭据只在同一来源上发送。** `token_env` 命名一个环境变量，其值作为 bearer token 附加在
+主 URL 的请求上。只有当某次请求的源 —— scheme、host、port，并对 scheme 的默认端口做归一化
+（所以 `https://h` 与 `https://h:443` 是同一个源）—— 与主 URL 相同时才会带上它。于是另一台
+主机上的镜像永远看不到主 URL 的凭据；需要凭据的镜像要声明自己的 `token_env`。变量未设置时，
+该次请求会失败并指出变量名，而不是悄悄退化成匿名请求。
+
 **ref 解析。** 给了 `ref`（tag / 分支 / commit SHA）就拉该 ref。省略 `ref` 时，会通过
 host API（GitHub）把 `HEAD` 解析成具体 commit SHA 并记录进缓存 stamp，后续启动复用同一
 commit；配置文件本身不会被改写。要可复现部署请固定 tag 或 SHA。
 
 **缓存与刷新。** 归档解压到 `cache_dir`（默认 `<config_dir>/shims-cache`，与配置文件同级）。
 固定 ref、给出 `sha256`、或 `refresh: "never"` 都只拉取一次；`refresh: "always"` 每次都拉；
-默认 `auto` 在缓存超过 `remote_ttl` 时重新拉取。拉取失败但已有缓存时，会告警并使用旧缓存；
-只有在无缓存可用时该源才算失败。
+默认 `auto` 在缓存超过 `remote_ttl` 时重新拉取。**传输**失败（连接、DNS、超时）且已有
+缓存时，会告警并使用过期缓存（标记为 stale）；没有缓存时该源失败。body 到了却不对 —— HTTP
+错误页、被截断或不安全的归档、`sha256` 不符 —— 无论有没有缓存都算失败。过期缓存的含义是
+「源现在够不着，先用上次的好副本」，不是「源给了不对的东西，当没看见」；见
+[Shim → 镜像](../guide/shims.md#mirrors)。
 
 **优先级。** shim 同名时后者覆盖前者：内置 → entry point 插件 → `paths` 按顺序 →
 `remotes` 按顺序。
