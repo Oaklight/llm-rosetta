@@ -50,6 +50,17 @@ class ShimSourcePackage:
             the package, keyed by language code like a shim's ``hint_msg``.
             It travels with the preset so a warning cannot be left behind in
             the docs.
+        ref: The tag the package's archives are published at, when it has one.
+            Setting it pins the preset: the mirror's bytes are the ones built
+            for that tag, so a primary that followed ``main`` could drift away
+            from them.  ``None`` keeps the pre-archive behaviour (an omitted
+            ref is resolved to a commit and pinned in the cache stamp).
+        mirror: The ``shims.remotes[].mirror`` entry, once the package
+            publishes a tagged archive.  ``sha256`` is a per-release constant:
+            bump it here when the archive is rebuilt.  ``path`` is the
+            directory to scan inside *that* archive, which differs from the
+            repository's when the archive is built from the providers
+            directory.
     """
 
     key: str
@@ -61,19 +72,35 @@ class ShimSourcePackage:
     token_env: str | None = None
     free: bool = False
     note: dict[str, str] | None = None
+    ref: str | None = None
+    mirror: dict[str, Any] | None = None
 
     @property
     def remote(self) -> dict[str, Any]:
         """Return the ``shims.remotes`` entry that loads this package.
 
-        No ``ref``: none of the repositories is tagged yet, and an omitted ref
-        is resolved to a concrete commit and pinned in the cache stamp, which is
-        both reproducible and fetchable today.  Pin a tag here once there is one.
+        Once the package publishes tagged archives the preset pins the tag
+        (:attr:`ref`) and names the mirror those archives are served from.
+        The two legs name the same version on purpose: the mirror's bytes are
+        the ones built for that tag, so a primary that followed ``main`` could
+        drift away from them.  Before the first tag an omitted ref is resolved
+        to a concrete commit and pinned in the cache stamp, which is both
+        reproducible and fetchable.
+
+        The mirror's ``sha256`` is a per-release constant kept beside each
+        entry — never computed at run time, which would make the preset depend
+        on the network.  Its ``url_template`` is just a template: any host that
+        serves the same archive works, so an internal mirror can replace the
+        published CDN without touching the loader.
         """
         remote: dict[str, Any] = {
             "url": self.repo,
             "path": f"src/{self.package}/providers",
         }
+        if self.ref:
+            remote["ref"] = self.ref
+        if self.mirror:
+            remote["mirror"] = dict(self.mirror)
         if self.token_env:
             remote["token_env"] = self.token_env
         return remote
@@ -245,6 +272,22 @@ SHIM_SOURCE_PACKAGES: tuple[ShimSourcePackage, ...] = (
         # Cluster-qualified in #1035; the unqualified spellings still ship in
         # configs written for the 0.14.0 dev builds.
         legacy_names=("alcf--metis", "alcf--minerva", "alcf--sophia"),
+        # The archive lives on the orphan ``dist`` branch, one directory
+        # per tag (#1412); the CDN URL is a template, not the only host.
+        # ``sha256`` is the published digest of the v0.1.0 archive: bump it
+        # together with ``ref`` when a new archive is released.
+        # ``path`` names ``providers`` rather than ``"."``: the archive
+        # strips its single top-level directory, and a future release that
+        # wraps the providers tree must not stop this config loading.
+        ref="v0.1.0",
+        mirror={
+            "url_template": (
+                "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-alcf"
+                "@dist/{ref}/alcf.tar.gz"
+            ),
+            "sha256": "3e1bc7a63b07922befacfc73600304bfd6ea6a04788d1a897acf3414acb1a6e3",
+            "path": "providers",
+        },
     ),
     ShimSourcePackage(
         key="argo",
@@ -264,6 +307,22 @@ SHIM_SOURCE_PACKAGES: tuple[ShimSourcePackage, ...] = (
             "argo--anthropic",
             "argo--openai_responses",
         ),
+        # The archive lives on the orphan ``dist`` branch, one directory
+        # per tag (#1412); the CDN URL is a template, not the only host.
+        # ``sha256`` is the published digest of the v0.1.0 archive: bump it
+        # together with ``ref`` when a new archive is released.
+        # ``path`` names ``providers`` rather than ``"."``: the archive
+        # strips its single top-level directory, and a future release that
+        # wraps the providers tree must not stop this config loading.
+        ref="v0.1.0",
+        mirror={
+            "url_template": (
+                "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-argo"
+                "@dist/{ref}/argo.tar.gz"
+            ),
+            "sha256": "287df404145ced54f88ab7746750986a94354d4d4f5469cb83e3760a0c5f0158",
+            "path": "providers",
+        },
     ),
     ShimSourcePackage(
         key="opencode_zen_free",
@@ -285,6 +344,22 @@ SHIM_SOURCE_PACKAGES: tuple[ShimSourcePackage, ...] = (
                 "上游门禁会识别客户端传输栈，非 CLI 客户端即使 shim 加载成功也会被拒。"
             ),
         },
+        # The archive lives on the orphan ``dist`` branch, one directory
+        # per tag (#1412); the CDN URL is a template, not the only host.
+        # ``sha256`` is the published digest of the v0.1.0 archive: bump it
+        # together with ``ref`` when a new archive is released.
+        # ``path`` names ``providers`` rather than ``"."``: the archive
+        # strips its single top-level directory, and a future release that
+        # wraps the providers tree must not stop this config loading.
+        ref="v0.1.0",
+        mirror={
+            "url_template": (
+                "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-opencode-free"
+                "@dist/{ref}/opencode_zen_free.tar.gz"
+            ),
+            "sha256": "0f2d9c5ff529985352d8c85114ab7378f09078f72ab8674140bfd9e2b42dde27",
+            "path": "providers",
+        },
     ),
     ShimSourcePackage(
         key="asksage",
@@ -296,11 +371,33 @@ SHIM_SOURCE_PACKAGES: tuple[ShimSourcePackage, ...] = (
             "asksage--messages",
             "asksage--open_responses",
             "asksage--google_generate",
+            # The archive's embeddings lane (#1433).  It loads — the library
+            # can convert with it — but a gateway embeddings provider on it is
+            # auto-disabled by the static-key gate, because the leaf inherits
+            # the vendor's token_command (#1401).  Listed anyway: the package
+            # ships it, and the migration diagnostics must be able to name it.
+            "asksage--embeddings",
         ),
         legacy_names=(
             "asksage--openai_chat",
             "asksage--anthropic",
             "asksage--openai_responses",
         ),
+        # The archive lives on the orphan ``dist`` branch, one directory
+        # per tag (#1412); the CDN URL is a template, not the only host.
+        # ``sha256`` is the published digest of the v0.1.0 archive: bump it
+        # together with ``ref`` when a new archive is released.
+        # ``path`` names ``providers`` rather than ``"."``: the archive
+        # strips its single top-level directory, and a future release that
+        # wraps the providers tree must not stop this config loading.
+        ref="v0.1.0",
+        mirror={
+            "url_template": (
+                "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-asksage"
+                "@dist/{ref}/asksage.tar.gz"
+            ),
+            "sha256": "632ee2d768ded954ce39ef065613b6a884f8ec0b260cd26e7411a9585769ac6b",
+            "path": "providers",
+        },
     ),
 )

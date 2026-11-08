@@ -253,11 +253,35 @@ class TestSourceCatalog:
             assert entry.label
             assert entry.repo.startswith("https://github.com/")
             assert entry.shims
-            assert entry.to_dict()["remote"] == {
-                "url": entry.repo,
-                "path": f"src/{entry.package}/providers",
-            }
-            assert "token_env" not in entry.to_dict()["remote"]
+            remote = entry.to_dict()["remote"]
+            assert remote["url"] == entry.repo
+            assert remote["path"] == f"src/{entry.package}/providers"
+            assert "token_env" not in remote
+            # A package that publishes tagged archives pins the tag and names
+            # its archive as a mirror; one that does not carries neither.
+            if entry.ref:
+                assert remote["ref"] == entry.ref
+                mirror = remote["mirror"]
+                assert mirror["url_template"].startswith(
+                    "https://cdn.jsdelivr.net/gh/Oaklight/"
+                )
+                assert "{ref}" in mirror["url_template"]
+                assert len(mirror["sha256"]) == 64
+                assert mirror["path"] == "providers"
+            else:
+                assert "ref" not in remote and "mirror" not in remote
+
+    def test_every_published_package_pins_v0_1_0(self):
+        """Phase 4 of #1411: the four packages that publish an archive."""
+        assert {entry.key for entry in SHIM_SOURCE_PACKAGES} == {
+            "alcf",
+            "argo",
+            "opencode_zen_free",
+            "asksage",
+        }
+        for entry in SHIM_SOURCE_PACKAGES:
+            assert entry.ref == "v0.1.0", entry.key
+            assert entry.mirror is not None, entry.key
 
     def test_every_preset_round_trips_through_the_source_resolver(self):
         from llm_rosetta_gateway.shim_sources import resolve_source_config

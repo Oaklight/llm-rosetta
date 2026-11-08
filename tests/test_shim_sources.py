@@ -687,6 +687,59 @@ class TestRemote:
         assert src.resolved_ref == expect_ref
         assert calls[-1] == f"https://codeload.github.com/acme/repo/tar.gz/{archive}"
 
+    def test_a_digest_pin_keeps_the_warm_cache_warm(self, tmp_path: Path):
+        """A literal-ref stamp is not re-pinned when the bytes are pinned.
+
+        The mirror exists for a network where ``github.com`` cannot be reached.
+        There the API never answers, so the stamp can never hold a commit, and
+        re-pinning on every apply made each reload pay one API timeout — a warm
+        cache that was not warm (#1433).
+        """
+        data = _tar_bytes(
+            {
+                "providers/rem/provider.yaml": PROVIDER_YAML.format(
+                    name="rem--chat_completions", slug="rem"
+                ).encode()
+            }
+        )
+        cache = tmp_path / "cache"
+        calls: list[str] = []
+
+        def http_get(url, *, headers=None, timeout=None, proxy=None):
+            calls.append(url)
+            if url.startswith("https://api.github.com/"):
+                raise TimeoutError("blackholed")
+            if "codeload" in url:
+                raise ConnectionRefusedError("blocked")
+            return data
+
+        spec = [
+            {
+                "url": "https://github.com/acme/repo",
+                "ref": "v1",
+                "path": "src/pkg/providers",
+                "mirror": {
+                    "url_template": "https://cdn.example/gh/acme/repo@dist/{ref}/r.tar.gz",
+                    "sha256": hashlib.sha256(data).hexdigest(),
+                    "path": "providers",
+                },
+            }
+        ]
+        first = rebuild_shims(
+            extra_remotes=spec, cache_root=cache, http_get=http_get
+        ).sources[0]
+        assert first.ok, first.error
+        assert first.leg == "mirror"
+        assert first.resolved_ref == "v1"
+
+        calls.clear()
+        second = rebuild_shims(
+            extra_remotes=spec, cache_root=cache, http_get=http_get
+        ).sources[0]
+        assert calls == []
+        assert second.ok, second.error
+        assert second.from_cache is True
+
     def test_a_stamp_holding_a_branch_name_is_re_pinned(self, tmp_path: Path):
         """Caches written before refs were resolved carry a name, not a commit."""
         sha = "c" * 40
@@ -1087,6 +1140,46 @@ class TestMirrorLayout:
             assert src.ok, src.error
             by_leg[src.leg] = src.shim_names
         assert by_leg == {"primary": (self._SHIM,), "mirror": (self._SHIM,)}
+
+    def test_the_mirror_is_addressed_by_the_declared_tag(self, tmp_path: Path):
+        """The forge's commit resolution must not leak into the mirror URL.
+
+        A mirror publishes one directory per release; substituting the commit
+        the tag resolved to asks for a directory that does not exist, and an
+        api.github.com rate limit would decide whether the fallback works.
+        """
+        _primary, mirror = self._legs()
+
+        def http_get(url: str, **_kw):
+            if url.startswith("https://api.github.com/"):
+                return json.dumps({"sha": _API_SHA}).encode()
+            if "codeload" in url:
+                raise ConnectionRefusedError("github is blocked here")
+            return mirror
+
+        sources_mod._chosen_legs.clear()
+        src = rebuild_shims(
+            extra_remotes=[
+                {
+                    "url": "https://github.com/acme/repo",
+                    "ref": "v1",
+                    "path": "src/pkg/providers",
+                    "mirror": {
+                        "url_template": (
+                            "https://cdn.example/gh/acme/repo@dist/{ref}/rem.tar.gz"
+                        ),
+                        "sha256": hashlib.sha256(mirror).hexdigest(),
+                        "path": ".",
+                    },
+                }
+            ],
+            cache_root=tmp_path / "cache",
+            http_get=http_get,
+        ).sources[0]
+        assert src.ok, src.error
+        assert src.leg == "mirror"
+        assert src.archive_url == "https://cdn.example/gh/acme/repo@dist/v1/rem.tar.gz"
+        assert _API_SHA not in src.archive_url
 
 
 class TestMirror:
@@ -2306,20 +2399,18 @@ class TestMirrorValidation:
         "declared, expected", [(".", ""), ("", ""), ("./", ""), ("a/./b", "a/b")]
     )
     def test_a_relative_path_is_normalized(self, declared, expected):
-        assert (
-            sources_mod.normalize_mirror(
-                {"url_template": "https://m.example/x.tar.gz", "path": declared}
-            )[3]
-            == expected
+        normalized = sources_mod.normalize_mirror(
+            {"url_template": "https://m.example/x.tar.gz", "path": declared}
         )
+        assert normalized is not None
+        assert normalized[3] == expected
 
     def test_an_object_can_carry_its_own_scan_path(self):
-        assert (
-            sources_mod.normalize_mirror(
-                {"url_template": "https://m.example/x.tar.gz", "path": "providers"}
-            )[3]
-            == "providers"
+        normalized = sources_mod.normalize_mirror(
+            {"url_template": "https://m.example/x.tar.gz", "path": "providers"}
         )
+        assert normalized is not None
+        assert normalized[3] == "providers"
 
     @pytest.mark.parametrize("path", ["/etc", "../x", "a/../../b", "a\\b", 5, ".."])
     def test_a_path_that_can_escape_is_refused(self, path):

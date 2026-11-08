@@ -20,6 +20,7 @@ from __future__ import annotations
 import asyncio
 import socket
 import sys
+from typing import Any
 
 import pytest
 
@@ -28,7 +29,8 @@ from llm_rosetta.shims.provider_shim import _reset_registry
 from llm_rosetta_gateway.config import GatewayConfig
 from llm_rosetta_gateway.ops import OpsContext, OpsProviderValidation
 from llm_rosetta_gateway.shim_sources import apply_shim_section
-from llm_rosetta_gateway.shims import SHIM_SOURCE_PACKAGES
+from llm_rosetta_gateway.shims import SHIM_SOURCE_PACKAGES, get_source_package
+from llm_rosetta_gateway.shims import sources as sources_mod
 
 PRESET_KEYS = [package.key for package in SHIM_SOURCE_PACKAGES]
 
@@ -94,7 +96,13 @@ class TestPresetsLoad:
             for name in package.shims:
                 shim = get_shim(name)
                 assert shim is not None, name
-                assert shim.format == name.partition("--")[2], name
+                suffix = name.partition("--")[2]
+                if shim.model_type == "llm":
+                    assert shim.format == suffix, name
+                else:
+                    # A typed shim is named for its model type
+                    # (``asksage--embeddings``), not for its wire format.
+                    assert suffix in (shim.model_type, shim.format), name
 
     def test_a_warm_cache_does_not_fetch_again(self, preset_config: str):
         """The second apply is the admin's normal reload: cache, no network."""
@@ -107,6 +115,38 @@ class TestPresetsLoad:
         )
         assert report.failures() == []
         assert all(status.from_cache for status in report.sources)
+
+
+class TestMirrorFallback:
+    """The mirror leg is the acceptance criterion for #1412 (#1411 Phase 4).
+
+    The forge is made unreachable for the archive download while everything
+    else (the tag lookup, the CDN) stays real — so this checks the published
+    digests and the published archive layout, not a stub.
+    """
+
+    @pytest.mark.parametrize("key", PRESET_KEYS)
+    def test_every_preset_loads_from_the_mirror(self, key: str, tmp_path):
+        def github_blocked(url, **kwargs):
+            if "codeload" in url:
+                raise ConnectionRefusedError("github is blocked here")
+            return sources_mod._default_http_get(url, **kwargs)
+
+        sources_mod._chosen_legs.clear()
+        report = apply_shim_section(
+            {"presets": [key]},
+            str(tmp_path / "config.jsonc"),
+            http_get=github_blocked,
+        )
+        assert report.failures() == [], [
+            (s.location, s.error) for s in report.failures()
+        ]
+        status = report.sources[0]
+        assert status.ok is True, status.error
+        assert status.leg == "mirror"
+        package = get_source_package(key)
+        assert package is not None
+        assert set(status.shim_names) == set(package.shims), key
 
 
 class TestProviderResolvesLive:
@@ -142,6 +182,24 @@ class TestProviderResolvesLive:
         assert config.provider_types["p"] == "chat_completions"
         assert config.provider_shim_names["p"] == "alcf_sophia--chat_completions"
         assert config.providers["p"].base_url
+
+    def test_the_embeddings_lane_loads_but_the_endpoint_is_gated(self):
+        """The archive ships an embeddings lane; #1401 still gates the endpoint.
+
+        The shim must register — the package ships it and the library can
+        convert with it — and the endpoint must say why it is disabled instead
+        of forwarding a credential the typed path never minted.
+        """
+        assert get_shim("asksage--embeddings") is not None
+        raw = {
+            "embeddings_providers": {
+                "p": {"embeddings_shim": "asksage--embeddings", "api_key": "k"}
+            }
+        }
+        cfg = GatewayConfig(raw)
+        assert "p" not in cfg.embeddings_providers
+        marker: Any = raw["embeddings_providers"]["p"]["_auto_disabled_endpoints"]
+        assert "mints its credential" in marker["embeddings"]["reason"]
 
     def test_dropping_the_preset_degrades_the_provider(self, preset_config: str):
         """A reload that removes the preset must say why, not fail obscurely."""

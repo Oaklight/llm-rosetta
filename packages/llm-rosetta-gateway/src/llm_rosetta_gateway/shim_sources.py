@@ -38,6 +38,7 @@ from .shims.sources import (
     DEFAULT_CACHE_DIRNAME,
     REMOTE_TTL_SECONDS,
     HttpGet,
+    normalize_subpath,
     normalize_mirror,
 )
 
@@ -194,14 +195,23 @@ def _validate_remote_specs(remotes: Sequence[Mapping[str, Any]]) -> None:
     """Validate the per-remote fields the config layer owns.
 
     The loader checks the primary URL shape and the cache paths at fetch time.
-    A ``mirror`` is checked here, at parse, because it is a declaration this
-    layer can judge without a network: startup and the admin save path share
-    this parser, so a bad mirror is refused before it is persisted or served.
+    A ``path`` and a ``mirror`` are checked here, at parse, because they are
+    declarations this layer can judge without a network: startup and the admin
+    save path share this parser, so a bad value is refused before it is
+    persisted or served.  ``path`` is normalized by the same rule the loader
+    applies (``mirror.path`` included) — refusing it here rather than at the
+    fetch keeps a document a load rejected from ever being written.
 
     Raises:
-        ValueError: If a remote's ``mirror`` declaration is invalid.
+        ValueError: If a remote's ``path`` or ``mirror`` declaration is invalid.
     """
     for index, entry in enumerate(remotes):
+        try:
+            normalize_subpath(entry.get("path"), where="'path'")
+        except ValueError as exc:
+            raise ValueError(
+                f"config: 'shims.remotes[{index}].path' is invalid: {exc}"
+            ) from None
         try:
             mirror = normalize_mirror(entry.get("mirror"))
         except ValueError as exc:

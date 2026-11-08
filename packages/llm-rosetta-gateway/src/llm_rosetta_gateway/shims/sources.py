@@ -536,7 +536,7 @@ class _RemoteSpec:
     mirror_subpath: str | None = None
 
 
-def _normalize_subpath(value: Any, *, where: str) -> str:
+def normalize_subpath(value: Any, *, where: str) -> str:
     """Normalize a declared scan directory, refusing anything that can escape.
 
     Both a source's ``path`` and a mirror's ``path`` name a directory inside an
@@ -669,7 +669,7 @@ def normalize_mirror(
     # An absent ``path`` inherits the source's (``None``); a declared one — even
     # ``"."`` or ``""`` — names the mirror's own scan directory.
     declared_path = (
-        None if subpath is None else _normalize_subpath(subpath, where="mirror 'path'")
+        None if subpath is None else normalize_subpath(subpath, where="mirror 'path'")
     )
     return template, pin, token_env, declared_path
 
@@ -704,7 +704,7 @@ def _parse_remote_spec(
     _validate_url_scheme(url)
     github = _parse_github(url)
     try:
-        subpath = _normalize_subpath(spec.get("path"), where="'path'")
+        subpath = normalize_subpath(spec.get("path"), where="'path'")
         mirror = normalize_mirror(spec.get("mirror"))
     except ValueError as exc:
         raise ShimSourceError(str(exc)) from None
@@ -775,11 +775,16 @@ def _needs_fetch(
             return True
     if spec.refresh == "never":
         return not has_cache
-    if has_cache and spec.github is not None:
+    if has_cache and spec.github is not None and pinned is None:
         # Stamps written before refs were resolved — or written while the API
         # was unreachable — hold the literal ref; a commit is what the update
         # check can compare against.  Checked after ``never``: the operator's
         # schedule wins, and the pin is re-resolved on the next fetch it allows.
+        #
+        # A digest pin is exempt: the bytes are the identity, the commit adds
+        # nothing to the verdict, and re-pinning is what made a warm cache
+        # cold — one API attempt on every reload, in exactly the environment
+        # the mirror exists for (#1433).
         if not _SHA_RE.match(str(cached.get("resolved_ref") or "")):
             return True
     if spec.refresh == "always":
@@ -959,7 +964,13 @@ def _fetch_remote(
 
     effective_ref = resolved_ref if spec.github else ref
     primary_url = _archive_url(spec.url, effective_ref, spec.github)
-    legs = _leg_plan(spec, primary_url, ref=effective_ref)
+    # The mirror is addressed by the ref the operator declared, not by the
+    # commit the forge resolved it to: a mirror publishes one directory per
+    # release (``...@dist/v0.1.0/...``, #1412), and its URL must not depend on
+    # api.github.com answering — an anonymous rate limit would otherwise turn
+    # a working fallback into a 404.  Its bytes are pinned by ``sha256``, so
+    # the release spelling is what the pin is about.
+    legs = _leg_plan(spec, primary_url, ref=effective_ref, mirror_ref=ref)
 
     with _file_lock(spec.source_dir.parent / f"{spec.source_dir.name}.lock"):
         return _fetch_installable(
@@ -1064,9 +1075,18 @@ def _install_archive(
 
 
 def _leg_plan(
-    spec: _RemoteSpec, primary_url: str, *, ref: str | None
+    spec: _RemoteSpec,
+    primary_url: str,
+    *,
+    ref: str | None,
+    mirror_ref: str | None = None,
 ) -> list[tuple[str, str, str | None]]:
     """Return the legs to try, in order, as ``(leg, url, sha256 pin)``.
+
+    *ref* fills the primary's ``{ref}`` (the resolved commit when the forge
+    resolved one); *mirror_ref* fills the mirror's, defaulting to the same
+    value.  The caller passes the declared ref for the mirror so its URL does
+    not depend on the forge's API.
 
     The leg that last served this source is tried first, so a mirror chosen
     because the primary was unreachable is not re-probed on every fetch.  If
@@ -1075,10 +1095,11 @@ def _leg_plan(
     """
     legs: list[tuple[str, str, str | None]] = [("primary", primary_url, spec.sha256)]
     if spec.mirror_url:
+        mirror_slot = ref if mirror_ref is None else mirror_ref
         legs.append(
             (
                 "mirror",
-                spec.mirror_url.replace("{ref}", ref or "HEAD"),
+                spec.mirror_url.replace("{ref}", mirror_slot or "HEAD"),
                 spec.mirror_sha256,
             )
         )

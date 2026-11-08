@@ -733,6 +733,31 @@ class TestMirrorConfig:
         )
         assert sources.remotes[0]["mirror"] == "https://m.example/x.tar.gz"
 
+    @pytest.mark.parametrize("path", ["../escape", "/etc", "a/../../b", "a\\b", 5])
+    def test_a_bad_source_path_is_refused_at_parse(self, path, tmp_path: Path):
+        """The source's own ``path`` is judged at parse, not at the fetch.
+
+        Startup and the admin save share this parser, so refusing here is what
+        keeps a value the loader would reject from being written to disk.
+        """
+        with pytest.raises(ValueError) as excinfo:
+            parse_shims_section(self._section(path=path), str(tmp_path / "c.jsonc"))
+        assert "shims.remotes[0].path" in str(excinfo.value)
+
+    def test_a_relative_source_path_is_kept_as_written(self, tmp_path: Path):
+        """Parse validates; the loader does the rewriting (``a/./b`` → ``a/b``)."""
+        sources = parse_shims_section(
+            self._section(path="a/./b"), str(tmp_path / "c.jsonc")
+        )
+        assert sources.remotes[0]["path"] == "a/./b"
+
+    def test_the_admin_save_path_rejects_a_bad_source_path(self, tmp_path: Path):
+        response = _validate_shim_sources_body(
+            self._section(path="../escape"), str(tmp_path / "c.jsonc")
+        )
+        assert response is not None
+        assert response.status_code == 400
+
     def test_the_admin_save_path_rejects_bad_mirrors(self, tmp_path: Path):
         response = _validate_shim_sources_body(
             self._section(mirror={"url_template": "https://m.example/plain"}),
@@ -773,6 +798,35 @@ class TestMirrorConfig:
         assert merged["sha256"] == "b" * 64
         # The preset's own keys survive the merge.
         assert merged["ref"] == "v0.1.0"
+
+    @pytest.mark.parametrize(
+        "key, archive",
+        [
+            ("asksage", "asksage.tar.gz"),
+            ("alcf", "alcf.tar.gz"),
+            ("argo", "argo.tar.gz"),
+            ("opencode_zen_free", "opencode_zen_free.tar.gz"),
+        ],
+    )
+    def test_a_preset_carries_its_tag_and_mirror(
+        self, key: str, archive: str, tmp_path: Path
+    ):
+        """Every published package expands to a pinned primary plus a mirror.
+
+        The tag is what makes the mirror usable: its bytes are the archive
+        built for that tag, so an unpinned primary could drift away from it.
+        """
+        sources = parse_shims_section({"presets": [key]}, str(tmp_path / "c.jsonc"))
+        remote = sources.remotes[0]
+        assert remote["ref"] == "v0.1.0"
+        assert remote["path"].endswith("/providers")
+        mirror = remote["mirror"]
+        assert mirror["url_template"].endswith(f"@dist/{{ref}}/{archive}")
+        assert "{ref}" in mirror["url_template"]
+        assert len(mirror["sha256"]) == 64
+        # The published archive is laid out from the providers directory, not
+        # from the repository root, so the mirror names its own scan path.
+        assert mirror["path"] == "providers"
 
     def test_describe_names_the_leg(self):
         report = ShimLoadReport(
