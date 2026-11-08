@@ -992,6 +992,103 @@ def _provider_archive() -> bytes:
     )
 
 
+class TestMirrorLayout:
+    """The two legs may lay their archives out differently (#1411 Phase 4).
+
+    The published ``dist`` archives hold ``providers/`` at the root — they are
+    built from the providers directory — while the forge tarball keeps the
+    repository's ``src/<package>/providers``.  One declared path cannot address
+    both, and before ``mirror.path`` existed the mirror leg extracted fine and
+    then failed to scan: ``not a directory: <cache>/<src>/src/<pkg>/providers``.
+    """
+
+    _SHIM = "rem--chat_completions"
+
+    def _legs(self) -> tuple[bytes, bytes]:
+        body = PROVIDER_YAML.format(name=self._SHIM, slug="rem").encode()
+        # The forge tarball: one <repo>-<ref> root, then the package tree.
+        primary = _tar_bytes({"src/pkg/providers/rem/provider.yaml": body})
+        # The published dist archive: providers/ is the root.
+        mirror = _tar_bytes({"providers/rem/provider.yaml": body}, root=None)
+        return primary, mirror
+
+    def _load(self, tmp_path: Path, *, mirror_extra: dict | None = None):
+        primary, mirror = self._legs()
+
+        def http_get(url: str, **_kw):
+            if url.startswith("https://api.github.com/"):
+                return json.dumps({"sha": _API_SHA}).encode()
+            if "codeload" in url:
+                raise ConnectionRefusedError("github is blocked here")
+            return mirror
+
+        spec = {
+            "url": "https://github.com/acme/repo",
+            "ref": "v1",
+            "path": "src/pkg/providers",
+            "mirror": {
+                "url_template": "https://cdn.example/gh/acme/repo@dist/{ref}/rem.tar.gz",
+                "sha256": hashlib.sha256(mirror).hexdigest(),
+                **(mirror_extra or {}),
+            },
+        }
+        return rebuild_shims(
+            extra_remotes=[spec], cache_root=tmp_path / "cache", http_get=http_get
+        ).sources[0]
+
+    def test_the_mirror_scans_its_own_root(self, tmp_path: Path):
+        """``path: "."`` names the extraction root the dist archive has."""
+        src = self._load(tmp_path, mirror_extra={"path": "."})
+        assert src.ok, src.error
+        assert src.leg == "mirror"
+        assert src.shim_names == (self._SHIM,)
+
+    def test_without_a_mirror_path_the_source_path_is_inherited(self, tmp_path: Path):
+        """The default is the source's path, which the dist archive lacks."""
+        src = self._load(tmp_path)
+        assert src.leg == "mirror"
+        assert src.ok is False
+        assert "not a directory" in (src.error or "")
+
+    def test_both_legs_yield_the_same_shim(self, tmp_path: Path):
+        """Each leg scans its own tree and registers the same shim."""
+        primary, mirror = self._legs()
+        by_leg = {}
+        for primary_fails in (False, True):
+
+            def http_get(url: str, **_kw):
+                if url.startswith("https://api.github.com/"):
+                    return json.dumps({"sha": _API_SHA}).encode()
+                if "codeload" in url:
+                    if primary_fails:
+                        raise ConnectionRefusedError("blocked")
+                    return primary
+                return mirror
+
+            sources_mod._chosen_legs.clear()
+            src = rebuild_shims(
+                extra_remotes=[
+                    {
+                        "url": "https://github.com/acme/repo",
+                        "ref": "v1",
+                        "path": "src/pkg/providers",
+                        "mirror": {
+                            "url_template": (
+                                "https://cdn.example/gh/acme/repo@dist/{ref}/rem.tar.gz"
+                            ),
+                            "sha256": hashlib.sha256(mirror).hexdigest(),
+                            "path": ".",
+                        },
+                    }
+                ],
+                cache_root=tmp_path / f"cache-{primary_fails}",
+                http_get=http_get,
+            ).sources[0]
+            assert src.ok, src.error
+            by_leg[src.leg] = src.shim_names
+        assert by_leg == {"primary": (self._SHIM,), "mirror": (self._SHIM,)}
+
+
 class TestMirror:
     """The mirror leg: selection, integrity and the remembered outcome."""
 
@@ -2188,13 +2285,14 @@ class TestMirrorValidation:
             "https://m.example/x.tar.gz",
             None,
             None,
+            None,
         )
 
     def test_an_object_carries_its_own_pin(self):
         pin = "a" * 64
         assert sources_mod.normalize_mirror(
             {"url_template": "https://m.example/x@{ref}.tar.gz", "sha256": pin}
-        ) == ("https://m.example/x@{ref}.tar.gz", pin, None)
+        ) == ("https://m.example/x@{ref}.tar.gz", pin, None, None)
 
     def test_an_object_can_carry_its_own_credential(self):
         assert sources_mod.normalize_mirror(
@@ -2202,7 +2300,33 @@ class TestMirrorValidation:
                 "url_template": "https://m.example/x.tar.gz",
                 "token_env": "MIRROR_TOKEN",
             }
-        ) == ("https://m.example/x.tar.gz", None, "MIRROR_TOKEN")
+        ) == ("https://m.example/x.tar.gz", None, "MIRROR_TOKEN", None)
+
+    @pytest.mark.parametrize(
+        "declared, expected", [(".", ""), ("", ""), ("./", ""), ("a/./b", "a/b")]
+    )
+    def test_a_relative_path_is_normalized(self, declared, expected):
+        assert (
+            sources_mod.normalize_mirror(
+                {"url_template": "https://m.example/x.tar.gz", "path": declared}
+            )[3]
+            == expected
+        )
+
+    def test_an_object_can_carry_its_own_scan_path(self):
+        assert (
+            sources_mod.normalize_mirror(
+                {"url_template": "https://m.example/x.tar.gz", "path": "providers"}
+            )[3]
+            == "providers"
+        )
+
+    @pytest.mark.parametrize("path", ["/etc", "../x", "a/../../b", "a\\b", 5, ".."])
+    def test_a_path_that_can_escape_is_refused(self, path):
+        with pytest.raises(ValueError):
+            sources_mod.normalize_mirror(
+                {"url_template": "https://m.example/x.tar.gz", "path": path}
+            )
 
     def test_absent_is_none(self):
         assert sources_mod.normalize_mirror(None) is None
