@@ -121,7 +121,8 @@ shim 不必放在包内。顶层 `shims` 段可以让 gateway 额外扫描若干
 `path` 是**在该归档内**扫描的目录，默认取源的 `path`。它之所以存在，是因为两条腿的布局
 未必相同：独立包发布的归档从 providers 目录构建（根的下一层就是 `providers/`），而 forge 的
 tarball 保留仓库里的 `src/<package>/providers`。`"."` 或 `""` 表示归档根目录；绝对路径或
-含 `..` 的路径会在加载配置时被拒绝。内置预设已经设置了它（见
+含 `..` 的路径会在加载配置时被拒绝。内置预设写的是 `providers` 而不是 `"."`，
+这样归档「剥掉唯一顶层目录」的规则就不会决定这份预设能不能加载（见
 [Shim → 独立 Shim 包](../guide/shims.md#standalone-shim-packages)）。
 
 镜像要带自己的 `sha256`，因为镜像提供的字节未必是主 URL 的 —— CDN 提供的是项目提交到
