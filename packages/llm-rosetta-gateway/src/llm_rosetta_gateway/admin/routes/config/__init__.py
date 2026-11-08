@@ -72,6 +72,7 @@ from .shims import (
 from .bulk import (
     _add_new_models,
     _append_provider_to_model,
+    _merge_outcome,
     _merge_provider_into_model,
     bulk_add_models,
 )
@@ -86,6 +87,7 @@ __all__ = [
     "_base_formats_payload",
     "_build_model_entry",
     "_get_model_type_metadata",
+    "_merge_outcome",
     "_merge_provider_into_model",
     "_merge_shim_sources_body",
     "_shim_removal_advisories",
