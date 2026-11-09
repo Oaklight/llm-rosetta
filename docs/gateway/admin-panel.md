@@ -16,6 +16,14 @@ The rail's foot carries the clock. It shows the gateway's own wall time, not the
 
 `Alt+1` … `Alt+5` jump to a section, `[` and `]` step through them, Back and Forward move between the sections you visited, and `?` opens the shortcut list.
 
+### Panels and tables
+
+A page carries one title — the one in the status bar — and a heading below it names its container, never the page. A **board** title is a strip: `[ Per-Provider Breakdown ]`, `[ Error Dumps ]`, `[ Profiling ]`, `[ Content Capture ]`. The strip marks one board sitting under a page and above that board's own controls; it is set one step below the section scale, and its brackets are drawn by the stylesheet with an empty alternative text, so they are decoration — no translated string carries punctuation, a screen reader speaks the title alone, and the Chinese panel reads `[ 服务方统计 ]`.
+
+Headings below a strip run at one section size (`h3`) and one group size (`h4`); a heading a component sizes itself, such as a modal title, keeps its size and takes the section weight.
+
+Tables separate rows with one hairline drawn on the row, not one per cell, under a stronger rule on the header row. A **magnitude** is right-aligned in tabular figures: the providers' model count, the API keys' requests and three token columns, the request log's tokens and duration, profiling's duration, and the token-usage modal's seven counters. A **string** stays left even when it is a column of digits — a timestamp and a status badge read as text, not as amounts. Sorting, the sticky header, horizontal scrolling and the expandable log rows behave as before; `tests/js/table-columns.test.mjs` pins every table's column count and the header that each positional alignment rule lands on, so a new column fails the suite instead of silently moving an alignment.
+
 ## Providers
 
 The **Providers** section manages every upstream the gateway can call.
