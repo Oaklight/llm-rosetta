@@ -1476,7 +1476,7 @@ th.sortable:focus-visible { outline:2px solid var(--accent);outline-offset:-2px;
   position: fixed;
   bottom: 0;
   /* Starts where the console rail ends: the rail runs to the window edge. */
-  left: 220px;
+  left: var(--side-w);
   right: 0;
   z-index: 50;
   padding: 4px 12px;
@@ -1978,7 +1978,7 @@ th.sortable:focus-visible { outline:2px solid var(--accent);outline-offset:-2px;
 }
 .dump-page[hidden] { display: none; }
 .dp-head { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
-.dp-head h1 { font-size: 15px; font-weight: 600; margin: 0; font-family: var(--mono); }
+.dp-head #dumpPageTitle { font-size: 15px; font-weight: 600; margin: 0; font-family: var(--mono); }
 .dp-actions { margin-left: auto; display: flex; gap: 8px; }
 .dp-meta {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));

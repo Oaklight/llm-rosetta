@@ -66,19 +66,29 @@ body.auth-pending > .db-footer { display: none !important; }
    The navigation is a left rail, not a top bar: every panel is a work
    surface that wants the full height, and a rail keeps the section names
    visible while a table or a log scrolls. */
-.app-shell { display: grid; grid-template-columns: 220px minmax(0, 1fr); min-height: 100vh; }
+.app-shell { display: grid; grid-template-columns: var(--side-w) minmax(0, 1fr); min-height: 100vh; }
 .sidebar {
   position: sticky; top: 0; height: 100vh;
   display: flex; flex-direction: column; gap: 12px;
-  padding: 16px 12px 12px;
+  padding: 0 12px 12px;
   border-right: 1px solid var(--border); background: var(--bg-card);
 }
 /* The brand is the way home. */
-.sb-brand { padding: 2px 8px 6px; cursor: pointer; border-radius: 8px; }
-.sb-brand:hover h1 { color: var(--accent); }
+/* The brand is a header strip the same height as the page's topbar, so the
+   two hairlines meet across the rail and the console's first line is one
+   unbroken edge. */
+.sb-brand {
+  display: flex; align-items: center; flex: 0 0 auto;
+  height: var(--topbar-h); padding: 0 8px;
+  border-bottom: 1px solid var(--hairline);
+  cursor: pointer; border-radius: 0;
+}
+.sb-brand:hover #brandTitle { color: var(--accent); }
 .sb-brand:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.sb-brand h1 { font-size: 15px; }
-.sb-brand h1 span { display: block; font-size: 11px; margin-top: 2px; }
+/* Typography unchanged from the `h1` this replaced: the UA weight (700)
+   was not part of P2's change list, so it is stated, not re-decided. */
+.sb-brand #brandTitle { font-size: 15px; font-weight: 700; }
+.sb-brand #brandTitle span { display: block; font-size: 11px; margin-top: 2px; }
 .sidebar .tabs {
   flex-direction: column; align-items: stretch; gap: 4px;
   padding: 0; border-bottom: none; overflow: visible; flex: 0 0 auto;
@@ -88,23 +98,23 @@ body.auth-pending > .db-footer { display: none !important; }
    navigations that looked nothing alike made the panel feel assembled from
    two designs.  Both are 14px with the same 9px vertical rhythm, so the rail
    and the settings pane beside it read as one column of entries. */
+/* Rail rows: square, full width, the active one filled and marked with a 2px
+   bar on the rail's edge.  The transparent border on every row keeps the text
+   from shifting by 2px when the bar appears. */
 .sidebar .tab {
   position: relative;
   display: flex; align-items: center; gap: 10px;
-  padding: 9px 10px 9px 12px; border-radius: 6px; border-bottom: none;
+  padding: 9px 10px 9px 10px;
+  border-radius: 0; border-bottom: none;
+  border-left: 2px solid transparent;
   font-size: 14px; color: var(--text-dim); white-space: normal;
   transition: color .12s ease, background .12s ease;
 }
-.sidebar .tab:hover { background: var(--bg-hover); color: var(--text); }
+.sidebar .tab:hover { background: var(--surface-2); color: var(--text); }
 .sidebar .tab.active {
-  background: transparent; color: var(--accent); font-weight: 600;
-  border-bottom-color: transparent;
+  background: var(--surface-2); color: var(--text); font-weight: 600;
+  border-left-color: var(--accent); border-bottom-color: transparent;
   box-shadow: none;
-}
-.sidebar .tab.active::before {
-  content: ''; position: absolute; left: 0; top: 8px; bottom: 8px;
-  width: 2px; border-radius: 2px; background: var(--accent);
-  pointer-events: none;
 }
 .sidebar .tabs-spacer { display: none; }
 .sidebar .config-path {
@@ -151,6 +161,43 @@ body.auth-pending > .db-footer { display: none !important; }
 }
 .sb-actions .sb-icon-btn svg { width: 16px; height: 16px; display: block; margin: 0 auto; }
 .app-main { min-width: 0; }
+
+/* ── Status bar (the page's topbar) ───────────────────────────────────────
+   Sticky, one line tall whatever the title length, carrying the section's
+   bracketed index and its title.  The panel keeps its `.section-header` row
+   for the controls, but its own `h2` is hidden: the title lives here once. */
+.topbar {
+  position: sticky; top: 0; z-index: 40;
+  display: flex; align-items: center; gap: var(--space-3);
+  height: var(--topbar-h); min-height: var(--topbar-h);
+  padding: 0 var(--space-4);
+  background: var(--surface);
+  border-bottom: 1px solid var(--hairline);
+}
+.topbar-index {
+  flex: 0 0 auto;
+  font-family: var(--mono); font-size: var(--fs-xs);
+  color: var(--text-muted); letter-spacing: 0;
+}
+.topbar-title {
+  margin: 0; font-size: var(--fs-lg); font-weight: 600; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.topbar-actions { margin-left: auto; display: flex; align-items: center; gap: var(--space-2); }
+/* The page title is the panel's own heading, at `.tab-panel > .section >
+   .section-header` — the shape every panel that has a title uses today.
+   Deeper `.section-header`s are sub-section titles (the observability board
+   has two) and stay visible.
+   The heading is hidden, not removed: it stays the source the status bar
+   copies.  With it hidden, `.section-header`'s `space-between` is left with
+   one flow child, which would jump from the right edge to the left — the
+   `h2 + *` rule pins the first control back to the right (`h2` is still the
+   previous sibling even when it is `display: none`). */
+.tab-panel.active > .section > .section-header > h2 { display: none; }
+.tab-panel.active .section-header > h2 + * { margin-left: auto; }
+/* A header that held nothing but the title (the routing board) collapses with
+   it instead of leaving an empty 29px row. */
+.tab-panel.active .section-header:not(:has(> :not(h2))) { display: none; }
 /* Language swap: the shell dips out for ~90ms while every string is replaced.
    The login card does the same; it is on screen before the shell exists. */
 .app-shell, .login-box { transition: opacity .12s ease; }
@@ -158,7 +205,17 @@ body.auth-pending > .db-footer { display: none !important; }
 @media (prefers-reduced-motion: reduce) {
   .app-shell, .login-box { transition: none; }
 }
-.content { max-width: 1600px; }
+/* The content column keeps a maximum width, and a 32px hairline grid runs
+   behind it.  `background-attachment: local` ties the grid to the content, so
+   it scrolls with the page instead of sliding under a fixed viewport. */
+.content {
+  max-width: 1600px;
+  background-image:
+    repeating-linear-gradient(90deg, var(--grid-line) 0 1px, transparent 1px 32px),
+    repeating-linear-gradient(0deg, var(--grid-line) 0 1px, transparent 1px 32px);
+  background-attachment: local;
+}
+:root { --grid-line: color-mix(in srgb, var(--hairline) 55%, transparent); }
 /* The rail is the console's left edge and runs to the window bottom, so the
    status bar starts beside it (components.css) and its four buttons sit at
    the very foot of the column, not above a reserved strip. */
@@ -176,9 +233,11 @@ body.auth-pending > .db-footer { display: none !important; }
   .sidebar .tabs { flex-direction: row; overflow-x: auto; scrollbar-width: none; }
   .sidebar .tabs::-webkit-scrollbar { display: none; }
   .sidebar .tab { white-space: nowrap; border-radius: 0; padding: 10px 12px; }
-  .sidebar .tab.active { background: none; box-shadow: inset 0 -2px 0 var(--accent); }
-  /* Horizontal bar: the accent bar under the label replaces the left one. */
-  .sidebar .tab.active::before { display: none; }
+  /* Horizontal strip: the mark is the underline, not the rail's left bar. */
+  .sidebar .tab.active {
+    background: none; border-left-color: transparent;
+    box-shadow: inset 0 -2px 0 var(--accent);
+  }
   .sb-foot { flex-direction: row; align-items: center; justify-content: space-between; }
   .sb-clock { flex-direction: row; align-items: baseline; gap: 6px; }
   .sb-actions { flex: 0 0 auto; }
