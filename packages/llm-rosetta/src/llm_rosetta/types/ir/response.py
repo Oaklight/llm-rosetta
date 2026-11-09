@@ -49,6 +49,10 @@ class UsageInfo(TypedDict):
     cache_creation_tokens: NotRequired[
         int
     ]  # 缓存创建Token数 Cache creation token count (Anthropic)
+    # OpenAI 统一计算单位（可空） OpenAI unified compute-unit count (nullable).
+    # Absent and present-but-null are different facts, so conversion preserves
+    # the key's presence, not its truthiness.
+    compute_units: NotRequired[int | None]
 
 
 class FinishReason(TypedDict):

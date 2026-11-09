@@ -297,6 +297,10 @@ class ChatCompletionsConverter(BaseConverter):
             reasoning = p_completion_details.get("reasoning_tokens")
             if reasoning is not None:
                 usage_info["reasoning_tokens"] = reasoning
+        # Nullable on the wire (still null in practice).  Copy it when the key
+        # is present, so "absent" and "present but null" stay distinguishable.
+        if "compute_units" in p_usage:
+            usage_info["compute_units"] = p_usage["compute_units"]
         return cast(UsageInfo, usage_info)
 
     def _apply_tool_config(
@@ -653,6 +657,11 @@ class ChatCompletionsConverter(BaseConverter):
             usage.setdefault("completion_tokens_details", {})["reasoning_tokens"] = (
                 ir_usage["reasoning_tokens"]
             )
+
+        # Emitted on presence, not truthiness: a null that the source carried
+        # is a different fact from a key the source never had.
+        if "compute_units" in ir_usage:
+            usage["compute_units"] = ir_usage["compute_units"]
 
         return usage
 
