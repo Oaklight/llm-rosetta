@@ -343,7 +343,7 @@
     "api_key_env": "TYPESAFE_API_KEY",
     "default_path": "/v1/systemone",
     "group": null,
-    "group_label": null,
+    "group_label": "TypeSafe",
     "display_name": null,
     "free_source": false
   },
