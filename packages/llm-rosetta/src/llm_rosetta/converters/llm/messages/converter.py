@@ -256,6 +256,12 @@ class MessagesConverter(BaseConverter):
         else:
             # Anthropic requires max_tokens
             result["max_tokens"] = 4096
+        if "max_tokens" not in (gen_config or {}):
+            # The target requires a value the request never named.  The write
+            # and the read are separate calls and the body cannot carry a
+            # marker, so a per-conversion record is the only place this fact
+            # can live; the gateway puts it in the request log (#1328).
+            ctx.metadata.setdefault("injected", {})["max_tokens"] = result["max_tokens"]
 
         # 4-6. Tools, tool choice, tool config
         self._apply_tool_config(ir_request, result, ctx)

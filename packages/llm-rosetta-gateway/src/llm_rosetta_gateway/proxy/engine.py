@@ -231,6 +231,12 @@ async def prepare_request(
         ) from exc
 
     profile.update(pipeline.profile)
+    # Fields the target required and the request did not name.  The converter
+    # records them on its context; the request log carries them on the row, so
+    # "the gateway added this" is visible after the fact (#1328).
+    injected = pipeline.context.metadata.get("injected")
+    if injected:
+        profile["injected"] = dict(injected)
 
     await _fidelity_check_and_dump(
         route, body, target_body, "request", profile, model, persistence, entry_id
@@ -745,7 +751,6 @@ async def handle_non_streaming(  # noqa: C901
 
     # Merge response-phase timings from pipeline
     profile.update(pipeline.profile)
-
     await _fidelity_check_and_dump(
         route,
         resp.body,
