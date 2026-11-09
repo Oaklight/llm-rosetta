@@ -635,20 +635,30 @@ Two kinds of refusal qualify:
   right now, not that the key is wrong, so no credential is demoted.
 
 A `400`, `403`, `404`, `413` or `422` answers the client unchanged: another
-provider would refuse the same request. The budget is **one failover** — not
-one upstream call: a refusal that leaves another credential of the same
-provider usable spends the ordinary same-provider retry first, and only a
-provider with nothing left fails over. The refusing provider is excluded for
-the rest of the request, one other provider is tried, and if it refuses too the
-client receives that refusal.
+provider would refuse the same request.
+
+What a refusal removes depends on what it says:
+
+- **An allowance refusal is credential-level.** Every lane of a provider shares
+  the key, so the whole provider leaves the route for the rest of the request
+  and one other provider is tried.
+- **A transient failure is lane-level.** It is about the upstream model that
+  answered, so only that lane leaves the route and the provider's **other
+  lanes are tried first** — the same account, the same base URL, the cheapest
+  retry. Another provider is reached only when no lane of the refusing one is
+  left.
+
+The budget is therefore one **sibling** retry followed by one **cross-provider**
+retry for a transient failure, which is at most three upstream attempts; an
+allowance refusal still spends exactly one. When a request has moved, its
+profile records `failover: {from, to, from_lane, to_lane, scope, reason}` — a
+two-hop move nests the second hop under the first — and the log row names the
+lane that actually served.
 
 It is on by default because a refusal it reacts to is one the client would
 otherwise receive as an error, and a model with one provider has no second
 attempt to make. Turning it off trades availability for something real: another
-provider is another prompt cache, another rate-limit bucket and possibly another
-model build. When it happens, the request's profile records
-`failover: {from, to, reason}` and the log row names the provider that actually
-served.
+lane or provider is another prompt cache and possibly another model build.
 
 A capacity refusal is also a routing signal. The first one sinks the provider —
 it moves to the back of the order but stays a candidate — and three `503`, `529`
@@ -697,7 +707,7 @@ A model may list the same provider more than once, each entry naming a different
 }
 ```
 
-Each entry is a candidate of its own: the strategy counts it separately, eligibility and capability filtering judge it separately, and the server record names the `upstream_model` that served. Two entries naming the same provider **and** the same `upstream_model` are one candidate written twice, and the config refuses to load. The model editor adds a lane the same way it adds a second provider: name the provider with the new `upstream_model` and confirm the merge, and the entry gains a lane while the ones it already had stay as they were. Failover and a spent allowance remain provider-level: every entry of one provider shares its credentials, so a 429 or exhausted quota removes all of them at once.
+Each entry is a candidate of its own: the strategy counts it separately, eligibility and capability filtering judge it separately, and the server record names the `upstream_model` that served. Two entries naming the same provider **and** the same `upstream_model` are one candidate written twice, and the config refuses to load. The model editor adds a lane the same way it adds a second provider: name the provider with the new `upstream_model` and confirm the merge, and the entry gains a lane while the ones it already had stay as they were. A spent allowance and a `429` remain provider-level: every entry of one provider shares its credentials, so one of them removes all of them at once. A transient upstream failure is lane-level instead — it says that upstream model could not serve, so the other lanes are still tried, and they are tried before another provider (see [Quota Failover](#quota-failover)).
 
 ### Typed Routes { #typed-routes }
 
