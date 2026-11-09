@@ -4,6 +4,11 @@ import { t, typeLabel, typeLabelAlt } from '../core/i18n.js';
 import { api, showToast, closeModal, esc, openMenu, closeMenus } from '../core/utils.js';
 import { providerRowsHtml, syncPickerBtn, openPickerMenu } from './provider-picker.js';
 import { jsArg } from '../core/html.js';
+import {
+  bulkAddOutcome,
+  bulkAddResult,
+  toastFor,
+} from '../core/model-bulk.js';
 
 // ===================== Fetch Models from Provider =====================
 
@@ -235,8 +240,7 @@ async function bulkAddFetchedModels() {
       return prefix ? prefix + cb.value : cb.value;
     });
 
-    let addedCount = 0;
-    let appendedCount = 0;
+    let outcome = bulkAddOutcome(null);
     let removedCount = 0;
 
     if (toAdd.length > 0 || toAppend.length > 0) {
@@ -253,12 +257,16 @@ async function bulkAddFetchedModels() {
         body.models_append = toAppend;
       }
       const res = await api.post('/admin/api/config/models', body);
-      if (res.ok) {
-        addedCount = (res.added || []).length;
-        appendedCount = (res.appended || []).length;
-      } else {
-        showToast(res.error || t('toast.error'), 'error');
+      // `api.post` resolves with the parsed body whatever the status, so a
+      // failure arrives without `ok` (#1436).  Stop here: falling through
+      // would replace the error toast with the "nothing changed" wording.
+      const result = bulkAddResult(res);
+      if (!result.ok) {
+        const toast = toastFor(result, {tr: t});
+        showToast(toast.text, toast.kind);
+        return;
       }
+      outcome = result;
     }
 
     for (const name of toRemove) {
@@ -266,15 +274,11 @@ async function bulkAddFetchedModels() {
       if (res.ok) removedCount++;
     }
 
-    const msgs = [];
-    if (addedCount > 0) msgs.push(t('toast.modelsAdded', {count: addedCount}));
-    if (appendedCount > 0) msgs.push(t('toast.providersAppended', {count: appendedCount}));
-    if (removedCount > 0) msgs.push(t('toast.modelsRemoved', {count: removedCount}));
-    if (msgs.length > 0) {
-      showToast(msgs.join(', '));
-    } else {
-      showToast(t('toast.modelsAllExist'));
-    }
+    // A refused entry is reported with its own wording, and a batch that
+    // changed nothing and was refused is an error, not "already exist"
+    // (#1436).  Every branch lives in toastFor(), which the tests drive.
+    const toast = toastFor(outcome, {removedCount, tr: t});
+    showToast(toast.text, toast.kind);
     closeModal('fetchModelsModal');
     window.loadConfig();
   } catch (e) {
