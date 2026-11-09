@@ -50,10 +50,28 @@ title: 管理面板主题
 
 ### 颜色 token
 
-`--bg`、`--bg-card`、`--bg-hover`、`--border`、`--text`、`--text-dim`、
-`--text-muted`、`--accent`、`--accent-hover`、`--accent-subtle`、`--accent-on`、
-`--green`、`--green-subtle`、`--green-bg`、`--green-deep`、`--red`、
-`--red-subtle`、`--orange`、`--blue`、`--purple`。
+面板样式表收敛到的名字（issue [#1472](https://github.com/Oaklight/llm-rosetta/issues/1472)，P1）：
+
+| 角色 | token | 说明 |
+|------|-------|------|
+| 表面 | `--bg`、`--surface`、`--surface-2` | 页面、面板、悬停/次级 |
+| 线 | `--hairline`、`--hairline-strong` | 行与分隔线；强档是派生的 |
+| 文字 | `--text`、`--text-dim`、`--text-muted` | |
+| 强调 | `--accent`、`--accent-hover`、`--accent-subtle`、`--accent-on` | |
+| 状态 | `--pos`、`--neg`、`--warn`、`--info` | 各自带 `-subtle`（半透明叠色）、`-bg`（叠在 `--surface` 上的不透明浅底）与 `-border`（派生） |
+| 其他 | `--purple`、`--magenta`、`--cyan`、`--lime`、`--green-deep` | 能力与类型颜色 |
+
+`--hairline-strong`、四个 `-border`、`--warn-bg` 与 `--info-bg` 是用
+`color-mix()` 从角色色算出的表达式 —— 与 `components.css` 生成浅底/边框的写法相同 —— 所以主题加上它们并不新增颜色值。它们是暂定值：目前没有组件绘制它们，第一个真正上屏的阶段（`P3`/`P4`）会用主题矩阵按实际对比度调整比例。
+
+字号阶梯、间距与外壳几何（`--fs-*`、`--tracking-label`、`--space-1..6`、
+`--side-w`、`--topbar-h`）不随主题变化，放在 `base.css` 的 `:root`。
+
+### 兼容别名
+
+P1 把取值搬到了上面的名字下，并把原来的名字（`--bg-card`、`--bg-hover`、
+`--border`、`--green`、`--green-subtle`、`--green-bg`、`--red`、`--red-subtle`、
+`--orange`、`--blue`、`--badge-radius`）留在每个主题文件末尾的一个别名块里，因此没有组件改变行为。这个块是临时的：**P5 删除它**，而防止它变成第二套 API 的规则是一次 grep —— 在该块之外，`admin/` 里不得残留任何旧名字。
 
 深色块可以在深色背景需要不同强度时重新声明 `--dot` 与 `--grid`（emerald 就是这样）。除此之外，它不应重新声明结构块里的值——除非那确实是模式之间的差异，而不是方案之间的差异。
 
