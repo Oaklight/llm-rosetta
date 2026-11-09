@@ -1,7 +1,33 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "definition": "A path is in A ∩ B when A → IR → B → IR gives it back unchanged.  A path outside it must be named by a conversion warning; each silent entry counts the bodies that lost it, and the corruptions are paths B carries and then changes, each with the reason it is still open.",
   "silent_issue": "https://github.com/Oaklight/llm-rosetta/issues/1328",
+  "reasons": {
+    "chat_completions->messages": {
+      "generation.max_tokens": "The Messages API requires max_tokens.  The writer fills 4096 when the request names no limit, and the read-back cannot tell that value from one the client asked for: the write and the read are separate calls, the only carrier between them is the wire body, and the body has one field for it.  Intended silent (option c1 of the #1328 decision): the injected value is on the outgoing request, and #1457 (option c2) records it on the request-log row's profile."
+    },
+    "chat_completions->google_generate": {
+      "stream.enabled": "Google generate chooses streaming by endpoint (streamGenerateContent), not by a body field.  The SDK-shape writer does put `stream` in `config`, but that key is not part of the wire body: the request reader does not read it back and `_to_rest_body` does not lift it.  Intended silent: the gateway selects the streaming URL from the request."
+    },
+    "open_responses->messages": {
+      "generation.max_tokens": "The Messages API requires max_tokens.  The writer fills 4096 when the request names no limit, and the read-back cannot tell that value from one the client asked for: the write and the read are separate calls, the only carrier between them is the wire body, and the body has one field for it.  Intended silent (option c1 of the #1328 decision): the injected value is on the outgoing request, and #1457 (option c2) records it on the request-log row's profile."
+    },
+    "open_responses->google_generate": {
+      "stream.enabled": "Google generate chooses streaming by endpoint (streamGenerateContent), not by a body field.  The SDK-shape writer does put `stream` in `config`, but that key is not part of the wire body: the request reader does not read it back and `_to_rest_body` does not lift it.  Intended silent: the gateway selects the streaming URL from the request."
+    },
+    "messages->google_generate": {
+      "stream.enabled": "Google generate chooses streaming by endpoint (streamGenerateContent), not by a body field.  The SDK-shape writer does put `stream` in `config`, but that key is not part of the wire body: the request reader does not read it back and `_to_rest_body` does not lift it.  Intended silent: the gateway selects the streaming URL from the request."
+    },
+    "google_generate->messages": {
+      "generation.max_tokens": "The Messages API requires max_tokens.  The writer fills 4096 when the request names no limit, and the read-back cannot tell that value from one the client asked for: the write and the read are separate calls, the only carrier between them is the wire body, and the body has one field for it.  Intended silent (option c1 of the #1328 decision): the injected value is on the outgoing request, and #1457 (option c2) records it on the request-log row's profile."
+    },
+    "google_interactions->messages": {
+      "generation.max_tokens": "The Messages API requires max_tokens.  The writer fills 4096 when the request names no limit, and the read-back cannot tell that value from one the client asked for: the write and the read are separate calls, the only carrier between them is the wire body, and the body has one field for it.  Intended silent (option c1 of the #1328 decision): the injected value is on the outgoing request, and #1457 (option c2) records it on the request-log row's profile."
+    },
+    "google_interactions->google_generate": {
+      "stream.enabled": "Google generate chooses streaming by endpoint (streamGenerateContent), not by a body field.  The SDK-shape writer does put `stream` in `config`, but that key is not part of the wire body: the request reader does not read it back and `_to_rest_body` does not lift it.  Intended silent: the gateway selects the streaming URL from the request."
+    }
+  },
   "silent": {
     "chat_completions->messages": {
       "generation.max_tokens": 20
