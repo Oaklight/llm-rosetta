@@ -854,6 +854,12 @@ def _parse_range(where: str, spec: Any, yaml_path: Path) -> Range:
         raise ValueError(
             f"{yaml_path}: {where} must declare on_out_of_range (clamp, drop or reject)"
         )
+    policy = spec["on_out_of_range"]
+    if policy not in ("clamp", "drop", "reject"):
+        raise ValueError(
+            f"{yaml_path}: {where}.on_out_of_range must be clamp, drop or "
+            f"reject, got {policy!r}"
+        )
     bounds: dict[str, float | None] = {}
     for bound in ("min", "max"):
         value = spec.get(bound)
@@ -864,11 +870,7 @@ def _parse_range(where: str, spec: Any, yaml_path: Path) -> Range:
                 f"{yaml_path}: {where}.{bound} must be a number, got {value!r}"
             )
         bounds[bound] = value
-    return Range(
-        min=bounds["min"],
-        max=bounds["max"],
-        on_out_of_range=spec["on_out_of_range"],
-    )
+    return Range(min=bounds["min"], max=bounds["max"], on_out_of_range=policy)
 
 
 def _parse_type_params(

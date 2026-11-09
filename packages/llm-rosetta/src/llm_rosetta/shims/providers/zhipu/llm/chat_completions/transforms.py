@@ -4,9 +4,10 @@ Zhipu does not support ``n``, ``presence_penalty``, ``frequency_penalty``,
 ``logprobs``, ``top_logprobs``, ``logit_bias``, or ``seed``.
 Strip them before sending upstream to avoid errors.
 
-Additionally, ``temperature`` range is [0, 1] (vs OpenAI's [0, 2]) and
-``top_p`` minimum is 0.01.  These value-range adjustments are not handled
-by simple field stripping and may need future transform support.
+The value ranges this lane accepts are not a transform concern: they are
+declared in ``provider.yaml`` under ``request.ranges`` (``temperature`` is
+[0, 1] versus OpenAI's [0, 2], and ``top_p`` has a 0.01 minimum), and the
+conversion applies them with the change reported under the IR path.
 
 References:
     https://docs.bigmodel.cn

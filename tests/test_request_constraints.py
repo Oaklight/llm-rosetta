@@ -209,3 +209,44 @@ class TestMessagesDialectDeclaration:
         ir = _ir()
         apply_request_constraints(ir, constraints=constraints)
         assert ir["generation"]["max_tokens"] == 2048
+
+
+class TestRangeDescription:
+    """The bounds as a caller reads them, never with an absent side shown."""
+
+    def test_both_bounds(self):
+        assert Range(0.0, 1.0, "clamp").describe() == "0.0..1.0"
+
+    def test_a_floor_only(self):
+        assert Range(0.01, None, "clamp").describe() == ">= 0.01"
+
+    def test_a_ceiling_only(self):
+        assert Range(None, 2.0, "clamp").describe() == "<= 2.0"
+
+    def test_no_bounds(self):
+        assert Range(None, None, "clamp").describe() == "any"
+
+    def test_a_one_sided_warning_never_prints_none(self):
+        sink = WarningSink()
+        ir = _ir(top_p=0.001)
+        apply_request_constraints(
+            ir,
+            constraints=RequestConstraints(
+                ranges={"generation.top_p": Range(0.01, None, "clamp")}
+            ),
+            warnings=sink,
+        )
+        message = str(sink[0])
+        assert "0.001" in message
+        assert "None" not in message
+
+    def test_a_rejection_message_never_prints_none(self):
+        with pytest.raises(RequestConstraintViolation) as caught:
+            apply_request_constraints(
+                _ir(top_p=0.001),
+                constraints=RequestConstraints(
+                    ranges={"generation.top_p": Range(0.01, None, "reject")}
+                ),
+            )
+        assert "None" not in str(caught.value)
+        assert ">= 0.01" in str(caught.value)

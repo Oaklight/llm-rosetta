@@ -4,6 +4,20 @@ format: chat_completions
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/zhipu.svg
 
 # Domestic (China mainland): open.bigmodel.cn; international: api.z.ai
+request:
+  # OpenAI accepts temperature up to 2.0 and top_p down to 0.0; this lane does
+  # not, and an out-of-range value is otherwise passed through unchanged —
+  # either rejected or read as a different value than the client asked for.
+  # Clamped, with the change reported under the IR path (#1461).
+  ranges:
+    generation.temperature:
+      min: 0.0
+      max: 1.0
+      on_out_of_range: clamp
+    generation.top_p:
+      min: 0.01
+      max: 1.0
+      on_out_of_range: clamp
 reasoning:
   thinking_modes:
     enabled: enabled
