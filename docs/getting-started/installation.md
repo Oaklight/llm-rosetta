@@ -47,7 +47,12 @@ docker run -p 8765:8765 -v /path/to/config:/config oaklight/llm-rosetta-gateway
 docker run --user $(id -u):$(id -g) -p 8765:8765 -v /path/to/config:/config oaklight/llm-rosetta-gateway
 ```
 
-也可使用 Docker Compose — 参见仓库中的 `docker/docker-compose.yaml`。
+也可使用 Docker Compose — 参见仓库中的 `docker/docker-compose.yaml`。该文件把 `./config` 挂进容器（即 `docker/config`），首次启动前先创建它并交给容器运行的 uid：
+
+```bash
+mkdir -p docker/config && sudo chown "${PUID:-1000}:${PGID:-1000}" docker/config
+docker compose -f docker/docker-compose.yaml up -d
+```
 
 #### 从源码构建 { #building-from-source }
 
@@ -74,9 +79,9 @@ docker run --user "$(id -u):$(id -g)" -p 8765:8765 -v "$PWD/config:/config" llm-
 PUID=$(id -u) PGID=$(id -g) docker compose -f docker/docker-compose.source.yaml up -d --build
 ```
 
-缺失的 bind mount 目录会被 compose 以 `root` 创建，而首次运行要在其中写入 `config.jsonc`，所以目录属主不对是唯一会看到容器启动失败的情形。不经 Compose 的 `docker run` 形式不读取 `PUID`，要像上面的例子那样用 `--user`。
+缺失的 bind mount 目录会被 compose 以 `root` 创建，而首次运行要在其中写入 `config.jsonc`，所以目录属主不对是唯一会看到容器启动失败的情形：entrypoint 会直接报 `error: cannot create HOME=… as uid …` 并退出，而不是让网关在更晚处失败。不经 Compose 的 `docker run` 形式不读取 `PUID`，要像上面的例子那样用 `--user`。
 
-非 1000 的 uid 在镜像里没有 passwd 条目，Docker 会把 `HOME` 留成 `/`，进程无法写入。两个 compose 文件为这种情况设置 `HOME=/config/home`，由 entrypoint 创建；默认 uid 仍用 `/home/appuser`。因此 per-uid 状态 —— shim 缓存与 Sign in with ChatGPT 记录 —— 会落在 `config/` 下，这也是该目录必须属于运行时 uid 的第二个原因。
+非 1000 的 uid 在镜像里没有 passwd 条目，Docker 会把 `HOME` 留成 `/`，进程无法写入。源码版 compose 文件为这种情况传入 `HOME=/config/home`，由 entrypoint 创建；镜像版不传，交给 entrypoint 处理，因此旧镜像保持原有的 `HOME`。默认 uid 在两种情况下都仍是 `/home/appuser`。Sign in with ChatGPT 的记录基于 `Path.home()`（`~/.config/llm-rosetta/siwc/…`），因此会落在 `config/` 下 —— 这也是该目录必须属于运行时 uid 的第二个原因。shim 归档缓存不受影响：它锚定在配置目录（`config/shims-cache`），与 `HOME` 是否可写无关。
 
 两个文件是两个入口 —— `docker/docker-compose.yaml` 运行已发布的镜像，`docker/docker-compose.source.yaml` 从工作树构建 —— 且都发布 8765 端口，一次只跑一个。
 
