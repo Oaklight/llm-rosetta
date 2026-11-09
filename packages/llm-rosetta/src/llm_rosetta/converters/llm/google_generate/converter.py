@@ -650,7 +650,13 @@ class GoogleGenerateConverter(BaseConverter):
         config = sdk_request.get("config", {})
 
         # Lift specific keys from config to top level
-        for key in ("tools", "tool_config", "response_mime_type", "response_schema"):
+        for key in (
+            "tools",
+            "tool_config",
+            "response_mime_type",
+            "response_schema",
+            "cached_content",
+        ):
             if config.get(key):
                 body[key] = config[key]
 

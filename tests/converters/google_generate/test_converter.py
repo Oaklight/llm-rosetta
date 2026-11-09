@@ -169,6 +169,28 @@ class TestGoogleGenerateConverter:
 
         assert restored["cache"] == {"key": "cachedContents/abc"}
 
+    def test_the_rest_body_carries_the_cached_content_resource(self):
+        """The REST lift keeps the resource instead of dropping it (#1328).
+
+        ``_to_rest_body`` lifts a fixed key list out of ``config``; the
+        resource was not on it, so the gateway's REST body had no
+        ``cached_content`` at all even after the reader learned to read one.
+        """
+        ir_request: IRRequest = {
+            "model": "gemini-2.0-flash",
+            "messages": [{"role": "user", "content": [{"type": "text", "text": "Hi"}]}],
+            "cache": {"key": "cachedContents/abc"},
+        }
+        body, _warnings = self.converter.request_to_provider(
+            ir_request, output_format="rest"
+        )
+
+        assert "config" not in body
+        assert body["cached_content"] == "cachedContents/abc"
+        assert self.converter.request_from_provider(body)["cache"] == {
+            "key": "cachedContents/abc"
+        }
+
     def test_a_hand_written_rest_body_reads_the_camel_case_resource(self):
         """A REST client may spell the field camelCase; it is the same resource."""
         provider_request = {
