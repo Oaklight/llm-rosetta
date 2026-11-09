@@ -82,10 +82,37 @@ and dark; **colour tokens** are declared once per mode.
 
 ### Colour tokens
 
-`--bg`, `--bg-card`, `--bg-hover`, `--border`, `--text`, `--text-dim`,
-`--text-muted`, `--accent`, `--accent-hover`, `--accent-subtle`, `--accent-on`,
-`--green`, `--green-subtle`, `--green-bg`, `--green-deep`, `--red`,
-`--red-subtle`, `--orange`, `--blue`, `--purple`.
+The names the panel's stylesheets converge on (issue
+[#1472](https://github.com/Oaklight/llm-rosetta/issues/1472), P1):
+
+| Role | Tokens | Notes |
+|------|--------|-------|
+| Surfaces | `--bg`, `--surface`, `--surface-2` | page, panel, hover/secondary |
+| Lines | `--hairline`, `--hairline-strong` | rows and separators; the strong variant is derived |
+| Text | `--text`, `--text-dim`, `--text-muted` | |
+| Accent | `--accent`, `--accent-hover`, `--accent-subtle`, `--accent-on` | |
+| Status | `--pos`, `--neg`, `--warn`, `--info` | each with `-subtle` (translucent wash), `-bg` (opaque tint over `--surface`) and `-border` (derived) |
+| Other | `--purple`, `--magenta`, `--cyan`, `--lime`, `--green-deep` | capability and type colours |
+
+`--hairline-strong`, the four `-border` variants, `--warn-bg` and `--info-bg`
+are `color-mix()` expressions over the role colours — the same construct
+`components.css` already uses for its tints — so a theme can add them without
+adding a colour value. They are provisional: no component paints them yet, and
+the phase that first does (`P3`/`P4`) tunes the ratios against the theme matrix.
+
+The type scale, the spacing steps and the shell's geometry (`--fs-*`,
+`--tracking-label`, `--space-1..6`, `--side-w`, `--topbar-h`) do not vary by
+theme; they live in `base.css` `:root`.
+
+### Compatibility aliases
+
+P1 moved the values under the names above and left the previous names
+(`--bg-card`, `--bg-hover`, `--border`, `--green`, `--green-subtle`,
+`--green-bg`, `--red`, `--red-subtle`, `--orange`, `--blue`, `--badge-radius`)
+as aliases in a block at the end of each theme file, so no component changes
+behaviour. That block is temporary: **P5 deletes it**, and the rule that keeps
+it from becoming a second API is a grep — outside that block, no old name may
+remain anywhere in `admin/`.
 
 A dark block may re-declare `--dot` and `--grid` when the texture needs a
 different intensity on a dark background (emerald does). It may not re-declare
