@@ -881,9 +881,11 @@ request:
 - An absent or empty declaration leaves the dialect's value in place, so a shim
   with no `request:` section produces exactly the body it did before.
 
-A converter used directly applies its dialect's constraints itself; the
-conversion pipeline merges the active shim's overlay and applies the result
-right before the writer reads the request.
+The target converter applies the constraints to the request it is about to
+write — its own dialect's when used directly, and the merged dialect-plus-shim
+declaration when the conversion pipeline hands one over. The pipeline's own IR
+keeps what the source request carried, so an injected default is recorded in
+the request log's `injected` field rather than read back as a client value.
 
 ## Transforms
 
