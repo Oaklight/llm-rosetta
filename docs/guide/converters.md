@@ -250,6 +250,25 @@ from llm_rosetta.converters.llm.open_responses.tool_ops import fix_orphaned_tool
 items = fix_orphaned_tool_calls(items)
 ```
 
+### Assistant Part Order (Chat Completions) { #assistant-part-order-chat-completions }
+
+A chat assistant turn travels as three message fields — `reasoning_content`, `content` and `tool_calls` — and the dialect gives them no shared position. The IR therefore cannot record where a part sat on the wire; Chat Completions declares one **canonical order**:
+
+```
+[reasoning, text…, tool_call…]
+```
+
+This is exactly the shape the dialect's reader rebuilds and its writer can reproduce. On the write leg, an input that deviates is written in that order and reported through the warning sink — one `downgraded` loss with subject `part_order` — when any of these holds:
+
+- a reasoning part follows a text part or a tool call;
+- a text part follows a tool call;
+- a message carries more than one text part (the parts are joined with a single space, so their boundary is lost);
+- a message carries more than one reasoning part.
+
+The last case also loses content, because `reasoning_content` is one field overwritten per part: only the last reasoning part survives. That loss is reported separately, under the `reasoning` subject. Reports are deduplicated per subject per request, so an interleaved history does not warn once per turn.
+
+The ordinary replay shape `[text…, call…]` — and any other input already in canonical form — reports nothing. The reader cannot recover the upstream order and does not claim to: its output is the declared convention above. The streaming reader keeps the same convention within one chunk (a delta carrying both fields emits reasoning first) and does not warn, since that is a field order rather than a loss across turns.
+
 ### Google camelCase vs snake_case
 
 Google's REST API and CLI tools (e.g. Gemini CLI) use camelCase (`inlineData`, `mimeType`, `functionCall`, `functionResponse`, `functionDeclarations`, `responseMimeType`, `thinkingConfig`, etc.) while the Python SDK uses snake_case. LLM-Rosetta's Google converter accepts both conventions transparently in all layers — content, tools, config, and response fields. All IR→Provider output uses camelCase for REST API compatibility.
@@ -300,6 +319,7 @@ Warnings are **informational, not errors** — the conversion always completes. 
 | `"X does not support Y, ignored"` | A feature from the source format has no equivalent in the target format and was dropped |
 | `"Extension item ignored: ..."` | An Open Responses extension item has no portable IR representation |
 | `"Tool chain converted to sequential calls"` | A provider's chained tool-call pattern was flattened |
+| `"Reasoning part dropped: it carries no Responses reasoning id"` | A Responses reasoning item is replayed by its id; a part that came from another dialect has none, so the item is omitted (issue [#1491](https://github.com/Oaklight/llm-rosetta/issues/1491)) |
 | `"Skipped image in tool result packing: ..."` | An image in a tool result couldn't be converted |
 
 To capture warnings from `request_from_provider` or `response_from_provider` (which don't return a tuple), pass a `ConversionContext`:
