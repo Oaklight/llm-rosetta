@@ -89,11 +89,13 @@ PUID=$(id -u) PGID=$(id -g) docker compose -f docker/docker-compose.source.yaml 
 ```
 
 Compose creates a missing bind-mount directory as `root`, and the first run
-writes `config.jsonc` there, so a directory owned by a different uid is the one
-way to watch the container fail at startup: the entrypoint stops with
-`error: cannot create HOME=… as uid …` instead of letting the gateway fail
-later. The plain `docker run` form does
-not read `PUID`; use `--user` there, as the example above does.
+writes `config.jsonc` there, so a directory owned by a different uid stops the
+container at startup: the entrypoint exits with one of two HOME errors —
+`error: cannot create HOME=… as uid …` when it cannot create the directory,
+`error: HOME=… exists but is not writable by uid …` when it exists but that
+uid cannot write it — instead of letting the gateway fail later. The plain
+`docker run` form does not read `PUID`; use `--user` there, as the example
+above does.
 
 A uid other than 1000 has no passwd entry in the image, so Docker leaves `HOME` at `/`, which the process cannot write. The source file passes `HOME=/config/home` for that case and the entrypoint creates it; the image file leaves it to the entrypoint, so an image built before this change keeps whatever `HOME` it had. The default uid keeps `/home/appuser` either way. This means a `PUID`/`PGID` other than 1000 needs an image that contains this entrypoint — an image published after this change; pair an older tag with a foreign uid and `HOME` stays at `/`. The Sign in with ChatGPT record is `Path.home()`-based (`~/.config/llm-rosetta/siwc/…`), so it lands under `config/`; that is the second reason the directory must belong to the runtime uid. The shim archive cache is not affected — it is anchored to the config directory (`config/shims-cache`) whether or not `HOME` is writable.
 
