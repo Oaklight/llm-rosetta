@@ -649,7 +649,8 @@ body::before {
    same size as its own description and separates itself by weight and
    tracking instead.  That invariant outranks the group size where a
    component's own body is larger — the legacy-marker notice sets its heading
-   to its paragraph's size, not to this scale.
+   to its paragraph's size, not to this scale, and a provider card's heading
+   is --fs-sm for the same reason (its field hints are --fs-sm).
 
    The strip is a board-level component: the title of one board, sitting
    under a page and above that board's own controls.  Its brackets are drawn
