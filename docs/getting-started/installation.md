@@ -49,6 +49,26 @@ docker run --user $(id -u):$(id -g) -p 8765:8765 -v /path/to/config:/config oakl
 
 也可使用 Docker Compose — 参见仓库中的 `docker/docker-compose.yaml`。
 
+#### 从源码构建 { #building-from-source }
+
+上面的镜像安装的是已发布的 wheel。若要从工作树直接运行网关，仓库提供了一条源码构建路径，直接安装 `packages/llm-rosetta` 与 `packages/llm-rosetta-gateway` 两个发行版：
+
+```bash
+git clone https://github.com/Oaklight/llm-rosetta.git
+cd llm-rosetta
+echo "ADMIN_PASSWORD=change-me" > .env   # compose 会读取 .env
+docker compose up -d --build             # 构建 docker/Dockerfile.source
+```
+
+不使用 Compose：
+
+```bash
+docker build -f docker/Dockerfile.source -t llm-rosetta-gateway:src .
+docker run -p 8765:8765 -v "$PWD/config:/config" llm-rosetta-gateway:src
+```
+
+根目录的 `docker-compose.yaml` 把 `./config` 挂载为容器的 `/config`，并从 `.env` 读取 `config.jsonc` 中引用的变量（例如 `"${ADMIN_PASSWORD}"`）。发布路径不变：`make build-docker` 仍构建 `docker/Dockerfile`，从 `dist/` 或 PyPI 安装 wheel。
+
 ## 开发
 
 ```bash
