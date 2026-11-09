@@ -37,6 +37,13 @@ def _raw(*providers: str) -> dict[str, Any]:
     }
 
 
+def _same_lane_raw(*providers: str) -> dict[str, Any]:
+    """Both models ask their provider for the *same* upstream model."""
+    raw = _raw(*providers)
+    raw["models"][SOURCE]["upstream_model"] = TARGET
+    return raw
+
+
 def _request(
     tmp_path: Path, raw: dict[str, Any], *, name: str, body: dict[str, Any]
 ) -> SimpleNamespace:
@@ -55,7 +62,9 @@ def _request(
         path_params={"name": name},
         method="PUT",
         headers={},
-        json=lambda: dict(body),
+        # The body object itself: a test may hand in a dict whose answers
+        # change after the first read, to pin that the handler reads it once.
+        json=lambda: body,
     )
 
 
@@ -65,10 +74,8 @@ def _on_disk(request: SimpleNamespace) -> dict[str, Any]:
 
 
 @pytest.mark.asyncio
-async def test_same_provider_rename_merge_is_refused_and_drops_nothing(
-    tmp_path: Path,
-):
-    raw = _raw("opendesign-go")
+async def test_the_same_lane_twice_is_refused_and_drops_nothing(tmp_path: Path):
+    raw = _same_lane_raw("opendesign-go")
     request = _request(
         tmp_path,
         raw,
@@ -80,7 +87,8 @@ async def test_same_provider_rename_merge_is_refused_and_drops_nothing(
     payload = json.loads(response.body)
 
     assert response.status_code == 409
-    assert "already routes through provider 'opendesign-go'" in payload["error"]
+    assert "already routes provider 'opendesign-go'" in payload["error"]
+    assert "cannot appear twice" in payload["error"]
     # The refusal names the upstream the target already uses.
     assert f"{TARGET}" in payload["error"]
     # Nothing to confirm: the merge can never succeed.
@@ -92,8 +100,8 @@ async def test_same_provider_rename_merge_is_refused_and_drops_nothing(
 
 @pytest.mark.asyncio
 async def test_the_offered_merge_only_appears_when_it_can_happen(tmp_path: Path):
-    """The first 409 asks for confirmation only for a merge that adds a leg."""
-    raw = _raw("opendesign-go")
+    """The first 409 asks for confirmation only for a merge that adds a lane."""
+    raw = _same_lane_raw("opendesign-go")
     request = _request(
         tmp_path,
         raw,
@@ -104,9 +112,10 @@ async def test_the_offered_merge_only_appears_when_it_can_happen(tmp_path: Path)
     payload = json.loads((await put_model(request)).body)
 
     assert "merge_possible" not in payload
-    assert "already routes through provider" in payload["error"]
+    assert "already routes provider" in payload["error"]
+    assert "cannot appear twice" in payload["error"]
     on_disk = _on_disk(request)["models"]
-    assert on_disk[SOURCE]["upstream_model"] == SOURCE
+    assert on_disk[SOURCE] == raw["models"][SOURCE]
     assert on_disk[TARGET] == raw["models"][TARGET]
 
 
@@ -203,6 +212,64 @@ async def test_a_plain_rename_moves_the_entry_and_nothing_else(tmp_path: Path):
     assert models[SOURCE] == raw["models"][SOURCE]
 
 
+@pytest.mark.asyncio
+async def test_one_provider_two_upstreams_merge_into_two_lanes(tmp_path: Path):
+    """The shape #1430 exists for: `-eco` joins `...` as a second lane.
+
+    Both models name one provider; they ask it for different upstream models,
+    so the merge adds a lane instead of being refused.
+    """
+    raw = _raw("opendesign-go")
+    request = _request(
+        tmp_path,
+        raw,
+        name=TARGET,
+        body={"provider": "opendesign-go", "rename_from": SOURCE, "merge": True},
+    )
+
+    payload = json.loads((await put_model(request)).body)
+
+    assert payload["ok"] is True
+    models = _on_disk(request)["models"]
+    assert SOURCE not in models
+    lanes = models[TARGET]["providers"]
+    assert [(lane["name"], lane.get("upstream_model")) for lane in lanes] == [
+        ("opendesign-go", TARGET),
+        ("opendesign-go", SOURCE),
+    ]
+
+
+class _OneReadBody(dict):
+    """A body whose ``upstream_model`` answer changes after the first read.
+
+    If the handler judged the lane and then asked the body again to write it,
+    the two answers could differ — the same divergence a concurrent config
+    edit would cause.
+    """
+
+    def get(self, key, default=None):
+        value = super().get(key, default)
+        if key == "upstream_model" and key in self:
+            super().__setitem__(key, "changed-after-first-read")
+        return value
+
+
+@pytest.mark.asyncio
+async def test_the_lane_is_read_from_the_body_once(tmp_path: Path):
+    """The lane that is judged is the lane that is written."""
+    raw = _raw("opendesign-go", "backup-go")
+    raw["models"][SOURCE]["upstream_model"] = "real"
+    body = _OneReadBody({"provider": "backup-go", "rename_from": SOURCE, "merge": True})
+    body["upstream_model"] = "eco"
+    request = _request(tmp_path, raw, name=TARGET, body=body)
+
+    payload = json.loads((await put_model(request)).body)
+
+    assert payload["ok"] is True
+    lanes = _on_disk(request)["models"][TARGET]["providers"]
+    assert [lane.get("upstream_model") for lane in lanes] == [TARGET, "eco"]
+
+
 @pytest.mark.parametrize("source_lanes", ["declared-first", "declared-second"])
 @pytest.mark.asyncio
 async def test_the_source_upstream_is_found_on_any_lane(
@@ -245,8 +312,8 @@ async def test_the_source_upstream_is_found_on_any_lane(
 @pytest.mark.parametrize(
     ("existing", "outcome_hint"),
     [
-        ({"provider": "p", "upstream_model": "u-1"}, "same provider"),
-        ({"providers": [{"name": "p", "upstream_model": "u-1"}]}, "provider list"),
+        ({"provider": "p", "upstream_model": SOURCE}, "same lane"),
+        ({"providers": [{"name": "p", "upstream_model": SOURCE}]}, "provider list"),
         (42, "unrecognised entry"),
     ],
 )
