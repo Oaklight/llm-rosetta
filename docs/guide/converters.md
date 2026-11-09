@@ -257,7 +257,7 @@ chat 的助手回合以三个消息字段传输——`reasoning_content`、`cont
 [reasoning, text…, tool_call…]
 ```
 
-这正是该方言的读端重建、写端能够复现的形状。写入方向上，偏离的输入按此顺序写出，并通过 warning sink 上报——主题为 `part_order` 的一条 `downgraded` 丢失——只要出现以下任一情况：
+这正是该方言的读端重建、写端能够复现的形状。写入方向上，偏离的输入按此顺序写出，并通过 warning sink 上报——主题为 `part_order` 的一条 `downgraded` 丢失，并写明第一个命中的偏离——只要出现以下任一情况：
 
 - 推理部件位于文本部件或工具调用之后；
 - 文本部件位于工具调用之后；
