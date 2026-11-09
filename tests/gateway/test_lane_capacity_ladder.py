@@ -426,3 +426,43 @@ class TestTheSingleLaneProvider:
         assert provider_eligibility(config.providers["a"], "a").eligible is True
         # The warning names the lane the ladder actually took out.
         assert any("a/solo" in record.getMessage() for record in gateway_warnings)
+
+
+class TestTheClientIsToldWhy:
+    """A disabled lane leaves the route down for a reason the client can use.
+
+    ``ready`` folds the lane's own disable into "not ready", so the answer used
+    to be "initializing" — a boot problem that does not exist — for a lane
+    that comes back on its own in a minute (#1464).
+    """
+
+    def test_the_third_refusal_turns_the_answer_into_a_rate_limit(self):
+        from llm_rosetta_gateway.maintenance.startup import ProviderNotReady
+
+        # One lane, so the disable is the whole route: with a sibling the
+        # request would fail over and never ask this question.
+        config = _lane_config(lanes=[{"name": "a", "upstream_model": "fast"}])
+        transport = _LaneTransport(failing={"fast": 503})
+
+        for _ in range(3):
+            response, _models = _serve(config, transport)
+            assert response.status_code == 503
+
+        selection = config.selection_context("m", "chat_completions")
+        with pytest.raises(ProviderNotReady) as caught:
+            config.resolve(selection)
+
+        assert "rate limited until" in str(caught.value)
+        assert caught.value.retry_after is not None
+        # The lane is what is disabled, and its end is what the client waits for.
+        record = QUOTA_STATE.rate_limits.upstream_record("a", "fast")
+        assert record is not None and record.disabled_until is not None
+
+    def test_a_serving_lane_is_not_reported_as_limited(self):
+        config = _lane_config()
+        transport = _LaneTransport()
+
+        response, models = _serve(config, transport)
+
+        assert response.status_code == 200
+        assert models == ["fast"]

@@ -291,11 +291,100 @@ class TestTheStartupStates:
         assert classify(_config({"a": _unready("a")}), ctx).reason == "initializing"
 
 
+class TestTheRateLimitLadder:
+    """A ladder that took every candidate out is not "still starting".
+
+    ``ready`` folds a 429 disable and a capacity disable into "not ready", so
+    the block check used to answer "quota block" (a plan refusal the client
+    never received) or, when the block could not be dated, "initializing".
+    The ladder's own answers are what distinguish them.
+    """
+
+    @staticmethod
+    def _limited(name, until):
+        from llm_rosetta_gateway.routing.eligibility import Eligibility, RATE_LIMITED
+
+        return Eligibility(name=name, eligible=False, reason=RATE_LIMITED, until=until)
+
+    @staticmethod
+    def _ready(name):
+        return SimpleNamespace(name=name, ready=True)
+
+    def test_every_candidate_limited_is_rate_limited_with_the_latest_end(self):
+        ctx = _ctx(["a", "b"])
+        later = NOW + timedelta(seconds=90)
+        ctx.with_eligibility(
+            {
+                ("a", None): self._limited("a", NOW + timedelta(seconds=30)),
+                ("b", None): self._limited("b", later),
+            }
+        )
+
+        state = classify(_config({"a": self._ready("a"), "b": self._ready("b")}), ctx)
+
+        assert state.reason == "rate_limited"
+        assert state.until == later
+        assert state.as_kwargs() == {"rate_limited_until": later, "rate_limited": False}
+
+    def test_one_candidate_still_initializing_keeps_initializing(self):
+        from llm_rosetta_gateway.routing.eligibility import Eligibility, INITIALIZING
+
+        ctx = _ctx(["a", "b"])
+        ctx.with_eligibility(
+            {
+                ("a", None): self._limited("a", NOW + timedelta(seconds=30)),
+                ("b", None): Eligibility(name="b", eligible=False, reason=INITIALIZING),
+            }
+        )
+
+        state = classify(_config({"a": self._ready("a"), "b": _unready("b")}), ctx)
+
+        assert state.reason == "initializing"
+        assert state.as_kwargs() == {"failed": False}
+
+    def test_an_undated_disable_is_reported_without_a_deadline(self):
+        ctx = _ctx(["a"])
+        ctx.with_eligibility({("a", None): self._limited("a", None)})
+
+        state = classify(_config({"a": self._ready("a")}), ctx)
+
+        assert state.reason == "rate_limited"
+        assert state.until is None
+        assert state.as_kwargs() == {"rate_limited_until": None, "rate_limited": True}
+
+    def test_a_quota_block_beside_a_disable_stays_a_block(self):
+        from llm_rosetta_gateway.routing.eligibility import Eligibility, BLOCKED
+
+        a = _blocked("a", "@unavail-mixed-block", 30)
+        b = _blocked("b", "@unavail-mixed-block-b", 60)
+        ctx = _ctx(["a", "b"])
+        # ``b`` is blocked at the provider level, so its eligibility is not the
+        # ladder's: the route is a block, not a rate limit.
+        ctx.with_eligibility(
+            {
+                ("a", None): self._limited("a", NOW + timedelta(seconds=30)),
+                ("b", None): Eligibility(name="b", eligible=False, reason=BLOCKED),
+            }
+        )
+
+        state = classify(_config({"a": a, "b": b}), ctx)
+
+        assert state.reason == "blocked"
+
+
 class TestTheAnswerShape:
     @pytest.mark.parametrize(
         "state, expected",
         [
             (Unavailable("blocked", NOW), {"blocked_until": NOW}),
+            (
+                Unavailable("rate_limited", NOW),
+                {"rate_limited_until": NOW, "rate_limited": False},
+            ),
+            (
+                Unavailable("rate_limited"),
+                {"rate_limited_until": None, "rate_limited": True},
+            ),
             (
                 Unavailable("exhausted", NOW),
                 {"exhausted_until": NOW, "exhausted": False},

@@ -322,7 +322,7 @@ class TestTheRoute:
 
         assert selection.chosen is not None and selection.chosen.name == "a"
 
-    def test_a_route_with_only_disabled_providers_is_blocked(self):
+    def test_a_route_with_only_disabled_providers_is_rate_limited(self):
         from llm_rosetta_gateway.maintenance.startup import ProviderNotReady
 
         config = _config("a")
@@ -333,9 +333,10 @@ class TestTheRoute:
         with pytest.raises(ProviderNotReady) as caught:
             config.resolve(selection)
 
-        # The client is told when to come back, not that the gateway is booting.
+        # The client is told when to come back, not that the gateway is
+        # booting — and the cause is the ladder, not a quota plan refusal.
         assert caught.value.retry_after is not None
-        assert "quota block until" in str(caught.value)
+        assert "rate limited until" in str(caught.value)
 
 
 class TestTheStrategySeesIt:
