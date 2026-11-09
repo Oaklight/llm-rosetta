@@ -303,7 +303,7 @@ a { color: var(--accent); text-decoration: none; }
   gap: 12px; margin: 0 0 16px; min-height: 24px;
 }
 .settings-pane-head h3 {
-  font-size: 15px; font-weight: 600; letter-spacing: -0.01em; margin: 0;
+  font-size: var(--fs-base); font-weight: 600; letter-spacing: -0.01em; margin: 0;
 }
 /* Nothing on this tab is a card any more: a group is a heading, its fields
    and its own buttons, separated by a rule rather than boxed. */
@@ -312,8 +312,8 @@ a { color: var(--accent); text-decoration: none; }
 .settings-group:last-of-type { padding-bottom: 0; }
 .settings-group-head { margin-bottom: 10px; }
 .settings-group-head h4 {
-  margin: 0 0 2px; font-size: 13px; font-weight: 600; color: var(--text);
-  letter-spacing: -0.01em;
+  margin: 0 0 2px; font-size: var(--fs-xs); font-weight: 600;
+  color: var(--text-muted); letter-spacing: var(--tracking-label);
 }
 .settings-group-head p { margin: 0; font-size: 11.5px; color: var(--text-dim); }
 /* A group can carry its own scope badge when it differs from its pane's; it
@@ -385,7 +385,7 @@ a { color: var(--accent); text-decoration: none; }
 .settings-popup-panel::-webkit-scrollbar-track { background: transparent; }
 .settings-popup-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 .settings-popup-panel h3 {
-  margin-bottom: 20px; font-size: 16px; font-weight: 600; letter-spacing: -0.01em;
+  margin-bottom: 20px; font-size: var(--fs-base); font-weight: 600; letter-spacing: -0.01em;
   display: flex; align-items: center; gap: 8px;
 }
 .settings-popup-panel h3::before {
@@ -637,6 +637,60 @@ body::before {
 .stat-card .value.red { color: var(--red); }
 .stat-card .value.blue { color: var(--blue); }
 .stat-card .sub { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+
+/* ── Heading scale (issue #1472 P3) ──────────────────────────────────────
+   One page title per page: the status bar's `h1`.  A heading below it names
+   its own container, never the page:
+     board   → a strip: `[ Title ]`, --fs-sm, 600
+     section → --fs-base, 600
+     group   → --fs-xs, 600, --text-muted, --tracking-label
+
+   A group heading is never smaller than the text it introduces: it is the
+   same size as its own description and separates itself by weight and
+   tracking instead.  That invariant outranks the group size where a
+   component's own body is larger — the legacy-marker notice sets its heading
+   to its paragraph's size, not to this scale.
+
+   The strip is a board-level component: the title of one board, sitting
+   under a page and above that board's own controls.  Its brackets are drawn
+   here rather than stored in the string, so no translated label changes and
+   the Chinese page reads `[ 服务方统计 ]`.  They are decoration only — the
+   `content` alternative text is empty, so assistive technology speaks the
+   title and not the punctuation. */
+:is(
+  #breakdownSection > div,
+  #errorDumpSection > div,
+  #profilingSection > summary,
+  #captureSection > summary
+) > h2 {
+  display: inline-flex; align-items: baseline; gap: 6px;
+  font-size: var(--fs-sm); font-weight: 600; letter-spacing: var(--tracking-label);
+  color: var(--text);
+}
+:is(
+  #breakdownSection > div,
+  #errorDumpSection > div,
+  #profilingSection > summary,
+  #captureSection > summary
+) > h2::before {
+  content: '[' / ''; color: var(--text-muted); font-weight: 400;
+}
+:is(
+  #breakdownSection > div,
+  #errorDumpSection > div,
+  #profilingSection > summary,
+  #captureSection > summary
+) > h2::after {
+  content: ']' / ''; color: var(--text-muted); font-weight: 400;
+}
+/* Section scale.  `h3` had no rule of its own: each component that shows one
+   chose a size, and the weight fell through to the browser's bold (700).  One
+   weight now applies everywhere, and one size wherever a component does not
+   already set it — `.modal h3` keeps its 16px and takes the weight. */
+h3 { font-size: var(--fs-base); font-weight: 600; }
+/* The release renderer rewrites this title and the changelog modal sizes it;
+   it is outside the shell's scale and keeps the weight it had. */
+#changelogTitle { font-weight: 700; }
 
 /* Section */
 .section { margin-bottom: 32px; }

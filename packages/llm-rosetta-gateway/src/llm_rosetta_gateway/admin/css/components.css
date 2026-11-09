@@ -14,14 +14,56 @@
 .btn-sm { padding: 4px 10px; font-size: 12px; }
 .btn-disabled, .btn[disabled] { background: var(--border); color: var(--text-dim); cursor: not-allowed; border-color: var(--border); opacity: 0.6; }
 
-/* Tables */
+/* Tables: one hairline per row, and a stronger one under the header row.
+   The line lives on the row, not on every cell, so an expandable detail row
+   is separated from its parent by one continuous rule. */
 table { width: 100%; border-collapse: collapse; }
-th, td {
-  text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border);
-  font-size: 13px;
-}
+th, td { text-align: left; padding: 10px 12px; font-size: 13px; }
+tbody > tr { border-bottom: 1px solid var(--hairline); }
+tbody > tr:last-child { border-bottom: 0; }
+thead th { border-bottom: 1px solid var(--hairline-strong); }
 th { color: var(--th-color); font-weight: var(--th-weight); font-size: var(--th-size); text-transform: var(--th-transform); letter-spacing: var(--th-spacing); }
 tr:hover td { background: var(--bg-hover); }
+/* ── Numeric columns (issue #1472 P3) ────────────────────────────────────
+   A magnitude reads right-aligned in tabular figures; a string — a label, a
+   timestamp, a status badge — stays left even when it is a column of digits.
+   Some renderers already tag their value cells with a role class; the rest
+   are addressed by position, and each positional rule names the header its
+   index lands on.  `tests/js/table-columns.test.mjs` pins the header text at
+   those indices, so inserting a column reds the suite instead of silently
+   shifting an alignment.
+
+   Providers, column 4 of 5 ("Models"): header and cell both carry
+   `.pc-col-num`, styled with the provider grid further down — no rule here.
+   API keys, columns 5–8 of 9 ("Requests", "Input", "Output", "Total"):
+   already right-aligned by `.key-*-cell` beside that table's own rules. */
+
+/* Request log, column 8 of 9 = "Tokens", column 9 of 9 = "Duration".  The
+   header cells carry ids; the body cells carry role classes. */
+#thLogTokens, #thLogDuration { text-align: right; }
+#requestLogTable .log-tokens, #requestLogTable .log-duration {
+  text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums;
+}
+
+/* Profiling, column 6 of 8 = "Duration": select, Time, Model,
+   Source → Target, Mode, Duration, Type, Flamegraph. */
+#logView-profiling thead th:nth-child(6),
+#profilingResults td:nth-child(6) {
+  text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums;
+}
+
+/* Token usage, columns 2–8 of 8 = "Requests", "Input", "Output", "Cache↓",
+   "Cache↑", "Reasoning", "Total"; column 1 = "Date" stays left. */
+#tokenUsageModal thead th:nth-child(n+2),
+#tokenUsageModal tbody td:nth-child(n+2) {
+  text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums;
+}
+/* Secondary cells: context, not values — one step down the scale and a shade
+   back.  The key label and the client IP carried this as an inline style on
+   every rendered row, so the value was copied 30 times per page. */
+#requestLogTable .log-key, #requestLogTable .log-ip {
+  font-size: var(--fs-micro); color: var(--text-muted);
+}
 /* An expandable error row is a tab stop; the ring is inset so the table's
    scroll container cannot clip it. */
 #logTable tr[tabindex]:focus-visible,
@@ -101,7 +143,7 @@ tr:hover td { background: var(--bg-hover); }
     max-height: calc(100vh - 200px); overflow-y: auto;
   }
   #tab-models thead th, #tab-keys thead th {
-    position: sticky; top: 0; z-index: 3; background: var(--bg-card);
+    position: sticky; top: 0; z-index: 3; background: var(--surface);
   }
 }
 .seg-control { display:inline-flex;border-radius:8px;overflow:hidden;box-shadow:0 0 0 1px var(--border); }
@@ -266,7 +308,10 @@ tr:hover td { background: var(--bg-hover); }
 .prov-source-note { font-size:12px; color:var(--text-dim); margin-top:8px; }
 .prov-card { border:1px solid var(--border); border-radius:var(--radius); margin-bottom:14px; background:var(--bg-card); }
 .prov-card-head { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:9px 12px; border-bottom:1px solid var(--border); }
-.prov-card-head h4 { margin:0; font-size:12.5px; font-weight:600; }
+.prov-card-head h4 {
+  margin:0; font-size:var(--fs-xs); font-weight:600; color:var(--text-muted);
+  letter-spacing:var(--tracking-label);
+}
 .prov-card-note { font-size:11.5px; color:var(--text-muted); font-family:var(--mono); }
 .prov-card-body { padding:11px 12px; }
 .prov-card-body .form-group:last-child { margin-bottom:0; }
@@ -287,7 +332,13 @@ tr:hover td { background: var(--bg-hover); }
 .prov-actions { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
 .prov-error { color:var(--red); font-size:0.82em; margin-top:4px; overflow-wrap:anywhere; }
 .prov-warn { border:1px solid var(--orange); border-radius:var(--radius); padding:10px 12px; margin-bottom:14px; }
-.prov-warn h4 { margin:0 0 4px; font-size:12.5px; color:var(--orange); }
+/* The notice's own body is 12.5px, so its heading is 12.5px too: the rule is
+   that a heading is never smaller than its text, and the group size is one
+   implementation of it.  Deliberate, not a missed token. */
+.prov-warn h4 {
+  margin:0 0 4px; font-size:var(--fs-sm); font-weight:600; color:var(--orange);
+  letter-spacing:var(--tracking-label);
+}
 .prov-warn p { margin:0; font-size:12.5px; color:var(--text); }
 .prov-preview { border:1px solid var(--border); border-radius:var(--radius); margin-bottom:14px; }
 .prov-preview summary { cursor:pointer; padding:9px 12px; font-size:12.5px; font-weight:600; background:var(--bg-card); }
@@ -1903,8 +1954,8 @@ th.sortable:focus-visible { outline:2px solid var(--accent);outline-offset:-2px;
   #keysTable .key-output-cell::before,
   #keysTable .key-total-cell::before {
     content:attr(data-label) " ";
-    font-size:11px;
-    color:var(--text-dim);
+    font-size:var(--fs-micro);
+    color:var(--text-muted);
   }
 }
 
