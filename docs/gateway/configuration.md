@@ -667,14 +667,18 @@ otherwise receive as an error, and a model with one provider has no second
 attempt to make. Turning it off trades availability for something real: another
 lane or provider is another prompt cache and possibly another model build.
 
-A capacity refusal is also a routing signal. The first one sinks the provider —
-it moves to the back of the order but stays a candidate — and three `503`, `529`
-or `520`-`524` responses (or a `402`/`429` no probe explained) inside five
-minutes block it for a minute, doubling on repeats as the 429 ladder does. A
-served request clears the count. A `500`, `502`, `504` or `408` fails over for
-the request but does not, on its own, enter the ladder. The three requests that
-reach the threshold are still served — by the failover, not by the failing
-provider.
+A capacity refusal is also a routing signal, and the ladder it feeds belongs to
+the lane. One `503`, `529` or `520`-`524` sinks the lane that answered — it moves
+behind its siblings but stays a candidate, and a provider with one lane has
+nothing to order it behind, so it keeps serving — and three of them on the same
+lane inside five minutes take that lane out for a minute, doubling on repeats as
+the 429 ladder does. Only a success **on that lane** clears its count: a sibling
+that served says the provider can serve, not that the upstream model that
+refused has recovered. A `402` or `429` no probe explained is still a credential
+fact and counts provider-wide, cleared by any served request. A `500`, `502`,
+`504` or `408` fails over for the request but does not, on its own, enter the
+ladder. The requests that reach the threshold are still served — by a sibling
+lane or the failover, not by the failing lane.
 
 Streaming requests fail over too, but only before the first event: the handler
 opens the upstream connection before writing anything, so a refusal at that
