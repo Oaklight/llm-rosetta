@@ -685,7 +685,7 @@ A model may list the same provider more than once, each entry naming a different
 }
 ```
 
-Each entry is a candidate of its own: the strategy counts it separately, eligibility and capability filtering judge it separately, and the server record names the `upstream_model` that served. Two entries naming the same provider **and** the same `upstream_model` are one candidate written twice, and the config refuses to load. Failover and a spent allowance remain provider-level: every entry of one provider shares its credentials, so a 429 or exhausted quota removes all of them at once.
+Each entry is a candidate of its own: the strategy counts it separately, eligibility and capability filtering judge it separately, and the server record names the `upstream_model` that served. Two entries naming the same provider **and** the same `upstream_model` are one candidate written twice, and the config refuses to load. The model editor adds a lane the same way it adds a second provider: name the provider with the new `upstream_model` and confirm the merge, and the entry gains a lane while the ones it already had stay as they were. Failover and a spent allowance remain provider-level: every entry of one provider shares its credentials, so a 429 or exhausted quota removes all of them at once.
 
 ### Typed Routes { #typed-routes }
 
