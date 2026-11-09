@@ -20,18 +20,30 @@ from llm_rosetta_gateway.admin.routes.routing import (
     _decision,
     _expected_shares,
     _iso,
+    _lane_blocks,
     _state,
     get_model_routing,
     list_routable_models,
     put_model_routing,
 )
 from llm_rosetta_gateway.config import JsoncConfigIO
+from llm_rosetta_gateway.quota.rate_limit import RateLimitPolicy
 from llm_rosetta_gateway.routing import (
     Eligibility,
     ModelRoute,
     ProviderEntry,
     parse_model_routing,
 )
+
+
+@pytest.fixture(autouse=True)
+def _clean_quota_state():
+    """The ladders are process-wide; no test may inherit another's refusals."""
+    from llm_rosetta_gateway.quota.state import QUOTA_STATE
+
+    QUOTA_STATE.clear()
+    yield
+    QUOTA_STATE.clear()
 
 
 def _provider(name: str) -> SimpleNamespace:
@@ -646,12 +658,25 @@ class TestRoutableModels:
             "providers": 2,
             "serving": 2,
             "blocked": 0,
+            "lane_blocks": {"count": 0, "until": None},
             "shares": [1.0, 1.0],
             # The list's bar is a share stack, so the summary names the lane
             # behind each slice.
             "lanes": [
-                {"name": "a", "share": 1.0, "eligible": True, "state": "serving"},
-                {"name": "b", "share": 1.0, "eligible": True, "state": "serving"},
+                {
+                    "name": "a",
+                    "share": 1.0,
+                    "eligible": True,
+                    "state": "serving",
+                    "until": None,
+                },
+                {
+                    "name": "b",
+                    "share": 1.0,
+                    "eligible": True,
+                    "state": "serving",
+                    "until": None,
+                },
             ],
             "requests": 4,
             "last_seen": "2026-11-02T12:00:00Z",
@@ -820,3 +845,129 @@ class TestPinnedBlockIsWhatTheParserReads:
     def test_an_unimplemented_affinity_is_refused_with_a_reason(self):
         with pytest.raises(ValueError, match="affinity"):
             parse_model_routing({"affinity": "turn"}, label="models.m")
+
+
+class TestTheLaneBlocks:
+    """A ladder-disabled lane is a lane fact, not a provider block (#1463).
+
+    ``provider_cooldown`` reads the credential ledger and stays ``429``-only.
+    The capacity ladder belongs to one lane, so the summary counts the lanes
+    the eligibility answers hold out and reports the latest end — the same
+    answers the selector acted on, whatever a lane is keyed by.
+    """
+
+    NOW = datetime.now(timezone.utc)
+    POLICY = RateLimitPolicy()
+
+    @classmethod
+    def _disable_lane(cls, lane: str = "m") -> datetime:
+        from llm_rosetta_gateway.quota.state import QUOTA_STATE
+
+        for _ in range(3):
+            QUOTA_STATE.rate_limits.note_upstream("a", lane, cls.POLICY, now=cls.NOW)
+        end = QUOTA_STATE.rate_limits.upstream_disabled("a", lane)
+        assert end is not None
+        return end
+
+    @pytest.mark.asyncio
+    async def test_a_ladder_disabled_lane_reaches_the_model_list(self):
+        end = self._disable_lane()
+        request = _request(models={"m": _route(ProviderEntry(name="a"))})
+
+        payload = json.loads((await list_routable_models(request)).body)
+
+        row = payload["summary"]["m"]
+        assert row["blocked"] == 1
+        assert row["lane_blocks"] == {"count": 1, "until": _iso(end)}
+        assert row["lanes"][0]["state"] == "rate_limited"
+        assert row["lanes"][0]["until"] == _iso(end)
+
+    @pytest.mark.asyncio
+    async def test_a_lane_key_is_the_model_it_was_disabled_for(self):
+        """Two models through one provider are two lanes (#1452 review).
+
+        A candidate that names no upstream model is keyed by the model the
+        client asked for, so disabling one model's lane must leave the other
+        model serving — the aggregate reads each candidate's own answer and
+        never a provider-wide record.
+        """
+        end = self._disable_lane("m")
+        request = _request(
+            models={"m": _route(), "n": _route()},
+        )
+
+        payload = json.loads((await list_routable_models(request)).body)
+
+        assert payload["summary"]["m"]["lane_blocks"] == {
+            "count": 1,
+            "until": _iso(end),
+        }
+        assert payload["summary"]["n"]["lane_blocks"] == {"count": 0, "until": None}
+        assert payload["summary"]["n"]["blocked"] == 0
+
+    @pytest.mark.asyncio
+    async def test_the_model_card_carries_the_same_statement(self):
+        end = self._disable_lane()
+        request = _request(models={"m": _route(ProviderEntry(name="a"))})
+
+        payload = json.loads((await get_model_routing(request)).body)
+
+        assert payload["lane_blocks"] == {"count": 1, "until": _iso(end)}
+        # The lane row was already right; this test keeps it that way.
+        assert payload["providers"][0]["state"] == "rate_limited"
+
+    @pytest.mark.asyncio
+    async def test_a_credential_disable_stays_a_provider_block(self):
+        from llm_rosetta_gateway.quota.state import QUOTA_STATE
+
+        for _ in range(3):
+            QUOTA_STATE.rate_limits.note("a", None, self.POLICY, now=self.NOW)
+        request = _request(models={"m": _route(ProviderEntry(name="a"))})
+
+        payload = json.loads((await get_model_routing(request)).body)
+
+        # The credential ladder is the provider's business: it keeps `block`,
+        # and the lane aggregate does not double-count it as a lane.
+        assert payload["providers"][0]["block"] is not None
+        assert payload["lane_blocks"] == {"count": 0, "until": None}
+
+    def test_an_undated_disable_reports_no_end(self):
+        """One lane without an end makes the model's end unknown.
+
+        Defensive: today's ladder always dates a disable, but the aggregate
+        must not borrow another lane's deadline if one ever does not.
+        """
+        from llm_rosetta_gateway.routing.eligibility import (
+            Eligibility,
+            RATE_LIMITED,
+        )
+
+        now = datetime.now(timezone.utc)
+        answers = [
+            Eligibility(name="a", eligible=False, reason=RATE_LIMITED, until=now),
+            Eligibility(name="b", eligible=False, reason=RATE_LIMITED, until=None),
+        ]
+
+        assert _lane_blocks([(answer, True) for answer in answers]) == {
+            "count": 2,
+            "until": None,
+        }
+
+    def test_only_ladder_lanes_are_counted(self):
+        from llm_rosetta_gateway.routing.eligibility import (
+            Eligibility,
+            BLOCKED,
+            RATE_LIMITED,
+        )
+
+        now = datetime.now(timezone.utc)
+        answers = [
+            Eligibility(name="a", eligible=False, reason=RATE_LIMITED, until=now),
+            Eligibility(name="b", eligible=False, reason=BLOCKED, until=now),
+            Eligibility(name="c", eligible=True),
+        ]
+
+        assert _lane_blocks([(answer, True) for answer in answers]) == {
+            "count": 1,
+            "until": _iso(now),
+        }

@@ -126,11 +126,16 @@ function _renderModelList() {
     // The count is where an operator asks "how many, and are they well?" —
     // the answer belongs on it, one lane per line, rather than on the slices
     // they would have to hunt through one at a time.
+    // A lane a ladder holds out says when it comes back: "rate limited" alone
+    // makes the reader open the model to find out how long.
     const laneTitle = lanesInfo
       .map((lane) =>
         lane.name + ' · ' +
         Math.round((Math.max(0, Number(lane.share) || 0) / total) * 100) + '% · ' +
-        _stateLabel({ state: lane.state })
+        _stateLabel({ state: lane.state }) +
+        (lane.until && lane.state === 'rate_limited'
+          ? ' · ' + new Date(lane.until).toLocaleTimeString()
+          : '')
       )
       .join('\n');
     return (
@@ -434,7 +439,23 @@ function _renderBoard() {
       '</div>'
     );
   });
-  el.innerHTML = '<div class="routing-route">' + head + rows.join('') + '</div>';
+  // The board's rows say which lane is held out; this says the route is, so a
+  // single-lane model does not need the reader to notice a red dot.
+  const laneBlocks = _data.lane_blocks || {};
+  const limited = Number(laneBlocks.count) || 0;
+  const banner = limited
+    ? '<div class="routing-lane-blocks badge badge-error">' +
+      esc(laneBlocks.until
+        ? t(limited === 1 ? 'routing.laneBlockUntil' : 'routing.laneBlocksUntil', {
+          count: limited,
+          time: new Date(laneBlocks.until).toLocaleTimeString(),
+        })
+        : t(limited === 1 ? 'routing.laneBlock' : 'routing.laneBlocks', {
+          count: limited,
+        })) +
+      '</div>'
+    : '';
+  el.innerHTML = banner + '<div class="routing-route">' + head + rows.join('') + '</div>';
   // The switch writes the provider's own entry; a lane switched off here
   // leaves the route the same way it would from the Providers page.
   el.querySelectorAll('.routing-switch input').forEach((input) => {
