@@ -34,6 +34,14 @@ The focus ring is drawn by the panel, not by the browser: one declaration set, `
 
 `color-scheme` follows the mode, so the parts a stylesheet cannot paint — `<select>` popups, checkbox and radio glyphs, the text caret — follow the mode as well. The browser's own scrollbars read the same property, but that could not be observed here: the test browser draws overlay scrollbars, which take no pixels. `accent-color` and `::placeholder` are set from the scheme's tokens for the same reason.
 
+## Dialogs and drawers
+
+A dialog is a frame, not a floating card: one 1 px border, the theme's panel corner (`--card-radius` — 0 in minimal, 4 px in emerald), and no shadow. The twelve centred dialogs and the two drawers share it, so an **Add Provider** panel and a **Delete Provider** confirmation are the same object. A drawer is 560 px wide (`--drawer-w`), rounds only the two corners that stand free — the right-hand pair meets the viewport edge — keeps a single 1 px border on its left, and takes the whole width below 700 px, where no corner is left to round.
+
+One scrim covers everything behind either kind, drawers included: `--overlay`, `rgba(0, 0, 0, .45)` in light and `rgba(0, 0, 0, .70)` in dark. There is no frosted glass and no second, lighter scrim.
+
+A dialog behaves as one dialog. The panel, not its backdrop, carries `role="dialog"`, `aria-modal="true"` and a label taken from its own heading, so the label follows the page's language. Opening puts focus on the panel; the panel is a landing point and does not draw the control's focus ring. Tab cycles inside it, Escape closes it, a click on the backdrop closes it, and closing returns focus to whatever opened it. While any dialog is open the page behind it does not scroll — the scrolling element is locked and restored, so the scroll position itself never moves.
+
 ## Providers
 
 The **Providers** section manages every upstream the gateway can call.
