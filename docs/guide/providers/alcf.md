@@ -211,7 +211,7 @@ Setup steps:
 2. **Start the container** with the volume mount above
 3. **Add the provider** through the admin panel or `config.jsonc` — no `token_command`
 
-The container's `appuser` (uid 1000) needs read-write access to `~/.globus` so the refresh token can be updated in place. If your host uid differs, `chown 1000:1000` the `.globus` directory: the `PUID`/`PGID` variables in the compose files are not read by the image.
+The container runs as `${PUID:-1000}` — Compose's `user:` directive, default the image's `appuser` (uid 1000) — so the mounted `~/.globus` must be writable by that uid for the refresh token to be updated in place. If your host uid differs, set `PUID`/`PGID` in the compose file and make the `.globus` directory belong to the same uid.
 
 See [`docker/docker-compose.yaml`](https://github.com/Oaklight/llm-rosetta/blob/master/docker/docker-compose.yaml) for the full example.
 

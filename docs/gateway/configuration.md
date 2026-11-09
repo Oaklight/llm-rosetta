@@ -394,7 +394,7 @@ Setup:
 2. **Start the container** with the volume mount above
 3. **Add the provider** via the admin panel or `config.jsonc` — no `token_command` needed
 
-The container's `appuser` (uid 1000) needs read-write access to `~/.globus` so the refresh token can be updated in place.
+The container runs as `${PUID:-1000}` (Compose's `user:` directive), so the mounted `~/.globus` must be writable by that uid for the refresh token to be updated in place.
 
 ### Per-Provider Proxy
 

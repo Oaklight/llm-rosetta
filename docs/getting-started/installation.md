@@ -60,7 +60,7 @@ which installs both distributions (`packages/llm-rosetta` and
 ```bash
 git clone https://github.com/Oaklight/llm-rosetta.git
 cd llm-rosetta
-mkdir -p config   # the container runs as uid 1000 and cannot create it
+mkdir -p config   # the container runs as ${PUID:-1000} and cannot create it
 docker compose -f docker/docker-compose.source.yaml up -d --build
 ```
 
@@ -69,21 +69,28 @@ Without Compose:
 ```bash
 docker build -f docker/Dockerfile.source -t llm-rosetta-gateway:src .
 mkdir -p config
-docker run -p 8765:8765 -v "$PWD/config:/config" llm-rosetta-gateway:src
+docker run --user "$(id -u):$(id -g)" -p 8765:8765 -v "$PWD/config:/config" llm-rosetta-gateway:src
 ```
 
-The source file mounts the repository's `config/` and takes `PUID`, `PGID` and
-any `environment:` entries the same way the image file does; the two files are
-separate entry points — `docker/docker-compose.yaml` runs the published image,
-`docker/docker-compose.source.yaml` builds from the checkout — and both publish
-port 8765, so run one at a time. Create `config/` before the first start: a
-missing bind-mount directory is created by compose as `root`, and the gateway
-runs as uid 1000, so its first-run `config.jsonc` write would fail. An empty
-directory is enough, but it must be writable by uid 1000: if your user id is
-not 1000, run `sudo chown 1000:1000 config`. The image's `PUID`/`PGID`
-variables are not read by the gateway today (issue
-[#1481](https://github.com/Oaklight/llm-rosetta/issues/1481)), so passing them
-does not change this.
+The source file mounts the repository's `config/`. Both compose files run the
+container as `${PUID:-1000}:${PGID:-1000}` through Compose's `user:` directive:
+the image declares `USER appuser` (uid 1000), `user:` replaces it, and nothing
+else reads the pair. The bind-mounted `config/` must be writable by that same
+uid — create it before the first start, and if your user id is not 1000, pass
+it through:
+
+```bash
+PUID=$(id -u) PGID=$(id -g) docker compose -f docker/docker-compose.source.yaml up -d --build
+```
+
+Compose creates a missing bind-mount directory as `root`, and the first run
+writes `config.jsonc` there, so a directory owned by a different uid is the one
+way to watch the container fail at startup. The plain `docker run` form below
+does not read `PUID`; pass `--user` there, as the example does.
+
+The two files are separate entry points — `docker/docker-compose.yaml` runs the
+published image, `docker/docker-compose.source.yaml` builds from the checkout —
+and both publish port 8765, so run one at a time.
 
 The release path is unchanged: `make build-docker` still builds
 `docker/Dockerfile`, which installs wheels from `dist/` or PyPI.
