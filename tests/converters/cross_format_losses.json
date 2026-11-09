@@ -12,7 +12,6 @@
       "generation.max_tokens": 20
     },
     "chat_completions->google_generate": {
-      "cache.key": 1,
       "generation.logit_bias.k": 1,
       "service_tier": 1,
       "stream.enabled": 22,
@@ -34,7 +33,6 @@
       "generation.truncation": 1
     },
     "open_responses->google_generate": {
-      "cache.key": 1,
       "generation.truncation": 1,
       "service_tier": 1,
       "stream.enabled": 25

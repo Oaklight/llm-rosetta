@@ -892,7 +892,30 @@ class GoogleGenerateConverter(BaseConverter):
                 reasoning_source
             )
 
+        self._apply_cache(provider_request, config, ir_request)
+
         return ir_request
+
+    def _apply_cache(
+        self,
+        provider_request: dict[str, Any],
+        config: dict[str, Any],
+        ir_request: dict[str, Any],
+    ) -> None:
+        """Read a cached-content resource into *ir_request*, when it names one.
+
+        The SDK shape keeps the resource in ``config``; a REST body carries it
+        at the top level, snake or camel.  Without this read the resource is
+        write-only: a request that names one loses it on the way back, and a
+        cross-format round trip cannot tell that from a request that never had
+        one (#1328).
+        """
+        for source in (config, provider_request):
+            if "cached_content" in source or "cachedContent" in source:
+                cache = self.config_ops.p_cache_config_to_ir(source)
+                if cache:
+                    ir_request["cache"] = cache
+                    return
 
     def _get_response_id_prefix(
         self, context: ConversionContext | StreamContext | None = None
