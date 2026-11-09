@@ -28,16 +28,22 @@ services:
       # Then add the ALCF provider via the admin panel; no token_command.
       #
       # - ~/.globus:/home/appuser/.globus            # Globus token file (rw for refresh)
-    environment:
-      # Not read by the image today (follow-up #1481): the app user is fixed at
-      # uid 1000, so a config/ directory it writes must belong to that uid.
-      # Kept for symmetry with the source file.
-      - PUID=${PUID:-1000}
-      - PGID=${PGID:-1000}
-      # API keys — referenced as ${ENV_VAR} in config.jsonc
-      # - OPENAI_API_KEY=sk-xxx
-      # - ANTHROPIC_API_KEY=sk-ant-xxx
-      # - GOOGLE_API_KEY=xxx
+    # Runtime uid/gid.  The image declares USER appuser (uid 1000); this runs the
+    # container as the host user instead, so the bind-mounted config/ (and any
+    # other bind mount) must be writable by this uid.
+    user: "${PUID:-1000}:${PGID:-1000}"
+    # No HOME here: this file may run an image built before the entrypoint
+    # learned to resolve HOME (see docker/entrypoint.sh), and setting it would
+    # replace appuser's /home/appuser for uid 1000.  A uid without a passwd
+    # entry gets /config/home from the entrypoint; its Sign in with ChatGPT
+    # record (Path.home()/.config) then lands under config/, which must belong
+    # to that uid.  A PUID other than 1000 therefore needs an image published
+    # after that entrypoint change — an older tag leaves HOME at "/".
+    # API keys — referenced as ${ENV_VAR} in config.jsonc; uncomment to pass:
+    # environment:
+    #   - OPENAI_API_KEY=sk-xxx
+    #   - ANTHROPIC_API_KEY=sk-ant-xxx
+    #   - GOOGLE_API_KEY=xxx
     # Uncomment to allow the container to reach host services via "host.docker.internal"
     # extra_hosts:
     #   - "host.docker.internal:host-gateway"

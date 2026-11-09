@@ -246,6 +246,7 @@ tmp/
 # are root-anchored so nested package directories named the same stay tracked.
 .env.*
 /config/
+/docker/config/
 /config.jsonc
 /config.jsonc.*
 /data/

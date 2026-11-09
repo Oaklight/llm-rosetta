@@ -27,15 +27,19 @@ services:
       - "8765:8765" # Gateway API + admin panel
     volumes:
       - ../config:/config # Repository root's config directory
+    # Runtime uid/gid, same as the image file: the container runs as this user
+    # instead of the image's appuser (uid 1000), so the bind-mounted config/
+    # must be writable by it.
+    user: "${PUID:-1000}:${PGID:-1000}"
     environment:
-      # Not read by the image today (follow-up #1481): the app user is fixed at
-      # uid 1000, so a config/ directory it writes must belong to that uid.
-      # Kept for symmetry with the image file.
-      - PUID=${PUID:-1000}
-      - PGID=${PGID:-1000}
-      # API keys — referenced as ${ENV_VAR} in config.jsonc
-      # - OPENAI_API_KEY=sk-xxx
-      # - ADMIN_PASSWORD=change-me
+      # Home for a uid with no passwd entry (PUID other than 1000); same rule as
+      # the image file — uid 1000 keeps /home/appuser, any other uid gets this
+      # directory, and the Sign in with ChatGPT record (Path.home()/.config)
+      # lands under config/, which must belong to it.
+      - HOME=/config/home
+      # API keys — referenced as ${ENV_VAR} in config.jsonc; uncomment to pass:
+      #   - OPENAI_API_KEY=sk-xxx
+      #   - ADMIN_PASSWORD=change-me
     restart: unless-stopped
     # Raise fd limit — the gateway holds many concurrent upstream connections
     ulimits:
