@@ -22,18 +22,21 @@ reaching into the card's hit-testing; now something does
 
 | Piece | Lives in | Owns |
 |-------|----------|------|
-| Scheme | `admin/css/base.css` | token values, per scheme and per mode |
+| Scheme | `admin/css/themes/<name>.css` | token values, per mode |
+| Registry | `admin/themes.py` | the list of schemes: name, label, file |
 | Component | `admin/css/components.css` and the structural rules in `base.css` | box model, layout, pointer behaviour |
 | Variant | a component's own rule keyed on `data-variant` | a structural difference between schemes |
 
 The selected scheme and mode are attributes on the document element
 (`<html data-scheme="emerald" data-mode="dark">`), mirrored to `localStorage`
 under `llm-rosetta-scheme` and `llm-rosetta-mode`. The panel reads them before
-its first paint, so a stored scheme does not flash the default.
+its first paint, so a stored scheme does not flash the default. The registry
+crosses the wire as injected JSON (`#adminThemes`), which is the only list the
+page, the Settings picker and `tools/theme_matrix` consult.
 
 ## The four rules
 
-1. **A scheme selector appears only in `base.css`, and names nothing but the
+1. **A scheme selector appears only in a theme file, and names nothing but the
    scheme and mode.** `[data-scheme="emerald"]` and
    `[data-scheme="emerald"][data-mode="dark"]` are the only legal shapes. A
    selector such as `[data-scheme="emerald"] .stat-card` belongs to no one: it
@@ -91,30 +94,34 @@ difference between modes rather than schemes.
 
 ## Adding a scheme
 
-The matrix's default scheme axis is every scheme `base.css` declares, so new
-blocks are covered the next time it runs; `--schemes` narrows the matrix while
-you are iterating on one. The checklist below is the whole surface; every item
-is something the panel reads.
+The matrix's default scheme axis is the registry's list, so a new theme is
+covered the next time it runs; `--schemes` narrows the matrix while you are
+iterating on one. The checklist below is the whole surface.
 
-1. **Declare the values in `base.css`.** Add a structural block
+1. **Write `admin/css/themes/<name>.css`.** One shared block
    (`[data-scheme="<name>"]`) and one block per mode
    (`[data-scheme="<name>"][data-mode="light"]`,
-   `[data-scheme="<name>"][data-mode="dark"]`). Declare every structural token
-   from the table above; a token left out resolves to nothing and the matrix's
-   `tokens-resolve` probe fails the cell that selected the scheme.
-2. **Allow the name in `admin/js/core/utils.js`.** `VALID_SCHEMES` gates
-   `setScheme()`; a name it does not list silently falls back to minimal.
-3. **Allow it in the early-boot script in `admin/admin.html`.** The inline
-   script applies the stored scheme before the first paint, and carries its own
-   allow-list (`s!=='minimal'&&s!=='emerald'`). Update it too, or the new scheme
-   flashes minimal on every load.
-4. **Add the option to the Settings select.** `#settingsSchemeSelect` in
-   `admin/admin.html` lists the schemes; the mode select next to it is separate.
-5. **Add the label to both dictionaries.** `scheme.<name>` goes in the English
-   and Chinese dictionaries in `admin/js/core/i18n.js`. The Chinese dictionary
-   stores non-ASCII characters as literal `\uXXXX` escapes, so edit it with a
-   tool that preserves backslashes.
-6. **Run the checks and attach the screenshots.**
+   `[data-scheme="<name>"][data-mode="dark"]`). Declare the same token names as
+   the default theme — `tests/gateway/test_admin_themes.py` compares the two
+   themes' available sets per mode, so a token left out fails there — and
+   declare values only: the contract test rejects a real property in a scheme
+   block. A mode may re-declare a shared token when the value really differs
+   between modes (emerald's `--dot`/`--grid`).
+2. **Register it in `admin/themes.py`.**
+
+   ```python
+   Theme("<name>", "<Label>", "css/themes/<name>.css"),
+   ```
+
+   That one entry is what the boot script receives, what the Settings picker
+   lists, what the matrix enumerates, and what the wheel packaging ships
+   (`css/**/*.css`). There is no second list to update.
+3. **Optionally add the label to both dictionaries.** `scheme.<name>` goes in
+   the English and Chinese dictionaries in `admin/js/core/i18n.js`; without it
+   the picker shows the registry's own label. The Chinese dictionary stores
+   non-ASCII characters as literal `\uXXXX` escapes, so edit it with a tool
+   that preserves backslashes.
+4. **Run the checks and attach the screenshots.**
 
    ```bash
    make test-js      # the contract: what a scheme may say
