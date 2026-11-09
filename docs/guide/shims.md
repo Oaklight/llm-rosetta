@@ -839,6 +839,52 @@ multimodal_tool_result: false
 
 These flags are injected into `ConversionContext.options` at conversion time, so converters can query them without knowing which shim is active.
 
+## Request Constraints
+
+Three different things can be true of a request field, and until #1460 only
+one of them had a home:
+
+| What the upstream says | Where it is declared | Example |
+| --- | --- | --- |
+| it **refuses** the field | a transform (`strip_fields`, `drop_refused_fields`) | the ChatGPT plan route drops `temperature` |
+| it **requires** the field and has no default of its own | `request_constraints` on the converter, overridable per shim | the Messages API requires `max_tokens` |
+| it **restricts** the value | `request_constraints` (`ranges`) | zhipu accepts `temperature` up to 1.0, not 2.0 |
+
+The dialect's requirement lives on the converter
+(`MessagesConverter.request_constraints`), because every shim that speaks that
+format — including shims shipped outside this repository — needs the same
+value. A vendor speaks for its own upstream, so a shim's `request:` section
+overrides the dialect per path:
+
+```yaml
+request:
+  # IR path → the value written when the client names none
+  defaults:
+    generation.max_tokens: 2048   # this vendor caps lower than the dialect's 4096
+  # IR path → the range this upstream accepts
+  ranges:
+    generation.temperature: { min: 0.0, max: 1.0, on_out_of_range: clamp }
+```
+
+- Keys are **IR paths** (`generation.max_tokens`), not wire field names: the
+  constraint is applied to the IR before a dialect writes it, so one entry
+  covers every chat format, and a conversion warning files the change under
+  that path.
+- An explicit `null` counts as "the client named no value", for every field of
+  the IR generation config. It is removed before the defaults apply, so a
+  `null` never reaches a writer (#1459).
+- `on_out_of_range` is `clamp` (write the nearest bound), `drop` (remove the
+  field so the upstream default applies) or `reject` (fail the conversion).
+  Each is reported — a clamp is otherwise invisible.
+- A path that does not name a real IR field is refused when the shim loads: a
+  declaration that silently matches nothing is worse than one that fails.
+- An absent or empty declaration leaves the dialect's value in place, so a shim
+  with no `request:` section produces exactly the body it did before.
+
+A converter used directly applies its dialect's constraints itself; the
+conversion pipeline merges the active shim's overlay and applies the result
+right before the writer reads the request.
+
 ## Transforms
 
 Transforms are pure `dict → dict` functions that bridge the gap between a provider's actual API dialect and the "ideal" standard that the corresponding base converter expects. They handle field-level quirks (strip unsupported fields, rename parameters, inject defaults) — **not** semantic API-standard translation, which is the converter's job.
