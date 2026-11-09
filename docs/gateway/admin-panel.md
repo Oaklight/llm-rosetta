@@ -160,13 +160,13 @@ States follow the eligibility predicate, so the panel and the proxy agree by con
 | **Serving** | A candidate; nothing is holding it back |
 | **Sunk** | Still a candidate, but a recent 429 orders it last |
 | **Blocked** | A provider-wide block (a keyless 429, a rotating credential whose account is out); the row counts down to its end and the board refetches when it expires |
-| **Rate limited** | Continuous 429s disabled the lane until the cooldown ends |
+| **Rate limited** | Continuous 429s disabled the lane until the cooldown ends — or a run of capacity refusals (`503`, `529`, `520`-`524`) disabled that upstream lane, leaving its siblings in rotation |
 | **Spent** | Every credential's freshest reading says its window is spent |
 | **No credential** | The key ring has nothing usable left |
 | **Starting** | A credential has not been seeded yet |
 | **Off** | The provider is switched off in the Providers section, so the route does not carry the lane; the row stays after the candidates, read-only apart from its switch |
 
-The model list on the left is the selector: a row per routable model, ordered by the moment it was last requested, with that window's request count, its provider count, the shares those providers carry and how many lanes are blocked. The top row — the model requested most recently — is selected when the tab opens; a later visit keeps the model on screen. The search box narrows the list as you type. The window switch (**5h**, **24h**, **7d**, **All**) recomputes the counts and the order; five hours is the default because the tab answers what is being routed now. The list shows what `GET /admin/api/routing?window=…` returns, which is the runtime's route table rather than every key in the config document, so a model whose provider was skipped at load is not offered.
+The model list on the left is the selector: a row per routable model, ordered by the moment it was last requested, with that window's request count, its provider count, the shares those providers carry and how many lanes are blocked. A lane a ladder holds out is reported separately from a provider block: the row's tooltip and the badge above the board say how many lanes are rate limited and when the latest of them comes back, because the ladder belongs to one lane and the provider's own `block` stays the credential's (`429`-only). The top row — the model requested most recently — is selected when the tab opens; a later visit keeps the model on screen. The search box narrows the list as you type. The window switch (**5h**, **24h**, **7d**, **All**) recomputes the counts and the order; five hours is the default because the tab answers what is being routed now. The list shows what `GET /admin/api/routing?window=…` returns, which is the runtime's route table rather than every key in the config document, so a model whose provider was skipped at load is not offered.
 
 Saving the policy writes through `PUT /admin/api/routing/<model>`, which rebuilds the config — so a value the parser refuses comes back as the parser's own message, and a key the editor does not own (`rules`, `first_token_ms`) is carried through the save unchanged.
 
