@@ -10,7 +10,7 @@ Open **`http://localhost:8765/admin/`**.
 
 ## The console
 
-The console is a left rail of sections — **Dashboard**, **Providers**, **Models**, **API Keys** and **Observability** — with the mode, language, settings and logout buttons in one row at the bottom, and a status bar along the bottom edge that reports the request counters. Below 900 px the rail folds into a top bar.
+The console is a left rail of sections — **Dashboard**, **Providers**, **Models**, **API Keys** and **Observability** — with the mode, language, settings and logout buttons in one row at the bottom, and a status bar along the bottom edge that reports the request counters. Across the top, a sticky status bar names the section you are in: its bracketed index and its page title (`[03] Model Routing`), filled from the panel's own heading. The content sits on a 32px hairline grid. Below 900 px the rail folds into a horizontal strip, its active item marked by an underline; the top status bar stays.
 
 The rail's foot carries the clock. It shows the gateway's own wall time, not the browser's: `/health` reports the process's clock and zone, and a click on the time switches to the browser clock (the label says which one is showing, and the choice is remembered). The zone beside it is a second click target — the GMT offset (`GMT-5`) by default, the IANA name (`America/Chicago`) when switched; a name wider than the rail is trimmed with an ellipsis. A bare `/admin` opens the dashboard rather than resuming the last section; an explicit hash (`#providers`, `#models`) still deep-links. The logs section is `#observability`, and an old `#logs` bookmark opens it and is rewritten in the address bar.
 
