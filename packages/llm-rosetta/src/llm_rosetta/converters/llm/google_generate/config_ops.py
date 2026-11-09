@@ -395,7 +395,12 @@ class GoogleGenerateConfigOps(BaseConfigOps):
         if not isinstance(provider_cache, dict):
             return cast(CacheConfig, result)
 
-        if "cached_content" in provider_cache:
-            result["key"] = provider_cache["cached_content"]
+        # The SDK shape names the field ``cached_content``; a REST body may
+        # use the camelCase spelling.  Both carry the same resource name.
+        key = provider_cache.get("cached_content") or provider_cache.get(
+            "cachedContent"
+        )
+        if key:
+            result["key"] = key
 
         return cast(CacheConfig, result)

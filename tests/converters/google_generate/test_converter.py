@@ -134,6 +134,53 @@ class TestGoogleGenerateConverter:
         rest = GoogleGenerateConverter._to_rest_body(provider_request)
         assert rest["system_instruction"]["parts"][0]["text"] == "CONFIG"
 
+    def test_the_cached_content_resource_round_trips(self):
+        """A named cached-content resource survives the SDK shape (#1328).
+
+        The writer already mapped ``cache.key`` to ``cached_content``; the
+        reader had no branch for it, so the resource was write-only and a
+        cross-format round trip lost it in silence.
+        """
+        ir_request: IRRequest = {
+            "model": "gemini-2.0-flash",
+            "messages": [{"role": "user", "content": [{"type": "text", "text": "Hi"}]}],
+            "cache": {"key": "cachedContents/abc"},
+        }
+        body, _warnings = self.converter.request_to_provider(ir_request)
+
+        restored = self.converter.request_from_provider(body)
+
+        assert restored["cache"] == {"key": "cachedContents/abc"}
+
+    def test_an_empty_config_resource_falls_through_to_the_top_level(self):
+        """An empty value in ``config`` must not hide a real one above it.
+
+        ``config`` is authoritative, but only when it actually names a
+        resource: a blank field there means "none", not "stop looking".
+        """
+        provider_request = {
+            "model": "gemini-2.0-flash",
+            "contents": [{"role": "user", "parts": [{"text": "Hi"}]}],
+            "config": {"cached_content": ""},
+            "cachedContent": "cachedContents/abc",
+        }
+
+        restored = self.converter.request_from_provider(provider_request)
+
+        assert restored["cache"] == {"key": "cachedContents/abc"}
+
+    def test_a_hand_written_rest_body_reads_the_camel_case_resource(self):
+        """A REST client may spell the field camelCase; it is the same resource."""
+        provider_request = {
+            "model": "gemini-2.0-flash",
+            "contents": [{"role": "user", "parts": [{"text": "Hi"}]}],
+            "cachedContent": "cachedContents/abc",
+        }
+
+        restored = self.converter.request_from_provider(provider_request)
+
+        assert restored["cache"] == {"key": "cachedContents/abc"}
+
     @pytest.mark.parametrize("output_format", ["sdk", "rest"])
     def test_system_instruction_round_trips(self, output_format: str):
         """Both shapes read their system instruction back into IR (#936).
