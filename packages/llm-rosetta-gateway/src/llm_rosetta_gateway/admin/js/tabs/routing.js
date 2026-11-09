@@ -852,7 +852,8 @@ function _renderPolicy() {
     '<label>' + esc(t('routing.firstToken')) +
     '<select id="routingFirstToken">' + firstTokenOptions + '</select></label>' +
     '</div>' +
-    '<div class="routing-rules-head">' + esc(t('routing.rules')) + '</div>' + rules +
+    '<div class="routing-rules-head">' + esc(t('routing.rules')) + '</div>' +
+    '<div class="field-hint">' + esc(t('routing.rules.hint')) + '</div>' + rules +
     '<button type="button" class="btn btn-primary btn-sm routing-save" onclick="saveRouting()">' +
     esc(t('routing.save')) + '</button>' +
     '<div class="routing-rules-head">' + esc(t('routing.json')) + '</div>' +
