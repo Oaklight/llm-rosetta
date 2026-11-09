@@ -160,6 +160,31 @@ def declared_provider_names(value: Any) -> list[str]:
     return [name for name in names if name]
 
 
+def _declared_lane_pairs(value: Any) -> list[tuple[str, str | None]]:
+    """The ``(provider, upstream_model)`` pairs a model entry names, in order.
+
+    One provider may appear several times, each lane asking for its own
+    upstream model; the pair is what tells them apart.
+    """
+    if isinstance(value, str):
+        return [(value, None)] if value else []
+    if not isinstance(value, dict):
+        return []
+    single = value.get("provider")
+    if isinstance(single, str) and single:
+        return [(single, value.get("upstream_model") or None)]
+    raw_list = value.get("providers")
+    if not isinstance(raw_list, list):
+        return []
+    pairs: list[tuple[str, str | None]] = []
+    for item in raw_list:
+        if isinstance(item, str):
+            pairs.append((item, None))
+        elif isinstance(item, dict) and isinstance(item.get("name"), str):
+            pairs.append((item["name"], item.get("upstream_model") or None))
+    return [(name, upstream) for name, upstream in pairs if name]
+
+
 def declared_model_lanes(
     models_raw: Any, providers: dict[str, Any]
 ) -> dict[str, list[dict[str, Any]]]:
@@ -175,32 +200,35 @@ def declared_model_lanes(
         providers: Every declared provider, disabled ones included.
 
     Returns:
-        One list per model; each item is ``{"name": ..., "weight": ...}``.
+        One list per model; one item per **lane** — ``{"name",
+        "upstream_model", "weight", "enabled"}``.  A provider listed twice
+        with different upstream models yields two items, each with its own
+        weight and switch.
     """
     lanes: dict[str, list[dict[str, Any]]] = {}
     if not isinstance(models_raw, dict):
         return lanes
     for model, value in models_raw.items():
-        weights: dict[str, Any] = {}
-        enabled: dict[str, bool] = {}
+        weights: dict[tuple[str, str | None], Any] = {}
+        enabled: dict[tuple[str, str | None], bool] = {}
         raw_list = value.get("providers") if isinstance(value, dict) else None
         if isinstance(raw_list, list):
             for item in raw_list:
                 if isinstance(item, dict) and isinstance(item.get("name"), str):
-                    weights.setdefault(item["name"], item.get("weight", 1))
+                    key = (item["name"], item.get("upstream_model") or None)
+                    weights.setdefault(key, item.get("weight", 1))
                     # The lane's own switch is not the provider's: a lane the
                     # model entry turns off is a different state from a
                     # provider that is off everywhere.
-                    enabled.setdefault(
-                        item["name"], item.get("enabled", True) is not False
-                    )
+                    enabled.setdefault(key, item.get("enabled", True) is not False)
         lanes[str(model)] = [
             {
                 "name": name,
-                "weight": _lane_weight(weights.get(name, 1)),
-                "enabled": enabled.get(name, True),
+                "upstream_model": upstream,
+                "weight": _lane_weight(weights.get((name, upstream), 1)),
+                "enabled": enabled.get((name, upstream), True),
             }
-            for name in declared_provider_names(value)
+            for name, upstream in _declared_lane_pairs(value)
             if name in providers
         ]
     return lanes

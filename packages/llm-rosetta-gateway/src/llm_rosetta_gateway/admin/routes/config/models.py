@@ -266,6 +266,16 @@ def _append_lane(existing: dict[str, Any], provider: str, body: dict[str, Any]) 
         existing.setdefault("providers", []).append(lane_entry)
 
 
+def _clear_upstream_fallback(existing: dict[str, Any], body: dict[str, Any]) -> None:
+    """Drop the entry-level fallback upstream, but only when asked by name.
+
+    An unrelated save must not remove it: the resolver still serves the lanes
+    that declare no upstream of their own with this value.
+    """
+    if body.get("clear_upstream_fallback"):
+        existing.pop("upstream_model", None)
+
+
 def _update_multi_provider_entry(
     existing: dict[str, Any], body: dict[str, Any], provider: str = ""
 ) -> None:
@@ -285,14 +295,12 @@ def _update_multi_provider_entry(
         existing["type"] = model_type
     elif "type" in existing and (not model_type or model_type == "llm"):
         del existing["type"]
-    # ``upstream_model`` at this level is not ignored once the entry lists
-    # ``providers[]``: it is the **fallback** for a lane that declares none
-    # (``config/resolve.py`` reads ``entry.upstream_model or
-    # config.model_upstream_names.get(model)``).  A lane keeps its own value;
-    # the top-level one covers the rest.  It is still written here because the
-    # editor's single-provider form posts the field at the entry level; a
-    # multi-provider entry keeping both is known and pinned by a test.
-    for key in ("upstream_model", "url_template", "stream_url_template"):
+    # The entry-level ``upstream_model`` is the resolver's fallback for a
+    # lane that declares none (``entry.upstream_model or
+    # config.model_upstream_names.get(model)``); it is never written here,
+    # and removed only when the caller asks (see ``_clear_upstream_fallback``).
+    _clear_upstream_fallback(existing, body)
+    for key in ("url_template", "stream_url_template"):
         if body.get(key):
             existing[key] = body[key]
         elif key in existing and key in body:

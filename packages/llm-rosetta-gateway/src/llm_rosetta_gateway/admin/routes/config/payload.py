@@ -216,13 +216,29 @@ def _normalize_model_entry(value: Any) -> dict[str, Any]:
     # and nothing else, so the panel and the pools cannot apply different
     # rules to a legacy capability-only entry.
     entry["type"] = declared_model_type(value)
-    for key in (
-        "upstream_model",
-        "reasoning_override",
-        "flatten_system",
-        "url_template",
-        "stream_url_template",
-    ):
+    # ``upstream_model`` is the lane's own once the entry lists ``providers[]``;
+    # the entry-level one is the resolver's fallback for a lane that declares
+    # none.  It is reported under its own key — read-only in the panel, never
+    # re-posted by the editor — so the operator can see the value that is in
+    # effect and delete it explicitly.
+    if "providers" in value:
+        if value.get("upstream_model"):
+            entry["upstream_model_fallback"] = value["upstream_model"]
+        echo_keys = (
+            "reasoning_override",
+            "flatten_system",
+            "url_template",
+            "stream_url_template",
+        )
+    else:
+        echo_keys = (
+            "upstream_model",
+            "reasoning_override",
+            "flatten_system",
+            "url_template",
+            "stream_url_template",
+        )
+    for key in echo_keys:
         if value.get(key):
             entry[key] = value[key]
     # On is the default, so the editor gets the effective value rather than
