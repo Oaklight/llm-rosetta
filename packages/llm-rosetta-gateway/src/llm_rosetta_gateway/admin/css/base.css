@@ -1,6 +1,30 @@
 :root {
   --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --mono: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+
+  /* ── The shared vocabulary (issue #1472 P1) ──────────────────────────
+     One set of names the panel's stylesheets converge on.  These are
+     theme-independent — the type scale, the spacing steps and the shell's
+     geometry are the same in every scheme — so they live here rather than in
+     a theme file.  Declared now, consumed from P2 onwards; nothing reads them
+     yet, which is why adding them moves no pixel. */
+  --fs-micro: 10.5px;
+  --fs-xs: 11.5px;
+  --fs-sm: 12.5px;
+  --fs-base: 13.5px;
+  --fs-lg: 15px;
+  --fs-xl: 19px;
+  --tracking-label: 0.09em;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+
+  --side-w: 232px;
+  --topbar-h: 48px;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
