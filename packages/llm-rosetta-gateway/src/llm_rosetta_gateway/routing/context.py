@@ -310,8 +310,19 @@ class SelectionContext:
         return [p for p in self.candidates if p.name == provider_name]
 
     def first_eligible_lane(self, provider_name: str) -> ProviderEntry | None:
-        """The first lane of *provider_name* this request may be served by."""
+        """The first lane of *provider_name* this request may be served by.
+
+        "May be served by" is the same question :meth:`excluded_providers`
+        answers, not only the eligibility predicate: a lane this request
+        already failed over from, one a pin rules out, or one the quota
+        reading removed is not a candidate even when the provider itself can
+        serve.  A caller that wants only the predicate's answer reads
+        ``self.eligibility`` directly.
+        """
+        excluded = self.excluded_providers()
         for entry in self.lanes_of(provider_name):
+            if entry.key in excluded:
+                continue
             answer = self.eligibility.get(entry.key)
             if answer is not None and answer.eligible:
                 return entry

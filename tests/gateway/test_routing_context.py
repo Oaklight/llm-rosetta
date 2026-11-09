@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from llm_rosetta_gateway.routing import (
+    Eligibility,
     Identity,
     ModelRoute,
     ProviderEntry,
@@ -111,6 +112,66 @@ class TestSelectionContext:
         assert ctx.is_eligible("b") is True
         # A provider the stage never answered for is not a candidate.
         assert ctx.is_eligible("missing") is False
+
+
+class TestFirstEligibleLaneHonoursThisRequestsExclusions:
+    """The lane a request may be served by is more than "the provider works".
+
+    ``excluded_providers`` answers what this request must skip — a provider it
+    already failed over from, one a pin rules out, one the quota reading
+    removed.  ``first_eligible_lane`` is the same question asked of one
+    provider's lanes, so it must apply the same exclusions; reading only the
+    eligibility predicate let a ``use`` rule promote a lane this request had
+    already ruled out, and let it leave a pinned provider.
+    """
+
+    @staticmethod
+    def _lanes() -> SelectionContext:
+        entries = [
+            ProviderEntry("p", upstream_model="fast"),
+            ProviderEntry("p", upstream_model="eco"),
+        ]
+        ctx = SelectionContext("m", "chat_completions")
+        ctx.install_route(
+            model_route=ModelRoute(providers=entries, route_id="m"),
+            providers={},
+            provider_types={},
+            provider_shim_names={},
+            provider_account_tokens={},
+        )
+        ctx.with_eligibility(
+            {
+                entry.key: Eligibility(
+                    name=entry.name, eligible=True, upstream=entry.upstream_model
+                )
+                for entry in entries
+            }
+        )
+        return ctx
+
+    def test_returns_the_first_lane_when_nothing_is_excluded(self):
+        lane = self._lanes().first_eligible_lane("p")
+
+        assert lane is not None
+        assert lane.key == ("p", "fast")
+
+    def test_a_provider_the_request_failed_over_from_has_no_lane_left(self):
+        ctx = self._lanes()
+        ctx.with_failover_excluded({"p"})
+
+        assert ctx.first_eligible_lane("p") is None
+
+    def test_a_pin_rules_out_another_providers_lanes(self):
+        ctx = self._lanes()
+        ctx.with_pinned_provider("q")
+
+        assert ctx.first_eligible_lane("p") is None
+
+    def test_a_provider_the_quota_reading_spent_has_no_lane_left(self):
+        ctx = self._lanes()
+        ctx.with_quota_headroom({}, frozenset({"p"}))
+
+        assert ctx.first_eligible_lane("p") is None
 
 
 class TestRoutingChain:

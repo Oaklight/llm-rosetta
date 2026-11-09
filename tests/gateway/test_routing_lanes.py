@@ -259,6 +259,27 @@ class TestRulesSpeakProviderWide:
 
         assert self._resolve(config, RuleFacts()).upstream_model == "fast"
 
+    def test_a_use_rule_cannot_leave_a_pinned_provider(self):
+        """A pin is the operator's instruction; a rule is not a veto over it.
+
+        The anchor honours the pin, but ``use`` used to read only the
+        eligibility predicate, so the promoted provider came back even though
+        ``excluded_providers`` ruled it out.
+        """
+        config = self._config(
+            [{"when": {}, "use": "q"}],
+            [{"name": "p"}, {"name": "q"}],
+        )
+        selection = config.selection_context(
+            "m", "chat_completions", pinned_provider="p"
+        )
+        selection.with_rule_facts(RuleFacts())
+
+        config.resolve(selection)
+
+        assert selection.chosen is not None
+        assert selection.chosen.name == "p"
+
     def test_a_use_rule_falls_to_the_second_lane_when_the_first_cannot_serve(self):
         config = self._config(
             [{"when": {"images": True}, "use": "p"}],
