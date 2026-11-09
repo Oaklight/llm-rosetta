@@ -1395,7 +1395,6 @@ function _buildProvCapCheckboxes() {
   for (const desc of S.configData?.model_types || []) {
     const label = document.createElement('label');
     label.id = `provCap${_capitalize(desc.name)}Wrap`;
-    label.style = 'flex:1;padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius);transition:all 0.2s';
     const labelText = typeLabel(desc.name);
     label.innerHTML = `<input type="checkbox" id="provCap${_capitalize(desc.name)}" onchange="toggleProvCapSection()"> <span>${esc(labelText)}</span>`;
     container.appendChild(label);
@@ -2399,9 +2398,6 @@ function deleteProvider(name) {
   document.getElementById('deleteConfirmMsg').innerHTML = t('confirm.typeToConfirm', {name: '<strong>' + esc(name) + '</strong>'});
   document.getElementById('deleteConfirmInput').value = '';
   document.getElementById('deleteConfirmBtn').disabled = true;
-  // Reset button style
-  const btn = document.getElementById('deleteConfirmBtn');
-  btn.style.background = '#ccc'; btn.style.color = '#888'; btn.style.cursor = 'not-allowed';
   // Show affected models if any
   const affected = Object.entries(S.configData.models || {})
     .filter(([, v]) => (typeof v === 'object' ? v.provider : v) === name)
@@ -2419,18 +2415,8 @@ function deleteProvider(name) {
 }
 
 function onDeleteConfirmInput() {
-  const btn = document.getElementById('deleteConfirmBtn');
   const matched = document.getElementById('deleteConfirmInput').value === _pendingDeleteProvider;
-  btn.disabled = !matched;
-  if (matched) {
-    btn.style.background = '#cf222e';
-    btn.style.color = '#fff';
-    btn.style.cursor = 'pointer';
-  } else {
-    btn.style.background = '#ccc';
-    btn.style.color = '#888';
-    btn.style.cursor = 'not-allowed';
-  }
+  document.getElementById('deleteConfirmBtn').disabled = !matched;
 }
 
 function onDeleteConfirmClick() {

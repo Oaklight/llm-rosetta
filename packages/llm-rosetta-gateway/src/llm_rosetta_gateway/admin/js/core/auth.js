@@ -356,20 +356,14 @@ function openCleanupConfirm(target) {
   document.getElementById('cleanupRangeStart').value = '';
   document.getElementById('cleanupRangeEnd').value = '';
   setCleanupMode('olderThan');
-  const btn = document.getElementById('cleanupConfirmBtn');
-  btn.disabled = true;
-  btn.style.background = '#ccc'; btn.style.color = '#888'; btn.style.cursor = 'not-allowed';
+  document.getElementById('cleanupConfirmBtn').disabled = true;
   openModal('cleanupConfirmModal');
   document.getElementById('cleanupConfirmInput').focus();
 }
 
 function onCleanupConfirmInput() {
   const matched = document.getElementById('cleanupConfirmInput').value === 'CLEANUP';
-  const btn = document.getElementById('cleanupConfirmBtn');
-  btn.disabled = !matched;
-  btn.style.background = matched ? 'var(--red)' : '#ccc';
-  btn.style.color = matched ? '#fff' : '#888';
-  btn.style.cursor = matched ? 'pointer' : 'not-allowed';
+  document.getElementById('cleanupConfirmBtn').disabled = !matched;
 }
 
 const _TARGET_LABELS = {logs: 'log', errors: 'error dump', ops: 'ops log', all: ''};

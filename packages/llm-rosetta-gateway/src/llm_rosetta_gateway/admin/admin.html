@@ -5,11 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>llm-rosetta Gateway Console</title>
 <!-- The default theme's seed colours, inline so the first frame is never
-     white before a theme sheet arrives.  Exactly these three values, per mode;
-     a drift test compares them with css/themes/minimal.css. -->
+     white before a theme sheet arrives.  Exactly three custom properties per
+     mode, plus `color-scheme` — the user agent's switch, which has to flip
+     with the same frame (#1470); a drift test compares the colours with
+     css/themes/minimal.css. -->
 <style id="themeSeed">
-  html { --bg: #fff; --text: #171717; --accent: #171717; }
-  html[data-mode="dark"] { --bg: #000; --text: #ededed; --accent: #ededed; }
+  html { --bg: #fff; --text: #171717; --accent: #171717; color-scheme: light; }
+  html[data-mode="dark"] { --bg: #000; --text: #ededed; --accent: #ededed; color-scheme: dark; }
 </style>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='30 15 490 500'%3E%3Cpath fill='%23666' d='M517.5,415.4c.3-10.7-2.6-21.4-2.2-31.9c.1-2.4,2-4.5,2.1-6.9c.2-5.1-1.1-12.1-2.8-16.2c-2-4.9-1.4-11.1-1.1-16.9c.4-5.9-.3-11.6-.3-17.5c0-5.9-1.4-13.4-.3-18.4c.9-3.9-.3-8.7.2-12.7c.2-1.3,1.3-1.6,1.5-2.7c.6-2.8-1.7-2.8-1.7-4.7c0-1.6,1.7-3.2,1.9-5c1.5-3-2.3-8.2-1.4-10.6c4.9-14.2-8.2-27.4-12.9-37c-.1-.2-.2-.5-.2-.8c-3.8-15.2-8.4-27.1-13.8-41.1c-1.8-4.8-6-8.7-7.6-13.6c-1.6-4.9-5.1-9.4-7.9-13.4c-6.6-9.4-14.5-22.3-13.8-35.9c-6-6.5-6-18.5-9-28.5c-1.3-4.3-2-8.8-2.9-13.4c-.8-4.1-2.3-10.6-2.1-14.3c0-.6.8-1.1.7-1.7c-.1-.6-1.2-1-1.4-1.5c-1-2.7-1-6.6-2.2-10c-1.1-3.1-2.3-6.9-2.7-9.6c-.3-1.8-.1-3.2-1.1-4.2c-.9-.9-2.1-.9-2.3-1.9c-.5-1.8.8-2.5.8-3.8c0-2.6-2.7-6.6-3-9.7c-.1-.6.5-1.3.5-1.9c-.2-2.3-3.3-4.1-4.7-5.6c-1.8-1.8-4.3-7.6-4.9-10.1c-.6-2.2.3-6.1-1-7.2c-.7-.6-6-1-6.7-1.1c-11.2-.2-22.7-2.7-35.3-2.3c-8.5.2-17.3.5-25.6,1.4c-8.4.9-15.5,3.4-23.4,4.3c-4.5.5-7.4,1.9-11.1,2.8c-8,1.8-16.2,2.5-23,4.9c-2.8,1-8,2.4-9.6,4.4c-2,2.5-1.4,1.9-4.4,2c-1.1,0-2.4.9-3.7,1.1c-1.4.2-2.7-.5-4-.5c-1.9.1-5.9,2.2-7.9,3c-2.7,1-5.4,2.2-8.1,2.9c-14.2,3.8-26.2,10.3-38.8,16c-2.2,1-4.8,3.7-6.8,4.2c-6.6,1.8-9.7,6.2-15.4,8.7c-2.7,1.2-7.5,1.5-10,3.2c-3.7,2.6-7.4,5.9-11.7,8.4c-3,1.7-3.8.7-5,3.5c-.5,1.2-3.4.7-4.5,1.4c-5.5,3.7-9.7,9.5-15,14.1c-2.8,2.5-6,3.5-8.7,5.9c-2.9,2.5-5.8,3.9-8.9,5.7c-1.5.9-2.5,3.5-4.1,4.2c-4.1,1.9-7.7,4.2-11,7.2c-.3.2-.5.6-.6.8c-7.2,11.5-19.6,18.1-30.6,25.2c-4.6,1.7-6.6,9.6-7.1,15.3c-.2,2.1,1.1,3.6,1,5.7c-.1,1.8-1.4,2.6-1.3,4.4c.1,2.2.1,2.6-.5,4.4c-.9,2.7.8,6,.7,9.2c-.3,6.5-2.2,12.4-2.7,17.9c-.2,2.8,1.9,6.2,1,8.7c-3.3,9-1.6,21.4-.3,31.4c.7,5.2-.9,10.4-1,15.7c-.1,5.6.7,11.4.4,16.4c-.4,6.1-3.1,12.3-2.8,18.1c.3,6.1,2.2,11.8,3.5,17.2c2,7.7-.1,13.8-2.5,19.1c-2.5,5.5-.7,10.8-1.5,17.1c-.3,2.1-2.1,3.7-1.7,6.8c.3,2.5,1.2,5.1,1.3,7.5c.1,3.5-1.3,5.8-.3,9.5c1,3.8-.1,5.9-.8,9.3c-1.8,9.5-4.1,17.8-2.5,29.2c.6,4.1,1.7,7.4,2.1,11.4c.4,4.3-2.4,6.8-2.6,10.8c-.4,9.7.3,20.4-1.9,29c-1,3.8.7,5.6,1.2,8.7c.4,2.5-.4,6.2-1.3,9c-1,3.3.2,6,1.1,8.5c1.8,5.3.4,12.4-.1,18.2c-.5,6.4-.7,12.4-.5,19.1c.2,6.5-1.3,13-.4,19.7c.8,5.8,2,11.2,2,18.5c0,6.8,0,13.5-.3,19.9c-.3,7.4,3.7,9.9,11.2,9.5c3.3-.2,6.6-1.4,9.2-.2c2.4,1,4.6,2.7,7.7,2.9c1.3.1,2.6-.8,3.5-.8c2.6.2,5.4,2.4,8.7,2.1c4.7-.4,8.5.6,13,1.9c3.7,1.1,6.8,3,10.7,3.4c.7.1,1.2-.8,1.8-.8c2.9,0,5.5,1.6,8.7,1.1c3.1-.4,6.4-.4,9.3-.4c6.4.2,11.4-2.6,15.7-4.7c.3-.2.7-.3,1.1-.4c7.2-1.7,13.7-5.7,20.8-8c2.6-.8,6.4,0,9.3-.1c5-.3,11.2-1.2,16.4.8c5.9,2.2,10.9.6,16.6,1.4c2.8.4,4.9.7,7.8.8c9.8.4,19.8-4.8,29.1-5.5c.1,0,.1,0,.2-.1c5.3-1.9,13-1.6,17.9-1.3c8.2.6,18,2.6,25.4-1.1c3.2-1.6,7.4-3.3,11.1-3.7c4.5-.5,9.4,1.5,13.7.6c.8-.2.6-1.1,1.5-1.2c.6,0,1.2.5,1.9.5c12-.4,25.1-2.8,34.6-7c6.8-3,10.3-7.7,18.8-9.3c3.3-.6,6.6-3.3,9.2-4.9c5.1-3.2,15.8-4.4,18.4-9.8c5.6-11.5,22.2-12.4,28.9-22.5c.1-.1.2-.2.3-.3c4.8-4.1,9.7-8.1,13.8-12.8c2-2.3,5.1-3.6,7.1-6.2c2-2.6,4-5,6.3-7c4.6-4,8.2-9.4,12.6-14c6.8-7.1,12.3-15.3,18.6-22.2c1.6-1.7,7.5-4.8,8-7.1C521.1,437.1,517.2,426,517.5,415.4z'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="/admin/static/css/base.css">
@@ -317,7 +319,7 @@
         <h2 data-i18n="section.apiKeys">API Keys</h2>
 <button class="btn btn-primary btn-sm" onclick="openKeyModal()" data-i18n="btn.generateKey">+ Generate Key</button>
       </div>
-      <p style="font-size:13px;color:var(--text-dim);margin-bottom:16px"><span data-i18n="keys.description">Manage gateway API keys used to authenticate requests to /v1/* endpoints.</span> <button onclick="backfillKeysLastUsed()" data-i18n-title="hint.refreshLastUsed" title="Refresh last-used timestamps from request log" style="background:none;border:none;cursor:pointer;color:var(--text-dim);padding:2px;vertical-align:middle;transition:color 0.15s" onmouseenter="this.style.color='var(--accent)'" onmouseleave="this.style.color='var(--text-dim)'"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15"/></svg></button></p>
+      <p style="font-size:13px;color:var(--text-dim);margin-bottom:16px"><span data-i18n="keys.description">Manage gateway API keys used to authenticate requests to /v1/* endpoints.</span> <button class="key-btn" onclick="backfillKeysLastUsed()" data-i18n-title="hint.refreshLastUsed" title="Refresh last-used timestamps from request log" onmouseenter="this.style.color='var(--accent)'" onmouseleave="this.style.color='var(--text-dim)'"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15"/></svg></button></p>
       <div class="key-toolbar">
         <div class="mt-row">
           <input id="keySearch" type="search" placeholder="Search keys..." data-i18n-placeholder="label.searchKeys" oninput="renderKeys()">
@@ -406,7 +408,7 @@
     <div class="modal" style="width:400px">
       <h3 data-i18n="confirm.clearDumps">Clear All Error Dumps</h3>
       <p style="font-size:13px;color:var(--text-dim);margin-bottom:16px" data-i18n-html="confirm.clearDumpsHint">This will permanently delete all error dump records. Type <strong style="color:var(--red)">CLEAR</strong> to confirm.</p>
-      <input type="text" id="clearDumpsInput" oninput="onClearDumpsInput()" placeholder="Type CLEAR" data-i18n-placeholder="confirm.typeClear" style="width:100%;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:14px;font-family:var(--mono)">
+      <input type="text" id="clearDumpsInput" oninput="onClearDumpsInput()" placeholder="Type CLEAR" data-i18n-placeholder="confirm.typeClear" style="width:100%;font-family:var(--mono)">
       <div class="modal-actions">
         <button class="btn" onclick="closeModal('clearDumpsModal')" data-i18n="btn.cancel">Cancel</button>
         <button class="btn btn-danger" id="clearDumpsBtn" onclick="confirmClearDumps()" disabled data-i18n="btn.clearAll">Clear All</button>
@@ -420,13 +422,13 @@
       <h3 data-i18n="export.title">Export Error Dumps</h3>
       <p style="font-size:13px;color:var(--text-dim);margin-bottom:12px" data-i18n="export.hint">Select a date range (optional). Leave empty to export all.</p>
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px">
-        <input type="date" id="exportStartDate" style="flex:1;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+        <input type="date" id="exportStartDate" style="flex:1">
         <span style="color:var(--text-dim)">—</span>
-        <input type="date" id="exportEndDate" style="flex:1;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+        <input type="date" id="exportEndDate" style="flex:1">
       </div>
       <div class="modal-actions">
         <button class="btn" onclick="closeModal('exportDumpsModal')" data-i18n="btn.cancel">Cancel</button>
-        <button class="btn" onclick="doExportDumps()" style="background:var(--accent);color:#fff" data-i18n="btn.export">Export</button>
+        <button class="btn btn-primary" onclick="doExportDumps()" data-i18n="btn.export">Export</button>
       </div>
     </div>
   </div>
@@ -489,7 +491,7 @@
           </div>
           <span id="logStatusSearchWrap" style="display:none;align-items:center;gap:2px">
             <input type="text" id="logStatusSearch" data-i18n-placeholder="filter.statusPlaceholder" placeholder="e.g. 429" oninput="onLogStatusSearchInput()" style="width:90px" inputmode="numeric" pattern="[0-9]*" maxlength="3">
-            <button class="btn btn-sm" onclick="closeLogStatusSearch()" style="padding:6px 8px;font-size:13px;line-height:1;flex-shrink:0">✕</button>
+            <button class="btn btn-sm" onclick="closeLogStatusSearch()">✕</button>
           </span>
         </div>
         <div class="mt-row">
@@ -523,7 +525,7 @@
           <button class="btn btn-sm" onclick="jumpToLogPage()" data-i18n="btn.go">Go</button>
         </span>
         <label class="info" for="logPageSize" data-i18n="page.rows">Rows/page</label>
-        <select id="logPageSize" onchange="onLogPageSizeChange()" style="padding:4px 8px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:13px">
+        <select id="logPageSize" onchange="onLogPageSizeChange()">
           <option value="30">30</option>
           <option value="50">50</option>
           <option value="100">100</option>
@@ -568,11 +570,11 @@
   <details class="section section-collapsible" id="profilingSection">
         <summary class="section-header">
           <h2 data-i18n="section.profiling">Profiling</h2>
-          <span id="profilingBadge" class="badge" style="margin-left:auto;padding:4px 10px;border-radius:4px;font-size:12px;font-weight:600;visibility:hidden">OFF</span>
+          <span id="profilingBadge" class="badge" style="margin-left:auto;visibility:hidden">OFF</span>
         </summary>
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap">
           <label style="font-size:13px" data-i18n="profiling.requests">Requests:</label>
-          <input type="number" id="profilingCount" value="5" min="1" max="100" style="width:60px;padding:4px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text)">
+          <input type="number" id="profilingCount" value="5" min="1" max="100" style="width:60px">
           <label style="font-size:13px;display:inline-flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="profilingTracing"> <span data-i18n="profiling.tracing">Tracing</span></label>
           <button class="btn btn-sm" onclick="toggleProfiling()" id="profilingToggleBtn" data-i18n="profiling.enable">Enable</button>
           <button class="btn btn-sm" onclick="clearProfilingResults()" data-i18n="profiling.clear">Clear</button>
@@ -609,11 +611,11 @@
   <details class="section section-collapsible" id="captureSection">
         <summary class="section-header">
           <h2 data-i18n="section.capture">Content Capture</h2>
-          <span id="captureBadge" class="badge" style="margin-left:auto;padding:4px 10px;border-radius:4px;font-size:12px;font-weight:600;visibility:hidden">OFF</span>
+          <span id="captureBadge" class="badge" style="margin-left:auto;visibility:hidden">OFF</span>
         </summary>
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap">
           <label style="font-size:13px" data-i18n="capture.requests">Requests:</label>
-          <input type="number" id="captureCount" value="5" min="1" max="100" style="width:60px;padding:4px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text)">
+          <input type="number" id="captureCount" value="5" min="1" max="100" style="width:60px">
           <button class="btn btn-sm" onclick="toggleCapture()" id="captureToggleBtn" data-i18n="capture.enable">Enable</button>
           <button class="btn btn-sm" onclick="clearCaptureResults()" data-i18n="capture.clear">Clear</button>
           <button class="btn btn-sm" onclick="downloadAllCaptures()" id="captureDownloadAll" style="display:none" data-i18n="capture.downloadAll">Download All</button>
@@ -655,7 +657,7 @@
             <button class="btn btn-sm" onclick="downloadAllDumps()" id="dumpDownloadAllBtn" style="display:none" data-i18n="btn.downloadAll">Download All</button>
             <button class="btn btn-sm" onclick="backfillDumpLogIds()" title="Link unmatched error dumps to their request log entries by timestamp and provider" data-i18n-title="btn.matchLogsTitle" data-i18n="btn.matchLogs">Match Logs</button>
             <div style="display:inline-block;position:relative">
-              <button class="btn btn-sm" onclick="toggleDumpMoreMenu(this)" style="padding:3px 8px">⋯</button>
+              <button class="btn btn-sm" onclick="toggleDumpMoreMenu(this)">⋯</button>
               <div id="dumpMoreMenu" style="display:none;position:absolute;right:0;top:calc(100% + 4px);min-width:140px;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.3);z-index:10;overflow:hidden">
                 <div style="padding:8px 14px;font-size:13px;cursor:pointer" onmouseenter="this.style.background='var(--bg-hover)'" onmouseleave="this.style.background=''" onclick="document.getElementById('dumpMoreMenu').style.display='none';openExportDumpsModal()" data-i18n="btn.export">Export...</div>
                 <div style="padding:8px 14px;font-size:13px;cursor:pointer;color:var(--red)" onmouseenter="this.style.background='var(--bg-hover)'" onmouseleave="this.style.background=''" onclick="document.getElementById('dumpMoreMenu').style.display='none';openClearDumpsConfirm()" data-i18n="btn.clearAll">Clear All</div>
@@ -681,7 +683,7 @@
             </select>
             <span id="dumpStatusSearchWrap" style="display:none;align-items:center;gap:2px;width:100%">
               <input type="text" id="dumpStatusSearch" data-i18n-placeholder="filter.statusPlaceholder" placeholder="e.g. 429" oninput="onDumpStatusSearchInput()" style="flex:1;min-width:0" inputmode="numeric" pattern="[0-9]*" maxlength="3">
-              <button class="btn btn-sm" onclick="closeDumpStatusSearch()" style="padding:6px 8px;font-size:13px;line-height:1;flex-shrink:0">✕</button>
+              <button class="btn btn-sm" onclick="closeDumpStatusSearch()">✕</button>
             </span>
           </span>
           <select id="dumpProviderFilter" onchange="renderDumps()">
@@ -694,7 +696,7 @@
             </select>
             <span id="dumpModelSearchWrap" style="display:none;align-items:center;gap:2px;width:100%">
               <input type="text" id="dumpModelSearch" placeholder="Search model..." data-i18n-placeholder="label.searchModels" oninput="renderDumps()" style="flex:1;min-width:0">
-              <button class="btn btn-sm" onclick="closeDumpModelSearch()" style="padding:6px 8px;font-size:13px;line-height:1;flex-shrink:0">✕</button>
+              <button class="btn btn-sm" onclick="closeDumpModelSearch()">✕</button>
             </span>
           </span>
           <span id="dumpTimeFilterWrap" style="display:inline-flex;width:280px">
@@ -707,10 +709,10 @@
               <option value="custom" data-i18n="filter.custom">Custom...</option>
             </select>
             <span id="dumpCustomDateRange" style="display:none;align-items:center;gap:4px;width:100%">
-              <input type="date" id="dumpDateFrom" onchange="renderDumps()" style="padding:5px 6px;font-size:12px;flex:1;min-width:0">
+              <input type="date" id="dumpDateFrom" onchange="renderDumps()" style="flex:1;min-width:0">
               <span style="color:var(--text-dim)">—</span>
-              <input type="date" id="dumpDateTo" onchange="renderDumps()" style="padding:5px 6px;font-size:12px;flex:1;min-width:0">
-              <button class="btn btn-sm" onclick="closeDumpTimeCustom()" style="padding:5px 8px;font-size:12px;line-height:1;flex-shrink:0">✕</button>
+              <input type="date" id="dumpDateTo" onchange="renderDumps()" style="flex:1;min-width:0">
+              <button class="btn btn-sm" onclick="closeDumpTimeCustom()">✕</button>
             </span>
           </span>
           <button class="btn btn-sm" id="dumpSelectFilteredBtn" onclick="selectAllFilteredDumps()" data-i18n="btn.selectFiltered">Select all</button>
@@ -1497,7 +1499,7 @@
           <dl class="prov-rows" id="provExchangeRows"></dl>
           <div class="prov-actions" id="provExchangeActions"></div>
           <div id="provCredentialBox" style="display:none;margin-top:6px">
-            <textarea id="provCredentialRecord" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder='{"access_token": "...", "refresh_token": "...", "id_token": "..."}' style="width:100%;min-height:96px;font-family:var(--mono,monospace);font-size:0.78em"></textarea>
+            <textarea id="provCredentialRecord" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder='{"access_token": "...", "refresh_token": "...", "id_token": "..."}' style="width:100%;min-height:96px;font-family:var(--mono,monospace)"></textarea>
             <div style="display:flex;gap:6px;margin-top:4px">
               <button type="button" class="btn btn-sm btn-primary" data-i18n="btn.installCredential" onclick="installProviderCredential()">Install record</button>
               <button type="button" class="btn btn-sm" data-i18n="btn.cancel" onclick="toggleProviderCredentialBox(false)">Cancel</button>
@@ -1792,7 +1794,7 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
     <div id="cleanupModeBeforeDate" class="cleanupModePanel" style="display:none">
       <div style="margin:0 0 8px">
         <label style="font-size:12px;color:var(--text-dim)" data-i18n="label.cleanupBefore">Delete records before:</label>
-        <input type="date" id="cleanupBeforeDate" style="width:100%;padding:6px;margin-top:4px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+        <input type="date" id="cleanupBeforeDate" style="width:100%;margin-top:4px">
       </div>
     </div>
     <!-- Date Range inputs -->
@@ -1800,11 +1802,11 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
       <div style="display:flex;gap:8px;margin:0 0 8px">
         <div style="flex:1">
           <label style="font-size:12px;color:var(--text-dim)" data-i18n="label.cleanupFrom">From:</label>
-          <input type="date" id="cleanupRangeStart" style="width:100%;padding:6px;margin-top:4px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+          <input type="date" id="cleanupRangeStart" style="width:100%;margin-top:4px">
         </div>
         <div style="flex:1">
           <label style="font-size:12px;color:var(--text-dim)" data-i18n="label.cleanupTo">To:</label>
-          <input type="date" id="cleanupRangeEnd" style="width:100%;padding:6px;margin-top:4px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+          <input type="date" id="cleanupRangeEnd" style="width:100%;margin-top:4px">
         </div>
       </div>
     </div>
@@ -1819,7 +1821,7 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
     </div>
     <div class="modal-actions">
       <button class="btn" onclick="closeModal('cleanupConfirmModal')" data-i18n="btn.cancel">Cancel</button>
-      <button class="btn" id="cleanupConfirmBtn" onclick="onCleanupConfirmClick()" disabled
+      <button class="btn btn-danger-fill" id="cleanupConfirmBtn" onclick="onCleanupConfirmClick()" disabled
         data-i18n="btn.cleanup">Cleanup</button>
     </div>
   </div>
@@ -1837,7 +1839,7 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
     </div>
     <div class="modal-actions">
       <button class="btn" onclick="closeModal('deleteConfirmModal')" data-i18n="btn.cancel">Cancel</button>
-      <button class="btn" id="deleteConfirmBtn" onclick="onDeleteConfirmClick()" disabled
+      <button class="btn btn-danger-fill" id="deleteConfirmBtn" onclick="onDeleteConfirmClick()" disabled
         data-i18n="btn.delete">Delete</button>
     </div>
   </div>
@@ -1928,7 +1930,7 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
     <h3 data-i18n="modal.keyCreated">Key Created</h3>
     <p style="font-size:13px;color:var(--text-dim);margin-bottom:12px" data-i18n="keys.copyWarning">Copy this key now. It will not be shown again in full.</p>
     <div style="display:flex;gap:8px;align-items:center">
-      <input id="createdKeyValue" readonly style="flex:1;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:14px;font-family:var(--mono)">
+      <input id="createdKeyValue" readonly style="flex:1;font-family:var(--mono)">
       <button class="btn btn-sm" onclick="copyCreatedKey()" data-i18n="btn.copy">Copy</button>
     </div>
     <div class="modal-actions" style="margin-top:16px">
@@ -1965,7 +1967,7 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
         <label><input type="radio" name="tuRange" onchange="setTokenUsageRange(7)"><span data-i18n="tokenUsage.range7d">7 days</span></label>
         <label><input type="radio" name="tuRange" onchange="setTokenUsageRange(30)"><span data-i18n="tokenUsage.range30d">30 days</span></label>
       </div>
-      <select id="tokenUsageKeyFilter" onchange="loadTokenUsage()" style="padding:6px 10px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:13px">
+      <select id="tokenUsageKeyFilter" onchange="loadTokenUsage()">
         <option value="" data-i18n="filter.allKeys">All Keys</option>
       </select>
     </div>

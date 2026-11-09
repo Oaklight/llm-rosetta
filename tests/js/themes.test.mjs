@@ -133,14 +133,19 @@ test('the inline seed is exactly the default theme’s first frame', () => {
   const seed = seedTag[1];
   const minimal = readFileSync(join(ADMIN, 'css/themes/minimal.css'), 'utf8');
 
-  // Exactly these keys: the seed exists so the first frame has a background,
-  // text and accent colour before the sheet arrives.  Anything else belongs in
-  // the theme file.
+  // Exactly these custom properties: the seed exists so the first frame has a
+  // background, text and accent colour before the sheet arrives.  Anything
+  // else belongs in the theme file — except `color-scheme`, which is the user
+  // agent's switch and must flip with the very first frame, so it is seeded
+  // here as well (#1470).
   const KEYS = ['--bg', '--text', '--accent'];
+  const custom = (decls) => [...decls.keys()].filter((k) => k.startsWith('--')).sort();
   const light = ruleDeclarations(seed, 'html');
   const dark = ruleDeclarations(seed, 'html[data-mode="dark"]');
-  assert.deepEqual([...light.keys()].sort(), [...KEYS].sort());
-  assert.deepEqual([...dark.keys()].sort(), [...KEYS].sort());
+  assert.deepEqual(custom(light), [...KEYS].sort());
+  assert.deepEqual(custom(dark), [...KEYS].sort());
+  assert.equal(light.get('color-scheme'), 'light');
+  assert.equal(dark.get('color-scheme'), 'dark');
 
   const themeLight = ruleDeclarations(minimal, '[data-scheme="minimal"][data-mode="light"]');
   const themeDark = ruleDeclarations(minimal, '[data-scheme="minimal"][data-mode="dark"]');

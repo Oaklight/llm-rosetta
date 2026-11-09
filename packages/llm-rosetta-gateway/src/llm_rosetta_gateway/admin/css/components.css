@@ -1,18 +1,56 @@
-/* Buttons */
-.btn {
-  padding: 8px 16px; border-radius: var(--radius); border: 1px solid var(--border);
-  background: var(--bg-card); color: var(--text); cursor: pointer; font-size: 13px;
-  transition: all 0.15s;
+/* ── Controls (issue #1472 P4) ───────────────────────────────────────────
+   One skin for everything you click or type into: 28px tall, one 2px
+   corner, one 1px frame, one type size.  A context owns a control's width
+   and nothing else — before this, every context painted its own box and
+   twenty-two inline style attributes carried one, and buttons came in five
+   heights.  `:where()` keeps the element skin at zero specificity so a
+   context can still set a width without an `!important`. */
+:where(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]),
+  select:not(.sr-select),
+  textarea
+) {
+  height: 28px; padding: 0 var(--space-2);
+  border: 1px solid var(--border); border-radius: var(--radius-control);
+  background: var(--surface); color: var(--text);
+  font-family: var(--font); font-size: var(--fs-xs); line-height: 1.2;
+  transition: border-color .15s ease;
 }
-.btn:hover { background: var(--bg-hover); }
+:where(select:not(.sr-select)) { padding-right: 6px; }
+:where(textarea) { height: auto; min-height: 72px; padding: 6px var(--space-2); resize: vertical; }
+:where(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):hover,
+  select:not(.sr-select):hover,
+  textarea:hover
+) { border-color: var(--text-dim); }
+
+/* Buttons: one height, one corner.  `.btn-sm` is the same 28px button with
+   tighter sides.  `.chart-range-btn`, inside a chart header, keeps a smaller
+   height so the header does not grow — the one height exception, and it is
+   squared like everything else.  `.key-btn` was the second; measurement put
+   it at 28px without growing its 49px key row, so it takes the scale. */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: 28px; padding: 0 12px; border-radius: var(--radius-control);
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  font-family: var(--font); font-size: var(--fs-xs); font-weight: 500; line-height: 1;
+  cursor: pointer; transition: background .15s, border-color .15s, color .15s;
+}
+.btn:hover { background: var(--surface-2); border-color: var(--text-dim); }
 .btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-on); font-weight: var(--btn-primary-weight); }
-.btn-primary:hover { background: var(--accent-hover); }
+.btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
 .btn-danger { color: var(--red); border-color: color-mix(in srgb, var(--red) 30%, transparent); }
 .btn-danger:hover { background: color-mix(in srgb, var(--red) 6%, transparent); border-color: var(--red); }
 .btn-danger-fill { background: var(--red); color: #fff; border-color: var(--red); }
 .btn-danger-fill:hover { background: color-mix(in srgb, var(--red) 85%, #000); border-color: color-mix(in srgb, var(--red) 85%, #000); color: #fff; }
-.btn-sm { padding: 4px 10px; font-size: 12px; }
-.btn-disabled, .btn[disabled] { background: var(--border); color: var(--text-dim); cursor: not-allowed; border-color: var(--border); opacity: 0.6; }
+.btn-sm { padding: 0 10px; }
+/* One disabled recipe: the control fades and stops taking the pointer; it
+   does not change its own fill, which used to disagree between `.btn-sm`,
+   `.btn[disabled]` and the controls that only set `pointer-events: none`. */
+/* One disabled recipe for every control: a button, a field or a select. */
+.btn-disabled, .btn[disabled],
+button:disabled, input:disabled, select:disabled, textarea:disabled { opacity: .5; cursor: not-allowed; }
+.btn-disabled:hover, .btn[disabled]:hover, button:disabled:hover { background: var(--surface); border-color: var(--border); }
 
 /* Tables: one hairline per row, and a stronger one under the header row.
    The line lives on the row, not on every cell, so an expandable detail row
@@ -146,10 +184,10 @@ tr:hover td { background: var(--bg-hover); }
     position: sticky; top: 0; z-index: 3; background: var(--surface);
   }
 }
-.seg-control { display:inline-flex;border-radius:8px;overflow:hidden;box-shadow:0 0 0 1px var(--border); }
-.seg-control > * { display:flex;align-items:center;padding:6px 20px;font-size:13px;font-weight:500;cursor:pointer;border-right:1px solid var(--border);transition:all 0.15s;user-select:none;color:var(--text-dim);text-transform:none;letter-spacing:0;margin:0; }
+.seg-control { display:inline-flex;border:1px solid var(--border);border-radius:var(--radius-control);overflow:hidden; }
+.seg-control > * { display:flex;align-items:center;height:28px;padding:0 16px;font-size:var(--fs-xs);font-weight:500;cursor:pointer;border-right:1px solid var(--border);transition:background .15s,color .15s;user-select:none;color:var(--text-dim);text-transform:none;letter-spacing:0;margin:0; }
 .seg-control > *:last-child { border-right:none; }
-.seg-control > *:hover { background:var(--bg); }
+.seg-control > *:hover { background:var(--surface-2); color:var(--text); }
 .seg-control input { position:absolute;opacity:0;width:0;height:0;pointer-events:auto; }
 .seg-control > *.active { background:var(--accent);color:var(--accent-on); }
 /* Keyboard focus.  Some groups are role="radio" divs, others wrap a visually
@@ -164,21 +202,41 @@ tr:hover td { background: var(--bg-hover); }
 /* Capability badges for provider cards */
 /* Capability badges are secondary metadata — kept small so a provider with
    all three still fits its column without squeezing the base URL. */
-.cap-badge { position:relative;display:inline-flex;align-items:center;gap:3px;padding:3px 7px;border-radius:10px;font-size:11px;font-weight:600;letter-spacing:.02em;margin:0 2px;vertical-align:middle; }
+/* The capability checkboxes in the provider drawer: one framed option per
+   model type.  The frame used to be an inline style set from JS, which no
+   rule could override; the container id is the hook, so the JS builds plain
+   labels. */
+#provCapChecks > label {
+  flex: 1; display: flex; align-items: center; gap: 6px;
+  padding: 8px 12px; border: 1px solid var(--border);
+  border-radius: var(--radius-control); cursor: pointer;
+  font-size: var(--fs-xs); transition: border-color .15s ease, background .15s ease;
+}
+#provCapChecks > label:hover { border-color: var(--text-dim); }
+#provCapChecks > label:has(input:checked) { border-color: var(--accent); background: var(--surface-2); }
+
+/* Capability tags are not status: square, outlined, mono, uppercase — the
+   epic keeps the pill for status alone, so a capability cannot be mistaken
+   for an outcome at a glance. */
+.cap-badge { position:relative;display:inline-flex;align-items:center;gap:4px;height:18px;padding:0 7px;
+  border:1px solid color-mix(in srgb, currentColor 30%, transparent);border-radius:var(--radius-control);
+  background:color-mix(in srgb, currentColor 8%, transparent);
+  font-family:var(--mono);font-size:var(--fs-micro);font-weight:500;letter-spacing:var(--tracking-label);
+  text-transform:uppercase;line-height:1;margin:0 2px;vertical-align:middle; }
 /* A capability that no longer routes: greyed out, with an `!` overlay that
    names the type and carries the reason in its tooltip. */
 .cap-badge.is-off { filter:grayscale(1);opacity:.55; }
 .cap-badge-alert { position:absolute;top:-5px;right:-5px;width:13px;height:13px;border-radius:50%;background:var(--red);color:#fff;font-size:9px;font-weight:700;line-height:13px;text-align:center;box-shadow:0 0 0 2px var(--bg-card); }
 /* Icon-only capability badge: same height as the named ones, square. */
-#tab-models .mn-badges .cap-badge { padding:4px;border-radius:6px;margin:0; }
+#tab-models .mn-badges .cap-badge { padding:4px;border-radius:var(--radius-control);margin:0; }
 #tab-models .mn-badges .cap-badge svg { width:12px;height:12px; }
 .cap-badge svg { width:11px;height:11px;flex-shrink:0; }
-.cap-badge-llm { background:color-mix(in srgb, var(--green) 12%, transparent);color:var(--green); }
-.cap-badge-embedding { background:color-mix(in srgb, var(--blue) 12%, transparent);color:var(--blue); }
-.cap-badge-rerank { background:color-mix(in srgb, var(--orange) 12%, transparent);color:var(--orange); }
-.cap-badge-decision { background:color-mix(in srgb, #8b5cf6 12%, transparent);color:#8b5cf6; }
-.cap-badge-text { background:color-mix(in srgb, var(--text-dim) 15%, transparent);color:var(--text-dim); }
-.cap-badge-vision { background:color-mix(in srgb, var(--magenta) 12%, transparent);color:var(--magenta); }
+.cap-badge-llm { color:var(--green); }
+.cap-badge-embedding { color:var(--blue); }
+.cap-badge-rerank { color:var(--orange); }
+.cap-badge-decision { color:#8b5cf6; }
+.cap-badge-text { color:var(--text-dim); }
+.cap-badge-vision { color:var(--magenta); }
 /* Capability hues avoid the status vocabulary: red, green and orange mean
    failed, healthy and warning everywhere else in the console, so a small dot
    in one of them reads as a state rather than a capability.  Reasoning was
@@ -186,8 +244,8 @@ tr:hover td { background: var(--bg-hover); }
    far enough toward yellow that it does not read as the board's healthy dot.
    Tools took the cyan the reasoning teal used to hold, and vision moved from
    purple to magenta because its old dot read as a dark smudge on white. */
-.cap-badge-tools { background:color-mix(in srgb, var(--cyan) 10%, transparent);color:var(--cyan); }
-.cap-badge-reasoning { background:color-mix(in srgb, var(--lime) 10%, transparent);color:var(--lime); }
+.cap-badge-tools { color:var(--cyan); }
+.cap-badge-reasoning { color:var(--lime); }
 /* Provider-model cross-navigation */
 .provider-link { color:inherit;cursor:pointer;text-decoration:none; }
 .provider-link:hover { text-decoration:underline;color:var(--accent); }
@@ -204,7 +262,7 @@ tr:hover td { background: var(--bg-hover); }
 .provider-list-item .provider-link { font-size:12px; }
 .provider-list-item .provider-weight { font-size:10px;color:var(--text-dim);background:var(--bg);padding:1px 4px;border-radius:3px; }
 .provider-list-item .provider-upstream { font-size:10px;color:var(--text-dim); }
-.provider-list-item .weight-input { width:40px;padding:1px 4px;font-size:11px;text-align:center;border:1px solid var(--border);border-radius:3px;background:var(--bg);color:var(--text);font-family:var(--mono); }
+.provider-list-item .weight-input { width:40px;text-align:center;font-family:var(--mono); }
 .provider-list-item .weight-input::-webkit-inner-spin-button { opacity:0; }
 .provider-list-item .weight-input:hover::-webkit-inner-spin-button { opacity:1; }
 .provider-list-item .remove-provider { opacity:0;cursor:pointer;font-size:10px;color:var(--text-dim);background:none;border:none;padding:0 2px;line-height:1; }
@@ -212,7 +270,7 @@ tr:hover td { background: var(--bg-hover); }
 .provider-list-item .remove-provider:hover { opacity:1;color:var(--danger, #cf222e); }
 .provider-card.highlight { border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent);transition:box-shadow 0.3s,border-color 0.3s; }
 /* Reset filter button */
-.btn-reset { padding:4px 8px;font-size:11px;color:var(--text-dim);border:1px solid var(--border);border-radius:6px;background:none;cursor:pointer;display:none;align-items:center;gap:3px;transition:all 0.15s; }
+.btn-reset { height:28px;padding:0 10px;font-size:var(--fs-xs);color:var(--text-dim);border:1px solid var(--border);border-radius:var(--radius-control);background:var(--surface);cursor:pointer;display:none;align-items:center;gap:4px;transition:color .15s,border-color .15s; }
 .btn-reset:hover { color:var(--red);border-color:var(--red); }
 .btn-reset.visible { display:inline-flex; }
 /* Endpoint config sections in provider modal */
@@ -260,7 +318,7 @@ tr:hover td { background: var(--bg-hover); }
 }
 .prov-tab:hover { color:var(--text); }
 .prov-tab.active { color:var(--text); border-bottom-color:var(--accent); font-weight:600; }
-.prov-tab:focus-visible { outline:2px solid var(--blue); outline-offset:2px; }
+.prov-tab:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
 .prov-tab-badge { width:7px; height:7px; border-radius:50%; background:var(--red); display:inline-block; }
 .prov-tab-badge[hidden] { display:none; }
 .prov-pane[hidden] { display:none; }
@@ -275,9 +333,10 @@ tr:hover td { background: var(--bg-hover); }
 .prov-auth-summary-head { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:8px; }
 .prov-mode-chips { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:6px; }
 .prov-mode-chip {
-  appearance:none; font-family:inherit; cursor:pointer; font-size:12px;
-  padding:3px 10px; border:1px solid var(--border); border-radius:20px;
-  color:var(--text-dim); background:var(--bg);
+  appearance:none; font-family:inherit; cursor:pointer; font-size:var(--fs-xs);
+  height:28px; padding:0 var(--space-2); border:1px solid var(--border);
+  border-radius:var(--radius-control); line-height:1;
+  color:var(--text-dim); background:var(--surface);
 }
 .prov-mode-chip:hover { border-color:var(--border-strong,var(--border)); color:var(--text); }
 .prov-mode-chip[aria-pressed="true"] { border-color:var(--accent); color:var(--text); font-weight:600; box-shadow:inset 0 0 0 1px var(--accent); }
@@ -300,7 +359,7 @@ tr:hover td { background: var(--bg-hover); }
 }
 .prov-source:hover { border-color:var(--border-strong,var(--border)); background:var(--bg-hover); }
 .prov-source[aria-checked="true"] { border-color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent); background:var(--bg-card); }
-.prov-source:focus-visible { outline:2px solid var(--blue); outline-offset:2px; }
+.prov-source:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
 .prov-source[hidden] { display:none; }
 .prov-source .t { font-weight:600; font-size:13px; }
 .prov-source .d { font-size:11.5px; color:var(--text-dim); }
@@ -325,12 +384,12 @@ tr:hover td { background: var(--bg-hover); }
 .prov-argv { display:flex; flex-direction:column; gap:6px; }
 .prov-arg-row { display:flex; gap:6px; align-items:center; }
 .prov-arg-row input { flex:1; min-width:0; }
-.prov-icon-btn {
-  appearance:none; cursor:pointer; border:1px solid var(--border); background:var(--bg);
-  color:var(--text-dim); border-radius:4px; width:28px; height:28px; flex:none;
-  font-size:14px; line-height:1; font-family:inherit;
+button.prov-icon-btn {
+  appearance:none; cursor:pointer; border:1px solid var(--border); background:var(--surface);
+  color:var(--text-dim); border-radius:var(--radius-control); width:28px; height:28px; flex:none;
+  font-size:var(--fs-base); line-height:1; font-family:inherit;
 }
-.prov-icon-btn:hover { background:var(--bg-hover); color:var(--text); }
+button.prov-icon-btn:hover { background:var(--bg-hover); color:var(--text); }
 .prov-add-arg { margin-top:6px; }
 /* On the token scale rather than a bare `em`: a relative size here made the
    hint (0.8 × 16 = 12.8px) outgrow the card heading it explains. */
@@ -356,7 +415,7 @@ tr:hover td { background: var(--bg-hover); }
 .prov-credential-state { font-size:0.88em; line-height:1.5; }
 @media (max-width: 520px) { .prov-sources { grid-template-columns:1fr; } }
 .chip-group { display:flex;gap:6px;flex-wrap:wrap; }
-.chip { display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border:1px solid var(--border);border-radius:20px;font-size:13px;cursor:pointer;user-select:none;transition:all 0.15s;background:var(--bg-card);color:var(--text-dim); }
+.chip { display:inline-flex;align-items:center;gap:5px;height:28px;padding:0 10px;border:1px solid var(--border);border-radius:var(--radius-control);font-size:var(--fs-xs);font-weight:500;cursor:pointer;user-select:none;transition:background .15s,color .15s,border-color .15s;background:var(--surface);color:var(--text-dim); }
 .chip:hover { border-color:var(--accent);color:var(--accent); }
 .chip.active { background:var(--accent);border-color:var(--accent);color:var(--accent-on); }
 /* Type-qualified so the `.modal input { width:100% }` rule cannot stretch the
@@ -371,7 +430,7 @@ tr:hover td { background: var(--bg-hover); }
 .bulk-bar .bulk-count { font-weight:600;color:var(--accent); }
 .bulk-bar .bulk-actions { margin-left:auto;display:flex;gap:6px; }
 .row-check { width:16px;height:16px;cursor:pointer;accent-color:var(--accent); }
-.pill-toggle { display:inline-flex;border:1px solid var(--border);border-radius:14px;overflow:hidden;font-size:11px;font-weight:600;cursor:pointer;user-select:none;vertical-align:middle;min-width:52px;text-align:center; }
+.pill-toggle { display:inline-flex;border:1px solid var(--border);border-radius:var(--radius-control);overflow:hidden;font-size:var(--fs-micro);font-weight:600;cursor:pointer;user-select:none;vertical-align:middle;min-width:52px;text-align:center; }
 .toggle.row-toggle { width:32px;height:18px;flex:0 0 auto; }
 .toggle.row-toggle .slider::before { height:12px;width:12px;left:3px;bottom:2px; }
 .toggle.row-toggle input:checked + .slider::before { transform:translateX(14px); }
@@ -536,13 +595,13 @@ tr:hover td { background: var(--bg-hover); }
 /* ═══ Provider type picker (Top level + Base type) ═══ */
 .type-picker { position:relative; }
 .type-picker-trigger {
-  display:flex;align-items:center;gap:8px;width:100%;min-width:0;
-  padding:8px 12px;background:var(--bg);border:1px solid var(--border);
-  border-radius:var(--radius);color:var(--text);font-size:14px;
+  display:flex;align-items:center;gap:8px;width:100%;min-width:0;height:28px;
+  padding:0 10px;background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-control);color:var(--text);font-size:var(--fs-xs);
   font-family:var(--mono);cursor:pointer;text-align:left;
 }
 .type-picker-trigger:hover { border-color:var(--text-dim); }
-.type-picker-trigger:focus { outline:none;border-color:var(--accent); }
+.type-picker-trigger:focus { border-color:var(--accent); }
 .type-picker-logo { width:18px;height:18px;flex-shrink:0;object-fit:contain;border-radius:2px; }
 .tp-trigger-label { flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
 .tp-trigger-label.tp-placeholder { color:var(--text-muted); }
@@ -564,7 +623,7 @@ tr:hover td { background: var(--bg-hover); }
   background:var(--bg-card);border-bottom:1px solid var(--border);
 }
 .tp-view-toggle button {
-  flex:1;padding:4px 8px;font-size:11px;border:1px solid transparent;border-radius:4px;
+  flex:1;padding:4px 8px;font-size:11px;border:1px solid transparent;border-radius:var(--radius-control);
   background:none;color:var(--text-dim);cursor:pointer;font-family:inherit;
 }
 .tp-view-toggle button:hover { background:var(--bg-hover); }
@@ -575,11 +634,11 @@ tr:hover td { background: var(--bg-hover); }
 .tp-list { padding:4px; }
 .tp-group-label { padding:6px 10px 4px;font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.6px; }
 .tp-item {
-  display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:4px;
+  display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:var(--radius-control);
   cursor:pointer;font-size:13px;color:var(--text);min-width:0;
 }
 .tp-item:hover { background:var(--bg-hover); }
-.tp-item:focus { outline:none;background:var(--bg-hover);box-shadow:inset 0 0 0 1px var(--accent); }
+.tp-item:focus { background:var(--bg-hover);box-shadow:inset 0 0 0 1px var(--accent); }
 .tp-item.tp-active { background:color-mix(in srgb, var(--accent) 12%, transparent);color:var(--accent);font-weight:500; }
 .tp-logo { width:16px;height:16px;flex-shrink:0;object-fit:contain;border-radius:2px; }
 .tp-logo-empty { border:1px dashed var(--border);border-radius:3px; }
@@ -608,9 +667,12 @@ tr:hover td { background: var(--bg-hover); }
 .key-cell { display: flex; align-items: center; gap: 4px; }
 .key-cell code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .key-actions { display: flex; gap: 2px; flex-shrink: 0; }
+/* Measured: the key row is already 49px tall, so a 28px button changes
+   nothing there — it takes the button scale like every other button. */
 .key-btn {
-  background: none; border: none; cursor: pointer; padding: 2px 4px;
-  color: var(--text-dim); font-size: 13px; line-height: 1; border-radius: 3px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: none; border: none; cursor: pointer; padding: 0 6px; height: 28px;
+  color: var(--text-dim); font-size: var(--fs-xs); line-height: 1; border-radius: var(--radius-control);
 }
 .key-btn:hover { color: var(--accent); background: var(--bg-hover); }
 code.copyable { cursor: pointer; transition: background 0.15s; }
@@ -651,7 +713,8 @@ code.copyable:hover { background: var(--bg-hover); }
 #providerModal .drawer-head h3, #fetchModelsModal .drawer-head h3 { margin: 0; }
 .drawer-close {
   appearance: none; border: 0; background: transparent; color: var(--text-dim);
-  font-size: 14px; line-height: 1; padding: 6px 8px; border-radius: 6px; cursor: pointer;
+  width: 28px; height: 28px; padding: 0; line-height: 1;
+  border-radius: var(--radius-control); font-size: var(--fs-base); cursor: pointer;
 }
 .drawer-close:hover { background: var(--bg-hover); color: var(--text); }
 #providerModal > .modal > .modal-actions,
@@ -666,12 +729,9 @@ code.copyable:hover { background: var(--bg-hover); }
 
 .form-group { margin-bottom: 14px; }
 .form-group label { display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
-.form-group input, .form-group select {
-  width: 100%; padding: 8px 12px; background: var(--bg); border: 1px solid var(--border);
-  border-radius: var(--radius); color: var(--text); font-size: 14px;
-}
+.form-group input, .form-group select { width: 100%; }
 .form-group input { font-family: var(--mono); }
-.form-group input:focus, .form-group select:focus, .form-group textarea:focus { outline: none; border-color: var(--accent); }
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: var(--accent); }
 .form-row { display: flex; gap: 10px; }
 .form-row > .form-group { flex: 1; min-width: 0; }
 .form-row.align-end { align-items: flex-end; }
@@ -686,8 +746,8 @@ code.copyable:hover { background: var(--bg-hover); }
 /* Multi-key entry list (auto-switches from single input when comma-separated keys detected) */
 .multi-key-list { display:flex;flex-direction:column;gap:4px;margin-top:4px; }
 .multi-key-row { display:flex;gap:4px;align-items:center; }
-.multi-key-row input { flex:1;padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:13px;font-family:var(--mono); }
-.multi-key-row input:focus { outline:none;border-color:var(--accent); }
+.multi-key-row input { flex:1;font-family:var(--mono); }
+.multi-key-row input:focus { border-color:var(--accent); }
 .multi-key-row .key-btn { flex-shrink:0; }
 .multi-key-footer { display:flex;align-items:center;gap:8px;margin-top:4px; }
 .multi-key-footer .key-count { font-size:11px;color:var(--text-dim); }
@@ -739,9 +799,11 @@ canvas { width: 100%; height: 160px; }
 .chart-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .chart-head h3 { margin-bottom: 0; }
 .chart-range { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--border); border-radius: 7px; }
+/* Measured: at 28px the chart header grows from 25px to 34px, so this is the
+   one button that keeps a smaller height.  Squared like the rest. */
 .chart-range-btn {
   appearance: none; border: 0; background: transparent; color: var(--text-dim);
-  font: inherit; font-size: 11px; padding: 2px 9px; border-radius: 5px; cursor: pointer;
+  font: inherit; font-size: 11px; padding: 2px 9px; border-radius: var(--radius-control); cursor: pointer;
 }
 .chart-range-btn:hover { color: var(--text); background: var(--bg-hover); }
 .chart-range-btn.is-active { color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); font-weight: 600; }
@@ -762,10 +824,7 @@ canvas { width: 100%; height: 160px; }
 
 /* Filters */
 .filters { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
-.filters select, .filters input {
-  padding: 6px 10px; background: var(--bg-card); border: 1px solid var(--border);
-  border-radius: var(--radius); color: var(--text); font-size: 13px;
-}
+
 
 /* Log view switch + auto-refresh pause */
 .log-view-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
@@ -775,27 +834,32 @@ canvas { width: 100%; height: 160px; }
 .pagination .info { font-size: 13px; color: var(--text-dim); }
 /* Page-jump box: narrow, so it never competes with the pager buttons. */
 .page-jump-group { display: inline-flex; align-items: center; gap: 6px; }
-.page-jump {
-  width: 68px; padding: 5px 8px; background: var(--bg-card); border: 1px solid var(--border);
-  border-radius: var(--radius); color: var(--text); font-size: 13px; text-align: center;
-}
-.page-jump:disabled { opacity: 0.5; }
+.page-jump { width: 68px; text-align: center; }
 
 /* Status badge */
+/* Status tags are the one place the epic keeps a pill.  Outlined, not
+   filled: the fill is the text colour at 8%, so a variant only chooses its
+   colour and cannot drift into a second background recipe. */
 .badge {
-  display: inline-block; padding: 2px 8px; border-radius: var(--badge-radius); font-size: 11px; font-weight: var(--badge-weight);
+  display: inline-flex; align-items: center; gap: 4px;
+  height: 18px; padding: 0 7px; vertical-align: middle;
+  border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, currentColor 8%, transparent);
+  font-family: var(--mono); font-size: var(--fs-micro); font-weight: 500;
+  letter-spacing: var(--tracking-label); text-transform: uppercase; line-height: 1;
 }
-.badge-ok { background: color-mix(in srgb, var(--green) 15%, transparent); color: var(--green); }
-.badge-error { background: color-mix(in srgb, var(--red) 15%, transparent); color: var(--red); }
-.badge-warning { background: color-mix(in srgb, var(--yellow, #eab308) 15%, transparent); color: var(--yellow, #eab308); }
-.badge-stream { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); }
+.badge-ok { color: var(--green); }
+.badge-error { color: var(--red); }
+.badge-warning { color: var(--yellow, #eab308); }
+.badge-stream { color: var(--accent); }
 
 /* Capability badges */
-.badge-cap { background: color-mix(in srgb, var(--text-dim) 15%, transparent); color: var(--text-dim); font-size: 10px; padding: 1px 5px; margin-right: 4px; display:inline-flex; align-items:center; gap:2px; }
-.badge-cap-vision { background: color-mix(in srgb, var(--purple) 12%, transparent); color: var(--purple); }
-.badge-cap-tools { background: color-mix(in srgb, var(--blue) 8%, var(--green) 4%); color: color-mix(in srgb, var(--blue) 50%, var(--green)); }
-.badge-cap-embed { background: color-mix(in srgb, var(--blue) 12%, transparent); color: var(--blue); }
-.badge-cap-reasoning { background: color-mix(in srgb, var(--red) 8%, transparent); color: var(--red); }
+.badge-cap { color: var(--text-dim); margin-right: 4px; }
+.badge-cap-vision { color: var(--purple); }
+.badge-cap-tools { color: color-mix(in srgb, var(--blue) 50%, var(--green)); }
+.badge-cap-embed { color: var(--blue); }
+.badge-cap-reasoning { color: var(--red); }
 
 /* Checkbox group */
 .checkbox-group { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
@@ -805,12 +869,12 @@ canvas { width: 100%; height: 160px; }
 /* Test button dropdown */
 .test-group { position: relative; display: inline-flex; }
 .test-group .btn-test {
-  border-radius: var(--radius) 0 0 var(--radius); border-right: none;
+  border-radius: var(--radius-control) 0 0 var(--radius-control); border-right: none;
   color: var(--orange); font-weight: 600;
 }
 .test-group .btn-test:hover { background: color-mix(in srgb, var(--orange) 10%, transparent); }
 .test-group .btn-caret {
-  border-radius: 0 var(--radius) var(--radius) 0; padding: 4px 6px;
+  border-radius: 0 var(--radius-control) var(--radius-control) 0; padding: 0 6px;
   color: var(--orange);
 }
 .test-group .btn-caret:hover { background: color-mix(in srgb, var(--orange) 10%, transparent); }
@@ -862,7 +926,7 @@ canvas { width: 100%; height: 160px; }
 .md-row { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
 .md-label { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-dim); }
 .md-caps { display: flex; gap: 4px; flex-wrap: wrap; }
-.md-caps .cap-badge { padding: 2px 8px; border-radius: 10px; }
+.md-caps .cap-badge { padding: 0 7px; border-radius: var(--radius-control); }
 .md-providers { border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
 /* The drawer's "one more lane" row: a full-width footer inside the provider
    box, so it reads as one more row of the same list. */
@@ -981,7 +1045,7 @@ canvas { width: 100%; height: 160px; }
 .cap-picker { display: inline-flex; }
 .cap-menu-toggle {
   display: inline-flex; align-items: center; gap: 3px;
-  border: 1px solid var(--border); border-radius: 4px;
+  border: 1px solid var(--border); border-radius: var(--radius-control);
   background: var(--bg-card); padding: 2px 5px; cursor: pointer;
 }
 /* One 5 px circle per capability, in its badge's colour: four of them still
@@ -1000,7 +1064,7 @@ canvas { width: 100%; height: 160px; }
 .cap-menu { min-width: 150px; padding: 4px; }
 .cap-menu-row {
   display: flex; align-items: center; gap: 8px;
-  padding: 5px 8px; border-radius: 4px; cursor: pointer; font-size: 12px;
+  padding: 5px 8px; border-radius: var(--radius-control); cursor: pointer; font-size: 12px;
 }
 .cap-menu-row:hover { background: var(--bg-hover); }
 .cap-menu-row input { margin: 0; }
@@ -1031,12 +1095,8 @@ canvas { width: 100%; height: 160px; }
   display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
   margin: 2px 0 8px;
 }
-.shim-filter {
-  width: 260px; padding: 5px 10px; font-size: 12px;
-  background: var(--bg); color: var(--text);
-  border: 1px solid var(--border); border-radius: 6px;
-}
-.shim-filter:focus { outline: none; border-color: var(--accent); }
+.shim-filter { width: 260px; }
+.shim-filter:focus { border-color: var(--accent); }
 .shim-inventory-list { max-height: 360px; overflow-y: auto; }
 .shim-count { font-size: 11px; color: var(--text-dim); }
 .shim-group + .shim-group {
@@ -1201,41 +1261,37 @@ th.sortable:focus-visible { outline:2px solid var(--accent);outline-offset:-2px;
 .facet-sep { width:1px; height:16px; background:var(--border); margin:0 6px; }
 .facet-chips { display:flex; align-items:center; gap:2px; flex-wrap:wrap; }
 .facet-chips > div {
-  display:flex; align-items:center; padding:4px 10px; border-radius:14px;
-  font-size:12px; color:var(--text-dim); cursor:pointer; user-select:none;
+  display:flex; align-items:center; height:28px; padding:0 10px;
+  border:1px solid transparent; border-radius:var(--radius-control);
+  font-size:var(--fs-xs); font-weight:500; color:var(--text-dim); cursor:pointer; user-select:none;
 }
 .facet-chips > div:hover { background:var(--bg-hover); color:var(--text); }
 .facet-chips > div.active {
-  background:var(--bg-card); color:var(--text);
-  box-shadow: inset 0 0 0 1px var(--border);
+  background:var(--surface); color:var(--text); border-color:var(--border);
 }
 /* The dump filters are a row of selects, not the models panel's two-row
    toolbar; they borrowed its class before the split. */
 .dump-toolbar { display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap; }
-.dump-toolbar select { padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:13px; }
-.dump-toolbar input {
-  flex:1;min-width:120px;padding:6px 10px;background:var(--bg);
-  border:1px solid var(--border);border-radius:var(--radius);
-  color:var(--text);font-size:13px;font-family:var(--mono);
-}
+
+.dump-toolbar input { flex:1;min-width:120px;font-family:var(--mono); }
 /* The id box is a lookup, not a filter over the list: it keeps its size. */
 .dump-toolbar #dumpIdSearch { flex: 0 0 190px; }
-.model-toolbar input, .provider-toolbar input { flex:1;min-width:180px;max-width:300px;padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:13px;font-family:var(--mono); }
+.model-toolbar input, .provider-toolbar input { flex:1;min-width:180px;max-width:300px;font-family:var(--mono); }
 .model-toolbar #modelSearch { max-width: 280px; }
-.model-toolbar select { padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:13px; }
+
 
 /* Provider filter — a custom listbox, because a native <select> cannot
    render the logo each provider card shows.  The hidden input inside keeps
    `element.value` working for the existing call sites. */
 .logo-select { position:relative; }
 .logo-select-trigger {
-  display:flex; align-items:center; gap:7px; min-width:160px; max-width:260px;
-  padding:6px 10px; background:var(--bg); border:1px solid var(--border);
-  border-radius:var(--radius); color:var(--text); font-size:13px;
+  display:flex; align-items:center; gap:7px; min-width:160px; max-width:260px; height:28px;
+  padding:0 10px; background:var(--surface); border:1px solid var(--border);
+  border-radius:var(--radius-control); color:var(--text); font-size:var(--fs-xs);
   font-family:inherit; cursor:pointer; text-align:left;
 }
 .logo-select-trigger:hover { border-color:var(--text-dim); }
-.logo-select-trigger:focus-visible { outline:none; border-color:var(--accent); }
+.logo-select-trigger:focus-visible { border-color:var(--accent); }
 .logo-select-label { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .logo-select-chevron { color:var(--text-dim); font-size:10px; flex-shrink:0; }
 .logo-select-img { width:16px; height:16px; object-fit:contain; border-radius:2px; flex-shrink:0; }
@@ -1246,11 +1302,10 @@ th.sortable:focus-visible { outline:2px solid var(--accent);outline-offset:-2px;
   background:var(--bg-card); border:1px solid var(--border);
   border-radius:var(--radius); box-shadow:0 8px 24px rgba(0,0,0,.35);
 }
-.logo-select-panel:focus { outline:none; }
 .logo-select.open .logo-select-panel { display:block; }
 .logo-select-option {
   display:flex; align-items:center; gap:8px; padding:7px 10px;
-  border-radius:4px; cursor:pointer; font-size:13px; white-space:nowrap;
+  border-radius:var(--radius-control); cursor:pointer; font-size:var(--fs-xs); white-space:nowrap;
 }
 .logo-select-option:hover, .logo-select-option.active { background:var(--bg-hover); }
 .logo-select-option.selected { color:var(--accent); }
@@ -1267,8 +1322,8 @@ th.sortable:focus-visible { outline:2px solid var(--accent);outline-offset:-2px;
 /* The usage-range tiers are chips with the same weight as the model facets,
    and carry a visually hidden radio so arrow keys still work. */
 .facet-chips > label {
-  display:flex; align-items:center; position:relative;
-  padding:4px 10px; border-radius:14px; font-size:12px;
+  display:flex; align-items:center; position:relative; height:28px;
+  padding:0 10px; border-radius:var(--radius-control); font-size:var(--fs-xs); font-weight:500;
   color:var(--text-dim); cursor:pointer; user-select:none;
 }
 .facet-chips > label:hover { background:var(--bg-hover); color:var(--text); }
@@ -1281,10 +1336,7 @@ th.sortable:focus-visible { outline:2px solid var(--accent);outline-offset:-2px;
 .sr-select { position:absolute;width:1px;height:1px;opacity:0;pointer-events:none; }
 .filters { display:flex; flex-direction:column; gap:8px; margin-bottom:10px; }
 .filters .mt-row { flex-wrap:wrap; }
-.filters select {
-  padding:5px 8px; background:var(--bg); border:1px solid var(--border);
-  border-radius:var(--radius); color:var(--text); font-size:12px;
-}
+
 /* Key rows: the pencil and the row actions stay quiet until the row is used. */
 #keysTable .key-btn,
 #keysTable .key-actions-cell .btn { opacity:0; transition:opacity .12s ease; }
@@ -1311,12 +1363,7 @@ th.sortable:focus-visible { outline:2px solid var(--accent);outline-offset:-2px;
    the toolbar grows the same sort select + direction toggle as Models. */
 .key-sort-mobile { display:none;align-items:center;gap:6px; }
 #keySortDirBtn { min-width:34px; }
-.key-sort-mobile #keySortDirBtn:disabled { opacity:.4; cursor:default; }
-.key-toolbar #keySearch {
-  flex:1;min-width:160px;max-width:280px;padding:6px 10px;
-  background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);
-  color:var(--text);font-size:13px;
-}
+.key-toolbar #keySearch { flex:1;min-width:160px;max-width:280px;font-family:var(--mono); }
 .key-toolbar .key-count { font-size:12px;color:var(--text-dim);white-space:nowrap; }
 
 
@@ -1373,12 +1420,12 @@ th.sortable:focus-visible { outline:2px solid var(--accent);outline-offset:-2px;
 .fetch-models-list label:last-child { border-bottom:none; }
 .fetch-models-list input[type="checkbox"] { flex-shrink:0; }
 .fetch-toolbar { display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap; }
-.fetch-toolbar input { flex:1;min-width:120px;max-width:200px;padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:13px;font-family:var(--mono); }
+.fetch-toolbar input { flex:1;min-width:120px;max-width:200px;font-family:var(--mono); }
 .fetch-toolbar .btn { flex-shrink:0; }
 .fetch-count { font-size:12px;color:var(--text-dim); }
 .prefix-group { display:flex;align-items:center;gap:8px;margin:8px 0; }
 .prefix-group label { font-size:13px;white-space:nowrap; }
-.prefix-group input { flex:1;max-width:240px;padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:13px;font-family:var(--mono); }
+.prefix-group input { flex:1;max-width:240px;font-family:var(--mono); }
 .prefix-preview { font-size:12px;color:var(--text-dim);margin:4px 0 8px 0;font-family:var(--mono); }
 .fetch-type-group { margin:10px 0 4px; }
 .fetch-type-group > label { font-size:13px;font-weight:500;margin-bottom:4px;display:block; }
@@ -1408,18 +1455,19 @@ th.sortable:focus-visible { outline:2px solid var(--accent);outline-offset:-2px;
 
 .login-field { position:relative; }
 .login-field input {
-  width:100%;padding:11px 40px 11px 12px;border:1px solid var(--border);border-radius:var(--radius);
-  background:var(--bg);color:var(--text);font-size:14px;box-sizing:border-box;
+  width:100%;padding:11px 40px 11px 12px;border:1px solid var(--border);border-radius:var(--radius-control);
+  background:var(--surface);color:var(--text);font-size:var(--fs-base);box-sizing:border-box;
   transition:border-color .15s, box-shadow .15s;
 }
 .login-field input:focus {
-  outline:none;border-color:var(--accent);
+  border-color:var(--accent);
   box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
 }
-.login-reveal {
+button.login-reveal {
   position:absolute;top:0;right:0;height:100%;width:38px;padding:0;margin:0;
   display:flex;align-items:center;justify-content:center;
-  background:none;border:none;color:var(--text-dim);cursor:pointer;border-radius:var(--radius);
+  background:none;border:none;color:var(--text-dim);cursor:pointer;
+  border-radius:var(--radius-control);
 }
 .login-reveal:hover { color:var(--text); }
 .login-reveal svg { width:16px;height:16px; }
@@ -1433,7 +1481,7 @@ th.sortable:focus-visible { outline:2px solid var(--accent);outline-offset:-2px;
 }
 /* `display:flex` would otherwise win over the hidden attribute. */
 .login-remember[hidden] { display:none; }
-.login-remember input { width:14px;height:14px;margin:0;accent-color:var(--accent);cursor:pointer; }
+.login-remember input[type="checkbox"] { width:14px;height:14px;margin:0;accent-color:var(--accent);cursor:pointer; }
 .login-remember-days { color:var(--text-dim);opacity:.8; }
 
 .login-box .login-error {
@@ -1441,12 +1489,13 @@ th.sortable:focus-visible { outline:2px solid var(--accent);outline-offset:-2px;
   text-align:left;
 }
 .login-box .login-submit {
-  margin-top:12px;width:100%;padding:11px;border:none;border-radius:var(--radius);
+  margin-top:12px;width:100%;padding:11px;border:none;border-radius:var(--radius-control);
   background:var(--accent);color:var(--accent-on);font-size:14px;font-weight:600;cursor:pointer;
   transition:background .15s, opacity .15s;
 }
 .login-box .login-submit:hover { background:var(--accent-hover); }
-.login-box .login-submit[disabled] { opacity:.65;cursor:progress; }
+/* Signing in is the one busy state: the shared fade, but a progress cursor. */
+.login-box .login-submit[disabled] { cursor:progress; }
 .login-foot {
   margin-top:16px;padding-top:14px;border-top:1px solid var(--border);
   font-size:11px;color:var(--text-dim);line-height:1.5;
@@ -1458,8 +1507,8 @@ th.sortable:focus-visible { outline:2px solid var(--accent);outline-offset:-2px;
    Borderless like the console rail's controls: a box around two 24px glyphs
    reads as a form field the card does not have. */
 .login-prefs { display:flex;gap:2px;flex:0 0 auto; }
-.login-pref-btn {
-  width:24px;height:24px;padding:0;border:0;border-radius:6px;
+button.login-pref-btn {
+  width:28px;height:28px;padding:0;border:0;border-radius:var(--radius-control);
   background:transparent;color:var(--text-dim);font-size:11px;font-weight:600;
   cursor:pointer;display:flex;align-items:center;justify-content:center;
 }
@@ -1599,20 +1648,19 @@ th.sortable:focus-visible { outline:2px solid var(--accent);outline-offset:-2px;
 .lp-wrapper { position:relative; }
 .lp-input-row { display:flex;align-items:center;gap:6px; }
 .lp-input-row input {
-  flex:1;padding:8px 12px;background:var(--bg);border:1px solid var(--border);
-  border-radius:var(--radius);color:var(--text);font-size:14px;font-family:var(--mono);
+  flex:1;font-family:var(--mono);
 }
-.lp-input-row input:focus { outline:none;border-color:var(--accent); }
+.lp-input-row input:focus { border-color:var(--accent); }
 .lp-preview {
   width:24px;height:24px;flex-shrink:0;border-radius:4px;
   border:1px solid var(--border);background:var(--bg);
   display:flex;align-items:center;justify-content:center;overflow:hidden;
 }
 .lp-preview img { width:18px;height:18px;object-fit:contain; }
-.lp-clear {
+button.lp-clear {
   display:none;flex-shrink:0;background:none;border:none;cursor:pointer;
   color:var(--text-dim);padding:2px 4px;font-size:16px;line-height:1;
-  border-radius:3px;transition:color 0.15s;
+  border-radius:var(--radius-control);transition:color 0.15s;
 }
 .lp-clear:hover { color:var(--red); }
 .lp-dropdown {
@@ -1632,7 +1680,7 @@ th.sortable:focus-visible { outline:2px solid var(--accent);outline-offset:-2px;
 }
 .lp-grid { display:flex;flex-wrap:wrap;gap:2px;padding:4px 6px; }
 .lp-item {
-  display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:4px;
+  display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:var(--radius-control);
   cursor:pointer;font-size:12px;color:var(--text);transition:background 0.1s;
   min-width:0;flex:0 0 auto;max-width:180px;
 }
@@ -1651,12 +1699,14 @@ th.sortable:focus-visible { outline:2px solid var(--accent);outline-offset:-2px;
 /* Compact logo picker (icon button mode) */
 .lp-compact { display:inline-flex;align-items:flex-start;gap:4px;position:relative; }
 .lp-trigger {
-  width:36px;height:36px;border:1px solid var(--border);border-radius:var(--radius);
-  background:var(--bg);cursor:pointer;display:flex;align-items:center;justify-content:center;
+  width:28px;height:28px;border:1px solid var(--border);border-radius:var(--radius-control);
+  background:var(--surface);cursor:pointer;display:flex;align-items:center;justify-content:center;
   padding:0;transition:border-color 0.15s;
 }
 .lp-trigger:hover { border-color:var(--text-dim); }
-.lp-trigger-img { width:24px;height:24px;object-fit:contain; }
+/* Measured: a 24px glyph leaves 1px of frame inside a 28px button; 18 keeps
+   the 5px inset the 36px box had. */
+.lp-trigger-img { width:18px;height:18px;object-fit:contain; }
 .lp-placeholder { color:var(--text-muted); }
 .lp-clear-compact {
   position:absolute;top:-4px;right:-4px;width:14px;height:14px;
@@ -1667,12 +1717,8 @@ th.sortable:focus-visible { outline:2px solid var(--accent);outline-offset:-2px;
 .lp-clear-compact:hover { color:var(--red);border-color:var(--red); }
 .lp-compact .lp-dropdown { left:0;top:calc(100% + 4px);min-width:280px; }
 .lp-search-row { padding:6px;border-bottom:1px solid var(--border); }
-.lp-search-row input {
-  width:100%;padding:6px 8px;font-size:12px;
-  background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);
-  color:var(--text);font-family:var(--mono);
-}
-.lp-search-row input:focus { outline:none;border-color:var(--accent); }
+.lp-search-row input { width:100%; font-family:var(--mono); }
+.lp-search-row input:focus { border-color:var(--accent); }
 
 /* ── Provider health indicator (left border) ── */
 .provider-card.health-ok       { border-left: 3px solid var(--green, #22c55e); }
@@ -1839,7 +1885,7 @@ th.sortable:focus-visible { outline:2px solid var(--accent);outline-offset:-2px;
   content:'\25B8'; font-size:10px; color:var(--text-dim); transition:transform .15s;
 }
 .section-collapsible[open] > summary::after { transform:rotate(90deg); }
-.section-collapsible > summary:focus-visible { outline:2px solid var(--accent); outline-offset:2px; border-radius:4px; }
+.section-collapsible > summary:focus-visible { outline:2px solid var(--accent); outline-offset:2px; border-radius:var(--radius-control); }
 .section-collapsible[open] > summary { margin-bottom:12px; }
 .section-summary {
   margin-left:auto; max-width:50%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
@@ -2009,7 +2055,7 @@ th.sortable:focus-visible { outline:2px solid var(--accent);outline-offset:-2px;
   #dumpTable .dump-check { grid-area:check; align-self:center; }
   /* The 13px default control is a small target on a card; 18px fills the
      check track and is easier to hit without widening the layout. */
-  #dumpTable .dump-check input { width:18px; height:18px; }
+  #dumpTable .dump-check input[type="checkbox"] { width:18px; height:18px; }
   #dumpTable .dump-time { grid-area:time; font-size:12px; color:var(--text-dim); white-space:nowrap; }
   #dumpTable .dump-model { grid-area:model; overflow-wrap:anywhere; }
   #dumpTable .dump-route { grid-area:route; font-size:12px; color:var(--text-dim); overflow-wrap:anywhere; }
@@ -2025,7 +2071,7 @@ th.sortable:focus-visible { outline:2px solid var(--accent);outline-offset:-2px;
 /* One glyph per row tool.  Their intrinsic heights came from each icon's own
    viewBox, so the three buttons in a row stood at 26.7 / 23.9 / 24.7px.  A
    square box makes them a group. */
-.dump-actions .btn { width:28px; height:26px; padding:0; display:inline-flex; align-items:center; justify-content:center; }
+.dump-actions .btn { width:28px; height:28px; padding:0; display:inline-flex; align-items:center; justify-content:center; }
 .dump-actions .btn svg { display:block; }
 
 
@@ -2068,8 +2114,8 @@ th.sortable:focus-visible { outline:2px solid var(--accent);outline-offset:-2px;
 .dp-tools { margin-left: auto; display: flex; gap: 6px; }
 .dp-tool {
   font-size: 11px; font-weight: 500; padding: 2px 9px; cursor: pointer;
-  border: 1px solid var(--border); background: var(--bg); color: var(--text-dim);
-  border-radius: 5px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text-dim);
+  border-radius: var(--radius-control);
 }
 .dp-tool:hover { color: var(--text); border-color: var(--text-dim); }
 .dp-big {
@@ -2193,7 +2239,7 @@ button.shim-update.unknown { color: var(--yellow, #b7791f); }
 .routing-route { border-top: 1px solid var(--border); }
 .routing-route-row {
   display: grid;
-  grid-template-columns: 26px minmax(150px, 1.4fr) 84px minmax(160px, 1.6fr) 56px 150px;
+  grid-template-columns: 26px minmax(150px, 1.4fr) 92px minmax(160px, 1.6fr) 56px 150px;
   gap: 12px; align-items: center; padding: 10px 12px;
   border-bottom: 1px solid var(--border); font-size: 13px;
 }
@@ -2241,11 +2287,15 @@ button.shim-update.unknown { color: var(--yellow, #b7791f); }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .routing-stepper { display: inline-flex; align-items: center; gap: 4px; }
+/* Measured: at 22px the weight column was 84px and the two buttons shrank
+   when squared; the control scale's 28px needs 92px (28 + 4 + 24 + 4 + 28 + a
+   4px reserve), which the two fr columns absorb.  The row height is 51px at
+   either size, so the scale costs nothing vertical here. */
 .routing-stepper button {
-  width: 22px; height: 22px; padding: 0; line-height: 1;
-  border: 1px solid var(--border); border-radius: var(--radius);
-  background: var(--bg); color: var(--text-dim);
-  font: 12px var(--mono); cursor: pointer;
+  width: 28px; height: 28px; padding: 0; line-height: 1;
+  border: 1px solid var(--border); border-radius: var(--radius-control);
+  background: var(--surface); color: var(--text-dim);
+  font-family: var(--mono); font-size: var(--fs-xs); cursor: pointer;
 }
 .routing-stepper button:hover { background: var(--bg-hover); color: var(--text); }
 /* A fixed width and tabular digits: the -/+ buttons must not move when
@@ -2367,12 +2417,10 @@ button.shim-update.unknown { color: var(--yellow, #b7791f); }
 .routing-field-row label { display: flex; flex-direction: column; gap: 4px; min-width: 0; font-size: 12px; color: var(--text-dim); }
 .routing-field-row .routing-check { flex-direction: row; align-items: center; gap: 6px; color: var(--text); }
 .routing-field-row select {
-  width: 100%; min-width: 0; padding: 5px 10px;
-  background: var(--bg); color: var(--text);
-  border: 1px solid var(--border); border-radius: 6px; font-size: 12px;
+  width: 100%; min-width: 0;
 }
 .routing-field-row select:focus {
-  outline: none; border-color: var(--accent);
+  border-color: var(--accent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 8%, transparent);
 }
 .routing-rules-head { font-size: 12px; color: var(--text-dim); margin: 14px 0 6px; }
@@ -2403,13 +2451,8 @@ button.shim-update.unknown { color: var(--yellow, #b7791f); }
 .routing-models-head { display: flex; align-items: center; gap: 8px; padding: 10px 10px 6px; }
 .routing-models-head .routing-picker { flex: 1; min-width: 0; }
 .routing-picker { position: relative; display: block; }
-.routing-picker input {
-  width: 100%; padding: 6px 10px;
-  background: var(--bg); border: 1px solid var(--border);
-  border-radius: var(--radius); color: var(--text);
-  font-size: 13px; font-family: var(--mono);
-}
-.routing-picker input:focus { outline: none; border-color: var(--accent); }
+.routing-picker input { width: 100%; font-family: var(--mono); }
+.routing-picker input:focus { border-color: var(--accent); }
 .routing-windows { margin: 0; padding: 0 10px 8px; }
 .routing-model-list {
   max-height: 540px; overflow-y: auto;

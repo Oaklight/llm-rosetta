@@ -1383,7 +1383,7 @@ function renderModels() {
     // menu already lists it per provider; it stays a tooltip here.
     const upstream = (typeof info === 'object' && info.upstream_model) ? info.upstream_model : '';
     const urlTpl = (typeof info === 'object' && info.url_template) ? info.url_template : '';
-    const urlTplTag = urlTpl ? ` <span style="font-size:10px;color:var(--text-dim);background:var(--bg-card);padding:1px 4px;border-radius:3px;border:1px solid var(--border)" title="${t('label.urlTemplate')}: ${esc(urlTpl)}">⛓ url</span>` : '';
+    const urlTplTag = urlTpl ? ` <span class="cap-badge cap-badge-text" title="${t('label.urlTemplate')}: ${esc(urlTpl)}">⛓ url</span>` : '';
     return `<tr${rowDimmed ? ' class="model-disabled"' : ''} role="row"
       onclick="if(!event.target.closest('button,input,label,a,.more-menu,.provider-link'))openModelDrawer(${jsArg(name)})">
       <td class="col-check" role="cell" aria-labelledby="thModelSelect"><input type="checkbox" class="row-check" data-model="${esc(name)}" onchange="updateModelBulk()"></td>
