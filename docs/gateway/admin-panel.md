@@ -26,13 +26,13 @@ Tables separate rows with one hairline drawn on the row, not one per cell, under
 
 ### Controls
 
-Every control is the same shape: 28 px tall, one 2 px corner (`--radius-control`), one 1 px frame. That covers buttons, text fields, selects, text areas, segmented controls and filter chips. Two controls keep a smaller height because they live inside a row that must not grow — the copy button in a key row and the range switch in a chart header — and they are squared like the rest.
+Every control is the same shape at desktop widths: 28 px tall, one 2 px corner (`--radius-control`), one 1 px frame. That covers buttons, text fields, selects, text areas, segmented controls, filter chips, a drawer's close button, the credential-source chips and the logo picker's trigger. One control keeps a smaller height because it lives inside a row that must not grow — the range switch in a chart header, at 19 px — and it is squared like the rest. Below the phone breakpoint two touch rules take over: `.btn-sm` is at least 30 px tall and a full-width logo picker is 36 px. Navigation strips are not controls and keep their own heights — the settings group rail's rows and the provider drawer's tabs at 37 px, the routing pane's tabs at 32 px.
 
 Tags are outlined rather than filled: a **status** tag (request status, severity, stream, the profiling badge) is a pill in its own colour, monospace and uppercase; a **capability** tag (LLM, Embeddings, Rerank, Decisions and the per-capability markers) takes the same outline and a square corner, so a capability is never mistaken for an outcome. A disabled control fades to half opacity and stops taking the pointer; it does not change its own fill.
 
-The focus ring is drawn by the panel, not by the browser: `2px solid var(--accent)` at a 2 px offset, inset by 2 px where a scroll container or a table cell would clip it, and in the accent's ink where the control's own fill is the accent. Every tab stop on every tab and in both drawers draws it.
+The focus ring is drawn by the panel, not by the browser: one declaration set, `2px solid var(--accent)`, at one of three offsets — 2 px by default, inset by 2 px where a scroll container or a table cell would clip it, and in the accent's ink where the control's own fill is the accent. Every tab stop on every tab and in both drawers draws it.
 
-`color-scheme` follows the mode, so the parts a stylesheet cannot paint — scrollbars, `<select>` popups, checkbox and radio glyphs, the text caret — are dark in dark mode and light in light mode. `accent-color` and `::placeholder` are set from the scheme's tokens for the same reason.
+`color-scheme` follows the mode, so the parts a stylesheet cannot paint — `<select>` popups, checkbox and radio glyphs, the text caret, and the browser's own scrollbars where it draws them — follow the mode as well. `accent-color` and `::placeholder` are set from the scheme's tokens for the same reason.
 
 ## Providers
 
