@@ -46,7 +46,7 @@ from .errors import (
     error_response_for_source,
     note_upstream_success,
 )
-from .failover import prepare_failover, record_failover
+from .failover import FailoverBudget, prepare_failover, record_failover
 from .metadata import (
     ProviderMetadataStore,
     _default_metadata_store,
@@ -264,7 +264,7 @@ async def _failover_response(
     route: ResolvedRoute,
     body: dict[str, Any],
     *,
-    signal: Any,
+    decision: Any,
     transport: UpstreamTransport,
     metadata_store: ProviderMetadataStore | None,
     extra_headers: dict[str, str] | None,
@@ -272,22 +272,22 @@ async def _failover_response(
     capture_state: CaptureState | None,
     entry_id: str | None,
     profile: dict[str, Any],
-    attempted: str | None,
+    budget: FailoverBudget,
 ) -> tuple[Response, dict[str, Any]] | None:
-    """Serve the request from another provider after a quota refusal.
+    """Serve the request from another lane or provider after a refusal.
 
     Returns:
-        The second attempt's response and this request's merged profile, or
-        ``None`` when there will not be a second attempt — failover is off for
-        this model, has already happened, or nothing else can serve.  The
-        caller then reports the upstream's own refusal.
+        The attempt's response and this request's merged profile, or ``None``
+        when there will not be one — failover is off for this model, the
+        budget is spent, or nothing else can serve.  The caller then reports
+        the upstream's own refusal.
     """
     prepared = prepare_failover(
-        config, selection, route, body, signal=signal, attempted=attempted
+        config, selection, route, body, decision=decision, budget=budget
     )
     if prepared is None:
         return None
-    new_route, new_pinfo, retry_body = prepared
+    new_route, new_pinfo, retry_body, next_budget = prepared
     sub_profile: dict[str, Any] = {}
     try:
         response, sub_profile = await handle_non_streaming(
@@ -302,7 +302,7 @@ async def _failover_response(
             entry_id=entry_id,
             selection=selection,
             config=config,
-            _failover_from=route.provider_name,
+            _failover_budget=next_budget,
         )
     finally:
         # Recorded even when the second attempt raises: a failure produced by
@@ -312,7 +312,7 @@ async def _failover_response(
             profile,
             route=route,
             new_route=new_route,
-            signal=signal,
+            decision=decision,
             sub_profile=sub_profile,
         )
     return response, profile
@@ -347,7 +347,7 @@ async def _non_streaming_from_stream(
     profile: dict[str, Any],
     selection: SelectionContext | None = None,
     config: Any | None = None,
-    _failover_from: str | None = None,
+    _failover_budget: FailoverBudget | None = None,
 ) -> tuple[Response, dict[str, Any]]:
     """Serve a non-streaming client from an upstream that only streams.
 
@@ -368,9 +368,8 @@ async def _non_streaming_from_stream(
         selection: This request's routing state.  ``None`` disables failover,
             which is what a bare handler call (a test) gets.
         config: The live config; with *selection*, enables failover.
-        _failover_from: The provider a failover is already coming from.  Set
-            on the second attempt, so a refusal there cannot start a third:
-            the failover budget is one per request.
+        _failover_budget: What a failover has already spent.  Set on a retry,
+            so the next refusal only gets what is left of the budget.
     """
     if route.source_provider != "chat_completions":
         return (
@@ -384,6 +383,7 @@ async def _non_streaming_from_stream(
             profile,
         )
 
+    budget = _failover_budget or FailoverBudget()
     target_body = _inject_stream_flags(route.target_provider, target_body, stream=True)
     upstream_url = provider_info.upstream_url(model, stream=True)
     stream = None
@@ -426,7 +426,7 @@ async def _non_streaming_from_stream(
                 selection,
                 route,
                 body,
-                signal=decision.signal,
+                decision=decision,
                 transport=transport,
                 metadata_store=metadata_store,
                 extra_headers=extra_headers,
@@ -434,7 +434,7 @@ async def _non_streaming_from_stream(
                 capture_state=capture_state,
                 entry_id=entry_id,
                 profile=profile,
-                attempted=_failover_from,
+                budget=budget,
             )
             if failed_over is not None:
                 return failed_over
@@ -525,7 +525,7 @@ async def handle_non_streaming(  # noqa: C901
     entry_id: str | None = None,
     selection: SelectionContext,
     config: Any | None = None,
-    _failover_from: str | None = None,
+    _failover_budget: FailoverBudget | None = None,
 ) -> tuple[Response, dict[str, Any]]:
     """Non-streaming proxy: convert -> forward -> convert back -> respond.
 
@@ -533,8 +533,8 @@ async def handle_non_streaming(  # noqa: C901
         config: The live config, when the caller has one.  ``None`` disables
             cross-provider failover, which is what a bare handler call (a
             test, an embedder) gets.
-        _failover_from: The provider a failover is already coming from.  Set
-            on the second attempt so the retry budget cannot be exceeded.
+        _failover_budget: What a failover has already spent.  Set on a retry
+            so the retry budget cannot be exceeded.
 
     Returns:
         A ``(response, profile)`` tuple.  The profile dict contains
@@ -542,6 +542,7 @@ async def handle_non_streaming(  # noqa: C901
         gateway-level measurements (upstream latency).
     """
     store = metadata_store or _default_metadata_store
+    budget = _failover_budget or FailoverBudget()
     profile: dict[str, Any] = {}
     # model was already injected into body by app.py
     try:
@@ -581,7 +582,7 @@ async def handle_non_streaming(  # noqa: C901
             profile=profile,
             selection=selection,
             config=config,
-            _failover_from=_failover_from,
+            _failover_budget=_failover_budget,
         )
 
     # Phase 3: Forward to upstream via transport
@@ -633,16 +634,16 @@ async def handle_non_streaming(  # noqa: C901
             return decision.response, profile
         if decision.action is RefusalAction.RETRY:
             continue
-        # No credential of this provider can serve the request any more.  A
-        # second provider is a different prompt cache, so trying one is the
-        # model's opt-in, and the budget is one.
+        # Whether another lane or another provider may serve is the
+        # decision's scope; whether this request may move at all is the
+        # model's opt-in, and how often is the budget's.
         if decision.action is RefusalAction.FAILOVER:
             failed_over = await _failover_response(
                 config,
                 selection,
                 route,
                 body,
-                signal=decision.signal,
+                decision=decision,
                 transport=transport,
                 metadata_store=store,
                 extra_headers=extra_headers,
@@ -650,7 +651,7 @@ async def handle_non_streaming(  # noqa: C901
                 capture_state=capture_state,
                 entry_id=entry_id,
                 profile=profile,
-                attempted=_failover_from,
+                budget=budget,
             )
             if failed_over is not None:
                 return failed_over

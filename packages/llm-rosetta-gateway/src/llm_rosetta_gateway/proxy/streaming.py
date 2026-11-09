@@ -37,6 +37,8 @@ from ..transport.sse_format import (
 )
 from .errors import (
     RefusalAction,
+    RefusalDecision,
+    RefusalScope,
     _connection_error_response,
     _first_token_timeout_response,
     _detect_stream_chunk_error,
@@ -45,7 +47,7 @@ from .errors import (
     decide_on_refusal,
     note_upstream_success,
 )
-from .failover import prepare_failover, record_failover
+from .failover import FailoverBudget, prepare_failover, record_failover
 from .metadata import (
     ProviderMetadataStore,
     _default_metadata_store,
@@ -447,7 +449,7 @@ async def _failover_stream(
     body: dict[str, Any],
     *,
     reported_model: str | None,
-    signal: Any,
+    decision: Any,
     transport: UpstreamTransport,
     metadata_store: ProviderMetadataStore | None,
     extra_headers: dict[str, str] | None,
@@ -458,23 +460,23 @@ async def _failover_stream(
     capture_state: CaptureState | None,
     preflight_token_count: bool,
     profile: dict[str, Any],
-    attempted: str | None,
+    budget: FailoverBudget,
 ) -> tuple[Response | StreamingResponse, dict[str, Any]] | None:
-    """Serve this stream from another provider, before the first event.
+    """Serve this stream from another lane or provider, before the first event.
 
     Reached only while the upstream has refused and nothing has been written
     to the client, which is what makes the second answer honest.
 
     Returns:
-        The second attempt's response and this request's merged profile, or
-        ``None`` when there will not be a second attempt.
+        The attempt's response and this request's merged profile, or ``None``
+        when there will not be one.
     """
     prepared = prepare_failover(
-        config, selection, route, body, signal=signal, attempted=attempted
+        config, selection, route, body, decision=decision, budget=budget
     )
     if prepared is None:
         return None
-    new_route, new_pinfo, retry_body = prepared
+    new_route, new_pinfo, retry_body, next_budget = prepared
     sub_profile: dict[str, Any] = {}
     try:
         response, sub_profile = await handle_streaming(
@@ -493,7 +495,7 @@ async def _failover_stream(
             preflight_token_count=preflight_token_count,
             selection=selection,
             config=config,
-            _failover_from=route.provider_name,
+            _failover_budget=next_budget,
         )
     finally:
         # Same rule as the non-streaming path: whichever provider ran owns
@@ -502,7 +504,7 @@ async def _failover_stream(
             profile,
             route=route,
             new_route=new_route,
-            signal=signal,
+            decision=decision,
             sub_profile=sub_profile,
         )
     return response, profile
@@ -525,7 +527,7 @@ async def handle_streaming(  # noqa: C901
     preflight_token_count: bool = False,
     selection: SelectionContext,
     config: Any | None = None,
-    _failover_from: str | None = None,
+    _failover_budget: FailoverBudget | None = None,
 ) -> tuple[Response | StreamingResponse, dict[str, Any]]:
     """Streaming proxy: convert -> forward -> stream-convert back -> SSE.
 
@@ -551,6 +553,7 @@ async def handle_streaming(  # noqa: C901
         after the stream completes.
     """
     store = metadata_store or _default_metadata_store
+    budget = _failover_budget or FailoverBudget()
     profile: dict[str, Any] = {}
     # model was already injected into body by app.py, and app.py rewrites it to
     # the upstream id before calling us.  ``reported_model`` carries the name
@@ -663,7 +666,7 @@ async def handle_streaming(  # noqa: C901
                 route,
                 body,
                 reported_model=reported_model,
-                signal=decision.signal,
+                decision=decision,
                 transport=transport,
                 metadata_store=store,
                 extra_headers=extra_headers,
@@ -674,7 +677,7 @@ async def handle_streaming(  # noqa: C901
                 capture_state=capture_state,
                 preflight_token_count=preflight_token_count,
                 profile=profile,
-                attempted=_failover_from,
+                budget=budget,
             )
             if failed_over is not None:
                 return failed_over
@@ -735,7 +738,13 @@ async def handle_streaming(  # noqa: C901
             route,
             body,
             reported_model=reported_model,
-            signal=FirstTokenDeadline(route.provider_name, budget_ms),
+            # A lane that accepted the stream and then went quiet is a
+            # content-level failure: its siblings may still answer.
+            decision=RefusalDecision(
+                RefusalAction.FAILOVER,
+                signal=FirstTokenDeadline(route.provider_name, budget_ms),
+                scope=RefusalScope.LANE,
+            ),
             transport=transport,
             metadata_store=store,
             extra_headers=extra_headers,
@@ -746,7 +755,7 @@ async def handle_streaming(  # noqa: C901
             capture_state=capture_state,
             preflight_token_count=preflight_token_count,
             profile=profile,
-            attempted=_failover_from,
+            budget=budget,
         )
         if failed_over is not None:
             return failed_over

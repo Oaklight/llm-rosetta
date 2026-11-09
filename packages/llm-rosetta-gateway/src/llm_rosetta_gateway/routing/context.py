@@ -78,6 +78,7 @@ class SelectionContext:
         "quota_headroom",
         "quota_excluded",
         "failover_excluded",
+        "lane_excluded",
         "pinned",
         "key_affinity",
         "upstream_session_id",
@@ -132,6 +133,12 @@ class SelectionContext:
         # for the rest of *this* request only — a failed-over request must not
         # bounce back to the provider that just said no.
         self.failover_excluded: frozenset[str] = frozenset()
+        # Candidate lanes this request has been refused by for a reason of
+        # their own — an upstream error, a first token that never came —
+        # rather than a credential's.  Keys, not names: the provider's other
+        # lanes share the credential and may still serve, so only the lane
+        # that answered leaves the route.
+        self.lane_excluded: frozenset[EntryKey] = frozenset()
         # One provider this request must be served by, if the caller asked
         # for a specific one.  Every other candidate is excluded, so neither
         # the strategy nor failover can leave the pinned provider.
@@ -233,15 +240,31 @@ class SelectionContext:
 
         Names, not candidate keys: a refusal this reacts to is credential-level
         (429, quota), and every lane of a provider shares its credentials, so
-        excluding the name excludes all of its lanes.  Lane-level exclusion is
-        a different fact — one upstream model refusing for its own reason —
-        and would have to say which lane refused.
+        excluding the name excludes all of its lanes.  A refusal that is about
+        one upstream model instead — a 5xx from that lane, say — is recorded
+        by :meth:`with_lane_excluded`, which leaves the siblings in the route.
 
         The previous choice is voided along with it: the caller is about to
         re-run selection, and a stage that finds nothing must not leave the
         refused provider standing.
         """
         self.failover_excluded = frozenset(names)
+        self.chosen = None
+        self.provider_info = None
+
+    def with_lane_excluded(self, keys: frozenset[EntryKey] | set[EntryKey]) -> None:
+        """Record lanes this request must not be sent to again.
+
+        The lane-level counterpart of :meth:`with_failover_excluded`: the
+        provider keeps its credential as far as this request is concerned, so
+        only the candidate keys named here leave the route.  The previous
+        choice is voided for the same reason.
+
+        Args:
+            keys: The candidate keys — ``(provider, upstream model)`` — that
+                refused this request.
+        """
+        self.lane_excluded = frozenset(keys)
         self.chosen = None
         self.provider_info = None
 
@@ -258,7 +281,8 @@ class SelectionContext:
 
         The answer is candidate keys.  The quota and failover sets are provider
         names — both are credential-level facts — so each name is widened to
-        every lane it names.
+        every lane it names.  The lane set is already keyed, so it is added as
+        it stands: the provider's other lanes stay in the route.
 
         A pin excludes every other candidate, so a pinned request cannot be
         served by a provider the caller did not name; pinning a provider keeps
@@ -270,6 +294,8 @@ class SelectionContext:
         by_name = self.quota_excluded | self.failover_excluded
         if by_name:
             excluded |= frozenset(p.key for p in self.candidates if p.name in by_name)
+        if self.lane_excluded:
+            excluded |= self.lane_excluded
         if not self.pinned:
             return excluded
         return frozenset(

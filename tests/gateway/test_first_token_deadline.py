@@ -203,6 +203,29 @@ class TestTheDeadline:
         assert response.status_code == 504
         assert profile["first_token_timeout_ms"] == 50
 
+    def test_the_deadline_budget_is_bounded_to_three_attempts(self):
+        """The deadline is a content-level refusal, so it earns the same steps.
+
+        Every provider here has one lane, which is the shape where counting
+        kinds instead of steps would walk the whole route.
+        """
+        config = _config(providers=("a", "b", "c", "d"))
+        transport = _Transport(
+            _StalledStream(),
+            _StalledStream(),
+            _StalledStream(),
+            _ChunkStream(_CHUNK),
+        )
+
+        response, _profile = _run_stream(config, transport)
+
+        assert response.status_code == 504
+        assert transport.calls == [
+            "https://a.test",
+            "https://b.test",
+            "https://c.test",
+        ]
+
     def test_the_second_lane_serves_when_the_first_stalls(self):
         config = _config()
         transport = _Transport(_StalledStream(), _ChunkStream(_CHUNK))
@@ -213,6 +236,9 @@ class TestTheDeadline:
         assert transport.calls == ["https://a.test", "https://b.test"]
         assert profile["failover"]["from"] == "a"
         assert profile["failover"]["to"] == "b"
+        # A lane that went quiet is a content-level failure: the credential
+        # is fine, so the exclusion it earns is the lane's, not the key's.
+        assert profile["failover"]["scope"] == "lane"
         assert profile["failover"]["reason"] == "no first token within 50 ms"
 
     def test_a_model_with_failover_off_keeps_the_504(self):
