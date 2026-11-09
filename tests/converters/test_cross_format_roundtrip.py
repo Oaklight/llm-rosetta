@@ -71,6 +71,11 @@ def _write(format: Format, ir: Any) -> tuple[dict[str, Any], list[Any]]:
     converter = format.converter()
     ctx = ConversionContext()
     sink = WarningSink(leg=format.name)
+    # The writer reports through ``ctx.warnings`` as well as through the
+    # conversion in progress; reading only the ambient sink hid every warning
+    # a converter appends to its own context (the extension loses were
+    # reported and still counted as silent).
+    ctx.warnings = sink
     with recording_to(sink):
         body, _ = converter.request_to_provider(ir, context=ctx)
     return body, list(sink)
