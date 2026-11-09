@@ -18,6 +18,7 @@ from ....types.ir.configs import (
 from ...base import BaseConfigOps
 from llm_rosetta.conversion_warnings import report_loss
 from ...base.helpers.reasoning import DEFAULT_REASONING_CAPS, apply_reasoning_config
+from ...base.helpers.response_format import schema_to_ir
 from ...base.helpers.retention import retention_to_ir, retention_to_wire
 
 
@@ -165,7 +166,10 @@ class ChatCompletionsConfigOps(BaseConfigOps):
             rf: dict[str, Any] = {"type": "json_schema"}
             json_schema = ir_format.get("json_schema")
             if json_schema:
-                rf["json_schema"] = json_schema
+                # The wire nests the envelope; a bare schema from an IR
+                # producer built before #1327 is wrapped so its content is
+                # written rather than dropped.
+                rf["json_schema"] = schema_to_ir(json_schema)
             return {"response_format": rf}
 
         return {}

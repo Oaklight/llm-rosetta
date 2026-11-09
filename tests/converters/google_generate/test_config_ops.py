@@ -181,7 +181,9 @@ class TestGoogleGenerateConfigOps:
             {"response_mime_type": "application/json", "response_schema": schema}
         )
         assert result["type"] == "json_schema"
-        assert result["json_schema"] == schema
+        # The IR spells the OpenAI envelope (#1327); Google's raw schema is
+        # its ``schema``.
+        assert result["json_schema"] == {"schema": schema}
 
     def test_p_response_format_empty(self):
         """Test empty provider format → empty IR."""
@@ -204,12 +206,15 @@ class TestGoogleGenerateConfigOps:
         """Test json_schema round-trip."""
         schema = {"type": "object", "properties": {"x": {"type": "integer"}}}
         original = cast(
-            ResponseFormatConfig, {"type": "json_schema", "json_schema": schema}
+            ResponseFormatConfig,
+            {"type": "json_schema", "json_schema": {"schema": schema}},
         )
         provider = GoogleGenerateConfigOps.ir_response_format_to_p(original)
+        # The wire carries the raw schema, not the envelope (#1327).
+        assert provider["response_schema"] == schema
         restored = GoogleGenerateConfigOps.p_response_format_to_ir(provider)
         assert restored["type"] == "json_schema"
-        assert restored["json_schema"] == schema
+        assert restored["json_schema"] == {"schema": schema}
 
     # ==================== Stream Config ====================
 

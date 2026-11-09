@@ -107,8 +107,7 @@
       "reasoning.mode": 1
     },
     "google_generate->open_responses": {
-      "reasoning.mode": 1,
-      "response_format.json_schema.type": 1
+      "reasoning.mode": 1
     },
     "google_generate->messages": {
       "generation.max_tokens": 12
@@ -140,12 +139,5 @@
       "stream.enabled": 1
     }
   },
-  "corruptions": [
-    {
-      "pair": "google_generate->open_responses",
-      "field": "response_schema",
-      "loss": "response_format.type: 'json_schema' → 'json_object'",
-      "reason": "issue #1327: the IR's json_schema has two shapes — the OpenAI envelope the Responses writer expects and the raw schema the Google reader fills — so the writer emits a format with no schema and the reader reconstructs json_object"
-    }
-  ]
+  "corruptions": []
 }
