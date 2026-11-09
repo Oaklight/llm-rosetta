@@ -64,6 +64,12 @@ class RequestLogEntry:
     #: every row written before the column existed: a reader groups such a
     #: row the way it grouped every row before this value existed.
     conversation_id: str | None = None
+    #: The upstream model the request was sent as, when the lane names one.
+    #: ``model`` stays what the client asked for; with one model name routing
+    #: to several lanes (#1430), this is the only column that says which lane
+    #: served — ``None`` on a lane with no alias and on rows written before
+    #: the column existed.
+    upstream_model: str | None = None
 
     @classmethod
     def create(
@@ -92,6 +98,7 @@ class RequestLogEntry:
         ttft_ms: float | None = None,
         user_agent: str | None = None,
         conversation_id: str | None = None,
+        upstream_model: str | None = None,
     ) -> RequestLogEntry:
         """Factory with auto-generated id and timestamp."""
         return cls(
@@ -120,6 +127,7 @@ class RequestLogEntry:
             ttft_ms=None if ttft_ms is None else round(float(ttft_ms), 2),
             user_agent=user_agent,
             conversation_id=conversation_id,
+            upstream_model=upstream_model,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -156,6 +164,7 @@ class RequestLogEntry:
             ("request_id", self.request_id),
             ("user_agent", self.user_agent),
             ("conversation_id", self.conversation_id),
+            ("upstream_model", self.upstream_model),
         ):
             if value is not None:
                 d[key] = value

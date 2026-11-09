@@ -271,6 +271,7 @@ async def _handle_llm(
         model=model,
         target_format=route.target_provider,
         provider_name=route.provider_name,
+        upstream_model=route.upstream_model,
     )
 
     # --- Circuit breaker check ---

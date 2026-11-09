@@ -2275,6 +2275,14 @@ button.shim-update.unknown { color: var(--yellow, #b7791f); }
   display: block; font-size: 10px; color: var(--text-muted);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+/* The chosen cell carries the provider and, under it, the lane's upstream
+   model — one provider may serve a model as several lanes (#1430), and the
+   name alone would not say which one answered. */
+.routing-lane { white-space: normal; }
+.routing-lane small {
+  display: block; font-size: 10px; color: var(--text-muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 /* A line with no conversation id is a client group, not one session: the
    italic word says the row covers at least one conversation, not exactly one. */
 .routing-session-group { font-style: italic; }

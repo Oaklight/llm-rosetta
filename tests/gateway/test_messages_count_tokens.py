@@ -159,6 +159,43 @@ async def test_body_is_forwarded_unchanged_and_answer_relayed(
 
 
 @pytest.mark.asyncio
+async def test_the_row_names_the_lane_that_served(
+    upstream: tuple[_Recorder, str], tmp_path
+) -> None:
+    """The alias is what the row records as the lane (#1430).
+
+    The route notes it with the provider, before the breaker; nothing after the
+    call records it again.
+    """
+    from llm_rosetta_gateway.observability import PersistenceManager, RequestLog
+    from llm_rosetta_gateway.ops import OpsContext
+
+    _, url = upstream
+    pm = await PersistenceManager.create(str(tmp_path))
+    app = await create_app(GatewayConfig(_config(url)))
+    request_log = RequestLog(persistence=pm)
+    wired: Any = app
+    wired.ops_ctx = OpsContext(request_log=request_log, persistence=pm)
+    wired.request_log = request_log
+    wired.persistence = pm
+    listener = await asyncio.start_server(app._handle_connection, "127.0.0.1", 0)
+    try:
+        served = Served(listener.sockets[0].getsockname()[1])
+        status, _, _ = await served.post("/v1/messages/count_tokens", _COUNT_BODY)
+        assert status == 200
+        rows, _total = await pm.query_log_entries(limit=5)
+    finally:
+        listener.close()
+        await listener.wait_closed()
+        await pm.close()
+
+    assert (rows[0]["target_provider_name"], rows[0]["upstream_model"]) == (
+        "Up",
+        "claude-real",
+    )
+
+
+@pytest.mark.asyncio
 async def test_upstream_error_is_relayed_verbatim(
     served: Served, upstream: tuple[_Recorder, str]
 ) -> None:
@@ -211,6 +248,41 @@ async def test_non_messages_target_is_a_501(upstream: tuple[_Recorder, str]) -> 
     assert "messages upstream" in body["error"]["message"]
     # The refusal happens before any upstream call is made.
     assert recorder.requests == []
+
+
+@pytest.mark.asyncio
+async def test_the_501_row_names_the_lane_too(
+    upstream: tuple[_Recorder, str], tmp_path
+) -> None:
+    """The refusal is answered before the shared flow ever runs.
+
+    Its own note is the only place that path records the lane, so the row for
+    a wrong-format target would otherwise name the provider and nothing else.
+    """
+    from llm_rosetta_gateway.observability import PersistenceManager, RequestLog
+    from llm_rosetta_gateway.ops import OpsContext
+
+    recorder, url = upstream
+    pm = await PersistenceManager.create(str(tmp_path))
+    app = await create_app(GatewayConfig(_config(url, provider_type="open_responses")))
+    request_log = RequestLog(persistence=pm)
+    wired: Any = app
+    wired.ops_ctx = OpsContext(request_log=request_log, persistence=pm)
+    wired.request_log = request_log
+    wired.persistence = pm
+    listener = await asyncio.start_server(app._handle_connection, "127.0.0.1", 0)
+    try:
+        served = Served(listener.sockets[0].getsockname()[1])
+        status, _, _body = await served.post("/v1/messages/count_tokens", _COUNT_BODY)
+        assert status == 501
+        rows, _total = await pm.query_log_entries(limit=5)
+    finally:
+        listener.close()
+        await listener.wait_closed()
+        await pm.close()
+
+    assert recorder.requests == []
+    assert (rows[0]["status_code"], rows[0]["upstream_model"]) == (501, "claude-real")
 
 
 @pytest.mark.asyncio

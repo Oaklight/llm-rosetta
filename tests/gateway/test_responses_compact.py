@@ -291,6 +291,107 @@ class TestThroughTheLifecycle:
         breaker = config.circuit_breaker_registry.get_or_create("p")
         assert breaker.state == CircuitState.CLOSED
 
+    def test_the_501_row_names_the_lane_too(self, monkeypatch, tmp_path):
+        """The format refusal is answered before the shared flow ever runs.
+
+        Its own note is the only place that path records the lane, so a row
+        for it would otherwise name the provider and nothing else.
+        """
+        from llm_rosetta_gateway.app import _state
+        from llm_rosetta_gateway.app.routes_compact import route_responses_compact
+        from llm_rosetta_gateway.observability import PersistenceManager, RequestLog
+        from llm_rosetta_gateway.ops import OpsContext
+
+        config = _config("chat_completions", upstream_model="upstream-compact")
+        monkeypatch.setattr(_state, "_config", config)
+        transport = _transport(
+            UpstreamResponse(status_code=200, body={}, raw_content=b"{}")
+        )
+
+        async def scenario() -> dict[str, Any]:
+            pm = await PersistenceManager.create(str(tmp_path / "gateway.db"))
+            request_log = RequestLog(persistence=pm)
+            request = self._lifecycle_request(COMPACTION_BODY, transport)
+            request.app.persistence = pm
+            request.app.ops_ctx = OpsContext(request_log=request_log, persistence=pm)
+            request.app.request_log = request_log
+
+            response = await route_responses_compact(request)
+            assert response.status_code == 501
+            rows, _total = await pm.query_log_entries(limit=5)
+            await pm.close()
+            return rows[0]
+
+        row = asyncio.run(scenario())
+
+        assert transport.send.await_count == 0
+        assert (
+            row["status_code"],
+            row["target_provider_name"],
+            row["upstream_model"],
+        ) == (
+            501,
+            "p",
+            "upstream-compact",
+        )
+
+    def test_the_lane_is_named_on_both_the_served_and_the_rejected_path(
+        self, monkeypatch, tmp_path
+    ):
+        """The lane is noted before the breaker, so an early 503 carries it.
+
+        The row is the acceptance surface, so this reads it: the normal path
+        used to note the lane again after the call, and that second note is
+        gone — the rejection never reaches the code after the call at all.
+        """
+        from llm_rosetta_gateway.app import _state
+        from llm_rosetta_gateway.app.routes_compact import route_responses_compact
+        from llm_rosetta_gateway.observability import PersistenceManager, RequestLog
+        from llm_rosetta_gateway.ops import OpsContext
+
+        config = _config("open_responses", upstream_model="upstream-compact", breaker=2)
+        monkeypatch.setattr(_state, "_config", config)
+        transport = _transport(
+            UpstreamResponse(
+                status_code=200,
+                body=COMPACTED,
+                raw_content=json.dumps(COMPACTED).encode(),
+            )
+        )
+        request = self._lifecycle_request(COMPACTION_BODY, transport)
+        request.path = "/v1/responses/compact"
+
+        async def scenario() -> list[dict[str, Any]]:
+            pm = await PersistenceManager.create(str(tmp_path / "gateway.db"))
+            request_log = RequestLog(persistence=pm)
+            request.app.persistence = pm
+            request.app.ops_ctx = OpsContext(request_log=request_log, persistence=pm)
+            request.app.request_log = request_log
+
+            response = await route_responses_compact(request)
+            assert response.status_code == 200
+            served, _total = await pm.query_log_entries(limit=10)
+
+            # Trip the breaker, then ask again: the rejection is answered
+            # before the code after the call, where the served path ends up.
+            breaker = config.circuit_breaker_registry.get_or_create("p")
+            breaker.record_failure()
+            breaker.record_failure()
+            response = await route_responses_compact(request)
+            assert response.status_code == 503
+            rejected, _total = await pm.query_log_entries(limit=10)
+            await pm.close()
+            return [served[0], rejected[0]]
+
+        served_row, rejected_row = asyncio.run(scenario())
+
+        for row in (served_row, rejected_row):
+            assert (row["target_provider_name"], row["upstream_model"]) == (
+                "p",
+                "upstream-compact",
+            )
+        assert rejected_row["status_code"] == 503
+
     def test_an_upstream_failure_still_counts(self, monkeypatch):
         """The breaker keeps doing its job for failures that are the provider's."""
         from llm_rosetta_gateway.app import _state

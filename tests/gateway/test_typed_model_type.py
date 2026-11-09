@@ -94,6 +94,29 @@ def _config(base_url: str) -> GatewayConfig:
     )
 
 
+def _config_with_upstream() -> GatewayConfig:
+    """The same fake type, with the model renamed for the provider."""
+    return GatewayConfig(
+        {
+            "providers": {
+                "acme": {
+                    "api_key": "k",
+                    "base_url": "https://acme.test",
+                    "type": "chat_completions",
+                    "sentiment_format": FORMAT,
+                }
+            },
+            "models": {
+                "acme-sentiment": {
+                    "provider": "acme",
+                    "type": TYPE_NAME,
+                    "upstream_model": "upstream-sentiment",
+                },
+            },
+        }
+    )
+
+
 class TestFourthType:
     def test_config_parses_and_resolves_it(self, sentiment_type: str) -> None:
         config = _config("https://acme.test")
@@ -225,6 +248,116 @@ class TestFourthType:
 
         _, _, sent_body = request.app.transport.send.call_args.args
         assert sent_body["model"] == "upstream-sentiment"
+
+    def test_the_lane_the_route_resolved_to_reaches_the_log(self, sentiment_type: str):
+        """A typed row names the upstream model, not only the provider.
+
+        The openai/embedding/rerank routes take the same lifecycle note as the
+        chat route; without it a renamed typed model is indistinguishable from
+        an unrenamed one in the request log.
+        """
+        from llm_rosetta_gateway import lifecycle
+
+        config = _config_with_upstream()
+        handler = TypedHandler(
+            model_type=TYPE_NAME,
+            build_pipeline=_FakePipeline,
+            resolve=lambda cfg, model: _resolve(cfg, model),
+            configured_models=_configured_models,
+            response_usage=_fake_response_usage,
+        )
+        request = MagicMock()
+        request.json.return_value = {"model": "acme-sentiment", "input": "hi"}
+        request.headers = {}
+        request.app.metrics = None
+        request.app.request_log = None
+        request.app.transport = MagicMock()
+        request.app.transport.send = AsyncMock(
+            return_value=UpstreamResponse(
+                status_code=200,
+                body={"label": "positive"},
+                raw_content=b'{"label": "positive"}',
+            )
+        )
+        ctx = lifecycle.LifecycleContext(
+            config=config,
+            app=request.app,
+            request_id="req-1",
+            entry_id="entry-1",
+            model_type=TYPE_NAME,
+            body={},
+        )
+
+        token = lifecycle._lifecycle_var.set(ctx)
+        try:
+            asyncio.run(handle_typed_request(request, config, handler))
+        finally:
+            lifecycle._lifecycle_var.reset(token)
+
+        assert (ctx.provider_name, ctx.upstream_model) == (
+            "acme",
+            "upstream-sentiment",
+        )
+
+    def test_a_request_rejected_by_the_breaker_still_names_the_lane(
+        self, sentiment_type: str
+    ):
+        """The early note is the only one a rejected request reaches.
+
+        The shared flow records the lane as soon as the route resolves and then
+        asks the breaker; a rejected request never reaches the note the normal
+        path takes after the call, so without the early one the row for a
+        breaker rejection would name the provider and no lane.
+        """
+        from llm_rosetta_gateway import lifecycle
+        from llm_rosetta_gateway.middleware.circuit_breaker import CircuitBreakerConfig
+
+        config = _config_with_upstream()
+        registry = config.circuit_breaker_registry
+        registry.set_override(
+            "acme",
+            CircuitBreakerConfig(
+                enabled=True, error_threshold=1, cooldown_seconds=60.0
+            ),
+        )
+        registry.get_or_create("acme").record_failure()
+
+        handler = TypedHandler(
+            model_type=TYPE_NAME,
+            build_pipeline=_FakePipeline,
+            resolve=lambda cfg, model: _resolve(cfg, model),
+            configured_models=_configured_models,
+            response_usage=_fake_response_usage,
+        )
+        request = MagicMock()
+        request.path = "/v1/embeddings"
+        request.json.return_value = {"model": "acme-sentiment", "input": "hi"}
+        request.headers = {}
+        request.app.metrics = None
+        request.app.request_log = None
+        request.app.transport = MagicMock()
+        request.app.transport.send = AsyncMock()
+        ctx = lifecycle.LifecycleContext(
+            config=config,
+            app=request.app,
+            request_id="req-1",
+            entry_id="entry-1",
+            model_type=TYPE_NAME,
+            body={},
+        )
+
+        token = lifecycle._lifecycle_var.set(ctx)
+        try:
+            response = asyncio.run(handle_typed_request(request, config, handler))
+        finally:
+            lifecycle._lifecycle_var.reset(token)
+
+        assert response.status_code == 503
+        assert not request.app.transport.send.called
+        assert (ctx.provider_name, ctx.upstream_model) == (
+            "acme",
+            "upstream-sentiment",
+        )
 
     def test_unknown_model_is_a_404(self, sentiment_type: str) -> None:
         config = _config("https://acme.test")

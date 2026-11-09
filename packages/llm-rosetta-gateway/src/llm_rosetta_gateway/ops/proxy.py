@@ -53,6 +53,7 @@ class OpsProxyRequest(OpsBase):
         "entry_id_override",
         "request_id",
         "client_ip",
+        "upstream_model",
         "_entry_id",
     )
 
@@ -74,6 +75,7 @@ class OpsProxyRequest(OpsBase):
         entry_id_override: str | None = None,
         request_id: str | None = None,
         client_ip: str | None = None,
+        upstream_model: str | None = None,
     ) -> None:
         super().__init__(ctx)
         self.model = model
@@ -90,6 +92,7 @@ class OpsProxyRequest(OpsBase):
         self.entry_id_override = entry_id_override
         self.request_id = request_id
         self.client_ip = client_ip
+        self.upstream_model = upstream_model
         self._entry_id: str | None = None
 
     @property
@@ -159,6 +162,7 @@ class OpsProxyRequest(OpsBase):
                 model_type=self.model_type,
                 request_id=self.request_id,
                 conversation_id=current_conversation(),
+                upstream_model=self.upstream_model,
                 **columns,
             )
             if self.entry_id_override:
@@ -190,6 +194,7 @@ async def record_proxy_request(
     entry_id_override: str | None = None,
     request_id: str | None = None,
     client_ip: str | None = None,
+    upstream_model: str | None = None,
 ) -> None:
     """Record one proxy request against the app's ops context.
 
@@ -222,5 +227,6 @@ async def record_proxy_request(
         entry_id_override=entry_id_override,
         request_id=request_id,
         client_ip=client_ip,
+        upstream_model=upstream_model,
     )
     await op.execute()

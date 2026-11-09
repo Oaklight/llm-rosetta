@@ -145,7 +145,7 @@ function renderLogs(entries, total) {
       let rows = `<tr data-log-id="${esc(e.id)}" role="row"${styleAttr}${rowClick}${rowKeyboard}${expandHint}>
         <td class="log-time" role="cell" aria-labelledby="thLogTime">${time}</td>
         <td class="log-model" role="cell" aria-labelledby="thLogModel"><code>${esc(e.model)}</code></td>
-        <td class="log-source" role="cell" aria-labelledby="thLogSourceTarget">${esc(e.source_provider)} &rarr; ${esc(e.target_provider_name || resolveProviderName(e.target_provider))}</td>
+        <td class="log-source" role="cell" aria-labelledby="thLogSourceTarget">${esc(e.source_provider)} &rarr; ${esc(e.target_provider_name || resolveProviderName(e.target_provider))}${e.upstream_model ? ` <small style="color:var(--text-dim)">${esc(e.upstream_model)}</small>` : ''}</td>
         <td class="log-mode" role="cell" aria-labelledby="thLogMode">${modeBadge}</td>
         <td class="log-key" role="cell" aria-labelledby="thLogApiKey" style="font-size:12px;color:var(--text-dim)">${esc(keyLabel)}</td>
         <td class="log-ip" role="cell" aria-labelledby="thLogClientIp" style="font-size:12px;color:var(--text-dim)">${esc(clientIp)}</td>

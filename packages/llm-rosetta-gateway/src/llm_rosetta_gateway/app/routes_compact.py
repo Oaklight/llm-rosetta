@@ -176,6 +176,7 @@ async def handle_responses_compact(request: Any, config: GatewayConfig) -> Respo
                 model=model,
                 target_format=route.target_provider,
                 provider_name=route.provider_name,
+                upstream_model=route.upstream_model,
                 is_stream=False,
             )
         return _error(
@@ -191,6 +192,7 @@ async def handle_responses_compact(request: Any, config: GatewayConfig) -> Respo
         source_format=SOURCE_FORMAT,
         target_format=route.target_provider,
         provider_name=route.provider_name,
+        upstream_model=route.upstream_model,
     )
     if rejection is not None:
         return rejection
@@ -206,6 +208,8 @@ async def handle_responses_compact(request: Any, config: GatewayConfig) -> Respo
     )
 
     if ctx is not None:
+        # The lane is already recorded: ``begin_typed`` notes it with the
+        # provider, before the breaker, so a rejected request carries it too.
         ctx.note_route(model=model, is_stream=False)
 
     started = time.monotonic()

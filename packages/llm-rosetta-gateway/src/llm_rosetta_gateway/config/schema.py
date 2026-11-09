@@ -25,6 +25,10 @@ class TypedRoute(NamedTuple):
     path: str
     provider_info: ProviderInfo
     params: Mapping[str, Any] | None = None
+    #: The upstream model the provider knows this model by, when the config
+    #: declares one.  A typed route has no lanes of its own, so this is the
+    #: model-level alias — and it is what the request log records as the lane.
+    upstream_model: str | None = None
 
 
 @dataclass(frozen=True)
