@@ -121,8 +121,10 @@ test('the weight field hands the handler names, not escaped text', () => {
   assert.match(html, /value="3"/);
   assert.match(
     html,
-    /onchange="updateProviderWeight\(&quot;m1&quot;,&quot;a'-alert\(1\)-'b&quot;,this\)"/,
-    'jsArg, not esc: the apostrophe cannot close the literal',
+    /onchange="updateProviderWeight\(&quot;m1&quot;,&quot;a'-alert\(1\)-'b&quot;,&quot;&quot;,this\)"/,
+    'jsArg, not esc: the apostrophe cannot close the literal, and the lane ' +
+      'without an upstream still passes one argument so the handler signature ' +
+      'stays one shape',
   );
 });
 
