@@ -547,6 +547,12 @@ Rules run after the anchor is chosen, so they compose with the same-format tiers
 replacing them: a rule starts from the provider routing would have picked. A `use` rule whose
 provider cannot serve this request is ignored, and the anchor stands.
 
+A `pause` rule is a preference as well, not a veto. It drops the provider for the requests that
+match, but when that would leave the route with no candidate at all, the anchor chosen before
+the rules stands and still serves the request. This is why `pause p` on a model whose route lists
+only `p` changes nothing: pausing never takes a provider offline. To stop a provider from serving,
+remove it from the model's route, or switch the provider off.
+
 Conditions read the request's **IR**, never the source body, so one rule means the same thing
 whichever dialect the client spoke. Two facts are approximations and worth knowing:
 

@@ -181,6 +181,7 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 ### Documentation
 - **The READMEs now describe the 0.14 surface, in both languages**: the root README and both package READMEs (each with an English and a Chinese version) lead with the three levels of control — raw converter, pipeline, gateway — plus a toolbox of single-value helpers, and the reason to own your model sources; use the canonical converter names (`ChatCompletionsConverter`, `MessagesConverter`, …); list the five chat formats plus the embedding, rerank and decision formats; and state the real Python floor (3.10, with `typing_extensions` as the only 3.10 addition). The gateway's install paths (pip, Docker), config example, admin console and CLI integrations are documented there for the first time.
 - **The docs site's entry pages follow the same structure**: the home page, installation, both quickstarts and Core Concepts now lead with the three levels of control and the toolbox, the IR-as-payload model and the zero-dependency story.
+- **The routing guide says `pause` is a preference, not a veto** (issue [#1437](https://github.com/Oaklight/llm-rosetta/issues/1437)): a `pause` rule drops a provider only for the requests that match, and when that would leave the route with no candidate at all, the anchor chosen before the rules still serves — `pause p` on a route that lists only `p` changes nothing. The guide names the two ways to actually stop a provider: remove it from the model's route, or switch the provider off.
 
 ## v0.13.0 — 2026-09-08
 
