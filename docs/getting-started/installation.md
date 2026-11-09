@@ -85,8 +85,8 @@ PUID=$(id -u) PGID=$(id -g) docker compose -f docker/docker-compose.source.yaml 
 
 Compose creates a missing bind-mount directory as `root`, and the first run
 writes `config.jsonc` there, so a directory owned by a different uid is the one
-way to watch the container fail at startup. The plain `docker run` form below
-does not read `PUID`; pass `--user` there, as the example does.
+way to watch the container fail at startup. The plain `docker run` form does
+not read `PUID`; use `--user` there, as the example above does.
 
 The two files are separate entry points — `docker/docker-compose.yaml` runs the
 published image, `docker/docker-compose.source.yaml` builds from the checkout —
