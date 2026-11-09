@@ -5,6 +5,12 @@ A provider shim may declare parameter defaults for its own model type (an
 They are IR field names, so they are applied to the IR request after the
 source converter has read the client's body and before the target converter
 writes the upstream one.  A value the client supplied always wins.
+
+This is the typed families' mechanism (embeddings, rerank, decisions), keyed by
+a flat IR field name.  A chat request uses
+:mod:`llm_rosetta.ir.passes.request_constraints` instead: its constraints are
+keyed by IR path, split into defaults and ranges, and a dialect declares them in
+addition to a shim.
 """
 
 from __future__ import annotations

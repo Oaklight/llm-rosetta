@@ -6,7 +6,7 @@ Composes ContentOps, ToolOps, MessageOps, and ConfigOps for full bidirectional
 conversion between IR and Anthropic Messages API format.
 
 Key Anthropic differences from OpenAI:
-- ``max_tokens`` is required (default 4096)
+- ``max_tokens`` is required; ``request_constraints`` supplies the value
 - System messages via top-level ``system`` parameter
 - Single response message (not choices list)
 - No ``created`` timestamp (uses ``time.time()``)
@@ -46,6 +46,7 @@ from ....types.ir.stream import (
     ToolResultEvent,
     UsageEvent,
 )
+from ....types.ir.constraints import Range, RequestConstraints
 from ....ir.passes.tool_names import STRICT_TOOL_NAME_PATTERN
 from ...base import BaseConverter
 from ...base.errors import require_representable_finish_reason
@@ -202,6 +203,16 @@ class MessagesConverter(BaseConverter):
     _TOOL_NAME_PATTERN = STRICT_TOOL_NAME_PATTERN
     _INTRINSIC_IR_TRANSFORMS = (hoist_late_system_messages(), auto_cache_breakpoints())
 
+    # The Messages API has no default for ``max_tokens``: the field is
+    # required, so a request that names no limit needs one invented, and this
+    # is the one place that value lives.  ``temperature`` is documented as
+    # 0.0-1.0; a client that sends more (OpenAI allows up to 2.0) gets the
+    # ceiling, reported as a downgrade rather than silently.
+    request_constraints = RequestConstraints(
+        defaults={"generation.max_tokens": 4096},
+        ranges={"generation.temperature": Range(0.0, 1.0, "clamp")},
+    )
+
     def __init__(self):
         self.content_ops = self.content_ops_class()
         self.tool_ops = self.tool_ops_class()
@@ -258,15 +269,23 @@ class MessagesConverter(BaseConverter):
                     "Anthropic has no truncation control; ignored",
                     subject="generation.truncation",
                 )
-        else:
-            # Anthropic requires max_tokens
-            result["max_tokens"] = 4096
-        if "max_tokens" not in (gen_config or {}):
-            # The target requires a value the request never named.  The write
-            # and the read are separate calls and the body cannot carry a
-            # marker, so a per-conversion record is the only place this fact
-            # can live; the gateway puts it in the request log (#1328).
-            ctx.metadata.setdefault("injected", {})["max_tokens"] = result["max_tokens"]
+        if result.get("max_tokens") is None:
+            # The dialect requires a value the request never named.  The base
+            # class applies ``request_constraints`` before this writer runs, so
+            # this is only reached when that declaration is removed — a
+            # converter with no default would write a body the API refuses, so
+            # say so here instead (#1460).
+            default = self.request_constraints.defaults.get("generation.max_tokens")
+            if default is None:
+                raise ValueError(
+                    "Messages requires generation.max_tokens and this converter "
+                    "declares no default; declare it in request_constraints"
+                )
+            result["max_tokens"] = default
+            # The write and the read are separate calls and the body cannot
+            # carry a marker, so a per-conversion record is the only place this
+            # fact can live; the gateway puts it in the request log (#1328).
+            ctx.metadata.setdefault("injected", {})["max_tokens"] = default
 
         # 4-6. Tools, tool choice, tool config
         self._apply_tool_config(ir_request, result, ctx)

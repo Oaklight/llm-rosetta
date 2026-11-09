@@ -10,6 +10,7 @@ from collections.abc import Iterable, Iterator, Mapping, Sequence
 import re
 from typing import Any, cast
 
+from ...types.ir.constraints import RequestConstraints
 from ...types.ir.passthrough import ProviderPassthroughEvent
 from ...types.ir.request import IRInputItem, IRRequest
 from ...types.ir.response import IRResponse, UsageInfo
@@ -40,6 +41,7 @@ from .helpers.extensions import (
 )
 from .passthrough import merge_provider_output_items
 from ...conversion_warnings import DROPPED, records_on_leg, report_loss
+from ...ir.passes.request_constraints import apply_request_constraints
 
 
 class BaseConverter(ABC):
@@ -89,6 +91,14 @@ class BaseConverter(ABC):
     # request for that capability and promoted by the pipeline.  Chat
     # Completions overrides to False.
     _SUPPORTS_NATIVE_SERVER_TOOLS: bool = True
+
+    # What this dialect requires of its request fields: a value to write for a
+    # field the client named none for, and the range each field accepts.  Keyed
+    # by IR path (``generation.max_tokens``).  A target shim may declare or
+    # override entries per path (``ProviderShim.request``); the merged object
+    # is what ``ir.passes.request_constraints`` applies.  Empty means the
+    # dialect constrains nothing.
+    request_constraints: RequestConstraints = RequestConstraints()
 
     # What the format accepts as a function name, matched in full, or None
     # when it imposes no shape.  Chat Completions, Messages and Responses all
@@ -177,6 +187,12 @@ class BaseConverter(ABC):
         returns ``(result, ctx.warnings)``.
         """
         ctx = context if context is not None else ConversionContext()
+        # Which constraints to apply: the pipeline merges the shim's
+        # declaration into the dialect's and hands the result over through the
+        # context; a converter reached directly has only its own.
+        constraints = ctx.options.get("request_constraints")
+        if constraints is None:
+            constraints = self.request_constraints
         messages = ir_request.get("messages")
         if messages is not None:
             # Repair the tool pairing once, here, before any dialect writes
@@ -189,7 +205,30 @@ class BaseConverter(ABC):
             # target-independent, so they run here as well.
             ctx.warnings.extend(strip_orphaned_tool_config(ir_request))
             ir_request["messages"] = assign_tool_batch_ids(ir_request["messages"])
-        result = self._do_request_to_provider(ir_request, context=ctx, **kwargs)
+        # What this target requires of its request fields.  Applied to a copy
+        # and handed to the writer: a constraint can *add* a field, and the IR
+        # the caller handed in is also the reference side of a round-trip
+        # comparison, where a target's injected default would read as a change
+        # the source made.  Only the containers a constraint can reach are
+        # copied, so the hot path does not deep-copy the messages.
+        write_ir: dict[str, Any] = dict(ir_request)
+        generation = write_ir.get("generation")
+        if isinstance(generation, dict):
+            write_ir["generation"] = dict(generation)
+        # A declared range that says ``reject`` raises.  It is left to
+        # propagate: the pipeline wraps everything this call can raise into
+        # ``ConversionError(phase="ir_to_target")``, and a converter reached
+        # directly reports the violation as the ``ValueError`` it is.
+        apply_request_constraints(
+            write_ir,
+            constraints=constraints,
+            warnings=ctx.warnings,
+            metadata=ctx.metadata,
+        )
+
+        result = self._do_request_to_provider(
+            cast(IRRequest, write_ir), context=ctx, **kwargs
+        )
         strip_internal_metadata(result)
         dropped = unowned_extensions(ir_request, self._CONVERTER_TAG)
         # One warning per path, with the path as its subject: a container-wide

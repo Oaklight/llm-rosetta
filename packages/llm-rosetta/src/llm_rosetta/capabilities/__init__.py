@@ -30,6 +30,10 @@ from llm_rosetta.ir.passes.enforcement import (
     unwrap_custom_tool_input,
 )
 from llm_rosetta.ir.passes.intrinsic_history import degrade_intrinsic_history
+from llm_rosetta.ir.passes.request_constraints import (
+    RequestConstraintViolation,
+    apply_request_constraints,
+)
 from llm_rosetta.ir.passes.tool_names import (
     MAX_TOOL_NAME_LEN,
     STRICT_TOOL_NAME_PATTERN,
@@ -67,4 +71,6 @@ __all__ = [
     "dedupe_tool_definitions",
     "relocate_oversized_tool_descriptions",
     "ToolNameMap",
+    "RequestConstraintViolation",
+    "apply_request_constraints",
 ]

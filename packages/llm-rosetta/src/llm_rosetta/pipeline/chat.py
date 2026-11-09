@@ -933,6 +933,20 @@ class ConversionPipeline:
             ir_request, name_map=self._name_map, warnings=ctx.warnings
         )
 
+        # Request-field constraints: what the dialect requires of its own
+        # fields, with the target shim's per-vendor declaration laid over it.
+        # Only the merge happens here: the target converter applies the result
+        # to the copy it writes, so the IR this pipeline holds keeps exactly
+        # what the source request carried.  That matters beyond tidiness — the
+        # original-request record and the round-trip guards both read this IR,
+        # and a target's injected default appearing in it would report a value
+        # the client never sent (#1457).
+        ctx.options["request_constraints"] = (
+            self._target_converter.request_constraints.merged_with(
+                getattr(self._resolved_target_shim, "request", None)
+            )
+        )
+
         self._ir_request = ir_request
 
         # A target that cannot state an ``allowed_tools`` restriction warns

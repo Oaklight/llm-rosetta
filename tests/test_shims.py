@@ -1316,3 +1316,136 @@ class TestToolGroupsShimDeclarations:
         )
         assert body["tool_choice"] is not None
         assert pipe.warnings == []
+
+
+class TestRequestConstraintDeclarations:
+    """The ``request:`` section: defaults and ranges, keyed by IR path."""
+
+    @staticmethod
+    def _parse(cfg):
+        from pathlib import Path
+
+        from llm_rosetta.shims.providers import _parse_request_constraints
+
+        return _parse_request_constraints(cfg, Path("vendor/llm/format/provider.yaml"))
+
+    def test_an_absent_section_declares_nothing(self):
+        declared = self._parse({})
+        assert not declared
+
+    def test_defaults_and_ranges_are_read(self):
+        declared = self._parse(
+            {
+                "request": {
+                    "defaults": {"generation.max_tokens": 4096},
+                    "ranges": {
+                        "generation.temperature": {
+                            "min": 0.0,
+                            "max": 1.0,
+                            "on_out_of_range": "clamp",
+                        }
+                    },
+                }
+            }
+        )
+        assert declared.defaults == {"generation.max_tokens": 4096}
+        temperature = declared.ranges["generation.temperature"]
+        assert (temperature.min, temperature.max) == (0.0, 1.0)
+
+    def test_an_unknown_section_key_is_refused(self):
+        with pytest.raises(ValueError, match="unknown key"):
+            self._parse({"request": {"required": ["generation.max_tokens"]}})
+
+    def test_an_unknown_ir_path_is_refused_at_load_time(self):
+        """A declaration that matches nothing must not load silently."""
+        with pytest.raises(ValueError, match="not a field of the IR generation"):
+            self._parse({"request": {"defaults": {"generation.max_token": 4096}}})
+
+    def test_a_path_outside_the_generation_block_is_refused(self):
+        with pytest.raises(ValueError, match="expected 'generation.<field>'"):
+            self._parse({"request": {"defaults": {"stream.enabled": True}}})
+
+    def test_a_default_of_the_wrong_type_is_refused(self):
+        """A value the IR field cannot hold fails at load time, like a bad path."""
+        with pytest.raises(ValueError, match="generation.max_tokens expects int"):
+            self._parse({"request": {"defaults": {"generation.max_tokens": "big"}}})
+
+    def test_a_bool_is_not_an_int(self):
+        with pytest.raises(ValueError, match="expects int"):
+            self._parse({"request": {"defaults": {"generation.max_tokens": True}}})
+
+    def test_a_list_of_the_wrong_element_type_is_refused(self):
+        with pytest.raises(ValueError, match="list of str"):
+            self._parse(
+                {"request": {"defaults": {"generation.stop_sequences": [1, 2]}}}
+            )
+
+    def test_a_value_outside_a_literal_is_refused(self):
+        with pytest.raises(ValueError, match="'auto' or 'disabled'"):
+            self._parse({"request": {"defaults": {"generation.truncation": "fast"}}})
+
+    def test_an_int_is_accepted_for_a_float_field(self):
+        declared = self._parse({"request": {"defaults": {"generation.temperature": 1}}})
+        assert declared.defaults["generation.temperature"] == 1
+
+    def test_a_missing_policy_is_refused(self):
+        """A range must say what happens outside it; clamping is not implied."""
+        with pytest.raises(ValueError, match="must declare on_out_of_range"):
+            self._parse(
+                {"request": {"ranges": {"generation.temperature": {"max": 1.0}}}}
+            )
+
+    def test_a_non_numeric_bound_is_refused(self):
+        with pytest.raises(ValueError, match="must be a number"):
+            self._parse(
+                {
+                    "request": {
+                        "ranges": {
+                            "generation.temperature": {
+                                "max": "hot",
+                                "on_out_of_range": "clamp",
+                            }
+                        }
+                    }
+                }
+            )
+
+    def test_an_unknown_policy_is_refused(self):
+        with pytest.raises(ValueError, match="on_out_of_range"):
+            self._parse(
+                {
+                    "request": {
+                        "ranges": {
+                            "generation.temperature": {
+                                "max": 1.0,
+                                "on_out_of_range": "clip",
+                            }
+                        }
+                    }
+                }
+            )
+
+    def test_a_min_above_max_is_refused(self):
+        with pytest.raises(ValueError, match="greater than max"):
+            self._parse(
+                {
+                    "request": {
+                        "ranges": {
+                            "generation.temperature": {
+                                "min": 2.0,
+                                "max": 1.0,
+                                "on_out_of_range": "clamp",
+                            }
+                        }
+                    }
+                }
+            )
+
+    def test_a_shipped_shim_declares_nothing_today(self):
+        """No in-tree shim overrides a dialect constraint yet (#1461 adds one)."""
+        from llm_rosetta.shims.providers import load_providers
+
+        declared = {
+            shim.name: shim.request for shim in load_providers() if shim.request
+        }
+        assert declared == {}, declared

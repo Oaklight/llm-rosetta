@@ -24,6 +24,10 @@ from .enforcement import (  # noqa: F401
     unwrap_custom_tool_input,
 )
 from .intrinsic_history import degrade_intrinsic_history  # noqa: F401
+from .request_constraints import (  # noqa: F401
+    RequestConstraintViolation,
+    apply_request_constraints,
+)
 from .tool_names import (  # noqa: F401
     MAX_TOOL_NAME_LEN,
     STRICT_TOOL_NAME_PATTERN,
@@ -41,7 +45,9 @@ __all__ = [
     "MAX_TOOL_NAME_LEN",
     "STRICT_TOOL_NAME_PATTERN",
     "CustomToolRestorer",
+    "RequestConstraintViolation",
     "ToolNameMap",
+    "apply_request_constraints",
     "apply_upstream_tool_names",
     "backfill_reasoning_replay",
     "build_tool_name_map",
