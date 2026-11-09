@@ -12,7 +12,7 @@ from .._shared import (
     parse_json_body,
 )
 
-from .bulk import _append_provider_to_model
+from .bulk import Lane, _append_provider_to_model, lane_key
 from .providers import _handle_rename_merge
 
 logger = logging.getLogger("llm-rosetta-gateway")
@@ -186,11 +186,27 @@ _MERGE_KEY = "__merged__"
 
 def _declared_providers(entry: dict[str, Any]) -> list[str]:
     """The provider names an entry already lists, in order."""
+    return [lane[0] for lane in _declared_lanes(entry)]
+
+
+def _declared_lanes(entry: dict[str, Any]) -> list[Lane]:
+    """The lanes an entry already lists, in declared order.
+
+    One provider may appear several times, each lane asking for its own
+    upstream model; the pair is what makes a lane distinct.
+    """
     raw = entry.get("providers")
     if isinstance(raw, list):
-        return [p if isinstance(p, str) else p.get("name", "") for p in raw]
+        return [
+            lane_key(p, None)
+            if isinstance(p, str)
+            else lane_key(p.get("name", ""), p.get("upstream_model"))
+            for p in raw
+        ]
     provider = entry.get("provider")
-    return [provider] if isinstance(provider, str) and provider else []
+    if isinstance(provider, str) and provider:
+        return [lane_key(provider, entry.get("upstream_model"))]
+    return []
 
 
 def _to_multi_provider_entry(
@@ -211,6 +227,7 @@ def _to_multi_provider_entry(
         "",
         {},
         body.get("capabilities") or ["text"],
+        upstream=body.get("upstream_model"),
     )
     entry = holder[_MERGE_KEY]
     _update_multi_provider_entry(entry, body, new_provider)
@@ -236,6 +253,19 @@ def _carry_routing(existing: dict[str, Any], body: dict[str, Any]) -> None:
         existing["routing"] = routing
 
 
+def _append_lane(existing: dict[str, Any], provider: str, body: dict[str, Any]) -> None:
+    """Add the lane *body* asks for, unless the entry already has it.
+
+    A provider may join several times; the lane — provider and upstream model
+    — is what is checked, and the lane carries the upstream the caller named.
+    """
+    lane_entry: dict[str, Any] = {"name": provider}
+    if body.get("upstream_model"):
+        lane_entry["upstream_model"] = body["upstream_model"]
+    if lane_key(provider, body.get("upstream_model")) not in _declared_lanes(existing):
+        existing.setdefault("providers", []).append(lane_entry)
+
+
 def _update_multi_provider_entry(
     existing: dict[str, Any], body: dict[str, Any], provider: str = ""
 ) -> None:
@@ -244,8 +274,8 @@ def _update_multi_provider_entry(
     ``provider`` joins the list when the caller asked to merge and the entry
     does not name it yet.
     """
-    if provider and body.get("merge") and provider not in _declared_providers(existing):
-        existing.setdefault("providers", []).append({"name": provider})
+    if provider and body.get("merge"):
+        _append_lane(existing, provider, body)
     if "capabilities" in body:
         existing["capabilities"] = body["capabilities"]
     from llm_rosetta.formats import canonical_model_type
@@ -255,6 +285,12 @@ def _update_multi_provider_entry(
         existing["type"] = model_type
     elif "type" in existing and (not model_type or model_type == "llm"):
         del existing["type"]
+    # ``upstream_model`` is historical at this level: once an entry lists
+    # ``providers[]``, every reader — the loader, the routing route, the panel —
+    # takes the upstream from the lane, and a top-level value is ignored.  It
+    # is still written here because the editor's single-provider form posts the
+    # field at the entry level; a multi-provider entry keeping both is known and
+    # pinned by a test.
     for key in ("upstream_model", "url_template", "stream_url_template"):
         if body.get(key):
             existing[key] = body[key]
@@ -280,6 +316,29 @@ def _update_multi_provider_entry(
     _carry_routing(existing, body)
     if body.get("enabled") is not None:
         existing["enabled"] = body["enabled"]
+
+
+def _second_lane_confirmation(
+    name: str, provider: str, existing: dict[str, Any]
+) -> JSONResponse:
+    """409 offering to add a second lane of *provider* instead of replacing one.
+
+    The upstream named in the message comes from the lanes themselves: a
+    ``providers[]`` entry keeps each lane's upstream on that lane, so reading
+    the entry-level field there would report the model name as an upstream.
+    """
+    upstreams = [
+        lane[1] or name for lane in _declared_lanes(existing) if lane[0] == provider
+    ]
+    shown = ", ".join(f"'{upstream}'" for upstream in upstreams) or f"'{name}'"
+    return JSONResponse(
+        {
+            "error": f"Model '{name}' already routes '{provider}' to {shown}",
+            "merge_possible": True,
+            "existing_provider": provider,
+        },
+        status_code=409,
+    )
 
 
 def _write_model_entry(
@@ -312,8 +371,18 @@ def _write_model_entry(
         and "providers" in existing
         and not body.get("_force_single")
     ):
+        # Naming a lane the entry does not list is a request to add it; that
+        # still needs the caller to confirm, exactly as a second provider does.
+        body_upstream = body.get("upstream_model")
+        lane = lane_key(provider, body_upstream)
+        if (
+            body_upstream is not None
+            and lane not in _declared_lanes(existing)
+            and not body.get("merge")
+        ):
+            return _second_lane_confirmation(name, provider, existing), False
         _update_multi_provider_entry(existing, body, provider)
-        return None, provider in _declared_providers(existing)
+        return None, lane in _declared_lanes(existing)
     if isinstance(existing, dict) and existing.get("provider") != provider:
         if not body.get("merge"):
             return (
@@ -328,6 +397,19 @@ def _write_model_entry(
                 ),
                 False,
             )
+        models_section[name] = _to_multi_provider_entry(existing, provider, body)
+        return None, True
+    if (
+        isinstance(existing, dict)
+        and body.get("upstream_model") is not None
+        and lane_key(provider, body.get("upstream_model"))
+        != lane_key(existing.get("provider", ""), existing.get("upstream_model"))
+    ):
+        # The same provider, a different upstream model: that is a second lane,
+        # not an edit of the first one.  Silently replacing the entry would
+        # drop the lane the model already serves.
+        if not body.get("merge"):
+            return _second_lane_confirmation(name, provider, existing), False
         models_section[name] = _to_multi_provider_entry(existing, provider, body)
         return None, True
     models_section[name] = _build_model_entry(

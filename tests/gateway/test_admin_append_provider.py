@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from llm_rosetta_gateway.admin.routes.config import (
@@ -218,11 +220,11 @@ class TestMergeProviderIntoModel:
         assert len(models["gpt-4o"]["providers"]) == 3
         assert models["gpt-4o"]["providers"][-1] == new_p
 
-    def test_merge_skips_duplicate_provider(self):
+    def test_merge_skips_the_same_lane(self):
         models = {
             "gpt-4o": {
                 "providers": [
-                    {"name": "provider_a", "weight": 1},
+                    {"name": "provider_a", "weight": 1, "upstream_model": "x"},
                 ],
                 "capabilities": ["text"],
             }
@@ -233,13 +235,42 @@ class TestMergeProviderIntoModel:
         )
         assert len(models["gpt-4o"]["providers"]) == 1
 
-    def test_merge_skips_duplicate_string_entry(self):
+    def test_merge_adds_a_second_lane_of_one_provider(self):
+        """Same provider, different upstream: two candidates, not a duplicate."""
+        models = {
+            "gpt-4o": {
+                "providers": [
+                    {"name": "provider_a", "weight": 1, "upstream_model": "x"},
+                ],
+                "capabilities": ["text"],
+            }
+        }
+        new_p = {"name": "provider_a", "weight": 1, "upstream_model": "y"}
+        assert _merge_provider_into_model(models, "gpt-4o", new_p, ["text"]) == "merged"
+        assert [lane["upstream_model"] for lane in models["gpt-4o"]["providers"]] == [
+            "x",
+            "y",
+        ]
+
+    def test_merge_skips_the_same_lane_of_a_string_entry(self):
         models = {"gpt-4o": "provider_a"}
-        new_p = {"name": "provider_a", "weight": 1, "upstream_model": "x"}
+        new_p = {"name": "provider_a", "weight": 1}
         assert (
             _merge_provider_into_model(models, "gpt-4o", new_p, ["text"]) == "skipped"
         )
         assert models["gpt-4o"] == "provider_a"
+
+    def test_merge_turns_a_string_entry_into_two_lanes(self):
+        """A bare name is the lane without an upstream model; another upstream is new."""
+        models: dict[str, Any] = {}
+        models["gpt-4o"] = "provider_a"
+        new_p = {"name": "provider_a", "weight": 1, "upstream_model": "x"}
+        assert _merge_provider_into_model(models, "gpt-4o", new_p, ["text"]) == "merged"
+        entry: Any = models["gpt-4o"]
+        assert [lane.get("upstream_model") for lane in entry["providers"]] == [
+            None,
+            "x",
+        ]
 
     def test_merge_skips_duplicate_single_provider_dict(self):
         models = {"gpt-4o": {"provider": "provider_a", "capabilities": ["text"]}}

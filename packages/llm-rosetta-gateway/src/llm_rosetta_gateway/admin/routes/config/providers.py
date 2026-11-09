@@ -18,7 +18,7 @@ from .._shared import (
     parse_json_body,
 )
 
-from .bulk import _merge_outcome, _merge_provider_into_model
+from .bulk import Lane, _merge_outcome, _merge_provider_into_model, lane_key
 
 logger = logging.getLogger("llm-rosetta-gateway")
 
@@ -351,18 +351,26 @@ def _rename_merge_conflict(
     provider: str,
     existing: Any,
     outcome: str,
+    lane: Lane,
 ) -> JSONResponse:
-    """409 for a rename-merge that could not add the provider.
+    """409 for a rename-merge that could not add the lane.
 
     The caller deletes the source model once the merge reports success, so a
     merge that adds nothing must refuse instead of reporting while losing a
-    model (#1429).
+    model (#1429).  A provider may serve several upstream models, so only the
+    same ``(provider, upstream_model)`` pair twice is refused.
     """
     if outcome == "skipped":
+        upstream = lane[1]
+        target = (
+            f"provider '{provider}' to upstream '{upstream}'"
+            if upstream
+            else f"provider '{provider}'"
+        )
         reason = (
-            f"Model '{name}' already routes through provider '{provider}'"
-            f" ({_describe_routing(existing)}); the same provider cannot appear"
-            " twice under one model name."
+            f"Model '{name}' already routes {target}"
+            f" ({_describe_routing(existing)}); that lane cannot appear twice"
+            " under one model name."
         )
     else:
         routing = _describe_routing(existing) or "unrecognised entry"
@@ -389,9 +397,23 @@ def _handle_rename_merge(
     reload).  A 409 leaves both models untouched.
     """
     existing = models[name]
-    outcome = _merge_outcome(existing, provider)
+    # The lane this merge would add is decided once, here, and the same value
+    # is judged and then written — the pre-check and the mutation cannot
+    # disagree about which upstream model the new lane asks for.
+    raw_upstream = body.get("upstream_model")
+    if raw_upstream is None:
+        # Omitting the field means "keep what the source lane asked for".  The
+        # source model's name is only the last resort, for a source that names
+        # no upstream at all — it is usually not a model the provider serves.
+        upstream = _source_upstream(models[rename_from], provider) or rename_from
+    else:
+        upstream = raw_upstream
+    lane = lane_key(provider, upstream)
+    outcome = _merge_outcome(existing, lane)
     if outcome != "merged":
-        return _rename_merge_conflict(name, rename_from, provider, existing, outcome)
+        return _rename_merge_conflict(
+            name, rename_from, provider, existing, outcome, lane
+        )
     existing_provider = _get_existing_provider_label(existing)
     if not body.get("merge"):
         return JSONResponse(
@@ -402,14 +424,6 @@ def _handle_rename_merge(
             },
             status_code=409,
         )
-    raw_upstream = body.get("upstream_model")
-    if raw_upstream is None:
-        # Omitting the field means "keep what the source lane asked for".  The
-        # source model's name is only the last resort, for a source that names
-        # no upstream at all — it is usually not a model the provider serves.
-        upstream = _source_upstream(models[rename_from], provider) or rename_from
-    else:
-        upstream = raw_upstream
     new_p: dict[str, Any] = {"name": provider, "weight": 1}
     if upstream:
         new_p["upstream_model"] = upstream
@@ -417,6 +431,8 @@ def _handle_rename_merge(
         models, name, new_p, body.get("capabilities", ["text"])
     )
     if merged != "merged":  # defensive: the entry changed shape under us
-        return _rename_merge_conflict(name, rename_from, provider, existing, merged)
+        return _rename_merge_conflict(
+            name, rename_from, provider, existing, merged, lane
+        )
     del models[rename_from]
     return None
