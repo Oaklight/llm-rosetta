@@ -94,8 +94,8 @@ The names the panel's stylesheets converge on (issue
 | Status | `--pos`, `--neg`, `--warn`, `--info` | each with `-subtle` (translucent wash), `-bg` (opaque tint over `--surface`) and `-border` (derived) |
 | Other | `--purple`, `--magenta`, `--cyan`, `--lime`, `--green-deep` | capability and type colours |
 
-`--hairline-strong`, the four `-border` variants, `--warn-bg` and `--info-bg`
-are `color-mix()` expressions over the role colours — the same construct
+`--hairline-strong`, the four `-border` variants, `--neg-bg`, `--warn-bg` and
+`--info-bg` are `color-mix()` expressions over the role colours — the same construct
 `components.css` already uses for its tints — so a theme can add them without
 adding a colour value. They are provisional: no component paints them yet, and
 the phase that first does (`P3`/`P4`) tunes the ratios against the theme matrix.
