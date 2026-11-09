@@ -39,6 +39,7 @@ class Theme:
 THEMES: tuple[Theme, ...] = (
     Theme("minimal", "Minimal", "css/themes/minimal.css", default=True),
     Theme("emerald", "Emerald", "css/themes/emerald.css"),
+    Theme("typesafe", "TypeSafe", "css/themes/typesafe.css"),
 )
 
 #: URL prefix the panel serves static files under (``static.py``).

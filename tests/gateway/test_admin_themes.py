@@ -174,9 +174,11 @@ class TestThemeFiles:
 
     def test_the_legacy_aliases_are_marked_for_removal(self):
         # P1 left the previous names aliased so no component changes
-        # behaviour; the block must carry its expiry verbatim, or a looser
-        # wording ("removed later") would satisfy a looser test while the
-        # promise quietly rots.
+        # behaviour; the block must carry its removal condition verbatim, or a
+        # looser wording ("removed later") would satisfy a looser test while
+        # the promise quietly rots.  P5 was where the comment used to say the
+        # block would go; it did not (the aliases are still consumed), so the
+        # condition names the cleanup issue and its precondition instead.
         legacy = {
             "--bg-card": "--surface",
             "--bg-hover": "--surface-2",
@@ -194,11 +196,16 @@ class TestThemeFiles:
             # The raw file: _theme_text() strips the comment that carries the
             # expiry, and the expiry is the thing under test.
             text = (ADMIN_DIR / theme.file).read_text(encoding="utf-8")
-            assert text.count("removed in P5") == 1, theme.name
+            # The condition is wrapped across comment lines, so it is matched
+            # in its two halves; both must be inside the alias block.
+            marker, precondition = "planned for removal (#1489)", "must migrate first"
+            assert text.count(marker) == 1, theme.name
+            assert text.count(precondition) == 1, theme.name
             head = text[: text.index("/* P1 compatibility aliases")]
-            assert "removed in P5" not in head, theme.name
+            assert marker not in head and precondition not in head, theme.name
             aliases = text[text.index("/* P1 compatibility aliases") :]
-            assert "removed in P5" in aliases.split("[data-scheme=", 1)[0], theme.name
+            assert marker in aliases.split("[data-scheme=", 1)[0], theme.name
+            assert precondition in aliases.split("[data-scheme=", 1)[0], theme.name
             declared = set(_TOKEN.findall(aliases))
             for old, new in legacy.items():
                 assert f"{old}: var({new});" in aliases, (theme.name, old)

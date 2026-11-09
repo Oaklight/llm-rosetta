@@ -1,0 +1,173 @@
+/* TypeSafe — square geometry over a grey scale, with the brand magenta.
+   Values only: components own where these land (epic #1154, issue #1471).
+
+   Geometry: every corner this theme owns is 0 (`--radius`, `--card-radius`),
+   so panels, cards, dialogs and drawers are square.  Controls keep the
+   shared `--radius-control` (2px, base.css), which is skeleton, not theme;
+   the one pill left is the status tag (`--radius-pill`), per the shell's
+   rule that only a status tag may be a pill. */
+
+[data-scheme="typesafe"] {
+  /* The modal scrim.  A literal rgba, so `getComputedStyle` returns the
+     token's own value and the review can compare it without resolving
+     a color-mix.  Same values as the other schemes: a scrim is behaviour,
+     not brand. */
+  --overlay: rgba(0, 0, 0, .45);
+  --radius: 0px;
+  --dot: transparent;
+  --grid: transparent;
+  --bar-color: var(--accent);
+  --bar-opacity: 1;
+  --bar-hover: .55;
+  --th-transform: uppercase;
+  --th-spacing: .6px;
+  --th-weight: 500;
+  --th-size: 10px;
+  --th-color: var(--text-muted);
+  --radius-pill: 10px;
+  --badge-weight: 500;
+  /* Surfaces.  The page carries a 32px hairline grid; a card is a lighter
+     surface inside a hard 1px frame — black in light mode, the hairline grey
+     in dark (a black frame on #0b0b0b is invisible). */
+  --stats-gap: 1px;
+  --stats-frame-bg: var(--border);
+  --stats-frame-border: 1px solid var(--border);
+  --stats-frame-radius: var(--radius);
+  --card-bg: var(--surface);
+  --card-border: 1px solid #161616;
+  --card-radius: var(--radius);
+  --card-texture: none;
+  --card-texture-opacity: 0;
+  /* No second texture: the shell already draws the 32px hairline grid behind
+     `.content` (base.css), and a page texture here would paint a second grid
+     on a different origin. */
+  --page-texture: none;
+  --page-texture-size: auto;
+  --page-texture-display: none;
+  --btn-primary-weight: 500;
+}
+
+[data-scheme="typesafe"][data-mode="light"] {
+  --bg: #fefefe;
+  --surface: #f7f7f7;
+  --surface-2: #efefef;
+  --hairline: #e4e4e4;
+  --hairline-strong: color-mix(in srgb, var(--text) 22%, var(--hairline));
+  --text: #1e1e1e;
+  --text-dim: #4e4e4e;
+  /* The quiet tier sits at the AA floor (#1487): 4.85:1 on `--surface-2`;
+     `--text-dim` is kept darker (7.24) so the tiers still separate. */
+  --text-muted: #686868;
+  --accent: #d45bb6;
+  --accent-hover: #c24da4;
+  --accent-subtle: rgba(212, 91, 182, .06);
+  --accent-on: #161616;
+  --pos: #1a7f37;
+  --pos-subtle: rgba(26, 127, 55, .06);
+  --pos-bg: #eef7f1;
+  --pos-border: color-mix(in srgb, var(--pos) 30%, transparent);
+  --green-deep: #1a7f37;
+  --neg: #e5484d;
+  --neg-subtle: rgba(229, 72, 77, .06);
+  --neg-bg: color-mix(in srgb, var(--neg) 8%, var(--surface));
+  --neg-border: color-mix(in srgb, var(--neg) 30%, transparent);
+  --warn: #bd5b00;
+  --warn-bg: color-mix(in srgb, var(--warn) 8%, var(--surface));
+  --warn-border: color-mix(in srgb, var(--warn) 30%, transparent);
+  --info: #0070f3;
+  --info-bg: color-mix(in srgb, var(--info) 8%, var(--surface));
+  --info-border: color-mix(in srgb, var(--info) 30%, transparent);
+  --purple: #7c3aed;
+  --magenta: #d946ef;
+  --cyan: #0891b2;
+  --lime: #65a30d;
+  --yellow: #a16207;
+
+  /* Tag inks (#1487).  A tag paints its text in one of these and derives
+     its fill from it (`color-mix(currentColor 8%, transparent)`), so the
+     ink — not the semantic colour above — is what clears 4.5:1 against the
+     composited fill.  The semantic tokens stay free for dots, borders,
+     danger fills and the focus ring.  Measured on `--bg`, `--surface` and `--surface-2` (a hovered row), the strictest of the three. */
+  --tag-pos: #177332;
+  --tag-neg: #c21b21;
+  --tag-warn: #a04d00;
+  --tag-info: #005fce;
+  --tag-accent: #ac2d8c;
+  --tag-purple: #7934ed;
+  --tag-magenta: #a711be;
+  --tag-tools: #066d86;
+  --tag-lime: #456f09;
+  --tag-decision: #7036f4;
+}
+
+[data-scheme="typesafe"][data-mode="dark"] {
+  --overlay: rgba(0, 0, 0, .70);
+  --bg: #0b0b0b;
+  --surface: #101010;
+  --surface-2: #161616;
+  --hairline: #262626;
+  --hairline-strong: color-mix(in srgb, var(--text) 22%, var(--hairline));
+  --text: #ededed;
+  --text-dim: #a3a3a3;
+  --text-muted: #8a8a8a;
+  --accent: #f386a1;
+  --accent-hover: #ff9db4;
+  --accent-subtle: rgba(243, 134, 161, .08);
+  --accent-on: #0b0b0b;
+  --pos: #45a557;
+  --pos-subtle: rgba(69, 165, 87, .08);
+  --pos-bg: #0d1f12;
+  --pos-border: color-mix(in srgb, var(--pos) 30%, transparent);
+  --green-deep: #45a557;
+  --neg: #e5484d;
+  --neg-subtle: rgba(229, 72, 77, .08);
+  --neg-bg: color-mix(in srgb, var(--neg) 8%, var(--surface));
+  --neg-border: color-mix(in srgb, var(--neg) 30%, transparent);
+  --warn: #f1a10d;
+  --warn-bg: color-mix(in srgb, var(--warn) 8%, var(--surface));
+  --warn-border: color-mix(in srgb, var(--warn) 30%, transparent);
+  --info: #3291ff;
+  --info-bg: color-mix(in srgb, var(--info) 8%, var(--surface));
+  --info-border: color-mix(in srgb, var(--info) 30%, transparent);
+  --purple: #a78bfa;
+  --magenta: #f0abfc;
+  --cyan: #22d3ee;
+  --lime: #a3e635;
+  --yellow: #fbbf24;
+
+  /* The hard frame is a light-mode feature: on #0b0b0b a #161616 frame is
+     invisible, so dark mode frames with the hairline grey instead. */
+  --card-border: 1px solid #262626;
+
+  --tag-pos: #45a557;
+  --tag-neg: #e75458;
+  --tag-warn: #f1a10d;
+  --tag-info: #3291ff;
+  --tag-accent: #f386a1;
+  --tag-purple: #a78bfa;
+  --tag-magenta: #f0abfc;
+  --tag-tools: #22d3ee;
+  --tag-lime: #a3e635;
+  --tag-decision: #976df7;
+}
+
+/* P1 compatibility aliases — planned for removal (#1489); every consumer
+   must migrate first.  The values live under the shared vocabulary
+   (surface, hairline, pos/neg/warn/info and their -bg/-subtle/-border
+   variants); these names keep every component resolving the same values
+   until the last one reads the new names.  Removing them is not a
+   comment edit — `--bg-card`, `--bg-hover`, `--border`, `--badge-radius`
+   and the colour aliases are still read by base.css and components.css. */
+[data-scheme="typesafe"] {
+  --bg-card: var(--surface);
+  --bg-hover: var(--surface-2);
+  --border: var(--hairline);
+  --green: var(--pos);
+  --green-subtle: var(--pos-subtle);
+  --green-bg: var(--pos-bg);
+  --red: var(--neg);
+  --red-subtle: var(--neg-subtle);
+  --orange: var(--warn);
+  --blue: var(--info);
+  --badge-radius: var(--radius-pill);
+}

@@ -389,7 +389,7 @@ a { color: var(--accent); text-decoration: none; }
   border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
 }
 .scope-badge.server-save {
-  color: var(--yellow, #b7791f);
+  color: var(--tag-warn);
   border-color: color-mix(in srgb, var(--yellow, #b7791f) 40%, var(--border));
 }
 @media (max-width: 900px) {

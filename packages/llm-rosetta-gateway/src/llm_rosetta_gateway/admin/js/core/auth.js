@@ -280,7 +280,7 @@ function _validateRlQuotas() {
       if (p && p.error) { errors.push(f.name + ' ("' + part + '"): ' + p.error); hasError = true; }
       else if (p) { allParsed.push(p); }
     }
-    if (hasError) { document.getElementById(f.id).style.borderColor = 'var(--red)'; }
+    if (hasError) { document.getElementById(f.id).style.borderColor = 'var(--neg)'; }
     else { document.getElementById(f.id).style.borderColor = ''; parsed[f.id] = allParsed.length === 1 ? allParsed[0] : allParsed[0] || null; }
   }
   const rpm = {};
@@ -290,7 +290,7 @@ function _validateRlQuotas() {
   if (rpm.rlGlobal && rpm.rlPerKey && rpm.rlPerKey > rpm.rlGlobal) warnings.push(t('rl.warnOrder', {a: t('rl.perKey'), av: _fmtRpm(rpm.rlPerKey), b: t('rl.perGlobal'), bv: _fmtRpm(rpm.rlGlobal)}));
   if (rpm.rlPerModel && rpm.rlPerKey && rpm.rlPerModel > rpm.rlPerKey) warnings.push('Per Model (' + _fmtRpm(rpm.rlPerModel) + ') > Per API Key (' + _fmtRpm(rpm.rlPerKey) + ')');
   const el = document.getElementById('rlWarning');
-  if (errors.length) { el.innerHTML = '⛔ ' + errors.join('<br>⛔ '); el.classList.add('visible'); el.style.color = 'var(--red)'; el.style.background = 'rgba(207,34,46,0.06)'; el.style.borderColor = 'rgba(207,34,46,0.2)'; return false; }
+  if (errors.length) { el.innerHTML = '⛔ ' + errors.join('<br>⛔ '); el.classList.add('visible'); el.style.color = 'var(--neg)'; el.style.background = 'color-mix(in srgb, var(--neg) 6%, transparent)'; el.style.borderColor = 'color-mix(in srgb, var(--neg) 20%, transparent)'; return false; }
   else if (warnings.length) { el.innerHTML = '⚠ ' + warnings.join('<br>⚠ '); el.classList.add('visible'); el.style.color = ''; el.style.background = ''; el.style.borderColor = ''; return true; }
   else { el.classList.remove('visible'); return true; }
 }

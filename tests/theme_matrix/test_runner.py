@@ -127,7 +127,7 @@ def test_probe_summary_names_every_failure():
 
 def test_declared_axes_come_from_the_registry():
     """The default axes are the registry's schemes and the sheets' modes."""
-    assert declared_schemes() == ["minimal", "emerald"]
+    assert declared_schemes() == ["minimal", "emerald", "typesafe"]
     assert declared_modes() == ["dark", "light"]
 
 
