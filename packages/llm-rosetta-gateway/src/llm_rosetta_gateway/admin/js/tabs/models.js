@@ -8,6 +8,7 @@ import { initLogoSelect, setLogoSelectOptions } from '../components/logo-select.
 import { mergeReasoningOverride } from '../core/reasoning-override.js';
 import { providerRowsHtml, syncPickerBtn, openPickerMenu } from '../components/provider-picker.js';
 import { laneGripHtml, laneSwitchHtml, laneWeightInputHtml } from '../components/provider-row.js';
+import { findLane, laneBody, laneKey, laneLabel } from '../core/lanes.js';
 import { jsArg } from '../core/html.js';
 
 // ── helpers (module-private) ──
@@ -648,7 +649,7 @@ function _capPicker(model, provider) {
     '<input type="checkbox"' + (caps.includes(capability) ? ' checked' : '') +
     ' data-capability="' + capability + '"' +
     ' onchange="toggleProviderCapability(' + jsArg(model) + ',' +
-    jsArg(provider.name) + ',this)">' +
+    jsArg(provider.name) + ',' + jsArg(provider.upstream_model || '') + ',this)">' +
     '<span class="cap-dot cap-badge-' + capability + '" aria-hidden="true"></span>' +
     '<span class="cap-menu-label">' + esc(capLabel(capability)) + '</span></label>'
   ).join('');
@@ -676,7 +677,7 @@ function toggleCapMenu(button) {
  *  that lands late must not repaint the row with a state the menu no longer
  *  shows.
  */
-async function toggleProviderCapability(model, provider, checkbox) {
+async function toggleProviderCapability(model, provider, upstream, checkbox) {
   const menu = checkbox.closest('.cap-menu');
   const list = [...menu.querySelectorAll('input[data-capability]')]
     .filter((box) => box.checked)
@@ -685,7 +686,7 @@ async function toggleProviderCapability(model, provider, checkbox) {
   menu.dataset.seq = seq;
   const res = await api.post(
     `/admin/api/config/models/${encodeURIComponent(model)}/update-provider`,
-    { provider, capabilities: list },
+    laneBody(provider, upstream, { capabilities: list }),
   );
   if (!res.ok) {
     if (menu.dataset.seq === seq) {
@@ -695,7 +696,7 @@ async function toggleProviderCapability(model, provider, checkbox) {
     return;
   }
   if (menu.dataset.seq !== seq) return;
-  const entry = _providerEntry(S.configData.models[model], provider);
+  const entry = _providerEntry(S.configData.models[model], provider, upstream);
   if (entry && typeof entry === 'object') {
     if (list.length) entry.capabilities = list;
     else delete entry.capabilities;
@@ -704,7 +705,7 @@ async function toggleProviderCapability(model, provider, checkbox) {
   if (button) button.innerHTML = _capDots(list);
   const row = checkbox.closest('.cap-menu-row');
   if (row) row.setAttribute('aria-checked', String(checkbox.checked));
-  showToast(t('toast.capsSet', { provider }));
+  showToast(t('toast.capsSet', { provider: laneLabel(provider, upstream) }));
 }
 
 /** One menu row per provider: its own on/off switch, weight, test and remove. */
@@ -717,12 +718,20 @@ function _providerMenuRows(name, info, disabledProviders) {
     const n = esc(name);
     const pn = esc(p.name);
     const w = p.weight || 1;
+    // The same provider may hold two lanes, so every control in the row names
+    // the lane, not only the provider.
+    const upstream = p.upstream_model || '';
     // A multi-provider entry's order is its route order, so the rows are
-    // draggable here exactly as they are on the Routing board.
-    const drag = details.length > 1
+    // draggable here exactly as they are on the Routing board.  Two lanes of
+    // one provider are not draggable: the reorder endpoint takes a list of
+    // provider names, so a duplicated name cannot say which row moved —
+    // offering the handle would reorder the wrong lane.
+    const draggable = details.length > 1
+      && new Set(details.map((d) => d.name)).size === details.length;
+    const drag = draggable
       ? ` draggable="true" data-pname="${pn}" data-pmodel="${n}"`
       : '';
-    const grip = details.length > 1
+    const grip = draggable
       ? laneGripHtml({ title: t('model.reorderHint') })
       : '';
     return `<div class="provider-menu-row${off ? ' pm-off' : ''}" role="menuitem"${drag}>
@@ -731,7 +740,7 @@ function _providerMenuRows(name, info, disabledProviders) {
         name: p.name,
         on: !off,
         title: off ? t('provider.disabled') : t('provider.enabled'),
-        onchange: `toggleModelProvider(${jsArg(name)},${jsArg(p.name)})`,
+        onchange: `toggleModelProvider(${jsArg(name)},${jsArg(p.name)},${jsArg(upstream)})`,
       })}
       <div class="pm-id">
         <span class="provider-link pm-name" title="${esc(p.name)}" onclick="goToProviderFromModel(${jsArg(p.name)})">${esc(_providerLabel(p.name))}</span>
@@ -740,9 +749,9 @@ function _providerMenuRows(name, info, disabledProviders) {
       ${modelType === 'llm'
         ? _capPicker(name, p)
         : `<span class="cap-badge ${_typeBadgeClass(modelType)}" title="${esc(typeLabelAlt(modelType))}">${_CAP_ICONS[modelType] || ''}</span>`}
-      ${laneWeightInputHtml({ model: name, provider: p.name, weight: w, title: t('label.weight') })}
+      ${laneWeightInputHtml({ model: name, provider: p.name, upstream, weight: w, title: t('label.weight') })}
       ${_testGroup(name, modelType, opts, p.name)}
-      <button class="btn btn-sm pd-remove" title="${t('btn.remove')}" onclick="removeProviderFromModel(${jsArg(name)},${jsArg(p.name)})">✕</button>
+      <button class="btn btn-sm pd-remove" title="${t('btn.remove')}" onclick="removeProviderFromModel(${jsArg(name)},${jsArg(p.name)},${jsArg(upstream)})">✕</button>
     </div>`;
   }).join('');
 }
@@ -869,7 +878,7 @@ function _modelDetailHtml(name, info, disabledProviders) {
   ).join('');
   return `<div class="model-detail">
       <div class="md-row"><span class="md-label">${t('label.capabilities')}</span><span class="md-caps">${capList}</span></div>
-      <div class="md-providers">${_detailProviderRows(name, info, disabledProviders)}</div>
+      <div class="md-providers">${_detailProviderRows(name, info, disabledProviders)}${_fallbackRowHtml(name, info)}${_addLaneHtml(name)}</div>
       <div class="md-actions">
         <button class="btn btn-sm" onclick="editModel(${jsArg(name)},${jsArg(_getProviderDetails(info)[0]?.name || '')})">${t('btn.edit')}</button>
         <button class="btn btn-sm" onclick="cloneModel(${jsArg(name)})">${t('btn.clone')}</button>
@@ -877,6 +886,60 @@ function _modelDetailHtml(name, info, disabledProviders) {
       </div>
     </div>`;
 }
+
+/** The drawer's "one more lane" row.
+ *
+ *  It opens the editor on this model with no provider chosen and an empty
+ *  upstream: saving it names a lane the entry does not have yet, which the
+ *  backend answers with a 409 and then adds on confirmation. */
+function _addLaneHtml(name) {
+  return `<button type="button" class="btn btn-sm md-add-lane"` +
+    ` title="${esc(t('hint.addLane'))}"` +
+    ` onclick="addModelLane(${jsArg(name)})">+ ${t('model.addLane')}</button>`;
+}
+
+/** The entry-level upstream a lane without one falls back to, if any. */
+function _upstreamFallback(info) {
+  return (typeof info === 'object' && info && info.upstream_model_fallback) || '';
+}
+
+/** The fallback row: shown read-only, deleted only on purpose.
+ *
+ *  The resolver serves a lane that declares no upstream with this value, so
+ *  the panel has to show it — a value in effect that no screen mentions is how
+ *  a config and its UI drift apart.  It is not edited here: a lane's own
+ *  upstream belongs on the lane.  Deleting it is an explicit act because it
+ *  changes what those lanes request. */
+function _fallbackRowHtml(name, info) {
+  const fallback = _upstreamFallback(info);
+  if (!fallback) return '';
+  return `<div class="provider-menu-row pd-single md-fallback" title="${esc(t('hint.upstreamFallback'))}">
+      <span class="pm-id">
+        <span class="pm-upstream">${esc(t('label.upstreamFallback'))} → ${esc(fallback)}</span>
+      </span>
+      <button class="btn btn-sm pd-remove" title="${esc(t('btn.remove'))}" onclick="clearModelUpstreamFallback(${jsArg(name)})">✕</button>
+    </div>`;
+}
+
+/** Drop the entry-level fallback.  Lanes that declared their own are untouched. */
+async function clearModelUpstreamFallback(name) {
+  const info = S.configData?.models?.[name];
+  const fallback = _upstreamFallback(info);
+  if (!fallback) return;
+  if (!confirm(t('confirm.clearUpstreamFallback', { upstream: fallback, model: name }))) return;
+  const provider = _getProviderDetails(info)[0]?.name || '';
+  const res = await api.put(
+    `/admin/api/config/models/${encodeURIComponent(name)}`,
+    { provider, clear_upstream_fallback: true },
+  );
+  if (res.ok) {
+    showToast(t('toast.upstreamFallbackCleared', { model: name }));
+    window.loadConfig();
+  } else {
+    showToast(res.error || t('toast.error'), 'error');
+  }
+}
+window.clearModelUpstreamFallback = clearModelUpstreamFallback;
 
 /** Repaint the summary pane; a form in progress is left alone. */
 function _syncModelDrawer() {
@@ -980,6 +1043,12 @@ async function _reorderModelProviders(model, lane, target, after, root) {
     (row) => row.dataset.pname,
   );
   if (!names.includes(lane) || !names.includes(target)) return;
+  // The endpoint addresses rows by provider name, so a duplicated name would
+  // make this list say two different orders at once.  Unreachable from the
+  // drawer — a duplicated provider gets no drag handle — and the endpoint
+  // answers 400 for such a list as well; the guard is the client half of that
+  // contract, so a stale DOM cannot post a half-specified order.
+  if (new Set(names).size !== names.length) return;
   names.splice(names.indexOf(lane), 1);
   names.splice(names.indexOf(target) + (after ? 1 : 0), 0, lane);
   const res = await api.post(
@@ -1040,19 +1109,20 @@ window.toggleProviderMenu = toggleProviderMenu;
 /** Turn one provider's entry for a model on or off.
  *
  *  This is not the same as disabling the provider: it narrows one model to
- *  its other providers. */
-async function toggleModelProvider(modelName, providerName) {
+ *  its other providers.  `upstream` names the lane, since a provider may hold
+ *  two of them. */
+async function toggleModelProvider(modelName, providerName, upstream = '') {
   const info = S.configData?.models?.[modelName];
   if (!info) return;
-  const detail = _getProviderDetails(info).find(p => p.name === providerName);
+  const detail = findLane(_getProviderDetails(info), providerName, upstream);
   if (!detail) return;
   const next = detail.enabled === false;
   const res = await api.post(
     `/admin/api/config/models/${encodeURIComponent(modelName)}/update-provider`,
-    {provider: providerName, enabled: next},
+    laneBody(providerName, upstream, {enabled: next}),
   );
   if (res.ok) {
-    showToast(`${providerName}: ${t(next ? 'model.enabled' : 'model.disabled')}`);
+    showToast(`${laneLabel(providerName, upstream)}: ${t(next ? 'model.enabled' : 'model.disabled')}`);
     window.loadConfig();
   } else {
     showToast(res.error || t('toast.error'), 'error');
@@ -1061,23 +1131,25 @@ async function toggleModelProvider(modelName, providerName) {
 window.toggleModelProvider = toggleModelProvider;
 
 
-async function removeProviderFromModel(modelName, providerName) {
-  if (!confirm(t('confirm.removeProviderFromModel', {provider: providerName, model: modelName}))) return;
-  const res = await api.post(`/admin/api/config/models/${encodeURIComponent(modelName)}/remove-provider`, {provider: providerName});
+async function removeProviderFromModel(modelName, providerName, upstream = '') {
+  const lane = laneLabel(providerName, upstream);
+  if (!confirm(t('confirm.removeLane', {lane, model: modelName}))) return;
+  const res = await api.post(`/admin/api/config/models/${encodeURIComponent(modelName)}/remove-provider`, laneBody(providerName, upstream));
   if (res.ok) {
-    showToast(t('toast.providerRemovedFromModel', {provider: providerName, model: modelName}));
+    showToast(t('toast.providerRemovedFromModel', {provider: lane, model: modelName}));
     window.loadConfig();
   } else {
     showToast(res.error || t('toast.error'), 'error');
   }
 }
 
-/** The mutable `providers[]` entry for one provider, or null when the model
+/** The mutable `providers[]` entry for one lane, or null when the model
  *  is a single-provider entry. */
-function _providerEntry(info, providerName) {
+function _providerEntry(info, providerName, upstream = '') {
   if (!info || typeof info !== 'object' || !Array.isArray(info.providers)) return null;
+  const key = laneKey(providerName, upstream);
   return info.providers.find(
-    p => (typeof p === 'string' ? p : p.name) === providerName,
+    p => laneKey(typeof p === 'string' ? p : p.name, typeof p === 'string' ? '' : p.upstream_model) === key,
   ) || null;
 }
 
@@ -1086,9 +1158,10 @@ function _providerEntry(info, providerName) {
  *  The weight shows nowhere but this menu, so the answer is written back into
  *  the loaded config instead of reloading it: a reload rebuilds the table and
  *  the menu would close under the pointer after every step. */
-async function updateProviderWeight(modelName, providerName, input) {
-  const detail = _getProviderDetails(S.configData.models[modelName])
-    .find(p => p.name === providerName);
+async function updateProviderWeight(modelName, providerName, upstream, input) {
+  const detail = findLane(
+    _getProviderDetails(S.configData.models[modelName]), providerName, upstream,
+  );
   const previous = detail ? (detail.weight || 1) : 1;
   const w = parseInt(input.value, 10);
   if (isNaN(w) || w < 1 || w > 100) {
@@ -1098,22 +1171,37 @@ async function updateProviderWeight(modelName, providerName, input) {
   }
   const res = await api.post(
     `/admin/api/config/models/${encodeURIComponent(modelName)}/update-provider`,
-    {provider: providerName, weight: w},
+    laneBody(providerName, upstream, {weight: w}),
   );
   if (!res.ok) {
     showToast(res.error || t('toast.error'), 'error');
     input.value = previous;
     return;
   }
-  const entry = _providerEntry(S.configData.models[modelName], providerName);
+  const entry = _providerEntry(S.configData.models[modelName], providerName, upstream);
   if (entry && typeof entry === 'object') entry.weight = w;
-  showToast(t('toast.weightSet', {provider: providerName, w}));
+  showToast(t('toast.weightSet', {provider: laneLabel(providerName, upstream), w}));
 }
 
 /** Set what this provider serves for this model; blank means inherit.
  *
  *  The list is comma-separated in the row, which is the whole edit surface:
  *  the kernel vocabulary is small (text, vision, tools, reasoning). */
+
+/** Open the editor to add one more lane to an existing model.
+ *
+ *  No provider is preselected: the point of this entry point is to name a lane
+ *  the entry does not have yet, and picking the first provider would read as an
+ *  edit of it.  The backend answers a new lane with a 409 and adds it on
+ *  confirmation, exactly as it does for a second provider. */
+function addModelLane(name) {
+  const info = S.configData?.models?.[name];
+  if (!info) return;
+  const caps = typeof info === 'string' ? ['text'] : (info.capabilities || ['text']);
+  const modelType = (typeof info === 'object' && info.type) ? info.type : null;
+  openModelModal(name, '', caps, '', undefined, modelType);
+}
+window.addModelLane = addModelLane;
 
 // ── Model rendering ──
 

@@ -804,6 +804,12 @@ canvas { width: 100%; height: 160px; }
 .md-caps { display: flex; gap: 4px; flex-wrap: wrap; }
 .md-caps .cap-badge { padding: 2px 8px; border-radius: 10px; }
 .md-providers { border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+/* The drawer's "one more lane" row: a full-width footer inside the provider
+   box, so it reads as one more row of the same list. */
+.md-add-lane { display: block; width: 100%; border: 0; border-top: 1px solid var(--border); border-radius: 0; color: var(--text-dim); }
+.md-add-lane:hover { color: var(--text); }
+/* The entry-level fallback: reported, not a lane of its own. */
+.md-fallback { color: var(--text-dim); }
 .md-actions { display: flex; gap: 6px; justify-content: flex-end; margin-top: 8px; }
 .model-drawer {
   position: fixed; top: 0; right: 0; bottom: 0; width: 440px; max-width: 100vw;

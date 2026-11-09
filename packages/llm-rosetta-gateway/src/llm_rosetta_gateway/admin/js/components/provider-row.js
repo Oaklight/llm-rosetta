@@ -59,12 +59,16 @@ export function laneGripHtml({ title, cls = 'pm-grip', data = '' }) {
 
 /** The weight control, for the surfaces whose weight is a text field.
  *  The board's stepper is not this control: it writes on every step instead
- *  of on blur, so it stays the board's own. */
-export function laneWeightInputHtml({ model, provider, weight, title }) {
+ *  of on blur, so it stays the board's own.
+ *
+ *  `upstream` names the lane this weight belongs to.  A provider may appear
+ *  twice, so the handler cannot find the row from the name alone; it is passed
+ *  as an empty string when the lane declares no upstream. */
+export function laneWeightInputHtml({ model, provider, upstream = '', weight, title }) {
   return (
     `<input type="number" class="pd-weight" min="1" max="100" value="${esc(weight)}"` +
     ` title="${esc(title)}"` +
-    ` onchange="updateProviderWeight(${jsArg(model)},${jsArg(provider)},this)"` +
+    ` onchange="updateProviderWeight(${jsArg(model)},${jsArg(provider)},${jsArg(upstream)},this)"` +
     ` onkeydown="if(event.key==='Enter'){this.blur()}">`
   );
 }
