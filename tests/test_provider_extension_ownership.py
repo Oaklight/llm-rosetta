@@ -18,8 +18,12 @@ from typing import Any
 import pytest
 
 from llm_rosetta import ConversionPipeline
+from llm_rosetta.converters.base.context import ConversionContext
 from llm_rosetta.converters.llm.chat_completions import ChatCompletionsConverter
+from llm_rosetta.converters.llm.open_responses import OpenResponsesConverter
+from llm_rosetta.conversion_warnings import WarningSink, recording_to
 from llm_rosetta.types.ir.request import IRRequest
+from tools.conformance.suites.wire import explained
 
 REQUEST: dict[str, Any] = {
     "model": "test-model",
@@ -101,6 +105,47 @@ def test_the_loss_is_reported_once_per_path() -> None:
         "provider-bound request fields dropped for messages: previous_response_id; "
         "previous_response_id refers to a stored conversation that only the "
         "source upstream holds, so the target answers from this turn alone"
+    )
+
+
+def test_the_profile_withholding_is_reported_once_per_path() -> None:
+    """The Responses writer's own withholdings are attributable per path.
+
+    These fields are owned by this dialect and have no IR equivalent; the
+    writer withholds the ones the target did not declare.  A comma-joined
+    subject matches no path at all, so the loss was only ever attributed by
+    the base writer's warning about a *different* set (#1328).
+    """
+    ir: IRRequest = {
+        "model": "test-model",
+        "messages": [{"role": "user", "content": [{"type": "text", "text": "hi"}]}],
+        "provider_extensions": {
+            "_owner": "open_responses",
+            "logit_bias": {"123": 1},
+            "moderation": {"model": "omni-moderation-latest"},
+        },
+    }
+
+    ctx = ConversionContext()
+    sink = WarningSink(leg="request")
+    ctx.warnings = sink
+    with recording_to(sink):
+        body, warnings = OpenResponsesConverter().request_to_provider(ir, context=ctx)
+
+    assert "logit_bias" not in body and "moderation" not in body
+    assert len(warnings) == 2, warnings
+    by_subject = {getattr(w, "subject", ""): w for w in warnings}
+    assert set(by_subject) == {
+        "provider_extensions.logit_bias",
+        "provider_extensions.moderation",
+    }
+    for subject in by_subject:
+        # Exactly the path it names, and nothing else.
+        assert explained(f"{subject}: lost", warnings)
+        assert not explained("provider_extensions.store: lost", [by_subject[subject]])
+    assert not explained(
+        "provider_extensions.logit_bias: lost",
+        [by_subject["provider_extensions.moderation"]],
     )
 
 

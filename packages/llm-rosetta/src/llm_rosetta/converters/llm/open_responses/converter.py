@@ -464,12 +464,14 @@ class OpenResponsesConverter(BaseConverter):
                 for key in merged
                 if key in _PROFILE_REQUEST_FIELDS and key not in declared
             }
-            for key in withheld:
+            for key in sorted(withheld):
                 merged.pop(key)
-            if withheld:
+                # One warning per field, with its IR path as the subject:
+                # ``explained()`` matches a subject against the path it
+                # explains, and a comma-joined list matches none of them.
                 report_loss(
-                    extension_loss_warning(withheld, self._CONVERTER_TAG),
-                    subject=",".join(sorted(withheld)),
+                    extension_loss_warning([key], self._CONVERTER_TAG),
+                    subject=f"provider_extensions.{key}",
                 )
             result.update(merged)
 
