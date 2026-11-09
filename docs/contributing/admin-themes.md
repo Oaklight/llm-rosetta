@@ -71,7 +71,7 @@ title: 管理面板主题
 
 P1 把取值搬到了上面的名字下，并把原来的名字（`--bg-card`、`--bg-hover`、
 `--border`、`--green`、`--green-subtle`、`--green-bg`、`--red`、`--red-subtle`、
-`--orange`、`--blue`、`--badge-radius`）留在每个主题文件末尾的一个别名块里，因此没有组件改变行为。这个块是临时的：**P5 删除它**，而防止它变成第二套 API 的规则是一次 grep —— 在该块之外，`admin/` 里不得残留任何旧名字。
+`--orange`、`--blue`、`--badge-radius`）留在每个主题文件末尾的一个别名块里，因此没有组件改变行为。这个块是临时的，但还没有到期日：它**计划删除**（[#1489](https://github.com/Oaklight/llm-rosetta/issues/1489)），且要等所有消费者先迁移完——`base.css` 与 `components.css` 仍在读取这些名字。防止它变成第二套 API 的规则是一次 grep —— 在该块之外，`admin/` 里不得残留任何旧名字。
 
 深色块可以在深色背景需要不同强度时重新声明 `--dot` 与 `--grid`（emerald 就是这样）。除此之外，它不应重新声明结构块里的值——除非那确实是模式之间的差异，而不是方案之间的差异。
 
