@@ -257,7 +257,7 @@ class TestACallersOwnSinkWins:
         with recording_to(caller):
             ChatCompletionsConverter().request_to_provider(ir, context=ctx)
 
-        assert [w.subject for w in caller] == ["top_k"]
+        assert [w.subject for w in caller] == ["generation.top_k"]
         assert caller.leg == "caller", "the caller's cursor must not move"
         assert ctx.warnings == [], "the entry point must not install its own sink"
 
@@ -287,7 +287,7 @@ class TestACallersOwnSinkWins:
         with recording_to(caller):
             ChatCompletionsConverter().request_to_provider(ir, context=ctx)
 
-        assert [w.subject for w in caller] == ["max_tool_calls"]
+        assert [w.subject for w in caller] == ["tool_config.max_calls"]
         assert ctx.warnings == []
 
     def test_a_tool_choice_loss_reaches_the_caller_too(self):
@@ -803,7 +803,7 @@ class TestThePipelineSink:
             }
         )
 
-        [warning] = [w for w in pipe.warnings if w.subject == "top_k"]
+        [warning] = [w for w in pipe.warnings if w.subject == "generation.top_k"]
         assert warning.leg == "request"
         assert warning.code == DROPPED
         assert warning.converter == "messages->chat_completions"

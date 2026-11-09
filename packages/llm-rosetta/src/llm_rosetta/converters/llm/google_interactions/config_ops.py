@@ -82,7 +82,8 @@ class GoogleInteractionsConfigOps(BaseConfigOps):
         for field in sorted(set(ir_config) - _GENERATION_FIELDS_MAPPED):
             report_loss(
                 f"Google Interactions does not support {field}; ignored",
-                subject=field,
+                # IR path, not the dialect's field name (#1328).
+                subject=f"generation.{field}",
                 leg="request",
                 warnings=kwargs.get("warnings"),
             )
@@ -114,6 +115,7 @@ class GoogleInteractionsConfigOps(BaseConfigOps):
     @staticmethod
     def ir_reasoning_to_p(ir_config: ReasoningConfig) -> dict:
         result: dict[str, Any] = {}
+        level = None
         if "effort" in ir_config:
             level = _IR_EFFORT_TO_THINKING_LEVEL.get(ir_config["effort"])
             if level:
@@ -122,6 +124,23 @@ class GoogleInteractionsConfigOps(BaseConfigOps):
             val = ir_config["summary"]
             if val in ("auto", "none"):
                 result["thinking_summaries"] = val
+        # ``thinking_level`` is the whole reasoning surface here: a level
+        # implies "thinking on", but a bare on/off switch carries no level, and
+        # there is no budget field.  Report by IR path so the loss is
+        # attributable (#1328).
+        if "mode" in ir_config and level is None:
+            report_loss(
+                "Google Interactions has no on/off reasoning switch without a "
+                "thinking level; mode ignored",
+                subject="reasoning.mode",
+                leg="request",
+            )
+        if "budget_tokens" in ir_config:
+            report_loss(
+                "Google Interactions has no reasoning budget; ignored",
+                subject="reasoning.budget_tokens",
+                leg="request",
+            )
         return result
 
     @staticmethod
@@ -205,6 +224,26 @@ class GoogleInteractionsConfigOps(BaseConfigOps):
 
     @staticmethod
     def ir_cache_config_to_p(ir_cache: CacheConfig, **kwargs: Any) -> Any:
+        """Interactions takes a cached-content resource, not an IR cache key.
+
+        The IR ``cache.key`` is a request-scoped cache key (a prompt-cache
+        handle); ``cached_content`` is the name of a resource created ahead of
+        time.  Forwarding one as the other would address a resource that does
+        not exist, so the fields are reported rather than sent (#1328).
+        """
+        if "key" in ir_cache:
+            report_loss(
+                "Google Interactions takes a cached-content resource, not a "
+                "request cache key; ignored",
+                subject="cache.key",
+                leg="request",
+            )
+        if "retention" in ir_cache:
+            report_loss(
+                "Google Interactions has no per-request cache retention; ignored",
+                subject="cache.retention",
+                leg="request",
+            )
         return {}
 
     @staticmethod

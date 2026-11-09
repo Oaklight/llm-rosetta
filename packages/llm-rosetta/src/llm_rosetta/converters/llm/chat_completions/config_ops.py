@@ -88,7 +88,7 @@ class ChatCompletionsConfigOps(BaseConfigOps):
         if "top_k" in ir_config:
             report_loss(
                 "OpenAI Chat does not support top_k; ignored",
-                subject="top_k",
+                subject="generation.top_k",
             )
 
         return result

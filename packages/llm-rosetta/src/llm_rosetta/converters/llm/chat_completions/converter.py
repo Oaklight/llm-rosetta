@@ -222,6 +222,11 @@ class ChatCompletionsConverter(BaseConverter):
         if gen_config:
             gen_fields = self.config_ops.ir_generation_config_to_p(gen_config)
             result.update(gen_fields)
+            if "truncation" in gen_config:
+                report_loss(
+                    "Chat Completions has no truncation control; ignored",
+                    subject="generation.truncation",
+                )
 
         # 7. Response format
         resp_format = ir_request.get("response_format")
@@ -317,7 +322,7 @@ class ChatCompletionsConverter(BaseConverter):
             if "max_calls" in tool_config:
                 report_loss(
                     "OpenAI Chat does not support max_tool_calls, ignored",
-                    subject="max_tool_calls",
+                    subject="tool_config.max_calls",
                 )
 
     def _get_response_id_prefix(

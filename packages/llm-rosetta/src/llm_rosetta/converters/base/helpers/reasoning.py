@@ -133,7 +133,10 @@ def apply_reasoning_config(
         if converter_type in ("google_generate", "google"):
             _apply_google_extras(ir, result, mode, budget_tokens, cap)
             return result
-        return _serialize_disabled(cap)
+        disabled = _serialize_disabled(cap)
+        if not disabled:
+            _report_unexpressed(converter_type, mode, budget_tokens, thinking=False)
+        return disabled
 
     # Effort clamping + placement.
     if effort is not None:
@@ -153,7 +156,49 @@ def apply_reasoning_config(
     elif converter_type in ("google_generate", "google"):
         _apply_google_extras(ir, result, mode, budget_tokens, cap)
 
+    _report_unexpressed(
+        converter_type, mode, budget_tokens, thinking="thinking" in result
+    )
     return result
+
+
+def _report_unexpressed(
+    converter_type: str | None,
+    mode: str | None,
+    budget_tokens: int | None,
+    *,
+    thinking: bool,
+) -> None:
+    """Report reasoning fields this target had no form for, by IR path.
+
+    A warning is attributed by the path it names, so the subject is the IR
+    field (``reasoning.mode`` / ``reasoning.budget_tokens``), not the wire
+    spelling the target would have used.  Google generate expresses a mode
+    through its thinking budget, and Anthropic through the thinking object,
+    so neither reports here.
+    """
+    if converter_type == "chat_completions" and not thinking:
+        if mode is not None:
+            report_drop(
+                "Chat Completions has no on/off reasoning switch without a shim "
+                "that declares one; mode ignored",
+                subject="reasoning.mode",
+            )
+        if budget_tokens is not None:
+            report_drop(
+                "Chat Completions has no reasoning budget without a shim that "
+                "declares one; ignored",
+                subject="reasoning.budget_tokens",
+            )
+    elif converter_type in ("open_responses", "openai_responses"):
+        # The API's ``reasoning.mode`` is standard/pro, a different axis; the
+        # on/off switch has no spelling.  The budget is reported by the
+        # Responses extras, which own that structure.
+        if mode is not None:
+            report_drop(
+                "OpenAI Responses has no on/off reasoning switch; mode ignored",
+                subject="reasoning.mode",
+            )
 
 
 # ── Effort clamping ──────────────────────────────────────────────────────────
@@ -355,7 +400,7 @@ def _apply_open_responses_extras(
     if budget_tokens is not None:
         report_drop(
             "OpenAI Responses API does not support reasoning budget_tokens; ignored",
-            subject="budget_tokens",
+            subject="reasoning.budget_tokens",
         )
 
     _apply_visibility(ir, result, cap)
@@ -415,7 +460,7 @@ def _build_anthropic_thinking(
             "Anthropic 'enabled' thinking requires budget_tokens; falling back "
             f"to {fallback!r}",
             code=DOWNGRADED,
-            subject="budget_tokens",
+            subject="reasoning.budget_tokens",
         )
     return {"type": fallback or thinking_type}
 

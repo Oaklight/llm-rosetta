@@ -48,6 +48,7 @@ from ....types.ir.stream import (
 from ...base import BaseConverter
 from ...base.errors import require_representable_finish_reason
 from llm_rosetta.conversion_warnings import report_loss
+from llm_rosetta.converters.base.helpers.service_tier import google_service_tier
 from ...base.context import (
     ConversionContext,
     StreamContext,
@@ -656,6 +657,7 @@ class GoogleGenerateConverter(BaseConverter):
             "response_mime_type",
             "response_schema",
             "cached_content",
+            "service_tier",
         ):
             if config.get(key):
                 body[key] = config[key]
@@ -757,6 +759,11 @@ class GoogleGenerateConverter(BaseConverter):
         if gen_config:
             gen_fields = self.config_ops.ir_generation_config_to_p(gen_config)
             config.update(gen_fields)
+            if "truncation" in gen_config:
+                report_loss(
+                    "Google GenAI has no truncation control; ignored",
+                    subject="generation.truncation",
+                )
 
         # Response format
         resp_format = ir_request.get("response_format")
@@ -777,11 +784,24 @@ class GoogleGenerateConverter(BaseConverter):
             )
             config.update(reasoning_fields)
 
+        # Service tier -- only the values both sides spell the same way.
+        service_tier = ir_request.get("service_tier")
+        if service_tier:
+            mapped = google_service_tier(service_tier, "Google GenAI")
+            if mapped:
+                config["service_tier"] = mapped
+
         # Stream config
         stream = ir_request.get("stream")
         if stream:
             stream_fields = self.config_ops.ir_stream_config_to_p(stream)
             config.update(stream_fields)
+            if stream.get("include_usage"):
+                report_loss(
+                    "Google GenAI reports usage on every response; "
+                    "include_usage is not a request field",
+                    subject="stream.include_usage",
+                )
 
         # Cache config
         cache = ir_request.get("cache")

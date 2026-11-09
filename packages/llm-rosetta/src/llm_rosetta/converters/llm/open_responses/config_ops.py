@@ -103,7 +103,8 @@ class OpenResponsesConfigOps(BaseConfigOps):
             if field in ir_config:
                 report_loss(
                     f"OpenAI Responses API does not support {field}; ignored",
-                    subject=field,
+                    # IR path, not the dialect's field name (#1328).
+                    subject=f"generation.{field}",
                 )
 
         return result
