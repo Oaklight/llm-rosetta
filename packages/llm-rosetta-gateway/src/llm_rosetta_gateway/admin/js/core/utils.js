@@ -11,6 +11,7 @@ import { t } from './i18n.js';
 import { shimBrand } from './shim-tree.js';
 import { esc } from './html.js';
 import { defaultThemeName, resolveScheme, setThemeSheet } from './themes.js';
+import { openDialog, closeDialog } from './dialog.js';
 
 // ===================== Scheme + Mode =====================
 // The schemes themselves live in the gateway's theme registry (themes.js);
@@ -208,31 +209,33 @@ function showToastHtml(trustedHtml, type = 'success') {
 }
 
 // ===================== Modal =====================
+// The dialog rules (scroll lock, Tab trap, Escape) live in `dialog.js`,
+// shared with the model side panel.  This module keeps only what is specific
+// to an overlay-modal: the `open` class, the element lookup and the trigger
+// to give focus back to.
 const _modalTriggers = new Map();
-const _modalEscapeHandlers = new Map();
+
+/** The dialog panel inside an overlay: the thing that carries
+ *  `role="dialog"` and `tabindex="-1"`. */
+function _modalPanel(id) {
+  const overlay = document.getElementById(id);
+  return overlay ? overlay.querySelector(':scope > .modal') : null;
+}
 
 function openModal(id) {
+  const overlay = document.getElementById(id);
+  const panel = _modalPanel(id);
+  if (!overlay || !panel || overlay.classList.contains('open')) return;
   _modalTriggers.set(id, document.activeElement);
-  document.getElementById(id).classList.add('open');
-  if (!_modalEscapeHandlers.has(id)) {
-    // Registered when the dialog opens, so component handlers (pickers,
-    // dropdowns) that were bound earlier run first and can consume Escape
-    // with preventDefault; only an unconsumed Escape closes the dialog.
-    const onKey = (e) => {
-      if (e.key === 'Escape' && !e.defaultPrevented) closeModal(id);
-    };
-    _modalEscapeHandlers.set(id, onKey);
-    document.addEventListener('keydown', onKey);
-  }
+  overlay.classList.add('open');
+  openDialog(panel, { onEscape: () => closeModal(id) });
 }
 
 function closeModal(id) {
-  document.getElementById(id).classList.remove('open');
-  const onKey = _modalEscapeHandlers.get(id);
-  if (onKey) {
-    document.removeEventListener('keydown', onKey);
-    _modalEscapeHandlers.delete(id);
-  }
+  const overlay = document.getElementById(id);
+  if (!overlay || !overlay.classList.contains('open')) return;
+  overlay.classList.remove('open');
+  closeDialog(_modalPanel(id));
   if (id === 'testModal') window._abortPendingTest?.();
   const trigger = _modalTriggers.get(id);
   _modalTriggers.delete(id);

@@ -404,9 +404,9 @@
     </div>
   </div>
   <!-- Clear Dumps Confirm Modal -->
-  <div class="modal-overlay" role="dialog" aria-modal="true" id="clearDumpsModal">
-    <div class="modal" style="width:400px">
-      <h3 data-i18n="confirm.clearDumps">Clear All Error Dumps</h3>
+  <div class="modal-overlay" id="clearDumpsModal">
+    <div class="modal" style="width:400px" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="clearDumpsModalTitle">
+      <h3 data-i18n="confirm.clearDumps" id="clearDumpsModalTitle">Clear All Error Dumps</h3>
       <p style="font-size:13px;color:var(--text-dim);margin-bottom:16px" data-i18n-html="confirm.clearDumpsHint">This will permanently delete all error dump records. Type <strong style="color:var(--red)">CLEAR</strong> to confirm.</p>
       <input type="text" id="clearDumpsInput" oninput="onClearDumpsInput()" placeholder="Type CLEAR" data-i18n-placeholder="confirm.typeClear" style="width:100%;font-family:var(--mono)">
       <div class="modal-actions">
@@ -417,9 +417,9 @@
   </div>
 
   <!-- Export Error Dumps Modal -->
-  <div class="modal-overlay" role="dialog" aria-modal="true" id="exportDumpsModal">
-    <div class="modal" style="width:400px">
-      <h3 data-i18n="export.title">Export Error Dumps</h3>
+  <div class="modal-overlay" id="exportDumpsModal">
+    <div class="modal" style="width:400px" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="exportDumpsModalTitle">
+      <h3 data-i18n="export.title" id="exportDumpsModalTitle">Export Error Dumps</h3>
       <p style="font-size:13px;color:var(--text-dim);margin-bottom:12px" data-i18n="export.hint">Select a date range (optional). Leave empty to export all.</p>
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px">
         <input type="date" id="exportStartDate" style="flex:1">
@@ -1254,8 +1254,8 @@
 <div class="settings-popup" id="settingsPopup" style="display:none"></div>
 
 <!-- Provider Modal -->
-<div class="modal-overlay" role="dialog" aria-modal="true" id="providerModal">
-  <div class="modal modal-wide">
+<div class="modal-overlay" id="providerModal">
+  <div class="modal modal-wide" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="providerModalTitle">
     <div class="drawer-head">
       <h3 id="providerModalTitle" data-i18n="modal.addProvider">Add Provider</h3>
       <button type="button" class="drawer-close" aria-label="Close" data-i18n-aria-label="btn.close" onclick="closeModal('providerModal')">&#10005;</button>
@@ -1544,7 +1544,9 @@
 
 <!-- Model Modal -->
 <!-- Model side panel: the summary, and the edit form in the same panel -->
-<aside class="model-drawer" id="modelDrawer" aria-hidden="true" aria-label="Model details" data-i18n-aria-label="aria.modelDetails">
+<div class="drawer-scrim" id="modelDrawerScrim" hidden></div>
+<aside class="model-drawer" id="modelDrawer" role="dialog" aria-modal="true" tabindex="-1"
+  aria-labelledby="drawerTitle" aria-hidden="true">
   <div class="md-head">
     <code class="md-name" id="drawerTitle"></code>
     <button class="btn btn-sm md-close" onclick="closeModelDrawer()" data-i18n="btn.close" aria-label="Close">Close</button>
@@ -1719,10 +1721,10 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
 </aside>
 
 <!-- Fetch Models Modal -->
-<div class="modal-overlay" role="dialog" aria-modal="true" id="fetchModelsModal">
-  <div class="modal modal-wide">
+<div class="modal-overlay" id="fetchModelsModal">
+  <div class="modal modal-wide" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="fetchModelsModalTitle">
     <div class="drawer-head">
-      <h3 data-i18n="modal.fetchModels">Fetch Models from Provider</h3>
+      <h3 data-i18n="modal.fetchModels" id="fetchModelsModalTitle">Fetch Models from Provider</h3>
       <button type="button" class="drawer-close" aria-label="Close" data-i18n-aria-label="btn.close" onclick="closeModal('fetchModelsModal')">&#10005;</button>
     </div>
     <div class="form-group">
@@ -1776,9 +1778,9 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
 </div>
 
 <!-- Cleanup Confirmation Modal -->
-<div class="modal-overlay" role="dialog" aria-modal="true" id="cleanupConfirmModal">
-  <div class="modal" style="max-width:420px">
-    <h3 data-i18n="confirm.cleanupTitle">Database Cleanup</h3>
+<div class="modal-overlay" id="cleanupConfirmModal">
+  <div class="modal" style="max-width:420px" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="cleanupConfirmModalTitle">
+    <h3 data-i18n="confirm.cleanupTitle" id="cleanupConfirmModalTitle">Database Cleanup</h3>
     <!-- Mode selector -->
     <div style="display:flex;gap:4px;margin:8px 0 12px;flex-wrap:wrap">
       <button class="btn btn-sm cleanupModeBtn active" data-mode="olderThan" onclick="setCleanupMode('olderThan')" data-i18n="cleanup.modeOlderThan">Older Than</button>
@@ -1828,9 +1830,9 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
 </div>
 
 <!-- Delete Confirmation Modal -->
-<div class="modal-overlay" role="dialog" aria-modal="true" id="deleteConfirmModal">
-  <div class="modal">
-    <h3 data-i18n="confirm.deleteProviderTitle">Delete Provider</h3>
+<div class="modal-overlay" id="deleteConfirmModal">
+  <div class="modal" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="deleteConfirmModalTitle">
+    <h3 data-i18n="confirm.deleteProviderTitle" id="deleteConfirmModalTitle">Delete Provider</h3>
     <p id="deleteConfirmMsg" style="margin:8px 0 12px;color:var(--text-dim);font-size:13px"></p>
     <div id="deleteAffectedModels" style="display:none;margin-bottom:12px;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);font-size:12px;max-height:120px;overflow-y:auto"></div>
     <div class="form-group">
@@ -1846,9 +1848,9 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
 </div>
 
 <!-- Matryoshka Dimensions Modal -->
-<div class="modal-overlay" role="dialog" aria-modal="true" id="matryoshkaModal">
-  <div class="modal" style="max-width:360px">
-    <h3 data-i18n="test.matryoshka">Matryoshka</h3>
+<div class="modal-overlay" id="matryoshkaModal">
+  <div class="modal" style="max-width:360px" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="matryoshkaModalTitle">
+    <h3 data-i18n="test.matryoshka" id="matryoshkaModalTitle">Matryoshka</h3>
     <div class="form-group">
       <label data-i18n="test.matryoshkaDimPrompt">Enter dimensions for matryoshka embedding:</label>
       <input id="matryoshkaDim" type="number" min="1" value="256" style="margin-top:6px" onkeydown="if(event.key==='Enter')confirmMatryoshka()">
@@ -1861,8 +1863,8 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
 </div>
 
 <!-- Test Result Modal -->
-<div class="modal-overlay" role="dialog" aria-modal="true" id="testModal">
-  <div class="modal modal-wide">
+<div class="modal-overlay" id="testModal">
+  <div class="modal modal-wide" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="testModalTitle">
     <h3 id="testModalTitle" data-i18n="test.resultTitle">Test Result</h3>
     <div class="test-meta" id="testMeta"></div>
     <div class="test-output" id="testOutput"></div>
@@ -1885,8 +1887,8 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
 </div>
 
 <!-- API Key Modal -->
-<div class="modal-overlay" role="dialog" aria-modal="true" id="shimModal">
-  <div class="modal modal-yaml">
+<div class="modal-overlay" id="shimModal">
+  <div class="modal modal-yaml" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="shimModalTitle">
     <h3 id="shimModalTitle" data-i18n="modal.shim">Shim</h3>
     <div class="shim-modal-meta" id="shimModalMeta"></div>
     <textarea id="shimModalYaml" class="shim-yaml" spellcheck="false" rows="18"></textarea>
@@ -1906,8 +1908,8 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
     </div>
   </div>
 </div>
-<div class="modal-overlay" role="dialog" aria-modal="true" id="keyModal">
-  <div class="modal">
+<div class="modal-overlay" id="keyModal">
+  <div class="modal" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="keyModalTitle">
     <h3 id="keyModalTitle" data-i18n="modal.generateKey">Generate API Key</h3>
     <div class="form-group">
       <label data-i18n="label.keyLabel">Label (optional)</label>
@@ -1925,9 +1927,9 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
 </div>
 
 <!-- Key Created Modal -->
-<div class="modal-overlay" role="dialog" aria-modal="true" id="keyCreatedModal">
-  <div class="modal">
-    <h3 data-i18n="modal.keyCreated">Key Created</h3>
+<div class="modal-overlay" id="keyCreatedModal">
+  <div class="modal" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="keyCreatedModalTitle">
+    <h3 data-i18n="modal.keyCreated" id="keyCreatedModalTitle">Key Created</h3>
     <p style="font-size:13px;color:var(--text-dim);margin-bottom:12px" data-i18n="keys.copyWarning">Copy this key now. It will not be shown again in full.</p>
     <div style="display:flex;gap:8px;align-items:center">
       <input id="createdKeyValue" readonly style="flex:1;font-family:var(--mono)">
@@ -1940,9 +1942,9 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
 </div>
 
 <!-- Edit Key Label Modal -->
-<div class="modal-overlay" role="dialog" aria-modal="true" id="keyLabelModal">
-  <div class="modal" style="width:380px">
-    <h3 data-i18n="modal.editKeyLabel">Edit Key Label</h3>
+<div class="modal-overlay" id="keyLabelModal">
+  <div class="modal" style="width:380px" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="keyLabelModalTitle">
+    <h3 data-i18n="modal.editKeyLabel" id="keyLabelModalTitle">Edit Key Label</h3>
     <div class="form-group">
       <label data-i18n="col.label">Label</label>
       <input id="keyLabelInput" placeholder="e.g. Production, Dev testing" data-i18n-placeholder="placeholder.keyLabel" onkeydown="onKeyLabelInputKeydown(event)">
@@ -1955,10 +1957,10 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
 </div>
 
 <!-- Token Usage Modal -->
-<div class="modal-overlay" role="dialog" aria-modal="true" id="tokenUsageModal">
-  <div class="modal modal-wide" style="width:780px;max-width:95vw">
+<div class="modal-overlay" id="tokenUsageModal">
+  <div class="modal modal-wide" style="width:780px;max-width:95vw" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="tokenUsageModalTitle">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-      <h3 style="margin:0" data-i18n="tokenUsage.title">Token Usage Details</h3>
+      <h3 style="margin:0" data-i18n="tokenUsage.title" id="tokenUsageModalTitle">Token Usage Details</h3>
       <button class="btn btn-sm" onclick="closeModal('tokenUsageModal')" data-i18n="btn.close">Close</button>
     </div>
     <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
@@ -2010,8 +2012,8 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
 
 <!-- What changed in the running release.  Shown once per version: closing it
      without pressing "don't show again" brings it back on the next load. -->
-<div class="modal-overlay" role="dialog" aria-modal="true" id="changelogModal">
-  <div class="modal" style="width:640px;max-width:92vw">
+<div class="modal-overlay" id="changelogModal">
+  <div class="modal" style="width:640px;max-width:92vw" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="changelogTitle">
     <h3 id="changelogTitle"></h3>
     <div class="changelog-body" id="changelogBody"></div>
     <div class="modal-actions">
