@@ -48,7 +48,12 @@ docker run -p 8765:8765 -v /path/to/config:/config oaklight/llm-rosetta-gateway
 docker run --user $(id -u):$(id -g) -p 8765:8765 -v /path/to/config:/config oaklight/llm-rosetta-gateway
 ```
 
-Or use Docker Compose — see `docker/docker-compose.yaml` in the repository.
+Or use Docker Compose — see `docker/docker-compose.yaml` in the repository. It mounts `./config` next to itself, so create `docker/config/` before the first start and give it to the uid the container runs as:
+
+```bash
+mkdir -p docker/config && sudo chown "${PUID:-1000}:${PGID:-1000}" docker/config
+docker compose -f docker/docker-compose.yaml up -d
+```
 
 #### Building from source
 
@@ -85,10 +90,12 @@ PUID=$(id -u) PGID=$(id -g) docker compose -f docker/docker-compose.source.yaml 
 
 Compose creates a missing bind-mount directory as `root`, and the first run
 writes `config.jsonc` there, so a directory owned by a different uid is the one
-way to watch the container fail at startup. The plain `docker run` form does
+way to watch the container fail at startup: the entrypoint stops with
+`error: cannot create HOME=… as uid …` instead of letting the gateway fail
+later. The plain `docker run` form does
 not read `PUID`; use `--user` there, as the example above does.
 
-A uid other than 1000 has no passwd entry in the image, so Docker leaves `HOME` at `/`, which the process cannot write. The compose files set `HOME=/config/home` for that case and the entrypoint creates it; the default uid keeps `/home/appuser`. Per-uid state — the shim cache and the Sign in with ChatGPT record — therefore lands under `config/`, which is the second reason that directory must belong to the runtime uid.
+A uid other than 1000 has no passwd entry in the image, so Docker leaves `HOME` at `/`, which the process cannot write. The source file passes `HOME=/config/home` for that case and the entrypoint creates it; the image file leaves it to the entrypoint, so an image built before this change keeps whatever `HOME` it had. The default uid keeps `/home/appuser` either way. The Sign in with ChatGPT record is `Path.home()`-based (`~/.config/llm-rosetta/siwc/…`), so it lands under `config/`; that is the second reason the directory must belong to the runtime uid. The shim archive cache is not affected — it is anchored to the config directory (`config/shims-cache`) whether or not `HOME` is writable.
 
 The two files are separate entry points — `docker/docker-compose.yaml` runs the
 published image, `docker/docker-compose.source.yaml` builds from the checkout —
