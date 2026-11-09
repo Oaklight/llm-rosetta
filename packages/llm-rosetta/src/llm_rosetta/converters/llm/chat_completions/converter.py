@@ -774,6 +774,11 @@ class ChatCompletionsConverter(BaseConverter):
         # This corrects the order *within* one chunk.  A stream whose deltas
         # keep alternating between the two fields still gets one block per
         # reasoning run, because reordering across chunks is out of scope.
+        #
+        # The field order here is the same canonical order the read and write
+        # legs declare — [reasoning, text, call] (#1491) — and it needs no
+        # warning: it orders two fields of a single chunk, which is not a
+        # cross-turn loss of the kind the write leg reports.
         reasoning_content = delta.get("reasoning_content")
         if reasoning_content is not None:
             events.append(

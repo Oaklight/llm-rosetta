@@ -10,7 +10,7 @@ Also handles multimodal tool result packing/unpacking (Phase 2 dual encoding).
 
 import logging
 from collections.abc import Sequence
-from typing import Any, cast
+from typing import Any, NamedTuple, cast
 
 from ....types.ir import (
     ContentPart,
@@ -34,7 +34,7 @@ from ....types.ir import (
 )
 from ...base import BaseMessageOps
 from ...base.helpers.citations import report_dropped_citation
-from llm_rosetta.conversion_warnings import DOWNGRADED, report_loss
+from llm_rosetta.conversion_warnings import DOWNGRADED, DROPPED, report_loss
 from ...base.helpers.opaque import (
     set_opaque_origin,
 )
@@ -50,6 +50,24 @@ from .content_ops import ChatCompletionsContentOps
 from .tool_ops import ChatCompletionsToolOps
 
 logger = logging.getLogger(__name__)
+
+
+class _AssistantFields(NamedTuple):
+    """An assistant turn's parts, sorted into the three chat message fields.
+
+    ``first_deviation`` names the earliest deviation from the canonical
+    order, which is what the warning reports: the subject is deduplicated to
+    one report per request, so the earliest deviation is the only one the
+    reader learns about.  ``None`` means the parts still fit.
+    """
+
+    texts: list[str]
+    calls: list[dict[str, Any]]
+    annotations: list[dict[str, Any]]
+    refusal: Any
+    reasoning: str | None
+    reasoning_count: int
+    first_deviation: str | None
 
 
 def restore_reasoning_details(
@@ -115,6 +133,10 @@ class ChatCompletionsMessageOps(BaseMessageOps):
         warnings: list[str] = []
         supports_mm = supports_multimodal_tool_result
         multimodal_packs: dict[str, list[dict[str, Any]]] = {}
+        # Subjects already reported for this request.  The warning list a
+        # single message writes into is per message, so the request-wide
+        # dedupe state lives here and is handed down (#1491).
+        order_reports: set[str] = set()
 
         for item in ir_messages:
             passthrough_warnings = self._restore_provider_passthrough_item(
@@ -130,6 +152,7 @@ class ChatCompletionsMessageOps(BaseMessageOps):
                     cast(Message, item),
                     multimodal_packs,
                     supports_multimodal=supports_mm,
+                    order_reports=order_reports,
                 )
                 warnings.extend(msg_warnings)
                 if isinstance(converted, list):
@@ -212,6 +235,7 @@ class ChatCompletionsMessageOps(BaseMessageOps):
         multimodal_packs: dict[str, list[dict[str, Any]]],
         *,
         supports_multimodal: bool = False,
+        order_reports: set[str] | None = None,
     ) -> tuple[Any, list[str]]:
         """Convert a single IR message to OpenAI format.
 
@@ -220,6 +244,8 @@ class ChatCompletionsMessageOps(BaseMessageOps):
             multimodal_packs: Accumulator for multimodal tool result content.
             supports_multimodal: When True, skip packing and pass multimodal
                 content through natively in tool results.
+            order_reports: Subjects already reported for the request this
+                message belongs to; see :meth:`_report_order_loss`.
 
         Returns:
             Tuple of (converted message or list of messages, warnings).
@@ -238,7 +264,9 @@ class ChatCompletionsMessageOps(BaseMessageOps):
                 supports_multimodal=supports_multimodal,
             )
         elif role == "assistant":
-            return self._ir_assistant_to_p(content, warnings)
+            return self._ir_assistant_to_p(
+                content, warnings, order_reports=order_reports
+            )
         elif role == "tool":
             return self._ir_tool_messages_to_p(
                 content,
@@ -332,33 +360,82 @@ class ChatCompletionsMessageOps(BaseMessageOps):
         result_messages.extend(tool_messages)
         return result_messages, warnings
 
-    def _ir_assistant_to_p(  # noqa: C901
-        self, content: list, warnings: list[str]
-    ) -> tuple[dict[str, Any], list[str]]:
-        """Convert IR assistant message content to OpenAI assistant message.
+    @staticmethod
+    def _report_order_loss(
+        message: str,
+        *,
+        code: str,
+        subject: str,
+        warnings: list[str],
+        order_reports: set[str] | None,
+    ) -> None:
+        """Report one part-order loss, at most once per subject per request.
 
-        Text parts are concatenated. Tool calls are collected into tool_calls list.
+        ``WarningSink`` records every warning it is handed — it has no dedupe
+        of its own.  The ``warnings`` list a single message writes into is per
+        message, so the request-wide ``order_reports`` set is threaded down
+        from :meth:`ir_messages_to_p`.  One report per subject keeps a long
+        interleaved history from drowning the other warnings; a caller that
+        reaches ``_ir_assistant_to_p`` directly passes ``None`` and gets every
+        report.
+
+        Args:
+            message: What was lost, in words the caller can act on.
+            code: The kind of loss — ``DOWNGRADED`` or ``DROPPED``.
+            subject: The subject the report is keyed on.
+            warnings: The list to record into.
+            order_reports: Subjects already reported for this request, or
+                ``None`` outside a request-wide conversion.
         """
-        text_parts: list[str] = []
-        tool_calls: list[dict[str, Any]] = []
-        annotations: list[dict[str, Any]] = []
-        refusal_text = None
-        reasoning_text: str | None = None
+        if order_reports is not None:
+            if subject in order_reports:
+                return
+            order_reports.add(subject)
+        report_loss(message, code=code, subject=subject, warnings=warnings)
 
-        for part in content:
+    def _collect_assistant_parts(
+        self, content: list, warnings: list[str]
+    ) -> _AssistantFields:
+        """Sort an assistant turn's parts into the three chat message fields.
+
+        Text parts are concatenated, tool calls are collected into a list, and
+        a citation rides ``annotations``.  Whether the input still fits the
+        canonical order is decided afterwards, by
+        :meth:`_first_part_order_deviation`.
+
+        Args:
+            content: IR assistant message content parts.
+            warnings: Warning list for this message.
+
+        Returns:
+            The fields to write and the first part-order deviation, if any.
+        """
+        texts: list[str] = []
+        calls: list[dict[str, Any]] = []
+        annotations: list[dict[str, Any]] = []
+        refusal = None
+        reasoning: str | None = None
+        reasoning_count = 0
+        dropped_calls: set[int] = set()
+
+        for index, part in enumerate(content):
             if is_text_part(part):
-                text_parts.append(part["text"])
+                texts.append(part["text"])
             elif is_tool_call_part(part):
                 # Request leg: a server call this dialect cannot express becomes
                 # a plain function so the model still sees the context.  A drop
-                # is falsy and is not appended.
+                # is falsy and is not appended — and a dropped call puts
+                # nothing on the wire, so it cannot lose a position either.
                 call = self.tool_ops.ir_tool_call_to_p(part, leg="history")
                 if call:
-                    tool_calls.append(call)
+                    calls.append(call)
+                else:
+                    dropped_calls.add(index)
             elif is_reasoning_part(part):
-                reasoning_text = part.get("reasoning", "")
+                reasoning_count += 1
+                reasoning = part.get("reasoning", "")
             elif is_refusal_part(part):
-                refusal_text = part.get("refusal", "")
+                refusal = part.get("refusal", "")
             elif is_citation_part(part):
                 # A citation rides the assistant message's ``annotations``, the
                 # same field the response writer fills.  Measured live: this
@@ -375,6 +452,137 @@ class ChatCompletionsMessageOps(BaseMessageOps):
                     subject=str(part.get("type", "")),
                     warnings=warnings,
                 )
+
+        return _AssistantFields(
+            texts=texts,
+            calls=calls,
+            annotations=annotations,
+            refusal=refusal,
+            reasoning=reasoning,
+            reasoning_count=reasoning_count,
+            first_deviation=self._first_part_order_deviation(content, dropped_calls),
+        )
+
+    @staticmethod
+    def _first_part_order_deviation(
+        content: list, dropped_calls: set[int]
+    ) -> str | None:
+        """Name the earliest deviation from ``[reasoning, text, call]``.
+
+        The four Appendix A conditions (#1491): a reasoning part after text or
+        a call, a text part after a call, a second reasoning part, or a second
+        text part.  The earliest one found is the one reported, because the
+        ``part_order`` subject is deduplicated per request.
+
+        Args:
+            content: IR assistant message content parts, in order.
+            dropped_calls: Positions of tool-call parts that were not written,
+                so a call that never reached the wire cannot lose a position.
+
+        Returns:
+            A phrase naming the first deviation, or ``None`` when the parts
+            already have the canonical shape.
+        """
+        first: str | None = None
+        seen_text = False
+        seen_call = False
+        text_count = 0
+        reasoning_count = 0
+
+        for index, part in enumerate(content):
+            if is_text_part(part):
+                if seen_call:
+                    first = first or "a text after a tool call"
+                elif text_count:
+                    first = first or "a second text part"
+                text_count += 1
+                seen_text = True
+            elif is_tool_call_part(part):
+                # Defensive: this dialect does not currently drop an intrinsic
+                # call — the template writes it as a plain function call with a
+                # non-empty body — so ``dropped_calls`` is empty on the writer's
+                # own path.  The exclusion is for a future dialect, or template
+                # change, that really omits one: a call that never reached the
+                # wire must not make the text after it look like a deviation.
+                if index not in dropped_calls:
+                    seen_call = True
+            elif is_reasoning_part(part):
+                if seen_text or seen_call:
+                    first = first or (
+                        "reasoning after a tool call"
+                        if seen_call
+                        else "reasoning after text"
+                    )
+                reasoning_count += 1
+                if reasoning_count > 1:
+                    first = first or "a second reasoning part"
+
+        return first
+
+    def _ir_assistant_to_p(
+        self,
+        content: list,
+        warnings: list[str],
+        *,
+        order_reports: set[str] | None = None,
+    ) -> tuple[dict[str, Any], list[str]]:
+        """Convert IR assistant message content to OpenAI assistant message.
+
+        Text parts are concatenated. Tool calls are collected into tool_calls list.
+
+        Chat Completions has no carrier for a part's position: reasoning,
+        content and tool calls are separate message fields, and the reader
+        rebuilds them in the canonical order ``[reasoning, text, call]``
+        (:meth:`_p_assistant_to_ir`).  Input that deviates from that order,
+        splits its text into several parts, or carries more than one
+        reasoning part loses the deviation, so it is reported (#1491).
+
+        Args:
+            content: IR assistant message content parts.
+            warnings: Warning list for this message.
+            order_reports: Subjects already reported for the request this
+                message belongs to; see :meth:`_report_order_loss`.
+
+        Returns:
+            Tuple of (the OpenAI assistant message, warnings).
+        """
+        fields = self._collect_assistant_parts(content, warnings)
+        text_parts = fields.texts
+        tool_calls = fields.calls
+        annotations = fields.annotations
+        refusal_text = fields.refusal
+        reasoning_text = fields.reasoning
+
+        # A deviation from the canonical shape is not expressible: the reader
+        # rebuilds [reasoning, text, call] from the three fields, so the
+        # original order — or the boundary between two text parts — is lost.
+        # The report names the earliest deviation found (#1491).
+        if fields.first_deviation is not None:
+            self._report_order_loss(
+                "Assistant part order cannot be expressed in Chat Completions: "
+                "reasoning_content, content and tool_calls are separate fields, "
+                "so the parts were written in the fixed order "
+                "[reasoning, text, call] and their original order, or the "
+                f"boundaries between them, are lost (first: {fields.first_deviation})",
+                code=DOWNGRADED,
+                subject="part_order",
+                warnings=warnings,
+                order_reports=order_reports,
+            )
+
+        # Content loss, kept apart from the order and boundary losses above
+        # (Appendix B, #1491): ``reasoning_text`` is one field overwritten per
+        # part, so every reasoning part but the last is gone.
+        if fields.reasoning_count > 1:
+            self._report_order_loss(
+                f"{fields.reasoning_count} reasoning parts were collapsed into "
+                "the single reasoning_content field: only the last one is "
+                "kept, the earlier reasoning content is lost",
+                code=DROPPED,
+                subject="reasoning",
+                warnings=warnings,
+                order_reports=order_reports,
+            )
 
         openai_message: dict[str, Any] = {"role": "assistant"}
 
@@ -617,11 +825,29 @@ class ChatCompletionsMessageOps(BaseMessageOps):
         return {"role": "user", "content": ir_content}
 
     def _p_assistant_to_ir(self, msg: dict[str, Any]) -> dict[str, Any]:
-        """OpenAI assistant message → IR AssistantMessage."""
+        """OpenAI assistant message → IR AssistantMessage.
+
+        The wire carries no part order: ``reasoning_content``, ``content`` and
+        ``tool_calls`` are three independent message fields.  The original
+        order is therefore unknowable here, and this reader does not claim to
+        recover it — it builds the **canonical order** the dialect's writer
+        can reproduce::
+
+            [reasoning, text…, tool_call…]
+
+        That is a declared convention, not a measurement: a turn that arrived
+        in another order is indistinguishable from one that arrived in this
+        one.  The write leg (:meth:`_ir_assistant_to_p`) reports a
+        ``part_order`` loss when the IR it is given deviates from the
+        canonical order (#1491).
+        """
         ir_content: list[ContentPart] = []
 
-        # Handle reasoning_content (DeepSeek / extended OpenAI Chat providers)
-        # Prepend before text content to match convention (reasoning first)
+        # Handle reasoning_content (DeepSeek / extended OpenAI Chat providers).
+        # Emitted first because that is the canonical order's reasoning seat,
+        # declared in the docstring above — not a recovered position.  The
+        # write leg reports a part_order loss when reasoning sits elsewhere
+        # (#1491).
         reasoning_content = msg.get("reasoning_content")
         if reasoning_content is not None:
             reasoning_part = self.content_ops.p_reasoning_to_ir(reasoning_content)
