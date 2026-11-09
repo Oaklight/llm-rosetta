@@ -160,6 +160,10 @@ def _decision(entry: dict[str, Any]) -> dict[str, Any]:
     The failover lives in the row's profile, not at its top level: the proxy
     records it there (``proxy/failover.py``) so a reader can see that the
     answer came from a second provider.
+
+    ``upstream_model`` is what tells two lanes of one provider apart (#1430):
+    without it a row names the provider and the client's model, and the cheap
+    lane is indistinguishable from the fast one.
     """
     profile = entry.get("profile") or {}
     failover = profile.get("failover") if isinstance(profile, dict) else None
@@ -170,6 +174,7 @@ def _decision(entry: dict[str, Any]) -> dict[str, Any]:
         "client": entry.get("api_key_label") or entry.get("client_ip"),
         "user_agent": entry.get("user_agent"),
         "provider": entry.get("target_provider_name") or entry.get("target_provider"),
+        "upstream_model": entry.get("upstream_model"),
         "status": entry.get("status_code"),
         "duration_ms": entry.get("duration_ms"),
         "failover": failover,

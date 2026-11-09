@@ -204,10 +204,14 @@ def record_failover(
             "profile": sub_profile,
         }
         ctx = current_lifecycle()
-        if ctx is not None:
+        # The outermost call runs last, so an attempt that failed over again
+        # has already named the lane that served: a second hop's row must not
+        # be overwritten with the intermediate one.
+        if ctx is not None and "failover" not in sub_profile:
             ctx.note_route(
                 target_format=new_route.target_provider,
                 provider_name=new_route.provider_name,
+                upstream_model=new_route.upstream_model,
             )
     except Exception:  # noqa: BLE001 - bookkeeping must not mask the outcome
         # This runs from a ``finally`` on the failure path, where an exception

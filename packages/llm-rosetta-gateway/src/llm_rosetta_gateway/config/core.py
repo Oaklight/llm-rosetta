@@ -559,6 +559,8 @@ class GatewayConfig:
             path=pcfg[path_key],
             provider_info=infos[provider_name],
             params=pcfg.get("params") or None,
+            upstream_model=ctx.chosen.upstream_model
+            or self.model_upstream_names.get(model),
         )
 
     def resolve_embedding(

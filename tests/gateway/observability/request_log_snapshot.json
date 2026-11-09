@@ -4,6 +4,7 @@
    "INFO Applying migration v10: rename request_log.model_type 'decision' to 'decisions'",
    "INFO Applying migration v11: add request_log.user_agent so a decision names its client",
    "INFO Applying migration v12: add request_log.conversation_id so the routing page groups by conversation",
+   "INFO Applying migration v13: add request_log.upstream_model so a row names the lane that served",
    "INFO Applying migration v1: add request_log extra columns",
    "INFO Applying migration v2: add error_dumps indexes on model and error_phase",
    "INFO Applying migration v3: add error_dumps.tool_name_collisions",
@@ -18,6 +19,7 @@
    "INFO Migration v10 applied",
    "INFO Migration v11 applied",
    "INFO Migration v12 applied",
+   "INFO Migration v13 applied",
    "INFO Migration v2 applied",
    "INFO Migration v3 applied",
    "INFO Migration v4 applied",
@@ -156,6 +158,11 @@
      "conversation_id",
      "TEXT",
      null
+    ],
+    [
+     "upstream_model",
+     "TEXT",
+     null
     ]
    ],
    "indexes": [
@@ -281,7 +288,7 @@
     [
      "table",
      "request_log",
-     "CREATE TABLE request_log (                 id              TEXT PRIMARY KEY,                 timestamp       TEXT NOT NULL,                 model           TEXT NOT NULL,                 source_provider TEXT NOT NULL,                 target_provider TEXT NOT NULL,                 is_stream       INTEGER NOT NULL,                 status_code     INTEGER NOT NULL,                 duration_ms     REAL NOT NULL,                 error_detail    TEXT,                 api_key_label   TEXT,                 target_provider_name TEXT,                 client_ip       TEXT,                 user_agent      TEXT             , profile TEXT, input_tokens INTEGER, output_tokens INTEGER, total_tokens INTEGER, cache_read_tokens INTEGER, cache_creation_tokens INTEGER, reasoning_tokens INTEGER, api_key_bucket TEXT, model_type TEXT DEFAULT 'llm', request_id TEXT, ttft_ms REAL, conversation_id TEXT)"
+     "CREATE TABLE request_log (                 id              TEXT PRIMARY KEY,                 timestamp       TEXT NOT NULL,                 model           TEXT NOT NULL,                 source_provider TEXT NOT NULL,                 target_provider TEXT NOT NULL,                 is_stream       INTEGER NOT NULL,                 status_code     INTEGER NOT NULL,                 duration_ms     REAL NOT NULL,                 error_detail    TEXT,                 api_key_label   TEXT,                 target_provider_name TEXT,                 client_ip       TEXT,                 user_agent      TEXT             , profile TEXT, input_tokens INTEGER, output_tokens INTEGER, total_tokens INTEGER, cache_read_tokens INTEGER, cache_creation_tokens INTEGER, reasoning_tokens INTEGER, api_key_bucket TEXT, model_type TEXT DEFAULT 'llm', request_id TEXT, ttft_ms REAL, conversation_id TEXT, upstream_model TEXT)"
     ],
     [
      "table",
@@ -301,16 +308,18 @@
     9,
     10,
     11,
-    12
+    12,
+    13
    ]
   },
-  "schema_version": 12
+  "schema_version": 13
  },
  "at_1": {
   "log_first_open": [
    "INFO Applying migration v10: rename request_log.model_type 'decision' to 'decisions'",
    "INFO Applying migration v11: add request_log.user_agent so a decision names its client",
    "INFO Applying migration v12: add request_log.conversation_id so the routing page groups by conversation",
+   "INFO Applying migration v13: add request_log.upstream_model so a row names the lane that served",
    "INFO Applying migration v2: add error_dumps indexes on model and error_phase",
    "INFO Applying migration v3: add error_dumps.tool_name_collisions",
    "INFO Applying migration v4: add request_log.api_key_bucket for per-key usage attribution",
@@ -323,6 +332,7 @@
    "INFO Migration v10 applied",
    "INFO Migration v11 applied",
    "INFO Migration v12 applied",
+   "INFO Migration v13 applied",
    "INFO Migration v2 applied",
    "INFO Migration v3 applied",
    "INFO Migration v4 applied",
@@ -461,6 +471,11 @@
      "conversation_id",
      "TEXT",
      null
+    ],
+    [
+     "upstream_model",
+     "TEXT",
+     null
     ]
    ],
    "indexes": [
@@ -586,7 +601,7 @@
     [
      "table",
      "request_log",
-     "CREATE TABLE request_log (                 id              TEXT PRIMARY KEY,                 timestamp       TEXT NOT NULL,                 model           TEXT NOT NULL,                 source_provider TEXT NOT NULL,                 target_provider TEXT NOT NULL,                 is_stream       INTEGER NOT NULL,                 status_code     INTEGER NOT NULL,                 duration_ms     REAL NOT NULL,                 error_detail    TEXT,                 api_key_label   TEXT,                 target_provider_name TEXT,                 client_ip       TEXT,                 user_agent      TEXT             , profile TEXT, input_tokens INTEGER, output_tokens INTEGER, total_tokens INTEGER, cache_read_tokens INTEGER, cache_creation_tokens INTEGER, reasoning_tokens INTEGER, api_key_bucket TEXT, model_type TEXT DEFAULT 'llm', request_id TEXT, ttft_ms REAL, conversation_id TEXT)"
+     "CREATE TABLE request_log (                 id              TEXT PRIMARY KEY,                 timestamp       TEXT NOT NULL,                 model           TEXT NOT NULL,                 source_provider TEXT NOT NULL,                 target_provider TEXT NOT NULL,                 is_stream       INTEGER NOT NULL,                 status_code     INTEGER NOT NULL,                 duration_ms     REAL NOT NULL,                 error_detail    TEXT,                 api_key_label   TEXT,                 target_provider_name TEXT,                 client_ip       TEXT,                 user_agent      TEXT             , profile TEXT, input_tokens INTEGER, output_tokens INTEGER, total_tokens INTEGER, cache_read_tokens INTEGER, cache_creation_tokens INTEGER, reasoning_tokens INTEGER, api_key_bucket TEXT, model_type TEXT DEFAULT 'llm', request_id TEXT, ttft_ms REAL, conversation_id TEXT, upstream_model TEXT)"
     ],
     [
      "table",
@@ -606,18 +621,21 @@
     9,
     10,
     11,
-    12
+    12,
+    13
    ]
   },
-  "schema_version": 12
+  "schema_version": 13
  },
  "at_10": {
   "log_first_open": [
    "INFO Applying migration v11: add request_log.user_agent so a decision names its client",
    "INFO Applying migration v12: add request_log.conversation_id so the routing page groups by conversation",
+   "INFO Applying migration v13: add request_log.upstream_model so a row names the lane that served",
    "INFO Database backup created: <store-root>/at_10/backups/gateway-<ts>.db (<size> MB)",
    "INFO Migration v11 applied",
-   "INFO Migration v12 applied"
+   "INFO Migration v12 applied",
+   "INFO Migration v13 applied"
   ],
   "log_second_open": [
    "INFO Database backup created: <store-root>/at_10/backups/gateway-<ts>.db (<size> MB)"
@@ -748,6 +766,11 @@
      "conversation_id",
      "TEXT",
      null
+    ],
+    [
+     "upstream_model",
+     "TEXT",
+     null
     ]
    ],
    "indexes": [
@@ -873,7 +896,7 @@
     [
      "table",
      "request_log",
-     "CREATE TABLE request_log (                 id              TEXT PRIMARY KEY,                 timestamp       TEXT NOT NULL,                 model           TEXT NOT NULL,                 source_provider TEXT NOT NULL,                 target_provider TEXT NOT NULL,                 is_stream       INTEGER NOT NULL,                 status_code     INTEGER NOT NULL,                 duration_ms     REAL NOT NULL,                 error_detail    TEXT,                 api_key_label   TEXT,                 target_provider_name TEXT,                 client_ip       TEXT,                 user_agent      TEXT             , profile TEXT, input_tokens INTEGER, output_tokens INTEGER, total_tokens INTEGER, cache_read_tokens INTEGER, cache_creation_tokens INTEGER, reasoning_tokens INTEGER, api_key_bucket TEXT, model_type TEXT DEFAULT 'llm', request_id TEXT, ttft_ms REAL, conversation_id TEXT)"
+     "CREATE TABLE request_log (                 id              TEXT PRIMARY KEY,                 timestamp       TEXT NOT NULL,                 model           TEXT NOT NULL,                 source_provider TEXT NOT NULL,                 target_provider TEXT NOT NULL,                 is_stream       INTEGER NOT NULL,                 status_code     INTEGER NOT NULL,                 duration_ms     REAL NOT NULL,                 error_detail    TEXT,                 api_key_label   TEXT,                 target_provider_name TEXT,                 client_ip       TEXT,                 user_agent      TEXT             , profile TEXT, input_tokens INTEGER, output_tokens INTEGER, total_tokens INTEGER, cache_read_tokens INTEGER, cache_creation_tokens INTEGER, reasoning_tokens INTEGER, api_key_bucket TEXT, model_type TEXT DEFAULT 'llm', request_id TEXT, ttft_ms REAL, conversation_id TEXT, upstream_model TEXT)"
     ],
     [
      "table",
@@ -893,16 +916,19 @@
     9,
     10,
     11,
-    12
+    12,
+    13
    ]
   },
-  "schema_version": 12
+  "schema_version": 13
  },
  "at_11": {
   "log_first_open": [
    "INFO Applying migration v12: add request_log.conversation_id so the routing page groups by conversation",
+   "INFO Applying migration v13: add request_log.upstream_model so a row names the lane that served",
    "INFO Database backup created: <store-root>/at_11/backups/gateway-<ts>.db (<size> MB)",
-   "INFO Migration v12 applied"
+   "INFO Migration v12 applied",
+   "INFO Migration v13 applied"
   ],
   "log_second_open": [
    "INFO Database backup created: <store-root>/at_11/backups/gateway-<ts>.db (<size> MB)"
@@ -1033,6 +1059,11 @@
      "conversation_id",
      "TEXT",
      null
+    ],
+    [
+     "upstream_model",
+     "TEXT",
+     null
     ]
    ],
    "indexes": [
@@ -1158,7 +1189,7 @@
     [
      "table",
      "request_log",
-     "CREATE TABLE request_log (                 id              TEXT PRIMARY KEY,                 timestamp       TEXT NOT NULL,                 model           TEXT NOT NULL,                 source_provider TEXT NOT NULL,                 target_provider TEXT NOT NULL,                 is_stream       INTEGER NOT NULL,                 status_code     INTEGER NOT NULL,                 duration_ms     REAL NOT NULL,                 error_detail    TEXT,                 api_key_label   TEXT,                 target_provider_name TEXT,                 client_ip       TEXT,                 user_agent      TEXT             , profile TEXT, input_tokens INTEGER, output_tokens INTEGER, total_tokens INTEGER, cache_read_tokens INTEGER, cache_creation_tokens INTEGER, reasoning_tokens INTEGER, api_key_bucket TEXT, model_type TEXT DEFAULT 'llm', request_id TEXT, ttft_ms REAL, conversation_id TEXT)"
+     "CREATE TABLE request_log (                 id              TEXT PRIMARY KEY,                 timestamp       TEXT NOT NULL,                 model           TEXT NOT NULL,                 source_provider TEXT NOT NULL,                 target_provider TEXT NOT NULL,                 is_stream       INTEGER NOT NULL,                 status_code     INTEGER NOT NULL,                 duration_ms     REAL NOT NULL,                 error_detail    TEXT,                 api_key_label   TEXT,                 target_provider_name TEXT,                 client_ip       TEXT,                 user_agent      TEXT             , profile TEXT, input_tokens INTEGER, output_tokens INTEGER, total_tokens INTEGER, cache_read_tokens INTEGER, cache_creation_tokens INTEGER, reasoning_tokens INTEGER, api_key_bucket TEXT, model_type TEXT DEFAULT 'llm', request_id TEXT, ttft_ms REAL, conversation_id TEXT, upstream_model TEXT)"
     ],
     [
      "table",
@@ -1178,14 +1209,17 @@
     9,
     10,
     11,
-    12
+    12,
+    13
    ]
   },
-  "schema_version": 12
+  "schema_version": 13
  },
  "at_12": {
   "log_first_open": [
-   "INFO Database backup created: <store-root>/at_12/backups/gateway-<ts>.db (<size> MB)"
+   "INFO Applying migration v13: add request_log.upstream_model so a row names the lane that served",
+   "INFO Database backup created: <store-root>/at_12/backups/gateway-<ts>.db (<size> MB)",
+   "INFO Migration v13 applied"
   ],
   "log_second_open": [
    "INFO Database backup created: <store-root>/at_12/backups/gateway-<ts>.db (<size> MB)"
@@ -1316,6 +1350,11 @@
      "conversation_id",
      "TEXT",
      null
+    ],
+    [
+     "upstream_model",
+     "TEXT",
+     null
     ]
    ],
    "indexes": [
@@ -1441,7 +1480,7 @@
     [
      "table",
      "request_log",
-     "CREATE TABLE request_log (                 id              TEXT PRIMARY KEY,                 timestamp       TEXT NOT NULL,                 model           TEXT NOT NULL,                 source_provider TEXT NOT NULL,                 target_provider TEXT NOT NULL,                 is_stream       INTEGER NOT NULL,                 status_code     INTEGER NOT NULL,                 duration_ms     REAL NOT NULL,                 error_detail    TEXT,                 api_key_label   TEXT,                 target_provider_name TEXT,                 client_ip       TEXT,                 user_agent      TEXT             , profile TEXT, input_tokens INTEGER, output_tokens INTEGER, total_tokens INTEGER, cache_read_tokens INTEGER, cache_creation_tokens INTEGER, reasoning_tokens INTEGER, api_key_bucket TEXT, model_type TEXT DEFAULT 'llm', request_id TEXT, ttft_ms REAL, conversation_id TEXT)"
+     "CREATE TABLE request_log (                 id              TEXT PRIMARY KEY,                 timestamp       TEXT NOT NULL,                 model           TEXT NOT NULL,                 source_provider TEXT NOT NULL,                 target_provider TEXT NOT NULL,                 is_stream       INTEGER NOT NULL,                 status_code     INTEGER NOT NULL,                 duration_ms     REAL NOT NULL,                 error_detail    TEXT,                 api_key_label   TEXT,                 target_provider_name TEXT,                 client_ip       TEXT,                 user_agent      TEXT             , profile TEXT, input_tokens INTEGER, output_tokens INTEGER, total_tokens INTEGER, cache_read_tokens INTEGER, cache_creation_tokens INTEGER, reasoning_tokens INTEGER, api_key_bucket TEXT, model_type TEXT DEFAULT 'llm', request_id TEXT, ttft_ms REAL, conversation_id TEXT, upstream_model TEXT)"
     ],
     [
      "table",
@@ -1461,16 +1500,307 @@
     9,
     10,
     11,
-    12
+    12,
+    13
    ]
   },
-  "schema_version": 12
+  "schema_version": 13
+ },
+ "at_13": {
+  "log_first_open": [
+   "INFO Database backup created: <store-root>/at_13/backups/gateway-<ts>.db (<size> MB)"
+  ],
+  "log_second_open": [
+   "INFO Database backup created: <store-root>/at_13/backups/gateway-<ts>.db (<size> MB)"
+  ],
+  "schema": {
+   "columns": [
+    [
+     "id",
+     "TEXT",
+     null
+    ],
+    [
+     "timestamp",
+     "TEXT",
+     null
+    ],
+    [
+     "model",
+     "TEXT",
+     null
+    ],
+    [
+     "source_provider",
+     "TEXT",
+     null
+    ],
+    [
+     "target_provider",
+     "TEXT",
+     null
+    ],
+    [
+     "is_stream",
+     "INTEGER",
+     null
+    ],
+    [
+     "status_code",
+     "INTEGER",
+     null
+    ],
+    [
+     "duration_ms",
+     "REAL",
+     null
+    ],
+    [
+     "error_detail",
+     "TEXT",
+     null
+    ],
+    [
+     "api_key_label",
+     "TEXT",
+     null
+    ],
+    [
+     "target_provider_name",
+     "TEXT",
+     null
+    ],
+    [
+     "client_ip",
+     "TEXT",
+     null
+    ],
+    [
+     "user_agent",
+     "TEXT",
+     null
+    ],
+    [
+     "profile",
+     "TEXT",
+     null
+    ],
+    [
+     "input_tokens",
+     "INTEGER",
+     null
+    ],
+    [
+     "output_tokens",
+     "INTEGER",
+     null
+    ],
+    [
+     "total_tokens",
+     "INTEGER",
+     null
+    ],
+    [
+     "cache_read_tokens",
+     "INTEGER",
+     null
+    ],
+    [
+     "cache_creation_tokens",
+     "INTEGER",
+     null
+    ],
+    [
+     "reasoning_tokens",
+     "INTEGER",
+     null
+    ],
+    [
+     "api_key_bucket",
+     "TEXT",
+     null
+    ],
+    [
+     "model_type",
+     "TEXT",
+     "'llm'"
+    ],
+    [
+     "request_id",
+     "TEXT",
+     null
+    ],
+    [
+     "ttft_ms",
+     "REAL",
+     null
+    ],
+    [
+     "conversation_id",
+     "TEXT",
+     null
+    ],
+    [
+     "upstream_model",
+     "TEXT",
+     null
+    ]
+   ],
+   "indexes": [
+    "idx_rl_api_key_bucket",
+    "idx_rl_api_key_label",
+    "idx_rl_request_id",
+    "idx_rl_status",
+    "idx_rl_success_ts",
+    "idx_rl_timestamp",
+    "sqlite_autoindex_request_log_1"
+   ],
+   "objects": [
+    [
+     "index",
+     "idx_ed_error_phase",
+     "CREATE INDEX idx_ed_error_phase ON error_dumps(error_phase)"
+    ],
+    [
+     "index",
+     "idx_ed_model",
+     "CREATE INDEX idx_ed_model ON error_dumps(model)"
+    ],
+    [
+     "index",
+     "idx_ed_request_log",
+     "CREATE INDEX idx_ed_request_log                 ON error_dumps(request_log_id)"
+    ],
+    [
+     "index",
+     "idx_ed_timestamp",
+     "CREATE INDEX idx_ed_timestamp                 ON error_dumps(timestamp DESC)"
+    ],
+    [
+     "index",
+     "idx_ol_event_type",
+     "CREATE INDEX idx_ol_event_type                 ON ops_log(event_type)"
+    ],
+    [
+     "index",
+     "idx_ol_severity_ts",
+     "CREATE INDEX idx_ol_severity_ts                 ON ops_log(severity, timestamp DESC)"
+    ],
+    [
+     "index",
+     "idx_ol_timestamp",
+     "CREATE INDEX idx_ol_timestamp                 ON ops_log(timestamp DESC)"
+    ],
+    [
+     "index",
+     "idx_rl_api_key_bucket",
+     "CREATE INDEX idx_rl_api_key_bucket ON request_log(api_key_bucket, timestamp)"
+    ],
+    [
+     "index",
+     "idx_rl_api_key_label",
+     "CREATE INDEX idx_rl_api_key_label ON request_log(api_key_label)"
+    ],
+    [
+     "index",
+     "idx_rl_request_id",
+     "CREATE INDEX idx_rl_request_id ON request_log(request_id)"
+    ],
+    [
+     "index",
+     "idx_rl_status",
+     "CREATE INDEX idx_rl_status                 ON request_log(status_code)"
+    ],
+    [
+     "index",
+     "idx_rl_success_ts",
+     "CREATE INDEX idx_rl_success_ts                 ON request_log(timestamp ASC) WHERE status_code < 400"
+    ],
+    [
+     "index",
+     "idx_rl_timestamp",
+     "CREATE INDEX idx_rl_timestamp                 ON request_log(timestamp DESC)"
+    ],
+    [
+     "index",
+     "sqlite_autoindex_dump_bodies_1",
+     ""
+    ],
+    [
+     "index",
+     "sqlite_autoindex_error_dumps_1",
+     ""
+    ],
+    [
+     "index",
+     "sqlite_autoindex_metrics_1",
+     ""
+    ],
+    [
+     "index",
+     "sqlite_autoindex_ops_log_1",
+     ""
+    ],
+    [
+     "index",
+     "sqlite_autoindex_request_log_1",
+     ""
+    ],
+    [
+     "table",
+     "dump_bodies",
+     "CREATE TABLE dump_bodies (                 hash        TEXT PRIMARY KEY,                 data        BLOB NOT NULL,                 orig_bytes  INTEGER NOT NULL,                 created     TEXT NOT NULL             )"
+    ],
+    [
+     "table",
+     "error_dumps",
+     "CREATE TABLE error_dumps (                 id                  TEXT PRIMARY KEY,                 request_log_id      TEXT REFERENCES request_log(id) ON DELETE SET NULL,                 timestamp           TEXT NOT NULL,                 model               TEXT,                 source_provider     TEXT,                 target_provider     TEXT,                 provider_name       TEXT,                 status_code         INTEGER,                 error_phase         TEXT,                 body_hash           TEXT,                 response_text       TEXT,                 upstream_url        TEXT,                 converted_body_hash TEXT,                 tool_name_collisions TEXT             )"
+    ],
+    [
+     "table",
+     "metrics",
+     "CREATE TABLE metrics (                 key   TEXT PRIMARY KEY,                 value TEXT NOT NULL             )"
+    ],
+    [
+     "table",
+     "ops_log",
+     "CREATE TABLE ops_log (                 id          TEXT PRIMARY KEY,                 timestamp   TEXT NOT NULL,                 event_type  TEXT NOT NULL,                 severity    TEXT NOT NULL,                 message     TEXT NOT NULL,                 details     TEXT,                 source      TEXT             )"
+    ],
+    [
+     "table",
+     "request_log",
+     "CREATE TABLE request_log (                 id              TEXT PRIMARY KEY,                 timestamp       TEXT NOT NULL,                 model           TEXT NOT NULL,                 source_provider TEXT NOT NULL,                 target_provider TEXT NOT NULL,                 is_stream       INTEGER NOT NULL,                 status_code     INTEGER NOT NULL,                 duration_ms     REAL NOT NULL,                 error_detail    TEXT,                 api_key_label   TEXT,                 target_provider_name TEXT,                 client_ip       TEXT,                 user_agent      TEXT             , profile TEXT, input_tokens INTEGER, output_tokens INTEGER, total_tokens INTEGER, cache_read_tokens INTEGER, cache_creation_tokens INTEGER, reasoning_tokens INTEGER, api_key_bucket TEXT, model_type TEXT DEFAULT 'llm', request_id TEXT, ttft_ms REAL, conversation_id TEXT, upstream_model TEXT)"
+    ],
+    [
+     "table",
+     "schema_version",
+     "CREATE TABLE schema_version (                 version     INTEGER PRIMARY KEY,                 applied_at  TEXT NOT NULL             )"
+    ]
+   ],
+   "versions": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13
+   ]
+  },
+  "schema_version": 13
  },
  "at_2": {
   "log_first_open": [
    "INFO Applying migration v10: rename request_log.model_type 'decision' to 'decisions'",
    "INFO Applying migration v11: add request_log.user_agent so a decision names its client",
    "INFO Applying migration v12: add request_log.conversation_id so the routing page groups by conversation",
+   "INFO Applying migration v13: add request_log.upstream_model so a row names the lane that served",
    "INFO Applying migration v3: add error_dumps.tool_name_collisions",
    "INFO Applying migration v4: add request_log.api_key_bucket for per-key usage attribution",
    "INFO Applying migration v5: index request_log.api_key_label",
@@ -1482,6 +1812,7 @@
    "INFO Migration v10 applied",
    "INFO Migration v11 applied",
    "INFO Migration v12 applied",
+   "INFO Migration v13 applied",
    "INFO Migration v3 applied",
    "INFO Migration v4 applied",
    "INFO Migration v5 applied",
@@ -1619,6 +1950,11 @@
      "conversation_id",
      "TEXT",
      null
+    ],
+    [
+     "upstream_model",
+     "TEXT",
+     null
     ]
    ],
    "indexes": [
@@ -1744,7 +2080,7 @@
     [
      "table",
      "request_log",
-     "CREATE TABLE request_log (                 id              TEXT PRIMARY KEY,                 timestamp       TEXT NOT NULL,                 model           TEXT NOT NULL,                 source_provider TEXT NOT NULL,                 target_provider TEXT NOT NULL,                 is_stream       INTEGER NOT NULL,                 status_code     INTEGER NOT NULL,                 duration_ms     REAL NOT NULL,                 error_detail    TEXT,                 api_key_label   TEXT,                 target_provider_name TEXT,                 client_ip       TEXT,                 user_agent      TEXT             , profile TEXT, input_tokens INTEGER, output_tokens INTEGER, total_tokens INTEGER, cache_read_tokens INTEGER, cache_creation_tokens INTEGER, reasoning_tokens INTEGER, api_key_bucket TEXT, model_type TEXT DEFAULT 'llm', request_id TEXT, ttft_ms REAL, conversation_id TEXT)"
+     "CREATE TABLE request_log (                 id              TEXT PRIMARY KEY,                 timestamp       TEXT NOT NULL,                 model           TEXT NOT NULL,                 source_provider TEXT NOT NULL,                 target_provider TEXT NOT NULL,                 is_stream       INTEGER NOT NULL,                 status_code     INTEGER NOT NULL,                 duration_ms     REAL NOT NULL,                 error_detail    TEXT,                 api_key_label   TEXT,                 target_provider_name TEXT,                 client_ip       TEXT,                 user_agent      TEXT             , profile TEXT, input_tokens INTEGER, output_tokens INTEGER, total_tokens INTEGER, cache_read_tokens INTEGER, cache_creation_tokens INTEGER, reasoning_tokens INTEGER, api_key_bucket TEXT, model_type TEXT DEFAULT 'llm', request_id TEXT, ttft_ms REAL, conversation_id TEXT, upstream_model TEXT)"
     ],
     [
      "table",
@@ -1764,16 +2100,18 @@
     9,
     10,
     11,
-    12
+    12,
+    13
    ]
   },
-  "schema_version": 12
+  "schema_version": 13
  },
  "at_3": {
   "log_first_open": [
    "INFO Applying migration v10: rename request_log.model_type 'decision' to 'decisions'",
    "INFO Applying migration v11: add request_log.user_agent so a decision names its client",
    "INFO Applying migration v12: add request_log.conversation_id so the routing page groups by conversation",
+   "INFO Applying migration v13: add request_log.upstream_model so a row names the lane that served",
    "INFO Applying migration v4: add request_log.api_key_bucket for per-key usage attribution",
    "INFO Applying migration v5: index request_log.api_key_label",
    "INFO Applying migration v6: add request_log.model_type for the non-chat model types",
@@ -1784,6 +2122,7 @@
    "INFO Migration v10 applied",
    "INFO Migration v11 applied",
    "INFO Migration v12 applied",
+   "INFO Migration v13 applied",
    "INFO Migration v4 applied",
    "INFO Migration v5 applied",
    "INFO Migration v6 applied",
@@ -1920,6 +2259,11 @@
      "conversation_id",
      "TEXT",
      null
+    ],
+    [
+     "upstream_model",
+     "TEXT",
+     null
     ]
    ],
    "indexes": [
@@ -2045,7 +2389,7 @@
     [
      "table",
      "request_log",
-     "CREATE TABLE request_log (                 id              TEXT PRIMARY KEY,                 timestamp       TEXT NOT NULL,                 model           TEXT NOT NULL,                 source_provider TEXT NOT NULL,                 target_provider TEXT NOT NULL,                 is_stream       INTEGER NOT NULL,                 status_code     INTEGER NOT NULL,                 duration_ms     REAL NOT NULL,                 error_detail    TEXT,                 api_key_label   TEXT,                 target_provider_name TEXT,                 client_ip       TEXT,                 user_agent      TEXT             , profile TEXT, input_tokens INTEGER, output_tokens INTEGER, total_tokens INTEGER, cache_read_tokens INTEGER, cache_creation_tokens INTEGER, reasoning_tokens INTEGER, api_key_bucket TEXT, model_type TEXT DEFAULT 'llm', request_id TEXT, ttft_ms REAL, conversation_id TEXT)"
+     "CREATE TABLE request_log (                 id              TEXT PRIMARY KEY,                 timestamp       TEXT NOT NULL,                 model           TEXT NOT NULL,                 source_provider TEXT NOT NULL,                 target_provider TEXT NOT NULL,                 is_stream       INTEGER NOT NULL,                 status_code     INTEGER NOT NULL,                 duration_ms     REAL NOT NULL,                 error_detail    TEXT,                 api_key_label   TEXT,                 target_provider_name TEXT,                 client_ip       TEXT,                 user_agent      TEXT             , profile TEXT, input_tokens INTEGER, output_tokens INTEGER, total_tokens INTEGER, cache_read_tokens INTEGER, cache_creation_tokens INTEGER, reasoning_tokens INTEGER, api_key_bucket TEXT, model_type TEXT DEFAULT 'llm', request_id TEXT, ttft_ms REAL, conversation_id TEXT, upstream_model TEXT)"
     ],
     [
      "table",
@@ -2065,16 +2409,18 @@
     9,
     10,
     11,
-    12
+    12,
+    13
    ]
   },
-  "schema_version": 12
+  "schema_version": 13
  },
  "at_4": {
   "log_first_open": [
    "INFO Applying migration v10: rename request_log.model_type 'decision' to 'decisions'",
    "INFO Applying migration v11: add request_log.user_agent so a decision names its client",
    "INFO Applying migration v12: add request_log.conversation_id so the routing page groups by conversation",
+   "INFO Applying migration v13: add request_log.upstream_model so a row names the lane that served",
    "INFO Applying migration v5: index request_log.api_key_label",
    "INFO Applying migration v6: add request_log.model_type for the non-chat model types",
    "INFO Applying migration v7: add request_log.request_id so an X-Request-Id resolves to a row",
@@ -2084,6 +2430,7 @@
    "INFO Migration v10 applied",
    "INFO Migration v11 applied",
    "INFO Migration v12 applied",
+   "INFO Migration v13 applied",
    "INFO Migration v5 applied",
    "INFO Migration v6 applied",
    "INFO Migration v7 applied",
@@ -2219,6 +2566,11 @@
      "conversation_id",
      "TEXT",
      null
+    ],
+    [
+     "upstream_model",
+     "TEXT",
+     null
     ]
    ],
    "indexes": [
@@ -2344,7 +2696,7 @@
     [
      "table",
      "request_log",
-     "CREATE TABLE request_log (                 id              TEXT PRIMARY KEY,                 timestamp       TEXT NOT NULL,                 model           TEXT NOT NULL,                 source_provider TEXT NOT NULL,                 target_provider TEXT NOT NULL,                 is_stream       INTEGER NOT NULL,                 status_code     INTEGER NOT NULL,                 duration_ms     REAL NOT NULL,                 error_detail    TEXT,                 api_key_label   TEXT,                 target_provider_name TEXT,                 client_ip       TEXT,                 user_agent      TEXT             , profile TEXT, input_tokens INTEGER, output_tokens INTEGER, total_tokens INTEGER, cache_read_tokens INTEGER, cache_creation_tokens INTEGER, reasoning_tokens INTEGER, api_key_bucket TEXT, model_type TEXT DEFAULT 'llm', request_id TEXT, ttft_ms REAL, conversation_id TEXT)"
+     "CREATE TABLE request_log (                 id              TEXT PRIMARY KEY,                 timestamp       TEXT NOT NULL,                 model           TEXT NOT NULL,                 source_provider TEXT NOT NULL,                 target_provider TEXT NOT NULL,                 is_stream       INTEGER NOT NULL,                 status_code     INTEGER NOT NULL,                 duration_ms     REAL NOT NULL,                 error_detail    TEXT,                 api_key_label   TEXT,                 target_provider_name TEXT,                 client_ip       TEXT,                 user_agent      TEXT             , profile TEXT, input_tokens INTEGER, output_tokens INTEGER, total_tokens INTEGER, cache_read_tokens INTEGER, cache_creation_tokens INTEGER, reasoning_tokens INTEGER, api_key_bucket TEXT, model_type TEXT DEFAULT 'llm', request_id TEXT, ttft_ms REAL, conversation_id TEXT, upstream_model TEXT)"
     ],
     [
      "table",
@@ -2364,16 +2716,18 @@
     9,
     10,
     11,
-    12
+    12,
+    13
    ]
   },
-  "schema_version": 12
+  "schema_version": 13
  },
  "at_5": {
   "log_first_open": [
    "INFO Applying migration v10: rename request_log.model_type 'decision' to 'decisions'",
    "INFO Applying migration v11: add request_log.user_agent so a decision names its client",
    "INFO Applying migration v12: add request_log.conversation_id so the routing page groups by conversation",
+   "INFO Applying migration v13: add request_log.upstream_model so a row names the lane that served",
    "INFO Applying migration v6: add request_log.model_type for the non-chat model types",
    "INFO Applying migration v7: add request_log.request_id so an X-Request-Id resolves to a row",
    "INFO Applying migration v8: add request_log.ttft_ms so a stream's generation rate is measurable",
@@ -2382,6 +2736,7 @@
    "INFO Migration v10 applied",
    "INFO Migration v11 applied",
    "INFO Migration v12 applied",
+   "INFO Migration v13 applied",
    "INFO Migration v6 applied",
    "INFO Migration v7 applied",
    "INFO Migration v8 applied",
@@ -2516,6 +2871,11 @@
      "conversation_id",
      "TEXT",
      null
+    ],
+    [
+     "upstream_model",
+     "TEXT",
+     null
     ]
    ],
    "indexes": [
@@ -2641,7 +3001,7 @@
     [
      "table",
      "request_log",
-     "CREATE TABLE request_log (                 id              TEXT PRIMARY KEY,                 timestamp       TEXT NOT NULL,                 model           TEXT NOT NULL,                 source_provider TEXT NOT NULL,                 target_provider TEXT NOT NULL,                 is_stream       INTEGER NOT NULL,                 status_code     INTEGER NOT NULL,                 duration_ms     REAL NOT NULL,                 error_detail    TEXT,                 api_key_label   TEXT,                 target_provider_name TEXT,                 client_ip       TEXT,                 user_agent      TEXT             , profile TEXT, input_tokens INTEGER, output_tokens INTEGER, total_tokens INTEGER, cache_read_tokens INTEGER, cache_creation_tokens INTEGER, reasoning_tokens INTEGER, api_key_bucket TEXT, model_type TEXT DEFAULT 'llm', request_id TEXT, ttft_ms REAL, conversation_id TEXT)"
+     "CREATE TABLE request_log (                 id              TEXT PRIMARY KEY,                 timestamp       TEXT NOT NULL,                 model           TEXT NOT NULL,                 source_provider TEXT NOT NULL,                 target_provider TEXT NOT NULL,                 is_stream       INTEGER NOT NULL,                 status_code     INTEGER NOT NULL,                 duration_ms     REAL NOT NULL,                 error_detail    TEXT,                 api_key_label   TEXT,                 target_provider_name TEXT,                 client_ip       TEXT,                 user_agent      TEXT             , profile TEXT, input_tokens INTEGER, output_tokens INTEGER, total_tokens INTEGER, cache_read_tokens INTEGER, cache_creation_tokens INTEGER, reasoning_tokens INTEGER, api_key_bucket TEXT, model_type TEXT DEFAULT 'llm', request_id TEXT, ttft_ms REAL, conversation_id TEXT, upstream_model TEXT)"
     ],
     [
      "table",
@@ -2661,16 +3021,18 @@
     9,
     10,
     11,
-    12
+    12,
+    13
    ]
   },
-  "schema_version": 12
+  "schema_version": 13
  },
  "at_6": {
   "log_first_open": [
    "INFO Applying migration v10: rename request_log.model_type 'decision' to 'decisions'",
    "INFO Applying migration v11: add request_log.user_agent so a decision names its client",
    "INFO Applying migration v12: add request_log.conversation_id so the routing page groups by conversation",
+   "INFO Applying migration v13: add request_log.upstream_model so a row names the lane that served",
    "INFO Applying migration v7: add request_log.request_id so an X-Request-Id resolves to a row",
    "INFO Applying migration v8: add request_log.ttft_ms so a stream's generation rate is measurable",
    "INFO Applying migration v9: rename request_log.model_type 'embedding' to 'embeddings'",
@@ -2678,6 +3040,7 @@
    "INFO Migration v10 applied",
    "INFO Migration v11 applied",
    "INFO Migration v12 applied",
+   "INFO Migration v13 applied",
    "INFO Migration v7 applied",
    "INFO Migration v8 applied",
    "INFO Migration v9 applied"
@@ -2811,6 +3174,11 @@
      "conversation_id",
      "TEXT",
      null
+    ],
+    [
+     "upstream_model",
+     "TEXT",
+     null
     ]
    ],
    "indexes": [
@@ -2936,7 +3304,7 @@
     [
      "table",
      "request_log",
-     "CREATE TABLE request_log (                 id              TEXT PRIMARY KEY,                 timestamp       TEXT NOT NULL,                 model           TEXT NOT NULL,                 source_provider TEXT NOT NULL,                 target_provider TEXT NOT NULL,                 is_stream       INTEGER NOT NULL,                 status_code     INTEGER NOT NULL,                 duration_ms     REAL NOT NULL,                 error_detail    TEXT,                 api_key_label   TEXT,                 target_provider_name TEXT,                 client_ip       TEXT,                 user_agent      TEXT             , profile TEXT, input_tokens INTEGER, output_tokens INTEGER, total_tokens INTEGER, cache_read_tokens INTEGER, cache_creation_tokens INTEGER, reasoning_tokens INTEGER, api_key_bucket TEXT, model_type TEXT DEFAULT 'llm', request_id TEXT, ttft_ms REAL, conversation_id TEXT)"
+     "CREATE TABLE request_log (                 id              TEXT PRIMARY KEY,                 timestamp       TEXT NOT NULL,                 model           TEXT NOT NULL,                 source_provider TEXT NOT NULL,                 target_provider TEXT NOT NULL,                 is_stream       INTEGER NOT NULL,                 status_code     INTEGER NOT NULL,                 duration_ms     REAL NOT NULL,                 error_detail    TEXT,                 api_key_label   TEXT,                 target_provider_name TEXT,                 client_ip       TEXT,                 user_agent      TEXT             , profile TEXT, input_tokens INTEGER, output_tokens INTEGER, total_tokens INTEGER, cache_read_tokens INTEGER, cache_creation_tokens INTEGER, reasoning_tokens INTEGER, api_key_bucket TEXT, model_type TEXT DEFAULT 'llm', request_id TEXT, ttft_ms REAL, conversation_id TEXT, upstream_model TEXT)"
     ],
     [
      "table",
@@ -2956,22 +3324,25 @@
     9,
     10,
     11,
-    12
+    12,
+    13
    ]
   },
-  "schema_version": 12
+  "schema_version": 13
  },
  "at_7": {
   "log_first_open": [
    "INFO Applying migration v10: rename request_log.model_type 'decision' to 'decisions'",
    "INFO Applying migration v11: add request_log.user_agent so a decision names its client",
    "INFO Applying migration v12: add request_log.conversation_id so the routing page groups by conversation",
+   "INFO Applying migration v13: add request_log.upstream_model so a row names the lane that served",
    "INFO Applying migration v8: add request_log.ttft_ms so a stream's generation rate is measurable",
    "INFO Applying migration v9: rename request_log.model_type 'embedding' to 'embeddings'",
    "INFO Database backup created: <store-root>/at_7/backups/gateway-<ts>.db (<size> MB)",
    "INFO Migration v10 applied",
    "INFO Migration v11 applied",
    "INFO Migration v12 applied",
+   "INFO Migration v13 applied",
    "INFO Migration v8 applied",
    "INFO Migration v9 applied"
   ],
@@ -3104,6 +3475,11 @@
      "conversation_id",
      "TEXT",
      null
+    ],
+    [
+     "upstream_model",
+     "TEXT",
+     null
     ]
    ],
    "indexes": [
@@ -3229,7 +3605,7 @@
     [
      "table",
      "request_log",
-     "CREATE TABLE request_log (                 id              TEXT PRIMARY KEY,                 timestamp       TEXT NOT NULL,                 model           TEXT NOT NULL,                 source_provider TEXT NOT NULL,                 target_provider TEXT NOT NULL,                 is_stream       INTEGER NOT NULL,                 status_code     INTEGER NOT NULL,                 duration_ms     REAL NOT NULL,                 error_detail    TEXT,                 api_key_label   TEXT,                 target_provider_name TEXT,                 client_ip       TEXT,                 user_agent      TEXT             , profile TEXT, input_tokens INTEGER, output_tokens INTEGER, total_tokens INTEGER, cache_read_tokens INTEGER, cache_creation_tokens INTEGER, reasoning_tokens INTEGER, api_key_bucket TEXT, model_type TEXT DEFAULT 'llm', request_id TEXT, ttft_ms REAL, conversation_id TEXT)"
+     "CREATE TABLE request_log (                 id              TEXT PRIMARY KEY,                 timestamp       TEXT NOT NULL,                 model           TEXT NOT NULL,                 source_provider TEXT NOT NULL,                 target_provider TEXT NOT NULL,                 is_stream       INTEGER NOT NULL,                 status_code     INTEGER NOT NULL,                 duration_ms     REAL NOT NULL,                 error_detail    TEXT,                 api_key_label   TEXT,                 target_provider_name TEXT,                 client_ip       TEXT,                 user_agent      TEXT             , profile TEXT, input_tokens INTEGER, output_tokens INTEGER, total_tokens INTEGER, cache_read_tokens INTEGER, cache_creation_tokens INTEGER, reasoning_tokens INTEGER, api_key_bucket TEXT, model_type TEXT DEFAULT 'llm', request_id TEXT, ttft_ms REAL, conversation_id TEXT, upstream_model TEXT)"
     ],
     [
      "table",
@@ -3249,21 +3625,24 @@
     9,
     10,
     11,
-    12
+    12,
+    13
    ]
   },
-  "schema_version": 12
+  "schema_version": 13
  },
  "at_8": {
   "log_first_open": [
    "INFO Applying migration v10: rename request_log.model_type 'decision' to 'decisions'",
    "INFO Applying migration v11: add request_log.user_agent so a decision names its client",
    "INFO Applying migration v12: add request_log.conversation_id so the routing page groups by conversation",
+   "INFO Applying migration v13: add request_log.upstream_model so a row names the lane that served",
    "INFO Applying migration v9: rename request_log.model_type 'embedding' to 'embeddings'",
    "INFO Database backup created: <store-root>/at_8/backups/gateway-<ts>.db (<size> MB)",
    "INFO Migration v10 applied",
    "INFO Migration v11 applied",
    "INFO Migration v12 applied",
+   "INFO Migration v13 applied",
    "INFO Migration v9 applied"
   ],
   "log_second_open": [
@@ -3395,6 +3774,11 @@
      "conversation_id",
      "TEXT",
      null
+    ],
+    [
+     "upstream_model",
+     "TEXT",
+     null
     ]
    ],
    "indexes": [
@@ -3520,7 +3904,7 @@
     [
      "table",
      "request_log",
-     "CREATE TABLE request_log (                 id              TEXT PRIMARY KEY,                 timestamp       TEXT NOT NULL,                 model           TEXT NOT NULL,                 source_provider TEXT NOT NULL,                 target_provider TEXT NOT NULL,                 is_stream       INTEGER NOT NULL,                 status_code     INTEGER NOT NULL,                 duration_ms     REAL NOT NULL,                 error_detail    TEXT,                 api_key_label   TEXT,                 target_provider_name TEXT,                 client_ip       TEXT,                 user_agent      TEXT             , profile TEXT, input_tokens INTEGER, output_tokens INTEGER, total_tokens INTEGER, cache_read_tokens INTEGER, cache_creation_tokens INTEGER, reasoning_tokens INTEGER, api_key_bucket TEXT, model_type TEXT DEFAULT 'llm', request_id TEXT, ttft_ms REAL, conversation_id TEXT)"
+     "CREATE TABLE request_log (                 id              TEXT PRIMARY KEY,                 timestamp       TEXT NOT NULL,                 model           TEXT NOT NULL,                 source_provider TEXT NOT NULL,                 target_provider TEXT NOT NULL,                 is_stream       INTEGER NOT NULL,                 status_code     INTEGER NOT NULL,                 duration_ms     REAL NOT NULL,                 error_detail    TEXT,                 api_key_label   TEXT,                 target_provider_name TEXT,                 client_ip       TEXT,                 user_agent      TEXT             , profile TEXT, input_tokens INTEGER, output_tokens INTEGER, total_tokens INTEGER, cache_read_tokens INTEGER, cache_creation_tokens INTEGER, reasoning_tokens INTEGER, api_key_bucket TEXT, model_type TEXT DEFAULT 'llm', request_id TEXT, ttft_ms REAL, conversation_id TEXT, upstream_model TEXT)"
     ],
     [
      "table",
@@ -3540,20 +3924,23 @@
     9,
     10,
     11,
-    12
+    12,
+    13
    ]
   },
-  "schema_version": 12
+  "schema_version": 13
  },
  "at_9": {
   "log_first_open": [
    "INFO Applying migration v10: rename request_log.model_type 'decision' to 'decisions'",
    "INFO Applying migration v11: add request_log.user_agent so a decision names its client",
    "INFO Applying migration v12: add request_log.conversation_id so the routing page groups by conversation",
+   "INFO Applying migration v13: add request_log.upstream_model so a row names the lane that served",
    "INFO Database backup created: <store-root>/at_9/backups/gateway-<ts>.db (<size> MB)",
    "INFO Migration v10 applied",
    "INFO Migration v11 applied",
-   "INFO Migration v12 applied"
+   "INFO Migration v12 applied",
+   "INFO Migration v13 applied"
   ],
   "log_second_open": [
    "INFO Database backup created: <store-root>/at_9/backups/gateway-<ts>.db (<size> MB)"
@@ -3684,6 +4071,11 @@
      "conversation_id",
      "TEXT",
      null
+    ],
+    [
+     "upstream_model",
+     "TEXT",
+     null
     ]
    ],
    "indexes": [
@@ -3809,7 +4201,7 @@
     [
      "table",
      "request_log",
-     "CREATE TABLE request_log (                 id              TEXT PRIMARY KEY,                 timestamp       TEXT NOT NULL,                 model           TEXT NOT NULL,                 source_provider TEXT NOT NULL,                 target_provider TEXT NOT NULL,                 is_stream       INTEGER NOT NULL,                 status_code     INTEGER NOT NULL,                 duration_ms     REAL NOT NULL,                 error_detail    TEXT,                 api_key_label   TEXT,                 target_provider_name TEXT,                 client_ip       TEXT,                 user_agent      TEXT             , profile TEXT, input_tokens INTEGER, output_tokens INTEGER, total_tokens INTEGER, cache_read_tokens INTEGER, cache_creation_tokens INTEGER, reasoning_tokens INTEGER, api_key_bucket TEXT, model_type TEXT DEFAULT 'llm', request_id TEXT, ttft_ms REAL, conversation_id TEXT)"
+     "CREATE TABLE request_log (                 id              TEXT PRIMARY KEY,                 timestamp       TEXT NOT NULL,                 model           TEXT NOT NULL,                 source_provider TEXT NOT NULL,                 target_provider TEXT NOT NULL,                 is_stream       INTEGER NOT NULL,                 status_code     INTEGER NOT NULL,                 duration_ms     REAL NOT NULL,                 error_detail    TEXT,                 api_key_label   TEXT,                 target_provider_name TEXT,                 client_ip       TEXT,                 user_agent      TEXT             , profile TEXT, input_tokens INTEGER, output_tokens INTEGER, total_tokens INTEGER, cache_read_tokens INTEGER, cache_creation_tokens INTEGER, reasoning_tokens INTEGER, api_key_bucket TEXT, model_type TEXT DEFAULT 'llm', request_id TEXT, ttft_ms REAL, conversation_id TEXT, upstream_model TEXT)"
     ],
     [
      "table",
@@ -3829,16 +4221,18 @@
     9,
     10,
     11,
-    12
+    12,
+    13
    ]
   },
-  "schema_version": 12
+  "schema_version": 13
  },
  "fresh": {
   "log_first_open": [
    "INFO Applying migration v10: rename request_log.model_type 'decision' to 'decisions'",
    "INFO Applying migration v11: add request_log.user_agent so a decision names its client",
    "INFO Applying migration v12: add request_log.conversation_id so the routing page groups by conversation",
+   "INFO Applying migration v13: add request_log.upstream_model so a row names the lane that served",
    "INFO Applying migration v1: add request_log extra columns",
    "INFO Applying migration v2: add error_dumps indexes on model and error_phase",
    "INFO Applying migration v3: add error_dumps.tool_name_collisions",
@@ -3852,6 +4246,7 @@
    "INFO Migration v10 applied",
    "INFO Migration v11 applied",
    "INFO Migration v12 applied",
+   "INFO Migration v13 applied",
    "INFO Migration v2 applied",
    "INFO Migration v3 applied",
    "INFO Migration v4 applied",
@@ -3990,6 +4385,11 @@
      "conversation_id",
      "TEXT",
      null
+    ],
+    [
+     "upstream_model",
+     "TEXT",
+     null
     ]
    ],
    "indexes": [
@@ -4115,7 +4515,7 @@
     [
      "table",
      "request_log",
-     "CREATE TABLE request_log (                 id              TEXT PRIMARY KEY,                 timestamp       TEXT NOT NULL,                 model           TEXT NOT NULL,                 source_provider TEXT NOT NULL,                 target_provider TEXT NOT NULL,                 is_stream       INTEGER NOT NULL,                 status_code     INTEGER NOT NULL,                 duration_ms     REAL NOT NULL,                 error_detail    TEXT,                 api_key_label   TEXT,                 target_provider_name TEXT,                 client_ip       TEXT,                 user_agent      TEXT             , profile TEXT, input_tokens INTEGER, output_tokens INTEGER, total_tokens INTEGER, cache_read_tokens INTEGER, cache_creation_tokens INTEGER, reasoning_tokens INTEGER, api_key_bucket TEXT, model_type TEXT DEFAULT 'llm', request_id TEXT, ttft_ms REAL, conversation_id TEXT)"
+     "CREATE TABLE request_log (                 id              TEXT PRIMARY KEY,                 timestamp       TEXT NOT NULL,                 model           TEXT NOT NULL,                 source_provider TEXT NOT NULL,                 target_provider TEXT NOT NULL,                 is_stream       INTEGER NOT NULL,                 status_code     INTEGER NOT NULL,                 duration_ms     REAL NOT NULL,                 error_detail    TEXT,                 api_key_label   TEXT,                 target_provider_name TEXT,                 client_ip       TEXT,                 user_agent      TEXT             , profile TEXT, input_tokens INTEGER, output_tokens INTEGER, total_tokens INTEGER, cache_read_tokens INTEGER, cache_creation_tokens INTEGER, reasoning_tokens INTEGER, api_key_bucket TEXT, model_type TEXT DEFAULT 'llm', request_id TEXT, ttft_ms REAL, conversation_id TEXT, upstream_model TEXT)"
     ],
     [
      "table",
@@ -4135,16 +4535,18 @@
     9,
     10,
     11,
-    12
+    12,
+    13
    ]
   },
-  "schema_version": 12
+  "schema_version": 13
  },
  "pre_registry": {
   "log_first_open": [
    "INFO Applying migration v10: rename request_log.model_type 'decision' to 'decisions'",
    "INFO Applying migration v11: add request_log.user_agent so a decision names its client",
    "INFO Applying migration v12: add request_log.conversation_id so the routing page groups by conversation",
+   "INFO Applying migration v13: add request_log.upstream_model so a row names the lane that served",
    "INFO Applying migration v2: add error_dumps indexes on model and error_phase",
    "INFO Applying migration v3: add error_dumps.tool_name_collisions",
    "INFO Applying migration v4: add request_log.api_key_bucket for per-key usage attribution",
@@ -4157,6 +4559,7 @@
    "INFO Migration v10 applied",
    "INFO Migration v11 applied",
    "INFO Migration v12 applied",
+   "INFO Migration v13 applied",
    "INFO Migration v2 applied",
    "INFO Migration v3 applied",
    "INFO Migration v4 applied",
@@ -4295,6 +4698,11 @@
      "conversation_id",
      "TEXT",
      null
+    ],
+    [
+     "upstream_model",
+     "TEXT",
+     null
     ]
    ],
    "indexes": [
@@ -4420,7 +4828,7 @@
     [
      "table",
      "request_log",
-     "CREATE TABLE request_log (                 id              TEXT PRIMARY KEY,                 timestamp       TEXT NOT NULL,                 model           TEXT NOT NULL,                 source_provider TEXT NOT NULL,                 target_provider TEXT NOT NULL,                 is_stream       INTEGER NOT NULL,                 status_code     INTEGER NOT NULL,                 duration_ms     REAL NOT NULL,                 error_detail    TEXT,                 api_key_label   TEXT,                 target_provider_name TEXT,                 client_ip       TEXT,                 user_agent      TEXT             , profile TEXT, input_tokens INTEGER, output_tokens INTEGER, total_tokens INTEGER, cache_read_tokens INTEGER, cache_creation_tokens INTEGER, reasoning_tokens INTEGER, api_key_bucket TEXT, model_type TEXT DEFAULT 'llm', request_id TEXT, ttft_ms REAL, conversation_id TEXT)"
+     "CREATE TABLE request_log (                 id              TEXT PRIMARY KEY,                 timestamp       TEXT NOT NULL,                 model           TEXT NOT NULL,                 source_provider TEXT NOT NULL,                 target_provider TEXT NOT NULL,                 is_stream       INTEGER NOT NULL,                 status_code     INTEGER NOT NULL,                 duration_ms     REAL NOT NULL,                 error_detail    TEXT,                 api_key_label   TEXT,                 target_provider_name TEXT,                 client_ip       TEXT,                 user_agent      TEXT             , profile TEXT, input_tokens INTEGER, output_tokens INTEGER, total_tokens INTEGER, cache_read_tokens INTEGER, cache_creation_tokens INTEGER, reasoning_tokens INTEGER, api_key_bucket TEXT, model_type TEXT DEFAULT 'llm', request_id TEXT, ttft_ms REAL, conversation_id TEXT, upstream_model TEXT)"
     ],
     [
      "table",
@@ -4440,9 +4848,10 @@
     9,
     10,
     11,
-    12
+    12,
+    13
    ]
   },
-  "schema_version": 12
+  "schema_version": 13
  }
 }

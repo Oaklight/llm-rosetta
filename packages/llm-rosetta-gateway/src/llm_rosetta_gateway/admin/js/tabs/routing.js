@@ -665,6 +665,11 @@ function _renderDecisions() {
       ? '<span class="badge badge-warning">' +
         esc(t('routing.failover', { from: decision.failover.from || '?' })) + '</span>'
       : '<span class="routing-muted">—</span>';
+    // Which lane served, when one provider is several upstream models (#1430):
+    // the provider name alone cannot tell the cheap lane from the fast one.
+    const lane = decision.upstream_model
+      ? '<small class="routing-muted">' + esc(decision.upstream_model) + '</small>'
+      : '';
     const key = String(index);
     // A click opens the chain under the row: who asked, what the gateway did,
     // and why the lane was the one chosen.
@@ -673,6 +678,7 @@ function _renderDecisions() {
       ? '<div class="routing-dec-detail">' +
         '<div class="routing-dec-chain">' +
         esc(decision.client || '—') + ' → gateway → ' + esc(decision.provider || '—') +
+        (decision.upstream_model ? '/' + esc(decision.upstream_model) : '') +
         ' · ' + esc(_strategyName()) + '</div>' +
         '<div class="routing-dec-why">' +
         esc(t('routing.decisionWhy', {
@@ -692,7 +698,7 @@ function _renderDecisions() {
       esc(decision.client || '—') +
       (decision.user_agent ? '<small>' + esc(_shortUa(decision.user_agent)) + '</small>' : '') +
       '</span>' +
-      '<span>' + esc(decision.provider || '—') + '</span>' +
+      '<span class="routing-lane">' + esc(decision.provider || '—') + lane + '</span>' +
       '<span>' + reason + '</span>' +
       '<span class="routing-status is-' + tone + '">' + esc(status) + '</span>' +
       '<span class="routing-mono">' + esc(_latency(decision.duration_ms)) + '</span>' +

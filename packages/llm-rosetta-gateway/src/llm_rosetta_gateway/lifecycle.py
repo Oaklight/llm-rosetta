@@ -75,6 +75,10 @@ class LifecycleContext:
     target_format: str = ""
     provider_name: str = ""
     is_stream: bool = False
+    #: The upstream model the serving lane asks for, when it names one.  The
+    #: client's own model is ``model``; one model name may route to several
+    #: lanes (#1430), and this is what tells them apart in the log row.
+    upstream_model: str | None = None
     status_code: int = 500
     error_detail: str | None = None
     usage: Mapping[str, Any] | None = None
@@ -90,6 +94,7 @@ class LifecycleContext:
         source_format: str | None = None,
         target_format: str | None = None,
         provider_name: str | None = None,
+        upstream_model: str | None = None,
         model: str | None = None,
         is_stream: bool | None = None,
     ) -> None:
@@ -104,6 +109,8 @@ class LifecycleContext:
             self.target_format = target_format
         if provider_name is not None:
             self.provider_name = provider_name
+        if upstream_model is not None:
+            self.upstream_model = upstream_model
         if model is not None:
             self.model = model
         if is_stream is not None:
@@ -183,11 +190,17 @@ def begin_typed(
     source_format: str,
     target_format: str,
     provider_name: str,
+    upstream_model: str | None = None,
 ) -> Response | None:
     """Record a typed route's resolved provider and apply the breaker.
 
-    Returns the 503 response when the breaker is open, else ``None``.  A
-    handler called outside the lifecycle (no context) is unaffected.
+    ``upstream_model`` is what the provider knows the model by, when the config
+    declares one: the log row records it as the lane, so a renamed model is
+    distinguishable from the name the client sent.
+
+    Returns:
+        The 503 response when the breaker is open, else ``None``.  A handler
+        called outside the lifecycle (no context) is unaffected.
     """
     ctx = current_lifecycle()
     if ctx is None:
@@ -196,6 +209,7 @@ def begin_typed(
         source_format=source_format,
         target_format=target_format,
         provider_name=provider_name,
+        upstream_model=upstream_model,
     )
     return ctx.check_circuit_breaker(request)
 
@@ -418,6 +432,7 @@ async def instrumented_handler(
                 duration_ms=duration_ms,
                 error_detail=ctx.error_detail,
                 model_type=ctx.model_type,
+                upstream_model=ctx.upstream_model,
                 profile=ctx.profile,
                 usage=ctx.usage,
                 entry_id_override=ctx.entry_id,

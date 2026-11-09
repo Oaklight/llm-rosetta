@@ -476,6 +476,20 @@ class PersistenceManager:
                 "ALTER TABLE request_log ADD COLUMN conversation_id TEXT",
             ],
         ),
+        (
+            13,
+            "add request_log.upstream_model so a row names the lane that served",
+            [
+                # One model name may route to several upstream models of one
+                # provider (#1430); without this column two lanes are one
+                # provider name in every row, and the operator cannot tell the
+                # cheap one from the fast one.  The client's own ``model`` is
+                # unchanged; this is what the request was sent as upstream.
+                # NULL on a row written before the column existed, and on a
+                # lane that names no alias.
+                "ALTER TABLE request_log ADD COLUMN upstream_model TEXT",
+            ],
+        ),
     ]
 
     async def _run_migrations(self) -> None:
@@ -647,6 +661,7 @@ class PersistenceManager:
         "ttft_ms",
         "user_agent",
         "conversation_id",
+        "upstream_model",
     ]
 
     async def insert_log_entries(self, entries: list[dict[str, Any]]) -> None:
@@ -661,8 +676,8 @@ class PersistenceManager:
             "input_tokens, output_tokens, total_tokens, "
             "cache_read_tokens, cache_creation_tokens, reasoning_tokens, "
             "api_key_bucket, model_type, request_id, ttft_ms, user_agent, "
-            "conversation_id) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "conversation_id, upstream_model) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 (
                     e["id"],
@@ -696,6 +711,7 @@ class PersistenceManager:
                     e.get("ttft_ms"),
                     e.get("user_agent"),
                     e.get("conversation_id"),
+                    e.get("upstream_model"),
                 )
                 for e in entries
             ],
@@ -2498,6 +2514,7 @@ class PersistenceManager:
                     "request_id",
                     "ttft_ms",
                     "conversation_id",
+                    "upstream_model",
                 )
                 and val is None
             ):

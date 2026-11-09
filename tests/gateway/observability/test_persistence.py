@@ -228,6 +228,39 @@ class TestSchemaVersioning:
         entries, _total = await pm.query_log_entries(limit=10)
         assert entries[0]["conversation_id"] == conversation
 
+    async def test_request_log_has_upstream_model_column(self, pm):
+        """Migration v13 adds the lane a row was served by (#1430)."""
+        cursor = await pm._conn.execute("PRAGMA table_info(request_log)")
+        columns = {r[1] for r in await cursor.fetchall()}
+        assert "upstream_model" in columns
+
+    async def test_upstream_model_round_trips(self, pm):
+        entry = RequestLogEntry.create(
+            model="gpt-4o",
+            source_provider="openai_chat",
+            target_provider="anthropic",
+            is_stream=False,
+            status_code=200,
+            duration_ms=50.0,
+            upstream_model="gpt-4o-eco",
+        )
+        await pm.insert_log_entries([entry.to_dict()])
+        entries, _total = await pm.query_log_entries(limit=10)
+        assert entries[0]["upstream_model"] == "gpt-4o-eco"
+
+    async def test_a_lane_without_an_alias_omits_the_key(self, pm):
+        entry = RequestLogEntry.create(
+            model="gpt-4o",
+            source_provider="openai_chat",
+            target_provider="anthropic",
+            is_stream=False,
+            status_code=200,
+            duration_ms=50.0,
+        )
+        await pm.insert_log_entries([entry.to_dict()])
+        entries, _total = await pm.query_log_entries(limit=10)
+        assert entries[0].get("upstream_model") is None
+
     async def test_a_row_without_a_conversation_omits_the_key(self, pm):
         """A NULL column reads as absent, so a reader can tell it was not measured."""
         entry = RequestLogEntry.create(
@@ -259,7 +292,8 @@ class TestSchemaVersioning:
         # Rewind the store to the release before the column: drop it and the
         # migration record, keeping the row a user's database would hold.
         await pm._conn.execute("ALTER TABLE request_log DROP COLUMN conversation_id")
-        await pm._conn.execute("DELETE FROM schema_version WHERE version = 12")
+        await pm._conn.execute("ALTER TABLE request_log DROP COLUMN upstream_model")
+        await pm._conn.execute("DELETE FROM schema_version WHERE version >= 12")
         await pm._conn.commit()
         await pm.close()
 

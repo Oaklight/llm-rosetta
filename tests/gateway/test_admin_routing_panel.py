@@ -592,6 +592,7 @@ class TestGetModelRouting:
                 "client": "codex",
                 "user_agent": "claude-cli/1.2.3 (external, cli)",
                 "provider": "a",
+                "upstream_model": None,
                 "status": 200,
                 "duration_ms": 12,
                 "failover": {"from": "a", "to": "b"},
@@ -740,6 +741,16 @@ class TestDecisionRow:
     def test_a_failover_is_read_from_the_row_profile(self):
         entry = {"profile": {"failover": {"from": "a", "to": "b"}}}
         assert _decision(entry)["failover"] == {"from": "a", "to": "b"}
+
+    def test_the_lane_is_carried_through(self):
+        """Two lanes of one provider are one name: the row must say which ran."""
+        entry = {
+            "target_provider_name": "a",
+            "upstream_model": "fast",
+            "status_code": 200,
+        }
+        assert _decision(entry)["upstream_model"] == "fast"
+        assert _decision({"target_provider_name": "a"})["upstream_model"] is None
 
     def test_the_client_falls_back_to_the_address(self):
         assert _decision({"api_key_label": "codex"})["client"] == "codex"

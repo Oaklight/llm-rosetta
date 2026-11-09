@@ -561,6 +561,57 @@ class TestTheRequestLog:
 
         assert ctx.provider_name == "b"
 
+    def _logged_lane(self, config: GatewayConfig, transport: _Transport):
+        """Drive one request under a lifecycle context and return it."""
+        from llm_rosetta_gateway import lifecycle
+
+        selection = config.selection_context("m", "chat_completions")
+        route, pinfo = config.resolve(selection)
+        body = dict(_REQUEST)
+        if route.upstream_model:
+            body["model"] = route.upstream_model
+        ctx = lifecycle.LifecycleContext(
+            config=config,
+            app=None,
+            request_id="req-1",
+            entry_id="entry-1",
+            model_type="llm",
+            body=dict(_REQUEST),
+        )
+        ctx.note_route(provider_name=route.provider_name)
+
+        async def _go():
+            await handle_non_streaming(
+                route,
+                pinfo,
+                body,
+                selection=selection,
+                transport=transport,
+                metadata_store=ProviderMetadataStore(),
+                config=config,
+            )
+
+        token = lifecycle._lifecycle_var.set(ctx)
+        try:
+            asyncio.run(_go())
+        finally:
+            lifecycle._lifecycle_var.reset(token)
+        return ctx
+
+    def test_the_row_names_the_lane_that_answered(self):
+        ctx = self._logged_lane(_two_lane_config(), _Transport(_server_error(), _ok()))
+
+        assert (ctx.provider_name, ctx.upstream_model) == ("a", "eco")
+
+    def test_a_second_hop_is_not_overwritten_by_the_first(self):
+        """The outermost record runs last; it must not rewind the row."""
+        ctx = self._logged_lane(
+            _two_lane_config(),
+            _Transport(_server_error(), _server_error(), _ok()),
+        )
+
+        assert (ctx.provider_name, ctx.upstream_model) == ("b", None)
+
 
 class _PartialStream:
     """An upstream that starts answering, then dies."""

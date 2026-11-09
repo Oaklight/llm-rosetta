@@ -472,6 +472,7 @@ async def handle_typed_request(
             source_format=source_format,
             target_format=route.format,
             provider_name=route.provider_name,
+            upstream_model=route.upstream_model,
         )
         if rejection is not None:
             return rejection
