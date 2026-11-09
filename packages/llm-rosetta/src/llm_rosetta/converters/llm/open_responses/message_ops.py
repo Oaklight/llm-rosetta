@@ -35,12 +35,29 @@ from ....types.ir.messages import MessageMetadata
 from ....types.ir.passthrough import ProviderPassthroughItem
 from ...base import BaseMessageOps
 from ...base.helpers.citations import report_dropped_citation
-from llm_rosetta.conversion_warnings import DOWNGRADED, report_loss
+from llm_rosetta.conversion_warnings import DOWNGRADED, DROPPED, report_loss
 from ...base.tools import sanitize_tool_call_id
 from ...base.tools.batch import assign_tool_batch_ids
 from ...base.tools.intrinsic import history_native_calls
 from .content_ops import OpenResponsesContentOps
 from .tool_ops import OpenResponsesToolOps
+
+
+def report_dropped_reasoning(warnings: list[str]) -> None:
+    """Record a reasoning part the request cannot replay.
+
+    A Responses reasoning item is replayed only through its id; a part
+    converted from another dialect has none, so the writer cannot emit it.
+    The drop is recorded rather than silent: the history the client sends
+    back is not the history it recorded, and only the warning says so.
+    """
+    report_loss(
+        "Reasoning part dropped: it carries no Responses reasoning id, so the "
+        "item cannot be replayed",
+        code=DROPPED,
+        subject="reasoning",
+        warnings=warnings,
+    )
 
 
 def _recorded_status(provider_metadata: dict | None) -> dict[str, Any]:
@@ -231,7 +248,9 @@ class OpenResponsesMessageOps(BaseMessageOps):
                     extra_items.append(item)
             elif is_reasoning_part(part):
                 reasoning_item = self.content_ops.ir_reasoning_to_p(part)
-                if reasoning_item is not None:
+                if reasoning_item is None:
+                    report_dropped_reasoning(warnings)
+                else:
                     extra_items.append(reasoning_item)
             else:
                 report_loss(
@@ -380,7 +399,9 @@ class OpenResponsesMessageOps(BaseMessageOps):
                 result_items.append(item)
         elif is_reasoning_part(part):
             reasoning_item = self.content_ops.ir_reasoning_to_p(part)
-            if reasoning_item is not None:
+            if reasoning_item is None:
+                report_dropped_reasoning(warnings)
+            else:
                 result_items.append(reasoning_item)
         else:
             report_loss(

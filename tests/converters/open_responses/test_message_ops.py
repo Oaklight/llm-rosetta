@@ -193,7 +193,7 @@ class TestOpenAIResponsesMessageOps:
         assert result[1]["type"] == "function_call"
 
     def test_assistant_unproven_reasoning_is_not_request_portable(self):
-        """Assistant reasoning without Responses provenance is skipped."""
+        """Assistant reasoning without Responses provenance is skipped — audibly."""
         messages = cast(
             list[Message],
             [
@@ -212,7 +212,11 @@ class TestOpenAIResponsesMessageOps:
         assert result[0]["content"] == [
             {"type": "output_text", "text": "The answer is 42"}
         ]
-        assert warnings == []
+        # The drop is recorded (issue #1491): the replayed history is not the
+        # one the client recorded, and only this warning says so — one, not a
+        # stream of them.
+        assert len(warnings) == 1
+        assert "no Responses reasoning id" in warnings[0]
 
     def test_tool_message_to_p(self):
         """Test IR tool message → function_call_output items."""

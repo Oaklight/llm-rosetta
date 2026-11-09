@@ -138,7 +138,7 @@ def test_adjacent_text_parts_share_one_message(message_ops):
         pytest.param(
             [_text("A"), _bare_reasoning(), _text("B")],
             ["message", "message"],
-            0,
+            1,
             id="text-bare-reasoning-text",
         ),
     ],
