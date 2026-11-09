@@ -459,6 +459,27 @@ When `socket` is set, `host` and `port` are ignored. The socket file is:
 
 Combined with SSH `LocalForward`, this locks down the entire access chain end-to-end.
 
+## Request Body Size
+
+The inbound server accepts request bodies up to **50 MB** by default. A
+deployment that forwards long tool-heavy conversations, or a document that
+travels in a vision request, can raise the cap:
+
+```jsonc
+{
+  "server": {
+    "max_body_size": 100000000
+  }
+}
+```
+
+The value is in **bytes** and is the limit on the whole request body, applied
+before parsing: a request above it is answered `413` and is not converted. The
+floor is **1 MB** — a smaller value is clamped to it, because no provider
+payload is that small and the value can only be a typo. A value that is not a
+number is a load error naming the key, not a silent fallback to the default:
+a deployment that thinks it raised the cap must not keep the old one.
+
 ## Model Routing
 
 The `models` section maps model names to providers:
