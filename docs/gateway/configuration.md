@@ -201,7 +201,9 @@ stale。不掩盖的只有两类 —— `sha256` 不符，以及 body 不是可�
 
 `<type>_shim` 若不属于该能力，启动时会报错并指明该 shim 的类别。gateway 把每个提供方的身份记录为 `(model_type, format)` 对；LLM 模型若被路由到身份为 `embeddings`、`rerank` 或 `decisions` 的提供方，会被拒绝。
 
-旧的 `embeddings_providers` / `rerank_providers` / `decisions_providers` 段仍然可用，并与统一条目合并；改名前写作 `embedding_providers`、`decision_providers` 的段按同一段读取。
+声明在 `providers:` 条目上的端点转发**该条目自己的凭据**。当该条目自行铸造凭据 —— `token_command`，或 shim 的 `auth.py` 用已保存的记录换取 —— 端点读取的是聊天通道使用的同一个 key ring：一次铸造、一次启动填充、一份刷新循环即可服务该提供方的全部端点；铸造失败时，提供方卡片会写明是哪条命令、什么错误，而不是把空凭据发往上游。配额状态同样共享：被探测或 429 降级的 key，会被该提供方的每个端点跳过，因为额度属于凭据，不属于端点。
+
+旧的 `embeddings_providers` / `rerank_providers` / `decisions_providers` 段仍然可用，并与统一条目合并；改名前写作 `embedding_providers`、`decision_providers` 的段按同一段读取。旧段中的条目在 `providers:` 里没有可共享铸造凭据的对应条目，因此其中自行铸造凭据的条目仍会被停用，理由会指明该段 —— 把它移到 `providers:` 即可使用。
 
 模型类型与它服务的端点拼写一致：`embeddings` 与 `decisions`。改名前写下的配置 —— `embedding_format` / `embedding_path` / `embedding_shim`、`default_embedding_format`、`decision_format` / `decision_path` / `decision_shim`、`default_decision_format`，或标记为 `"type": "embedding"` / `"type": "decision"` 的模型 —— 会在加载时改写，原文件另存为 `.pre-migration.bak`（文档版本升到 `config_version` 3）。若文件无法写回（只读挂载），旧键仍会被读取。
 
