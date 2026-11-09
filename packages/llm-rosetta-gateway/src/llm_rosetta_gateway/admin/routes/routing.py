@@ -21,7 +21,7 @@ from typing import Any
 
 from ..._vendor.httpserver import JSONResponse, Response
 from ...quota.service import provider_allowance, provider_cooldown
-from ...routing import parse_model_routing, provider_eligibility
+from ...routing import lane_eligibility, parse_model_routing
 from ._shared import _qp, config_mutate, parse_json_body
 from .config.payload import _get_gateway_config
 
@@ -234,7 +234,9 @@ async def list_routable_models(request: Any, **kwargs: Any) -> Response:
         for entry in route.providers:
             pinfo = config.providers.get(entry.name)
             answer = (
-                provider_eligibility(pinfo, entry.name) if pinfo is not None else None
+                lane_eligibility(pinfo, entry.name, lane=entry.upstream_model or name)
+                if pinfo is not None
+                else None
             )
             factor = answer.weight_factor if answer is not None else 1.0
             lanes.append(
@@ -405,7 +407,11 @@ async def get_model_routing(request: Any, **kwargs: Any) -> Response:
     lanes: list[tuple[Any, Any, float, bool]] = []
     for entry in route.providers:
         pinfo = config.providers.get(entry.name)
-        answer = provider_eligibility(pinfo, entry.name) if pinfo is not None else None
+        answer = (
+            lane_eligibility(pinfo, entry.name, lane=entry.upstream_model or model)
+            if pinfo is not None
+            else None
+        )
         factor = answer.weight_factor if answer is not None else 1.0
         lanes.append(
             (entry, answer, factor, bool(answer is not None and answer.eligible))

@@ -433,13 +433,14 @@ class TestTheTransientLadder:
 
         assert tracker.note("p", None, policy, now=now + timedelta(seconds=2)) == "off"
 
-    def test_the_service_counts_the_provider_lane_without_sinking_it(self):
-        """A capacity status is the provider's failure, not a key's.
+    def test_the_service_counts_the_credential_lane_without_sinking_it(self):
+        """A ``402`` no probe explained is the credential's failure.
 
         The count is written to the provider-wide lane (credential ``None``),
         so a provider with several keys cannot spread one outage across them;
         and the provider is not sunk, so the next request still reaches it and
-        the count can grow to the disabling third.
+        the count can grow to the disabling third.  A capacity status is
+        counted per upstream lane instead (``#1452``).
         """
         from llm_rosetta_gateway.quota.service import (
             note_transient_refusal,
@@ -450,15 +451,15 @@ class TestTheTransientLadder:
         QUOTA_STATE.rate_limits.clear()
         try:
             pinfo = SimpleNamespace(name="a", config_name="a")
-            assert note_transient_refusal(pinfo, 503) == "off"
+            assert note_transient_refusal(pinfo, 402) == "off"
             assert QUOTA_STATE.rate_limits.sunk("a") is False
-            assert note_transient_refusal(pinfo, 503) == "off"
+            assert note_transient_refusal(pinfo, 402) == "off"
             assert QUOTA_STATE.rate_limits.sunk("a") is False
-            assert note_transient_refusal(pinfo, 503) == "disable"
+            assert note_transient_refusal(pinfo, 402) == "disable"
             assert QUOTA_STATE.rate_limits.latest_disable("a") is not None
             assert QUOTA_STATE.rate_limits.record("a", None) is not None
 
-            note_upstream_success(pinfo)
+            note_upstream_success(pinfo, lane="m")
             assert QUOTA_STATE.rate_limits.record("a", None) is None
         finally:
             QUOTA_STATE.rate_limits.clear()

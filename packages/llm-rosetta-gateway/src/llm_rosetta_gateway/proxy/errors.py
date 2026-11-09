@@ -353,7 +353,11 @@ def _count_capacity_refusal(
     status_code: int,
     policy: Any | None = None,
 ) -> None:
-    """Feed one capacity refusal into the cross-request ladder.
+    """Feed one credential-level refusal into the cross-request ladder.
+
+    Used for the statuses the quota probes could not explain (``402``/``429``),
+    which are the credential's state.  A capacity refusal is counted per lane
+    by :func:`_count_lane_refusal` instead.
 
     Bookkeeping must not change the answer: this request still gets the
     failover it earned, so a failure here is logged and swallowed.
@@ -366,12 +370,40 @@ def _count_capacity_refusal(
         logger.warning("Could not record the transient refusal", exc_info=True)
 
 
-def note_upstream_success(provider_info: ProviderInfo) -> None:
-    """Clear the capacity-refusal ladder after a served request."""
+def _count_lane_refusal(
+    provider_info: ProviderInfo,
+    status_code: int,
+    policy: Any | None,
+    lane: str,
+) -> None:
+    """Feed one capacity refusal into the lane's cross-request ladder.
+
+    Args:
+        provider_info: The provider that refused.
+        status_code: The upstream status.
+        policy: The rate-limit rule in force, or ``None`` for the default.
+        lane: The lane's key, as :func:`proxy.failover.attempted_lane` builds
+            it.
+    """
+    from ..quota.service import note_lane_refusal
+
+    try:
+        note_lane_refusal(provider_info, status_code, policy, lane=lane)
+    except Exception:  # noqa: BLE001 - the refusal path always wins
+        logger.warning("Could not record the lane refusal", exc_info=True)
+
+
+def note_upstream_success(provider_info: ProviderInfo, *, lane: str) -> None:
+    """Clear the ladder entries a served request is evidence about.
+
+    Args:
+        provider_info: The provider that served the request.
+        lane: The key of the lane the served attempt was made on.
+    """
     from ..quota.service import note_upstream_success as _note
 
     try:
-        _note(provider_info)
+        _note(provider_info, lane=lane)
     except Exception:  # noqa: BLE001 - bookkeeping must not fail a served request
         logger.warning("Could not clear the transient refusals", exc_info=True)
 
@@ -433,6 +465,7 @@ async def decide_on_refusal(
     source_provider: ProviderType,
     *,
     rate_limit: Any | None = None,
+    lane: str,
 ) -> RefusalDecision:
     """Classify a failed upstream attempt into one action.
 
@@ -455,6 +488,10 @@ async def decide_on_refusal(
         source_provider: The client's dialect, for a direct answer.
         rate_limit: The continuous-429 rule in force, or ``None`` for the
             default.
+        lane: The key of the lane this attempt was made on, as
+            :func:`proxy.failover.attempted_lane` builds it.  A capacity
+            refusal is counted against this lane, not the provider
+            (``#1452``); the credential-level counting stays provider-wide.
 
     Returns:
         The action to take, with the response for ``RETURN`` and the signal
@@ -474,7 +511,7 @@ async def decide_on_refusal(
         return RefusalDecision(RefusalAction.RETRY)
     if status_code in TRANSIENT_UPSTREAM_STATUSES:
         if status_code in CAPACITY_UPSTREAM_STATUSES:
-            _count_capacity_refusal(provider_info, status_code, rate_limit)
+            _count_lane_refusal(provider_info, status_code, rate_limit, lane)
         return RefusalDecision(
             RefusalAction.FAILOVER,
             signal=UpstreamRefusal(status_code, f"upstream {status_code}"),

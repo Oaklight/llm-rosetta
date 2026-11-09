@@ -162,6 +162,37 @@ def prepare_failover(
     return new_route, new_pinfo, retry_body, budget.after(route, new_route)
 
 
+def attempted_lane(
+    selection: SelectionContext | None, route: ResolvedRoute, model: str
+) -> str:
+    """The lane key this attempt was made on.
+
+    The lane ladders are keyed by the candidate, not by the route: a
+    model-level upstream alias is what the request is *sent as*, while the
+    candidate key is which lane the selection picked (``#1448``).  Counting a
+    refusal against the alias would file it under a lane no candidate has, and
+    clearing on success would clear someone else's record.
+
+    A candidate that names no upstream model is keyed by the **model the
+    client asked for**, not by ``None``: several models may route through one
+    provider without naming an upstream, and a shared key would let the healthy
+    model's success clear the failing model's evidence (``#1452`` review).
+
+    Args:
+        selection: This request's selection state, or ``None`` when the caller
+            has none (failover is off in that case).
+        route: The route the attempt used.
+        model: The model the client asked for, used when the candidate names no
+            upstream model.
+
+    Returns:
+        The lane key: the candidate's upstream model, or *model*.
+    """
+    if selection is not None and selection.chosen is not None:
+        return selection.chosen.key[1] or model
+    return route.upstream_model or model
+
+
 def _refused_lane(selection: SelectionContext, route: ResolvedRoute) -> EntryKey:
     """The candidate key the attempt was made on.
 
