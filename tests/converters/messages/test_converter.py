@@ -8,7 +8,7 @@ from typing import Any, cast
 
 import pytest
 
-from llm_rosetta.converters.base.context import StreamContext
+from llm_rosetta.converters.base.context import ConversionContext, StreamContext
 from llm_rosetta.converters.llm.messages import MessagesConverter
 from llm_rosetta.types.ir import (
     FinishEvent,
@@ -1632,3 +1632,46 @@ class TestAnthropicContentBlockCompliance:
         )
         result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         assert result["delta"]["container"] is None
+
+
+class TestTheRequiredDefaultIsRecorded:
+    """A limit the request never named is ours, and the log can say so (#1328).
+
+    The write and the read are separate calls whose only carrier is the wire
+    body, and the API refuses unknown fields, so the fact cannot travel with
+    the body.  It rides the conversion context instead.
+    """
+
+    def setup_method(self):
+        self.converter = MessagesConverter()
+
+    def _ir(self, **generation: Any) -> IRRequest:
+        ir: dict[str, Any] = {
+            "model": "claude-test",
+            "messages": [{"role": "user", "content": [{"type": "text", "text": "hi"}]}],
+        }
+        if generation:
+            ir["generation"] = generation
+        return cast(IRRequest, ir)
+
+    def test_a_required_default_is_recorded(self):
+        ctx = ConversionContext()
+        body, _ = self.converter.request_to_provider(self._ir(), context=ctx)
+        assert body["max_tokens"] == 4096
+        assert ctx.metadata["injected"] == {"max_tokens": 4096}
+
+    def test_the_default_inside_a_generation_block_is_recorded_too(self):
+        ctx = ConversionContext()
+        body, _ = self.converter.request_to_provider(
+            self._ir(temperature=0.5), context=ctx
+        )
+        assert body["max_tokens"] == 4096
+        assert ctx.metadata["injected"] == {"max_tokens": 4096}
+
+    def test_a_named_limit_is_not_recorded(self):
+        ctx = ConversionContext()
+        body, _ = self.converter.request_to_provider(
+            self._ir(max_tokens=123), context=ctx
+        )
+        assert body["max_tokens"] == 123
+        assert "injected" not in ctx.metadata

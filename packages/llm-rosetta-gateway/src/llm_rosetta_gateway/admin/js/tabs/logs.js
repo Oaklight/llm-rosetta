@@ -126,20 +126,27 @@ function renderLogs(entries, total) {
       const modeBadge = e.is_stream ? `<span class="badge badge-stream">${t('stream.mode')}</span>` : '';
       const keyLabel = e.api_key_label || '—';
       const hasError = !!e.error_detail;
+      // A field the gateway had to supply (the target required it and the
+      // request named none) is part of the log detail, not a warning: it is
+      // recorded per request and costs no log line (#1328).
+      const injected = e.profile && e.profile.injected;
+      const injectedText =
+        injected && Object.keys(injected).length ? JSON.stringify(injected) : '';
+      const hasDetail = hasError || !!injectedText;
       // The log id is stable across refreshes (unlike an index) and cannot
       // contain a quote, which the old timestamp+model key could.
       const rowId = String(e.id);
       const detailId = 'logErr-' + idx;
       const isExpanded = S.expandedLogRows.has(rowId);
-      const expandHint = hasError ? ` title="${esc(t('log.expandHint'))}"` : '';
+      const expandHint = hasDetail ? ` title="${esc(t('log.expandHint'))}"` : '';
       const clientIp = e.client_ip || '—';
       const hlBg = S._highlightLogId === e.id ? 'background:color-mix(in srgb, var(--accent) 20%, transparent);' : '';
-      const rowCursor = hasError ? 'cursor:pointer;' : '';
+      const rowCursor = hasDetail ? 'cursor:pointer;' : '';
       const styleAttr = (hlBg || rowCursor) ? ` style="${hlBg}${rowCursor}"` : '';
-      const rowClick = hasError ? ' onclick="toggleLogRow(this.dataset.logId,this)"' : '';
+      const rowClick = hasDetail ? ' onclick="toggleLogRow(this.dataset.logId,this)"' : '';
       // An expandable error row is a tab stop; aria-expanded reports the
       // same state the detail row's hidden attribute carries.
-      const rowKeyboard = hasError
+      const rowKeyboard = hasDetail
         ? ` tabindex="0" aria-expanded="${isExpanded}" aria-controls="${detailId}" onkeydown="rowToggleKey(event,this)"`
         : '';
       let rows = `<tr data-log-id="${esc(e.id)}" role="row"${styleAttr}${rowClick}${rowKeyboard}${expandHint}>
@@ -149,12 +156,19 @@ function renderLogs(entries, total) {
         <td class="log-mode" role="cell" aria-labelledby="thLogMode">${modeBadge}</td>
         <td class="log-key" role="cell" aria-labelledby="thLogApiKey" style="font-size:12px;color:var(--text-dim)">${esc(keyLabel)}</td>
         <td class="log-ip" role="cell" aria-labelledby="thLogClientIp" style="font-size:12px;color:var(--text-dim)">${esc(clientIp)}</td>
-        <td class="log-status" role="cell" aria-labelledby="thLogStatus"><span class="badge ${statusCls}">${e.status_code}${hasError ? ' ▸' : ''}</span>${e.status_code >= 400 ? ` <button class="btn btn-sm" onclick="event.stopPropagation();jumpToErrorDump(${jsArg(e.id)})" title="${esc(t('btn.viewErrorDump'))}" style="padding:2px 4px;margin-left:2px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></button>` : ''}</td>
+        <td class="log-status" role="cell" aria-labelledby="thLogStatus"><span class="badge ${statusCls}">${e.status_code}${hasDetail ? ' ▸' : ''}</span>${e.status_code >= 400 ? ` <button class="btn btn-sm" onclick="event.stopPropagation();jumpToErrorDump(${jsArg(e.id)})" title="${esc(t('btn.viewErrorDump'))}" style="padding:2px 4px;margin-left:2px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></button>` : ''}</td>
         <td class="log-tokens" role="cell" aria-labelledby="thLogTokens" style="font-size:12px">${e.total_tokens != null ? fmtTokens(e.total_tokens) : '—'}${e.cache_read_tokens ? `<br><span title="${t('token.cacheRead')}" style="color:var(--blue);font-size:10px;cursor:help">C↓ ${fmtTokens(e.cache_read_tokens)}</span>` : ''}${e.reasoning_tokens ? `<br><span title="${t('token.reasoning')}" style="color:var(--red);font-size:10px;cursor:help">R ${fmtTokens(e.reasoning_tokens)}</span>` : ''}</td>
         <td class="log-duration" role="cell" aria-labelledby="thLogDuration">${_durationCell(e)}${_tokensPerSecond(e)}</td>
       </tr>`;
-      if (hasError) {
-        rows += `<tr class="log-error-row" id="${detailId}" role="row"${isExpanded ? '' : ' hidden'}><td colspan="9" role="cell"><pre style="margin:0;padding:8px;background:var(--bg);border-radius:6px;font-size:11px;max-height:200px;overflow:auto;white-space:pre-wrap;word-break:break-all">${esc(e.error_detail)}</pre></td></tr>`;
+      if (hasDetail) {
+        const parts = [];
+        if (hasError) {
+          parts.push(`<pre style="margin:0 0 6px;padding:8px;background:var(--bg);border-radius:6px;font-size:11px;max-height:200px;overflow:auto;white-space:pre-wrap;word-break:break-all">${esc(e.error_detail)}</pre>`);
+        }
+        if (injectedText) {
+          parts.push(`<pre style="margin:0;padding:8px;background:var(--bg);border-radius:6px;font-size:11px;max-height:200px;overflow:auto;white-space:pre-wrap;word-break:break-all">${esc(injectedText)}</pre>`);
+        }
+        rows += `<tr class="log-error-row" id="${detailId}" role="row"${isExpanded ? '' : ' hidden'}><td colspan="9" role="cell">${parts.join('')}</td></tr>`;
       }
       return rows;
     }).join('');
