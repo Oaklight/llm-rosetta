@@ -50,6 +50,32 @@ docker run --user $(id -u):$(id -g) -p 8765:8765 -v /path/to/config:/config oakl
 
 Or use Docker Compose — see `docker/docker-compose.yaml` in the repository.
 
+#### Building from source
+
+The images above install released wheels. To run the gateway from a checkout
+instead, the repository ships a source build that installs both distributions
+(`packages/llm-rosetta` and `packages/llm-rosetta-gateway`) straight from the
+working tree:
+
+```bash
+git clone https://github.com/Oaklight/llm-rosetta.git
+cd llm-rosetta
+echo "ADMIN_PASSWORD=change-me" > .env   # compose reads .env
+docker compose up -d --build             # builds docker/Dockerfile.source
+```
+
+Without Compose:
+
+```bash
+docker build -f docker/Dockerfile.source -t llm-rosetta-gateway:src .
+docker run -p 8765:8765 -v "$PWD/config:/config" llm-rosetta-gateway:src
+```
+
+The root `docker-compose.yaml` mounts `./config` as the container's `/config`
+and reads `.env` for variables your `config.jsonc` references (for example
+`"${ADMIN_PASSWORD}"`). The release path is unchanged: `make build-docker`
+still builds `docker/Dockerfile`, which installs wheels from `dist/` or PyPI.
+
 ## Development
 
 ```bash
