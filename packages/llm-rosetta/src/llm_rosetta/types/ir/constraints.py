@@ -71,6 +71,25 @@ class Range:
             return False
         return not (self.max is not None and value > self.max)
 
+    def describe(self) -> str:
+        """Render the bounds for a message a caller will read.
+
+        A range with one bound is the common case for a floor such as
+        ``top_p >= 0.01``, so the rendering never prints the absent side (a
+        literal ``None`` in a conversion warning reads as a bug).
+
+        Returns:
+            ``"0.0..1.0"`` for two bounds, ``">= 0.01"`` or ``"<= 2.0"`` for
+            one, and ``"any"`` for neither.
+        """
+        if self.min is not None and self.max is not None:
+            return f"{self.min}..{self.max}"
+        if self.min is not None:
+            return f">= {self.min}"
+        if self.max is not None:
+            return f"<= {self.max}"
+        return "any"
+
 
 @dataclass(frozen=True)
 class RequestConstraints:

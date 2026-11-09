@@ -1411,7 +1411,11 @@ class TestRequestConstraintDeclarations:
             )
 
     def test_an_unknown_policy_is_refused(self):
-        with pytest.raises(ValueError, match="on_out_of_range"):
+        with pytest.raises(
+            ValueError,
+            match="vendor/llm/format/provider.yaml: "
+            "request.ranges.generation.temperature.on_out_of_range",
+        ):
             self._parse(
                 {
                     "request": {
@@ -1441,11 +1445,70 @@ class TestRequestConstraintDeclarations:
                 }
             )
 
-    def test_a_shipped_shim_declares_nothing_today(self):
-        """No in-tree shim overrides a dialect constraint yet (#1461 adds one)."""
+    def test_only_zhipu_declares_constraints_today(self):
+        """The first vendor-level declaration; every other shim is untouched."""
         from llm_rosetta.shims.providers import load_providers
 
         declared = {
             shim.name: shim.request for shim in load_providers() if shim.request
         }
-        assert declared == {}, declared
+        assert set(declared) == {"zhipu"}, sorted(declared)
+
+
+class TestZhipuRequestRanges:
+    """zhipu's value ranges are declared, not left to the upstream (#1461).
+
+    The same chat_completions converter serves every Chat Completions shim, so
+    the last case matters as much as the first two: a declaration on one shim
+    must not reach another lane.
+    """
+
+    @staticmethod
+    def _convert(target: str, **generation: object):
+        from llm_rosetta.pipeline.chat import ConversionPipeline
+        from llm_rosetta.shims.providers import load_providers
+
+        # This module's autouse fixture empties the registry, so a shim name
+        # only resolves once the built-ins are loaded back.
+        load_providers()
+
+        pipe = ConversionPipeline("chat_completions", target)
+        body = pipe.convert_request(
+            {
+                "model": "m",
+                "messages": [{"role": "user", "content": "hi"}],
+                **generation,
+            }
+        )
+        return body, pipe
+
+    def test_temperature_above_one_is_clamped_and_reported(self):
+        body, pipe = self._convert("zhipu", temperature=1.8)
+        assert body["temperature"] == 1.0
+        assert [w.subject for w in pipe.warnings if "outside the range" in str(w)] == [
+            "generation.temperature"
+        ]
+
+    def test_top_p_below_the_minimum_is_clamped_and_reported(self):
+        body, pipe = self._convert("zhipu", top_p=0.001)
+        assert body["top_p"] == 0.01
+        assert [w.subject for w in pipe.warnings if "outside the range" in str(w)] == [
+            "generation.top_p"
+        ]
+
+    def test_top_p_above_one_is_clamped_and_reported(self):
+        body, pipe = self._convert("zhipu", top_p=1.5)
+        assert body["top_p"] == 1.0
+        assert [w.subject for w in pipe.warnings if "outside the range" in str(w)] == [
+            "generation.top_p"
+        ]
+
+    def test_values_inside_the_ranges_are_untouched(self):
+        body, pipe = self._convert("zhipu", temperature=0.7, top_p=0.9)
+        assert (body["temperature"], body["top_p"]) == (0.7, 0.9)
+        assert not [w for w in pipe.warnings if "outside the range" in str(w)]
+
+    def test_another_chat_lane_keeps_an_out_of_range_value(self):
+        body, pipe = self._convert("deepseek--chat_completions", temperature=1.8)
+        assert body["temperature"] == 1.8
+        assert not [w for w in pipe.warnings if "outside the range" in str(w)]

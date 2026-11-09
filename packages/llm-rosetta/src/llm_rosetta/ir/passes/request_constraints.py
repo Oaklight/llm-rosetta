@@ -53,14 +53,9 @@ class RequestConstraintViolation(ValueError):
         self.path = path
         self.value = value
         self.range = declared
-        bounds = []
-        if declared.min is not None:
-            bounds.append(f">= {declared.min:g}")
-        if declared.max is not None:
-            bounds.append(f"<= {declared.max:g}")
         super().__init__(
             f"{path} = {value!r} is outside the range this target accepts "
-            f"({' and '.join(bounds)}); the target rejects the request"
+            f"({declared.describe()}); the target rejects the request"
         )
 
 
@@ -169,8 +164,8 @@ def _apply_ranges(
             if warnings is not None:
                 warnings.warn(
                     f"{value!r} is outside the range this target accepts "
-                    f"({declared.min!r}..{declared.max!r}); the field is "
-                    f"dropped so the target applies its own default",
+                    f"({declared.describe()}); the field is dropped so the "
+                    f"target applies its own default",
                     code=DROPPED,
                     subject=path,
                 )
@@ -180,7 +175,7 @@ def _apply_ranges(
         if warnings is not None:
             warnings.warn(
                 f"{value!r} is outside the range this target accepts "
-                f"({declared.min!r}..{declared.max!r}); written as {clamped!r}",
+                f"({declared.describe()}); written as {clamped!r}",
                 code=DOWNGRADED,
                 subject=path,
             )
