@@ -744,6 +744,44 @@ multimodal_tool_result: false
 
 这些标志在转换时注入 `ConversionContext.options`，转换器无需知道当前使用的是哪个 shim 即可查询。
 
+## 请求约束 { #request-constraints }
+
+一个请求字段与上游之间可能成立三种关系，而在 #1460 之前只有一种有归属：
+
+| 上游的态度 | 声明位置 | 例子 |
+| --- | --- | --- |
+| **拒绝**该字段 | transform（`strip_fields`、`drop_refused_fields`） | ChatGPT plan 路由丢弃 `temperature` |
+| **要求**该字段，且自己没有默认值 | 转换器上的 `request_constraints`，shim 可按路径覆盖 | Messages API 要求 `max_tokens` |
+| **限制**取值范围 | `request_constraints` 的 `ranges` | zhipu 的 `temperature` 上限是 1.0，不是 2.0 |
+
+方言层面的要求放在转换器上（`MessagesConverter.request_constraints`），因为
+每一种使用该格式的 shim——包括在本仓库之外发布的 shim——都需要同一个值。厂商
+为自己的上游说话，因此 shim 的 `request:` 段按路径覆盖方言的声明：
+
+```yaml
+request:
+  # IR 路径 → 客户端未给值时写入的值
+  defaults:
+    generation.max_tokens: 2048   # 该厂商的上限低于方言的 4096
+  # IR 路径 → 该上游接受的取值范围
+  ranges:
+    generation.temperature: { min: 0.0, max: 1.0, on_out_of_range: clamp }
+```
+
+- 键是 **IR 路径**（`generation.max_tokens`），不是 wire 字段名：约束在方言写出
+  请求之前施加于 IR，因此一条声明覆盖所有对话格式，转换警告也以该路径为主题。
+- 显式 `null` 视为"客户端没有给出值"，适用于 IR 生成配置的每一个字段。它在
+  默认值填充之前被移除，因此 `null` 永远不会到达写入端（#1459）。
+- `on_out_of_range` 可取 `clamp`（写入最近的边界）、`drop`（删除字段，让上游
+  默认值生效）或 `reject`（让转换失败）。三种都会上报——否则 clamp 是不可见的。
+- 不指向真实 IR 字段的路径会在 shim 加载时被拒绝：静默不生效的声明比直接失败
+  更糟。
+- 声明缺失或为空时保留方言的值，因此没有 `request:` 段的 shim 产出的 body 与
+  之前完全相同。
+
+直接使用的转换器会自行施加方言约束；转换管线则合并当前 shim 的覆盖，并在写入端
+读取之前施加合并结果。
+
 ## 转换规则（Transforms）
 
 转换规则是纯 `dict → dict` 函数，用于弥合提供方实际 API 方言与对应基础转换器所期望的"标准"格式之间的差异。它们处理字段级差异（剥离不支持的字段、重命名参数、注入默认值）—— **不**处理语义级 API 标准转换，那是转换器的职责。
