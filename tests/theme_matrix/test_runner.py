@@ -125,10 +125,22 @@ def test_probe_summary_names_every_failure():
     assert "--bg" in _probe_summary(failing)
 
 
-def test_declared_axes_come_from_the_token_sheet():
-    """The default axes are the vocabulary the stylesheet declares."""
-    assert declared_schemes() == ["emerald", "minimal"]
+def test_declared_axes_come_from_the_registry():
+    """The default axes are the registry's schemes and the sheets' modes."""
+    assert declared_schemes() == ["minimal", "emerald"]
     assert declared_modes() == ["dark", "light"]
+
+
+def test_a_registered_theme_without_a_file_fails_loudly(monkeypatch):
+    """A registry entry that names a missing file must not yield a smaller
+    matrix that quietly passes."""
+    from llm_rosetta_gateway.admin import themes as theme_registry
+
+    ghost = theme_registry.Theme("ghost", "Ghost", "css/themes/ghost.css")
+    monkeypatch.setattr(theme_registry, "THEMES", (*theme_registry.THEMES, ghost))
+
+    with pytest.raises(RuntimeError, match="ghost.css does not exist"):
+        scheme_tokens()
 
 
 def test_declared_schemes_ignores_blocks_outside_the_token_sheet(tmp_path):

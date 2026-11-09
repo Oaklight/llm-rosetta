@@ -1,12 +1,12 @@
 /**
  * The admin panel's theme contract.
  *
- * `base.css` owns the tokens — a scheme declares values, per scheme and per
- * mode — and every other stylesheet consumes them.  A scheme that reaches into
- * a component's box model is how #1149 happened: emerald's decorative
- * `::before` grid carried `pointer-events: auto`, sat above the KPI card's
- * contents, and swallowed the Token card's "details" click in every browser.
- * Nothing forbade it, so this test does.
+ * `css/themes/<name>.css` owns the tokens — a theme declares values, per mode
+ * — and every other stylesheet consumes them (issue #1471).  A scheme that
+ * reaches into a component's box model is how #1149 happened: emerald's
+ * decorative `::before` grid carried `pointer-events: auto`, sat above the KPI
+ * card's contents, and swallowed the Token card's "details" click in every
+ * browser.  Nothing forbade it, so this test does.
  *
  * The checker parses the stylesheets as text — no browser, no DOM — which is
  * enough for the three rules that matter, and it is exercised against fixture
@@ -147,7 +147,7 @@ const SCHEME_SELECTOR = /^\[data-scheme="[^"]+"\](?:\[data-mode="[^"]+"\])?$/;
 // ---- the three rules ----------------------------------------------------
 
 /**
- * Rule 1: a scheme selector may only appear in `base.css`, and only as the
+ * Rule 1: a scheme selector may only appear in a theme sheet, and only as the
  * bare scheme/mode selector — never with a component after it.
  */
 export function checkSchemeSelectors(files) {
@@ -156,7 +156,7 @@ export function checkSchemeSelectors(files) {
     for (const rule of allRules(css)) {
       if (!rule.selector.includes('[data-scheme=')) continue;
       if (!isTokens) {
-        problems.push(`${name}: scheme-scoped component rule "${rule.selector}" (schemes belong in base.css)`);
+        problems.push(`${name}: scheme-scoped component rule "${rule.selector}" (schemes belong in a theme sheet)`);
         continue;
       }
       if (!SCHEME_SELECTOR.test(rule.selector)) {
@@ -228,18 +228,27 @@ export function checkDecorationPointerEvents(files) {
 
 // ---- the stylesheets ----------------------------------------------------
 
-// Every stylesheet in the directory, not a hand-listed pair: a third sheet
-// added later must be policed the day it lands, and base.css is the only one
-// allowed to carry scheme selectors.  Read fresh, so a new file cannot be
-// missed by a stale list.
-const FILES = readdirSync(CSS_DIR)
-  .filter(name => name.endsWith('.css'))
-  .sort()
-  .map(name => ({
-    name,
-    css: readFileSync(join(CSS_DIR, name), 'utf8'),
-    isTokens: name === 'base.css',
-  }));
+/** Every `.css` file under *dir*, as `{name, css}`, with paths relative to *dir*. */
+function readStylesheets(dir, prefix = '') {
+  const out = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+    const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+    if (entry.isDirectory()) out.push(...readStylesheets(join(dir, entry.name), rel));
+    else if (entry.name.endsWith('.css')) out.push({ name: rel, css: readFileSync(join(dir, entry.name), 'utf8') });
+  }
+  return out;
+}
+
+// Every stylesheet under css/, recursively: a theme added later is policed the
+// day it lands, and the theme directory is the only place allowed to carry
+// scheme selectors.  Read fresh, so a new file cannot be missed by a stale
+// list.
+const THEME_PREFIX = 'themes/';
+const FILES = readStylesheets(CSS_DIR).map(({ name, css }) => ({
+  name,
+  css,
+  isTokens: name.startsWith(THEME_PREFIX),
+}));
 
 test('the checker sees the stylesheets it is meant to police', () => {
   // A parser that matches nothing would pass every rule below; these are the
@@ -252,11 +261,17 @@ test('the checker sees the stylesheets it is meant to police', () => {
   // live in @media and are exactly where a scheme rule would be added back.
   const nested = FILES.flatMap(f => allRules(f.css)).filter(r => r.at.length > 0);
   assert.ok(nested.length >= 1, 'expected rules nested inside an at-rule');
-  // The token sheet is base.css and only base.css; everything else consumes it.
-  assert.deepEqual(FILES.filter(f => f.isTokens).map(f => f.name), ['base.css']);
+  // The token sheets are exactly the files in css/themes/; every other
+  // stylesheet consumes them.
+  const tokens = FILES.filter(f => f.isTokens).map(f => f.name);
+  assert.ok(tokens.length >= 2, `expected the theme sheets, found ${tokens.join(', ')}`);
+  assert.ok(tokens.every(name => name.startsWith(THEME_PREFIX)), tokens.join(', '));
+  const consumers = FILES.filter(f => !f.isTokens).map(f => f.name);
+  assert.ok(consumers.includes('base.css'), 'base.css is a consumer now, not a token sheet');
+  assert.ok(consumers.includes('components.css'), 'components.css must be policed');
 });
 
-test('no scheme-scoped component rules outside base.css', () => {
+test('no scheme-scoped component rules outside the theme sheets', () => {
   assert.deepEqual(checkSchemeSelectors(FILES), []);
 });
 
@@ -278,8 +293,8 @@ test('the scheme-selector check flags a component rule in a component sheet', ()
   assert.match(problems[0], /scheme-scoped component rule/);
 });
 
-test('the scheme-selector check flags a non-token declaration in base.css', () => {
-  const fixture = [{ name: 'base.css', css: '[data-scheme="emerald"] { --radius: 4px; color: red; }', isTokens: true }];
+test('the scheme-selector check flags a non-token declaration in a theme sheet', () => {
+  const fixture = [{ name: 'themes/minimal.css', css: '[data-scheme="emerald"] { --radius: 4px; color: red; }', isTokens: true }];
   const problems = checkSchemeSelectors(fixture);
   assert.equal(problems.length, 1);
   assert.match(problems[0], /custom properties/);

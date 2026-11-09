@@ -1,0 +1,91 @@
+/* Emerald — the green scheme.
+Values only: components own where these land (epic #1154, issue #1471). */
+
+[data-scheme="emerald"] {
+  --radius: 4px;
+  --dot: rgba(0,0,0,.04);
+  --grid: rgba(0,0,0,.04);
+  --bar-color: var(--accent);
+  --bar-opacity: .4;
+  --bar-hover: .8;
+  --th-transform: uppercase;
+  --th-spacing: .6px;
+  --th-weight: 500;
+  --th-size: 10px;
+  --th-color: var(--text-muted);
+  --badge-radius: 10px;
+  --badge-weight: 600;
+  /* Surfaces.  Emerald separates the cards and textures both the page and
+     each card with the --dot / --grid colours declared above; the dark block
+     below re-declares those two, and the gradients follow it because a
+     var() in a token value is substituted where it is used. */
+  --stats-gap: 16px;
+  --stats-frame-bg: transparent;
+  --stats-frame-border: 0;
+  --stats-frame-radius: 0;
+  --card-bg: var(--bg-card);
+  --card-border: 1px solid var(--border);
+  --card-radius: var(--radius);
+  --card-texture:
+    repeating-linear-gradient(90deg,var(--grid) 0 1px,transparent 1px 28px),
+    repeating-linear-gradient(0deg,var(--grid) 0 1px,transparent 1px 28px);
+  --card-texture-opacity: .5;
+  --page-texture: radial-gradient(circle,var(--dot) 1px,transparent 1px);
+  --page-texture-size: 24px 24px;
+  --page-texture-display: block;
+  --btn-primary-weight: 600;
+}
+
+[data-scheme="emerald"][data-mode="light"] {
+  --bg: #fff;
+  --bg-card: #fafafa;
+  --bg-hover: #f3f3f3;
+  --border: #e4e5e7;
+  --text: #18191b;
+  --text-dim: #616469;
+  --text-muted: #949798;
+  --accent: #34d59a;
+  --accent-hover: #2bc48c;
+  --accent-subtle: rgba(52,213,154,.06);
+  --accent-on: #18191b;
+  --green: #059669;
+  --green-subtle: rgba(5,150,105,.06);
+  --green-bg: #cae6d9;
+  --green-deep: #285d49;
+  --red: #ff3621;
+  --red-subtle: rgba(255,54,33,.06);
+  --orange: #d97706;
+  --blue: #2563eb;
+  --purple: #7c3aed;
+  --magenta: #d946ef;
+  --cyan: #0891b2;
+  --lime: #65a30d;
+}
+
+[data-scheme="emerald"][data-mode="dark"] {
+  --bg: #0a0a0b;
+  --bg-card: #131315;
+  --bg-hover: #1a1a1c;
+  --border: #242628;
+  --text: #e4e5e7;
+  --text-dim: #949798;
+  --text-muted: #616469;
+  --accent: #34d59a;
+  --accent-hover: #4de0ab;
+  --accent-subtle: rgba(52,213,154,.08);
+  --accent-on: #0a0a0b;
+  --green: #34d399;
+  --green-subtle: rgba(52,211,153,.08);
+  --green-bg: #1a2e26;
+  --green-deep: #34d399;
+  --red: #ff5647;
+  --red-subtle: rgba(255,86,71,.08);
+  --orange: #fbbf24;
+  --blue: #60a5fa;
+  --purple: #a78bfa;
+  --magenta: #f0abfc;
+  --cyan: #22d3ee;
+  --lime: #a3e635;
+  --dot: rgba(255,255,255,.025);
+  --grid: rgba(255,255,255,.025);
+}

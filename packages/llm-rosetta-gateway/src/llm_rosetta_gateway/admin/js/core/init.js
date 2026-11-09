@@ -21,6 +21,7 @@ import '../components/test-runner.js';
 import { initLogoPicker } from '../components/logo-picker.js';
 import { initTypePicker } from '../components/type-picker.js';
 import { initUpdates } from './updates.js';
+import { installThemeFallback, populateSchemeSelect } from './themes.js';
 
 // A #dump/<id> link is its own screen in this app, so the session check that
 // guards every other screen guards it too.  Captured before any tab
@@ -673,6 +674,16 @@ wireSortableHeaders();
 // ===================== Start =====================
 initLogoPicker();
 initTypePicker();
+// The scheme picker is built from the registry the server injected, so a new
+// theme needs no HTML change; a theme without a `scheme.<name>` translation
+// keeps the registry's own label.  The fallback keeps the panel styled when a
+// theme file does not load.
+populateSchemeSelect(document.getElementById('settingsSchemeSelect'), (name, label) => {
+  const key = 'scheme.' + name;
+  const text = t(key);
+  return text === key ? label : text;
+});
+installThemeFallback();
 setLang(S.currentLang);
 checkAuthAndInit();
 

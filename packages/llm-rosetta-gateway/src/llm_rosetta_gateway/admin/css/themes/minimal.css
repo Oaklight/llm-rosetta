@@ -1,0 +1,86 @@
+/* Minimal — the admin panel's default scheme.
+Values only: components own where these land (epic #1154, issue #1471). */
+
+[data-scheme="minimal"] {
+  --radius: 6px;
+  --dot: transparent;
+  --grid: transparent;
+  --bar-color: var(--text);
+  --bar-opacity: .15;
+  --bar-hover: .4;
+  --th-transform: none;
+  --th-spacing: 0;
+  --th-weight: 400;
+  --th-size: 12px;
+  --th-color: var(--text-dim);
+  --badge-radius: 20px;
+  --badge-weight: 500;
+  /* Surfaces.  Minimal merges the KPI cards into one seamless frame and
+     paints no texture; the components own where these values land, the
+     scheme owns only the values (see the theme contract, epic #1154). */
+  --stats-gap: 1px;
+  --stats-frame-bg: var(--border);
+  --stats-frame-border: 1px solid var(--border);
+  --stats-frame-radius: var(--radius);
+  --card-bg: var(--bg);
+  --card-border: none;
+  --card-radius: 0;
+  --card-texture: none;
+  --card-texture-opacity: 0;
+  --page-texture: none;
+  --page-texture-size: auto;
+  --page-texture-display: none;
+  --btn-primary-weight: 400;
+}
+
+[data-scheme="minimal"][data-mode="light"] {
+  --bg: #fff;
+  --bg-card: #fafafa;
+  --bg-hover: #f5f5f5;
+  --border: #eaeaea;
+  --text: #171717;
+  --text-dim: #666;
+  --text-muted: #999;
+  --accent: #171717;
+  --accent-hover: #000;
+  --accent-subtle: rgba(0,0,0,.04);
+  --accent-on: #fff;
+  --green: #1a7f37;
+  --green-subtle: rgba(26,127,55,.08);
+  --green-bg: #f0faf4;
+  --green-deep: #1a7f37;
+  --red: #e5484d;
+  --red-subtle: rgba(229,72,77,.06);
+  --orange: #bd5b00;
+  --blue: #0070f3;
+  --purple: #7c3aed;
+  --magenta: #d946ef;
+  --cyan: #0891b2;
+  --lime: #65a30d;
+}
+
+[data-scheme="minimal"][data-mode="dark"] {
+  --bg: #000;
+  --bg-card: #0a0a0a;
+  --bg-hover: #111;
+  --border: #222;
+  --text: #ededed;
+  --text-dim: #888;
+  --text-muted: #555;
+  --accent: #ededed;
+  --accent-hover: #fff;
+  --accent-subtle: rgba(255,255,255,.06);
+  --accent-on: #000;
+  --green: #45a557;
+  --green-subtle: rgba(69,165,87,.08);
+  --green-bg: #0d1f12;
+  --green-deep: #45a557;
+  --red: #e5484d;
+  --red-subtle: rgba(229,72,77,.08);
+  --orange: #f1a10d;
+  --blue: #3291ff;
+  --purple: #a78bfa;
+  --magenta: #f0abfc;
+  --cyan: #22d3ee;
+  --lime: #a3e635;
+}

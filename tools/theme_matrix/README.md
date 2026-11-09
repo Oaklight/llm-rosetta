@@ -8,14 +8,14 @@ what came out.
 
 ## What it does
 
-For every cell of **scheme × mode × width** (default: every scheme `base.css`
-declares — today Minimal and Emerald — × every declared mode × 390 / 768 /
-1280 = 12) it:
+For every cell of **scheme × mode × width** (default: every theme
+`admin/themes.py` registers — today Minimal and Emerald — × every declared
+mode × 390 / 768 / 1280 = 12) it:
 
 1. **`scheme-applied`** — the scheme and mode planted in `localStorage`
    reached `document.documentElement`.
-2. **`tokens-resolve`** — every custom property any scheme block in `base.css`
-   declares resolves to a non-empty computed value.  A scheme that forgot a
+2. **`tokens-resolve`** — every custom property any theme sheet declares
+   resolves to a non-empty computed value.  A scheme that forgot a
    token falls back to nothing; a text-level test cannot see that.
 3. **`scheme-values`** — samples `--bg`, `--accent` and `--card-bg` so the run
    can compare cells afterwards.
@@ -99,7 +99,8 @@ disk for debugging.
 ## Adding a scheme
 
 The guide is in the docs worktrees (`docs-en`/`docs-zh`,
-`contributing/admin-themes.md`).  In short: declare the values in `base.css`,
-list the scheme in `VALID_SCHEMES` (`admin/js/core/utils.js`) and the Settings
-select, then run `make test-js` (the contract) and `make theme-matrix` (the
-render).
+`contributing/admin-themes.md`).  In short: add `css/themes/<name>.css` with
+the same token names as the default theme, add one `Theme` entry to
+`admin/themes.py`, then run `make test-js` (the contract) and
+`make theme-matrix` (the render).  The Settings picker, the boot script and
+this matrix all derive from the registry — there is no second list.
