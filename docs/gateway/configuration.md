@@ -240,10 +240,22 @@ an error naming the shim's category. The gateway records each provider's
 identity as the pair `(model_type, format)`; an LLM model routed to a provider
 whose identity is `embeddings`, `rerank`, or `decisions` is rejected.
 
+An endpoint declared on a `providers:` entry forwards **that entry's
+credential**.  When the entry mints one — a `token_command`, or a shim whose
+`auth.py` exchanges a stored record — the endpoint reads the same key ring the
+chat lane uses, so one mint, one startup seed and one refresh loop serve every
+endpoint of the provider, and a failed mint names its command and error on the
+provider card instead of sending an empty credential upstream.  The quota state
+is shared for the same reason: a credential a probe or a 429 demoted is skipped
+by every endpoint, because the allowance belongs to the credential, not to the
+endpoint.
+
 The legacy `embeddings_providers` / `rerank_providers` / `decisions_providers`
 sections still load and are merged with the unified entries.  The pre-rename
 spellings `embedding_providers` and `decision_providers` are read as the same
-sections.
+sections.  An entry in a legacy section has no `providers:` counterpart to
+share a minted credential with, so one that mints stays disabled, with a reason
+naming the section — move the provider to `providers:` to use it.
 
 The model types are spelled `embeddings` and `decisions`, like the endpoints
 they serve.  A config written before those renames — `embedding_format` /
