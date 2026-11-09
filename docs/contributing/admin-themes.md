@@ -91,7 +91,8 @@ The names the panel's stylesheets converge on (issue
 | Lines | `--hairline`, `--hairline-strong` | rows and separators; the strong variant is derived |
 | Text | `--text`, `--text-dim`, `--text-muted` | |
 | Accent | `--accent`, `--accent-hover`, `--accent-subtle`, `--accent-on` | |
-| Status | `--pos`, `--neg`, `--warn`, `--info` | each with `-subtle` (translucent wash), `-bg` (opaque tint over `--surface`) and `-border` (derived) |
+| Status | `--pos`, `--neg`, `--warn`, `--info`, `--yellow` | each with `-subtle` (translucent wash), `-bg` (opaque tint over `--surface`) and `-border` (derived); `--yellow` is decoration only — a border, a fill, a bar |
+| Tag inks | `--tag-pos`, `--tag-neg`, `--tag-warn`, `--tag-info`, `--tag-accent`, `--tag-purple`, `--tag-magenta`, `--tag-tools`, `--tag-lime`, `--tag-decision` | the colour a status or capability tag paints its text in; the tag derives its 8 % fill from the same ink, so each must clear 4.5:1 against that fill on `--bg`, `--surface` and `--surface-2` (hovered rows) — `tests/js/tag-ink.test.mjs` enforces all 180 pairs |
 | Other | `--purple`, `--magenta`, `--cyan`, `--lime`, `--green-deep` | capability and type colours |
 
 `--hairline-strong`, the four `-border` variants, `--neg-bg`, `--warn-bg` and
