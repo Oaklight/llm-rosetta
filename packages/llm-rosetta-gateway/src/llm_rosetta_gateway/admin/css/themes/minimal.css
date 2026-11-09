@@ -13,7 +13,7 @@ Values only: components own where these land (epic #1154, issue #1471). */
   --th-weight: 400;
   --th-size: 12px;
   --th-color: var(--text-dim);
-  --badge-radius: 20px;
+  --radius-pill: 20px;
   --badge-weight: 500;
   /* Surfaces.  Minimal merges the KPI cards into one seamless frame and
      paints no texture; the components own where these values land, the
@@ -35,9 +35,10 @@ Values only: components own where these land (epic #1154, issue #1471). */
 
 [data-scheme="minimal"][data-mode="light"] {
   --bg: #fff;
-  --bg-card: #fafafa;
-  --bg-hover: #f5f5f5;
-  --border: #eaeaea;
+  --surface: #fafafa;
+  --surface-2: #f5f5f5;
+  --hairline: #eaeaea;
+  --hairline-strong: color-mix(in srgb, var(--text) 22%, var(--hairline));
   --text: #171717;
   --text-dim: #666;
   --text-muted: #999;
@@ -45,14 +46,21 @@ Values only: components own where these land (epic #1154, issue #1471). */
   --accent-hover: #000;
   --accent-subtle: rgba(0,0,0,.04);
   --accent-on: #fff;
-  --green: #1a7f37;
-  --green-subtle: rgba(26,127,55,.08);
-  --green-bg: #f0faf4;
+  --pos: #1a7f37;
+  --pos-subtle: rgba(26,127,55,.08);
+  --pos-bg: #f0faf4;
+  --pos-border: color-mix(in srgb, var(--pos) 30%, transparent);
   --green-deep: #1a7f37;
-  --red: #e5484d;
-  --red-subtle: rgba(229,72,77,.06);
-  --orange: #bd5b00;
-  --blue: #0070f3;
+  --neg: #e5484d;
+  --neg-subtle: rgba(229,72,77,.06);
+  --neg-bg: color-mix(in srgb, var(--neg) 8%, var(--surface));
+  --neg-border: color-mix(in srgb, var(--neg) 30%, transparent);
+  --warn: #bd5b00;
+  --warn-bg: color-mix(in srgb, var(--warn) 8%, var(--surface));
+  --warn-border: color-mix(in srgb, var(--warn) 30%, transparent);
+  --info: #0070f3;
+  --info-bg: color-mix(in srgb, var(--info) 8%, var(--surface));
+  --info-border: color-mix(in srgb, var(--info) 30%, transparent);
   --purple: #7c3aed;
   --magenta: #d946ef;
   --cyan: #0891b2;
@@ -61,9 +69,10 @@ Values only: components own where these land (epic #1154, issue #1471). */
 
 [data-scheme="minimal"][data-mode="dark"] {
   --bg: #000;
-  --bg-card: #0a0a0a;
-  --bg-hover: #111;
-  --border: #222;
+  --surface: #0a0a0a;
+  --surface-2: #111;
+  --hairline: #222;
+  --hairline-strong: color-mix(in srgb, var(--text) 22%, var(--hairline));
   --text: #ededed;
   --text-dim: #888;
   --text-muted: #555;
@@ -71,16 +80,43 @@ Values only: components own where these land (epic #1154, issue #1471). */
   --accent-hover: #fff;
   --accent-subtle: rgba(255,255,255,.06);
   --accent-on: #000;
-  --green: #45a557;
-  --green-subtle: rgba(69,165,87,.08);
-  --green-bg: #0d1f12;
+  --pos: #45a557;
+  --pos-subtle: rgba(69,165,87,.08);
+  --pos-bg: #0d1f12;
+  --pos-border: color-mix(in srgb, var(--pos) 30%, transparent);
   --green-deep: #45a557;
-  --red: #e5484d;
-  --red-subtle: rgba(229,72,77,.08);
-  --orange: #f1a10d;
-  --blue: #3291ff;
+  --neg: #e5484d;
+  --neg-subtle: rgba(229,72,77,.08);
+  --neg-bg: color-mix(in srgb, var(--neg) 8%, var(--surface));
+  --neg-border: color-mix(in srgb, var(--neg) 30%, transparent);
+  --warn: #f1a10d;
+  --warn-bg: color-mix(in srgb, var(--warn) 8%, var(--surface));
+  --warn-border: color-mix(in srgb, var(--warn) 30%, transparent);
+  --info: #3291ff;
+  --info-bg: color-mix(in srgb, var(--info) 8%, var(--surface));
+  --info-border: color-mix(in srgb, var(--info) 30%, transparent);
   --purple: #a78bfa;
   --magenta: #f0abfc;
   --cyan: #22d3ee;
   --lime: #a3e635;
+}
+
+/* P1 compatibility aliases — removed in P5.
+   The values now live under the shared vocabulary (surface, hairline,
+   pos/neg/warn/info and their -bg/-subtle/-border variants).  These
+   names keep every component resolving the same values until the last
+   one reads the new names; P5 deletes this block and the rule that
+   enforces it is a grep: outside this block, no old name may remain. */
+[data-scheme="minimal"] {
+  --bg-card: var(--surface);
+  --bg-hover: var(--surface-2);
+  --border: var(--hairline);
+  --green: var(--pos);
+  --green-subtle: var(--pos-subtle);
+  --green-bg: var(--pos-bg);
+  --red: var(--neg);
+  --red-subtle: var(--neg-subtle);
+  --orange: var(--warn);
+  --blue: var(--info);
+  --badge-radius: var(--radius-pill);
 }

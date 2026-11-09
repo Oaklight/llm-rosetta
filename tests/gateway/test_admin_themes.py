@@ -37,10 +37,17 @@ def _theme_text(theme: registry.Theme) -> str:
 
 
 def _blocks(theme: registry.Theme) -> dict[str | None, set[str]]:
-    """Return ``{mode: token names}`` for one theme, ``None`` for its shared block."""
+    """Return ``{mode: token names}`` for one theme, ``None`` for its shared block.
+
+    A theme may repeat a selector: the shared vocabulary, then the P1
+    compatibility aliases in a block of their own.  The blocks are merged, so
+    a token declared in either place counts once.
+    """
     blocks: dict[str | None, set[str]] = {}
     for match in _BLOCK.finditer(_theme_text(theme)):
-        blocks[match.group("mode")] = set(_TOKEN.findall(match.group("body")))
+        blocks.setdefault(match.group("mode"), set()).update(
+            _TOKEN.findall(match.group("body"))
+        )
     return blocks
 
 
@@ -133,6 +140,73 @@ class TestThemeFiles:
                     assert prop.startswith("--"), (
                         f"{theme.file}: {prop!r} is not a theme token"
                     )
+
+    def test_every_theme_declares_the_shared_vocabulary(self):
+        # The vocabulary issue #1472 P1 adopts.  A theme that is missing one
+        # of these still renders — the component falls back to nothing — so
+        # the set is asserted here rather than left to review.
+        vocabulary = {
+            "--surface",
+            "--surface-2",
+            "--hairline",
+            "--hairline-strong",
+            "--pos",
+            "--pos-subtle",
+            "--pos-bg",
+            "--pos-border",
+            "--neg",
+            "--neg-subtle",
+            "--neg-bg",
+            "--neg-border",
+            "--warn",
+            "--warn-bg",
+            "--warn-border",
+            "--info",
+            "--info-bg",
+            "--info-border",
+            "--radius-pill",
+        }
+        for theme in registry.THEMES:
+            available = set().union(*_blocks(theme).values())
+            assert vocabulary <= available, (
+                f"{theme.name} is missing {sorted(vocabulary - available)}"
+            )
+
+    def test_the_legacy_aliases_are_marked_for_removal(self):
+        # P1 left the previous names aliased so no component changes
+        # behaviour; the block must carry its expiry verbatim, or a looser
+        # wording ("removed later") would satisfy a looser test while the
+        # promise quietly rots.
+        legacy = {
+            "--bg-card": "--surface",
+            "--bg-hover": "--surface-2",
+            "--border": "--hairline",
+            "--green": "--pos",
+            "--green-subtle": "--pos-subtle",
+            "--green-bg": "--pos-bg",
+            "--red": "--neg",
+            "--red-subtle": "--neg-subtle",
+            "--orange": "--warn",
+            "--blue": "--info",
+            "--badge-radius": "--radius-pill",
+        }
+        for theme in registry.THEMES:
+            # The raw file: _theme_text() strips the comment that carries the
+            # expiry, and the expiry is the thing under test.
+            text = (ADMIN_DIR / theme.file).read_text(encoding="utf-8")
+            assert text.count("removed in P5") == 1, theme.name
+            head = text[: text.index("/* P1 compatibility aliases")]
+            assert "removed in P5" not in head, theme.name
+            aliases = text[text.index("/* P1 compatibility aliases") :]
+            assert "removed in P5" in aliases.split("[data-scheme=", 1)[0], theme.name
+            declared = set(_TOKEN.findall(aliases))
+            for old, new in legacy.items():
+                assert f"{old}: var({new});" in aliases, (theme.name, old)
+            # Every old name the components still use has an alias; this is
+            # the set P5 deletes, so it must be the whole set, not a sample.
+            assert declared == set(legacy), (
+                f"{theme.name}: alias block declares {sorted(declared)}"
+            )
 
     def test_the_default_themes_structural_block_is_not_empty(self):
         # A structural block that parsed as empty would make the completeness
