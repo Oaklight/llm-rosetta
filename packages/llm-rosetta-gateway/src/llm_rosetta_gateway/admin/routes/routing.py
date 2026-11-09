@@ -21,7 +21,12 @@ from typing import Any
 
 from ..._vendor.httpserver import JSONResponse, Response
 from ...quota.service import provider_allowance, provider_cooldown
-from ...routing import lane_eligibility, parse_model_routing
+from ...routing import (
+    lane_eligibility,
+    parse_model_routing,
+    provider_eligibility,
+)
+from ...routing.eligibility import RATE_LIMITED
 from ._shared import _qp, config_mutate, parse_json_body
 from .config.payload import _get_gateway_config
 
@@ -34,6 +39,88 @@ SESSION_SAMPLE = 200
 #: The windows the panel's model list counts traffic over.  ``None`` is "all
 #: that the log still holds", not "no bound on the query".
 ROUTING_WINDOWS: dict[str, int | None] = {"5h": 5, "24h": 24, "7d": 24 * 7, "all": None}
+
+
+def _model_lanes(
+    config: Any, route: Any, model: str
+) -> tuple[list[tuple[Any, Any, float, bool]], list[tuple[Any, bool]]]:
+    """Every candidate of one model, with the answer the selector got.
+
+    Args:
+        config: The gateway config.
+        route: The model's route.
+        model: The model the client asks for.  A candidate that names no
+            upstream model is keyed by it, so two models routed through one
+            provider are two lanes rather than one shared record.
+
+    Returns:
+        ``(lanes, lane_ready)``.  *lanes* is ``(entry, answer, weight_factor,
+        eligible)`` per candidate, in route order, for the shares and the
+        board.  *lane_ready* is ``(answer, provider_ready)`` for the lane-block
+        aggregate: a lane held out while its provider is ready is the capacity
+        ladder's work, and a provider-wide disable is the provider's ``block``,
+        which the board already reports.
+    """
+    lanes: list[tuple[Any, Any, float, bool]] = []
+    lane_ready: list[tuple[Any, bool]] = []
+    for entry in route.providers:
+        pinfo = config.providers.get(entry.name)
+        answer = (
+            lane_eligibility(pinfo, entry.name, lane=entry.upstream_model or model)
+            if pinfo is not None
+            else None
+        )
+        factor = answer.weight_factor if answer is not None else 1.0
+        lanes.append(
+            (entry, answer, factor, bool(answer is not None and answer.eligible))
+        )
+        lane_ready.append(
+            (answer, provider_eligibility(pinfo, entry.name).eligible)
+            if pinfo is not None
+            else (None, False)
+        )
+    return lanes, lane_ready
+
+
+def _lane_blocks(lanes: list[tuple[Any, bool]]) -> dict[str, Any]:
+    """How many candidates a capacity ladder holds out, and until when.
+
+    A lane-level fact, kept out of the provider's ``block`` (which stays the
+    credential's, ``429``-only): the ladder belongs to one lane and its
+    siblings may still serve, so counting it into a provider block would say
+    the provider is out when it is not.
+
+    Only a lane that is out while its **provider is ready** counts.  A
+    credential-wide ``429`` answers ``rate_limited`` too, but that is the
+    provider's block — already reported as ``block`` — and counting it here
+    would describe one disable as two.
+
+    Derived from the answers the board already has, one per candidate, rather
+    than from any provider-level state: that keeps the number right whatever a
+    lane is keyed by, and it is the answer the selector acted on, so the panel
+    cannot disagree with the router.
+
+    Args:
+        lanes: ``(answer, provider_ready)`` for every candidate, in route order.
+
+    Returns:
+        ``{"count": int, "until": iso | None}``.  ``until`` is the latest end
+        among the limited lanes — the moment the model has nothing left out on
+        a ladder — and ``None`` when at least one of them names no end.
+    """
+    limited = [
+        answer
+        for answer, ready in lanes
+        if ready and answer is not None and answer.reason == RATE_LIMITED
+    ]
+    ends = [answer.until for answer in limited if answer.until is not None]
+    if limited and len(ends) != len(limited):
+        # One undated disable makes the end unknown; do not borrow another's.
+        return {"count": len(limited), "until": None}
+    return {
+        "count": len(limited),
+        "until": _iso(max(ends)) if ends else None,
+    }
 
 
 def _state(answer: Any) -> str:
@@ -230,24 +317,17 @@ async def list_routable_models(request: Any, **kwargs: Any) -> Response:
     routes = getattr(config, "models", {})
     summary: dict[str, dict[str, Any]] = {}
     for name, route in routes.items():
-        lanes: list[tuple[Any, Any, float, bool]] = []
-        for entry in route.providers:
-            pinfo = config.providers.get(entry.name)
-            answer = (
-                lane_eligibility(pinfo, entry.name, lane=entry.upstream_model or name)
-                if pinfo is not None
-                else None
-            )
-            factor = answer.weight_factor if answer is not None else 1.0
-            lanes.append(
-                (entry, answer, factor, bool(answer is not None and answer.eligible))
-            )
+        lanes, lane_ready = _model_lanes(config, route, name)
         shares = _expected_shares(route, lanes)
         row = (activity or {}).get(name, {})
         summary[name] = {
             "providers": len(lanes),
             "serving": sum(1 for lane in lanes if lane[3]),
             "blocked": sum(1 for lane in lanes if not lane[3]),
+            # How much of that count is a capacity ladder, and when it ends:
+            # "1 blocked" alone does not say whether the lane is cooling down
+            # or out of credit.
+            "lane_blocks": _lane_blocks(lane_ready),
             "shares": [round(value, 4) for value in shares],
             # The lane behind each share, so the list's bar can name what it
             # draws: a full bar beside "1 blocked" does not say which lane
@@ -261,6 +341,11 @@ async def list_routable_models(request: Any, **kwargs: Any) -> Response:
                     # way the board colours its dot: amber for a lane that is
                     # only sunk, red for one that cannot serve at all.
                     "state": _state(lanes[index][1]),
+                    # When that state ends, for a lane a ladder holds out:
+                    # the list's tooltip can then say "rate limited · 12:34".
+                    "until": _iso(lanes[index][1].until)
+                    if lanes[index][1] is not None
+                    else None,
                 }
                 for index, (entry, _answer, _factor, _ok) in enumerate(lanes)
             ],
@@ -404,18 +489,7 @@ async def get_model_routing(request: Any, **kwargs: Any) -> Response:
             status_code=404,
         )
 
-    lanes: list[tuple[Any, Any, float, bool]] = []
-    for entry in route.providers:
-        pinfo = config.providers.get(entry.name)
-        answer = (
-            lane_eligibility(pinfo, entry.name, lane=entry.upstream_model or model)
-            if pinfo is not None
-            else None
-        )
-        factor = answer.weight_factor if answer is not None else 1.0
-        lanes.append(
-            (entry, answer, factor, bool(answer is not None and answer.eligible))
-        )
+    lanes, lane_ready = _model_lanes(config, route, model)
     shares = _expected_shares(route, lanes)
 
     providers = [
@@ -449,6 +523,10 @@ async def get_model_routing(request: Any, **kwargs: Any) -> Response:
             "strategy": type(route.strategy).__name__,
             "routing": route.routing.describe(),
             "providers": providers,
+            # The board's per-lane rows already say `rate_limited`; this is the
+            # model-level statement the card needs, so the route being held out
+            # by a ladder is legible without counting dots.
+            "lane_blocks": _lane_blocks(lane_ready),
             "decisions": decisions,
             "sessions": sessions["sessions"],
             # One row per conversation, plus one per fallback client identity
