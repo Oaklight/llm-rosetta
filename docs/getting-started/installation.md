@@ -88,6 +88,8 @@ writes `config.jsonc` there, so a directory owned by a different uid is the one
 way to watch the container fail at startup. The plain `docker run` form does
 not read `PUID`; use `--user` there, as the example above does.
 
+A uid other than 1000 has no passwd entry in the image, so Docker leaves `HOME` at `/`, which the process cannot write. The compose files set `HOME=/config/home` for that case and the entrypoint creates it; the default uid keeps `/home/appuser`. Per-uid state — the shim cache and the Sign in with ChatGPT record — therefore lands under `config/`, which is the second reason that directory must belong to the runtime uid.
+
 The two files are separate entry points — `docker/docker-compose.yaml` runs the
 published image, `docker/docker-compose.source.yaml` builds from the checkout —
 and both publish port 8765, so run one at a time.
