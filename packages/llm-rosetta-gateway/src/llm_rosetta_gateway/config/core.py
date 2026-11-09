@@ -115,6 +115,7 @@ class GatewayConfig:
     log_bodies: bool
     log_format: str
     maintenance: Registry | None
+    max_body_size: int
     model_capabilities: Any
     model_failover: Any
     model_flatten_system: Any

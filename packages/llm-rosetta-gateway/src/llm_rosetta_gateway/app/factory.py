@@ -395,7 +395,7 @@ async def create_app(
     app = App(
         max_body_size=ext.max_body_size
         if ext.max_body_size is not None
-        else 50_000_000,
+        else config.max_body_size,
         read_timeout=config.read_timeout,
     )
 
