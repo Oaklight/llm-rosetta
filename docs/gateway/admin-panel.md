@@ -24,6 +24,16 @@ Headings below a strip run at one section size (`h3`) and one group size (`h4`);
 
 Tables separate rows with one hairline drawn on the row, not one per cell, under a stronger rule on the header row. A **magnitude** is right-aligned in tabular figures: the providers' model count, the API keys' requests and three token columns, the request log's tokens and duration, profiling's duration, and the token-usage modal's seven counters. A **string** stays left even when it is a column of digits — a timestamp and a status badge read as text, not as amounts. Sorting, the sticky header, horizontal scrolling and the expandable log rows behave as before; `tests/js/table-columns.test.mjs` pins every table's column count and the header that each positional alignment rule lands on, so a new column fails the suite instead of silently moving an alignment.
 
+### Controls
+
+Every control is the same shape: 28 px tall, one 2 px corner (`--radius-control`), one 1 px frame. That covers buttons, text fields, selects, text areas, segmented controls and filter chips. Two controls keep a smaller height because they live inside a row that must not grow — the copy button in a key row and the range switch in a chart header — and they are squared like the rest.
+
+Tags are outlined rather than filled: a **status** tag (request status, severity, stream, the profiling badge) is a pill in its own colour, monospace and uppercase; a **capability** tag (LLM, Embeddings, Rerank, Decisions and the per-capability markers) takes the same outline and a square corner, so a capability is never mistaken for an outcome. A disabled control fades to half opacity and stops taking the pointer; it does not change its own fill.
+
+The focus ring is drawn by the panel, not by the browser: `2px solid var(--accent)` at a 2 px offset, inset by 2 px where a scroll container or a table cell would clip it, and in the accent's ink where the control's own fill is the accent. Every tab stop on every tab and in both drawers draws it.
+
+`color-scheme` follows the mode, so the parts a stylesheet cannot paint — scrollbars, `<select>` popups, checkbox and radio glyphs, the text caret — are dark in dark mode and light in light mode. `accent-color` and `::placeholder` are set from the scheme's tokens for the same reason.
+
 ## Providers
 
 The **Providers** section manages every upstream the gateway can call.
