@@ -1022,6 +1022,10 @@ class OpenResponsesConverter(BaseConverter):
         if p_output_details:
             if "reasoning_tokens" in p_output_details:
                 usage_info["reasoning_tokens"] = p_output_details["reasoning_tokens"]
+        # Nullable on the wire (still null in practice).  Copy it when the key
+        # is present, so "absent" and "present but null" stay distinguishable.
+        if "compute_units" in p_usage:
+            usage_info["compute_units"] = p_usage["compute_units"]
         return cast(UsageInfo, usage_info)
 
     @staticmethod
@@ -1053,7 +1057,7 @@ class OpenResponsesConverter(BaseConverter):
         contract still asks every dialect for this mapping, and a caller may
         reach it directly.
         """
-        return {
+        usage: dict[str, Any] = {
             "input_tokens": ir_usage.get("prompt_tokens") or 0,
             "output_tokens": ir_usage.get("completion_tokens") or 0,
             "total_tokens": ir_usage.get("total_tokens") or 0,
@@ -1064,6 +1068,12 @@ class OpenResponsesConverter(BaseConverter):
                 "reasoning_tokens": ir_usage.get("reasoning_tokens", 0),
             },
         }
+        # The same shape ``_build_finish_usage`` writes, so it carries the same
+        # field: a caller that reaches this mapping directly must not get a
+        # usage object two other builders would have filled (#1446 review).
+        if "compute_units" in ir_usage:
+            usage["compute_units"] = ir_usage["compute_units"]
+        return usage
 
     def _apply_tool_config(
         self,
@@ -3008,6 +3018,10 @@ class OpenResponsesConverter(BaseConverter):
         usage["output_tokens_details"] = {
             "reasoning_tokens": reasoning if reasoning is not None else 0
         }
+        # The body and stream terminals are written here, so this is where the
+        # field survives a non-stream round trip.
+        if "compute_units" in pending_usage:
+            usage["compute_units"] = pending_usage["compute_units"]
         return usage
 
     def _apply_finish_echo(
@@ -3248,14 +3262,17 @@ class OpenResponsesConverter(BaseConverter):
             return {}
 
         # Without context: preserve backward-compatible behavior
+        output_usage: dict[str, Any] = {
+            "input_tokens": usage.get("prompt_tokens") or 0,
+            "output_tokens": usage.get("completion_tokens") or 0,
+            "total_tokens": usage.get("total_tokens") or 0,
+        }
+        if "compute_units" in usage:
+            output_usage["compute_units"] = usage["compute_units"]
         resp: dict[str, Any] = {
             "status": "completed",
             "output": [],
-            "usage": {
-                "input_tokens": usage.get("prompt_tokens") or 0,
-                "output_tokens": usage.get("completion_tokens") or 0,
-                "total_tokens": usage.get("total_tokens") or 0,
-            },
+            "usage": output_usage,
         }
         terminal = self._terminal_events(resp)
         return terminal[0] if len(terminal) == 1 else terminal
