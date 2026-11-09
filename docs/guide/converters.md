@@ -249,6 +249,25 @@ from llm_rosetta.converters.llm.open_responses.tool_ops import fix_orphaned_tool
 items = fix_orphaned_tool_calls(items)
 ```
 
+### 助手部件的顺序（Chat Completions） { #assistant-part-order-chat-completions }
+
+chat 的助手回合以三个消息字段传输——`reasoning_content`、`content` 与 `tool_calls`——方言没有给它们共享的位置。因此 IR 无法记录部件在线路上的真实位置；Chat Completions 声明一个**规范顺序**：
+
+```
+[reasoning, text…, tool_call…]
+```
+
+这正是该方言的读端重建、写端能够复现的形状。写入方向上，偏离的输入按此顺序写出，并通过 warning sink 上报——主题为 `part_order` 的一条 `downgraded` 丢失——只要出现以下任一情况：
+
+- 推理部件位于文本部件或工具调用之后；
+- 文本部件位于工具调用之后；
+- 一条消息带有多个文本部件（这些部件用单个空格拼接，边界因此丢失）；
+- 一条消息带有多个推理部件。
+
+最后一种情况还丢失内容：`reasoning_content` 是一个逐部件覆盖的字段，只有最后一个推理部件保留。这条丢失按 `reasoning` 主题单独上报。上报在同一请求内按主题去重，交错的历史不会每回合告警一次。
+
+常见的回放形状 `[text…, call…]`——以及任何已经符合规范顺序的输入——不会上报。读端无法恢复上游顺序，也不声称能恢复：它的输出就是上面声明的约定。流式读端在单个 chunk 内维持同一约定（同时携带两个字段的 delta 先输出推理），且不告警，因为那是字段顺序，而不是跨回合的丢失。
+
 ### Google camelCase 与 snake_case
 
 Google 的 REST API 和 CLI 工具（如 Gemini CLI）使用 camelCase（`inlineData`、`mimeType`、`functionCall`、`functionResponse`、`functionDeclarations`、`responseMimeType`、`thinkingConfig` 等），而 Python SDK 使用 snake_case。LLM-Rosetta 的 Google 转换器在所有层级（内容、工具、配置和响应字段）透明地接受两种命名约定。所有 IR→Provider 输出使用 camelCase 以兼容 REST API。
@@ -299,6 +318,7 @@ for w in warnings:
 | `"X does not support Y, ignored"` | 某特性在目标格式中没有对应项，被丢掉了 |
 | `"Extension item ignored: ..."` | Open Responses 扩展项在 IR 中没有对应表示 |
 | `"Tool chain converted to sequential calls"` | 链式工具调用被展平成了顺序调用 |
+| `"Reasoning part dropped: it carries no Responses reasoning id"` | Responses 的 reasoning 条目只能凭 id 回放；来自其它方言的部件没有 id，因此该条目被省略（issue [#1491](https://github.com/Oaklight/llm-rosetta/issues/1491)） |
 | `"Skipped image in tool result packing: ..."` | 工具结果中的某张图片转换失败 |
 
 `request_from_provider` 和 `response_from_provider` 不返回元组，要拿警告的话传一个 `ConversionContext` 进去：
