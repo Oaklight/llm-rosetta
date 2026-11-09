@@ -418,6 +418,12 @@ class OpenResponsesConverter(BaseConverter):
         if stream:
             stream_fields = self.config_ops.ir_stream_config_to_p(stream)
             result.update(stream_fields)
+            if stream.get("include_usage"):
+                report_loss(
+                    "OpenAI Responses API reports usage in every stream; "
+                    "include_usage is not a request field",
+                    subject="stream.include_usage",
+                )
 
         # 9. Reasoning config
         reasoning = ir_request.get("reasoning")

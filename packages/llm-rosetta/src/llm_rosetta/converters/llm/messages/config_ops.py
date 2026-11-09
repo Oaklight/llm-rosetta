@@ -94,7 +94,10 @@ class MessagesConfigOps(BaseConfigOps):
             for field in unsupported_found:
                 report_loss(
                     f"Anthropic does not support {field}; ignored",
-                    subject=field,
+                    # The IR path, not the dialect's field name: the loss is
+                    # ``generation.<field>`` and a warning is attributed by
+                    # the path it names (#1328).
+                    subject=f"generation.{field}",
                     warnings=kwargs.get("warnings"),
                 )
 

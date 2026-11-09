@@ -89,19 +89,22 @@ class GoogleGenerateConfigOps(BaseConfigOps):
         if "logit_bias" in ir_config:
             report_loss(
                 "Google GenAI does not support logit_bias; ignored",
-                subject="logit_bias",
+                # IR path, not the dialect's field name (#1328).
+                subject="generation.logit_bias",
                 leg="request",
             )
         if "logprobs" in ir_config:
             report_loss(
                 "Google GenAI does not support logprobs; ignored",
-                subject="logprobs",
+                # IR path, not the dialect's field name (#1328).
+                subject="generation.logprobs",
                 leg="request",
             )
         if "top_logprobs" in ir_config:
             report_loss(
                 "Google GenAI does not support top_logprobs; ignored",
-                subject="top_logprobs",
+                # IR path, not the dialect's field name (#1328).
+                subject="generation.top_logprobs",
                 leg="request",
             )
 
@@ -397,7 +400,7 @@ class GoogleGenerateConfigOps(BaseConfigOps):
             report_loss(
                 "Google GenAI cache retention is managed at the CachedContent "
                 "resource level, not per-request; ignored",
-                subject="retention",
+                subject="cache.retention",
                 leg="request",
             )
 

@@ -253,6 +253,11 @@ class MessagesConverter(BaseConverter):
         if gen_config:
             gen_fields = self.config_ops.ir_generation_config_to_p(gen_config)
             result.update(gen_fields)
+            if "truncation" in gen_config:
+                report_loss(
+                    "Anthropic has no truncation control; ignored",
+                    subject="generation.truncation",
+                )
         else:
             # Anthropic requires max_tokens
             result["max_tokens"] = 4096
@@ -652,7 +657,7 @@ class MessagesConverter(BaseConverter):
             if "max_calls" in tool_config:
                 report_loss(
                     "Anthropic does not support max_tool_calls, ignored",
-                    subject="max_tool_calls",
+                    subject="tool_config.max_calls",
                 )
 
     @staticmethod

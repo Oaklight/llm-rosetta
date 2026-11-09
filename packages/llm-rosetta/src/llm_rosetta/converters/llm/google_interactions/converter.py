@@ -12,6 +12,9 @@ from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import Any, cast
 
+from llm_rosetta.conversion_warnings import report_loss
+from llm_rosetta.converters.base.helpers.service_tier import google_service_tier
+
 from ....types.ir import ToolResultPart
 from ....types.ir.request import IRRequest
 from ....types.ir.response import (
@@ -218,9 +221,28 @@ class GoogleInteractionsConverter(BaseConverter):
             if fmt:
                 result["response_format"] = fmt
 
+        cache = ir_request.get("cache")
+        if cache:
+            result.update(self.config_ops.ir_cache_config_to_p(cache))
+
+        service_tier = ir_request.get("service_tier")
+        if service_tier:
+            mapped = google_service_tier(service_tier, "Google Interactions")
+            if mapped:
+                result["service_tier"] = mapped
+
         stream = ir_request.get("stream")
-        if stream and stream.get("enabled"):
-            result["stream"] = True
+        if stream is not None and "enabled" in stream:
+            # The API takes the flag in the body and answers both values
+            # (measured 2026-11-08: false -> 200 JSON, true -> 200 SSE), so
+            # an explicit "off" travels instead of being spelled as absence.
+            result["stream"] = bool(stream["enabled"])
+            if stream.get("include_usage"):
+                report_loss(
+                    "Google Interactions reports usage on every interaction; "
+                    "include_usage is not a request field",
+                    subject="stream.include_usage",
+                )
 
         _copy_provider_extensions(ir_request, result, self._CONVERTER_TAG)
         return result
@@ -323,8 +345,8 @@ class GoogleInteractionsConverter(BaseConverter):
         if rf:
             ir["response_format"] = self.config_ops.p_response_format_to_ir(rf)
 
-        if req.get("stream"):
-            ir["stream"] = {"enabled": True}
+        if "stream" in req:
+            ir["stream"] = {"enabled": bool(req["stream"])}
 
         _extract_provider_extensions(req, ir)
         return ir

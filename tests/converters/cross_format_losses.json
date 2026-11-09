@@ -3,76 +3,23 @@
   "definition": "A path is in A ∩ B when A → IR → B → IR gives it back unchanged.  A path outside it must be named by a conversion warning; each silent entry counts the bodies that lost it, and the corruptions are paths B carries and then changes, each with the reason it is still open.",
   "silent_issue": "https://github.com/Oaklight/llm-rosetta/issues/1328",
   "silent": {
-    "chat_completions->open_responses": {
-      "generation.logit_bias.k": 1,
-      "stream.include_usage": 1
-    },
     "chat_completions->messages": {
-      "generation.logit_bias.k": 1,
       "generation.max_tokens": 20
     },
     "chat_completions->google_generate": {
-      "generation.logit_bias.k": 1,
-      "service_tier": 1,
-      "stream.enabled": 22,
-      "stream.include_usage": 1
-    },
-    "chat_completions->google_interactions": {
-      "cache.key": 1,
-      "cache.retention": 1,
-      "generation.logit_bias.k": 1,
-      "service_tier": 1,
-      "stream.enabled": 1,
-      "stream.include_usage": 1
-    },
-    "open_responses->chat_completions": {
-      "generation.truncation": 1
+      "stream.enabled": 22
     },
     "open_responses->messages": {
-      "generation.max_tokens": 24,
-      "generation.truncation": 1
+      "generation.max_tokens": 24
     },
     "open_responses->google_generate": {
-      "generation.truncation": 1,
-      "service_tier": 1,
       "stream.enabled": 25
     },
-    "open_responses->google_interactions": {
-      "cache.key": 1,
-      "cache.retention": 1,
-      "service_tier": 1,
-      "stream.enabled": 1
-    },
-    "messages->chat_completions": {
-      "reasoning.budget_tokens": 1,
-      "reasoning.mode": 1
-    },
-    "messages->open_responses": {
-      "reasoning.mode": 1
-    },
     "messages->google_generate": {
-      "service_tier": 1,
       "stream.enabled": 1
-    },
-    "messages->google_interactions": {
-      "reasoning.budget_tokens": 1,
-      "reasoning.mode": 1,
-      "service_tier": 1,
-      "stream.enabled": 1
-    },
-    "google_generate->chat_completions": {
-      "reasoning.budget_tokens": 1,
-      "reasoning.mode": 1
-    },
-    "google_generate->open_responses": {
-      "reasoning.mode": 1
     },
     "google_generate->messages": {
       "generation.max_tokens": 12
-    },
-    "google_generate->google_interactions": {
-      "reasoning.budget_tokens": 1,
-      "reasoning.mode": 1
     },
     "google_interactions->messages": {
       "generation.max_tokens": 8

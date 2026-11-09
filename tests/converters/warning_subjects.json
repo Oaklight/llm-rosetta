@@ -3,12 +3,12 @@
     [
       "request",
       "dropped",
-      "max_tool_calls"
+      "generation.top_k"
     ],
     [
       "request",
       "dropped",
-      "top_k"
+      "tool_config.max_calls"
     ],
     [
       "response",
@@ -20,12 +20,12 @@
     [
       "request",
       "dropped",
-      "logprobs"
+      "generation.logprobs"
     ],
     [
       "request",
       "dropped",
-      "top_logprobs"
+      "generation.top_logprobs"
     ],
     [
       "request",
@@ -37,12 +37,12 @@
     [
       "request",
       "dropped",
-      "logprobs"
+      "generation.logprobs"
     ],
     [
       "request",
       "dropped",
-      "top_logprobs"
+      "generation.top_logprobs"
     ],
     [
       "response",
@@ -54,44 +54,44 @@
     [
       "request",
       "dropped",
-      "logprobs"
+      "generation.logprobs"
     ],
     [
       "request",
       "dropped",
-      "max_tool_calls"
+      "generation.seed"
     ],
     [
       "request",
       "dropped",
-      "seed"
+      "generation.top_logprobs"
     ],
     [
       "request",
       "dropped",
-      "top_logprobs"
+      "tool_config.max_calls"
     ]
   ],
   "open_responses": [
     [
       "request",
       "dropped",
-      "logprobs"
+      "generation.logprobs"
     ],
     [
       "request",
       "dropped",
-      "seed"
+      "generation.seed"
     ],
     [
       "request",
       "dropped",
-      "stop_sequences"
+      "generation.stop_sequences"
     ],
     [
       "request",
       "dropped",
-      "top_k"
+      "generation.top_k"
     ]
   ]
 }
