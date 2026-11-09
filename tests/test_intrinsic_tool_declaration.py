@@ -493,6 +493,26 @@ class TestShimEmitConsistency:
             _RESPONSES_INTRINSIC_TOOLS
         )
 
+    def test_openai_chatgpt_responses(self):
+        """One hosted tool is declared, because the plan route serves one.
+
+        The record is in
+        ``packages/llm-rosetta/src/llm_rosetta/shims/providers/``
+        ``openai_chatgpt/llm/open_responses/provider.yaml``: the plan route
+        rejects `code_interpreter`, `file_search`, image generation, computer
+        use, hosted MCP and `tool_search` (the shim records the outcome but no
+        date, so it is the shim — not this docstring — that is the source).
+        A second kind here would make `resolve_intrinsic_tools` keep a server
+        tool the route refuses.
+        """
+        from llm_rosetta.converters.llm.open_responses.tool_ops import (
+            _RESPONSES_INTRINSIC_TOOLS,
+        )
+
+        declared = self._shim_kinds("openai_chatgpt--open_responses")
+        assert declared == {"web_search"}
+        assert declared <= set(_RESPONSES_INTRINSIC_TOOLS)
+
     def test_minimax_messages(self):
         """MiniMax's Anthropic lane runs web search; code execution is not declared.
 
@@ -527,13 +547,28 @@ class TestShimEmitConsistency:
         )
 
     def test_google_interactions(self):
+        """Exactly the four kinds the Gemini API was measured to execute.
+
+        Measured live 2026-11-08 against generativelanguage.googleapis.com:
+        `file_search` answers 400 (the wire type needs `stores`, which the
+        converter does not emit) and `retrieval` answers 400 ("not supported
+        for 'tools[0].type' on the Gemini API, it is allowed on the Gemini
+        Enterprise Agent Platform"); `google_search`, `code_execution`,
+        `url_context` and `google_maps` each return their `*_call` + `*_result`
+        steps.  Pinned as an equality so re-adding a refused kind fails here.
+        """
         from llm_rosetta.converters.llm.google_interactions.tool_ops import (
             _GI_INTRINSIC_TOOLS,
         )
 
-        assert self._shim_kinds("google--google_interactions") <= set(
-            _GI_INTRINSIC_TOOLS
-        )
+        declared = self._shim_kinds("google--google_interactions")
+        assert declared == {
+            "google_search",
+            "code_execution",
+            "url_context",
+            "google_maps",
+        }
+        assert declared <= set(_GI_INTRINSIC_TOOLS)
 
 
 class TestUnsupportedKindNotCachedAsEmpty:

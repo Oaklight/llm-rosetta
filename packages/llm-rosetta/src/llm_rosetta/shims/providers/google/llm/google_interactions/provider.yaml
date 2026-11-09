@@ -8,10 +8,31 @@ reasoning:
   effort_range: [minimal, high]
 
 tools:
+  # `file_search` and `retrieval` are deliberately absent: both were declared
+  # here and both are refused by the API this shim points at.
+  #
+  # Measured live 2026-11-08 against generativelanguage.googleapis.com, the
+  # default host of the `google` vendor manifest:
+  #
+  #   tools: [{"type": "file_search"}]   → 400 invalid_request
+  #     {"error": {"message": "Request contains an invalid argument.",
+  #                "code": "invalid_request"}}
+  #   (the wire type needs `stores`; the converter emits the bare type, so the
+  #   declaration could never succeed)
+  #
+  #   tools: [{"type": "retrieval"}]     → 400 invalid_request
+  #     "The value 'retrieval' is not supported for 'tools[0].type' on the
+  #      Gemini API, it is allowed on the Gemini Enterprise Agent Platform.
+  #      Supported values: 'code_execution', 'computer_use', 'file_search',
+  #      'function', 'google_maps', 'google_search', 'mcp_server',
+  #      'url_context'."
+  #
+  # A declaration is a promise the target accepts the kind; advertising one the
+  # upstream refuses leaves the caller with a server tool that never works.
+  # The other four were measured to execute (a `*_call` plus its `*_result`
+  # step per request), so they stay.
   intrinsic_tools:
     - google_search
     - code_execution
     - url_context
     - google_maps
-    - file_search
-    - retrieval
