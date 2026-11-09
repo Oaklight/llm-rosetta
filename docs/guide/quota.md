@@ -241,6 +241,13 @@ A 429 that no probe can classify is still a rate limit: the request fails over
 to another provider when the model opted in, rather than being answered with
 the refusal and retried on the same lane next time.
 
+A disable that leaves the model with no candidate at all is reported as a rate
+limit rather than as a startup state: the `503` says `rate limited until <time>`
+and carries that end in `Retry-After`. It is the same answer for a lane the
+capacity ladder disabled, because readiness alone cannot tell the ladder from a
+quota block — both leave the provider "not ready" — and "initializing" would
+send the client looking for a boot problem that does not exist.
+
 ## Lanes with no usage endpoint
 
 Some lanes have an allowance the vendor never exposes to the application: the

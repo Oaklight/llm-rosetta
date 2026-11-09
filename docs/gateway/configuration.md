@@ -678,7 +678,10 @@ refused has recovered. A `402` or `429` no probe explained is still a credential
 fact and counts provider-wide, cleared by any served request. A `500`, `502`,
 `504` or `408` fails over for the request but does not, on its own, enter the
 ladder. The requests that reach the threshold are still served — by a sibling
-lane or the failover, not by the failing lane.
+lane or the failover, not by the failing lane. When the ladder leaves the model
+with no candidate at all — one lane, disabled — the client is told what
+happened: `503` with `rate limited until <time>` and the end in `Retry-After`,
+not "initializing".
 
 Streaming requests fail over too, but only before the first event: the handler
 opens the upstream connection before writing anything, so a refusal at that
