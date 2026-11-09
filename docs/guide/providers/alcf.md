@@ -210,7 +210,7 @@ services:
 2. 使用上述 volume 挂载**启动容器**
 3. 通过管理面板或 `config.jsonc` **添加提供方** —— 不需要 `token_command`
 
-容器内的 `appuser`（uid 1000）需要对 `~/.globus` 目录有读写权限，以便就地更新刷新令牌。如果宿主机 uid 不同，请在 compose 文件中设置 `PUID`/`PGID`，或执行 `chown 1000:1000 .globus` 目录。
+容器内的 `appuser`（uid 1000）需要对 `~/.globus` 目录有读写权限，以便就地更新刷新令牌。如果宿主机 uid 不同，请执行 `chown 1000:1000 .globus` —— compose 文件中的 `PUID`/`PGID` 变量不会被镜像读取。
 
 参见 [`docker/docker-compose.yaml`](https://github.com/Oaklight/llm-rosetta/blob/master/docker/docker-compose.yaml) 获取完整示例。
 
