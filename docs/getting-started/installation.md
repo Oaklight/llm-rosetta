@@ -53,28 +53,36 @@ Or use Docker Compose — see `docker/docker-compose.yaml` in the repository.
 #### Building from source
 
 The images above install released wheels. To run the gateway from a checkout
-instead, the repository ships a source build that installs both distributions
-(`packages/llm-rosetta` and `packages/llm-rosetta-gateway`) straight from the
-working tree:
+instead, `docker/docker-compose.source.yaml` builds `docker/Dockerfile.source`,
+which installs both distributions (`packages/llm-rosetta` and
+`packages/llm-rosetta-gateway`) straight from the working tree:
 
 ```bash
 git clone https://github.com/Oaklight/llm-rosetta.git
 cd llm-rosetta
-echo "ADMIN_PASSWORD=change-me" > .env   # compose reads .env
-docker compose up -d --build             # builds docker/Dockerfile.source
+mkdir -p config   # the container runs as uid 1000 and cannot create it
+docker compose -f docker/docker-compose.source.yaml up -d --build
 ```
 
 Without Compose:
 
 ```bash
 docker build -f docker/Dockerfile.source -t llm-rosetta-gateway:src .
+mkdir -p config
 docker run -p 8765:8765 -v "$PWD/config:/config" llm-rosetta-gateway:src
 ```
 
-The root `docker-compose.yaml` mounts `./config` as the container's `/config`
-and reads `.env` for variables your `config.jsonc` references (for example
-`"${ADMIN_PASSWORD}"`). The release path is unchanged: `make build-docker`
-still builds `docker/Dockerfile`, which installs wheels from `dist/` or PyPI.
+The source file mounts the repository's `config/` and takes `PUID`, `PGID` and
+any `environment:` entries the same way the image file does; the two files are
+separate entry points — `docker/docker-compose.yaml` runs the published image,
+`docker/docker-compose.source.yaml` builds from the checkout — and both publish
+port 8765, so run one at a time. Create `config/` before the first start: a
+missing bind-mount directory is created by compose as `root`, and the gateway
+runs as uid 1000, so its first-run `config.jsonc` write would fail. An empty
+directory owned by you (or the `PUID` you pass) is enough.
+
+The release path is unchanged: `make build-docker` still builds
+`docker/Dockerfile`, which installs wheels from `dist/` or PyPI.
 
 ## Development
 
