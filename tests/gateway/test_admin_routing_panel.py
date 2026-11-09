@@ -36,6 +36,10 @@ from llm_rosetta_gateway.routing import (
 )
 
 
+#: The moment every ladder read judges against (see ``_pinned_clock``).
+NOW = datetime.now(timezone.utc)
+
+
 @pytest.fixture(autouse=True)
 def _clean_quota_state():
     """The ladders are process-wide; no test may inherit another's refusals."""
@@ -44,6 +48,22 @@ def _clean_quota_state():
     QUOTA_STATE.clear()
     yield
     QUOTA_STATE.clear()
+
+
+@pytest.fixture(autouse=True)
+def _pinned_clock(monkeypatch):
+    """Judge every ladder read at ``NOW``, not at the wall clock.
+
+    A capacity disable lasts seconds, and the eligibility predicate reads the
+    tracker without passing a moment.  Against the real clock, a record written
+    moments — or, in a full run, minutes — earlier has already expired by the
+    time the endpoint reads it, which is how the lane-block tests failed only
+    in a full suite.  Writer and reader share this clock, so no interval
+    between them can expire a record.
+    """
+    from llm_rosetta_gateway.quota import rate_limit as rate_limit_module
+
+    monkeypatch.setattr(rate_limit_module, "_now", lambda: NOW)
 
 
 def _provider(name: str) -> SimpleNamespace:
@@ -856,15 +876,20 @@ class TestTheLaneBlocks:
     answers the selector acted on, whatever a lane is keyed by.
     """
 
-    NOW = datetime.now(timezone.utc)
     POLICY = RateLimitPolicy()
+
+    @staticmethod
+    def _now() -> datetime:
+        """The file's pinned moment — the same one every read judges against."""
+        return NOW
 
     @classmethod
     def _disable_lane(cls, lane: str = "m") -> datetime:
         from llm_rosetta_gateway.quota.state import QUOTA_STATE
 
+        now = cls._now()
         for _ in range(3):
-            QUOTA_STATE.rate_limits.note_upstream("a", lane, cls.POLICY, now=cls.NOW)
+            QUOTA_STATE.rate_limits.note_upstream("a", lane, cls.POLICY, now=now)
         end = QUOTA_STATE.rate_limits.upstream_disabled("a", lane)
         assert end is not None
         return end
@@ -920,8 +945,9 @@ class TestTheLaneBlocks:
     async def test_a_credential_disable_stays_a_provider_block(self):
         from llm_rosetta_gateway.quota.state import QUOTA_STATE
 
+        now = self._now()
         for _ in range(3):
-            QUOTA_STATE.rate_limits.note("a", None, self.POLICY, now=self.NOW)
+            QUOTA_STATE.rate_limits.note("a", None, self.POLICY, now=now)
         request = _request(models={"m": _route(ProviderEntry(name="a"))})
 
         payload = json.loads((await get_model_routing(request)).body)
