@@ -46,10 +46,23 @@ from tools.conformance.suites.wire import differences, explained
 
 BASELINE_PATH = Path(__file__).with_name("cross_format_losses.json")
 
-#: What :func:`write_baseline` writes for a corruption nobody has reviewed yet.
-#: :func:`test_every_corruption_says_why` refuses it, so a fresh entry cannot
+#: What :func:`write_baseline` writes for an entry nobody has reviewed yet.
+#: :func:`test_every_corruption_says_why` and
+#: :func:`test_every_silent_entry_says_why` refuse it, so a fresh entry cannot
 #: land by accident.
 _UNREVIEWED = "UNREVIEWED"
+
+
+def _reason(value: Any) -> str:
+    """The reason text a baseline field carries, with blanks read as absent.
+
+    A whitespace-only string passes a truthiness check while reading as a
+    blank in the file, so it is a placeholder, not a reason -- the same thing
+    ``UNREVIEWED`` is.  A value of the wrong type is read the same way rather
+    than crashing the guard with an attribute error.
+    """
+    return value.strip() if isinstance(value, str) else ""
+
 
 _NAMES = list(FORMATS)
 _PAIRS = [(a, b) for a in _NAMES for b in _NAMES if a != b]
@@ -142,7 +155,13 @@ def measure(a_name: str, b_name: str) -> tuple[Counter[str], set[tuple[str, str]
 
 
 def _baseline() -> dict[str, Any]:
-    """Return the committed record of what the dialects disagree about today."""
+    """Return the committed record of what the dialects disagree about today.
+
+    ``schema_version`` is recorded, not enforced: a file written by an older
+    schema simply lacks ``reasons``, and the reason guard then refuses every
+    entry it does not account for.  That is the same failure a version check
+    would produce, without a second thing to keep in step with the file.
+    """
     if not BASELINE_PATH.exists():
         return {"silent": {}, "corruptions": []}
     return json.loads(BASELINE_PATH.read_text())
@@ -195,15 +214,73 @@ def test_every_format_contributes_cases() -> None:
         assert any(case[0] == name for case in CASES), name
 
 
+def test_every_silent_entry_says_why() -> None:
+    """A silent loss recorded without a reason is a bucket, not a decision.
+
+    Every path still in ``silent`` is a loss the dialects are allowed to make
+    in silence, so the baseline has to say *why* for that exact entry -- and a
+    reason that outlives its entry is stale data that would excuse a loss that
+    no longer happens.
+    """
+    baseline = _baseline()
+    reasons = baseline.get("reasons", {})
+    for pair, paths in baseline["silent"].items():
+        for path in paths:
+            reason = _reason(reasons.get(pair, {}).get(path, ""))
+            assert reason and reason != _UNREVIEWED, f"{pair} {path}: no reason"
+    for pair, paths in reasons.items():
+        assert pair in baseline["silent"], f"reason for a pair with no losses: {pair}"
+        for path in paths:
+            assert path in baseline["silent"][pair], (
+                f"reason for a loss that no longer happens: {pair} {path}"
+            )
+
+
 def test_every_corruption_says_why() -> None:
     """A corruption in the baseline without a reason hides an unreviewed defect."""
     for entry in _baseline()["corruptions"]:
-        assert entry["reason"], entry
-        assert entry["reason"] != _UNREVIEWED, (
+        reason = _reason(entry.get("reason"))
+        assert reason and reason != _UNREVIEWED, (
             f"{entry['pair']} {entry['field']}: the corruption is recorded but "
             "nobody said why it is still open"
         )
         assert entry["pair"] in {f"{a}->{b}" for a, b in _PAIRS}, entry
+
+
+@pytest.mark.parametrize("blank", ["", "   ", "\n\t ", _UNREVIEWED, f" {_UNREVIEWED} "])
+def test_a_blank_reason_is_not_a_reason(
+    blank: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Whitespace, and the marker hiding in it, both read as a placeholder.
+
+    A blank string is what a hurried reviewer leaves behind, and it is
+    indistinguishable from "nobody looked"; the guard has to refuse it for the
+    same reason it refuses a missing key.
+    """
+    baseline = json.loads(json.dumps(_baseline()))
+    pair, paths = next(iter(baseline["silent"].items()))
+    baseline["reasons"][pair][next(iter(paths))] = blank
+    monkeypatch.setattr(__name__ + "._baseline", lambda: baseline)
+    with pytest.raises(AssertionError, match="no reason"):
+        test_every_silent_entry_says_why()
+
+
+def test_a_blank_corruption_reason_is_not_a_reason(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The corruption guard refuses a blank reason the same way."""
+    baseline = json.loads(json.dumps(_baseline()))
+    baseline["corruptions"] = [
+        {
+            "pair": next(iter(baseline["silent"])),
+            "field": "generation.temperature",
+            "loss": "changed",
+            "reason": " \t ",
+        }
+    ]
+    monkeypatch.setattr(__name__ + "._baseline", lambda: baseline)
+    with pytest.raises(AssertionError, match="nobody said why"):
+        test_every_corruption_says_why()
 
 
 def test_the_baseline_names_live_pairs_only() -> None:
@@ -220,16 +297,23 @@ def write_baseline() -> Path:
     statement of what the dialects disagree about, not a cache.
     """
     silent: dict[str, dict[str, int]] = {}
+    reasons: dict[str, dict[str, str]] = {}
     corruptions: list[dict[str, str]] = []
+    baseline = _baseline()
     known = {
         "|".join((entry["pair"], entry["field"], entry["loss"])): entry
-        for entry in _baseline()["corruptions"]
+        for entry in baseline["corruptions"]
     }
+    reviewed = baseline.get("reasons", {})
     for a, b in _PAIRS:
         key = f"{a}->{b}"
         lost, changed = measure(a, b)
         if lost:
             silent[key] = dict(sorted(lost.items()))
+            reasons[key] = {
+                path: reviewed.get(key, {}).get(path, _UNREVIEWED)
+                for path in silent[key]
+            }
         for field, loss in sorted(changed):
             marker = f"{key}|{field}|{loss}"
             previous = known.get(marker, {})
@@ -242,7 +326,7 @@ def write_baseline() -> Path:
                 }
             )
     data = {
-        "schema_version": 2,
+        "schema_version": 3,
         "definition": (
             "A path is in A ∩ B when A → IR → B → IR gives it back unchanged.  "
             "A path outside it must be named by a conversion warning; each "
@@ -251,6 +335,7 @@ def write_baseline() -> Path:
             "still open."
         ),
         "silent_issue": "https://github.com/Oaklight/llm-rosetta/issues/1328",
+        "reasons": reasons,
         "silent": silent,
         "corruptions": corruptions,
     }
