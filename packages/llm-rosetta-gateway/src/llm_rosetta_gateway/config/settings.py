@@ -82,6 +82,36 @@ def resolve_data_dir(configured: str | None, config_path: str | None) -> str | N
     return None
 
 
+DEFAULT_MAX_BODY_SIZE = 50_000_000
+MIN_MAX_BODY_SIZE = 1_000_000
+
+
+def _body_size(value: Any, label: str) -> int:
+    """Parse the inbound request-body cap, in bytes.
+
+    A value that is not a number is rejected rather than ignored: falling back
+    to the default would leave a deployment believing it had raised the cap.
+    A number below the floor is clamped — a body smaller than a megabyte does
+    not exist in practice, so the value can only be a typo.
+    """
+    if value is None or value == "":
+        return DEFAULT_MAX_BODY_SIZE
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        raise ValueError(
+            f"config: {label} must be an integer number of bytes, got {value!r}"
+        )
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError, OverflowError) as exc:
+        # ``OverflowError`` is what ``int(float("inf"))`` raises: JSON's
+        # ``1e999`` parses to infinity, and it is a non-number here just as a
+        # word is — named, not silently defaulted.
+        raise ValueError(
+            f"config: {label} must be an integer number of bytes, got {value!r}"
+        ) from exc
+    return max(MIN_MAX_BODY_SIZE, parsed)
+
+
 def _non_negative_int(value: Any, default: int, label: str) -> int:
     """Parse a session lifetime, rejecting anything below zero."""
     if value is None or value == "":
@@ -167,6 +197,14 @@ def apply_server_settings(config: GatewayConfig, _server: dict[str, Any]) -> Non
     # httpserver waits for the client to send a complete request.
     config.upstream_timeout = max(1.0, float(_server.get("upstream_timeout", 300.0)))
     config.read_timeout = max(1.0, float(_server.get("read_timeout", 300.0)))
+
+    # The largest request body the inbound server accepts, in bytes.  50 MB is
+    # the cap the gateway has always enforced, so leaving the key out changes
+    # nothing; the floor keeps a typo from turning every real request into a
+    # ``413``.
+    config.max_body_size = _body_size(
+        _server.get("max_body_size"), "server max_body_size"
+    )
 
     # Request-log retention knobs (consumed by setup_admin).
     config.request_log = _server.get("request_log", {}) or {}
