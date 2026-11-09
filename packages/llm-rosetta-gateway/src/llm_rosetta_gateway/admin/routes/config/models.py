@@ -285,12 +285,13 @@ def _update_multi_provider_entry(
         existing["type"] = model_type
     elif "type" in existing and (not model_type or model_type == "llm"):
         del existing["type"]
-    # ``upstream_model`` is historical at this level: once an entry lists
-    # ``providers[]``, every reader — the loader, the routing route, the panel —
-    # takes the upstream from the lane, and a top-level value is ignored.  It
-    # is still written here because the editor's single-provider form posts the
-    # field at the entry level; a multi-provider entry keeping both is known and
-    # pinned by a test.
+    # ``upstream_model`` at this level is not ignored once the entry lists
+    # ``providers[]``: it is the **fallback** for a lane that declares none
+    # (``config/resolve.py`` reads ``entry.upstream_model or
+    # config.model_upstream_names.get(model)``).  A lane keeps its own value;
+    # the top-level one covers the rest.  It is still written here because the
+    # editor's single-provider form posts the field at the entry level; a
+    # multi-provider entry keeping both is known and pinned by a test.
     for key in ("upstream_model", "url_template", "stream_url_template"):
         if body.get(key):
             existing[key] = body[key]

@@ -95,13 +95,16 @@ class TestThePayloadKeepsBothLanes:
         ]
 
 
-class TestATopLevelUpstreamOnALaneListIsInert:
+class TestATopLevelUpstreamIsTheLaneFallback:
     """An entry with ``providers[]`` and a top-level ``upstream_model`` is known.
 
-    The editor's single-provider form posts the field at the entry level, so a
-    multi-provider entry can carry both.  Every reader takes the upstream from
-    the lane; the top-level value is ignored, and this test is the statement
-    that we know it is there.
+    The editor posts the upstream at the entry level, so a multi-provider entry
+    can carry both.  The top-level value is not ignored: it is the **fallback**
+    for a lane that declares none — ``config/resolve.py`` reads
+    ``entry.upstream_model or config.model_upstream_names.get(model)``.  Only a
+    shape with one lane declaring an upstream and one without can tell the two
+    readings apart; when every lane declares one, both readings give the same
+    answer.
     """
 
     def _raw_with_legacy_top_level(self) -> dict[str, Any]:
@@ -120,6 +123,7 @@ class TestATopLevelUpstreamOnALaneListIsInert:
         ]
 
     def test_the_route_has_only_the_lane_upstreams(self):
+        """Every lane declares one, so the top-level value changes nothing."""
         config = GatewayConfig(self._raw_with_legacy_top_level())
 
         route = config.models[MODEL]
@@ -129,6 +133,25 @@ class TestATopLevelUpstreamOnALaneListIsInert:
         ]
         picked = {route.select().upstream_model for _ in range(8)}
         assert picked == {"fast", "eco"}
+
+    def test_a_lane_without_an_upstream_gets_the_top_level_one(self):
+        """The mixed shape is the one that separates fallback from "ignored"."""
+        raw = _raw()
+        raw["models"][MODEL]["providers"] = [
+            {"name": "p", "upstream_model": "fast"},
+            {"name": "p"},
+        ]
+        raw["models"][MODEL]["upstream_model"] = "legacy-top-level"
+        config = GatewayConfig(raw)
+
+        picked: set[str | None] = set()
+        # The strategy is deterministic (weighted round-robin alternates), so
+        # two calls already see both lanes; the loop is margin, not sampling.
+        for _ in range(32):
+            route, _ = config.resolve(config.selection_context(MODEL, "openai_chat"))
+            picked.add(route.upstream_model)
+
+        assert picked == {"fast", "legacy-top-level"}
 
 
 class TestTheEditorAddsASecondLane:
