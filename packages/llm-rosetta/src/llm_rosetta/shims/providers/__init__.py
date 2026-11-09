@@ -82,6 +82,7 @@ from collections.abc import Callable
 from typing import Any
 
 from llm_rosetta._vendor.yaml import load as yaml_load
+from llm_rosetta.types.ir.constraints import Range, RequestConstraints
 
 from ..provider_shim import (
     TYPE_PARAM_KEYS,
@@ -666,6 +667,210 @@ def _parse_hint_msg(raw: Any, yaml_path: Path) -> dict[str, str] | None:
     return None
 
 
+def _value_matches(value: Any, annotation: Any) -> bool:
+    """Whether *value* fits an IR field's annotation.
+
+    Deliberately narrow: the annotations of ``GenerationConfig`` are plain
+    ``int``, ``float``, ``bool``, ``str``, ``Literal[...]``, ``list[...]`` and
+    ``dict[...]``, and an annotation this does not understand is accepted
+    rather than guessed at.
+
+    Args:
+        value: The declared default.
+        annotation: The IR field's annotation object.
+
+    Returns:
+        ``True`` when the value can be written into that field.
+    """
+    from typing import Literal, get_args, get_origin
+
+    if annotation is float:
+        # A float field accepts an int (``0`` for ``0.0``) but not a bool,
+        # which Python would otherwise read as 1/0.
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
+    if annotation is int:
+        return isinstance(value, int) and not isinstance(value, bool)
+    if annotation is bool:
+        return isinstance(value, bool)
+    if annotation is str:
+        return isinstance(value, str)
+    origin = get_origin(annotation)
+    if origin is Literal:
+        return value in get_args(annotation)
+    if origin is list:
+        if not isinstance(value, list):
+            return False
+        args = get_args(annotation)
+        return all(_value_matches(item, args[0]) for item in value) if args else True
+    if origin is dict:
+        return isinstance(value, dict)
+    return True
+
+
+def _expected(annotation: Any) -> str:
+    """Describe an annotation for an error message."""
+    from typing import Literal, get_args, get_origin
+
+    if get_origin(annotation) is Literal:
+        return " or ".join(repr(a) for a in get_args(annotation))
+    origin = get_origin(annotation)
+    if origin is list:
+        args = get_args(annotation)
+        return f"list of {_expected(args[0])}" if args else "list"
+    if origin is dict:
+        return "mapping"
+    return getattr(annotation, "__name__", repr(annotation))
+
+
+def _check_default_value(
+    path: str, value: Any, annotations: dict[str, Any], yaml_path: Path
+) -> None:
+    """Refuse a default whose type the IR field cannot hold.
+
+    The path check exists because a declaration that silently matches nothing
+    is worse than one that fails; a value of the wrong type is the same
+    failure one step later, so it is refused at load time too.
+
+    Args:
+        path: The IR path, already validated against the generation config.
+        value: The declared default.
+        annotations: ``GenerationConfig.__annotations__``.
+        yaml_path: The file, for the message.
+
+    Raises:
+        ValueError: When the value does not fit the field's annotation.
+    """
+    annotation = annotations[path.partition(".")[2]]
+    if isinstance(annotation, str):  # a stringised annotation says nothing
+        return
+    if not _value_matches(value, annotation):
+        raise ValueError(
+            f"{yaml_path}: request.defaults.{path} expects "
+            f"{_expected(annotation)}, got {value!r}"
+        )
+
+
+def _parse_request_constraints(
+    cfg: dict[str, Any], yaml_path: Path
+) -> RequestConstraints:
+    """Read the shim's ``request:`` section: defaults and value ranges.
+
+    Keys are IR paths (``generation.max_tokens``), the same spelling the
+    conversion warning uses as its subject.  A path the IR request cannot
+    carry is refused at load time: a declaration that silently matches nothing
+    is worse than one that fails, because the body it was meant to fix still
+    goes out.
+
+    Args:
+        cfg: The parsed ``provider.yaml``.
+        yaml_path: The file, for error messages.
+
+    Returns:
+        The declared constraints; an empty object when the section is absent.
+
+    Raises:
+        ValueError: On an unknown key, a malformed path, a non-numeric bound,
+            or an unknown ``on_out_of_range`` policy.
+    """
+    from llm_rosetta.types.ir.configs import GenerationConfig
+
+    raw = cfg.get("request")
+    if raw is None:
+        return RequestConstraints()
+    if not isinstance(raw, dict):
+        raise ValueError(f"{yaml_path}: request: must be a mapping")
+
+    unknown = set(raw) - {"defaults", "ranges"}
+    if unknown:
+        raise ValueError(
+            f"{yaml_path}: request: has unknown key(s) "
+            f"{', '.join(sorted(unknown))}; it accepts defaults and ranges"
+        )
+
+    generation_types = dict(GenerationConfig.__annotations__)
+    generation_keys = set(generation_types)
+
+    def _check_path(path: Any, where: str) -> None:
+        if not isinstance(path, str) or path.count(".") != 1:
+            raise ValueError(
+                f"{where}: {path!r} is not a valid IR path; expected "
+                f"'generation.<field>'"
+            )
+        block, _, field_name = path.partition(".")
+        if block != "generation" or field_name not in generation_keys:
+            raise ValueError(
+                f"{where}: {path!r} is not a field of the IR generation "
+                f"config; expected 'generation.<field>' with field one of "
+                f"{', '.join(sorted(generation_keys))}"
+            )
+
+    defaults: dict[str, Any] = {}
+    raw_defaults = raw.get("defaults") or {}
+    if not isinstance(raw_defaults, dict):
+        raise ValueError(f"{yaml_path}: request.defaults must be a mapping")
+    for path, value in raw_defaults.items():
+        _check_path(path, f"{yaml_path}: request.defaults")
+        _check_default_value(path, value, generation_types, yaml_path)
+        defaults[path] = value
+
+    ranges: dict[str, Range] = {}
+    raw_ranges = raw.get("ranges") or {}
+    if not isinstance(raw_ranges, dict):
+        raise ValueError(f"{yaml_path}: request.ranges must be a mapping")
+    for path, spec in raw_ranges.items():
+        _check_path(path, f"{yaml_path}: request.ranges")
+        ranges[path] = _parse_range(f"request.ranges.{path}", spec, yaml_path)
+    return RequestConstraints(defaults=defaults, ranges=ranges)
+
+
+def _parse_range(where: str, spec: Any, yaml_path: Path) -> Range:
+    """Parse one ``request.ranges`` entry into a :class:`Range`.
+
+    ``on_out_of_range`` is required rather than defaulted: a range without a
+    policy would clamp by surprise, and clamping changes a value the client
+    sent.  The Python type keeps its default for programmatic declarations.
+
+    Args:
+        where: The entry's dotted location, for the message.
+        spec: The YAML value.
+        yaml_path: The file, for the message.
+
+    Returns:
+        The parsed range.
+
+    Raises:
+        ValueError: On a malformed entry.
+    """
+    if not isinstance(spec, dict):
+        raise ValueError(
+            f"{yaml_path}: {where} must be a mapping with min, max and on_out_of_range"
+        )
+    unknown = set(spec) - {"min", "max", "on_out_of_range"}
+    if unknown:
+        raise ValueError(
+            f"{yaml_path}: {where} has unknown key(s) {', '.join(sorted(unknown))}"
+        )
+    if "on_out_of_range" not in spec:
+        raise ValueError(
+            f"{yaml_path}: {where} must declare on_out_of_range (clamp, drop or reject)"
+        )
+    bounds: dict[str, float | None] = {}
+    for bound in ("min", "max"):
+        value = spec.get(bound)
+        if value is not None and (
+            not isinstance(value, (int, float)) or isinstance(value, bool)
+        ):
+            raise ValueError(
+                f"{yaml_path}: {where}.{bound} must be a number, got {value!r}"
+            )
+        bounds[bound] = value
+    return Range(
+        min=bounds["min"],
+        max=bounds["max"],
+        on_out_of_range=spec["on_out_of_range"],
+    )
+
+
 def _parse_type_params(
     cfg: dict[str, Any], model_type: str, yaml_path: Path
 ) -> dict[str, Any]:
@@ -930,6 +1135,7 @@ def _load_single_provider(
         )
 
     params = _parse_type_params(cfg, model_type, yaml_path)
+    request_constraints = _parse_request_constraints(cfg, yaml_path)
 
     pre_t, post_t, ir_t, resp_t, transforms_mod = _load_transforms(
         provider_dir, group=group, _builtin=_builtin, root=root
@@ -1083,6 +1289,7 @@ def _load_single_provider(
         hoist_system_messages=cfg.get("hoist_system_messages", True),
         soft_error_patterns=soft_errors,
         params=params,
+        request=request_constraints,
     )
     register_shim(shim)
 

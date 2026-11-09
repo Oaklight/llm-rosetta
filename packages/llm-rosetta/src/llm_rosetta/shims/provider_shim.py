@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from ..types.ir.configs import IREffort, IRMode  # re-exported
+from ..types.ir.constraints import RequestConstraints
 from llm_rosetta.model_vocabulary import (
     FORMATS_BY_TYPE,
     MODEL_TYPES,
@@ -550,6 +551,14 @@ class ProviderShim:
             fields (an ``embeddings:``, ``rerank:`` or ``decisions:`` section in
             the YAML).  Keys are IR field names; the gateway fills a field the
             client omitted, so a declared value never overrides the caller.
+            Chat requests do not use this field: what a chat dialect requires
+            or restricts is declared in :attr:`request` (the ``request:``
+            section), so a keyed-by-IR-path constraint never shares a spelling
+            with a typed parameter name.
+        request: What this vendor requires or restricts on the chat request,
+            by IR path.  Overlaid on the converter's own dialect declaration
+            per path; see
+            :class:`~llm_rosetta.types.ir.constraints.RequestConstraints`.
     """
 
     name: str
@@ -603,6 +612,7 @@ class ProviderShim:
     hoist_system_messages: bool = True
     soft_error_patterns: tuple[SoftErrorPattern, ...] = ()
     params: dict[str, Any] = field(default_factory=dict)
+    request: RequestConstraints = field(default_factory=RequestConstraints)
 
     def __init__(self, **kwargs: Any) -> None:  # type: ignore[override]
         """Accept both new and legacy kwarg names.
@@ -705,6 +715,7 @@ class ProviderShim:
             "hoist_system_messages": True,
             "soft_error_patterns": (),
             "params": {},
+            "request": RequestConstraints(),
         }
         _VALID_FIELDS = {"name", "format", "base"} | _FIELD_DEFAULTS.keys()
         for k, v in _FIELD_DEFAULTS.items():

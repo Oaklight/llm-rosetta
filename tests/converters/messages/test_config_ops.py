@@ -32,16 +32,25 @@ class TestMessagesConfigOps:
         assert result["top_p"] == 0.9
         assert result["top_k"] == 50
 
-    def test_ir_generation_config_default_max_tokens(self):
-        """Test default max_tokens when not specified."""
-        result = MessagesConfigOps.ir_generation_config_to_p({})
-        assert result["max_tokens"] == 4096
+    def test_ir_generation_config_writes_no_default_max_tokens(self):
+        """The writer maps what the request carries; it never invents a limit.
 
-    def test_ir_generation_config_temperature_clamped(self):
-        """Test temperature is clamped to 1.0 max."""
+        The value comes from the dialect's ``request_constraints``, applied by
+        ``BaseConverter`` before this writer runs (#1460).  Writing one here
+        again would give the literal a second home.
+        """
+        result = MessagesConfigOps.ir_generation_config_to_p({})
+        assert "max_tokens" not in result
+
+    def test_ir_generation_config_does_not_clamp_temperature(self):
+        """The range is the declaration's job, not the writer's.
+
+        ``request_constraints`` clamps to 0.0-1.0 and reports the change; this
+        writer only maps a value it was given.
+        """
         ir_config = cast(GenerationConfig, {"temperature": 1.5})
         result = MessagesConfigOps.ir_generation_config_to_p(ir_config)
-        assert result["temperature"] == 1.0
+        assert result["temperature"] == 1.5
 
     def test_ir_generation_config_stop_sequences(self):
         """Test stop_sequences conversion."""

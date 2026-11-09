@@ -6,8 +6,9 @@ Handles bidirectional conversion of generation, stream, reasoning,
 cache, and response format configurations.
 
 Key Anthropic differences:
-- ``max_tokens`` is required (default 4096)
-- ``temperature`` range is 0.0-1.0 (needs clamping)
+- ``max_tokens`` is required; the value comes from the dialect's
+  ``request_constraints`` (a shim may override it)
+- ``temperature`` range is 0.0-1.0, declared and applied as a constraint
 - ``top_k`` is supported
 - Response format is not supported (use tools or system instructions)
 - Cache control is block-level, not request-level
@@ -44,7 +45,8 @@ class MessagesConfigOps(BaseConfigOps):
         - ``temperature`` → ``temperature`` (clamped to 0.0-1.0)
         - ``top_p`` → ``top_p`` (direct)
         - ``top_k`` → ``top_k`` (direct, supported by Anthropic)
-        - ``max_tokens`` → ``max_tokens`` (required, default 4096)
+        - ``max_tokens`` → ``max_tokens`` (required; the value is supplied by
+          the dialect's ``request_constraints`` before this writer runs)
         - ``stop_sequences`` → ``stop_sequences`` (direct)
         - ``frequency_penalty`` → not supported (warning)
         - ``presence_penalty`` → not supported (warning)
@@ -61,12 +63,16 @@ class MessagesConfigOps(BaseConfigOps):
         """
         result: dict[str, Any] = {}
 
-        # max_tokens is required for Anthropic
-        result["max_tokens"] = ir_config.get("max_tokens", 4096)
+        # ``max_tokens`` is required, and its value is never invented here: the
+        # dialect's ``request_constraints`` fills it (``BaseConverter`` applies
+        # them before this writer runs, and the shim may override the value).
+        if ir_config.get("max_tokens") is not None:
+            result["max_tokens"] = ir_config["max_tokens"]
 
-        # temperature (clamped to 0.0-1.0)
-        if "temperature" in ir_config:
-            result["temperature"] = min(float(ir_config["temperature"]), 1.0)
+        # ``temperature`` was clamped to this dialect's 0.0-1.0 range by the
+        # same declaration; the writer only maps what it was given.
+        if ir_config.get("temperature") is not None:
+            result["temperature"] = float(ir_config["temperature"])
 
         # Direct mapping fields
         if "top_p" in ir_config:

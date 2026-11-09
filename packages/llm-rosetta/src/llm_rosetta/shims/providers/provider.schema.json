@@ -407,6 +407,59 @@
         },
         "connection": {
           "$ref": "#/definitions/connection"
+        },
+        "request": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "What this vendor requires of the request fields, overriding the dialect's own declaration per path. Keys are IR paths ('generation.max_tokens').",
+          "properties": {
+            "defaults": {
+              "type": "object",
+              "description": "IR path → the value written when the client names none (a missing key and an explicit null are the same thing).",
+              "propertyNames": {
+                "pattern": "^generation\\.[A-Za-z_]+$"
+              },
+              "additionalProperties": true
+            },
+            "ranges": {
+              "type": "object",
+              "description": "IR path → the value range this upstream accepts.",
+              "propertyNames": {
+                "pattern": "^generation\\.[A-Za-z_]+$"
+              },
+              "additionalProperties": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "min": {
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "description": "Lowest accepted value."
+                  },
+                  "max": {
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "description": "Highest accepted value."
+                  },
+                  "on_out_of_range": {
+                    "enum": [
+                      "clamp",
+                      "drop",
+                      "reject"
+                    ],
+                    "description": "What to do with a value outside the bounds."
+                  }
+                },
+                "required": [
+                  "on_out_of_range"
+                ]
+              }
+            }
+          }
         }
       }
     },

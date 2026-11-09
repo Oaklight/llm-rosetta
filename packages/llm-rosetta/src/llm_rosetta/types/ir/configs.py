@@ -56,7 +56,11 @@ class GenerationConfig(TypedDict, total=False):
     - logprobs: 各provider实现不同 Different implementations across providers
     """
 
-    # 温度控制 Temperature control (0.0-2.0 for OpenAI, 0.0-1.0 for Anthropic/Google)
+    # 温度控制 Temperature control
+    # The accepted range is the target dialect's: it declares one in
+    # ``BaseConverter.request_constraints`` and the conversion pass clamps,
+    # drops or rejects an out-of-range value with a warning (#1461).  This
+    # field carries the value the client asked for, unchanged.
     temperature: float
 
     # Nucleus采样 Nucleus sampling (0.0-1.0)
