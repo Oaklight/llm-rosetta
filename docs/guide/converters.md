@@ -258,7 +258,7 @@ A chat assistant turn travels as three message fields — `reasoning_content`, `
 [reasoning, text…, tool_call…]
 ```
 
-This is exactly the shape the dialect's reader rebuilds and its writer can reproduce. On the write leg, an input that deviates is written in that order and reported through the warning sink — one `downgraded` loss with subject `part_order` — when any of these holds:
+This is exactly the shape the dialect's reader rebuilds and its writer can reproduce. On the write leg, an input that deviates is written in that order and reported through the warning sink — one `downgraded` loss with subject `part_order`, naming the first deviation it found — when any of these holds:
 
 - a reasoning part follows a text part or a tool call;
 - a text part follows a tool call;
