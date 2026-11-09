@@ -68,7 +68,7 @@ mkdir -p config
 docker run -p 8765:8765 -v "$PWD/config:/config" llm-rosetta-gateway:src
 ```
 
-源码版挂载仓库根目录的 `config/`，`PUID`、`PGID` 与 `environment:` 的用法与镜像版一致；两个文件是两个入口 —— `docker/docker-compose.yaml` 运行已发布的镜像，`docker/docker-compose.source.yaml` 从工作树构建 —— 且都发布 8765 端口，一次只跑一个。首次启动前先创建 `config/`：缺失的 bind mount 目录会被 compose 以 `root` 创建，而网关以 uid 1000 运行，首次写入 `config.jsonc` 会失败。一个由你（或你传入的 `PUID`）拥有空目录即可。
+源码版挂载仓库根目录的 `config/`，`PUID`、`PGID` 与 `environment:` 的用法与镜像版一致；两个文件是两个入口 —— `docker/docker-compose.yaml` 运行已发布的镜像，`docker/docker-compose.source.yaml` 从工作树构建 —— 且都发布 8765 端口，一次只跑一个。首次启动前先创建 `config/`：缺失的 bind mount 目录会被 compose 以 `root` 创建，而网关以 uid 1000 运行，首次写入 `config.jsonc` 会失败。空目录即可，但属主必须是 uid 1000：如果你的用户 id 不是 1000，执行 `sudo chown 1000:1000 config`。镜像里的 `PUID`/`PGID` 变量目前没有被网关读取（议题 [#1481](https://github.com/Oaklight/llm-rosetta/issues/1481)），传入它们不会改变这一点。
 
 发布路径不变：`make build-docker` 仍构建 `docker/Dockerfile`，从 `dist/` 或 PyPI 安装 wheel。
 
