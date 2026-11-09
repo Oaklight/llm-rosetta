@@ -61,7 +61,7 @@ title: 管理面板主题
 | 状态 | `--pos`、`--neg`、`--warn`、`--info` | 各自带 `-subtle`（半透明叠色）、`-bg`（叠在 `--surface` 上的不透明浅底）与 `-border`（派生） |
 | 其他 | `--purple`、`--magenta`、`--cyan`、`--lime`、`--green-deep` | 能力与类型颜色 |
 
-`--hairline-strong`、四个 `-border`、`--warn-bg` 与 `--info-bg` 是用
+`--hairline-strong`、四个 `-border`、`--neg-bg`、`--warn-bg` 与 `--info-bg` 是用
 `color-mix()` 从角色色算出的表达式 —— 与 `components.css` 生成浅底/边框的写法相同 —— 所以主题加上它们并不新增颜色值。它们是暂定值：目前没有组件绘制它们，第一个真正上屏的阶段（`P3`/`P4`）会用主题矩阵按实际对比度调整比例。
 
 字号阶梯、间距与外壳几何（`--fs-*`、`--tracking-label`、`--space-1..6`、
