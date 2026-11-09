@@ -1294,6 +1294,10 @@ export function applyI18n() {
   if (S.currentTab === 'routing') window.loadRouting?.();
   // Re-render DB status footer with cached data
   if (S._lastPersistence != null) window.renderPersistence?.(S._lastPersistence, S._lastTotalReq);
+  // Last, and only last: the status bar copies the active panel's heading, so
+  // it has to read it after every renderer above has run, or the shell keeps
+  // the old language above a translated page.
+  window.syncTopbarTitle?.();
 }
 
 // ---- Expose on window for non-module scripts -------------------------

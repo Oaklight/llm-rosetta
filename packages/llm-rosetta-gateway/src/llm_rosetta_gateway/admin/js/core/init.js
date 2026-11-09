@@ -21,6 +21,7 @@ import '../components/test-runner.js';
 import { initLogoPicker } from '../components/logo-picker.js';
 import { initTypePicker } from '../components/type-picker.js';
 import { initUpdates } from './updates.js';
+import { syncTopbarTitle } from './topbar.js';
 import { installThemeFallback, populateSchemeSelect } from './themes.js';
 
 // A #dump/<id> link is its own screen in this app, so the session check that
@@ -144,6 +145,7 @@ function activateTab(tab, opts = {}) {
   const id = tab.dataset.tab;
   document.getElementById('tab-' + id).classList.add('active');
   S.currentTab = id;
+  syncTopbarTitle();
   window._syncRailPrefs?.();
   // The model panel belongs to the models tab; it does not follow the operator
   // to another tab.
@@ -685,6 +687,7 @@ populateSchemeSelect(document.getElementById('settingsSchemeSelect'), (name, lab
 });
 installThemeFallback();
 setLang(S.currentLang);
+syncTopbarTitle();
 checkAuthAndInit();
 
 Object.assign(window, { initApp, stopTimers, toggleLogPause, startLogTimers });
