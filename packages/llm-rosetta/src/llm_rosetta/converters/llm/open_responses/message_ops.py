@@ -269,10 +269,21 @@ class OpenResponsesMessageOps(BaseMessageOps):
     ) -> tuple[list[dict[str, Any]], list[str]]:
         """Convert IR assistant message to Responses API items.
 
-        Text parts become output_text in a message item.
-        Tool calls become separate function_call items.
-        Reasoning parts become separate reasoning items.
-        Slug-prefixed passthrough items are emitted verbatim.
+        Each part becomes the item it names, **in the order the parts hold**.
+        A multi-step turn interleaves reasoning, text and tool calls, and that
+        order is what ties a reasoning item to the call it explains; bucketing
+        the parts by kind and emitting reasoning, then the message, then the
+        calls rewrites the history the client recorded (a turn read as
+        ``[text, call, reasoning, call]`` came back as ``[reasoning, text,
+        call, call]``).
+
+        One concession: every text part of the turn is one message item, so the
+        message is placed at the first text part's position and the later text
+        parts join it there.
+
+        Tool calls become separate function_call items and reasoning parts
+        separate reasoning items. Slug-prefixed passthrough items are emitted
+        verbatim, last: they are message-level metadata, not part positions.
         """
         # Emit slug-prefixed passthrough items verbatim
         passthrough_items: list[dict[str, Any]] = []
@@ -281,8 +292,26 @@ class OpenResponsesMessageOps(BaseMessageOps):
             passthrough_items = custom.get("_passthrough_items", [])
 
         content_parts: list[dict[str, Any]] = []
-        tool_items: list[dict[str, Any]] = []
-        reasoning_items: list[dict[str, Any]] = []
+        result_items: list[dict[str, Any]] = []
+        message_item: dict[str, Any] | None = None
+
+        def message() -> dict[str, Any]:
+            """The turn's one message item, placed where its first text is."""
+            nonlocal message_item
+            if message_item is None:
+                message_item = {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": content_parts,
+                    **_recorded_status(provider_metadata),
+                }
+                # Restore phase from provider_metadata
+                if provider_metadata:
+                    phase = provider_metadata.get("responses_phase")
+                    if phase:
+                        message_item["phase"] = phase
+                result_items.append(message_item)
+            return message_item
 
         for part in content:
             if is_text_part(part):
@@ -292,12 +321,13 @@ class OpenResponsesMessageOps(BaseMessageOps):
                 )
                 if pt_meta:
                     content_parts.append(pt_meta)
-                    continue
-                content_parts.append({"type": "output_text", "text": part["text"]})
+                else:
+                    content_parts.append({"type": "output_text", "text": part["text"]})
+                message()
             elif is_citation_part(part):
                 self._attach_annotation(part, content_parts, warnings)
             elif is_tool_call_part(part):
-                tool_items.append(
+                result_items.append(
                     self.tool_ops.ir_tool_call_to_p(part, for_history=True)
                 )
             elif is_tool_result_part(part):
@@ -311,11 +341,11 @@ class OpenResponsesMessageOps(BaseMessageOps):
                     degraded_intrinsic_calls=degraded_intrinsic_calls,
                 )
                 if item:
-                    tool_items.append(item)
+                    result_items.append(item)
             elif is_reasoning_part(part):
                 reasoning_item = self.content_ops.ir_reasoning_to_p(part)
                 if reasoning_item is not None:
-                    reasoning_items.append(reasoning_item)
+                    result_items.append(reasoning_item)
             else:
                 report_loss(
                     f"Unsupported content part type in assistant message: "
@@ -324,30 +354,6 @@ class OpenResponsesMessageOps(BaseMessageOps):
                     warnings=warnings,
                 )
 
-        result_items: list[dict[str, Any]] = []
-
-        # Add reasoning items first (they come before the message)
-        result_items.extend(reasoning_items)
-
-        # Add assistant message if there are text content parts
-        if content_parts:
-            msg_item: dict[str, Any] = {
-                "type": "message",
-                "role": "assistant",
-                "content": content_parts,
-                **_recorded_status(provider_metadata),
-            }
-            # Restore phase from provider_metadata
-            if provider_metadata:
-                phase = provider_metadata.get("responses_phase")
-                if phase:
-                    msg_item["phase"] = phase
-            result_items.append(msg_item)
-
-        # Add tool call items
-        result_items.extend(tool_items)
-
-        # Add slug-prefixed passthrough items verbatim
         result_items.extend(passthrough_items)
 
         return result_items, warnings
