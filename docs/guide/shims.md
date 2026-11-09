@@ -875,7 +875,10 @@ request:
   `null` never reaches a writer (#1459).
 - `on_out_of_range` is `clamp` (write the nearest bound), `drop` (remove the
   field so the upstream default applies) or `reject` (fail the conversion).
-  Each is reported — a clamp is otherwise invisible.
+  Each is reported — a clamp is otherwise invisible. The key is **required**
+  in `provider.yaml`: a range without a policy fails to load, because a
+  default policy would change a value the client sent without the declaration
+  saying so. (A programmatically built `Range` still defaults to `clamp`.)
 - A path that does not name a real IR field is refused when the shim loads: a
   declaration that silently matches nothing is worse than one that fails.
 - An absent or empty declaration leaves the dialect's value in place, so a shim
