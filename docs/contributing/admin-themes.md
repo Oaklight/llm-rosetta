@@ -12,17 +12,18 @@ title: 管理面板主题
 
 | 概念 | 位置 | 负责 |
 |------|------|------|
-| 配色方案 | `admin/css/base.css` | token 值，按方案、按模式声明 |
+| 配色方案 | `admin/css/themes/<name>.css` | token 值，按模式声明 |
+| 注册表 | `admin/themes.py` | 方案清单：名字、标签、文件 |
 | 组件 | `admin/css/components.css` 与 `base.css` 中的结构规则 | 盒模型、布局、点击行为 |
 | 变体 | 组件自己的规则，以 `data-variant` 为键 | 方案之间的结构性差异 |
 
 选中的方案与模式是文档元素上的属性
 （`<html data-scheme="emerald" data-mode="dark">`），并同步到 `localStorage` 的
-`llm-rosetta-scheme` 与 `llm-rosetta-mode`。面板在首次绘制前读取它们，因此已保存的方案不会先闪一下默认方案。
+`llm-rosetta-scheme` 与 `llm-rosetta-mode`。面板在首次绘制前读取它们，因此已保存的方案不会先闪一下默认方案。注册表以注入 JSON（`#adminThemes`）的形式送到页面，这是页面、设置下拉框与 `tools/theme_matrix` 唯一的清单来源。
 
 ## 四条规则
 
-1. **方案选择器只能出现在 `base.css`，且只能点名方案和模式。** 合法形式只有
+1. **方案选择器只能出现在主题文件里，且只能点名方案和模式。** 合法形式只有
    `[data-scheme="emerald"]` 与 `[data-scheme="emerald"][data-mode="dark"]`。
    像 `[data-scheme="emerald"] .stat-card` 这样的选择器不属于任何一方：它是主题伸手进了组件。
 2. **方案块只声明自定义属性。** 在方案块里写 `color`、`padding` 或 `position`，是同一个泄漏的另一种写法。
@@ -58,16 +59,20 @@ title: 管理面板主题
 
 ## 添加一个配色方案
 
-矩阵默认的方案轴是 `base.css` 声明的全部方案，因此新加的块下次运行就会被覆盖；迭代单个方案时用 `--schemes` 收窄范围。下面这份清单就是全部改动面，每一项都是面板会读取的东西。
+矩阵默认的方案轴就是注册表的清单，因此新加的主题下次运行就会被覆盖；迭代单个方案时用 `--schemes` 收窄范围。下面这份清单就是全部改动面。
 
-1. **在 `base.css` 声明值。** 加一个结构块（`[data-scheme="<name>"]`）和每个模式一个块
+1. **写 `admin/css/themes/<name>.css`。** 一个共享块（`[data-scheme="<name>"]`）和每个模式一个块
    （`[data-scheme="<name>"][data-mode="light"]`、
-   `[data-scheme="<name>"][data-mode="dark"]`）。把上表里的结构 token 全部声明一遍；漏掉的 token 会解析为空，矩阵的 `tokens-resolve` 探针会让选中该方案的格子失败。
-2. **在 `admin/js/core/utils.js` 里放行名字。** `VALID_SCHEMES` 是 `setScheme()` 的白名单；不在其中的名字会静默回退到 minimal。
-3. **在 `admin/admin.html` 的启动脚本里放行。** 这段内联脚本在首次绘制前应用已保存的方案，自带一份白名单（`s!=='minimal'&&s!=='emerald'`）。不同步修改的话，新方案每次加载都会先闪一下 minimal。
-4. **在设置里增加选项。** `admin/admin.html` 的 `#settingsSchemeSelect` 列出所有方案；旁边的模式选择是独立的。
-5. **在两种语言字典里加标签。** `scheme.<name>` 要加进 `admin/js/core/i18n.js` 的英文与中文字典。中文字典把非 ASCII 字符存成字面量 `\uXXXX` 转义，请用不会吞掉反斜杠的工具编辑。
-6. **跑检查并附上截图。**
+   `[data-scheme="<name>"][data-mode="dark"]`）。声明的 token 名字要和默认主题一致——`tests/gateway/test_admin_themes.py` 会按模式比较两个主题可用的 token 集合，漏掉一个就失败——并且只声明取值：契约测试拒绝方案块里的真实属性。当取值确实随模式变化时，某个模式可以重新声明共享 token（emerald 的 `--dot`/`--grid`）。
+2. **在 `admin/themes.py` 注册。**
+
+   ```python
+   Theme("<name>", "<Label>", "css/themes/<name>.css"),
+   ```
+
+   这一条就是引导脚本收到的内容、设置下拉框列出的内容、矩阵枚举的方案，以及 wheel 打包的（`css/**/*.css`）。没有第二份清单要改。
+3. **（可选）在两种语言字典里加标签。** `scheme.<name>` 加进 `admin/js/core/i18n.js` 的英文与中文字典；不加的话，下拉框显示注册表里的标签。中文字典把非 ASCII 字符存成字面量 `\uXXXX` 转义，请用不会吞掉反斜杠的工具编辑。
+4. **跑检查并附上截图。**
 
    ```bash
    make test-js      # 契约：方案可以写什么
