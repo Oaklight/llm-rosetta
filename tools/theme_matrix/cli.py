@@ -70,14 +70,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--schemes",
         default=None,
         help=(
-            "comma-separated schemes (default: every scheme base.css "
-            "declares, so a new scheme is covered automatically)"
+            "comma-separated schemes (default: every theme "
+            "admin/themes.py registers, so a new theme is covered automatically)"
         ),
     )
     parser.add_argument(
         "--modes",
         default=None,
-        help=("comma-separated modes (default: every mode base.css declares)"),
+        help=("comma-separated modes (default: every mode a theme sheet declares)"),
     )
     parser.add_argument(
         "--widths",

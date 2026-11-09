@@ -29,20 +29,18 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+# The theme registry is the matrix's one source of names and files (#1471): a
+# theme added to `admin/themes.py` is covered the next time the matrix runs,
+# with no list to keep here.  Importing it is filesystem- and network-free by
+# contract.
+from llm_rosetta_gateway.admin import themes as theme_registry
+
 # Playwright is imported where it is used, not at module level: the token and
 # cell helpers are pure and the contract test suite imports them on machines
 # that have no browser (and no Playwright installed).
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-CSS_DIR = (
-    _REPO_ROOT
-    / "packages"
-    / "llm-rosetta-gateway"
-    / "src"
-    / "llm_rosetta_gateway"
-    / "admin"
-    / "css"
-)
+ADMIN_DIR = Path(theme_registry.__file__).parent
+THEME_DIR = ADMIN_DIR / "css" / "themes"
 
 # A scheme block's body holds declarations only and never nests, so a regex is
 # exact here; the contract test's parser is for rules with at-rule nesting.
@@ -105,9 +103,36 @@ class CellResult:
         return all(probe.ok for probe in self.probes)
 
 
+def _token_sheets(css_path: Path | None) -> list[Path]:
+    """The token sheets to read: *css_path*, or every registered theme file."""
+    if css_path is not None:
+        return [css_path]
+    sheets: list[Path] = []
+    for theme in theme_registry.THEMES:
+        path = ADMIN_DIR / theme.file
+        if not path.is_file():
+            raise RuntimeError(
+                f"theme {theme.name!r} is registered in admin/themes.py but "
+                f"{path} does not exist"
+            )
+        sheets.append(path)
+    if not sheets:
+        raise RuntimeError(
+            "the theme registry names no themes; the matrix has nothing to read"
+        )
+    return sheets
+
+
 def _read_token_sheet(css_path: Path | None) -> str:
-    """Read the token sheet."""
-    return (css_path or CSS_DIR / "base.css").read_text(encoding="utf-8")
+    """Read the token sheets, joined so the block pattern sees every theme."""
+    return "\n".join(
+        path.read_text(encoding="utf-8") for path in _token_sheets(css_path)
+    )
+
+
+def _sheet_name(css_path: Path | None) -> str:
+    """How an error message names the source it read."""
+    return str(css_path) if css_path is not None else "the registered theme sheets"
 
 
 def _scheme_blocks(css: str) -> list[tuple[str, str | None, str]]:
@@ -129,13 +154,14 @@ def scheme_tokens(css_path: Path | None = None) -> list[str]:
     consume, and an empty computed value means this scheme left one out.
 
     Args:
-        css_path: Token stylesheet to read; defaults to ``base.css``.
+        css_path: Token stylesheet to read; defaults to every registered theme
+            sheet.
 
     Returns:
         Sorted token names, e.g. ``['--accent', '--bg', ...]``.
 
     Raises:
-        RuntimeError: If the stylesheet yields implausibly few tokens, which
+        RuntimeError: If the stylesheets yield implausibly few tokens, which
             means the block pattern stopped matching and the check would have
             passed vacuously.
     """
@@ -145,28 +171,35 @@ def scheme_tokens(css_path: Path | None = None) -> list[str]:
         tokens.update(_CUSTOM_PROPERTY_RE.findall(body))
     if len(tokens) < 10:
         raise RuntimeError(
-            f"only {len(tokens)} scheme tokens found in {css_path or CSS_DIR / 'base.css'}; "
+            f"only {len(tokens)} scheme tokens found in {_sheet_name(css_path)}; "
             "the scheme-block pattern no longer matches the token sheet"
         )
     return sorted(tokens)
 
 
 def declared_schemes(css_path: Path | None = None) -> list[str]:
-    """Return every scheme the token sheet declares.
+    """Return every scheme the matrix covers.
 
-    This is the matrix's default scheme axis rather than a hand-kept list: a
-    third scheme added to ``base.css`` is covered the next time the matrix
-    runs, so "every scheme" stays true.
+    With no *css_path* this is the theme registry's list, in registry order:
+    the matrix and the panel cannot disagree about what exists, and a theme
+    added to ``admin/themes.py`` is covered the next time the matrix runs.
+    Given a stylesheet, the schemes are what that file declares (the fixture
+    path the tests use).
 
     Raises:
-        RuntimeError: If no scheme block matches, so an empty axis cannot make
-            the matrix pass vacuously.
+        RuntimeError: If no scheme matches, so an empty axis cannot make the
+            matrix pass vacuously.
     """
+    if css_path is None:
+        names = list(theme_registry.theme_names())
+        if not names:
+            raise RuntimeError("no schemes registered in admin/themes.py")
+        return names
     css = _read_token_sheet(css_path)
     schemes = sorted({scheme for scheme, _, _ in _scheme_blocks(css)})
     if not schemes:
         raise RuntimeError(
-            f"no schemes found in {css_path or CSS_DIR / 'base.css'}; "
+            f"no schemes found in {_sheet_name(css_path)}; "
             "the scheme-block pattern no longer matches the token sheet"
         )
     return schemes
@@ -183,7 +216,7 @@ def declared_modes(css_path: Path | None = None) -> list[str]:
     modes = sorted({mode for _, mode, _ in _scheme_blocks(css) if mode})
     if not modes:
         raise RuntimeError(
-            f"no modes found in {css_path or CSS_DIR / 'base.css'}; "
+            f"no modes found in {_sheet_name(css_path)}; "
             "the scheme-block pattern no longer matches the token sheet"
         )
     return modes

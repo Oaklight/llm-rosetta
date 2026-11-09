@@ -10,15 +10,20 @@ import { S, INACTIVITY_TIMEOUT_MS } from './state.js';
 import { t } from './i18n.js';
 import { shimBrand } from './shim-tree.js';
 import { esc } from './html.js';
+import { defaultThemeName, resolveScheme, setThemeSheet } from './themes.js';
 
 // ===================== Scheme + Mode =====================
-const VALID_SCHEMES = ['minimal', 'emerald'];
+// The schemes themselves live in the gateway's theme registry (themes.js);
+// this module only applies the choice.
 const VALID_MODES = ['light', 'dark', 'system'];
 const SYSTEM_DARK = () => window.matchMedia?.('(prefers-color-scheme: dark)').matches;
 
 function setScheme(scheme) {
-  if (!VALID_SCHEMES.includes(scheme)) scheme = 'minimal';
+  // A stored name this build no longer ships — a theme removed in an upgrade,
+  // or a hand-edited value — resolves to the registry's default.
+  scheme = resolveScheme(scheme);
   document.documentElement.setAttribute('data-scheme', scheme);
+  setThemeSheet(scheme);
   S.currentScheme = scheme;
   localStorage.setItem('llm-rosetta-scheme', scheme);
   const el = document.getElementById('settingsSchemeSelect');
@@ -48,9 +53,11 @@ window.matchMedia?.('(prefers-color-scheme: dark)')
   });
 
 function setTheme(name) {
-  if (name === 'light') { setScheme('minimal'); setMode('light'); }
-  else if (name === 'dark') { setScheme('minimal'); setMode('dark'); }
-  else { setScheme('minimal'); setMode('light'); }
+  // The login card and the rail call this with a legacy pseudo-theme name;
+  // both land on the registry's default scheme.
+  const scheme = defaultThemeName();
+  setScheme(scheme);
+  setMode(name === 'dark' ? 'dark' : 'light');
 }
 
 // ===================== Theme icons =====================

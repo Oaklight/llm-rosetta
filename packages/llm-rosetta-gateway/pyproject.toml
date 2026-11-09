@@ -38,7 +38,7 @@ llm-rosetta-usage = "llm_rosetta_gateway.observability.usage.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-"llm_rosetta_gateway.admin" = ["admin.html", "css/*.css", "js/**/*.js"]
+"llm_rosetta_gateway.admin" = ["admin.html", "css/**/*.css", "js/**/*.js"]
 # The changelog is written by the release workflow from the docs branches; a
 # wheel built from source without them simply has no file to ship.
 "llm_rosetta_gateway" = ["CHANGELOG.*.md"]

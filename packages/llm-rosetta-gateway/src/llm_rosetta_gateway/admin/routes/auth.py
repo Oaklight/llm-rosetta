@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hmac
+import json
 import time
 from typing import Any
 
@@ -11,8 +12,39 @@ from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
 from llm_rosetta_gateway.middleware.auth import ADMIN_COOKIE_NAME
 
 from ..static import load_admin_html, load_static_file
+from ..themes import registry_payload
 
-# Cached HTML — loaded once on first request, per custom_head value.
+
+def _json_for_script(payload: object) -> str:
+    """Serialise *payload* for an inline ``<script type="application/json">``.
+
+    The JSON is embedded in a ``<script>`` element, and the HTML parser ends
+    that element at the first ``</script`` it sees — wherever it sits in the
+    text.  Escaping ``<``, ``>`` and ``&`` as ``\\uXXXX`` keeps any value in
+    the payload, today's fixed labels included, from closing the element early
+    and leaving the rest of the registry as markup.  The escapes are valid
+    JSON, so the page reads the same values back.
+    """
+    return (
+        json.dumps(payload, separators=(",", ":"))
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+        .replace("&", "\\u0026")
+    )
+
+
+def _theme_script() -> str:
+    """The registry as the inline JSON script the boot script reads."""
+    return (
+        '<script id="adminThemes" type="application/json">'
+        + _json_for_script(registry_payload())
+        + "</script>"
+    )
+
+
+# Cached HTML — loaded once on first request, per custom_head value.  The
+# registry is a module constant, so it does not need to be part of the key;
+# a new theme is picked up when the gateway restarts, like any static file.
 _admin_html_cache: dict[str, str] = {}
 
 _FAVICON_SVG = (
@@ -70,6 +102,9 @@ async def serve_admin_html(request: Any) -> Response:
     cache_key = custom_head
     if cache_key not in _admin_html_cache:
         html = load_admin_html()
+        # The boot script needs the registry before it can pick a theme, and
+        # the page ships no build step, so the server injects it here.
+        html = html.replace("<!--admin-themes-->", _theme_script(), 1)
         if custom_head:
             html = html.replace("</head>", f"{custom_head}\n</head>", 1)
         _admin_html_cache[cache_key] = html

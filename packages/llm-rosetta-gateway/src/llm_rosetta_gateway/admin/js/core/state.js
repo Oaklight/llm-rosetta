@@ -29,7 +29,11 @@ export function populateCapIcons(modelTypes) {
 
 export const S = {
   currentTab: localStorage.getItem('llm-rosetta-tab') || 'providers',
-  currentScheme: localStorage.getItem('llm-rosetta-scheme') || 'minimal',
+  // The boot script resolved the stored name against the registry and wrote
+  // the winner to data-scheme; a name this build no longer ships never
+  // reaches the Settings picker.
+  currentScheme: document.documentElement.getAttribute('data-scheme')
+    || localStorage.getItem('llm-rosetta-scheme') || 'minimal',
   currentMode: localStorage.getItem('llm-rosetta-mode') || 'light',
   currentLang: localStorage.getItem('llm-rosetta-lang') || 'en',
   configData: null,
