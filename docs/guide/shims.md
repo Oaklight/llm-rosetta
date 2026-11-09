@@ -891,9 +891,9 @@ keeps what the source request carried, so an injected default is recorded in
 the request log's `injected` field rather than read back as a client value.
 
 zhipu is the first shim to declare a range: that lane accepts `temperature` up
-to 1.0 (OpenAI allows 2.0) and `top_p` down to 0.01, so an out-of-range value is
-clamped and reported instead of reaching an upstream that would reject it or
-read a different value than the client asked for.
+to 1.0 (OpenAI allows 2.0) and `top_p` within `[0.01, 1.0]`, so an out-of-range
+value is clamped and reported instead of reaching an upstream that would reject
+it or read a different value than the client asked for.
 
 ## Transforms
 
