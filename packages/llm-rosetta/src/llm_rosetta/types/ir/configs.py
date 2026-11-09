@@ -135,6 +135,18 @@ class ResponseFormatConfig(TypedDict, total=False):
 
     type: Literal["text", "json_object", "json_schema"]
     json_schema: dict[str, Any]  # 当type为json_schema时使用
+    """The OpenAI envelope — ``{name?, description?, schema, strict?}``.
+
+    This is the shape Chat Completions and Responses define, and every reader
+    stores it: the Google dialects, whose ``response_schema`` is a raw JSON
+    Schema, wrap theirs as ``{"schema": <raw>}`` (#1327).  ``schema`` is the
+    only key with a JSON Schema meaning; the other three have no Google
+    spelling and are reported as a loss on that leg.
+
+    A bare schema — a value without a ``schema`` key, which an IR producer
+    built before the envelope existed may still pass — is accepted by the
+    writers and wrapped on the way out.
+    """
     mime_type: str  # Google的response_mime_type
 
 

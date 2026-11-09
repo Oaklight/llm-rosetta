@@ -25,6 +25,11 @@ from ....types.ir.configs import (
 from ...base import BaseConfigOps
 from llm_rosetta.conversion_warnings import report_loss
 from ...base.helpers.reasoning import DEFAULT_REASONING_CAPS, apply_reasoning_config
+from ...base.helpers.response_format import (
+    dropped_envelope_keys,
+    schema_to_ir,
+    schema_to_raw,
+)
 
 
 class GoogleGenerateConfigOps(BaseConfigOps):
@@ -166,7 +171,9 @@ class GoogleGenerateConfigOps(BaseConfigOps):
         """IR ResponseFormatConfig → Google GenAI response format parameters.
 
         Google uses ``response_mime_type`` and ``response_schema`` instead of
-        a nested response_format object.
+        a nested response_format object.  ``response_schema`` is the raw JSON
+        Schema; the IR carries the OpenAI envelope, so the envelope's ``schema``
+        is what goes on the wire (#1327).
 
         Args:
             ir_format: IR response format config.
@@ -182,8 +189,21 @@ class GoogleGenerateConfigOps(BaseConfigOps):
         elif fmt_type == "json_schema":
             result["response_mime_type"] = "application/json"
             json_schema = ir_format.get("json_schema")
-            if json_schema:
-                result["response_schema"] = json_schema
+            schema = schema_to_raw(json_schema)
+            if schema:
+                result["response_schema"] = schema
+            # Only an envelope loses keys here: in a raw schema ``description``
+            # and ``name`` are ordinary keywords and are written as part of it
+            # (#1327 follow-up — the first version warned while writing them).
+            dropped = dropped_envelope_keys(json_schema)
+            if dropped:
+                verb = "are" if len(dropped) > 1 else "is"
+                report_loss(
+                    "Google GenAI takes the raw JSON Schema only; "
+                    f"{', '.join(dropped)} {verb} dropped",
+                    subject="response_format.json_schema",
+                    leg="request",
+                )
 
         return result
 
@@ -192,6 +212,9 @@ class GoogleGenerateConfigOps(BaseConfigOps):
         provider_format: Any, **kwargs: Any
     ) -> ResponseFormatConfig:
         """Google GenAI response format → IR ResponseFormatConfig.
+
+        ``response_schema`` is the raw JSON Schema; the IR stores the OpenAI
+        envelope, so the raw schema is wrapped as its ``schema`` (#1327).
 
         Args:
             provider_format: Dict with ``response_mime_type`` and
@@ -214,7 +237,7 @@ class GoogleGenerateConfigOps(BaseConfigOps):
             )
             if schema:
                 result["type"] = "json_schema"
-                result["json_schema"] = schema
+                result["json_schema"] = schema_to_ir(schema)
             else:
                 result["type"] = "json_object"
 

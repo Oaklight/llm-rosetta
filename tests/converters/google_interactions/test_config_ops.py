@@ -141,4 +141,5 @@ class TestResponseFormat:
         }
         result = GoogleInteractionsConfigOps.p_response_format_to_ir(p)
         assert result["type"] == "json_schema"
-        assert result["json_schema"] == {"type": "object"}
+        # The IR spells the OpenAI envelope (#1327).
+        assert result["json_schema"] == {"schema": {"type": "object"}}

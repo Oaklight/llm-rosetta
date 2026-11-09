@@ -17,6 +17,11 @@ from ....types.ir.configs import (
 from ....types.ir.reasoning import IREffort, IRVisibility
 from ...base import BaseConfigOps
 from llm_rosetta.conversion_warnings import report_loss
+from ...base.helpers.response_format import (
+    dropped_envelope_keys,
+    schema_to_ir,
+    schema_to_raw,
+)
 
 # Interactions thinking_level ↔ IR effort (nearly 1:1)
 _THINKING_LEVEL_TO_IR: dict[str, IREffort] = {
@@ -156,9 +161,19 @@ class GoogleInteractionsConfigOps(BaseConfigOps):
                 "type": "text",
                 "mime_type": "application/json",
             }
-            schema = ir_format.get("json_schema")
+            json_schema = ir_format.get("json_schema")
+            schema = schema_to_raw(json_schema)
             if schema:
                 result["response_schema"] = schema
+            dropped = dropped_envelope_keys(json_schema)
+            if dropped:
+                verb = "are" if len(dropped) > 1 else "is"
+                report_loss(
+                    "Interactions takes the raw JSON Schema only; "
+                    f"{', '.join(dropped)} {verb} dropped",
+                    subject="response_format.json_schema",
+                    leg="request",
+                )
             return result
         return None
 
@@ -173,7 +188,7 @@ class GoogleInteractionsConfigOps(BaseConfigOps):
                 schema = provider_format.get("response_schema")
                 if schema:
                     result["type"] = "json_schema"
-                    result["json_schema"] = schema
+                    result["json_schema"] = schema_to_ir(schema)
                 else:
                     result["type"] = "json_object"
         return result

@@ -23,6 +23,7 @@ from ....types.ir.configs import (
 from llm_rosetta.conversion_warnings import report_loss
 from ...base import BaseConfigOps
 from ...base.helpers.reasoning import DEFAULT_REASONING_CAPS, apply_reasoning_config
+from ...base.helpers.response_format import schema_to_ir
 from ...base.helpers.retention import retention_to_ir, retention_to_wire
 
 #: The response formats the Responses ``text`` parameter defines.  The spec
@@ -161,6 +162,14 @@ class OpenResponsesConfigOps(BaseConfigOps):
         Writing the Chat shape here produced a body the spec does not define
         and the reader could not read back (#1294).
 
+        The neutral spec makes ``name`` optional; OpenAI's profile does not —
+        its ``TextResponseFormatJsonSchema`` requires ``type``, ``name`` and
+        ``schema``.  A schema that arrived from Google carries no name (there
+        was none to carry), so it is written here with the schema intact and
+        is still refused by an OpenAI upstream for the missing name.  The
+        schema is no longer lost, which is what #1327 fixed; supplying a name
+        is the caller's or the shim layer's decision, not this writer's.
+
         Args:
             ir_format: IR response format config.
 
@@ -174,7 +183,10 @@ class OpenResponsesConfigOps(BaseConfigOps):
 
         fmt: dict[str, Any] = {"type": fmt_type}
         if fmt_type == "json_schema":
-            schema = ir_format.get("json_schema") or {}
+            # The IR carries the envelope; a bare schema from an IR producer
+            # built before #1327 is wrapped first, so its content is written
+            # rather than dropped.
+            schema = schema_to_ir(ir_format.get("json_schema"))
             fmt.update({key: schema[key] for key in _SCHEMA_KEYS if key in schema})
         return {"text": {"format": fmt}}
 
