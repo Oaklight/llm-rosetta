@@ -58,7 +58,8 @@ title: 管理面板主题
 | 线 | `--hairline`、`--hairline-strong` | 行与分隔线；强档是派生的 |
 | 文字 | `--text`、`--text-dim`、`--text-muted` | |
 | 强调 | `--accent`、`--accent-hover`、`--accent-subtle`、`--accent-on` | |
-| 状态 | `--pos`、`--neg`、`--warn`、`--info` | 各自带 `-subtle`（半透明叠色）、`-bg`（叠在 `--surface` 上的不透明浅底）与 `-border`（派生） |
+| 状态 | `--pos`、`--neg`、`--warn`、`--info`、`--yellow` | 各自带 `-subtle`（半透明叠色）、`-bg`（叠在 `--surface` 上的不透明浅底）与 `-border`（派生）；`--yellow` 只用于装饰——一条边框、一层填充、一根条 |
+| 标签墨色 | `--tag-pos`、`--tag-neg`、`--tag-warn`、`--tag-info`、`--tag-accent`、`--tag-purple`、`--tag-magenta`、`--tag-tools`、`--tag-lime`、`--tag-decision` | 状态标签与能力标签绘制文字所用的颜色；标签从同一墨色派生 8 % 填充，因此每一对都必须在 `--bg`、`--surface` 与 `--surface-2`（悬停行）上对它自己的填充达到 4.5:1——`tests/js/tag-ink.test.mjs` 校验全部 180 对 |
 | 其他 | `--purple`、`--magenta`、`--cyan`、`--lime`、`--green-deep` | 能力与类型颜色 |
 
 `--hairline-strong`、四个 `-border`、`--neg-bg`、`--warn-bg` 与 `--info-bg` 是用
