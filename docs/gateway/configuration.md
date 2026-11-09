@@ -248,7 +248,14 @@ endpoint of the provider, and a failed mint names its command and error on the
 provider card instead of sending an empty credential upstream.  The quota state
 is shared for the same reason: a credential a probe or a 429 demoted is skipped
 by every endpoint, because the allowance belongs to the credential, not to the
-endpoint.
+endpoint.  An endpoint that receives a 401 re-mints once through the same
+source and retries the request once; a second refusal is reported as it stands,
+and a session-policy 401 — which needs a human sign-in — is never retried.
+
+The sharing stops at measurement.  The endpoint does not poll the allowance,
+so it takes no part in headroom weighting or in the "every credential is
+spent" exclusion: it is excluded only by what the credential itself reports (a
+demoted key, a provider block, or a rate-limit disable).
 
 The legacy `embeddings_providers` / `rerank_providers` / `decisions_providers`
 sections still load and are merged with the unified entries.  The pre-rename
