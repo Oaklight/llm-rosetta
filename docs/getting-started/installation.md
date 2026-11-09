@@ -56,7 +56,7 @@ docker run --user $(id -u):$(id -g) -p 8765:8765 -v /path/to/config:/config oakl
 ```bash
 git clone https://github.com/Oaklight/llm-rosetta.git
 cd llm-rosetta
-mkdir -p config   # 容器以 uid 1000 运行，无法自行创建该目录
+mkdir -p config   # 容器以 ${PUID:-1000} 运行，无法自行创建该目录
 docker compose -f docker/docker-compose.source.yaml up -d --build
 ```
 
@@ -65,10 +65,18 @@ docker compose -f docker/docker-compose.source.yaml up -d --build
 ```bash
 docker build -f docker/Dockerfile.source -t llm-rosetta-gateway:src .
 mkdir -p config
-docker run -p 8765:8765 -v "$PWD/config:/config" llm-rosetta-gateway:src
+docker run --user "$(id -u):$(id -g)" -p 8765:8765 -v "$PWD/config:/config" llm-rosetta-gateway:src
 ```
 
-源码版挂载仓库根目录的 `config/`，`PUID`、`PGID` 与 `environment:` 的用法与镜像版一致；两个文件是两个入口 —— `docker/docker-compose.yaml` 运行已发布的镜像，`docker/docker-compose.source.yaml` 从工作树构建 —— 且都发布 8765 端口，一次只跑一个。首次启动前先创建 `config/`：缺失的 bind mount 目录会被 compose 以 `root` 创建，而网关以 uid 1000 运行，首次写入 `config.jsonc` 会失败。空目录即可，但属主必须是 uid 1000：如果你的用户 id 不是 1000，执行 `sudo chown 1000:1000 config`。镜像里的 `PUID`/`PGID` 变量目前没有被网关读取（议题 [#1481](https://github.com/Oaklight/llm-rosetta/issues/1481)），传入它们不会改变这一点。
+源码版挂载仓库根目录的 `config/`。两个 compose 文件都通过 Compose 的 `user:` 指令以 `${PUID:-1000}:${PGID:-1000}` 运行容器：镜像声明的是 `USER appuser`（uid 1000），`user:` 会取代它，除此之外没有任何东西读取这对变量。挂载的 `config/` 必须对同一个 uid 可写 —— 首次启动前先创建，用户 id 不是 1000 时把它一起传进去：
+
+```bash
+PUID=$(id -u) PGID=$(id -g) docker compose -f docker/docker-compose.source.yaml up -d --build
+```
+
+缺失的 bind mount 目录会被 compose 以 `root` 创建，而首次运行要在其中写入 `config.jsonc`，所以目录属主不对是唯一会看到容器启动失败的情形。下面不使用 Compose 的 `docker run` 形式不读取 `PUID`，`--user` 就是给它用的，示例已带上。
+
+两个文件是两个入口 —— `docker/docker-compose.yaml` 运行已发布的镜像，`docker/docker-compose.source.yaml` 从工作树构建 —— 且都发布 8765 端口，一次只跑一个。
 
 发布路径不变：`make build-docker` 仍构建 `docker/Dockerfile`，从 `dist/` 或 PyPI 安装 wheel。
 

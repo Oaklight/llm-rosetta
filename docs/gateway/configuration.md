@@ -325,7 +325,7 @@ volumes:
 2. 使用上述 volume 挂载**启动容器**
 3. 通过管理面板或 `config.jsonc` **添加提供方** —— 不需要 `token_command`
 
-容器内的 `appuser`（uid 1000）需要对 `~/.globus` 目录有读写权限，以便就地更新刷新令牌。
+容器以 `${PUID:-1000}` 运行（compose 的 `user:` 指令），挂载的 `~/.globus` 必须对该 uid 可写，以便就地更新刷新令牌。
 
 ### 逐提供方代理
 
