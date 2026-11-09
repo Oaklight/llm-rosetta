@@ -79,7 +79,11 @@ separate entry points — `docker/docker-compose.yaml` runs the published image,
 port 8765, so run one at a time. Create `config/` before the first start: a
 missing bind-mount directory is created by compose as `root`, and the gateway
 runs as uid 1000, so its first-run `config.jsonc` write would fail. An empty
-directory owned by you (or the `PUID` you pass) is enough.
+directory is enough, but it must be writable by uid 1000: if your user id is
+not 1000, run `sudo chown 1000:1000 config`. The image's `PUID`/`PGID`
+variables are not read by the gateway today (issue
+[#1481](https://github.com/Oaklight/llm-rosetta/issues/1481)), so passing them
+does not change this.
 
 The release path is unchanged: `make build-docker` still builds
 `docker/Dockerfile`, which installs wheels from `dist/` or PyPI.
