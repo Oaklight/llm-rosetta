@@ -130,6 +130,18 @@ test('the drawer width is geometry, declared once at the root', () => {
     '--drawer-w is geometry; a theme may not override it');
 });
 
+test('the control corner is skeleton too, and no theme may retune it', () => {
+  // P4 fixed one corner for every control in base.css; a theme that overrides
+  // it would re-open the "five heights, three corners" problem one scheme at
+  // a time.  Same rule as --drawer-w, and the same reason: geometry shared by
+  // every scheme does not belong to a scheme.
+  const decls = rules(BASE).flatMap((r) => declarations(r.body).filter(([p]) => p === '--radius-control'));
+  assert.equal(decls.length, 1, `expected one --radius-control, found ${decls.length}`);
+  assert.match(decls[0][1], /^\d+px$/);
+  assert.ok(!THEMES.some(({ text }) => text.includes('--radius-control')),
+    '--radius-control is geometry; a theme may not override it');
+});
+
 test('the model side panel takes the same frame and the same role', () => {
   const drawer = rules(COMPONENTS).find((r) => r.selector === '.model-drawer' && /position/.test(r.body));
   assert.ok(drawer, 'expected a .model-drawer rule');

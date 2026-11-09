@@ -1637,14 +1637,17 @@ function _buildProviderSegControls() {
 }
 
 /**
- * Inject a dynamic <style> tag for badge and dot color rules from metadata.
- * Falls back gracefully to existing CSS rules in components.css.
+ * Inject a dynamic <style> tag for dot and endpoint colours from metadata.
+ *
+ * The type *badge* is not painted here any more (#1487): a tag's colour is a
+ * `--tag-*` ink declared by the theme and its fill is the one 8% recipe, so
+ * the stylesheet owns both.  What stays dynamic is the dot — decoration, not
+ * text — and the endpoint section's tint.
  */
 function _injectTypeStyles(modelTypes) {
   let css = '';
   for (const desc of modelTypes) {
     if (desc.color) {
-      css += `.cap-badge-${desc.name} { background:color-mix(in srgb, ${desc.color} 12%, transparent);color:${desc.color}; }\n`;
       css += `.dot-${desc.name} { background:${desc.color}; }\n`;
       // Visible endpoint section gets a colored left border and tinted background
       if (!desc.is_llm) {

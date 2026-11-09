@@ -287,15 +287,13 @@ async function loadProfilingStatus() {
     const badge = document.getElementById('profilingBadge');
     const btn = document.getElementById('profilingToggleBtn');
     if (badge) {
-      if (s.enabled) {
-        badge.textContent = t('profiling.remaining').replace('{n}', s.remaining);
-        badge.style.background = 'var(--green, #22c55e)';
-        badge.style.color = '#fff';
-      } else {
-        badge.textContent = t('label.off');
-        badge.style.background = 'var(--text-dim, #888)';
-        badge.style.color = '#fff';
-      }
+      // The badge is a tag: the theme's `--tag-pos` ink and its 8 % fill
+      // paint it.  An inline solid fill with a literal white ink read 3.77:1
+      // on emerald's green and could not follow a scheme at all.
+      badge.textContent = s.enabled
+        ? t('profiling.remaining').replace('{n}', s.remaining)
+        : t('label.off');
+      badge.classList.toggle('badge-ok', !!s.enabled);
       // The stored text is a placeholder; reveal the badge only once the
       // server has answered, so a collapsed summary never claims OFF while
       // profiling is actually on.
@@ -408,15 +406,11 @@ async function loadCaptureStatus() {
     const badge = document.getElementById('captureBadge');
     const btn = document.getElementById('captureToggleBtn');
     if (badge) {
-      if (s.enabled) {
-        badge.textContent = t('capture.remaining').replace('{n}', s.remaining);
-        badge.style.background = 'var(--green, #22c55e)';
-        badge.style.color = '#fff';
-      } else {
-        badge.textContent = t('label.off');
-        badge.style.background = 'var(--text-dim, #888)';
-        badge.style.color = '#fff';
-      }
+      // Same rule as the profiling badge: the tag recipe paints it.
+      badge.textContent = s.enabled
+        ? t('capture.remaining').replace('{n}', s.remaining)
+        : t('label.off');
+      badge.classList.toggle('badge-ok', !!s.enabled);
       // Same rule as the profiling badge: no state claim before the fetch.
       badge.style.visibility = 'visible';
     }

@@ -47,8 +47,10 @@ Values only: components own where these land (epic #1154, issue #1471). */
   --hairline: #e4e5e7;
   --hairline-strong: color-mix(in srgb, var(--text) 22%, var(--hairline));
   --text: #18191b;
-  --text-dim: #616469;
-  --text-muted: #949798;
+  --text-dim: #505355;
+  /* The quiet tier sits at the AA floor (#1487): 4.70:1 on `--surface-2`;
+     `--text-dim` is kept darker (6.98) so the tiers still separate. */
+  --text-muted: #6a6d6f;
   --accent: #34d59a;
   --accent-hover: #2bc48c;
   --accent-subtle: rgba(52,213,154,.06);
@@ -72,6 +74,23 @@ Values only: components own where these land (epic #1154, issue #1471). */
   --magenta: #d946ef;
   --cyan: #0891b2;
   --lime: #65a30d;
+  --yellow: #a16207;
+
+  /* Tag inks (#1487).  A tag paints its text in one of these and derives
+     its fill from it (`color-mix(currentColor 8%, transparent)`), so the
+     ink — not the semantic colour above — is what clears 4.5:1 against the
+     composited fill.  The semantic tokens stay free for dots, borders,
+     danger fills and the focus ring.  Measured on `--bg`, `--surface` and `--surface-2` (a hovered row), the strictest of the three. */
+  --tag-pos: #047553;
+  --tag-neg: #c91300;
+  --tag-warn: #9b5404;
+  --tag-info: #1859ea;
+  --tag-accent: #187453;
+  --tag-purple: #7b39ed;
+  --tag-magenta: #ab11c3;
+  --tag-tools: #06708a;
+  --tag-lime: #477209;
+  --tag-decision: #733af4;
 }
 
 [data-scheme="emerald"][data-mode="dark"] {
@@ -82,8 +101,8 @@ Values only: components own where these land (epic #1154, issue #1471). */
   --hairline: #242628;
   --hairline-strong: color-mix(in srgb, var(--text) 22%, var(--hairline));
   --text: #e4e5e7;
-  --text-dim: #949798;
-  --text-muted: #616469;
+  --text-dim: #a9acae;
+  --text-muted: #8a8d90;
   --accent: #34d59a;
   --accent-hover: #4de0ab;
   --accent-subtle: rgba(52,213,154,.08);
@@ -107,16 +126,34 @@ Values only: components own where these land (epic #1154, issue #1471). */
   --magenta: #f0abfc;
   --cyan: #22d3ee;
   --lime: #a3e635;
+  --yellow: #fbbf24;
+
+  /* Tag inks (#1487).  A tag paints its text in one of these and derives
+     its fill from it (`color-mix(currentColor 8%, transparent)`), so the
+     ink — not the semantic colour above — is what clears 4.5:1 against the
+     composited fill.  The semantic tokens stay free for dots, borders,
+     danger fills and the focus ring.  Measured on `--bg`, `--surface` and `--surface-2` (a hovered row), the strictest of the three. */
+  --tag-pos: #34d399;
+  --tag-neg: #ff5647;
+  --tag-warn: #fbbf24;
+  --tag-info: #60a5fa;
+  --tag-accent: #34d59a;
+  --tag-purple: #a78bfa;
+  --tag-magenta: #f0abfc;
+  --tag-tools: #22d3ee;
+  --tag-lime: #a3e635;
+  --tag-decision: #9b72f7;
   --dot: rgba(255,255,255,.025);
   --grid: rgba(255,255,255,.025);
 }
 
-/* P1 compatibility aliases — removed in P5.
-   The values now live under the shared vocabulary (surface, hairline,
-   pos/neg/warn/info and their -bg/-subtle/-border variants).  These
-   names keep every component resolving the same values until the last
-   one reads the new names; P5 deletes this block and the rule that
-   enforces it is a grep: outside this block, no old name may remain. */
+/* P1 compatibility aliases — planned for removal (#1489); every consumer
+   must migrate first.  The values live under the shared vocabulary
+   (surface, hairline, pos/neg/warn/info and their -bg/-subtle/-border
+   variants); these names keep every component resolving the same values
+   until the last one reads the new names.  Removing them is not a
+   comment edit — `--bg-card`, `--bg-hover`, `--border`, `--badge-radius`
+   and the colour aliases are still read by base.css and components.css. */
 [data-scheme="emerald"] {
   --bg-card: var(--surface);
   --bg-hover: var(--surface-2);

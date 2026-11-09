@@ -141,7 +141,7 @@ tr:hover td { background: var(--bg-hover); }
 .pc-endpoint-warning {
   display: inline-flex; align-items: center; gap: 4px; max-width: 100%;
   padding: 2px 6px; border-radius: var(--badge-radius); font-size: 11px;
-  color: var(--yellow, #eab308);
+  color: var(--tag-warn);
   background: color-mix(in srgb, var(--yellow, #eab308) 10%, transparent);
   border: 1px solid color-mix(in srgb, var(--yellow, #eab308) 30%, transparent);
 }
@@ -150,8 +150,8 @@ tr:hover td { background: var(--bg-hover); }
 .pc-endpoint-warning .pc-endpoint-reason {
   color: var(--text-dim); min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
 }
-.pc-warning { color: var(--yellow, #eab308); margin-left: 6px; font-size: 15px; cursor: help; }
-.pc-logo-warning { color: var(--yellow, #eab308); font-size: 16px; line-height: 16px; text-align: center; }
+.pc-warning { color: var(--tag-warn); margin-left: 6px; font-size: 15px; cursor: help; }
+.pc-logo-warning { color: var(--tag-warn); font-size: 16px; line-height: 16px; text-align: center; }
 .pc-validation-warning {
   display: none;
   min-width: 0;
@@ -231,12 +231,12 @@ tr:hover td { background: var(--bg-hover); }
 #tab-models .mn-badges .cap-badge { padding:4px;border-radius:var(--radius-control);margin:0; }
 #tab-models .mn-badges .cap-badge svg { width:12px;height:12px; }
 .cap-badge svg { width:11px;height:11px;flex-shrink:0; }
-.cap-badge-llm { color:var(--green); }
-.cap-badge-embedding { color:var(--blue); }
-.cap-badge-rerank { color:var(--orange); }
-.cap-badge-decision { color:#8b5cf6; }
+.cap-badge-llm { color:var(--tag-pos); }
+.cap-badge-embedding { color:var(--tag-info); }
+.cap-badge-rerank { color:var(--tag-warn); }
+.cap-badge-decision { color:var(--tag-decision); }
 .cap-badge-text { color:var(--text-dim); }
-.cap-badge-vision { color:var(--magenta); }
+.cap-badge-vision { color:var(--tag-magenta); }
 /* Capability hues avoid the status vocabulary: red, green and orange mean
    failed, healthy and warning everywhere else in the console, so a small dot
    in one of them reads as a state rather than a capability.  Reasoning was
@@ -244,8 +244,8 @@ tr:hover td { background: var(--bg-hover); }
    far enough toward yellow that it does not read as the board's healthy dot.
    Tools took the cyan the reasoning teal used to hold, and vision moved from
    purple to magenta because its old dot read as a dark smudge on white. */
-.cap-badge-tools { color:var(--cyan); }
-.cap-badge-reasoning { color:var(--lime); }
+.cap-badge-tools { color:var(--tag-tools); }
+.cap-badge-reasoning { color:var(--tag-lime); }
 /* Provider-model cross-navigation */
 .provider-link { color:inherit;cursor:pointer;text-decoration:none; }
 .provider-link:hover { text-decoration:underline;color:var(--accent); }
@@ -267,7 +267,7 @@ tr:hover td { background: var(--bg-hover); }
 .provider-list-item .weight-input:hover::-webkit-inner-spin-button { opacity:1; }
 .provider-list-item .remove-provider { opacity:0;cursor:pointer;font-size:10px;color:var(--text-dim);background:none;border:none;padding:0 2px;line-height:1; }
 .provider-list-item:hover .remove-provider { opacity:0.6; }
-.provider-list-item .remove-provider:hover { opacity:1;color:var(--danger, #cf222e); }
+.provider-list-item .remove-provider:hover { opacity:1;color:var(--neg); }
 .provider-card.highlight { border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent);transition:box-shadow 0.3s,border-color 0.3s; }
 /* Reset filter button */
 .btn-reset { height:28px;padding:0 10px;font-size:var(--fs-xs);color:var(--text-dim);border:1px solid var(--border);border-radius:var(--radius-control);background:var(--surface);cursor:pointer;display:none;align-items:center;gap:4px;transition:color .15s,border-color .15s; }
@@ -338,7 +338,7 @@ tr:hover td { background: var(--bg-hover); }
   border-radius:var(--radius-control); line-height:1;
   color:var(--text-dim); background:var(--surface);
 }
-.prov-mode-chip:hover { border-color:var(--border-strong,var(--border)); color:var(--text); }
+.prov-mode-chip:hover { border-color:var(--hairline-strong); color:var(--text); }
 .prov-mode-chip[aria-pressed="true"] { border-color:var(--accent); color:var(--text); font-weight:600; box-shadow:inset 0 0 0 1px var(--accent); }
 .prov-auth-detail { font-size:12px; color:var(--text-dim); margin-bottom:8px; overflow-wrap:anywhere; }
 .prov-pill {
@@ -357,7 +357,7 @@ tr:hover td { background: var(--bg-hover); }
   gap:2px; padding:10px 11px; border:1px solid var(--border); border-radius:var(--radius);
   background:var(--bg); color:var(--text); font-family:inherit; min-width:0;
 }
-.prov-source:hover { border-color:var(--border-strong,var(--border)); background:var(--bg-hover); }
+.prov-source:hover { border-color:var(--hairline-strong); background:var(--bg-hover); }
 .prov-source[aria-checked="true"] { border-color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent); background:var(--bg-card); }
 .prov-source:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
 .prov-source[hidden] { display:none; }
@@ -569,7 +569,7 @@ button.prov-icon-btn:hover { background:var(--bg-hover); color:var(--text); }
 }
 #providerTable .pc-models { cursor: pointer; color: var(--text); }
 #providerTable .pc-models:hover { color: var(--accent); }
-.pc-row-warning { margin-left: 6px; color: var(--yellow, #b7791f); }
+.pc-row-warning { margin-left: 6px; color: var(--tag-warn); }
 .provider-empty { color: var(--text-dim); padding: 16px 12px; }
 /* Row buttons stay quiet until the row is under the pointer. */
 #providerTable .pc-actions .btn {
@@ -849,7 +849,10 @@ canvas { width: 100%; height: 160px; }
 /* Status badge */
 /* Status tags are the one place the epic keeps a pill.  Outlined, not
    filled: the fill is the text colour at 8%, so a variant only chooses its
-   colour and cannot drift into a second background recipe. */
+   colour and cannot drift into a second background recipe.  The colour is a
+   `--tag-*` ink rather than the semantic token (#1487): the ink is chosen to
+   clear 4.5:1 against its own composited fill, while `--pos`/`--neg`/... stay
+   free to be a dot, a border, a danger fill or the focus ring. */
 .badge {
   display: inline-flex; align-items: center; gap: 4px;
   height: 18px; padding: 0 7px; vertical-align: middle;
@@ -859,17 +862,17 @@ canvas { width: 100%; height: 160px; }
   font-family: var(--mono); font-size: var(--fs-micro); font-weight: 500;
   letter-spacing: var(--tracking-label); text-transform: uppercase; line-height: 1;
 }
-.badge-ok { color: var(--green); }
-.badge-error { color: var(--red); }
-.badge-warning { color: var(--yellow, #eab308); }
-.badge-stream { color: var(--accent); }
+.badge-ok { color: var(--tag-pos); }
+.badge-error { color: var(--tag-neg); }
+.badge-warning { color: var(--tag-warn); }
+.badge-stream { color: var(--tag-accent); }
 
 /* Capability badges */
 .badge-cap { color: var(--text-dim); margin-right: 4px; }
-.badge-cap-vision { color: var(--purple); }
-.badge-cap-tools { color: color-mix(in srgb, var(--blue) 50%, var(--green)); }
-.badge-cap-embed { color: var(--blue); }
-.badge-cap-reasoning { color: var(--red); }
+.badge-cap-vision { color: var(--tag-purple); }
+.badge-cap-tools { color: var(--tag-tools); }
+.badge-cap-embed { color: var(--tag-info); }
+.badge-cap-reasoning { color: var(--tag-neg); }
 
 /* Checkbox group */
 .checkbox-group { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
@@ -1149,7 +1152,7 @@ canvas { width: 100%; height: 160px; }
   color: var(--accent);
   border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
 }
-.shim-pill.remote { color: var(--yellow, #b7791f); }
+.shim-pill.remote { color: var(--tag-warn); }
 .shim-row-meta {
   margin-top: 2px; font-size: 11px; color: var(--text-dim);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -1492,7 +1495,7 @@ button.login-reveal {
 .login-reveal svg { width:16px;height:16px; }
 
 .login-caps {
-  margin-top:8px;font-size:12px;color:var(--yellow,#b7791f);text-align:left;
+  margin-top:8px;font-size:12px;color:var(--tag-warn);text-align:left;
 }
 .login-remember {
   display:flex;align-items:center;gap:8px;margin-top:14px;
@@ -2209,7 +2212,7 @@ button.lp-clear {
 .changelog-full { margin-right: auto; align-self: center; font-size: 12px; color: var(--accent); }
 
 /* Save affordance: the unsaved note that sits beside the Save button. */
-.shim-dirty { font-size: 11px; color: var(--yellow, #b7791f); }
+.shim-dirty { font-size: 11px; color: var(--tag-warn); }
 
 /* Remote source vs its GitHub HEAD, shown on the source group header. */
 .shim-update {
@@ -2227,10 +2230,10 @@ button.shim-update.new {
   border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
 }
 button.shim-update.new:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); }
-button.shim-update.unknown { color: var(--yellow, #b7791f); }
+button.shim-update.unknown { color: var(--tag-warn); }
 
 /* A selected package's warning, under the picker. */
-.shim-preset-note { color: var(--yellow, #b7791f); }
+.shim-preset-note { color: var(--tag-warn); }
 
 /* A preset row that carries a note: the sentence takes the second line. */
 .tp-item.tp-has-note { flex-wrap: wrap; row-gap: 2px; }
