@@ -277,9 +277,14 @@ class OpenResponsesMessageOps(BaseMessageOps):
         ``[text, call, reasoning, call]`` came back as ``[reasoning, text,
         call, call]``).
 
-        One concession: every text part of the turn is one message item, so the
-        message is placed at the first text part's position and the later text
-        parts join it there.
+        Text is emitted as one message item per run: adjacent text parts share
+        a message item (the dialect constrains that — a message carries a
+        content array), and any other item — a call, a tool result, a reasoning
+        part — closes the run, so text that follows opens a **new** message
+        item at its own position.  Folding later text into the first message
+        would move it ahead of the items that sat between: ``[text A, call c1,
+        text B]`` came back as ``[message A+B, call c1]``.  Two message items
+        are accepted by the API, so this is not a loss the dialect forces.
 
         Tool calls become separate function_call items and reasoning parts
         separate reasoning items. Slug-prefixed passthrough items are emitted
@@ -296,7 +301,7 @@ class OpenResponsesMessageOps(BaseMessageOps):
         message_item: dict[str, Any] | None = None
 
         def message() -> dict[str, Any]:
-            """The turn's one message item, placed where its first text is."""
+            """The message item the current run of text belongs to."""
             nonlocal message_item
             if message_item is None:
                 message_item = {
@@ -313,6 +318,12 @@ class OpenResponsesMessageOps(BaseMessageOps):
                 result_items.append(message_item)
             return message_item
 
+        def close_message() -> None:
+            """End the run of text; the next text part opens a new item."""
+            nonlocal message_item, content_parts
+            message_item = None
+            content_parts = []
+
         for part in content:
             if is_text_part(part):
                 # Check for passthrough content part (slug-prefixed)
@@ -326,37 +337,58 @@ class OpenResponsesMessageOps(BaseMessageOps):
                 message()
             elif is_citation_part(part):
                 self._attach_annotation(part, content_parts, warnings)
-            elif is_tool_call_part(part):
-                result_items.append(
-                    self.tool_ops.ir_tool_call_to_p(part, for_history=True)
-                )
-            elif is_tool_result_part(part):
-                # A result carried inline in the assistant turn (a server
-                # tool's result, or one a history pass degraded) pairs with
-                # the call written above; a native server call yields {}.
-                item = self.tool_ops.ir_tool_result_to_p(
-                    part,
-                    warnings=warnings,
-                    for_history=True,
-                    degraded_intrinsic_calls=degraded_intrinsic_calls,
-                )
-                if item:
-                    result_items.append(item)
-            elif is_reasoning_part(part):
-                reasoning_item = self.content_ops.ir_reasoning_to_p(part)
-                if reasoning_item is not None:
-                    result_items.append(reasoning_item)
             else:
-                report_loss(
-                    f"Unsupported content part type in assistant message: "
-                    f"{part.get('type')}",
-                    subject=str(part.get("type", "")),
-                    warnings=warnings,
+                # A call, a tool result, a reasoning part — or one this
+                # writer cannot express — ends the text run either way: the
+                # text after it is not adjacent to the text before it, even
+                # when the part itself writes nothing.
+                self._emit_assistant_part(
+                    part, result_items, warnings, degraded_intrinsic_calls
                 )
+                close_message()
 
         result_items.extend(passthrough_items)
 
         return result_items, warnings
+
+    def _emit_assistant_part(
+        self,
+        part: Any,
+        result_items: list[dict[str, Any]],
+        warnings: list[str],
+        degraded_intrinsic_calls: dict[str, bool],
+    ) -> None:
+        """Append the item a non-text assistant part names, if it writes one.
+
+        A part that yields nothing — a reasoning item with no replayable id, a
+        native server call's result — still separates the text around it; the
+        caller closes the run either way.
+        """
+        if is_tool_call_part(part):
+            result_items.append(self.tool_ops.ir_tool_call_to_p(part, for_history=True))
+        elif is_tool_result_part(part):
+            # A result carried inline in the assistant turn (a server tool's
+            # result, or one a history pass degraded) pairs with the call
+            # written above; a native server call yields {}.
+            item = self.tool_ops.ir_tool_result_to_p(
+                part,
+                warnings=warnings,
+                for_history=True,
+                degraded_intrinsic_calls=degraded_intrinsic_calls,
+            )
+            if item:
+                result_items.append(item)
+        elif is_reasoning_part(part):
+            reasoning_item = self.content_ops.ir_reasoning_to_p(part)
+            if reasoning_item is not None:
+                result_items.append(reasoning_item)
+        else:
+            report_loss(
+                f"Unsupported content part type in assistant message: "
+                f"{part.get('type')}",
+                subject=str(part.get("type", "")),
+                warnings=warnings,
+            )
 
     def _attach_annotation(
         self, part: Any, content_parts: list[dict[str, Any]], warnings: list[str]
