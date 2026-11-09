@@ -15,6 +15,10 @@ from typing import Any
 
 import pytest
 
+from llm_rosetta_gateway.admin.routes.config.model_providers import (
+    remove_model_provider,
+    update_model_provider,
+)
 from llm_rosetta_gateway.admin.routes.config.models import put_model
 from llm_rosetta_gateway.admin.routes.config.payload import _normalize_model_entry
 from llm_rosetta_gateway.config import GatewayConfig, JsoncConfigIO
@@ -93,6 +97,244 @@ class TestThePayloadKeepsBothLanes:
             ("p", "fast"),
             ("p", "eco"),
         ]
+
+
+class TestThePanelNoLongerCreatesAFallback:
+    """A multi-lane entry keeps every upstream on its own lane.
+
+    The entry-level ``upstream_model`` is a fallback the resolver still honours
+    for hand-written configs, but the panel must stop feeding it: the editor
+    stores the upstream it was given on the lane it named, the payload reports
+    the fallback read-only under its own key, and deleting it takes an explicit
+    request.
+    """
+
+    @pytest.mark.asyncio
+    async def test_the_editor_stores_the_upstream_on_the_new_lane(self, tmp_path: Path):
+        request = _request(
+            tmp_path,
+            _raw(),
+            name=MODEL,
+            body={"provider": "p", "upstream_model": "turbo", "merge": True},
+        )
+
+        await put_model(request)
+
+        on_disk = _on_disk(request)["models"][MODEL]
+        assert "upstream_model" not in on_disk
+        assert [lane.get("upstream_model") for lane in on_disk["providers"]] == [
+            "fast",
+            "eco",
+            "turbo",
+        ]
+
+    @pytest.mark.asyncio
+    async def test_a_hand_written_top_level_upstream_survives_an_edit(
+        self, tmp_path: Path
+    ):
+        """Dropping it would change what the lanes without one resolve to."""
+        raw = _raw()
+        raw["models"][MODEL]["upstream_model"] = "legacy-top-level"
+        request = _request(
+            tmp_path,
+            raw,
+            name=MODEL,
+            body={"provider": "p", "capabilities": ["text", "vision"]},
+        )
+
+        await put_model(request)
+
+        on_disk = _on_disk(request)["models"][MODEL]
+        assert on_disk["upstream_model"] == "legacy-top-level"
+        assert on_disk["capabilities"] == ["text", "vision"]
+
+    @pytest.mark.asyncio
+    async def test_the_panel_deletes_it_only_when_asked(self, tmp_path: Path):
+        raw = _raw()
+        raw["models"][MODEL]["upstream_model"] = "legacy-top-level"
+        request = _request(
+            tmp_path,
+            raw,
+            name=MODEL,
+            body={"provider": "p", "clear_upstream_fallback": True},
+        )
+
+        await put_model(request)
+
+        on_disk = _on_disk(request)["models"][MODEL]
+        assert "upstream_model" not in on_disk
+        assert [lane["upstream_model"] for lane in on_disk["providers"]] == [
+            "fast",
+            "eco",
+        ]
+
+    def test_the_payload_reports_it_under_its_own_key(self):
+        entry = _normalize_model_entry(
+            {
+                "providers": [{"name": "p", "upstream_model": "fast"}],
+                "upstream_model": "legacy-top-level",
+                "capabilities": ["text"],
+            }
+        )
+
+        assert entry["upstream_model_fallback"] == "legacy-top-level"
+        assert "upstream_model" not in entry, "the editor must not re-post it"
+
+    def test_the_payload_keeps_the_lane_key_for_a_single_provider(self):
+        entry = _normalize_model_entry(
+            {"provider": "p", "upstream_model": "gpt-4o-2024-08-06"}
+        )
+
+        assert entry["upstream_model"] == "gpt-4o-2024-08-06"
+        assert "upstream_model_fallback" not in entry
+
+
+def _post_request(
+    tmp_path: Path, raw: dict[str, Any], *, name: str, body: dict[str, Any]
+) -> SimpleNamespace:
+    request = _request(tmp_path, raw, name=name, body=body)
+    request.method = "POST"
+    return request
+
+
+class TestLaneAdminEndpoints:
+    """remove/update-provider address one lane; a bare name must be enough."""
+
+    def _two_lane(self) -> dict[str, Any]:
+        raw = _raw()
+        raw["models"][MODEL]["providers"] = [
+            {"name": "p", "upstream_model": "fast", "weight": 2},
+            {"name": "p", "upstream_model": "eco", "weight": 1},
+        ]
+        return raw
+
+    def test_declared_lanes_are_one_row_each(self):
+        config = GatewayConfig(self._two_lane())
+
+        assert config.declared_model_lanes[MODEL] == [
+            {"name": "p", "upstream_model": "fast", "weight": 2, "enabled": True},
+            {"name": "p", "upstream_model": "eco", "weight": 1, "enabled": True},
+        ]
+
+    @pytest.mark.asyncio
+    async def test_removing_a_lane_keeps_its_sibling(self, tmp_path: Path):
+        request = _post_request(
+            tmp_path,
+            self._two_lane(),
+            name=MODEL,
+            body={"provider": "p", "upstream_model": "eco"},
+        )
+
+        payload = json.loads((await remove_model_provider(request)).body)
+
+        assert payload["ok"] is True
+        assert payload["removed_upstream_model"] == "eco"
+        # One lane left collapses back to the single-provider shape, carrying
+        # the upstream it kept.
+        entry = _on_disk(request)["models"][MODEL]
+        assert entry["provider"] == "p"
+        assert entry["upstream_model"] == "fast"
+
+    @pytest.mark.asyncio
+    async def test_removing_by_name_alone_is_ambiguous(self, tmp_path: Path):
+        raw = self._two_lane()
+        request = _post_request(tmp_path, raw, name=MODEL, body={"provider": "p"})
+
+        response = await remove_model_provider(request)
+
+        assert response.status_code == 409
+        assert "'fast'" in json.loads(response.body)["error"]
+        assert _on_disk(request)["models"] == raw["models"]
+
+    @pytest.mark.asyncio
+    async def test_updating_a_lane_changes_only_it(self, tmp_path: Path):
+        request = _post_request(
+            tmp_path,
+            self._two_lane(),
+            name=MODEL,
+            body={"provider": "p", "upstream_model": "eco", "weight": 7},
+        )
+
+        payload = json.loads((await update_model_provider(request)).body)
+
+        assert payload["ok"] is True
+        lanes = _on_disk(request)["models"][MODEL]["providers"]
+        assert [lane.get("weight") for lane in lanes] == [2, 7]
+
+    @pytest.mark.asyncio
+    async def test_updating_by_name_alone_is_ambiguous(self, tmp_path: Path):
+        raw = self._two_lane()
+        request = _post_request(
+            tmp_path, raw, name=MODEL, body={"provider": "p", "weight": 7}
+        )
+
+        response = await update_model_provider(request)
+
+        assert response.status_code == 409
+        assert _on_disk(request)["models"] == raw["models"]
+
+    @pytest.mark.asyncio
+    async def test_one_lane_still_takes_a_bare_name(self, tmp_path: Path):
+        raw = _raw(lanes=[{"name": "p", "upstream_model": "fast", "weight": 2}])
+        request = _post_request(
+            tmp_path, raw, name=MODEL, body={"provider": "p", "weight": 5}
+        )
+
+        payload = json.loads((await update_model_provider(request)).body)
+
+        assert payload["ok"] is True
+        lanes = _on_disk(request)["models"][MODEL]["providers"]
+        assert [lane.get("weight") for lane in lanes] == [5]
+
+    @pytest.mark.asyncio
+    async def test_collapsing_keeps_the_fallback_the_survivor_uses(
+        self, tmp_path: Path
+    ):
+        """The surviving lane declared none, so the entry value is its upstream.
+
+        Dropping it would make that lane start asking for the model's own name
+        — the silent edit the read-only fallback row exists to prevent.
+        """
+        raw = _raw()
+        raw["models"][MODEL]["providers"] = [
+            {"name": "p", "upstream_model": "fast"},
+            {"name": "p"},
+        ]
+        raw["models"][MODEL]["upstream_model"] = "legacy-top-level"
+        request = _post_request(
+            tmp_path,
+            raw,
+            name=MODEL,
+            body={"provider": "p", "upstream_model": "fast"},
+        )
+
+        await remove_model_provider(request)
+
+        entry = _on_disk(request)["models"][MODEL]
+        assert entry["provider"] == "p"
+        assert entry["upstream_model"] == "legacy-top-level"
+
+    @pytest.mark.asyncio
+    async def test_the_undeclared_lane_is_addressed_as_empty(self, tmp_path: Path):
+        """``""`` names the lane without an upstream; absent means "not said"."""
+        raw = _raw()
+        raw["models"][MODEL]["providers"] = [
+            {"name": "p", "upstream_model": "fast"},
+            {"name": "p"},
+        ]
+        request = _post_request(
+            tmp_path,
+            raw,
+            name=MODEL,
+            body={"provider": "p", "upstream_model": ""},
+        )
+
+        payload = json.loads((await remove_model_provider(request)).body)
+
+        assert payload["ok"] is True
+        entry = _on_disk(request)["models"][MODEL]
+        assert entry["provider"] == "p"
+        assert entry["upstream_model"] == "fast"
 
 
 class TestATopLevelUpstreamIsTheLaneFallback:

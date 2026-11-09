@@ -357,8 +357,8 @@ def test_declared_lanes_keep_a_switched_off_provider():
 
     assert [entry.name for entry in config.models["m"].providers] == ["a"]
     assert config.declared_model_lanes["m"] == [
-        {"name": "a", "weight": 2, "enabled": True},
-        {"name": "b", "weight": 3, "enabled": True},
+        {"name": "a", "upstream_model": None, "weight": 2, "enabled": True},
+        {"name": "b", "upstream_model": None, "weight": 3, "enabled": True},
     ]
 
 
