@@ -2,6 +2,10 @@
 Values only: components own where these land (epic #1154, issue #1471). */
 
 [data-scheme="minimal"] {
+  /* The modal scrim.  A literal rgba, so `getComputedStyle` returns the
+     token's own value and the review can compare it without resolving
+     a color-mix. */
+  --overlay: rgba(0, 0, 0, .45);
   --radius: 6px;
   --dot: transparent;
   --grid: transparent;
@@ -68,6 +72,7 @@ Values only: components own where these land (epic #1154, issue #1471). */
 }
 
 [data-scheme="minimal"][data-mode="dark"] {
+  --overlay: rgba(0, 0, 0, .70);
   --bg: #000;
   --surface: #0a0a0a;
   --surface-2: #111;

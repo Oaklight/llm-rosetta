@@ -26,8 +26,8 @@
  * context rules and twenty-two inline attributes, so a single sheet can no
  * longer be trusted to hold it.
  *
- * Nine mutations this file has been checked against — each one reds the test
- * named, and a guard that stops reding is not a guard:
+ * Eleven mutations this file has been checked against — each one reds the
+ * test named, and a guard that stops reding is not a guard:
  *
  *   1. `outline: none` on a `:focus-visible` rule          → 1
  *   2. `:focus-visible { outline: 1px … }`                  → 2
@@ -38,6 +38,10 @@
  *   7. `.login-remember input { height: 60px }`             → 4
  *   8. `color-scheme: dark` on `.chip`                      → 6
  *   9. `color-scheme` inside a theme file                   → theme-contract
+ *  10. `.modal .prov-tab { outline: none }`                  → 1 (P5: the
+ *      dialog exception may not be borrowed by a descendant)
+ *  11. `.modal.modal-wide:focus-visible { outline: none }`   → 1 (nor by a
+ *      variant)
  */
 
 import assert from 'node:assert/strict';
@@ -98,11 +102,18 @@ function splitButtonRadius(value) {
 }
 
 test('no stylesheet removes the focus ring', () => {
+  // A dialog container takes focus on open as a landing point (`tabindex="-1"`
+  // is how the browser says where focus went).  It is not a control, and a
+  // 2px ring around a whole panel is not an affordance.  The exception is
+  // deliberately narrow: the two dialog panel selectors, and only `outline:
+  // none` — not a descendant, not a variant, not another value.
+  const FOCUS_LANDING = /^\.(?:modal|model-drawer)(:focus-visible)?$/;
   for (const sheet of SHEETS) {
     for (const rule of rules(sheet.text)) {
       for (const [prop, value] of declarations(rule.body)) {
+        const landing = FOCUS_LANDING.test(rule.selector) && prop === 'outline' && /^none\b/.test(value);
         assert.ok(
-          !(prop === 'outline' && /^none\b/.test(value)),
+          landing || !(prop === 'outline' && /^none\b/.test(value)),
           `${sheet.name}: "${rule.selector}" sets outline: ${value} — the panel draws one ring for every control`,
         );
       }

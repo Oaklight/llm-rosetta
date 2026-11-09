@@ -571,7 +571,10 @@ document.querySelectorAll('.seg-control[role="radiogroup"]').forEach(group => {
 });
 
 // ===================== Modal focus trap =====================
-document.querySelectorAll('.modal-overlay, .settings-popup').forEach(overlay => {
+// Dialogs trap their own Tab (see core/dialog.js): the trap has to know that
+// the panel itself can hold focus, which a listener per overlay could not.
+// The settings popup is not a modal and keeps its own wrap.
+document.querySelectorAll('.settings-popup').forEach(overlay => {
   overlay.addEventListener('keydown', (e) => {
     if (e.key !== 'Tab') return;
     const focusable = overlay.querySelectorAll('button, [href], input:not([type="hidden"]), select, textarea, [tabindex]:not([tabindex="-1"])');

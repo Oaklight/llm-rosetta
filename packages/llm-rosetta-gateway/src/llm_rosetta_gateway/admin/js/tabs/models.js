@@ -10,6 +10,7 @@ import { providerRowsHtml, syncPickerBtn, openPickerMenu } from '../components/p
 import { laneGripHtml, laneSwitchHtml, laneWeightInputHtml } from '../components/provider-row.js';
 import { findLane, laneBody, laneKey, laneLabel } from '../core/lanes.js';
 import { jsArg } from '../core/html.js';
+import { openDialog, closeDialog } from '../core/dialog.js';
 
 // ── helpers (module-private) ──
 
@@ -765,15 +766,20 @@ let _focusBeforeDrawer = null;
 
 function _openDrawer() {
   const el = document.getElementById('modelDrawer');
-  if (!el.classList.contains('open')) _focusBeforeDrawer = document.activeElement;
+  const scrim = document.getElementById('modelDrawerScrim');
+  if (el.classList.contains('open')) {
+    // Re-rendering the same open panel: keep the dialog entry and the focus.
+    _markActiveModelRow();
+    return;
+  }
+  _focusBeforeDrawer = document.activeElement;
   el.classList.add('open');
   el.setAttribute('aria-hidden', 'false');
+  if (scrim) scrim.hidden = false;
   document.body.classList.add('model-drawer-open');
-  // The panel is the new context: focus it so Escape and the close button work
-  // without a click, without stealing focus on every re-render.
-  if (document.activeElement !== el && !el.contains(document.activeElement)) {
-    el.querySelector('.md-close')?.focus();
-  }
+  // Same rules as every other dialog: the page stops scrolling, focus starts
+  // on the panel and Tab cycles inside it, Escape closes it.
+  openDialog(el, { onEscape: () => closeModelDrawer() });
   _markActiveModelRow();
 }
 
@@ -834,8 +840,12 @@ window.openModelDrawer = openModelDrawer;
 
 function closeModelDrawer() {
   const el = document.getElementById('modelDrawer');
+  const scrim = document.getElementById('modelDrawerScrim');
+  if (!el.classList.contains('open')) return;
   el.classList.remove('open');
   el.setAttribute('aria-hidden', 'true');
+  if (scrim) scrim.hidden = true;
+  closeDialog(el);
   document.body.classList.remove('model-drawer-open');
   document.querySelectorAll('#modelTable tr.model-row-active')
     .forEach(r => r.classList.remove('model-row-active'));

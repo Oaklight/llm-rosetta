@@ -678,26 +678,35 @@ button.prov-icon-btn:hover { background:var(--bg-hover); color:var(--text); }
 code.copyable { cursor: pointer; transition: background 0.15s; }
 code.copyable:hover { background: var(--bg-hover); }
 
-/* Modal */
+/* Modal (epic #1472 P5).  A panel is a frame, not a floating card: one 1px
+   hairline, the theme's panel corner, and no shadow — depth is the scrim's
+   job, and there is exactly one scrim.  The drawers below are the same frame
+   with the top, right and bottom edges cut off by the viewport. */
 .modal-overlay {
-  position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+  position: fixed; inset: 0; background: var(--overlay);
   display: none; align-items: center; justify-content: center; z-index: 100;
 }
 .modal-overlay.open { display: flex; }
+/* A dialog takes focus when it opens — that is how the browser announces
+   where focus went.  It is a landing point, not a control, so it does not
+   draw the control ring: a 2px accent box around a whole drawer is noise. */
+.modal:focus-visible { outline: none; }
 .modal {
   background: var(--bg-card); border: 1px solid var(--border);
-  border-radius: 12px; padding: 24px; width: 440px; max-width: 90vw;
+  border-radius: var(--card-radius); padding: 24px; width: 440px; max-width: 90vw;
   max-height: 85vh; overflow-y: auto;
 }
 .modal h3 { margin-bottom: 16px; font-size: 16px; }
 /* Add and edit flows slide in from the right, like the model panel: the list
    stays in view, the page does not jump, and the panel can be as tall as the
    form needs instead of scrolling inside an 85vh box. */
-#providerModal, #fetchModelsModal { justify-content: flex-end; align-items: stretch; background: transparent; }
+#providerModal, #fetchModelsModal { justify-content: flex-end; align-items: stretch; }
 #providerModal > .modal, #fetchModelsModal > .modal {
-  width: 560px; max-width: 100vw; height: 100%; max-height: none; margin: 0;
-  border-radius: 0; border-right: 0; border-top: 0; border-bottom: 0;
-  box-shadow: -10px 0 30px rgba(0,0,0,.22);
+  width: var(--drawer-w); max-width: 100vw; height: 100%; max-height: none; margin: 0;
+  /* Only the two corners that stand free: a radius on the right would round
+     against the viewport edge and show the page through the gap. */
+  border-radius: var(--card-radius) 0 0 var(--card-radius);
+  border-right: 0; border-top: 0; border-bottom: 0;
   transform: translateX(100%); transition: transform .18s ease;
 }
 #providerModal.open > .modal,
@@ -724,7 +733,8 @@ code.copyable:hover { background: var(--bg-hover); }
   background: var(--bg-card); border-top: 1px solid var(--border);
 }
 @media (max-width: 700px) {
-  #providerModal > .modal, #fetchModelsModal > .modal { width: 100vw; }
+  /* Full width: no free corner is left to round. */
+  #providerModal > .modal, #fetchModelsModal > .modal { width: 100vw; border-radius: 0; }
 }
 
 .form-group { margin-bottom: 14px; }
@@ -935,13 +945,22 @@ canvas { width: 100%; height: 160px; }
 /* The entry-level fallback: reported, not a lane of its own. */
 .md-fallback { color: var(--text-dim); }
 .md-actions { display: flex; gap: 6px; justify-content: flex-end; margin-top: 8px; }
+/* The model side panel is the third drawer and takes the same frame as the
+   other two: one 1px edge on the side that stands free, the panel corner on
+   the corners that do, no shadow, and the one scrim behind it. */
 .model-drawer {
-  position: fixed; top: 0; right: 0; bottom: 0; width: 440px; max-width: 100vw;
+  position: fixed; top: 0; right: 0; bottom: 0; width: var(--drawer-w); max-width: 100vw;
   z-index: 60; background: var(--bg-card); border-left: 1px solid var(--border);
-  box-shadow: -8px 0 24px rgba(0,0,0,.18); padding: 16px 20px; overflow-y: auto;
+  border-radius: var(--card-radius) 0 0 var(--card-radius);
+  padding: 16px 20px; overflow-y: auto;
   transform: translateX(100%); transition: transform .18s ease;
 }
 .model-drawer.open { transform: translateX(0); }
+.model-drawer:focus-visible { outline: none; }
+.drawer-scrim { position: fixed; inset: 0; z-index: 59; background: var(--overlay); }
+@media (max-width: 700px) {
+  .model-drawer { width: 100vw; border-radius: 0; }
+}
 /* The four visibility modes read as one field, so they share a row. */
 .vis-grid { display:grid; grid-template-columns:minmax(0,1fr); gap:6px; }
 .vis-grid > label { display:flex; align-items:center; gap:6px; font-size:11px; color:var(--text-dim); }

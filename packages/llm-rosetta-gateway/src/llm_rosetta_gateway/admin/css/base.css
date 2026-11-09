@@ -25,6 +25,8 @@
 
   --side-w: 232px;
   --topbar-h: 48px;
+  /* A drawer's width: geometry, not colour, so it is not a theme value. */
+  --drawer-w: 560px;
 
   /* Controls are square (issue #1472 P4): one corner radius for every
      button, field, chip and frame.  Pills survive only on status tags. */
@@ -46,11 +48,13 @@
    `auto` ring, whose colour follows the element's text colour — nine
    different ring colours on one page — and two controls showed none.  What
    the contexts share is this declaration set, `2px solid var(--accent)`, not
-   one selector: thirteen rules (sixteen selector strings) mention
-   `:focus-visible`, and ten of them declare this outline — at 2px by default,
-   -2px where a scroll container or a table cell would clip it (see
-   `.table-scroll`, `th.sortable`), or the accent's ink on an accent-filled
-   control.  One more sets only an `outline-color`, one only a `border-color`,
+   one selector: fifteen rules (eighteen selector strings) mention
+   `:focus-visible`, and twelve of them declare an `outline` — ten draw this
+   ring, at 2px by default, -2px where a scroll container or a table cell
+   would clip it (see `.table-scroll`, `th.sortable`), or the accent's ink on
+   an accent-filled control; the eleventh and twelfth are P5's `.modal` and
+   `.model-drawer`, dialog landing points rather than controls, which draw
+   none.  One more sets only an `outline-color`, one only a `border-color`,
    and the switch track keeps a 3px halo. */
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 /* The UA's own widgets follow the accent too, and the placeholder stops
