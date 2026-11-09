@@ -814,8 +814,10 @@ class TestDeclaredGrouping:
 
         Kilo titles its group because its key is lower-case; the ChatGPT plan
         profile titles its own because the fallback would be the mangled key
-        (``Openai_chatgpt``).  Neither declares ``group`` — the name split
-        already puts each shim where it belongs.
+        (``Openai_chatgpt``); TypeSafe titles its own because the vendor writes
+        the name with a capital ``S`` the key split cannot produce.  None of
+        them declares ``group`` — the name split already puts each shim where
+        it belongs.
 
         Deliberately not a whitelist: the set of titled shims is not pinned,
         so a new vendor adding one does not have to edit this test.  What is
@@ -828,6 +830,8 @@ class TestDeclaredGrouping:
         assert "openai_chatgpt--open_responses" in titled
         assert all(s.group is None for s in titled.values())
         assert titled["kilo--chat_completions"].group_label == "Kilo"
+        assert titled["typesafe--systemone"].group_label == "TypeSafe"
+        assert titled["typesafe--systemone"].display_name is None
         assert (
             titled["openai_chatgpt--open_responses"].group_label
             == "OpenAI (ChatGPT plan)"
@@ -838,7 +842,11 @@ class TestDeclaredGrouping:
 
     def test_undeclared_shims_leave_both_fields_none(self):
         """A shim that declares neither renders from its name alone."""
-        titled = {"kilo--chat_completions", "openai_chatgpt--open_responses"}
+        titled = {
+            "kilo--chat_completions",
+            "openai_chatgpt--open_responses",
+            "typesafe--systemone",
+        }
         shims = load_providers()
         assert all(
             s.group is None and s.group_label is None

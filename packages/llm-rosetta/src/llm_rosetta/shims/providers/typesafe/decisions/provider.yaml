@@ -1,6 +1,22 @@
+# TypeSafe AI — the System One decision API.
+#
+# The picker files this shim under the `typesafe` key its name already implies;
+# the title is declared because the fallback is the capitalized key
+# (`Typesafe`), and the vendor writes its name as one word with a capital S.
+# No `display_name` is declared.  The endpoint picker does have a tree view —
+# `viewToggle: false` only hides the switch, and the stored
+# `provider-type-view` preference still selects it — and there the shim's own
+# row falls back to the format name (`systemone`) under the `TypeSafe` group
+# row.  A row label carrying the vendor name would print it a second time; the
+# group title is where it belongs.
+#
+# `typesafeai` is the slug lobehub's icon set uses for the vendor; there is no
+# `typesafe` icon.
 name: typesafe--systemone
+group_label: TypeSafe
 model_type: decisions
 format: systemone
+logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/typesafeai.svg
 
 connection:
   base_url: https://api.typesafe.ai
