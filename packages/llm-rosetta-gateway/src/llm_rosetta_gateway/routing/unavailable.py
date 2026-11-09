@@ -150,14 +150,18 @@ def classify(
     table = config.providers if providers is None else providers
 
     # The route as this request can still use it: a provider it already failed
-    # over from is not "available", so answering "every provider" over the full
-    # list would describe a route that includes the one that just refused.
-    # Everything else is whole-route -- ``len(unready) == len(remaining)`` and
-    # ``names <= quota_excluded`` are "every provider is blocked" / "... spent"
-    # -- and both were asked that way by ``resolve`` before this module
-    # existed.  A list filtered by anything else here would make them answer
-    # about that filtered set instead.
-    remaining = [p for p in ctx.candidates if p.name not in ctx.failover_excluded]
+    # over from is not "available", and neither is a lane it was refused by, so
+    # answering "every provider" over the full list would describe a route that
+    # includes what just refused.  Everything else is whole-route --
+    # ``len(unready) == len(remaining)`` and ``names <= quota_excluded`` are
+    # "every provider is blocked" / "... spent" -- and both were asked that way
+    # by ``resolve`` before this module existed.  A list filtered by anything
+    # else here would make them answer about that filtered set instead.
+    remaining = [
+        p
+        for p in ctx.candidates
+        if p.name not in ctx.failover_excluded and p.key not in ctx.lane_excluded
+    ]
     unready = [
         table[p.name] for p in remaining if p.name in table and not table[p.name].ready
     ]

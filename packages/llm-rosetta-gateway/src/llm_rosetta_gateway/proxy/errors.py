@@ -396,6 +396,23 @@ class RefusalAction(str, Enum):
     BREAK = "break"
 
 
+class RefusalScope(str, Enum):
+    """Whose failure a refusal reports, and so what a failover may reuse.
+
+    The distinction decides how much of a route the retry may still use, so it
+    is made here, where the status is classified, rather than in the retry
+    path: a credential-level refusal takes the provider's siblings down with
+    it, a lane-level one leaves them standing.
+    """
+
+    #: One key's state — a ``429``, a ``402``, a spent allowance.  Every lane
+    #: of the provider shares the key, so all of them are out for the retry.
+    CREDENTIAL = "credential"
+    #: One upstream model's failure — a transient status, a first token that
+    #: never came.  The provider's other lanes may still serve.
+    LANE = "lane"
+
+
 @dataclass(frozen=True)
 class RefusalDecision:
     """The outcome of :func:`decide_on_refusal`."""
@@ -405,6 +422,8 @@ class RefusalDecision:
     response: Response | None = None
     #: The quota signal that explains a ``FAILOVER``.
     signal: Any = None
+    #: What the refusal was about, when ``action`` is ``FAILOVER``.
+    scope: RefusalScope | None = None
 
 
 async def decide_on_refusal(
@@ -459,6 +478,7 @@ async def decide_on_refusal(
         return RefusalDecision(
             RefusalAction.FAILOVER,
             signal=UpstreamRefusal(status_code, f"upstream {status_code}"),
+            scope=RefusalScope.LANE,
         )
     refusal, signal = _quota_refusal(provider_info, status_code, error_text)
     if refusal is None and status_code == 429:
@@ -473,7 +493,9 @@ async def decide_on_refusal(
     if refusal is QuotaRefusal.RETRY:
         return RefusalDecision(RefusalAction.RETRY)
     if refusal is QuotaRefusal.EXHAUSTED:
-        return RefusalDecision(RefusalAction.FAILOVER, signal=signal)
+        return RefusalDecision(
+            RefusalAction.FAILOVER, signal=signal, scope=RefusalScope.CREDENTIAL
+        )
     if status_code in REFUSAL_STATUSES:
         # No probe explained it, but the status alone is a refusal: count it
         # toward the same ladder, so a provider that keeps answering 429 or
@@ -482,6 +504,7 @@ async def decide_on_refusal(
         return RefusalDecision(
             RefusalAction.FAILOVER,
             signal=UpstreamRefusal(status_code, f"upstream {status_code}"),
+            scope=RefusalScope.CREDENTIAL,
         )
     return RefusalDecision(RefusalAction.BREAK)
 

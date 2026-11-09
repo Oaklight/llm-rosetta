@@ -118,6 +118,7 @@ def _config(
     providers: tuple[str, ...] = ("a", "b"),
     opt_in: bool = True,
     probe: bool = True,
+    lanes: list[dict[str, Any]] | None = None,
 ) -> GatewayConfig:
     config = GatewayConfig(
         {
@@ -129,7 +130,7 @@ def _config(
                 }
                 for name in providers
             },
-            "models": {"m": {"providers": list(providers)}},
+            "models": {"m": {"providers": lanes or list(providers)}},
         }
     )
     if probe:
@@ -393,6 +394,7 @@ class _StreamTransport(_Transport):
     ) -> Any:
         provider_info.auth_headers()
         self.calls.append(provider_info.base_url)
+        self.models.append(body.get("model"))
         return self._responses.pop(0)
 
 
@@ -404,6 +406,9 @@ def _run_stream(config: GatewayConfig, transport: _StreamTransport):
     selection = config.selection_context("m", "chat_completions")
     route, pinfo = config.resolve(selection)
     body = {**_REQUEST, "stream": True}
+    # Same rewrite the route handler does; a lane's alias must reach the wire.
+    if route.upstream_model:
+        body["model"] = route.upstream_model
 
     async def _go():
         return await handle_streaming(
@@ -436,6 +441,16 @@ class TestTheStreamFailover:
         assert transport.calls == ["https://a.test", "https://b.test"]
         assert profile["failover"]["from"] == "a"
         assert profile["failover"]["to"] == "b"
+
+    def test_a_transient_refusal_moves_to_the_sibling_lane(self):
+        transport = _StreamTransport(_ErrorStream(500, "boom"), _EmptyStream())
+
+        response, profile = _run_stream(_two_lane_config(), transport)
+
+        assert response.status_code == 200
+        assert transport.models == ["fast", "eco"]
+        assert profile["failover"]["scope"] == "lane"
+        assert profile["failover"]["to_lane"] == "eco"
 
     def test_an_opted_out_model_keeps_the_refusal(self):
         config = _config(opt_in=False)
@@ -762,6 +777,166 @@ class TestTheBudgetIsOneFailover:
 
         assert response.status_code == 429
         assert transport.calls == ["https://a.test", "https://b.test"]
+        assert profile["failover"]["to"] == "b"
+
+
+def _two_lane_config() -> GatewayConfig:
+    """One provider with two lanes, and a third provider that would outbid one.
+
+    ``a/fast`` carries the weight that makes it the first pick; ``b`` outbids
+    ``a/eco`` in any plain re-selection, so a test that sees ``eco`` served has
+    proven the sibling was tried first, not that the weights happened to agree.
+    """
+    return _config(
+        providers=("a", "b"),
+        lanes=[
+            {"name": "a", "upstream_model": "fast", "weight": 100},
+            {"name": "a", "upstream_model": "eco"},
+            {"name": "b", "weight": 9},
+        ],
+    )
+
+
+class TestTheSiblingLane:
+    """A content-level refusal is about one upstream model, not its key (#1430).
+
+    The lane that answered leaves the route; the provider's other lanes stay
+    in it, and they are tried before another provider — the same account, the
+    same base URL, so the cheapest retry is also the most likely to work.
+    """
+
+    def test_a_5xx_is_retried_on_the_sibling_lane(self):
+        transport = _Transport(_server_error(), _ok())
+
+        response, profile = _run(_two_lane_config(), transport)
+
+        assert response.status_code == 200
+        # ``b`` outweighs ``eco``: only the sibling pin can have chosen it.
+        assert transport.models == ["fast", "eco"]
+        failover = profile["failover"]
+        assert (failover["from"], failover["from_lane"]) == ("a", "fast")
+        assert (failover["to"], failover["to_lane"]) == ("a", "eco")
+        assert failover["scope"] == "lane"
+
+    def test_a_429_takes_both_lanes_out_and_another_provider_serves(self):
+        """A quota refusal is one credential's state: the sibling shares it."""
+        transport = _Transport(_refused(), _ok())
+
+        response, profile = _run(_two_lane_config(), transport)
+
+        assert response.status_code == 200
+        assert transport.models == ["fast", "m"]
+        assert profile["failover"]["to"] == "b"
+        assert profile["failover"]["scope"] == "credential"
+
+    def test_both_lanes_refusing_reaches_another_provider(self):
+        transport = _Transport(_server_error(), _server_error(), _ok())
+
+        response, profile = _run(_two_lane_config(), transport)
+
+        assert response.status_code == 200
+        assert transport.models == ["fast", "eco", "m"]
+        outer = profile["failover"]
+        assert (outer["from_lane"], outer["to_lane"]) == ("fast", "eco")
+        inner = outer["profile"]["failover"]
+        assert (inner["from_lane"], inner["to"]) == ("eco", "b")
+
+    def test_the_content_level_budget_stops_at_three_attempts(self):
+        transport = _Transport(_server_error(), _server_error(), _server_error(), _ok())
+
+        response, _profile = _run(_two_lane_config(), transport)
+
+        assert response.status_code == 500
+        assert transport.models == ["fast", "eco", "m"]
+
+    def test_the_refused_lane_is_the_one_selection_chose_not_the_route_alias(self):
+        """The lane key comes from the selection, not from the route.
+
+        A model-level ``upstream_model`` alias is what a request is sent as, not
+        which candidate was picked: a key read off the route would name a lane
+        no candidate has, exclude nothing, and retry the lane that just
+        refused.
+        """
+        config = GatewayConfig(
+            {
+                "providers": {
+                    name: {
+                        "type": "chat_completions",
+                        "api_key": f"sk-{name}",
+                        "base_url": f"https://{name}.test",
+                    }
+                    for name in ("a", "b")
+                },
+                "models": {
+                    "m": {
+                        "providers": [{"name": "a", "weight": 100}, {"name": "b"}],
+                        "upstream_model": "alias",
+                    }
+                },
+            }
+        )
+        config.model_failover = {"m": True}
+        transport = _Transport(_server_error(), _ok())
+
+        response, profile = _run(config, transport)
+
+        assert response.status_code == 200
+        # ``a`` was tried once: the lane key matched the candidate that
+        # refused, so the retry moved to ``b`` instead of repeating ``a``.
+        assert transport.calls == ["https://a.test", "https://b.test"]
+        assert profile["failover"]["to"] == "b"
+
+    def test_a_route_of_single_lane_providers_is_bounded(self):
+        """Every provider has one lane, so each sibling step lands elsewhere.
+
+        Counting kinds rather than steps let this shape walk the whole route:
+        the first provider had no sibling, so ``lane_retried`` never became
+        true and every refusal bought another hop.
+        """
+        config = _config(providers=("a", "b", "c", "d"))
+        transport = _Transport(_server_error(), _server_error(), _server_error())
+
+        response, profile = _run(config, transport)
+
+        assert response.status_code == 500
+        assert transport.calls == [
+            "https://a.test",
+            "https://b.test",
+            "https://c.test",
+        ]
+        assert profile["failover"]["profile"]["failover"]["to"] == "c"
+
+    def test_the_same_bound_holds_when_the_client_asked_for_a_stream(self):
+        """One decision serves both transports, so the bound is shared."""
+        config = _config(providers=("a", "b", "c", "d"))
+        transport = _StreamTransport(
+            _ErrorStream(500, "boom"),
+            _ErrorStream(500, "boom"),
+            _ErrorStream(500, "boom"),
+        )
+
+        response, _profile = _run_stream(config, transport)
+
+        assert response.status_code == 500
+        assert transport.calls == [
+            "https://a.test",
+            "https://b.test",
+            "https://c.test",
+        ]
+
+    def test_a_provider_with_one_lane_falls_through_to_another(self):
+        config = _config(
+            providers=("a", "b"),
+            lanes=[{"name": "a", "upstream_model": "fast"}, {"name": "b"}],
+        )
+        transport = _Transport(_server_error(), _ok())
+
+        response, profile = _run(config, transport)
+
+        assert response.status_code == 200
+        assert transport.models == ["fast", "m"]
+        # The refusal was lane-scoped; the provider simply had no sibling.
+        assert profile["failover"]["scope"] == "lane"
         assert profile["failover"]["to"] == "b"
 
 

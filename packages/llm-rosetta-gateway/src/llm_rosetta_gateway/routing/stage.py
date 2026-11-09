@@ -78,8 +78,10 @@ class RoutingChain:
             "provider_shim_names",
             "provider_account_tokens",
             # Seeded by the proxy, which seeds ``provider_info`` too: a
-            # failover attempt starts with a set of providers already refused.
+            # failover attempt starts with a set of providers already refused,
+            # and, after a lane-scoped refusal, the lanes it must not reuse.
             "failover_excluded",
+            "lane_excluded",
             # Seeded by the edge when the model has rules: the source request
             # in IR form, reduced to what a rule reads.  A model without rules
             # leaves it ``None`` and no stage reads it.

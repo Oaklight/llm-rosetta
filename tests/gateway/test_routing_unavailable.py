@@ -56,6 +56,59 @@ def _blocked(name: str, identity: str, seconds: int) -> SimpleNamespace:
     return pinfo
 
 
+class TestTheLaneExclusion:
+    """A lane this request was refused by is out of the story, as a provider is.
+
+    ``classify`` answers about the route the request can still use.  After a
+    lane-level refusal that route is every candidate except that lane, so a
+    full-route answer taken over the unfiltered list would name a candidate
+    the retry may not touch.
+    """
+
+    def test_a_refused_lane_is_not_counted_as_available(self):
+        refuser = SimpleNamespace(name="a", ready=True)
+        blocked = _blocked("b", "@unavail-lane-block", 30)
+        ctx = SelectionContext("m", "chat_completions")
+        ctx.model_route = ModelRoute(
+            providers=[ProviderEntry("a", upstream_model="fast"), ProviderEntry("b")],
+            route_id="r-unavailable-lane",
+        )
+        ctx.lane_excluded = frozenset({("a", "fast")})
+
+        state = classify(_config({"a": refuser, "b": blocked}), ctx)
+
+        # Only ``b`` is left in the retry's route, and it is blocked: that is
+        # the client's story, not "initializing" over a route that still
+        # counted the lane that just refused.
+        assert state.reason == "blocked"
+        assert state.as_kwargs()["blocked_until"] is not None
+
+    def test_a_sibling_of_the_refused_lane_keeps_the_story_partial(self):
+        """The exclusion is one lane's, not the provider's.
+
+        ``a/eco`` is still usable, so a route whose only *unready* provider is
+        ``b`` is not a whole-route block.  Filtering by provider name instead
+        of by lane would drop ``a`` from the route, leaving ``b`` alone and
+        turning the same state into "blocked".
+        """
+        refuser = SimpleNamespace(name="a", ready=True)
+        blocked = _blocked("b", "@unavail-lane-sibling", 30)
+        ctx = SelectionContext("m", "chat_completions")
+        ctx.model_route = ModelRoute(
+            providers=[
+                ProviderEntry("a", upstream_model="fast"),
+                ProviderEntry("a", upstream_model="eco"),
+                ProviderEntry("b"),
+            ],
+            route_id="r-unavailable-lane-2",
+        )
+        ctx.lane_excluded = frozenset({("a", "fast")})
+
+        state = classify(_config({"a": refuser, "b": blocked}), ctx)
+
+        assert state.reason == "initializing"
+
+
 class TestTheBlock:
     def test_every_provider_blocked_is_a_block_with_the_latest_end(self):
         a = _blocked("a", "@unavail-block-a", 30)
