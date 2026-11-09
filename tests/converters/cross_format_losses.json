@@ -27,61 +27,21 @@
       "stream.include_usage": 1
     },
     "open_responses->chat_completions": {
-      "generation.truncation": 1,
-      "provider_extensions.background": 1,
-      "provider_extensions.context_management.type": 1,
-      "provider_extensions.conversation": 1,
-      "provider_extensions.include": 1,
-      "provider_extensions.metadata.k": 1,
-      "provider_extensions.previous_response_id": 1,
-      "provider_extensions.prompt.id": 1,
-      "provider_extensions.safety_identifier": 1,
-      "provider_extensions.store": 1,
-      "provider_extensions.user": 1
+      "generation.truncation": 1
     },
     "open_responses->messages": {
       "generation.max_tokens": 24,
-      "generation.truncation": 1,
-      "provider_extensions.background": 1,
-      "provider_extensions.context_management.type": 1,
-      "provider_extensions.conversation": 1,
-      "provider_extensions.include": 1,
-      "provider_extensions.metadata.k": 1,
-      "provider_extensions.previous_response_id": 1,
-      "provider_extensions.prompt.id": 1,
-      "provider_extensions.safety_identifier": 1,
-      "provider_extensions.store": 1,
-      "provider_extensions.user": 1
+      "generation.truncation": 1
     },
     "open_responses->google_generate": {
       "cache.key": 1,
       "generation.truncation": 1,
-      "provider_extensions.background": 1,
-      "provider_extensions.context_management.type": 1,
-      "provider_extensions.conversation": 1,
-      "provider_extensions.include": 1,
-      "provider_extensions.metadata.k": 1,
-      "provider_extensions.previous_response_id": 1,
-      "provider_extensions.prompt.id": 1,
-      "provider_extensions.safety_identifier": 1,
-      "provider_extensions.store": 1,
-      "provider_extensions.user": 1,
       "service_tier": 1,
       "stream.enabled": 25
     },
     "open_responses->google_interactions": {
       "cache.key": 1,
       "cache.retention": 1,
-      "provider_extensions.background": 1,
-      "provider_extensions.context_management.type": 1,
-      "provider_extensions.conversation": 1,
-      "provider_extensions.include": 1,
-      "provider_extensions.metadata.k": 1,
-      "provider_extensions.previous_response_id": 1,
-      "provider_extensions.prompt.id": 1,
-      "provider_extensions.safety_identifier": 1,
-      "provider_extensions.store": 1,
-      "provider_extensions.user": 1,
       "service_tier": 1,
       "stream.enabled": 1
     },
@@ -117,26 +77,10 @@
       "reasoning.budget_tokens": 1,
       "reasoning.mode": 1
     },
-    "google_interactions->chat_completions": {
-      "provider_extensions.background": 1,
-      "provider_extensions.previous_interaction_id": 1,
-      "provider_extensions.store": 1
-    },
-    "google_interactions->open_responses": {
-      "provider_extensions.background": 1,
-      "provider_extensions.previous_interaction_id": 1,
-      "provider_extensions.store": 1
-    },
     "google_interactions->messages": {
-      "generation.max_tokens": 8,
-      "provider_extensions.background": 1,
-      "provider_extensions.previous_interaction_id": 1,
-      "provider_extensions.store": 1
+      "generation.max_tokens": 8
     },
     "google_interactions->google_generate": {
-      "provider_extensions.background": 1,
-      "provider_extensions.previous_interaction_id": 1,
-      "provider_extensions.store": 1,
       "stream.enabled": 1
     }
   },

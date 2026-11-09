@@ -192,8 +192,15 @@ class BaseConverter(ABC):
         result = self._do_request_to_provider(ir_request, context=ctx, **kwargs)
         strip_internal_metadata(result)
         dropped = unowned_extensions(ir_request, self._CONVERTER_TAG)
-        if dropped:
-            ctx.warnings.append(extension_loss_warning(dropped, self._CONVERTER_TAG))
+        # One warning per path, with the path as its subject: a container-wide
+        # subject would back every ``provider_extensions.*`` path of this
+        # write, including one this warning's message does not name, so a
+        # later loss could hide behind it.
+        for key in sorted(dropped):
+            ctx.warnings.warn(
+                extension_loss_warning([key], self._CONVERTER_TAG),
+                subject=f"provider_extensions.{key}",
+            )
         return result, ctx.warnings
 
     def _normalize_tool_pairing(

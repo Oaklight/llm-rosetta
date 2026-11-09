@@ -79,14 +79,26 @@ def test_the_format_that_recorded_them_still_gets_them() -> None:
     assert warnings == []
 
 
-def test_the_loss_is_reported_and_names_the_consequence() -> None:
+def test_the_loss_is_reported_once_per_path() -> None:
+    """One warning per dropped key, with that key's IR path as its subject.
+
+    A container-wide subject would back every ``provider_extensions.*`` path
+    of the write, so a later loss could hide behind a warning that never
+    mentioned it.
+    """
     _, warnings = _body("messages")
-    assert len(warnings) == 1, warnings
+    assert len(warnings) == len(FOREIGN_KEYS), warnings
+    assert {getattr(warning, "subject", "") for warning in warnings} == {
+        f"provider_extensions.{key}" for key in FOREIGN_KEYS
+    }
+    by_key = {
+        getattr(warning, "subject", "").rsplit(".", 1)[-1]: warning
+        for warning in warnings
+    }
     # ``previous_response_id`` is not a trimmed knob: the target answers from
-    # this turn alone, and the warning has to say so.
-    assert warnings[0] == (
-        "provider-bound request fields dropped for messages: background, "
-        "metadata, previous_response_id, safety_identifier, store, user; "
+    # this turn alone, and its warning has to say so.
+    assert by_key["previous_response_id"] == (
+        "provider-bound request fields dropped for messages: previous_response_id; "
         "previous_response_id refers to a stored conversation that only the "
         "source upstream holds, so the target answers from this turn alone"
     )
