@@ -508,12 +508,13 @@ class TestDecisionSection:
 
 
 class TestMintedCredential:
-    """A typed endpoint installs a static key, so a minting shim cannot serve it.
+    """A legacy ``<type>_providers`` entry that mints cannot serve its endpoint.
 
-    A shim whose credential comes from ``token_command`` or ``auth.py`` would
-    reach the upstream with an empty ``Authorization`` header.  Until the typed
-    pools share the gateway's minting (#1355), the endpoint is disabled with a
-    reason the admin panel shows.
+    The section has no counterpart in ``providers:``, so there is no LLM lane
+    to share a minted credential with (a ``providers:`` entry does share —
+    see ``test_typed_minted_credential.py``).  Forwarding anyway would send an
+    empty ``Authorization`` header, so the endpoint is disabled with a reason
+    that names the section and the fix.
     """
 
     @staticmethod

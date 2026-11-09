@@ -363,8 +363,16 @@ class GatewayConfig:
         # entries plus its legacy ``<type>_providers`` section, and its
         # default format from the registry.  A newly registered type needs no
         # edit here.
+        #
+        # Order dependency: the typed endpoints of a ``providers:`` entry draw
+        # their credential from that entry's ProviderInfo, so ``self.providers``
+        # must already be built above.  The pool is read straight off the
+        # attribute — no ``getattr`` fallback — so moving this loop earlier
+        # fails the load with an AttributeError instead of quietly leaving every
+        # typed endpoint without an owner.  A test pins the shared key ring.
         from llm_rosetta.formats import legacy_model_type
 
+        credential_owners = self.providers
         for descriptor in _typed_descriptors():
             name = descriptor.name
             # A legacy spelling of the type names the same pools (the v1
@@ -382,6 +390,7 @@ class GatewayConfig:
                 require_declared_format=True,
                 map_models=False,
                 global_proxy=self.proxy,
+                credential_owner=credential_owners,
             )
             legacy = parse_typed_config(
                 raw.get(f"{name}_providers") or old_providers,

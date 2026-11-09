@@ -778,3 +778,62 @@ def build_provider_info(
         quota_in_band=quota_in_band,
         quota_probes=(shim.quota_probes if shim is not None else ()),
     )
+
+
+#: The credential state a second endpoint of one provider reads from the lane
+#: that owns it.  Kept as a name list rather than a copy loop over ``__dict__``
+#: so a field added to :class:`ProviderInfo` later is shared only by an
+#: explicit decision.
+_CREDENTIAL_FIELDS: tuple[str, ...] = (
+    "config_name",
+    "token_command",
+    "token_refresh_interval",
+    "token_command_env",
+    "token_input",
+    "auth_exchange",
+    "auth_context",
+    "keyless",
+    "credential_token",
+    "credential_source",
+    "quota_identity",
+    "quota_provider_blocked",
+)
+
+
+def share_credential(target: ProviderInfo, owner: ProviderInfo) -> None:
+    """Make *target* read *owner*'s credential instead of holding its own.
+
+    A typed endpoint (embeddings, rerank, decisions) is a second endpoint of a
+    provider entry, not a second provider: it must forward whatever the entry
+    minted.  Sharing the **key ring object** — not a copy of its keys — is what
+    gives that for free, because every path that renews a credential
+    (``DeferredStartup`` seeding, the scheduled refresher, the reactive 401
+    retry, the panel's "refresh now") writes through ``owner.key_ring``.  No
+    path is added for typed endpoints, so one credential source keeps exactly
+    one mint and one refresh loop.
+
+    The routing state that belongs to the account rather than the endpoint is
+    carried over too: a provider-wide quota block or a rate-limit disable is a
+    fact about the credential, so it must apply to every endpoint of it.
+
+    **The quota boundary.**  What is shared is the credential's *eligibility*:
+    the key ring's ``usable`` predicate (a demoted or 429-disabled key is
+    skipped), the provider-wide block, and the credential identity.  What is
+    not shared is the allowance *measurement*: ``quota_probe`` and
+    ``quota_interval`` stay on the owner, so ``provider_headroom`` is ``None``
+    for a typed endpoint and ``provider_spent`` never excludes one.  Typed
+    routing therefore spends no part of the headroom-weighting budget — it is
+    excluded only by what the credential itself reports.  Copying the probe
+    here would leave a declaration nothing reads: the poller walks
+    ``config.providers`` only.
+
+    Args:
+        target: The typed endpoint's own :class:`ProviderInfo`.
+        owner: The provider entry in the LLM pool that mints the credential.
+    """
+    target.key_ring = owner.key_ring
+    for field in _CREDENTIAL_FIELDS:
+        setattr(target, field, getattr(owner, field))
+    # ``token_status`` reads through this link rather than copying the dict:
+    # a copy would stop describing the credential the moment it refreshed.
+    target.credential_owner = owner

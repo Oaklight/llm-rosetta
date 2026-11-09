@@ -136,6 +136,62 @@ def _inband_error(handler: TypedHandler, route: TypedRoute, resp: Any) -> str | 
     return handler.upstream_error(route.format, resp.body)
 
 
+async def _credential_retry(
+    resp: Any, route: TypedRoute, *, already_refreshed: bool
+) -> bool:
+    """Whether a refused attempt re-mints and retries the same provider.
+
+    A 401 from a provider whose credential is minted means the ring's token
+    expired early.  The chat route reacts through
+    ``proxy.errors._handle_401``; a typed request never reaches that handler,
+    so it reacts here.  The ring is the provider entry's own
+    (:func:`~llm_rosetta_gateway.providers.share_credential`), so this mints
+    through the one credential source, and :func:`force_refresh` debounces
+    concurrent 401s.
+
+    **Once per request**: *already_refreshed* makes a second refusal the
+    answer, so a credential the upstream keeps rejecting cannot loop.
+
+    A session-policy 401 is not an expiry: it needs a human sign-in, and
+    re-minting cannot produce one, so it is reported rather than retried.
+
+    Args:
+        resp: The refused upstream response.
+        route: The route that answered it.
+        already_refreshed: Whether this request already re-minted once.
+
+    Returns:
+        ``True`` when a fresh credential was obtained and the caller should
+        retry this provider once.
+    """
+    if (
+        resp.status_code != 401
+        or already_refreshed
+        or not route.provider_info.mints_credential
+    ):
+        return False
+
+    from ..transport.auth_errors import AuthErrorKind, classify_auth_error
+    from ..transport.token_refresh import force_refresh
+
+    if (
+        classify_auth_error(401, resp.error_text or "")
+        is AuthErrorKind.SESSION_POLICY_401
+    ):
+        logger.warning(
+            "typed: provider '%s' needs an interactive sign-in; not retrying",
+            route.provider_name,
+        )
+        return False
+    if await force_refresh(route.provider_info):
+        logger.info(
+            "typed: retrying after a reactive credential refresh for '%s'",
+            route.provider_name,
+        )
+        return True
+    return False
+
+
 def _converted_body(
     handler: TypedHandler,
     pipeline: Any,
@@ -183,6 +239,38 @@ def _failover_target(
         )
     except ProviderNotReady:
         return None
+
+
+async def _retry_action(
+    resp: Any,
+    route: TypedRoute,
+    handler: TypedHandler,
+    config: GatewayConfig,
+    model: str,
+    excluded: frozenset[str],
+    *,
+    refreshed: bool,
+) -> tuple[TypedRoute, bool, frozenset[str]] | None:
+    """The next attempt a refused response earns, or ``None`` to report it.
+
+    Two refusals are retryable, and they spend different budgets:
+
+    * a 401 from a provider that mints its credential — re-mint once and try
+      the same provider again (``refreshed`` comes back ``True``);
+    * a 429 with failover enabled — try the next eligible provider, leaving
+      the one that refused out (``refreshed`` is unchanged).
+
+    Returns:
+        ``(route, refreshed, excluded)`` for the next attempt, or ``None`` when
+        the refusal is the answer.
+    """
+    if await _credential_retry(resp, route, already_refreshed=refreshed):
+        return route, True, excluded
+    if _may_fail_over(config, handler, model, resp.status_code):
+        next_route = _failover_target(config, handler, model, route, excluded)
+        if next_route is not None:
+            return next_route, refreshed, excluded | {route.provider_name}
+    return None
 
 
 def _error(message: str, error_type: str, status_code: int) -> JSONResponse:
@@ -372,6 +460,12 @@ async def handle_typed_request(
     # that answered it to the excluded set and resolves again.  The lifecycle
     # note is re-taken per attempt so the log names the provider that served.
     excluded: frozenset[str] = frozenset()
+    # A 401 from a provider whose credential is minted means the ring's token
+    # expired early.  The chat route reacts through
+    # ``proxy.errors._handle_401``; a typed request never reaches that handler,
+    # so it reacts here — **once per request**, never in a loop: a refusal that
+    # survives a freshly minted credential is the answer, not another attempt.
+    refreshed = False
     while True:
         rejection = begin_typed(
             request,
@@ -430,15 +524,19 @@ async def handle_typed_request(
 
             if resp.is_error:
                 error_detail = resp.error_text
-                if _may_fail_over(config, handler, model, resp.status_code):
-                    next_route = _failover_target(
-                        config, handler, model, route, excluded
-                    )
-                    if next_route is not None:
-                        excluded = excluded | {route.provider_name}
-                        route = next_route
-                        retrying = True
-                        continue
+                retried = await _retry_action(
+                    resp,
+                    route,
+                    handler,
+                    config,
+                    model,
+                    excluded,
+                    refreshed=refreshed,
+                )
+                if retried is not None:
+                    route, refreshed, excluded = retried
+                    retrying = True
+                    continue
                 return with_request_id(
                     Response(
                         body=resp.raw_content,
