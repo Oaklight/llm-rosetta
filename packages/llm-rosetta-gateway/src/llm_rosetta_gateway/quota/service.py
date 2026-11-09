@@ -772,28 +772,85 @@ def provider_cooldown(name: str, pinfo: Any) -> dict[str, Any] | None:
     return {"until": _iso(until), "reason": "repeated refusals", "window": None}
 
 
+def note_lane_refusal(
+    pinfo: Any,
+    status_code: int,
+    policy: RateLimitPolicy | None = None,
+    *,
+    lane: str,
+) -> str:
+    """Count one capacity refusal against the upstream lane that answered.
+
+    The per-request failover already serves this request from a sibling lane
+    (``#1448``).  This is the cross-request half: ``policy.after`` refusals of
+    *this lane* inside ``policy.window_s`` disable it for ``policy.cooldown_s``,
+    doubling on repeats, so later requests start on a sibling instead of
+    paying the failed attempt again.
+
+    The key is ``(provider, lane)`` — the lane, not the credential — where a
+    lane is the upstream model the attempt asked for, or the model the client
+    asked for when the candidate names none.  It is never empty: two models
+    routing through one provider are two lanes.
+    That is what makes the count work: a capacity status is evidence about one
+    upstream model, and the sibling that served the request says nothing about
+    it.  Keyed by provider, a healthy sibling's success cleared the failed
+    lane's evidence every time, so the count never reached ``policy.after``
+    (``#1452``).
+
+    What stays shared on purpose is the *credential* axis: a ``429`` is still
+    counted by :func:`note_upstream_rate_limit` against the whole credential,
+    because every lane of the provider shares the key.  The two ladders never
+    see each other's records.
+
+    The policy's ``sink`` applies as written.  Sinking a lane only reorders it
+    behind its siblings, and a provider with no sibling left still serves
+    through it — which is why a capacity refusal may sink a lane but must not
+    sink a provider the way the old provider-wide count did.
+
+    Args:
+        pinfo: The provider that refused.
+        status_code: The upstream status, for the log line.
+        policy: The rule in force, or the default when the caller has none.
+        lane: The lane's key, as :func:`proxy.failover.attempted_lane` builds
+            it.
+
+    Returns:
+        ``"disable"``, ``"sink"`` or ``"off"``, as
+        :meth:`RateLimitTracker.note_upstream` reports it.
+    """
+    name = provider_config_key(pinfo)
+    outcome = QUOTA_STATE.rate_limits.note_upstream(
+        name, lane, policy or RateLimitPolicy()
+    )
+    if outcome == "disable":
+        logger.warning(
+            "Upstream: %s/%s disabled until %s after repeated capacity refusals "
+            "(last status %s)",
+            name,
+            lane,
+            _iso(QUOTA_STATE.rate_limits.upstream_disabled(name, lane)),
+            status_code,
+        )
+    return outcome
+
+
 def note_transient_refusal(
     pinfo: Any,
     status_code: int,
     policy: RateLimitPolicy | None = None,
 ) -> str:
-    """Count one capacity refusal against the provider's own lane.
+    """Count a credential-level refusal the quota probes could not explain.
 
-    The per-request failover already serves this request from another
-    provider.  This is the cross-request half: ``policy.after`` refusals
-    inside ``policy.window_s`` disable the provider for ``policy.cooldown_s``,
-    doubling on repeats, so later requests are routed away instead of paying
-    the failed attempt again.
+    A ``402``/``429`` that no probe classified is still evidence that the
+    *credential* cannot serve, so this count is provider-wide (credential
+    ``None``): every lane of the provider shares the key, and key rotation must
+    not spread one outage across several lanes.  Capacity refusals do not come
+    here — they are counted per lane by :func:`note_lane_refusal`.
 
-    Unlike a ``429``, a capacity refusal does **not** sink the provider on the
-    first one.  Sinking keeps the provider out of the next request for the
-    whole window, so the count could never reach ``policy.after`` — the
-    three-strike rung would be unreachable with the sink on.
-
-    The count is provider-wide (credential ``None``) rather than per key: a
-    capacity status says the provider cannot serve, not that the key that
-    happened to answer is spent, and key rotation must not spread one outage
-    across several lanes.
+    It does not sink the provider on the first refusal.  Sinking keeps it out
+    of the next request for the whole window, so the count could never reach
+    ``policy.after`` and the three-strike rung would be unreachable; the
+    continuous-429 ladder is what demotes a credential immediately.
 
     Args:
         pinfo: The provider that refused.
@@ -816,6 +873,17 @@ def note_transient_refusal(
     return outcome
 
 
-def note_upstream_success(pinfo: Any) -> None:
-    """A served request clears the provider's capacity-refusal count."""
-    QUOTA_STATE.rate_limits.clear_lane(provider_config_key(pinfo), None)
+def note_upstream_success(pinfo: Any, *, lane: str) -> None:
+    """A served request clears the evidence about the lane that served it.
+
+    Two records are cleared, on purpose:
+
+    - the provider-wide credential-level record (``None``), as before: a
+      served request says the credential can serve;
+    - the capacity record of *this* lane only.  A sibling's success is not
+      evidence about the lane that refused, so it must not clear its count
+      (``#1452``).
+    """
+    name = provider_config_key(pinfo)
+    QUOTA_STATE.rate_limits.clear_lane(name, None)
+    QUOTA_STATE.rate_limits.clear_upstream(name, lane)

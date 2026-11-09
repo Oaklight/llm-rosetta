@@ -144,6 +144,32 @@ class Eligibility:
 
 
 def provider_eligibility(pinfo: Any, name: str | None = None) -> Eligibility:
+    """Decide whether *pinfo* may serve, as a provider, and say why not.
+
+    The provider-wide answer: it reads the credential ladder, which is what a
+    caller with no lane in mind wants (``ProviderInfo.can_serve``, a typed
+    route).  A caller that judges one lane of the provider calls
+    :func:`lane_eligibility`, which adds that lane's own capacity record.
+    """
+    return _eligibility(pinfo, name, per_lane=False, lane="")
+
+
+def lane_eligibility(pinfo: Any, name: str | None = None, *, lane: str) -> Eligibility:
+    """Decide whether one lane of *pinfo* may serve, and say why not.
+
+    Args:
+        pinfo: The provider's transport configuration.
+        name: The provider's config key.  Defaults to the provider's own.
+        lane: The lane's key, as :func:`proxy.failover.attempted_lane` builds
+            it — the upstream model the candidate asks for, or the model the
+            client asked for when it names none.
+    """
+    return _eligibility(pinfo, name, per_lane=True, lane=lane)
+
+
+def _eligibility(
+    pinfo: Any, name: str | None, *, per_lane: bool, lane: str
+) -> Eligibility:
     """Decide whether *pinfo* may serve, and say why not when it may not.
 
     The checks are ordered by what the client should be told, and by what can
@@ -157,10 +183,17 @@ def provider_eligibility(pinfo: Any, name: str | None = None) -> Eligibility:
        covers every key;
     5. readings that say every credential's allowance is spent.
 
+    The provider-wide checks read the credential ladder: a ``429`` takes every
+    lane of the provider out, because they share the key.  A lane-level answer
+    reads that lane's own capacity record too — its sink makes it a fallback,
+    and its disable leaves only that lane out (``#1452``).
+
     Args:
         pinfo: The provider's transport configuration.  Duck-typed on purpose:
             the admin panel and tests pass stand-ins.
         name: The provider's config key.  Defaults to the provider's own.
+        per_lane: Whether to read one lane's capacity record as well.
+        lane: The lane's key, read only when *per_lane* is true.
 
     Returns:
         The answer.  ``eligible`` is ``False`` exactly when ``reason`` is set.
@@ -175,6 +208,8 @@ def provider_eligibility(pinfo: Any, name: str | None = None) -> Eligibility:
     key = name or provider_config_key(pinfo)
     headroom = provider_headroom(pinfo)
     sunk = QUOTA_STATE.rate_limits.sunk(key)
+    if per_lane:
+        sunk = sunk or QUOTA_STATE.rate_limits.upstream_sunk(key, lane)
 
     def answer(
         reason: str | None,
@@ -200,6 +235,12 @@ def provider_eligibility(pinfo: Any, name: str | None = None) -> Eligibility:
     disabled = QUOTA_STATE.rate_limits.disabled(key)
     if disabled is not None:
         return answer(RATE_LIMITED, until=disabled)
+    if per_lane:
+        # A capacity disable is the upstream model's own: its siblings keep
+        # serving, so only this lane is ruled out.
+        lane_disabled = QUOTA_STATE.rate_limits.upstream_disabled(key, lane)
+        if lane_disabled is not None:
+            return answer(RATE_LIMITED, until=lane_disabled)
 
     if getattr(pinfo, "credentials_pending", False):
         return answer(INITIALIZING)
@@ -259,7 +300,9 @@ class EligibilityStage(RoutingStage):
                 )
                 headroom[entry.key] = 1.0
                 continue
-            answer = provider_eligibility(pinfo, entry.name)
+            answer = lane_eligibility(
+                pinfo, entry.name, lane=entry.upstream_model or ctx.model
+            )
             # A provider entry may declare what it serves for this model.  The
             # comparison is per request: the same entry stays a candidate for
             # every request whose needs it covers.

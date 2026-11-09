@@ -46,7 +46,12 @@ from .errors import (
     error_response_for_source,
     note_upstream_success,
 )
-from .failover import FailoverBudget, prepare_failover, record_failover
+from .failover import (
+    FailoverBudget,
+    attempted_lane,
+    prepare_failover,
+    record_failover,
+)
 from .metadata import (
     ProviderMetadataStore,
     _default_metadata_store,
@@ -402,7 +407,12 @@ async def _non_streaming_from_stream(
             from ..quota.service import clear_upstream_rate_limit
 
             clear_upstream_rate_limit(provider_info)
-            note_upstream_success(provider_info)
+            note_upstream_success(
+                provider_info,
+                lane=attempted_lane(
+                    selection, route, selection.model if selection else model
+                ),
+            )
             break
         error_text = await stream.read_error()
         status = stream.status_code
@@ -416,6 +426,9 @@ async def _non_streaming_from_stream(
             error_text,
             route.source_provider,
             rate_limit=getattr(config, "routing_rate_limit", None),
+            lane=attempted_lane(
+                selection, route, selection.model if selection else model
+            ),
         )
         if decision.action is RefusalAction.RETURN:
             assert decision.response is not None
@@ -634,6 +647,7 @@ async def handle_non_streaming(  # noqa: C901
             resp.error_text,
             route.source_provider,
             rate_limit=getattr(config, "routing_rate_limit", None),
+            lane=attempted_lane(selection, route, selection.model),
         )
         if decision.action is RefusalAction.RETURN:
             assert decision.response is not None
@@ -670,7 +684,9 @@ async def handle_non_streaming(  # noqa: C901
         from ..quota.service import clear_upstream_rate_limit
 
         clear_upstream_rate_limit(provider_info)
-        note_upstream_success(provider_info)
+        note_upstream_success(
+            provider_info, lane=attempted_lane(selection, route, selection.model)
+        )
 
     # Check for upstream errors (HTTP 4xx/5xx) or soft-errors (HTTP 200
     # with an error embedded in the body, e.g. Argo auth warnings).

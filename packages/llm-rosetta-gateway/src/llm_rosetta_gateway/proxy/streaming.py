@@ -47,7 +47,12 @@ from .errors import (
     decide_on_refusal,
     note_upstream_success,
 )
-from .failover import FailoverBudget, prepare_failover, record_failover
+from .failover import (
+    FailoverBudget,
+    attempted_lane,
+    prepare_failover,
+    record_failover,
+)
 from .metadata import (
     ProviderMetadataStore,
     _default_metadata_store,
@@ -636,7 +641,9 @@ async def handle_streaming(  # noqa: C901
             from ..quota.service import clear_upstream_rate_limit
 
             clear_upstream_rate_limit(provider_info)
-            note_upstream_success(provider_info)
+            note_upstream_success(
+                provider_info, lane=attempted_lane(selection, route, selection.model)
+            )
             stream_error_text = None
             break
 
@@ -651,6 +658,7 @@ async def handle_streaming(  # noqa: C901
             stream_error_text,
             route.source_provider,
             rate_limit=getattr(config, "routing_rate_limit", None),
+            lane=attempted_lane(selection, route, selection.model),
         )
         if decision.action is RefusalAction.RETURN:
             assert decision.response is not None

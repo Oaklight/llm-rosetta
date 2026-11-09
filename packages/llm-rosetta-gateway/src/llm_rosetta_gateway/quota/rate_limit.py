@@ -183,18 +183,39 @@ class RateLimit:
 class RateLimitTracker:
     """The refusals of every lane, counted and graded.
 
-    The gateway runs one event loop, and a short critical section is enough for
-    a read-modify-write of a counter; the same choice the quota state makes.
+    Two axes, because the two kinds of refusal are evidence about different
+    things:
+
+    - a **credential** refusal (a ``429``) is one key's state, so its records
+      are keyed by ``(provider, credential fingerprint)``.  Every lane of the
+      provider reads the same record: the provider sinks or leaves together,
+      whatever lane answered, because they share the key.
+    - a **capacity** refusal (the ``503`` family) is one upstream model's
+      state, so its records are keyed by ``(provider, upstream model)``.  A
+      sibling lane's success cannot clear them, and one lane's refusals cannot
+      take its siblings out.
+
+    Both ladders have the same shape (:class:`RateLimit`) and run the same
+    counting code; they differ in the key and in the policy they are counted
+    with.  The gateway runs one event loop, and a short critical section is
+    enough for a read-modify-write of a counter; the same choice the quota
+    state makes.
     """
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._records: dict[tuple[str, str | None], RateLimit] = {}
+        # Capacity refusals, by upstream model: ``(provider, upstream)``.
+        # Separate from ``_records`` because "no credential" there means the
+        # provider itself, while "no upstream" here is a real lane — the one
+        # whose entry names no upstream model.
+        self._upstream_records: dict[tuple[str, str | None], RateLimit] = {}
 
     def clear(self) -> None:
         """Drop every record.  Used by tests and by a full state reset."""
         with self._lock:
             self._records.clear()
+            self._upstream_records.clear()
 
     # -- writing -----------------------------------------------------------
 
@@ -220,9 +241,51 @@ class RateLimitTracker:
             ordered last, ``"off"`` when the policy counted nothing.
         """
         moment = now or _now()
-        key = (provider, credential)
+        return self._note(self._records, (provider, credential), policy, moment)
+
+    def note_upstream(
+        self,
+        provider: str,
+        lane: str,
+        policy: RateLimitPolicy,
+        *,
+        now: datetime | None = None,
+    ) -> Outcome:
+        """Count one capacity refusal against one upstream lane.
+
+        The lane is the upstream model the attempt was made on, or — for a
+        candidate that names none — the model the client asked for.  Either
+        way it is never ``None``: two models routing through one provider are
+        two lanes, and sharing one key would let a healthy model clear the
+        failed one's evidence (``#1452`` review).
+
+        The policy's ``sink`` applies as written: sinking a lane only reorders
+        it behind its siblings, and a provider with nothing else still serves
+        through it.
+
+        Args:
+            provider: The provider's config key.
+            lane: The lane's key, as :func:`proxy.failover.attempted_lane`
+                builds it.
+            policy: The rule in force.
+            now: The moment of the refusal; tests pass one.
+
+        Returns:
+            ``"disable"``, ``"sink"`` or ``"off"``, as :meth:`note` reports it.
+        """
+        moment = now or _now()
+        return self._note(self._upstream_records, (provider, lane), policy, moment)
+
+    def _note(
+        self,
+        store: dict[tuple[str, str | None], RateLimit],
+        key: tuple[str, str | None],
+        policy: RateLimitPolicy,
+        moment: datetime,
+    ) -> Outcome:
         with self._lock:
-            previous = self._records.get(key)
+            self._sweep(store, moment)
+            previous = store.get(key)
             if previous is not None and moment <= previous.window_end:
                 refusals = previous.refusals + 1
                 strikes = previous.strikes
@@ -238,7 +301,7 @@ class RateLimitTracker:
                 seconds = min(
                     policy.cooldown_s * (2 ** (strikes - 1)), policy.cooldown_max_s
                 )
-                self._records[key] = RateLimit(
+                store[key] = RateLimit(
                     refusals=0,
                     window_end=window_end,
                     strikes=strikes,
@@ -247,7 +310,7 @@ class RateLimitTracker:
                 )
                 return "disable"
 
-            self._records[key] = RateLimit(
+            store[key] = RateLimit(
                 refusals=refusals,
                 window_end=window_end,
                 strikes=strikes,
@@ -257,15 +320,26 @@ class RateLimitTracker:
             return "sink" if policy.sink else "off"
 
     def clear_lane(self, provider: str, credential: str | None = None) -> None:
-        """Forget one lane's count and strike ladder after a success."""
+        """Forget one credential's count and strike ladder after a success."""
         with self._lock:
             self._records.pop((provider, credential), None)
 
-    def clear_provider(self, provider: str) -> None:
-        """Forget every lane of one provider."""
+    def clear_upstream(self, provider: str, lane: str) -> None:
+        """Forget one upstream lane's capacity count after its own success.
+
+        A sibling's success is not evidence about this lane: it says the
+        provider can serve, not that the upstream model that refused has
+        recovered.  Only a success *on this lane* clears it.
+        """
         with self._lock:
-            for key in [k for k in self._records if k[0] == provider]:
-                self._records.pop(key, None)
+            self._upstream_records.pop((provider, lane), None)
+
+    def clear_provider(self, provider: str) -> None:
+        """Forget every record of one provider, on both axes."""
+        with self._lock:
+            for store in (self._records, self._upstream_records):
+                for key in [k for k in store if k[0] == provider]:
+                    store.pop(key, None)
 
     # -- reading -----------------------------------------------------------
 
@@ -278,15 +352,88 @@ class RateLimitTracker:
     ) -> RateLimit | None:
         """The live record for one lane, or ``None`` when there is none."""
         moment = now or _now()
-        key = (provider, credential)
+        return self._live(self._records, (provider, credential), moment)
+
+    def _live(
+        self,
+        store: dict[tuple[str, str | None], RateLimit],
+        key: tuple[str, str | None],
+        moment: datetime,
+    ) -> RateLimit | None:
+        """The record at *key* while it still means something, else ``None``."""
         with self._lock:
-            found = self._records.get(key)
+            found = store.get(key)
             if found is None:
                 return None
             if moment >= found.window_end and not found.is_disabled(moment):
-                self._records.pop(key, None)
+                store.pop(key, None)
                 return None
             return found
+
+    def upstream_record(
+        self,
+        provider: str,
+        lane: str,
+        *,
+        now: datetime | None = None,
+    ) -> RateLimit | None:
+        """The live capacity record for one upstream lane, or ``None``."""
+        moment = now or _now()
+        return self._live(self._upstream_records, (provider, lane), moment)
+
+    def upstream_sunk(
+        self,
+        provider: str,
+        lane: str,
+        *,
+        now: datetime | None = None,
+    ) -> bool:
+        """Whether one upstream lane is sunk at *now*."""
+        moment = now or _now()
+        record = self.upstream_record(provider, lane, now=moment)
+        return bool(record is not None and record.is_sunk(moment))
+
+    def upstream_disabled(
+        self,
+        provider: str,
+        lane: str,
+        *,
+        now: datetime | None = None,
+    ) -> datetime | None:
+        """When one upstream lane may serve again, or ``None``.
+
+        A capacity disable is the lane's alone: its siblings keep serving.
+        """
+        moment = now or _now()
+        record = self.upstream_record(provider, lane, now=moment)
+        if record is None or not record.is_disabled(moment):
+            return None
+        return record.disabled_until
+
+    def tracked(self) -> int:
+        """How many records the tracker holds, on both axes.
+
+        For diagnostics and tests: the sweep below is what keeps a lane that
+        was renamed or removed from sitting here until the process ends.
+        """
+        with self._lock:
+            return len(self._records) + len(self._upstream_records)
+
+    @staticmethod
+    def _sweep(
+        store: dict[tuple[str, str | None], RateLimit], moment: datetime
+    ) -> None:
+        """Drop the records a write would otherwise never visit.
+
+        ``_live`` expires a record when its own key is read, which is enough
+        while the key keeps being asked about.  A lane that is renamed, or
+        whose model is removed, is never asked about again — so a write sweeps
+        the store instead of waiting for a read that will not come.
+        """
+        for key in [k for k, record in store.items() if moment >= record.window_end]:
+            record = store[key]
+            if not record.is_disabled(moment):
+                store.pop(key, None)
 
     def disabled(
         self,
@@ -334,7 +481,11 @@ class RateLimitTracker:
             )
 
     def snapshot(self, provider: str) -> dict[str, Any]:
-        """The provider's lanes, for the admin panel."""
+        """The provider's credential lanes, for the admin panel.
+
+        Capacity lanes are not here: they are per upstream model, and the
+        admin reads them through the selector's per-lane answer instead.
+        """
         lanes: list[dict[str, Any]] = []
         with self._lock:
             for (owner, credential), record in self._records.items():

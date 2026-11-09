@@ -41,6 +41,7 @@ def _decide(
     status: int = 429,
     auth: tuple[bool, Any] = (False, None),
     quota: tuple[QuotaRefusal | None, Any] = (None, None),
+    lane: str = "lane",
 ) -> tuple[Any, list[bool]]:
     """Run the decision with both underlying helpers replaced.
 
@@ -64,7 +65,11 @@ def _decide(
     provider = SimpleNamespace(name="p", config_name="p", keyless=True)
     decision = asyncio.run(
         decide_on_refusal(
-            cast(Any, provider), status, "upstream said no", "chat_completions"
+            cast(Any, provider),
+            status,
+            "upstream said no",
+            "chat_completions",
+            lane=lane,
         )
     )
     return decision, consulted
@@ -140,12 +145,22 @@ def test_an_unexplained_402_fails_over(monkeypatch):
     assert decision.signal.status_code == 402
 
 
-def _record_ladder(monkeypatch) -> list[int]:
-    """Replace the cross-request ladder with a recorder."""
-    calls: list[int] = []
+def _record_ladder(monkeypatch) -> list[tuple[str, int, str | None]]:
+    """Replace both cross-request ladders with recorders.
+
+    ``("lane", status, upstream)`` is the capacity ladder; ``("credential",
+    status, None)`` is the provider-wide one the ``402``/``429`` fallback uses.
+    """
+    calls: list[tuple[str, int, str | None]] = []
+    monkeypatch.setattr(
+        "llm_rosetta_gateway.quota.service.note_lane_refusal",
+        lambda pinfo, status, policy=None, *, lane: calls.append(
+            ("lane", status, lane)
+        ),
+    )
     monkeypatch.setattr(
         "llm_rosetta_gateway.quota.service.note_transient_refusal",
-        lambda pinfo, status, policy=None: calls.append(status),
+        lambda pinfo, status, policy=None: calls.append(("credential", status, None)),
     )
     return calls
 
@@ -158,7 +173,27 @@ def test_a_capacity_refusal_counts_toward_the_ladder(monkeypatch, status):
     decision, _ = _decide(monkeypatch, status=status)
 
     assert decision.action is RefusalAction.FAILOVER
-    assert calls == [status]
+    assert calls == [("lane", status, "lane")]
+
+
+@pytest.mark.parametrize("status", (503, 529, 520, 524))
+def test_a_capacity_refusal_is_counted_against_its_lane(monkeypatch, status):
+    """The count is the upstream model's, not the provider's (#1452)."""
+    calls = _record_ladder(monkeypatch)
+
+    _decide(monkeypatch, status=status, lane="fast")
+
+    assert calls == [("lane", status, "fast")]
+
+
+def test_an_unexplained_402_counts_against_the_credential(monkeypatch):
+    """A ``402`` no probe explained is the credential's state, not a lane's."""
+    calls = _record_ladder(monkeypatch)
+
+    decision, _ = _decide(monkeypatch, status=402, lane="fast")
+
+    assert decision.action is RefusalAction.FAILOVER
+    assert calls == [("credential", 402, None)]
 
 
 @pytest.mark.parametrize("status", (408, 500, 502, 504))
@@ -249,7 +284,11 @@ def test_an_unexplained_429_counts_on_the_credential_lane(monkeypatch):
 
     decision = asyncio.run(
         decide_on_refusal(
-            cast(Any, provider), 429, "upstream said no", "chat_completions"
+            cast(Any, provider),
+            429,
+            "upstream said no",
+            "chat_completions",
+            lane="m",
         )
     )
 
