@@ -280,7 +280,15 @@ class ProviderInfo:
         # identity is read at config time and when the credential is minted.
         self.auth_exchange = auth_exchange
         self.auth_context = auth_context
-        self.token_status: dict | None = None
+        # The credential state itself is stored here; :attr:`token_status`
+        # reads through to ``credential_owner`` when this object has none of
+        # its own.
+        self._token_status: dict[str, Any] | None = None
+        # The provider entry that mints this object's credential, when this is
+        # a second endpoint of the same provider (a typed endpoint).  It shares
+        # that entry's key ring, so one mint serves every endpoint and the
+        # seeding/refresh loops keep exactly one owner per credential source.
+        self.credential_owner: ProviderInfo | None = None
         self.keyless = keyless
         # Per-conversation session header (name declared by the shim, value
         # derived per request in gateway.proxy).  ``session_id`` stays None
@@ -333,6 +341,31 @@ class ProviderInfo:
         self.quota_provider_blocked: Callable[[], bool] | None = None
 
     # -- readiness ----------------------------------------------------------
+
+    @property
+    def token_status(self) -> dict[str, Any] | None:
+        """The latest mint result for this provider's credential.
+
+        A typed endpoint holds no status of its own: it reads the owner's,
+        because the owner is what mints and refreshes.  Reading through — not
+        copying at build time — is what keeps the panel's "last refresh" and
+        "last error" describing the credential as it is now rather than as it
+        was when the config was parsed.
+        """
+        if self._token_status is None and self.credential_owner is not None:
+            return self.credential_owner.token_status
+        return self._token_status
+
+    @token_status.setter
+    def token_status(self, value: dict[str, Any] | None) -> None:
+        # A write is forwarded for the same reason a read is: the status
+        # describes the credential, and the owner is where the credential
+        # lives.  A reactive refresh triggered by a typed endpoint's own 401
+        # therefore lands on the provider card, not on a hidden copy.
+        if self.credential_owner is not None:
+            self.credential_owner.token_status = value
+            return
+        self._token_status = value
 
     @property
     def auth_state_dir(self) -> str | None:

@@ -126,6 +126,8 @@ def parse_typed_config(
     require_declared_format: bool = False,
     map_models: bool = True,
     global_proxy: str | None = None,
+    credential_owner: dict[str, ProviderInfo] | None = None,
+    refuse_unowned_minted: bool = True,
 ) -> tuple[dict[str, dict[str, Any]], dict[str, ProviderInfo], dict[str, str]]:
     """Parse one typed endpoint out of a provider section.
 
@@ -147,6 +149,18 @@ def parse_typed_config(
         map_models: Return the model→provider mapping; ``False`` when the
             caller distributes typed models separately.
         global_proxy: Server-level proxy URL.
+        credential_owner: The LLM pool the entries draw their credential
+            from, keyed by config name.  An entry that mints its credential
+            (a ``token_command`` or the shim's ``auth.py``) shares its owner's
+            key ring, so one mint serves both lanes.  ``None`` for a caller
+            parsing a document without a live pool — the migration's
+            "which providers serve this type" pass.
+        refuse_unowned_minted: Disable an entry whose credential would be
+            minted but has no owner to share it from.  The legacy
+            ``<type>_providers`` section has no ``providers:`` entry, so its
+            endpoints keep today's refusal with a reason that names the
+            section.  A caller that only needs membership (the migration)
+            passes ``False``.
 
     Returns:
         ``(providers, provider_infos, models)``.
@@ -163,6 +177,10 @@ def parse_typed_config(
                 descriptor=descriptor,
                 require_declared_format=require_declared_format,
                 global_proxy=global_proxy,
+                credential_owner=(
+                    credential_owner.get(name) if credential_owner is not None else None
+                ),
+                refuse_unowned_minted=refuse_unowned_minted,
             )
         except (ValueError, KeyError, TypeError) as exc:
             # One broken endpoint must not take the provider's other
@@ -225,6 +243,8 @@ def parse_typed_provider(
     descriptor: ModelTypeDescriptor,
     require_declared_format: bool,
     global_proxy: str | None,
+    credential_owner: ProviderInfo | None = None,
+    refuse_unowned_minted: bool = True,
 ) -> tuple[dict[str, Any], ProviderInfo] | None:
     """Parse one provider entry, or ``None`` when it does not participate.
 
@@ -270,7 +290,17 @@ def parse_typed_provider(
 
     wire_format = typed_wire_format(cfg, keys, explicit_format, shim)
     path = typed_path(cfg, keys, descriptor, shim, wire_format)
-    info = typed_provider_info(name, cfg, keys, wire_format, path, shim, global_proxy)
+    info = typed_provider_info(
+        name,
+        cfg,
+        keys,
+        wire_format,
+        path,
+        shim,
+        global_proxy,
+        credential_owner=credential_owner,
+        refuse_unowned_minted=refuse_unowned_minted,
+    )
     # The shim's defaults describe its own dialect; an explicit format that
     # overrides the shim's makes them a guess, so they apply only when the
     # effective format is the shim's (the same rule ``typed_path`` follows).
@@ -309,34 +339,36 @@ def typed_path(
     return path or keys.default_path
 
 
-def _refuse_minted_credential(name: str, effective: dict[str, Any], shim: Any) -> None:
-    """Refuse a typed endpoint whose credential would be minted, not stored.
+def _refuse_unowned_minted_credential(
+    name: str,
+    effective: dict[str, Any],
+    shim: Any,
+    type_name: str,
+) -> None:
+    """Refuse a minted credential this parse has no lane to share it from.
 
     A shim can mint its credential from a command (``connection.token_command``)
-    or from an exchange (``auth.py``).  This path installs a static key only, so
-    forwarding the request would send an empty ``Authorization`` header and fail
-    as a 401 far from the cause.  Until the typed pools share the gateway's
-    minting (follow-up on #1355), say so here: ``parse_typed_config`` catches
-    the ``ValueError`` and auto-disables the endpoint with this reason, which the
-    admin panel shows.
+    or from an exchange (``auth.py``), and a provider entry can name its own
+    command.  A ``providers:`` entry shares the LLM lane's key ring, so its
+    typed endpoints forward the minted credential
+    (:func:`~llm_rosetta_gateway.providers.share_credential`).
 
-    **Every** command is refused, including one that takes the operator's key
-    as its input (``token_command_env``).  The LLM path accepts that shape
-    because the key is the command's input and the command's output is the
-    credential; a typed endpoint never runs the command, so the key would be
-    sent as the credential instead — which is the 401 this refusal exists to
-    prevent.  An operator who does want the account key on a typed endpoint
-    declares that endpoint without the shim (a ``format``, a ``base_url`` and
-    the key), which is the static path this function lets through.
+    The legacy ``<type>_providers`` section has no counterpart in
+    ``providers:`` — nothing there mints, seeds or refreshes — so an entry
+    there that mints would forward an empty ``Authorization`` header and fail
+    as a 401 far from the cause.  ``parse_typed_config`` catches the
+    ``ValueError`` and auto-disables the endpoint with this reason, which names
+    the section and the fix.
 
     Args:
         name: The configured provider, named in the message.
         effective: The entry after shim defaults are applied.
         shim: The resolved endpoint shim, or ``None``.
+        type_name: The model type whose section is being parsed.
 
     Raises:
         ValueError: The effective credential is produced by a command or an
-            exchange.
+            exchange, and this parse has no owner to share it from.
     """
     exchange = getattr(shim, "auth", None) if shim is not None else None
     command = effective.get("token_command")
@@ -345,8 +377,10 @@ def _refuse_minted_credential(name: str, effective: dict[str, Any], shim: Any) -
     kind = getattr(exchange, "kind", None) or "auth.py"
     source = "a token_command" if command is not None else f"an {kind} exchange"
     raise ValueError(
-        f"provider {name!r} mints its credential with {source}; non-LLM "
-        f"endpoints support a static key only, so this endpoint stays disabled"
+        f"provider {name!r} mints its credential with {source}, but the legacy "
+        f"{type_name}_providers section has no provider entry in `providers:` "
+        f"to share the minted credential from; move this provider to "
+        f"`providers:` so its {type_name} endpoint can use it"
     )
 
 
@@ -358,14 +392,42 @@ def typed_provider_info(
     path: str,
     shim: Any,
     global_proxy: str | None,
+    *,
+    credential_owner: ProviderInfo | None = None,
+    refuse_unowned_minted: bool = True,
 ) -> ProviderInfo:
-    """The connection a parsed entry forwards through."""
-    from ..providers import _apply_shim_defaults
+    """The connection a parsed entry forwards through.
+
+    An endpoint of a ``providers:`` entry forwards with that entry's
+    credential: *credential_owner* is the entry in the LLM pool, and this
+    object reads its key ring, minting declaration and credential status.  One
+    credential source therefore mints once, seeds once and refreshes once, and
+    every endpoint of it sees the same value.
+
+    Args:
+        name: The provider's config key.
+        cfg: The raw provider entry.
+        keys: The config keys this type is parsed with.
+        wire_format: The effective wire format.
+        path: The upstream endpoint path.
+        shim: The resolved endpoint shim, or ``None``.
+        global_proxy: Server-level proxy URL.
+        credential_owner: The provider entry that mints this endpoint's
+            credential, or ``None`` when the parse has no such lane.
+        refuse_unowned_minted: Disable the endpoint when it mints but has no
+            owner — see :func:`_refuse_unowned_minted_credential`.
+
+    Raises:
+        ValueError: The credential would be minted and there is no owner to
+            share it from.
+    """
+    from ..providers import _apply_shim_defaults, share_credential
     from ..transport.provider_info import google_auth, openai_auth
 
     effective = _apply_shim_defaults(cfg, shim) if shim is not None else cfg
-    _refuse_minted_credential(name, effective, shim)
-    return ProviderInfo(
+    if credential_owner is None and refuse_unowned_minted:
+        _refuse_unowned_minted_credential(name, effective, shim, keys.type_name)
+    info = ProviderInfo(
         name=f"{keys.type_name}:{name}",
         api_key=effective.get("api_key", ""),
         base_url=effective.get("base_url", "").rstrip("/"),
@@ -375,6 +437,9 @@ def typed_provider_info(
         url_template="{base_url}" + path,
         proxy_url=cfg.get("proxy") or global_proxy,
     )
+    if credential_owner is not None:
+        share_credential(info, credential_owner)
+    return info
 
 
 def resolve_endpoint_shim(cfg: dict[str, Any], *, type_name: str, shim_key: str) -> Any:

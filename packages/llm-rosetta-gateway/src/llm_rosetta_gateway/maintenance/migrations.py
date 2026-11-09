@@ -252,6 +252,20 @@ def _migrate_v3_to_v4(raw: dict[str, Any]) -> None:
     an ``embeddings_format`` (or the matching shim) leaves the entry in the
     chat pool at runtime, so writing the type there would make the file
     disagree with the process, and with a reader that trusts ``type``.
+
+    **One exception, measured.**  :func:`_serving_providers` counts an entry
+    that *declares* the endpoint even when its credential has no lane to share
+    (:func:`~.config.typed.parse_typed_config` with
+    ``refuse_unowned_minted=False``), because membership is a document
+    question.  So a legacy ``embeddings_providers`` entry carrying its own
+    ``token_command`` is written as serving — while the runtime parses it,
+    disables the endpoint with a reason, and logs ``Model '<m>' has
+    type=embeddings but provider '<p>' lacks embeddings_format — skipped``.
+    The window is narrow (it needs a v3 document, a capability-only model, and
+    a legacy minting provider at once) and the runtime says what happened; the
+    alternative — writing no type — would leave the document silent about a
+    model the file otherwise routes, which is the disagreement this migration
+    exists to remove.
     """
     models = raw.get("models")
     if not isinstance(models, dict):
@@ -278,7 +292,10 @@ def _serving_providers(raw: dict[str, Any]) -> dict[str, set[str]]:
 
     Uses the same ``parse_typed_config`` calls the runtime pools make, so the
     migration's idea of "this provider serves the type" cannot drift from the
-    distribution's.
+    distribution's.  Only membership is read, so an endpoint this pass has no
+    credential owner for is still counted: whether it can *serve* is a runtime
+    question (it is disabled there with a reason), while whether the document
+    routes the type at it is a document question.
     """
     from llm_rosetta.formats import legacy_model_type
 
@@ -295,6 +312,7 @@ def _serving_providers(raw: dict[str, Any]) -> dict[str, set[str]]:
             require_declared_format=True,
             map_models=False,
             global_proxy=proxy,
+            refuse_unowned_minted=False,
         )[0]
         old_name = legacy_model_type(descriptor.name)
         legacy_raw = raw.get(f"{descriptor.name}_providers") or (
@@ -306,6 +324,7 @@ def _serving_providers(raw: dict[str, Any]) -> dict[str, set[str]]:
             descriptor=descriptor,
             format_key="format",
             global_proxy=proxy,
+            refuse_unowned_minted=False,
         )[0]
         serving[descriptor.name] = set(unified) | set(legacy)
     return serving
