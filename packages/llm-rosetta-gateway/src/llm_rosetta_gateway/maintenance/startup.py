@@ -46,12 +46,13 @@ class ProviderInitState(Enum):
 class ProviderNotReady(Exception):
     """Raised when every provider for a model is unavailable right now.
 
-    Four states reach here, and a client should be told which: the providers
+    Five states reach here, and a client should be told which: the providers
     are still initializing after startup, they failed to initialize, they are
-    in a quota block with a known end, or every one of them has a reading that
-    says its allowance is spent.  Neither quota state is "initializing" —
-    saying so sends a client that just received an allowance refusal looking
-    for a startup problem.
+    in a quota block with a known end, every one of them is rate limited (a
+    run of 429s, or a lane's capacity ladder) with a known or unknown end, or
+    every one of them has a reading that says its allowance is spent.  None of
+    the three quota-shaped states is "initializing" — saying so sends a client
+    that just received an allowance refusal looking for a startup problem.
     """
 
     def __init__(
@@ -60,6 +61,8 @@ class ProviderNotReady(Exception):
         *,
         failed: bool = False,
         blocked_until: datetime | None = None,
+        rate_limited_until: datetime | None = None,
+        rate_limited: bool = False,
         exhausted_until: datetime | None = None,
         exhausted: bool = False,
         unsupported: tuple[str, ...] = (),
@@ -112,6 +115,27 @@ class ProviderNotReady(Exception):
             super().__init__(
                 f"All providers for model '{model}' are in a quota block until "
                 f"{rendered}; please retry after that"
+            )
+            return
+        if rate_limited_until is not None:
+            self.retry_after = max(
+                1, int((rate_limited_until - moment).total_seconds())
+            )
+            rendered = rate_limited_until.astimezone(timezone.utc).strftime(
+                "%Y-%m-%dT%H:%M:%SZ"
+            )
+            super().__init__(
+                f"All providers for model '{model}' are rate limited until "
+                f"{rendered}; please retry after that"
+            )
+            return
+        if rate_limited:
+            # A disable the state cannot date: a run of refusals that left a
+            # lane out without a cooldown it could name.  Report the state and
+            # say no reset is known, rather than borrowing a deadline.
+            super().__init__(
+                f"All providers for model '{model}' are rate limited and no "
+                "reset time is known; please retry later"
             )
             return
         state = "failed" if failed else "initializing"

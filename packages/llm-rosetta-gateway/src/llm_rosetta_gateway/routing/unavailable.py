@@ -4,14 +4,20 @@
 instead of re-deriving the four states inline.  The order of the checks is the
 rule:
 
-1. a **quota block** covering every provider the request can still use has a
+1. a **rate-limit disable** covering every candidate the request can still use
+   — the credential ladder's 429s or a lane's capacity ladder — is temporary
+   and dated, and it is asked first because ``ready`` cannot tell it apart
+   from a quota block: the client is told when the lane comes back;
+2. a **quota block** covering every provider the request can still use has a
    known end and must not be reported as startup — a client that just
    received a plan refusal would go looking for a boot problem that does not
    exist;
-2. a route every remaining candidate of which a **reading** removed is
+3. a route every remaining candidate of which a **reading** removed is
    ``exhausted``, with the reset when the vendor named one and without one
    when it did not;
-3. otherwise the route is down for a startup reason: ``failed`` when every
+4. a route every remaining candidate of which **lacks the capability** this
+   request needs is ``capability``;
+5. otherwise the route is down for a startup reason: ``failed`` when every
    unready provider failed to initialise, else ``initializing``.
 
 The module answers a question; it does not raise.  ``ProviderNotReady`` stays
@@ -31,10 +37,12 @@ if TYPE_CHECKING:
     from ..config.core import GatewayConfig
     from .context import SelectionContext
 
-#: ``blocked`` and ``exhausted`` are quota states; ``failed`` and
-#: ``initializing`` are startup states; ``capability`` means every candidate
-#: serves the model but not this request.
-Reason = Literal["blocked", "exhausted", "failed", "initializing", "capability"]
+#: ``rate_limited`` and ``blocked`` are temporary and dated; ``exhausted`` is
+#: a spent allowance; ``failed`` and ``initializing`` are startup states;
+#: ``capability`` means every candidate serves the model but not this request.
+Reason = Literal[
+    "rate_limited", "blocked", "exhausted", "failed", "initializing", "capability"
+]
 
 
 @dataclass(frozen=True)
@@ -42,10 +50,10 @@ class Unavailable:
     """The state of a route no candidate could serve.
 
     Attributes:
-        reason: Which of the four stories this is.
-        until: When the route comes back, for the two quota reasons.  ``None``
-            on ``exhausted`` means the vendor named no reset, and the gateway
-            will not invent one.
+        reason: Which of the stories this is.
+        until: When the route comes back, for ``rate_limited`` and the other
+            dated reasons.  ``None`` on ``exhausted`` means the vendor named no
+            reset, and the gateway will not invent one.
     """
 
     reason: Reason
@@ -57,6 +65,11 @@ class Unavailable:
         """The keyword arguments ``ProviderNotReady`` takes for this state."""
         if self.reason == "capability":
             return {"unsupported": self.unsupported}
+        if self.reason == "rate_limited":
+            return {
+                "rate_limited_until": self.until,
+                "rate_limited": self.until is None,
+            }
         if self.reason == "blocked":
             return {"blocked_until": self.until}
         if self.reason == "exhausted":
@@ -125,6 +138,19 @@ def exhausted_until(
     return max(ends) if ends else None
 
 
+def _latest_until(answers: list[Any]) -> datetime | None:
+    """The latest end among the answers, or ``None`` when one has none.
+
+    The route is unavailable until the **last** candidate comes back, so the
+    latest end is the answer — unless a candidate cannot date its own, in
+    which case the end is unknown and this module does not invent one.
+    """
+    ends = [answer.until for answer in answers if answer is not None]
+    if not ends or any(end is None for end in ends):
+        return None
+    return max(ends)
+
+
 def classify(
     config: GatewayConfig,
     ctx: SelectionContext,
@@ -162,6 +188,20 @@ def classify(
         for p in ctx.candidates
         if p.name not in ctx.failover_excluded and p.key not in ctx.lane_excluded
     ]
+
+    # A rate-limit disable — the credential ladder's 429s, or the capacity
+    # ladder of one upstream lane — is temporary and dated.  Asked before the
+    # block check because ``ready`` cannot tell the two apart: a disabled
+    # provider is unready, so the block check would call it a quota block
+    # ("plan refusal") when a ladder is what actually holds it out.
+    from .eligibility import RATE_LIMITED
+
+    answers = [ctx.eligibility.get(p.key) for p in remaining]
+    if remaining and all(
+        answer is not None and answer.reason == RATE_LIMITED for answer in answers
+    ):
+        return Unavailable("rate_limited", _latest_until(answers))
+
     unready = [
         table[p.name] for p in remaining if p.name in table and not table[p.name].ready
     ]
