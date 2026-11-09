@@ -74,7 +74,7 @@ docker run --user "$(id -u):$(id -g)" -p 8765:8765 -v "$PWD/config:/config" llm-
 PUID=$(id -u) PGID=$(id -g) docker compose -f docker/docker-compose.source.yaml up -d --build
 ```
 
-缺失的 bind mount 目录会被 compose 以 `root` 创建，而首次运行要在其中写入 `config.jsonc`，所以目录属主不对是唯一会看到容器启动失败的情形。下面不使用 Compose 的 `docker run` 形式不读取 `PUID`，`--user` 就是给它用的，示例已带上。
+缺失的 bind mount 目录会被 compose 以 `root` 创建，而首次运行要在其中写入 `config.jsonc`，所以目录属主不对是唯一会看到容器启动失败的情形。不经 Compose 的 `docker run` 形式不读取 `PUID`，要像上面的例子那样用 `--user`。
 
 两个文件是两个入口 —— `docker/docker-compose.yaml` 运行已发布的镜像，`docker/docker-compose.source.yaml` 从工作树构建 —— 且都发布 8765 端口，一次只跑一个。
 
