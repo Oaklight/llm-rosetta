@@ -110,9 +110,12 @@ P1 moved the values under the names above and left the previous names
 (`--bg-card`, `--bg-hover`, `--border`, `--green`, `--green-subtle`,
 `--green-bg`, `--red`, `--red-subtle`, `--orange`, `--blue`, `--badge-radius`)
 as aliases in a block at the end of each theme file, so no component changes
-behaviour. That block is temporary: **P5 deletes it**, and the rule that keeps
-it from becoming a second API is a grep — outside that block, no old name may
-remain anywhere in `admin/`.
+behaviour. That block is temporary but has no expiry date yet: it is planned
+for removal ([#1489](https://github.com/Oaklight/llm-rosetta/issues/1489)), and
+the removal waits on every consumer migrating first — `base.css` and
+`components.css` still read those names. The rule that keeps it from becoming a
+second API is a grep — outside that block, no old name may remain anywhere in
+`admin/`.
 
 A dark block may re-declare `--dot` and `--grid` when the texture needs a
 different intensity on a dark background (emerald does). It may not re-declare
