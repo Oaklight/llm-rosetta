@@ -17,6 +17,8 @@ import pytest
 
 
 from llm_rosetta_gateway.admin.routes.credential import (
+    begin_provider_login,
+    complete_provider_login,
     delete_provider_credential,
     get_provider_credential,
     put_provider_credential,
@@ -81,6 +83,23 @@ class _Exchange:
         return True
 
 
+class _BrowserExchange(_Exchange):
+    """A fake exchange for the webadmin start/callback courier."""
+
+    def begin_login(self, ctx: AuthContext) -> dict[str, Any]:
+        return {
+            "authorization_url": "https://auth.example/authorize?state=opaque",
+            "callback_url": "http://127.0.0.1:1455/auth/callback",
+            "expires_at": 123.0,
+            "access_token": "must-not-escape",
+        }
+
+    def complete_login(self, ctx: AuthContext, callback_url: str) -> dict[str, Any]:
+        assert callback_url == "http://127.0.0.1:1455/auth/callback?code=c&state=s"
+        self._record = {"subject": "user-1"}
+        return {"connected": True, "subject": "user-1"}
+
+
 class _LegacyExchange:
     """An exchange written before ``install()`` existed."""
 
@@ -111,6 +130,20 @@ def _pinfo(exchange: Any, *, key: str = TOKEN_PENDING_SENTINEL) -> ProviderInfo:
     )
 
 
+class _Deferred:
+    """The lifecycle slice the credential routes notify."""
+
+    def __init__(self) -> None:
+        self.ready: list[str] = []
+        self.removed: list[str] = []
+
+    async def provider_credential_ready(self, name: str, pinfo: Any) -> None:
+        self.ready.append(name)
+
+    async def provider_credential_removed(self, name: str, pinfo: Any) -> None:
+        self.removed.append(name)
+
+
 class _Request:
     """The slice of the request object these handlers read."""
 
@@ -130,6 +163,70 @@ def _config(*, exchange: Any = None, key: str = TOKEN_PENDING_SENTINEL):
 
 def _call(handler: Any, request: Any, name: str = "chatgpt") -> Any:
     return asyncio.run(handler(request, name))
+
+
+class TestBrowserLogin:
+    def test_start_returns_only_safe_authorization_fields(self):
+        response = _call(
+            begin_provider_login, _Request(_config(exchange=_BrowserExchange()))
+        )
+        payload = json.loads(response.body)
+
+        assert response.status_code == 200
+        assert payload["pending"] is True
+        assert payload["authorization_url"].startswith("https://auth.example/")
+        assert "access_token" not in payload
+        assert "refresh_token" not in payload
+        assert "id_token" not in payload
+
+    def test_callback_accepts_only_the_url_and_reseeds(self):
+        exchange = _BrowserExchange()
+        config = _config(exchange=exchange)
+        deferred = _Deferred()
+        request = _Request(
+            config,
+            {"callback_url": "http://127.0.0.1:1455/auth/callback?code=c&state=s"},
+        )
+        request.app.deferred_startup = deferred
+        response = _call(complete_provider_login, request)
+        payload = json.loads(response.body)
+
+        assert response.status_code == 200
+        assert payload["connected"] is True
+        assert payload["summary"]["subject"] == "user-1"
+        assert payload["summary"].get("access_token") is None
+        assert exchange.installed == []
+        # A stale pending credential is not "ready": readiness is the
+        # application's decision, taken only after the ring holds the token.
+        assert deferred.ready == ["chatgpt"]
+
+    def test_a_sign_out_tells_the_lifecycle_to_stop_refreshing(self):
+        exchange = _Exchange()
+        pinfo = _pinfo(exchange)
+        exchange.install(AuthContext(provider="chatgpt"), RECORD)
+        config = SimpleNamespace(providers={"chatgpt": pinfo})
+        deferred = _Deferred()
+        request = _Request(config)
+        request.app.deferred_startup = deferred
+
+        response = _call(delete_provider_credential, request)
+
+        assert response.status_code == 200
+        assert json.loads(response.body)["removed"] is True
+        assert deferred.removed == ["chatgpt"]
+
+    def test_callback_rejects_a_record_or_extra_fields(self):
+        response = _call(
+            complete_provider_login,
+            _Request(
+                _config(exchange=_BrowserExchange()),
+                {"callback_url": "x", "access_token": "secret"},
+            ),
+        )
+
+        assert response.status_code == 400
+        assert b"only a callback_url" in response.body
+        assert b"secret" not in response.body
 
 
 class TestGet:

@@ -1498,6 +1498,16 @@
         <div class="prov-card-body">
           <dl class="prov-rows" id="provExchangeRows"></dl>
           <div class="prov-actions" id="provExchangeActions"></div>
+          <div id="provBrowserLoginBox" hidden style="margin-top:6px">
+            <div class="prov-field-hint" data-i18n="prov.browserLoginHint">Open the sign-in URL in a browser. After authorization, paste the complete callback URL here.</div>
+            <a id="provBrowserLoginLink" target="_blank" rel="noopener noreferrer" class="prov-field-hint" hidden></a>
+            <code id="provBrowserLoginUrl" style="display:block;word-break:break-all;margin-top:4px;font-size:0.78em"></code>
+            <input id="provBrowserCallback" type="url" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="http://127.0.0.1:1455/auth/callback?code=...&state=..." style="width:100%;margin-top:6px">
+            <div style="display:flex;gap:6px;margin-top:4px">
+              <button type="button" class="btn btn-sm btn-primary" data-i18n="btn.completeBrowserLogin" onclick="completeProviderBrowserLogin()">Complete sign-in</button>
+              <button type="button" class="btn btn-sm" data-i18n="btn.cancel" onclick="resetProviderBrowserLogin()">Cancel</button>
+            </div>
+          </div>
           <div id="provCredentialBox" style="display:none;margin-top:6px">
             <textarea id="provCredentialRecord" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder='{"access_token": "...", "refresh_token": "...", "id_token": "..."}' style="width:100%;min-height:96px;font-family:var(--mono,monospace)"></textarea>
             <div style="display:flex;gap:6px;margin-top:4px">
@@ -1506,8 +1516,7 @@
             </div>
           </div>
           <div id="provCredentialHint" class="prov-field-hint">
-            <span data-i18n="label.credentialHint">This provider signs in rather than stores a key. Produce the record where a browser is —</span>
-            <code>llm-rosetta-gateway credential &lt;provider&gt;</code> — <span data-i18n="label.credentialHint2">and paste it here promptly.</span>
+            <span data-i18n="label.credentialHint">This provider signs in rather than stores a key. Use the browser sign-in above.</span>
           </div>
         </div>
       </div>

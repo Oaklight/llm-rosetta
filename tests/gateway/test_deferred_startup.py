@@ -161,6 +161,86 @@ class TestProviderNotReady:
 # ---------------------------------------------------------------------------
 
 
+class TestDeferredStartupCredentialCompletion:
+    def test_seeding_does_not_start_a_twin_refresher(self):
+        """An admin completion during the startup retry window owns the loop.
+
+        Without the live-name filter, seeding registers a second refresher
+        over the same key ring; nothing in the existing assertions notices.
+        """
+
+        async def exercise():
+            pinfo = _make_pending_pinfo("chatgpt")
+            config = _FakeConfig({"chatgpt": pinfo})
+            app = _FakeApp()
+            startup = DeferredStartup(config, app)
+            startup._provider_states["chatgpt"] = ProviderInitState.READY
+
+            running = asyncio.create_task(asyncio.sleep(60))
+            running.set_name("token-refresh-chatgpt")
+            app._token_refresh_tasks = [running]
+
+            started: list[dict[str, Any]] = []
+
+            async def fake_start(providers):
+                started.append(dict(providers))
+                return []
+
+            try:
+                with patch(
+                    "llm_rosetta_gateway.transport.token_refresh.start_token_refreshers",
+                    new=fake_start,
+                ):
+                    await startup._seed_tokens()
+                assert started == []
+                assert app._token_refresh_tasks == [running]
+            finally:
+                running.cancel()
+                await asyncio.gather(running, return_exceptions=True)
+
+        asyncio.run(exercise())
+
+    def test_admin_login_completion_restores_readiness_and_refresher(self):
+        async def exercise():
+            pinfo = _make_pending_pinfo("chatgpt")
+            config = _FakeConfig({"chatgpt": pinfo})
+            app = _FakeApp()
+            startup = DeferredStartup(config, app)
+            startup._provider_states["chatgpt"] = ProviderInitState.FAILED
+            pinfo.token_status = {
+                "enabled": False,
+                "interactive_setup_required": True,
+            }
+
+            await startup.provider_credential_ready("chatgpt", pinfo)
+            assert startup.provider_state("chatgpt") == ProviderInitState.READY
+            status = pinfo.token_status or {}
+            assert status["enabled"] is True
+            assert "interactive_setup_required" not in status
+            assert [task.get_name() for task in app._token_refresh_tasks] == [
+                "token-refresh-chatgpt"
+            ]
+
+            # A second completion replaces the record, not the loop.  The live
+            # task still renews, so "automatic refresh is off" would be a lie.
+            first_task = app._token_refresh_tasks[0]
+            await startup.provider_credential_ready("chatgpt", pinfo)
+            assert (pinfo.token_status or {})["enabled"] is True
+            assert app._token_refresh_tasks == [first_task]
+
+            await startup.provider_credential_removed("chatgpt", pinfo)
+            assert startup.provider_state("chatgpt") == ProviderInitState.FAILED
+            removed_status = pinfo.token_status or {}
+            assert removed_status["enabled"] is False
+            assert removed_status["interactive_setup_required"] is True
+            assert first_task.done() is True
+            assert app._token_refresh_tasks == []
+
+            await asyncio.gather(first_task, return_exceptions=True)
+
+        asyncio.run(exercise())
+
+
 class TestDeferredStartupStates:
     def test_no_token_command_providers_all_ready(self):
         config = _FakeConfig({"openai": _make_pinfo("openai")})

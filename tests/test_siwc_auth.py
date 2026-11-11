@@ -768,3 +768,128 @@ class TestInstallingARecord:
 
         assert not (Path(ctx.state_dir) / "credential.json").exists()
         assert siwc.EXCHANGE.needs_interactive_setup(ctx) is True
+
+
+class TestBrowserLogin:
+    def test_begin_and_complete_keep_tokens_server_side(self, siwc, issuer, ctx):
+        started = siwc.begin_login(ctx)
+
+        assert started["authorization_url"].startswith(
+            "https://auth.openai.com/api/accounts/authorize?"
+        )
+        assert started["callback_url"] == siwc.WEB_CALLBACK_URI
+        assert "access_token" not in started
+        assert "refresh_token" not in started
+        assert "id_token" not in started
+
+        pending_path = Path(ctx.state_dir) / siwc.PENDING_LOGIN_NAME
+        pending = json.loads(pending_path.read_text())
+        issuer.id_token_claims = {"nonce": pending["nonce"]}
+        query = urllib.parse.urlencode(
+            {"code": "authorization-code", "state": pending["state"]}
+        )
+
+        summary = siwc.complete_login(ctx, f"{started['callback_url']}?{query}")
+
+        assert summary["connected"] is True
+        assert summary["subject"] == "user-1"
+        assert not pending_path.exists()
+        record = json.loads((Path(ctx.state_dir) / "credential.json").read_text())
+        assert record["access_token"] == "access-0"
+        assert "access_token" not in summary
+        assert "refresh_token" not in summary
+        assert "id_token" not in summary
+
+    def test_callback_state_mismatch_does_not_consume_challenge(
+        self, siwc, issuer, ctx
+    ):
+        started = siwc.begin_login(ctx)
+        pending_path = Path(ctx.state_dir) / siwc.PENDING_LOGIN_NAME
+        pending = json.loads(pending_path.read_text())
+        callback = f"{started['callback_url']}?code=c&state=wrong"
+
+        with pytest.raises(siwc.AuthExchangeError, match="state"):
+            siwc.complete_login(ctx, callback)
+        assert pending_path.exists()
+
+        issuer.id_token_claims = {"nonce": pending["nonce"]}
+        query = urllib.parse.urlencode(
+            {"code": "authorization-code", "state": pending["state"]}
+        )
+        siwc.complete_login(ctx, f"{started['callback_url']}?{query}")
+        with pytest.raises(siwc.AuthExchangeError, match="no browser sign-in"):
+            siwc.complete_login(ctx, f"{started['callback_url']}?{query}")
+
+    def test_a_callback_from_another_origin_or_path_is_refused(self, siwc, ctx):
+        """The URL is operator-pasted, so it is checked, not trusted."""
+        siwc.begin_login(ctx)
+        pending_path = Path(ctx.state_dir) / siwc.PENDING_LOGIN_NAME
+        cases = [
+            "https://127.0.0.1:1455/auth/callback?code=c&state=x",
+            "http://127.0.0.1:1456/auth/callback?code=c&state=x",
+            "http://127.0.0.1:1455/evil?code=c&state=x",
+            "http://127.0.0.1:1455/auth/callback?code=c&state=x#fragment",
+            "http://user@127.0.0.1:1455/auth/callback?code=c&state=x",
+        ]
+
+        for callback in cases:
+            # The URL check must be what refuses each case.  A looser match on
+            # "does not match" would also accept the *state* error, hiding a
+            # removed origin/path/fragment guard behind an unrelated refusal.
+            with pytest.raises(
+                siwc.AuthExchangeError, match=r"callback URL does not match"
+            ):
+                siwc.complete_login(ctx, callback)
+            assert pending_path.exists(), callback
+
+    def test_an_expired_challenge_is_refused_and_consumed(self, siwc, issuer, ctx):
+        started = siwc.begin_login(ctx)
+        pending_path = Path(ctx.state_dir) / siwc.PENDING_LOGIN_NAME
+        pending = json.loads(pending_path.read_text())
+        pending["expires_at"] = time.time() - 1
+        pending_path.write_text(json.dumps(pending))
+        os.chmod(pending_path, 0o600)
+
+        query = urllib.parse.urlencode({"code": "c", "state": pending["state"]})
+        with pytest.raises(siwc.AuthExchangeError, match="expired"):
+            siwc.complete_login(ctx, f"{started['callback_url']}?{query}")
+        assert not pending_path.exists()
+
+    def test_a_second_begin_supersedes_the_first(self, siwc, ctx):
+        """Two open tabs are a race; the latest start is the one that wins."""
+        first = siwc.begin_login(ctx)
+        pending_path = Path(ctx.state_dir) / siwc.PENDING_LOGIN_NAME
+        first_pending = json.loads(pending_path.read_text())
+        second = siwc.begin_login(ctx)
+        second_pending = json.loads(pending_path.read_text())
+
+        assert first["authorization_url"] != second["authorization_url"]
+        query = urllib.parse.urlencode({"code": "c", "state": first_pending["state"]})
+        with pytest.raises(siwc.AuthExchangeError, match=r"state does not match"):
+            siwc.complete_login(ctx, f"{first['callback_url']}?{query}")
+        assert second_pending["state"] != first_pending["state"]
+
+    def test_the_registered_client_id_is_taken_from_the_callback(
+        self, siwc, issuer, ctx
+    ):
+        """First sign-in: authorize with the placeholder, exchange with the real id.
+
+        The issuer puts the dynamically registered ``oaiapp_…`` in the callback
+        URL; naming the placeholder at the token endpoint answers
+        ``400 invalid_client``.
+        """
+        started = siwc.begin_login(ctx)
+        pending_path = Path(ctx.state_dir) / siwc.PENDING_LOGIN_NAME
+        pending = json.loads(pending_path.read_text())
+        issuer.id_token_claims = {"nonce": pending["nonce"]}
+        query = urllib.parse.urlencode(
+            {
+                "code": "authorization-code",
+                "state": pending["state"],
+                "client_id": "oaiapp_registered",
+            }
+        )
+
+        siwc.complete_login(ctx, f"{started['callback_url']}?{query}")
+
+        assert issuer.token_calls()[-1]["client_id"] == "oaiapp_registered"

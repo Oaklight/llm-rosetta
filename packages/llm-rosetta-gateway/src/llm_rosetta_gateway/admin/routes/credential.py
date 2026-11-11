@@ -90,6 +90,20 @@ def exchange_can_install(exchange: Any) -> bool:
     return install is not None and (can_install() if callable(can_install) else True)
 
 
+def exchange_can_begin_login(exchange: Any) -> bool:
+    """Whether the exchange supports a server-side browser sign-in."""
+    begin = getattr(exchange, "begin_login", None)
+    capability = getattr(exchange, "can_begin_login", None)
+    return begin is not None and (capability() if callable(capability) else True)
+
+
+def exchange_can_complete_login(exchange: Any) -> bool:
+    """Whether the exchange accepts a pasted browser callback."""
+    complete = getattr(exchange, "complete_login", None)
+    capability = getattr(exchange, "can_complete_login", None)
+    return complete is not None and (capability() if callable(capability) else True)
+
+
 def exchange_can_revoke(exchange: Any) -> bool:
     """Whether sign-out can reach the vendor and remove the record.
 
@@ -230,8 +244,90 @@ async def get_provider_credential(request: Any, name: str) -> Response:
             # not come back 501.  The exchange owns both answers.
             "can_install": exchange_can_install(exchange),
             "can_revoke": exchange_can_revoke(exchange),
+            "can_begin_login": exchange_can_begin_login(exchange),
+            "can_complete_login": exchange_can_complete_login(exchange),
         }
     )
+
+
+async def begin_provider_login(request: Any, name: str) -> Response:
+    """Start browser OAuth and return only its authorization URL."""
+    try:
+        pinfo, exchange = _provider_and_exchange(request, name)
+    except _NotSupported as exc:
+        return _error(exc)
+    if not exchange_can_begin_login(exchange):
+        return JSONResponse(
+            {"error": f"Provider '{name}' has no browser sign-in flow"},
+            status_code=501,
+        )
+    try:
+        result = await _off_loop(exchange.begin_login, pinfo.auth_context)
+    except Exception as exc:  # noqa: BLE001 - vendor errors are operator-facing
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    if not isinstance(result, dict) or not isinstance(
+        result.get("authorization_url"), str
+    ):
+        return JSONResponse(
+            {"error": "the exchange returned no authorization URL"}, status_code=502
+        )
+    # Keep the response allow-list explicit: a shim must never accidentally
+    # expose a verifier or token by adding a field to its private result.
+    payload = {
+        "provider": name,
+        "pending": True,
+        "authorization_url": result["authorization_url"],
+    }
+    for key in ("callback_url", "expires_at"):
+        if key in result:
+            payload[key] = result[key]
+    return JSONResponse(payload)
+
+
+async def complete_provider_login(request: Any, name: str) -> Response:
+    """Complete browser OAuth from one pasted callback URL."""
+    try:
+        pinfo, exchange = _provider_and_exchange(request, name)
+    except _NotSupported as exc:
+        return _error(exc)
+    if not exchange_can_complete_login(exchange):
+        return JSONResponse(
+            {"error": f"Provider '{name}' has no browser callback flow"},
+            status_code=501,
+        )
+    body, err = parse_json_body(request)
+    if err:
+        return err
+    if (
+        not isinstance(body, dict)
+        or set(body) != {"callback_url"}
+        or not isinstance(body.get("callback_url"), str)
+    ):
+        return JSONResponse(
+            {"error": "only a callback_url is accepted"}, status_code=400
+        )
+    try:
+        summary = await _off_loop(
+            exchange.complete_login,
+            pinfo.auth_context,
+            body["callback_url"],
+        )
+    except Exception as exc:  # noqa: BLE001 - exchange owns safe error wording
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    if not isinstance(summary, dict):
+        return JSONResponse(
+            {"error": "the exchange returned no summary"}, status_code=502
+        )
+    error = await _reseed(pinfo)
+    await _activate_after_reseed(request, name, pinfo, error)
+    payload: dict[str, Any] = {
+        "provider": name,
+        "connected": error is None,
+        "summary": summary,
+    }
+    if error is not None:
+        payload["error"] = f"the sign-in is saved but not in use: {error}"
+    return JSONResponse(payload)
 
 
 async def refresh_provider_credential(request: Any, name: str) -> Response:
@@ -383,6 +479,7 @@ async def put_provider_credential(request: Any, name: str) -> Response:
 
     payload = {"provider": name, "installed": True, "summary": summary}
     error = await _reseed(pinfo)
+    await _activate_after_reseed(request, name, pinfo, error)
     if error is not None:
         payload["error"] = f"the record is installed but not in use: {error}"
     return JSONResponse(payload)
@@ -413,6 +510,11 @@ async def delete_provider_credential(request: Any, name: str) -> Response:
     # endpoint must not do.
     await _reseed(pinfo)
     removed = bool(exchange.needs_interactive_setup(pinfo.auth_context))
+    if removed:
+        deferred = getattr(request.app, "deferred_startup", None)
+        deactivate = getattr(deferred, "provider_credential_removed", None)
+        if deactivate is not None:
+            await deactivate(name, pinfo)
     if not removed and not revocable:
         # "Sign out" and "did nothing" must not look alike: the record is still
         # there because this exchange has no way to remove it.  Same split as
@@ -428,6 +530,18 @@ async def delete_provider_credential(request: Any, name: str) -> Response:
     if error is not None:
         payload["error"] = error
     return JSONResponse(payload)
+
+
+async def _activate_after_reseed(
+    request: Any, name: str, pinfo: Any, error: str | None
+) -> None:
+    """Notify the application lifecycle when a credential became usable."""
+    if error is not None:
+        return
+    deferred = getattr(request.app, "deferred_startup", None)
+    activate = getattr(deferred, "provider_credential_ready", None)
+    if activate is not None:
+        await activate(name, pinfo)
 
 
 async def _reseed(pinfo: Any) -> str | None:

@@ -63,6 +63,8 @@ class TestTheProfile:
         assert profile.connection.base_url == "https://api.openai.com/v1"
         assert profile.auth is not None
         assert profile.auth.kind == "oauth"
+        # The token lives 3600 s; a 3600 s loop could renew after expiry.
+        assert profile.connection.token_refresh_interval == 2880
 
     def test_the_route_is_stateless(self):
         profile = shim()
