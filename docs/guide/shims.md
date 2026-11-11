@@ -589,7 +589,7 @@ here; every shim's full declaration is in its own `transforms.py`.
 
 ### Standalone shim packages
 
-Four shim sets live in their own repositories rather than in core:
+Five shim sets live in their own repositories rather than in core:
 
 | Package | Shim names | Repository |
 |---------|------------|------------|
@@ -597,6 +597,7 @@ Four shim sets live in their own repositories rather than in core:
 | Argo | `argo--chat_completions`, `argo--messages`, `argo--open_responses` | [llm-rosetta-shim-argo](https://github.com/Oaklight/llm-rosetta-shim-argo) |
 | AskSage | `asksage--chat_completions`, `asksage--messages`, `asksage--open_responses`, `asksage--google_generate` | [llm-rosetta-shim-asksage](https://github.com/Oaklight/llm-rosetta-shim-asksage) |
 | OpenCode Zen free lane | `opencode_zen_free--chat_completions` | [llm-rosetta-shim-opencode-free](https://github.com/Oaklight/llm-rosetta-shim-opencode-free) |
+| Open Design | `opendesign--chat_completions`, `opendesign--open_responses`, `opendesign--messages` | [llm-rosetta-shim-opendesign](https://github.com/Oaklight/llm-rosetta-shim-opendesign) |
 
 ALCF and AskSage were introduced during the 0.14.0 development cycle and never
 appeared in a stable release's built-in set; Argo had shipped built in since
