@@ -700,10 +700,20 @@ function _renderExchangePanel(data, ui) {
     _appendAction(acts, {kind: 'link', href: manage,
       label: _credentialText('btn.manageUsage', 'Manage usage')});
   }
-  // 501 is what an exchange that never implemented install()/revoke()
-  // answers; the panel asks the endpoint instead of offering a dead button.
-  if (data.can_install !== false) {
+  // A browser-capable exchange keeps the credential record on the gateway.
+  // The panel receives only an authorization URL and later a callback URL.
+  const browserLogin = !!(data.can_begin_login && data.can_complete_login);
+  if (browserLogin) {
     _appendAction(acts, {kind: 'primary',
+      label: _credentialText('btn.startBrowserLogin', 'Start browser sign-in'),
+      fn: 'beginProviderBrowserLogin()'});
+  }
+  if (data.can_install !== false) {
+    // 501 is what an exchange that never implemented install() answers; the
+    // panel asks the endpoint instead of offering a dead button.  A CLI
+    // record path stays available even when the browser flow is offered: the
+    // two are alternative ways to produce the same record, not versions.
+    _appendAction(acts, {kind: browserLogin ? '' : 'primary',
       label: _credentialText('btn.installRecord', 'Install a record'),
       fn: 'toggleProviderCredentialBox(true)'});
   }
@@ -1014,6 +1024,80 @@ async function testProviderCredential() {
       showToast?.(_credentialText('label.credentialAccepted', 'The upstream accepted the credential'), 'success');
     } else {
       _setCredentialError((res && res.error) || _credentialText('label.credentialRejected', 'The credential test failed.'));
+    }
+  } catch (err) {
+    _setCredentialError(String(err && err.message || err));
+  }
+}
+
+function resetProviderBrowserLogin() {
+  const box = document.getElementById('provBrowserLoginBox');
+  const link = document.getElementById('provBrowserLoginLink');
+  const input = document.getElementById('provBrowserCallback');
+  if (box) box.hidden = true;
+  if (link) { link.hidden = true; link.removeAttribute('href'); link.textContent = ''; }
+  const code = document.getElementById('provBrowserLoginUrl');
+  if (code) code.textContent = '';
+  if (input) input.value = '';
+  _setCredentialError('');
+}
+
+async function beginProviderBrowserLogin() {
+  const name = _credentialFor;
+  if (!name || name !== _editingProviderName) return;
+  resetProviderBrowserLogin();
+  // Open the tab inside the click, before the await: a popup opened after an
+  // async round trip is what browsers block.  The URL is filled in once the
+  // server answers, and the panel keeps a visible link as the fallback when
+  // the popup was blocked anyway.
+  const opened = window.open('about:blank', '_blank');
+  try {
+    const result = await api.post(
+      `/admin/api/config/providers/${encodeURIComponent(name)}/credential/login`
+    );
+    if (!result || !result.authorization_url) {
+      throw new Error(result?.error || 'The server returned no sign-in URL.');
+    }
+    if (opened) {
+      opened.location.href = result.authorization_url;
+    }
+    const box = document.getElementById('provBrowserLoginBox');
+    const link = document.getElementById('provBrowserLoginLink');
+    const code = document.getElementById('provBrowserLoginUrl');
+    const input = document.getElementById('provBrowserCallback');
+    if (link) {
+      link.href = result.authorization_url;
+      link.textContent = _credentialText('prov.openBrowserLogin', 'Open sign-in page');
+      link.hidden = false;
+    }
+    if (code) code.textContent = result.authorization_url;
+    if (box) box.hidden = false;
+    input?.focus();
+  } catch (err) {
+    if (opened) opened.close();
+    _setCredentialError(String(err && err.message || err));
+  }
+}
+
+async function completeProviderBrowserLogin() {
+  const name = _credentialFor;
+  const input = document.getElementById('provBrowserCallback');
+  const callbackUrl = input?.value.trim() || '';
+  if (!name || name !== _editingProviderName || !callbackUrl) {
+    _setCredentialError(_credentialText('prov.callbackRequired', 'Paste the complete callback URL first.'));
+    return;
+  }
+  try {
+    const result = await api.post(
+      `/admin/api/config/providers/${encodeURIComponent(name)}/credential/login/callback`,
+      {callback_url: callbackUrl}
+    );
+    resetProviderBrowserLogin();
+    await loadProviderCredential(name);
+    if (result?.error) {
+      _setCredentialError(result.error);
+    } else {
+      showToast?.(_credentialText('label.credentialInstalled', 'Credential installed'), 'success');
     }
   } catch (err) {
     _setCredentialError(String(err && err.message || err));
@@ -2587,6 +2671,7 @@ Object.assign(window, {
   goToModelsForProvider, goToProviderFromModel, testProviderConnectivity,
   showProviderQuota,
   installProviderCredential, signOutProviderCredential, toggleProviderCredentialBox,
+  beginProviderBrowserLogin, completeProviderBrowserLogin, resetProviderBrowserLogin,
   refreshProviderCredential, testProviderCredential,
   setProviderPane, selectCredentialSource, addProviderArg, refreshProviderAuthPane,
   _activateSegChild,

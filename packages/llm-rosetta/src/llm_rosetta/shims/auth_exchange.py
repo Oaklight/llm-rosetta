@@ -229,6 +229,14 @@ class AuthExchange(Protocol):
         """
         ...
 
+    def begin_login(self, ctx: AuthContext) -> Mapping[str, Any]:
+        """Start a browser sign-in and return a token-free authorization URL."""
+        ...
+
+    def complete_login(self, ctx: AuthContext, callback_url: str) -> Mapping[str, Any]:
+        """Finish a browser sign-in from the pasted callback URL."""
+        ...
+
 
 class BaseAuthExchange:
     """Defaults for the optional half of :class:`AuthExchange`.
@@ -263,6 +271,16 @@ class BaseAuthExchange:
         """Refuse: this exchange has no browser sign-in."""
         raise NotImplementedError
 
+    def begin_login(self, ctx: AuthContext) -> Mapping[str, Any]:  # pragma: no cover
+        """Refuse: this exchange has no web sign-in flow."""
+        raise NotImplementedError
+
+    def complete_login(
+        self, ctx: AuthContext, callback_url: str
+    ) -> Mapping[str, Any]:  # pragma: no cover
+        """Refuse: this exchange has no web sign-in flow."""
+        raise NotImplementedError
+
     def revoke(self, ctx: AuthContext) -> bool:  # pragma: no cover
         """Refuse: this exchange keeps no record to revoke."""
         raise NotImplementedError
@@ -278,6 +296,14 @@ class BaseAuthExchange:
     def can_login(self) -> bool:
         """Whether :meth:`login` was overridden."""
         return type(self).login is not BaseAuthExchange.login
+
+    def can_begin_login(self) -> bool:
+        """Whether the exchange supports a server-side browser flow."""
+        return type(self).begin_login is not BaseAuthExchange.begin_login
+
+    def can_complete_login(self) -> bool:
+        """Whether the exchange supports callback completion."""
+        return type(self).complete_login is not BaseAuthExchange.complete_login
 
     def can_revoke(self) -> bool:
         """Whether :meth:`revoke` was overridden."""

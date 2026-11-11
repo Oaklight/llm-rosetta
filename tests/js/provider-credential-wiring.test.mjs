@@ -136,3 +136,61 @@ test('the Auth tab dot is named, and the name follows the state', () => {
   assert.match(source, /badge\.setAttribute\('aria-label', label\)/);
   assert.match(source, /_stateLabel\(state\)/);
 });
+
+test('the browser sign-in submits the callback URL and nothing else', () => {
+  // Tokens stay server-side; the panel's payload is the operator's pasted URL.
+  assert.match(source, /credential\/login`/);
+  assert.match(source, /credential\/login\/callback`/);
+  assert.match(source, /\{callback_url: callbackUrl\}/);
+  assert.doesNotMatch(
+    source.slice(source.indexOf('async function completeProviderBrowserLogin(')),
+    /access_token|refresh_token|id_token/,
+    'the completion request must not carry a token',
+  );
+});
+
+test('the browser sign-in controls are statically present and exported', () => {
+  for (const id of ['provBrowserLoginBox', 'provBrowserLoginLink', 'provBrowserLoginUrl', 'provBrowserCallback']) {
+    assert.match(html, new RegExp(`id="${id}"`), id);
+  }
+  const exportList = source.match(/Object\.assign\(window,\s*\{([\s\S]*?)\}\);/);
+  assert.ok(exportList);
+  for (const name of [
+    'beginProviderBrowserLogin', 'completeProviderBrowserLogin',
+    'resetProviderBrowserLogin',
+  ]) {
+    assert.match(exportList[1], new RegExp(`\\b${name}\\b`), name);
+  }
+});
+
+test('a CLI record stays installable beside the browser flow', () => {
+  // The two are alternative ways to produce one record; hiding install would
+  // strand a record the operator already generated on another machine.
+  const panel = source.slice(
+    source.indexOf('function _renderExchangePanel('),
+    source.indexOf('function _credentialDraftDirty('),
+  );
+  assert.match(panel, /data\.can_begin_login/);
+  assert.match(panel, /data\.can_install !== false/);
+  assert.doesNotMatch(
+    panel,
+    /else if \(data\.can_install !== false\)/,
+    'install must not be an exclusive fallback for the browser flow',
+  );
+});
+
+test('the sign-in tab is opened inside the click, not after the await', () => {
+  // A window.open() after an async round trip is what browsers block; the
+  // blank tab is opened first and its location filled when the URL arrives.
+  const fn = source.slice(
+    source.indexOf('async function beginProviderBrowserLogin('),
+    source.indexOf('async function completeProviderBrowserLogin('),
+  );
+  const openAt = fn.indexOf("window.open('about:blank'");
+  const awaitAt = fn.indexOf('await api.post(');
+  assert.ok(openAt >= 0, 'the blank tab is opened');
+  assert.ok(openAt < awaitAt, 'the tab is opened before the request');
+  assert.match(fn, /opened\.location\.href = result\.authorization_url/);
+  assert.match(fn, /getElementById\('provBrowserLoginUrl'\)/);
+  assert.match(fn, /opened\.close\(\)/, 'a failed start closes the blank tab');
+});

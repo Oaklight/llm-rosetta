@@ -192,6 +192,72 @@ class DeferredStartup:
         """Return the init state for *name*, defaulting to READY."""
         return self._provider_states.get(name, ProviderInitState.READY)
 
+    async def provider_credential_ready(self, name: str, pinfo: Any) -> None:
+        """Make a provider ready after an admin-installed credential.
+
+        A provider that needed sign-in at startup is intentionally absent from
+        the initial refresher set.  Credential completion is an application
+        lifecycle event, so this method owns the readiness transition and the
+        task registration instead of the admin route creating an orphan task.
+        """
+        if not pinfo.mints_credential:
+            return
+        live = [
+            task
+            for task in getattr(self._app, "_token_refresh_tasks", [])
+            if not task.done()
+        ]
+        task_name = f"token-refresh-{name}"
+        already_running = any(task.get_name() == task_name for task in live)
+        self._provider_states[name] = ProviderInitState.READY
+        status = dict(pinfo.token_status or {})
+        status.update(
+            {
+                # A second completion replaces the record, not the loop: the
+                # live task keeps renewing, so the panel must keep saying so.
+                "enabled": already_running,
+                "last_refresh": datetime.now(timezone.utc).isoformat(),
+                "consecutive_failures": 0,
+                "last_error": None,
+            }
+        )
+        status.pop("interactive_setup_required", None)
+        pinfo.token_status = status
+
+        if already_running:
+            return
+        from ..transport.token_refresh import start_token_refreshers
+
+        refresh_tasks = await start_token_refreshers({name: pinfo})
+        live.extend(refresh_tasks)
+        setattr(self._app, "_token_refresh_tasks", live)
+
+    async def provider_credential_removed(self, name: str, pinfo: Any) -> None:
+        """Stop the tracked refresher after an admin sign-out."""
+        self._provider_states[name] = ProviderInitState.FAILED
+        status = dict(pinfo.token_status or {})
+        status.update(
+            {
+                "enabled": False,
+                "last_refresh": None,
+                "last_error": None,
+                "interactive_setup_required": True,
+            }
+        )
+        pinfo.token_status = status
+        task_name = f"token-refresh-{name}"
+        tasks = list(getattr(self._app, "_token_refresh_tasks", []))
+        owned = [task for task in tasks if task.get_name() == task_name]
+        for task in owned:
+            task.cancel()
+        if owned:
+            await asyncio.gather(*owned, return_exceptions=True)
+        setattr(
+            self._app,
+            "_token_refresh_tasks",
+            [task for task in tasks if task not in owned and not task.done()],
+        )
+
     # -- Overall readiness --------------------------------------------------
 
     def is_fully_ready(self) -> bool:
@@ -465,13 +531,22 @@ class DeferredStartup:
             if generation != self._seed_generation:
                 return
 
-        # Start background refresh loops only for providers that succeeded
+        # Start background refresh loops only for providers that succeeded.
+        # A credential installed through the admin panel while this pass was
+        # retrying arrives READY with its own loop already registered; a second
+        # loop over the same key ring would only duplicate the refresh.
+        live_names = {
+            task.get_name()
+            for task in getattr(self._app, "_token_refresh_tasks", [])
+            if not task.done()
+        }
         ready_providers = {
             name: pinfo
             for name, pinfo in self._config.providers.items()
             if (
                 pinfo.mints_credential
                 and self._provider_states.get(name) == ProviderInitState.READY
+                and f"token-refresh-{name}" not in live_names
             )
         }
         if ready_providers:

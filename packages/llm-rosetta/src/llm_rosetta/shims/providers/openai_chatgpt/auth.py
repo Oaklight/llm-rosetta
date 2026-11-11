@@ -76,6 +76,9 @@ DYNAMIC_CLIENT = "dynamic_agent_client"
 SCOPES = "openid profile email offline_access resource.invoke chatgpt.tokens.use.direct"
 RESOURCE = "https://api.openai.com/v1"
 CALLBACK_PATH = "/auth/callback"
+WEB_CALLBACK_URI = "http://127.0.0.1:1455/auth/callback"
+PENDING_LOGIN_NAME = "pending-login.json"
+PENDING_LOGIN_TTL = 10 * 60.0
 
 #: Wall-clock budget for one outbound call, and the cap on what we will read
 #: from it.  A token endpoint that streams forever must not fill memory.
@@ -757,6 +760,163 @@ def _loopback_handler(result: dict[str, Any]):
     return Handler
 
 
+def _pending_login_path(ctx: AuthContext) -> Path:
+    """Return the one-shot browser challenge path for this provider."""
+    return _state_dir(ctx) / PENDING_LOGIN_NAME
+
+
+def _read_pending_login(ctx: AuthContext) -> dict[str, Any]:
+    """Read and validate the server-side browser challenge."""
+    path = _pending_login_path(ctx)
+    try:
+        with open(path, encoding="utf-8") as handle:
+            pending = json.load(handle)
+    except FileNotFoundError as exc:
+        raise AuthExchangeError("no browser sign-in is waiting for a callback") from exc
+    except (OSError, json.JSONDecodeError) as exc:
+        raise AuthExchangeError("the pending browser sign-in is unreadable") from exc
+    if not isinstance(pending, dict):
+        raise AuthExchangeError("the pending browser sign-in has an invalid shape")
+    expires_at = pending.get("expires_at")
+    if not isinstance(expires_at, (int, float)) or time.time() >= float(expires_at):
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            pass
+        raise AuthExchangeError("the browser sign-in has expired; start again")
+    return pending
+
+
+def _discard_pending_login(ctx: AuthContext) -> None:
+    """Consume a browser challenge, including when the exchange later fails."""
+    try:
+        _pending_login_path(ctx).unlink()
+    except FileNotFoundError:
+        pass
+
+
+def begin_login(ctx: AuthContext) -> dict[str, Any]:
+    """Create a browser authorization URL without exposing a credential.
+
+    Starting again supersedes an unfinished sign-in: only the newest
+    challenge completes, so two open tabs cannot both mint a record.
+    """
+    doc = _discover()
+    _prepare_dir(_state_dir(ctx))
+    try:
+        previous = _read_record(ctx)
+    except (InteractiveSetupRequired, AuthExchangeError):
+        previous = None
+    client_id = previous.get("client_id") if previous else None
+    verifier, challenge = _pkce()
+    state = secrets.token_urlsafe(32)
+    nonce = secrets.token_urlsafe(32)
+    host_id = _host_id(ctx)
+    expires_at = time.time() + PENDING_LOGIN_TTL
+    pending = {
+        "client_id": client_id,
+        "verifier": verifier,
+        "state": state,
+        "nonce": nonce,
+        "host_id": host_id,
+        "redirect_uri": WEB_CALLBACK_URI,
+        "created_at": time.time(),
+        "expires_at": expires_at,
+    }
+    _write_private(_pending_login_path(ctx), json.dumps(pending, sort_keys=True) + "\n")
+    return {
+        "authorization_url": _authorize_url(
+            doc,
+            redirect_uri=WEB_CALLBACK_URI,
+            state=state,
+            nonce=nonce,
+            challenge=challenge,
+            client_id=client_id,
+            host_id=host_id,
+        ),
+        "callback_url": WEB_CALLBACK_URI,
+        "expires_at": expires_at,
+    }
+
+
+def complete_login(ctx: AuthContext, callback_url: str) -> dict[str, Any]:
+    """Exchange one pasted callback URL and store the verified record."""
+    if not isinstance(callback_url, str) or not callback_url.strip():
+        raise AuthExchangeError("a callback URL is required")
+    with _record_lock(ctx):
+        pending = _read_pending_login(ctx)
+        expected = urllib.parse.urlparse(str(pending.get("redirect_uri", "")))
+        parsed = urllib.parse.urlparse(callback_url.strip())
+        if (
+            parsed.scheme != expected.scheme
+            or parsed.netloc != expected.netloc
+            or parsed.path != expected.path
+            or parsed.fragment
+        ):
+            raise AuthExchangeError("callback URL does not match this sign-in")
+        query = urllib.parse.parse_qs(parsed.query, keep_blank_values=True)
+        error = query.get("error", [""])[0]
+        if error:
+            detail = query.get("error_description", [""])[0]
+            _discard_pending_login(ctx)
+            raise AuthExchangeError(
+                f"the sign-in was refused: {error}{(': ' + detail) if detail else ''}"
+            )
+        state = query.get("state", [""])[0]
+        if not hmac.compare_digest(state, str(pending.get("state", ""))):
+            raise AuthExchangeError("callback state does not match this sign-in")
+        code = query.get("code", [""])[0]
+        if not code:
+            raise AuthExchangeError("callback carried no authorization code")
+        # A first sign-in authorizes with the registration placeholder; the
+        # issuer answers the callback with the client id it actually created
+        # (``oaiapp_…``), and the token exchange must name that one.
+        callback_client = query.get("client_id", [""])[0]
+        _discard_pending_login(ctx)
+
+    doc = _discover()
+    try:
+        previous = _read_record(ctx)
+    except (InteractiveSetupRequired, AuthExchangeError):
+        previous = None
+    client_id = pending.get("client_id")
+    if (
+        not isinstance(client_id, str) or not client_id or client_id == DYNAMIC_CLIENT
+    ) and callback_client:
+        client_id = callback_client
+    if not isinstance(client_id, str) or not client_id:
+        client_id = DYNAMIC_CLIENT
+    payload = _token_call(
+        doc,
+        {
+            "grant_type": "authorization_code",
+            "client_id": client_id,
+            "code": code,
+            "code_verifier": str(pending["verifier"]),
+            "redirect_uri": str(pending["redirect_uri"]),
+            "resource": RESOURCE,
+        },
+    )
+    issued = payload.get("client_id")
+    if not isinstance(issued, str) or not issued:
+        issued = client_id
+    if issued == DYNAMIC_CLIENT:
+        raise AuthExchangeError(
+            "the issuer returned the registration placeholder as the client id"
+        )
+    record = _record_from_token(
+        ctx,
+        doc,
+        payload,
+        client_id=issued,
+        previous=previous,
+        nonce=str(pending["nonce"]),
+        host_id=str(pending["host_id"]),
+    )
+    _save_record(ctx, record)
+    return _summary(record)
+
+
 def login(
     ctx: AuthContext,
     *,
@@ -828,6 +988,17 @@ def login(
     code = result.get("code")
     if not isinstance(code, str) or not code:
         raise AuthExchangeError("callback carried no authorization code")
+    callback_client = result.get("client_id")
+    if (
+        not client_id
+        and isinstance(callback_client, str)
+        and callback_client
+        and callback_client != DYNAMIC_CLIENT
+    ):
+        # A first sign-in authorizes with the registration placeholder; the
+        # issuer answers with the client id it created, and the exchange must
+        # name that one.
+        client_id = callback_client
 
     payload = _token_call(
         doc,
@@ -950,6 +1121,14 @@ class SignInWithChatGPT(BaseAuthExchange):
         except (InteractiveSetupRequired, AuthExchangeError):
             return None
         return _summary(record)
+
+    def begin_login(self, ctx: AuthContext) -> dict[str, Any]:
+        """Start a sign-in that the webadmin panel can complete."""
+        return begin_login(ctx)
+
+    def complete_login(self, ctx: AuthContext, callback_url: str) -> dict[str, Any]:
+        """Complete the one-shot callback submitted by webadmin."""
+        return complete_login(ctx, callback_url)
 
     def login(self, ctx: AuthContext) -> dict[str, Any]:
         """Run the sign-in here, where the operator and their browser are.
