@@ -517,7 +517,7 @@ LLM-Rosetta 内置 39 个提供方 shim，每个 shim 对应 `packages/llm-roset
 
 ### 独立 Shim 包 { #standalone-shim-packages }
 
-有四套 shim 维护在各自的仓库中，而不在核心包内：
+有五套 shim 维护在各自的仓库中，而不在核心包内：
 
 | 包 | Shim 名称 | 仓库 |
 |----|----------|------|
@@ -525,6 +525,7 @@ LLM-Rosetta 内置 39 个提供方 shim，每个 shim 对应 `packages/llm-roset
 | Argo | `argo--chat_completions`、`argo--messages`、`argo--open_responses` | [llm-rosetta-shim-argo](https://github.com/Oaklight/llm-rosetta-shim-argo) |
 | AskSage | `asksage--chat_completions`、`asksage--messages`、`asksage--open_responses`、`asksage--google_generate` | [llm-rosetta-shim-asksage](https://github.com/Oaklight/llm-rosetta-shim-asksage) |
 | OpenCode Zen 免费通道 | `opencode_zen_free--chat_completions` | [llm-rosetta-shim-opencode-free](https://github.com/Oaklight/llm-rosetta-shim-opencode-free) |
+| Open Design | `opendesign--chat_completions`、`opendesign--open_responses`、`opendesign--messages` | [llm-rosetta-shim-opendesign](https://github.com/Oaklight/llm-rosetta-shim-opendesign) |
 
 ALCF 与 AskSage 是在 0.14.0 开发周期中引入的，从未出现在任何稳定版的内置集合中；Argo 则自
 v0.6.3 起一直作为内置 shim 发布。三者均已在 0.14.0 离开核心。OpenCode 免费通道在 0.14 之后
