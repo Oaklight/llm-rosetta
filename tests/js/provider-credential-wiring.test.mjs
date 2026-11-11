@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -15,6 +16,57 @@ const ADMIN = join(
 );
 const source = readFileSync(join(ADMIN, 'js/tabs/providers.js'), 'utf8');
 const html = readFileSync(join(ADMIN, 'admin.html'), 'utf8');
+const utils = readFileSync(join(ADMIN, 'js/core/utils.js'), 'utf8');
+const i18n = readFileSync(join(ADMIN, 'js/core/i18n.js'), 'utf8');
+// These assertions pin wiring, so they must read code, not prose: a comment
+// that names the pattern they look for would otherwise satisfy them.  A plain
+// regex cannot do this — `//` also opens `https://` inside a string — so walk
+// the source and drop comments while keeping string literals intact.
+function stripJsComments(src) {
+  let out = '';
+  let i = 0;
+  while (i < src.length) {
+    const ch = src[i];
+    const next = src[i + 1];
+    if (ch === '/' && next === '/') {
+      const end = src.indexOf('\n', i);
+      i = end === -1 ? src.length : end;
+      continue;
+    }
+    if (ch === '/' && next === '*') {
+      const end = src.indexOf('*/', i + 2);
+      i = end === -1 ? src.length : end + 2;
+      continue;
+    }
+    if (ch === "'" || ch === '"' || ch === '`') {
+      const quote = ch;
+      out += ch;
+      i += 1;
+      while (i < src.length) {
+        out += src[i];
+        if (src[i] === '\\') { out += src[i + 1] ?? ''; i += 2; continue; }
+        if (src[i] === quote) { i += 1; break; }
+        i += 1;
+      }
+      continue;
+    }
+    out += ch;
+    i += 1;
+  }
+  return out;
+}
+
+const code = stripJsComments(source);
+
+test('the comment stripper leaves string literals alone', () => {
+  // `//` inside `https://` is not a comment; a text-level strip turned the
+  // string into `https:` and would have made a future assertion red for the
+  // wrong reason.
+  const sample = stripJsComments("const url = 'https://api.openai.com/v1'; // note\nconst x = 1; /* block */");
+  assert.match(sample, /'https:\/\/api\.openai\.com\/v1'/);
+  assert.doesNotMatch(sample, /note|block/);
+  assert.match(sample, /const x = 1;/);
+});
 
 test('the credential actions are reachable from an inline handler', () => {
   // The buttons are built with `fn: 'refreshProviderCredential()'`; an inline
@@ -193,4 +245,111 @@ test('the sign-in tab is opened inside the click, not after the await', () => {
   assert.match(fn, /opened\.location\.href = result\.authorization_url/);
   assert.match(fn, /getElementById\('provBrowserLoginUrl'\)/);
   assert.match(fn, /opened\.close\(\)/, 'a failed start closes the blank tab');
+});
+
+test('an entry command is an override, not a peer credential source', () => {
+  // Four equal cards made "sign in" and "run this argv instead" look like the
+  // same kind of choice; the command is an override of the shim's own source.
+  assert.match(html, /id="provOverrideBtn"/);
+  assert.match(source, /const overriding = ui === 'config'/);
+  assert.match(source, /overriding \? id !== 'config'/);
+  assert.match(source, /id === 'config' \|\| !avail\[id\]/);
+  const exportList = source.match(/Object\.assign\(window,\s*\{([\s\S]*?)\}\);/);
+  assert.ok(exportList);
+  assert.match(exportList[1], /\btoggleCommandOverride\b/);
+});
+
+test('the expiry row is readable and offers a countdown', () => {
+  assert.match(html, /id="provExchangeRefreshHint"/);
+  assert.match(code, /formatCredentialExpiry\(summary\.expires_at\)/);
+  // The value is an action, so it is a button, and the row is only drawn when
+  // the row builder is actually called.
+  assert.match(code, /_renderExpiryRow\(rows, summary\.expires_at\)/);
+  assert.match(code, /createElement\('button'\)/);
+  assert.match(code, /prov\.autoRefreshOn/);
+  // The countdown's word comes from the dictionary, not from the helper.
+  assert.match(code, /formatCountdown\(expiresAt, Date\.now\(\),/);
+  assert.match(code, /prov\.expiryExpired/);
+});
+
+test('a refresh keeps the expiry view the operator chose', () => {
+  // The refresh path re-renders the panel; resetting to the wall clock here
+  // would silently undo a countdown the operator had switched on.
+  assert.match(code, /let _expiryCountdown = false;/);
+  assert.match(code, /let showCountdown = _expiryCountdown;/);
+  assert.match(code, /_expiryCountdown = showCountdown;/);
+  assert.match(code, /if \(showCountdown\) _expiryTimer = setInterval\(paint, 1000\);/);
+});
+
+test('the refresher warning is said once, not once per card', () => {
+  // The exchange hint sits beside the expiry; the status card lower down used
+  // to repeat the same sentence when the refresher was off.
+  assert.match(code, /const hintSaysIt = ui === 'exchange' && data\.state === 'connected';/);
+  assert.match(code, /data\.refresher_enabled === false && !hintSaysIt/);
+});
+
+test('the countdown ticks only while it is on screen, and stops with the drawer', () => {
+  // An always-running 1 s interval kept ticking after the drawer closed; the
+  // timer now belongs to the countdown and the close path clears it.
+  assert.match(code, /if \(showCountdown\) \{\s*_expiryTimer = setInterval\(paint, 1000\);/);
+  assert.doesNotMatch(code, /_expiryTimer = setInterval\(\(\) => \{ if \(showCountdown\)/);
+  assert.match(code, /else \{\s*_clearExpiryTimer\(\);/);
+  assert.match(code, /if \(_provPane === 'basic'\) _clearExpiryTimer\(\);/);
+  const exportList = code.match(/Object\.assign\(window,\s*\{([\s\S]*?)\}\);/);
+  assert.ok(exportList, 'providers.js must export its inline handlers');
+  assert.match(exportList[1], /\bclearProviderExpiryTimer\b/);
+  assert.match(utils, /if \(id === 'providerModal'\) window\.clearProviderExpiryTimer\?\.\(\);/);
+});
+
+test('the override control describes the action it performs', () => {
+  assert.match(code, /_renderOverrideButton\(avail, ui\);/);
+  assert.match(code, /const removing = ui === 'config'/);
+  assert.match(code, /prov\.overrideRemoveHint/);
+  // Three close/open paths repaint the pane; the Override label is a built
+  // string, so the language switch has to repaint it too.
+  const refresh = code.slice(code.indexOf('function refreshProviderAuthPane('));
+  assert.match(refresh.slice(0, refresh.indexOf('\n}')), /_renderSourceCards\(_availableSources\(\), _uiSource\(\)\)/);
+});
+
+test('the dictionary parses as a module, not only as text', () => {
+  // The key checks below read the dictionary as text, so they pass over a
+  // missing comma between two entries; the browser then fails to load the
+  // module and the whole panel stays blank.  Parse it the way a browser does.
+  assert.doesNotThrow(
+    () => execFileSync(process.execPath, ['--input-type=module', '--check'], {
+      input: i18n,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }),
+    'i18n.js must parse as an ES module',
+  );
+});
+
+test('a missing dictionary key falls back to the sentence, not to the key', () => {
+  // `t(key, fallback)` passed the fallback as interpolation params, which made
+  // it inert: a typo'd key rendered the key itself.
+  assert.doesNotMatch(code, /\bt\(key, fallback\)/);
+  assert.match(code, /return value && value !== key \? value : fallback;/);
+  // The guard in tests/js/i18n-keys.mjs cannot see `_credentialText` call
+  // sites, so check the new keys exist in both dictionaries here.  Counting
+  // the whole file would accept two copies in one dictionary; read each
+  // dictionary body instead.
+  const enBody = i18n.slice(i18n.indexOf('  en: {'), i18n.indexOf('  zh: {'));
+  const zhStart = i18n.indexOf('  zh: {');
+  const zhBody = i18n.slice(zhStart, i18n.indexOf('\n};', zhStart));
+  assert.ok(enBody.length && zhBody.length, 'both dictionaries are in i18n.js');
+  for (const key of ['prov.expiryExpired', 'prov.overrideRemoveHint']) {
+    assert.equal(enBody.split(`'${key}'`).length - 1, 1, `${key} in the en dictionary`);
+    assert.equal(zhBody.split(`'${key}'`).length - 1, 1, `${key} in the zh dictionary`);
+  }
+});
+
+test('the Basic pane states one source instead of offering a picker', () => {
+  // Overrides live in Auth; the drawer home must not show two credential
+  // forms as peer buttons.
+  assert.match(code, /chip\.hidden = !current/);
+  assert.doesNotMatch(code, /chip\.hidden = !avail\[id\]/);
+  // The chip opens Auth; it does not toggle, so `aria-pressed` would promise
+  // an action it does not perform.
+  assert.match(code, /chip\.setAttribute\('aria-current', 'true'\)/);
+  assert.doesNotMatch(code, /chip\.setAttribute\('aria-pressed'/);
 });

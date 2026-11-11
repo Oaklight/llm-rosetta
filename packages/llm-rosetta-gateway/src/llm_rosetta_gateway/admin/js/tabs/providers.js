@@ -11,6 +11,7 @@ import { t, capLabel, typeLabel, typeLabelAlt } from '../core/i18n.js';
 import { api, showToast, showToastHtml, closeModal, esc, copyText, inlineConfirm, isFreeEntry, freeEntryLabel, providerTypeName } from '../core/utils.js';
 import {
   safeLinkUrl, parseRecord, credentialSource, credentialNeedsKey,
+  formatCredentialExpiry, formatCountdown, shortAccount,
   credentialLoadedFor, credentialSaveFields, shortCredential,
   credentialSourceId, credentialUiSource, availableCredentialSources,
   credentialFallbackSource, credentialSourceFields, credentialNeedsAttention,
@@ -200,7 +201,11 @@ function _needsKey(ui) {
 }
 
 function _credentialText(key, fallback) {
-  return (typeof t === 'function' ? t(key, fallback) : fallback);
+  if (typeof t !== 'function') return fallback;
+  const value = t(key);
+  // ``t`` answers with the key itself when the dictionary has no entry; that
+  // is a missing translation, not the fallback sentence it was handed.
+  return value && value !== key ? value : fallback;
 }
 
 function _clearProviderDrawerState(cfg) {
@@ -223,6 +228,9 @@ function setProviderPane(pane) {
   if (!basic || !auth) return;
   basic.hidden = _provPane !== 'basic';
   auth.hidden = _provPane !== 'auth';
+  // The expiry row is on the Auth pane only; while it is off screen its
+  // countdown has nothing to repaint, so the clock stops.
+  if (_provPane === 'basic') _clearExpiryTimer();
   for (const [id, on] of [['provTabBasic', _provPane === 'basic'],
     ['provTabAuth', _provPane === 'auth']]) {
     const tab = document.getElementById(id);
@@ -343,14 +351,53 @@ function _setCommandError(message) {
 }
 
 function _renderSourceCards(avail, ui) {
+  const overriding = ui === 'config';
   for (const id of ['static', 'config', 'shim', 'exchange']) {
     const card = document.getElementById('provSourceCard_' + id);
     if (!card) continue;
-    card.hidden = !avail[id];
+    // A command in the entry is an *override* of whatever the shim declares,
+    // not a peer choice.  While it is active it is the only card on screen:
+    // showing the shim's own source beside it would read as "pick one", when
+    // the only way back is the Remove override control.
+    card.hidden = overriding ? id !== 'config' : (id === 'config' || !avail[id]);
     card.setAttribute('aria-checked', String(id === ui));
   }
+  _renderOverrideButton(avail, ui);
   const note = document.getElementById('provSourceNote');
   if (note) note.textContent = _sourceNote(ui, _selectedShim(), _editingCfg());
+}
+
+/** The source the shim itself declares, without a config override. */
+function _primarySource() {
+  const avail = _availableSources();
+  if (avail.exchange) return 'exchange';
+  if (avail.shim) return 'shim';
+  if (avail.static) return 'static';
+  return 'config';
+}
+
+function _renderOverrideButton(avail, ui) {
+  const btn = document.getElementById('provOverrideBtn');
+  if (!btn) return;
+  const alternatives = ['static', 'shim', 'exchange'].filter(id => avail[id]);
+  btn.hidden = alternatives.length === 0;
+  const removing = ui === 'config';
+  btn.textContent = removing
+    ? _credentialText('btn.commandOverrideRemove', 'Remove override')
+    : _credentialText('btn.commandOverride', 'Override');
+  // The tooltip describes the action *this* button performs; the removal
+  // state is the opposite action, so it cannot reuse the override hint.
+  btn.title = removing
+    ? _credentialText('prov.overrideRemoveHint',
+      "Go back to the shim's own credential.")
+    : _credentialText('prov.overrideHint',
+      "Use a command from this entry instead of the shim's own credential.");
+}
+
+/** Flip between the shim's own credential and a command in this entry. */
+function toggleCommandOverride() {
+  _credSource = _uiSource() === 'config' ? _primarySource() : 'config';
+  _syncCredentialUI();
 }
 
 /** Why this source is the one the loader will honour, in one sentence. */
@@ -612,12 +659,13 @@ function _stateLabel(state) {
 }
 
 /** `<dl>` pairs the exchange panel and the status card share. */
-function _appendRow(host, key, value, bad) {
+function _appendRow(host, key, value, bad, title) {
   const dt = document.createElement('dt');
   dt.textContent = key;
   const dd = document.createElement('dd');
   dd.textContent = value;
   if (bad) dd.className = 'bad';
+  if (title) dd.title = title;
   host.append(dt, dd);
 }
 
@@ -644,6 +692,71 @@ function _appendAction(host, action) {
   host.appendChild(el);
 }
 
+//: The one live countdown, cleared whenever the exchange panel re-renders.
+let _expiryTimer = null;
+
+//: Whether the operator reads the expiry as a countdown.  A refresh re-renders
+//: the row; starting over in wall-clock mode would undo their choice behind
+//: their back, so the view outlives the render.
+let _expiryCountdown = false;
+
+function _clearExpiryTimer() {
+  if (_expiryTimer !== null) {
+    clearInterval(_expiryTimer);
+    _expiryTimer = null;
+  }
+}
+
+//: The close path lives in utils.js, which cannot import this module; it calls
+//: the exported name instead, so a closed drawer leaves no interval behind.
+function clearProviderExpiryTimer() {
+  _clearExpiryTimer();
+}
+
+/**
+ * The expiry row, whose value toggles between the wall clock and a live
+ * countdown.  A countdown answers "how long do I have"; the absolute time is
+ * what an operator compares with a provider page, so neither alone.
+ */
+function _renderExpiryRow(host, expiresAt) {
+  _clearExpiryTimer();
+  const dt = document.createElement('dt');
+  dt.textContent = _credentialText('label.credentialExpires', 'Access token expires');
+  const dd = document.createElement('dd');
+  // The value is an action, so it is a button: a bare ``dd`` with a click
+  // listener has no accessible name and is unreachable from the keyboard.
+  const toggle = document.createElement('button');
+  toggle.type = 'button';
+  toggle.className = 'prov-expiry-toggle';
+  toggle.title = _credentialText('prov.expiryToggle',
+    'Click to switch between the expiry time and the countdown.');
+  let showCountdown = _expiryCountdown;
+  const paint = () => {
+    toggle.textContent = showCountdown
+      ? formatCountdown(expiresAt, Date.now(),
+        _credentialText('prov.expiryExpired', 'expired'))
+      : formatCredentialExpiry(expiresAt);
+  };
+  toggle.addEventListener('click', () => {
+    showCountdown = !showCountdown;
+    _expiryCountdown = showCountdown;
+    if (showCountdown) {
+      // Tick only while a countdown is on screen: a timer nobody reads is a
+      // leak that outlives the drawer.
+      _expiryTimer = setInterval(paint, 1000);
+    } else {
+      _clearExpiryTimer();
+    }
+    paint();
+  });
+  paint();
+  // The first render after a refresh has to resume the view, not just the
+  // word: a countdown that is not ticking is worse than no countdown.
+  if (showCountdown) _expiryTimer = setInterval(paint, 1000);
+  dd.append(toggle);
+  host.append(dt, dd);
+}
+
 function _renderExchangePanel(data, ui) {
   const panel = document.getElementById('provExchangePanel');
   if (panel) panel.hidden = ui !== 'exchange';
@@ -653,6 +766,9 @@ function _renderExchangePanel(data, ui) {
   if (!rows || !acts) return;
   rows.textContent = '';
   acts.textContent = '';
+  _clearExpiryTimer();
+  const refreshHint = document.getElementById('provExchangeRefreshHint');
+  if (refreshHint) { refreshHint.hidden = true; refreshHint.textContent = ''; }
 
   if (!_editingProviderName) {
     _appendRow(rows, _credentialText('prov.stateLabel', 'State'),
@@ -684,12 +800,24 @@ function _renderExchangePanel(data, ui) {
   const summary = data.summary || {};
   if (data.state === 'connected') {
     // ``data.account`` is a digest, not a name — only the exchange's own
-    // summary can say which account this is.
+    // summary can say which account this is.  The subject is a machine id:
+    // elide its middle on the row and keep the whole value in the title.
+    const account = summary.subject
+      || _credentialText('label.thisAccount', 'this account');
     _appendRow(rows, _credentialText('label.credentialConnected', 'Connected as'),
-      summary.subject || _credentialText('label.thisAccount', 'this account'));
-    if (summary.expires_at) {
-      _appendRow(rows, _credentialText('label.credentialExpires', 'Access token expires'),
-        summary.expires_at);
+      shortAccount(account) || account, false, account);
+    if (formatCredentialExpiry(summary.expires_at)) {
+      _renderExpiryRow(rows, summary.expires_at);
+    }
+    if (refreshHint) {
+      // The expiry is not a deadline the operator must act on: say so, or the
+      // row reads like a manual-renewal chore.
+      refreshHint.hidden = false;
+      refreshHint.textContent = data.refresher_enabled === false
+        ? _credentialText('label.credentialRefresherOff',
+          'Automatic refresh is off — this token will not renew.')
+        : _credentialText('prov.autoRefreshOn',
+          'The gateway renews this token automatically before it expires.');
     }
   }
   const shim = _credentialShim() || {};
@@ -803,7 +931,10 @@ function _renderStatusCard(data, ui) {
   // "connected" alone would imply the token renews itself.  With no token at
   // all, "will not renew" is noise: there is nothing to renew.
   const hasToken = data.state === 'connected' || data.state === 'failing';
-  if (hasToken && data.refresher_enabled === false) {
+  // The exchange panel's hint sits beside the expiry and says this same
+  // sentence; the operator gets one warning, not two.
+  const hintSaysIt = ui === 'exchange' && data.state === 'connected';
+  if (hasToken && data.refresher_enabled === false && !hintSaysIt) {
     line(_credentialText('label.credentialRefresherOff',
       'Automatic refresh is off — this token will not renew.'), true);
   }
@@ -856,15 +987,18 @@ function _renderAuthSummary() {
   const ui = _uiSource();
   const data = _credentialData;
   const shim = _selectedShim() || {};
+  // The Basic pane states the source in effect; it is not a picker.  Only the
+  // current source is shown, so two credential forms never sit side by side
+  // as if choosing between them were the same act as overriding one.
   document.querySelectorAll('#provAuthChips .prov-mode-chip').forEach(chip => {
-    chip.setAttribute('aria-pressed', String(chip.dataset.source === ui));
+    const current = chip.dataset.source === ui;
+    chip.hidden = !current;
+    // The chip opens the Auth pane; it is not a toggle, so `aria-pressed`
+    // would promise an action it does not perform.
+    chip.removeAttribute('aria-pressed');
+    if (current) chip.setAttribute('aria-current', 'true');
+    else chip.removeAttribute('aria-current');
   });
-  // The Basic summary names only the sources the Auth pane offers.
-  const avail = _availableSources();
-  for (const id of ['static', 'shim', 'exchange']) {
-    const chip = document.querySelector(`#provAuthChips .prov-mode-chip[data-source="${id}"]`);
-    if (chip) chip.hidden = !avail[id];
-  }
 
   const pill = document.getElementById('provAuthPill');
   const detail = document.getElementById('provAuthDetail');
@@ -980,6 +1114,9 @@ function refreshProviderAuthPane() {
     title.textContent = _editingProviderName
       ? t('modal.editProvider') : t('modal.addProvider');
   }
+  // The Override label and tooltip are built strings, and `applyI18n` only
+  // rewrites `data-i18n` attributes — this control's text depends on state.
+  _renderSourceCards(_availableSources(), _uiSource());
   _renderCommandPanel(_uiSource(), _selectedShim(), _editingCfg());
   _renderCredentialPanels();
   _renderAuthSummary();
@@ -2674,6 +2811,7 @@ Object.assign(window, {
   beginProviderBrowserLogin, completeProviderBrowserLogin, resetProviderBrowserLogin,
   refreshProviderCredential, testProviderCredential,
   setProviderPane, selectCredentialSource, addProviderArg, refreshProviderAuthPane,
+  toggleCommandOverride, clearProviderExpiryTimer,
   _activateSegChild,
   openFreeProvider, refreshFreeModels, revealProviderKey,
   refreshShimHint,
