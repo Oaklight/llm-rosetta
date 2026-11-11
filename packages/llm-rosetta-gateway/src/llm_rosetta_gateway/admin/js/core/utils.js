@@ -237,6 +237,9 @@ function closeModal(id) {
   overlay.classList.remove('open');
   closeDialog(_modalPanel(id));
   if (id === 'testModal') window._abortPendingTest?.();
+  // The credential drawer's countdown owns an interval; a closed drawer must
+  // not keep ticking (X, Cancel and Escape all arrive here).
+  if (id === 'providerModal') window.clearProviderExpiryTimer?.();
   const trigger = _modalTriggers.get(id);
   _modalTriggers.delete(id);
   if (trigger && typeof trigger.focus === 'function') trigger.focus();

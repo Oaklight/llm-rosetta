@@ -1414,7 +1414,11 @@
     <!-- Auth: where the credential comes from and what its last refresh did. -->
     <div class="prov-pane" id="provPaneAuth" role="tabpanel" aria-labelledby="provTabAuth" hidden>
       <div class="prov-group">
-        <div class="prov-group-title" data-i18n="label.credentialSource">Credential source</div>
+        <div class="prov-source-head">
+          <div class="prov-group-title" data-i18n="label.credentialSource">Credential source</div>
+          <button type="button" class="prov-corner-btn" id="provOverrideBtn"
+                  onclick="toggleCommandOverride()"></button>
+        </div>
         <div class="prov-sources" id="provSourceCards" role="radiogroup" data-i18n-aria-label="label.credentialSource">
           <button type="button" class="prov-source" id="provSourceCard_static" data-source="static" role="radio" aria-checked="false" onclick="selectCredentialSource('static')">
             <span class="t" data-i18n="prov.sourceStatic">Static API key</span>
@@ -1497,6 +1501,7 @@
         </div>
         <div class="prov-card-body">
           <dl class="prov-rows" id="provExchangeRows"></dl>
+          <div class="prov-field-hint" id="provExchangeRefreshHint" hidden></div>
           <div class="prov-actions" id="provExchangeActions"></div>
           <div id="provBrowserLoginBox" hidden style="margin-top:6px">
             <div class="prov-field-hint" data-i18n="prov.browserLoginHint">Open the sign-in URL in a browser. After authorization, paste the complete callback URL here.</div>

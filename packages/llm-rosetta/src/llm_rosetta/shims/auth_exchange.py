@@ -165,6 +165,11 @@ class AuthExchange(Protocol):
 
         Optional, like :meth:`install`.  What an admin panel can show without
         touching the credential: who is signed in, and until when.
+
+        ``expires_at``, when present, is **epoch seconds** — the panel renders
+        it as a wall-clock time and reads a missing or unparsable value as "no
+        expiry to show", so a summary that used another unit would silently
+        lose the row rather than print it.
         """
         ...
 

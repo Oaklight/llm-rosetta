@@ -291,3 +291,58 @@ export function shortCredential(token) {
   if (sep <= 0 || sep === token.length - 1) return null;
   return `${token.slice(0, sep)}:${token.slice(sep + 1, sep + 13)}…`;
 }
+
+/**
+ * An epoch-seconds expiry as a local, human-readable ``YYYY-MM-DD HH:MM``.
+ *
+ * The exchange reports ``expires_at`` in seconds; rendering that number
+ * directly is unreadable.  Null when the value is missing or not a time, so
+ * the caller can omit the row instead of printing ``NaN``.
+ */
+export function formatCredentialExpiry(value) {
+  const seconds = Number(value);
+  if (!Number.isFinite(seconds) || seconds <= 0) return null;
+  const date = new Date(seconds * 1000);
+  if (Number.isNaN(date.getTime())) return null;
+  const pad = n => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} `
+    + `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+/**
+ * The time left until *epochSeconds*, as a compact ``2h 05m`` style string.
+ *
+ * Takes ``nowMs`` so the caller (and the tests) own the clock.  Past or
+ * missing values render as *expiredLabel* rather than a negative count; the
+ * caller passes the interface language's word, since this module holds no
+ * strings of its own.
+ */
+export function formatCountdown(epochSeconds, nowMs = Date.now(), expiredLabel = 'expired') {
+  const seconds = Number(epochSeconds);
+  if (!Number.isFinite(seconds) || seconds <= 0) return expiredLabel;
+  let left = Math.floor(seconds - nowMs / 1000);
+  if (left <= 0) return expiredLabel;
+  const days = Math.floor(left / 86400);
+  left -= days * 86400;
+  const hours = Math.floor(left / 3600);
+  left -= hours * 3600;
+  const minutes = Math.floor(left / 60);
+  const secs = left - minutes * 60;
+  const pad = n => String(n).padStart(2, '0');
+  if (days > 0) return `${days}d ${pad(hours)}h`;
+  if (hours > 0) return `${hours}h ${pad(minutes)}m`;
+  if (minutes > 0) return `${minutes}m ${pad(secs)}s`;
+  return `${secs}s`;
+}
+
+/**
+ * A long opaque account id with its middle elided.
+ *
+ * The ID-token subject is a machine string, not a name; the row must stay one
+ * line, and the full value belongs in the row's title rather than the text.
+ */
+export function shortAccount(value) {
+  if (typeof value !== 'string' || value === '') return null;
+  if (value.length <= 28) return value;
+  return `${value.slice(0, 10)}…${value.slice(-6)}`;
+}

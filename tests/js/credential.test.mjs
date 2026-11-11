@@ -6,6 +6,7 @@ import {
   credentialLoadedFor, credentialSaveFields, parseCommandArgv, shortCredential,
   credentialSourceId, credentialUiSource, availableCredentialSources,
   credentialFallbackSource, credentialSourceFields, credentialNeedsAttention,
+  formatCredentialExpiry, formatCountdown, shortAccount,
 } from '../../packages/llm-rosetta-gateway/src/llm_rosetta_gateway/admin/js/core/credential.js';
 
 test('a link keeps https and normalises it', () => {
@@ -293,4 +294,48 @@ test('only a credential that needs an action badges the Auth tab', () => {
   }
   // The legacy marker is worth a badge even on a static entry.
   assert.equal(credentialNeedsAttention('static', null, true), true);
+});
+
+test('an epoch expiry renders as a local minute, not a raw float', () => {
+  const rendered = formatCredentialExpiry(1794408539.2608542);
+  assert.match(rendered, /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
+  assert.equal(formatCredentialExpiry(null), null);
+  assert.equal(formatCredentialExpiry(''), null);
+  assert.equal(formatCredentialExpiry('not a time'), null);
+  assert.equal(formatCredentialExpiry(-1), null);
+});
+
+test('the countdown names days, hours, minutes and seconds', () => {
+  const now = 1_000_000_000_000;
+  const at = sec => now / 1000 + sec;
+  assert.equal(formatCountdown(at(3 * 86400 + 2 * 3600), now), '3d 02h');
+  assert.equal(formatCountdown(at(2 * 3600 + 5 * 60), now), '2h 05m');
+  assert.equal(formatCountdown(at(5 * 60 + 7), now), '5m 07s');
+  assert.equal(formatCountdown(at(9), now), '9s');
+  assert.equal(formatCountdown(at(0), now), 'expired');
+  assert.equal(formatCountdown(at(-5), now), 'expired');
+  assert.equal(formatCountdown(null, now), 'expired');
+});
+
+test('a finished countdown uses the interface language, not a hard word', () => {
+  // `formatCountdown` holds no strings of its own: the admin passes its own
+  // word, so a Chinese panel does not print an English "expired".
+  const now = 1_700_000_000_000;
+  const at = sec => now / 1000 + sec;
+  assert.equal(formatCountdown(at(0), now, '已过期'), '已过期');
+  assert.equal(formatCountdown(at(-5), now, '已过期'), '已过期');
+  assert.equal(formatCountdown(null, now, '已过期'), '已过期');
+  // The default keeps the unit tests and any other caller in English.
+  assert.equal(formatCountdown(at(0), now), 'expired');
+  assert.equal(formatCountdown(at(9), now), '9s');
+});
+
+test('a long account id keeps one line, a short one is untouched', () => {
+  assert.equal(shortAccount('short-subject'), 'short-subject');
+  const long = 'mJxsmXc4XedDa514ahkYhMZ1b1powQXvbfqeMQaq5rikCRWT2cgukZ';
+  const shown = shortAccount(long);
+  assert.equal(shown, 'mJxsmXc4Xe…2cgukZ');
+  assert.ok(shown.length < long.length);
+  assert.equal(shortAccount(''), null);
+  assert.equal(shortAccount(null), null);
 });

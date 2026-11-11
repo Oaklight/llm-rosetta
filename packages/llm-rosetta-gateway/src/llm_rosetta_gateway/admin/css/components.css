@@ -339,7 +339,7 @@ tr:hover td { background: var(--bg-hover); }
   color:var(--text-dim); background:var(--surface);
 }
 .prov-mode-chip:hover { border-color:var(--hairline-strong); color:var(--text); }
-.prov-mode-chip[aria-pressed="true"] { border-color:var(--accent); color:var(--text); font-weight:600; box-shadow:inset 0 0 0 1px var(--accent); }
+.prov-mode-chip[aria-current="true"] { border-color:var(--accent); color:var(--text); font-weight:600; box-shadow:inset 0 0 0 1px var(--accent); }
 .prov-auth-detail { font-size:12px; color:var(--text-dim); margin-bottom:8px; overflow-wrap:anywhere; }
 .prov-pill {
   display:inline-flex; align-items:center; gap:6px; font-size:11.5px; font-weight:600;
@@ -394,9 +394,21 @@ button.prov-icon-btn:hover { background:var(--bg-hover); color:var(--text); }
 /* On the token scale rather than a bare `em`: a relative size here made the
    hint (0.8 × 16 = 12.8px) outgrow the card heading it explains. */
 .prov-field-hint { font-size:var(--fs-sm); color:var(--text-dim); margin-top:2px; overflow-wrap:anywhere; }
+.prov-source-head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.prov-corner-btn { appearance:none; font-family:inherit; font-size:11px; padding:1px 8px; border:1px solid var(--border); background:transparent; color:var(--text-dim); border-radius:4px; cursor:pointer; }
+.prov-corner-btn:hover { color:var(--text); border-color:var(--accent); }
+/* A real button inside the ``dd``: reset the UA button chrome so it reads as
+   the value, and keep the dotted underline as the affordance. */
+.prov-expiry-toggle {
+  appearance:none; font:inherit; color:inherit; padding:0; border:0; background:none;
+  cursor:pointer; text-decoration:underline dotted; text-underline-offset:2px;
+}
+.prov-expiry-toggle:focus-visible { outline:2px solid var(--accent); outline-offset:2px; border-radius:3px; }
+.prov-expiry-toggle:hover { color:var(--accent); }
 .prov-rows { display:grid; grid-template-columns:max-content minmax(0,1fr); gap:5px 16px; margin:0 0 8px; }
 .prov-rows dt { color:var(--text-dim); font-size:12px; }
-.prov-rows dd { margin:0; min-width:0; overflow-wrap:anywhere; }
+.prov-rows dd { margin:0; min-width:0; overflow-wrap:anywhere; font-size:12.5px; line-height:1.55; font-style:normal; }
+.prov-rows dd, .prov-credential-state { font-variant-numeric:tabular-nums; }
 .prov-actions { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
 .prov-error { color:var(--red); font-size:0.82em; margin-top:4px; overflow-wrap:anywhere; }
 .prov-warn { border:1px solid var(--orange); border-radius:var(--radius); padding:10px 12px; margin-bottom:14px; }
@@ -412,7 +424,7 @@ button.prov-icon-btn:hover { background:var(--bg-hover); color:var(--text); }
 .prov-preview summary { cursor:pointer; padding:9px 12px; font-size:12.5px; font-weight:600; background:var(--bg-card); }
 .prov-preview pre { margin:0; padding:10px 12px; overflow-x:auto; background:var(--bg); }
 .prov-preview code { font-family:var(--mono); font-size:11.5px; white-space:pre; }
-.prov-credential-state { font-size:0.88em; line-height:1.5; }
+.prov-credential-state { font-size:12.5px; font-style:normal; line-height:1.55; }
 @media (max-width: 520px) { .prov-sources { grid-template-columns:1fr; } }
 .chip-group { display:flex;gap:6px;flex-wrap:wrap; }
 .chip { display:inline-flex;align-items:center;gap:5px;height:28px;padding:0 10px;border:1px solid var(--border);border-radius:var(--radius-control);font-size:var(--fs-xs);font-weight:500;cursor:pointer;user-select:none;transition:background .15s,color .15s,border-color .15s;background:var(--surface);color:var(--text-dim); }
