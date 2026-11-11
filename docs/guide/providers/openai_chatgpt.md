@@ -59,8 +59,25 @@ credential.
 
 ## Signing in
 
-The sign-in needs a browser and a loopback listener, so it happens where the
-browser is — not necessarily on the gateway host:
+### From the admin panel
+
+Open **Providers → the provider → Auth**. **Start browser sign-in** asks the
+gateway for an authorization URL and opens it in a new tab; after you approve
+the app, paste the complete callback URL from the address bar back into the
+panel. The gateway holds the PKCE verifier, state and nonce in the provider's
+private state directory and submits only the authorization code, so no token
+ever reaches the browser that runs the panel. The panel shows the account and
+the token expiry when the exchange succeeds.
+
+Clicking **Start browser sign-in** while already connected is a re-login: the
+new challenge supersedes a pending one, and a completed callback replaces the
+stored record. **Install a record** remains beside it for a record produced
+elsewhere.
+
+### From the CLI
+
+The sign-in needs a browser and a loopback listener, so it can also run where
+the browser is — not necessarily on the gateway host:
 
 ```bash
 llm-rosetta-gateway credential chatgpt --out record.json
@@ -81,6 +98,36 @@ repeated:
 A successful install re-seeds the live provider, so the next request uses it
 without a restart. Repeating the sign-in is safe: a rotating refresh token is
 replaced, and the account identity (the verified `sub`) does not change.
+
+## Model list
+
+The route answers `{models: [{slug, visibility, …}]}` rather than
+`{data: […]}`. The shim keeps only the entries marked `visibility: "list"` and
+preserves the server's order.
+
+That list is **the signed-in account's entitlement**, not the Platform API
+catalogue. Expect fewer models than `openai--open_responses` serves, and a
+different set per plan or app grant; a model that is publicly available may be
+absent here, and naming it in a request will fail upstream. Fetch the list
+again after a plan change — newly granted models appear without a restart.
+
+## Token lifetime and refresh
+
+The access token lives **3600 seconds**. The exchange's own record schedules a
+refresh at 80% of that lifetime (`earliest_refresh_at`, 2880 s — twelve minutes
+early), and the shim declares `token_refresh_interval: 2880`, so the scheduled
+refresher renews the token while it is still valid. The twelve-minute margin
+covers clock skew, token-endpoint latency and one retry.
+
+Refreshing is asynchronous: the refresh loop awaits the exchange, whose
+blocking HTTP runs on a worker thread, and commands use an async subprocess.
+A request that still meets an expired token is retried once after a reactive
+`401` refresh. **Refresh now** in the panel mints immediately; while the
+current token is still fresh the exchange returns it without rotating the
+refresh token.
+
+Override the interval per provider with `token_refresh_interval` when a plan
+issues a different lifetime; values below 60 seconds are rejected.
 
 ## What the gateway sends
 
