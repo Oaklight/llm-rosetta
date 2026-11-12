@@ -598,6 +598,21 @@ a { color: var(--accent); text-decoration: none; }
 .tab-panel { display: none; }
 .tab-panel.active { display: block; }
 
+/* A statement about the panel's own configuration, above every tab's content.
+   Paired with `hint.*` text rather than a toast: a toast clears itself, and
+   this is a standing condition (#1502 §2.1). */
+.admin-banner {
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  border: 1px solid var(--tag-warn);
+  border-left-width: 3px;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--tag-warn) 8%, var(--bg-card));
+  color: var(--text);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
 /* Cards.
    The components own their box model and their decorations; a scheme supplies
    values through the surface tokens above and never reaches in.  A texture

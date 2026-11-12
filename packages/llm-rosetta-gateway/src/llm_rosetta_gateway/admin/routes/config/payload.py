@@ -402,6 +402,21 @@ def _mask_provider_entry(name: str, cfg: Any) -> dict[str, Any]:
     return masked
 
 
+def _effective_server_section(
+    raw: dict[str, Any], config: GatewayConfig
+) -> dict[str, Any]:
+    """The ``server`` section the panel reads, with the resolved switch.
+
+    ``open_on_no_keys`` defaults to ``False`` when the file omits it, and the
+    API Keys page has to say which state is in force — the same answer the
+    startup warning logs (#1502 §2.2).  Resolving it here rather than in JS
+    keeps one source for a value two readers depend on.
+    """
+    safe = _sanitize_server_section(raw)
+    safe["open_on_no_keys"] = bool(config.open_on_no_keys)
+    return safe
+
+
 async def get_config(request: Any) -> Response:
     """Return the current (raw) gateway configuration."""
     config_path = _get_config_path(request)
@@ -458,9 +473,8 @@ async def get_config(request: Any) -> Response:
             model_name, entry, raw_models, providers
         )
 
-    server = _sanitize_server_section(raw.get("server", {}))
-
     config: GatewayConfig = request.app.gateway_config
+    server = _effective_server_section(raw.get("server", {}), config)
     return JSONResponse(
         {
             "config_path": os.path.basename(config_path),

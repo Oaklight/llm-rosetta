@@ -87,6 +87,9 @@ class TestTheConfigPayload:
         monkeypatch.setattr(payload, "_shim_source_presets_payload", lambda: [])
         config.credential_visible = False
         config.api_keys_db = None
+        # The payload now sends the resolved switch; a real GatewayConfig
+        # always has it (#1502 §2.2).
+        config.open_on_no_keys = False
         config.admin_session_idle_minutes = 30
         config.admin_session_remember_days = 30
         request = SimpleNamespace(
