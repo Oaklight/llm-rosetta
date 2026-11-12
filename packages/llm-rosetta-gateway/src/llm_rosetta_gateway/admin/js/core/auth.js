@@ -1,6 +1,7 @@
 // auth.js — Authentication, login, settings, token management
 import { S } from './state.js';
 import { t, applyI18n, typeNamesMode } from './i18n.js';
+import { showsNoPasswordBanner } from './posture.js';
 import { api, _adminHeaders, showToast, closeModal, fmtBytesLong, _startInactivityTracking, _stopInactivityTracking, paintThemeButton } from './utils.js';
 import { renderShimSources } from '../tabs/shims.js';
 
@@ -10,6 +11,7 @@ let _tokenRotateEnd = 0;
 let _tokenCountdownTimer = null;
 
 function openSettings() {
+  renderPostureBanner();
   // Sync theme & language
   const ss = document.getElementById('settingsSchemeSelect');
   if (ss) ss.value = S.currentScheme;
@@ -640,6 +642,49 @@ async function changeAdminPassword() {
   }
 }
 
+/**
+ * One notice above the tab content when the panel has no admin password.
+ *
+ * The element carries `data-i18n`, so a language switch repaints it with the
+ * rest of the page; `role="status"` announces it once without stealing focus.
+ */
+function renderPostureBanner() {
+  const unprotected = showsNoPasswordBanner(S.requiresAuth);
+  const host = document.querySelector('.content');
+  const existing = document.getElementById('adminPostureBanner');
+  if (host && unprotected && !existing) {
+    const el = document.createElement('div');
+    el.id = 'adminPostureBanner';
+    el.className = 'admin-banner';
+    el.setAttribute('role', 'status');
+    el.setAttribute('data-i18n', 'hint.noPassword');
+    el.textContent = t('hint.noPassword');
+    host.prepend(el);
+  } else if (!unprotected) {
+    existing?.remove();
+  }
+  renderPasswordGroup(unprotected);
+}
+
+/**
+ * On an unprotected gateway the Change Password form can only fail — the
+ * endpoint needs the current password, and there is none — so the form gives
+ * way to the one instruction that works from here.  The group's own hint line
+ * carries whichever sentence applies, so a language switch repaints both.
+ */
+function renderPasswordGroup(unprotected) {
+  const group = document.querySelector(
+    '.settings-group:has(h4[data-i18n="label.changePassword"])');
+  if (!group) return;
+  for (const part of group.querySelectorAll('.settings-fields, .settings-group-actions')) {
+    part.style.display = unprotected ? 'none' : '';
+  }
+  const hint = group.querySelector('.settings-group-head p');
+  if (!hint) return;
+  hint.setAttribute('data-i18n', unprotected ? 'hint.noPasswordCli' : 'hint.changePassword');
+  hint.textContent = t(hint.getAttribute('data-i18n'));
+}
+
 function showLoginOverlay() {
   document.body.classList.add('auth-pending');
   // Stop background polling timers to prevent repeated 401 → showLoginOverlay loops
@@ -806,6 +851,10 @@ async function checkAuthAndInit() {
       fetch('/admin/api/config', {credentials: 'include'}),
     ]);
     const authData = await authRes.json();
+    // Kept on the state, not just read once: the Settings pane and the notice
+    // both ask whether this panel is protected.
+    S.requiresAuth = !!authData.requires_auth;
+    renderPostureBanner();
     if (typeof authData.idle_minutes === 'number') S.idleMinutes = authData.idle_minutes;
     if (typeof authData.remember_days === 'number') S.rememberDays = authData.remember_days;
     // A remembered session ends with its cookie, not with the idle clock, so

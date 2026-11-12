@@ -40,6 +40,9 @@ export const S = {
   // Session lifetimes reported by /admin/api/auth-check: minutes of idle
   // before the panel signs out (0 = never) and days a "stay signed in"
   // session lasts (0 = the login page does not offer it).
+  // `false` means the server has no admin password; `undefined` means
+  // /auth-check has not answered yet.
+  requiresAuth: undefined,
   idleMinutes: undefined,
   rememberDays: undefined,
   // Whether the session on screen is a "stay signed in" one.  Such a session

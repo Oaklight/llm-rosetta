@@ -3,6 +3,7 @@ import { t } from '../core/i18n.js';
 import { api, showToast, closeModal, openModal, esc, fmtTokens, inlineConfirm, withBusyButton } from '../core/utils.js';
 import { syncAriaSort, sortByKey } from '../core/sort.js';
 import { jsArg } from '../core/html.js';
+import { keysEmptyMessageKey } from '../core/posture.js';
 
 // ===================== API Keys Tab =====================
 
@@ -226,7 +227,11 @@ function renderKeys() {
       : t('keys.count', {count: allKeys.length});
   }
   if (allKeys.length === 0 && extraRows.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="9" style="color:var(--text-dim)">${t('keys.noKeys')}</td></tr>`;
+    // Which sentence is true depends on `server.open_on_no_keys`; the payload
+    // carries the value the gateway resolved, so the page and the startup
+    // warning cannot disagree (#1502 §2.2).
+    const openOnNoKeys = !!(S.configData && S.configData.server && S.configData.server.open_on_no_keys);
+    tbody.innerHTML = `<tr><td colspan="9" style="color:var(--text-dim)">${t(keysEmptyMessageKey(openOnNoKeys))}</td></tr>`;
     return;
   }
   if (keys.length === 0 && extraRows.length === 0) {
