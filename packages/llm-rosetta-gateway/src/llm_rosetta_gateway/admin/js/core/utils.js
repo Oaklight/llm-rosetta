@@ -12,6 +12,7 @@ import { shimBrand } from './shim-tree.js';
 import { esc } from './html.js';
 import { defaultThemeName, resolveScheme, setThemeSheet } from './themes.js';
 import { openDialog, closeDialog } from './dialog.js';
+import { writeResult, networkResult } from './write-result.js';
 
 // ===================== Scheme + Mode =====================
 // The schemes themselves live in the gateway's theme registry (themes.js);
@@ -86,6 +87,43 @@ function _adminHeaders(extra) {
   return extra ? {...extra} : {};
 }
 
+/**
+ * One mutating request, in the shape every call site already branches on.
+ *
+ * Never rejects.  A refusal, an answer that is not JSON and a request that
+ * never reached the server all resolve to `{ok: false, error}` — see
+ * `write-result.js` for why (#1502).  A success hands back the server's body.
+ * `api.get` keeps its own contract (it throws): every read path wraps it.
+ */
+const PASSWORD_CHANGE_URL = /^\/admin\/api\/config\/password(?:[?#]|$)/;
+
+async function _send(method, url, body) {
+  const hasBody = body !== undefined;
+  const opts = {
+    method,
+    headers: hasBody ? _adminHeaders({'Content-Type':'application/json'}) : _adminHeaders(),
+    credentials: 'include',
+  };
+  if (hasBody) opts.body = JSON.stringify(body);
+  let r;
+  try {
+    r = await fetch(url, opts);
+  } catch (e) {
+    // Transport failure: say so in the panel, and keep the cause for the console.
+    console.warn('admin request failed:', method, url, e);
+    return networkResult(t('toast.error'));
+  }
+  // A 401 means the session ended — except on the password-change endpoint,
+  // where it means the *current password typed into the form* is wrong.
+  // Sending the operator to the login card there hides the real reason.
+  //
+  // The login card is the whole signal: it covers the panel at a far higher
+  // stacking order than the toast, so a call site's error toast on the same
+  // 401 stays behind it and clears itself.
+  if (r.status === 401 && !PASSWORD_CHANGE_URL.test(url)) window.showLoginOverlay?.();
+  return writeResult(r);
+}
+
 const api = {
   async get(url) {
     const r = await fetch(url, {headers: _adminHeaders(), cache: 'no-store', credentials: 'include'});
@@ -95,26 +133,39 @@ const api = {
     if (data === null) throw new Error('Invalid JSON response');
     return data;
   },
-  async put(url, body) {
-    const r = await fetch(url, {method:'PUT', headers:_adminHeaders({'Content-Type':'application/json'}), body:JSON.stringify(body), credentials: 'include'});
-    if (r.status === 401) { window.showLoginOverlay?.(); throw new Error('Unauthorized'); }
-    return r.json();
-  },
-  async del(url) {
-    const r = await fetch(url, {method:'DELETE', headers: _adminHeaders(), credentials: 'include'});
-    if (r.status === 401) { window.showLoginOverlay?.(); throw new Error('Unauthorized'); }
-    return r.json();
-  },
-  async post(url, body) {
-    const h = body !== undefined ? _adminHeaders({'Content-Type':'application/json'}) : _adminHeaders();
-    const opts = {method:'POST', headers: h};
-    if (body !== undefined) opts.body = JSON.stringify(body);
-    opts.credentials = 'include';
-    const r = await fetch(url, opts);
-    if (r.status === 401) { window.showLoginOverlay?.(); throw new Error('Unauthorized'); }
-    return r.json();
-  }
+  async put(url, body) { return _send('PUT', url, body); },
+  async del(url) { return _send('DELETE', url); },
+  async post(url, body) { return _send('POST', url, body); },
 };
+
+/**
+ * Run one action with its submit button held disabled until it settles.
+ *
+ * A second click used to send the request twice — two POSTs for one
+ * double-clicked *Generate*, measured in #1502 §1.2.  `doLogin` already
+ * toggles its own button; this is the same rule for the dialogs, in one place
+ * so no handler re-implements a flag.  A click that arrives while the first is
+ * still in flight is dropped, not queued.
+ *
+ * @param {HTMLElement|null} btn
+ * @param {() => Promise<unknown>} action
+ * @returns {Promise<unknown>}
+ */
+async function withBusyButton(btn, action) {
+  if (!btn) return action();
+  if (btn.dataset.busy === '1') return undefined;
+  // A caller may hand over a button that was already disabled for its own
+  // reason; put it back the way it was found, not unconditionally enabled.
+  const wasDisabled = btn.disabled;
+  btn.dataset.busy = '1';
+  btn.disabled = true;
+  try {
+    return await action();
+  } finally {
+    btn.dataset.busy = '';
+    btn.disabled = wasDisabled;
+  }
+}
 
 // ===================== Inactivity auto-logout =====================
 // The window comes from the server (server.admin_session.idle_minutes), so the
@@ -430,6 +481,6 @@ export {
   setScheme, setMode, setTheme, _adminHeaders, api, showToast, showToastHtml, openModal, closeModal,
   copyText, copyProviderEntry, esc, formatDuration,
   fmtBytesShort, fmtBytesLong, fmtTokens,
-  inlineConfirm, closeMenus, openMenu, positionMenu, doLogout,
+  inlineConfirm, closeMenus, openMenu, positionMenu, doLogout, withBusyButton,
   _startInactivityTracking, _stopInactivityTracking,
 };

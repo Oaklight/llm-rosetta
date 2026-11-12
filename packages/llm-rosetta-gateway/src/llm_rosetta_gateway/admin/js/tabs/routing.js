@@ -621,10 +621,13 @@ async function _stepWeight(provider, delta) {
   const next = Math.max(1, Math.min(100, Number(lane ? lane.weight : 1) + delta));
   if (lane && next === lane.weight) return;
   try {
-    await api.post(
+    const res = await api.post(
       '/admin/api/config/models/' + encodeURIComponent(model) + '/update-provider',
       { provider, weight: next }
     );
+    // `api.post` resolves on a refusal too; without this the step looked
+    // applied until the board reloaded it away.
+    if (!res.ok) { showToast(res.error || t('toast.error'), 'error'); return; }
     await loadRouting(model);
   } catch (e) {
     showToast(String(e.message || e), 'error');
@@ -1038,7 +1041,8 @@ async function _save(block) {
   // because the save replaces the block whole.
   const merged = Object.assign({}, (_data && _data.routing) || {}, block);
   try {
-    await api.put('/admin/api/routing/' + encodeURIComponent(name), { routing: merged });
+    const res = await api.put('/admin/api/routing/' + encodeURIComponent(name), { routing: merged });
+    if (!res.ok) { showToast(res.error || t('toast.error'), 'error'); return; }
     showToast(t('routing.saved'), 'success');
     await loadRouting(name);
   } catch (e) {

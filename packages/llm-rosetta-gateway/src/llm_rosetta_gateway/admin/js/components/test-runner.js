@@ -207,6 +207,7 @@ async function runTest(model, type, extraParam, provider) {
     try {
       const startBody = provider ? {endpoint, payload, provider} : {endpoint, payload};
       const startResp = await api.post('/admin/api/test', startBody);
+      if (!startResp.ok) throw new Error(startResp.error || t('toast.error'));
       const taskId = startResp.task_id;
       S._testTaskId = taskId;
 
@@ -227,6 +228,9 @@ async function runTest(model, type, extraParam, provider) {
         S._testPollTimer = setInterval(async () => {
           try {
             const r = await api.post('/admin/api/test/' + taskId + '/poll');
+            // A poll that never reached the server has no task status; report it
+            // instead of falling through to the "done" branch with no body.
+            if (!r.ok) throw new Error(r.error || t('toast.error'));
             if (r.status === 'pending') return; // keep polling
             clearInterval(S._testPollTimer);
             S._testPollTimer = null;

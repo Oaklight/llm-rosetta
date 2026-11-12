@@ -1,7 +1,7 @@
 // models.js — Model management: modal, CRUD, rendering, filtering, bulk ops
 import { S, _CAP_ICONS } from '../core/state.js';
 import { t, capLabel, typeLabel, typeLabelAlt } from '../core/i18n.js';
-import { api, showToast, closeModal, esc, inlineConfirm, closeMenus, openMenu, isFreeEntry, freeEntryLabel, providerTypeName } from '../core/utils.js';
+import { api, showToast, closeModal, esc, inlineConfirm, closeMenus, openMenu, isFreeEntry, freeEntryLabel, providerTypeName, withBusyButton } from '../core/utils.js';
 import { syncAriaSort } from '../core/sort.js';
 import { syncChipState } from '../core/chips.js';
 import { initLogoSelect, setLogoSelectOptions } from '../components/logo-select.js';
@@ -1433,7 +1433,11 @@ function renderModels() {
 
 // ── Model CRUD ──
 
-async function saveModel() {
+function saveModel() {
+  return withBusyButton(document.querySelector('#modelDrawer .modal-actions .btn-primary'), _saveModel);
+}
+
+async function _saveModel() {
   const name = document.getElementById('modelName').value.trim();
   const provider = document.getElementById('modelProvider').value;
   if (!name || !provider) { showToast(t('error.modelRequired'), 'error'); return; }
