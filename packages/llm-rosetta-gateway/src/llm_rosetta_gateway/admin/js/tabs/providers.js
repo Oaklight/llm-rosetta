@@ -2916,7 +2916,12 @@ async function showProviderQuota(name) {
         continue;
       }
       for (const w of reading.windows) {
-        const pct = w.used_percent == null ? '—' : `${Math.round(w.used_percent)}%`;
+        // The routing line below speaks of what is left; this row speaks of
+        // what is spent.  Two different quantities on one panel, so each says
+        // which one it is (#1507).
+        const pct = w.used_percent == null
+          ? '—'
+          : t('quota.usedPercent', {percent: `${Math.round(w.used_percent)}%`});
         const reset = w.resets_at ? ` · ${new Date(w.resets_at).toLocaleString()}` : '';
         const cls = w.exhausted ? 'conn-fail' : 'conn-ok';
         lines.push(`<div class="conn-row"><span class="${cls}"></span><span class="conn-label">${esc(head)} · ${esc(w.name)}</span><span class="conn-detail">${esc(pct + reset)}</span></div>`);

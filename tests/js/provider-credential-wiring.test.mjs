@@ -343,6 +343,19 @@ test('a missing dictionary key falls back to the sentence, not to the key', () =
   }
 });
 
+test('a quota window row says it prints what is used, not what is left', () => {
+  // The routing line right below speaks of what is left ("tightest credential
+  // x% left"); an unlabelled percentage next to it reads as the other number.
+  assert.match(code, /t\('quota\.usedPercent', \{percent:/);
+  assert.doesNotMatch(code, /const pct = w\.used_percent == null \? '—' : `\$\{Math\.round\(w\.used_percent\)\}%`/);
+  const enBody = i18n.slice(i18n.indexOf('  en: {'), i18n.indexOf('  zh: {'));
+  const zhStart = i18n.indexOf('  zh: {');
+  const zhBody = i18n.slice(zhStart, i18n.indexOf('\n};', zhStart));
+  for (const body of [enBody, zhBody]) {
+    assert.equal(body.split("'quota.usedPercent'").length - 1, 1, 'one entry per dictionary');
+  }
+});
+
 test('the Basic pane states one source instead of offering a picker', () => {
   // Overrides live in Auth; the drawer home must not show two credential
   // forms as peer buttons.
