@@ -215,13 +215,24 @@ async def get_provider_credential(request: Any, name: str) -> Response:
             # nor "needs a sign-in"; saying either would send the operator to
             # the wrong action.
             unreadable = True
-    if summary is not None:
-        state = "connected"
-    elif unreadable:
+    status = _public_status(pinfo)
+    # A record can exist and still be unusable: a refused grant leaves the
+    # refresh token in the store, so ``describe`` keeps answering.  Trusting
+    # that answer alone reported "connected" and offered Refresh for a token
+    # that can never mint again.  The refresh log knows better — a mint that
+    # needs a human outranks the record, and any other failure outranks it
+    # too, because Refresh may recover a timeout but only a sign-in recovers
+    # a refused grant.
+    if unreadable:
         state = "unreadable"
+    elif status.get("interactive_setup_required"):
+        state = "needs_setup"
+    elif status.get("last_error"):
+        state = "failing"
+    elif summary is not None:
+        state = "connected"
     else:
         state = "needs_setup"
-    status = _public_status(pinfo)
     return JSONResponse(
         {
             "provider": name,
