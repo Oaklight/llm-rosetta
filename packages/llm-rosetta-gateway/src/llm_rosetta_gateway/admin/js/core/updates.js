@@ -119,10 +119,9 @@ export async function applyUpdate() {
   if (!window.confirm(t('confirm.selfUpdate', {version: target.version}))) return;
   const button = document.getElementById('updateApplyBtn');
   if (button) { button.disabled = true; button.textContent = t('update.applying'); }
-  let result = null;
-  try {
-    result = await api.post('/admin/api/updates/apply', {version: target.version});
-  } catch { result = null; }
+  // `api.post` resolves even when the request failed, so the failure branches
+  // below are reached by checking the answer rather than by catching.
+  const result = await api.post('/admin/api/updates/apply', {version: target.version});
   if (!result || result.status !== 'restarting') {
     if (button) { button.disabled = false; button.textContent = t('update.apply'); }
     // pip's own output is the only thing that says which step failed; the

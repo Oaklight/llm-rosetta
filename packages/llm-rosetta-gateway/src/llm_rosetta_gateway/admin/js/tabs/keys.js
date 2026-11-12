@@ -1,6 +1,6 @@
 import { S } from '../core/state.js';
 import { t } from '../core/i18n.js';
-import { api, showToast, closeModal, openModal, esc, fmtTokens, inlineConfirm } from '../core/utils.js';
+import { api, showToast, closeModal, openModal, esc, fmtTokens, inlineConfirm, withBusyButton } from '../core/utils.js';
 import { syncAriaSort, sortByKey } from '../core/sort.js';
 import { jsArg } from '../core/html.js';
 
@@ -328,13 +328,21 @@ window.selectAllKeys = selectAllKeys;
 window.updateKeyBulk = updateKeyBulk;
 window.bulkDeleteKeys = bulkDeleteKeys;
 
+const _keyModalPrimary = () => document.querySelector('#keyModal .modal-actions .btn-primary');
+const _keyLabelModalPrimary = () => document.querySelector('#keyLabelModal .modal-actions .btn-primary');
+
 function openKeyModal() {
   document.getElementById('keyLabel').value = '';
   document.getElementById('keyManual').value = '';
   openModal('keyModal');
 }
 
-async function generateKey() {
+function generateKey() {
+  // Two clicks on *Generate* used to send two POSTs (#1502 §1.2).
+  return withBusyButton(_keyModalPrimary(), _generateKey);
+}
+
+async function _generateKey() {
   const label = document.getElementById('keyLabel').value.trim();
   const manual = document.getElementById('keyManual').value.trim();
   const body = {label};
@@ -392,7 +400,11 @@ function onKeyLabelInputKeydown(e) {
   }
 }
 
-async function saveKeyLabel() {
+function saveKeyLabel() {
+  return withBusyButton(_keyLabelModalPrimary(), _saveKeyLabel);
+}
+
+async function _saveKeyLabel() {
   if (!_editingKeyId) return;
   const label = document.getElementById('keyLabelInput').value.trim();
   const res = await api.put(`/admin/api/keys/${encodeURIComponent(_editingKeyId)}`, {label});

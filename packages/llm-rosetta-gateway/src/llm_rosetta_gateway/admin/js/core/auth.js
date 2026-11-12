@@ -142,7 +142,10 @@ async function saveSessionSettings() {
     },
   };
   try {
-    await api.put('/admin/api/config/server', body);
+    const res = await api.put('/admin/api/config/server', body);
+    // `api.put` resolves on a refusal too, so an unchecked save reported
+    // "Saved" for a config the gateway had rejected (#1502).
+    if (!res.ok) throw new Error(res.error || t('toast.error'));
     await window.loadConfig();
     // The panel's own idle timer follows the value it just saved.
     S.idleMinutes = body.admin_session.idle_minutes;
@@ -166,9 +169,10 @@ async function saveSettingsField(field, value) {
     body.credential_visible = value;
   }
   try {
-    await api.put('/admin/api/config/server', body);
+    const res = await api.put('/admin/api/config/server', body);
+    if (!res.ok) throw new Error(res.error || t('toast.error'));
     await window.loadConfig(); showToast(t('toast.saved'));
-  } catch { showToast(t('toast.error'), 'error'); }
+  } catch (e) { showToast(String(e.message || e) || t('toast.error'), 'error'); }
 }
 
 function updateCvLabel(on) {
@@ -221,11 +225,12 @@ async function saveRetentionPart(part) {
     return;
   }
   try {
-    await api.put('/admin/api/config/server', body);
+    const res = await api.put('/admin/api/config/server', body);
+    if (!res.ok) throw new Error(res.error || t('toast.error'));
     await window.loadConfig();
     showToast(t('toast.saved'));
-  } catch {
-    showToast(t('toast.error'), 'error');
+  } catch (e) {
+    showToast(String(e.message || e) || t('toast.error'), 'error');
   }
 }
 
@@ -306,7 +311,11 @@ async function saveRateLimitSettings() {
     const v = document.getElementById(id)?.value?.trim();
     payload.rate_limit[key] = _quotaToPayload(v);
   }
-  try { await api.put('/admin/api/config/server', payload); await window.loadConfig(); showToast(t('toast.saved')); } catch { showToast(t('toast.error'), 'error'); }
+  try {
+    const res = await api.put('/admin/api/config/server', payload);
+    if (!res.ok) throw new Error(res.error || t('toast.error'));
+    await window.loadConfig(); showToast(t('toast.saved'));
+  } catch (e) { showToast(String(e.message || e) || t('toast.error'), 'error'); }
 }
 
 // --- Database Cleanup ---
@@ -384,11 +393,13 @@ async function onCleanupConfirmClick() {
         : target === 'ops' ? '/admin/api/ops-log/cleanup'
         : '/admin/api/db/cleanup';
       d = await api.post(url, { max_age_days: days });
+      if (!d.ok) throw new Error(d.error || t('toast.error'));
       _showOlderThanResult(target, d, days);
     } else if (mode === 'beforeDate') {
       const before = document.getElementById('cleanupBeforeDate').value;
       if (!before) { showToast(t('toast.error'), 'error'); return; }
       d = await api.post('/admin/api/db/cleanup-before', { target, before: before + 'T00:00:00Z' });
+      if (!d.ok) throw new Error(d.error || t('toast.error'));
       const total = Object.keys(d).filter(k => k.endsWith('_deleted')).reduce((s, k) => s + (d[k] || 0), 0);
       if (total === 0) showToast(t('toast.cleanupNone', {days: before}));
       else showToast(t('toast.cleanupBeforeDone', {total, date: before, freed: fmtBytesLong(d.freed_bytes)}));
@@ -397,16 +408,18 @@ async function onCleanupConfirmClick() {
       const end = document.getElementById('cleanupRangeEnd').value;
       if (!start || !end) { showToast(t('toast.error'), 'error'); return; }
       d = await api.post('/admin/api/db/cleanup-range', { target, start: start + 'T00:00:00Z', end: end + 'T23:59:59Z' });
+      if (!d.ok) throw new Error(d.error || t('toast.error'));
       const total = Object.keys(d).filter(k => k.endsWith('_deleted')).reduce((s, k) => s + (d[k] || 0), 0);
       if (total === 0) showToast(t('toast.cleanupNone', {days: `${start} ~ ${end}`}));
       else showToast(t('toast.cleanupRangeDone', {total, freed: fmtBytesLong(d.freed_bytes)}));
     } else if (mode === 'trimToCap') {
       d = await api.post('/admin/api/db/trim');
+      if (!d.ok) throw new Error(d.error || t('toast.error'));
       const total = (d.request_log_trimmed || 0) + (d.error_dumps_trimmed || 0) + (d.ops_log_trimmed || 0);
       if (total === 0) showToast(t('toast.trimNone'));
       else showToast(t('toast.trimDone', {rl: d.request_log_trimmed, ed: d.error_dumps_trimmed, ops: d.ops_log_trimmed, freed: fmtBytesLong(d.freed_bytes)}));
     }
-  } catch { showToast(t('toast.error'), 'error'); }
+  } catch (e) { showToast(String(e.message || e) || t('toast.error'), 'error'); }
   window.loadMetrics?.();
   if (target === 'errors' || target === 'all') window.invalidateDumpCache?.();
 }
@@ -434,10 +447,11 @@ async function doTrimToCap() {
   _showWorkingToast('toast.trimWorking');
   try {
     const d = await api.post('/admin/api/db/trim');
+    if (!d.ok) throw new Error(d.error || t('toast.error'));
     const total = (d.request_log_trimmed || 0) + (d.error_dumps_trimmed || 0) + (d.ops_log_trimmed || 0);
     if (total === 0) showToast(t('toast.trimNone'));
     else showToast(t('toast.trimDone', {rl: d.request_log_trimmed, ed: d.error_dumps_trimmed, ops: d.ops_log_trimmed, freed: fmtBytesLong(d.freed_bytes)}));
-  } catch { showToast(t('toast.error'), 'error'); }
+  } catch (e) { showToast(String(e.message || e) || t('toast.error'), 'error'); }
   window.loadMetrics?.();
 }
 
@@ -446,9 +460,10 @@ async function doVacuum() {
   _showWorkingToast('toast.vacuumWorking');
   try {
     const d = await api.post('/admin/api/db/vacuum');
+    if (!d.ok) throw new Error(d.error || t('toast.error'));
     if (d.freed_bytes > 0) showToast(t('toast.vacuumDone', {freed: fmtBytesLong(d.freed_bytes)}));
     else showToast(t('toast.vacuumNone'));
-  } catch { showToast(t('toast.error'), 'error'); }
+  } catch (e) { showToast(String(e.message || e) || t('toast.error'), 'error'); }
   window.loadMetrics?.();
 }
 
@@ -529,19 +544,21 @@ async function _doTokenRotate() {
   if (_tokenCountdownTimer) { clearInterval(_tokenCountdownTimer); _tokenCountdownTimer = null; }
   document.getElementById('tokenCountdown').textContent = '';
   try {
-    await api.post('/admin/api/token/rotate');
+    const r = await api.post('/admin/api/token/rotate');
+    if (!r.ok) throw new Error(r.error || t('toast.error'));
     const td = await api.get('/admin/api/internal-token');
     S.internalToken = td.token;
     _refreshTokenDisplay();
     showToast(t('toast.tokenRotated'));
   } catch (e) {
-    showToast(t('toast.error'), 'error');
+    showToast(String(e.message || e) || t('toast.error'), 'error');
   }
 }
 
 async function logoutAllSessions() {
   try {
     const data = await api.post('/admin/api/sessions/logout-all');
+    if (!data.ok) throw new Error(data.error || t('toast.error'));
     showToast(t('toast.logoutAll', { count: data.sessions_cleared || 0 }));
     showLoginOverlay();
   } catch (e) {
@@ -581,12 +598,13 @@ function renderAdminTheme() {
 async function saveAdminTheme() {
   const css = document.getElementById('settingsCustomCss')?.value || '';
   try {
-    await api.put('/admin/api/config/server', { admin_custom_css: css });
+    const res = await api.put('/admin/api/config/server', { admin_custom_css: css });
+    if (!res.ok) throw new Error(res.error || t('toast.error'));
     await window.loadConfig();
     renderAdminTheme();
     showToast(t('toast.saved'));
-  } catch {
-    showToast(t('toast.error'), 'error');
+  } catch (e) {
+    showToast(String(e.message || e) || t('toast.error'), 'error');
   }
 }
 
@@ -609,13 +627,16 @@ async function changeAdminPassword() {
   if (newPw.length < 4) { errEl.textContent = t('pw.tooShort'); return; }
   try {
     const data = await api.put('/admin/api/config/password', { current_password: current, new_password: newPw });
+    // A refusal is an answer, not an exception: `error` holds the server's
+    // wording ("Current password is incorrect", the lockout seconds).
+    if (!data.ok) throw new Error(data.error || t('toast.error'));
     // Session cookie updated automatically by server response
     ['settingsCurrentPw','settingsNewPw','settingsConfirmPw'].forEach(id => {
       const el = document.getElementById(id); if (el) el.value = '';
     });
     showToast(t('pw.changed'));
   } catch (e) {
-    errEl.textContent = e.message || t('toast.error');
+    errEl.textContent = String(e.message || e) || t('toast.error');
   }
 }
 

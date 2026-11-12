@@ -464,6 +464,10 @@ function _updateBadge(group) {
 async function checkShimUpdates(force) {
   try {
     const d = await api.post('/admin/api/config/shims/check-updates', force ? { refresh: true } : {});
+    // A failed answer carries no `sources`; reading that as "nothing to
+    // update" would empty the map and clear every badge — the opposite of
+    // what this function promises to do on a failure.
+    if (!d || !d.ok) return;
     const rows = (d && d.sources) || [];
     _shimUpdates = new Map(rows.map(r => [r.location, r]));
     renderLoadedShims();
@@ -852,7 +856,11 @@ async function saveManifestYaml() {
     const res = await api.put('/admin/api/config/shim-manifests',
       { path: _manifestDetail.path, yaml });
     if (res && res.error) { _showManifestProblem(res.error); return; }
-    await api.post('/admin/api/config/shims/reload', {});
+    // The manifest file is written by now, but the running sources are only
+    // re-applied here: closing the dialog over a failed reload would report
+    // "saved" about a gateway that still runs the old shim.
+    const reload = await api.post('/admin/api/config/shims/reload', {});
+    if (!reload.ok) throw new Error(reload.error || t('toast.error'));
     closeModal('shimModal');
     const changed = (res && res.changed_leaves) || [];
     showToast(changed.length

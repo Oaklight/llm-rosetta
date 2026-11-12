@@ -340,19 +340,23 @@ async function loadProfilingResults() {
 }
 
 async function toggleProfiling() {
+  // Every mutating call answers with a result now; both branches must look at
+  // it, or a refused toggle reads as success until the next status poll.
   if (S._profilingEnabled) {
-    await api.post('/admin/api/profiling/disable');
+    const res = await api.post('/admin/api/profiling/disable');
+    if (!res.ok) { showToast(res.error || t('toast.error'), 'error'); return; }
   } else {
     const n = parseInt(document.getElementById('profilingCount')?.value || '5', 10);
     const tracing = !!document.getElementById('profilingTracing')?.checked;
     const res = await api.post('/admin/api/profiling/enable', { requests: Math.max(1, Math.min(100, n)), tracing });
-    if (res && res.error) { showToast(res.error, 'error'); return; }
+    if (!res.ok) { showToast(res.error || t('toast.error'), 'error'); return; }
   }
   await loadProfilingStatus();
 }
 
 async function clearProfilingResults() {
-  await api.del('/admin/api/profiling/results');
+  const res = await api.del('/admin/api/profiling/results');
+  if (!res.ok) { showToast(res.error || t('toast.error'), 'error'); return; }
   await loadProfilingResults();
 }
 
@@ -453,16 +457,19 @@ async function loadCaptureResults() {
 
 async function toggleCapture() {
   if (S._captureEnabled) {
-    await api.post('/admin/api/capture/disable');
+    const res = await api.post('/admin/api/capture/disable');
+    if (!res.ok) { showToast(res.error || t('toast.error'), 'error'); return; }
   } else {
     const n = parseInt(document.getElementById('captureCount')?.value || '5', 10);
-    await api.post('/admin/api/capture/enable', { requests: Math.max(1, Math.min(100, n)) });
+    const res = await api.post('/admin/api/capture/enable', { requests: Math.max(1, Math.min(100, n)) });
+    if (!res.ok) { showToast(res.error || t('toast.error'), 'error'); return; }
   }
   await loadCaptureStatus();
 }
 
 async function clearCaptureResults() {
-  await api.del('/admin/api/capture/results');
+  const res = await api.del('/admin/api/capture/results');
+  if (!res.ok) { showToast(res.error || t('toast.error'), 'error'); return; }
   await loadCaptureResults();
 }
 
@@ -970,7 +977,10 @@ function onClearDumpsInput() {
 
 async function confirmClearDumps() {
   closeModal('clearDumpsModal');
-  await api.del('/admin/api/error-dumps');
+  const res = await api.del('/admin/api/error-dumps');
+  // "Cleared" over a refused delete is the worst kind of false positive: the
+  // operator stops looking at the dumps and they are still there.
+  if (!res.ok) { showToast(res.error || t('toast.error'), 'error'); return; }
   showToast(t('toast.dumpsCleared'));
   S._dumpPage = 0;
   invalidateDumpCache();
@@ -1539,7 +1549,8 @@ async function bulkDeleteDumps() {
   if (!confirm(t('confirm.deleteDumps', {count: String(S._selectedDumpIds.size)}))) return;
   let ok = 0;
   for (const id of S._selectedDumpIds) {
-    try { await api.del('/admin/api/error-dumps/' + encodeURIComponent(id)); ok++; } catch {}
+    const res = await api.del('/admin/api/error-dumps/' + encodeURIComponent(id));
+    if (res.ok) ok++;
   }
   S._selectedDumpIds.clear();
   _updateDumpBulkBar();

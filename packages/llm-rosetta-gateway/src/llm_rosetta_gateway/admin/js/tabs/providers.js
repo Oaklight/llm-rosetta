@@ -8,7 +8,7 @@
 
 import { S, _CAP_ICONS, populateCapIcons } from '../core/state.js';
 import { t, capLabel, typeLabel, typeLabelAlt } from '../core/i18n.js';
-import { api, showToast, showToastHtml, closeModal, esc, copyText, inlineConfirm, isFreeEntry, freeEntryLabel, providerTypeName } from '../core/utils.js';
+import { api, showToast, showToastHtml, closeModal, esc, copyText, inlineConfirm, isFreeEntry, freeEntryLabel, providerTypeName, withBusyButton } from '../core/utils.js';
 import {
   safeLinkUrl, parseRecord, credentialSource, credentialNeedsKey,
   formatCredentialExpiry, formatCountdown, shortAccount,
@@ -2480,7 +2480,12 @@ function renderProviders() {
 
 // ── Provider CRUD ───────────────────────────────────────────────────
 
-async function saveProvider() {
+function saveProvider() {
+  // One Save click, one PUT: the button is held until the answer arrives.
+  return withBusyButton(document.querySelector('#providerModal .modal-actions .btn-primary'), _saveProvider);
+}
+
+async function _saveProvider() {
   const name = document.getElementById('provName').value.trim();
   const provType = document.getElementById('provType').value;
   const baseUrl = document.getElementById('provBaseUrl').value.trim();
