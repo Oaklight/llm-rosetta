@@ -145,6 +145,12 @@ class TestOpenCodeGoProbe:
         assert self.probe.match("https://api.example.com/v1") is None
 
     def test_parses_percent_as_used(self):
+        # Relative, not a fixed instant: a window whose reset time has passed
+        # stops blocking, so a hardcoded date turns this test red the next day
+        # for everyone.  The past-reset rule has its own test below.
+        resets = (datetime.now(timezone.utc) + timedelta(days=10)).strftime(
+            "%Y-%m-%dT%H:%M:%S.000Z"
+        )
         plan, windows = self.probe.parse(
             {
                 "usage": {
@@ -157,7 +163,7 @@ class TestOpenCodeGoProbe:
                     "monthly": {
                         "status": "rate-limited",
                         "percent": 100,
-                        "resetsAt": "2026-11-11T22:26:38.000Z",
+                        "resetsAt": resets,
                     },
                 }
             }
@@ -166,6 +172,7 @@ class TestOpenCodeGoProbe:
         assert [w.name for w in windows] == ["5 hours", "7 days", "Month"]
         assert windows[0].used_percent == 12
         assert windows[0].span_seconds == 5 * 3600
+        assert windows[2].used_percent == 100
         assert windows[2].exhausted
 
     def test_malformed_answer_is_an_error(self):
