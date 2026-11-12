@@ -295,6 +295,63 @@ class TestGet:
         assert payload["can_install"] is False
         assert payload["can_revoke"] is False
 
+    def test_a_record_with_a_refused_grant_is_not_reported_connected(self):
+        """The refresh token of a refused grant stays in the store, so the
+        exchange keeps answering; the record alone must not count as
+        "connected" when the last mint asked for a human."""
+        exchange = _Exchange()
+        exchange.install(AuthContext(provider="chatgpt"), dict(RECORD))
+        cfg = _config(exchange=exchange)
+        cfg.providers["chatgpt"].token_status = {
+            "enabled": True,
+            "consecutive_failures": 2,
+            "last_error": 'the grant was refused (400: {"error": "invalid_grant"})',
+            "interactive_setup_required": True,
+        }
+
+        payload = json.loads(_call(get_provider_credential, _Request(cfg)).body)
+
+        assert payload["state"] == "needs_setup"
+        # The record is still readable; only the state changed.
+        assert payload["installed"] is True
+        assert payload["summary"]["subject"] == "user-1"
+
+    def test_a_transient_refresh_failure_is_failing_not_needs_setup(self):
+        """Refresh may recover a timeout; only a sign-in recovers a refused
+        grant, so the two failures are not one state."""
+        exchange = _Exchange()
+        exchange.install(AuthContext(provider="chatgpt"), dict(RECORD))
+        cfg = _config(exchange=exchange)
+        cfg.providers["chatgpt"].token_status = {
+            "enabled": True,
+            "consecutive_failures": 1,
+            "last_error": "the token endpoint answered 502",
+        }
+
+        payload = json.loads(_call(get_provider_credential, _Request(cfg)).body)
+
+        assert payload["state"] == "failing"
+
+    def test_an_unreadable_record_outranks_the_refresh_log(self):
+        """A record that cannot be read is neither state; saying "sign in"
+        would advise replacing a record the operator may be able to repair."""
+        exchange: Any = _Exchange()
+        exchange.install(AuthContext(provider="chatgpt"), dict(RECORD))
+
+        def boom(ctx):
+            raise AuthExchangeError("the record is corrupt")
+
+        exchange.describe = boom
+        cfg = _config(exchange=exchange)
+        cfg.providers["chatgpt"].token_status = {
+            "last_error": "the record is corrupt",
+            "interactive_setup_required": True,
+        }
+
+        payload = json.loads(_call(get_provider_credential, _Request(cfg)).body)
+
+        assert payload["state"] == "unreadable"
+
     def test_the_summary_never_carries_a_token(self):
         exchange = _Exchange()
         exchange.install(AuthContext(provider="chatgpt"), dict(RECORD))
