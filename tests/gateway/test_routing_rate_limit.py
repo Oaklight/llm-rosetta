@@ -197,6 +197,10 @@ class TestEligibility:
         assert answer.sunk is True
 
     def test_a_spent_allowance_is_reported_with_its_reset(self):
+        # The reset is built here, not from the module-import anchor: this
+        # assertion is a wall-clock comparison, so a shared anchor turns the
+        # test red once the suite's own runtime passes the fuse.
+        reset = datetime.now(timezone.utc) + timedelta(minutes=5)
         pinfo = _pinfo()
         pinfo.quota_probe = "p-eligibility-spent"
         QUOTA_STATE.put_reading(
@@ -207,7 +211,7 @@ class TestEligibility:
                     QuotaWindow(
                         name="5h",
                         used_percent=100,
-                        resets_at=NOW + timedelta(minutes=5),
+                        resets_at=reset,
                     )
                 ],
             )
@@ -217,7 +221,7 @@ class TestEligibility:
 
         assert answer.eligible is False
         assert answer.reason == SPENT
-        assert answer.until == NOW + timedelta(minutes=5)
+        assert answer.until == reset
 
     def test_a_pending_credential_is_initializing(self):
         from llm_rosetta_gateway.transport.provider_info import TOKEN_PENDING_SENTINEL
